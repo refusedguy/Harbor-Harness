@@ -114,11 +114,11 @@ public class DiffHunkHeaderFormatTests
             .IsFalse()
             .Because("one past int.MaxValue is not a number, so the header is malformed");
 
-        // The row counter's own increment is a separate matter and is NOT
-        // asserted here: starting at int.MaxValue, `++oldNo` wraps to
-        // int.MinValue. That wrap predates #740, needs a two-billion-line
-        // file to reach, and renders as a blank field under
-        // `DiffBlock.NumberField` (which blanks anything <= 0) — so it is
-        // out of this guard's perimeter rather than silently tolerated.
+        // The row counter's own increment used to go unasserted here, on the
+        // reasoning that reaching the wrap needs a two-billion-line file.
+        // That was wrong, and this test is the proof: it has just asserted
+        // that the header above IS a hunk, so a single row underneath it is
+        // a two-billion-line file in 36 bytes. The increment is asserted, in
+        // DiffLineNumberWrapTests (#850).
     }
 }

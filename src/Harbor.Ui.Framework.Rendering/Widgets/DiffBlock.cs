@@ -85,13 +85,17 @@ public static class UnifiedDiffParser
             switch (sign)
             {
                 case '+':
-                    lines.Add(new DiffLine(DiffLineKind.Add, 0, ++newNo, line[1..].ToString()));
+                    newNo = NextNo(newNo);
+                    lines.Add(new DiffLine(DiffLineKind.Add, 0, newNo, line[1..].ToString()));
                     break;
                 case '-':
-                    lines.Add(new DiffLine(DiffLineKind.Delete, ++oldNo, 0, line[1..].ToString()));
+                    oldNo = NextNo(oldNo);
+                    lines.Add(new DiffLine(DiffLineKind.Delete, oldNo, 0, line[1..].ToString()));
                     break;
                 case ' ':
-                    lines.Add(new DiffLine(DiffLineKind.Context, ++oldNo, ++newNo, line[1..].ToString()));
+                    oldNo = NextNo(oldNo);
+                    newNo = NextNo(newNo);
+                    lines.Add(new DiffLine(DiffLineKind.Context, oldNo, newNo, line[1..].ToString()));
                     break;
             }
         }
@@ -171,6 +175,42 @@ public static class UnifiedDiffParser
 
         return (oldStart, newStart, true);
     }
+
+    /// <summary>
+    /// The next row number after <paramref name="current"/>, holding at
+    /// <see cref="int.MaxValue"/> instead of wrapping past it (#850).
+    /// </summary>
+    /// <remarks>
+    /// The header parse above is where the ceiling comes from: it accepts a
+    /// line number up to and including <see cref="int.MaxValue"/>, and a test
+    /// asserts the boundary is a hunk. This is the step <em>past</em> that
+    /// ceiling — it runs once per body row, on a counter the header seeded.
+    /// C# arithmetic is unchecked by default, so a plain <c>++</c> one past
+    /// the bound is <see cref="int.MinValue"/>: no exception, no diagnostic,
+    /// a row numbered below zero under a header that had just been accepted.
+    /// It takes ~40 bytes of tool output to get there, not a two-billion-line
+    /// file, because the header alone can carry the bound.
+    /// <para>
+    /// Holding is the honest answer: past the bound there is no further line
+    /// number to hand out, and <c>DiffBlock.NumberField</c> — which draws
+    /// anything <c>&lt;= 0</c> as a blank field — cannot render a number the
+    /// parser does not have. Wrapping instead would state a smaller number
+    /// than the header it came from, which is not a line in any file. This is
+    /// the increment that is guarded rather than the header, so it also holds
+    /// the sequential case, where any valid header crosses the bound after
+    /// ~2^31 rows.
+    /// </para>
+    /// <para>
+    /// It replaces the <c>++</c>, not the assignment. A helper that only
+    /// <em>returned</em> the next number would leave the counter standing on
+    /// the header's value, and every row below <c>@@ -10,7 @@</c> would be
+    /// numbered 11 — a diff whose line numbers never advance, which is a
+    /// worse bug than the wrap and passes every at-the-bound case in
+    /// DiffLineNumberWrapTests, because <see cref="int.MaxValue"/> has
+    /// nowhere to advance to.
+    /// </para>
+    /// </remarks>
+    private static int NextNo(int current) => current == int.MaxValue ? int.MaxValue : current + 1;
 
     /// <summary>
     /// One line number: unsigned decimal digits, and a value an
