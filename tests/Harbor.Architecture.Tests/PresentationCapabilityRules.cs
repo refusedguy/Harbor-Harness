@@ -693,8 +693,10 @@ public sealed class PresentationCapabilityRules
         // `ICommonConfigModelRefReader` in Ui.Framework.Abstractions (the read-only
         // half, which carries a `Maybe<ModelRef>`); `CommonConfigContractRules` is
         // the guard for that pair. Referenced here because this comment is the
-        // history of why `ICommonConfigStore` is a PORT in a Domain-labelled leaf
-        // while its implementation is not.
+        // history of why `ICommonConfigStore` is a PORT in the
+        // `Harbor.Desktop.Abstractions` leaf — a Presentation package, which the
+        // matrix has said since the row was created (5d2df19f), and not the Domain
+        // one this note used to claim — while its implementation is not. #895.
     };
 
     /// <summary>

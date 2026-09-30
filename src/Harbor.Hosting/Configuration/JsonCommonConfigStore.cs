@@ -1,11 +1,15 @@
 // JsonCommonConfigStore.cs — JSON-backed implementation of ICommonConfigStore.
 //
 // #534: this type MOVED here from Harbor.Desktop.Abstractions, which is
-// IsPackable / `PackageId: Harbor.Desktop.Abstractions` and the only project the
-// layer matrix calls Domain (§2). A Domain-labelled package that stats the file,
-// creates ~/.harbor and writes through a sibling `.tmp` is not a domain model; it
-// is a storage engine that also ships a schema. Persistence belongs to the
-// composition root, which already constructed both of these stores.
+// IsPackable / `PackageId: Harbor.Desktop.Abstractions`.
+// The layer matrix calls it Presentation (§2), and has said so since the matrix
+// row was created (5d2df19f). A published Presentation package that stats the
+// file, creates ~/.harbor and writes through a sibling `.tmp` is not a UI
+// contract; it
+// is a storage engine that also ships a schema, and PresentationCapabilityRules
+// forbids `System.IO.File*` in every Presentation assembly anyway. Persistence
+// belongs to the composition root, which already constructed both of these
+// stores.
 //
 // The PORT (ICommonConfigStore), the DTOs (CommonConfig / AppConfigBase) and
 // `CompositeConfig<T>` stayed in the leaf. The contract is the schema's; where the

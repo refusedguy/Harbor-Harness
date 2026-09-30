@@ -4,7 +4,7 @@ Contracts and abstractions for the Harbor UI Framework — configuration, diagno
 
 ## Layer
 
-**Presentation (framework contracts).** Innermost UI Framework project. Depends on `Harbor.Abstractions` and `Microsoft.Extensions.Logging.Abstractions` only.
+**Domain (framework contracts).** Innermost UI Framework project — and the matrix places it in **Domain**, not with its `Ui.Framework.*` siblings, which is what lets the port sit *below* its consumer instead of beside it (ADR-009). Depends on `Harbor.Abstractions` and `Microsoft.Extensions.Logging.Abstractions` only.
 
 ## What's in it
 
