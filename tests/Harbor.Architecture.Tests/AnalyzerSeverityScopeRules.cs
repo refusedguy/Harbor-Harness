@@ -15,14 +15,10 @@
 //     `.editorconfig` both reach the app projects.
 //   * DI006 has NO hole in that shape. The README shipped in the pinned package
 //     (2.18.24, read out of the restored nupkg) puts the exact form in its
-//     "Problem" block:
-//
-//         public static class Locator
-//         {
-//             public static IServiceProvider Provider { get; set; } = null!;
-//
-//     so a static auto-property typed `IServiceProvider` is in scope, and #837
-//     saw the rule fire as `error DI006` on that same shape in the CLI.
+//     "Problem" block — a static auto-property `IServiceProvider Provider
+//     { get; set; }` on a static class, initialised to `null!` — so a static
+//     auto-property typed IServiceProvider is in scope, and #837 saw the rule
+//     fire as `error DI006` on that same shape in the CLI.
 //   * The third thing is the one nobody had looked for: `.editorconfig` has a
 //     PATH-SCOPED block that demotes DI003/DI006/DI008/DI014 to `suggestion`
 //     for the desktop composition roots. `apps/Harbor.App.Avalonia/App.axaml.cs`
@@ -149,10 +145,13 @@ public sealed class AnalyzerSeverityScopeRules
     ///     member of the DI-lifetime family this file is about. The Excubo EDI
     ///     rules and the TUnit reservations are scoped to paths too, and they are
     ///     out of scope here: the doc-coverage rule is about the DI severity
-    ///     table, not about every reservation in the file.
+    ///     table, not about every reservation in the file. Deliberately
+    ///     unanchored at the end, so a line carrying a trailing reason comment
+    ///     still counts as a DI assignment rather than vanishing from the
+    ///     inventory.
     /// </summary>
     private static readonly Regex DiSeverityAssignment =
-        new(@"^dotnet_diagnostic\.(?<id>DI\d{3})\.severity\s*=\s*(?<severity>\S+)\s*$");
+        new(@"^dotnet_diagnostic\.(?<id>DI\d{3})\.severity\s*=\s*(?<severity>\w+)");
 
     // =====================================================================
     // 1. The configuration half: no section may address a path that is not there.
@@ -296,18 +295,22 @@ public sealed class AnalyzerSeverityScopeRules
             .. PathScopedSections().Select(section => section.Anchor!)
         ];
 
-        foreach (string real in
-                 [
-                     "apps/Harbor.App.Avalonia",
-                     "tests/Harbor.Tui.RendererTests/NickConsoleExGoldenFrameTests.cs"
-                 ])
+        string[] realPathSections =
+        [
+            "apps/Harbor.App.Avalonia",
+            "tests/Harbor.Tui.RendererTests/NickConsoleExGoldenFrameTests.cs"
+        ];
+
+        foreach (string real in realPathSections)
         {
             await Assert.That(anchors.Contains(real, StringComparer.Ordinal)).IsTrue()
                 .Because($"'{real}' is a real path section in {EditorConfigRelativePath}; if the scanner "
                        + "cannot find it, it is not reading the file and every other test here is vacuous");
         }
 
-        foreach (string notAPath in ["*", "*.{cs,csx}", "*.{md,markdown}", "Makefile"])
+        string[] notPathSections = ["*", "*.{cs,csx}", "*.{md,markdown}", "Makefile"];
+
+        foreach (string notAPath in notPathSections)
         {
             await Assert.That(anchors.Contains(notAPath, StringComparer.Ordinal)).IsFalse()
                 .Because($"'{notAPath}' is a whole-tree glob or a bare file name, not a repo path; "
@@ -333,15 +336,16 @@ public sealed class AnalyzerSeverityScopeRules
     /// <summary>
     ///     Splits <c>.editorconfig</c> into sections. A header is a trimmed line
     ///     that both starts and ends with a bracket; everything up to the next
-    ///     header is that section's body.
+    ///     header is that section's body. Every line is trimmed, so a CRLF
+    ///     checkout parses the same as an LF one.
     /// </summary>
-    private static IReadOnlyList<EditorConfigSection> ParseSections(IReadOnlyList<string> lines)
+    private static IReadOnlyList<EditorConfigSection> ParseSections(string content)
     {
         var sections = new List<EditorConfigSection>();
         var body = new List<string>();
         string? pattern = null;
 
-        foreach (string raw in lines)
+        foreach (string raw in content.Split('\n'))
         {
             string line = raw.Trim();
 
@@ -353,7 +357,7 @@ public sealed class AnalyzerSeverityScopeRules
                 }
 
                 pattern = line[1..^1].Trim();
-                body = [];
+                body.Clear();
                 continue;
             }
 
