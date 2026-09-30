@@ -95,6 +95,20 @@ public class FullLayerMatrixTests
             + "is <Compile Include>-linked rather than referenced. Linked into the four providers; "
             + "OpenAiWire/OpenAiImageContent reach only OpenAI + OpenAiCompatible, whose wire "
             + "format Anthropic and Ollama do not share.",
+
+        // #456: this folder was here before the issue was filed and was not on the list at
+        // all, so nothing in the enforcer read it. Harbor.Storage.Memory links NEITHER
+        // file and hand-writes the same literals nine times — stated here so the manifest
+        // records the gap instead of letting the declaration imply all three stores share
+        // these files. Unifying Memory is a separate change, tracked on its own issue.
+        ["Harbor.Storage.Shared"] =
+            "The Jsonl and Sqlite session stores must share one per-session lock strip and one "
+            + "set of canonical failure texts, and the layer matrix forbids "
+            + "Infrastructure→Infrastructure project references, so both are <Compile "
+            + "Include>-linked rather than referenced. SessionLockStrip and SessionStoreErrors "
+            + "reach both stores; SessionStatsAggregator reaches Jsonl alone, because Sqlite and "
+            + "Memory persist the metadata record instead of folding it from message history. "
+            + "Harbor.Storage.Memory links neither file and re-writes the failure texts inline.",
     };
 
     /// <summary>

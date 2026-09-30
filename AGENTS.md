@@ -69,7 +69,7 @@ src/Harbor.Tui.NickConsoleEx/         — SharpConsoleUI-based renderer (HARBOR_
 src/Harbor.Tui.Notifications/         — desktop OS notifications renderer
 src/Harbor.Ui.Framework{,.Abstractions,.State,.ViewModels,.Rendering,.Projection,.Services,.Sessions}/ — TEA-style UI state/reducers/projection/services shared by apps (shell csproj is a meta-package)
 src/Harbor.Desktop.{Abstractions,Shared,Animations} — desktop app support
-src/Harbor.Storage.{Jsonl,Memory,Sqlite}/ — session stores (HARBOR_STORAGE=jsonl|memory|sqlite)
+src/Harbor.Storage.{Jsonl,Memory,Sqlite}/ — session stores (HARBOR_STORAGE=jsonl|memory|sqlite); Harbor.Storage.Shared/ is linked-source (no .csproj, compiled into Jsonl+Sqlite)
 src/Harbor.Providers.{Anthropic,OpenAI,Ollama,OpenAiCompatible}/ — LLM clients; Harbor.Providers.Shared/ is linked-source (no .csproj, compiled into each provider)
 src/Harbor.Tools.Builtin/             — 20 builtin tools under Tools/ (read/write/edit/bash/glob/grep/
                                         ls/skill/patch/notebook/tree/lsp/task/webfetch/ripgrep/mcp/

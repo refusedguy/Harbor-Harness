@@ -43,7 +43,8 @@ src/                                   — ~50 projects (all included in Harbor.
 ├── Harbor.Registries/                 — Agent/Tool/Provider registries, EventBus (builtin agents: code, plan, explore)
 ├── Harbor.Application/                — AgentLoop, sessions, permissions, config, onboarding, compaction
 ├── Harbor.Hosting/                    — DI modules wired by the CLI (TuiModule, StorageModule, ...)
-├── Harbor.Storage.{Jsonl,Memory,Sqlite}/  — session stores (HARBOR_STORAGE=jsonl|memory|sqlite)
+├── Harbor.Storage.{Jsonl,Memory,Sqlite,Shared}/  — session stores (HARBOR_STORAGE=jsonl|memory|sqlite);
+│                                        Shared/ is linked-source (no .csproj, compiled into Jsonl+Sqlite)
 ├── Harbor.Providers.{Anthropic,OpenAI,Ollama,OpenAiCompatible,Shared}/ — LLM clients
 ├── Harbor.Tools.Builtin/              — 20 builtin tools under Tools/
 │                                        (read/write/edit/bash/glob/grep/ls/skill/patch/notebook/tree/lsp/task/

@@ -815,6 +815,16 @@ public sealed class EnforcerIntegrityTests
     ///     forward slashes so the value compares equal to the exception tables
     ///     regardless of host OS (Windows separators would never match).
     /// </summary>
+    /// <remarks>
+    ///     #456: since <c>RepoPaths.EnumerateCsFiles</c> started returning linked
+    ///     shared-source files, a file can sit outside the project directory while
+    ///     being compiled into it. Such a file is named by its <c>..</c>-relative path
+    ///     (<c>../Harbor.Storage.Shared/SessionStoreErrors.cs</c>) rather than by bare
+    ///     filename: two shared folders could each hold a <c>SessionStoreErrors.cs</c>,
+    ///     and an exception scoped to sites would then be able to name either one. Files
+    ///     inside the project are unchanged — they still render as
+    ///     <c>ViewModels/OnboardingViewModel.cs</c>, so no existing site moves.
+    /// </remarks>
     private static string ProjectRelative(string path, string projectDir)
     {
         string? root = RepoPaths.RepoRoot;
@@ -826,10 +836,12 @@ public sealed class EnforcerIntegrityTests
         // Absolute on both sides: the test host's working directory is the test
         // bin folder, not the repository root, so a relative prefix never matches.
         string full = Path.GetFullPath(path);
-        string prefix = Path.GetFullPath(Path.Combine(root, "src", projectDir)) + Path.DirectorySeparatorChar;
+        string projectRoot = Path.GetFullPath(Path.Combine(root, "src", projectDir));
+        string prefix = projectRoot + Path.DirectorySeparatorChar;
+
         string relative = full.StartsWith(prefix, StringComparison.Ordinal)
             ? full[prefix.Length..]
-            : Path.GetFileName(full);
+            : Path.GetRelativePath(projectRoot, full);
 
         return relative.Replace('\\', '/');
     }

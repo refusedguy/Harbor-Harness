@@ -191,10 +191,12 @@ every Ipc.*, Ui.Framework.* and Desktop.* project), and it duplicated rules
 that are already enforced mechanically.
 
 Canonical enforcement now lives in `tests/Harbor.Architecture.Tests/`
-(46 tests: reflection-based + NetArchTest + the ROP-D full-project matrix in
-`FullLayerMatrixTests.cs`). Per the ROP-D close-out the matrix covers 47 of 50
-`src/` directories; the other 3 (CodeGen build tool, Plugins.Host exe,
-Providers.Shared linked source) are documented out-of-scope. It runs
+(reflection-based + NetArchTest + the ROP-D full-project matrix in
+`FullLayerMatrixTests.cs`). Every `src/` project is either on that matrix or
+listed in `OutOfScopeAssemblies` with a reason; two further folders
+(`Providers.Shared`, `Storage.Shared`) produce no assembly at all and are listed
+in `SharedSourceFolders` instead, which `SharedSourceLinkRules` holds against the
+real csproj link items in both directions. It runs
 as part of the regular `dotnet test` step — no extra tool install, single source
 of truth. See docs/ARCHITECTURE_LAYERS.md §5 for the rule catalogue.
 
