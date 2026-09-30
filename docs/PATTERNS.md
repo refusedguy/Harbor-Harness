@@ -599,7 +599,7 @@ lifetime the container does not provide is a defect**, and that is the rule.
 The concrete cost, all visible in the current tree:
 
 1. `SessionChangedEvent` — *the* "new session" transition — is handled at
-   `ChatScreenBridge.cs:321-325` (`case SessionChangedEvent changed:`) by
+   `ChatScreenBridge.cs:339-343` (`case SessionChangedEvent changed:`) by
    assigning **one** field (`_parentSessionId`).
    `_runHadError`, `_errorCardSeq`, `_toolRetryShown`, `_displayedMessageIds` and
    everything inside `_cards` / `_streams` / `_gates` survive the switch.
@@ -609,11 +609,11 @@ The concrete cost, all visible in the current tree:
    — the contract is "whoever switches sessions must remember to poke three
    internals", enforced by nothing and documented nowhere in the interface. The
    one method that comes close, `ResetMessageTracking()`
-   (`ChatScreenBridge.cs:476`), covers exactly one of ~11 fields, and `MarkSeen`'s
-   own doc comment (`:482-483`) admits the coupling: "`ResetMessageTracking`
+   (`ChatScreenBridge.cs:494`), covers exactly one of ~11 fields, and `MarkSeen`'s
+   own doc comment (`:500-501`) admits the coupling: "`ResetMessageTracking`
    re-arms on session switch/new session, where the timeline is cleared
    alongside."
-3. `Dispose()` (`:704`) releases only the bus subscription, so a renderer swap
+3. `Dispose()` (`:722`) releases only the bus subscription, so a renderer swap
    mid-session leaves every accumulated field in place for the next subscriber.
 
 Every number in this list was off when #868 measured it — the field block, both
