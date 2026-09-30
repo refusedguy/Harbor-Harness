@@ -547,7 +547,7 @@ consistent throughout:
 | messages | `State/AppMsg.cs`, `State/ChatAppMsg.cs` |
 | transitions | `State/AppReducer.cs`, `State/ChatAppReducer.cs` |
 | store / lifecycle | `State/UiStore.cs:175` `Dispatch` → `:211` `Notify`, with a revision ledger and a stale-drop guard |
-| consumption | `CellForgeTuiRenderer.cs:314` dispatch, `:299` `PumpProjection()` — the renderer reads the fold **as data** |
+| consumption | `CellForgeTuiRenderer.cs:314` dispatch, `:290` `PumpProjection()` — the renderer reads the fold **as data** |
 
 The split is deliberate: `AppReducer` is domain-free (panels, scroll, input,
 focus, quit) and the chat half plugs in through `IAppReducerPlugin`, so a
@@ -559,16 +559,16 @@ non-chat host uses the generic reducer alone.
 parallel state machine for the same `AgentEvent` stream** — the same fact ("what
 is on screen for the current session") with two owners:
 
-- the state, as fields: `:20-30` `_panel`, `_status`, `_streams`, `_cards`,
-  `_context`, `_gates`, `_displayedMessageIds`; plus `:38` `_toolRetryShown`,
-  `:65` `_parentSessionId`, `:70` `_runHadError`, `:74` `_errorCardSeq` —
+- the state, as fields: `:41-61` `_panel`, `_status`, `_streams`, `_cards`,
+  `_context`, `_gates`, `_displayedMessageIds`; plus `:59` `_toolRetryShown`,
+  `:68` `_parentSessionId`, `:72` `_runHadError`, `:74` `_errorCardSeq` —
   **~11 pieces of mutable state**;
 - the transition: `HandleEvent` at `:127`, 21 arms mutating those fields directly;
 - the lifetime: `apps/Harbor.App.Cli/Hosting/CellForgeModule.cs:101` registers it
-  `AddSingleton`, over a per-process `ChatScreen` (`:76-79`, also a singleton).
+  `AddSingleton`, over a per-process `ChatScreen` (`:77-79`, also a singleton).
 
 Meanwhile the reducer side *is* per session: `CellForgeTuiRenderer.cs:226`
-(`ActiveStore => _sessions?.ActiveContext?.Store ?? _store`) and `:236-255`
+(`ActiveStore => _sessions?.ActiveContext?.Store ?? _store`) and `:236-258`
 (`EnsureSubscribedToActiveStore`) re-bind on switch.
 
 **The module's own doc comment claims the opposite** — `CellForgeModule.cs:32`
@@ -579,21 +579,28 @@ lifetime the container does not provide is a defect**, and that is the rule.
 The concrete cost, all visible in the current tree:
 
 1. `SessionChangedEvent` — *the* "new session" transition — is handled at
-   `ChatScreenBridge.cs:299-303` by assigning **one** field (`_parentSessionId`).
+   `ChatScreenBridge.cs:321-325` (`case SessionChangedEvent changed:`) by
+   assigning **one** field (`_parentSessionId`).
    `_runHadError`, `_errorCardSeq`, `_toolRetryShown`, `_displayedMessageIds` and
    everything inside `_cards` / `_streams` / `_gates` survive the switch.
 2. The cleanup that does exist lives in a **caller**:
-   `apps/Harbor.App.Cli/Repl/SessionSwitchManager.cs:244`
+   `apps/Harbor.App.Cli/Repl/SessionSwitchManager.cs:245-247`
    (`host.Bridge.ResetMessageTracking(); host.Timeline.Clear(); host.Selection.Clear();`)
    — the contract is "whoever switches sessions must remember to poke three
    internals", enforced by nothing and documented nowhere in the interface. The
    one method that comes close, `ResetMessageTracking()`
-   (`ChatScreenBridge.cs:439`), covers exactly one of ~11 fields, and `MarkSeen`'s
-   own doc comment (`:445-446`) admits the coupling: "`ResetMessageTracking`
+   (`ChatScreenBridge.cs:476`), covers exactly one of ~11 fields, and `MarkSeen`'s
+   own doc comment (`:482-483`) admits the coupling: "`ResetMessageTracking`
    re-arms on session switch/new session, where the timeline is cleared
    alongside."
-3. `Dispose()` (`:617`) releases only the bus subscription, so a renderer swap
+3. `Dispose()` (`:704`) releases only the bus subscription, so a renderer swap
    mid-session leaves every accumulated field in place for the next subscriber.
+
+Every number in this list was off when #868 measured it — the field block, both
+caller citations, the method and the doc comment. They are named with the symbol
+they point at for that reason: a `Dispose()` at `:617` is a line 87 lines above
+the `Dispose` the sentence is about, and it still *exists*, so nothing but a
+reader notices.
 
 **The rule:** *if a type holds session-derived mutable state, it needs a
 `Reset`/`ResetTo(sessionId)` — and the "new session" transition must call it, so
