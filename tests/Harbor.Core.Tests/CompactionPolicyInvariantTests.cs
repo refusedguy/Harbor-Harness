@@ -378,20 +378,31 @@ public class CompactionPolicyInvariantTests
     // =====================================================================
 
     /// <summary>
-    ///     Indices at which a kept slice opens on an unpaired
-    ///     <see cref="ToolResultMessage" />. Index 0 is the case that matters: a
-    ///     conversation whose first message is a tool result whose tool_call is not in
-    ///     the conversation.
+    ///     The indices of the LEADING run of <see cref="ToolResultMessage" />s in a kept
+    ///     slice — which is the only orphan this can prove from the slice alone.
+    ///     <para>
+    ///         A tool result at index 0 has, by construction, no tool_call to pair it:
+    ///         whatever issued it is not in the slice, because the slice starts after it.
+    ///         A result further along may be perfectly paired, and whether it is cannot be
+    ///         told from the kept messages alone — an assistant turn precedes it, but the
+    ///         tool_call could be one this slice dropped. So a result at index &gt; 0 is not
+    ///         reported. Over-reporting would be the safe direction for a
+    ///         never-returns-a-bad-thing detector, but this one grades a defect with a
+    ///         specific shape, and grading shape instead of correctness turns the rule off
+    ///         rather than fixing it.
+    ///     </para>
     /// </summary>
     internal static List<int> FindOrphanOpenings(IReadOnlyList<AgentMessage> kept)
     {
         var openings = new List<int>();
         for (int i = 0; i < kept.Count; i++)
         {
-            if (kept[i] is ToolResultMessage)
+            if (kept[i] is not ToolResultMessage)
             {
-                openings.Add(i);
+                break;
             }
+
+            openings.Add(i);
         }
 
         return openings;
