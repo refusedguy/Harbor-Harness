@@ -5,4 +5,6 @@ global using System.Globalization;
 global using System.Linq;
 global using System.Threading;
 global using System.Threading.Tasks;
-global using Microsoft.Extensions.Logging;
+// #754: `global using Microsoft.Extensions.Logging;` removed with its
+// PackageReference — it existed only to resolve that package for the deleted
+// RecentItemsService, and no file here names a type from it.

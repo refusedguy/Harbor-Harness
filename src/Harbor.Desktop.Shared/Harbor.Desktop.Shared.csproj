@@ -3,12 +3,11 @@
   <!--
     Harbor.Desktop.Shared — cross-platform implementations built on top of
     Harbor.Desktop.Abstractions. No UI-framework references; depends on Markdig
-    (already used by every desktop app) and Microsoft.Extensions.Logging.Abstractions.
+    (already used by every desktop app).
 
     Dependency rule (enforced by Harbor.Architecture.Tests):
       ✅ Harbor.Desktop.Abstractions
       ✅ Markdig (for MarkdownToPlainTextService)
-      ✅ Microsoft.Extensions.Logging.Abstractions
       ❌ NO Avalonia / WPF / MAUI / Blazor
   -->
 
@@ -34,7 +33,13 @@
   <ItemGroup>
     <PackageReference Include="Markdig"/>
     <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions"/>
-    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions"/>
+    <!-- #754: Microsoft.Extensions.Logging.Abstractions was dropped. Its only
+         consumer was Services/RecentItemsService, deleted by #535; no file in this
+         assembly named a logging type afterwards. Nothing needs it at build time
+         (the public surface exposes no logging type and there is no generator here)
+         and nothing needed it at run time either — the package was already
+         transitive via Harbor.Desktop.Abstractions and Harbor.Ui.Framework.Abstractions,
+         both ProjectReferences below. -->
   </ItemGroup>
 
 </Project>
