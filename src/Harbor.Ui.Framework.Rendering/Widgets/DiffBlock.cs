@@ -152,32 +152,87 @@ public static class UnifiedDiffParser
     private static (int OldStart, int NewStart, bool Ok) ParseHunk(ReadOnlySpan<char> header)
     {
         // Format: @@ -a[,b] +c[,d] @@ …
-        int plus = header.IndexOf('+');
-        if (plus < 0)
+        //
+        // The header is checked as a format, not skimmed for something that
+        // happens to parse (#740). The text arrives from tool output — an MCP
+        // server's resource body, a command's stdout, a `.patch` file — so a
+        // header that does not spell the format out is not a hunk, and
+        // guessing a number for it is what put a negative in the gutter.
+        int i = 0;
+        if (!ExpectToken(header, ref i, "@@ -")
+            || !TryReadNumber(header, ref i, out int oldStart)
+            || !TryReadOptionalCount(header, ref i)
+            || !ExpectToken(header, ref i, " +")
+            || !TryReadNumber(header, ref i, out int newStart)
+            || !TryReadOptionalCount(header, ref i))
         {
             return (0, 0, false);
         }
 
-        int secondAt = header.Slice(plus).IndexOf("@@");
-        int tailEnd = secondAt >= 0 ? plus + secondAt : header.Length;
-
-        var oldPart = header.Slice(4, Math.Max(0, plus - 5));
-        var newPart = header.Slice(plus + 1, Math.Max(0, tailEnd - plus - 1));
-
-        return (ParseLeadingInt(oldPart), ParseLeadingInt(newPart),
-            int.TryParse(SpanSliceUntil(oldPart, ','), NumberStyles.Integer, CultureInfo.InvariantCulture, out _));
+        return (oldStart, newStart, true);
     }
 
-    private static ReadOnlySpan<char> SpanSliceUntil(ReadOnlySpan<char> span, char stop)
+    /// <summary>
+    /// One line number: unsigned decimal digits, and a value an
+    /// <see cref="int"/> holds. <c>NumberStyles.Integer</c> — which is what
+    /// this used to parse with — also admits a leading sign and surrounding
+    /// blanks, so <c>@@ - -5,1 +1,1 @@</c> read as the line -5. A sign is not
+    /// diff syntax and a blank is not a digit, so neither is accepted here.
+    /// A run of digits too long to be a number is rejected rather than
+    /// truncated or wrapped: it is malformed input, and there is no correct
+    /// shorter number to substitute for it.
+    /// </summary>
+    private static bool TryReadNumber(ReadOnlySpan<char> header, ref int i, out int value)
     {
-        int i = span.IndexOf(stop);
-        return i >= 0 ? span[..i] : span;
+        value = 0;
+        int start = i;
+
+        while (i < header.Length && header[i] is >= '0' and <= '9')
+        {
+            int digit = header[i] - '0';
+
+            // Tested before the multiply, so this cannot overflow. The
+            // previous parser let a 20-digit number reach int.TryParse and
+            // trust its `false`; this rejects it at the digit that broke it.
+            if (value > (int.MaxValue - digit) / 10)
+            {
+                return false;
+            }
+
+            value = (value * 10) + digit;
+            i++;
+        }
+
+        return i > start; // at least one digit
     }
 
-    private static int ParseLeadingInt(ReadOnlySpan<char> span)
+    /// <summary>
+    /// The optional <c>,b</c> length that follows a line number. Absent is
+    /// fine — <c>@@ -1 +1 @@</c> is a valid single-line hunk. Present but not
+    /// a number is not: <c>@@ -1, +2 @@</c> is malformed, not a length of 1.
+    /// The old parser validated only the text <em>before</em> the comma, so
+    /// the length on this side, and this whole side, went unchecked (#740).
+    /// </summary>
+    private static bool TryReadOptionalCount(ReadOnlySpan<char> header, ref int i)
     {
-        span = SpanSliceUntil(span.TrimStart(), ',');
-        return int.TryParse(span, NumberStyles.Integer, CultureInfo.InvariantCulture, out var v) ? v : 0;
+        if (i >= header.Length || header[i] != ',')
+        {
+            return true;
+        }
+
+        i++;
+        return TryReadNumber(header, ref i, out _);
+    }
+
+    private static bool ExpectToken(ReadOnlySpan<char> header, ref int i, string token)
+    {
+        if (!header.Slice(i).StartsWith(token, StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        i += token.Length;
+        return true;
     }
 }
 
