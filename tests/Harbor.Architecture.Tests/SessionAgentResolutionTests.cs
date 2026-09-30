@@ -380,7 +380,7 @@ public sealed class SessionAgentResolutionTests
     {
         var store = new MemorySessionStore();
         return new SessionSwitcher(
-            agent, store, new SessionFactory(registry, agent, store, NullLogger<SessionFactory>.Instance),
+            agent, store, new SessionFactory(registry, agent, store, new CoreSessionForker(store), NullLogger<SessionFactory>.Instance),
             NullLogger<SessionSwitcher>.Instance);
     }
 

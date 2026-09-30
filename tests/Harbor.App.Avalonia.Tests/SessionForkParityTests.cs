@@ -1,6 +1,7 @@
 using Harbor.Abstractions.Agents;
 using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Sessions;
+using Harbor.App.Avalonia.Services;
 using Harbor.Application.Sessions;
 using Harbor.Storage.Memory;
 using Harbor.TestKit;
@@ -177,6 +178,7 @@ public class SessionForkParityTests
             new FakeAgentRegistry(AgentDefinition.CodeDefault("test-model", "test-provider")),
             new FakeAgent(),
             store,
+            new SessionForkerAdapter(store),
             NullLogger<SessionFactory>.Instance);
         return (factory, store);
     }
