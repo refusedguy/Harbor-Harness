@@ -168,41 +168,49 @@ public sealed class ProjectFileTreeScanner
             .ListAsync(directory, cancellationToken)
             .ConfigureAwait(false);
 
-        if (rootListing.IsSuccess)
+        if (rootListing.IsFailure)
         {
-            var budget = new NodeBudget(_maxNodes);
-            FileTreeNode rootNode = CreateDirectoryNode(
-                Path.GetFileName(directory),
-                directory,
-                expanded: true);
-
-            // The root row is the tree's first node, so it is charged like any
-            // other: a budget of one yields a root with nothing under it, which is
-            // still a tree the user can read. `TryTake` cannot answer false here
-            // because the constructor clamps the budget to at least one — the call
-            // is for the accounting, not for the branch.
-            _ = budget.TryTake();
-            await PopulateAsync(rootNode, rootListing.Value, depth: 0, budget, cancellationToken)
-                .ConfigureAwait(false);
-
-            if (budget.Truncated)
-            {
-                // Warning, not Debug: this is the one case where the tree on screen
-                // is a strict prefix of the project, and the user is entitled to
-                // know it.
-                _logger.LogWarning(
-                    "File-tree scan of {Dir} stopped at the {MaxNodes}-node budget — the tree is a prefix of the project",
-                    directory,
-                    _maxNodes);
-            }
-
-            return Result.Success(rootNode);
+            // The root is the one listing whose failure means there is nothing to
+            // draw. A NESTED failure degrades to "no children" inside PopulateAsync,
+            // because a tree with one unreadable folder is still a useful tree.
+            //
+            // `ConvertFailure`, not a hand-rolled `Result.Failure<FileTreeNode>(
+            // rootListing.Error)`: re-typing a failure by rebuilding it is what
+            // ResultFailureConversionTests.GuardedTrees_DoNotHandRollFailureConversion
+            // forbids, and the reason it forbids it is that the rebuilt error is a
+            // new string with a new stack nobody will ever read. This guard's `if`
+            // is load-bearing in both directions — it is what keeps the
+            // `rootListing.Value` below legal.
+            return rootListing.ConvertFailure<FileTreeNode>();
         }
 
-        // The root is the one listing whose failure means there is nothing to draw.
-        // A NESTED failure degrades to "no children" inside PopulateAsync, because
-        // a tree with one unreadable folder is still a useful tree.
-        return Result.Failure<FileTreeNode>(rootListing.Error);
+        var budget = new NodeBudget(_maxNodes);
+        FileTreeNode rootNode = CreateDirectoryNode(
+            Path.GetFileName(directory),
+            directory,
+            expanded: true);
+
+        // The root row is the tree's first node, so it is charged like any other: a
+        // budget of one yields a root with nothing under it, which is still a tree
+        // the user can read. `TryTake` cannot answer false here because the
+        // constructor clamps the budget to at least one — the call is for the
+        // accounting, not for the branch.
+        _ = budget.TryTake();
+
+        await PopulateAsync(rootNode, rootListing.Value, depth: 0, budget, cancellationToken)
+            .ConfigureAwait(false);
+
+        if (budget.Truncated)
+        {
+            // Warning, not Debug: this is the one case where the tree on screen is
+            // a strict prefix of the project, and the user is entitled to know it.
+            _logger.LogWarning(
+                "File-tree scan of {Dir} stopped at the {MaxNodes}-node budget — the tree is a prefix of the project",
+                directory,
+                _maxNodes);
+        }
+
+        return Result.Success(rootNode);
     }
 
     /// <summary>
