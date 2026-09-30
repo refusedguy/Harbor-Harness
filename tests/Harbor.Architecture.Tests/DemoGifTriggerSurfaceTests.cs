@@ -42,11 +42,23 @@
 //      paths, so a parser that stops matching YAML reports "fully covered"
 //      vacuously rather than "uncovered".
 //
-// STATUS: never compiled locally. Local dotnet builds are forbidden in this
-// repository (many concurrent agents on one box), so the first CI run is the
-// first build. Treat the C# as unverified until then; the first build to touch it
-// may find a genuine compile error, and that is the point of sending it rather
-// than a defect to reason about locally.
+// STATUS: first CI run compiled this file clean and failed TWO tests, which is
+// the record worth keeping:
+//
+//   * `ThePushFilter_WasActuallyParsed` — reported "Parsed: " with nothing after
+//     it. `ReadPushPaths` compared `l.TrimEnd()` against "push:", and the keys
+//     are INDENTED, so neither comparison ever matched and the parse returned an
+//     empty filter.
+//   * `EveryRecordingInput_IsCoveredByTheWorkflowTrigger` — then reported all
+//     EIGHT recording inputs as uncovered, which was a true statement about an
+//     empty filter and a false one about demo.yml.
+//
+// That is the non-vacuity design paying for itself in the cheapest possible
+// currency: the parse bug surfaced as its own legible message rather than as a
+// mystery in a different test's finding. Fixed to `l.Trim()`; both green on the
+// run after. Had the parse guard been absent, the coverage rule would have
+// failed with a confident, entirely wrong story about the workflow, and the
+// obvious next step — widening the filter again — would have made things worse.
 
 using System.Text;
 using System.Text.RegularExpressions;
@@ -353,13 +365,21 @@ public sealed class DemoGifTriggerSurfaceTests
         string workflow = Path.Combine(root, WorkflowPath);
         string[] lines = File.ReadAllLines(workflow);
 
-        int push = Array.FindIndex(lines, l => l.TrimEnd() == "push:");
+        // Trim(), NOT TrimEnd(). The keys are INDENTED in the YAML, so TrimEnd
+        // leaves the leading spaces in place and neither comparison below ever
+        // matches. The first CI run of this file failed for exactly that reason:
+        // the parse silently returned an empty filter, and the rule then read
+        // "no recording input is covered" — a red that looked like a finding
+        // about demo.yml and was really a bug in the reader. The non-vacuity
+        // test below is what turned that into a legible message instead of a
+        // mystery.
+        int push = Array.FindIndex(lines, l => l.Trim() == "push:");
         if (push < 0)
         {
             return [];
         }
 
-        int paths = Array.FindIndex(lines, push, l => l.TrimEnd() == "paths:");
+        int paths = Array.FindIndex(lines, push, l => l.Trim() == "paths:");
         if (paths < 0)
         {
             return [];
