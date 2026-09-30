@@ -78,7 +78,7 @@ public sealed class ShellLocatorTests
                 Assert.Throws<InvalidOperationException>(() => ShellLocator.Of(orphan));
             await Assert.That(thrown.Message.Contains(nameof(IShellLocatorHost), StringComparison.Ordinal))
                 .IsTrue();
-        });
+        }, CancellationToken.None);
     }
 
     /// <summary>

@@ -577,7 +577,7 @@ public class ServiceLocatorBoundaryRules
         }
 
         return SourceScan.TryReadAllText(
-            Path.Combine(root, relative.Replace('/', Path.GetDirectorySeparatorChar)));
+            Path.Combine(root, relative.Replace('/', Path.DirectorySeparatorChar)));
     }
 
     // ── #760 planted control types — never constructed, only reflected over ──
