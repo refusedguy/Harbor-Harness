@@ -121,6 +121,15 @@ public sealed class WhichKeyHelpOverlay
 
         if (key.KeyChar == '?')
         {
+            // #833: a chord is not a dismissal. The gate is the ConsoleModifiers
+            // overload of the same rule the kitty path uses — and it admits
+            // Shift, because `?` IS a shifted rune, so a strict "no modifiers"
+            // gate would refuse this overlay's own dismiss key.
+            if (key.Modifiers.IsCommandModifier())
+            {
+                return false;
+            }
+
             Hide();
             return true;
         }
