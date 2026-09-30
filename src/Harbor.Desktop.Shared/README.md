@@ -2,7 +2,7 @@
 
 Cross-platform implementations built on top of `Harbor.Desktop.Abstractions`.
 No UI-framework references — depends only on `Markdig` (already used by every
-desktop app) and `Microsoft.Extensions.Logging.Abstractions`.
+desktop app).
 
 ## What's shared
 
@@ -28,8 +28,13 @@ desktop app) and `Microsoft.Extensions.Logging.Abstractions`.
 
 ✅ **Allowed**: `Harbor.Desktop.Abstractions`, `Harbor.Ui.Framework`,
 `Harbor.Ui.Framework.Abstractions` (slash-command registry, #462),
-`Markdig`, `Microsoft.Extensions.Logging.Abstractions`,
-`Microsoft.Extensions.DependencyInjection.Abstractions`.
+`Markdig`, `Microsoft.Extensions.DependencyInjection.Abstractions`.
+
+`Microsoft.Extensions.Logging.Abstractions` used to be on this list. #535
+deleted `Services/RecentItemsService`, the only type here that logged, and #754
+dropped the reference that outlived it — so this assembly now names no logging
+type at all. Don't add the package back for a single `ILogger`: take the
+constructor parameter from the composition root's existing logging stack.
 
 ❌ **Forbidden**: any UI framework (`Avalonia*`, `System.Windows.*`,
 `Microsoft.Maui.*`, `Microsoft.AspNetCore.Components.*`).
