@@ -513,7 +513,7 @@ public sealed class PanelImplementationBoundaryRules
 
         await Assert.That(string.Join(" | ", demanded))
             .IsEqualTo(
-                $"{typeof(PanelLocatorFixture.ContainerCtorPanel).FullName} :: ctor parameter '_container' (IServiceProvider)")
+                $"{typeof(PanelLocatorFixture.ContainerCtorPanel).FullName} :: ctor parameter 'services' (IServiceProvider)")
             .Because(
                 "the other half of the same defect, and the one #474's own prescription would have "
                 + "recommended: a panel taking the container it should be handed values by. Read: "
@@ -587,12 +587,27 @@ internal static class PanelLocatorFixture
         public bool OnKey(UiKey key, PanelContext ctx) => false;
     }
 
-    /// <summary>Demands a container as a constructor parameter. The other half. Must be reported.</summary>
+    /// <summary>
+    ///     Demands a container as a constructor parameter. The other half, and the
+    ///     one #474's own prescription would have recommended. Must be reported.
+    /// </summary>
+    /// <remarks>
+    ///     <para>
+    ///         Deliberately NOT <c>readonly</c> and deliberately not also holding a
+    ///         container in a field: the control must attribute each reported line to
+    ///         one mechanism. An earlier version of this fixture used a readonly field
+    ///         assigned from the ctor parameter, which the first red run duly
+    ///         reported TWICE — the field first, then the parameter — and the
+    ///         exact-string assertion caught the ambiguity the probe had just proved
+    ///         correct. The parameter is named <c>services</c> so the control's expected
+    ///         string is pinned to the parameter's own name.
+    ///     </para>
+    /// </remarks>
     internal sealed class ContainerCtorPanel : IPanelProvider
     {
-        private readonly IServiceProvider _container;
+        private IServiceProvider _services = null!;
 
-        public ContainerCtorPanel(IServiceProvider container) => _container = container;
+        public ContainerCtorPanel(IServiceProvider services) => _services = services;
 
         public string Id => "fixture-container-ctor";
 
@@ -602,7 +617,7 @@ internal static class PanelLocatorFixture
 
         public int DefaultSize => 10;
 
-        public object? Build(PanelContext ctx) => _container.ToString();
+        public object? Build(PanelContext ctx) => _services.ToString();
 
         public bool OnKey(UiKey key, PanelContext ctx) => false;
     }
