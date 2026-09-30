@@ -31,6 +31,9 @@ inner layer, never the other way around. The innermost layer (Domain/Abstraction
 │    Tui.Notifications                                            │
 │  - Optional contrib/tui renderers: Spectre / .Fullscreen /      │
 │    SpectreTui / TerminalGui / Termina / RazorConsole / Sixel    │
+│  - Harbor.Desktop.Abstractions (config schema: CommonConfig,    │
+│    ICommonConfigStore; desktop VM bases)                        │
+│  - Harbor.Terminal.Abstractions (TUI interfaces, ITuiPlugin)    │
 │  Depends on: Application + Ui.Framework + Abstractions          │
 └─────────────────────────────────────────────────────────────────┘
                                   ▲
@@ -69,8 +72,7 @@ inner layer, never the other way around. The innermost layer (Domain/Abstraction
 │  - Harbor.Ipc.{Abstractions, InProcess, Server, Client}         │
 │  - Harbor.Logging (Serilog per-run timestamped files)           │
 │  Depends on: Domain ONLY (Harbor.Abstractions +                 │
-│              Harbor.Abstractions.Contracts +                    │
-│              Harbor.Desktop.Abstractions)                       │
+│              Harbor.Abstractions.Contracts)                     │
 └─────────────────────────────────────────────────────────────────┘
                                   ▲
                                   │ implements
@@ -97,28 +99,57 @@ inner layer, never the other way around. The innermost layer (Domain/Abstraction
 │    ToolResult, Usage, Pricing etc.; namespace                   │
 │    `Harbor.Abstractions.Models`. Бывший `Harbor.Domain.dll` —   │
 │    переименован в F1 decoupling (ADR-007, commit fa8d3ae).      │
-│  - Harbor.Desktop.Abstractions (Configuration: CommonConfig,    │
-│    ICommonConfigStore; base VMs for cross-platform reuse)       │
-│  - Harbor.Terminal.Abstractions (TUI interfaces, ITuiPlugin)    │
-│  Depends on: NOTHING (only BCL + CSharpFunctionalExtensions +   │
-│              Microsoft.Extensions.Logging.Abstractions etc. —   │
-│              no other Harbor project)                           │
-│  EXCEPTION: Harbor.Desktop.Abstractions → Harbor.Ui.Framework   │
-│             (direct, plus five more Ui.Framework.* edges).       │
-│             Worked around via ICommonConfigModelRefReader in    │
-│             Ui.Framework.Abstractions — the read-only half of    │
-│             the pair; see #453 and ADR-009.                     │
+│  - Harbor.Ipc.Abstractions (IPC contracts)                      │
+│  - Harbor.Ui.Framework.Abstractions (the read-only config port) │
+│    — the read-only half of the shared-config contract pair)     │
+│  - Harbor.Diagnostics.Abstractions, Harbor.Extensions (leaves)  │
+│  Depends on: Harbor.Abstractions.Contracts ONLY, plus BCL +     │
+│              CSharpFunctionalExtensions +                       │
+│              Microsoft.Extensions.Logging.Abstractions — no     │
+│              Application / Infrastructure / Presentation.       │
 └─────────────────────────────────────────────────────────────────┘
 ```
+
+> **Two of this box's entries were wrong until #751, and they were wrong from the
+> start, not out of date.** `Harbor.Desktop.Abstractions` and
+> `Harbor.Terminal.Abstractions` were both listed here as Domain.
+> `FullLayerMatrixTests` has carried `new(Layer.Presentation, …)` for both **since the
+> matrix row was created** (2026-08-25, `5d2df19f`) — nothing was renamed and nothing
+> moved, so this was a description disagreeing with the thing it describes rather than
+> text left behind by a change. For `Desktop.Abstractions` the correction is mechanical,
+> not editorial: `MatrixTable_RespectsLayerRules` lets a `Domain` row reference Domain
+> only, and the project has five live edges into
+> `Harbor.Ui.Framework.{ViewModels,State,Services,Sessions,Rendering}` — all
+> Presentation — so marking it Domain would fail the architecture tests. §2 and the tests
+> were always the truth; this box is only a summary of them.
+>
+> The `-Abstractions` suffix carries no layer meaning, which is why the name could not
+> settle it: Domain holds `Harbor.Abstractions.Contracts`,
+> `Harbor.Diagnostics.Abstractions`, `Harbor.Extensions` and
+> `Harbor.Ui.Framework.Abstractions`; Presentation holds
+> `Harbor.Terminal.Abstractions` and `Harbor.Desktop.Abstractions`. Which name a project
+> *should* have is a layering decision (#555), not a docs one.
+>
+> The `Harbor.Desktop.Abstractions → Harbor.Ui.Framework.*` edges this box used to carry
+> as an EXCEPTION are ordinary Presentation-to-Presentation edges the matrix permits; the
+> circular-dependency workaround they caused is unchanged and is described in the next
+> subsection. The `Harbor.Ui.Framework` *shell* edge that old EXCEPTION named is dead —
+> that project has no `.cs` files at all and an empty allowed set (#450).
 
 ### Why so many projects in the Domain layer?
 
 | Project | Why it's separate | Why it's in Domain (not Application) |
 |---|---|---|
-| `Harbor.Abstractions` | Pure contract surface for the agent harness (LLM, tools, sessions, events, permissions, plugins). A headless consumer (CLI script, MCP bridge, test harness) can reference just this. | Zero dependencies — only BCL + CSharpFunctionalExtensions. |
+| `Harbor.Abstractions` | Pure contract surface for the agent harness (LLM, tools, sessions, events, permissions, plugins). A headless consumer (CLI script, MCP bridge, test harness) can reference just this. | Contracts only — `Harbor.Abstractions.Contracts` and the BCL, no I/O. |
 | `Harbor.Abstractions.Contracts` | Holds the concrete model types (`Session`, `ContentPart`, `ToolResult`, `Usage`, etc.). They declare `namespace Harbor.Abstractions.Models` so consumers don't need a second `using`. Бывший `Harbor.Domain.dll` — переименован в F1 decoupling (ADR-007, commit fa8d3ae, 2026-08-24). | Pure data + formatters — no I/O. |
-| `Harbor.Desktop.Abstractions` | Cross-platform contracts shared by every desktop app (Avalonia / WPF / MAUI / Blazor): `CommonConfig`, `ICommonConfigStore`, base VMs. | Configuration schema + VM contracts are stable across platforms. |
-| `Harbor.Terminal.Abstractions` | TUI contracts: `ITuiRenderer`, `ITuiPlugin`, panel system entry points. Kept separate from `Harbor.Ui.Framework` because terminal vocabulary (Spectre, ANSI) is not relevant to desktop GUIs. | Used by both `Harbor.Ui.Framework` (panel system) and concrete TUI renderers. |
+| `Harbor.Ipc.Abstractions` | IPC contracts for the daemon/remote transport, so a client can be referenced without `Harbor.Ipc.Server` / `Harbor.Ipc.Client`. | Contracts only — `Harbor.Abstractions`, no I/O. |
+| `Harbor.Ui.Framework.Abstractions` | Holds `ICommonConfigModelRefReader`, the narrow read-only port `Harbor.Ui.Framework.Sessions` needs for session bootstrap (#453, ADR-009). It is Domain so the port can sit *below* its consumer instead of beside it. | One narrow contract, no I/O. |
+| `Harbor.Diagnostics.Abstractions`, `Harbor.Extensions` | Telemetry contracts (`ITracer`, `IMetrics`, `CorrelationContext`) and small cross-cutting helpers. | Zero Harbor references — leaves over BCL. |
+
+Projects named `-Abstractions` that are **not** in this layer: `Harbor.Terminal.Abstractions`
+(TUI contracts — Presentation) and `Harbor.Desktop.Abstractions` (config schema + desktop
+VM bases — Presentation). Both were rows in this table's Domain column until #751; see the
+note above the diagram.
 
 ### Circular-dependency workaround: `ICommonConfigModelRefReader`
 
@@ -187,6 +218,7 @@ flowchart TB
         TuiAnsi["Harbor.Tui.AnsiPlain (ANSI + plain)<br/>/ .Notifications"]
         TuiConsoleEx["Harbor.Tui.CellForge (+ .Engine)<br/>/ .NickConsoleEx (cell-diff backends)"]
         TuiContrib["contrib/tui: Spectre / SpectreTui<br/>/ TerminalGui / Termina / RazorConsole / Sixel"]
+        DesktopAbs["Harbor.Desktop.Abstractions<br/>(config schema, desktop VM bases)"]
     end
 
     subgraph App["Application (use cases)"]
@@ -203,6 +235,9 @@ flowchart TB
 
     subgraph Domain["Domain / Abstractions (hexagon core)"]
         Abs["Harbor.Abstractions + Abstractions.Contracts<br/>(IAgent, ITool, ILlmClient, ISessionStore, ...)"]
+    end
+
+    subgraph UiPres["Presentation (UI contracts)"]
         TuiAbs["Harbor.Terminal.Abstractions<br/>(ITuiRenderer, UiState, panels)"]
     end
 
@@ -213,6 +248,8 @@ flowchart TB
     Cli --> Tools
     Cli --> Abs
     Cli --> TuiAbs
+
+    DesktopAbs --> Abs
 
     TuiAnsi --> Abs
     TuiAnsi --> TuiAbs
@@ -237,26 +274,40 @@ flowchart TB
     classDef infra fill:#fff3cd,stroke:#ffc107,stroke-width:2px
     classDef pres fill:#f8d7da,stroke:#dc3545,stroke-width:2px
 
-    class Abs,TuiAbs domain
+    class Abs domain
     class AppLayer,Core,Plugins app
     class Storage,Providers,Tools infra
-    class Cli,TuiAnsi,TuiConsoleEx,TuiContrib pres
+    class Cli,TuiAnsi,TuiConsoleEx,TuiContrib,DesktopAbs,TuiAbs pres
 ```
+
+`Harbor.Terminal.Abstractions` sits in a Presentation subgraph rather than the Domain
+one: it is an `-Abstractions`-named project that the matrix does not place in Domain.
+Corrected in #751 — see the note under the ASCII diagram above.
 
 **Dependency direction = inward only.** Outer layers may reference inner layers;
 inner layers never reference outer layers. The Domain layer has no inbound
-arrows from Harbor projects — only outbound to BCL / third-party NuGet packages.
+arrows from outside itself — only outbound to BCL / third-party NuGet packages, plus
+Domain-to-Domain edges *within* the layer (`Harbor.Abstractions` →
+`Harbor.Abstractions.Contracts`, `Harbor.Ipc.Abstractions` → `Harbor.Abstractions`,
+`Harbor.Ui.Framework.Abstractions` → `Harbor.Abstractions.Contracts`).
 
 
-### Why two projects in the Domain layer?
+### Why so many projects in the Domain layer? (the split, not the count)
 
 `Harbor.Abstractions` is the contract surface for the agent harness (LLM, tools, sessions,
-events, permissions). `Harbor.Tui.Abstractions` is the contract surface for the UI layer
-(views, view models, renderers, panels, UI state). They are kept separate so that a
-headless consumer (CLI script, MCP bridge, test harness) can reference just
-`Harbor.Abstractions` without dragging in any UI vocabulary. Both projects are in the
-Domain layer and may reference each other; in practice `Harbor.Tui.Abstractions` references
-`Harbor.Abstractions` (for `IAgent`, `AgentEvent`, `Session`), never the reverse.
+events, permissions). `Harbor.Abstractions.Contracts` holds the concrete model types
+those contracts speak in, split off in F1 decoupling (ADR-007) so a consumer can take the
+contracts without the data. They are kept separate so that a headless consumer
+(CLI script, MCP bridge, test harness) can reference just `Harbor.Abstractions` without
+dragging in model DTOs. Both are Domain and reference each other in one direction only:
+`Harbor.Abstractions` → `Harbor.Abstractions.Contracts`, never the reverse.
+
+> This subsection used to be headed "Why **two** projects in the Domain layer?" and named
+> `Harbor.Tui.Abstractions` as the second one. That project does not exist — it was a
+> deprecated facade, it has no matrix row, and `src/` has no directory for it any more.
+> The Domain layer is six projects deep in the matrix, and §1's diagram lists them. The
+> `-Abstractions`-named projects that are **not** Domain are `Harbor.Terminal.Abstractions`
+> and `Harbor.Desktop.Abstractions` (both Presentation) — corrected in #751.
 
 ---
 
