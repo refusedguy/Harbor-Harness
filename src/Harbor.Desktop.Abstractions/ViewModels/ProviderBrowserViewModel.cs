@@ -183,6 +183,15 @@ public sealed record ModelRowViewModel(
     bool SupportsReasoning,
     bool SupportsVision,
     bool SupportsToolUse,
+
+    /// <summary>
+    ///     #686: the row carries the label, not the two rates. A row that formats
+    ///     its own rates is a row free to disagree with the other row — which is
+    ///     how the browser came to print "$0.00 in / $0.00 out per 1M" for a model
+    ///     whose catalogue entry has no rates at all. The wording and the
+    ///     unknown-price decision both live in <see cref="ModelRateLabel" />,
+    ///     shared with the picker dropdown.
+    /// </summary>
     string PricingLabel)
 {
     public string Features =>
@@ -192,13 +201,4 @@ public sealed record ModelRowViewModel(
             SupportsVision ? "vision" : null,
             SupportsReasoning ? "reasoning" : null
         }.Where(s => s is not null)!) ?? "—";
-
-    /// <summary>
-    ///     #686: the row now carries the label instead of the two rates, because
-    ///     formatting them here is what let the browser print "$0.00 in / $0.00
-    ///     out per 1M" for a model whose catalogue entry has no rates at all. The
-    ///     wording and the unknown-price decision both live in
-    ///     <see cref="ModelRateLabel" />, shared with the picker dropdown.
-    /// </summary>
-    public string PricingLabel { get; }
 }
