@@ -315,18 +315,36 @@ public class SystemPromptSupervisionTests
         }
 
         // A tool that declares no leg must not reach the recipe even when it
-        // resolved, so every name the section prints has a declaration behind it.
+        // resolved. Rendered one leg at a time against every OTHER declared
+        // tool, so each iteration has a section with content and the expected
+        // name set is exactly one — an assertion that could not be satisfied by
+        // an empty extraction.
         string[] withoutLegs =
             [.. DeclaredBuiltinNames().Where(n => !legs.Contains(n, StringComparer.Ordinal))];
-        string prompt = await builder.BuildAsync(Context(Tools(withoutLegs)));
-        string section = PeerSupervisionSection(prompt);
 
-        foreach (string name in BacktickedWords(section))
+        foreach (string leg in legs)
         {
-            await Assert.That(legs.Contains(name, StringComparer.Ordinal)).IsTrue()
-                .Because($"the recipe named `{name}`, which declares no leg — a name in the section that "
-                       + "no declaration claims is a hand-kept copy of the vocabulary");
+            var mixed = new List<string>(withoutLegs) { leg };
+            string prompt = await builder.BuildAsync(Context(Tools([.. mixed])));
+            string[] named = BacktickedWords(PeerSupervisionSection(prompt));
+
+            await Assert.That(named).IsEquivalentTo(new[] { leg })
+                .Because($"with only {leg} among the legs resolved, that is the only tool the section may "
+                       + "name. An extra name here declares no leg and is a hand-kept copy of the "
+                       + "vocabulary; a MISSING one means the composition is not reading the declaration. "
+                       + "Either way the builder is keeping the list #793 is about");
         }
+
+        // And with no leg resolved the section is gone, not rendered with a hole
+        // in it. Every tool in this set resolved, so this is the "these tools
+        // are not what makes the recipe appear" claim, checked against a set
+        // that resolves something.
+        string none = await builder.BuildAsync(Context(Tools(withoutLegs)));
+
+        await Assert.That(none.Contains(SectionHeader, StringComparison.Ordinal)).IsFalse()
+            .Because("every tool in this set resolved and none declares a leg, so the recipe has nothing "
+                   + "to describe; a section here would name tools the turn does not have, or render a "
+                   + "clause with no tool in it");
     }
 
     /// <summary>

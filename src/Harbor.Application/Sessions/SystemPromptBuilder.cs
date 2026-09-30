@@ -324,7 +324,7 @@ public sealed class SystemPromptBuilder : ISystemPromptBuilder
             AppendLeg(builder, ref first, director, PeerSupervisionDirectText);
         }
 
-        builder.AppendLine('.');
+        builder.Append('.').AppendLine();
         builder.AppendLine(PeerSupervisionProtocol);
         builder.AppendLine();
     }
