@@ -56,11 +56,17 @@
 //     TreeView.cs:269                         != None
 //     Tabs.cs:143                             != None
 //     ToolCardTracker.cs:624 + :667           != None
-//     LeaderKeyRouter.cs:94                   != None
+//     LeaderKeyRouter.cs:94                   != None  (consume-and-disarm)
 //     VimComposerMode.cs:37                   == None
-//     DiffViewerOverlay.cs:282                != 0            (kitty)
-//     DiffViewerOverlay.cs:210                != 0            (legacy)
-//     ImageViewerOverlay.cs:124               != 0
+//
+//   BUFFER, BUT NOT A TEXT BUFFER — the taxonomy's sharpest edge, and the
+//   reason the two families are not a spectrum. These three sites hold no text
+//   buffer, yet they correctly ADMIT Shift, because they bind shifted RUNES of
+//   their own: DiffViewerOverlay binds `G` (:310) and ImageViewerOverlay binds
+//   `_` (:139). So "I have no buffer" does NOT imply "refuse Shift"; what
+//   decides it is whether Shift means something AT THIS SITE.
+//     DiffViewerOverlay.cs:282 + :210         (Ctrl|Alt|Meta) != 0
+//     ImageViewerOverlay.cs:124               (Ctrl|Alt|Meta) != 0
 //
 //   UNGATED — the THIRD state, which the issue's two-family taxonomy cannot
 //   name, and the reason a guard that counts only the two families is not
@@ -87,6 +93,19 @@
 // at eight sites" is the same rule measured at one predicate; read as sites it
 // undercounts by more than half, and read as families it omits the ungated one
 // entirely.
+//
+// WHAT THE FIRST DRAFT GOT WRONG, AND WHAT CI SAID
+// -------------------------------------------------
+// Recorded because the corrections are the argument, not a footnote. This file
+// first classified DiffViewerOverlay and ImageViewerOverlay as COMMAND, and
+// asserted they refuse Shift+char. CI run 36725439283 failed both rows — and
+// they were RIGHT and I was wrong: they bind `G` and `_`. It also failed my
+// legacy-DialogOverlay row, because ConsoleKeyInfo has no Meta slot and my
+// probe mapped Meta onto "no flag", testing a gesture that path cannot express.
+// A third row measured LeaderKeyRouter's consume-and-disarm as "resolved a
+// chord". Three of my own rows were wrong before a single line of product code
+// was read, which is the argument for driving real keys instead of trusting a
+// table: a source read cannot tell you which of two readings the code supports.
 //
 // WHY BEHAVIOURAL AND TABLE-DRIVEN, NOT A SOURCE SCAN
 // ---------------------------------------------------
@@ -196,9 +215,17 @@ public class KeyGateFamilyRules
         new("ToolCardTracker(image)", KeyGateFamily.Command, "src/Harbor.Tui.CellForge/Chat/Streaming/ToolCardTracker.cs"),
         new("LeaderKeyRouter", KeyGateFamily.Command, "src/Harbor.Tui.CellForge/Chat/Widgets/LeaderKeyRouter.cs"),
         new("VimComposerMode", KeyGateFamily.Command, "src/Harbor.Tui.CellForge.Engine/Rendering/VimComposerMode.cs"),
-        new("DiffViewerOverlay(kitty)", KeyGateFamily.Command, "src/Harbor.Tui.CellForge/Chat/Widgets/DiffViewerOverlay.cs"),
-        new("DiffViewerOverlay(legacy)", KeyGateFamily.Command, "src/Harbor.Tui.CellForge/Chat/Widgets/DiffViewerOverlay.cs"),
-        new("ImageViewerOverlay", KeyGateFamily.Command, "src/Harbor.Tui.CellForge/Chat/Widgets/ImageViewerOverlay.cs"),
+
+        // Neither of these holds a text buffer, yet both ADMIT Shift — and they
+        // are right to. DiffViewerOverlay binds `G` (:310) and ImageViewerOverlay
+        // binds `_` (:139), so Shift+<rune> is a bound gesture here, exactly as a
+        // capital is in a text buffer. "No buffer" does not imply "refuse Shift";
+        // what decides it is whether Shift means something AT THIS SITE. That is
+        // why the two families are not a spectrum, and why the first draft of
+        // this file got it wrong until CI run 36725439283 said so.
+        new("DiffViewerOverlay(kitty)", KeyGateFamily.Buffer, "src/Harbor.Tui.CellForge/Chat/Widgets/DiffViewerOverlay.cs"),
+        new("DiffViewerOverlay(legacy)", KeyGateFamily.Buffer, "src/Harbor.Tui.CellForge/Chat/Widgets/DiffViewerOverlay.cs"),
+        new("ImageViewerOverlay", KeyGateFamily.Buffer, "src/Harbor.Tui.CellForge/Chat/Widgets/ImageViewerOverlay.cs"),
 
         // ---- UNGATED: no modifier test at all (#833's real finding) ------------
         // SetupChecklistOverlay is REACHED from the product input loop
@@ -221,9 +248,6 @@ public class KeyGateFamilyRules
     /// that swallows the modifier also swallows the letter.
     /// </summary>
     private static KeyEvent ShiftCapitalA() => KeyEvent.Char(new Rune('A'), KeyModifiers.Shift);
-
-    /// <summary>The same rune with a command modifier held.</summary>
-    private static KeyEvent CtrlA() => KeyEvent.Char(new Rune('A'), KeyModifiers.Ctrl);
 
     // ---------------------------------------------------------------- BUFFER --
 
@@ -289,12 +313,23 @@ public class KeyGateFamilyRules
             dialog.ShowPrompt("t", "m");
             await Assert.That(dialog.HandleKey(KeyEvent.Char(new Rune('A'), mods))).IsFalse();
             await Assert.That(dialog.Input).IsEqualTo(string.Empty);
+        }
 
+        // The legacy ConsoleKeyInfo path is its own row because the vocabulary
+        // is NARROWER: ConsoleKeyInfo has no Meta slot, so {Ctrl, Alt} is a
+        // strict subset of the kitty side's {Ctrl, Meta, Alt}. Iterating the
+        // kitty mask here and mapping Meta onto "no flag" would test a gesture
+        // the legacy path cannot even express — and it did: CI run
+        // 36725439283 caught the Meta row passing for exactly that reason.
+        foreach ((string name, bool control, bool alt) in
+                 new[] { ("Ctrl", true, false), ("Alt", false, true) })
+        {
             var legacy = new DialogOverlay();
             legacy.ShowPrompt("t", "m");
+
             await Assert.That(legacy.HandleKey(new ConsoleKeyInfo(
-                'A', ConsoleKey.A, shift: true, alt: mods == KeyModifiers.Alt, control: mods == KeyModifiers.Ctrl)))
-                .IsFalse();
+                'A', ConsoleKey.A, shift: true, alt: alt, control: control))).IsFalse()
+                .Because($"{name}+A is a command on the legacy path (:718 tests Control|Alt) and must not be typed");
             await Assert.That(legacy.Input).IsEqualTo(string.Empty);
         }
     }
@@ -459,6 +494,13 @@ public class KeyGateFamilyRules
         await Assert.That(whichKeyPlain.HandleKey(new ConsoleKeyInfo(
             '?', ConsoleKey.Oem2, shift: true, alt: false, control: false))).IsTrue()
             .Because("the plain shifted '?' still dismisses — the gate admits Shift and refuses Ctrl/Alt/Meta");
+
+        // The measured size of the third family. Not decoration: it is the count
+        // the PR quotes against the issue's, so if a fourth site loses its gate
+        // the number has to be argued about rather than drift.
+        await Assert.That(Table.Count(r => r.Family == KeyGateFamily.Ungated)).IsEqualTo(6)
+            .Because("six sites consume a rune with no modifier test; a different number means the "
+                + "inventory moved and the PR's count is stale");
     }
 
     /// <summary>
@@ -550,37 +592,81 @@ public class KeyGateFamilyRules
     {
         KeyEvent Gate(char c) => KeyEvent.Char(new Rune(c), mods);
 
-        var dialog = new DialogOverlay();
-        dialog.ShowPrompt("t", "m");
-
         return
         [
             ("ApprovalGateView(a)", new ApprovalGateView("bash", "ls -la").HandleKey(Gate('a'))),
             ("TreeView(j)", new TreeView([new TreeNode("root", [])]).HandleKey(Gate('j'))),
             ("Tabs(h)", new Tabs(["one", "two"]).HandleKey(Gate('h'))),
-            ("LeaderKeyRouter(chord)", ArmedLeader().HandleKey(Gate('g'), 500)),
             ("VimComposerMode(j)", NormalModeComposer().HandleKey(Gate('j'), new ComposerController()) != ComposerAction.Ignored),
-            ("DiffViewerOverlay(j)", ShownDiff().HandleKey(
-                new ConsoleKeyInfo('j', ConsoleKey.J, mods == KeyModifiers.Shift, false, mods == KeyModifiers.Ctrl))),
-            ("ImageViewerOverlay(+)", ShownImage().HandleKey(Gate('+'))),
-            ("DialogOverlay-legacy(A)", dialog.HandleKey(new ConsoleKeyInfo(
-                'A', ConsoleKey.A, shift: mods == KeyModifiers.Shift, alt: false, control: mods == KeyModifiers.Ctrl))),
         ];
     }
 
     /// <summary>
-    /// <see cref="LeaderKeyRouter" /> consumes a rune only while ARMED — the
-    /// Ctrl+x leader press arms it and the next plain rune is the chord. Probing
-    /// it unarmed would return false for Shift and for None alike, and the
-    /// control in <see cref="Every_Command_Site_Still_Consumes_The_Unmodified_Char" />
-    /// would pass for the wrong reason.
+    /// The sites that hold NO buffer yet still admit Shift, because they bind
+    /// shifted RUNES of their own: <c>DiffViewerOverlay</c> binds <c>G</c>
+    /// (DiffViewerOverlay.cs:310) and <c>ImageViewerOverlay</c> binds <c>_</c>
+    /// (:139). Their gate is the buffer one — <c>(Ctrl|Alt|Meta) != 0</c> →
+    /// refuse — so <c>Shift+G</c> and <c>Shift+_</c> are gestures they are
+    /// supposed to consume.
+    /// <para>
+    /// This is the taxonomy's sharpest edge and the reason the families cannot
+    /// be collapsed: "no buffer" does NOT imply "refuse Shift". What decides it
+    /// is whether Shift is meaningful AT THIS SITE, and that is true for a text
+    /// buffer and for a capitalised command alike. CI run 36725439283 caught
+    /// this file asserting the opposite.
+    /// </para>
     /// </summary>
-    private static LeaderKeyRouter ArmedLeader()
+    [Test]
+    public async Task A_Shifted_Command_Is_Not_A_Text_Buffer_And_Vice_Versa()
     {
+        // Shift+G is a bound command on the diff viewer (:310), not a stray
+        // capital, so the buffer-family gate admits it.
+        await Assert.That(ShownDiff().HandleKey(KeyEvent.Char(new Rune('G'), KeyModifiers.Shift))).IsTrue()
+            .Because("DiffViewerOverlay binds 'G' as a command; refusing Shift here would make it unreachable");
+
+        // Shift+_ is a bound command on the image viewer (:139).
+        await Assert.That(ShownImage().HandleKey(KeyEvent.Char(new Rune('_'), KeyModifiers.Shift))).IsTrue()
+            .Because("ImageViewerOverlay binds '_' as zoom-out; the same Shift rule as the composer");
+
+        // …and the gate still refuses a real command modifier on both.
+        await Assert.That(ShownDiff().HandleKey(KeyEvent.Char(new Rune('g'), KeyModifiers.Ctrl))).IsFalse();
+        await Assert.That(ShownImage().HandleKey(KeyEvent.Char(new Rune('_'), KeyModifiers.Ctrl))).IsFalse()
+            .Because("Ctrl+_ is a chord the host owns; the viewer must not claim it");
+    }
+
+    /// <summary>
+    /// <see cref="LeaderKeyRouter" /> returns TRUE for an armed key that is not
+    /// a plain char — it consumes the key to DISARM (:94-97). So "handled" here
+    /// means "swallowed", not "resolved as a chord", and it is a command site by
+    /// a different route: it holds no buffer and refuses Shift in order not to
+    /// let a shifted rune resolve a chord. Asserting it in the command table
+    /// would need the disarm to be distinguished from the resolution, which is
+    /// what <see cref="LeaderKeyRouter_Disarms_Without_Resolving_Shift" /> does.
+    /// </summary>
+    [Test]
+    public async Task LeaderKeyRouter_Disarms_Without_Resolving_Shift()
+    {
+        int fired = 0;
         var router = new LeaderKeyRouter();
-        router.Bind('g', static () => { });
+        router.Bind('g', () => fired++);
         _ = router.HandleKey(KeyEvent.Char(new Rune('x'), KeyModifiers.Ctrl), nowMs: 0);
-        return router;
+        await Assert.That(router.IsPending).IsTrue();
+
+        _ = router.HandleKey(KeyEvent.Char(new Rune('g'), KeyModifiers.Shift), nowMs: 500);
+
+        await Assert.That(fired).IsEqualTo(0)
+            .Because("Shift+g must not resolve the chord — the gate is 'Modifiers != None' (:94)");
+        await Assert.That(router.IsPending).IsFalse()
+            .Because("the router consumed the key to disarm, which is its documented behaviour (:96)");
+
+        // Control: the unmodified rune DOES resolve it.
+        int firedPlain = 0;
+        var plain = new LeaderKeyRouter();
+        plain.Bind('g', () => firedPlain++);
+        _ = plain.HandleKey(KeyEvent.Char(new Rune('x'), KeyModifiers.Ctrl), nowMs: 0);
+        _ = plain.HandleKey(KeyEvent.Char(new Rune('g')), nowMs: 500);
+        await Assert.That(firedPlain).IsEqualTo(1)
+            .Because("the unmodified rune is the gesture the chord is for");
     }
 
     /// <summary>
