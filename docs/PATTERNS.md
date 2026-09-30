@@ -381,10 +381,14 @@ parse/IO failures.
 
 Two more live instances of the banned direction:
 
-- `src/Harbor.Abstractions/Tools/ITool.cs:98` — `ValidateArguments(args) =>
+- `src/Harbor.Abstractions/Tools/ITool.cs:124` — `ValidateArguments(args) =>
   Result.Success()` accepts any argument shape. Currently harmless **only**
-  because all 26 in-tree `ITool` implementations override it — which is exactly
-  why it is safe to delete rather than reason about.
+  because all 22 in-tree `ITool` implementations override it (`grep -rnE "class
+  [A-Za-z0-9_]+ *: *[A-Za-z0-9_.]*ITool" src/`, 22 distinct types, none in a file
+  without a `ValidateArguments`) — which is exactly why it is safe to delete
+  rather than reason about. §9 cited this same member at `:74`, which is a
+  doc-comment line on `SafetyProfile`; two numbers for one claim in one document,
+  and neither was right.
 - `src/Harbor.Terminal.Abstractions/Views/ITuiView.cs:32` —
   `OnEventAsync(...) => Task.CompletedTask`, and the hook has **zero callers**.
   `BaseTuiRenderer` only calls `view.RenderAsync`
@@ -448,13 +452,16 @@ then the default arm invents an answer. Every instance in #578 is the default ar
 | #556 | `ChatRole → (label, markdown?)` written 4×, all four `_ =>` arms **silently relabelling** a new role |
 | #567 | tool-call lifecycle as three enums, all `_ =>` render a new state as `running` — a cancelled call spins forever |
 | #553 | `Rect.Width < 2` guard lost in 2 of 7 copies; corners drawn **outside** the requested rect |
-| #557 | `PathGuardSafetyPolicy.DefaultTools` (`IArgSafetyPolicy.cs:107-110`) is a hand-rolled tool-name list; omitting a path-taking write-tool means `new("mytool","src/*",Allow)` authorises `src/../../../etc/passwd` |
+| #557 | the tool-name list behind the path guard — `PathArgExtractionPolicy.DefaultTools` (`PathArgExtractionPolicy.cs:53`), a hand-rolled set rather than a union; omitting a path-taking write-tool means `new("mytool","src/*",Allow)` authorises `src/../../../etc/passwd`. #557's fix was to make `ITool.SafetyProfile` a required member and derive the set from it, so what is cited here today is the derived fallback, not the literal that caused it |
 
 ### The wire unions, which are the hand-maintained lists
 
 - `src/Harbor.Abstractions.Contracts/Events/AgentEvent.cs:9-25` — 17
   `[JsonDerivedType]` entries for the `AgentEvent` record union; the nested
-  `LlmEvent` union has 13 at `:191-203`. Declared in **`Harbor.Abstractions.Events`**,
+  `LlmEvent` union has 13 at `:210-222` (immediately above
+  `public abstract record LlmEvent;` at `:223` — the tags are on the *members*,
+  so the block that counts them is the one above the declaration, not the one
+  below). Declared in **`Harbor.Abstractions.Events`**,
   not `Harbor.Abstractions.Contracts.Events` — the *project* is
   `Harbor.Abstractions.Contracts`, the *namespace* is not under it. Read the
   `namespace` line; do not infer it from the folder.
@@ -482,11 +489,12 @@ copy.
 ### The known trap, and the sequencing
 
 Issue #578 is explicit: *"Do NOT try to land one giant enforcement PR. Add the
-guard in the same PR as the refactor of each union."* There are 17 sites in the tree today
-that carry a wildcard arm over one of these unions, and every one is a real
-finding. Landing the rule bare would be a permanently red build; landing it as a
-ratchet means **the set may shrink but never grow**, and each existing row names
-the issue that owns removing it.
+guard in the same PR as the refactor of each union."* The ratchet opened at 17
+rows and stands at **7** — `WildcardBaseline` in the guard is the number, not
+this sentence, and every deletion from it is a fix that landed. Landing the rule
+bare would be a permanently red build; landing it as a ratchet means **the set
+may shrink but never grow**, and each existing row names the issue that owns
+removing it.
 
 The ratchet is not decorative. It already fired once: the two IPC projections
 were four rows, #495 was fixed on `dev` while this document was being written,
@@ -526,7 +534,9 @@ union by reflection and **refuse to start** when coverage is incomplete.
 **Guard:** `tests/Harbor.Architecture.Tests/ExhaustiveUnionSwitchRule.cs` — the
 union census comes from reflection, the wildcard-arm scan runs over
 `src/`, `apps/`, `contrib/tui/`, `contrib/apps/`, and the current set must be a
-subset of a 17-row baseline. The scan is deliberately conservative: a switch must
+subset of the baseline — **7 rows** (`WildcardBaseline`, down from 17; read the
+dictionary, do not read this sentence, it is the number that goes stale). The
+scan is deliberately conservative: a switch must
 name at least 2 distinct members of a registered union before it counts as "a
 switch over that union", so unrelated switches are never graded for
 exhaustiveness they were not claiming.
