@@ -133,10 +133,15 @@ internal sealed class ConfigCommand : IReplCommand
             return;
         }
 
+        // Read the mutation in the block the guard above already left, not inside
+        // the `UpdateAsync` lambda: there the check and the read sit in different
+        // scopes and CFE0001 cannot see across the boundary.
+        Action<HarborConfig> apply = decision.Value;
+
         var configStore = host.ConfigStore;
         var updateResult = await configStore.UpdateAsync(c =>
         {
-            decision.Value(c);
+            apply(c);
             return c;
         }, ct).ConfigureAwait(false);
 

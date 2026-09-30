@@ -78,9 +78,17 @@ public sealed class ConfigCommand : ISlashCommand
                 return decision.ConvertFailure();
             }
 
+            // Read the mutation HERE, in the block the guard above already left.
+            // Inside the `UpdateAsync` lambda the check and the read sit in
+            // different scopes, and CFE0001 — the guard that stops `.Value` on a
+            // failed `Result` from throwing §ROP-001's crash into production —
+            // cannot see across that boundary. `ModelCommand.cs:87-93` reads its
+            // `Result` the same way, in the body and not in a closure.
+            Action<HarborConfig> apply = decision.Value;
+
             var updateResult = await _configStore.UpdateAsync(c =>
             {
-                decision.Value(c);
+                apply(c);
                 return c;
             }, ct).ConfigureAwait(false);
 
