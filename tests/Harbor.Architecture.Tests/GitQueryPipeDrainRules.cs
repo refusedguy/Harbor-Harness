@@ -459,9 +459,9 @@ public sealed class GitQueryPipeDrainRules
                 continue;
             }
 
-            foreach ((int offset, string block) in MembersOf(code))
+            foreach ((int line, string block) in MembersOf(code))
             {
-                violations.AddRange(rule(block).Select(v => $"{file}:{LineOf(code, offset)}  {v}"));
+                violations.AddRange(rule(block).Select(v => $"{file}:{line}  {v}"));
             }
         }
 
@@ -487,16 +487,25 @@ public sealed class GitQueryPipeDrainRules
             return [];
         }
 
-        return [.. MembersOf(code).Select(m => $"{relative}:{LineOf(code, m.Offset)}")];
+        return [.. MembersOf(code).Select(m => $"{relative}:{m.Line}")];
     }
 
     /// <summary>
-    ///     Every member in <paramref name="code" /> that spawns a process, as the offset
-    ///     of its <c>ProcessStartInfo</c> token and the block that encloses it.
-    ///     Offsets are into the COMMENT-STRIPPED text, so line numbers reported from
-    ///     them still point at the real source line.
+    ///     Every member in <paramref name="code" /> that spawns a process, as the LINE of
+    ///     its <c>ProcessStartInfo</c> token and the block that encloses it.
     /// </summary>
-    private static IReadOnlyList<(int Offset, string Block)> MembersOf(string code)
+    /// <remarks>
+    ///     The line is counted in the COMMENT-STRIPPED text, because the offsets are
+    ///     offsets into that text — <c>SourceScan.StripComments</c> collapses a
+    ///     <c>//</c> comment to a single space, so the stripped string is SHORTER than
+    ///     the file and an offset measured against one cannot be looked up in the
+    ///     other. Newlines are preserved by both, so counting in the stripped text
+    ///     still names the real source line. Getting this wrong is not cosmetic: the
+    ///     red run of this guard reported the violation at line 60 of a file whose
+    ///     spawn is at line 106, and a failure message pointing at the wrong line is
+    ///     half a guard.
+    /// </remarks>
+    private static IReadOnlyList<(int Line, string Block)> MembersOf(string code)
     {
         string stripped = SourceScan.StripComments(code);
         var members = new List<(int, string)>();
@@ -506,7 +515,7 @@ public sealed class GitQueryPipeDrainRules
             string block = InnermostBlockContaining(stripped, SpawnNeedle, at);
             if (block.Length > 0)
             {
-                members.Add((at, block));
+                members.Add((LineOf(stripped, at), block));
             }
 
             at = stripped.IndexOf(SpawnNeedle, at + SpawnNeedle.Length, StringComparison.Ordinal);
@@ -599,7 +608,10 @@ public sealed class GitQueryPipeDrainRules
         return bestOpen < 0 ? string.Empty : text[bestOpen..(bestOpen + bestLength + 1)];
     }
 
-    /// <summary>1-based line number of a character offset.</summary>
+    /// <summary>
+    ///     1-based line number of a character offset, counted in the text it is an
+    ///     offset INTO.
+    /// </summary>
     private static int LineOf(string text, int at)
     {
         int line = 1;
