@@ -57,22 +57,27 @@ public sealed class DebouncedPluginWatcherOrderingTests : IDisposable
     }
 
     /// <summary>
-    ///     Wait for the creation burst, then for a quiet stretch long enough that a late
-    ///     inotify echo has landed and armed its own window. A count that stops growing
-    ///     for <c>Debounce * 3</c> is the same settle condition
-    ///     <c>QuickSaveBurst_CollapsesToSingleModified</c> uses to drain creation echoes.
+    ///     Wait for real progress past <paramref name="baseline" />, THEN for a quiet
+    ///     stretch long enough that a late inotify echo has landed and armed its own
+    ///     window. The two phases cannot be swapped: a count that is merely STABLE is not
+    ///     settled, because the queue is trivially stable before the first event arrives —
+    ///     a stability-first loop declares "settled" on an empty queue and fails. The 10s
+    ///     progress budget and the <c>Debounce * 3</c> settle are the same numbers
+    ///     <c>DebouncedPluginWatcherTests</c> already uses.
     /// </summary>
     private static async Task SettledAsync(ConcurrentQueue<PluginSourceChangeEventArgs> received, int baseline)
     {
+        var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(10);
+        while (received.Count <= baseline && DateTime.UtcNow < deadline)
+            await Task.Delay(40);
+        await Assert.That(received.Count).IsGreaterThan(baseline);
+
         while (true)
         {
             int current = received.Count;
             await Task.Delay(Debounce * 3);
             if (received.Count == current)
-            {
-                await Assert.That(current).IsGreaterThan(baseline);
                 return;
-            }
         }
     }
 
