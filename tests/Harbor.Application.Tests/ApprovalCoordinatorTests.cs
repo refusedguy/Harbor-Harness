@@ -54,17 +54,39 @@ public class ApprovalCoordinatorTests
     [Test]
     public async Task DoubleDecide_SecondIsAlreadyDecided()
     {
+        // #797: the twin is stamped with no waiter in flight. A parked waiter forgets
+        // the slot when it consumes, so asserting the twin's disposition against a
+        // live waiter raced that ForgetGate: AlreadyDecided (slot still there) versus
+        // StaleGate (slot already dropped) — both correct, only one was asserted.
         var coordinator = NewCoordinator();
         coordinator.RegisterGate("g1");
-        var wait = coordinator.WaitForDecisionAsync("g1", CancellationToken.None);
 
         await Assert.That(coordinator.DecideApproval("g1", Approve()))
             .IsEqualTo(ApprovalDecisionDisposition.Accepted);
         await Assert.That(coordinator.DecideApproval("g1", new ApprovalResolution(false, false)))
             .IsEqualTo(ApprovalDecisionDisposition.AlreadyDecided);
 
-        // First decision stands.
+        // First decision stands: the twin's Deny did not overwrite the slot.
+        var outcome = await coordinator.WaitForDecisionAsync("g1", CancellationToken.None);
+        await Assert.That(outcome).IsNotNull();
+        await Assert.That(outcome!.Approved).IsTrue();
+    }
+
+    [Test]
+    public async Task DecideWithWaiterParked_WaiterResolves()
+    {
+        // The order DoubleDecide deliberately does not test: the waiter is already
+        // parked when the decision lands, so resolution runs the consume path
+        // (ForgetGate) that the twin assertion above must not race.
+        var coordinator = NewCoordinator();
+        coordinator.RegisterGate("g1");
+        var wait = coordinator.WaitForDecisionAsync("g1", CancellationToken.None);
+
+        await Assert.That(coordinator.DecideApproval("g1", Approve()))
+            .IsEqualTo(ApprovalDecisionDisposition.Accepted);
+
         var outcome = await wait;
+        await Assert.That(outcome).IsNotNull();
         await Assert.That(outcome!.Approved).IsTrue();
     }
 

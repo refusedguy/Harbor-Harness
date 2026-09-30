@@ -35,6 +35,8 @@ public class ApprovalGateRouterTupleTests
 
     private static ApprovalResolution Approve() => new(Approved: true, PersistDecision: false);
 
+    private static ApprovalResolution Deny() => new(Approved: false, PersistDecision: false);
+
     [Test]
     public async Task BoundMatch_Accepted_WaiterResolves()
     {
@@ -46,11 +48,39 @@ public class ApprovalGateRouterTupleTests
 
         await Assert.That(router.TryRouteApprovalKey(KeyEvent.Char(new System.Text.Rune('y')))).IsTrue();
 
-        // The winning stamp was recorded: a late twin is AlreadyDecided, not a second accept.
-        // (Before the waiter consumes the gate — WaitForDecisionAsync forgets it on consume.)
-        await Assert.That(coordinator.DecideApproval(gate.Id, "inv-1", 1, Approve()))
-            .IsEqualTo(ApprovalDecisionDisposition.AlreadyDecided);
         var outcome = await wait;
+        await Assert.That(outcome).IsNotNull();
+        await Assert.That(outcome!.Approved).IsTrue();
+    }
+
+    [Test]
+    public async Task BoundMatch_LateTwin_IsAlreadyDecided_AndDoesNotOverwrite()
+    {
+        // #797: this is what the previous BoundMatch_Accepted_WaiterResolves asserted
+        // with a waiter parked on the very TCS the router just completed — a
+        // disposition the test did not own. WaitForDecisionAsync drops the slot on
+        // consume (ApprovalCoordinator.cs:218), and the continuation is queued by
+        // RunContinuationsAsynchronously, so who runs first was up to the scheduler:
+        // test thread first → AlreadyDecided, waiter first → the slot is gone → StaleGate.
+        // Both are correct product states; only the first was the one asserted.
+        //
+        // No waiter is started until the twin is stamped, so the gate is provably
+        // still registered and the disposition follows slot.Decided, not scheduling.
+        var coordinator = NewCoordinator();
+        var (router, _) = MakeRouter(coordinator);
+        var gate = router.BeginApprovalGate("bash", "rm -rf /", "inv-1", 1);
+        coordinator.RegisterGate(gate.Id, "inv-1", 1);
+
+        // The router's stamp wins: gate registered, tuple bound, nothing decided yet.
+        await Assert.That(router.TryRouteApprovalKey(KeyEvent.Char(new System.Text.Rune('y')))).IsTrue();
+
+        // A late twin with the winning identity cannot accept twice.
+        await Assert.That(coordinator.DecideApproval(gate.Id, "inv-1", 1, Deny()))
+            .IsEqualTo(ApprovalDecisionDisposition.AlreadyDecided);
+
+        // And the winner stands: the twin's Deny did not overwrite the slot, so a
+        // waiter attaching afterwards resolves the approval, not the denial.
+        var outcome = await coordinator.WaitForDecisionAsync(gate.Id, CancellationToken.None);
         await Assert.That(outcome).IsNotNull();
         await Assert.That(outcome!.Approved).IsTrue();
     }
