@@ -1,3 +1,4 @@
+using Harbor.Abstractions.Git;
 using Harbor.Ui.Framework.Overlays;
 using TUnit.Assertions;
 using TUnit.Assertions.Extensions;
@@ -6,55 +7,30 @@ namespace Harbor.Tui.Tests;
 
 /// <summary>
 ///     Tests for <see cref="WorktreeJumpSeeder" /> — the pure jump-palette
-///     seeding (slice 2): <c>git worktree list --porcelain</c> parsing plus the
-///     session/worktree merge into <see cref="WorktreeJumpEntry" /> rows.
-///     Deterministic — pure string/list transforms only.
+///     seeding (slice 2): the session/worktree merge into
+///     <see cref="WorktreeJumpEntry" /> rows.
+///     Deterministic — pure list transforms only.
 /// </summary>
+/// <remarks>
+/// <para>
+///     #666: the porcelain <c>ParsePorcelain</c> tests left this file with the
+///     parser, which is now <c>WorktreePorcelainParser</c> in
+///     <c>Harbor.Application</c> and is tested there. What is left builds
+///     <see cref="GitWorktreeInfo" /> records as literals on purpose: a merge
+///     test should not break because git changed the shape of its output, and
+///     this one only cares how sessions and worktrees are combined.
+/// </para>
+/// </remarks>
 public class WorktreeJumpSeederTests
 {
-    private const string Porcelain =
-        "worktree /repo\n" +
-        "HEAD abc123\n" +
-        "branch refs/heads/main\n" +
-        "\n" +
-        "worktree /repo/.worktrees/jump-palette\n" +
-        "HEAD def456\n" +
-        "branch refs/heads/feat/jump-palette\n" +
-        "\n" +
-        "worktree /repo/.worktrees/detached-wt\n" +
-        "HEAD 789aaa\n" +
-        "detached\n" +
-        "\n" +
-        "worktree /repo/.git\n" +
-        "HEAD abc123\n" +
-        "bare\n";
-
-    /// <summary>
-    ///     <see cref="WorktreeJumpSeeder.ParsePorcelain" /> extracts paths,
-    ///     branches, detached (null branch) and bare records.
-    /// </summary>
-    [Test]
-    public async Task ParsePorcelain_ExtractsPathBranchDetachedAndBare()
-    {
-        var infos = WorktreeJumpSeeder.ParsePorcelain(Porcelain);
-
-        await Assert.That(infos.Count).IsEqualTo(4);
-        await Assert.That(infos[0].Path).IsEqualTo("/repo");
-        await Assert.That(infos[0].Branch).IsEqualTo("main");
-        await Assert.That(infos[0].IsBare).IsFalse();
-        await Assert.That(infos[1].Branch).IsEqualTo("feat/jump-palette");
-        await Assert.That(infos[2].Branch).IsNull();
-        await Assert.That(infos[3].IsBare).IsTrue();
-    }
-
-    /// <summary>Null, empty and garbage inputs yield no records (never throw).</summary>
-    [Test]
-    public async Task ParsePorcelain_NullEmptyGarbage_YieldsNone()
-    {
-        await Assert.That(WorktreeJumpSeeder.ParsePorcelain(null)).IsEmpty();
-        await Assert.That(WorktreeJumpSeeder.ParsePorcelain(string.Empty)).IsEmpty();
-        await Assert.That(WorktreeJumpSeeder.ParsePorcelain("not a worktree listing\n")).IsEmpty();
-    }
+    /// <summary>The four records the fixture porcelain used to yield.</summary>
+    private static readonly GitWorktreeInfo[] Worktrees =
+    [
+        new("/repo", "main", false),
+        new("/repo/.worktrees/jump-palette", "feat/jump-palette", false),
+        new("/repo/.worktrees/detached-wt", null, false),
+        new("/repo/.git", null, true),
+    ];
 
     /// <summary>
     ///     <see cref="WorktreeJumpSeeder.BuildEntries" /> prefers the session
@@ -70,9 +46,8 @@ public class WorktreeJumpSeederTests
             new("s1", "Jump Palette", "/repo/.worktrees/jump-palette", null, "working", true),
             new("s2", "Main", "/repo", "main", "idle", false),
         };
-        var worktrees = WorktreeJumpSeeder.ParsePorcelain(Porcelain);
 
-        var entries = WorktreeJumpSeeder.BuildEntries(sessions, worktrees);
+        var entries = WorktreeJumpSeeder.BuildEntries(sessions, Worktrees);
 
         await Assert.That(entries.Count).IsEqualTo(3);
         await Assert.That(entries[0].SessionId).IsEqualTo("s1");
@@ -95,7 +70,7 @@ public class WorktreeJumpSeederTests
             new("s1", "First", "/a", "a1", "idle", false),
         };
 
-        var entries = WorktreeJumpSeeder.BuildEntries(sessions, Array.Empty<WorktreeInfo>());
+        var entries = WorktreeJumpSeeder.BuildEntries(sessions, Array.Empty<GitWorktreeInfo>());
 
         await Assert.That(entries.Count).IsEqualTo(2);
         await Assert.That(entries[0].SessionId).IsEqualTo("s2");
@@ -115,7 +90,7 @@ public class WorktreeJumpSeederTests
             new("s2", "task(explore): dig", "/repo", "main", "working", false, true),
         };
 
-        var entries = WorktreeJumpSeeder.BuildEntries(sessions, Array.Empty<WorktreeInfo>());
+        var entries = WorktreeJumpSeeder.BuildEntries(sessions, Array.Empty<GitWorktreeInfo>());
 
         await Assert.That(entries.Count).IsEqualTo(1);
         await Assert.That(entries[0].SessionId).IsEqualTo("s1");
@@ -131,7 +106,7 @@ public class WorktreeJumpSeederTests
             new("s2", "task(explore): dig", "/repo", "main", "working", false, true),
         };
 
-        var entries = WorktreeJumpSeeder.BuildEntries(sessions, Array.Empty<WorktreeInfo>(), includeSubagents: true);
+        var entries = WorktreeJumpSeeder.BuildEntries(sessions, Array.Empty<GitWorktreeInfo>(), includeSubagents: true);
 
         await Assert.That(entries.Count).IsEqualTo(2);
         await Assert.That(entries[0].SessionId).IsEqualTo("s1");
