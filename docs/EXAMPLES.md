@@ -604,9 +604,14 @@ cp TodoWritePlugin.cs ~/.harbor/plugins/   # .cs file with both Plugin + Tool cl
 
 ### 25. Add a TUI panel plugin
 
+> `ITuiPlugin` is a closed seam (#564) — do not write the recipe below. Implement
+> `ITuiPanelPlugin` and register through `IPanelRegistry` (see Example 5 in
+> PLUGIN_DEVELOPMENT.md). The sample is kept only so the dead route has a name.
+
 > **TODO: confirm with subagent #2** — `ITuiPanelPlugin` may be added separately.
 
 ```csharp
+// NOT REACHABLE — kept as a record of the closed route.
 public sealed class LspDiagnosticsPlugin : ITuiPlugin
 {
     public string Name => "lsp-diag";

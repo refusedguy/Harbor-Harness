@@ -297,6 +297,16 @@ which hold state; **views** read VM state at render time and emit characters thr
 
 Extension points:
 
+> **`ITuiPlugin` is a closed seam (#564).** The marker is dispatched and
+> `host.RegisterTuiPlugin(...)` is invoked, but `IPluginLoadHost.TuiPlugins` has
+> no reader in the product, so `RegisterTui` is never called: a plugin view is
+> collected and never rendered. The items below are how the *in-tree* views work
+> — they are not a plugin axis. For a panel a plugin contributes, implement
+> `ITuiPanelPlugin` and register through `IPanelRegistry`, which is live end to
+> end. Guarded by `tests/Harbor.Architecture.Tests/CellForgeWidgetAxisRules.cs`,
+> which also fails if the product ever starts rendering this seam while the
+> documents still call it closed.
+
 - **Add a view** — implement `ITuiView` (or derive from `TuiViewBase<TViewModel>`), set a
   unique `Id` and `TuiViewPlacement`, and register it via `ViewRegistry.Register`. The
   base renderer auto-binds it to the matching VM by id.
@@ -308,7 +318,12 @@ Extension points:
   `ITuiViewModel`) and register it via `ViewModelRegistry.Register`. The base renderer
   fans every `AgentEvent` out to all VMs via `UpdateFromEventAsync`.
 - **Custom placement logic** — override `BaseTuiRenderer.ShouldRenderPlacement` to control
-  which events trigger a repaint of each placement.
+  which events trigger a repaint of each placement. It queries four placements
+  (`StatusBar`, `ChatHistory`, `Input`, `Overlay`); `Footer` and both sidebars
+  fall to `_ => false`, so a view registered there is never asked to paint.
+- **A cell-level CellForge widget** (a `Panel` subclass) is not plugin-reachable
+  at all: the layout tree is built by the static factory `ChatScreen.Build`, and
+  no plugin is handed a tree, a `ChatScreen` or a `Panel`.
 
 Decoupling contract: **never** import `Harbor.Application` / `Harbor.Registries` from a TUI
 assembly. All agent state arrives via `AgentEvent`; all rendering goes through `ITuiRenderContext`.
@@ -425,7 +440,7 @@ public sealed class AgentLoop
 - **Specification**: `PermissionRuleset` — encapsulates permission evaluation logic.
 - **Value Object**: `SessionId`, `MessageId`, `ToolCallId`, `ProviderId`, `ModelRef`, `ToolName`, `AgentName` (7 types via CSharpFunctionalExtensions).
 - **Factory Method**: `Session.Create`, `ToolResult.Success/Error`, `ProviderId.TryCreate`.
-- **Plugin**: `IPlugin`, `IToolPlugin`, `IProviderPlugin`, `IAgentPlugin`, `ITuiPlugin` (5 contracts).
+- **Plugin**: `IPlugin`, `IToolPlugin`, `IProviderPlugin`, `IAgentPlugin`, `ITuiPanelPlugin` (5 live contracts). `ITuiPlugin` is the sixth and is a closed seam (#564) — collected, never rendered.
 - **Repository**: `ISessionStore` — abstracts persistence (Jsonl, Memory, Sqlite).
 - **Chain of Responsibility**: `AgentLoop` (prompt → LLM stream → tool execution → next turn → compaction).
 - **Flyweight**: `StringPool.Shared.GetOrAdd()` for tool name interning in `AgentLoop`.
@@ -904,7 +919,7 @@ public sealed class MyTuiRenderer : ITuiRenderer
 CS-source plugins are compiled in-memory via Roslyn at startup. No `.csproj`, no DLL.
 
 1. Drop a `.cs` file into `~/.harbor/plugins/` (user-global) or `<project>/.harbor/plugins/` (project-local).
-2. The file must contain a public class implementing `IPlugin` (and `IToolPlugin` / `IProviderPlugin` / `IAgentPlugin` / `ITuiPlugin`) with a parameterless constructor.
+2. The file must contain a public class implementing `IPlugin` (and `IToolPlugin` / `IProviderPlugin` / `IAgentPlugin` / `ITuiPanelPlugin`) with a parameterless constructor.
 3. Add `using Harbor.Abstractions.Models.Identifiers;` if using `ToolName`.
 4. Add `using Microsoft.Extensions.Logging;` for `LogInformation` extension.
 5. The plugin can reference any type already loaded in the host AppDomain (Harbor.Abstractions, System.Text.Json, CSharpFunctionalExtensions, Microsoft.Extensions.Logging, etc.).

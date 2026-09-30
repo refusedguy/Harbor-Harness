@@ -8,13 +8,45 @@ namespace Harbor.Terminal.Abstractions.Plugins;
 /// </summary>
 /// <remarks>
 ///     <para>
-///         <b>What a TUI plugin can do:</b>
+///         <b>ITuiPlugin is a closed seam (#564) — nothing calls <c>RegisterTui</c>.</b> The
+///         marker is dispatched and the host door is invoked
+///         (<c>PluginRegistrar.Register</c> → <c>host.RegisterTuiPlugin</c>), so
+///         this contract passes #620's axis freeze; what is missing is the
+///         consumer. <c>IPluginLoadHost.TuiPlugins</c> has no reader anywhere in
+///         the product, so <c>RegisterTui</c> is never called, and the items
+///         below and the sample above describe a route no shipped renderer takes:
+///         a plugin implementing this loads, logs success, and paints nothing. In
+///         the canonical CellForge screen it could not paint even if it were
+///         called, because that screen is drawn by the cell-diff layout tree and
+///         not by the four placements <see cref="BaseTuiRenderer.ShouldRenderPlacement" />
+///         queries — and <c>SidebarRight</c>, the placement the sample registers
+///         at, is the <c>_ =&gt; false</c> arm of that switch.
+///     </para>
+///     <para>
+///         <b>To add a plugin panel, implement <c>ITuiPanelPlugin</c></b> and
+///         register through <c>IPanelRegistry</c> — that axis is live end to end
+///         (<c>RegisterPanelProvider</c> → <c>PanelRegistryPluginAdapter</c> →
+///         <c>CellForgePanelRegistry</c> → the dock). It paints rows of text, not
+///         cells; adding a cell-level widget is a <c>Panel</c> subclass spliced
+///         into <c>ChatScreen.Build</c>, which is an in-tree change and not a
+///         plugin one (#555 freezes new axes).
+///     </para>
+///     <para>
+///         Kept in the type rather than deleted so the freeze still has a name,
+///         and so a future change that does wire a renderer to the collected
+///         plugins has a contract to wire. The closure is guarded, not asserted:
+///         <c>tests/Harbor.Architecture.Tests/CellForgeWidgetAxisRules.cs</c>
+///         fails if the product starts rendering this seam and the documents
+///         still call it closed, and fails in the other direction too.
+///     </para>
+///     <para>
+///         <b>What the contract would do if it were wired:</b>
 ///     </para>
 ///     <list type="bullet">
 ///         <item>
 ///             <b>Register a new view</b> — append a custom panel to any
 ///             <see cref="TuiViewPlacement" /> (status bar, chat history, sidebar, overlay, …).
-///             The renderer will repaint it on the events selected by
+///             The renderer would repaint it on the events selected by
 ///             <see cref="BaseTuiRenderer.ShouldRenderPlacement" />.
 ///         </item>
 ///         <item>
@@ -36,7 +68,8 @@ namespace Harbor.Terminal.Abstractions.Plugins;
 ///         rendering goes through <see cref="Renderers.ITuiRenderContext" />.
 ///     </para>
 ///     <para>
-///         <b>Minimal example — a custom sidebar view:</b>
+///         <b>Minimal example — a custom sidebar view (NOT REACHABLE today, see
+///         above):</b>
 ///     </para>
 ///     <code>
 /// public sealed class ClockPlugin : ITuiPlugin
@@ -53,8 +86,9 @@ namespace Harbor.Terminal.Abstractions.Plugins;
 /// }
 /// </code>
 ///     <para>
-///         The host calls <see cref="RegisterTui" /> after constructing the renderer but before
-///         <see cref="BaseTuiRenderer.InitializeAsync" />, so plugins always win over builtins.
+///         The host WOULD call <see cref="RegisterTui" /> after constructing the
+///         renderer but before <see cref="BaseTuiRenderer.InitializeAsync" />, so
+///         plugins would win over builtins. It does not: no renderer calls it.
 ///     </para>
 /// </remarks>
 public interface ITuiPlugin
@@ -72,6 +106,13 @@ public interface ITuiPlugin
     ///     Register views and view models into the supplied registries. Called once during
     ///     renderer initialization, before builtin views are registered.
     /// </summary>
+    /// <remarks>
+    ///     <b>Never called.</b> No renderer in the product enumerates
+    ///     <c>IPluginLoadHost.TuiPlugins</c>, so this method has no call site and
+    ///     a plugin that implements it renders nothing. Implement
+    ///     <c>ITuiPanelPlugin</c> and register through <c>IPanelRegistry</c> for a
+    ///     panel that is actually painted. See the type-level remarks and #564.
+    /// </remarks>
     /// <param name="views">
     ///     The view registry — register <see cref="ITuiView" /> instances
     ///     here.

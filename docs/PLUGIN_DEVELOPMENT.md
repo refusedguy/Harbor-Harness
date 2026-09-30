@@ -126,12 +126,21 @@ public interface IAgentPlugin : IPlugin
 }
 ```
 
-### `ITuiPlugin` — adds TUI views + view models
+### `ITuiPlugin` — closed seam (#564), adds nothing today
+
+**`ITuiPlugin` is a closed seam (#564).** The marker is dispatched and
+`host.RegisterTuiPlugin(...)` is invoked, but `IPluginLoadHost.TuiPlugins` has no
+reader in the product, so `RegisterTui` is never called: a plugin view is
+collected and never rendered. The canonical CellForge screen could not paint it
+even if it were called — that screen is drawn by the cell-diff layout tree, not
+by the four placements `ShouldRenderPlacement` queries. **Do not implement this
+for a panel; implement `ITuiPanelPlugin` below.** The contract is kept so the
+freeze has a name and so a future wiring has somewhere to land.
 
 ```csharp
-public interface ITuiPlugin : IPlugin
+public interface ITuiPlugin
 {
-    void RegisterTui(ViewRegistry views, ViewModelRegistry viewModels);
+    void RegisterTui(ViewRegistry views, ViewModelRegistry viewModels); // never called
 }
 ```
 
@@ -189,8 +198,8 @@ public sealed class PluginContext
 | `Harbor.Abstractions.Permissions` | `PermissionRuleset`, `PermissionRule`, `PermissionAction`, `PermissionRequest`, `PermissionResponse` |
 | `Harbor.Abstractions.Agents` | `IAgent`, `AgentDefinition` |
 | `Harbor.Abstractions.Plugins` | `IPlugin`, `IToolPlugin`, `IProviderPlugin`, `IAgentPlugin`, `PluginContext` |
-| `Harbor.Tui.Abstractions.Plugins` | `ITuiPlugin` |
-| `Harbor.Tui.Abstractions` | `ViewRegistry`, `ViewModelRegistry`, `ITuiView`, `ITuiViewModel`, `ITuiRenderContext` |
+| `Harbor.Terminal.Abstractions.Plugins` | `ITuiPlugin` — **closed seam (#564)**: collected, never rendered. Use `ITuiPanelPlugin`. |
+| `Harbor.Terminal.Abstractions` | `ViewRegistry`, `ViewModelRegistry`, `ITuiView`, `ITuiViewModel`, `ITuiRenderContext` (in-tree view work, not a plugin axis) |
 
 ### Via constructor injection (the only supported path since #470)
 
