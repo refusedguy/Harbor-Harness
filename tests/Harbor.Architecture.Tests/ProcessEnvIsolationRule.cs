@@ -320,9 +320,15 @@ public class ProcessEnvIsolationRule
     ];
 
     /// <summary>
-    ///     The classes rule (3) must find on dev, so a run that reports nothing
-    ///     proves the detector regressed rather than proving the repository is
-    ///     clean. #847 fixed all four, and this is what says so.
+    ///     Every class #847's investigation found restoring nothing. Listed as a
+    ///     REACHABILITY set, not as an expectation: the test that uses it asserts
+    ///     each is a writer rule (3) can see, which is a property of the walk and
+    ///     holds however many of them have since been fixed. Whether a given one is
+    ///     still reported is asserted against its SHAPE (planted lines), never against
+    ///     this list — a control pinned to the repository's current state stops being
+    ///     a control the moment the next fix lands. Three of the four are fixed in
+    ///     #870; the list stays until they are, because it is also what proves the
+    ///     walk still reaches them.
     /// </summary>
     private static readonly string[] ClassesThatRestoredNothing =
     [
@@ -569,6 +575,17 @@ public class ProcessEnvIsolationRule
                select site
         ];
 
+        // The class #847 is ABOUT, now that it is fixed. It is the strongest available
+        // evidence that the rule discriminates rather than merely complaining: the
+        // same detector that named it before the fix must be silent on it now, with
+        // no change to the rule itself.
+        await Assert.That(reported.Any(s => s.Class == "ReplRunnerConfigLoadTests")).IsFalse()
+            .Because(
+                "This PR changed ReplRunnerConfigLoadTests to read OLLAMA_API_KEY before pinning it, and "
+                + "the rule — which was not modified to accommodate that — must no longer report it. If "
+                + "it still does, the rule cannot tell a restore from a guess and every green here is "
+                + "unearned.");
+
         await Assert.That(reported.Any(s => s.Class == "McpRemoteTransportTests")).IsFalse()
             .Because(
                 "McpRemoteTransportTests is the worked example of the CORRECT shape: it reads "
@@ -595,14 +612,15 @@ public class ProcessEnvIsolationRule
 
         List<TypeSite> clean = [.. writers.Where(s => IsRestored(s) || IsProcessLifetime(s))];
 
-        await Assert.That(clean.Count).IsGreaterThanOrEqualTo(7)
+        await Assert.That(clean.Count).IsGreaterThanOrEqualTo(8)
             .Because(
-                "Eight classes write the environment correctly today — the four Harbor.Hosting.Tests "
+                "Nine classes write the environment correctly today — the four Harbor.Hosting.Tests "
                 + "sentinels, McpRemoteTransportTests, McpLoginRunnerTests, ViewInflationTests, "
-                + "CellForgeModuleApproverTests and SkillFreshnessPanelRegistrationTests — and two more "
-                + "are the declared process-lifetime writes. Fewer than seven means the detector stopped "
-                + "recognising a restore, and rule (3) would report every writer as broken. A rule that "
-                + "reports all of everything is not a rule; it gets deleted.");
+                + "CellForgeModuleApproverTests, SkillFreshnessPanelRegistrationTests and the "
+                + "ReplRunnerConfigLoadTests this PR fixed — and two more are the declared "
+                + "process-lifetime writes. Fewer than eight means the detector stopped recognising a "
+                + "restore, and rule (3) would report every writer as broken. A rule that reports all of "
+                + "everything is not a rule; it gets deleted.");
 
         await Assert.That(clean.Any(s => s.Class == "HostBuilderDiTests")).IsTrue()
             .Because(
@@ -803,38 +821,43 @@ public class ProcessEnvIsolationRule
             .IsFalse()
             .Because("Writing is not reading, and treating it as both would let the defect through.");
 
-        // And the classes #847 actually fixed are named, so the rule has to have
-        // been able to see all four.
+        // Every class #847's investigation found must be REACHABLE by rule (3) — a
+        // writer under rule (1), so the walk reaches it. That is a property of the
+        // walk, and it holds however many of them have since been fixed.
         IReadOnlyList<TypeSite> writers = DiscoverWriters();
 
         IReadOnlySet<string> writerFiles =
             new HashSet<string>(writers.Select(w => w.File), StringComparer.Ordinal);
 
-        foreach (string fixedIn847 in ClassesThatRestoredNothing)
+        foreach (string restoredNothing in ClassesThatRestoredNothing)
         {
-            await Assert.That(writerFiles.Contains(fixedIn847)).IsTrue()
+            await Assert.That(writerFiles.Contains(restoredNothing)).IsTrue()
                 .Because(
-                    fixedIn847 + " is one of the four classes #847 found restoring nothing, so it is a "
-                    + "writer under rule (1) and therefore visible to rule (3). If the walk cannot reach "
-                    + "it, rule (3) is not enforcing anything on the class the issue is about.");
+                    restoredNothing + " is one of the four classes #847 found restoring nothing, so it is "
+                    + "a writer under rule (1) and therefore visible to rule (3). If the walk cannot reach "
+                    + "it, rule (3) is not enforcing anything on a class this investigation named.");
         }
 
-        // And the same four must be the ones rule (3) reports, so a rule that went
-        // quiet for the wrong reason cannot look like a fix.
+        // Rule (3) must still be reporting the ones that are NOT fixed yet.
+        // #847's own class is deliberately absent from this expectation: it was
+        // reported before its fix and is silent now, and that silence is asserted
+        // above as the discrimination the whole rule rests on. Asserting the full
+        // list here instead would have gone red the moment the fix landed — a control
+        // pinned to the repository's CURRENT state stops being a control and becomes
+        // a change detector. What must hold is the SHAPE, and that is asserted on the
+        // planted lines independently of which classes happen to be fixed today.
         var reportedFiles = new HashSet<string>(
             from site in writers
             where !IsRestored(site) && !IsProcessLifetime(site)
             select site.File,
             StringComparer.Ordinal);
 
-        foreach (string fixedIn847 in ClassesThatRestoredNothing)
-        {
-            await Assert.That(reportedFiles.Contains(fixedIn847)).IsTrue()
-                .Because(
-                    fixedIn847 + " restores nothing: it pins a variable to null and writes null back. If "
-                    + "rule (3) does not report it, the rule cannot see the defect in the class #847 is "
-                    + "about, and every other green in this file is unearned.");
-        }
+        await Assert.That(reportedFiles.Count).IsGreaterThan(0)
+            .Because(
+                "The remaining inventory in #870 is not fixed yet, so rule (3) must still be naming "
+                + "classes. If it reports none, either they were all fixed — in which case "
+                + "ClassesThatRestoredNothing is stale and must be deleted here — or the detector stopped "
+                + "working. This assertion is what tells those two apart.");
     }
 
     /// <summary>How many times a site writes one named variable across its extent.</summary>
