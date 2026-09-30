@@ -208,9 +208,9 @@ public class ProcessEnvIsolationRule
         // 24 writes of OLLAMA_API_KEY and 8 of ANTHROPIC_API_KEY, in the same
         // assembly as AuthStoreTests. Not in #823's list.
         "tests/Harbor.Config.Tests/OnboardingWizardTests.cs",
-        // #823 attributes lines 193-255 to `ProviderConfigTests`. They are in
-        // `EnvVarAuthResolverTests`, declared at ProviderConfigTests.cs:173;
-        // `ProviderConfigTests` itself (lines 10-168) writes nothing.
+        // #823 attributes lines 193-255 of ProviderConfigTests.cs to the class
+        // named in the file. Those lines belong to the resolver suite declared at
+        // line 173; the class named in the file (lines 10-168) writes nothing.
         "tests/Harbor.Providers.Tests/ProviderConfigTests.cs",
         "tests/Harbor.Tools.Builtin.Tests/McpRemoteTransportTests.cs",
         "tests/Harbor.Tui.CellForge.Tests/SkillFreshnessPanelRegistrationTests.cs",
@@ -228,7 +228,7 @@ public class ProcessEnvIsolationRule
 
         foreach (TypeSite site in DiscoverWriters())
         {
-            if (site.Parallelism.IsGlobal || site.Parallelism.Keys.Length > 0)
+            if (site.Form.IsGlobal || site.Form.Keys.Length > 0)
             {
                 continue;
             }
@@ -291,7 +291,7 @@ public class ProcessEnvIsolationRule
                 continue;
             }
 
-            if (Holds(writer.Parallelism, reader.Parallelism))
+            if (Holds(writer.Form, reader.Form))
             {
                 continue;
             }
@@ -299,8 +299,8 @@ public class ProcessEnvIsolationRule
             violations.Add(
                 $"{writer.File} / {reader.File} — {writerName} writes and {readerName} reads the same "
                 + $"process state in {project}, and their [NotInParallel] declarations do not intersect. "
-                + $"The writer holds [{Describe(writer.Parallelism)}], the reader "
-                + $"[{Describe(reader.Parallelism)}]. A named key is a mutex over its NAMED PEERS only, so "
+                + $"The writer holds [{Describe(writer.Form)}], the reader "
+                + $"[{Describe(reader.Form)}]. A named key is a mutex over its NAMED PEERS only, so "
                 + "a key on one side and not the other excludes nothing and the two still overlap — the "
                 + "mistake #704 was opened for. They share " + shared);
         }
@@ -430,13 +430,13 @@ public class ProcessEnvIsolationRule
         internal static readonly Parallelism None = new(false, []);
     }
 
-    /// <summary>One type declaration and everything the rules need to judge it.</summary>
+    /// <summary>One top-level type declaration and everything the rules need to judge it.</summary>
     private sealed record TypeSite(
         string Project,
         string File,
         string Class,
         int Line,
-        Parallelism Parallelism,
+        Parallelism Form,
         bool HasTests,
         int WriteLine);
 
@@ -499,19 +499,25 @@ public class ProcessEnvIsolationRule
 
         string relative = Path.GetRelativePath(root, file).Replace('\\', '/');
 
-        // A type's extent ends at the next type declared at the SAME OR SHALLOWER
-        // indentation, which is the ordinary C# convention: top-level types sit at
-        // column 0 and nested ones are indented under them.
+        // Only top-level types are sites, and each one's extent ends at the next
+        // top-level one. Two earlier attempts were wrong, and the CI red run is
+        // what showed it:
         //
-        // Bounding at the next declaration of ANY indentation was wrong, and
-        // OnboardingWizardTests.cs is what proved it: its helpers
-        // (`FakeHealthCheck`, `FakeCatalogClient`, …) are declared BETWEEN the test
-        // methods, so 27 of its 32 writes were attributed to a helper that holds no
-        // tests. Bounding at any indentation was also wrong in the other direction:
-        // ProviderConfigTests.cs declares `ProviderConfigTests`, then
-        // `EnvVarAuthResolverTests` 160 lines later, and the first would have been
-        // reported as the writer of the second's writes. A guard that accuses the
-        // wrong class is a guard that gets deleted.
+        //   * Bounding at the next declaration of ANY indentation reported three
+        //     nested helpers in OnboardingWizardTests.cs — FakeHealthCheck,
+        //     FakeLiveRegistry, FakeCatalogClient — as writers in their own right,
+        //     because each one's extent swallowed the test methods that follow it.
+        //   * Bounding at the next declaration of the SAME OR SHALLOWER indentation
+        //     removed the helpers but then let the outer class's writes be
+        //     attributed to whichever nested type they happened to land after.
+        //
+        // Ignoring nested types outright is not a workaround, it is the correct
+        // model: TUnit discovers top-level types, so a nested type is not a suite
+        // and cannot be scheduled against anything. It also gets the awkward file
+        // right in both directions — OnboardingWizardTests keeps all 32 of its
+        // writes despite four nested helpers declared between its test methods,
+        // while ProviderConfigTests does not steal the writes belonging to the
+        // resolver class 160 lines below it.
         var declarations = new List<(int Index, int Column, string Name)>();
         for (int i = 0; i < code.Length; i++)
         {
@@ -524,13 +530,17 @@ public class ProcessEnvIsolationRule
 
         for (int t = 0; t < declarations.Count; t++)
         {
+            if (declarations[t].Column != 0)
+            {
+                continue;
+            }
+
             int index = declarations[t].Index;
-            int column = LeadingWhitespace(code[index]);
             int end = code.Length;
 
             for (int u = t + 1; u < declarations.Count; u++)
             {
-                if (declarations[u].Column <= column)
+                if (declarations[u].Column == 0)
                 {
                     end = declarations[u].Index;
                     break;
@@ -548,7 +558,7 @@ public class ProcessEnvIsolationRule
         }
     }
 
-    /// <summary>How many leading spaces a line has, so declarations can be compared by depth.</summary>
+    /// <summary>How many leading spaces a line has, so a top-level type is told from a nested one.</summary>
     private static int LeadingWhitespace(string line)
     {
         int i = 0;
@@ -689,26 +699,30 @@ public class ProcessEnvIsolationRule
     {
         var code = line.ToCharArray();
 
-        for (int i = 0; i < code.Length; i++)
+        int i = 0;
+        while (i < code.Length)
         {
             char c = code[i];
 
             if (c is '@' or '$' && i + 1 < code.Length && code[i + 1] == '"')
             {
-                i = BlanksLiteral(code, i + 1, verbatim: true);
+                i = BlanksLiteral(code, i + 1, verbatim: true) + 1;
                 continue;
             }
 
             if (c == '"')
             {
-                i = BlanksLiteral(code, i, verbatim: false);
+                i = BlanksLiteral(code, i, verbatim: false) + 1;
                 continue;
             }
 
             if (c == '\'')
             {
-                i = BlanksLiteral(code, i, verbatim: false, quote: '\'');
+                i = BlanksLiteral(code, i, verbatim: false, quote: '\'') + 1;
+                continue;
             }
+
+            i++;
         }
 
         return new string(code);
@@ -721,30 +735,32 @@ public class ProcessEnvIsolationRule
     /// </summary>
     private static int BlanksLiteral(char[] code, int open, bool verbatim, char quote = '"')
     {
-        for (int i = open + 1; i < code.Length; i++)
+        int i = open + 1;
+        while (i < code.Length)
         {
-            if (!verbatim && code[i] == '\\')
+            // A backslash escape covers the next character too, so `\"` must not
+            // be read as the closing quote.
+            if (!verbatim && code[i] == '\\' && i + 1 < code.Length)
             {
-                code[i++] = ' ';
-                if (i < code.Length)
-                {
-                    code[i] = ' ';
-                }
-
+                code[i] = ' ';
+                code[i + 1] = ' ';
+                i += 2;
                 continue;
             }
 
             if (code[i] != quote)
             {
                 code[i] = ' ';
+                i++;
                 continue;
             }
 
+            // A verbatim literal escapes its own quote by doubling it.
             if (verbatim && i + 1 < code.Length && code[i + 1] == quote)
             {
                 code[i] = ' ';
                 code[i + 1] = ' ';
-                i++;
+                i += 2;
                 continue;
             }
 
@@ -761,8 +777,13 @@ public class ProcessEnvIsolationRule
     private static bool Holds(Parallelism a, Parallelism b) =>
         a.IsGlobal || b.IsGlobal || a.Keys.Intersect(b.Keys, StringComparer.Ordinal).Any();
 
-    private static string Describe(Parallelism p) =>
-        p.IsGlobal ? "NotInParallel (bare — alone)" : $"NotInParallel({string.Join(", ", p.Keys)})";
+    /// <summary>How a declaration reads in a failure message, including the empty case.</summary>
+    private static string Describe(Parallelism form) => form switch
+    {
+        { IsGlobal: true } => "NotInParallel (the bare form — completely alone)",
+        { Keys.Length: > 0 } => $"NotInParallel({string.Join(", ", form.Keys)})",
+        _ => "no [NotInParallel] at all",
+    };
 
     private static IReadOnlyList<string> EnumerateTestProjects()
     {
