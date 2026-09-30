@@ -49,6 +49,12 @@ RULES
                      banner. See "THE THIRD SHAPE" below: this rule is the one
                      that would have caught #807 on the day the table was
                      written.
+  DOC-SAMPLE-API-UNDECLARED
+                     a backticked type name in the `## Public API` section of a
+                     `samples/plugins/*/README.md` that no tracked `.cs` file
+                     under src/, apps/ or samples/ declares. See "THE FOURTH
+                     SHAPE" below: this rule is the one that would have caught
+                     #794 the day the sample README was written.
 
   The escape hatch is a line IN THE SAME DOCUMENT, and it must carry a reason:
 
@@ -118,6 +124,77 @@ THE THIRD SHAPE — WHY #807 HAPPENED AT ALL (#807)
   What this rule deliberately does NOT do: verify that a declared record's
   numbers are right. A запись is allowed to be wrong about today. It only has
   to stop pretending to be an эталон.
+
+THE FOURTH SHAPE — THE NAME THAT NO TREE DECLARES (#794)
+
+  #807 was one fence reading one shape. This is the same disease in the type
+  rules, and it is worse because the type rules are supposed to be the ones
+  that see past the fence.
+
+  DOC-TYPE-UNWIRED answers "this type EXISTS and nothing constructs it". It
+  cannot answer "this type DOES NOT EXIST", because it looks the name up in
+  `declared_in` and then:
+
+      decls = declared_in.get(name)
+      if not decls:
+          continue          # <-- the exact case that needs reporting
+
+  So a normative document could name a type that no file in the repository has
+  ever declared and the type rule passed it silently. Measured on this tree,
+  the three axes of the table below are not equal, and only the middle column
+  was fenced:
+
+      declared in src//apps/, wired      -> DOC-TYPE-UNWIRED  (#664)
+      declared in src//apps/, unwired    -> DOC-TYPE-UNWIRED
+      declared NOWHERE                     -> nothing.   <- this rule
+
+  A second, independent blind spot fed it: `scan()` indexed declarations from
+  `production` alone (`src/` and `apps/`), so a type declared in `samples/`
+  was not in `declared_in` at all and could not be found by either type rule.
+
+  DOC-SAMPLE-API-UNDECLARED closes both, on the one shape where the claim is
+  structural rather than rhetorical. A `## Public API` section is a CONTRACT
+  INVENTORY: every bullet says "this component declares this type", which is a
+  claim about the tree in exactly the way a `file:line` citation is, and it is
+  checkable with no interpretation. The perimeter is
+  `samples/plugins/*/README.md` — four files, listed in the glob below.
+
+  Measured before the fix, on the four sample READMEs: SEVEN of the 23 names
+  in those sections were types no tree has ever declared, and ALL FOUR of the
+  READMEs were affected. The TodoWrite one was born lying — commit 487a68a0
+  added the README and its false `TodoPanelPlugin` / `ITuiPlugin` claims in
+  the same commit, and that sample's source has never contained a panel. #794
+  reported one of the seven.
+
+WHY THIS RULE IS NOT OPT-IN, EITHER
+
+  Same reasoning as DOC-CITED-TABLE-UNDECLARED, and it is the second rule to
+  earn it: a table of `| path | line |` and a list of `## Public API` type
+  names LOOK like the prose and table claims the other rules cover, so leaving
+  them out is what let 2842 unchecked rows and 8 phantom types accumulate
+  while every other fence stayed green. Neither rule asks a document to
+  declare anything — the answer is one edit to the README, and there is
+  nothing here to go red on day one once the READMEs are corrected.
+
+  What this rule deliberately does NOT do, stated rather than implied:
+
+  * It checks the `## Public API` SECTION, not the whole README. A name in
+    "How it works" is prose about a mechanism, and a doc that names an
+    illustrative type there is not making a claim about the tree. Pinned by a
+    self-test, because a whole-file version of this rule is the obvious wrong
+    answer and would fire on every `HttpClient` in the repository.
+  * It checks EXISTENCE, not locality. A real type attributed to the wrong
+    component passes. The FileTree README claimed `TreeNode` — a real type in
+    `Harbor.Ui.Framework.Rendering` — for a sample that has no such record.
+    That is a different defect with a different fix, and this rule does not
+    see it.
+  * It does not check tool NAMES. All four sample READMEs also misname their
+    own tool (`file_tree` for `tree`, `git_status`/`git_diff`/`git_log` for
+    one `git` tool, `todo_write` for `todo`, `web_search` for `websearch`),
+    and `ToolNameInventory.cs` already extracts the truth from
+    `ToolName.Create("…")`. The claim lives in free prose on line 3, not in a
+    structured field, so matching it would need a heuristic and a heuristic in
+    a docs gate is how a gate starts guessing. Measured and reported instead.
 
 KNOWN LIMITATIONS — READ THIS BEFORE TRUSTING A GREEN
 
@@ -219,6 +296,34 @@ TABLE_CITATION = re.compile(
     r"\s*\|\s*(?P<spec>\d+(?:-\d*)?(?:,\d+(?:-\d*)?)*)\s*\|",
     re.M,
 )
+
+# THE FOURTH SHAPE (#794). A component README whose `## Public API` section is
+# an inventory of the types that component declares — the sample-plugin
+# version of a contract table, and the one shape where "does this name exist?"
+# is a question about the tree rather than a question about prose.
+#
+# The perimeter is four files and is written as a glob rather than a list so a
+# new sample plugin is covered by existing, not by remembering to edit a list
+# here (the same self-selecting property NORMATIVE_RE has).
+SAMPLE_README = re.compile(r"^samples/plugins/[^/]+/README\.md$")
+
+# `## Public API`, optionally with a parenthetical suffix. `^##\s` cannot match
+# `### Public API`, and not requiring end-of-line means a section titled
+# `## Public API (highlights)` is still the section — which is how the
+# `src/*/README.md` spell it, and those are outside the perimeter for a
+# different reason.
+PUBLIC_API_HEADING = re.compile(r"^##[ \t]+Public API\b", re.M)
+
+# The section ends at the next `##` heading, or at end of file.
+SECTION_END = re.compile(r"^##[ \t]+", re.M)
+
+# Where a type may be DECLARED for this rule's purposes. `src/` and `apps/` are
+# the product; `samples/` is here because a sample README's claim is about the
+# sample, and a name the sample itself declares is the one thing that must
+# resolve. `tests/` is deliberately absent: a name that exists only in a test is
+# not a type a sample plugin ships, so a README claiming it is wrong.
+# `contrib/` is absent for the reason index_sources gives.
+DECLARATION_SCOPE = ("src/", "apps/", "samples/")
 
 # A dated record: the `> **Status (2026-08-27):**` banner that
 # docs/audit-archive/README.md already prescribes for "a snapshot" kept in
@@ -546,6 +651,56 @@ def check_table_citations(
     return found, problems
 
 
+def check_sample_api(
+    text: str, rel: str, declared: set[str]
+) -> tuple[int, list[tuple[str, str, int]]]:
+    """The fourth shape (#794): does a `## Public API` list name a real type?
+
+    Returns (name count, [(code, message, doc line), ...]). A name count is
+    returned even for a document that passes, for the reason
+    check_table_shape gives: a rule that only prints a number when it is about
+    to fail is indistinguishable from a rule that never fires.
+
+    The section boundary is the point of the rule, not a convenience. A
+    `## Public API` bullet asserts "this component declares this type"; the
+    same name in "How it works" is prose about a mechanism, and a document is
+    entitled to describe an illustrative type there without shipping it. So the
+    scan is bounded at the next `##` and the count is of names INSIDE it.
+    """
+    heading = PUBLIC_API_HEADING.search(text)
+    if heading is None:
+        return 0, []
+
+    body_start = heading.end()
+    nxt = SECTION_END.search(text, body_start)
+    body_end = nxt.start() if nxt else len(text)
+
+    seen: set[str] = set()
+    problems: list[tuple[str, str, int]] = []
+    for m in BACKTICK_TYPE.finditer(text):
+        if not (body_start <= m.start() < body_end):
+            continue
+        name = m.group(1)
+        if name in seen:
+            continue
+        seen.add(name)
+        if name in declared:
+            continue
+        line_no = text.count("\n", 0, m.start()) + 1
+        problems.append(
+            (
+                "DOC-SAMPLE-API-UNDECLARED",
+                f"`{name}` is listed in this README's `## Public API` section but no "
+                f".cs file under src/, apps/ or samples/ declares it — the section is "
+                f"a contract inventory, so the name is a claim about the tree. Either "
+                f"the type is missing from {rel.rsplit('/', 1)[0]}/ or the bullet "
+                f"describes something this sample does not ship",
+                line_no,
+            )
+        )
+    return len(seen), problems
+
+
 class Scan:
     """One pass over the normative documents, plus the counts the floors need."""
 
@@ -555,6 +710,8 @@ class Scan:
         self.type_names = 0
         self.table_rows = 0
         self.table_docs = 0
+        self.api_names = 0
+        self.api_docs = 0
         self.hits: dict[str, list[tuple[str, str, int]]] = defaultdict(list)
 
     @property
@@ -568,19 +725,32 @@ class Scan:
 
 def scan(repo: str, verbose: bool) -> Scan:
     """Scan the normative documents once and return everything the gate needs."""
-    _, by_base, production = index_sources(repo)
+    files, by_base, production = index_sources(repo)
 
     declared_in: dict[str, set[str]] = defaultdict(set)
+    # The union index DOC-SAMPLE-API-UNDECLARED needs. A SET rather than the
+    # dict above because the question it asks is only "does this name exist
+    # anywhere a product or a sample could declare it" — WHERE it is declared is
+    # not what makes a README bullet true. Scoped to DECLARATION_SCOPE so the
+    # answer stays a statement about shipped code, and read over `files` rather
+    # than `production` so a type declared in samples/ is findable at all —
+    # which, before this rule, no code path could do.
+    declared_anywhere: set[str] = set()
     production_text: dict[str, str] = {}
-    for rel in sorted(production):
+    for rel in files:
+        if not rel.startswith(DECLARATION_SCOPE):
+            continue
         try:
             with open(os.path.join(repo, rel), encoding="utf-8", errors="replace") as fh:
                 body = strip_comments(fh.read())
         except OSError:
             continue
-        production_text[rel] = body
-        for m in DECLARATION.finditer(body):
-            declared_in[m.group(1)].add(rel)
+        names = {m.group(1) for m in DECLARATION.finditer(body)}
+        declared_anywhere |= names
+        if rel in production:
+            production_text[rel] = body
+            for name in names:
+                declared_in[name].add(rel)
 
     cache: dict[str, int] = {}
     result = Scan()
@@ -599,6 +769,16 @@ def scan(repo: str, verbose: bool) -> Scan:
         if rows:
             result.table_docs += 1
             result.table_rows += rows
+
+        # ... and so does the fourth shape (#794), for the same reason and with
+        # the same one-line fix. A sample README's `## Public API` list is a
+        # contract table, so a name in it is a claim about the tree whether or
+        # not the document ever writes a status banner.
+        if SAMPLE_README.match(rel):
+            api_names, api_problems = check_sample_api(text, rel, declared_anywhere)
+            result.api_docs += 1
+            result.api_names += api_names
+            shape_problems = shape_problems + api_problems
 
         if not normative:
             if shape_problems:
@@ -943,6 +1123,138 @@ def self_test() -> int:
         out[-400:],
     )
 
+    # ---- THE FOURTH SHAPE (#794) ------------------------------------------------
+    # A name no tree declares, in a section that is a contract inventory. Each
+    # "must pass" fixture carries `clean_norm` so the floors are satisfied and
+    # the case can only pass for the reason it names — the same trap as above.
+    #
+    # The fixture tree needs `ITool` declared, because the README's bullets name
+    # the contract the sample implements and the rule checks EVERY backticked
+    # name in the section. A fixture whose own bullets are undeclared would fail
+    # for a reason the case is not about, which is how a self-test ends up
+    # asserting nothing.
+    tool_contract = "namespace Demo;\npublic interface ITool { }\n"
+    tool_plugin = "namespace Demo;\npublic interface IToolPlugin { }\n"
+    sample_src = (
+        "samples/plugins/Harbor.Plugin.Sample/Sample.cs",
+        "namespace Harbor.Plugin.Sample;\n"
+        "public sealed class SamplePlugin : Demo.IToolPlugin { }\n"
+        "public sealed class SampleTool : Demo.ITool { }\n",
+    )
+    sample_readme = (
+        "# Harbor.Plugin.Sample\n\n"
+        "Sample plugin. Demonstrates `IToolPlugin`.\n\n"
+        "## Public API\n\n"
+        "- `SamplePlugin` — implements `IToolPlugin`\n"
+        "- `SampleTool` — the `ITool` implementation\n"
+        "- `NAME_PLACEHOLDER` — the panel that renders the list\n\n"
+        "## How it works\n\n"
+        "The tool keeps its state in a `NAME_PLACEHOLDER` and emits an event.\n"
+    )
+
+    def sample_fixture(name: str, **extra: str) -> dict[str, str]:
+        """A tree whose sample README names `name` in BOTH positions."""
+        return {
+            **live,
+            "src/Demo/ITool.cs": tool_contract,
+            "src/Demo/IToolPlugin.cs": tool_plugin,
+            sample_src[0]: sample_src[1],
+            "docs/NORM.md": clean_norm,
+            "samples/plugins/Harbor.Plugin.Sample/README.md": sample_readme.replace(
+                "NAME_PLACEHOLDER", name
+            ),
+            **extra,
+        }
+
+    code, out = run(sample_fixture("GhostPanelPlugin"))
+    st.expect(
+        "a `## Public API` bullet naming a type NO tree declares fails (#794)",
+        code == 1 and "DOC-SAMPLE-API-UNDECLARED" in out,
+        out[-400:],
+    )
+
+    # The SAME fixture with the type added to the sample. Everything else is
+    # byte-identical, so the only thing that moved the verdict is whether the
+    # name exists — which is the whole claim the rule makes.
+    code, out = run(
+        sample_fixture(
+            "GhostPanelPlugin",
+            **{
+                "samples/plugins/Harbor.Plugin.Sample/Panel.cs":
+                    "namespace Harbor.Plugin.Sample;\npublic sealed class GhostPanelPlugin { }\n"
+            },
+        )
+    )
+    st.expect(
+        "the SAME bullet passes once the sample declares the type — the rule asks "
+        "whether the name exists, not whether the README is pretty",
+        code == 0,
+        out.strip()[-400:],
+    )
+
+    # The discrimination case, and the reason the rule is not a whole-file scan.
+    # `LiveThing` is a REAL type in the fixture tree and it is named in the same
+    # two positions, so this pair differs from the two above only in whether the
+    # name resolves: section mention reported, prose mention not.
+    code, out = run(sample_fixture("LiveThing"))
+    st.expect(
+        "the same bullet naming a REAL type passes — and a real type is not a phantom",
+        code == 0,
+        out.strip()[-400:],
+    )
+    code, out = run(
+        {
+            **live,
+            "src/Demo/ITool.cs": tool_contract,
+            "src/Demo/IToolPlugin.cs": tool_plugin,
+            sample_src[0]: sample_src[1],
+            "docs/NORM.md": clean_norm,
+            "samples/plugins/Harbor.Plugin.Sample/README.md": (
+                "# S\n\n## Public API\n\n- `SamplePlugin` — implements `IToolPlugin`\n\n"
+                "## How it works\n\nIt builds a `GhostPanelPlugin` forest.\n"
+            ),
+        }
+    )
+    st.expect(
+        "an undeclared name OUTSIDE `## Public API` is prose and is not reported (#794)",
+        code == 0,
+        out.strip()[-400:],
+    )
+
+    # The perimeter. An undeclared name in a NORMATIVE document must still pass:
+    # the new rule narrows nothing the existing rules do, and a version of it
+    # that ran on every document would be a second, undeclared fence.
+    code, out = run(
+        {
+            **live,
+            "docs/NORM.md": clean_norm + "A recipe may name an illustrative `GhostPanelPlugin`.\n",
+        }
+    )
+    st.expect(
+        "an undeclared name in a NORMATIVE document is still out of scope for the "
+        "new rule — it did not widen the fence",
+        code == 0,
+        out.strip()[-400:],
+    )
+
+    # The ratchet. The surface is present and clean, and a floor above today's
+    # count still fails — otherwise a rule that quietly stopped matching would
+    # look exactly like a rule that is passing.
+    code, out = run(sample_fixture("LiveThing"), "--min-api", "9")
+    st.expect(
+        "the `--min-api` ratchet fails when the sample surface shrinks",
+        code == 1 and "floor" in out,
+        out[-400:],
+    )
+    code, out = run({**live, "docs/NORM.md": clean_norm})
+    st.expect(
+        "and a fixture with no sample README is not failed by it — the floor is "
+        "opt-in, like --min-cites (a 'must pass' case that fails on the floors "
+        "proves nothing about the rule)",
+        code == 0,
+        out.strip()[-400:],
+    )
+
     return st.finish()
 
 
@@ -954,6 +1266,13 @@ def main() -> int:
     ap.add_argument("--min-files", type=int, default=0, help="fail unless at least this many normative docs were scanned (0 = off)")
     ap.add_argument("--min-cites", type=int, default=0, help="fail unless at least this many line citations were examined (0 = off)")
     ap.add_argument("--min-types", type=int, default=0, help="fail unless at least this many backticked type names were examined (0 = off)")
+    ap.add_argument(
+        "--min-api",
+        type=int,
+        default=0,
+        help="fail unless at least this many `## Public API` type names were examined "
+        "in samples/plugins/*/README.md (0 = off)",
+    )
     ap.add_argument(
         "--self-test",
         action="store_true",
@@ -975,6 +1294,10 @@ def main() -> int:
             f"and declared {result.table_rows} `| path | line |` table rows in "
             f"{result.table_docs} document(s) (#807: the shape the prose fence is blind to)"
         )
+    print(
+        f"and checked {result.api_names} `## Public API` type names in "
+        f"{result.api_docs} sample README(s) (#794: names no tree declares)"
+    )
 
     # Two calls, one per unit, so a parser that silently stops matching is
     # caught separately from a file set that shrank.
@@ -989,6 +1312,22 @@ def main() -> int:
         args.min_files,
         args.min_types,
     )
+    # Engaged ONLY by the flag, like the two above. require_non_vacuous treats a
+    # zero count as a failure whatever the floor is, so running it
+    # unconditionally would make every self-test fixture that happens to have
+    # no sample README exit 1 — which is the trap #826 recorded when three of
+    # its own "must pass" fixtures were passing on the floors rather than on
+    # the rule they were written to test. The rule itself is unconditional;
+    # only the ratchet is opt-in.
+    if args.min_api > 0:
+        problems += md_gate.require_non_vacuous(
+            "doc-cites/sample-api",
+            result.api_docs,
+            result.api_names,
+            "`## Public API` type names",
+            args.min_files,
+            args.min_api,
+        )
 
     if result.violations:
         print(
@@ -1006,7 +1345,10 @@ def main() -> int:
 
     if result.violations or problems:
         return 1
-    print("OK: every normative file:line citation resolves to a line that exists.")
+    print(
+        "OK: every normative file:line citation resolves to a line that exists, "
+        "and every `## Public API` name in a sample README is a type the tree declares."
+    )
     return 0
 
 

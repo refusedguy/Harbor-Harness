@@ -1,6 +1,6 @@
 # Harbor.Plugin.GitTools
 
-Sample plugin that adds git tools: `git_status`, `git_diff`, `git_log`. Demonstrates `IToolPlugin`.
+Sample plugin that adds a `git` tool — one tool that takes a git subcommand as an argument. Demonstrates `IToolPlugin`.
 
 ## Layer
 
@@ -15,7 +15,7 @@ Sample plugin — implements `IPlugin` (+ `IToolPlugin`) from `Harbor.Abstractio
 ## Public API
 
 - `GitToolsPlugin` — implements `IToolPlugin`
-- `GitStatusTool`, `GitDiffTool`, `GitLogTool` — the `ITool` implementations
+- `GitTool` — the `ITool` implementation (tool name `git`)
 
 ## Usage
 
@@ -32,7 +32,7 @@ await host.LoadAllAsync(ct);
 
 ## How it works
 
-Shells out to `git` (via `Process.Start`) and returns stdout as a `ToolResult`. Each tool wraps a specific git subcommand. No native libgit2 dependency — requires `git` on PATH.
+Takes an `args` string (the subcommand and its flags) plus an optional `cwd`, and shells out to `git` with it via `Process.Start`, streaming stdout and stderr into `StringBuilder`s. Output is returned as a `ToolResult` verbatim — nothing is parsed per subcommand. `ValidateArguments` is where the safety lives: it rejects `push --force` unless `--force-with-lease` is also present, and rejects `reset --hard` outright. No native libgit2 dependency — requires `git` on PATH.
 
 ## See also
 
