@@ -774,8 +774,8 @@ public sealed class SeamTypeLeakRules
         await Assert.That(asNameDetails).Contains("'ctor' parameter 'writer'")
             .Because(
                 "rule 1 counts constructor parameters and rule 2 does not. That asymmetry is deliberate and "
-                "this assertion pins it: WiredWriterProbe is caught by one and not the other, so neither "
-                "rule can be quietly widened until they are the same rule");
+                + "this assertion pins it: WiredWriterProbe is caught by one and not the other, so neither "
+                + "rule can be quietly widened until they are the same rule");
     }
 
     /// <summary>
