@@ -49,6 +49,16 @@
 // and invisible to every caller who is looking for something. That asymmetry is the
 // defect. An honest API would say which of the two it is doing.
 //
+// The codebase already draws this line in the other direction, which is worth
+// recording because it corroborates the split rather than duplicating it.
+// `SessionStoreFailureTextParityRules` (#885) scans BY PATH PREFIX over
+// `SourceScan.EnumerateProductCsFiles()` and says in its own header that it does so
+// "precisely so a csproj-less folder is reachable" — `src/Harbor.Storage.Shared/
+// SessionStoreErrors.cs` is in that set even though it belongs to no project. So a
+// path-keyed walk over `src/` sees these folders and a project-keyed walk does not,
+// and one guard in this repository already depends on the difference. This file is
+// about the half that does not know they exist.
+//
 // WHAT THIS DOES NOT CLAIM
 // ------------------------
 // Not that the two folders are wrong. Both are deliberate: `Harbor.Storage.Shared`'s

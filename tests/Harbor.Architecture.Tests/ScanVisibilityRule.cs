@@ -35,12 +35,18 @@
 // `IsBuildOutput`. Measured, that would be the wrong move, and the reason is worth
 // recording because the "96 guards depend on it" argument inverts the truth:
 //
-//   1. NO SHIPPED GUARD IS AFFECTED BY EITHER CLAUSE. All 13 guard files that
+//   1. NO SHIPPED GUARD IS AFFECTED BY EITHER CLAUSE. All 15 guard files that
 //      route through `SourceScan` root their walk at `src/` and/or `apps/`. There
 //      is no directory named `tests`, `contrib` or `.worktrees` ANYWHERE UNDER
 //      `src/` or `apps/`, so for those walks the clauses can never fire. The
 //      feared blast radius — "96 guards start seeing `tests/` and some go red" —
 //      is measurably zero. It was never a real cost.
+//      (The count was 13 when this was first measured and is 15 now: #872 and
+//      #885 landed on `dev` while this PR was open, and both root at
+//      `EnumerateProductCsFiles()`. Worth saying that the inventory is a moving
+//      target and a number in a header goes stale — which is the argument for
+//      pinning the measurement in a test rather than in prose, and what this file
+//      is.)
 //   2. BUT DELETING THE CLAUSE IS STILL THE WRONG FIX, for a reason that has
 //      nothing to do with cost. It would make `EnumerateCsFiles("tests")` return
 //      781 files, and those files include the guard files themselves. Every rule
