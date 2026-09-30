@@ -386,6 +386,89 @@ public sealed class ToolNameListRule
     }
 
     /// <summary>
+    ///     THE TWO-NAME CONTROL (issue #832). A set of exactly TWO tool names is a
+    ///     set, and <see cref="TableMinimumNames" /> currently declares that it is
+    ///     not — so a two-name hand-maintained list is invisible to both rules.
+    /// </summary>
+    /// <remarks>
+    ///     <para>
+    ///         This is not hypothetical. <c>SystemPromptBuilder.HasSupervisionTools
+    ///         </c> string-matched <c>"session_read"</c> and <c>"session_steer"</c>
+    ///         inline (#793), and the OR shipped: the predicate rendered the recipe
+    ///         while naming a tool the turn had not been offered, because
+    ///         <c>PermissionRuleset.Default</c> ALLOWS <c>session_read</c> and ASKS
+    ///         for <c>session_steer</c> while <c>ResolveTools</c> keeps only Allow.
+    ///         Every default <c>code</c> turn was told to steer with a tool it could
+    ///         not call. #818 derived the role and closed the defect, and recorded the
+    ///         threshold as "measured-no" rather than guessing at it.
+    ///     </para>
+    ///     <para>
+    ///         Both syntactic forms are planted, because the rule reads names and not
+    ///         syntax: a predicate comparing two names, and a two-element initialiser.
+    ///         A guard that caught only one of them would leave the other as a
+    ///         spelling that gets past it.
+    ///     </para>
+    /// </remarks>
+    [Test]
+    public async Task Non_Vacuity_A_Two_Name_Tool_Set_Is_A_Table()
+    {
+        FrozenSet<string> known = ToolNameInventory.Names;
+
+        // The shape #793 shipped: two names compared inline, three lines apart or
+        // fewer, both real tools.
+        const string twoNamePredicate = """
+            private static bool HasSupervisionTools(IReadOnlyList<string> tools)
+            {
+                foreach (string name in tools)
+                {
+                    if (name == "session_read" || name == "session_steer")
+                    {
+                        return true;
+                    }
+                }
+
+                return false;
+            }
+            """;
+
+        // The same pair as a table literal — the shape the issue describes.
+        const string twoNameSet = """
+            private static readonly FrozenSet<string> SupervisionTools = new[]
+            {
+                "session_read", "session_steer",
+            };
+            """;
+
+        IReadOnlyList<IReadOnlyList<Mention>> fromPredicate =
+            FindToolTables([("prompt.cs", twoNamePredicate)], known);
+        IReadOnlyList<IReadOnlyList<Mention>> fromSet =
+            FindToolTables([("policy.cs", twoNameSet)], known);
+
+        await Assert.That(fromPredicate.Count).IsEqualTo(1)
+            .Because("two real tool names compared in one predicate is a hand-maintained set of tool "
+                   + "names, which is what both rules exist to remove. If the finder cannot see it, the "
+                   + "threshold is admitting that a set of two is not a set — and that is the shape #793 "
+                   + "shipped, so the blindness is measured, not hypothetical");
+
+        await Assert.That(Sorted(fromPredicate[0].Select(m => m.Name)))
+            .IsEquivalentTo(new[] { "session_read", "session_steer" })
+            .Because("the finder must recover the names in full or it cannot name the offender it "
+                   + "reports");
+
+        await Assert.That(fromSet.Count).IsEqualTo(1)
+            .Because("the same pair written as an initialiser is the same defect; a rule that saw only "
+                   + "the predicate form would leave the literal form as a spelling that gets past it");
+
+        await Assert.That(Sorted(fromSet[0].Select(m => m.Name)))
+            .IsEquivalentTo(new[] { "session_read", "session_steer" })
+            .Because("the names, not the count of runs, are what makes the report actionable");
+
+        await Assert.That(known.Contains("session_read") && known.Contains("session_steer")).IsTrue()
+            .Because("both are declared in BuiltinToolSafetyProfiles, so the control is measuring the "
+                   + "threshold rather than a vocabulary that lost the names");
+    }
+
+    /// <summary>
     ///     THE DEAD-ROW CONTROL. The dead-row rule must reject a table keyed on a
     ///     name no tool registers, and accept the same table once the name is
     ///     corrected. Checked against the derivation, not a fixture, so it stays
