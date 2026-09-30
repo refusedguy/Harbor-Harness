@@ -87,14 +87,23 @@
 // built so that either resolution turns it green without weakening it:
 //
 //   * WIRING (a host calls the router) — the second hop appears and the hand-off
-//     is reachable. No edit to this file.
+//     is reachable.
 //   * DELETING (the routers and the `OnKey` implementations go) — there is no
-//     hand-off left to rule on. No edit to this file.
+//     hand-off left to rule on.
 //
 // That is the point of matching the hand-off BY FORM (`X.OnKey(`, read out of
 // the source) rather than by any file list or member name. The same property
 // #821's third rule relies on: the set is re-derived from the tree, so the edit
 // that resolves the defect cannot also be the edit that satisfies the guard.
+//
+// Because both resolutions are the OWNER's — #857 asks whether
+// `IPanelProvider.OnKey` should be wired or deleted, #812 asks the same of the
+// `OverlayStack` host-routing API, and both are bounded by the feature freeze
+// #555 — the two known-dead routers sit in `PanelKeyRouteProbe.Ledger` with the
+// issue that owns each, and the gate fails only on an UNDECLARED third. The
+// ledger ratchets both ways: an entry whose router stops being an orphan fails
+// until it is removed, so debt is retired by an explicit edit and never by
+// quietly ceasing to apply.
 //
 // HONEST LIMITS OF A SOURCE SCAN
 // ------------------------------
@@ -108,9 +117,9 @@
 //     fails OPEN on what it cannot parse and fails CLOSED only on what it can.
 //   2. Consequence, stated rather than hidden: the third hand-off above
 //     (`CellForgeJumpPaletteOverlayLayer.OnKey`) is NOT among the orphans this
-//     rule reports, because eight types in this tree implement `OnKey` and a test
-//     or a caller spelling `x.OnKey(` cannot be told apart by name. The rule
-//     reports the two routers it CAN place, and does not pretend about the third.
+//     rule reports, because eight types in this tree implement `OnKey` and a
+//     caller spelled `x.OnKey(` cannot be told apart by name. The rule reports
+//     the two routers it CAN place, and does not pretend about the third.
 //   3. It counts hops out from the hand-off, not from the process entry point,
 //     so it does not prove a chain ends at `Main` — only that it is entered by
 //     called product code two hops out. Requiring more would mean resolving entry
@@ -119,12 +128,15 @@
 //     nearest declaration, so a hand-off inside a local function or a lambda is
 //     attributed to the enclosing named method. That direction is fail-open for
 //     the ruled property.
+//   5. It cannot see the test tree through `SourceScan`, which rejects `/tests/`.
+//     The measurement therefore walks `tests/` itself; see `ReadTestTrees`.
 //
 // NON-VACUITY
 // -----------
 // A gate that finds nothing is indistinguishable from a gate that is satisfied,
-// and a gate whose regex silently stopped matching is worse than no gate. Four
-// things close that:
+// and a gate whose regex silently stopped matching is worse than no gate. Five
+// things close that, and the third exists because this file's own first run got
+// it wrong:
 //
 //   1. `NonVacuity_TheRealTreeStillExposesTheHandOffSeam` — a FLOOR on what the
 //      scan found in the real product tree, so a moved file, a renamed method or
@@ -134,9 +146,16 @@
 //      in this tree) so they exercise the same scanner the rule uses and not a
 //      copy of it. Both directions are asserted in one test, so the gate is shown
 //      to discriminate rather than to answer a constant.
-//   3. `TestsDrivingAnUnreachableRouterAreNamedAndCounted` — the measurement the
-//      issue asks for, kept as code, so the count cannot rot into a paragraph.
-//   4. `NonVacuity_TheRepoRootWasFound` — a guard that cannot see the tree
+//   3. `NonVacuity_TheTestTreeIsActuallyVisibleToTheMeasurement` — the first run
+//      of this guard reported **0** tests driving a dead router, because
+//      `SourceScan.EnumerateCsFiles("tests")` is empty BY CONSTRUCTION. A
+//      measurement that cannot see its subject reports a healthy zero, which is
+//      the exact shape of the defect it was written to measure. This floor is the
+//      fix for that class of blindness, and the reason the walker is local.
+//   4. `TestsDrivingAnUnreachableRouterAreNamedAndCounted` — the measurement the
+//      issue asks for, ratcheted at the measured value so it can only fall by an
+//      explicit edit.
+//   5. `NonVacuity_TheRepoRootWasFound` — a guard that cannot see the tree
 //      reports zero hand-offs and reads as clean.
 
 using System.Text.RegularExpressions;
@@ -180,6 +199,20 @@ internal sealed record KeyRouteReport(
     IReadOnlyList<OrphanHandOff> Orphans);
 
 /// <summary>
+///     One unreachable router the project is carrying ON PURPOSE, and the issue that
+///     owns the decision to wire or delete it.
+/// </summary>
+/// <param name="File">Repo-relative file declaring the router.</param>
+/// <param name="Name">The router's name.</param>
+/// <param name="OwnedBy">The issue whose decision this entry is waiting on.</param>
+internal readonly record struct AcknowledgedDebt(string File, string Name, string OwnedBy)
+{
+    /// <summary>The identity the scan reports orphans under.</summary>
+    /// <returns>The (file, name) pair.</returns>
+    internal ProductMethod Method => new(File, Name);
+}
+
+/// <summary>
 ///     The scanner both the rule and its non-vacuity controls go through, so
 ///     neither can be satisfied by weakening the other's half. Internal rather
 ///     than private because the controls must call the SAME code.
@@ -195,6 +228,66 @@ internal static class PanelKeyRouteProbe
 
     /// <summary>How far upward <see cref="EnclosingMethod" /> will look for a declaration.</summary>
     internal const int MaxEnclosingWalk = 400;
+
+    /// <summary>
+    ///     The debt ledger: unreachable routers this project is carrying on purpose,
+    ///     each with the issue that owns the decision.
+    /// </summary>
+    /// <remarks>
+    ///     <para>
+    ///         This is NOT a fix and NOT a decision. #857 asks whether
+    ///         <c>IPanelProvider.OnKey</c> should be wired or deleted, and #812 asks
+    ///         the same of the <c>OverlayStack</c> host-routing API; both are bounded
+    ///         by the feature freeze <c>#555</c> and both are product calls, so neither
+    ///         is the guard's to make. What the ledger does is stop the two known
+    ///         dead routers from being indistinguishable from a THIRD one.
+    ///     </para>
+    ///     <para>
+    ///         It ratchets in both directions, and
+    ///         <see cref="PanelKeyRouteReachabilityRule.TheAcknowledgedDebtIsExactlyWhatTheScanStillFinds" />
+    ///         is what holds the second: an entry that stops being an orphan — because
+    ///         the router was wired or deleted — fails until it is removed here. So
+    ///         the debt can only be retired by an explicit edit, never by silently
+    ///         going away, and a new unreachable router fails
+    ///         <see cref="PanelKeyRouteReachabilityRule.EveryKeyHandOffIsReachableFromProductCode" />
+    ///         because it has no entry.
+    ///     </para>
+    /// </remarks>
+    internal static readonly AcknowledgedDebt[] Ledger =
+    [
+        new(
+            "src/Harbor.Tui.CellForge.Engine/Rendering/OverlayStack.cs",
+            "RouteKey",
+            "#812 — the engine's host-routing API; the two live layers are reached directly by ReplInputLoop"),
+        new(
+            "src/Harbor.Tui.CellForge/Chat/Panels/CellForgePanelAdapter.cs",
+            "RouteKey",
+            "#857 — the panel key route; wire it or delete IPanelProvider.OnKey"),
+    ];
+
+    /// <summary>Whether the scan's orphan set is exactly the ledger, no more and no less.</summary>
+    /// <param name="report">What the product scan found.</param>
+    /// <param name="undeclared">Orphans with no ledger entry — the gate's real failure list.</param>
+    /// <param name="stale">Ledger entries that are no longer orphans — retired debt not yet removed.</param>
+    internal static void PartitionDebt(
+        KeyRouteReport report,
+        out IReadOnlyList<OrphanHandOff> undeclared,
+        out IReadOnlyList<AcknowledgedDebt> stale)
+    {
+        var acknowledged = Ledger.Select(entry => entry.Method).ToHashSet();
+
+        undeclared = report.Orphans
+            .Where(o => !acknowledged.Contains(new ProductMethod(o.HandOff.File, o.HandOff.Performer)))
+            .ToList();
+
+        var orphanMethods = report.Orphans
+            .Select(o => new ProductMethod(o.HandOff.File, o.HandOff.Performer))
+            .ToHashSet();
+
+        stale = Ledger
+            .Where(entry => !orphanMethods.Contains(entry.Method))
+            .ToList();
+    }
 
     /// <summary>Matches a hand-off: a receiver followed by a call of the seam member.</summary>
     private static readonly Regex HandOffSite =
@@ -229,18 +322,67 @@ internal static class PanelKeyRouteProbe
             RegexOptions.Compiled | RegexOptions.Multiline);
 
     /// <summary>
-    ///     Reads the given repository-relative trees into comment-stripped text.
-    ///     Comments go through <see cref="SourceScan.StripComments" />, which
-    ///     preserves line count, so a line number still points at real source and
-    ///     the prose in this header — which names `RouteKey` a dozen times — cannot
-    ///     trip the scan.
+    ///     Reads the PRODUCT trees into comment-stripped text. Comments go through
+    ///     <see cref="SourceScan.StripComments" />, which preserves line count, so a
+    ///     line number still points at real source and the prose in this header —
+    ///     which names <c>RouteKey</c> a dozen times — cannot trip the scan.
     /// </summary>
-    /// <param name="trees">Repository-relative directories to read.</param>
     /// <returns>Absolute-path / text pairs; unreadable files are skipped.</returns>
-    internal static List<(string Path, string Text)> ReadTrees(params string[] trees)
+    internal static List<(string Path, string Text)> ReadProductTrees() =>
+        Read(SourceScan.EnumerateCsFiles(SourceScan.ProductTrees));
+
+    /// <summary>
+    ///     Reads the TEST tree, which <see cref="SourceScan" /> cannot see at all.
+    /// </summary>
+    /// <remarks>
+    ///     This walker is local on purpose and the reason is worth recording, because
+    ///     it is what the first run of this guard proved. <c>SourceScan.IsBuildOutput</c>
+    ///     rejects any path containing <c>/tests/</c> — correct for a gate judging
+    ///     product source — so <c>SourceScan.EnumerateCsFiles("tests")</c> returns an
+    ///     EMPTY list. Reusing it here made the measurement report "0 tests drive a
+    ///     dead router" on a tree that has 13, i.e. a blind spot that read as a clean
+    ///     result. <c>SourceScan</c> is shared by every guard in this project and
+    ///     changing <c>IsBuildOutput</c> for one caller would move all of them, so
+    ///     this file walks the tree itself and excludes only build output.
+    /// </remarks>
+    /// <returns>Absolute-path / text pairs; unreadable files are skipped.</returns>
+    internal static List<(string Path, string Text)> ReadTestTrees() => Read(EnumerateTestFiles());
+
+    /// <summary>Every <c>*.cs</c> file under <c>tests/</c>, excluding build output only.</summary>
+    /// <returns>Sorted absolute paths.</returns>
+    private static List<string> EnumerateTestFiles()
+    {
+        if (RepoPaths.RepoRoot is not { } root)
+        {
+            return [];
+        }
+
+        string dir = Path.Combine(root, "tests");
+        if (!Directory.Exists(dir))
+        {
+            return [];
+        }
+
+        return Directory
+            .EnumerateFiles(dir, "*.cs", SearchOption.AllDirectories)
+            .Where(path =>
+            {
+                string normalised = path.Replace('\\', '/');
+                return !normalised.Contains("/obj/", StringComparison.Ordinal)
+                    && !normalised.Contains("/bin/", StringComparison.Ordinal)
+                    && !normalised.Contains("/.worktrees/", StringComparison.Ordinal);
+            })
+            .OrderBy(path => path, StringComparer.Ordinal)
+            .ToList();
+    }
+
+    /// <summary>Reads and comment-strips the given files.</summary>
+    /// <param name="paths">Absolute file paths.</param>
+    /// <returns>Absolute-path / comment-stripped text pairs.</returns>
+    private static List<(string Path, string Text)> Read(IReadOnlyList<string> paths)
     {
         var sources = new List<(string Path, string Text)>();
-        foreach (string path in SourceScan.EnumerateCsFiles(trees))
+        foreach (string path in paths)
         {
             if (SourceScan.TryReadAllText(path) is { } text)
             {
@@ -632,42 +774,74 @@ internal static class PanelKeyRouteProbe
 public sealed class PanelKeyRouteReachabilityRule
 {
     private static readonly Lazy<KeyRouteReport> Report = new(
-        () => PanelKeyRouteProbe.Scan(PanelKeyRouteProbe.ReadTrees(SourceScan.ProductTrees)));
+        () => PanelKeyRouteProbe.Scan(PanelKeyRouteProbe.ReadProductTrees()));
 
     private static readonly Lazy<IReadOnlyList<(string Path, string Text)>> Tests = new(
-        () => PanelKeyRouteProbe.ReadTrees("tests"));
+        () => PanelKeyRouteProbe.ReadTestTrees());
 
     /// <summary>
-    ///     No hand-off in the product trees may be unreachable. Red today, by
-    ///     construction: the routers #857 and #812 name are both unreachable, which
-    ///     is what makes this gate worth having rather than a restatement of the
-    ///     paint path.
+    ///     No hand-off in the product trees may be unreachable unless the ledger says
+    ///     this one is known. The ledger holds exactly the two routers #857 and #812
+    ///     are about, so a THIRD unreachable router fails here.
     /// </summary>
+    /// <remarks>
+    ///     This is the rule that was red on the first run of this guard, and the
+    ///     failure message named both offenders with their chains — which is the
+    ///     whole point: the defect was assertable, not a reading of the code.
+    /// </remarks>
     [Test]
     public async Task EveryKeyHandOffIsReachableFromProductCode()
     {
-        List<string> orphans = Report.Value.Orphans
+        PanelKeyRouteProbe.PartitionDebt(Report.Value, out IReadOnlyList<OrphanHandOff> undeclared, out _);
+
+        List<string> offenders = undeclared
             .Select(o => $"{o.HandOff.File}:{o.HandOff.Line} — {o.HandOff.Receiver}."
                 + $"{PanelKeyRouteProbe.SeamMember}() inside {o.HandOff.Performer}: {o.Verdict}")
             .OrderBy(s => s, StringComparer.Ordinal)
             .ToList();
 
-        await Assert.That(orphans).IsEmpty().Because(
+        await Assert.That(offenders).IsEmpty().Because(
             "a hand-off into the panel/overlay input seam that product code cannot enter is a "
             + "feature whose input does not work, and the tests over it are green only because "
-            + "they are the sole callers. #857: `CellForgePanelAdapter.RouteKey` is called only by "
-            + "`ChatScreenPanelDock.RoutePanelKey`, which nothing calls, so all seven "
-            + "`IPanelProvider.OnKey` implementations are unreachable and F12 shows a logs panel "
-            + "whose keys fall through to the composer. #812: `OverlayStack.RouteKey` has no "
-            + "product caller at all. Fix by WIRING a host to the router (this gate goes green) "
-            + "or by DELETING the router and its `OnKey` implementations (there is then nothing "
-            + "to rule on) — this rule is built to accept either, and to be unsatisfiable by a "
-            + "rename, because it reads the hand-off out of the source rather than from a list. "
-            + "Offending hand-offs: "
-            + (orphans.Count == 0
+            + "they are the sole callers. The ledger already carries the two routers #857 and "
+            + "#812 are about, so anything reported here is a THIRD one, or a renamed "
+            + "version of one the ledger names. Fix by WIRING a host to the router or by "
+            + "DELETING it — the gate is built to accept either and to be unsatisfiable by a "
+            + "rename, because it reads the hand-off out of the source rather than from a "
+            + "list. Unreachable hand-offs with no ledger entry: "
+            + (offenders.Count == 0
                 ? "(none — the scan graded no hand-off at all, which is its own failure; see "
                   + "NonVacuity_TheRealTreeStillExposesTheHandOffSeam)"
-                : string.Join(" | ", orphans)));
+                : string.Join(" | ", offenders)));
+    }
+
+    /// <summary>
+    ///     The ledger is the debt, and a debt that is not re-checked is a comment
+    ///     that rots. Every entry must STILL be an orphan — so wiring or deleting a
+    ///     router turns this red until its entry is removed, and the debt can only be
+    ///     retired by an explicit edit.
+    /// </summary>
+    [Test]
+    public async Task TheAcknowledgedDebtIsExactlyWhatTheScanStillFinds()
+    {
+        PanelKeyRouteProbe.PartitionDebt(Report.Value, out IReadOnlyList<OrphanHandOff> undeclared, out IReadOnlyList<AcknowledgedDebt> stale);
+
+        await Assert.That(undeclared.Count).IsEqualTo(0).Because(
+            "an unreachable router the ledger does not name is new debt, and the whole value of "
+            + "carrying the two known ones is that a third cannot hide among them. Add it to the "
+            + "ledger with the issue that owns it, or fix it. Undeclared: "
+            + (undeclared.Count == 0
+                ? "(none)"
+                : string.Join(" | ", undeclared.Select(o => $"{o.HandOff.File}:{o.HandOff.Performer}"))));
+
+        await Assert.That(stale.Count).IsEqualTo(0).Because(
+            "a ledger entry whose router is no longer unreachable is retired debt that was never "
+            + "removed, which is how an allowance outlives the thing it allowed. If the router was "
+            + "wired or deleted, drop its entry here — that edit is the record that #857 or #812 "
+            + "was resolved. Stale entries: "
+            + (stale.Count == 0
+                ? "(none)"
+                : string.Join(" | ", stale.Select(s => $"{s.File}:{s.Name} (owned by {s.OwnedBy})"))));
     }
 
     /// <summary>
@@ -779,11 +953,14 @@ public sealed class PanelKeyRouteReachabilityRule
     ///     is the shape the issue reports.
     /// </summary>
     /// <remarks>
-    ///     A FLOOR, not a pin, on purpose. Pinning the count would make the natural
-    ///     fix — wiring or deleting a router — fail a test about test hygiene. The
-    ///     floor says the measurement is still being taken and the defect class is
-    ///     still present in the test tree, and the names are in the failure message
-    ///     so the count is readable without editing anything.
+    ///     A ratchet, set at the MEASURED value (13: six test methods drive
+    ///     <c>RoutePanelKey</c>, seven drive <c>OverlayStack.RouteKey</c>). It can
+    ///     only go down by an explicit edit, which is what happens when #857 or #812
+    ///     is resolved — and that edit is the record. It cannot go down by accident,
+    ///     which is the failure this guard exists to prevent: on its first run this
+    ///     very test reported <c>0</c> because the shared <c>SourceScan</c> walker
+    ///     cannot see <c>tests/</c> at all, and a count of zero reads exactly like a
+    ///     clean bill of health.
     /// </remarks>
     [Test]
     public async Task TestsDrivingAnUnreachableRouterAreNamedAndCounted()
@@ -791,14 +968,44 @@ public sealed class PanelKeyRouteReachabilityRule
         IReadOnlyList<string> hits = PanelKeyRouteProbe.TestsThatDriveOnlyDeadRoutes(
             Report.Value, Tests.Value);
 
-        await Assert.That(hits.Count).IsGreaterThan(0).Because(
+        await Assert.That(hits.Count).IsGreaterThanOrEqualTo(13).Because(
             "a test that is the SOLE caller of a method no product code calls cannot fail when "
             + "the product path is absent — that is the test #857 reports, in the shape "
             + "`PanelWiringTests.RouteKey_Logs_F12_Toggles_Panel` has: it drives "
             + "`RoutePanelKey` directly AND dispatches the `AppMsg.FocusPanel` that the "
             + "product's F12 path never dispatches, so it asserts a precondition it "
-            + "manufactured. These are green and assert nothing a user can observe. Named: "
+            + "manufactured. Measured 13. If a router is wired or deleted this count drops "
+            + "and the floor is lowered HERE, on purpose, so the drop is a recorded decision "
+            + "rather than a silent one. Named: "
             + (hits.Count == 0 ? "(the scan attributed no test at all)" : string.Join(" | ", hits)));
+    }
+
+    /// <summary>
+    ///     The measurement has to be able to SEE the test tree, and the shared
+    ///     walker cannot: <c>SourceScan.IsBuildOutput</c> rejects any path containing
+    ///     <c>/tests/</c>, so <c>SourceScan.EnumerateCsFiles("tests")</c> is empty.
+    ///     That is why the walker in this file is local, and this floor is what keeps
+    ///     it working — a test-tree scan that silently returns nothing reports a
+    ///     healthy zero, which is the same shape as the defect it is measuring.
+    /// </summary>
+    [Test]
+    public async Task NonVacuity_TheTestTreeIsActuallyVisibleToTheMeasurement()
+    {
+        int files = Tests.Value.Count;
+
+        await Assert.That(files).IsGreaterThan(500).Because(
+            "the measurement reads the test tree with a walker local to this file, because "
+            + "SourceScan.IsBuildOutput rejects `/tests/` and its EnumerateCsFiles(\"tests\") "
+            + "returns an empty list. A test-tree scan that finds nothing would report zero "
+            + "vacuous tests, which is indistinguishable from there being none. Read: "
+            + files + " files.");
+
+        await Assert.That(SourceScan.EnumerateCsFiles("tests").Count).IsEqualTo(0).Because(
+            "this is the fact the local walker exists for, pinned so it is not 'fixed' by "
+            + "changing shared SourceScan behaviour underneath every other guard in this "
+            + "project. If a future SourceScan change makes this non-empty, the local "
+            + "walker and this expectation must be reconciled deliberately rather than by "
+            + "one of the two silently changing.");
     }
 
     /// <summary>
