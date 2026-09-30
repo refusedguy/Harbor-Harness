@@ -45,6 +45,14 @@
 //      its regex is broken is worse than no scan, and a "there are no
 //      violations" result is otherwise indistinguishable from "the scanner read
 //      nothing".
+//   5. THE FOURTH READER READS THROUGH THE PORT TOO. `ThemeDirectoryWatcher` —
+//      the other half of the #479-A6 pair named in line 13 above — was the site
+//      #668 could not reach and #720 could not finish: it is in
+//      `Harbor.Hosting.Themes`, not in a Presentation assembly, so it was never
+//      in rule 3's gated list, and it went on doing its own read-and-parse. That
+//      is the "THIRD theme-parse path for the same input" the issue names, and
+//      it was the last one standing. See "THE TWO WATCHERS" below for what this
+//      file does and does not unify about that pair.
 //
 // WHY THE PORT LIVES IN DESIGNSYSTEM AND NOT IN DOMAIN
 // ----------------------------------------------------
@@ -88,17 +96,81 @@
 //     declared here, in the leaf, and that is the point: the two halves are
 //     deliberately apart, so "the assembly the port lives in" and "the assembly
 //     that touches the disk" are no longer the same answer.
-//   * Whether the two watchers share a polling base class. That is #479-A6's
-//     own proposal ("PollingWatcher base + two concretes, or one
-//     IFileSetSource"). Duplication of the *read* is what this file rules;
-//     duplication of the *poll skeleton* stays visible in review, where the
-//     trade-off is legible, rather than becoming an enforced base class in a
-//     debt wave.
+//   * `System.IO.Directory` inside `ThemeDirectoryWatcher`. The port answers
+//     "read this theme" and "when did this theme change"; it does not answer
+//     "which themes exist", and the enumeration is the watcher's entire reason
+//     to exist (#622 seals that mechanism as the theme DISCOVERY path — adding
+//     a second one is frozen, re-implementing this one is not). A blanket
+//     "no File.* and no Directory.*" rule here would forbid the type's job.
+//     `File.*` IS ruled for it, and that is the whole delta: the stamp and the
+//     read-and-parse are both port members (`TryGetLastWriteUtc`, `LoadFile`),
+//     so a watcher that calls `File.*` is calling something the port already
+//     offers it by name.
 //   * The RESULT TYPE. DesignSystem has no PackageReference at all — that is
 //     why ThemeParseResult is a hand-rolled record and not Result<T>
 //     (ResultFailureConversionTests.Exemptions says so). A rule demanding
 //     Result<T> in the port would be unsatisfiable without giving the leaf a
 //     dependency, which is a bigger decision than this issue.
+//
+// THE TWO WATCHERS: TWO NEEDS THAT SHARE A SHAPE, NOT ONE NEED SPLIT IN TWO
+// -------------------------------------------------------------------------
+// #479-A6's fix line offered "PollingWatcher base + two concretes, or one
+// IFileSetSource". A previous revision of this file left that open: "duplication
+// of the POLL SKELETON stays visible in review, where the trade-off is legible".
+// The trade-off is now legible, and the answer is that the two watchers must
+// NOT share a poll. They are different requirements that happen to have
+// similar silhouettes, and the shared surface is two lines:
+//
+//     _timer = new Timer(_ => Poll(), null, Interval, Interval);
+//     public void Dispose() => _timer.Dispose();
+//
+// …one of which is not even shared, because each type declares its own
+// `static readonly Interval` constant. Everything BELOW that pair is the
+// requirement, and it differs:
+//
+//   * THE FILE SET. `ThemeFileWatcher` is one named path that cannot appear or
+//     vanish. `ThemeDirectoryWatcher` enumerates a directory every tick, builds
+//     a `seen` set, and GCs the stamps of paths that disappeared — the single-file
+//     watcher has no counterpart to any of that, and cannot grow one: "a file I
+//     was told to watch is now gone" is not a state it can represent.
+//   * THE CHANGE SIGNAL. One scalar `DateTime` versus a `Dictionary<string,
+//     DateTime>` with per-path eviction. The stamp map IS the difference; a
+//     shared base that owned "did anything change" would have to own the map,
+//     and then the single-file case would be a degenerate map of one entry.
+//   * BLAST RADIUS OF ONE CHANGE. One load, versus N loads in one poll with
+//     per-file error isolation and a filename-prefixed error. And the ordering
+//     is contractual: `ReplLifecycle.ArmThemeDirectory`'s own XML doc records
+//     that the directory watcher applies every parseable `*.json` in name order
+//     and the caller leans on that, so "which theme wins" is answered by the
+//     watcher and must not be re-derived by a base class.
+//   * START POLICY. The file watcher always starts; the directory watcher takes
+//     `autoStart` and builds a disabled `Timer` when it is false, which is how
+//     its tests get determinism.
+//
+// A `PollingWatcher` base would own a `Timer` and expose a `virtual Poll()` that
+// BOTH types override in full. What it would actually share is two lines of
+// timer plumbing; every requirement above would still live in the overrides, so
+// the base decides nothing and the hierarchy would exist to hold a `Timer`. It
+// is also unreachable: the base has to live in an assembly both can name, the
+// only common leaf is `Harbor.DesignSystem` with an EMPTY allowed-reference set,
+// and putting a `Timer` in the HDS v1 token leaf is exactly what #536 moved out
+// of it. A new shared assembly would additionally need a home added to
+// `ThemeAxisStaysDataRules.SealedThemeSourceHomes`.
+//
+// So the unification here is NOT the poll — it is the READ. One owner for
+// "read and parse a theme document" (`ThemeStore`, via the port), two owners for
+// "what changed and what should I apply" (the two watchers, each honest about
+// its own file set). That is the shape #717 already used on
+// `CollapseWhitespace`/`StripWhitespace`: identical-looking signature, opposite
+// requirement, so name them apart and cross-reference rather than unify.
+//
+// Consequences for the rules below: `ThemeDirectoryWatcher` is gated for its READ
+// — the same `File.*` scanner rule 3 applies to the two CellForge widgets, plus
+// the port-naming rule — and is deliberately NOT gated for its enumeration. Its
+// sibling `ThemeFileWatcher` is likewise free to keep owning its own poll
+// skeleton; the two are cross-referenced in each other's remarks so the next
+// reader does not re-open this question from the issue text alone.
+//
 
 using System.Text.RegularExpressions;
 
@@ -112,6 +184,13 @@ namespace Harbor.Architecture.Tests;
 public sealed class ThemeStoreSeamRules
 {
     private const string PortName = "IThemeStore";
+
+    /// <summary>
+    ///     The port's read member, by name. Matched against comment-stripped source
+    ///     rather than through reflection because a guard for a port that does not exist
+    ///     yet has to compile before the port does, or it cannot be landed red-first.
+    /// </summary>
+    private const string ReadMember = "LoadFile";
 
     /// <summary>The assembly the port and its single implementation belong to.</summary>
     private const string HomeAssembly = "Harbor.DesignSystem";
@@ -131,6 +210,38 @@ public sealed class ThemeStoreSeamRules
     ];
 
     /// <summary>
+    ///     The other half of the #479-A6 watcher pair, gated for its READ and not
+    ///     for its enumeration. <c>Directory.*</c> stays legal here on purpose: the
+    ///     port answers "read this theme" and "when did it change", never "which
+    ///     themes exist", and that enumeration is the file-set discovery #622 seals
+    ///     rather than duplicates. <c>File.*</c> is the ruled half, and both members
+    ///     it would want — <c>TryGetLastWriteUtc</c> and <c>LoadFile</c> — are on
+    ///     the port, so the rule is enforceable rather than aspirational.
+    /// </summary>
+    private static readonly string[] GatedDirectoryWatcher =
+    [
+        "src/Harbor.Hosting/Themes/ThemeDirectoryWatcher.cs",
+    ];
+
+    /// <summary>
+    ///     The one production type allowed to read and parse a theme document: the
+    ///     port's single implementation. It is also the non-vacuity anchor for the
+    ///     file-touching scanner, because it is the file that legitimately still
+    ///     calls <c>File.*</c> and <c>ThemeJson.Parse</c> itself.
+    /// </summary>
+    private const string ReadOwner = "src/Harbor.Hosting/Themes/ThemeStore.cs";
+
+    /// <summary>
+    ///     The sibling watcher, which already does this correctly: it holds an
+    ///     <c>IThemeStore</c> field and calls <c>_store.LoadFile(</c> through it. This
+    ///     is the non-vacuity anchor for the port-naming probe — "the file names the
+    ///     port" must be a claim the scanner can contradict, and a sibling that
+    ///     passes is a far better control than a synthetic string.
+    /// </summary>
+    private const string PortNamingControl = "src/Harbor.Tui.CellForge/Chat/Widgets/ThemeFileWatcher.cs";
+
+
+    /// <summary>
     ///     The widget that also owned a public static disk read of its own, which
     ///     is the second implementation in its purest form.
     /// </summary>
@@ -144,6 +255,19 @@ public sealed class ThemeStoreSeamRules
     private static readonly Regex FilesystemCall = new(
         @"(?:\b(?:File|Directory)\s*\.\s*[A-Za-z_])|\bnew\s+(?:FileInfo|DirectoryInfo)\s*\(",
         RegexOptions.CultureInvariant);
+
+    /// <summary>
+    ///     The <c>File.*</c> half of <see cref="FilesystemCall" />, for the directory
+    ///     watcher, which may enumerate its theme set but may not stat or read it. The
+    ///     split is the point: the port answers "read this theme" and "when did it
+    ///     change" and deliberately does not answer "which themes exist", so a
+    ///     watcher that calls <c>Directory.EnumerateFiles</c> is doing its job and one
+    ///     that calls <c>File.GetLastWriteTimeUtc</c> is duplicating a port member.
+    /// </summary>
+    private static readonly Regex FileCall = new(
+        @"(?:\bFile\s*\.\s*[A-Za-z_])|\bnew\s+FileInfo\s*\(",
+        RegexOptions.CultureInvariant);
+
 
     [Test]
     public async Task ThemeStore_Port_Is_Public_And_Lives_In_DesignSystem()
@@ -249,6 +373,74 @@ public sealed class ThemeStoreSeamRules
             "JsonThemeLoader is the pure parser and stays; only its disk half moves. If "
             + "Parse(string) is gone too, the probe above passes because the type was "
             + "emptied, not because the duplicate was removed.");
+    }
+
+    /// <summary>
+    ///     #479-A6's surviving half. The directory watcher stat-ed and read each theme
+    ///     file itself, in a third file, beside the port that already offered both
+    ///     operations by name — which is the "THIRD theme-parse path for the same
+    ///     input" the issue is literally about. Deliberately <c>File.*</c> and not
+    ///     <c>Directory.*</c>: see <see cref="GatedDirectoryWatcher" />.
+    /// </summary>
+    [Test]
+    public async Task ThemeDirectoryWatcher_Does_Not_Touch_The_File_Api()
+    {
+        var hits = FindCalls(GatedDirectoryWatcher, FileCall);
+
+        await Assert.That(hits.Count).IsEqualTo(0).Because(
+            "The port already offers this watcher both halves of what it would call here: "
+            + "IThemeStore.TryGetLastWriteUtc for the stamp and IThemeStore.LoadFile for the "
+            + "read-and-parse. A File.* call in a type that holds the port is a private copy of "
+            + "a member it was handed, and a private copy is the defect #668/#720 were closing, "
+            + "not a leftover of it. Enumerating the directory stays allowed — the file set is "
+            + "this type's job. Found: "
+            + (hits.Count == 0 ? "(none)" : string.Join("\n", hits)));
+    }
+
+    /// <summary>
+    ///     The other half of the same delta, and the one that keeps the previous rule from
+    ///     being satisfiable by deletion: forbidding <c>File.*</c> would also be satisfied by
+    ///     the watcher simply no longer reading anything. It has to read, and it has to read
+    ///     through a port it names.
+    /// </summary>
+    [Test]
+    public async Task ThemeDirectoryWatcher_Reads_The_Theme_Through_The_Port()
+    {
+        var missing = FindUnmetPortRead(GatedDirectoryWatcher);
+
+        await Assert.That(missing.Count).IsEqualTo(0).Because(
+            "Live-reload has to keep working, so the read cannot simply be removed along with "
+            + "the File.* call. It moves to the port the sibling watcher already uses "
+            + "(ThemeFileWatcher holds an IThemeStore and calls _store.LoadFile). Unmet: "
+            + (missing.Count == 0 ? "(none)" : string.Join("\n", missing)));
+    }
+
+    /// <summary>
+    ///     Non-vacuity for both probes added by #479-A6, in the same shape as
+    ///     <see cref="Filesystem_Scanner_Still_Sees_A_Real_Call" /> and for the same reason:
+    ///     each of them can go green for the wrong reason, and a guard whose failure modes
+    ///     are indistinguishable from "the guard is broken" teaches the next reader to
+    ///     delete it.
+    /// </summary>
+    [Test]
+    public async Task Directory_Watcher_Probes_Are_Non_Vacuous()
+    {
+        IReadOnlyList<string> fileHits = FindCalls([ReadOwner], FileCall);
+        await Assert.That(fileHits.Count).IsGreaterThan(0).Because(
+            "The File.* scanner in ThemeDirectoryWatcher_Does_Not_Touch_The_File_Api must be "
+            + "able to fail. " + ReadOwner + " is the port's one implementer and legitimately "
+            + "still reads the disk, so a scan that finds nothing there is a broken regex — or "
+            + "an unreadable repo root — and the watcher's pass is then meaningless. It also "
+            + "keeps the check honest about a RENAMED watcher: a missing path is reported as a "
+            + "hit, never as a clean file.");
+
+        IReadOnlyList<string> unmet = FindUnmetPortRead([PortNamingControl]);
+        await Assert.That(unmet.Count).IsEqualTo(0).Because(
+            "The port-naming probe in ThemeDirectoryWatcher_Reads_The_Theme_Through_The_Port "
+            + "must be able to fail. " + PortNamingControl + " is the sibling that already does "
+            + "this correctly, so if it does not satisfy the probe the probe is wrong and the "
+            + "watcher's pass means nothing. Unmet: "
+            + (unmet.Count == 0 ? "(none)" : string.Join("\n", unmet)));
     }
 
     /// <summary>
@@ -389,6 +581,16 @@ public sealed class ThemeStoreSeamRules
     ///     backstop for.
     /// </summary>
     private static IReadOnlyList<string> FindFilesystemCalls(IReadOnlyList<string> relativePaths)
+        => FindCalls(relativePaths, FilesystemCall);
+
+    /// <summary>
+    ///     Every call to <paramref name="pattern" /> in the named repo-relative files, one
+    ///     entry per site, as <c>repo-relative-path:line  matched-text</c>. Comments are
+    ///     stripped first so a doc line naming the old <c>File.Exists</c> is not graded as
+    ///     code. Returns empty when the repo root is unavailable, which the non-vacuity
+    ///     tests are the backstop for.
+    /// </summary>
+    private static IReadOnlyList<string> FindCalls(IReadOnlyList<string> relativePaths, Regex pattern)
     {
         if (RepoPaths.RepoRoot is not { } root)
         {
@@ -398,17 +600,15 @@ public sealed class ThemeStoreSeamRules
         var hits = new List<string>();
         foreach (string relative in relativePaths)
         {
-            string path = Path.Combine(root, relative);
-            if (!File.Exists(path))
+            if (!TryReadStripped(relative, out string[] lines))
             {
-                hits.Add($"{relative}  (file is missing — the guard cannot grade a file it cannot read)");
+                hits.Add(MissingFile(relative));
                 continue;
             }
 
-            string[] lines = SourceCommentStripper.StripAll(File.ReadLines(path));
             for (int i = 0; i < lines.Length; i++)
             {
-                Match match = FilesystemCall.Match(lines[i]);
+                Match match = pattern.Match(lines[i]);
                 if (match.Success)
                 {
                     hits.Add($"{relative}:{i + 1}  {match.Value.Trim()}");
@@ -417,6 +617,66 @@ public sealed class ThemeStoreSeamRules
         }
 
         return hits;
+    }
+
+    /// <summary>
+    ///     The ways a file fails to read a theme document THROUGH the port: it never names
+    ///     the port, or it names it without calling the read member. Both are reported, and
+    ///     a missing file is a failure rather than a pass — a renamed watcher has to redden
+    ///     this rule, not satisfy it.
+    /// </summary>
+    private static IReadOnlyList<string> FindUnmetPortRead(IReadOnlyList<string> relativePaths)
+    {
+        var unmet = new List<string>();
+        foreach (string relative in relativePaths)
+        {
+            if (RepoPaths.RepoRoot is null)
+            {
+                unmet.Add("(repo root unavailable — the non-vacuity test is the backstop)");
+                continue;
+            }
+
+            if (!TryReadStripped(relative, out string[] lines))
+            {
+                unmet.Add(MissingFile(relative));
+                continue;
+            }
+
+            string text = string.Join('\n', lines);
+            if (!text.Contains(PortName, StringComparison.Ordinal))
+            {
+                unmet.Add($"{relative}  never names {PortName}");
+            }
+
+            if (!text.Contains(ReadMember, StringComparison.Ordinal))
+            {
+                unmet.Add($"{relative}  calls no {PortName}.{ReadMember}(");
+            }
+        }
+
+        return unmet;
+    }
+
+    private static string MissingFile(string relative)
+        => $"{relative}  (file is missing — the guard cannot grade a file it cannot read)";
+
+    private static bool TryReadStripped(string relative, out string[] lines)
+    {
+        if (RepoPaths.RepoRoot is not { } root)
+        {
+            lines = [];
+            return false;
+        }
+
+        string path = Path.Combine(root, relative);
+        if (!File.Exists(path))
+        {
+            lines = [];
+            return false;
+        }
+
+        lines = SourceCommentStripper.StripAll(File.ReadLines(path));
+        return true;
     }
 
     /// <summary>

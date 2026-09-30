@@ -134,14 +134,27 @@ deterministic tests.
 
 ```csharp
 using var watcher = new ThemeDirectoryWatcher(
-    onApplied: theme => ShowStatus($"theme: live-reload → {theme.Name}"),
-    onError:   error => ShowStatus($"! theme: {error}"));
+    directory:  null,                       // null = the default themes directory
+    store:      new ThemeStore(),           // required: the stat and the read go through it
+    onApplied:  theme => ShowStatus($"theme: live-reload → {theme.Name}"),
+    onError:    error => ShowStatus($"! theme: {error}"));
 ```
+
+Both watchers read the theme through the `IThemeStore` port this package
+declares; the store is a required argument, not an optional convenience, so a
+watcher cannot quietly build its own reader (see
+[#668](https://github.com/refusedguy/Harbor-Harness/issues/668)).
 
 The CellForge interactive shell ships the same contract for a single file:
 `HARBOR_THEME_FILE`, else `~/.harbor/theme.json` when present (`JsonThemeLoader`
-+ `ThemeFileWatcher`, which read through the `IThemeStore` port this package
-declares — see [#668](https://github.com/refusedguy/Harbor-Harness/issues/668)).
++ `ThemeFileWatcher`, which read through the same port).
+
+The two watchers are **not** merged into a shared polling base, deliberately:
+they differ in the file set they own (one named path that cannot vanish, versus
+a directory enumerated every tick whose members appear and disappear), in the
+change signal (one timestamp versus a stamp dictionary with eviction), and in
+how many files one change loads. What they share is the read, and that has one
+owner (see [#479](https://github.com/refusedguy/Harbor-Harness/issues/479)).
 
 ## The theme axis is exempt from the feature freeze (#622)
 
