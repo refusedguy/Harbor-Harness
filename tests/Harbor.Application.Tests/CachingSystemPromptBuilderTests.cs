@@ -29,14 +29,23 @@ public class CachingSystemPromptBuilderTests
     private static readonly ModelInfo TestModel =
         new("test-model", "test", "Test Model", 200_000, 4096, false, false, true, Pricing.Unknown, "openai");
 
-    private static ToolDescriptor Tool(string name, string schemaJson) => new(
+    private static ToolDescriptor Tool(string name, string schemaJson, params string[] guidelines) => new(
         ToolName.Create(name),
         name,
         $"{name} description",
         JsonDocument.Parse(schemaJson),
         ExecutionMode.Parallel,
         null,
-        Array.Empty<string>());
+        guidelines);
+
+    /// <summary>
+    ///     ONE working directory for every context this class builds. The key
+    ///     covers <c>WorkingDirectory</c>, so a helper that minted a fresh temp
+    ///     dir per call made each two-call test miss on that field alone — the
+    ///     field the test names never had to move the key for the test to pass.
+    ///     Five tests here were measuring the temp directory.
+    /// </summary>
+    private static readonly string WorkDir = TestTempDirs.NewDirectory("harbor-prompt-cache-tests");
 
     private static SystemPromptContext Context(params ToolDescriptor[] tools) => new(
         TestAgents.AllowAll(),
@@ -45,7 +54,7 @@ public class CachingSystemPromptBuilderTests
         Array.Empty<ContextFile>(),
         Array.Empty<SkillDescriptor>(),
         null,
-        TestTempDirs.NewDirectory("harbor-prompt-cache-tests"));
+        WorkDir);
 
     [Test]
     public async Task BuildAsync_SameContextTwice_InnerBuilderInvokedOnce()
@@ -93,7 +102,7 @@ public class CachingSystemPromptBuilderTests
             Array.Empty<ContextFile>(),
             Array.Empty<SkillDescriptor>(),
             null,
-            TestTempDirs.NewDirectory("harbor-prompt-cache-tests"));
+            WorkDir);
         _ = await caching.BuildAsync(otherContext);
 
         await Assert.That(inner.BuildCalls).IsEqualTo(2);
@@ -188,8 +197,13 @@ public class CachingSystemPromptBuilderTests
     [Test]
     public async Task BuildAsync_SameToolsDifferentOrder_TreatedAsChange()
     {
-        // The key preserves order because the rendered system prompt lists
-        // tools in order — a reorder changes the prompt text.
+        // The KEY is order-sensitive. This used to be justified by a comment
+        // claiming the rendered prompt lists tools in context order — the
+        // builder sorts them by name (SystemPromptBuilder.cs:139), so the
+        // prompt is byte-identical across this reorder and the entry is an
+        // over-invalidation, not a required miss. Harmless, and kept: the key
+        // walking the list as given is the cheaper property to keep than the
+        // sort that would make it order-blind. The reason is now the real one.
         var inner = new CountingPromptBuilder();
         var caching = new CachingSystemPromptBuilder(inner);
 
@@ -199,6 +213,48 @@ public class CachingSystemPromptBuilderTests
         _ = await caching.BuildAsync(Context(
             Tool("beta", """{"type":"object"}"""),
             Tool("alpha", """{"type":"object"}""")));
+
+        await Assert.That(inner.BuildCalls).IsEqualTo(2);
+    }
+
+    // ── #792: a guideline is prompt content, so it belongs in the key ──
+
+    [Test]
+    public async Task BuildAsync_OnlyGuidelinesChanged_ServesRebuiltPrompt()
+    {
+        // The REAL builder, not the counting fake. The defect #792 reports is a
+        // stale STRING — a guideline edit serving the previous turn's prompt —
+        // and a fake that returns a constant "built" cannot show staleness at
+        // all: the counter would have read 2 and the user would still have got
+        // the old text. So this asserts on the strings the model would read.
+        //
+        // Everything else is held equal by construction, including the working
+        // directory (see WorkDir) — otherwise this passes for the wrong reason.
+        var caching = new CachingSystemPromptBuilder(new SystemPromptBuilder());
+
+        string first = await caching.BuildAsync(
+            Context(Tool("alpha", """{"type":"object"}""", "OLD guidance.")));
+        string second = await caching.BuildAsync(
+            Context(Tool("alpha", """{"type":"object"}""", "NEW guidance.")));
+
+        await Assert.That(first).Contains("OLD guidance.");
+        await Assert.That(second).Contains("NEW guidance.");
+        await Assert.That(second).DoesNotContain("OLD guidance.");
+    }
+
+    [Test]
+    public async Task BuildAsync_GuidelineCountChanged_RebuildsPrompt()
+    {
+        // Separate from the content case above: appending the guidelines as a
+        // joined string would satisfy that one while keying every count the
+        // same, and a single added guideline then changes the rendered prompt
+        // without changing the key. The count has to ride in the key too.
+        var inner = new CountingPromptBuilder();
+        var caching = new CachingSystemPromptBuilder(inner);
+
+        _ = await caching.BuildAsync(Context(Tool("alpha", """{"type":"object"}""", "only one.")));
+        _ = await caching.BuildAsync(
+            Context(Tool("alpha", """{"type":"object"}""", "only one.", "and a second.")));
 
         await Assert.That(inner.BuildCalls).IsEqualTo(2);
     }
