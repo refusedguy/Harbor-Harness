@@ -48,6 +48,16 @@
 // in order: solve, prepare, BeginFrameScope (which pins the palette for the whole
 // frame — the #458/#648 fix, and the reason nothing here needs a manual pin),
 // PaintAll, ArmGateGlow, flush.
+//
+// ONE THING THE FIRST CI RUN OF THIS FILE GOT WRONG, since it will bite the next
+// person who extends it: the pulse intensity is NOT 1.0 at the peak. `PanelFx`'s
+// pulse is a sine, so the ledger publishes something comfortably below full
+// strength, and `GlowEffect.Transform` blends by `intensity * PeakStrength`.
+// `PostFxTests.HotSgr` can hard-code `PeakStrength` because every test that uses
+// it sets `intensity: 1.0` on a synthetic effect. Driving the real ledger and
+// assuming 1.0 produces an expected byte string brighter than the renderer can
+// ever emit, and the assertion then fails on a build whose glow is perfect. The
+// intensity is read out of `_glowScratch` and carried into the expectation.
 
 using System.Text;
 using CSharpFunctionalExtensions;
@@ -85,23 +95,38 @@ public sealed class GateGlowAgingTests
     private static (byte R, byte G, byte B) Channels(PackedColor c) =>
         c.IsRgb ? c.RgbChannels : ((byte)0, (byte)0, (byte)0);
 
+    /// <summary>The fixed burn <c>GlowEffect</c> applies toward white to derive its hot tone.</summary>
+    private static PackedColor HotTone(PackedColor accent)
+    {
+        var (r, g, b) = Channels(accent);
+        const double burn = 0.65; // GlowEffect.HotBurn
+        return PackedColor.Rgb(
+            (byte)(r + ((255 - r) * burn)),
+            (byte)(g + ((255 - g) * burn)),
+            (byte)(b + ((255 - b) * burn)));
+    }
+
     private static string Sgr(PackedColor c)
     {
         var (r, g, b) = Channels(c);
         return $"\x1B[38;2;{r};{g};{b}m";
     }
 
-    /// <summary>The tone a full-intensity glow blends a cell's foreground toward.</summary>
-    private static string HotSgr(PackedColor accent)
-    {
-        var (r, g, b) = Channels(accent);
-        const double burn = 0.65; // GlowEffect.HotBurn
-        var hot = PackedColor.Rgb(
-            (byte)(r + ((255 - r) * burn)),
-            (byte)(g + ((255 - g) * burn)),
-            (byte)(b + ((255 - b) * burn)));
-        return Sgr(PanelFx.Lerp(accent, hot, GlowEffect.PeakStrength));
-    }
+    /// <summary>
+    /// The tone a glow blends a cell's foreground toward, for a GIVEN ledger intensity.
+    /// </summary>
+    /// <remarks>
+    /// The intensity is a parameter and not a constant, and that is a measured correction rather
+    /// than a stylistic one. <c>GlowEffect.Transform</c> blends by <c>_intensity * PeakStrength</c>,
+    /// and the pulse is a SINE: the ledger's intensity at the peak frame is comfortably below 1.0.
+    /// <c>PostFxTests.HotSgr</c> can hard-code <c>PeakStrength</c> because every test that uses it
+    /// sets <c>intensity: 1.0</c> on a synthetic effect. This test drives the REAL ledger, so the
+    /// only correct expectation is the one built from the value the ledger actually published —
+    /// assuming the peak is 1.0 produces an expected string that is brighter than anything the
+    /// terminal can ever be sent, and the byte assertion then fails on a build whose glow is perfect.
+    /// </remarks>
+    private static string HotSgr(PackedColor accent, double intensity) =>
+        Sgr(PanelFx.Lerp(accent, HotTone(accent), intensity * GlowEffect.PeakStrength));
 
     // ── The producer half, observed through the real consumer ────────────
 
@@ -136,6 +161,7 @@ public sealed class GateGlowAgingTests
 
         PackedColor accent;
         Rect region;
+        double intensity;
         using (var frame = screen.BeginFrameScope())
         {
             Solve(runner);
@@ -154,6 +180,7 @@ public sealed class GateGlowAgingTests
                        + "instance rather than allocating, which is what makes arming allocation-free");
             region = effect!.Region;
             accent = runner._glowScratch[0].Accent;
+            intensity = runner._glowScratch[0].Intensity;
 
             await Assert.That(region.Width).IsGreaterThan(0)
                 .Because("an empty region would make the glow invisible for a reason that has "
@@ -167,6 +194,18 @@ public sealed class GateGlowAgingTests
                 .Because("the publisher contract is truecolor accents — a palette-index accent is "
                        + "deliberately not glowed (GlowEffect.Update keeps the hot tone equal to the "
                        + "accent), so an indexed one would make every byte assertion below vacuous");
+
+            // The REAL pulse intensity, not 1.0. The pulse is a sine, so the peak frame publishes
+            // something below full strength, and GlowEffect.Transform blends by
+            // intensity * PeakStrength. Carrying the value forward is what makes the byte assertion
+            // below exact instead of approximately-right-in-the-wrong-direction.
+            await Assert.That(intensity).IsGreaterThan(0.0)
+                .Because("a zero intensity would make the whole aging experiment blind: the slot would "
+                       + "be armed and the transform would return every cell untouched, so a missing "
+                       + "drain would be invisible. This is the guarantee the second test needs");
+            await Assert.That(intensity).IsLessThanOrEqualTo(1.0)
+                .Because("GlowRegion clamps intensity to [0..1], and anything above that would mean the "
+                       + "clamp stopped working. Measured: " + intensity);
 
             // The slot is armed AND non-zero: this is the assertion that makes the aging test
             // below sensitive. A last-armed frame at the pulse trough would satisfy Count == 1
@@ -184,7 +223,7 @@ public sealed class GateGlowAgingTests
             await frame.FlushAsync();
         }
 
-        string hot = HotSgr(accent);
+        string hot = HotSgr(accent, intensity);
         await Assert.That(backend.Text.Contains(hot)).IsTrue()
             .Because("the armed slot must reach the wire: the diff selects the cell, the pipeline "
                    + "transforms it, and the SGR automaton encodes the HOT tone rather than the raw "
@@ -223,6 +262,7 @@ public sealed class GateGlowAgingTests
 
         PackedColor accent;
         Rect region;
+        double intensity;
         using (var frame = screen.BeginFrameScope())
         {
             Solve(runner);
@@ -230,14 +270,21 @@ public sealed class GateGlowAgingTests
             lifecycle.ArmGateGlow();
             region = runner._glowEffects[0]!.Region;
             accent = runner._glowScratch[0].Accent;
+            intensity = runner._glowScratch[0].Intensity;
             screen.Back.SetText(region.X, region.Y, "GLOW", new CellStyle(accent, attrs: StyleAttr.Bold));
             await frame.FlushAsync();
         }
 
-        await Assert.That(backend.Text.Contains(HotSgr(accent))).IsTrue()
+        await Assert.That(intensity).IsGreaterThan(0.0)
+            .Because("the frame that arms the slot must arm it at non-zero strength, or a missing "
+                   + "drain is invisible and this whole test is decorative. Measured: " + intensity);
+
+        string hot = HotSgr(accent, intensity);
+        await Assert.That(backend.Text.Contains(hot)).IsTrue()
             .Because("the first frame must actually glow, or the second frame proves nothing: a test "
                    + "that asserts 'no hot bytes' against a build that never emitted any would be "
-                   + "green forever. Captured: " + backend.Escaped);
+                   + "green forever. Expected the tone for the ledger's own intensity (" + intensity
+                   + "), not for 1.0 — the pulse is a sine. Captured: " + backend.Escaped);
 
         // The decision. This is what makes the ledger stop publishing — the producer half
         // PostFxTests already covers — and it is the only thing that changes between the frames.
@@ -282,7 +329,7 @@ public sealed class GateGlowAgingTests
             await frame.FlushAsync();
         }
 
-        await Assert.That(backend.Text.Contains(HotSgr(accent))).IsFalse()
+        await Assert.That(backend.Text.Contains(hot)).IsFalse()
             .Because("the hot tone must be gone from the wire. With the drain deleted the transform "
                    + "reproduces the tone already in FRONT, so the frame emits NOTHING for this cell "
                    + "rather than a plain repaint — which is the visible symptom: the gate keeps its "
