@@ -18,6 +18,36 @@
 //
 // The wave converted all 64. This file stops the 65th from landing.
 //
+// #593 — THE HOLE BETWEEN THE TWO GUARDS, AND WHAT IS LEFT
+// -------------------------------------------------------
+// #593 claimed 26 hand-written copies of this operation. Re-measured on
+// 2026-09-30 (rg over `src/` + `apps/`, `contrib/` excluded): **0 remain**, and the
+// one the wave left is the documented `ThemeParseResult` exemption below. The claim
+// was true when the audit ran and is false now, so the headline is stale — but the
+// sweep was not useless, because asking "where is it now?" found the shape it
+// missed:
+//
+//     src/Harbor.Application/Providers/ProviderHealthCheck.cs:54
+//         return Result.Failure<ProviderHealth>(Classify(result.Error));
+//
+// Same operation, different spelling: the re-type's error is piped through a
+// classifier before it is wrapped. `Classify(` sits between the `(` and the
+// receiver, so:
+//
+//   * the pattern above requires `Failure…(ident.Error` — it stops at `Classify(`;
+//   * `MapErrorFailureShapeTests` requires an `$"…{x.Error}"` interpolation or
+//     `+ x.Error` — `Classify(result.Error)` is neither.
+//
+// Two guards, one hole, one live site. That is the only reason the second rule
+// below exists, and `ReTypeRules_AreDisjointOnTheLiveSite` is what proves the hole
+// was real rather than merely believed: it asserts that Rule 1 does NOT match that
+// line. A guard that only ever grows the same pattern cannot notice the shape
+// right next to it.
+//
+// The library spelling is `ConvertFailure<K>().MapError(…)` — `MapError` alone is
+// `Result<T> → Result<T>` and cannot cross the type change (inventory §4 item 12),
+// which is the same two-member composition the Sessions slice uses (#600).
+//
 // SCOPE
 // -----
 // All of `src/` and all of `apps/` — exactly the trees the wave touched.
@@ -89,6 +119,32 @@ public class ResultFailureConversionTests
             + "duplication at the source; that is a type change to a design-system contract, not this wave.",
     };
 
+    /// <summary>
+    ///     <b>#593.</b> The same re-type, piped through a call: the argument to
+    ///     <c>Result.Failure</c> is <c>f(x.Error)</c> rather than <c>x.Error</c>.
+    ///     <list type="bullet">
+    ///     <item>
+    ///         The receiver chain is <c>ident(.ident)*</c> so <c>Classify(result.Error)</c>
+    ///         and <c>Errors.Wrap(e.Error)</c> both match, while a bare
+    ///         <c>ident.Error</c> does not — that one is Rule 1, above, and the two rules
+    ///         are asserted disjoint on the live site rather than assumed to be.
+    ///     </item>
+    ///     <item>
+    ///         The <c>\(</c> immediately after the receiver chain is what keeps the
+    ///         <see cref="MapErrorFailureShapeTests" /> family out: those arms begin with
+    ///         <c>$"</c> or <c>+</c>, never with a bare identifier followed by a call.
+    ///     </item>
+    ///     <item>
+    ///         The window is bounded and may not cross <c>;</c>, so the match is confined
+    ///         to one statement and an earlier <c>Failure(…)</c> in the same method cannot
+    ///         borrow a later <c>.Error</c>.
+    ///     </item>
+    ///     </list>
+    /// </summary>
+    private static readonly Regex FailureReTypeThroughCall = new(
+        @"\bResult\.Failure(?:<(?:[^<>]|<[^<>]*>)*>)?\(\s*[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*\([^;]{0,200}?\.Error\b",
+        RegexOptions.Compiled);
+
     // #561 REMOVED the `src/Harbor.Plugins.Hosting/PluginHost.cs` entry that used to
     // sit here. Its one non-Result site was `IPluginCompiler.CompileAsync`, which
     // returned a hand-rolled `CompilationResult` with no `ConvertFailure` to call;
@@ -126,6 +182,107 @@ public class ResultFailureConversionTests
                 + "what keeps the next line's `x.Value` legal. If the receiver is not a Result at all, add "
                 + "the file to Exemptions with the reason. Offenders:"
                 + Environment.NewLine + string.Join(Environment.NewLine, violations));
+    }
+
+    /// <summary>
+    ///     <b>#593.</b> Rule 2 — the re-type whose error reaches
+    ///     <c>Result.Failure</c> through a call rather than by attribute.
+    /// </summary>
+    [Test]
+    public async Task ReTypeThroughACall_IsNotRebuiltByHand()
+    {
+        var violations = new List<string>();
+
+        foreach ((string file, int line, string text) in ScanGuardedFiles())
+        {
+            if (!FailureReTypeThroughCall.IsMatch(text))
+            {
+                continue;
+            }
+
+            violations.Add($"{Relative(file)}:{line} — re-type through a call: {text.Trim()}");
+        }
+
+        await Assert.That(violations).IsEmpty()
+            .Because(
+                "Re-typing a failure whose reason is piped through a call is the same two members the "
+                + "bare form uses: `x.ConvertFailure<K>().MapError(Transformer)`. Neither guard can see it "
+                + "alone — the bare-error pattern stops at the call, and the hand-built-message pattern "
+                + "needs an interpolation. `MapError` alone is not the answer either: it is Result<T> → "
+                + "Result<T> and this site changes T (the model list becomes a ProviderHealth), so the "
+                + "re-type and the rewrite are two links, in that order, inside the IsFailure branch that "
+                + "keeps ConvertFailure from throwing on a success. Offenders:"
+                + Environment.NewLine + string.Join(Environment.NewLine, violations));
+    }
+
+    /// <summary>
+    ///     The evidence that the hole was real: the one live site is invisible to
+    ///     Rule 1 <em>and</em> to the sibling <c>MapError</c> guard. A second rule that
+    ///     merely re-matched what the first already caught would be dead width, and one
+    ///     that is asserted disjoint on a real line cannot be.
+    /// </summary>
+    [Test]
+    public async Task ReTypeRules_AreDisjointOnTheLiveSite()
+    {
+        const string liveSite =
+            "                return Result.Failure<ProviderHealth>(Classify(result.Error));";
+
+        await Assert.That(FailureReTypeThroughCall.IsMatch(liveSite)).IsTrue()
+            .Because(
+                "Positive control. This is the exact line the wave left behind; if Rule 2 stops "
+                + "recognising it the rule is decorative and the file says so in a comment it does not own.");
+
+        await Assert.That(HandRolledFailureConversion.IsMatch(liveSite)).IsFalse()
+            .Because(
+                "THE HOLE, stated as an assertion. Rule 1 requires `Failure(ident.Error`; here the "
+                + "argument opens with `Classify(`, so Rule 1 cannot see the site. This is why a second "
+                + "rule exists instead of an extension of the first — the two are disjoint on the one "
+                + "line in the tree that has this shape.");
+
+        await Assert.That(liveSite.Contains("$\"", StringComparison.Ordinal)).IsFalse()
+            .Because(
+                "The sibling guard's family is an ASSEMBLED message: `MapErrorFailureShapeTests` requires "
+                + "either a `$\"…{x.Error}\"` interpolation or a `+ x.Error` concatenation. This argument "
+                + "is neither — it opens with `Classify(` — so ProviderHealthCheck.cs:54 sat outside BOTH "
+                + "guards. Asserted on the text itself rather than by re-implementing the sibling's regex, "
+                + "because a local copy of another file's pattern would rot silently and turn a documented "
+                + "gap into a false claim. The gap is closed by Rule 2 above, not by widening Rule 1.");
+    }
+
+    /// <summary>
+    ///     Specificity: the neighbours of the banned shape must stay clean, including the
+    ///     one that looks most like it — <c>Classify(ex.Message)</c>, the sibling call two
+    ///     lines below the live site. <c>Exception.Message</c> is not a <c>Result</c>'s error
+    ///     channel, and flagging it would be a false positive on a legitimate site.
+    /// </summary>
+    [Test]
+    public async Task ReTypeThroughACall_AcceptsItsNeighbours()
+    {
+        foreach (string sample in new[]
+                 {
+                     // The sibling call in the SAME file: an Exception, not a Result.
+                     "            return Result.Failure<ProviderHealth>(Classify(ex.Message));",
+                     // The MapError family, which has its own guard and its own exemption list.
+                     "            return Result.Failure<string>($\"Import failed: {headerLineResult.Error}\");",
+                     "            return Result.Failure<string>(\"Import failed: \" + created.Error);",
+                     // An interpolated message that happens to end in `.Error`, not a call.
+                     "            return Result.Failure<HarborTheme>(\"theme load failed: \" + ex.Error);",
+                     // Ordinary failures with no Result receiver in the argument at all.
+                     "            return Result.Failure(SessionStoreErrors.MessageNotFound(id));",
+                     "            return Result.Failure<Maybe<LspLocation>>(firstFailure);",
+                     "            return Result.Failure($\"Tool '{name}' is not registered.\");",
+                     // The converted spelling this rule exists to produce, both links.
+                     "            return result.ConvertFailure<ProviderHealth>().MapError(Classify);",
+                     // The other direction: a delegate name that is not a call.
+                     "            return Result.Failure<ProviderHealth>(Classify);"
+                 })
+        {
+            await Assert.That(FailureReTypeThroughCall.IsMatch(sample)).IsFalse()
+                .Because(
+                    "The converted spelling and its legitimate neighbours must all stay clean. A rule that "
+                    + "flagged `Classify(ex.Message)` — the very next call in ProviderHealthCheck — would cry "
+                    + "wolf on the first honest hit, after which nobody reads it. Sample: " + sample.Trim());
+        }
     }
 
     [Test]
