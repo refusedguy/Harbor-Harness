@@ -536,7 +536,7 @@ public sealed class PanelImplementationBoundaryRules
                 "every field of PanelServices is declared `init`. If the detector stops recognising the "
                 + "accessor, rule 3's half about settable fields passes for having nothing to look at.");
 
-        await Assert.That(PanelLocatorProbe.IsInitOnly(typeof(SettableBag)).GetProperty(nameof(SettableBag.Store))!)).IsFalse()
+        await Assert.That(PanelLocatorProbe.IsInitOnly(typeof(SettableBag).GetProperty(nameof(SettableBag.Store))!)).IsFalse()
             .Because(
                 "the other direction: a plain setter must NOT read as init-only, or rule 3 is a rule that "
                 + "cannot fail. A bag with a settable field is what the detector is there to catch, and it is "
