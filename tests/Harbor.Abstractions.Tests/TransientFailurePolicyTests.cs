@@ -1,3 +1,6 @@
+using System.Net;
+using System.Net.Http;
+using System.Net.Sockets;
 using Harbor.Abstractions.Resilience;
 
 namespace Harbor.Abstractions.Tests;
@@ -48,6 +51,54 @@ public class TransientFailurePolicyTests
             await Assert.That(TransientFailurePolicy.ShouldRetry(failure)).IsFalse().Because(
                 $"{failure.GetType().Name} is not a transport blip — retrying cannot fix it");
         }
+    }
+
+    /// <summary>
+    ///     #831: the arm #572 dropped when it hoisted the set. The private copies
+    ///     the transports carried read
+    ///     <c>ex is HttpRequestException or IOException or TimeoutException</c>;
+    ///     the owner they were hoisted into matched only the last two. Because
+    ///     <see cref="HttpRequestException" /> derives from
+    ///     <see cref="Exception" /> and not from <see cref="IOException" />, the
+    ///     missing arm was not near-missed — it was a type the pattern could not
+    ///     match at all, so a connection that never reached the HTTP layer was
+    ///     reported to the user after one attempt instead of three.
+    /// </summary>
+    [Test]
+    public async Task ShouldRetry_StatusLessHttpRequestException_Retries()
+    {
+        // DNS failure, connection refused, TLS handshake — the shape HttpClient
+        // throws with StatusCode left null. No status code means no answer ever
+        // came back, so there is nothing to be refused by.
+        var failure = new HttpRequestException("connection refused", new SocketException(111));
+
+        await Assert.That(failure.StatusCode).IsNull();
+        await Assert.That(TransientFailurePolicy.ShouldRetry(failure)).IsTrue().Because(
+            "no response means no verdict — this is the same physical event as the IOException arm, and "
+            + "RetryPolicy.IsTransient has always retried it, so declining here is what gave one app two answers");
+    }
+
+    /// <summary>
+    ///     The constraint that makes the widened arm safe, and it is the whole
+    ///     reason this is not simply <c>is HttpRequestException</c>. A status code
+    ///     means the server DID answer — 401 is a refusal, 400 is a bad request,
+    ///     and #714 established that spending three attempts on either is latency
+    ///     in front of a guaranteed error, plus three more chances for a provider
+    ///     to flag a key. Only the status-less shape is a blip.
+    /// </summary>
+    [Test]
+    [Arguments(HttpStatusCode.Unauthorized)]
+    [Arguments(HttpStatusCode.Forbidden)]
+    [Arguments(HttpStatusCode.NotFound)]
+    [Arguments(HttpStatusCode.BadRequest)]
+    public async Task ShouldRetry_StatusBearingHttpRequestException_DoesNotRetry(HttpStatusCode status)
+    {
+        var failure = new HttpRequestException("refused", null, status);
+
+        await Assert.That(TransientFailurePolicy.ShouldRetry(failure)).IsFalse().Because(
+            $"{(int)status} is an answer the server gave. Retrying it cannot change the answer, and this set does not "
+            + "own status classification — the transports weigh a status while the response is still in hand (#714), and "
+            + "RetryPolicy.HttpClassifier owns the same set for the LLM path");
     }
 
     /// <summary>

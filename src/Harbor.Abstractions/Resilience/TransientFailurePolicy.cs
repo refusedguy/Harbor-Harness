@@ -22,13 +22,28 @@ namespace Harbor.Abstractions.Resilience;
 ///     </para>
 ///     <para>
 ///         <b>What is transient here:</b> <see cref="IOException" /> (socket
-///         reset, truncated stream, dropped connection) and
-///         <see cref="TimeoutException" /> (a client-side deadline passed). Both
-///         are the same physical event as an <see cref="System.Net.Http.HttpRequestException" />
-///         with no status code — a failure below the HTTP layer — which
-///         <see cref="Harbor.Application.Resilience.RetryPolicy" /> already
-///         treated as transient. Splitting them across two owners is what let
+///         reset, truncated stream, dropped connection),
+///         <see cref="TimeoutException" /> (a client-side deadline passed), and
+///         an <see cref="HttpRequestException" /> carrying <b>no</b> status code
+///         — a failure below the HTTP layer (DNS, connection refused, reset,
+///         TLS handshake). The third is the same physical event as the first two,
+///         which is why <see cref="Harbor.Application.Resilience.RetryPolicy" />
+///         has always retried it. Splitting them across two owners is what let
 ///         "is a dropped socket retryable?" have two answers in one app.
+///     </para>
+///     <para>
+///         <b>The status-less arm is what #572 dropped.</b> Each transport used
+///         to carry a private copy reading
+///         <c>ex is HttpRequestException or IOException or TimeoutException</c>.
+///         Hoisting that set here without the first arm left the type predicate
+///         as <c>is IOException or TimeoutException</c>, and
+///         <see cref="HttpRequestException" /> derives from
+///         <see cref="Exception" />, not <see cref="IOException" /> — so the
+///         connection failures the copy named were the one shape the owner
+///         could not match. The transports then fell through to their terminal
+///         arm and reported a dropped connection after one attempt, while the
+///         LLM path retried the identical exception. The paragraph above claimed
+///         the union; the code below never tested it.
 ///     </para>
 ///     <para>
 ///         <b>What is deliberately not here:</b> HTTP status classification
@@ -36,7 +51,10 @@ namespace Harbor.Abstractions.Resilience;
 ///         Application-layer policy, which is the only place that sees a
 ///         response object rather than a thrown exception. The transports
 ///         classify their own status codes inline at the call site and hand only
-///         the exception-shaped failures here.
+///         the exception-shaped failures here. The
+///         <c>StatusCode: null</c> constraint is that boundary stated as a
+///         pattern: a status-*bearing* failure is an answer the server gave, and
+///         retrying one is the Application layer's call — never this set's.
 ///     </para>
 /// </remarks>
 public static class TransientFailurePolicy
@@ -62,10 +80,21 @@ public static class TransientFailurePolicy
     ///     <c>DefaultToolRetryDecider</c> both call it rather than restating it.
     /// </summary>
     /// <param name="error">The failure a caller caught.</param>
+    /// <remarks>
+    ///     <see cref="HttpRequestException" /> matches only when
+    ///     <see cref="HttpRequestException.StatusCode" /> is <see langword="null" />
+    ///     — the below-the-HTTP-layer failures that are the same physical event as
+    ///     an <see cref="IOException" />, and that
+    ///     <c>RetryPolicy.HttpClassifier</c> already answers "transient" for. A
+    ///     status-bearing one is a refusal or a server verdict: #714 established
+    ///     that retrying a 401 is three chances to get a key flagged, so those
+    ///     stay out of this set and are classified where the response is in hand.
+    /// </remarks>
     public static bool ShouldRetry(Exception error)
     {
         ArgumentNullException.ThrowIfNull(error);
-        return error is IOException or TimeoutException;
+        return error is IOException or TimeoutException
+            || error is HttpRequestException { StatusCode: null };
     }
 
     /// <summary>

@@ -385,6 +385,76 @@ public class McpRemoteTransportTests
             .Because("5xx is exactly the class of failure the retry budget exists for");
     }
 
+    /// <summary>
+    ///     #831, end to end and counted at the far end. A server that accepts the
+    ///     connection and closes it without a byte of HTTP in reply is the everyday
+    ///     network blip — a dropped VPN, a proxy that hung up, a container
+    ///     restarting — and it surfaces as a status-less
+    ///     <c>HttpRequestException</c>.
+    ///     <para>
+    ///         Before the fix this cost ONE request. <c>TransientFailurePolicy</c>
+    ///         tested <c>is IOException or TimeoutException</c>, and
+    ///         <c>HttpRequestException</c> derives from <c>Exception</c>, so the
+    ///         drop matched neither arm: the loop fell through to its terminal
+    ///         catch and reported the failure after a single attempt. The LLM path
+    ///         retried the identical exception three times. That asymmetry is the
+    ///         defect, and this is the direction it failed in — too FEW retries.
+    ///     </para>
+    ///     <para>
+    ///         Asserted on the listener's own accept count rather than the error
+    ///         string, for #822's reason: the string names the attempt count
+    ///         (<c>"... after N attempt(s)"</c>), so it would track the fix without
+    ///         proving the connection was re-dialled. The count is the fact.
+    ///     </para>
+    /// </summary>
+    [Test]
+    public async Task SseTransport_DroppedConnection_RetriesTheWholeBudget()
+    {
+        using DeadServer server = DeadServer.Start();
+
+        await using var transport = new McpSseTransport(
+            new Uri($"http://127.0.0.1:{server.Port}/sse"),
+            requestTimeout: TimeSpan.FromSeconds(5));
+        using var request = JsonDocument.Parse("""{"jsonrpc":"2.0","id":8,"method":"tools/list","params":{}}""");
+
+        Result<Maybe<JsonDocument>> roundTrip = await transport.TryRoundTripAsync(request.RootElement.Clone(), 8);
+
+        await Assert.That(roundTrip.IsFailure).IsTrue();
+        await Assert.That(server.ConnectionsAccepted)
+            .IsEqualTo(TransientFailurePolicy.DefaultMaxAttempts)
+            .Because(
+                "a connection dropped below the HTTP layer carries no status code and no answer — it is the same "
+                + "physical event as the IOException arm, and the retry budget exists for exactly that. One dial is "
+                + "not a budget being spent, it is the budget being skipped: the user saw the error instead of the "
+                + "reconnect the policy already pays for on the LLM path");
+    }
+
+    /// <summary>
+    ///     The sibling, on the other transport. Both loops read the same owner, so
+    ///     a fix that landed in one and not the other would be invisible to a
+    ///     single-transport guard — which is precisely the shape of the #572
+    ///     duplication this file was written for.
+    /// </summary>
+    [Test]
+    public async Task HttpTransport_DroppedConnection_RetriesTheWholeBudget()
+    {
+        using DeadServer server = DeadServer.Start();
+
+        await using var transport = new McpHttpTransport(
+            new Uri($"http://127.0.0.1:{server.Port}/mcp"),
+            requestTimeout: TimeSpan.FromSeconds(5));
+        using var request = JsonDocument.Parse("""{"jsonrpc":"2.0","id":9,"method":"tools/list","params":{}}""");
+
+        Result<Maybe<JsonDocument>> roundTrip = await transport.TryRoundTripAsync(request.RootElement.Clone(), 9);
+
+        await Assert.That(roundTrip.IsFailure).IsTrue();
+        await Assert.That(server.ConnectionsAccepted)
+            .IsEqualTo(TransientFailurePolicy.DefaultMaxAttempts)
+            .Because(
+                "the streamable-HTTP transport shares the owner with the legacy SSE one, so the same dropped connection "
+                + "must cost the same number of dials there; one dial means the status-less arm is not being reached");
+    }
+
     // ---------- Registry integration ----------
 
     [Test]
@@ -727,6 +797,103 @@ public class McpRemoteTransportTests
             int port = ((IPEndPoint)probe.LocalEndpoint).Port;
             probe.Stop();
             return port;
+        }
+
+        public void Dispose()
+        {
+            _cts.Cancel();
+            try { _listener.Stop(); } catch { /* not started */ }
+            try { _acceptLoop.Wait(1000); } catch { /* loop ended */ }
+            _cts.Dispose();
+        }
+    }
+
+    /// <summary>
+    ///     #831: accepts the TCP connection and hangs up without writing a byte.
+    ///     <para>
+    ///         Deliberately a raw <see cref="TcpListener" /> rather than an
+    ///         extension of <c>FakeServer</c>. <c>FakeServer</c> speaks HTTP, and
+    ///         an HTTP server that stays silent still has to produce a status code
+    ///         or a clean close — both of which are a different failure class. This
+    ///         one never reaches the HTTP layer at all, which is the entire point:
+    ///         the failure arrives as <c>HttpRequestException</c> with
+    ///         <c>StatusCode == null</c>, the shape #572's hoist could not match.
+    ///     </para>
+    ///     <para>
+    ///         Linger-zero disposal makes the hang-up a TCP RST rather than a
+    ///         graceful FIN, so the client's socket errors instead of seeing a
+    ///         half-open connection — a FIN would surface as
+    ///         <c>HttpRequestError.ConnectionError</c> too, but the RST is the
+    ///         shape a genuinely dropped connection produces and does not depend on
+    ///         the client noticing a clean shutdown.
+    ///     </para>
+    ///     <para>
+    ///         The accept count is read through <see cref="Volatile" /> because
+    ///         the loop increments on a pool thread while the assertions run on the
+    ///         test's, and the assertion is the whole proof — a lost increment would
+    ///         read as "the retry never happened".
+    ///     </para>
+    /// </summary>
+    private sealed class DeadServer : IDisposable
+    {
+        private readonly TcpListener _listener;
+        private readonly CancellationTokenSource _cts = new(TimeSpan.FromSeconds(10));
+        private readonly Task _acceptLoop;
+        private int _connectionsAccepted;
+
+        private DeadServer(TcpListener listener)
+        {
+            _listener = listener;
+            _acceptLoop = Task.Run(AcceptAndDropAsync);
+        }
+
+        public int Port { get; private set; }
+
+        /// <summary>How many times something dialled this listener — the retry count, measured at the far end.</summary>
+        public int ConnectionsAccepted => Volatile.Read(ref _connectionsAccepted);
+
+        public static DeadServer Start()
+        {
+            var listener = new TcpListener(IPAddress.Loopback, 0);
+            listener.Start();
+            var server = new DeadServer(listener)
+            {
+                Port = ((IPEndPoint)listener.LocalEndpoint).Port,
+            };
+            return server;
+        }
+
+        private async Task AcceptAndDropAsync()
+        {
+            while (!_cts.IsCancellationRequested)
+            {
+                Socket socket;
+                try
+                {
+                    socket = await _listener.AcceptSocketAsync(_cts.Token).ConfigureAwait(false);
+                }
+                catch (Exception) when (_cts.IsCancellationRequested)
+                {
+                    return;
+                }
+                catch (OperationCanceledException)
+                {
+                    return;
+                }
+
+                Interlocked.Increment(ref _connectionsAccepted);
+                try
+                {
+                    // Drop it the way a vanishing peer does: RST, not a tidy close.
+                    socket.LingerState = new LingerOption(true, 0);
+                }
+                catch (SocketException)
+                {
+                    // Already gone — the hang-up below is the behaviour under test.
+                }
+
+                socket.Dispose();
+            }
         }
 
         public void Dispose()
