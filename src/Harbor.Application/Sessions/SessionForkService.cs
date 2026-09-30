@@ -30,6 +30,19 @@ public sealed record SessionFork(Session Session, int Copied);
 ///         continue elsewhere. Every step fail-closes via <c>Result</c>; a failed lineage
 ///         stamp deletes the just-created shell so no orphan child survives.
 ///     </para>
+///     <para>
+///         <b>#670 — the one fork.</b> This used to have a second implementation in the UI
+///         framework (<c>SessionFactory.CreateBranchAsync</c>), reachable only because that
+///         project cannot reference <c>Harbor.Application</c>. The copy drifted until a UI fork
+///         set no <c>ParentSessionId</c>, persisted no title and regenerated every copied
+///         message id. The UI framework now reaches this service through the
+///         <c>ISessionForker</c> port (<c>Harbor.Ui.Framework.Abstractions/Forking</c>), so this
+///         is the only fork left — and anything a caller needs guaranteed has to be guaranteed
+///         here. Two of those guarantees moved IN with the deletion: each failure now names the
+///         step that broke, and a half-written copy reports how far it got, because the copy
+///         reported progress and losing that would have left a truncated child in the store with
+///         nothing recording how far it reached.
+///     </para>
 /// </remarks>
 public sealed class SessionForkService
 {
@@ -53,11 +66,13 @@ public sealed class SessionForkService
     {
         Result<Session> parentRes = await store.GetAsync(sessionId, ct).ConfigureAwait(false);
         if (parentRes.IsFailure)
-            return parentRes.ConvertFailure<SessionFork>();
+            return parentRes.ConvertFailure<SessionFork>()
+                .MapError(static e => $"Failed to read source session: {e}");
 
         Result<IReadOnlyList<AgentMessage>> msgsRes = await store.GetMessagesAsync(sessionId, ct).ConfigureAwait(false);
         if (msgsRes.IsFailure)
-            return msgsRes.ConvertFailure<SessionFork>();
+            return msgsRes.ConvertFailure<SessionFork>()
+                .MapError(static e => $"Failed to read message history: {e}");
 
         int count;
         if (upToMessageId is null)
@@ -99,7 +114,8 @@ public sealed class SessionForkService
         Result<Session> created = await store.CreateAsync(
             parent.Directory, parent.Agent, parent.ProviderId, parent.Model, ct).ConfigureAwait(false);
         if (created.IsFailure)
-            return created.ConvertFailure<SessionFork>();
+            return created.ConvertFailure<SessionFork>()
+                .MapError(static e => $"Failed to create the child session: {e}");
 
         Session child = created.Value;
 
@@ -115,15 +131,27 @@ public sealed class SessionForkService
         if (stamped.IsFailure)
         {
             await store.DeleteAsync(child.Id, CancellationToken.None).ConfigureAwait(false);
-            return stamped.ConvertFailure<SessionFork>();
+            return stamped.ConvertFailure<SessionFork>()
+                .MapError(static e => $"Failed to stamp fork lineage on the child session: {e}");
         }
 
+        int copied = 0;
         for (int i = 0; i < count; i++)
         {
             AgentMessage copy = msgsRes.Value[i] with { SessionId = child.Id };
             Result appended = await store.AppendMessageAsync(child.Id, copy, ct).ConfigureAwait(false);
             if (appended.IsFailure)
-                return appended.ConvertFailure<SessionFork>();
+            {
+                // #670: the copy this replaced reported its progress here, and that number was
+                // the only record of how far a half-written branch got. It moves to the single
+                // remaining implementation rather than dying with the duplicate.
+                int done = copied;
+                return appended.ConvertFailure<SessionFork>()
+                    .MapError(e =>
+                        $"Failed to copy message history ({done} of {count} copied): {e}");
+            }
+
+            copied++;
         }
 
         return Result.Success(new SessionFork(stampedChild, count));
