@@ -295,9 +295,15 @@ public sealed class ModelRateLabelRules
         await Assert.That(files.Count).IsGreaterThan(200)
             .Because("src/ + apps/ hold an order of magnitude more than 200 C# files; a smaller "
                      + "count means the tree filter broke.");
+
+        // EnumerateProductCsFiles hands back ABSOLUTE paths, so the comparison is
+        // made in the same shape the rule's own failures print (repo-relative),
+        // not against the raw list — a Contains() on the absolute path would be
+        // false for every file in the repository.
+        IReadOnlyList<string> relative = [.. files.Select(SourceScan.Relative)];
         foreach (string offender in OffenderFiles)
         {
-            await Assert.That(files.Contains(offender)).IsTrue()
+            await Assert.That(relative.Contains(offender)).IsTrue()
                 .Because(offender + " must be inside the scanned set, or the rule polices nothing.");
         }
     }
@@ -311,13 +317,18 @@ public sealed class ModelRateLabelRules
     [Test]
     public async Task Matchers_FireOnPlantedCopies_AndStaySilentOnHandOffsAndJson()
     {
+        // The positives assert the hit AND its line number, by count plus
+        // element: TUnit's IsEqualTo on two collections compares by reference, so
+        // `IsEqualTo([0])` would fail on a List<int> that holds exactly 0 and say
+        // "same contents, different reference" — a self-test failing for a reason
+        // that has nothing to do with the matcher.
         await Assert.That(FindRateInStringLines(Line(
-                "    public string L => $\"${InputPerMillion:F2} in / ${OutputPerMillion:F2} out per 1M\";")))
-            .IsEqualTo([0])
+                "    public string L => $\"${InputPerMillion:F2} in / ${OutputPerMillion:F2} out per 1M\";")).ToArray())
+            .IsEquivalentTo(new[] { 0 })
             .Because("the planted shape this rule was written for must be detected, or the guard is blind");
         await Assert.That(FindRateInStringLines(Line(
-                "    public string L => $\"{inPerMillion:F2} in / {outPerMillion:F2} out per 1M\";")))
-            .IsEqualTo([0])
+                "    public string L => $\"{inPerMillion:F2} in / {outPerMillion:F2} out per 1M\";")).ToArray())
+            .IsEquivalentTo(new[] { 0 })
             .Because("a camelCase spelling of the same shape is the same defect, or the guard is blind");
         await Assert.That(FindRateInStringLines(Line(
                 "                m.Pricing.InputPerMillion, m.Pricing.OutputPerMillion))")))
@@ -337,11 +348,11 @@ public sealed class ModelRateLabelRules
             .Because("comment prose is not a second implementation");
 
         await Assert.That(FindRateZeroLines(Line(
-                "        if (inputPerMillion == 0m && outputPerMillion == 0m)")))
-            .IsEqualTo([0])
+                "        if (inputPerMillion == 0m && outputPerMillion == 0m)")).ToArray())
+            .IsEquivalentTo(new[] { 0 })
             .Because("the hand-rolled zero guess this rule was written for must be detected, or the guard is blind");
-        await Assert.That(FindRateZeroLines(Line("        if (InputPerMillion == 0m)")))
-            .IsEqualTo([0])
+        await Assert.That(FindRateZeroLines(Line("        if (InputPerMillion == 0m)")).ToArray())
+            .IsEquivalentTo(new[] { 0 })
             .Because("a PascalCase guess is the same defect, or the guard is blind");
         await Assert.That(FindRateZeroLines(Line("        if (Pricing.IsUnknown)")))
             .IsEmpty()
