@@ -164,6 +164,10 @@ public sealed class SessionStoreFailureTextParityRules
     /// </summary>
     private static readonly (string Project, string Shape)[] MeasuredInlineLiterals =
     [
+        // Nine SessionNotFound: MemorySessionStore.cs:30, :45, :63, :78, :90, :99, :126, :136, :146.
+        // The last one interpolates session.Id rather than the sessionId parameter, which is
+        // the same shape — the hole is the argument, and :146 is what the factory call at the
+        // equivalent Jsonl site (JsonlSessionStore.cs:584) looks like.
         ("Harbor.Storage.Memory", "Session '{}' not found."),
         ("Harbor.Storage.Memory", "Session '{}' not found."),
         ("Harbor.Storage.Memory", "Session '{}' not found."),
@@ -173,6 +177,12 @@ public sealed class SessionStoreFailureTextParityRules
         ("Harbor.Storage.Memory", "Session '{}' not found."),
         ("Harbor.Storage.Memory", "Session '{}' not found."),
         ("Harbor.Storage.Memory", "Session '{}' not found."),
+
+        // Two MessageNotFound: MemorySessionStore.cs:69 and :107. #764's inventory listed
+        // neither — it enumerated the nine above and stopped — so the duplication it
+        // reported was one shape and nine sites rather than two shapes and eleven.
+        ("Harbor.Storage.Memory", "Message '{}' not found in session '{}'."),
+        ("Harbor.Storage.Memory", "Message '{}' not found in session '{}'."),
     ];
 
     // =====================================================================
@@ -219,44 +229,61 @@ public sealed class SessionStoreFailureTextParityRules
     // =====================================================================
 
     /// <summary>
-    ///     R2 — the inline inventory is exactly what was measured. Both deltas
-    ///     are asserted empty: an addition is the violation, and a removal must
-    ///     be re-measured rather than pass unremarked.
+    ///     R2 — the inline inventory is exactly what was measured, COUNTED and not
+    ///     merely present. Both deltas are asserted empty: an addition is the
+    ///     violation, and a removal must be re-measured rather than pass unremarked.
     /// </summary>
+    /// <remarks>
+    ///     <para>
+    ///         The first version of this test compared the two sides with
+    ///         <c>Enumerable.Except</c>, which is SET semantics — and that was wrong
+    ///         in exactly the direction this file exists to close. Nine of the eleven
+    ///         literals share one normalised shape and the other two share a second,
+    ///         so a set difference reported the two <c>MessageNotFound</c> sites as
+    ///         ONE delta, and a twelfth literal of an already-present shape would
+    ///         have produced an empty set and passed. The first CI run caught it: the
+    ///         ratchet fired but printed a single <c>ADDED</c> line where the
+    ///         measurement says two sites changed.
+    ///     </para>
+    ///     <para>
+    ///         So the comparison is over COUNTS per (project, shape). A duplicate of a
+    ///         shape that is already there is now a delta of one, which is the case
+    ///         set semantics dropped.
+    ///     </para>
+    /// </remarks>
     [Test]
     public async Task Inline_Duplication_Is_Exactly_What_Was_Measured()
     {
-        (string Project, string Shape)[] now =
-            [.. ScanStoreLiterals().Select(l => (l.project, l.shape))];
-
-        List<string> regressions =
-        [
-            .. now.Except(MeasuredInlineLiterals)
-                .Select(l => $"ADDED — {l.Project} now writes {l.Shape} inline.")
-                .OrderBy(s => s, StringComparer.Ordinal)
-        ];
-
-        List<string> improvements =
-        [
-            .. MeasuredInlineLiterals.Except(now)
-                .Select(l => $"REMOVED — {l.Project} no longer writes {l.Shape} inline.")
-                .OrderBy(s => s, StringComparer.Ordinal)
-        ];
-
         var delta = new List<string>();
-        delta.AddRange(regressions);
-        delta.AddRange(improvements);
+
+        foreach ((string project, string shape, int deltaCount) in CountDeltas())
+        {
+            if (deltaCount > 0)
+            {
+                delta.Add(
+                    $"ADDED — {project} writes {shape} inline {Measured(now: deltaCount, was: 0)} "
+                    + "more time(s) than measured.");
+            }
+            else
+            {
+                delta.Add(
+                    $"REMOVED — {project} writes {shape} inline {Measured(now: 0, was: -deltaCount)} "
+                    + "fewer time(s) than measured.");
+            }
+        }
 
         await Assert.That(delta).IsEmpty()
             .Because(
-                "Eleven inline literals at the time of writing, all byte-identical in shape to "
+                "Eleven inline literals at the time of writing — nine SessionNotFound and two "
+                + "MessageNotFound — all byte-identical in shape to "
                 + "src/Harbor.Storage.Shared/SessionStoreErrors.cs, so a person sees the same text on "
-                + "every backend — this is duplication, not a behaviour bug. ADDING one is a "
+                + "every backend. This is duplication, not a behaviour bug. ADDING one is a "
                 + "regression: it is a new site no ROP suite pins, which is the seven-site hole "
                 + "described in the header. REMOVING one is the owed unification tracked on #764 "
                 + "(add the <Compile> link to Harbor.Storage.Memory and call the factory); when it "
-                + "lands, delete the matching row here in the same commit and let SharedSourceLinkRules."
-                + "The_Link_Inventory_Is_Not_Empty record the new consumer. Deltas:\n"
+                + "lands, delete the matching rows here in the same commit and let "
+                + "SharedSourceLinkRules.The_Link_Inventory_Is_Not_Empty record the new consumer. "
+                + "Deltas:\n"
                 + string.Join("\n", delta));
     }
 
@@ -460,6 +487,45 @@ public sealed class SessionStoreFailureTextParityRules
 
     /// <summary>Collapses every interpolation hole to <c>{}</c>.</summary>
     private static string Normalise(string body) => HolePattern.Replace(body, "{}");
+
+    /// <summary>
+    ///     Per-(project, shape) count difference between the scan now and
+    ///     <see cref="MeasuredInlineLiterals" />: positive means the shape is written
+    ///     inline more often than measured, negative fewer.
+    /// </summary>
+    /// <remarks>
+    ///     A COUNT, not a set difference, and the reason is in the header of
+    ///     <see cref="Inline_Duplication_Is_Exactly_What_Was_Measured" />: nine of the
+    ///     eleven sites share one normalised shape, so set semantics both under-report
+    ///     the drift and would wave through a duplicate of a shape already present.
+    /// </remarks>
+    private static IEnumerable<(string project, string shape, int delta)> CountDeltas()
+    {
+        var now = ScanStoreLiterals()
+            .GroupBy(l => (l.project, l.shape))
+            .ToDictionary(g => g.Key, g => g.Count());
+
+        var was = MeasuredInlineLiterals
+            .GroupBy(l => (Project: l.Project, Shape: l.Shape))
+            .ToDictionary(g => g.Key, g => g.Count());
+
+        var keys = now.Keys.Concat(was.Keys)
+            .Distinct()
+            .OrderBy(k => k.project, StringComparer.Ordinal)
+            .ThenBy(k => k.shape, StringComparer.Ordinal);
+
+        foreach (var key in keys)
+        {
+            int delta = now.GetValueOrDefault(key) - was.GetValueOrDefault(key);
+            if (delta != 0)
+            {
+                yield return (key.project, key.shape, delta);
+            }
+        }
+    }
+
+    /// <summary>Renders one side of a count delta for a failure message.</summary>
+    private static string Measured(int now, int was) => $"{now} (was {was})";
 
     /// <summary>
     ///     Whether a normalised body is a session-store failure text at all.
