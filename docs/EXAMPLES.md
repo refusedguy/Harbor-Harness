@@ -714,15 +714,25 @@ if (compaction.ShouldCompact(messages, model))
 }
 ```
 
-### 28. Branch a session (planned v0.6)
+### 28. Branch a session
 
 ```csharp
-// Future API:
-var branched = await store.BranchAsync(sessionId, "try-different-approach");
-// branched.ParentSessionId == sessionId
+// Harbor.Application.Sessions.SessionForkService — the ONE fork.
+// upToMessageId is an INCLUSIVE cut point; null copies the whole history.
+var forked = await new SessionForkService().ForkAsync(store, sessionId, upToMessageId);
+// forked.Value.Session.ParentSessionId == sessionId
+// forked.Value.Copied                      == messages written into the child
 ```
 
-Today: just create a new session and replay messages.
+The child is stamped with `ParentSessionId` and titled `Fork of {parent title}`, and
+copied messages keep their original ids — so a message named in the parent is
+namable in the child, and `/tree` renders the fork indented under its parent.
+
+The UI framework reaches this same service through the `ISessionForker` port
+(`Harbor.Ui.Framework.Abstractions/Forking/`, adapted by `SessionForkerAdapter` in
+the Avalonia composition root). It used to carry a hand-written second copy, which
+drifted until a desktop fork set no lineage, persisted no title and regenerated
+every copied message id — issue #670, closed by deleting the copy.
 
 ---
 
