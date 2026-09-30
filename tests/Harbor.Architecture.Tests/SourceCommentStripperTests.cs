@@ -1,0 +1,251 @@
+// SourceCommentStripperTests.cs — the helper 29 rules hand their raw file text to,
+// held to the two things it claims: a comment is gone, and nothing else is.
+//
+// THE PROBLEM THIS SOLVES
+// -----------------------
+// `SourceCommentStripper` is the only comment stripper in this suite that
+// understands STRING LITERALS — `SourceScan.StripComments` is a regex pair and
+// is literal-blind by design. It is the one rules reach for when the prose they
+// are grading quotes the literals they match ("working", "MochaYellow").
+//
+// It has never been tested. All 29 of its call sites are architecture RULES,
+// which are graded by whether they go red on the product tree — and no product
+// file in any scanned tree currently contains a multi-line `/* … */`, so the
+// defect below has had nothing to fire on. A helper with 29 callers and zero
+// tests is a helper whose correctness is a coincidence, not a property.
+//
+// THE DEFECT (#919)
+// -----------------
+// `Strip` deletes comment characters and tracks block-comment state in a LOCAL
+// that dies on return. `StripAll` then asks `OpensUnterminatedBlockComment`
+// whether the line left it inside a block comment — by counting `/*` and `*/`
+// in the ALREADY-STRIPPED string, which `Strip` has just emptied of both. The
+// count is 0, the predicate is false for every input, `inBlockComment` is never
+// set, and the `inBlockComment` branch of `StripAll` is unreachable. Every
+// continuation line of a multi-line block comment is lexed as code and handed
+// downstream as code.
+//
+// #899 is what this looks like from the outside: an interior line shaped
+// `: ISessionForker` reads as a base list, so a guard guarding a guard went
+// false-positive on a doc comment. That PR documented the defect from outside
+// and worked around it in its own file, which is the right call for a PR that is
+// not about the helper and exactly the wrong outcome for the helper.
+//
+// WHAT THESE TESTS ARE NOT
+// -----------------------
+// This is not a claim that the stripped text is byte-exact C#. It is a claim
+// about the two properties 29 rules actually depend on:
+//   1. the INTERIOR of a `/* … */` is not code, on any line of it;
+//   2. the line count is preserved, because every caller indexes the result by
+//      input line number to report a file:line.
+// (2) is not decoration either: `ThemeAxisStaysDataRules`, `DesktopSharedTakesNoIoRules`
+// and `DesignSystemLeafTakesNoIoRules` all walk `for (int i = 0; i < lines.Length; i++)`
+// against the stripped array and report `i + 1` as the source line.
+//
+// Each behavioural test has a mirror that must still PASS after the fix, so the
+// fix cannot be "strip more, break less": the one-line-block, the trailing
+// comment, and the literal that contains `//` are all cases where an
+// over-eager stripper would go quietly blind.
+
+using TUnit.Assertions;
+
+namespace Harbor.Architecture.Tests;
+
+/// <summary>
+///     Non-vacuity controls for <see cref="SourceCommentStripper" /> — the lexer 29
+///     architecture rules hand raw file text to (#919).
+/// </summary>
+public sealed class SourceCommentStripperTests
+{
+    // ── The defect: a block comment that spans lines ─────────────────────────
+
+    [Test]
+    public async Task MultiLineBlockComment_InteriorIsNotHandedDownstreamAsCode()
+    {
+        // The shape #899 hit, verbatim in intent: prose inside a `/* … */` that
+        // reads as a base list. A continuation line starting with `:` is not a
+        // declaration, and a stripper that cannot say so will fail a rule on its
+        // own documentation.
+        string[] source =
+        [
+            "var port = new CoreSessionForker();",
+            "/* the accepted shape is",
+            "   : ISessionForker",
+            "   the consumer holds it requiredly */",
+            "services.AddSingleton<ISessionFactory, SessionFactory>();",
+        ];
+
+        string[] clean = SourceCommentStripper.StripAll(source);
+        string text = string.Join("\n", clean);
+
+        await Assert.That(text).DoesNotContain(": ISessionForker")
+            .Because("the interior of a block comment is a comment, on every line of it");
+        await Assert.That(clean[2]).IsEqualTo(string.Empty)
+            .Because("`   : ISessionForker` is entirely comment and has no code to keep");
+        await Assert.That(text).DoesNotContain("the accepted shape")
+            .Because("prose that documents a rule must not be readable as the rule's subject");
+    }
+
+    [Test]
+    public async Task MultiLineBlockComment_KeepsTheCodeOnEitherSide()
+    {
+        // The mirror of the test above, and the one that stops "strip the rest of
+        // the file" from being a fix: the code BEFORE the opener and the code
+        // AFTER the closer are real and must survive, on their own lines.
+        string[] source =
+        [
+            "var before = 1; /* opens here",
+            "   and the interior is prose, not code",
+            "   and still prose */ var after = 2;",
+        ];
+
+        string[] clean = SourceCommentStripper.StripAll(source);
+
+        // The trailing space is the space that stood BEFORE `/*`, and it is
+        // spelled by concatenation so a reader (or a trim) does not "fix" it.
+        // `Strip` deletes comment characters rather than blanking them, so
+        // nothing stands in for them.
+        await Assert.That(clean[0]).IsEqualTo("var before = 1;" + " ")
+            .Because("`Strip` deletes rather than blanks, so the space before `/*` is all that is left");
+        await Assert.That(clean[1]).IsEqualTo(string.Empty)
+            .Because("this line is interior and nothing else");
+        await Assert.That(clean[2]).IsEqualTo(" var after = 2;")
+            .Because("the tail after `*/` is real code again and is re-lexed on its own");
+        await Assert.That(string.Join("\n", clean)).Contains("var after = 2;")
+            .Because("a stripper that ate the closer's tail would still pass the test above");
+    }
+
+    [Test]
+    public async Task MultiLineBlockComment_DoesNotSwallowTheWholeFile()
+    {
+        // The degenerate form. An unterminated `/*` runs to end of file, and the
+        // property that matters there is that nothing AFTER it leaks — there is
+        // nothing after it, so the assertion is that the opener does not instead
+        // put the lexer into a state that deletes the following file's worth of
+        // input. Written as its own case because it is the one a state-carrying
+        // fix could plausibly get wrong (an EOF state that resets to Code and
+        // resumes stripping mid-comment).
+        string[] source =
+        [
+            "var first = 1;",
+            "/* never closed",
+            "prose that looks like code: var smuggled = 2;",
+        ];
+
+        string[] clean = SourceCommentStripper.StripAll(source);
+
+        await Assert.That(clean[0]).IsEqualTo("var first = 1;");
+        await Assert.That(string.Join("\n", clean)).DoesNotContain("var smuggled = 2;")
+            .Because("an unterminated comment is a comment to end of file, not a licence to resume");
+    }
+
+    // ── Line count, because every caller indexes by it ───────────────────────
+
+    [Test]
+    public async Task StripAll_ReturnsOneLinePerInputLine()
+    {
+        // Every caller that reports a file:line indexes the result against the
+        // input index, so a stripper that dropped or merged lines would make
+        // every diagnostic in the suite point at the wrong line — silently, and
+        // in a way no rule can detect about itself.
+        string[] source =
+        [
+            "// one",
+            "/* two",
+            "   still two */",
+            "var three = 3; // three",
+        ];
+
+        string[] clean = SourceCommentStripper.StripAll(source);
+
+        await Assert.That(clean.Length).IsEqualTo(source.Length)
+            .Because("line numbers computed downstream must still point at the real source line");
+    }
+
+    // ── A second consequence of the same reset: multi-line verbatim strings ──
+
+    [Test]
+    public async Task MultiLineVerbatimString_IsNotReadAsCommentText()
+    {
+        // `@"…"` may legally span lines in C#, and the repo uses that. This is
+        // the same defect wearing a different hat: `StripAll` restarts the lexer
+        // in `Code` on every line, so a continuation line that happens to contain
+        // `//` is truncated mid-literal. A rule about a rendered string is ABOUT
+        // the literal, so this loses the exact thing the rule is looking for.
+        string[] source =
+        [
+            "var banner = @\"line one",
+            "// not a comment, it is inside the literal",
+            "line three\";",
+        ];
+
+        string text = string.Join("\n", SourceCommentStripper.StripAll(source));
+
+        await Assert.That(text).Contains("// not a comment")
+            .Because("a `//` inside an open `@\"…\"` is a string, and the rule is about the string");
+        await Assert.That(text).Contains("line three")
+            .Because("the literal does not end until its closing quote");
+    }
+
+    // ── Mirrors: the cases a too-eager fix would break ───────────────────────
+
+    [Test]
+    public async Task SingleLineBlockComment_IsStillStripped()
+    {
+        // The anti-loophole for the fix. Carrying state across lines must not
+        // change what happens to a comment that opens and closes on one line,
+        // which is the overwhelmingly common case and the one every existing
+        // caller actually depends on today.
+        string[] source = ["var kept = 1; /* var dropped = 2; */ var alsoKept = 3;"];
+
+        string text = string.Join("\n", SourceCommentStripper.StripAll(source));
+
+        await Assert.That(text).DoesNotContain("var dropped = 2;")
+            .Because("a one-line block comment is a comment too");
+        await Assert.That(text).Contains("var kept = 1;")
+            .Because("the code before it is real");
+        await Assert.That(text).Contains("var alsoKept = 3;")
+            .Because("and so is the code after it — `*/` returns the lexer to Code");
+    }
+
+    [Test]
+    public async Task TrailingLineComment_KeepsTheCodeThatPrecedesIt()
+    {
+        string[] source = ["var config = Load(); // the trailing note"];
+
+        string text = string.Join("\n", SourceCommentStripper.StripAll(source));
+
+        await Assert.That(text).IsEqualTo("var config = Load();" + " ")
+            .Because("blanking to end-of-line must not launder the code in front of it");
+    }
+
+    [Test]
+    public async Task LineCommentInsideAStringLiteral_IsNotAComment()
+    {
+        // The property that distinguishes this helper from `SourceScan.StripComments`
+        // and the reason the 29 callers use it: `//` inside a `"…"` is a string.
+        // A rule that matches a quoted literal must still see the literal. If this
+        // ever goes red the fix has traded one blindness for another.
+        string[] source = ["_logger.LogError(\"corrupt at https://example.invalid/cfg.json\");"];
+
+        string text = string.Join("\n", SourceCommentStripper.StripAll(source));
+
+        await Assert.That(text).Contains("https://example.invalid/cfg.json")
+            .Because("the URL is inside a string literal, not a comment");
+    }
+
+    // ── Non-vacuity of the suite itself: Strip still works per line ───────────
+
+    [Test]
+    public async Task Strip_HandlesOneLineOnItsOwn()
+    {
+        // `Strip` is the per-line entry point its XML doc promises, and it is
+        // correct on its own — the defect is entirely in `StripAll`'s use of it.
+        // This is here so a future fix that rewrites the shared lexer cannot
+        // quietly change `Strip`'s contract while fixing `StripAll`.
+        await Assert.That(SourceCommentStripper.Strip("var a = 1; // note")).IsEqualTo("var a = 1; ");
+        await Assert.That(SourceCommentStripper.Strip("var a = /* x */ 1;")).IsEqualTo("var a =  1;");
+        await Assert.That(SourceCommentStripper.Strip("var a = \"// not a comment\";"))
+            .IsEqualTo("var a = \"// not a comment\";");
+    }
+}
