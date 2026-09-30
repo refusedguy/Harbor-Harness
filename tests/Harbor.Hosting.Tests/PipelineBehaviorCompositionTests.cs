@@ -101,7 +101,7 @@ public class PipelineBehaviorCompositionTests
                 .Where(t => typeof(IPipelineBehavior).IsAssignableFrom(t))
                 // Nested private types of other rules in this assembly are not
                 // product behaviours; only the ones the product declares count.
-                .Where(t => t.Visibility is Accessibility.Public or Accessibility.NestedPublic)
+                .Where(t => t.IsPublic || t.IsNestedPublic)
         ];
     }
 
