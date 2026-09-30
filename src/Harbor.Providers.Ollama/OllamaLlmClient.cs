@@ -3,7 +3,6 @@ using System.Net.Http.Headers;
 using System.Runtime.CompilerServices;
 using System.Text;
 using System.Text.Json;
-using System.Text.Json.Serialization;
 using System.Threading.Channels;
 using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Events;
@@ -27,11 +26,6 @@ namespace Harbor.Providers.Ollama;
 public sealed class OllamaLlmClient : ILlmClient
 {
     private const string DefaultBaseUrl = "http://localhost:11434";
-
-    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
-    {
-        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
-    };
 
     // Pre-computed base URL — avoids per-request string manipulation.
     private readonly string _baseUrl;
@@ -172,90 +166,190 @@ public sealed class OllamaLlmClient : ILlmClient
         return (IReadOnlyList<ModelInfo>?)models ?? Array.Empty<ModelInfo>();
     }
 
-    private HttpRequestMessage BuildRequest(LlmRequest request)
+    /// <summary>
+    ///     Build the <c>/api/chat</c> request message.
+    /// </summary>
+    /// <remarks>
+    ///     §PERF-002 / #475: the body is written to a <see cref="Utf8JsonWriter" /> and
+    ///     pinned by <c>ProviderPayloadWireTests</c>, so the request shape is assertable
+    ///     without a live server. <c>internal</c> rather than <c>private</c> because that
+    ///     test suite calls it directly; the provider project already declares
+    ///     <c>InternalsVisibleTo("Harbor.Providers.Tests")</c>.
+    /// </remarks>
+    internal HttpRequestMessage BuildRequest(LlmRequest request)
     {
         string url = string.Concat(_baseUrl, "/api/chat");
 
-        var payload = new Dictionary<string, object?>(6)
-        {
-            ["model"] = request.Model,
-            ["messages"] = BuildMessages(request, _logger),
-            ["stream"] = true,
-            ["options"] = BuildOptions(request)
-        };
-
-        // keep_alive for model persistence (5 minutes by default)
-        payload["keep_alive"] = _config.KeepAlive;
-
-        if (request.Tools.Count > 0)
-        {
-            payload["tools"] = request.Tools.Select(t => new
-            {
-                type = "function",
-                function = new { name = t.Name, description = t.Description, parameters = t.InputSchema }
-            });
-        }
-
-        byte[] jsonBytes = JsonSerializer.SerializeToUtf8Bytes(payload, JsonOptions);
         var msg = new HttpRequestMessage(HttpMethod.Post, url)
         {
-            Content = new ByteArrayContent(jsonBytes)
+            Content = new ByteArrayContent(WritePayload(request, _logger))
         };
         msg.Content.Headers.ContentType = new MediaTypeHeaderValue("application/json");
         return msg;
     }
 
-    private static Dictionary<string, object?> BuildOptions(LlmRequest request)
+    /// <summary>
+    ///     Renders the whole <c>/api/chat</c> body as UTF-8 JSON.
+    /// </summary>
+    /// <remarks>
+    ///     §PERF-002 / #475 — written straight to a <see cref="Utf8JsonWriter" />.
+    ///     This used to be a <c>Dictionary&lt;string, object?&gt;</c> of anonymous
+    ///     types handed to <c>JsonSerializer.SerializeToUtf8Bytes</c>, which resolves
+    ///     a <c>JsonTypeInfo</c> for the runtime type of every value: reflection, and
+    ///     a hard failure under a trimmed / NativeAOT publish, where
+    ///     reflection-based serialization is disabled by default.
+    /// </remarks>
+    private byte[] WritePayload(LlmRequest request, ILogger logger)
     {
-        // Pre-size for the maximum known keys: temperature, top_p, top_k, num_predict.
-        var options = new Dictionary<string, object?>(4);
-        if (request.Temperature.HasValue) options["temperature"] = request.Temperature;
-        if (request.TopP.HasValue) options["top_p"] = request.TopP;
-        if (request.TopK.HasValue) options["top_k"] = request.TopK;
-        if (request.MaxOutputTokens.HasValue) options["num_predict"] = request.MaxOutputTokens;
-        return options;
+        var buffer = new ArrayBufferWriter<byte>(1024);
+        using (var writer = new Utf8JsonWriter(buffer))
+        {
+            writer.WriteStartObject();
+
+            writer.WriteString("model", request.Model);
+            WriteMessages(writer, request, logger);
+            writer.WriteBoolean("stream", true);
+            WriteOptions(writer, request);
+
+            // keep_alive for model persistence (5 minutes by default)
+            writer.WriteString("keep_alive", _config.KeepAlive);
+
+            WriteTools(writer, request.Tools);
+
+            writer.WriteEndObject();
+        }
+
+        return buffer.WrittenSpan.ToArray();
     }
 
-    private static List<object> BuildMessages(LlmRequest request, ILogger logger)
+    /// <summary>
+    ///     The <c>options</c> object. Always emitted, empty object included — that is
+    ///     how a local model is told "no overrides", and dropping the key is a
+    ///     different request.
+    /// </summary>
+    private static void WriteOptions(Utf8JsonWriter writer, LlmRequest request)
     {
-        var result = new List<object>(request.Messages.Count + 1);
+        writer.WriteStartObject("options");
+        if (request.Temperature.HasValue) writer.WriteNumber("temperature", request.Temperature.Value);
+        if (request.TopP.HasValue) writer.WriteNumber("top_p", request.TopP.Value);
+        if (request.TopK.HasValue) writer.WriteNumber("top_k", request.TopK.Value);
+        if (request.MaxOutputTokens.HasValue) writer.WriteNumber("num_predict", request.MaxOutputTokens.Value);
+        writer.WriteEndObject();
+    }
+
+    private static void WriteTools(Utf8JsonWriter writer, IReadOnlyList<ToolDefinition> tools)
+    {
+        if (tools.Count == 0)
+        {
+            return;
+        }
+
+        writer.WriteStartArray("tools");
+        for (int i = 0; i < tools.Count; i++)
+        {
+            ToolDefinition tool = tools[i];
+            writer.WriteStartObject();
+            writer.WriteString("type", "function");
+            writer.WriteStartObject("function");
+            writer.WriteString("name", tool.Name);
+            writer.WriteString("description", tool.Description);
+            writer.WritePropertyName("parameters");
+            tool.InputSchema.WriteTo(writer);
+            writer.WriteEndObject();
+            writer.WriteEndObject();
+        }
+
+        writer.WriteEndArray();
+    }
+
+    private static void WriteMessages(Utf8JsonWriter writer, LlmRequest request, ILogger logger)
+    {
+        writer.WriteStartArray("messages");
 
         if (!string.IsNullOrEmpty(request.SystemPrompt))
         {
-            result.Add(new { role = "system", content = request.SystemPrompt });
+            WriteRoleAndText(writer, "system", request.SystemPrompt);
         }
 
-        foreach (var msg in request.Messages)
+        for (int i = 0; i < request.Messages.Count; i++)
         {
-            result.Add(msg switch
+            switch (request.Messages[i])
             {
-                LlmUserMessage u => new
-                {
-                    role = "user",
+                case LlmUserMessage user:
                     // ROP-A ПР.12: non-text blocks dropped loudly.
-                    content = ProviderPayload.FirstTextOrEmpty(u.Content, logger, "ollama")
-                },
-                LlmAssistantMessage a => new
-                {
-                    role = "assistant",
-                    content = a.Content.OfType<LlmTextBlock>().Select(b => b.Text).FirstOrDefault() ?? "",
-                    tool_calls = a.Content.OfType<LlmToolCallBlock>().Select(tc => new
-                    {
-                        id = tc.Id,
-                        type = "function",
-                        function = new { name = tc.Name, arguments = tc.Arguments.GetRawText() }
-                    }).ToList()
-                },
-                LlmToolResultMessage tr => new
-                {
-                    role = "tool",
-                    content = tr.Output
-                },
-                _ => new { role = "user", content = "" }
-            });
+                    WriteRoleAndText(writer, "user", ProviderPayload.FirstTextOrEmpty(user.Content, logger, "ollama"));
+                    break;
+
+                case LlmAssistantMessage assistant:
+                    WriteAssistant(writer, assistant);
+                    break;
+
+                case LlmToolResultMessage result:
+                    WriteRoleAndText(writer, "tool", result.Output);
+                    break;
+
+                default:
+                    WriteRoleAndText(writer, "user", "");
+                    break;
+            }
         }
 
-        return result;
+        writer.WriteEndArray();
+    }
+
+    /// <summary>
+    ///     An assistant turn. Unlike the OpenAI builder this path writes
+    ///     <c>""</c> rather than omitting <c>content</c> when the turn carries no
+    ///     text: Ollama's template expects the key to be present.
+    /// </summary>
+    private static void WriteAssistant(Utf8JsonWriter writer, LlmAssistantMessage assistant)
+    {
+        writer.WriteStartObject();
+        writer.WriteString("role", "assistant");
+        writer.WriteString("content", FirstTextOrEmpty(assistant.Content));
+
+        writer.WriteStartArray("tool_calls");
+        for (int i = 0; i < assistant.Content.Count; i++)
+        {
+            if (assistant.Content[i] is not LlmToolCallBlock toolCall)
+            {
+                continue;
+            }
+
+            writer.WriteStartObject();
+            writer.WriteString("id", toolCall.Id);
+            writer.WriteString("type", "function");
+            writer.WriteStartObject("function");
+            writer.WriteString("name", toolCall.Name);
+            writer.WriteString("arguments", toolCall.Arguments.GetRawText());
+            writer.WriteEndObject();
+            writer.WriteEndObject();
+        }
+
+        writer.WriteEndArray();
+        writer.WriteEndObject();
+    }
+
+    private static void WriteRoleAndText(Utf8JsonWriter writer, string role, string content)
+    {
+        writer.WriteStartObject();
+        writer.WriteString("role", role);
+        writer.WriteString("content", content);
+        writer.WriteEndObject();
+    }
+
+    /// <summary>The first text block's text, or an empty string when there is none.</summary>
+    private static string FirstTextOrEmpty(IReadOnlyList<LlmContentBlock> content)
+    {
+        for (int i = 0; i < content.Count; i++)
+        {
+            if (content[i] is LlmTextBlock text)
+            {
+                return text.Text;
+            }
+        }
+
+        return "";
     }
 
     /// <summary>
