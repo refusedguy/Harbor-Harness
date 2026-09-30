@@ -27,13 +27,15 @@ inner layer, never the other way around. The innermost layer (Domain/Abstraction
 │  - apps/Harbor.App.Avalonia (cross-platform desktop GUI)        │
 │  - contrib/apps/: Harbor.App.Wpf / App.Maui / App.Blazor        │
 │  - In-solution TUI renderers: Tui.AnsiPlain (unified ANSI +     │
-│    plain) / Tui.CellForge (+ .Engine) / Tui.NickConsoleEx /    │
+│    plain) / Tui.CellForge (+ .Engine) / Tui.NickConsoleEx /     │
 │    Tui.Notifications                                            │
 │  - Optional contrib/tui renderers: Spectre / .Fullscreen /      │
 │    SpectreTui / TerminalGui / Termina / RazorConsole / Sixel    │
 │  - Harbor.Desktop.Abstractions (config schema: CommonConfig,    │
 │    ICommonConfigStore; desktop VM bases)                        │
 │  - Harbor.Terminal.Abstractions (TUI interfaces, ITuiPlugin)    │
+│  - Harbor.DesignSystem (HDS v1 token catalog — zero Harbor      │
+│    references; RgbColor + the cell-style primitives live here)  │
 │  Depends on: Application + Ui.Framework + Abstractions          │
 └─────────────────────────────────────────────────────────────────┘
                                   ▲
@@ -43,16 +45,17 @@ inner layer, never the other way around. The innermost layer (Domain/Abstraction
 │  UI FRAMEWORK (TEA + reusable VMs + components)                 │
 │  - Harbor.Ui.Framework (+ split projects Abstractions/, State/, │
 │    ViewModels/, Rendering/, Projection/, Services/, Sessions/;  │
-│    shell csproj is a meta-package)                             │
+│    shell csproj is a meta-package)                              │
 │    State/      (UiStore, UiState{Ui,Chat}, AppMsg/ChatAppMsg,   │
-│                AppReducer/ChatAppReducer — TEA)                  │
+│                AppReducer/ChatAppReducer — TEA)                 │
 │    ViewModels/ (ChatLineVM, ToolCallVM, TokenUsageVM, ...)      │
 │    Rendering/  (ChatMessageRenderer, ChatStreamingPresenter)    │
 │    Sessions/   (SessionFactory, SessionSwitcher, SessionContext,│
 │                 SessionGitTracker, IChatViewBinder)             │
 │    Panels/     (dockable panel system)                          │
-│    Services/   (IDispatcherAdapter, IThemeService, IToastService,│
-│                 GitService, SessionStatusTracker)               │
+│    Services/   (IDispatcherAdapter, IThemeService,              │
+│                 IToastService, GitService,                      │
+│                 SessionStatusTracker)                           │
 │    Configuration/ (ICommonConfigModelRefReader — read-only half │
 │                    of the shared-config contract pair)          │
 │  Depends on: Abstractions + Desktop.Abstractions                │
@@ -66,11 +69,8 @@ inner layer, never the other way around. The innermost layer (Domain/Abstraction
 │  - Harbor.Application (AgentLoop, Sessions, Agents,             │
 │                        Configuration, Permissions, Onboarding)  │
 │  - Harbor.Registries                                            │
-│  - Harbor.Plugins.{Abstractions, Runtime, Hosting, Registration,│
-│    Instantiation, Compilation, Storage, Host} (8 projects)      │
+│  - Harbor.Plugins.Abstractions (the plugin contract surface)    │
 │  - contrib/scripting: Harbor.Scripting.* (ScriptHost, Bridge)   │
-│  - Harbor.Ipc.{Abstractions, InProcess, Server, Client}         │
-│  - Harbor.Logging (Serilog per-run timestamped files)           │
 │  Depends on: Domain ONLY (Harbor.Abstractions +                 │
 │              Harbor.Abstractions.Contracts)                     │
 └─────────────────────────────────────────────────────────────────┘
@@ -85,7 +85,11 @@ inner layer, never the other way around. The innermost layer (Domain/Abstraction
 │  - Harbor.Tools.Builtin — все builtin tools в одном проекте,    │
 │    каталог Tools/ (20 tools — см. docs/TOOLS_CATALOG.md;        │
 │    MCP-клиент в подкаталоге Mcp/)                               │
-│  - DesignSystem — отдельный проект src/Harbor.DesignSystem/     │
+│  - Harbor.Ipc.{Client, InProcess, Server} — RPC endpoints       │
+│    (MessagePack over named pipes / in-process)                  │
+│  - Harbor.Logging (Serilog per-run timestamped files)           │
+│  - Harbor.Plugins.{Runtime, Hosting, Registration,              │
+│    Instantiation, Compilation, Storage} — plugin machinery      │
 │  Depends on: Domain ONLY                                        │
 └─────────────────────────────────────────────────────────────────┘
                                   ▲
@@ -135,6 +139,74 @@ inner layer, never the other way around. The innermost layer (Domain/Abstraction
 > circular-dependency workaround they caused is unchanged and is described in the next
 > subsection. The `Harbor.Ui.Framework` *shell* edge that old EXCEPTION named is dead —
 > that project has no `.cs` files at all and an empty allowed set (#450).
+
+> **Fourteen more entries in this diagram were wrong until #888, in three boxes, and the
+> same way: never right.** `FullLayerMatrixTests.Matrix` is measured from
+> `Assembly.GetReferencedAssemblies()`; every list above is hand-typed, and until #888
+> nothing compared the two. Measured against the matrix, the APPLICATION box named 16
+> assemblies and agreed on 3:
+>
+> | §1 said | §1 placed | matrix says |
+> |---|---|---|
+> | `Harbor.Plugins.{Runtime, Hosting, Registration, Instantiation, Compilation, Storage}` | Application | Infrastructure (6 projects) |
+> | `Harbor.Ipc.{Client, InProcess, Server}` | Application | Infrastructure |
+> | `Harbor.Ipc.Abstractions` | Application | **Domain** — it is in this box's DOMAIN list too, one screen up |
+> | `Harbor.Logging` | Application | Infrastructure |
+> | `Harbor.Plugins.Host` | Application | **not a layer at all** — `OutOfScopeAssemblies`: "a composition root" |
+> | `Harbor.DesignSystem` | Infrastructure | Presentation |
+>
+> `Harbor.Plugins.Host` is why it is no longer in any layer box. The matrix declines to
+> classify it, so a diagram that puts it in a layer is asserting a third answer to a
+> question the gate answers with "neither" — it is an `OutputType=Exe` out-of-process MCP
+> stdio server, the same kind of thing as `apps/*`.
+>
+> **Why the diagram was wrong and the gate was not.** The Allowed sets are measurements.
+> The plugin classification is then *forced* rather than chosen: the matrix permits
+> Infrastructure→Infrastructure only through its `Family()` carve-out, and two
+> `SharedSourceFolders` reasons exist precisely because the matrix "forbids
+> Infrastructure→Infrastructure project references" — so reading those six rows as
+> Application contradicts the same file four times over. The `Layer` enum's own doc comment
+> already said it: Infrastructure is "providers, storage, tools, **IPC endpoints**,
+> telemetry, plugin machinery" (`FullLayerMatrixTests.cs:37`).
+>
+> The honest limit, because it decides what may be claimed: for the IPC rows the *edges*
+> do not force the class. `Harbor.Ipc.Server`'s Allowed set is two Domain targets and
+> `MatrixTable_RespectsLayerRules` would accept that row as Domain, Application or
+> Infrastructure alike. The layer there is a judgement, corroborated by what the projects
+> contain — MessagePack framing in `Harbor.Ipc.Client`, named pipes and broadcast fanout
+> in `Harbor.Ipc.Server`, pure `[Union]` request/response records and no I/O in
+> `Harbor.Ipc.Abstractions`. What is measured is the Allowed set, and it is not in dispute.
+> No edge is wrong; the prose was.
+>
+> **Fourteen, not the thirteen the guard's first red run reported — the difference was a
+> bug in the guard that found the other thirteen.** `Harbor.Plugins.Instantiation`
+> produced no finding, and not because this box was right about it. The extractor read
+> each row as `line[1..].Trim()`, which leaves the row's closing `│` in place: it is not
+> whitespace, so trimming keeps it. On a brace form wrapped across two lines that bar
+> lands *inside* the braces, so the item became `│Instantiation`, the extracted name was
+> `Harbor.Plugins.│Instantiation`, and that key is not in the matrix — so the assembly
+> was counted as unjudged and produced nothing. Only a name beginning a *wrapped* line is
+> affected, which is why five siblings in the same brace list were flagged and the sixth
+> was not. `InnerText` strips the trailing bar, and
+> `The_Extractor_Reads_Wrapped_And_Repeated_Brace_Forms` plants this exact shape.
+>
+> Recorded in the document as well as in the guard's history, because the failure mode is
+> the dangerous kind: a silently *unchecked* assembly, in a guard whose whole subject is
+> unchecked claims. A rule that under-reports is harder to catch than one that
+> over-reports, and `13` was wrong for a reason no reader of that run could have derived.
+>
+> **This is the third time, which is why #888 also added the check.** #879 found three
+> false rows in §5.6's capability table; #896 found nine here, two of them false since the
+> matrix row was created; #888 found fourteen, one of which (`Harbor.Ipc.Abstractions`
+> appearing in two layer boxes at once) is #896's own residue. Three doc edits and the file
+> still lied, because `ci.yml` ignores `**.md` and `docs/**` by design (#509) and
+> `check-doc-cites.py` proves a cited `file:line` still *exists* — it says itself that this
+> is "necessary but NOT sufficient". Layer assignment is prose, so no existing gate saw it
+> at all. `LayerDocAgreementRule.cs` in `tests/Harbor.Architecture.Tests/` now compares
+> these boxes to the matrix rows, and **§1 is the only section it covers** — the
+> abbreviations this diagram still uses (`Harbor.Storage.Jsonl / Memory / Sqlite`) and the
+> `UI FRAMEWORK` box, which has no counterpart in the gate's five layers, are declared
+> holes in that file's header rather than things it pretends to check.
 
 ### Why so many projects in the Domain layer?
 
@@ -399,9 +471,19 @@ Concrete implementations of:
   owns only `CsPluginLoader` + compiled-result types; hosting graph lives in
   `Harbor.Plugins.Hosting`; source sources in `Harbor.Plugins.Storage`;
   instantiation/lifecycle in `Harbor.Plugins.Instantiation`; registration in
-  `Harbor.Plugins.Registration`. The Architecture tests treat the whole
-  `Harbor.Plugins.*` family as Application-layer projects for dependency-direction
-  purposes.
+  `Harbor.Plugins.Registration`. **The Architecture tests do NOT treat the whole
+  `Harbor.Plugins.*` family as Application-layer projects** — §1 listed all eight as
+  Application until #888 corrected it. Only `Harbor.Plugins.Abstractions` is Application;
+  the other six in-solution projects are classified Infrastructure, and
+  `Harbor.Plugins.Host` is not classified at all (`OutOfScopeAssemblies` — an
+  `OutputType=Exe` composition root). The reason the six are Infrastructure rather than
+  Application is not a preference: they reference each other, and
+  `MatrixTable_RespectsLayerRules` forbids Infrastructure→Infrastructure except *within* a
+  family, via the `Harbor.Plugins.*` prefix in its `Family()` helper. Application sits a
+  layer **above** Infrastructure, so an implementation stack that composes its own
+  machinery cannot be an Application project. `Harbor.Plugins.Runtime`'s row says this
+  outright: "classified Infrastructure-plugins rather than Application because of those
+  intra-family edges".
 
 ### Infrastructure
 
