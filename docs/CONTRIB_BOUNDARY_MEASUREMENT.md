@@ -241,6 +241,14 @@ projects and prints a per-project pass/fail table into the job summary. It exits
 dispatch converts this document's static floor into a compiled fact, at the cost
 of one non-gating CI run.
 
+One operational caveat, found by trying it: **GitHub only registers a workflow
+file that exists on the default branch, so this cannot be dispatched until it
+merges.** `gh workflow run contrib-dryrun.yml --ref <branch>` returns HTTP 404
+while the file is branch-only, even though the file is present and the YAML
+parses. The same one-dispatch-after-merge shape applies to any new
+`workflow_dispatch` workflow, and it is worth knowing before Option 3 is chosen
+in the expectation of measuring *before* merging this document.
+
 **Recommendation, as an owner decision with a price: Option 3, then re-decide.**
 The measurement says the *known* price of connecting is small and has a common
 cause, which is good news and was not the working assumption. But "small known

@@ -30,6 +30,15 @@
 #   The per-project result goes to the job summary, which is the same
 #   report-only contract `coverage` uses (issue #99): a table, not a threshold.
 #
+# ONE OPERATIONAL CAVEAT, found by trying it
+#
+#   GitHub only registers a workflow file that exists on the DEFAULT branch.
+#   While this file is branch-only, `gh workflow run contrib-dryrun.yml --ref
+#   <branch>` returns HTTP 404 — even though the file is present on the branch
+#   and the YAML parses. So this cannot be dispatched until it merges. Same for
+#   any new `workflow_dispatch` workflow; worth knowing before anyone plans to
+#   measure with it pre-merge.
+#
 # HOW TO READ THE TABLE
 #
 #   `skipped (windows TFM)` — the project targets `net10.0-windows*` and cannot
