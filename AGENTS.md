@@ -16,6 +16,7 @@
 > - [docs/ANTIPATTERNS.md](./docs/ANTIPATTERNS.md) — 38 antipatterns we forbid.
 > - [docs/EXAMPLES.md](./docs/EXAMPLES.md) — 40+ recipes ("How do I...?").
 > - [docs/PLUGIN_DEVELOPMENT.md](./docs/PLUGIN_DEVELOPMENT.md) — Roslyn plugin system.
+> - [docs/DEMO_GIFS.md](./docs/DEMO_GIFS.md) — README demo GIFs: how they are recorded, and what counts as an *intentional* re-record (never hand-edit `assets/demo/*.gif`; never commit regenerated GIFs in a PR).
 
 ## What Harbor is
 

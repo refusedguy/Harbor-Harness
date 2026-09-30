@@ -51,16 +51,31 @@
 #
 # PRs: NOT run (saves 8-14 min per PR; GIF review artifacts were never
 # inspected — regeneration happens on merge to dev/master instead).
+#
+# MAINTAINER GUIDE: docs/DEMO_GIFS.md — what counts as an intentional update, how
+# to tell it from a foreign re-record, what the drift gate compares, and why a PR
+# must not carry regenerated GIFs.
 name: demo-gifs
 
 on:
   push:
     branches: [dev, master]
+    # EVERY recording input belongs here, not just the tapes (issue #427).
+    # demo/run-scene.sh scrubs and paces the captured output,
+    # demo/install-toolchain.sh and demo/toolchain.lock pin vhs/ttyd/the font,
+    # and tools/demo_repro.py re-paces the frames the gate then measures. All
+    # four move pixels. A change outside this filter lands on dev with no
+    # workflow run, no drift gate and no red job — the README GIFs then go
+    # stale in silence, which is the failure a maintainer cannot see and this
+    # list existed to prevent.
+    # Guarded by DemoGifTriggerSurfaceTests
+    # (tests/Harbor.Architecture.Tests/DemoGifTriggerSurfaceTests.cs).
     paths:
       - "src/Harbor.Tui.**"
       - "src/Harbor.Terminal.Abstractions/**"
       - "apps/Harbor.App.Cli/**"
-      - "demo/*.tape"
+      - "demo/**"
+      - "tools/demo_repro.py"
       - ".github/workflows/demo.yml"
   workflow_dispatch:
     inputs:
