@@ -70,13 +70,6 @@ public sealed class SystemPromptBuilder : ISystemPromptBuilder
     public const string NoToolsGuidance = "No tools available this turn. Answer from knowledge only.";
 
     /// <summary>
-    ///     The peer-supervision section anchor. Named because consumers anchor on
-    ///     it — the same reason <c>## Available Tools</c> renders over an empty
-    ///     list — not because a tool name is being written down.
-    /// </summary>
-    private const string PeerSupervisionHeader = "## Peer Supervision";
-
-    /// <summary>
     ///     Opens the recipe's tool list. #793: everything after this is composed
     ///     from the roles the tools DECLARE, so this file names no tool at all.
     /// </summary>
@@ -314,7 +307,10 @@ public sealed class SystemPromptBuilder : ISystemPromptBuilder
             return;
         }
 
-        builder.AppendLine(PeerSupervisionHeader);
+        // Spelled inline, like the five other section headers, so
+        // PromptSectionPolicyRule attributes the bounds check to THIS method
+        // rather than to the whole file.
+        builder.AppendLine("## Peer Supervision");
         builder.Append(PeerSupervisionLead);
 
         bool first = true;
