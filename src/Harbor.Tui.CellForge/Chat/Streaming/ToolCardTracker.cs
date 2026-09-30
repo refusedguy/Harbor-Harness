@@ -621,7 +621,7 @@ internal sealed class ToolCardTracker
     public bool TryRouteToolCardKey(in KeyEvent key)
     {
         if (key.EventType is not (KeyEventType.Press or KeyEventType.Repeat)
-            || key.Modifiers != KeyModifiers.None)
+            || !key.Modifiers.IsUnmodified())
         {
             return false;
         }
@@ -664,7 +664,7 @@ internal sealed class ToolCardTracker
     public ImageBlock? TryOpenImageViewer(in KeyEvent key)
     {
         if (key.EventType is not (KeyEventType.Press or KeyEventType.Repeat)
-            || key.Modifiers != KeyModifiers.None
+            || !key.Modifiers.IsUnmodified()
             || key.Key != KeyCode.Enter)
         {
             return null;

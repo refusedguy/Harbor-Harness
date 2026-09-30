@@ -258,7 +258,7 @@ internal sealed class ReplInputLoop(CellForgeReplRunner host)
         // Slash shortcut: typing '/' on an empty composer opens the command
         // palette directly, skipping manual entry.
         if (key.Key == KeyCode.Char
-            && key.Modifiers is KeyModifiers.None or KeyModifiers.Shift
+            && key.Modifiers.AcceptsTypedChar()
             && (char)key.Character.Value == '/'
             && host._composer.Buffer.IsEmpty)
         {

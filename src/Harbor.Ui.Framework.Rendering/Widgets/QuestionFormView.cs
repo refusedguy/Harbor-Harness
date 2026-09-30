@@ -509,7 +509,7 @@ public sealed class QuestionFormView : IChatBlock, IFocusTarget
         // runes on the option rows, are commands and take the strict one.
         if (key.Key != KeyCode.Char)
         {
-            if (key.Modifiers != KeyModifiers.None)
+            if (!key.Modifiers.IsUnmodified())
             {
                 return false;
             }
@@ -568,12 +568,12 @@ public sealed class QuestionFormView : IChatBlock, IFocusTarget
     /// </summary>
     private bool AcceptsTypedChar(in KeyEvent key)
     {
-        if ((key.Modifiers & (KeyModifiers.Ctrl | KeyModifiers.Meta | KeyModifiers.Alt)) != 0)
+        if (key.Modifiers.IsCommandModifier())
         {
             return false;
         }
 
-        return OnCustomRow() || key.Modifiers == KeyModifiers.None;
+        return OnCustomRow() || key.Modifiers.IsUnmodified();
     }
 
     private bool HandleChar(Rune c)
