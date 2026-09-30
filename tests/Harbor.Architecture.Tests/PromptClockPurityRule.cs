@@ -482,7 +482,7 @@ public sealed class PromptClockPurityRule
                    + (injectedBuilders.Count == 0 ? "(nothing)" : string.Join(" | ", injectedBuilders)));
 
         await Assert.That(string.Join(" | ", injectedReads.Select(r => r.Read)))
-            .Contains("clock.GetUtcNow()")
+            .Contains("clock.GetUtcNow")
             .Because("injecting a TimeProvider makes the impurity testable, not absent: the value still "
                    + "moves under an identical context, so the cache is still wrong. The matcher has to "
                    + "see an injected clock by METHOD NAME, because the field is spelled _timeProvider or "
