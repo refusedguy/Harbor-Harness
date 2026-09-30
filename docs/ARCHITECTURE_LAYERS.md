@@ -745,13 +745,13 @@ grandfathers is gone.
 `FullLayerMatrixTests` + `CellForgeGraphRules` are all green. The previously cited counts
 (46 tests = 21 reflection + 25 NetArchTest, 54 executed cases) are historical.
 
-**The CAPABILITY rules added in #455 have 7 known violations, in 4 types across 3 of the
-18 Presentation assemblies.** They are not skipped: each is a row in
+**The CAPABILITY rules added in #455 have 5 known violations, in 3 types across 2 of the
+17 Presentation assemblies.** They are not skipped: each is a row in
 `PresentationCapabilityRules.KnownViolations` that a rule holds only while it is still
 exactly reproduced, and each carries a tracking issue. Fifteen Presentation assemblies
 are clean and fully enforced.
 
-Seven rows left that no longer count, in three issues. #536: the four
+Rows that no longer count, in four issues. #536: the four
 `Harbor.DesignSystem` rows — `ThemeStore` and `ThemeDirectoryWatcher` — are gone, and
 the `["Harbor.DesignSystem"]` entry with them, because an entry with no rows is still a
 claim that the assembly is dirty. That assembly is the HDS v1 package: `IsPackable`,
@@ -761,13 +761,25 @@ were the only thing in it that read a disk or the user's home directory. The per
 half moved to `Harbor.Hosting.Themes`; the `IThemeStore` port and every token stayed in
 the leaf, so the contract and the bytes are now in different assemblies on purpose.
 `DesignSystemLeafTakesNoIoRules` is the guard, and it covers the two `Environment.Get*`
-reads that no capability rule could see. #668: the terminal `JsonThemeLoader` and
-`ThemeFileWatcher` were not a filesystem permission but a second implementation of theme
-loading beside `ThemeStore`. They read through `IThemeStore` now, and
-`ThemeStoreSeamRules` fails if a second implementation of that port appears. #667: the two
-`CellForgeFileTreePanel` rows — the file tree, described below. All three deletions are
-forced rather than asserted: the liveness test fails the build on a row that outlived
-its violation, and the resolved-list test fails it if the capability returns.
+reads that no capability rule could see. #535: the two `Harbor.Desktop.Shared` rows —
+`RecentItemsService` — are gone, and the `["Harbor.Desktop.Shared"]` entry with them,
+for a different reason. That type was **constructed nowhere** — not by a product, not
+by a test — so the port #535 proposed would have had zero callers, and a seam with no
+consumer substitutes nothing. It was deleted rather than relocated, and the same five
+sites went with it: three `File.*`, one `Directory.CreateDirectory`, and the
+`Environment.GetFolderPath(UserProfile)` that resolved the path in the first place and
+that no capability rule could see. That leaves `Harbor.Desktop.Shared` with no I/O at
+all and no waiver — and, unlike the other clean Presentation assemblies, with a rule
+that says so: `DesktopSharedTakesNoIoRules` rules the whole project directory, because
+a per-type "resolved" row was unusable — `ResolvedRows_AreWellFormed` fails on a row
+whose type no longer exists. #668: the
+terminal `JsonThemeLoader` and `ThemeFileWatcher` were not a filesystem permission but a
+second implementation of theme loading beside `ThemeStore`. They read through
+`IThemeStore` now, and `ThemeStoreSeamRules` fails if a second implementation of that
+port appears. #667: the two `CellForgeFileTreePanel` rows — the file tree, described
+below. All four deletions are forced rather than asserted: the liveness test fails the
+build on a row that outlived its violation, and — where the type still exists — the
+resolved-list test fails it if the capability returns.
 
 A further capability is recorded in `PermanentCapabilities` — not a violation, so not
 counted above. See "Permanent capabilities" in §5.6.
@@ -782,8 +794,8 @@ counted above. See "Permanent capabilities" in §5.6.
 | Rule | Violating types | Assemblies | Tracking issues |
 |---|---:|---:|---|
 | `PRESENTATION-MUST-NOT-SPAWN-SUBPROCESSES` | 1 | 1 | [#538](https://github.com/refusedguy/Harbor-Harness/issues/538) (jump palette) |
-| `PRESENTATION-MUST-NOT-TOUCH-THE-FILESYSTEM-FILES` | 3 | 3 | [#534](https://github.com/refusedguy/Harbor-Harness/issues/534) (config stores), [#535](https://github.com/refusedguy/Harbor-Harness/issues/535) (recent items) |
-| `PRESENTATION-MUST-NOT-TOUCH-THE-FILESYSTEM-DIRECTORIES` | 3 | 2 | [#534](https://github.com/refusedguy/Harbor-Harness/issues/534) (config stores), [#535](https://github.com/refusedguy/Harbor-Harness/issues/535) (recent items) |
+| `PRESENTATION-MUST-NOT-TOUCH-THE-FILESYSTEM-FILES` | 2 | 2 | [#534](https://github.com/refusedguy/Harbor-Harness/issues/534) (config stores) |
+| `PRESENTATION-MUST-NOT-TOUCH-THE-FILESYSTEM-DIRECTORIES` | 2 | 1 | [#534](https://github.com/refusedguy/Harbor-Harness/issues/534) (config stores) |
 | `PRESENTATION-MUST-NOT-USE-THE-NETWORK` | 0 | 0 | — clean, unbaselined |
 | `PRESENTATION-MUST-NOT-LOAD-ASSEMBLIES-OR-EMIT-IL` | 0 | 0 | — clean, unbaselined |
 

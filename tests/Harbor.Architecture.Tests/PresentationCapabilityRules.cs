@@ -659,25 +659,36 @@ public sealed class PresentationCapabilityRules
                     + "side effect, in the two types whose LAYER is the tracked debt (#534).",
                 TrackedBy: "https://github.com/refusedguy/Harbor-Harness/issues/534"),
         },
-        ["Harbor.Desktop.Shared"] = new(StringComparer.Ordinal)
-        {
-            // Services/RecentItemsService.cs:89,:90,:117 (File) and :110 (Directory).
-            [NoFiles + " Harbor.Desktop.Shared.Services.RecentItemsService"] = new(
-                Reason:
-                    "The MRU list behind the command palette and the file recent-items menu, "
-                    + "persisted to a single file at ~/.harbor/recent.json. It is shell chrome with "
-                    + "no domain model behind it and nothing an agent can act on, so there is no "
-                    + "seam worth introducing for it yet; the path is injectable and tests pass a "
-                    + "temp one. The open part is that a Presentation service owns persistence, which "
-                    + "#535 tracks.",
-                TrackedBy: "https://github.com/refusedguy/Harbor-Harness/issues/535"),
-            [NoDirectories + " Harbor.Desktop.Shared.Services.RecentItemsService"] = new(
-                Reason:
-                    "The Directory half of the same type: Save creates the parent directory before "
-                    + "the first write, so a fresh install with no ~/.harbor yet still persists. Same "
-                    + "reason as the row above, and the same tracked move (#535).",
-                TrackedBy: "https://github.com/refusedguy/Harbor-Harness/issues/535"),
-        },
+        //
+        // #535 RESOLVED: the two `RecentItemsService` rows are GONE — not
+        // re-baselined, and the `["Harbor.Desktop.Shared"]` entry with them,
+        // because an entry with no rows is still a claim that the assembly is
+        // dirty. That type persisted ~/.harbor/recent.json (File.Exists /
+        // ReadAllText / WriteAllText at :89,:90,:117, Directory.CreateDirectory
+        // at :110) and found the path with Environment.GetFolderPath at :45.
+        //
+        // It was not moved the way #536 moved the theme store, and the reason
+        // is a fact rather than a preference: it was CONSTRUCTED NOWHERE. The
+        // only occurrences of the identifier outside its own file were this
+        // baseline, a doc-comment mention in PromptHistory, and three
+        // documents — one of which (docs/KILLER_FEATURES.md §6.2) said out
+        // loud that it was not used by the Avalonia command palette, and whose
+        // "Action" was to wire it up. So the port #535 proposed would have had
+        // zero callers: a seam with no consumer substitutes nothing, and it
+        // would have left the persisting code alive in a second place behind a
+        // second pair of rows. Deleting it took the last five I/O sites out of
+        // `Harbor.Desktop.Shared` — the assembly is now genuinely clean, not
+        // clean-with-a-waiver.
+        //
+        // The removal is guarded in the direction a per-type row could not
+        // reach: `ResolvedViolations` is unusable here, because
+        // `ResolvedRows_AreWellFormed` resolves each row's type against the
+        // real assembly and a row naming a DELETED type would fail the build.
+        // `DesktopSharedTakesNoIoRules` rules the whole project directory
+        // instead, so it holds for a re-added type, a renamed one, and the
+        // next one — and it also covers the
+        // `Environment.GetFolderPath(UserProfile)` read that no capability
+        // rule could see.
     };
 
     /// <summary>

@@ -69,11 +69,13 @@
 //     reach, and naming two members is the point: a rule grown to "no
 //     Environment at all" would be a different and broader claim than the one
 //     #536 makes.
-//   * The other baselined Presentation rows (#534 config stores, #535 recent
-//     items, #538 jump palette) and the desktop `ThemeService.LoadJson`, which
-//     the layer matrix leaves unrestricted because an app composition root is
-//     not a Presentation assembly. Named so the next reader does not read this
-//     file as a repository-wide I/O audit.
+//   * The other baselined Presentation rows (#534 config stores, #538 jump
+//     palette) and the desktop `ThemeService.LoadJson`, which the layer matrix
+//     leaves unrestricted because an app composition root is not a Presentation
+//     assembly. Named so the next reader does not read this file as a
+//     repository-wide I/O audit. (#535's recent items were in this list until
+//     that type was deleted; `DesktopSharedTakesNoIoRules` now rules that
+//     project instead.)
 //   * WHICH outer assembly holds the implementation. That was a decision, not a
 //     derivation, and this file is deliberately about what the leaf DOES rather
 //     than where the answer went — a different host would satisfy it too, or

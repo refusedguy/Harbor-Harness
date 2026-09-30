@@ -11,9 +11,6 @@ desktop app) and `Microsoft.Extensions.Logging.Abstractions`.
 - **`Services/MarkdownToPlainTextService`**: Markdig-based Markdown → plain
   text. Used by the command palette to fuzzy-search chat messages and by
   toast notifications to render a one-line summary.
-- **`Services/RecentItemsService`**: most-recently-used items list persisted
-  to `~/.harbor/recent.json`. Used by the command palette and the recent-files
-  menu.
 - **`Locators/ViewModelLocator` (+ `IViewModelLocator`, `LocatorRegistration`,
   `IShowPlaceholderFactory`)**: design-time-friendly VM resolution used by
   platform views that construct view-models by contract.
@@ -36,6 +33,19 @@ desktop app) and `Microsoft.Extensions.Logging.Abstractions`.
 
 ❌ **Forbidden**: any UI framework (`Avalonia*`, `System.Windows.*`,
 `Microsoft.Maui.*`, `Microsoft.AspNetCore.Components.*`).
+
+❌ **Forbidden: the filesystem and the user's home directory.** This project is
+Presentation, so it must not persist anything — and it does not: there is no
+`File.*`/`Directory.*` call and no `Environment.GetFolderPath` in it. That was
+not free. `Services/RecentItemsService` used to write `~/.harbor/recent.json`
+from here, nothing ever constructed it, and #535 removed it. The guard is
+`DesktopSharedTakesNoIoRules`.
+
+If you need to persist shell state (an MRU list, window geometry, pinned views),
+put the bytes behind a port declared in Domain, implement it in Infrastructure
+next to the `Harbor.Storage.*` family, and let a composition root wire it. Do not
+add it here, and do not reach for a `filePath` constructor parameter to keep the
+I/O in this assembly — that is the same defect with a test hook on it.
 
 These rules are enforced by `tests/Harbor.Architecture.Tests`.
 
