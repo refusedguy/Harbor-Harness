@@ -457,29 +457,34 @@ public sealed class SessionStoreFailureTextParityRules
     /// </summary>
     private static IEnumerable<(string project, string file, string shape)> ScanStoreLiterals()
     {
-        foreach (string project in StoreProjects)
+        // One pass over the product tree, not one per store: the original shape
+        // of this loop called EnumerateProductCsFiles() once per project and
+        // re-read every file it did not want, three times over, to filter by
+        // prefix. Deriving the project from the path makes it a single walk and
+        // removes the prefix test as a place the two lists could disagree.
+        foreach (string file in SourceScan.EnumerateProductCsFiles())
         {
-            foreach (string file in SourceScan.EnumerateProductCsFiles())
+            string relative = SourceScan.Relative(file);
+
+            string? project = StoreProjects.FirstOrDefault(
+                p => relative.StartsWith($"src/{p}/", StringComparison.Ordinal));
+            if (project is null)
             {
-                string relative = SourceScan.Relative(file);
-                if (!relative.StartsWith($"src/{project}/", StringComparison.Ordinal))
-                {
-                    continue;
-                }
+                continue;
+            }
 
-                string? raw = SourceScan.TryReadAllText(file);
-                if (raw is null)
-                {
-                    continue;
-                }
+            string? raw = SourceScan.TryReadAllText(file);
+            if (raw is null)
+            {
+                continue;
+            }
 
-                foreach (Match match in LiteralPattern.Matches(SourceScan.StripComments(raw)))
+            foreach (Match match in LiteralPattern.Matches(SourceScan.StripComments(raw)))
+            {
+                string shape = Normalise(match.Groups["body"].Value);
+                if (IsFailureShaped(shape))
                 {
-                    string shape = Normalise(match.Groups["body"].Value);
-                    if (IsFailureShaped(shape))
-                    {
-                        yield return (project, file, shape);
-                    }
+                    yield return (project, file, shape);
                 }
             }
         }
@@ -501,8 +506,14 @@ public sealed class SessionStoreFailureTextParityRules
     /// </remarks>
     private static IEnumerable<(string project, string shape, int delta)> CountDeltas()
     {
+        // Both sides key on the SAME named tuple type. Writing one as
+        // `(l.project, l.shape)` and the other as `(Project: ..., Shape: ...)`
+        // compiles, but `Concat` then unifies the two key shapes to an unnamed
+        // `(string, string)` and every `key.project` below stops resolving —
+        // which is the CS1061 this method's first CI run produced. One name,
+        // used on both sides, is the fix and the reason to keep it that way.
         var now = ScanStoreLiterals()
-            .GroupBy(l => (l.project, l.shape))
+            .GroupBy(l => (Project: l.project, Shape: l.shape))
             .ToDictionary(g => g.Key, g => g.Count());
 
         var was = MeasuredInlineLiterals
@@ -511,15 +522,15 @@ public sealed class SessionStoreFailureTextParityRules
 
         var keys = now.Keys.Concat(was.Keys)
             .Distinct()
-            .OrderBy(k => k.project, StringComparer.Ordinal)
-            .ThenBy(k => k.shape, StringComparer.Ordinal);
+            .OrderBy(k => k.Project, StringComparer.Ordinal)
+            .ThenBy(k => k.Shape, StringComparer.Ordinal);
 
-        foreach (var key in keys)
+        foreach ((string project, string shape) in keys)
         {
-            int delta = now.GetValueOrDefault(key) - was.GetValueOrDefault(key);
+            int delta = now.GetValueOrDefault((project, shape)) - was.GetValueOrDefault((project, shape));
             if (delta != 0)
             {
-                yield return (key.project, key.shape, delta);
+                yield return (project, shape, delta);
             }
         }
     }
