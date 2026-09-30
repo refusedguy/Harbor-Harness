@@ -20,6 +20,7 @@ using Harbor.Ipc.Client;
 using Harbor.Ipc.InProcess;
 using Harbor.Terminal.Pty;
 using Harbor.Ui.Framework.Navigation;
+using Harbor.Ui.Framework.Forking;
 using Harbor.Ui.Framework.Overlays;
 using CommunityToolkit.Mvvm.Messaging;
 using Harbor.Ui.Framework.Projection;
@@ -169,6 +170,10 @@ internal static class ServiceRegistration
         services.AddSingleton<AvaloniaUiViewport>();
         services.AddSingleton<ChatStreamingPresenter>();
         services.AddSingleton<UiRenderEngine>();
+        // #670: SessionFactory forks through the core's SessionForkService, which lives in
+        // Harbor.Application — a layer this Presentation framework may not reference. The
+        // adapter below is the bridge, same shape as CommonConfigReaderAdapter (#453, ADR-009).
+        services.AddSingleton<ISessionForker, SessionForkerAdapter>();
         services.AddSingleton<SessionFactory>();
         services.AddSingleton<SessionSwitcher>();
         services.AddSingleton<SessionGitTracker>();

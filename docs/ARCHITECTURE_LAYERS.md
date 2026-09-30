@@ -150,6 +150,34 @@ normal pre-onboarding state. They cannot be merged — the cycle above — and
 narrow one grows a write member, a second implementer, or a re-derivation of
 "is this reference whole?".
 
+### Presentation → Application is a violation, not a preference: `ISessionForker`
+
+The UI framework forks sessions, and the fork is Application-layer business logic
+(`SessionForkService`). `FullLayerMatrixTests.Matrix_AllowedEntries_RespectLayerRules`
+draws `Presentation → Application` as a violation, so `Harbor.Ui.Framework.Sessions`
+cannot reference `Harbor.Application` — and the single existing exception on that
+edge (`Harbor.Desktop.Abstractions` → `ProviderPresets`, #188/#96) is a named debt
+with a stated fix, not a precedent to widen.
+
+**What that cost, and the fix (#670).** `SessionFactory.CreateBranchAsync` used to
+fork sessions itself, and the copy drifted until a desktop fork set no
+`ParentSessionId`, persisted no title, and regenerated every copied message id — a
+fork the user could not recognise as a fork. The same answer as the config seam
+above applies: declared **`ISessionForker`** in
+`Harbor.Ui.Framework.Abstractions/Forking/`, a Domain project the UI framework
+already references, and had the composition root adapt it —
+`SessionForkerAdapter` in Avalonia forwards to `SessionForkService`, which is
+where `Harbor.App.Cli` already called it from. **Zero new `ProjectReference`s**:
+the port adds Domain→nothing, the framework edge Presentation→Domain already
+existed, and the adapter sits in a `CompositionRoot`, which the matrix permits
+unrestricted.
+
+`SessionFactory`'s constructor takes the port as a **required** parameter. That is
+the load-bearing part: a required dependency means a host that wants to fork names
+the one implementation, and a host that wires nothing gets a compile error instead
+of silently falling back to a second, different fork — which is exactly how the
+duplicate survived.
+
 ### Mermaid diagram
 
 ```mermaid

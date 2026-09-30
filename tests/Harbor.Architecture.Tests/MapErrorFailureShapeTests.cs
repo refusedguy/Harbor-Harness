@@ -432,13 +432,15 @@ public sealed class MapErrorFailureShapeTests
                 "The third converted site, and the only one whose MapError lambda CAPTURES state "
                 + "(`source.Id`) rather than being `static`. A capture is easy to break — dropping it, "
                 + "or shadowing `e` — and this assertion is what notices. Domain context (WHICH "
-                + "session) and cause (WHY) must both survive.");
+                + "session) and cause (WHY) must both survive. Since #670 the cause arrives from the "
+                + "core fork unchanged (ResultConversionBehaviourTests), so this is exactly the two "
+                + "halves and nothing else: a session-id prefix, and the store's text.");
     }
 
     /// <summary>
-    ///     The fourth site: the branch exists, the history read does not. This is the
-    ///     re-type the exemption was granted for, and it is the one whose message has to
-    ///     keep BOTH halves — which session, and what the store said.
+    ///     The fourth site: the parent exists, the history read does not. Since #670 this goes
+    ///     through the core fork, so it also pins that the chain stays composition rather than
+    ///     substitution — the factory's session id, then the store's own text.
     /// </summary>
     [Test]
     public async Task SessionFactory_CreateBranchAsync_HistoryReadFailure_StillCarriesTheCause()
@@ -446,23 +448,22 @@ public sealed class MapErrorFailureShapeTests
         const string Cause = "transcript is not readable";
         Session source = Session.Create("/home/user/project", "code", "test-provider", "test-model");
 
-        Result<Session> result = await NewFactory(new BranchStore(causeOnHistoryRead: Cause))
+        Result<Session> result = await NewFactory(new BranchStore(causeOnHistoryRead: Cause, parent: source))
             .CreateBranchAsync(source);
 
         await Assert.That(result.IsFailure).IsTrue();
-        await Assert.That(result.Error)
-            .IsEqualTo($"Failed to branch session '{source.Id}': could not read message history: {Cause}")
+        await Assert.That(result.Error).IsEqualTo($"Failed to branch session '{source.Id}': {Cause}")
             .Because(
-                "ConvertFailure<Session>().MapError(e => …: {e}) must produce byte-identical text to the "
-                + "hand-built string it replaces. This test is what says 'the conversion changed the "
-                + "SHAPE, not the MESSAGE' — a rewrite that dropped the cause, or reordered the two "
-                + "halves, fails here and nowhere else.");
+                "The fork reads the parent before it creates the child, so this is reachable only "
+                + "with a parent row to hand back — BranchStore gained one for exactly that. The "
+                + "point of the assertion is unchanged from the pre-#670 shape: the cause arrives "
+                + "byte-identical, with the session id in front of it and nothing dropped.");
     }
 
     /// <summary>
-    ///     The fifth site, and the one the issue calls load-bearing: the branch was
-    ///     already created in the store, the transcript is truncated, and the message is
-    ///     the only record of how far the copy got.
+    ///     The fifth site, and the one the issue calls load-bearing: the child already exists in
+    ///     the store, the transcript is truncated, and the message is the only record of how far
+    ///     the copy got.
     /// </summary>
     [Test]
     public async Task SessionFactory_CreateBranchAsync_CopyFailure_StillReportsProgressAndCause()
@@ -478,25 +479,27 @@ public sealed class MapErrorFailureShapeTests
             NewUserMessage("m3", "now the tests")
         };
 
-        Result<Session> result = await NewFactory(new BranchStore(causeOnAppend: Cause, history: messages))
+        Result<Session> result = await NewFactory(
+                new BranchStore(causeOnAppend: Cause, history: messages, parent: source))
             .CreateBranchAsync(source);
 
         await Assert.That(result.IsFailure).IsTrue();
         await Assert.That(result.Error).IsEqualTo(
-                $"Failed to branch session '{source.Id}': could not copy message history (0 of 3 copied): {Cause}")
+                $"Failed to branch session '{source.Id}': Failed to copy message history (0 of 3 copied): {Cause}")
             .Because(
-                "The progress number is the reason this site could not be a plain MapError: the context is a "
-                + "function of `copied`, `total` AND the cause. Converting the re-type to "
-                + "ConvertFailure<Session>() and the message to MapError(e => …{e}) keeps all three as a "
-                + "function of state, and this assertion pins that a later edit cannot quietly drop the "
-                + "progress — which is the only evidence left of a half-written branch still in the store.");
+                "Three layers of context, each owned by the layer that knows it: the session id by "
+                + "the Presentation layer, the copy progress by the core loop (only it knows where "
+                + "it stopped), the cause by the store. #670 deleted the duplicate fork and brought "
+                + "the progress along with it; dropping it would leave a half-written child in the "
+                + "store with nothing recording how far it reached.");
     }
 
     // ── Helpers ──────────────────────────────────────────────────────────────
 
     /// <summary>
-    ///     A <see cref="SessionFactory" /> wired to a store that always fails, and to nothing
-    ///     else. <c>IAgent</c> is <c>null</c> because the three create paths never read it, and
+    ///     A <see cref="SessionFactory" /> wired to a store that always fails, to the real core
+    ///     fork over that same store (#670), and to nothing else. <c>IAgent</c> is
+    ///     <c>null</c> because the three create paths never read it, and
     ///     <c>ICommonConfigModelRefReader</c> is <c>null</c> because it is an optional
     ///     dependency (#63) — passed as a declared constructor argument since #470,
     ///     where it used to be dug out of a service provider on every call.
@@ -510,6 +513,7 @@ public sealed class MapErrorFailureShapeTests
             agents,
             null!,
             store,
+            new CoreSessionForker(store),
             NullLogger<SessionFactory>.Instance,
             configReader: null);
     }
@@ -645,7 +649,8 @@ internal sealed class FailingSessionStore(string cause) : ISessionStore
 internal sealed class BranchStore(
     string? causeOnHistoryRead = null,
     string? causeOnAppend = null,
-    IReadOnlyList<AgentMessage>? history = null) : ISessionStore
+    IReadOnlyList<AgentMessage>? history = null,
+    Session? parent = null) : ISessionStore
 {
     public Task<Result<Session>> CreateAsync(string directory, string agentName, string providerId, string modelId, CancellationToken ct = default)
         => Task.FromResult(Result.Success(Session.Create(directory, agentName, providerId, modelId)));
@@ -661,7 +666,12 @@ internal sealed class BranchStore(
             : Result.Success());
 
     public Task<Result<Session>> GetAsync(string sessionId, CancellationToken ct = default)
-        => Task.FromResult(Result.Failure<Session>($"Session '{sessionId}' not found."));
+        // #670: the core fork reads the PARENT before it creates anything, so a fixture that
+        // wants to reach the history or append step has to hand one back. `null` keeps the old
+        // "not found" answer, which now fails one step earlier than it used to.
+        => Task.FromResult(parent is { } p
+            ? Result.Success(p)
+            : Result.Failure<Session>($"Session '{sessionId}' not found."));
 
     public Task<Result<IReadOnlyList<Session>>> ListAsync(string? projectId = null, CancellationToken ct = default)
         => Task.FromResult(Result.Success<IReadOnlyList<Session>>([]));

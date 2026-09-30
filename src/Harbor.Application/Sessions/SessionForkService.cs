@@ -30,6 +30,22 @@ public sealed record SessionFork(Session Session, int Copied);
 ///         continue elsewhere. Every step fail-closes via <c>Result</c>; a failed lineage
 ///         stamp deletes the just-created shell so no orphan child survives.
 ///     </para>
+///     <para>
+///         <b>#670 — the one fork.</b> This used to have a second implementation in the UI
+///         framework (<c>SessionFactory.CreateBranchAsync</c>), reachable only because that
+///         project cannot reference <c>Harbor.Application</c>. The copy drifted until a UI fork
+///         set no <c>ParentSessionId</c>, persisted no title and regenerated every copied
+///         message id. The UI framework now reaches this service through the
+///         <c>ISessionForker</c> port (<c>Harbor.Ui.Framework.Abstractions/Forking</c>), so this
+///         is the only fork left — and anything a caller needs guaranteed has to be guaranteed
+///         here. One diagnostic moved IN with the deletion: a half-written copy reports how far it
+///         got, because the duplicate reported progress and losing that would have left a
+///         truncated child in the store with nothing recording how far it reached. It is the only
+///         return in this method that rebuilds its error text — every other one re-types the
+///         store's <c>Result</c> and leaves the string alone, per
+///         <c>ResultConversionBehaviourTests</c>. Progress is the exception because it is not a
+///         restatement of the cause: only the copy loop knows where it stopped.
+///     </para>
 /// </remarks>
 public sealed class SessionForkService
 {
@@ -118,12 +134,29 @@ public sealed class SessionForkService
             return stamped.ConvertFailure<SessionFork>();
         }
 
+        int copied = 0;
         for (int i = 0; i < count; i++)
         {
             AgentMessage copy = msgsRes.Value[i] with { SessionId = child.Id };
             Result appended = await store.AppendMessageAsync(child.Id, copy, ct).ConfigureAwait(false);
             if (appended.IsFailure)
-                return appended.ConvertFailure<SessionFork>();
+            {
+                // #670: the duplicate this replaced reported its progress here, and that number
+                // was the only record of how far a half-written fork got. It moves to the single
+                // remaining implementation rather than dying with the duplicate.
+                //
+                // This is the ONE error this service rebuilds, and the reason it is allowed here
+                // and nowhere else in the method: `ResultConversionBehaviourTests` requires the
+                // store's text to arrive unchanged at a re-type, and that holds for every other
+                // return. Progress is not a restatement of the cause — it is state the caller
+                // cannot reconstruct, because only this loop knows where it stopped.
+                int done = copied;
+                return appended.ConvertFailure<SessionFork>()
+                    .MapError(e =>
+                        $"Failed to copy message history ({done} of {count} copied): {e}");
+            }
+
+            copied++;
         }
 
         return Result.Success(new SessionFork(stampedChild, count));
