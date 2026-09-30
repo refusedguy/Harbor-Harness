@@ -37,7 +37,13 @@ namespace Harbor.App.Avalonia.Tests;
 ///     inflates the XAML which exercises all resource lookups, style selectors,
 ///     and DataTemplate inflation paths.
 /// </remarks>
-[NotInParallel("avalonia-headless")]
+// `avalonia-headless` serializes the headless session. `process-env` (#823) is
+// the other half of this class's identity: the test below writes `HOME` and
+// restores it, and AppHostDiTests writes the same variable without restoring it
+// at all. `avalonia-headless` named only this class's peers, so the two were
+// scheduled in different buckets and overlapped on AppHost.ResolveHarborDir
+// (AppHost.cs:121-126). Two keys, because TUnit intersects on either.
+[NotInParallel("avalonia-headless", "process-env")]
 public class ViewInflationTests
 {
     [Test]

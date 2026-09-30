@@ -170,6 +170,20 @@ public class ProviderConfigTests
 /// <summary>
 ///     Tests for EnvVarAuthResolver — verifies env var lookup, overrides, and provider-id normalization.
 /// </summary>
+/// <remarks>
+///     #823, and a correction to the issue while we are here: it names
+///     <c>ProviderConfigTests</c> as a writer of the process environment at lines
+///     193-255. Those lines are in THIS class. <c>ProviderConfigTests</c> above
+///     ends at line 168 and writes nothing — it is JSON-file parsing throughout.
+///     The four variables below are all names this file invents
+///     (<c>TESTPROVIDER_API_KEY</c>, <c>KILO_CODE_API_KEY</c>,
+///     <c>MISSINGPROVIDER_API_KEY</c>, <c>EMPTYPROVIDER_API_KEY</c>), and the real
+///     kilocode variable is <c>KILO_API_KEY</c>, so no product surface reads them.
+///     That makes this the one case in #823 with no co-victim in its assembly —
+///     the key below excludes nobody today and exists so the next writer or reader
+///     of these names does not have to rediscover that.
+/// </remarks>
+[NotInParallel("process-env")]
 public class EnvVarAuthResolverTests
 {
     [Test]

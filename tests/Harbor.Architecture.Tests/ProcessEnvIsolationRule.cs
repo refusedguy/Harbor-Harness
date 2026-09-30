@@ -190,6 +190,19 @@ public class ProcessEnvIsolationRule
             + "places; OnboardingWizardTests clears it in eight and OLLAMA_API_KEY in twenty-four, and it "
             + "is not in #823's list. Both classes reach AuthStore.ListApiKeysAsync, which enumerates the "
             + "entire process environment (AuthStore.cs:140)."),
+
+        (
+            "Harbor.Config.Tests",
+            "AuthStoreTests",
+            "SetupChecklistDetectorTests",
+            "The whole-environment enumeration, from the other direction. This class writes nothing, so "
+            + "nothing in #823's method would have found it, but it constructs an AuthStore and "
+            + "SetupChecklistDetector.DetectAsync calls ListApiKeysAsync (SetupChecklistDetector.cs:176) "
+            + "— the whole process environment, same as above. Stated honestly: today's assertion cannot "
+            + "be flipped by a concurrent write, because ProviderKeyStored is true whenever ANY key is "
+            + "present and this test stores one in config. It is listed anyway because that is a property "
+            + "of one assertion, not of the design, and the next test to assert an exact key set would be "
+            + "a latent failure with no guard behind it."),
     ];
 
     /// <summary>

@@ -11,6 +11,17 @@ namespace Harbor.Tools.Builtin.Tests;
 ///     not a string ternary, and the same table both validates and dispatches.
 ///     A misspelled transport must fail loudly — never fall through to a default.
 /// </summary>
+/// <remarks>
+///     #823, and this class is the half of the race the issue did not name: it
+///     writes nothing, so nothing in the issue's method would have found it. Each
+///     <c>registry.InvokeAsync</c> below builds a transport through
+///     <c>McpRegistry.GetTransport</c>, whose no-auth branch reads
+///     <c>HARBOR_MCP_OAUTH_TOKEN</c> from the process environment
+///     (McpRegistry.cs:575) — the variable <c>McpRemoteTransportTests</c> pins to
+///     null. A named key is a mutex over its named peers, so this side has to hold
+///     the same one or the writer's key excludes nothing.
+/// </remarks>
+[NotInParallel("process-env")]
 public class McpTransportFactoryTests
 {
     // ---------- the seam itself ----------

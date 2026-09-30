@@ -5,6 +5,16 @@ namespace Harbor.Config.Tests;
 ///     Tests for AuthStore — manages per-provider API keys in HarborConfig
 ///     with env-var fallback.
 /// </summary>
+/// <remarks>
+///     #823: every write here is process-wide state that
+///     <see cref="AuthStore" /> reads back, and two of them are read by something
+///     wider than this class — <c>ListApiKeysAsync</c> enumerates the ENTIRE
+///     process environment (AuthStore.cs:140) and synthesises a provider entry for
+///     every <c>*_API_KEY</c> it finds. <c>OnboardingWizardTests</c> is in this
+///     same assembly, writes 32 of the same variables, and is not in #823's list of
+///     nine. Both carry <c>process-env</c> now.
+/// </remarks>
+[NotInParallel("process-env")]
 public class AuthStoreTests
 {
     private static string NewTempConfigPath() =>
