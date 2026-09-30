@@ -839,6 +839,56 @@ its violation, and `ResolvedViolations_HaveNoHits` fails it if the capability re
 The second is the one worth copying for the remaining #538 sites — a removed violation
 with nothing guarding its removal is indistinguishable from one that was never paid for.
 
+### ARCH-6 completed — the desktop file tree (#492)
+
+`MainViewModel` — the Avalonia shell's view-model — carried its own recursive filesystem
+scanner: `Directory.GetDirectories` / `Directory.GetFiles` / `new DirectoryInfo`, a
+literal `if (depth > 3) return`, a private ignore list (`bin`/`obj`/`node_modules`/`.git`/
+`packages` plus dotfiles) and a private extension→icon `switch`, all inside a `Task.Run`
+with no cancellation and no entry budget.
+
+**It was not a second #667, and the difference is worth stating.** #667's panel enumerated
+from inside `Build`, i.e. from a painted frame; this one wrapped the walk in `Task.Run`, so
+the syscalls ran on the thread pool. What the two had in common was the class of defect —
+unbounded, uncancellable, untestable filesystem work owned by a presentation type — not the
+thread. The consequences that remain: no `CancellationTokenSource` at all, so a Refresh
+during a scan started a second uncancellable walk and the later result won; a depth cap
+with no count cap, so a wide shallow tree was unbounded; no seam, so nothing about the
+ignore list, the recursion or the icon map could be asserted without a real temp directory;
+and `ProjectRootPath` read twice from inside the `Task.Run` while the UI thread could write
+it, with no snapshot to tell a late result from a current one.
+
+| Layer | Before | After |
+|---|---|---|
+| Walk | `Directory.Get*` in a view-model | Domain `IDirectoryLister` — **the #667 port, reused** |
+| Policy | two private statics in the view-model | Domain `IFileTreePolicy` + `DefaultFileTreePolicy` (Application) |
+| Recursion | private `LoadDirectory`, literal depth cap | `ProjectFileTreeScanner` (app-local), named depth **and node** budgets |
+| Cancellation | none | the view-model owns one `CancellationTokenSource` per request and supersedes the previous one |
+
+The walk port was **not** re-invented. `SystemDirectoryLister` already bounds one directory
+at 4096 entries, times out at 5s and checks its token between entries; what it does not
+have is a bound on the WALK, which is why the node budget is new and why it is the same
+number as the port's own entry cap — one idea, one constant.
+
+Policy is a separate contract from the listing on purpose: `IDirectoryLister` answers "what
+is on disk", `IFileTreePolicy` answers "what does a tree display", and the dependency runs
+one way. A view may list a directory and still hide half of it; the lister must have no
+opinion about glyphs.
+
+**Where the rule lives, and why not in `PresentationCapabilityRules`.**
+`Harbor.App.Avalonia` is an app. It is absent from `AllSrcAssemblies` (a `src/`-only list),
+so the IL probe never opens it, and a `KnownViolations` row naming `MainViewModel` would be
+a row against an assembly the enforcer never scans — a lie in the one table whose purpose is
+to be checkable. The rule is therefore source-level, like #569's and #672's, in
+`tests/Harbor.Architecture.Tests/AvaloniaFileTreeWalkRules.cs`. It forbids the four
+spellings of a directory walk and nothing else: `Directory.CreateDirectory` (the app
+creating its own `~/.harbor`) and `File.*` (`CodeEditorViewModel` reading the file the user
+picked) are different capabilities in different types, tracked as #534/#535, and folding
+them in would make the rule permanently red and therefore deletable. Its second test pins
+the same decision structurally — the app may consume `IFileTreePolicy` / `IDirectoryLister`
+but may not declare an implementer of either — because "policy is not in the view-model"
+is not greppable without pinning today's vocabulary.
+
 ### Previously suspected (not a violation)
 
 The previously suspected violation — *"Harbor.Tui.Abstractions references the

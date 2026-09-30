@@ -1,5 +1,6 @@
 using Harbor.Abstractions.Agents;
 using Harbor.Abstractions.Events;
+using Harbor.Abstractions.Filesystem;
 using Harbor.Abstractions.Git;
 using Harbor.Abstractions.Permissions;
 using Harbor.Abstractions.Providers;
@@ -9,6 +10,7 @@ using Harbor.Abstractions.Tools;
 using Harbor.App.Avalonia.Services;
 using Harbor.App.Avalonia.ViewModels.Terminal;
 using Harbor.Application.Agents;
+using Harbor.Application.Filesystem;
 using Harbor.Application.Git;
 using Harbor.Application.Permissions;
 using Harbor.Application.Resilience;
@@ -146,6 +148,19 @@ internal static class ServiceRegistration
             sp.GetRequiredService<ILogger<FloatingTerminalService>>()));
         services.AddSingleton<IShellChrome, AvaloniaShellChrome>();
         services.AddSingleton<IWorkspaceCommands, AvaloniaWorkspaceCommands>();
+        // #492: the desktop file tree stopped walking the filesystem. These three
+        // registrations are the whole of the fix on this side: the walk is the
+        // Domain `IDirectoryLister` (implemented in Harbor.Application by
+        // SystemDirectoryLister, which #667 already added for the TUI sidebar), the
+        // ignore list and the extension→icon map are the Domain `IFileTreePolicy`,
+        // and the recursion with its depth and node budgets is
+        // `ProjectFileTreeScanner` — the only one of the three that is app-local,
+        // because the TUI sidebar is lazy and per-directory while this tree is
+        // eager and depth-capped. The app does not implement either port: see
+        // AvaloniaFileTreeWalkRules, which fails the build if it ever does.
+        services.AddSingleton<IDirectoryLister, SystemDirectoryLister>();
+        services.AddSingleton<IFileTreePolicy, DefaultFileTreePolicy>();
+        services.AddSingleton<ProjectFileTreeScanner>();
         // #569: AvaloniaWorkspaceCommands takes an ILogger<AvaloniaWorkspaceCommands>
         // so its sync IWorkspaceCommands members can report a fault instead of
         // dropping the Task (a void member whose body is ExecuteAsync has no

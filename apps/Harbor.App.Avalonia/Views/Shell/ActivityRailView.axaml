@@ -3,6 +3,7 @@
              xmlns:views="clr-namespace:Harbor.App.Avalonia.Views"
              xmlns:ctrl="clr-namespace:Harbor.App.Avalonia.Views.Controls"
              xmlns:vm="clr-namespace:Harbor.App.Avalonia.ViewModels"
+             xmlns:svc="clr-namespace:Harbor.App.Avalonia.Services"
              xmlns:shell="clr-namespace:Harbor.App.Avalonia.Views.Shell"
              x:Class="Harbor.App.Avalonia.Views.Shell.ActivityRailView"
              HorizontalAlignment="Left"
@@ -59,7 +60,10 @@
                     <TreeView ItemsSource="{Binding FileTree}" Name="FileTreeView"
                               SelectionChanged="FileTreeView_SelectionChanged">
                         <TreeView.ItemTemplate>
-                            <TreeDataTemplate DataType="{x:Type vm:FileTreeNode}" ItemsSource="{Binding Children}">
+                            <!-- #492: FileTreeNode moved to Harbor.App.Avalonia.Services
+                                 with the scanner that builds it; the vm: prefix no
+                                 longer resolves it. -->
+                            <TreeDataTemplate DataType="{x:Type svc:FileTreeNode}" ItemsSource="{Binding Children}">
                                 <StackPanel Orientation="Horizontal" Spacing="4">
                                     <PathIcon Width="16" Height="16">
                                         <PathIcon.Data>
