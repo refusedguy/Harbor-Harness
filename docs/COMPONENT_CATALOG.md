@@ -813,8 +813,18 @@ public enum MascotReaction : byte { None, ErrorBlink, SuccessBounce, ApprovalWig
 
 ## Platform-agnostic helpers
 
-All UI components call into `Harbor.Ui.Framework.Converters.StatusMappers` for formatting.
-Each platform wraps these in its own `IValueConverter`:
+UI components call into `Harbor.Ui.Framework.Converters.StatusMappers` for formatting.
+Two recorded exceptions to "all": `SubagentsModel.StatusText` spells its own
+`SessionStatus` → label switch (`Working` → `"running"`), listed with its reason in
+`SessionStatusTableProbe.KnownDuplicates` because `Harbor.Ui.Framework.Projection` cannot
+reference `Harbor.Ui.Framework.ViewModels` (both are Presentation siblings in
+[ARCHITECTURE_LAYERS.md](./ARCHITECTURE_LAYERS.md) §2 — see that document's §5.7); and
+`TokensToCompact` / `CostToUsd` are thin adapters whose implementations live in
+`Harbor.Ui.Framework.State/State/StatusBarText.cs` and `UsdCell`, which the status-bar
+cell formatters (`PanelRows`, `StatusBarFacts`) call directly rather than through
+`StatusMappers` (#488).
+
+Each platform wraps the `StatusMappers` methods in its own `IValueConverter`:
 
 ### `Harbor.Ui.Framework.Converters.StatusMappers`
 

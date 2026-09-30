@@ -547,7 +547,7 @@ Concrete implementations of:
 | Infrastructure projects (Storage.*, Providers.*, Tools.Builtin) reference Domain only — never Application, never each other, never Presentation. | Architecture tests       |
 | Presentation projects (Tui.* renderers) reference Domain only — never Application, never Infrastructure, never each other. | Architecture tests       |
 | Presentation projects exercise no I/O capability of their own: no subprocess, no `System.IO.File`/`Directory`, no network, no reflection emit (§3 table, §5.6). | Architecture tests (`PresentationCapabilityRules`) |
-| A domain fact decided by the core is decided in ONE place, and the presentation layer reads it: no `SessionStatus`-returning method derives it from the transcript (#687), the `SessionStatus` label/brush table exists once (#663), the core classifies diagnostics (#674), money is priced in the core (#653). | Architecture tests (`SessionStatusSourceRule`, `SessionStatusTableRule`, `DiagnosticsClassificationRule`, `CostPricedInCoreRules`) |
+| A domain fact decided by the core is decided in ONE place, and the presentation layer reads it: no `SessionStatus`-returning method derives it from the transcript (#687), the `SessionStatus` label/brush table exists once, bar one recorded exception (§5.7) (#663), the core classifies diagnostics (#674), money is priced in the core (#653). | Architecture tests (`SessionStatusSourceRule`, `SessionStatusTableRule`, `DiagnosticsClassificationRule`, `CostPricedInCoreRules`) |
 | `apps/Harbor.App.Cli` references everything — it is the Composition Root.                         | (by convention)          |
 | Concrete impl types (`AnthropicLlmClient`, `JsonlSessionStore`, …) are `new`'d only inside `HostBuilder.cs`. | Code review              |
 | `Program.cs` resolves services by interface from DI; it does not `new` Infrastructure types.       | Code review              |
@@ -834,7 +834,7 @@ and nothing in the type system objects.
 | Rule | Fact | Issue |
 |---|---|---|
 | `SessionStatusSourceRule` | a `SessionStatus` is decided on the transition that establishes it (`ChatAppReducer`, from the core's own `AgentErrorEvent` / `AgentEndEvent`), and no method returning one may read the transcript | [#687](https://github.com/refusedguy/Harbor-Harness/issues/687) |
-| `SessionStatusTableRule` | the `SessionStatus` → label / brush-key table exists in exactly one file (`StatusMappers`) | [#663](https://github.com/refusedguy/Harbor-Harness/issues/663) |
+| `SessionStatusTableRule` | the `SessionStatus` → label / brush-key table exists in exactly one file (`StatusMappers`), **with one recorded exception** — see the exception note below | [#663](https://github.com/refusedguy/Harbor-Harness/issues/663) |
 | `DiagnosticsClassificationRule` | the detector patterns are declared once, in the core detector, and the LSP counts stay connected to state | [#674](https://github.com/refusedguy/Harbor-Harness/issues/674) |
 | `CostPricedInCoreRules` | money is priced by the core from the model that made the call; no renderer recomputes it | [#653](https://github.com/refusedguy/Harbor-Harness/issues/653) |
 
@@ -849,6 +849,39 @@ so a file's own doc comment quoting the rule it violates is not graded as code.
 **Perimeters are derived, not re-typed.** `SessionStatusSourceRule` reads its Presentation
 set from `FullLayerMatrixTests.PresentationLayerAssemblies()` for the same reason §5.6
 does, so a new Presentation project is covered the moment it gets a matrix row.
+
+**The recorded exception to "exactly one file" — and why it is not removable here.**
+`SessionStatusTableRule` carries the only allowlist in this section:
+`SessionStatusTableProbe.KnownDuplicates`, with exactly one entry,
+`src/Harbor.Ui.Framework.Projection/Projection/SubagentsModel.cs`. So the honest count is
+**two tables in the tree, one of them recorded** — the wording above is the rule's
+aspiration, not the whole current tree.
+
+The second table is a real `SessionStatus` → label switch that had already drifted
+(`Working` → `"running"`, where `StatusMappers` says `"working"`), so it is not a
+harmless copy. It survives for a structural reason, and the reason is still true today:
+
+- The canonical table lives in `Harbor.Ui.Framework.ViewModels`.
+- `Harbor.Ui.Framework.Projection` does not reference it, and the matrix in §2 puts both
+  in `Layer.Presentation`, so the edge is not available to add.
+- Collapsing it means either a cross-project call or relocating the canonical table
+  downward — an architecture change, not a doc fix.
+- `"running"` is pinned as visible CellForge output by
+  `CellForgeSubagentsPanelTests.FormatAge_And_StatusText_CoverVocabulary`, so relabelling
+  is a visible-output decision owed its own issue.
+
+Two things keep the record honest rather than an allowlist that rots into a blanket
+permission. `RecordedDuplicates_AreStillReal` fails the moment the entry stops being a
+real duplicate, so the excuse has to be deleted in the same commit that removes the table;
+and the entry is valued by its **reason**, not by a tracking issue, per §5.9. Note that
+the entry is graded rather than skipped — the switch in `SubagentsModel` is still scanned
+and would still fail the rule if the entry were ever dropped.
+
+This sentence exists because the summary table above used to state "exactly one file" with
+no mention of the exception, while the rule file recorded one — the guard and the prose
+disagreed, and only the prose was wrong. Related: [#862](https://github.com/refusedguy/Harbor-Harness/issues/862),
+[#896](https://github.com/refusedguy/Harbor-Harness/issues/896),
+[#902](https://github.com/refusedguy/Harbor-Harness/issues/902).
 
 **Non-vacuity.** Each rule carries a liveness check (the scan really walked a checkout,
 the canonical file really exists, the rule table is non-empty) and a positive control that
@@ -926,13 +959,33 @@ true, the exclusion has become an accident and the scope statement above is a li
 
 ### 5.9 An exemption row must state a reason
 
-Five tables in the architecture tests grant a permission: the Presentation capability
-baseline, the permanent-capability table, `FullLayerMatrixTests.DocumentedExceptions`, the
-declared-but-unbound `<ProjectReference>` list, and the reflection plugin allowance. Before
-[#626](https://github.com/refusedguy/Harbor-Harness/issues/626) each asked "does this row
-have a reason?" in its own words, and the table that most needed the answer — the
-tracked-violation baseline — did not ask at all: its value was the issue URL, and the
-argument for tolerating the violation lived in a `//` comment that no tool can read.
+Permission-granting tables in the architecture tests, and the count has grown. The five this
+section named — the Presentation capability baseline, the permanent-capability table,
+`FullLayerMatrixTests.DocumentedExceptions`, the declared-but-unbound `<ProjectReference>` list,
+and the reflection plugin allowance — are now **ten** across the project. Three joined them since:
+`FullLayerMatrixTests.SharedSourceFolders` (#456),
+`ProviderPayloadSerializationRules.KnownViolations`, and `AotBlockDemotionRules.KnownDemotions`; a
+fourth, `CellForgeEngineAtomicityRules`'s reviewed-imports list, is checked under its own label.
+
+Eight of the ten route through `ExemptionReason.RowsWithoutAReason`. The permanent-capability
+table carries its own blank-reason check, because it owes two rules the others do not (a row may
+not shadow a baseline row, and it has no tracking URL to confuse the reason with).
+`SessionStatusTableProbe.KnownDuplicates` — the allowlist in §5.7 — is not checked at all. Before
+[#626](https://github.com/refusedguy/Harbor-Harness/issues/626) each table asked "does this row
+have a reason?" in its own words, and the one that most needed the answer — the tracked-violation
+baseline — did not ask at all: its value was the issue URL, and the argument for tolerating the
+violation lived in a `//` comment that no tool can read.
+
+That last gap is the same shape as the defect fixed in §5.7 above, one level down: a
+permission that is recorded, justified and kept live, which a document then described as if
+it were not there. `SessionStatusTableProbe.KnownDuplicates` grants a real
+permission: it excuses `SubagentsModel` from the single-definition rule, and its entry is valued
+by its reason rather than by a tracking issue, so the row shape is right. What is missing is the
+call. Liveness covers part of it — `RecordedDuplicates_AreStillReal` fails once an entry stops
+being a real duplicate — but liveness catches a stale excuse, not a blank or URL-only one, which
+is exactly what `RowsWithoutAReason` exists to catch. Routing the table through the shared check
+is a small mechanical follow-up; it is left undone here because it changes a guard rather than a
+document, and no local build is available to verify a new test compiles.
 
 `ExemptionReason.RowsWithoutAReason` is now the single answer, and a row that fails it does
 not pass. Three rules, the third being the one that matters: not blank; not the tracking

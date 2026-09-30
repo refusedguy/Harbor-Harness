@@ -66,7 +66,7 @@ Second render path for the interactive REPL (`src/Harbor.Tui.CellForge/`, opt-in
 
 - **Reusable components** (`StatusBadge`, `ChatBubble`, `SessionRow`) implemented in 3 platforms (Avalonia / Blazor / WPF) with identical prop names + shared `StatusMappers` helpers
 - **Platform-agnostic `ToolCallViewModel`** in `Harbor.Ui.Framework` (replaced `IBrush` with `string StatusBrushKey`)
-- **`StatusMappers`** in `Harbor.Ui.Framework.Converters` — single source of truth for status→brush-key / status→label / time-ago / token-compact / cost formatting
+- **StatusMappers** in `Harbor.Ui.Framework.Converters` — status→brush-key / status→label / time-ago. `TokensToCompact` and `CostToUsd` are thin adapters onto `StatusBarText` (`Harbor.Ui.Framework.State`, #488), and status→label has one recorded duplicate in `SubagentsModel` — see ARCHITECTURE_LAYERS.md section 5.7
 - **`ChatLineViewModel`** extended with `TimestampUtc` + `TimestampText` + `Preview` (80-char truncation)
 - **`StatusBarViewModel`** extracted from `MainViewModel`
 
