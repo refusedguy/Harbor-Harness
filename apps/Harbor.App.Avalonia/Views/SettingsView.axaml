@@ -68,6 +68,44 @@
                                         Command="{Binding ThemeSettings.ApplyThemeCommand}"
                                         ToolTip.Tip="Apply the theme immediately without saving." />
                             </StackPanel>
+
+                            <!--
+                                Palette picker (#583). The ItemsSource is the
+                                catalog's own projection, so this list cannot fall
+                                out of step with Themes/Hds/ — a palette name typed
+                                here would be the second source of truth #673
+                                deleted. The swatches are the palette's own
+                                brushes, read out of its dictionary, so a thumbnail
+                                always shows the palette that pressing it installs.
+                            -->
+                            <StackPanel Spacing="6" Margin="0,8,0,0">
+                                <TextBlock Text="Palette" Classes="Label" />
+                                <ItemsControl ItemsSource="{Binding ThemeSettings.AvailableThemes}">
+                                    <ItemsControl.ItemsPanel>
+                                        <ItemsPanelTemplate>
+                                            <WrapPanel />
+                                        </ItemsPanelTemplate>
+                                    </ItemsControl.ItemsPanel>
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <Border Width="150" Height="64" Margin="0,0,8,8"
+                                                    CornerRadius="6" ClipToBounds="True"
+                                                    Background="{Binding Surface}"
+                                                    BorderBrush="{Binding Accent}" BorderThickness="1"
+                                                    ToolTip.Tip="{Binding DisplayName}"
+                                                    PointerPressed="OnThemePreviewClick">
+                                                <StackPanel VerticalAlignment="Bottom" Margin="8,0,8,6" Spacing="4">
+                                                    <Rectangle Height="4" Width="28" HorizontalAlignment="Left"
+                                                               Fill="{Binding Accent}" />
+                                                    <TextBlock Text="{Binding DisplayName}"
+                                                               Foreground="{Binding Text}"
+                                                               FontSize="11" TextWrapping="Wrap" />
+                                                </StackPanel>
+                                            </Border>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </StackPanel>
                         </StackPanel>
 
                         <Separator Margin="0,2" />

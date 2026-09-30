@@ -169,10 +169,10 @@ public sealed partial class SettingsViewModel : ObservableObject
         #pragma warning restore CFE0001
 #pragma warning restore RS0030
 
-        ThemeSettings = new ThemeSettingsViewModel(themeReader, themeApplier)
-        {
-            Theme = _common.Theme ?? string.Empty
-        };
+        ThemeSettings = new ThemeSettingsViewModel(themeReader, themeApplier);
+        // Restore, not assignment: a saved value may be a PALETTE name (#583), and
+        // the theme view-model has to know which of the two shapes it is holding.
+        ThemeSettings.Restore(_common.Theme);
         // #677: every field is shown EXACTLY as the record holds it. An absent
         // key already yields the record's own default (CommonConfig.DefaultProvider
         // = "anthropic", LogLevel = "info", AvaloniaConfig.FontFamily = "Inter"),
@@ -281,7 +281,10 @@ public sealed partial class SettingsViewModel : ObservableObject
     {
         _common = _common with
         {
-            Theme = ThemeSettings.Theme,
+            // PersistedTheme, not Theme: ThemeSettings.Theme holds the VARIANT the
+            // ComboBox lists, and a palette chosen from the thumbnail list is what
+            // the user actually wants back on the next launch (#583).
+            Theme = ThemeSettings.PersistedTheme,
             DefaultProvider = DefaultProvider,
             DefaultModel = DefaultModel,
             StorageBackend = StorageBackend,
@@ -293,7 +296,7 @@ public sealed partial class SettingsViewModel : ObservableObject
                 .Where(r => !string.IsNullOrWhiteSpace(r.ApiKey))
                 .ToImmutableDictionary(r => r.Id, r => r.ApiKey, StringComparer.Ordinal)
         };
-        _app = _app with { FontFamily = FontFamily, Theme = ThemeSettings.Theme };
+        _app = _app with { FontFamily = FontFamily, Theme = ThemeSettings.PersistedTheme };
 
         var commonResult = await _commonStore.SaveAsync(_common).ConfigureAwait(true);
         var appResult = await _appStore.SaveAsync(_app).ConfigureAwait(true);
@@ -301,14 +304,15 @@ public sealed partial class SettingsViewModel : ObservableObject
         if (commonResult.IsSuccess && appResult.IsSuccess)
         {
             // Apply the theme immediately so the user sees the change without
-            // a restart. ThemeService.Apply(string) handles dark/light/system.
-            ThemeSettings.Apply(ThemeSettings.Theme);
+            // a restart. ThemeService.Apply(string) takes a variant or a palette
+            // name, which is the same string that was just persisted (#583).
+            ThemeSettings.Apply(ThemeSettings.PersistedTheme);
             // ollamaHost is logged for traceability only: it is a launch-time
             // input, not something this save can change.
             _logger.LogInformation(
                 "Settings saved: theme={Theme}, provider={Provider}, model={Model}, storage={Storage}, log={LogLevel}, font={Font}, ollamaHost={OllamaHost}",
-                ThemeSettings.Theme, DefaultProvider, DefaultModel, StorageBackend, LogLevel, FontFamily, OllamaHost);
-            _toasts.Show($"Settings saved — theme: {ThemeSettings.Theme}, model: {DefaultProvider}/{DefaultModel}.", ToastKind.Success);
+                ThemeSettings.PersistedTheme, DefaultProvider, DefaultModel, StorageBackend, LogLevel, FontFamily, OllamaHost);
+            _toasts.Show($"Settings saved — theme: {ThemeSettings.PersistedTheme}, model: {DefaultProvider}/{DefaultModel}.", ToastKind.Success);
         }
         else
         {
@@ -322,7 +326,7 @@ public sealed partial class SettingsViewModel : ObservableObject
     [RelayCommand]
     private void Cancel()
     {
-        ThemeSettings.Theme = _common.Theme ?? string.Empty;
+        ThemeSettings.Restore(_common.Theme);
         DefaultProvider = _common.DefaultProvider ?? string.Empty;
         DefaultModel = _common.DefaultModel ?? string.Empty;
         FontFamily = _app.FontFamily ?? string.Empty;

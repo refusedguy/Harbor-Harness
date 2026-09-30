@@ -58,6 +58,48 @@ public sealed partial class ThemeSettingsViewModel : ObservableObject
     [ObservableProperty]
     private string _theme = "system";
 
+    /// <summary>
+    ///     The palette the user picked from the thumbnail list, or <c>null</c> when
+    ///     the choice is still the variant in <see cref="Theme" />.
+    /// </summary>
+    /// <remarks>
+    ///     #583: before this, a palette applied for the rest of the session and was
+    ///     then gone — the ComboBox held the only value any save wrote, and it holds
+    ///     VARIANTS, so a palette could not be persisted even once one could be
+    ///     selected. Kept apart from <see cref="Theme" /> rather than folded into it
+    ///     so the variant selector keeps listing variants.
+    /// </remarks>
+    [ObservableProperty]
+    private string? _selectedPalette;
+
+    /// <summary>
+    ///     What the parent must persist: the picked palette if there is one, else the
+    ///     variant. A launch feeds the same string back through
+    ///     <c>ThemeService.Apply</c>, which resolves either shape.
+    /// </summary>
+    public string PersistedTheme => SelectedPalette ?? Theme;
+
+    /// <summary>
+    ///     Adopt a persisted value on construction and on Cancel: a name the catalog
+    ///     ships comes back as the selected palette, anything else as the variant.
+    /// </summary>
+    /// <remarks>
+    ///     A restored palette deliberately leaves <see cref="Theme" /> alone: the
+    ///     selector lists variants, so pointing it at a palette name would blank the
+    ///     ComboBox. The palette still applies, and still saves.
+    /// </remarks>
+    /// <param name="persisted">The stored theme string, possibly a palette name.</param>
+    public void Restore(string? persisted)
+    {
+        string value = persisted ?? string.Empty;
+        SelectedPalette = HdsThemeCatalog.Find(value) is null ? null : value;
+
+        if (SelectedPalette is null)
+        {
+            Theme = value;
+        }
+    }
+
     /// <summary>Construct a <see cref="ThemeSettingsViewModel" />.</summary>
     /// <param name="themeReader">Read-only view of the active theme.</param>
     /// <param name="themeApplier">The theme applier that switches the running app.</param>
@@ -88,22 +130,30 @@ public sealed partial class ThemeSettingsViewModel : ObservableObject
     ///     Apply a specific HDS palette immediately (without saving). Called
     ///     from the Settings UI when the user clicks a theme preview thumbnail.
     /// </summary>
+    /// <remarks>
+    ///     The name is resolved BEFORE anything is mutated: <c>ApplyHds</c> swaps
+    ///     the merged dictionary for a <c>ResourceInclude</c> built from whatever
+    ///     string it is handed, so a name the catalog does not know would replace a
+    ///     working palette with a dictionary that does not exist (#583). Resolving
+    ///     first is what lets an unknown name leave the app exactly as it found it.
+    /// </remarks>
     /// <param name="themeName">HDS theme name, e.g. "CatppuccinMocha".</param>
     [RelayCommand]
     private void ApplyHdsTheme(string themeName)
     {
-        _themeApplier.ApplyHds(themeName);
-
-        // The palette answers "am I dark?" — it declares the ThemeVariant it was
-        // designed for. An unknown name leaves the variant alone rather than
-        // guessing light, which is what the old hand-written array did for every
-        // palette it had not been updated for (#673).
         HdsThemePreview? preview = HdsThemeCatalog.Find(themeName);
         if (preview is null)
         {
             return;
         }
 
+        SelectedPalette = preview.Name;
+        _themeApplier.ApplyHds(preview.Name);
+
+        // The palette answers "am I dark?" — it declares the ThemeVariant it was
+        // designed for. An unknown name leaves the variant alone rather than
+        // guessing light, which is what the old hand-written array did for every
+        // palette it had not been updated for (#673).
         _themeApplier.SetThemeVariant(preview.IsDark);
         IsDarkTheme = preview.IsDark;
     }

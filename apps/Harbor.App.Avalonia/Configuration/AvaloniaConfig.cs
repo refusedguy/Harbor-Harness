@@ -31,8 +31,12 @@ public sealed record AvaloniaConfig : AppConfigBase
     /// <summary>
     ///     App-specific theme override: <c>"system"</c> (default — use the
     ///     shared theme tokens), <c>"dark"</c> (force dark), <c>"light"</c>
-    ///     (force light). Lets the user override the cross-app theme for the
-    ///     Avalonia app only.
+    ///     (force light), or the name of a palette in <c>Themes/Hds/</c>
+    ///     (e.g. <c>"Vapor"</c>, which also sets the variant that palette
+    ///     declares). Lets the user override the cross-app theme for the
+    ///     Avalonia app only. A palette name is what Settings persists once the
+    ///     user picks a thumbnail; <c>ThemeService.Apply</c> resolves both shapes,
+    ///     and a name this build does not ship falls back to dark (#583).
     /// </summary>
     public string Theme { get; init; } = "system";
 
