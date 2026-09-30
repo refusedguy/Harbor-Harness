@@ -759,12 +759,16 @@ public class OnboardingWizardTests
                     "the step has nothing to list, and a silent empty step is indistinguishable from "
                     + "a wizard that forgot to ask. Menu was:\n" + string.Join("\n", output));
 
-            await Assert.That(saved.IsSuccess && saved.Value.Agent).IsEqualTo(AgentName.Fallback)
-                .Because(
-                    "an empty registry must not deadlock first-run setup: the wizard still has to answer, "
-                    + "and the answer is the agent the core names as the fallback, read from the constant "
-                    + "rather than spelled here. Read: "
-                    + (saved.IsSuccess ? saved.Value.Agent : "(config not saved)"));
+            await Assert.That(saved.IsSuccess).IsTrue()
+                .Because("the wizard has to have persisted a choice even with no registry to read");
+            if (saved.IsSuccess)
+            {
+                await Assert.That(saved.Value.Agent).IsEqualTo(AgentName.Fallback)
+                    .Because(
+                        "an empty registry must not deadlock first-run setup: the wizard still has to "
+                        + "answer, and the answer is the agent the core names as the fallback, read from "
+                        + "the constant rather than spelled here");
+            }
         }
         finally
         {
