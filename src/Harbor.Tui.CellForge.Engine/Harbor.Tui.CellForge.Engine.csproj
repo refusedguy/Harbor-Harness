@@ -21,6 +21,11 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- TEMPORARY (#789 red proof) — reverted in the next commit. -->
+    <PackageReference Include="CSharpFunctionalExtensions"/>
+  </ItemGroup>
+
+  <ItemGroup>
     <InternalsVisibleTo Include="Harbor.Tui.CellForge"/>
     <InternalsVisibleTo Include="Harbor.Tui.CellForge.Tests"/>
   </ItemGroup>
