@@ -21,7 +21,8 @@
 //     to already know its name.
 //
 // `src/Harbor.Storage.Shared` and `src/Harbor.Providers.Shared` are the live
-// instances. Both hold real compiled product code. Neither is in
+// instances, and the measurement is two folders and six files: three compiled into
+// the four provider clients, three into the two storage stores. Neither is in
 // `RepoPaths.EnumerateSrcProjects()`. Neither has an entry in
 // `RepoPaths.EnumerateRepoAssemblyNames()`. Both are reachable by exactly one
 // route: as linked source inside a real project, via `<Compile Include>` link items
@@ -187,15 +188,35 @@ public sealed class ProjectKeyedScanRule
         RepoPaths.RepoRoot is { } root ? ProjectKeyedScanProbe.Measure(root) : []);
 
     /// <summary>
-    ///     The csproj-less <c>src/</c> directories. EMPTY ON PURPOSE: the first CI run of
-    ///     this file is the measurement.
+    ///     The csproj-less <c>src/</c> directories. MEASURED, not assumed: two folders, six
+    ///     files. See the red run quoted in the PR body (run 36734067195, job 109951166971).
     /// </summary>
     /// <remarks>
-    ///     A set of names, not a count, for the reason <c>ScanVisibilityRule</c> gives: a count
-    ///     can hold steady while the hole changes shape, and only a name has to be deleted on
-    ///     purpose.
+    ///     <para>
+    ///         A set of names, not a count, for the reason <c>ScanVisibilityRule</c> gives: a count
+    ///         can hold steady while the hole changes shape, and only a name has to be deleted on
+    ///         purpose.
+    ///     </para>
+    ///     <para>
+    ///         The measured rows, verbatim from that run:
+    ///         <c>src/Harbor.Providers.Shared</c> — 3 files, compiled into
+    ///         <c>Harbor.Providers.Anthropic + Ollama + OpenAI + OpenAiCompatible</c>;
+    ///         <c>src/Harbor.Storage.Shared</c> — 3 files, compiled into
+    ///         <c>Harbor.Storage.Jsonl + Sqlite</c>.
+    ///     </para>
+    ///     <para>
+    ///         The row count is the point, not a detail. <c>Harbor.Storage.Shared</c> holds three
+    ///         files and two of its three consumers take two of them: <c>SessionStatsAggregator.cs</c>
+    ///         is linked into <c>Jsonl</c> and not into <c>Sqlite</c>. So "which files does this
+    ///         shared folder contribute" is not one question with one answer, it is one question
+    ///         per consumer, and <c>EveryCsprojLessFolder_IsCompiledIntoSomeProject</c> is
+    ///         deliberately the weaker assertion it is — non-empty, not equal. Deciding whether
+    ///         that asymmetry is intended is a judgement about the two stores, and it belongs to
+    ///         whoever owns them; this rule only refuses to let a folder become an orphan.
+    ///     </para>
     /// </remarks>
-    private static readonly string[] MeasuredCsprojLessFolders = [];
+    private static readonly string[] MeasuredCsprojLessFolders =
+        ["Harbor.Providers.Shared", "Harbor.Storage.Shared"];
 
     /// <summary>A directory that certainly has a csproj, for the positive control.</summary>
     private const string ControlProjectWithACsproj = "Harbor.Abstractions";

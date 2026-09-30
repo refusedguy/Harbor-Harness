@@ -79,6 +79,36 @@
 // A fix for either does not fix the other, and a header that conflated them
 // would hide exactly the distinction a future reader needs.
 //
+// A FOURTH, FOUND BY THE RED RUN — the filter is not a predicate over paths
+// ------------------------------------------------------------------------
+// Writing the positive control for this file is what turned up the sharpest thing
+// in it, and it is the same defect as the title: a measurement whose answer depends
+// on something other than its subject. `IsBuildOutput` matches `"/tests/"` — with a
+// LEADING separator — so a path that BEGINS with the excluded segment is not
+// rejected at all:
+//
+//     "/repo/tests/X.cs"  -> rejected       (absolute, as EnumerateCsFiles passes it)
+//     "tests/X.cs"        -> ACCEPTED       (relative; no clause matches)
+//
+// Every clause behaves this way, `obj/` and `bin/` included, because they are all
+// written with the leading separator. So the filter is a predicate over ABSOLUTE
+// paths wearing the costume of a predicate over paths.
+//
+// It is latent, and the reason is worth stating because "latent" is the word that
+// waves real defects through: `EnumerateCsFiles` always passes absolute paths, since
+// it builds them from `Path.Combine(root, tree)` with an absolute `root`, so its
+// first segment is never the excluded one. The two callers that DO pass relative
+// paths name `src/…`, so `src` is the first segment and nothing is skipped. Nothing
+// shipped is affected today.
+//
+// Which is why the control below PINS this rather than fixing it, and why the rows
+// that assert a relative path is accepted are commented as a finding rather than
+// left to look like a contract somebody chose. If someone makes the filter
+// leading-slash-insensitive, that control goes red and the change arrives as a
+// reviewed decision with its own blast radius. Whether to make it insensitive is a
+// follow-up issue; the inventory in this header says the cost looks low, and
+// "looks low" is exactly what this file exists to stop anyone saying unmeasured.
+//
 // RELATION TO #863
 // ----------------
 // PR #863 (issue #843) hit the `/contrib/` half of this from the other direction
@@ -113,11 +143,12 @@
 //      is pinned here rather than by the walk, because a sibling worktree is not
 //      part of the repository and must not be counted as one.
 //
-// The first version of this file shipped with an EMPTY baseline on purpose: the
-// red run is the measurement, and it is what puts a number in front of anyone.
-// (There is no local dotnet in the authoring environment, so the red run's log is
-// the only execution of this matcher there has ever been — the baseline is
-// transcribed from it, not recomputed.)
+// Both files first shipped with EMPTY baselines, on purpose: the red run was the
+// measurement, and there is no local dotnet in the authoring environment, so the
+// red run's log (run 36734067195, job 109951166971) is the only execution of these
+// matchers there has ever been. Every baseline below is transcribed verbatim from
+// that log rather than recomputed — including the correction to the control, which
+// the run caught.
 
 namespace Harbor.Architecture.Tests;
 
@@ -238,38 +269,96 @@ public sealed class ScanVisibilityRule
     private static readonly Lazy<IReadOnlyList<TreeVisibility>> Report = new(Measure);
 
     /// <summary>
-    ///     The trees the shared helper cannot read. EMPTY ON PURPOSE: the first CI run of
-    ///     this file is the measurement, and it is what turns a set of names into a fact.
+    ///     The trees the shared helper cannot read. MEASURED, not assumed: see the red run
+    ///     quoted in the PR body (run 36734067195, job 109951166971).
     /// </summary>
     /// <remarks>
-    ///     Pinned as a set of NAMES, never as a count. A count is satisfiable by a tree
-    ///     becoming readable on one side while another becomes invisible on the other: the
-    ///     number holds, the hole changes shape, and the diff that did it reads as a wash.
-    ///     Names make that impossible — a tree that becomes visible is a name somebody has to
-    ///     delete from this array on purpose, which is the edit that deserves review.
+    ///     <para>
+    ///         Pinned as a set of NAMES, never as a count. A count is satisfiable by a tree
+    ///         becoming readable on one side while another becomes invisible on the other: the
+    ///         number holds, the hole changes shape, and the diff that did it reads as a wash.
+    ///         Names make that impossible — a tree that becomes visible is a name somebody has to
+    ///         delete from this array on purpose, which is the edit that deserves review.
+    ///     </para>
+    ///     <para>
+    ///         Two of eighteen top-level trees, 948 files behind them: <c>tests/</c> holds 784 and
+    ///         <c>contrib/</c> holds 164. The other sixteen are readable, which is what makes this
+    ///         a measurement rather than a constant — <c>analyzers</c> (2), <c>build</c> (30),
+    ///         <c>samples</c> (8), <c>tools</c> (10), <c>src</c> (811), <c>apps</c> (180) and the
+    ///         <c>external/</c> submodule (1330) all come back, and ten trees hold no <c>.cs</c> at
+    ///         all. Note that <c>external/</c> is returned in full: it is a submodule, and no
+    ///         clause of the filter mentions submodules, so the helper reads a 1330-file tree
+    ///         that no Harbor project references. That is a separate observation and this rule
+    ///         does not act on it.
+    ///     </para>
     /// </remarks>
-    private static readonly string[] MeasuredInvisibleTrees = [];
+    private static readonly string[] MeasuredInvisibleTrees = ["contrib", "tests"];
 
     /// <summary>How the shared helper answers, on a fixed table of paths.</summary>
     /// <remarks>
-    ///     The declared contract, stated as data so a reader does not have to infer it from
-    ///     the implementation. The two product paths must be accepted, or nothing is ever read
-    ///     and every measurement above is vacuous. The five rejected paths are rejected for four
-    ///     different reasons — <c>obj/</c> and <c>bin/</c> are build output, <c>contrib/</c> is
-    ///     out of CI by owner decision, <c>tests/</c> holds the gates' own fixtures, and
-    ///     <c>.worktrees/</c> is a sibling checkout — and the filter treats all four the same
-    ///     way. That collapse is the simplification this rule exists to make visible, so it is
-    ///     pinned as data rather than left to be re-derived from the implementation.
+    ///     <para>
+    ///         The declared contract, stated as data so a reader does not have to infer it from
+    ///         the implementation. The two product paths must be accepted, or nothing is ever read
+    ///         and every measurement above is vacuous. The five ABSOLUTE paths are rejected — all
+    ///         four reasons, build output, out of CI, the gates' own fixtures, and a sibling
+    ///         checkout, collapsed into one predicate.
+    ///     </para>
+    ///     <para>
+    ///         The last three rows are a FINDING, not a contract I would have chosen. This control
+    ///         shipped in the red run asserting that <c>tests/…</c> and <c>contrib/…</c> are
+    ///         rejected, and the run failed it: <c>IsBuildOutput</c> matches
+    ///         <c>"/tests/"</c> — with a LEADING separator — so a path that BEGINS with the
+    ///         excluded segment is not rejected at all. <c>"tests/Harbor.Architecture.Tests/X.cs"</c>
+    ///         is accepted; only <c>"/…/tests/Harbor.Architecture.Tests/X.cs"</c> is rejected. The
+    ///         same holds for every clause: a bare <c>"obj/Debug/…"</c> is accepted, and so is a
+    ///         bare <c>"bin/…"</c>.
+    ///     </para>
+    ///     <para>
+    ///         So the filter is not a predicate over PATHS. It is a predicate over ABSOLUTE paths,
+    ///         and its answer depends on the spelling of its input. That is the same defect class
+    ///         as the rest of this file — a measurement whose result depends on something other
+    ///         than its subject — one level down: here it depends on the FORM of the path rather
+    ///         than on which tree it names.
+    ///     </para>
+    ///     <para>
+    ///         It is LATENT, and worth saying precisely why, because "latent" is the word that
+    ///         gets a real defect waved through. <c>EnumerateCsFiles</c> always hands the filter
+    ///         absolute paths, because it builds them from <c>Path.Combine(root, tree)</c> and
+    ///         <c>root</c> is absolute — so the first segment is never the excluded one, and every
+    ///         clause fires. The two direct callers that pass repo-relative paths
+    ///         (<c>AbstractionsNamespaceOwnershipRules</c> and
+    ///         <c>ProviderPayloadSerializationRules</c>) both name <c>src/…</c> paths, so
+    ///         <c>src</c> is the first segment and no clause is skipped. Nothing shipped is
+    ///         affected today, which is why this pins the behaviour instead of changing it.
+    ///     </para>
+    ///     <para>
+    ///         Pinning it also means the fix cannot land by accident: if someone makes the filter
+    ///         leading-slash-insensitive, this control goes red and the change arrives as a
+    ///         reviewed decision with its own blast radius, rather than as a drive-by. Whether to
+    ///         make it insensitive is a follow-up, not a drive-by — and given the inventory above
+    ///         the cost looks low, but "looks low" is what this file exists to stop anyone saying
+    ///         without measuring.
+    ///     </para>
     /// </remarks>
     private static readonly (string Path, bool Rejected)[] DeclaredFilterContract =
     [
+        // Product paths: accepted, or nothing is ever read.
         ("src/Harbor.Abstractions/Result.cs", false),
         ("apps/Harbor.App.Cli/Program.cs", false),
-        ("src/Harbor.Abstractions/obj/Debug/net10.0/Generated.cs", true),
-        ("src/Harbor.Abstractions/bin/Release/net10.0/Build.cs", true),
-        ("tests/Harbor.Architecture.Tests/ScanVisibilityRule.cs", true),
-        ("contrib/apps/Harbor.App.Wpf/MainWindow.xaml.cs", true),
-        ("src/Harbor.Abstractions/.worktrees/wt-1/Other.cs", true),
+
+        // Absolute paths: every clause fires, for four different reasons.
+        ("/repo/src/Harbor.Abstractions/obj/Debug/net10.0/Generated.cs", true),
+        ("/repo/src/Harbor.Abstractions/bin/Release/net10.0/Build.cs", true),
+        ("/repo/tests/Harbor.Architecture.Tests/ScanVisibilityRule.cs", true),
+        ("/repo/contrib/apps/Harbor.App.Wpf/MainWindow.xaml.cs", true),
+        ("/repo/src/Harbor.Abstractions/.worktrees/wt-1/Other.cs", true),
+
+        // Relative paths whose FIRST segment is the excluded one: accepted, because the
+        // clauses are written with a leading separator. See the remarks above — this is the
+        // finding the red run produced, pinned rather than fixed.
+        ("tests/Harbor.Architecture.Tests/ScanVisibilityRule.cs", false),
+        ("contrib/apps/Harbor.App.Wpf/MainWindow.xaml.cs", false),
+        ("obj/Debug/net10.0/Generated.cs", false),
     ];
 
     private static IReadOnlyList<TreeVisibility> Measure()
@@ -409,12 +498,26 @@ public sealed class ScanVisibilityRule
     ///     The filter answers the question it declares, on a fixed table of paths.
     /// </summary>
     /// <remarks>
-    ///     Load-bearing for the baseline. A baseline pinned against whatever the filter does
-    ///     on the day it is pinned is a baseline pinned against nothing: if the filter later
-    ///     regressed to accepting everything, the ratchet above would still pass — every tree
-    ///     would become visible, the live set would empty, and the failure would read as
-    ///     "someone cleaned up two dead entries". This control fails first, and says so in
-    ///     terms of paths rather than counts.
+    ///     <para>
+    ///         Load-bearing for the baseline. A baseline pinned against whatever the filter does
+    ///         on the day it is pinned is a baseline pinned against nothing: if the filter later
+    ///         regressed to accepting everything, the ratchet above would still pass — every tree
+    ///         would become visible, the live set would empty, and the failure would read as
+    ///         "someone cleaned up two dead entries". This control fails first, and says so in
+    ///         terms of paths rather than counts.
+    ///     </para>
+    ///     <para>
+    ///         The rows that assert a RELATIVE path is accepted are the ones to read twice. They
+    ///         look like a bug being enshrined, and the remarks on
+    ///         <see cref="DeclaredFilterContract" /> say why that is deliberate: the filter
+    ///         matches <c>"/tests/"</c> rather than <c>"tests/"</c>, so it is a predicate over
+    ///         absolute paths wearing the costume of a predicate over paths. No shipped caller is
+    ///         affected — <c>EnumerateCsFiles</c> always passes absolute paths — so this pins the
+    ///         property instead of changing it, and makes the follow-up a decision rather than an
+    ///         accident. This control is also the second time in this issue that a CI run, and not
+    ///         a reading of the code, is what caught a wrong assumption: the first draft of this
+    ///         table asserted that <c>"tests/…"</c> is rejected, and the red run said otherwise.
+    ///     </para>
     /// </remarks>
     [Test]
     public async Task TheFilterAnswersTheDeclaredQuestion()
@@ -430,11 +533,14 @@ public sealed class ScanVisibilityRule
             .Because(
                 "SourceScan.IsBuildOutput is the filter that makes EnumerateCsFiles return an empty "
                 + "list for a populated tree, so the behaviour pinned in MeasuredInvisibleTrees is "
-                + "only meaningful while the filter still answers the question stated above. The "
-                + "two product paths must be accepted or nothing is ever read; the five rejected "
-                + "paths are rejected for four different reasons (build output, out of CI, the "
-                + "gates' own fixtures, a sibling checkout) and this rule's subject is precisely "
-                + "that they are all rejected the same way. Mismatches: "
+                + "only meaningful while the filter still answers the question stated above. Note "
+                + "the SHAPE of the table: the clauses are written with a leading separator "
+                + "(\"/tests/\", \"/obj/\"), so the filter rejects an absolute path and ACCEPTS a "
+                + "repo-relative one whose first segment is the excluded directory. That asymmetry "
+                + "is pinned deliberately, because EnumerateCsFiles only ever passes absolute "
+                + "paths and changing it is a reviewed decision rather than a side effect. If a "
+                + "mismatch appears on a relative path, the filter became leading-slash-insensitive "
+                + "and that is a real change to review. Mismatches: "
                 + (wrong.Length == 0 ? "(none)" : string.Join(" | ", wrong)));
     }
 
