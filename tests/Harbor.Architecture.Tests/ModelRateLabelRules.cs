@@ -410,7 +410,7 @@ public sealed class ModelRateLabelRules
     {
         var hits = new List<int>();
         string[] lines = source.Split('\n');
-        for (int i = 0; i < lines.Count; i++)
+        for (int i = 0; i < lines.Length; i++)
         {
             foreach (Match literal in QuotedLiteral.Matches(lines[i]))
             {
@@ -432,7 +432,7 @@ public sealed class ModelRateLabelRules
     {
         var hits = new List<int>();
         string[] lines = source.Split('\n');
-        for (int i = 0; i < lines.Count; i++)
+        for (int i = 0; i < lines.Length; i++)
         {
             if (RateComparedToZero.IsMatch(lines[i]))
             {
