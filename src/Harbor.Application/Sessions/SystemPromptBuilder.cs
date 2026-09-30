@@ -146,8 +146,8 @@ public sealed class SystemPromptBuilder : ISystemPromptBuilder
                     int n = 0;
                     foreach (string g in tool.PromptGuidelines)
                     {
-                        if (n >= 3) break;
-                        if (string.IsNullOrWhiteSpace(g) || g.Length > 160) continue;
+                        if (n >= MaxGuidelinesPerTool) break;
+                        if (string.IsNullOrWhiteSpace(g) || g.Length > MaxGuidelineLength) continue;
                         builder.Append("  - ").AppendLine(g);
                         n++;
                     }

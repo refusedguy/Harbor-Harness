@@ -13,9 +13,9 @@
 // WHY THE BRANCH SELECTORS ARE NOT THE PROBLEM
 // ---------------------------------------------
 // It is tempting to read this as "the builder has too many branches". The
-// selectors are the OPPOSITE of the defect: every one of them is
-// `if (<some context component>.Count == 0)` — the same requirement, "render
-// this section when it has content", expressed per section. They are stages of
+// selectors are the OPPOSITE of the defect: every one of them is an emptiness
+// test on one context component — the same requirement, "render this section
+// when it has content", expressed per section. They are stages of
 // ONE path, not competing modes, and each already has a test naming it (the six
 // sections of SystemPromptBuilder are covered by SystemPromptBuilderTests and
 // SystemPromptSupervisionTests). Collapsing them or splitting them into
