@@ -33,7 +33,7 @@ public class ThemeDirectoryWatcherTests
         {
             TerminalColorPalette.Apply(HarborTheme.HarborDark);
             var applied = new List<HarborTheme>();
-            using var watcher = new ThemeDirectoryWatcher(dir, applied.Add, autoStart: false);
+            using var watcher = new ThemeDirectoryWatcher(dir, new ThemeStore(), applied.Add, autoStart: false);
 
             await File.WriteAllTextAsync(dir + "/night.json", """{ "name": "night", "accent": "#1122ff" }""");
             watcher.Poll();
@@ -63,7 +63,7 @@ public class ThemeDirectoryWatcherTests
         {
             TerminalColorPalette.Apply(HarborTheme.HarborDark);
             await File.WriteAllTextAsync(path, """{ "name": "v1", "accent": "#101010" }""");
-            using var watcher = new ThemeDirectoryWatcher(dir, autoStart: false);
+            using var watcher = new ThemeDirectoryWatcher(dir, new ThemeStore(), autoStart: false);
             watcher.Poll();
 
             await File.WriteAllTextAsync(path, """{ "name": "v2", "accent": "#202020" }""");
@@ -90,7 +90,7 @@ public class ThemeDirectoryWatcherTests
             TerminalColorPalette.Apply(HarborTheme.HarborCool);
             var errors = new List<string>();
             await File.WriteAllTextAsync(Path.Combine(dir, "bad.json"), "{ not json ");
-            using var watcher = new ThemeDirectoryWatcher(dir, onError: errors.Add, autoStart: false);
+            using var watcher = new ThemeDirectoryWatcher(dir, new ThemeStore(), onError: errors.Add, autoStart: false);
             watcher.Poll();
 
             await Assert.That(errors).Count().IsEqualTo(1);
@@ -109,7 +109,7 @@ public class ThemeDirectoryWatcherTests
     public async Task Poll_MissingDirectory_DoesNotCrash()
     {
         using var watcher = new ThemeDirectoryWatcher(
-            Path.Combine(TempDir(), "nope"), autoStart: false);
+            Path.Combine(TempDir(), "nope"), new ThemeStore(), autoStart: false);
 
         watcher.Poll();
 

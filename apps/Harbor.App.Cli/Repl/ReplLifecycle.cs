@@ -859,6 +859,7 @@ internal sealed class ReplLifecycle(CellForgeReplRunner host)
 
         host._themeDirectoryWatcher = new ThemeDirectoryWatcher(
             store.ThemesDirectory,
+            store,
             onApplied: theme =>
             {
                 host._themeReloadLine = $"theme: live-reload → {theme.Name}";
