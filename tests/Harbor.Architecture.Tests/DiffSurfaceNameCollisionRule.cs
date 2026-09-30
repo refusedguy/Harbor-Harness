@@ -68,18 +68,76 @@
 // `contrib/apps/Harbor.App.Blazor` binds the desktop one. Neither gap is
 // accidental and neither is scanned.
 //
+// SECOND PERIMETER — THE VOCABULARY LAYER (#803)
+// ----------------------------------------------
+// Rule 1 above is blind to a whole class of the same defect, and #803 is the
+// proof. It found two enums named `DiffLineKind` in two assemblies with
+// INCOMPATIBLE members — `Add`/`Delete` against `Added`/`Removed` — so
+// `DiffLineKind.Add` compiles in one and does not exist in the other, and the
+// compiler points at the wrong file. Neither file projects `LineDiff`, so
+// neither is inside the projection perimeter and rule 1 stayed silent. That
+// silence was correct scoping and still lost the pair.
+//
+// What was missing is that a diff surface has TWO layers, and rule 1 graded
+// only one of them:
+//
+//   projections  files that CALL the engine — a view of a diff, and rule 1's
+//                perimeter. Every one of them answers "what changed?".
+//   vocabulary   files that SPEAK the diff — a kind enum and the type that
+//                carries it. The two `DiffLineKind`s are both here, and
+//                neither is a projection of anything.
+//
+// The vocabulary layer is derived, not named, and it is anchored in the
+// PROJECT that owns the engine — never in a type name and never in a file
+// list. The anchor holds a recognisable pattern: a kind enum declared next to a
+// type that carries it, which is what a row vocabulary is. The engine's own
+// project declares four of them (`LineDiffRowKind`/`LineDiffRow`,
+// `SideBySideRowKind`/`SideBySideDiffRow`, `DiffLineKind`/`DiffLine`,
+// `WordSegKind`/`WordSeg`). Those names, read out of the source at scan time,
+// are the vocabulary. Then: NO OTHER PROJECT MAY DECLARE ONE OF THEM.
+//
+// Two properties make this more than a rule about a string, and both are the
+// point:
+//   * Renaming the engine's enum re-derives the set, so the rule is not
+//     satisfied by the same edit that re-creates the hazard — the objection
+//     this file's own header raises against naming `DiffViewModel`.
+//   * The fossil coming BACK trips it, which a "these two names must differ"
+//     rule would not: #803's fix is a rename on one side, and the copy that was
+//     renamed can be re-declared under its old name later with nothing to stop
+//     it.
+//
+// WHY THE ANCHOR IS THE ENGINE'S PROJECT AND NOT THE WHOLE TREE
+// -------------------------------------------------------------
+// "No project may declare a kind-and-carrier pair twice" is a rule about the
+// entire repository, and this repo has 25+ same-named types across assemblies,
+// most of them legitimate — `ToastKind` is one name in `Ui.Framework.Services`
+// and another in `Desktop.Abstractions`, and both earn it. A rule that
+// condemned them would be a different and much larger piece of work wearing
+// this one's name, exactly as this file's header already says about a
+// repo-wide duplicate-name rule. The diff earns a narrower anchor than that,
+// and this file is the diff's guard: a name only has to be unique where two
+// vocabularies for one concept would actually be confused, which is the diff.
+//
 // NON-VACUITY
 // -----------
 //   1. Scan_IsLive — the scan walked a checkout, read real files, and found the
 //      real projections of the engine. "No violations" is trivially satisfied by
 //      a scan that read nothing.
 //   2. NonVacuity_Scan_DetectsTheCollisionInSyntheticSources — THE POSITIVE
-//      CONTROL. The probe is handed the #570 shape item for item (two files, in
-//      two different projects, declaring the same name, both calling the engine)
-//      and four decoys it must NOT report — including a same-named type in a
-//      file that does not project the engine at all, and a name that merely
-//      CONTAINS the duplicated one.
+//      CONTROL for rule 1. The probe is handed the #570 shape item for item
+//      (two files, in two different projects, declaring the same name, both
+//      calling the engine) and four decoys it must NOT report — including a
+//      same-named type in a file that does not project the engine at all, and
+//      a name that merely CONTAINS the duplicated one.
+//   3. DiffVocabulary_IsDerivedFromTheEngineItself — the vocabulary is
+//      non-empty and every name in it is declared in the engine's own project,
+//      so rule 2 cannot be satisfied by deriving nothing.
+//   4. NonVacuity_Scan_DetectsTheForeignVocabularyInSyntheticSources — THE
+//      POSITIVE CONTROL for rule 2, and the #803 pair: a kind+carrier pair in
+//      the engine's project, the same kind name re-declared in a second
+//      project, and four decoys it must NOT report.
 
+using System.Text;
 using System.Text.RegularExpressions;
 
 namespace Harbor.Architecture.Tests;
@@ -89,16 +147,37 @@ namespace Harbor.Architecture.Tests;
 /// <param name="DeclaringFiles">Every file in the perimeter declaring it, sorted.</param>
 internal sealed record DiffNameCollision(string Name, IReadOnlyList<string> DeclaringFiles);
 
-/// <summary>Everything the rule needs from one repository scan.</summary>
-/// <param name="Collisions">Every finding, sorted — a non-empty list is the #570 failure.</param>
+/// <summary>A diff-vocabulary name declared outside the project that owns the engine (#803).</summary>
+/// <param name="Name">The vocabulary name re-declared away from the engine's project.</param>
+/// <param name="DeclaringFile">Where the foreign declaration is, repo-relative.</param>
+/// <param name="DeclaringProject">The project that declares it, so the message names an assembly.</param>
+/// <param name="OwningFile">The file in the engine's project that owns the vocabulary.</param>
+internal sealed record ForeignDiffVocabulary(
+    string Name,
+    string DeclaringFile,
+    string DeclaringProject,
+    string OwningFile);
+
+/// <summary>Everything the rules need from one repository scan.</summary>
+/// <param name="Collisions">Every rule-1 finding, sorted — a non-empty list is the #570 failure.</param>
 /// <param name="FilesScanned">How many <c>.cs</c> files were read.</param>
 /// <param name="EngineFilePresent">Whether the shared engine itself was found.</param>
 /// <param name="PerimeterFiles">Which files project the engine, sorted.</param>
+/// <param name="VocabularyNames">
+///     The diff vocabulary, read out of the engine's project at scan time: every kind enum that
+///     has a carrier type beside it, plus the carriers. A non-empty list is what makes rule 2
+///     mean anything.
+/// </param>
+/// <param name="VocabularyOwners">Which file in the engine's project owns each vocabulary name.</param>
+/// <param name="ForeignVocabulary">Every rule-2 finding, sorted — a non-empty list is the #803 failure.</param>
 internal sealed record DiffSurfaceReport(
     IReadOnlyList<DiffNameCollision> Collisions,
     int FilesScanned,
     bool EngineFilePresent,
-    IReadOnlyList<string> PerimeterFiles);
+    IReadOnlyList<string> PerimeterFiles,
+    IReadOnlyList<string> VocabularyNames,
+    IReadOnlyDictionary<string, string> VocabularyOwners,
+    IReadOnlyList<ForeignDiffVocabulary> ForeignVocabulary);
 
 /// <summary>
 ///     Finds type names declared by more than one project inside the diff surface.
@@ -120,7 +199,7 @@ internal static partial class DiffSurfaceNameCollisionProbe
     {
         if (repoRoot is null || !Directory.Exists(repoRoot))
         {
-            return new DiffSurfaceReport([], 0, false, []);
+            return new DiffSurfaceReport([], 0, false, [], [], new SortedDictionary<string, string>(StringComparer.Ordinal), []);
         }
 
         var sources = new List<(string Relative, string[] Lines)>();
@@ -139,7 +218,8 @@ internal static partial class DiffSurfaceNameCollisionProbe
             sources.Add((MakeRelative(repoRoot, file), lines));
         }
 
-        return ScanFiles(sources, File.Exists(Path.Combine(repoRoot, EngineFile.Replace('/', Path.DirectorySeparatorChar))));
+        string enginePath = Path.Combine(repoRoot, EngineFile.Replace('/', Path.DirectorySeparatorChar));
+        return ScanFiles(sources, File.Exists(enginePath), enginePath);
     }
 
     /// <summary>
@@ -150,16 +230,44 @@ internal static partial class DiffSurfaceNameCollisionProbe
     /// </summary>
     internal static DiffSurfaceReport ScanFiles(
         List<(string Relative, string[] Lines)> sources,
-        bool engineFilePresent)
+        bool engineFilePresent,
+        string? engineFilePath = null)
     {
         // name -> the projects that declare it. A name in two projects is a finding.
         var byName = new Dictionary<string, SortedSet<string>>(StringComparer.Ordinal);
         var filesByName = new Dictionary<string, SortedSet<string>>(StringComparer.Ordinal);
         var perimeter = new SortedSet<string>(StringComparer.Ordinal);
 
+        // Which project owns the diff engine. Read from the engine file's own PATH rather
+        // than from a constant naming the project directory, so the anchor moves with the
+        // engine: relocating LineDiff.cs relocates the vocabulary layer with it.
+        string engineProject = ProjectOf(engineFilePath is not null ? MakeRelativeFrom(engineFilePath) : EngineFile);
+
+        // The vocabulary layer, derived from the engine's project in the SAME pass, and the
+        // rule-3 findings, which can only be graded once the whole tree has been read: a name
+        // is foreign only after the file that owns it has been seen.
+        var vocabularyOwners = new SortedDictionary<string, string>(StringComparer.Ordinal);
+        var foreign = new List<ForeignDiffVocabulary>();
+
         foreach (var source in sources)
         {
             string[] clean = SourceCommentStripper.StripAll(source.Lines);
+            string project = ProjectOf(source.Relative);
+
+            // Rule 2 derivation. A kind enum WITH a carrier type beside it, declared in the
+            // engine's project, is that project's vocabulary: the engine speaks it, and no
+            // other project gets to re-declare the same name for a different shape.
+            if (string.Equals(project, engineProject, StringComparison.Ordinal))
+            {
+                foreach ((string kind, IReadOnlyList<string> carriers) in VocabularyPairs(clean))
+                {
+                    vocabularyOwners[kind] = source.Relative;
+                    foreach (string carrier in carriers)
+                    {
+                        vocabularyOwners[carrier] = source.Relative;
+                    }
+                }
+            }
 
             // The perimeter predicate: this file PROJECTS the engine. It must call
             // it, not merely name it in prose — a doc comment saying
@@ -183,7 +291,6 @@ internal static partial class DiffSurfaceNameCollisionProbe
             }
 
             perimeter.Add(source.Relative);
-            string project = ProjectOf(source.Relative);
 
             foreach (string name in DeclaredTypeNames(clean))
             {
@@ -196,6 +303,39 @@ internal static partial class DiffSurfaceNameCollisionProbe
 
                 projects.Add(project);
                 filesByName[name].Add(source.Relative);
+            }
+        }
+
+        // Rule 3 grading.
+        if (engineFilePresent)
+        {
+            foreach (var source in sources)
+            {
+                string project = ProjectOf(source.Relative);
+                if (string.Equals(project, engineProject, StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                string[] clean = SourceCommentStripper.StripAll(source.Lines);
+
+                // The SAME shape test as the engine's side, and this symmetry is the point.
+                // A foreign file earns a finding only for a KIND enum it declares beside a
+                // type that carries it — the vocabulary shape — not for merely mentioning
+                // an owned name. The first version of this rule graded names on the foreign
+                // side and shapes on the engine's, and the asymmetry reported a real type
+                // that is not in the conversation: apps/Harbor.App.Avalonia's HdsDiffCompact
+                // declares `record DiffLine(string Text, IBrush Brush)`, a DISPLAY row that
+                // carries no kind at all, and the rule called it a second vocabulary because
+                // it shares a word with the engine's parsed row. A guard that fires on
+                // unrelated types is a guard the team learns to disable.
+                foreach ((string kind, _) in VocabularyPairs(clean))
+                {
+                    if (vocabularyOwners.TryGetValue(kind, out string? owner))
+                    {
+                        foreign.Add(new ForeignDiffVocabulary(kind, source.Relative, project, owner));
+                    }
+                }
             }
         }
 
@@ -212,7 +352,239 @@ internal static partial class DiffSurfaceNameCollisionProbe
 
         collisions.Sort(static (a, b) => string.CompareOrdinal(a.Name, b.Name));
 
-        return new DiffSurfaceReport(collisions, sources.Count, engineFilePresent, [.. perimeter]);
+        // One finding per (name, file) so a project that splits a type across its own partial
+        // files is not reported twice, and so the message stays a list of declarations.
+        foreign.Sort(static (a, b) =>
+        {
+            int byName = string.CompareOrdinal(a.Name, b.Name);
+            return byName != 0 ? byName : string.CompareOrdinal(a.DeclaringFile, b.DeclaringFile);
+        });
+
+        List<string> vocabulary = [.. vocabularyOwners.Keys];
+        return new DiffSurfaceReport(
+            collisions,
+            sources.Count,
+            engineFilePresent,
+            [.. perimeter],
+            vocabulary,
+            vocabularyOwners,
+            foreign);
+    }
+
+    /// <summary>
+    ///     The kind-enum-and-carrier pairs a file declares: the diff vocabulary pattern, found
+    ///     by SHAPE rather than by name.
+    /// </summary>
+    /// <remarks>
+    ///     A vocabulary is a kind enum plus the type that carries it — <c>LineDiffRowKind</c>
+    ///     beside <c>LineDiffRow</c>. Requiring the carrier is what keeps the derivation from
+    ///     swallowing every enum in the project: <c>LineKind</c> in the markdown parser is
+    ///     matched only in <c>case</c> labels and has no carrier, so it is not a vocabulary,
+    ///     and neither is a flag enum that merely happens to be spelled <c>…Kind</c>.
+    ///     <para>
+    ///         The carrier must be a non-enum type declared in the SAME FILE. That is a
+    ///         deliberately tight test — a kind enum consumed across a project is a shared
+    ///         contract, not a second vocabulary — and it is why this derivation is safe to
+    ///         run over the engine's whole project rather than one file.
+    ///     </para>
+    /// </remarks>
+    internal static IReadOnlyList<(string Kind, IReadOnlyList<string> Carriers)> VocabularyPairs(string[] clean)
+    {
+        var pairs = new List<(string, IReadOnlyList<string>)>();
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+
+        for (int i = 0; i < clean.Length; i++)
+        {
+            Match declaration = EnumDeclaration().Match(clean[i]);
+            if (!declaration.Success)
+            {
+                continue;
+            }
+
+            string kind = declaration.Groups["name"].Value;
+            if (!seen.Add(kind))
+            {
+                continue;
+            }
+
+            var carriers = new List<string>();
+            foreach (int j in AdjacentDeclarationLines(clean, i))
+            {
+                Match carrier = TypeDeclaration().Match(clean[j]);
+                if (!carrier.Success
+                    || IsEnumDeclaration(clean[j], carrier.Index))
+                {
+                    continue;
+                }
+
+                string name = carrier.Groups["name"].Value;
+                if (name == kind || carriers.Contains(name, StringComparer.Ordinal))
+                {
+                    continue;
+                }
+
+                // The carrier must MENTION the kind inside its own declaration, which is the
+                // whole claim: a type that does not carry a value of the kind is not part of
+                // its vocabulary.
+                if (DeclarationMentions(clean, j, kind))
+                {
+                    carriers.Add(name);
+                }
+            }
+
+            if (carriers.Count > 0)
+            {
+                pairs.Add((kind, carriers));
+            }
+        }
+
+        return pairs;
+    }
+
+    /// <summary>
+    ///     The line indices a type declared BESIDE the enum on <paramref name="enumLine" />
+    ///     could be: the declarations immediately above it, and the first one below its closing
+    ///     brace.
+    /// </summary>
+    /// <remarks>
+    ///     Adjacency is the whole test, and it is what makes this derivation safe to run over a
+    ///     project rather than a file. A vocabulary is written as a pair —
+    ///     <c>enum DiffLineKind</c> then <c>record struct DiffLine(DiffLineKind Kind, …)</c> —
+    ///     and a type further down the file is a different concern that merely happens to
+    ///     mention the enum. Reading the whole file instead would make every later class that
+    ///     uses the kind a "carrier", which in <c>LineDiff.cs</c> would sweep in the static
+    ///     engine class itself: a name derived from a derivation bug is worse than no name at
+    ///     all, because the guard then holds the wrong set.
+    /// </remarks>
+    private static IEnumerable<int> AdjacentDeclarationLines(string[] clean, int enumLine)
+    {
+        // Above: walk back over the enum's own header to the declaration above it.
+        int start = enumLine - 1;
+        while (start >= 0 && !TypeDeclaration().IsMatch(clean[start]) && start > enumLine - 12)
+        {
+            start--;
+        }
+
+        if (start >= 0 && start != enumLine && TypeDeclaration().IsMatch(clean[start]))
+        {
+            yield return start;
+        }
+
+        // Below: the enum's body is a run of members, so the first declaration after its
+        // closing brace is the pair partner.
+        for (int i = enumLine + 1; i < clean.Length; i++)
+        {
+            string line = clean[i];
+            if (line.StartsWith('}') || line == "}")
+            {
+                for (int j = i + 1; j < clean.Length; j++)
+                {
+                    if (TypeDeclaration().IsMatch(clean[j]))
+                    {
+                        yield return j;
+                        yield break;
+                    }
+                }
+
+                yield break;
+            }
+
+            // An enum with no body — a single-line declaration — is over at the `}` on the
+            // same line, which the loop above has already handled, or at the terminator.
+            if (line.TrimEnd().EndsWith('}'))
+            {
+                for (int j = i + 1; j < clean.Length; j++)
+                {
+                    if (TypeDeclaration().IsMatch(clean[j]))
+                    {
+                        yield return j;
+                        yield break;
+                    }
+                }
+
+                yield break;
+            }
+        }
+    }
+
+    /// <summary>How far past its declaration line a type is followed while being graded.</summary>
+    private const int MaxDeclarationLines = 48;
+
+    /// <summary>
+    ///     Whether the type declared on <paramref name="declarationLine" /> mentions
+    ///     <paramref name="name" /> inside its own declaration span.
+    /// </summary>
+    /// <remarks>
+    ///     The span is the body where the declaration opens a brace, and the parameter list
+    ///     where it does not — which is the shape a positional record struct has, and every
+    ///     row type in the engine's project is one. Both stop at the terminator, so a member
+    ///     in a LATER type in the same file is not read as part of this one.
+    /// </remarks>
+    private static bool DeclarationMentions(string[] clean, int declarationLine, string name)
+    {
+        var span = new StringBuilder();
+        int depth = 0;
+        bool opened = false;
+        int end = Math.Min(clean.Length, declarationLine + MaxDeclarationLines);
+
+        for (int i = declarationLine; i < end; i++)
+        {
+            span.Append(clean[i]).Append('\n');
+
+            foreach (char c in clean[i])
+            {
+                if (c == '{')
+                {
+                    opened = true;
+                    depth++;
+                }
+                else if (c == '}')
+                {
+                    depth--;
+                }
+            }
+
+            if (opened && depth <= 0)
+            {
+                break; // the body closed: this declaration is over
+            }
+
+            if (!opened
+                && i > declarationLine
+                && clean[i].Contains(';', StringComparison.Ordinal))
+            {
+                break; // a parameter list that was terminated on its own line is over
+            }
+        }
+
+        return Regex.IsMatch(
+            span.ToString(),
+            $@"\b{Regex.Escape(name)}\b",
+            RegexOptions.CultureInvariant);
+    }
+
+    /// <summary>
+    ///     A repo-relative form of an absolute path, for the engine file. Falls back to the
+    ///     constant when the path does not sit under a recognisable root.
+    /// </summary>
+    private static string MakeRelativeFrom(string absolutePath)
+    {
+        // Normalise FIRST, then look for "/src/" in one spelling. Matching on
+        // Path.DirectorySeparatorChar alone means a path written with the other
+        // separator silently misses, and a silent miss here is not a wrong
+        // answer — it is an EMPTY derived layer, which reads exactly like
+        // "this tree has no diff vocabulary". The Windows job is where the
+        // control's hard-coded "/checkout/src/..." hit that.
+        string normalised = absolutePath.Replace('\\', '/');
+
+        const string Marker = "/src/";
+        int at = normalised.IndexOf(Marker, StringComparison.Ordinal);
+
+        // The slice starts AT the separator, so it must skip past it: a leading '/'
+        // splits into an empty first segment, and ProjectOf would then read the ROOT
+        // ("src") as the project — which matches no file, and makes the whole derived
+        // layer empty for a reason that has nothing to do with the tree.
+        return at < 0 ? normalised : normalised[(at + 1)..];
     }
 
     /// <summary>
@@ -336,6 +708,32 @@ internal static partial class DiffSurfaceNameCollisionProbe
     [GeneratedRegex(@"\b(?:class|struct|record|interface|enum)\s+(?<name>\w+)")]
     private static partial Regex TypeKeyword();
 
+    /// <summary>
+    ///     A type declaration with its keyword kept, because the vocabulary derivation needs
+    ///     to tell an enum from the class beside it.
+    /// </summary>
+    /// <remarks>
+    ///     <c>record struct</c> and <c>record class</c> are TWO keywords, and getting that
+    ///     wrong is not cosmetic: a naive alternation matches <c>record</c> first and captures
+    ///     <c>struct</c> as the type's NAME, so the derivation would hold a vocabulary called
+    ///     "struct" and miss every row type in the tree. The optional second keyword is
+    ///     consumed as part of the declaration rather than as its name.
+    /// </remarks>
+    [GeneratedRegex(@"\b(?:class|struct|interface|enum|record)\s+(?:(?:struct|class)\s+)?(?<name>\w+)")]
+    private static partial Regex TypeDeclaration();
+
+    /// <summary>An enum declaration — the left half of a vocabulary pair.</summary>
+    [GeneratedRegex(@"\benum\s+(?<name>\w+)")]
+    private static partial Regex EnumDeclaration();
+
+    /// <summary>
+    ///     Whether the declaration matched at <paramref name="at" /> is an enum. Asked
+    ///     separately because <see cref="TypeDeclaration" /> deliberately drops the keyword
+    ///     to swallow <c>record struct</c>, so the match text cannot be inspected for it.
+    /// </summary>
+    private static bool IsEnumDeclaration(string line, int at) =>
+        line.AsSpan(0, at).TrimEnd().EndsWith("enum", StringComparison.Ordinal);
+
     private static string MakeRelative(string repoRoot, string path) =>
         Path.GetRelativePath(repoRoot, path).Replace(Path.DirectorySeparatorChar, '/');
 }
@@ -411,6 +809,54 @@ public sealed class DiffSurfaceNameCollisionRule
     }
 
     // =====================================================================
+    // 2b. Rule 1's blind spot, closed — the vocabulary layer (#803).
+    // =====================================================================
+
+    /// <summary>
+    ///     Rule 3 (#803): the diff vocabulary belongs to the project that owns the engine, and
+    ///     no other project may declare one of its names.
+    /// </summary>
+    /// <remarks>
+    ///     <para>
+    ///         #803 is the pair rule 1 could not see. Two enums named <c>DiffLineKind</c> in
+    ///         two assemblies, with <b>incompatible members</b> — <c>Add</c>/<c>Delete</c>
+    ///         against <c>Added</c>/<c>Removed</c> — so <c>DiffLineKind.Add</c> compiles in one
+    ///         assembly and does not exist in the other, and the error names the wrong file.
+    ///     </para>
+    ///     <para>
+    ///         Rule 1 stayed silent because neither file projects <c>LineDiff</c>: they are not
+    ///         views of a diff, they are the words a diff is spoken in. A projection perimeter
+    ///         cannot see a vocabulary, so the vocabulary gets its own rule over its own
+    ///         derived layer — the kind enums and their carriers, read out of the engine's own
+    ///         project at scan time.
+    ///     </para>
+    ///     <para>
+    ///         BOTH sides of the comparison are graded by SHAPE, and that symmetry is not
+    ///         tidiness. Grading the engine's side by shape and the foreign side by bare name
+    ///         reports every type that happens to share a word with the engine's vocabulary,
+    ///         and the tree has one: <c>apps/Harbor.App.Avalonia</c>'s
+    ///         <c>HdsDiffCompact</c> declares <c>record DiffLine(string Text, IBrush Brush)</c>
+    ///         — a display row for a compact summary widget, with no kind in it. It is not a
+    ///         second vocabulary, and a rule that says it is gets switched off.
+    ///     </para>
+    /// </remarks>
+    [Test]
+    public async Task DiffVocabulary_IsOwnedByTheEngineProject()
+    {
+        var foreign = Report.Value.ForeignVocabulary;
+
+        await Assert.That(foreign).IsEmpty()
+            .Because(
+                "the diff vocabulary — the kind enum and the type that carries it — is the engine's to "
+                + "name, and the engine's project already names two vocabularies that are genuinely "
+                + "different concerns: LineDiffRowKind (a computed row) and DiffLineKind (a line of a "
+                + "unified diff document, hunk and file headers included). A second project declaring "
+                + "one of those names is declaring a SECOND vocabulary for one concept, which is the "
+                + "trap #803 reports: the name resolves, the members do not, and the compiler points "
+                + "at the other file. Found: " + Describe(foreign));
+    }
+
+    // =====================================================================
     // 3. Non-vacuity.
     // =====================================================================
 
@@ -438,6 +884,81 @@ public sealed class DiffSurfaceNameCollisionRule
                 + "are unique. A scan that cannot find what should be there is a scan whose silence means "
                 + "nothing — the perimeter predicate (a real member access on the engine, not a doc "
                 + "mention) is what decides it. Found: " + Describe(report.PerimeterFiles));
+
+        await Assert.That(report.VocabularyNames).IsNotEmpty()
+            .Because(
+                "rule 3 is graded against a vocabulary derived from the project that owns "
+                + DiffSurfaceNameCollisionProbe.EngineFile + ". A derivation that finds nothing makes every "
+                + "foreign declaration undetectable, so \"nothing is foreign\" would be vacuous. Derived: "
+                + Describe(report.VocabularyNames));
+
+        await Assert.That(report.VocabularyNames.OrderBy(n => n, StringComparer.Ordinal).ToArray())
+            .IsEquivalentTo(report.VocabularyOwners.Keys.OrderBy(n => n, StringComparer.Ordinal).ToArray())
+            .Because(
+                "the vocabulary names and the vocabulary owners are the same set by construction, and a "
+                + "mismatch means the grading step is reading a different list than the derivation "
+                + "produced — which is a guard that reports against names it never derived");
+    }
+
+    /// <summary>
+    ///     THE ENGINE'S OWN FILE IS IN THE VOCABULARY LAYER, WITH ITS CARRIERS.
+    /// </summary>
+    /// <remarks>
+    ///     The derivation keys on a SHAPE — a kind enum declared beside a type that carries it
+    ///     — and a shape is only as good as the evidence that it fires on the real thing. This
+    ///     pins that evidence to the engine's own declarations, so a matcher that quietly
+    ///     stopped finding carriers would be caught here rather than by a rule that reports
+    ///     nothing forever. It also pins the claim in rule 3's message: the two vocabularies
+    ///     the engine's project really does own, one for a computed row and one for a line of
+    ///     a unified diff document.
+    /// </remarks>
+    [Test]
+    public async Task DiffVocabulary_IsDerivedFromTheEngineFileItself()
+    {
+        var report = Report.Value;
+        var engine = DiffSurfaceNameCollisionProbe.EngineFile;
+        var engineProject = DiffSurfaceNameCollisionProbe.ProjectOf(engine);
+
+        await Assert.That(report.VocabularyOwners.TryGetValue("LineDiffRowKind", out string? kindOwner))
+            .IsTrue()
+            .Because(
+                "LineDiffRowKind sits beside LineDiffRow in " + engine + ", which is the kind-and-carrier "
+                + "shape the vocabulary derivation looks for. If the engine's own vocabulary is not in "
+                + "the derived set, the shape does not fire on the case it was written for and rule 3 is "
+                + "grading an empty set. Derived: " + Describe(report.VocabularyNames));
+
+        await Assert.That(kindOwner).IsEqualTo(engine)
+            .Because("the engine's vocabulary is owned by the engine's own file, which is what makes the "
+                   + "project it belongs to the owner of the vocabulary");
+
+        await Assert.That(report.VocabularyOwners.TryGetValue("LineDiffRow", out _))
+            .IsTrue()
+            .Because(
+                "the carrier is half the pattern: LineDiffRow is the type that carries a LineDiffRowKind, "
+                + "and a vocabulary that names only its enum would leave a second project's own row type "
+                + "free to reuse the same name");
+
+        // Every owner must sit in the engine's project. Graded as a bool list because the
+        // assertion is about EVERY entry, and a predicate over the values says that directly
+        // where a per-entry loop would only say it one name at a time.
+        await Assert.That(report.VocabularyOwners.Values
+                .Select(v => DiffSurfaceNameCollisionProbe.ProjectOf(v) == engineProject)
+                .ToArray())
+            .IsEquivalentTo(report.VocabularyOwners.Values.Select(_ => true).ToArray())
+            .Because(
+                "every vocabulary name is derived from the engine's project and owned by a file in it. A "
+                + "name owned by some other project would mean the layer leaked outwards, and the owner "
+                + "of a vocabulary is precisely what rule 3 exists to keep singular. Owners: "
+                + string.Join(" | ", report.VocabularyOwners.Select(o => o.Key + " -> " + o.Value)));
+
+        await Assert.That(report.VocabularyNames.Contains("DiffLineKind", StringComparer.Ordinal))
+            .IsTrue()
+            .Because(
+                "DiffLineKind beside DiffLine in src/Harbor.Ui.Framework.Rendering/Widgets/DiffBlock.cs is "
+                + "the #803 name on the engine's side — the unified-diff DOCUMENT vocabulary, which carries "
+                + "HunkHeader and FileHeader and therefore cannot be merged with a computed row. It is the "
+                + "name rule 3 protects, so the derivation has to find it. Derived: "
+                + Describe(report.VocabularyNames));
     }
 
     /// <summary>
@@ -566,10 +1087,231 @@ public sealed class DiffSurfaceNameCollisionRule
         }
     }
 
+    /// <summary>
+    ///     THE POSITIVE CONTROL FOR RULE 3. The probe is handed the #803 pair — a kind+carrier
+    ///     vocabulary in the engine's project, and the same kind name re-declared in a second
+    ///     project — plus five decoys it must NOT report.
+    /// </summary>
+    /// <remarks>
+    ///     A control written against the names this rule forbids would pass against a matcher
+    ///     that had learned those names instead of the shape, which is the one thing it must not
+    ///     do. So every source below is synthetic and the vocabulary is called
+    ///     <c>SyntheticRowKind</c>, which appears nowhere in the tree.
+    /// </remarks>
+    [Test]
+    public async Task NonVacuity_Scan_DetectsTheForeignVocabularyInSyntheticSources()
+    {
+        List<(string Relative, string[] Lines)> pair = new()
+        {
+            // (1) The engine's own project, declaring a kind beside its carrier — the shape the
+            // derivation looks for, and the anchor the whole layer hangs off.
+            ("src/Harbor.Ui.Framework.Rendering/Widgets/SyntheticDiff.cs",
+            [
+                "namespace Harbor.Ui.Framework.Rendering.Widgets;",
+                string.Empty,
+                "public enum SyntheticRowKind : byte",
+                "{",
+                "    Same,",
+                "    Added,",
+                "    Removed,",
+                "}",
+                string.Empty,
+                "public readonly record struct SyntheticRow(SyntheticRowKind Kind, int OldNo, string Text);",
+            ]),
+            // (2) #803 verbatim: the same kind name, in a different project, with a member set
+            // that does not match. Nothing here calls the engine, so rule 1 cannot see it — which
+            // is exactly why rule 3 exists.
+            ("src/Harbor.Desktop.Abstractions/ViewModels/SyntheticData.cs",
+            [
+                "namespace Harbor.Desktop.Abstractions.ViewModels;",
+                string.Empty,
+                "public enum SyntheticRowKind",
+                "{",
+                "    Context,",
+                "    Added,",
+                "    Removed",
+                "}",
+                string.Empty,
+                "public class SyntheticRowVm",
+                "{",
+                "    public SyntheticRowKind Kind { get; init; }",
+                "}",
+            ]),
+        };
+
+        // The ABSOLUTE engine path, exactly as Scan passes it, so the control exercises the
+        // same anchor resolution production does. A control that omits it falls back to the
+        // constant and never touches MakeRelativeFrom — which is how a real bug in the path
+        // handling stayed green in this test while the whole derived layer came back empty.
+        //
+        // Built with Path.Combine rather than written as a literal: MakeRelativeFrom looks
+        // for the platform's own separator, so a hard-coded "/checkout/src/..." matches on
+        // Linux and misses on Windows. The Windows job is where that showed up — the
+        // derivation came back empty there and only there.
+        DiffSurfaceReport report = DiffSurfaceNameCollisionProbe.ScanFiles(
+            pair,
+            engineFilePresent: true,
+            engineFilePath: AbsoluteEnginePath("SyntheticDiff.cs"));
+
+        await Assert.That(report.VocabularyNames).IsEquivalentTo(["SyntheticRowKind", "SyntheticRow"])
+            .Because(
+                "the derivation is by shape, and this is the shape: a kind enum with a type that carries "
+                + "it. Getting the enum without the carrier, or the carrier without the enum, means the "
+                + "derivation answers a different question than the one rule 3 asks. Derived: "
+                + Describe(report.VocabularyNames));
+
+        await Assert.That(string.Join(" | ", report.ForeignVocabulary.Select(f => f.Name)))
+            .IsEqualTo("SyntheticRowKind")
+            .Because(
+                "this is #803: the engine's project owns the name and a second project declares it. Exactly "
+                + "one finding is expected — reporting the carrier too would mean a second project's own "
+                + "row type was being held to a name it never borrowed. Reported: " + Describe(report.ForeignVocabulary));
+
+        ForeignDiffVocabulary finding = report.ForeignVocabulary[0];
+        await Assert.That(finding.DeclaringProject).IsEqualTo("Harbor.Desktop.Abstractions")
+            .Because("the finding must name the ASSEMBLY that re-declared the vocabulary, since a type "
+                   + "name without an assembly is the whole ambiguity #803 is about");
+
+        await Assert.That(finding.DeclaringFile).IsEqualTo(pair[1].Relative)
+            .Because("the finding must point at the file, so a reader can open the declaration that has to "
+                   + "change rather than guess which of the two copies is meant");
+
+        await Assert.That(finding.OwningFile).IsEqualTo(pair[0].Relative)
+            .Because("the finding must also say who OWNS the name, which is what tells a reader the fix "
+                   + "is on the foreign side and the vocabulary is not up for renegotiation");
+
+        // --- The decoys, each through the SAME probe.
+        List<(string Relative, string[] Lines)> decoys = new()
+        {
+            // (3) A kind enum with NO carrier beside it, in the engine's project. A flag enum is
+            // not a vocabulary, and if this entered the set it would make every later name
+            // un-ownable by a second project for no reason.
+            ("src/Harbor.Ui.Framework.Rendering/Input/SyntheticFlags.cs",
+            [
+                "namespace Harbor.Ui.Framework.Rendering.Input;",
+                string.Empty,
+                "public enum SyntheticFlag : byte",
+                "{",
+                "    None,",
+                "    Left,",
+                "    Right",
+                "}",
+            ]),
+            // (4) A name that merely CONTAINS the owned one. `SyntheticRowKind` inside
+            // `SyntheticRowKindExtra` is a different type, and holding it to the owned name
+            // would make the rule unfixable without inventing names.
+            ("src/Harbor.Desktop.Abstractions/ViewModels/SyntheticExtra.cs",
+            [
+                "namespace Harbor.Desktop.Abstractions.ViewModels;",
+                string.Empty,
+                "public enum SyntheticRowKindExtra",
+                "{",
+                "    Context,",
+                "    Added",
+                "}",
+                string.Empty,
+                "public sealed class SyntheticRowKindHolder",
+                "{",
+                "    public SyntheticRowKindExtra Kind { get; init; }",
+                "}",
+            ]),
+            // (5) The owned name declared AGAIN inside the engine's own project, in a second
+            // file. One project, one implementation — a partial or a companion type in the
+            // owner is not a second vocabulary.
+            ("src/Harbor.Ui.Framework.Rendering/Widgets/SyntheticDiff.Parts.cs",
+            [
+                "namespace Harbor.Ui.Framework.Rendering.Widgets;",
+                string.Empty,
+                "public readonly record struct SyntheticRow",
+                "{",
+                "    public string Label => Kind.ToString();",
+                "}",
+            ]),
+            // (6) A foreign project declaring a kind+carrier pair of its OWN, with a name
+            // nobody owns. A project is allowed its own vocabulary; the rule is about taking
+            // one that is already spoken, not about having one.
+            ("src/Harbor.Desktop.Abstractions/ViewModels/SyntheticOwn.cs",
+            [
+                "namespace Harbor.Desktop.Abstractions.ViewModels;",
+                string.Empty,
+                "public enum SyntheticBubbleKind",
+                "{",
+                "    Info,",
+                "    Warn",
+                "}",
+                string.Empty,
+                "public sealed class SyntheticBubble(SyntheticBubbleKind Kind, string Text);",
+            ]),
+            // (7) Prose that NAMES the owned vocabulary without declaring it. The XML docs in
+            // this very file are full of `<see cref="SyntheticRowKind" />`, so a matcher that
+            // keyed on the bare word would report the documentation as the defect.
+            ("src/Harbor.Desktop.Abstractions/ViewModels/SyntheticProse.cs",
+            [
+                "namespace Harbor.Desktop.Abstractions.ViewModels;",
+                string.Empty,
+                "/// <summary>Reads <see cref=\"SyntheticRowKind\" /> to pick a brush.</summary>",
+                "public sealed class SyntheticProse",
+                "{",
+                "    // TODO: reuse SyntheticRowKind here one day.",
+                "}",
+            ]),
+            // (8) A type that merely SHARES AN OWNED NAME, carrying no kind at all. This is
+            // apps/Harbor.App.Avalonia/Views/Controls/HdsDiffCompact.axaml.cs verbatim in
+            // shape: `public sealed record DiffLine(string Text, IBrush Brush)` is a DISPLAY
+            // row for a two-line summary widget, while the engine's DiffLine is a PARSED
+            // row with a DiffLineKind and two line numbers. One word, two unrelated types.
+            // The first version of this rule reported it, which is why the foreign side now
+            // gets the same kind-and-carrier test the engine's side does.
+            ("apps/Harbor.App.Avalonia/Views/Controls/SyntheticCompact.cs",
+            [
+                "namespace Harbor.App.Avalonia.Views.Controls;",
+                string.Empty,
+                "public sealed record SyntheticRow(string Text, IBrush Brush);",
+            ]),
+        };
+
+        foreach (var decoy in decoys)
+        {
+            DiffSurfaceReport decoyReport = DiffSurfaceNameCollisionProbe.ScanFiles(
+                [pair[0], decoy],
+                engineFilePresent: true,
+                engineFilePath: AbsoluteEnginePath("SyntheticDiff.cs"));
+
+            await Assert.That(decoyReport.ForeignVocabulary).IsEmpty()
+                .Because(
+                    decoy.Relative + " must not be reported. A kind enum with no carrier is not a "
+                    + "vocabulary, a longer name is a different type, the owner's own second file is one "
+                    + "implementation, a project may hold a vocabulary nobody else claims, and prose "
+                    + "naming the vocabulary is not a declaration. Reported: "
+                    + Describe(decoyReport.ForeignVocabulary));
+        }
+    }
+
+    /// <summary>
+    ///     An absolute engine-file path in the shape the live scan produces on the running
+    ///     platform, so a control driving the anchor resolution is not quietly testing a
+    ///     different platform's separators.
+    /// </summary>
+    private static string AbsoluteEnginePath(string fileName) => Path.Combine(
+        Path.GetTempPath(),
+        "checkout",
+        "src",
+        "Harbor.Ui.Framework.Rendering",
+        "Widgets",
+        fileName);
+
     private static string Describe(IReadOnlyList<DiffNameCollision> collisions) =>
         collisions.Count == 0
             ? "(nothing)"
             : string.Join(" | ", collisions.Select(c => c.Name + " in " + string.Join(" + ", c.DeclaringFiles)));
+
+    private static string Describe(IReadOnlyList<ForeignDiffVocabulary> foreign) =>
+        foreign.Count == 0
+            ? "(nothing)"
+            : string.Join(
+                " | ",
+                foreign.Select(f => f.Name + " declared by " + f.DeclaringProject + " in " + f.DeclaringFile
+                                        + ", owned by " + f.OwningFile));
 
     private static string Describe(IReadOnlyList<string> paths) =>
         paths.Count == 0 ? "(nothing)" : string.Join(" | ", paths.OrderBy(p => p, StringComparer.Ordinal));
