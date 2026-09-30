@@ -190,8 +190,18 @@ internal static partial class DiffSurfaceNameCollisionProbe
     /// <summary>Repository roots walked for declarations. <c>contrib/</c> is excluded on purpose.</summary>
     private static readonly string[] SourceRoots = ["src", "apps"];
 
-    /// <summary>Directory names never descended into during the scan.</summary>
-    private static readonly string[] SkippedDirectories =
+    /// <summary>
+    ///     Directory names never descended into during the scan.
+    /// </summary>
+    /// <remarks>
+    ///     Internal, and the walk below takes a replacement set, because a second rule
+    ///     (<c>ContribBoundaryNameRule</c>, #843) needs the SAME prune-don't-filter walk over a
+    ///     DIFFERENT root list: it measures the <c>contrib/</c> side of the CI boundary, which is
+    ///     exactly what this list prunes. A copied walk is a walk that drifts from the skip list
+    ///     above it — the reason <c>SourceScan.cs</c> exists — so the walk is shared and only the
+    ///     skip set varies.
+    /// </remarks>
+    internal static readonly string[] SkippedDirectories =
         [".git", "bin", "obj", "external", ".worktrees", "node_modules", "contrib"];
 
     /// <summary>Walks the repository. A missing checkout scans nothing, which the rule reports as a failure.</summary>
@@ -631,8 +641,21 @@ internal static partial class DiffSurfaceNameCollisionProbe
     ///     thrown, because a guard must not fail the build for a permission it did
     ///     not ask about.
     /// </remarks>
-    private static IEnumerable<string> EnumerateFiles(string repoRoot, string[] roots, string pattern)
+    /// <param name="repoRoot">Checkout to walk. A missing tree yields no files.</param>
+    /// <param name="roots">Repository-relative directories to walk.</param>
+    /// <param name="pattern">File glob, applied per directory.</param>
+    /// <param name="skipped">
+    ///     Directory names to prune. Defaults to <see cref="SkippedDirectories" />; a caller that
+    ///     must descend into one of them (<c>contrib/</c>) passes its own set. The skips are
+    ///     PRUNED, not filtered, which is the whole point of the hand-rolled walk.
+    /// </param>
+    internal static IEnumerable<string> EnumerateFiles(
+        string repoRoot,
+        string[] roots,
+        string pattern,
+        string[]? skipped = null)
     {
+        string[] skipSet = skipped ?? SkippedDirectories;
         foreach (string root in roots)
         {
             string absolute = Path.Combine(repoRoot, root);
@@ -675,7 +698,7 @@ internal static partial class DiffSurfaceNameCollisionProbe
 
                 foreach (string directory in directories)
                 {
-                    if (IsSkippedDirectory(directory))
+                    if (IsSkippedDirectory(directory, skipSet))
                     {
                         continue;
                     }
@@ -687,10 +710,10 @@ internal static partial class DiffSurfaceNameCollisionProbe
     }
 
     /// <summary>Whether a directory's NAME is one this walk never descends into.</summary>
-    private static bool IsSkippedDirectory(string absolutePath)
+    private static bool IsSkippedDirectory(string absolutePath, string[] skipSet)
     {
         string name = Path.GetFileName(absolutePath);
-        return SkippedDirectories.Contains(name, StringComparer.Ordinal);
+        return skipSet.Contains(name, StringComparer.Ordinal);
     }
 
     /// <summary>
@@ -734,7 +757,13 @@ internal static partial class DiffSurfaceNameCollisionProbe
     private static bool IsEnumDeclaration(string line, int at) =>
         line.AsSpan(0, at).TrimEnd().EndsWith("enum", StringComparison.Ordinal);
 
-    private static string MakeRelative(string repoRoot, string path) =>
+    /// <summary>
+    ///     Repo-relative, forward-slashed form of a walked file. Internal because
+    ///     <c>ContribBoundaryNameRule</c> walks the same tree with a different skip set and has to
+    ///     label what it reads the same way, or the two rules would report the same file under two
+    ///     spellings.
+    /// </summary>
+    internal static string MakeRelative(string repoRoot, string path) =>
         Path.GetRelativePath(repoRoot, path).Replace(Path.DirectorySeparatorChar, '/');
 }
 
