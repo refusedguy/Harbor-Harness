@@ -119,11 +119,22 @@ public sealed class SystemPromptBuilder : ISystemPromptBuilder
         builder.AppendLine(Constraints);
         builder.AppendLine();
 
-        // 3. Environment (compact)
+        // 3. Environment (compact). #814: every line in this block comes from the
+        //    context or from a machine fact, and the machine half is constant for
+        //    the life of the process — which is exactly what lets the caching
+        //    decorator key on the context alone. A wall clock is the one input
+        //    that is neither, and it used to be here: `- Today: <UtcNow>`, read
+        //    inside BuildAsync. The date is not a context member, so no key
+        //    derived from the context could cover it, and the decorator has no
+        //    TTL, no eviction and no Clear — a session left open across 00:00
+        //    UTC told the model it was still yesterday, on every later turn. A
+        //    model handed a stale date can act on it, so this reached the user's
+        //    answers, not only the cache. If the model ever needs the date, it
+        //    arrives as a SystemPromptContext member and the key covers it by
+        //    construction. PromptClockPurityRule holds the read out.
         builder.AppendLine("## Environment");
         builder.Append("- Working directory: `").Append(context.WorkingDirectory).AppendLine("`");
         builder.Append("- Platform: ").Append(GetOsShort()).AppendLine();
-        builder.Append("- Today: ").Append(DateTimeOffset.UtcNow.ToString("yyyy-MM-dd")).AppendLine();
         builder.Append("- Model: ").Append(context.Model.ProviderId).Append('/').Append(context.Model.Id).AppendLine();
         builder.AppendLine();
 
