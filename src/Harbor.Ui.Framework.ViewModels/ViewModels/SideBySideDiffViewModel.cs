@@ -22,6 +22,22 @@ namespace Harbor.Ui.Framework.ViewModels;
 ///         row is <i>painted</i> as, via <see cref="DiffRowViewModel.Kind" />.
 ///     </para>
 ///     <para>
+///         <b>Why the name says "SideBySide" (#570).</b> This type was
+///         <c>DiffViewModel</c>, and so was
+///         <c>Harbor.Desktop.Abstractions.ViewModels.DiffViewModel</c>. Two live
+///         types behind one name is what let #570's bug hide: the author of a fix
+///         could not tell from the name which one they were editing, one copy
+///         kept the old behaviour, and the end-to-end test stayed green because
+///         it drove both. The contracts are genuinely different — this one
+///         projects a row per line with a per-row <c>BrushKey</c> for Avalonia
+///         <c>DiffView.axaml</c>, that one flattens to a single
+///         <c>DiffText</c> string and owns the platform clipboard delegate — so
+///         neither is a copy to delete, and the fix is to let each name state
+///         which projection it is. The shared algorithm is
+///         <see cref="Harbor.Ui.Framework.Rendering.Widgets.LineDiff" />, and
+///         <c>DiffSurfaceNameCollisionRule</c> is what stops the pair regrowing.
+///     </para>
+///     <para>
 ///         <b>vm-dedup canon (audit 27-G):</b> canonical TEA-projection side-by-side
 ///         diff VM (<c>LeftText</c>/<c>RightText</c>/<c>Compute</c>/<c>Rows</c>), bound by
 ///         Avalonia <c>DiffView.axaml</c>. Not the same as the TUI
@@ -31,9 +47,9 @@ namespace Harbor.Ui.Framework.ViewModels;
 ///         stay separate types.
 ///     </para>
 /// </remarks>
-public sealed partial class DiffViewModel : ObservableObject
+public sealed partial class SideBySideDiffViewModel : ObservableObject
 {
-    private readonly ILogger<DiffViewModel> _logger;
+    private readonly ILogger<SideBySideDiffViewModel> _logger;
 
     [ObservableProperty]
     private string _leftText = string.Empty;
@@ -48,7 +64,7 @@ public sealed partial class DiffViewModel : ObservableObject
     private string _rightTitle = "after";
 
     /// <summary>Construct the diff view-model.</summary>
-    public DiffViewModel(ILogger<DiffViewModel> logger)
+    public SideBySideDiffViewModel(ILogger<SideBySideDiffViewModel> logger)
     {
         _logger = logger;
     }

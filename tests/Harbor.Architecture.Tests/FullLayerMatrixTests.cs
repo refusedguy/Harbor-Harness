@@ -324,10 +324,11 @@ public class FullLayerMatrixTests
         // now bind the Abstractions package in IL rather than carrying an
         // unbound reference to it. Same Presentation → Domain edge the other
         // Ui.Framework.* rows already declare.
-        // #679: DiffViewModel.Compute projects the core line-level LCS
-        // (Rendering.Widgets.LineDiff) instead of comparing left[i]/right[i]
-        // itself, so the edge is bound. Direct rather than transitive through
-        // State (CF-A-001 precedent) — Presentation → Presentation conforms.
+        // #679: SideBySideDiffViewModel.Compute (renamed from DiffViewModel by
+        // #570) projects the core line-level LCS (Rendering.Widgets.LineDiff)
+        // instead of comparing left[i]/right[i] itself, so the edge is bound.
+        // Direct rather than transitive through State (CF-A-001 precedent) —
+        // Presentation → Presentation conforms.
         ["Harbor.Ui.Framework.ViewModels"] = new(Layer.Presentation,
             [ "Harbor.Abstractions.Contracts", "Harbor.Ui.Framework.State", "Harbor.Ui.Framework.Services",
               "Harbor.Ui.Framework.Abstractions", "Harbor.Ui.Framework.Rendering"]),

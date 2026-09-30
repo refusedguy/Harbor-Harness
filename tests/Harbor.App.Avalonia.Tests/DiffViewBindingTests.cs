@@ -37,7 +37,7 @@ public class DiffViewBindingTests
         await using var session = HeadlessUnitTestSession.StartNew(typeof(App));
         await session.Dispatch(async () =>
         {
-            var vm = new DiffViewModel(NullLogger<DiffViewModel>.Instance)
+            var vm = new SideBySideDiffViewModel(NullLogger<SideBySideDiffViewModel>.Instance)
             {
                 LeftText = "line1\nline-left",
                 RightText = "line1\nline-right",

@@ -33,7 +33,7 @@ public sealed class AvaloniaContentHost : IContentHost
     public ChatViewModel Chat { get; }
     public SessionListViewModel Sessions { get; }
     public CodeEditorViewModel CodeEditor { get; }
-    public Harbor.Ui.Framework.ViewModels.DiffViewModel Diff { get; }
+    public Harbor.Ui.Framework.ViewModels.SideBySideDiffViewModel Diff { get; }
     public TokenUsageViewModel TokenUsage { get; }
     public Harbor.Desktop.Abstractions.ViewModels.ProviderBrowserViewModel ProviderBrowser { get; }
     public Harbor.App.Avalonia.ViewModels.ProviderModelPickerViewModel ProviderModelPicker { get; }
@@ -58,7 +58,7 @@ public sealed class AvaloniaContentHost : IContentHost
         ChatViewModel chat,
         SessionListViewModel sessions,
         CodeEditorViewModel codeEditor,
-        Harbor.Ui.Framework.ViewModels.DiffViewModel diff,
+        Harbor.Ui.Framework.ViewModels.SideBySideDiffViewModel diff,
         TokenUsageViewModel tokenUsage,
         Harbor.Desktop.Abstractions.ViewModels.ProviderBrowserViewModel providerBrowser,
         Harbor.App.Avalonia.ViewModels.ProviderModelPickerViewModel providerModelPicker,
