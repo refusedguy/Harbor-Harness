@@ -339,7 +339,7 @@ public class ReplRunnerConfigLoadTests
             agentRegistry,
             new FakeProviderRegistry(new ScriptedLlmClient()),
             slashes,
-            NullLogger<CellForgeReplRunner>.Instance,
+            NullLoggerFactory.Instance,
             pluginReload: null,
             rendererPipeline: null,
             tokens: null,
