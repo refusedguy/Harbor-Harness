@@ -93,11 +93,11 @@
 //   * `NonVacuity_Discovery_Sees_The_Provider_Trees` — the scope is non-empty
 //     and contains the files the rule is about.
 //   * `NonVacuity_The_Matchers_Fire_On_Planted_Offenders_Only` — synthetic
-//     source, ten planted snippets, six required hits: the reflection matcher
-//     must catch `SerializeToUtf8Bytes` and a whitespace-split `JsonSerializer
-//     . Serialize`, and must NOT catch `Deserialize<`, a `JsonSerializerContext`
-//     declaration, a payload built with `Utf8JsonWriter`, or a `///` sentence
-//     quoting the construct.
+//     source, ten planted snippets per rule; the correct neighbouring shapes must
+//     all stay silent. This one earned its place on its first CI run: the carrier
+//     matcher closed each generic branch twice and matched nothing, so the rule
+//     was green on the very code it exists to be red about, and the control said
+//     "expected 3, found 1" instead of the rule saying nothing.
 //   * `NonVacuity_Comments_Are_Stripped_Before_Matching` — the prose form is
 //     explicitly shown to be silent, because `OpenAiImageContent.cs` contains
 //     `JsonSerializer.Serialize(Dictionary<string, object?>)` inside a `///` and
@@ -158,9 +158,18 @@ public sealed class ProviderPayloadSerializationRules
     ///     The untyped carriers, as one alternation: a dictionary whose value type
     ///     is <c>object?</c>, and the two array-shaped ones.
     /// </summary>
+    /// <remarks>
+    ///     One closing angle per branch. The first version of this pattern closed
+    ///     each generic branch twice (<c>object?&gt;\s*&gt;</c>), which matches
+    ///     nothing at all — and the planted-offender control caught it on its first
+    ///     CI run, reporting three expected hits and one found. That is the control
+    ///     doing the job it exists for: the rule was live and silently matching only
+    ///     its <c>object[]</c> branch, i.e. green on the real code it was supposed
+    ///     to be red about.
+    /// </remarks>
     private static readonly Regex UntypedCarrier = new(
-        @"\bDictionary\s*<\s*string\s*,\s*object\s*\?>\s*>"
-        + @"|\bList\s*<\s*object\s*>\s*>"
+        @"\bDictionary\s*<\s*string\s*,\s*object\s*\??>"
+        + @"|\bList\s*<\s*object\s*>"
         + @"|\bobject\s*\[\s*\]",
         RegexOptions.Compiled);
 
@@ -327,10 +336,10 @@ public sealed class ProviderPayloadSerializationRules
     }
 
     /// <summary>
-    ///     Sensitivity control over synthetic source: ten planted snippets, six
-    ///     required to hit. Both rules are exercised, and the correct neighbouring
-    ///     shapes are asserted silent so the rule cannot be "fixed" later by
-    ///     widening the matcher until everything is a violation.
+    ///     Sensitivity control over synthetic source: the planted offenders must all be
+    ///     hit and the correct neighbouring shapes must all stay silent, so the rule
+    ///     cannot later be "fixed" by widening the matcher until everything is a
+    ///     violation.
     /// </summary>
     [Test]
     public async Task NonVacuity_The_Matchers_Fire_On_Planted_Offenders_Only()
@@ -370,6 +379,7 @@ public sealed class ProviderPayloadSerializationRules
             ("src/Harbor.Providers.X/A.cs", "var payload = new Dictionary<string, object?>(12);"),
             ("src/Harbor.Providers.X/B.cs", "public static List<object> BuildMessages(LlmRequest r)"),
             ("src/Harbor.Providers.X/C.cs", "object[] converted = new object[blocks.Count];"),
+            ("src/Harbor.Providers.X/G.cs", "Dictionary<string, object> map = new();"),
             // Must stay silent.
             ("src/Harbor.Providers.X/D.cs", "var messages = new List<LlmMessage>();"),
             ("src/Harbor.Providers.X/E.cs", "Dictionary<string, string> headers;"),
@@ -383,7 +393,8 @@ public sealed class ProviderPayloadSerializationRules
             "src/Harbor.Providers.X/A.cs",
             "src/Harbor.Providers.X/B.cs",
             "src/Harbor.Providers.X/C.cs",
-        }).Because("three planted carriers must be caught; a Dictionary<string, string> "
+            "src/Harbor.Providers.X/G.cs",
+        }).Because("four planted carriers must be caught; a Dictionary<string, string> "
                   + "and a List<LlmMessage> are typed and must not be reported");
     }
 
