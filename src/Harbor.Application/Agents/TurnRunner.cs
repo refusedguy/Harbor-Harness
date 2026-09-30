@@ -103,7 +103,7 @@ internal sealed class TurnRunner(
         // list: after a summary was produced, ShouldCompact and the
         // request both see [summary] + kept tail, so compaction does
         // not re-trigger on every subsequent turn.
-        IReadOnlyList<AgentMessage> turnMessages = CompactionService.MaterializeCompactedView(session.Messages);
+        IReadOnlyList<AgentMessage> turnMessages = CompactionPolicy.MaterializeCompactedView(session.Messages);
 
         // 2. Compaction check + truncation fallback — the per-turn
         // CompactionBehavior owns threshold check, summarization,
@@ -119,7 +119,7 @@ internal sealed class TurnRunner(
         // request from a strictly reduced recent tail instead.
         if (truncationFallback)
         {
-            turnMessages = CompactionService.TruncateToFitStrict(turnMessages, model, tokenTracker);
+            turnMessages = CompactionPolicy.TruncateToFitStrict(turnMessages, model, tokenTracker);
             metrics.Histogram(
                 "session.context.size", tokenTracker.EstimateTokens(turnMessages),
                 new KeyValuePair<string, object?>("context.phase", "truncated"),

@@ -259,7 +259,7 @@ public class CompactionServiceTests
     {
         var messages = new AgentMessage[] { User("hi"), Assistant("ho") };
 
-        var view = CompactionService.MaterializeCompactedView(messages);
+        var view = CompactionPolicy.MaterializeCompactedView(messages);
 
         await Assert.That(ReferenceEquals(view, messages)).IsTrue();
     }
@@ -275,7 +275,7 @@ public class CompactionServiceTests
         var summary = Summary("folded head", u1.Id);
         var raw = new AgentMessage[] { u0, u1, u2, summary };
 
-        var view = CompactionService.MaterializeCompactedView(raw);
+        var view = CompactionPolicy.MaterializeCompactedView(raw);
 
         await Assert.That(view.Count).IsEqualTo(3);
         await Assert.That(view[0].Id).IsEqualTo(summary.Id);
@@ -292,7 +292,7 @@ public class CompactionServiceTests
         var after = Assistant("appended after compaction");
         var raw = new AgentMessage[] { u0, u1, summary, after };
 
-        var view = CompactionService.MaterializeCompactedView(raw);
+        var view = CompactionPolicy.MaterializeCompactedView(raw);
 
         await Assert.That(view.Count).IsEqualTo(2);
         await Assert.That(view[0].Id).IsEqualTo(summary.Id);
@@ -307,7 +307,7 @@ public class CompactionServiceTests
         var summary = Summary("dangling anchor", "does-not-exist");
         var raw = new AgentMessage[] { u0, u1, summary };
 
-        var view = CompactionService.MaterializeCompactedView(raw);
+        var view = CompactionPolicy.MaterializeCompactedView(raw);
 
         await Assert.That(view.Count).IsEqualTo(raw.Length);
         await Assert.That(ReferenceEquals(view, raw)).IsTrue();
@@ -323,7 +323,7 @@ public class CompactionServiceTests
         var tr3 = ToolResult("read", "file contents here");
         var raw = new AgentMessage[] { u0, u1, summary, a2, tr3 };
 
-        var view = CompactionService.MaterializeCompactedView(raw);
+        var view = CompactionPolicy.MaterializeCompactedView(raw);
 
         await Assert.That(view.Count).IsEqualTo(4);
         await Assert.That(view[0].Id).IsEqualTo(summary.Id);
@@ -347,7 +347,7 @@ public class CompactionServiceTests
         // Raw layout is append-only: pruned head first, then kept tail,
         // then the summary the loop appends on top.
         var raw = new List<AgentMessage> { u0, u1, u2, summary };
-        var beforeView = CompactionService.MaterializeCompactedView(raw);
+        var beforeView = CompactionPolicy.MaterializeCompactedView(raw);
 
         foreach (var message in raw)
         {
@@ -357,7 +357,7 @@ public class CompactionServiceTests
 
         var reloaded = await store.GetMessagesAsync(sessionId);
         await Assert.That(reloaded.IsSuccess).IsTrue();
-        var afterView = CompactionService.MaterializeCompactedView(reloaded.Value);
+        var afterView = CompactionPolicy.MaterializeCompactedView(reloaded.Value);
 
         await Assert.That(afterView.Count).IsEqualTo(beforeView.Count);
         await Assert.That(afterView.Count).IsEqualTo(3);

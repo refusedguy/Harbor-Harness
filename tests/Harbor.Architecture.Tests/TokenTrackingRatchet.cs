@@ -32,7 +32,8 @@
 // matches the measured one:
 //
 //   ITokenEstimator        Estimate, EstimateMessage, EstimateTokens
-//                          -> CompactionService, TurnRunner, CompactionBehavior
+//                          -> CompactionService, CompactionPolicy, TurnRunner,
+//                             CompactionBehavior
 //   IUsageRecorder         RecordAppendedMessage, RecordTurnUsage
 //                          -> TurnRunner, SteeringDrainBehavior, BackgroundDrain
 //   ICompactionHeuristic   ShouldCompact
@@ -215,13 +216,13 @@ public sealed class TokenTrackingRatchet
     private const int MeasuredMemberCount = 7;
 
     /// <summary>How many product files held it when this table was measured.</summary>
-    private const int MeasuredHolderCount = 15;
+    private const int MeasuredHolderCount = 16;
 
     /// <summary>
-    ///     How many holders call at least one member: the six leaf consumers, plus the
+    ///     How many holders call at least one member: the seven leaf consumers, plus the
     ///     implementor row that is over-attributed (see the header).
     /// </summary>
-    private const int MeasuredFilesCallingSomething = 7;
+    private const int MeasuredFilesCallingSomething = 8;
 
     /// <summary>The aggregate's full name, resolved by name rather than by <c>typeof</c>.</summary>
     private const string AggregateFullName = "Harbor.Abstractions.Sessions." + AggregateName;
@@ -250,7 +251,7 @@ public sealed class TokenTrackingRatchet
 
     /// <summary>
     ///     Every product file that holds the aggregate, with the members it calls.
-    ///     Nine composition roots, six leaf consumers.
+    ///     Nine composition roots, seven leaf consumers.
     /// </summary>
     private static readonly TokenHolderBaseline[] BaselineHolders =
     [
@@ -286,6 +287,11 @@ public sealed class TokenTrackingRatchet
             ["EstimateTokens", "RecordAppendedMessage", "RecordTurnUsage"],
             "records what the turn spent and what it appended, and sizes the turn for a metric",
             false),
+        new("src/Harbor.Application/Sessions/CompactionPolicy.cs", ["EstimateMessage"],
+            "sizes the kept tail of a truncation: the cut walks the history backwards "
+            + "adding EstimateMessage until the budget is spent. Added by #472, which moved "
+            + "TruncateToFit / TruncateToFitStrict here out of CompactionService — this row "
+            + "is the ratchet catching that move rather than the move sneaking past it", false),
         new("src/Harbor.Application/Sessions/CompactionService.cs",
             ["Estimate", "EstimateMessage", "EstimateTokens"],
             "counts text and history; never records and never decides", false),
@@ -312,6 +318,7 @@ public sealed class TokenTrackingRatchet
         [
             "src/Harbor.Application/Agents/Pipeline/CompactionBehavior.cs",
             "src/Harbor.Application/Agents/TurnRunner.cs",
+            "src/Harbor.Application/Sessions/CompactionPolicy.cs",
             "src/Harbor.Application/Sessions/CompactionService.cs",
         ]),
         new("IUsageRecorder", ["RecordAppendedMessage", "RecordTurnUsage"],
@@ -393,8 +400,8 @@ public sealed class TokenTrackingRatchet
     }
 
     /// <summary>
-    ///     No sixteenth file holds the aggregate. Every row in the table above is a
-    ///     composition root that legitimately needs the wide type, or one of the six leaf
+    ///     No seventeenth file holds the aggregate. Every row in the table above is a
+    ///     composition root that legitimately needs the wide type, or one of the seven leaf
     ///     consumers the split exists for; a new one is coupling being added, not moved.
     /// </summary>
     [Test]
@@ -581,7 +588,7 @@ public sealed class TokenTrackingRatchet
         int calling = measured.Count(static pair => pair.Value.Count > 0);
         await Assert.That(calling).IsEqualTo(MeasuredFilesCallingSomething)
             .Because($"{MeasuredFilesCallingSomething} holders were measured calling something: the "
-                   + "six leaf consumers, plus TokenTracker.cs, whose two matches are the "
+                   + "seven leaf consumers, plus TokenTracker.cs, whose two matches are the "
                    + "over-attributed delegations documented in the header. This is the count that "
                    + "tells you the per-consumer half of the ratchet has rows to grade at all — a "
                    + "ratchet whose every row is empty grades nothing");

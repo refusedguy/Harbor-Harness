@@ -75,7 +75,7 @@ public sealed class CompactionBehavior(
                 // from the compacted view instead of the overfull
                 // pre-compaction history.
                 IReadOnlyList<AgentMessage> compacted =
-                    CompactionService.MaterializeCompactedView(session.Messages);
+                    CompactionPolicy.MaterializeCompactedView(session.Messages);
                 metrics.Histogram(
                     "session.context.size", tokenTracker.EstimateTokens(compacted),
                     new KeyValuePair<string, object?>("context.phase", "post-compaction"),

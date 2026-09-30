@@ -301,7 +301,7 @@ public class AgentLoopTests
         await Assert.That(anchorId).IsEqualTo(seedIds[16]);
 
         // The EFFECTIVE history is actually shorter: summary + kept tail + answer.
-        var view = CompactionService.MaterializeCompactedView(session.Messages);
+        var view = CompactionPolicy.MaterializeCompactedView(session.Messages);
         await Assert.That(view.Count).IsEqualTo(6);
         await Assert.That(view[0].Id).IsEqualTo(summaries[0].Id);
         for (int i = 1; i <= 4; i++)

@@ -1,5 +1,10 @@
 // CompactionPolicyInvariantTests.cs — the GUARD for #472, slice 1: the history-shaping
-// policy that lives inside CompactionService.
+// compaction policy.
+//
+// The citations below name CompactionPolicy.cs, where the policy lives after the split.
+// The guard was ARMED BEFORE that split and was red against the same three methods when
+// they were still on CompactionService; the line numbers moved with the code and the
+// rules did not. Commit 1 of the PR carries the pre-split citations and the red CI run.
 //
 // WHY THIS GUARDS POLICY AND NOT SIZE
 // -----------------------------------
@@ -14,21 +19,21 @@
 // The four rules, each quoted from the code that claims it
 // ---------------------------------------------------------
 //   1. NEITHER TRUNCATION MAY OPEN THE KEPT SLICE ON AN ORPHAN TOOL RESULT.
-//      CompactionService.cs:196-201 ("The cut point never lands on a ToolResultMessage:
+//      CompactionPolicy.cs:50-52 ("The cut point never lands on a ToolResultMessage:
 //      orphan tool results whose assistant tool_call was dropped would be rejected by
-//      providers") and :339-340 (the same claim in TruncateToFitStrict).
+//      providers") and :133-134 (the same claim in TruncateToFitStrict).
 //   2. TruncateToFitStrict ALWAYS REDUCES STRICTLY ABOVE THE KEEP FLOOR.
-//      CompactionService.cs:290-292 ("Whenever total > 4 the target is strictly below
+//      CompactionPolicy.cs:120-122 ("Whenever total > 4 the target is strictly below
 //      total, so reduction is guaranteed even when the whole history would trivially
 //      fit"). 4 is a real threshold in the code, not one invented here: it is
-//      `MinimumKeptMessages` at :311.
+//      `MinimumKeptMessages` at :144.
 //   3. MaterializeCompactedView IS IDEMPOTENT.
 //      The compacted view is recomputed from the raw append-only history on every turn
 //      (TurnRunner.cs:106, CompactionBehavior.cs:78). Materializing a view that has
 //      already been materialized must not shrink it again, or the session bleeds one
 //      turn at a time.
 //   4. MaterializeCompactedView FAILS SAFE.
-//      CompactionService.cs:374-378 ("when no summary exists, or the anchor id cannot be
+//      CompactionPolicy.cs:203-206 ("when no summary exists, or the anchor id cannot be
 //      resolved, the input instance is returned unchanged rather than risking silent
 //      history loss"). Silent history loss is the worst outcome this subsystem has.
 //
@@ -72,7 +77,7 @@ using Harbor.Application.Sessions;
 namespace Harbor.Core.Tests;
 
 /// <summary>
-///     Guards the history-shaping policy that <c>CompactionService</c> applies: what the
+///     Guards the history-shaping compaction policy in <c>CompactionPolicy</c>: what the
 ///     next LLM request is built from. Four rules, each one quoted from the code that
 ///     claims it, plus the non-vacuity controls that keep the rules load-bearing.
 /// </summary>
@@ -139,15 +144,15 @@ public class CompactionPolicyInvariantTests
         List<string> violations = [];
         foreach ((string name, AgentMessage[] history) in Sweep())
         {
-            IReadOnlyList<AgentMessage> kept = CompactionService.TruncateToFit(
+            IReadOnlyList<AgentMessage> kept = CompactionPolicy.TruncateToFit(
                 history, Budgeted, Tracker);
 
             violations.AddRange(Describe(name, "TruncateToFit", history, kept));
         }
 
         await Assert.That(violations).IsEmpty()
-            .Because("CompactionService.TruncateToFit documents at its own line 197 that "
-                   + "the cut point never lands on a ToolResultMessage, because an orphan "
+            .Because("CompactionPolicy.TruncateToFit documents at CompactionPolicy.cs:50 "
+                   + "that the cut point never lands on a ToolResultMessage, because an orphan "
                    + "result whose assistant tool_call was dropped is rejected by the "
                    + "provider. These histories broke that: "
                    + string.Join(" | ", violations));
@@ -165,14 +170,14 @@ public class CompactionPolicyInvariantTests
         List<string> violations = [];
         foreach ((string name, AgentMessage[] history) in Sweep())
         {
-            IReadOnlyList<AgentMessage> kept = CompactionService.TruncateToFitStrict(
+            IReadOnlyList<AgentMessage> kept = CompactionPolicy.TruncateToFitStrict(
                 history, Budgeted, Tracker);
 
             violations.AddRange(Describe(name, "TruncateToFitStrict", history, kept));
         }
 
         await Assert.That(violations).IsEmpty()
-            .Because("CompactionService.TruncateToFitStrict documents the same orphan "
+            .Because("CompactionPolicy.TruncateToFitStrict documents the same orphan "
                    + "guarantee as TruncateToFit, and it is the copy that runs in "
                    + "production. When the kept budget lands entirely inside a run of "
                    + "parallel tool results, the forward orphan-skip walks off the end "
@@ -180,6 +185,47 @@ public class CompactionPolicyInvariantTests
                    + "last result. TurnRunner then requests a conversation whose first "
                    + "message is an unpaired tool result. Violations: "
                    + string.Join(" | ", violations));
+    }
+
+    /// <summary>
+    ///     Rule 1's ONE documented exception, graded rather than left in a comment. When the
+    ///     entire history is tool results there is no assistant turn to step back to and no
+    ///     legal slice exists; the newest message is kept, because the input was already
+    ///     malformed and an empty history is strictly worse. This input is not reachable
+    ///     from session history — that is append-only from a user message, and its compacted
+    ///     view starts with a summary or a user turn — so it is a public-library edge case,
+    ///     not a product path, and the assertion below is that we behave as documented
+    ///     rather than that we somehow fix it.
+    /// </summary>
+    [Test]
+    public async Task TruncateToFit_KeepsTheNewestMessageWhenNothingLegalExists()
+    {
+        AgentMessage[] allToolResults =
+        [
+            ToolResult("read", "first"),
+            ToolResult("write", "second"),
+            ToolResult("bash", "third"),
+        ];
+
+        IReadOnlyList<AgentMessage> kept =
+            CompactionPolicy.TruncateToFit(allToolResults, Budgeted, Tracker);
+
+        await Assert.That(kept.Count).IsEqualTo(1)
+            .Because("an empty kept history would discard the conversation outright, which is "
+                   + "the worse of the two bad options; one message keeps it recoverable");
+
+        await Assert.That(ReferenceEquals(kept[0], allToolResults[^1])).IsTrue()
+            .Because("the newest message is the one to keep, and it is kept by identity — a "
+                   + "rebuilt-but-equal message would hide which arm of the policy ran");
+
+        // The same input through the strict variant must ALSO reduce: three in, at most one
+        // out, so a malformed history cannot become a request that grows.
+        IReadOnlyList<AgentMessage> strictKept =
+            CompactionPolicy.TruncateToFitStrict(allToolResults, Budgeted, Tracker);
+
+        await Assert.That(strictKept.Count).IsLessThan(allToolResults.Length)
+            .Because("the strict variant's contract is a strict reduction, and that contract "
+                   + "does not have an exception for malformed input");
     }
 
     /// <summary>
@@ -199,7 +245,7 @@ public class CompactionPolicyInvariantTests
                 continue;
             }
 
-            IReadOnlyList<AgentMessage> kept = CompactionService.TruncateToFitStrict(
+            IReadOnlyList<AgentMessage> kept = CompactionPolicy.TruncateToFitStrict(
                 history, Budgeted, Tracker);
 
             if (!KeptCount(kept, history.Length, name, "TruncateToFitStrict", out string why))
@@ -230,9 +276,9 @@ public class CompactionPolicyInvariantTests
         foreach ((string name, AgentMessage[] history) in SummaryAnchoredSweep())
         {
             IReadOnlyList<AgentMessage> once =
-                CompactionService.MaterializeCompactedView(history);
+                CompactionPolicy.MaterializeCompactedView(history);
             IReadOnlyList<AgentMessage> twice =
-                CompactionService.MaterializeCompactedView(once);
+                CompactionPolicy.MaterializeCompactedView(once);
 
             if (once.Count != twice.Count)
             {
@@ -271,7 +317,7 @@ public class CompactionPolicyInvariantTests
     {
         AgentMessage[] noSummary = [User("hello"), Assistant("hi")];
         IReadOnlyList<AgentMessage> noSummaryResult =
-            CompactionService.MaterializeCompactedView(noSummary);
+            CompactionPolicy.MaterializeCompactedView(noSummary);
 
         await Assert.That(ReferenceEquals(noSummaryResult, noSummary)).IsTrue()
             .Because("with no summary anchor there is nothing to fold, and the documented "
@@ -286,7 +332,7 @@ public class CompactionPolicyInvariantTests
             Assistant("later"),
         ];
         IReadOnlyList<AgentMessage> danglingResult =
-            CompactionService.MaterializeCompactedView(danglingAnchor);
+            CompactionPolicy.MaterializeCompactedView(danglingAnchor);
 
         await Assert.That(ReferenceEquals(danglingResult, danglingAnchor)).IsTrue()
             .Because("an unresolvable anchor means the summary folded in an unknown slice; "
@@ -429,9 +475,9 @@ public class CompactionPolicyInvariantTests
     ///     the number the sweep was sized against instead of trusting a comment.
     /// </summary>
     internal static int ComputeTruncationBudgetFor(ModelInfo model) =>
-        model.ContextWindow - CompactionService.DefaultReserveTokens - model.MaxOutputTokens < 4_096
+        model.ContextWindow - CompactionPolicy.DefaultReserveTokens - model.MaxOutputTokens < 4_096
             ? Math.Max(4_096, model.ContextWindow / 2)
-            : model.ContextWindow - CompactionService.DefaultReserveTokens - model.MaxOutputTokens;
+            : model.ContextWindow - CompactionPolicy.DefaultReserveTokens - model.MaxOutputTokens;
 
     /// <summary>
     ///     The truncation sweep: histories whose newest run is a set of parallel tool
