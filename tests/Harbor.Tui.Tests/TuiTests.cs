@@ -77,6 +77,34 @@ public class StatusBarViewModelTests
         await Assert.That(vm.Status).IsEqualTo("running");
     }
 
+    /// <summary>
+    ///     #773 — the legacy VM path's half of the compaction gap. This VM has
+    ///     no <c>MessageStartEvent</c> arm, so unlike the store projection (which
+    ///     self-corrects on the next message start) it has nothing that would
+    ///     clear a stale "compacting". The status must leave "compacting" the
+    ///     moment the failure lands.
+    ///     <para>
+    ///         "running", not "error": the core engaged the truncation fallback
+    ///         and continued the turn. A status bar is one collapsed line, so
+    ///         the value has to be the true one — the degradation itself is
+    ///         narrated by the renderers that have a transcript (see the sibling
+    ///         issue filed with #773).
+    ///     </para>
+    /// </summary>
+    [Test]
+    public async Task CompactionFailedEvent_LeavesStatusCompacting()
+    {
+        var vm = new StatusBarViewModel();
+        await vm.UpdateFromEventAsync(new CompactionStartedEvent("s1"));
+        await Assert.That(vm.Status).IsEqualTo("compacting");
+
+        await vm.UpdateFromEventAsync(new CompactionFailedEvent("s1", "summarizer timed out"));
+
+        await Assert.That(vm.Status).IsEqualTo("running")
+            .Because("compaction is over and the turn continues; \"compacting\" would be a "
+                   + "stale label with no MessageStartEvent arm in this VM to correct it");
+    }
+
     [Test]
     public async Task Formatted_Contains_Model_And_Status()
     {

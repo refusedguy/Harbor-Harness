@@ -177,6 +177,17 @@ public static class ChatAppReducer
         SessionStatsEvent ss => OnSessionStats(state, ss),
         CompactionStartedEvent => state with { Chat = state.Chat with { Status = "compacting" } },
         CompactionCompletedEvent cc => OnCompactionCompleted(state, cc),
+        // #773: the third arm of the lifecycle, and the only one whose absence
+        // left a LABEL lying. CompactionBehavior publishes this and returns
+        // TruncationFallback: true — the turn continues on a truncated history.
+        // "error" would be a worse lie than the one this fixes: AgentEndEvent
+        // deliberately preserves an "error" status past the end of a run
+        // (`Status == "error" ? "error" : "idle"`), so it would repaint a run
+        // that completed as a failed one. "running" is the truth, and the
+        // system line is what keeps the truncation from being silent.
+        // SessionStatus is deliberately NOT touched — #687 decides it on the
+        // transition that establishes it, and the run has not ended.
+        CompactionFailedEvent cf => OnCompactionFailed(state, cf),
         AgentErrorEvent err => state
             .AddLine(ChatRole.Error, err.Message)
             .WithStatus("error")
@@ -511,6 +522,19 @@ public static class ChatAppReducer
         state
             .AddLine(ChatRole.System,
                 $"compacted: pruned {cc.PrunedMessageCount} msgs, saved ~{cc.TokensSaved} tokens")
+            .WithStatus("running");
+
+    /// <summary>
+    ///     #773 — a failed compaction is a degradation, not a failed run. The
+    ///     core engaged the truncation fallback and continues the turn on a
+    ///     shortened history, so the status returns to "running" and the
+    ///     transcript says what happened instead. Shaped exactly like
+    ///     <see cref="OnCompactionCompleted" />: one system line, one status.
+    /// </summary>
+    private static UiState OnCompactionFailed(UiState state, CompactionFailedEvent cf) =>
+        state
+            .AddLine(ChatRole.System,
+                $"compaction failed: {cf.Error} — continuing on truncated history")
             .WithStatus("running");
 
     // ── formatting helpers (escaping) ─────────────────────────────────────
