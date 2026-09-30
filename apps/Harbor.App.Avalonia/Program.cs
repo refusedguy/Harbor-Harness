@@ -46,10 +46,16 @@ AppBuilder.Configure<App>()
     .LogToTrace()
     .AfterSetup(_ =>
     {
-        // Hand the built ServiceProvider + IHost to App so the ViewModels can
-        // resolve services and App.OnShutdownRequested can stop the host
-        // cleanly on exit (prevents the "window won't close" hang where
-        // background Task.Run instances kept the process alive).
+        // Hand the built ServiceProvider + IHost to App so App can compose the
+        // startup path (MainViewModel, ToastService, MainWindow, OnboardingWindow)
+        // and App.OnShutdownRequested can stop the host cleanly on exit (prevents
+        // the "window won't close" hang where background Task.Run instances kept
+        // the process alive).
+        //
+        // #779: shell VIEWS no longer read this. They resolve through ShellLocator,
+        // which walks up to the MainWindow that App builds with a real
+        // IViewModelLocator. This handover is the composition root's own channel,
+        // and App.Services throws by name if anything reads it before here.
         App.Services = host.Services;
         App.Host = host;
     })

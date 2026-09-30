@@ -1,5 +1,6 @@
 using Avalonia.Controls;
 using Avalonia.Interactivity;
+using Harbor.App.Avalonia.Hosting;
 using Harbor.App.Avalonia.ViewModels;
 using Harbor.Ui.Framework.Navigation;
 using Microsoft.Extensions.DependencyInjection;
@@ -27,5 +28,5 @@ public partial class ToolCallCardView : UserControl
     }
 
     private IShellChrome? _shellChrome;
-    private IShellChrome ShellChrome => _shellChrome ??= App.Services.GetRequiredService<IShellChrome>();
+    private IShellChrome ShellChrome => _shellChrome ??= ShellLocator.Of(this).Get<IShellChrome>();
 }

@@ -5,6 +5,7 @@ using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Markup.Xaml.Styling;
 using Avalonia.Media;
+using Harbor.App.Avalonia.Hosting;
 using Harbor.App.Avalonia.Services;
 using Harbor.App.Avalonia.ViewModels;
 using Harbor.Ui.Framework.Navigation;
@@ -21,13 +22,13 @@ namespace Harbor.App.Avalonia.Views.Shell;
 public partial class ActivityRailView : UserControl
 {
     private IShellChrome? _shellChrome;
-    private IShellChrome ShellChrome => _shellChrome ??= App.Services.GetRequiredService<IShellChrome>();
+    private IShellChrome ShellChrome => _shellChrome ??= ShellLocator.Of(this).Get<IShellChrome>();
 
     private CodeEditorViewModel? _codeEditor;
-    private CodeEditorViewModel CodeEditor => _codeEditor ??= App.Services.GetRequiredService<CodeEditorViewModel>();
+    private CodeEditorViewModel CodeEditor => _codeEditor ??= ShellLocator.Of(this).Get<CodeEditorViewModel>();
 
     private ILogger<ActivityRailView>? _logger;
-    private ILogger<ActivityRailView> Logger => _logger ??= App.Services.GetRequiredService<ILogger<ActivityRailView>>();
+    private ILogger<ActivityRailView> Logger => _logger ??= ShellLocator.Of(this).Get<ILogger<ActivityRailView>>();
 
     public ActivityRailView()
     {
