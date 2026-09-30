@@ -705,7 +705,12 @@ public class MyMessageTests
 | `[Before(HookType.TestDiscovery)]` | Global setup (use in `GlobalSetup` class). |
 | `[NotInParallel]` | Runs the test **completely alone** — no other test in the process overlaps it. |
 | `[NotInParallel("group")]` | Serializes against other tests carrying an **overlapping key only**. Not a global lock — see below. |
-| `[SkipWhenNotLinux]` | Skip on non-Linux. |
+| `[RunOn(OS.Linux)]` | Run only on Linux; skipped elsewhere. Also `[ExcludeOn(OS.Windows \| OS.MacOs)]` for the inverse. |
+
+Every row above is a TUnit type that resolves in any test project. The one
+bespoke attribute this file used to list here, `[SkipWhenNotLinux]`, is
+`internal` to `tests/Harbor.Tools.Builtin.Tests` and resolves nowhere else —
+copying it into another project is CS0246, not a skip.
 
 ### Parallelism: what each `[NotInParallel]` form actually guarantees
 
@@ -716,8 +721,30 @@ one, and the mistake has been made twice (#703's palette flake, #704).
 | Form | Serialized against | Scope |
 |---|---|---|
 | `[NotInParallel("a")]` | other tests whose key set **intersects** `{a}` | one test process |
-| `[NotInParallel("a", "b")]` | other tests whose key set intersects `{a}` **or** `{b}` | one test process |
+| `[NotInParallel(new[] { "a", "b" })]` | other tests whose key set intersects `{a}` **or** `{b}` | one test process |
 | `[NotInParallel]` | **every other test, keyed or not** | one test process |
+
+**The array is not optional shorthand — the two-argument form does not compile.**
+TUnit 1.61.0's `NotInParallelAttribute` (`src/TUnit.Core/Attributes/TestMetadata/`
+`NotInParallelAttribute.cs`, tag `v1.61.0`) declares exactly three constructors —
+`()`, `(string constraintKey)` and `(string[] constraintKeys)`. There is no
+`params` overload, so `[NotInParallel("a", "b")]` is **CS1729** — this table
+shipped that spelling for a day before CI caught it (#849). The array spelling is
+also what TUnit's own XML documentation uses for its two-key example.
+
+Two keys and one shared key are not the same thing, and the array is not a lock
+tier. `new[] { "a", "b" }` means *wait for anyone holding `a`, and for anyone
+holding `b`* — the union of two peer sets, never the two sets locking each other.
+It collapses to a single shared key `c` **only** if every class holding `a` and
+every class holding `b` is re-keyed to `c` as well; a class that keeps only `a`
+stays invisible to `c`. So use one shared key when you are free to name both
+groups — fewer names to keep straight, and it is the only form whose intent is
+readable from the key — and use the array when `a` and `b` are existing groups
+you did not get to name. That is the case #823 hit.
+
+The array constructor is also the only one that checks its input, and it does so
+at **runtime**: `[NotInParallel(new[] { "a", "a" })]` compiles and then throws
+`ArgumentException("Duplicate constraint keys are not allowed.")`.
 
 Three consequences, all of them load-bearing:
 
