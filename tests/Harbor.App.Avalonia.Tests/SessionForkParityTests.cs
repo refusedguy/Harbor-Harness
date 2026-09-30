@@ -140,20 +140,28 @@ public class SessionForkParityTests
     ///     The two fork paths must not be able to disagree. Anything the core does — lineage,
     ///     title, message identity — the UI path does identically, because it is the same code.
     /// </summary>
+    /// <remarks>
+    ///     Both sides are seeded from the SAME explicit message ids, so "the child carries the
+    ///     parent's ids" is a comparison and not two coin flips. The one thing that legitimately
+    ///     differs is the lineage pointer itself: each fork names ITS OWN parent, so that is
+    ///     asserted as a relation rather than compared across.
+    /// </remarks>
     [Test]
     public async Task Fork_ThroughUi_AndThroughTheCore_AgreeOnEveryObservableFact()
     {
+        string[] ids = ["m-1", "m-2"];
+
         // Same starting state, forked twice: once down the UI path, once down the core path
         // the CLI uses.
         var (uiFactory, uiStore) = NewFactory();
-        Session uiSource = await SeedAsync(uiStore, "the original work").ConfigureAwait(false);
+        Session uiSource = await SeedAsync(uiStore, "the original work", ids).ConfigureAwait(false);
         Session uiChild = (await uiFactory.CreateBranchAsync(uiSource).ConfigureAwait(false)).Value;
         Session uiPersisted = (await uiStore.GetAsync(uiChild.Id).ConfigureAwait(false)).Value;
         var uiIds = (await uiStore.GetMessagesAsync(uiChild.Id).ConfigureAwait(false)).Value
             .Select(m => m.Id).ToArray();
 
         var coreStore = new MemorySessionStore();
-        Session coreSource = await SeedAsync(coreStore, "the original work").ConfigureAwait(false);
+        Session coreSource = await SeedAsync(coreStore, "the original work", ids).ConfigureAwait(false);
         var coreFork = await new SessionForkService()
             .ForkAsync(coreStore, coreSource.Id).ConfigureAwait(false);
         await Assert.That(coreFork.IsSuccess).IsTrue();
@@ -162,11 +170,16 @@ public class SessionForkParityTests
             .Select(m => m.Id).ToArray();
 
         await Assert.That(uiPersisted.Title).IsEqualTo(corePersisted.Title);
-        await Assert.That(uiPersisted.ParentSessionId).IsEqualTo(corePersisted.ParentSessionId);
         await Assert.That(uiPersisted.Agent).IsEqualTo(corePersisted.Agent);
         await Assert.That(uiPersisted.Model).IsEqualTo(corePersisted.Model);
         await Assert.That(uiPersisted.ProviderId).IsEqualTo(corePersisted.ProviderId);
         await Assert.That(uiIds).IsEquivalentTo(coreIds);
+        await Assert.That(uiIds).IsEquivalentTo(ids);
+
+        // The lineage pointers are to DIFFERENT parents — two stores, two source sessions — so
+        // the property is "each names its own", not "the two strings match".
+        await Assert.That(uiPersisted.ParentSessionId).IsEqualTo(uiSource.Id);
+        await Assert.That(corePersisted.ParentSessionId).IsEqualTo(coreSource.Id);
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────
@@ -183,17 +196,22 @@ public class SessionForkParityTests
         return (factory, store);
     }
 
-    /// <summary>A source session with a two-message transcript, as a user would have after a few turns.</summary>
-    private static async Task<Session> SeedAsync(ISessionStore store, string content)
+    /// <summary>
+    ///     A source session with a two-message transcript, as a user would have after a few
+    ///     turns. <paramref name="ids" /> is explicit so a parity comparison is a comparison —
+    ///     generated ids would differ on each side and prove nothing.
+    /// </summary>
+    private static async Task<Session> SeedAsync(ISessionStore store, string content, string[]? ids = null)
     {
         Session session = (await store.CreateAsync("/tmp/proj", "code", "test-provider", "test-model").ConfigureAwait(false)).Value;
-        await store.AppendMessageAsync(session.Id, NewUser(session.Id, "first")).ConfigureAwait(false);
-        await store.AppendMessageAsync(session.Id, NewUser(session.Id, content)).ConfigureAwait(false);
+        string[] messageIds = ids ?? [Guid.NewGuid().ToString("N"), Guid.NewGuid().ToString("N")];
+        await store.AppendMessageAsync(session.Id, NewUser(session.Id, messageIds[0], "first")).ConfigureAwait(false);
+        await store.AppendMessageAsync(session.Id, NewUser(session.Id, messageIds[1], content)).ConfigureAwait(false);
         return session;
     }
 
-    private static UserMessage NewUser(string sessionId, string content) => new(
-        Guid.NewGuid().ToString("N"), sessionId, DateTimeOffset.UtcNow, content, "code", "test-model");
+    private static UserMessage NewUser(string sessionId, string id, string content) => new(
+        id, sessionId, DateTimeOffset.UtcNow, content, "code", "test-model");
 
     private static SessionTreeSeed Seed(Session s) => new(
         s.Id, s.Title, s.Directory, s.Agent, s.Model, s.CreatedAt, s.UpdatedAt, s.ParentSessionId, false);
