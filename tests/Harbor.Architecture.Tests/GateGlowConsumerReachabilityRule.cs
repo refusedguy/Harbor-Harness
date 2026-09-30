@@ -95,6 +95,22 @@
 // that greps test files for a name is not measuring coverage, and the file that
 // breaks first is its own.
 //
+// THE SECOND RED RUN, WHICH WAS THE CONTROL NOT RUNNING THE MATCHER
+// ------------------------------------------------------------------
+// With the self-satisfaction fixed, the control still failed — and the log showed
+// the comment-only decoy coming back as a CONSUMER and the comment-only caller
+// coming back as a CALLER. Both at once, both from one cause: `ScanFiles` took
+// pre-stripped lines, and the control was handing it raw ones, so nothing was
+// being stripped at all. The control had been asserting that the decoys are
+// rejected while reading them verbatim, and it only surfaced because it also
+// asserted a total, so the two phantom rows showed up in a count.
+//
+// `ScanFiles` now takes raw lines and strips them itself, which is also what
+// "the control drives the REAL matcher" has to mean. The general lesson is the
+// one worth keeping: a control that asserts a decoy is ABSENT, without also
+// asserting how many rows there are in total, proves nothing about a
+// pre-processing step it skipped.
+//
 // WHAT THIS FILE IS NOT
 // ---------------------
 //   * Not a second `SourceScan` decision. #877 declared the `/tests/` clause correct
@@ -199,7 +215,7 @@ internal static class GateGlowConsumerProbe
             return new GateGlowConsumerReport([], 0, 0, 0);
         }
 
-        var sources = new List<(string Relative, string[] Stripped)>();
+        var sources = new List<(string Relative, string[] Lines)>();
         foreach (string file in DiffSurfaceNameCollisionProbe.EnumerateFiles(repoRoot, Roots, "*.cs"))
         {
             string[] lines;
@@ -212,9 +228,7 @@ internal static class GateGlowConsumerProbe
                 continue;
             }
 
-            sources.Add((
-                DiffSurfaceNameCollisionProbe.MakeRelative(repoRoot, file),
-                SourceCommentStripper.StripAll(lines)));
+            sources.Add((DiffSurfaceNameCollisionProbe.MakeRelative(repoRoot, file), lines));
         }
 
         int sharedHelperTestFiles = SourceScan.EnumerateCsFiles("tests").Count;
@@ -222,12 +236,23 @@ internal static class GateGlowConsumerProbe
     }
 
     /// <summary>
-    ///     Grades already-read files. Exposed so the positive control drives the REAL matcher —
-    ///     comment stripping and declaration detection included — rather than a second
-    ///     implementation of it, which is the only way "it can fail" means anything.
+    ///     Grades already-read files, taking them RAW. Exposed so the positive control drives the
+    ///     REAL matcher end to end — comment stripping, literal blanking and declaration detection
+    ///     included — rather than a second implementation of it, which is the only way "it can fail"
+    ///     means anything.
     /// </summary>
+    /// <remarks>
+    ///     Raw, not pre-stripped, and that is load-bearing rather than a convenience. The first
+    ///     version of the positive control handed this method unstripped fixture lines, and the
+    ///     control then "proved" the decoys were rejected while the probe was in fact reading them
+    ///     verbatim: the comment-only fixture came back as a consumer and the comment-only caller
+    ///     came back as a caller. The failure was caught only because the control also asserted a
+    ///     total, so the extra rows showed up in the count. A control that asserts "the decoy is
+    ///     absent" without also asserting how many consumers there are proves nothing about a
+    ///     pre-processing step it skipped.
+    /// </remarks>
     internal static GateGlowConsumerReport ScanFiles(
-        List<(string Relative, string[] Stripped)> sources,
+        List<(string Relative, string[] Lines)> sources,
         int sharedHelperTestFiles = 0)
     {
         var testNames = new List<(string Relative, string Text)>();
@@ -235,17 +260,16 @@ internal static class GateGlowConsumerProbe
 
         foreach (var source in sources)
         {
-            string joined = string.Join("\n", source.Stripped);
+            string[] stripped = SourceCommentStripper.StripAll(source.Lines);
+            string joined = string.Join("\n", stripped);
 
             if (IsTestFile(source.Relative))
             {
-                // Literals blanked, not just comments: see BlankLiterals. Without this the guard
-                // satisfies ITSELF — its own positive control asserts
-                // IsEqualTo("ArmGateGlow"), and a string literal survives comment stripping, so the
-                // one file guaranteed to mention the name is the file that must not count. That is
-                // not hypothetical: the first red run of this rule passed its own assertion for
-                // exactly that reason, and the only thing that caught it was the control failing
-                // for an unrelated reason in the same run.
+                // Literals blanked as well as comments: see BlankLiterals. Without this the guard
+                // satisfies ITSELF — its own positive control asserts IsEqualTo("ArmGateGlow"), and a
+                // string literal survives comment stripping, so the one file guaranteed to mention
+                // the name is the file that must not count. That is not hypothetical: the first red
+                // run of this rule passed its own assertion for exactly that reason.
                 testNames.Add((source.Relative, BlankLiterals(joined)));
                 continue;
             }
@@ -256,14 +280,14 @@ internal static class GateGlowConsumerProbe
                 continue;
             }
 
-            foreach ((string method, int readLine) in ConsumersIn(source.Stripped))
+            foreach ((string method, int readLine) in ConsumersIn(stripped))
             {
                 found.Add(new GateGlowConsumer(
                     method,
                     source.Relative,
                     readLine,
-                    CountSlotWrites(source.Stripped, disarm: false),
-                    CountSlotWrites(source.Stripped, disarm: true),
+                    CountSlotWrites(stripped, disarm: false),
+                    CountSlotWrites(stripped, disarm: true),
                     []));
             }
         }
@@ -320,8 +344,9 @@ internal static class GateGlowConsumerProbe
     {
         var output = new StringBuilder(text.Length);
         LiteralState state = LiteralState.Code;
+        int i = 0;
 
-        for (int i = 0; i < text.Length; i++)
+        while (i < text.Length)
         {
             char c = text[i];
             char next = i + 1 < text.Length ? text[i + 1] : '\0';
@@ -331,37 +356,30 @@ internal static class GateGlowConsumerProbe
                 if (c == '@' && next == '"')
                 {
                     state = LiteralState.VerbatimString;
-                    output.Append(' ');
+                    Blank(output, 2);
+                    i += 2;
+                    continue;
+                }
+
+                if (c == '"' || c == '\'')
+                {
+                    state = c == '"' ? LiteralState.String : LiteralState.Char;
+                    Blank(output, 1);
                     i++;
                     continue;
                 }
 
-                if (c == '"')
-                {
-                    state = LiteralState.String;
-                    output.Append(' ');
-                    continue;
-                }
-
-                if (c == '\'')
-                {
-                    state = LiteralState.Char;
-                    output.Append(' ');
-                    continue;
-                }
-
                 output.Append(c);
+                i++;
                 continue;
             }
 
             // Inside a literal: every character is replaced, delimiters included, so no partial
             // identifier can survive. An escape consumes the next character with it.
-            output.Append(' ');
-
             if (c == '\\' && next != '\0' && state != LiteralState.VerbatimString)
             {
-                output.Append(' ');
-                i++;
+                Blank(output, 2);
+                i += 2;
                 continue;
             }
 
@@ -369,8 +387,8 @@ internal static class GateGlowConsumerProbe
             {
                 if (c == '"' && next == '"')
                 {
-                    output.Append(' ');
-                    i++;
+                    Blank(output, 2);
+                    i += 2;
                     continue;
                 }
 
@@ -378,23 +396,29 @@ internal static class GateGlowConsumerProbe
                 {
                     state = LiteralState.Code;
                 }
-
-                continue;
             }
-
-            if (state == LiteralState.String && c == '"')
-            {
-                state = LiteralState.Code;
-                continue;
-            }
-
-            if (state == LiteralState.Char && c == '\'')
+            else if (state == LiteralState.String && c == '"')
             {
                 state = LiteralState.Code;
             }
+            else if (state == LiteralState.Char && c == '\'')
+            {
+                state = LiteralState.Code;
+            }
+
+            Blank(output, 1);
+            i++;
         }
 
         return output.ToString();
+
+        static void Blank(StringBuilder target, int count)
+        {
+            for (int n = 0; n < count; n++)
+            {
+                target.Append(' ');
+            }
+        }
     }
 
     private enum LiteralState
