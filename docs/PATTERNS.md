@@ -117,7 +117,7 @@ by `tests/Harbor.Core.Tests/EventBusSinkVerdictTests.cs:309-330`.
 2. **Handler seam (for imperative side effects).** A renderer that must act on an
    event outside the state fold registers an `IAgentEventHandler` via
    `RegisterHandler` (`src/Harbor.Terminal.Abstractions/BaseTuiRenderer.cs:238`;
-   the contract is `Renderers/AgentEventHandler.cs:12-21`, whose doc comment
+   the contract is `src/Harbor.Terminal.Abstractions/Renderers/AgentEventHandler.cs:12-21`, whose doc comment
    states the intent outright: "instead of duplicating a per-renderer
    `switch (AgentEvent)`"). Canonical:
    `src/Harbor.Tui.AnsiPlain/AnsiPlainTuiRenderer.cs:85-88`.
@@ -126,7 +126,7 @@ AnsiPlain does both (`:74` dispatches to the store, `:79` runs the handlers) —
 that is fine and is not a third mechanism. Three renderers reach the store seam
 one hop away, through a `*TeaBridge` field
 (`contrib/tui/Harbor.Tui.TerminalGui/TerminalGuiRenderer.cs:36` →
-`TerminalGuiTeaBridge.cs:56`, and the Termina/RazorConsole pair) — the guard
+`contrib/tui/Harbor.Tui.TerminalGui/TerminalGuiTeaBridge.cs:56`, and the Termina/RazorConsole pair) — the guard
 follows that hop, because the bridge dispatches into the same `UiStore`.
 
 ### The known trap (#575)
@@ -139,7 +139,7 @@ objects across 5 renderer families, one hand-written 21-arm
 `ChatScreenBridge.HandleEvent` (`src/Harbor.Tui.CellForge/Chat/Streaming/ChatScreenBridge.cs:127`,
 15 outer arms at `:131-390` plus a nested `switch (update.LlmEvent)` with 6 more
 at `:174-189`) receives events through its **own** subscription
-(`Chat/Streaming/EventSubscription.cs:18`), not the base class's dispatcher, and
+(`src/Harbor.Tui.CellForge/Chat/Streaming/EventSubscription.cs:18`), not the base class's dispatcher, and
 is registered as a **singleton** with `autoSubscribe: false`
 (`apps/Harbor.App.Cli/Hosting/CellForgeModule.cs:101-106`).
 
@@ -403,11 +403,11 @@ Two more live instances of the banned direction:
   `OnEventAsync(...) => Task.CompletedTask`, and the hook has **zero callers**.
   `BaseTuiRenderer` only calls `view.RenderAsync`
   (`BaseTuiRenderer.cs:318-330`). Key and event handling moved to the reducer
-  (`AppMsg.KeyInput` via `Ui.Framework.State/State/KeyEventAdapter.cs:23`,
+  (`AppMsg.KeyInput` via `src/Harbor.Ui.Framework.State/State/KeyEventAdapter.cs:23`,
   `ChatAppMsg.Agent` via `CellForgeTuiRenderer.cs:314`), but the old hooks stayed
   on the interface with a no-op default, so the compiler will not tell anyone
   they are dead. A plugin author following `ITuiPlugin`'s `RegisterTui`
-  (`Terminal.Abstractions/Plugins/ITuiPlugin.cs:124`, and note `:11`: that whole
+  (`src/Harbor.Terminal.Abstractions/Plugins/ITuiPlugin.cs:124`, and note `:11`: that whole
   seam is closed as of #564) implements `OnEventAsync`, sees no exception, and
   ships a view that never updates.
 
@@ -566,7 +566,7 @@ consistent throughout:
 | state | `State/UiState.cs` (immutable record) |
 | messages | `State/AppMsg.cs`, `State/ChatAppMsg.cs` |
 | transitions | `State/AppReducer.cs`, `State/ChatAppReducer.cs` |
-| store / lifecycle | `State/UiStore.cs:175` `Dispatch` → `:211` `Notify`, with a revision ledger and a stale-drop guard |
+| store / lifecycle | `src/Harbor.Ui.Framework.State/State/UiStore.cs:175` `Dispatch` → `:211` `Notify`, with a revision ledger and a stale-drop guard |
 | consumption | `CellForgeTuiRenderer.cs:314` dispatch, `:290` `PumpProjection()` — the renderer reads the fold **as data** |
 
 The split is deliberate: `AppReducer` is domain-free (panels, scroll, input,
