@@ -971,9 +971,10 @@ Eight of the ten route through `ExemptionReason.RowsWithoutAReason`. The permane
 table carries its own blank-reason check, because it owes two rules the others do not (a row may
 not shadow a baseline row, and it has no tracking URL to confuse the reason with).
 `SessionStatusTableProbe.KnownDuplicates` — the allowlist in §5.7 — is not checked at all. Before
-`#626` each table asked "does this row have a reason?" in its own words, and the one that most
-needed the answer — the tracked-violation baseline — did not ask at all: its value was the issue
-URL, and the argument for tolerating the violation lived in a `//` comment that no tool can read.
+[#626](https://github.com/refusedguy/Harbor-Harness/issues/626) each table asked "does this row
+have a reason?" in its own words, and the one that most needed the answer — the tracked-violation
+baseline — did not ask at all: its value was the issue URL, and the argument for tolerating the
+violation lived in a `//` comment that no tool can read.
 
 That last gap is the same shape as the defect fixed in §5.7 above, one level down: a
 permission that is recorded, justified and kept live, which a document then described as if
