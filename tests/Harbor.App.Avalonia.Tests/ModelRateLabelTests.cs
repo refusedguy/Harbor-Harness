@@ -1,11 +1,10 @@
+using System.Globalization;
 using CommunityToolkit.Mvvm.Messaging;
 using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Abstractions.Providers;
-using Harbor.Abstractions.Sessions;
 using Harbor.Desktop.Abstractions.ViewModels;
-using Harbor.Ui.Framework.Services;
 using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Harbor.App.Avalonia.Tests;
@@ -25,16 +24,20 @@ namespace Harbor.App.Avalonia.Tests;
 /// </remarks>
 public class ModelRateLabelTests
 {
+    // Rates travel as strings because a `decimal` literal is not a legal C#
+    // attribute argument (CS0182) — the values are parsed here, in the test, so
+    // the table stays readable and the formatter still sees real decimals.
     [Test]
-    [Arguments(0m, 0m, "pricing unknown")]
-    [Arguments(3m, 15m, "$3.00 in / $15.00 out per 1M")]
-    [Arguments(0m, 15m, "$0.00 in / $15.00 out per 1M")]
-    [Arguments(3m, 0m, "$3.00 in / $0.00 out per 1M")]
-    [Arguments(0.075m, 0.25m, "$0.08 in / $0.25 out per 1M")]
-    public async Task For_FormatsTheRateCard(
-        decimal inputPerMillion, decimal outputPerMillion, string expected)
+    [Arguments("0", "0", "pricing unknown")]
+    [Arguments("3", "15", "$3.00 in / $15.00 out per 1M")]
+    [Arguments("0", "15", "$0.00 in / $15.00 out per 1M")]
+    [Arguments("3", "0", "$3.00 in / $0.00 out per 1M")]
+    [Arguments("0.075", "0.25", "$0.08 in / $0.25 out per 1M")]
+    public async Task For_FormatsTheRateCard(string inputPerMillion, string outputPerMillion, string expected)
     {
-        var pricing = new Pricing(inputPerMillion, outputPerMillion);
+        var pricing = new Pricing(
+            decimal.Parse(inputPerMillion, CultureInfo.InvariantCulture),
+            decimal.Parse(outputPerMillion, CultureInfo.InvariantCulture));
 
         await Assert.That(ModelRateLabel.For(pricing)).IsEqualTo(expected);
     }
@@ -75,20 +78,15 @@ public class ModelRateLabelTests
     [Test]
     public async Task BothPickers_PriceTheSameModelTheSameWay()
     {
-        var catalogue = new FakeRegistry
-        {
-            Models = Result.Success<IReadOnlyList<ModelInfo>>(
-            [
-                Model("priced-model", new Pricing(3m, 15m)),
-                Model("unpriced-model", Pricing.Unknown),
-            ])
-        };
+        var catalogue = new PricedModelRegistry(
+            ("priced-model", new Pricing(3m, 15m)),
+            ("unpriced-model", Pricing.Unknown));
 
         var picker = new ProviderModelPickerViewModel(
             catalogue,
-            new StubConfigStore(),
-            new StubSessionManager(),
-            new StubToastService(),
+            new EmptyApiKeyConfigStore(),
+            new NoSessionsManager(),
+            new SilentToastService(),
             NullLogger<ProviderModelPickerViewModel>.Instance,
             WeakReferenceMessenger.Default,
             new NoKeysAnywhereAuthResolver());
@@ -122,19 +120,24 @@ public class ModelRateLabelTests
         new(modelId, "ollama", modelId, 128_000, 8_192,
             false, false, true, pricing, "openai");
 
-    /// <summary>Registry with one provider and a caller-controlled model catalog.</summary>
-    private sealed class FakeRegistry : IProviderRegistry
+    /// <summary>
+    ///     One provider whose catalogue the caller names outright, with each model's
+    ///     rate table under the test's control — the existing
+    ///     <see cref="StaticModelRegistry" /> serves <see cref="Pricing.Unknown" />
+    ///     for every model and cannot express a priced one.
+    /// </summary>
+    private sealed class PricedModelRegistry(params (string ModelId, Pricing Pricing)[] catalogue) : IProviderRegistry
     {
-        public Result<IReadOnlyList<ModelInfo>> Models { get; set; } =
-            Result.Success<IReadOnlyList<ModelInfo>>([]);
+        private const string Provider = "ollama";
 
-        public IReadOnlyList<ProviderId> GetRegisteredProviderIds() => [ProviderId.Create("ollama")];
+        public IReadOnlyList<ProviderId> GetRegisteredProviderIds() => [ProviderId.Create(Provider)];
 
         public Result<ILlmClient> GetClient(ProviderId providerId) =>
             Result.Failure<ILlmClient>("not registered");
 
         public Task<Result<IReadOnlyList<ModelInfo>>> GetAllModelsAsync(CancellationToken cancellationToken = default) =>
-            Task.FromResult(Models);
+            Task.FromResult(Result.Success<IReadOnlyList<ModelInfo>>(
+                [.. catalogue.Select(m => Model(m.ModelId, m.Pricing))]));
 
         public Task<Result<IReadOnlyList<ModelInfo>>> GetModelsCachedAsync(ProviderId providerId, CancellationToken cancellationToken = default) =>
             GetAllModelsAsync(cancellationToken);
@@ -142,60 +145,5 @@ public class ModelRateLabelTests
         public void Register(ProviderId providerId, Func<ILlmClient> factory) { }
 
         public Result Unregister(ProviderId providerId) => Result.Failure("not supported");
-    }
-
-    private sealed class StubConfigStore : ICommonConfigStore
-    {
-        public Task<Result<CommonConfig>> LoadAsync(CancellationToken ct = default) =>
-            Task.FromResult(Result.Success(new CommonConfig()));
-
-        public Task<Result> SaveAsync(CommonConfig config, CancellationToken ct = default) =>
-            Task.FromResult(Result.Success());
-
-        public Task<Result> UpdateAsync(Func<CommonConfig, CommonConfig> updater, CancellationToken ct = default) =>
-            Task.FromResult(Result.Success());
-    }
-
-    private sealed class StubToastService : IToastService
-    {
-#pragma warning disable CS0067
-        public event EventHandler<ToastNotification>? ToastAdded;
-#pragma warning restore CS0067
-
-        public void Show(string message, ToastKind kind = ToastKind.Info) { }
-    }
-
-    private sealed class StubSessionManager : ISessionManager
-    {
-        public Session? Active => null;
-        public SessionContext? ActiveContext => null;
-        public SessionContext? GetContext(string sessionId) => null;
-        public GitSessionInfo GetGitInfo(string sessionId) => new(null, false, 0, null);
-        public void RefreshGitInfo(string sessionId, string directory) { }
-        public Task EnsureDefaultSessionAsync() => Task.CompletedTask;
-        public Task RebindFromCommonConfigAsync() => Task.CompletedTask;
-
-        public Task<Result<Session>> NewSessionAsync(string? agentName = null, string? providerId = null, string? modelId = null, string? workingDirectory = null) =>
-            Task.FromResult(Result.Failure<Session>("not configured"));
-
-        public Task<bool> OpenSessionAsync(string sessionId) => Task.FromResult(true);
-
-        public Task<Result<Session>> BranchActiveAsync() => Task.FromResult(Result.Failure<Session>("not configured"));
-        public Task<bool> DeleteSessionAsync(string sessionId) => Task.FromResult(true);
-        public Task<bool> RenameSessionAsync(string sessionId, string newTitle) => Task.FromResult(true);
-        public SessionStatus GetStatus(string sessionId) => SessionStatus.Idle;
-        public void SetStatus(string sessionId, SessionStatus status) { }
-        public void NotifyMessageCount(string sessionId, int count) { }
-
-#pragma warning disable CS0067
-        public event Action<string, SessionStatus>? StatusChanged;
-        public event Action<string, int>? MessageCountChanged;
-#pragma warning restore CS0067
-
-        public string? GetDirectory(string sessionId) => null;
-        public string? GetStatusText(string sessionId) => null;
-        public string? GetBranch(string sessionId) => null;
-        public bool GetIsDirty(string sessionId) => false;
-        public bool? GetIsSubagent(string sessionId) => null;
     }
 }
