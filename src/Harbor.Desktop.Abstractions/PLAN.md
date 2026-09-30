@@ -9,7 +9,7 @@ Shared view-model base classes + service interfaces + config stores for Harbor d
 - [x] `ViewModelBase` → deprecated and removed; all VMs now derive from `StoreSubscriberViewModel` (Harbor.Ui.Framework.ViewModels) — verified on `ChatViewModelBase.cs:31`, `SessionListViewModelBase.cs:12`
 - [x] 13 base VMs: Chat, SessionList, ProviderBrowser, Settings, CodeEditor, Diff, TokenUsage, CommandPalette, ToastNotification, ThemeSettings, FocusSession, ProviderModelPicker (+ concrete platform-facing VMs)
 - [x] Service interfaces: `IDispatcherAdapter`, `IThemeService`, `IFilePicker`, `IDialogService`, `IToastService`
-- [x] Configuration stores shared by all desktop apps (`Configuration/JsonAppConfigStore`, `JsonCommonConfigStore`)
+- [x] Configuration stores shared by all desktop apps — **ports** (`Configuration/IAppConfigStore<T>`, `ICommonConfigStore`) stay here; the JSON+filesystem implementations moved to `Harbor.Hosting/Configuration` in #534
 - [x] Terminal.Abstractions integration (panel contracts referenced without pulling a renderer)
 
 ## TODO

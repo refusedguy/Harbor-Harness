@@ -1,6 +1,10 @@
 using Harbor.Application.Configuration;
 using Harbor.Registries.Events;
 using Harbor.Desktop.Abstractions.Configuration;
+// #534: the two config STORES moved here from Harbor.Desktop.Abstractions (a
+// published Domain-labelled package). The ports and DTOs above are still the
+// leaf's; only the persistence came down here.
+using Harbor.Hosting.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 

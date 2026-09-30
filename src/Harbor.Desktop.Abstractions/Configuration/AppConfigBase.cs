@@ -17,7 +17,7 @@ namespace Harbor.Desktop.Abstractions.Configuration;
 ///     Abstract base for per-app configuration records. Each Harbor app
 ///     (CLI, Avalonia, WPF, MAUI, Blazor) derives its own <c>sealed record</c>
 ///     from this base and adds app-specific fields. Persistence is handled by
-///     <see cref="IAppConfigStore{T}" /> / <see cref="JsonAppConfigStore{T}" />.
+///     <see cref="IAppConfigStore{T}" /> / <c>JsonAppConfigStore&lt;T&gt;</c>.
 /// </summary>
 /// <remarks>
 ///     <para>

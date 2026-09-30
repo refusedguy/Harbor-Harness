@@ -1,5 +1,22 @@
 // JsonCommonConfigStore.cs — JSON-backed implementation of ICommonConfigStore.
 //
+// #534: this type MOVED here from Harbor.Desktop.Abstractions, which is
+// IsPackable / `PackageId: Harbor.Desktop.Abstractions` and the only project the
+// layer matrix calls Domain (§2). A Domain-labelled package that stats the file,
+// creates ~/.harbor and writes through a sibling `.tmp` is not a domain model; it
+// is a storage engine that also ships a schema. Persistence belongs to the
+// composition root, which already constructed both of these stores.
+//
+// The PORT (ICommonConfigStore), the DTOs (CommonConfig / AppConfigBase) and
+// `CompositeConfig<T>` stayed in the leaf. The contract is the schema's; where the
+// bytes come from is an outer layer's — the same split #742 made for IThemeStore
+// / ThemeStore.
+//
+// Note the direction the matrix forces: Infrastructure may never reference
+// Presentation, and Harbor.Desktop.Abstractions sits in the Presentation band, so
+// "put this in Infrastructure" was never available. See
+// DesktopAbstractionsLeafTakesNoIoRules for the guard that keeps the leaf clean.
+//
 // Persists the shared CommonConfig to ~/.harbor/config.json using
 // System.Text.Json with SOURCE-GENERATED metadata (ConfigJsonContext) so it
 // works under NativeAOT — reflection-based serialization is unavailable
@@ -19,7 +36,8 @@ using System.Text.Json.Serialization;
 using CSharpFunctionalExtensions;
 using System.Text.Json.Serialization.Metadata;
 using System.Text.Json.Nodes;
-namespace Harbor.Desktop.Abstractions.Configuration;
+using Harbor.Desktop.Abstractions.Configuration;
+namespace Harbor.Hosting.Configuration;
 /// <summary>
 ///     JSON-backed <see cref="ICommonConfigStore" />. Reads and writes the
 ///     shared config file at <see cref="CommonConfig.ConfigFilePath" />.

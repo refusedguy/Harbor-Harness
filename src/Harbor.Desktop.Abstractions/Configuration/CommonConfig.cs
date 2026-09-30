@@ -45,8 +45,9 @@ namespace Harbor.Desktop.Abstractions.Configuration;
 ///     </para>
 ///     <para>
 ///         <b>Persistence:</b> handled by <see cref="ICommonConfigStore" /> /
-///         <see cref="JsonCommonConfigStore" />. Same atomic-write + thread-safe
-///         pattern as <see cref="JsonAppConfigStore{T}" /> (temp file + rename,
+///         <c>JsonCommonConfigStore</c> (Harbor.Hosting since #534). Same
+///         atomic-write + thread-safe pattern as
+///         <c>JsonAppConfigStore&lt;T&gt;</c> (temp file + rename,
 ///         guarded by a <see cref="SemaphoreSlim" />).
 ///     </para>
 /// </remarks>
