@@ -31,7 +31,7 @@ original path is recorded below.
 | `design-system-report-20260827.html` | 2026-08-27 | Interactive HDS v1 report (106 theme keys, 6 themes) | [DESIGN_SYSTEM_API.md](../DESIGN_SYSTEM_API.md) §ChatPalette |
 | `architecture-code-mismatch-audit.json` | 2026-08-27 | 24 findings: docs claims vs actual `src/` code | All addressed; see [ROADMAP.md](../ROADMAP.md) |
 | `kilocode-cli-ux-analysis-20260827.md` | 2026-08-27 | UX analysis of the Kilocode CLI | [ROADMAP.md](../ROADMAP.md) |
-| `XML_DOC_AUDIT_20260827.md` | 2026-08-27 | 2861 members audited, 70% documented | [XML_DOC_AUDIT.md](../XML_DOC_AUDIT.md) (the live, per-project version) |
+| `XML_DOC_AUDIT_20260827.md` | 2026-08-27 | 2861 members audited, 70% documented | The per-project expansion of the same sweep is [XML_DOC_AUDIT.md](../XML_DOC_AUDIT.md) — itself a dated record, not a live version (#807) |
 | `release-packaging-report-20260827.html` | 2026-08-27 | Release/packaging state report | [BUILD.md](../BUILD.md) |
 | `sprint-report-20260827.html` | 2026-08-27 | Sprint close-out report | [CHANGELOG.md](../../CHANGELOG.md) |
 | `audit-1-desktop-abstractions.html` | 2026-08-27 | First audit of `Harbor.Desktop.*` (was `docs/audits/`) | [ARCHITECTURE_LAYERS.md](../ARCHITECTURE_LAYERS.md) |
@@ -44,3 +44,11 @@ original path is recorded below.
    link here only when it says in the same sentence that the target is a snapshot.
 3. **Add a date** to the filename or a header line when archiving. An undated
    file in this directory is indistinguishable from live documentation.
+
+Rule 3 is enforced outside this directory, for the files that stay in `docs/`
+proper. `tools/check-doc-cites.py` (rule `DOC-CITED-TABLE-UNDECLARED`, #807)
+requires any document carrying a `| path | line |` table to declare itself
+either `> Status: normative` — its rows claim to be about the current tree — or
+`> **Status (YYYY-MM-DD):**` — it is a dated record, and is therefore allowed to
+name code that has since moved. An undeclared table of pointers is the failure
+mode: it reads as current truth while its numbers rot.

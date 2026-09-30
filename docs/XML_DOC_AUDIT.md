@@ -1,5 +1,49 @@
 # XML Documentation Audit
 
+> **Status (2026-08-27):** point-in-time snapshot, taken at commit `07fba590`.
+> This file is a **запись, not an эталон** — a record of one automated sweep
+> over `src/**/*.cs`, not a statement about the tree as it stands today. The
+> `File` and `Line` columns say *where a member was on that date*. They are
+> not maintained, and the Summary counts below were never recomputed after it
+> was written.
+>
+> **How to use it:** grep it for a member *name* to learn whether that member
+> had an XML doc on 2026-08-27 and at what priority. Do not follow its
+> `File`/`Line` columns as a location — 672 of the 2842 rows do not resolve
+> (see "Known drift" below), and the number a reader copies is wrong more often
+> than not. For where a member lives *now*, grep `src/` for the member name.
+>
+> For the same reason this file is not marked `Status: normative`:
+> `tools/check-doc-cites.py` treats a normative document's `file:line` as a
+> claim about the current tree, which these columns stopped being.
+
+## Known drift (measured 2026-09-30, #807)
+
+The sweep is a month old and the tree moved under it. Measured over the 2842
+rows that carry a project-relative path and a line:
+
+| What | Count |
+|---|---|
+| Rows naming a file that no longer exists | 641 (82 distinct files) |
+| Rows whose line is past the end of a file that does exist | 31 |
+| Rows that resolve to a line | ~2170 |
+
+The three `CompactionService.cs` rows #807 opened with are the mild case — the
+file is alive, the members are alive, they just moved to
+`src/Harbor.Application/Sessions/CompactionPolicy.cs` when #472 split the god
+object. Find them there **by name**: `TruncateToFit`, `TruncateToFitStrict`,
+`MaterializeCompactedView`. No line numbers are given here on purpose; see
+"Why no line numbers" below.
+
+### Why no line numbers
+
+The issue's proposed correction put these three at `CompactionPolicy.cs`
+62 / 133 / 220. At the commit that issue cited (`2c55def5`) the real lines were
+62 / 133 / **211**, and on `dev` at the time of writing they are 86 / 157 /
+**235**. A hand-written line number in a snapshot is stale before the PR that
+writes it lands, which is the whole argument for the fence in
+`tools/check-doc-cites.py` over a wider edit here.
+
 ## Summary
 
 - **Total members audited:** 2861

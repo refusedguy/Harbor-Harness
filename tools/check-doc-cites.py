@@ -41,6 +41,14 @@ RULES
                      sending a reader down a branch nothing builds. This is the
                      half the line fence cannot see: the file exists, the line
                      exists, the type exists — nothing constructs it (#664).
+  DOC-CITE-TABLE-UNDECLARED
+                     a markdown table that asserts `| path/File.cs | 12 |` —
+                     an inventory of members, the shape every generated audit
+                     table has — in a document that declares NEITHER
+                     `Status: normative` NOR a dated `Status (YYYY-MM-DD):`
+                     banner. See "THE THIRD SHAPE" below: this rule is the one
+                     that would have caught #807 on the day the table was
+                     written.
 
   The escape hatch is a line IN THE SAME DOCUMENT, and it must carry a reason:
 
@@ -71,6 +79,45 @@ SCOPE — WHY THIS IS NOT A GLOBAL SCAN
   Deleting the marker from a document is therefore not a bypass: it shrinks
   the scanned set, and the `--min-files` / `--min-cites` floors in
   docs.yml turn that into a red build.
+
+THE THIRD SHAPE — WHY #807 HAPPENED AT ALL (#807)
+
+  The two fence rules above only match the PROSE form `path/File.cs:12`. A
+  markdown table row puts the path and the number in separate cells —
+  `| Harbor.Application/Sessions/CompactionService.cs | 209 |` — and that
+  matches nothing. Measured on this tree, the shape split is:
+
+      prose `path/File.cs:12`    199 citations, all fenced, all green
+      table `| path | line |`   2842 rows in ONE document, ZERO fenced
+
+  So the document with by far the densest concentration of `file:line` claims
+  in the repository sat entirely outside the only gate that checks whether a
+  `file:line` is real, and rotted for a month without a single build noticing.
+  That is the actual class: not "three audits went stale" but "the fence reads
+  one shape of citation and the other shape is where the claims pile up".
+
+  The fix is not a wider scan — the prose rules are deliberately not global,
+  for the reason above. The fix is to make the SHAPE declare itself, which is
+  what DOC-CITE-TABLE-UNDECLARED does:
+
+      `Status: normative`      the rows are claims about today; they get fenced
+      `Status (YYYY-MM-DD):`   the document says out loud that it is a dated
+                               record, and a record is ALLOWED to name code
+                               that has since moved. That is the whole point of
+                               a запись.
+      neither                  a table of pointers that never says which it is.
+                               This is the undeclared middle, and it is the
+                               defect: it reads as current truth while rotting
+                               at 672 rows out of 2842.
+
+  Making the label mandatory is the only version of this that lands. Fencing
+  the table rows directly is not available: the one document in that shape is
+  a dated snapshot, so a fence over it is red on 672 rows on day one, and a
+  gate red on day one is a gate that gets switched off (see SCOPE).
+
+  What this rule deliberately does NOT do: verify that a declared record's
+  numbers are right. A запись is allowed to be wrong about today. It only has
+  to stop pretending to be an эталон.
 
 KNOWN LIMITATIONS — READ THIS BEFORE TRUSTING A GREEN
 
@@ -110,7 +157,18 @@ import md_gate
 
 # The opt-in marker. A document that claims to be normative gets its
 # `file:line` fences checked; nothing else is scanned.
-NORMATIVE = "Status: normative"
+#
+# ANCHORED TO THE STATUS BANNER, not a bare substring (#807). A plain
+# `"Status: normative" in text` test means a document that merely MENTIONS the
+# marker opts itself in: docs/XML_DOC_AUDIT.md says in prose "this file is not
+# marked `Status: normative`", and the substring check read that sentence as
+# consent, pulling all 2842 of its table rows into the fence and turning the
+# gate red on 672 historical rows. Self-selection that can be triggered by
+# discussing the rule is not self-selection. The marker has to be a status
+# banner in the position the convention puts it — the leading `> Status: ...`
+# blockquote — and the three documents that declare it today all match.
+NORMATIVE_RE = re.compile(r"^[ \t]*>[ \t]*Status: normative\b", re.M)
+NORMATIVE = "Status: normative"  # prose references; matching is NORMATIVE_RE
 
 # `path/to/File.cs:12`, `File.cs:12-30`, `File.cs:12,30-44`, `File.cs:12-`.
 # The leading lookbehind keeps `xfoo.cs:1` from matching at `foo.cs:1`, and
@@ -143,6 +201,35 @@ STRUCK = re.compile(r"~~[^\n]*?~~")
 ALLOW_UNWIRED = re.compile(
     r"<!--\s*check-doc-cites:\s*allow-unwired\s+(?P<names>[A-Za-z0-9_,\s]+?)"
     r"(?:\s+[-—:]\s*(?P<reason>.+?))?\s*-->"
+)
+
+# THE THIRD SHAPE (#807). A markdown table row whose first cell is a source
+# path and whose second cell is a line — `| Harbor.Application/.../X.cs | 209 |`.
+# The path and the number live in separate cells, so CITATION above cannot see
+# them: the fence that exists for exactly this failure mode is blind to the one
+# shape a generated inventory table uses.
+#
+# Anchored at the start of a row and requiring the line cell to be digits, so
+# a prose mention, a link cell and the archive README's `| file.md | date |`
+# rows all stay out. `spec` reuses CITATION's range grammar (209, 209-215,
+# 209,215-230) so the two shapes describe a claim the same way.
+TABLE_CITATION = re.compile(
+    r"^\|\s*(?P<target>[A-Za-z0-9_][A-Za-z0-9_./\-]*\."
+    r"(?:cs|json|yml|yaml|csproj|slnx|props|targets|py|axaml|xaml|editorconfig))"
+    r"\s*\|\s*(?P<spec>\d+(?:-\d*)?(?:,\d+(?:-\d*)?)*)\s*\|",
+    re.M,
+)
+
+# A dated record: the `> **Status (2026-08-27):**` banner that
+# docs/audit-archive/README.md already prescribes for "a snapshot" kept in
+# docs/ proper. Two spellings are accepted — the parenthetical form the archive
+# rule documents, and `Status: as-of <date>` — so a document can declare
+# itself in whichever reads better. A DATE is required, not just the word
+# "Status": a table of pointers labelled only "Status: draft" is exactly the
+# undeclared middle this rule exists to close.
+DATED_RECORD = re.compile(
+    r"Status\s*(?:\(\s*(?P<paren>\d{4}-\d{2}-\d{2})\s*\)|:\s*as-of\s+(?P<asof>\d{4}-\d{2}-\d{2}))",
+    re.I,
 )
 
 # `public sealed partial record Foo` / `internal interface Foo` / `public enum
@@ -370,6 +457,95 @@ def check_types(
     return len(seen), problems
 
 
+def check_table_shape(
+    text: str, rel: str, normative: bool
+) -> tuple[int, list[tuple[str, str, int]]]:
+    """The third shape (#807): does this document SAY which kind it is?
+
+    Returns (row count, problems). A row count is reported for every document
+    that carries one, including documents the rule passes, because a rule that
+    only ever prints a number when it is about to fail is a rule nobody can
+    tell apart from a rule that never fires.
+
+    This runs over EVERY tracked markdown file, not just the normative ones.
+    That is the one place this script is deliberately not opt-in, and the
+    asymmetry is the point: a table of `file:line` claims is a document that
+    LOOKS like the prose the fence covers, so leaving it opt-in is what let
+    2842 unchecked rows accumulate in the densest claim table in the repo. The
+    rule asks one cheap question — normative, or dated, or neither — and the
+    answer is one line of prose, so there is nothing here to go red on day one.
+    """
+    rows = list(TABLE_CITATION.finditer(text))
+    if not rows:
+        return 0, []
+    if normative or DATED_RECORD.search(text):
+        # Declared. A normative document's rows are fenced as citations by
+        # check_citations' sibling rule below; a dated record is ALLOWED to
+        # name code that has since moved, which is what being a record means.
+        return len(rows), []
+    first = rows[0]
+    return len(rows), [
+        (
+            "DOC-CITED-TABLE-UNDECLARED",
+            f"{len(rows)} row(s) assert `| path | line |` against source files "
+            f"(first at L{text.count(chr(10), 0, first.start()) + 1}), and this "
+            f"document declares neither `Status: normative` nor a dated "
+            f"`Status (YYYY-MM-DD):` banner. A table of `file:line` that does "
+            f"not say which kind of document it is reads as current truth while "
+            f"its numbers rot — the failure #807 is. Add one banner: "
+            f"`> **Status: normative**` if the rows claim to be about today, or "
+            f"`> **Status (YYYY-MM-DD):**` if this is a dated record, in which "
+            f"case the rows are allowed to name code that has since moved",
+            text.count("\n", 0, first.start()) + 1,
+        )
+    ]
+
+
+def check_table_citations(
+    text: str, repo: str, by_base: dict[str, list[str]], cache: dict[str, int]
+) -> tuple[int, list[tuple[str, str, int]]]:
+    """Fence the table rows of a NORMATIVE document.
+
+    Only normative: for a dated record these numbers are the snapshot, and
+    policing them would be the gate demanding a history be corrected. Paths in
+    these tables are project-relative (`Harbor.Abstractions/...`, the column
+    header a project sweep writes), so `src/` and `apps/` are tried after the
+    repo-relative form.
+    """
+    found = 0
+    problems: list[tuple[str, str, int]] = []
+    for m in TABLE_CITATION.finditer(text):
+        target, spec = m.group("target"), m.group("spec")
+        line_no = text.count("\n", 0, m.start()) + 1
+        full = None
+        for candidate in (os.path.join(repo, target), os.path.join(repo, "src", target),
+                          os.path.join(repo, "apps", target)):
+            if os.path.isfile(candidate):
+                full = candidate
+                break
+        if full is None:
+            problems.append(
+                ("DOC-CITE-MISSING", f"{target}:{spec} — no such file in the tree", line_no)
+            )
+            continue
+        total = line_counts(full, cache)
+        for start, end in parse_ranges(spec):
+            found += 1
+            if total == 0:
+                problems.append(
+                    ("DOC-CITE-EOF", f"{target}:{start} — file is empty or unreadable", line_no)
+                )
+            elif end > total:
+                problems.append(
+                    (
+                        "DOC-CITE-EOF",
+                        f"{target}:{start}-{end if end != start else ''} — file has {total} lines",
+                        line_no,
+                    )
+                )
+    return found, problems
+
+
 class Scan:
     """One pass over the normative documents, plus the counts the floors need."""
 
@@ -377,6 +553,8 @@ class Scan:
         self.files = 0
         self.citations = 0
         self.type_names = 0
+        self.table_rows = 0
+        self.table_docs = 0
         self.hits: dict[str, list[tuple[str, str, int]]] = defaultdict(list)
 
     @property
@@ -412,17 +590,32 @@ def scan(repo: str, verbose: bool) -> Scan:
                 text = fh.read()
         except OSError:
             continue
-        if NORMATIVE not in text:
+        normative = NORMATIVE_RE.search(text) is not None
+
+        # The shape question runs on every tracked document, normative or not:
+        # that is the whole of #807, which happened in a document that never
+        # wrote the marker.
+        rows, shape_problems = check_table_shape(text, rel, normative)
+        if rows:
+            result.table_docs += 1
+            result.table_rows += rows
+
+        if not normative:
+            if shape_problems:
+                result.hits[rel] = shape_problems
             continue
         result.files += 1
         cites, cite_problems = check_citations(text, repo, by_base, cache)
+        table_cites, table_cite_problems = check_table_citations(text, repo, by_base, cache)
         allowance, allowance_problems = read_allowances(text)
         names, type_problems = check_types(text, declared_in, production_text, set(allowance))
-        result.citations += cites
+        result.citations += cites + table_cites
         result.type_names += names
-        result.hits[rel] = cite_problems + type_problems + allowance_problems
+        result.hits[rel] = (
+            cite_problems + table_cite_problems + type_problems + allowance_problems
+        )
         if verbose:
-            print(f"  {rel}: {cites} citations, {names} type names")
+            print(f"  {rel}: {cites + table_cites} citations, {names} type names, {rows} table rows")
     return result
 
 
@@ -584,6 +777,144 @@ def self_test() -> int:
         out.strip()[-400:],
     )
 
+    # ---- THE THIRD SHAPE (#807) ------------------------------------------------
+    # The shape the prose fence cannot see: `| path/File.cs | 12 |`. Every case
+    # below is a document with NO `Status: normative` marker, which is the
+    # state XML_DOC_AUDIT.md was in for a month.
+    table_row = "| Demo/Live.cs | 4 | public sealed class LiveThing | YES | HIGH |\n"
+
+    code, out = run(
+        {
+            **live,
+            "docs/TABLE.md": "# T\n\nMembers:\n\n| File | Line | Member |\n|---|---|---|\n" + table_row,
+        }
+    )
+    st.expect(
+        "an UNDECLARED table of `| path | line |` fails (#807 — the shape the prose fence is blind to)",
+        code == 1 and "DOC-CITED-TABLE-UNDECLARED" in out,
+        out[-400:],
+    )
+
+    # The three "must pass" fixtures below carry `clean_norm` because the
+    # non-vacuity floors require at least one normative document: a fixture
+    # with zero would exit 1 on the floors and the case would pass for the
+    # wrong reason. That is the same trap the floors exist to catch.
+    code, out = run(
+        {
+            **live,
+            "docs/NORM.md": clean_norm,
+            "docs/TABLE.md": "# T\n\n> **Status (2026-08-27):** a dated record.\n\n"
+            "Members:\n\n| File | Line | Member |\n|---|---|---|\n" + table_row,
+        }
+    )
+    st.expect(
+        "the SAME table with a dated `Status (YYYY-MM-DD):` banner passes — a запись may name code that has since moved",
+        code == 0,
+        out.strip()[-400:],
+    )
+
+    code, out = run(
+        {
+            **live,
+            "docs/NORM.md": clean_norm,
+            "docs/TABLE.md": "# T\n\n> **Status: as-of 2026-08-27.**\n\n"
+            "Members:\n\n| File | Line | Member |\n|---|---|---|\n" + table_row,
+        }
+    )
+    st.expect(
+        "the `Status: as-of <date>` spelling also declares a record",
+        code == 0,
+        out.strip()[-400:],
+    )
+
+    code, out = run(
+        {
+            **live,
+            "docs/TABLE.md": "# T\n\n> **Status: draft.**\n\n"
+            "Members:\n\n| File | Line | Member |\n|---|---|---|\n" + table_row,
+        }
+    )
+    st.expect(
+        "a dateless `Status: draft` banner does NOT declare anything (#807's undeclared middle)",
+        code == 1 and "DOC-CITED-TABLE-UNDECLARED" in out,
+        out[-400:],
+    )
+
+    # The regression that made #807 expensive to find: the marker used to be a
+    # bare substring, so a document EXPLAINING that it is not normative opted
+    # itself in. Both fixtures carry `clean_norm` so the non-vacuity floors are
+    # satisfied and each case can only pass for the reason it names.
+    code, out = run(
+        {
+            **live,
+            "docs/NORM.md": clean_norm,
+            "docs/NOTE.md": "# N\n\nFor the same reason this file is not marked\n"
+            "`Status: normative`: its numbers are a snapshot. See `src/Demo/Gone.cs:4`.\n",
+        }
+    )
+    st.expect(
+        "a document that merely MENTIONS the marker in prose does not opt itself in (#807)",
+        code == 0,
+        out.strip()[-400:],
+    )
+
+    code, out = run(
+        {
+            **live,
+            "docs/NORM.md": clean_norm.replace("`src/Demo/Live.cs:4` and `Live.cs:4`", "`src/Demo/Gone.cs:4`"),
+            "docs/NOTE.md": "# N\n\nThe convention is a `Status: normative` banner; "
+            "see `src/Demo/Live.cs:4`.\n",
+        }
+    )
+    st.expect(
+        "and a mention is still only a mention: the broken citation is in the NON-normative doc, so only the real banner fails",
+        code == 1 and "DOC-CITE-MISSING" in out,
+        out[-400:],
+    )
+
+    code, out = run(
+        {
+            **live,
+            "docs/TABLE.md": "# T\n\n> Status: normative for the current implementation.\n\n"
+            "Members:\n\n| File | Line | Member |\n|---|---|---|\n"
+            "| Demo/Gone.cs | 4 | public sealed class Gone | YES | HIGH |\n",
+        }
+    )
+    st.expect(
+        "a table row in a NORMATIVE document is fenced, not merely labelled",
+        code == 1 and "DOC-CITE-MISSING" in out,
+        out[-400:],
+    )
+
+    code, out = run(
+        {
+            **live,
+            "docs/TABLE.md": "# T\n\n> Status: normative for the current implementation.\n\n"
+            "Members:\n\n| File | Line | Member |\n|---|---|---|\n"
+            "| Demo/Live.cs | 9999 | public sealed class LiveThing | YES | HIGH |\n",
+        }
+    )
+    st.expect(
+        "a normative table row past EOF fails (the #664 rule, in the table shape)",
+        code == 1 and "DOC-CITE-EOF" in out,
+        out[-400:],
+    )
+
+    code, out = run(
+        {
+            **live,
+            "docs/NORM.md": clean_norm,
+            "docs/ARCHIVE.md": "# A\n\n| File | Date | Note |\n|---|---|---|\n"
+            "| design-system-audit.json | 2026-08-27 | theme sweep |\n"
+            "| report.html | 2026-08-27 | HDS v1 |\n",
+        }
+    )
+    st.expect(
+        "the archive README's own `| file | date |` rows are not mistaken for citations",
+        code == 0,
+        out.strip()[-400:],
+    )
+
     code, out = run(
         {**live, "docs/NORM.md": clean_norm},
         "--min-files",
@@ -639,6 +970,11 @@ def main() -> int:
         f"checked {result.citations} line citations and {result.type_names} backticked "
         f"type names across {result.files} normative markdown documents"
     )
+    if result.table_rows:
+        print(
+            f"and declared {result.table_rows} `| path | line |` table rows in "
+            f"{result.table_docs} document(s) (#807: the shape the prose fence is blind to)"
+        )
 
     # Two calls, one per unit, so a parser that silently stops matching is
     # caught separately from a file set that shrank.
