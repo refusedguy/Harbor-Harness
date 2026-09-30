@@ -176,7 +176,7 @@ Every swappable component is an interface:
 Three registries:
 - `IProviderRegistry` — LLM clients, lazy-loaded.
 - `IToolRegistry` — tools, filtered by permission.
-- `IAgentRegistry` — agent definitions (code, plan, explore, custom).
+- `IAgentRegistry` — agent definitions: the builtins declared in `AgentDefinition`, plus any a plugin contributed. The set is read from the registry, never restated at a use site.
 
 ### 5. Result<T> for error handling
 

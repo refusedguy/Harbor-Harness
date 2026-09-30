@@ -136,10 +136,30 @@ public sealed record CommonConfig
     public string DefaultModel { get; init; } = "claude-sonnet-4";
 
     /// <summary>
-    ///     Default agent mode: <c>"code"</c>, <c>"plan"</c>, or
-    ///     <c>"explore"</c>. Defaults to <c>"code"</c>.
+    ///     Default agent mode. Any name the agent registry holds, including one a
+    ///     plugin contributed. Defaults to the core fallback agent.
     /// </summary>
-    public string DefaultAgent { get; init; } = "code";
+    /// <remarks>
+    ///     The valid values are deliberately not enumerated here: the set is the
+    ///     agent registry's, and a doc comment that lists it is a list that goes
+    ///     stale silently the day a builtin agent is added (#582).
+    /// </remarks>
+    public string DefaultAgent { get; init; } = CommonFallbackAgent;
+
+    /// <summary>
+    ///     The default agent's name, read from the one constant that owns it.
+    /// </summary>
+    /// <remarks>
+    ///     Spelled as a literal here for years, and #716 moved the policy to
+    ///     <c>AgentName.Fallback</c> in the innermost layer. This file cannot
+    ///     <c>using</c>-import that namespace without colliding with its own
+    ///     <c>Harbor.Desktop.Abstractions</c> root, so the constant is named in
+    ///     full — which is the same reason
+    ///     <c>DefaultAgentSingleSourceTests</c> places the core constant there
+    ///     rather than in a Presentation-layer config type.
+    /// </remarks>
+    private static readonly string CommonFallbackAgent =
+        Harbor.Abstractions.Models.Identifiers.AgentName.Fallback;
 
     // ── Storage ───────────────────────────────────────────────────────────
 

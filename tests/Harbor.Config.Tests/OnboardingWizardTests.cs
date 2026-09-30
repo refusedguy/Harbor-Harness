@@ -1,3 +1,7 @@
+using System.Globalization;
+using CSharpFunctionalExtensions;
+using Harbor.Abstractions.Agents;
+using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Application.Configuration;
 using Harbor.Application.Onboarding;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -9,13 +13,58 @@ namespace Harbor.Config.Tests;
 /// </summary>
 public class OnboardingWizardTests
 {
+    /// <summary>
+    ///     The three builtin agents, as a registry the wizard can project (#582).
+    /// </summary>
+    /// <remarks>
+    ///     Passed to every wizard these tests build. The agent step reads the
+    ///     registry, so a test that constructs the wizard WITHOUT one exercises the
+    ///     degraded no-agents path and every "enter 1 and get code" assertion below
+    ///     would pass for the wrong reason.
+    /// </remarks>
+    private static TestAgentRegistry BuiltinAgents() => new(
+        AgentDefinition.CodeDefault("model", "provider"),
+        AgentDefinition.PlanDefault("model", "provider"),
+        AgentDefinition.ExploreDefault("model", "provider"));
+
     private static (OnboardingWizard wizard, JsonConfigStore store, AuthStore auth, string path) CreateWizard()
     {
         string path = Path.Combine(Path.GetTempPath(), $"harbor-onboarding-{Guid.NewGuid():N}", "config.json");
         var store = new JsonConfigStore(path, NullLogger<JsonConfigStore>.Instance);
         var auth = new AuthStore(store, NullLogger<AuthStore>.Instance);
-        var wizard = new OnboardingWizard(store, auth, NullLogger<OnboardingWizard>.Instance);
+        var wizard = new OnboardingWizard(
+            store, auth, NullLogger<OnboardingWizard>.Instance, agents: BuiltinAgents());
         return (wizard, store, auth, path);
+    }
+
+    /// <summary>
+    ///     The menu index the wizard PRINTED for an agent, read back out of the
+    ///     captured output.
+    /// </summary>
+    /// <remarks>
+    ///     The tests below used to hardcode "1"/"2"/"3", which is the hand-written
+    ///     menu's numbering — the thing #582 removed. The wizard now orders the menu
+    ///     (fallback first, the rest by name), so a hardcoded index tests a
+    ///     coincidence rather than a contract. Reading the index off the menu the
+    ///     wizard actually printed tests the contract instead: whatever number it
+    ///     showed for an agent must select that agent.
+    /// </remarks>
+    private static int MenuIndexOf(IReadOnlyList<string> output, string agentName)
+    {
+        foreach (string line in output)
+        {
+            int open = line.IndexOf("[", StringComparison.Ordinal);
+            if (open < 0) continue;
+            int close = line.IndexOf(']', open);
+            if (close < 0) continue;
+            if (line[(close + 1)..].TrimStart().StartsWith(agentName + " ", StringComparison.Ordinal))
+            {
+                return int.Parse(line[(open + 1)..close], CultureInfo.InvariantCulture);
+            }
+        }
+
+        throw new InvalidOperationException(
+            $"the wizard never listed '{agentName}'. Menu was:\n{string.Join("\n", output)}");
     }
 
     private static void Cleanup(string path)
@@ -66,7 +115,7 @@ public class OnboardingWizardTests
 
         // Find ollama preset index (1-based, position in ProviderPresets.All).
         int ollamaIndex = ProviderPresets.All.ToList().FindIndex(p => p.Id == "ollama") + 1;
-        var responses = new Queue<string>(new[] { ollamaIndex.ToString(), "", "2" });
+        var responses = new Queue<string>(new[] { ollamaIndex.ToString(), "", "plan" });
         Func<string, Task<string>> reader = _ => Task.FromResult(responses.Dequeue());
 
         Environment.SetEnvironmentVariable("OLLAMA_API_KEY", null);
@@ -473,30 +522,91 @@ public class OnboardingWizardTests
     }
 
     [Test]
-    public async Task RunAsync_AgentSelection_Plan_Explored()
+    public async Task RunAsync_AgentSelection_ByName_And_ByPrintedIndex()
     {
-        // Exercise all three agent modes by parameterizing.
-        foreach ((string input, string expected) in new[] { ("1", "code"), ("2", "plan"), ("3", "explore") })
+        // Every registered agent is selectable BOTH ways, and by NAME is the half
+        // that is the contract after #582: the menu is projected from the registry,
+        // so the name is what the projection offers. By index is read off the menu
+        // the wizard printed rather than hardcoded — the wizard orders the menu
+        // (fallback first, the rest by name), so a literal "2" would test a
+        // coincidence. Both halves together mean: whatever number the wizard shows
+        // for an agent, that number selects it, and so does typing its name.
+        foreach (string agent in new[] { "code", "plan", "explore" })
         {
-            (var wizard, var store, _, string path) = CreateWizard();
-            var output = new List<string>();
-            Action<string> writer = s => output.Add(s);
-
-            var responses = new Queue<string>(new[] { "ollama", "", input });
-            Func<string, Task<string>> reader = _ => Task.FromResult(responses.Dequeue());
-
-            Environment.SetEnvironmentVariable("OLLAMA_API_KEY", null);
-            try
+            foreach (bool byIndex in new[] { false, true })
             {
-                await wizard.RunAsync(reader, writer);
-                var loaded = await store.LoadAsync();
-                await Assert.That(loaded.Value.Agent).IsEqualTo(expected);
-            }
-            finally
-            {
+                (var wizard, var store, _, string path) = CreateWizard();
+                var output = new List<string>();
+                Action<string> writer = s => output.Add(s);
+
+                // The agent answer is the LAST thing the wizard reads, so for the
+                // index case the menu has to exist first — run the wizard once to
+                // learn the numbering, then again with the real answer.
+                var probe = new Queue<string>(["ollama", "", ""]);
+                await wizard.RunAsync(_ => Task.FromResult(probe.Dequeue()), writer);
+                string answer = byIndex
+                    ? MenuIndexOf(output, agent).ToString(CultureInfo.InvariantCulture)
+                    : agent;
+
+                (var wizard2, var store2, _, string path2) = CreateWizard();
+                var output2 = new List<string>();
+                var responses = new Queue<string>(["ollama", "", answer]);
+                Func<string, Task<string>> reader = _ => Task.FromResult(responses.Dequeue());
+
                 Environment.SetEnvironmentVariable("OLLAMA_API_KEY", null);
-                Cleanup(path);
+                try
+                {
+                    Result result = await wizard2.RunAsync(reader, s => output2.Add(s));
+
+                    await Assert.That(result.IsSuccess).IsTrue();
+                    var loaded = await store2.LoadAsync();
+                    await Assert.That(loaded.Value.Agent).IsEqualTo(agent)
+                        .Because(
+                            "the wizard offered " + agent + " and " + (byIndex ? "its printed index" : "its name")
+                            + " did not select it. Menu was:\n" + string.Join("\n", output2));
+                }
+                finally
+                {
+                    Environment.SetEnvironmentVariable("OLLAMA_API_KEY", null);
+                    Cleanup(path);
+                    Cleanup(path2);
+                }
             }
+        }
+    }
+
+    /// <summary>
+    ///     The menu is the registry (#582): every agent the registry holds is listed
+    ///     with its own description, and nothing else is. Graded against the registry
+    ///     the wizard was given, not against a written list of names.
+    /// </summary>
+    [Test]
+    public async Task RunAsync_AgentMenu_IsTheRegistryProjection()
+    {
+        (var wizard, _, _, string path) = CreateWizard();
+        var output = new List<string>();
+        var responses = new Queue<string>(new[] { "ollama", "", "" });
+        Func<string, Task<string>> reader = _ => Task.FromResult(responses.Dequeue());
+
+        Environment.SetEnvironmentVariable("OLLAMA_API_KEY", null);
+        try
+        {
+            await wizard.RunAsync(reader, output.Add);
+
+            foreach (AgentDefinition agent in BuiltinAgents().GetAllAgents())
+            {
+                await Assert.That(output.Any(l => l.Contains(agent.Description, StringComparison.Ordinal))).IsTrue()
+                    .Because(
+                        "each agent's own description has to reach the menu, or the menu is not a "
+                        + "projection of the registry but a hand-written list that happens to share "
+                        + "its names. Missing: " + agent.Description + ". Menu was:\n"
+                        + string.Join("\n", output));
+            }
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("OLLAMA_API_KEY", null);
+            Cleanup(path);
         }
     }
 
@@ -613,5 +723,82 @@ public class OnboardingWizardTests
             Environment.SetEnvironmentVariable("OLLAMA_API_KEY", null);
             Cleanup(path);
         }
+    }
+
+    /// <summary>
+    ///     A wizard with NO agent registry says so and still answers, rather than
+    ///     printing a menu of names it cannot verify (#582).
+    /// </summary>
+    /// <remarks>
+    ///     The old code had no such state: the three names were literals in the
+    ///     class, so a wizard built without a registry still offered a menu. The
+    ///     degraded path follows the shape the provider and model steps already use
+    ///     — print the reason, then continue — and the agent it falls back to is
+    ///     <c>AgentName.Fallback</c>, read from the constant rather than spelled.
+    /// </remarks>
+    [Test]
+    public async Task RunAsync_NoAgentRegistry_SaysSo_AndFallsBackToTheDefaultAgent()
+    {
+        string path = Path.Combine(Path.GetTempPath(), $"harbor-onboarding-{Guid.NewGuid():N}", "config.json");
+        var store = new JsonConfigStore(path, NullLogger<JsonConfigStore>.Instance);
+        var auth = new AuthStore(store, NullLogger<AuthStore>.Instance);
+        var wizard = new OnboardingWizard(store, auth, NullLogger<OnboardingWizard>.Instance);
+        var output = new List<string>();
+        var responses = new Queue<string>(new[] { "ollama", "", "" });
+        Func<string, Task<string>> reader = _ => Task.FromResult(responses.Dequeue());
+
+        Environment.SetEnvironmentVariable("OLLAMA_API_KEY", null);
+        try
+        {
+            Result result = await wizard.RunAsync(reader, output.Add);
+            Result<HarborConfig> saved = await store.LoadAsync();
+
+            await Assert.That(result.IsSuccess).IsTrue();
+            await Assert.That(output.Any(l => l.Contains("No agents registered", StringComparison.Ordinal))).IsTrue()
+                .Because(
+                    "the step has nothing to list, and a silent empty step is indistinguishable from "
+                    + "a wizard that forgot to ask. Menu was:\n" + string.Join("\n", output));
+
+            await Assert.That(saved.IsSuccess).IsTrue()
+                .Because("the wizard has to have persisted a choice even with no registry to read");
+            if (saved.IsSuccess)
+            {
+                await Assert.That(saved.Value.Agent).IsEqualTo(AgentName.Fallback)
+                    .Because(
+                        "an empty registry must not deadlock first-run setup: the wizard still has to "
+                        + "answer, and the answer is the agent the core names as the fallback, read from "
+                        + "the constant rather than spelled here");
+            }
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("OLLAMA_API_KEY", null);
+            Cleanup(path);
+        }
+    }
+
+    /// <summary>
+    ///     An <see cref="IAgentRegistry" /> over a fixed list — the production one is
+    ///     backed by a <c>ConcurrentDictionary</c>, whose enumeration order is
+    ///     unspecified, and these tests care about the wizard's ordering rather than
+    ///     the registry's.
+    /// </summary>
+    private sealed class TestAgentRegistry(params AgentDefinition[] agents) : IAgentRegistry
+    {
+        private readonly List<AgentDefinition> _agents = [.. agents];
+
+        public IReadOnlyList<AgentDefinition> GetAllAgents() => _agents;
+
+        public Result<AgentDefinition> GetAgent(AgentName name)
+        {
+            AgentDefinition? found = _agents.FirstOrDefault(a => a.Name.Value == name.Value);
+            return found is null
+                ? Result.Failure<AgentDefinition>($"Agent '{name}' is not registered.")
+                : Result.Success(found);
+        }
+
+        public Result Register(AgentDefinition agent) => Result.Success();
+
+        public Result Unregister(AgentName name) => Result.Success();
     }
 }

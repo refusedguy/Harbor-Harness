@@ -40,7 +40,8 @@ Harbor is a modular .NET 10 AI coding agent harness. The architecture prioritize
 src/                                   — ~50 projects (all included in Harbor.slnx unless noted)
 ├── Harbor.Abstractions/               — base contracts (zero deps)
 ├── Harbor.Abstractions.Contracts/     — models, events, ValueObjects, PermissionRuleset
-├── Harbor.Registries/                 — Agent/Tool/Provider registries, EventBus (builtin agents: code, plan, explore)
+├── Harbor.Registries/                 — Agent/Tool/Provider registries, EventBus; builtin agents are declared in
+│                                        AgentDefinition and registered in ToolsCatalog.CreateAgentRegistry
 ├── Harbor.Application/                — AgentLoop, sessions, permissions, config, onboarding, compaction
 ├── Harbor.Hosting/                    — DI modules wired by the CLI (TuiModule, StorageModule, ...)
 ├── Harbor.Storage.{Jsonl,Memory,Sqlite,Shared}/  — session stores (HARBOR_STORAGE=jsonl|memory|sqlite);

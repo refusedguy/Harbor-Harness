@@ -22,7 +22,16 @@ public sealed class AgentCommand : ISlashCommand
         _writer = writer;
     }
     public string Name => "agent";
-    public string Description => "Switch agent (mode): code, plan, explore";
+
+    /// <summary>
+    ///     Deliberately does not enumerate the agent names (#582). This string is
+    ///     what <c>/help</c> prints, and it used to spell the set out — a hand-written
+    ///     copy of the agent registry that a newly registered builtin agent would miss
+    ///     while <c>ExecuteAsync</c>, three lines below, listed the real set from
+    ///     <see cref="IAgentRegistry" />. Run <c>/agent</c> with no arguments to see
+    ///     the agents; run <c>/help</c> to see that the command exists.
+    /// </summary>
+    public string Description => "Switch agent (mode) — run with no arguments to list them";
     public string Usage => "/agent <name>";
     public IReadOnlyList<string> Aliases => new[] { "mode", "a" };
     public IReadOnlyList<string>? ArgSuggestions => null;
