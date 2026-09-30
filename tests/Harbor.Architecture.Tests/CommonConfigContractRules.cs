@@ -42,8 +42,16 @@
 //
 // — which is not one of the two files ProviderModelAbsenceRules scans. So the
 // rule as landed cannot see the derivation it was written to forbid, and the
-// seam still declares four states while the domain has one. This file extends
-// the scan to the producer side and pins the carrier.
+// seam still declares four states while the domain has one.
+//
+// There were in fact TWO independent reasons that rule passed over it, and the
+// first CI run of this guard is what exposed the second: the file was not on the
+// scan list, AND the pattern could not match a dotted name. `HalfPairProbe`
+// required `\w*[Pp]rovider\w*`, and the line above reads
+// `string.IsNullOrEmpty(cfg.DefaultProvider)` — so even with the file listed, the
+// matcher would have gone green over the exact spelling that existed. Both are
+// fixed, and the non-vacuity controls below plant the real dotted line in both
+// this file and `ProviderModelAbsenceRules` so neither blind spot can reopen.
 //
 // A tuple of two optional strings, wrapped in another optional, spells FOUR
 // states: both, neither, provider-only, model-only. `Maybe<ModelRef>` spells
@@ -143,6 +151,13 @@ public sealed class CommonConfigContractRules
     ///     derivation can sit on either side of the port: the port's own doc
     ///     comment, the producer, or the composition root's fallback.
     /// </summary>
+    /// <remarks>
+    ///     The port is listed by its POST-rename path, so on the pre-fix tree this
+    ///     list reports a missing file. That is intended: it is one of the three
+    ///     independent reasons the guard is red before the fix (the name is
+    ///     absent, the carrier is a tuple, the producer still derives), and a file
+    ///     that is listed but absent must be loud rather than quietly skipped.
+    /// </remarks>
     private static readonly string[] SeamFiles =
     [
         "src/Harbor.Ui.Framework.Abstractions/Configuration/ICommonConfigModelRefReader.cs",
@@ -151,28 +166,34 @@ public sealed class CommonConfigContractRules
     ];
 
     /// <summary>
-    ///     #729's matcher, verbatim in substance: an emptiness test on a
-    ///     provider-or-model-named value, joined by <c>&amp;&amp;</c>/<c>||</c> to
-    ///     the same kind of test on another one. Requiring BOTH operands to be
-    ///     provider/model-named is what keeps this from firing on every unrelated
-    ///     two-optional-string test; requiring the OPERATOR is what keeps it from
-    ///     firing on a lone per-field guard, which is a different question.
+    ///     #729's matcher, extended in one place and only one: the name of the
+    ///     tested value may now be QUALIFIED (<c>cfg.DefaultProvider</c>), not
+    ///     just bare (<c>providerId</c>). The inherited pattern was
+    ///     <c>\w*[Pp]rovider\w*</c>, which cannot match a dotted name — so it was
+    ///     blind to the one spelling that actually existed on this seam. That is
+    ///     not a hypothetical: the line it needed to catch reads
+    ///     <c>IsNullOrEmpty(cfg.DefaultProvider)</c>, so #729's own rule would
+    ///     have gone green over it even had the producer been on its file list.
+    ///     Caught by this file's non-vacuity control, which plants the real line.
     /// </summary>
     private static readonly Regex HalfPairProbe = new(
         """
-        string\.IsNullOr(?:Empty|WhiteSpace)\s*\(\s*(?:\w*[Pp]rovider\w*|\w*[Mm]odel\w*)\s*\)\s*(?:&&|\|\|)\s*(?:!\s*)?string\.IsNullOr(?:Empty|WhiteSpace)\s*\(\s*(?:\w*[Pp]rovider\w*|\w*[Mm]odel\w*)\s*\)
+        string\.IsNullOr(?:Empty|WhiteSpace)\s*\(\s*[\w.]*\w*(?:[Pp]rovider|[Mm]odel)\w*\s*\)\s*(?:&&|\|\|)\s*(?:!\s*)?string\.IsNullOr(?:Empty|WhiteSpace)\s*\(\s*[\w.]*\w*(?:[Pp]rovider|[Mm]odel)\w*\s*\)
         """,
         RegexOptions.Compiled);
 
     /// <summary>
     ///     A member whose name opens with one of these verbs is a write. Matched
-    ///     against the name with a trailing <c>Async</c> removed, and anchored at
-    ///     the start, so <c>ReadModelRefAsync</c> and <c>LoadAsync</c> are reads
-    ///     and <c>ResetAsync</c> is not caught by the <c>Set</c> entry.
+    ///     against the name with a trailing <c>Async</c> removed, anchored at the
+    ///     start, and — this is the part the first version of this control got
+    ///     wrong — the verb must be followed by a word boundary that is NOT a
+    ///     lowercase letter. A bare <c>^Add</c> matches <c>AddressOf</c>, which is
+    ///     a read; <c>(?![a-z])</c> is what keeps the two apart, and the control
+    ///     below plants <c>AddressOfAsync</c> to hold it to that.
     /// </summary>
     private static readonly Regex WriteMember = new(
         """
-        ^(?:Save|Update|Write|Set|Delete|Put|Post|Remove|Add|Insert|Erase|Purge|Clear|Mutate|Patch|Apply|Upsert|Commit|Edit|Persist|Configure|Store|Flush|Replace)
+        ^(?:Save|Update|Write|Set|Delete|Put|Post|Remove|Add|Insert|Erase|Purge|Clear|Mutate|Patch|Apply|Upsert|Commit|Edit|Persist|Configure|Store|Flush|Replace)(?![a-z])
         """,
         RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
@@ -365,11 +386,13 @@ public sealed class CommonConfigContractRules
     [Test]
     public async Task HalfPairMatcher_StillSeesTheRealSpelling()
     {
-        // The line this file exists for, in both operand orders, since the
-        // adapter and a future producer could spell it either way.
+        // The line this file exists for — dotted member access, which is how the
+        // adapter actually wrote it, and which the pattern inherited from #729
+        // could not match. Planted verbatim, because a control that only ever
+        // used the bare spelling would have kept a blind pattern green.
         await Assert.That(Scan(["if (string.IsNullOrEmpty(cfg.DefaultProvider) || string.IsNullOrEmpty(cfg.DefaultModel))"]).Count)
             .IsGreaterThan(0)
-            .Because("this is CommonConfigReaderAdapter:48 as it stands — the matcher must see it");
+            .Because("this is CommonConfigReaderAdapter:48 as it stood — the matcher must see it");
         await Assert.That(Scan(["if (!string.IsNullOrEmpty(modelId) && !string.IsNullOrEmpty(providerId))"]).Count)
             .IsGreaterThan(0)
             .Because("operand order is an implementation detail, not a distinction the rule draws");

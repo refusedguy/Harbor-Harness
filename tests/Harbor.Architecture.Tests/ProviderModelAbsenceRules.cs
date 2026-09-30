@@ -86,12 +86,9 @@ public sealed class ProviderModelAbsenceRules
     ///     reason the rule could be satisfied while the derivation was still there.
     ///     `CommonConfigReaderAdapter` — not a consumer file — carried the last
     ///     hand-written half-pair test
-    ///     (<c>IsNullOrEmpty(DefaultProvider) || IsNullOrEmpty(DefaultModel)</c>),
+    ///     (<c>IsNullOrEmpty(cfg.DefaultProvider) || IsNullOrEmpty(cfg.DefaultModel)</c>),
     ///     and this file did not scan it, so "the consumers no longer re-derive
-    ///     it" was true and the seam still re-derived it. The producer is the
-    ///     adapter, under its new name; the port itself cannot hold the probe
-    ///     (an interface has no body) and is covered by
-    ///     <c>CommonConfigContractRules</c> instead, which also pins the carrier.
+    ///     it" was true and the seam still re-derived it.
     /// </remarks>
     private static readonly string[] ConsumerFiles =
     [
@@ -112,9 +109,18 @@ public sealed class ProviderModelAbsenceRules
     // Raw string literals, deliberately: a verbatim @"…" would need every double
     // quote in the pattern doubled, which is where the sibling guard shipped red
     // the first time. The pattern IS the specification, so it stays literal.
+    //
+    // #453: the name alternation is now `[\w.]*\w*(?:[Pp]rovider|[Mm]odel)\w*`
+    // rather than the original `(?:\w*[Pp]rovider\w*|\w*[Mm]odel\w*)`, because the
+    // original could not match a QUALIFIED name. The one line this rule exists to
+    // forbid reads `IsNullOrEmpty(cfg.DefaultProvider)` — dotted — so the pattern
+    // was blind to it, and the file that carried it was not on the scan list
+    // either. Two independent reasons the pre-fix seam passed; the scan list is
+    // fixed above and the pattern here. `Matcher_...` below now plants the real
+    // dotted spelling so neither gap can reopen silently.
     private static readonly Regex HalfPairProbe = new(
         """
-        string\.IsNullOr(?:Empty|WhiteSpace)\s*\(\s*(?:\w*[Pp]rovider\w*|\w*[Mm]odel\w*)\s*\)\s*(?:&&|\|\|)\s*(?:!\s*)?string\.IsNullOr(?:Empty|WhiteSpace)\s*\(\s*(?:\w*[Pp]rovider\w*|\w*[Mm]odel\w*)\s*\)
+        string\.IsNullOr(?:Empty|WhiteSpace)\s*\(\s*[\w.]*\w*(?:[Pp]rovider|[Mm]odel)\w*\s*\)\s*(?:&&|\|\|)\s*(?:!\s*)?string\.IsNullOr(?:Empty|WhiteSpace)\s*\(\s*[\w.]*\w*(?:[Pp]rovider|[Mm]odel)\w*\s*\)
         """,
         RegexOptions.Compiled);
 
@@ -250,6 +256,18 @@ public sealed class ProviderModelAbsenceRules
         await Assert.That(Scan(["if (string.IsNullOrWhiteSpace(modelId) && string.IsNullOrWhiteSpace(providerId))"]).Count)
             .IsGreaterThan(0)
             .Because("the same rule with the other emptiness predicate is still this rule");
+
+        // #453: the QUALIFIED spelling, verbatim as the adapter wrote it. The
+        // pre-#453 pattern was `\w*[Pp]rovider\w*`, which cannot match across a
+        // dot — so this line, the very one the rule exists to forbid, was
+        // invisible to it. If the pattern is ever narrowed back, this fails.
+        await Assert.That(Scan(["if (string.IsNullOrEmpty(cfg.DefaultProvider) || string.IsNullOrEmpty(cfg.DefaultModel))"]).Count)
+            .IsGreaterThan(0)
+            .Because(
+                "this is CommonConfigReaderAdapter:48 as it stood — dotted member access, which the "
+                + "original pattern could not match. A guard that cannot see the spelling that "
+                + "actually exists is not a guard; the pattern now accepts a qualified name, and "
+                + "this control is what holds it to that");
 
         // The post-fix spelling, and near-misses that are somebody else's problem.
         await Assert.That(Scan(["if (configured is { } fromConfig)"]).Count).IsEqualTo(0)
