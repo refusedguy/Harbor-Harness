@@ -748,7 +748,7 @@ public sealed class SeamTypeLeakRules
 
         List<SeamLeak> published = SeamLeakProbe.PublishesConcrete(typeof(PublishedWriterProbe), banned);
 
-        await Assert.That(published.Select(static h => h.Detail)).Contains("property 'Writer'")
+        await Assert.That([.. published.Select(static h => h.Detail)]).Contains("property 'Writer'")
             .Because(
                 "PublishedWriterProbe.WRITER-PROPERTY is typed AnsiWriter — the exact shape "
                 + "CellForgeRenderContext.Writer had, which is what issue #494 removed. If the classifier "
@@ -769,7 +769,7 @@ public sealed class SeamTypeLeakRules
         // which is the difference between the two rules stated in one place.
         List<SeamLeak> asName = SeamLeakProbe.NamesConcrete(typeof(WiredWriterProbe), banned);
 
-        await Assert.That(asName.Select(static h => h.Detail)).Contains("'ctor parameter 'writer''")
+        await Assert.That([.. asName.Select(static h => h.Detail)]).Contains("'ctor' parameter 'writer'")
             .Because(
                 "rule 1 counts constructor parameters and rule 2 does not. That asymmetry is deliberate and "
                 "this assertion pins it: WiredWriterProbe is caught by one and not the other, so neither "
