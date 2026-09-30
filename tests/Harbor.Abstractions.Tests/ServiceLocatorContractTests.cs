@@ -62,7 +62,16 @@ public class ServiceLocatorContractTests
             .GetConstructors().Single().GetParameters();
 
         await Assert.That(parameters.Length).IsEqualTo(8);
-        await Assert.That(parameters.Select(p => p.Name).ToArray()).IsEquivalentTo(new[]
+
+        // #876: `ParameterInfo.Name` is `string?` in the BCL, so this projects to
+        // `string?[]` and cannot satisfy TUnit's `IEnumerable<string>` constraint
+        // — an error here, not a warning, and it blocks EVERY PR's build before
+        // the PR's own change is read. A constructor's parameters are always
+        // named in metadata, so the projection is not hiding a real null: this
+        // is the honest cast, and a NoWarn for CS8620/CS8622 would hide the next
+        // genuine one.
+        string[] names = [.. parameters.Select(p => p.Name!)];
+        await Assert.That(names).IsEquivalentTo(new[]
         {
             "SessionId", "MessageId", "CallId", "Agent", "Abort", "Messages", "ReportProgress", "Ask",
         });
