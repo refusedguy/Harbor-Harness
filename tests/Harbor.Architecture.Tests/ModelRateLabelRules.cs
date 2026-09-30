@@ -7,11 +7,11 @@
 // survived is worse than a duplicate: the two model pickers answer the SAME
 // question about the SAME model with two different answers.
 //
-//   src/Harbor.Desktop.Abstractions/ViewModels/ProviderModelPickerViewModel.cs:377-381
-//       private static string FormatPricing(decimal inputPerMillion, decimal outputPerMillion)
-//       { if (inputPerMillion == 0m && outputPerMillion == 0m) return "pricing unknown"; … }
-//   src/Harbor.Desktop.Abstractions/ViewModels/ProviderBrowserViewModel.cs:197
-//       public string PricingLabel => $"${InputPerMillion:F2} in / ${OutputPerMillion:F2} out per 1M";
+//   ProviderModelPickerViewModel.cs:377 — a private FormatPricing helper, which
+//     returned the literal "pricing unknown" when both rates were zero, and
+//     otherwise spelled "$X in / $Y out per 1M" with an F2 format on each rate.
+//   ProviderBrowserViewModel.cs:197 — a PricingLabel property that spelled the same
+//     sentence, and had no zero case at all.
 //
 // Both are LIVE, and #686's own caveat ("if one copy is in a test or a dead
 // branch there is nothing to converge") is the first thing this guard has to
@@ -175,7 +175,7 @@ public sealed class ModelRateLabelRules
         RegexOptions.Compiled);
 
     /// <summary>A file, a 1-based line number, and the offending line.</summary>
-    private sealed record Site(string RelativePath, int Line, string Text);
+    private sealed record Site(string RelativePath, int LineNumber, string Text);
 
     /// <summary>
     ///     Rule 1: a rate is spelled into a user-facing string on exactly one
@@ -444,5 +444,7 @@ public sealed class ModelRateLabelRules
     }
 
     private static string Describe(IReadOnlyList<Site> sites)
-        => sites.Count == 0 ? "(none)" : string.Join(", ", sites.Select(s => s.RelativePath + ":" + s.Line));
+        => sites.Count == 0
+            ? "(none)"
+            : string.Join(", ", sites.Select(s => s.RelativePath + ":" + s.LineNumber));
 }
