@@ -93,7 +93,7 @@ internal static class CliInfrastructure
             services.GetRequiredService<IAgentRegistry>(),
             services.GetRequiredService<IProviderRegistry>(),
             slashes,
-            services.GetRequiredService<ILogger<CellForgeReplRunner>>(),
+            services.GetRequiredService<ILoggerFactory>(),
             services.GetService<Harbor.Hosting.PluginReloadService>(),
             services.GetService<Harbor.Hosting.Rendering.IRendererPipeline>(),
             services.GetService<ITokenTracker>(),

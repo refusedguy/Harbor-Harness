@@ -14,7 +14,7 @@
 // fault. So the count is never asserted anywhere in this file. What is asserted
 // is the two facts the count is made of.
 //
-// FACT 1 — five of the twenty-one are not dependencies of ReplRunner at all.
+// FACT 1 — four of the twenty-one are not dependencies of ReplRunner at all.
 // Measured by occurrence count in the file, each of these appears EXACTLY
 // TWICE: once in the parameter list, once on line 92. They are never stored in
 // a field, never read, never passed on:
@@ -23,23 +23,23 @@
 //     IPermissionService                permissions
 //     Func<IReadOnlyList<SkillFreshnessEntry>>? skillRefresh
 //     Func<IReadOnlyList<string>, Task<SkillUpdateReport>>? skillUpdate
-//     ILoggerFactory                     loggerFactory   (one of its two uses)
 //
 // Their single use is as an argument to `new SlashCommandDispatcher(...)` in
 // the constructor. They are not what ReplRunner needs; they are what
 // ReplRunner was resolving FOR something else and dragging into its own
-// signature to do it. `ILoggerFactory` is the same fact in half measure: it is
-// also used for `_cellForgeLogger = loggerFactory.CreateLogger<…>()`, which is
-// composition (building a collaborator) wearing the costume of an assignment.
+// signature to do it. A FIFTH parameter, `ILoggerFactory`, is composition in
+// the same constructor — `loggerFactory.CreateLogger<CellForgeReplRunner>()` —
+// and is the single case the rule allows, for a reason that is an analyzer's:
+// see ProducesATypedLogger.
 //
 // This is the distinction the issue's own prescription gets wrong, and getting
 // it wrong is the expensive mistake: the proposed fix is to bundle the
 // parameters into a `ReplContext` and inject that. Bundling them would MOVE
-// five masked defaults one level down and make the mega-constructor a
+// four masked defaults one level down and make the mega-constructor a
 // well-typed one — twenty-one names replaced by one, with the same twenty-one
-// values, five of which had no business existing, still being supplied. A
+// values, four of which had no business existing, still being supplied. A
 // context is the right answer for a class that genuinely depends on twenty-one
-// things. This class depends on sixteen.
+// things. This class depends on seventeen.
 //
 // FACT 2 — the slash layer is wired by hand in TWO places, and one of them is
 // dead. `ReplRunner.cs:91` builds a `SlashCommandDispatcher` from nine
@@ -79,8 +79,14 @@
 // -----------
 // `Rule_FlagsTheMaskedDefaults` is the positive control: issue #486's
 // constructor verbatim, from which the walker must recover 21 parameters and
-// 5 offenders. Paired with the fixed spelling (17 parameters, all retained →
-// 0) so the rule cannot fire on the fix it asked for.
+// name 4 offenders, plus a separate assertion that the fifth candidate
+// (`loggerFactory`) is the allowed typed-logger production. Paired with the
+// fixed spelling (18 parameters, every one retained or allowed → 0) so the
+// rule cannot fire on the fix it asked for.
+//
+// `LoggerFactory_BuildingSomethingOtherThanALogger_IsStillFlagged` keeps that
+// single exception from becoming a general amnesty for composition, which is
+// the defect itself.
 //
 // `SiteScan_FlagsDuplicatedWiring` is the positive control for rule 2: two
 // sites → flagged; one site → clean; and the case a naive `Contains` gets
@@ -282,10 +288,10 @@ public sealed class ReplConstructorCompositionTests
             """;
 
         // The fixed spelling. `tools` and `permissions` are gone (they were the
-        // dispatcher's, resolved at the root now), the two skill delegates are
-        // gone with them, and the logger the class needs for a class it does not
-        // own is injected as that logger. Every parameter is retained, so the rule
-        // must be silent — a gate that fires on the fix is a gate that gets deleted.
+        // dispatcher's, resolved at the root now) and so are the two skill
+        // delegates. Every remaining parameter is either retained outright or is
+        // the one allowed typed-logger production, so the rule must be silent — a
+        // gate that fires on the fix is a gate that gets deleted.
         const string Fixed = """
             public ReplRunner(
                 ILogger<ReplRunner> logger,
@@ -299,7 +305,7 @@ public sealed class ReplConstructorCompositionTests
                 IAgentRegistry agentRegistry,
                 IProviderRegistry providers,
                 SlashCommandDispatcher slashes,
-                ILogger<CellForgeReplRunner> cellForgeLogger,
+                ILoggerFactory loggerFactory,
                 Harbor.Hosting.PluginReloadService? pluginReload,
                 Harbor.Hosting.Rendering.IRendererPipeline? rendererPipeline,
                 ITokenTracker? tokens,
@@ -318,7 +324,7 @@ public sealed class ReplConstructorCompositionTests
                 _agentRegistry = agentRegistry;
                 _providers = providers;
                 _slashes = slashes;
-                _cellForgeLogger = cellForgeLogger;
+                _cellForgeLogger = loggerFactory.CreateLogger<CellForgeReplRunner>();
                 _rendererPipeline = rendererPipeline;
                 _pluginReload = pluginReload;
                 _healthCheck = healthCheck;
@@ -337,21 +343,69 @@ public sealed class ReplConstructorCompositionTests
                 + "rule is measuring a subset of the signature. Read: " + string.Join(", ", currentParams));
 
         await Assert.That(MaskedDefaults(Current, "ReplRunner", currentParams)).IsEquivalentTo(
-            new[] { "tools", "permissions", "loggerFactory", "skillRefresh", "skillUpdate" })
+            new[] { "tools", "permissions", "skillRefresh", "skillUpdate" })
             .Because(
-                "The five masked defaults, by name, are the point of the whole guard. Four of them are "
-                + "read exactly once in the product, as arguments to the dispatcher's constructor; the "
-                + "fifth is used to build a second logger the class does not own. If this list changes, "
-                + "the finding in #486 has changed shape and the rule's premise needs re-reading rather "
-                + "than the test being adjusted to match the code.");
+                "The four masked defaults, by name, are the point of the whole guard. Each is read "
+                + "exactly once in the product, as an argument to the dispatcher's constructor. If this "
+                + "list changes, the finding in #486 has changed shape and the rule's premise needs "
+                + "re-reading rather than the test being adjusted to match the code.");
+
+        // `loggerFactory` is the fifth, and the reason it is NOT in the list above is
+        // recorded in ProducesATypedLogger. Asserted separately so that narrowing is
+        // a visible change to this test rather than a silent one.
+        await Assert.That(MaskedDefaults(Current, "ReplRunner", currentParams).Contains("loggerFactory")).IsFalse()
+            .Because(
+                "loggerFactory creates the typed logger of CellForgeReplRunner — a class this one "
+                + "CONSTRUCTS, and therefore cannot be injected (S6672 forbids a class from holding "
+                + "ILogger<T> for a T it does not own; the repo already works around S6672 twice on "
+                + "purpose, in ToolDispatcher and in AgentLoop). One typed-logger production is the "
+                + "rule's single allowed composition. It is allowed by TYPE and use, not because "
+                + "composition is acceptable here.");
 
         IReadOnlyList<string> fixedParams = ReadConstructorParameters(Fixed, "ReplRunner");
         await Assert.That(MaskedDefaults(Fixed, "ReplRunner", fixedParams)).IsEmpty()
             .Because(
                 "The fixed spelling must stay clean, and it is also the control that proves the rule is "
                 + "about retention and not about length: this constructor has 18 parameters and is "
-                + "legitimate, because every one of them is a value the class keeps. A rule that fired "
-                + "here would be a length rule, which is the gate this issue explicitly must not ship.");
+                + "legitimate, because every one of them is either kept outright or is the one allowed "
+                + "typed-logger production. A rule that fired here would be a length rule, which is the "
+                + "gate this issue explicitly must not ship.");
+    }
+
+    [Test]
+    public async Task LoggerFactory_BuildingSomethingOtherThanALogger_IsStillFlagged()
+    {
+        // The exception in ProducesATypedLogger is the one way composition is allowed
+        // in a consumer's constructor, and the control that keeps it from becoming a
+        // general amnesty for composition — which is the whole defect this guard
+        // exists for. A logger factory spent on anything other than a logger is the
+        // same shape as the four masked defaults: a value the class resolved for a
+        // collaborator and did not keep.
+        const string NotALogger = """
+            public ReplRunner(
+                ILogger<ReplRunner> logger,
+                IToolRegistry tools,
+                ILoggerFactory loggerFactory)
+            {
+                _logger = logger;
+                _tools = loggerFactory.CreateSomethingElse<ToolRegistry>();
+            }
+            """;
+
+        // And the case a bare "is the name loggerFactory" check would wrongly pass:
+        // the type is right, the USE is not. If the exception is ever widened to
+        // "the parameter is called loggerFactory", this stops flagging and the guard
+        // has quietly become decorative.
+        IReadOnlyList<string> offenders = MaskedDefaults(
+            NotALogger, "ReplRunner", ReadConstructorParameters(NotALogger, "ReplRunner"));
+
+        await Assert.That(offenders).IsEquivalentTo(new[] { "tools", "loggerFactory" })
+            .Because(
+                "A factory spent on anything but a typed logger is a masked default, and so is the "
+                + "service dragged in beside it. The single allowed composition is "
+                + "ILoggerFactory.CreateLogger<T>() — and it is allowed because S6672 makes injecting "
+                + "ILogger<T> for a T the class does not own impossible, not because composing here is "
+                + "acceptable.");
     }
 
     [Test]
@@ -535,8 +589,7 @@ public sealed class ReplConstructorCompositionTests
     /// <summary>
     ///     The parameters of <paramref name="parameters" /> that the constructor
     ///     never retains — that is, never the direct right-hand side of a field
-    ///     assignment in the body. Compared against the BODY only, so a parameter
-    ///     that merely appears in the signature is never enough to look retained.
+    ///     assignment in the body, and never spent producing a typed logger.
     /// </summary>
     private static IReadOnlyList<string> MaskedDefaults(string text, string typeName, IReadOnlyList<string> parameters)
     {
@@ -548,8 +601,35 @@ public sealed class ReplConstructorCompositionTests
                     body,
                     @"=\s*" + Regex.Escape(name) + @"\s*;",
                     RegexOptions.CultureInvariant))
+                .Where(name => !ProducesATypedLogger(name, body))
         ];
     }
+
+    /// <summary>
+    ///     The one composition a consumer is allowed to perform for itself: creating
+    ///     the typed logger of a class it CONSTRUCTS.
+    /// </summary>
+    /// <remarks>
+    ///     <para>
+    ///         This exception is narrow on purpose, and it exists because the alternative
+    ///         is not available. A class cannot inject <c>ILogger&lt;T&gt;</c> for a
+    ///         <c>T</c> it does not own — S6672 forbids exactly that, and the repo already
+    ///         works around S6672 twice on purpose (<c>ToolDispatcher</c> takes its own
+    ///         <c>ILogger&lt;ToolDispatcher&gt;</c> with the comment "own category instead of
+    ///         the borrowed ILogger&lt;AgentLoop&gt;", and <c>AgentLoop</c> hands its
+    ///         fallback a <c>NullLogger&lt;ToolDispatcher&gt;</c> for the same reason). So
+    ///         the parameter is retained by USE and its type is checked, not its call
+    ///         site: <c>loggerFactory</c> is allowed exactly when it is spent on
+    ///         <c>CreateLogger&lt;</c>.
+    ///     </para>
+    ///     <para>
+    ///         What this must NOT become is a general escape for composition — that is the
+    ///         whole defect. <c>LoggerFactory_BuildingSomethingOtherThanALogger_IsStillFlagged</c>
+    ///         is the control that keeps the door shut.
+    ///     </para>
+    /// </remarks>
+    private static bool ProducesATypedLogger(string parameter, string body) =>
+        Regex.IsMatch(body, @"\b" + Regex.Escape(parameter) + @"\s*\.\s*CreateLogger\s*<", RegexOptions.CultureInvariant);
 
     /// <summary>Every <c>.cs</c> file in the product tree, sorted, obj/bin excluded.</summary>
     private static IReadOnlyList<string> ProductSources()
