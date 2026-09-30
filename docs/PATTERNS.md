@@ -181,36 +181,46 @@ is two renderers declared in the test file — one with a seam, one without — 
 plus a frozen index**, not a `switch`. The three registries in
 `src/Harbor.Hosting/Modules/` have the same shape on purpose:
 
-| Registry | id table | `Build()` | `TryResolve` |
+| Registry | id table | `Build()` | `Resolve` |
 |---|---|---|---|
-| `TuiBackendRegistry.cs` | `FallbackBackendId` `:174`/`:177` | `:181-210` | falls back to that single id `:227` |
-| `SessionStoreRegistry.cs` | `KnownIds` `:67`/`:70` | `:74-84` | `:92-100` |
-| `HarborModeRegistry.cs` | `KnownIds` `:72` | `:75-83` | `:91-105` |
+| `TuiBackendRegistry.cs` | `FallbackBackendId` `:228`/`:231` | `:235` | falls back to that single id `:302` |
+| `SessionStoreRegistry.cs` | **none** — the id set is `Build()`'s own keys | `:108` | `:158-163` |
+| `HarborModeRegistry.cs` | **none** — the id set is `Build()`'s own keys | `:80` | `:98-103` |
 
 Every one of them is:
 
 ```csharp
-internal const string KnownIds = "…";                    // next to the factory set,
-                                                            // so error text cannot drift
-internal static FrozenDictionary<string, TStrategy> Build();   // built once, frozen
-internal static bool TryResolve(…, string rawId, out TStrategy? s);  // unknown id → false
+internal static FrozenDictionary<string, TStrategy> Build();  // built once, frozen;
+                                                            // its Keys ARE the id list
+internal static Maybe<TStrategy> Resolve(FrozenDictionary<string, TStrategy> registry,
+                                         string rawId);    // unknown id → None
 ```
 
+> `KnownIds` is **gone**, and its absence is the point. Both
+> `SessionStoreRegistry` and `HarborModeRegistry` used to carry a second
+> hand-written copy of their own key set next to the factory set, on the strength
+> of a doc comment claiming adjacency prevented drift. #581 deleted both: "there
+> is no second list left to drift; the registry below is the only declaration"
+> (`SessionStoreRegistry.cs:20-23`). A table of pointers is also a hand-maintained
+> list — which is §7 rule 3, one section up.
+
 `Build()` returns a `FrozenDictionary` — no per-lookup allocation, no lock.
-`TryResolve` returns `false` for an unknown id and the **caller fails loudly**:
-`SessionStoreRegistry`'s own doc comment says a `HARBOR_STORAGE` typo "used to
-boot on jsonl and silently split the session history".
+`Resolve` returns `Maybe.None` for an unknown id and the **caller fails loudly**:
+`SessionStoreRegistry`'s own header says the silent fallback "is gone: unknown
+ids fail fast" (`SessionStoreRegistry.cs:11`).
 
 Provider factories follow the same shape without the id index, because a
 provider is looked up by a strong id rather than a raw string:
-`src/Harbor.Hosting/Modules/ProviderFactories.cs:75`, `:93`, `:113`, `:135` —
+`src/Harbor.Hosting/Modules/ProviderFactories.cs:76`, `:94`, `:114`, `:136` —
 each `IProviderFactory` with `ProviderId` and `CreateClient(ILoggerFactory)`.
 
 ### The known trap
 
 `TuiBackendRegistry` is the one exception, and it is a *deliberate* one: unknown
-`HARBOR_TUI` falls back to ANSI and `TuiModule` logs a warning naming the
-requested id (`:216`). A fallback is acceptable **only when it is loud and
+`HARBOR_TUI` falls back to a single id — `"ansi"` when Spectre is compiled in,
+`"plain"` otherwise (`TuiBackendRegistry.cs:226-232`) — and `TuiModule` logs a
+warning naming the requested id and every available one
+(`TuiModule.cs:50-54`). A fallback is acceptable **only when it is loud and
 single**. If you add a fourth registry, copy `SessionStoreRegistry`, not
 `TuiBackendRegistry` — the difference is whether a typo is silent.
 
@@ -221,7 +231,7 @@ single**. If you add a fourth registry, copy `SessionStoreRegistry`, not
 **The convention.** Cross-cutting policy is a decorator registered **at the DI
 boundary**, wrapping the concrete instance. Three sites, same shape:
 
-- `src/Harbor.Hosting/Modules/RegistriesModule.cs:101-104`:
+- `src/Harbor.Hosting/Modules/RegistriesModule.cs:115-121`:
   ```csharp
   // sprint3-C C1: instrument at the DI boundary. Plugins keep mutating the
   // RAW registries (ctx.Registries) before Freeze; consumers resolving the
@@ -229,7 +239,7 @@ boundary**, wrapping the concrete instance. Three sites, same shape:
   services.AddSingleton<IToolRegistry>(new InstrumentedToolRegistry(
       toolRegistry, MeterMetrics.Instance, ActivityTracer.Instance));
   ```
-- `src/Harbor.Hosting/Modules/CoreModule.cs:58`: `IAgent` → `TracingAgentProxy`
+- `src/Harbor.Hosting/Modules/CoreModule.cs:83-86`: `IAgent` → `TracingAgentProxy`
   over the real `DefaultAgent`.
 - `src/Harbor.Hosting/Modules/TelemetryModule.cs:8-15`: the doc comment states
   the rule — the decorators wrap in `AddHarborRegistries`/`AddHarborCore`, "one
@@ -633,7 +643,7 @@ the transition and the lifecycle are the same code path rather than two.*
 | Wildcard arm over a Harbor union | 7 sites, baselined in the guard | Name every arm; or log **and** count (§7) |
 | **Missing** arm, no default | was `ChatScreenBridge.HandleEvent` missing `CompactionFailedEvent` and falling through silently — **fixed in #840**; the census in `CompactionLifecycleLineTests` is what holds it | The default arm invents an answer; a missing arm just doesn't. Not covered by the wildcard guard (§7); covered by an arm census per family |
 | Hand-maintained name list as a union | `PathArgExtractionPolicy.cs:53` (`DefaultTools`), `[JsonDerivedType]` tables | It IS a union — test it by reflection (§7) |
-| Unknown id → silent default | fixed in `SessionStoreRegistry`/`HarborModeRegistry` | `TryResolve` returns false; caller fails loudly (§2) |
+| Unknown id → silent default | fixed in `SessionStoreRegistry`/`HarborModeRegistry` | `Resolve` returns `Maybe.None`; caller fails loudly (§2) |
 | A fake metric | see `TelemetryModule.cs:25-33` for the right shape | Absent surface beats plausible zero (§3) |
 
 ---
