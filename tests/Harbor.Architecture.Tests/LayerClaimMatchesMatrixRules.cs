@@ -181,6 +181,17 @@ public sealed class LayerClaimMatchesMatrixRules
         RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
     /// <summary>
+    ///     Two leading words, tried only when the first is not a layer. "Composition
+    ///     Root" is the one layer whose name is two words, and a matcher that
+    ///     stopped at the first word would grade the single project on that row
+    ///     (<c>Harbor.Hosting</c>) as declaring nothing — which is how a fixed
+    ///     README goes back to unchecked without anything going red.
+    /// </summary>
+    private static readonly Regex LeadingTwoWords = new(
+        @"^[ \t*]*(?<phrase>[A-Za-z]+[ \t]+[A-Za-z]+)",
+        RegexOptions.Compiled | RegexOptions.CultureInvariant);
+
+    /// <summary>
     ///     "&lt;Layer&gt;-labelled" — an adjective bound to the noun it follows,
     ///     so it cannot be a statement about some other project in the sentence.
     /// </summary>
@@ -197,9 +208,27 @@ public sealed class LayerClaimMatchesMatrixRules
     ///     of it, so a rule that matched four spellings and not the fifth would
     ///     have been a description of one afternoon. What bounds the shape is
     ///     the phrase "the layer matrix", not the verb.
-    /// </summary>
+    /// </remarks>
+    /// <remarks>
+    ///     The <c>[*_]*</c> before the layer word is markdown, not decoration: a
+    ///     README writes the claim with the layer in <c>**bold**</c> after the
+    ///     verb, and a pattern that stops at the asterisks matches the same
+    ///     sentence in a .cs comment and silently misses it in the document — a
+    ///     shape that works in one medium and not the other is worse than one
+    ///     that works in neither, because the floor still passes.
+    /// </remarks>
+    /// <remarks>
+    ///     For the same reason no shape may span two comment lines: an
+    ///     attribution at the end of one <c>//</c> line and its layer word at the
+    ///     start of the next is one sentence to a reader and a non-match to
+    ///     <c>\s+</c>, which stops at the <c>//</c>. The sites keep the phrase on
+    ///     one line for that reason, and it is worth knowing that they have to.
+    ///     (This paragraph deliberately does not quote the phrase: a quoted
+    ///     example is a claim to this rule, and the example is about the wrong
+    ///     layer — which is the one thing the rule must never accept.)
+    /// </remarks>
     private static readonly Regex MatrixSays = new(
-        @"\blayer\s+matrix\s+(?:calls|labels|says|names|places|puts|marks)\s+(?:it\s+)?(?<layer>Domain|Presentation|Application|Infrastructure|Composition[\s\-]?Root)\b",
+        @"\blayer\s+matrix\s+(?:calls|labels|says|names|places|puts|marks)\s+(?:it\s+)?[*_`]*\s*(?<layer>Domain|Presentation|Application|Infrastructure|Composition[\s\-]?Root)\b",
         RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
     /// <summary>A Harbor project name as it appears in prose, namespace-shaped included.</summary>
@@ -710,6 +739,17 @@ public sealed class LayerClaimMatchesMatrixRules
             }
 
             Match word = LeadingWord.Match(declaration);
+            string? claimed = word.Success ? Canonical(word.Groups["word"].Value) : null;
+
+            if (claimed is null)
+            {
+                Match pair = LeadingTwoWords.Match(declaration);
+                if (pair.Success)
+                {
+                    claimed = Canonical(pair.Groups["phrase"].Value);
+                }
+            }
+
             claims.Add(Build(
                 relative,
                 declarationLine,

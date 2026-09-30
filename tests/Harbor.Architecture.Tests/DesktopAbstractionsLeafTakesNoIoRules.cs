@@ -10,14 +10,46 @@
 // so in its own header when it deleted the two CellForge rows for the same
 // reason, and #742 repeated it for the token leaf.
 //
-// The defect underneath the rows is that this leaf is the ONE project the layer
-// matrix calls Domain (docs/ARCHITECTURE_LAYERS.md §2) while behaving like
-// storage: `Harbor.Desktop.Abstractions` is `IsPackable`,
+// The defect underneath the rows is that this leaf — which the matrix places in
+// PRESENTATION, and has placed there since the matrix row was created
+// (`FullLayerMatrixTests.Matrix["Harbor.Desktop.Abstractions"] =
+// new(Layer.Presentation, …)`, 2026-08-25, 5d2df19f) — was doing storage:
+// `Harbor.Desktop.Abstractions` is `IsPackable`,
 // `PackageId: Harbor.Desktop.Abstractions`, a published package, and it shipped a
 // `File.WriteAllText → File.Delete → File.Move` sequence writing into the user's
 // home directory. The config STORES are persistence; the config SCHEMA is not.
 // #534's own "done when" — the four rows deleted, no `System.IO.File*` left in
 // the project — is reachable only by taking the I/O out.
+//
+// #895 CORRECTED THE REASONING HERE, AND IT GOT STRONGER
+// ------------------------------------------------------
+// This header used to say the defect was that the leaf was the ONE project the
+// layer matrix misfiled. Its exact wording is not reproduced here only because
+// `LayerClaimMatchesMatrixRules` grades that phrase wherever it appears — a
+// guard that fails on the file next door is a guard nobody can read. The matrix
+// has said Presentation since the row was created, so the argument was built on
+// a layer this code has never had. The conclusion survives — a published
+// Presentation package writing into `~/.harbor` is still wrong — but it does not
+// need the false premise:
+//
+//   * `PresentationCapabilityRules` already forbids `System.IO.File*` and
+//     `System.IO.Directory*` in EVERY Presentation assembly, and its perimeter
+//     is `FullLayerMatrixTests.PresentationLayerAssemblies()` — DERIVED from the
+//     matrix row, not a hand-typed list. So this leaf was in scope by
+//     construction, and the four rows #534 deleted were a narrowing of a rule
+//     that applied anyway. `RequireLoaded` THROWS when a Presentation assembly
+//     is not loadable, so "the rule ran against this assembly" is a fact the
+//     test proves, not one it assumes.
+//   * The leaf has carried NO baseline row since #534, so the file rules are
+//     ARMED against it: one `File.*` is red on the spot, with no waiver to
+//     widen. That is the opposite of the "permission" the old wording implied.
+//
+// So the scan below is not a special case bolted on for one unlucky package. It
+// restates, as a source fact, an invariant a Presentation rule already holds —
+// and adds the half no capability rule can express, which is rule 2 below.
+// `IsPackable` stays in the record because it is true, and because a NuGet
+// consumer is a second and independent reader of the same mistake; it is not the
+// reason this file exists.
 //
 // WHICH DIRECTION THIS ASSUMES, AND WHY THE OTHER ONE IS NOT AVAILABLE
 // --------------------------------------------------------------------
@@ -55,14 +87,19 @@
 // WHAT IS RULED
 // -------------
 //   1. No disk call anywhere in `src/Harbor.Desktop.Abstractions`. The
-//      capability rules already assert this — as four baselined rows, which is a
-//      permission. This states it as the invariant, so the code cannot come back
-//      behind a re-granted waiver.
+//      capability rules already assert this, over IL, with an EMPTY baseline for
+//      this assembly since #534 — an armed rule, not a permission (it used to
+//      read "as four baselined rows", which stopped being true when #534 deleted
+//      them). This states the same invariant as a SOURCE fact, which reaches one
+//      thing IL cannot: a `.cs` file sitting in the project directory that the
+//      compile does not pick up is still a persistence claim in the leaf.
 //   2. The two file-backed stores are not DECLARED in the leaf, while the two
-//      ports they implement still are. Rule 1 alone would be satisfied by a store
-//      that had been reduced to a wrapper around someone else's I/O; this states
-//      the shape #534 actually wants — the contract is the leaf's, the bytes are
-//      not — and the port half keeps the "move" from turning into "delete".
+//      ports they implement still are. No capability rule can say this — a
+//      rule about capabilities has no vocabulary for a type that is ABSENT — and
+//      rule 1 alone would be satisfied by a store that had been reduced to a
+//      wrapper around someone else's I/O. This states the shape #534 actually
+//      wants — the contract is the leaf's, the bytes are not — and the port half
+//      keeps the "move" from turning into "delete".
 //   3. The leaf enumeration is non-empty, so neither rule can pass because the
 //      probe read nothing.
 //   4. Non-vacuity for the disk scanner, in the shape `DesignSystemLeafTakesNoIoRules`
@@ -114,10 +151,14 @@ using System.Text.RegularExpressions;
 namespace Harbor.Architecture.Tests;
 
 /// <summary>
-///     #534: <c>Harbor.Desktop.Abstractions</c> is a published, Domain-labelled
-///     config leaf, and it was doing persistence. See the file header for the
-///     direction this assumes, why it is a source scan rather than a
-///     <c>ResolvedViolations</c> row, and what is deliberately left alone.
+///     #534: <c>Harbor.Desktop.Abstractions</c> is a published Presentation
+///     config leaf — the matrix has said Presentation since the row was created
+///     — and it was doing persistence, which
+///     <c>PresentationCapabilityRules</c> forbids every Presentation assembly
+///     anyway. See the file header for the direction this assumes, why the
+///     argument is a plain Presentation rule rather than a special case, why it
+///     is a source scan rather than a <c>ResolvedViolations</c> row, and what is
+///     deliberately left alone.
 /// </summary>
 public sealed class DesktopAbstractionsLeafTakesNoIoRules
 {
@@ -194,11 +235,15 @@ public sealed class DesktopAbstractionsLeafTakesNoIoRules
             + " .cs files under src/" + LeafProjectDir + ".");
 
         await Assert.That(hits.Count).IsEqualTo(0).Because(
-            "Harbor.Desktop.Abstractions is a published package: IsPackable, PackageId "
-            + "Harbor.Desktop.Abstractions. It is the only project the layer matrix labels "
-            + "Domain (§2), and a Domain-labelled package that writes into the user's home "
-            + "directory is not a domain model — it is a storage engine that also ships a "
-            + "schema. The config STORES are persistence and belong to an outer layer "
+            "Harbor.Desktop.Abstractions: the layer matrix calls it Presentation, and has since "
+            + "the row was created (5d2df19f). PresentationCapabilityRules already forbids "
+            + "System.IO.File* / System.IO.Directory* in every Presentation assembly, with an "
+            + "EMPTY baseline for this one since #534. So this is not a special case: it is a "
+            + "plain instance of a Presentation rule, restated as a source fact because IL cannot "
+            + "see a file in the project directory that the compile does not pick up. The project "
+            + "is also a published package (IsPackable, PackageId Harbor.Desktop.Abstractions), "
+            + "which makes a stray File.* a mistake a NuGet consumer would install. Either way "
+            + "the config STORES are persistence and belong to an outer layer "
             + "(Harbor.Hosting/Configuration); the config SCHEMA, the PORTS "
             + "(ICommonConfigStore, IAppConfigStore<T>) and the DTOs are the leaf's. Note the "
             + "matrix forbids the other direction too: an Infrastructure row may never "
