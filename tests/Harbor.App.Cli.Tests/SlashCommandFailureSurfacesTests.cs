@@ -205,9 +205,14 @@ public class SlashCommandFailureSurfacesTests
     [Test]
     public async Task ConfigSet_SaveSucceeds_StillReportsTheValue()
     {
-        var lines = await DispatchAsync("/config set model gpt-4", new EmptyStore(), config: new WorkingConfigStore());
+        // #709: the input was `gpt-4`, a bare id, and this assertion passed only
+        // because the value was silently DISCARDED — the `✓` line printed for a
+        // write that changed nothing. A bare id is now refused before the store
+        // is reached; `SlashCommandArgumentPassingTests` covers that half. This
+        // test is about the SUCCESS path, so it uses a value the key accepts.
+        var lines = await DispatchAsync("/config set model openai/gpt-4", new EmptyStore(), config: new WorkingConfigStore());
 
-        await Assert.That(lines.Any(l => l.Contains("gpt-4"))).IsTrue()
+        await Assert.That(lines.Any(l => l.Contains("✓ model = openai/gpt-4"))).IsTrue()
             .Because("The new failure arm must not change the success path — the old code printed this line too.");
     }
 
