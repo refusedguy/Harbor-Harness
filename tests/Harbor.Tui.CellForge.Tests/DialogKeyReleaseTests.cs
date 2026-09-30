@@ -1,3 +1,4 @@
+using System.Text;
 using Harbor.Tui.CellForge.Widgets;
 using TUnit.Assertions;
 using TUnit.Assertions.Extensions;
