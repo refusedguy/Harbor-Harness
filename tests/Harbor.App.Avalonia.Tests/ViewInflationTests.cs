@@ -43,7 +43,11 @@ namespace Harbor.App.Avalonia.Tests;
 // at all. `avalonia-headless` named only this class's peers, so the two were
 // scheduled in different buckets and overlapped on AppHost.ResolveHarborDir
 // (AppHost.cs:121-126). Two keys, because TUnit intersects on either.
-[NotInParallel("avalonia-headless", "process-env")]
+//
+// The array form, not `[NotInParallel("a", "b")]`: TUnit 1.61.0 declares
+// exactly three constructors — `()`, `(string)` and `(string[])` — and the
+// two-argument spelling is CS1729. See #849.
+[NotInParallel(new[] { "avalonia-headless", "process-env" })]
 public class ViewInflationTests
 {
     [Test]

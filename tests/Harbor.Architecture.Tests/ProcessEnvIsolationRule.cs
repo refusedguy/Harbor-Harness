@@ -450,12 +450,12 @@ public class ProcessEnvIsolationRule
         string Class,
         int Line,
         Parallelism Form,
-        bool HasTests,
+        bool DeclaresTests,
         int WriteLine);
 
     private static IReadOnlyList<TypeSite> DiscoverWriters() =>
         [.. DiscoverTypesInProjects(EnumerateTestProjects())
-            .Where(t => t.WriteLine > 0 && t.HasTests)];
+            .Where(t => t.WriteLine > 0 && t.DeclaresTests)];
 
     private static IReadOnlyList<TypeSite> DiscoverTypesInProject(string project) =>
         DiscoverTypesInProjects([project]);
@@ -566,7 +566,7 @@ public class ProcessEnvIsolationRule
                 declarations[t].Name,
                 index + 1,
                 ReadParallelism(code, index),
-                HasTests(code, index, end),
+                DeclaresTestMethods(code, index, end),
                 FirstEnvWriteBetween(code, index, end));
         }
     }
@@ -658,7 +658,7 @@ public class ProcessEnvIsolationRule
     }
 
     /// <summary>Whether the extent holds at least one <c>[Test]</c> method.</summary>
-    private static bool HasTests(string[] code, int fromInclusive, int toExclusive)
+    private static bool DeclaresTestMethods(string[] code, int fromInclusive, int toExclusive)
     {
         for (int i = fromInclusive; i < toExclusive && i < code.Length; i++)
         {
