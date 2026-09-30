@@ -621,6 +621,7 @@ public sealed class PresentationCapabilityRules
             //
             // The jump palette row above is untouched — a different defect, open.
         },
+
         //
         // #535 RESOLVED: the two `RecentItemsService` rows are GONE — not
         // re-baselined, and the `["Harbor.Desktop.Shared"]` entry with them,
@@ -676,6 +677,18 @@ public sealed class PresentationCapabilityRules
         // Harbor.Application` matrix exception (#188) stays, because it exists for the
         // ProviderPresets catalog in the picker/onboarding VMs, not for config
         // persistence. Retiring that edge is a different move.
+        //
+        // #453: the `ICommonConfigReader` seam this block used to name is gone. It was
+        // the narrow read-only port over the shared config, and #750 moved the bytes
+        // out from under it — the port's consumer (SessionFactory) lives in
+        // Ui.Framework.Sessions, which cannot see Harbor.Hosting, so the seam did not
+        // survive as a sibling of the move. The two contracts this note used to link
+        // are now `ICommonConfigStore` (the port that stayed in the leaf) and
+        // `ICommonConfigModelRefReader` in Ui.Framework.Abstractions (the read-only
+        // half, which carries a `Maybe<ModelRef>`); `CommonConfigContractRules` is
+        // the guard for that pair. Referenced here because this comment is the
+        // history of why `ICommonConfigStore` is a PORT in a Domain-labelled leaf
+        // while its implementation is not.
     };
 
     /// <summary>

@@ -181,18 +181,25 @@ Reverse the split: rename `Harbor.Domain.dll` to `Harbor.Abstractions.Contracts`
 
 ---
 
-# ADR-009: ICommonConfigReader lives in Ui.Framework.Abstractions (circular-dependency resolution)
+# ADR-009: ICommonConfigModelRefReader lives in Ui.Framework.Abstractions (circular-dependency resolution)
 
 ## Status
 Accepted (implemented by 793c998 Ui.Framework split; recorded 2026-09-04)
+Amended by #453 (2026-09-30): the interface was renamed and its carrier changed; the decision to
+keep two contracts is unchanged and now has a guard. The "Context" below also misstated the edge
+that causes the cycle — corrected here.
 
 ## Context
-Issue #20: SessionFactory (Ui.Framework) needs the persisted provider/model choice, but the full config store (JsonCommonConfigStore) lives in Harbor.Desktop.Abstractions, and Desktop.Abstractions -> Terminal.Abstractions -> Ui.Framework, so Ui.Framework could not reference it back. Options were: merge Desktop.Abstractions into Ui.Framework, split Terminal.Abstractions, or keep a narrow interface with a documented boundary.
+Issue #20: SessionFactory (Ui.Framework) needs the persisted provider/model choice, but the full config store (JsonCommonConfigStore) lives in Harbor.Desktop.Abstractions, so Ui.Framework could not reference it back. Options were: merge Desktop.Abstractions into Ui.Framework, split Terminal.Abstractions, or keep a narrow interface with a documented boundary.
+
+The edge is a DIRECT `ProjectReference` from Harbor.Desktop.Abstractions to Harbor.Ui.Framework, plus one to each of `Ui.Framework.ViewModels`, `.State`, `.Services`, `.Sessions` and `.Rendering`. An earlier version of this ADR named `Desktop.Abstractions -> Terminal.Abstractions -> Ui.Framework` as the cause; Terminal.Abstractions is one more edge in the same direction, not the one that closes the loop (#453). The cycle is real either way, which is why the decision below holds.
 
 ## Decision
-Keep the narrow interface, placed at the bottom of the layer stack: ICommonConfigReader lives in Harbor.Ui.Framework.Abstractions/Configuration (same assembly family as its consumer, zero new edges) and exposes only what SessionFactory needs (TryReadProviderModelAsync). Harbor.Desktop.Abstractions.JsonCommonConfigStore implements both its own ICommonConfigStore and the narrow reader; each platform registers the dual implementation in DI. Merging Desktop.Abstractions into Ui.Framework was rejected (wrong direction - desktop concepts would leak into the shared framework); splitting Terminal.Abstractions was rejected (large churn, no additional isolation).
+Keep the narrow interface, placed at the bottom of the layer stack: `ICommonConfigModelRefReader` (named `ICommonConfigReader` until #453) lives in Harbor.Ui.Framework.Abstractions/Configuration (same assembly family as its consumer, zero new edges) and exposes only what SessionFactory needs (`ReadModelRefAsync`, named `TryReadProviderModelAsync` until #453). Harbor.Desktop.Abstractions.JsonCommonConfigStore implements the full `ICommonConfigStore`; a per-platform adapter (`CommonConfigReaderAdapter`) projects it onto the narrow reader, and each platform registers both in DI. Merging Desktop.Abstractions into Ui.Framework was rejected (wrong direction - desktop concepts would leak into the shared framework); splitting Terminal.Abstractions was rejected (large churn, no additional isolation).
+
+Amendment (#453): the two contracts are read/write versus read-only over one file, which is a split of capability and not a duplicated contract — so the fix was to make the difference legible in the names rather than to merge them. The narrow reader also now returns `Maybe<ModelRef>` instead of `(string? ProviderId, string? ModelId)?`, which had spelled four states while the domain has one; `CommonConfigContractRules` is the guard, and it fails on a second producer or on a half-pair test reappearing anywhere on the seam.
 
 ## Consequences
-- No circular reference; layering enforced by Harbor.Architecture.Tests (47/47 green).
-- Ui.Framework.Sessions resolves ICommonConfigReader optionally via GetService - hosts without config (tests, minimal) behave as before.
-- Full config surface stays on the Desktop.Abstractions type; the narrow reader must not grow beyond session-bootstrap needs.
+- No circular reference; layering enforced by Harbor.Architecture.Tests.
+- Ui.Framework.Sessions takes the narrow reader as a DECLARED optional constructor parameter (since #470) - hosts without config (tests, minimal) behave as before.
+- Full config surface and all writes stay on the Desktop.Abstractions type; the narrow reader must not grow beyond session-bootstrap needs, and `CommonConfigContractRules` fails it if a write member or a second implementer appears.

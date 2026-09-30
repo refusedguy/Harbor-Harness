@@ -93,12 +93,13 @@ internal static class ConfigRegistration
                 sp.GetRequiredService<ILogger<JsonCommonConfigStore>>()));
         services.AddSingleton(commonConfig);
 
-        // Bridge ICommonConfigStore (Desktop.Abstractions) to
-        // ICommonConfigReader (Ui.Framework). Without this adapter,
+        // Project ICommonConfigStore (Desktop.Abstractions) onto the read-only
+        // ICommonConfigModelRefReader (Ui.Framework). Without this adapter,
         // SessionFactory (in Ui.Framework) can't read the persisted
         // provider/model because Ui.Framework can't reference Desktop.Abstractions
-        // (circular dependency via Terminal.Abstractions).
-        services.AddSingleton<ICommonConfigReader>(sp =>
+        // — Desktop.Abstractions declares a direct ProjectReference back to
+        // Harbor.Ui.Framework, so the reverse edge closes a cycle.
+        services.AddSingleton<ICommonConfigModelRefReader>(sp =>
             new CommonConfigReaderAdapter(sp.GetRequiredService<ICommonConfigStore>()));
 
         // ── Auth resolver + model catalog for OpenAI-compatible providers ──

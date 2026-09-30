@@ -9,7 +9,7 @@ using Microsoft.Extensions.Logging;
 namespace Harbor.Ui.Framework.Sessions;
 /// <summary>
 ///     Creates <see cref="Session" /> objects with the correct provider/model
-///     resolved from <see cref="ICommonConfigReader" /> (with HARBOR_MODEL
+///     resolved from <see cref="ICommonConfigModelRefReader" /> (with HARBOR_MODEL
 ///     env-var override). Owns the agent-definition resolution + provider/model
 ///     split logic so the <see cref="SessionManager" /> facade stays slim.
 /// </summary>
@@ -23,7 +23,7 @@ namespace Harbor.Ui.Framework.Sessions;
 ///     </para>
 ///     <para>
 ///         <b>No service locator (#470):</b> the optional
-///         <see cref="ICommonConfigReader" /> is a declared constructor
+///         <see cref="ICommonConfigModelRefReader" /> is a declared constructor
 ///         parameter resolved once by the composition root — not an
 ///         <c>IServiceProvider</c> field re-queried on every session
 ///         creation. See <see cref="ResolveProviderModelFromConfigAsync" />.
@@ -39,7 +39,7 @@ public sealed class SessionFactory
 {
     private readonly IAgent _agent;
     private readonly IAgentRegistry _agents;
-    private readonly ICommonConfigReader? _configReader;
+    private readonly ICommonConfigModelRefReader? _configReader;
     private readonly ILogger<SessionFactory> _logger;
     private readonly ISessionStore _sessionStore;
 
@@ -53,14 +53,16 @@ public sealed class SessionFactory
     ///     the dependency is visible in the signature and resolved once instead of
     ///     per call. <see langword="null" /> means "this host registered no config
     ///     reader" — sessions then fall back to the agent definition's own
-    ///     provider/model.
+    ///     provider/model. The read-only half of the shared-config contract pair;
+    ///     its writable counterpart is
+    ///     <c>Harbor.Desktop.Abstractions.ICommonConfigStore</c> (#453).
     /// </param>
     public SessionFactory(
         IAgentRegistry agents,
         IAgent agent,
         ISessionStore sessionStore,
         ILogger<SessionFactory> logger,
-        ICommonConfigReader? configReader = null)
+        ICommonConfigModelRefReader? configReader = null)
     {
         _agents = agents;
         _agent = agent;
@@ -76,7 +78,8 @@ public sealed class SessionFactory
     /// <returns>
     ///     The reference the config names, or <c>Maybe.None</c> when it names no
     ///     usable pair — no reader registered, no config written yet, a config
-    ///     that could not be read, or a half-written one.
+    ///     that could not be read, or one naming a provider/model that cannot be
+    ///     qualified.
     /// </returns>
     /// <remarks>
     ///     <para>
@@ -94,11 +97,22 @@ public sealed class SessionFactory
     ///         agreeing, and nothing stopped a second producer from forgetting it.
     ///     </para>
     ///     <para>
+    ///         #453: there is now nothing to normalise HERE. This method used to
+    ///         unpack the pair and re-run <see cref="ModelRef.Qualify" /> itself,
+    ///         because the seam's carrier was
+    ///         <c>(string? ProviderId, string? ModelId)?</c> — two raw strings that
+    ///         this body then had to turn back into a reference. The producing end
+    ///         carries <see cref="ModelRef" /> now, so the qualification happens once,
+    ///         at the producer, and the two guards about it — the type here and
+    ///         <c>CommonConfigContractRules</c> on the seam — are statements about
+    ///         the same object rather than about two representations of it.
+    ///     </para>
+    ///     <para>
     ///         There is no half to represent. <c>CommonConfigReaderAdapter</c>
-    ///         already answers <c>null</c> when either field is blank, and
-    ///         <see cref="ModelRef.Qualify" /> rejects a blank model — so the
-    ///         domain's single void is "no usable pair", and the signature now says
-    ///         so instead of leaving the caller to re-derive it.
+    ///         answers <c>None</c> when the config names nothing
+    ///         <see cref="ModelRef.Qualify" /> accepts, so the domain's single void
+    ///         is "no usable pair", and the signature says so instead of leaving the
+    ///         caller to re-derive it.
     ///     </para>
     ///     <para>
     ///         Not a <c>Result</c>. "Nothing is configured yet" is the normal state
@@ -116,24 +130,17 @@ public sealed class SessionFactory
         var configReader = _configReader;
         if (configReader is null) return Maybe<ModelRef>.None;
 
-        var pair = await configReader.TryReadProviderModelAsync().ConfigureAwait(false);
-        if (pair is null) return Maybe<ModelRef>.None;
-
-        (string? provider, string? model) = pair.Value;
-
         // #678: (provider, model) is ONE reference, and ModelRef is the only type
-        // in the repo written to read one — this method used to build
-        // `prefix = provider + "/"` and strip it with StartsWith, then hand the RAW
-        // provider string on, unnormalized and unvalidated, straight into the
-        // Session the app runs on. Qualify covers both shapes the config can hold:
-        // a bare model id ("tencent/hy3:free" — what OnboardingViewModel writes)
-        // and a redundant prefix for the same provider ("kilocode/tencent/hy3:free"
-        // — what HARBOR_MODEL and the settings screen write). A provider id that
-        // is not a valid id now falls back to the agent definition instead of
-        // reaching the session verbatim — which is also why an unusable config
-        // arrives here as None rather than as a half-filled pair.
-        Result<ModelRef> qualified = ModelRef.Qualify(provider, model);
-        return qualified.IsSuccess ? Maybe<ModelRef>.From(qualified.Value) : Maybe<ModelRef>.None;
+        // in the repo written to read one. Qualify now runs at the producer
+        // (CommonConfigReaderAdapter), which covers both shapes the config can
+        // hold: a bare model id ("tencent/hy3:free" — what OnboardingViewModel
+        // writes) and a redundant prefix for the same provider
+        // ("kilocode/tencent/hy3:free" — what HARBOR_MODEL and the settings
+        // screen write), and normalizes the provider half. This method used to
+        // build `prefix = provider + "/"` and strip it with StartsWith, handing the
+        // RAW provider string to a running Session. An unusable config arrives
+        // here as None rather than as a half-filled pair.
+        return await configReader.ReadModelRefAsync().ConfigureAwait(false);
     }
 
     /// <summary>

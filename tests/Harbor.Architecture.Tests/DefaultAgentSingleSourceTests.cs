@@ -324,7 +324,7 @@ public sealed class DefaultAgentSingleSourceTests
     /// <summary>
     ///     A <see cref="SessionFactory" /> over the given registry. <c>IAgent</c> is
     ///     <c>null</c> because none of the create/resolve paths read it, and
-    ///     <c>ICommonConfigReader</c> is <c>null</c> because it is an optional
+    ///     <c>ICommonConfigModelRefReader</c> is <c>null</c> because it is an optional
     ///     dependency (#63) — so the provider/model override path is inert here and
     ///     the agent pick is the only thing under test.
     /// </summary>

@@ -96,9 +96,21 @@ public sealed class ModelRefSingleParserTests
     ///     ratchet below does not have to carry a self-referential entry that
     ///     the very next commit deletes.
     /// </summary>
+    /// <remarks>
+    ///     #453: `SessionFactory` is no longer one of these, and the move is the
+    ///     point rather than a relaxation. It used to qualify the config's
+    ///     provider/model itself, because the seam handed it two raw strings. The
+    ///     seam now carries <c>ModelRef</c>, so the qualification happens once, at
+    ///     the producer (`CommonConfigReaderAdapter`) — and a file that no longer
+    ///     touches the model-reference rule should be released from the rule rather
+    ///     than kept on it with a call added to satisfy it. The delegation moved
+    ///     DOWN the seam to the one place that reads the config.
+    /// </remarks>
     private static readonly string[] OwnedFiles =
     [
-        "src/Harbor.Ui.Framework.Sessions/Sessions/SessionFactory.cs",
+        // #453: the producer of the shared-config reference, which is where
+        // ModelRef.Qualify is called now that the port carries a ModelRef.
+        "apps/Harbor.App.Avalonia/Services/CommonConfigReaderAdapter.cs",
         "src/Harbor.Tui.CellForge/Chat/Onboarding/OnboardingFlow.cs",
     ];
 
@@ -207,6 +219,37 @@ public sealed class ModelRefSingleParserTests
                 + "cutting strings: " + string.Join(", ", silent)
                 + ". A hand-rolled prefix check that was replaced by nothing is the same bug "
                 + "in a quieter shape. See issue #678.");
+    }
+
+    /// <summary>
+    ///     #453: the shared-config seam qualifies through the contract, and the
+    ///     qualification lives at the PRODUCER. The rule above proves an owned file
+    ///     delegates; this one names WHICH file must, so that moving the delegation
+    ///     somewhere the ratchet cannot see fails loudly instead of quietly
+    ///     emptying <see cref="OwnedFiles" />.
+    /// </summary>
+    [Test]
+    public async Task TheConfigSeam_QualifiesAtTheProducer_NotInTheConsumer()
+    {
+        string root = RequireRepoRoot();
+        const string producer = "apps/Harbor.App.Avalonia/Services/CommonConfigReaderAdapter.cs";
+        const string consumer = "src/Harbor.Ui.Framework.Sessions/Sessions/SessionFactory.cs";
+
+        await Assert.That(CountDelegations(root, producer)).IsGreaterThan(0)
+            .Because(
+                "CommonConfigReaderAdapter is the one place that turns the config's two raw "
+                + "fields into a ModelRef. It must call ModelRef.Qualify: that is what rejects a "
+                + "blank or invalid provider half and normalizes it, and it is the reason the "
+                + "seam can hand out one value with one absence.");
+
+        await Assert.That(CountDelegations(root, consumer)).IsEqualTo(0)
+            .Because(
+                "SessionFactory used to call ModelRef.Qualify itself, because the port handed it "
+                + "two raw strings to qualify. It now receives a ModelRef, so a second "
+                + "qualification would be a re-derivation of a question the value has already "
+                + "answered — and the type would stop being the single place the rule lives. If "
+                + "the port's carrier is ever widened back to two strings, this fails and the "
+                + "qualification belongs here again.");
     }
 
     /// <summary>

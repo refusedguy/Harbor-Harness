@@ -497,7 +497,7 @@ public sealed class MapErrorFailureShapeTests
     /// <summary>
     ///     A <see cref="SessionFactory" /> wired to a store that always fails, and to nothing
     ///     else. <c>IAgent</c> is <c>null</c> because the three create paths never read it, and
-    ///     <c>ICommonConfigReader</c> is <c>null</c> because it is an optional
+    ///     <c>ICommonConfigModelRefReader</c> is <c>null</c> because it is an optional
     ///     dependency (#63) — passed as a declared constructor argument since #470,
     ///     where it used to be dug out of a service provider on every call.
     /// </summary>

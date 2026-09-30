@@ -50,9 +50,10 @@ inner layer, never the other way around. The innermost layer (Domain/Abstraction
 │    Panels/     (dockable panel system)                          │
 │    Services/   (IDispatcherAdapter, IThemeService, IToastService,│
 │                 GitService, SessionStatusTracker)               │
-│    Configuration/ (ICommonConfigReader)                         │
+│    Configuration/ (ICommonConfigModelRefReader — read-only half │
+│                    of the shared-config contract pair)          │
 │  Depends on: Abstractions + Desktop.Abstractions                │
-│              (circular-dep workaround: ICommonConfigReader)     │
+│              (circular-dep workaround: #453, ADR-009)           │
 └─────────────────────────────────────────────────────────────────┘
                                   ▲
                                   │ uses
@@ -103,8 +104,10 @@ inner layer, never the other way around. The innermost layer (Domain/Abstraction
 │              Microsoft.Extensions.Logging.Abstractions etc. —   │
 │              no other Harbor project)                           │
 │  EXCEPTION: Harbor.Desktop.Abstractions → Harbor.Ui.Framework   │
-│             (via Harbor.Terminal.Abstractions). Worked around   │
-│             via ICommonConfigReader in Ui.Framework.            │
+│             (direct, plus five more Ui.Framework.* edges).       │
+│             Worked around via ICommonConfigModelRefReader in    │
+│             Ui.Framework.Abstractions — the read-only half of    │
+│             the pair; see #453 and ADR-009.                     │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
@@ -117,21 +120,35 @@ inner layer, never the other way around. The innermost layer (Domain/Abstraction
 | `Harbor.Desktop.Abstractions` | Cross-platform contracts shared by every desktop app (Avalonia / WPF / MAUI / Blazor): `CommonConfig`, `ICommonConfigStore`, base VMs. | Configuration schema + VM contracts are stable across platforms. |
 | `Harbor.Terminal.Abstractions` | TUI contracts: `ITuiRenderer`, `ITuiPlugin`, panel system entry points. Kept separate from `Harbor.Ui.Framework` because terminal vocabulary (Spectre, ANSI) is not relevant to desktop GUIs. | Used by both `Harbor.Ui.Framework` (panel system) and concrete TUI renderers. |
 
-### Circular-dependency workaround: `ICommonConfigReader`
+### Circular-dependency workaround: `ICommonConfigModelRefReader`
 
 ```
 Harbor.Ui.Framework
   ↓ (needs to read config for SessionFactory)
 Harbor.Desktop.Abstractions (has ICommonConfigStore + CommonConfig)
-  ↓ (uses Ui.Framework.ViewModels via GlobalUsings)
-Harbor.Terminal.Abstractions (references Ui.Framework)
-  ↓
+  ↓ (direct ProjectReference, plus one to each of
+  ↓  Ui.Framework.{ViewModels,State,Services,Sessions,Rendering})
 Harbor.Ui.Framework  ← CYCLE!
 ```
 
-**Fix**: declared `ICommonConfigReader` in `Harbor.Ui.Framework/Configuration/` with a narrow
-contract (just `TryReadProviderModelAsync`). Each platform app implements it as an adapter
-over its own `ICommonConfigStore` (e.g. `CommonConfigReaderAdapter` in Avalonia).
+**Fix**: declared `ICommonConfigModelRefReader` in
+`Harbor.Ui.Framework.Abstractions/Configuration/` with a narrow contract (just
+`ReadModelRefAsync`). Each platform app implements it as an adapter over its own
+`ICommonConfigStore` (e.g. `CommonConfigReaderAdapter` in Avalonia).
+
+Earlier revisions of this section named `Terminal.Abstractions` as the edge that
+closes the cycle. It is one more edge in the same direction, not the cause: the
+`Ui.Framework` edge is a direct `ProjectReference` (#453). The cycle is real
+either way, which is why the workaround stands.
+
+**These two contracts are a split of capability, not a duplicate** (#453). The
+store is read/write over the whole `CommonConfig` and reports failures as
+`Result`; the reader is read-only, hands out the single `ModelRef` session
+bootstrap needs, and has no failure channel because "not configured yet" is the
+normal pre-onboarding state. They cannot be merged — the cycle above — and
+`CommonConfigContractRules` in `tests/Harbor.Architecture.Tests/` fails if the
+narrow one grows a write member, a second implementer, or a re-derivation of
+"is this reference whole?".
 
 ### Mermaid diagram
 

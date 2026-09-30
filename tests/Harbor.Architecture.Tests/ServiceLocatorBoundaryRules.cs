@@ -14,7 +14,11 @@
 // `SessionFactory` kept `private readonly IServiceProvider _services` whose ONLY
 // purpose was `_services.GetService<ICommonConfigReader>()` — a container lookup
 // performed on every session creation and every agent-definition resolution, to
-// fetch ONE optional service. Its direct sibling `SessionManager`, in the same
+// fetch ONE optional service. (That config seam was named ICommonConfigReader then;
+// #453 renamed it ICommonConfigModelRefReader and gave it a different carrier, so
+// the member is gone by three separate means — but the locator is what this rule
+// exists for, and it must not be able to come back under any name.) Its direct
+// sibling `SessionManager`, in the same
 // folder, had been de-located by #189 (`SessionOptionalFactories`) with exactly
 // this argument. `SessionFactory` was missed.
 //
@@ -130,7 +134,7 @@ public class ServiceLocatorBoundaryRules
     /// <summary>
     ///     The session layer stores no locator. This is the rule that fails on
     ///     <c>SessionFactory._services</c> — a container kept alive purely to
-    ///     resolve one optional <c>ICommonConfigReader</c> per session creation.
+    ///     resolve one optional <c>ICommonConfigModelRefReader</c> per session creation.
     /// </summary>
     [Test]
     public async Task SessionLayer_StoresNoServiceLocator()

@@ -3,6 +3,15 @@
 // Mirrors IAppConfigStore<T> but is NOT generic — there is exactly one
 // CommonConfig type, shared by every Harbor app. The store reads/writes
 // ~/.harbor/config.json atomically and is thread-safe.
+//
+// #453: this is the WRITE half of the shared-config contract pair. Its
+// counterpart is Harbor.Ui.Framework.Configuration.ICommonConfigModelRefReader —
+// one member, read-only, handing out the single ModelRef that session bootstrap
+// needs. They are two capabilities over one file, not one contract declared
+// twice: the names differ in what they hand out, and the reader's header says
+// the same about this one. They cannot be merged, because this project declares
+// a direct ProjectReference to Harbor.Ui.Framework and the reverse edge would
+// close a cycle (docs/adr/DECISIONS.md ADR-009).
 
 using CSharpFunctionalExtensions;
 namespace Harbor.Desktop.Abstractions.Configuration;
@@ -13,6 +22,15 @@ namespace Harbor.Desktop.Abstractions.Configuration;
 ///     the same on-disk file (<c>~/.harbor/config.json</c>).
 /// </summary>
 /// <remarks>
+///     <para>
+///         <b>Not to be confused with the read-only seam:</b> session bootstrap
+///         reads one value out of this file through
+///         <c>Harbor.Ui.Framework.Configuration.ICommonConfigModelRefReader</c>,
+///         which is a projection of this contract and not a second copy of it. Use
+///         this one to load, change or persist the config; use the reader only to
+///         ask which provider/model is selected. Both are declared on purpose —
+///         see the file header and ADR-009.
+///     </para>
 ///     <para>
 ///         <b>Thread safety:</b> implementations MUST be thread-safe. The
 ///         shipped <c>JsonCommonConfigStore</c> (Harbor.Hosting, since #534 — it

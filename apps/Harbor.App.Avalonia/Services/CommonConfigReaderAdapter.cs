@@ -1,22 +1,25 @@
+using CSharpFunctionalExtensions;
+using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Desktop.Abstractions.Configuration;
 using Harbor.Ui.Framework.Configuration;
+
 namespace Harbor.App.Avalonia.Services;
+
 /// <summary>
-///     Adapter that bridges the Desktop.Abstractions
-///     <see cref="ICommonConfigStore" /> to the Ui.Framework
-///     <see cref="ICommonConfigReader" /> contract. Without this adapter,
-///     <c>SessionFactory</c> (in Ui.Framework) couldn't read the persisted
-///     provider/model from the on-disk config because Ui.Framework can't
-///     reference Desktop.Abstractions (circular project dependency via
-///     Terminal.Abstractions).
+///     Adapter that projects the Desktop.Abstractions
+///     <see cref="ICommonConfigStore" /> onto the Ui.Framework
+///     <see cref="ICommonConfigModelRefReader" /> contract — the read half of the
+///     pair, declared in Ui.Framework.Abstractions because that project cannot
+///     reference Desktop.Abstractions (the reverse edge closes a cycle).
 /// </summary>
 /// <remarks>
 ///     <para>
 ///         Registered as a singleton in <c>ConfigRegistration</c>, which hands
 ///         it the <see cref="ICommonConfigStore" /> it forwards to (that store
-///         is registered a few lines above). It forwards each
-///         <see cref="TryReadProviderModelAsync" /> call to
-///         <see cref="ICommonConfigStore.LoadAsync" />.
+///         is registered a few lines above). Each
+///         <see cref="ICommonConfigModelRefReader.ReadModelRefAsync" /> call is
+///         one <see cref="ICommonConfigStore.LoadAsync" /> followed by one
+///         <see cref="ModelRef.Qualify" />.
 ///     </para>
 ///     <para>
 ///         <b>No service locator (#470):</b> the adapter used to hold the whole
@@ -25,8 +28,21 @@ namespace Harbor.App.Avalonia.Services;
 ///         per session creation. The bridge now depends on the one interface it
 ///         forwards to.
 ///     </para>
+///     <para>
+///         <b>No hand-written half-pair test (#453):</b> this used to read
+///         <c>if (IsNullOrEmpty(cfg.DefaultProvider) || IsNullOrEmpty(cfg.DefaultModel)) return null;</c>
+///         — a second, private copy of "is this pair whole?", spelled with
+///         <c>||</c> where two other call sites of the same question spelled it
+///         with <c>&amp;&amp;</c> and one coalesced the halves field by field. It
+///         existed only because the interface returned
+///         <c>(string? ProviderId, string? ModelId)?</c>, whose four spellable
+///         states the type could not tell apart. <see cref="ModelRef.Qualify" />
+///         is now the only place that question is answered, and a blank provider
+///         half, an invalid provider id and a blank model half all arrive through
+///         it as the same <c>None</c>.
+///     </para>
 /// </remarks>
-public sealed class CommonConfigReaderAdapter : ICommonConfigReader
+public sealed class CommonConfigReaderAdapter : ICommonConfigModelRefReader
 {
     private readonly ICommonConfigStore _store;
 
@@ -38,16 +54,24 @@ public sealed class CommonConfigReaderAdapter : ICommonConfigReader
     }
 
     /// <inheritdoc />
-    public async Task<(string? ProviderId, string? ModelId)?> TryReadProviderModelAsync(
+    public async Task<Maybe<ModelRef>> ReadModelRefAsync(
         CancellationToken cancellationToken = default)
     {
-        var result = await _store.LoadAsync().ConfigureAwait(false);
-        if (!result.IsSuccess) return null;
+        // #453: the token used to be accepted and dropped on the floor — the
+        // store call below took no argument, so cancelling a session creation did
+        // nothing. One optional dependency, honoured end to end.
+        Result<CommonConfig> result = await _store.LoadAsync(cancellationToken).ConfigureAwait(false);
+        if (result.IsFailure) return Maybe<ModelRef>.None;
 
-        var cfg = result.Value;
-        if (string.IsNullOrEmpty(cfg.DefaultProvider) || string.IsNullOrEmpty(cfg.DefaultModel))
-            return null;
+        // Qualify is a pure re-read of the config, so there is no half to test and
+        // no Result to unwrap: failure here means the config names nothing usable,
+        // which is the same "not configured yet" answer as a missing file.
+        Result<ModelRef> qualified = ModelRef.Qualify(
+            result.Value.DefaultProvider,
+            result.Value.DefaultModel);
 
-        return (cfg.DefaultProvider, cfg.DefaultModel);
+        return qualified.IsSuccess
+            ? Maybe<ModelRef>.From(qualified.Value)
+            : Maybe<ModelRef>.None;
     }
 }
