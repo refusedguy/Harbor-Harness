@@ -112,6 +112,61 @@
 // service is covered the day it is written. A hard-coded list of today's three
 // offenders is precisely the shape that ages silently — the same argument as
 // `TuiReadLineContractRules` and #578.
+//
+// THE GENERAL CASE (#760) — an instance field is NOT the same defect as a static
+// ---------------------------------------------------------------------------
+// #470 closed one instance of "a stored container". #474 closed another and said
+// out loud that the general case was undecided; #760 is that general case, and
+// asks whether an `IServiceProvider` in an INSTANCE field or constructor parameter
+// is caught anywhere repo-wide. It is not — and that is a decision, not a hole:
+//
+//   * Constructor parameter → DI011, set to `suggestion` with the reason written
+//     out at .editorconfig:494 ("IServiceProvider injection is intentional in
+//     HostBuilder.cs"). Deliberate.
+//   * Static field or property → DI006, `warning`, so `TreatWarningsAsErrors`
+//     makes it a build error. Covered, and hard.
+//   * Instance field → no DI rule, BY THE ANALYZER'S OWN CONTRACT. DI006's own
+//     README offers `private readonly IServiceProvider _provider;` in a sealed
+//     class as the "Better pattern" to replace a static provider cache. The
+//     package authors classify the instance form as the fix, not the defect.
+//
+// So the sharp half of the question is the second one: is an instance field with
+// a container the same thing as a static one? NO — and the difference is the
+// whole answer, because the danger is not "in a field", it is the OWNER OF THE
+// FIELD. A static container is global state and is caught for being global. An
+// instance container is a *lifetime* question: a singleton that retains a
+// container and hands out a SCOPED service from it is a captive dependency, and
+// the scoped instance lives as long as the singleton — forever. A per-request
+// object holding a container it was handed captures nothing extra, and is fine.
+// "No IServiceProvider in a field" cannot tell those apart, so it is the wrong
+// rule; the right one is "no scope outlives its owner", and that is ALREADY
+// ENFORCED, at the strictest level, by the rules that can actually see lifetimes:
+// DI003 (captive dependency) and DI019 (scoped resolved from root) are `error`,
+// with DI002 / DI004 / DI001 at `warning` behind them. No new axis is needed for
+// it, and none is added — feature freeze #555.
+//
+// What this file adds is the one shape the analyzer layer genuinely does not own
+// and that a field sweep CAN own: a stored `IServiceScope`. Unlike a container, a
+// concrete scope is a leak in EVERY owner — it cannot be disposed at the right
+// time by anyone, and it pins every scoped service resolved through it. That is
+// `SrcAssemblies_StoreNoServiceScope` below, swept over the whole `src/` tree
+// rather than two assemblies, with `IServiceScopeFactory` deliberately excluded
+// because a scope FACTORY on a singleton is the correct idiom and both DI011 and
+// DI019 name it as a sanctioned exception.
+//
+// The container inventory is also widened to the whole `src/` tree
+// (`StoredLocatorInventory_IsExactlyTheDeclaredBaseline`), so the honest
+// "undetected" surface is now a number in an assertion instead of an assumption.
+// Measured on dev, src/ holds exactly two container-storing types: `ViewModelLocator`
+// (the named locator abstraction, deliberate since #63 — it IS the pattern) and
+// `HarborIpcServer` (an IPC host's own bootstrap ctor, which resolves what it
+// needs and retains nothing). apps/ is composition root and unreferenced by this
+// project; reading it found three instance holders — `ReplRunner._rendererHost`
+// (forwarded untouched, never resolved from), `AvaloniaChatViewBinder` (a
+// singleton, but its only resolution is `ChatViewModel`, registered
+// `AddSingleton`, so nothing is captured) and `DemoCellForgeScreen` (a demo
+// screen). Zero of them resolve a scoped service, which is why the captive case is
+// an empty set here rather than a suppressed one.
 
 using System.Runtime.CompilerServices;
 using Harbor.Abstractions.Tools;
@@ -119,6 +174,7 @@ using Harbor.Desktop.Shared.Locators;
 using Harbor.Ipc;
 using Harbor.Ui.Framework.Panels;
 using Harbor.Ui.Framework.Sessions;
+using Microsoft.Extensions.DependencyInjection;
 using TUnit.Assertions;
 using TUnit.Assertions.Extensions;
 
@@ -233,7 +289,199 @@ public class ServiceLocatorBoundaryRules
         await Assert.That(stateTypes).IsGreaterThan(5);
     }
 
+    // ── #760: the general case, repo-wide ──────────────────────────────────
+
+    /// <summary>
+    ///     The one container shape a field sweep can own and the analyzer layer
+    ///     does not: a stored <see cref="IServiceScope" />. A concrete scope is a
+    ///     leak in EVERY owner — whoever holds it also owns its disposal, so the
+    ///     scoped services behind it are pinned until the holder is collected, and
+    ///     nothing can dispose them at the end of the request that made them.
+    ///     <c>IServiceScopeFactory</c> is deliberately NOT matched: a factory on a
+    ///     singleton is the correct way to open a scope per unit of work, and both
+    ///     DI011 and DI019 list it as a sanctioned exception.
+    /// </summary>
+    /// <remarks>
+    ///     Swept over the whole <c>src/</c> tree, not the two assemblies the locator
+    ///     rule covers. This is the sharpened form of #760: the issue asked for "no
+    ///     container in a field", which cannot distinguish a harmless per-request
+    ///     holder from a singleton that outlives what it resolves. A stored scope is
+    ///     unambiguous, so it is the form worth ruling.
+    /// </remarks>
+    [Test]
+    public async Task SrcAssemblies_StoreNoServiceScope()
+    {
+        var hits = new List<string>();
+        foreach (Assembly assembly in SrcAssemblies())
+        {
+            hits.AddRange(FindStoredScopes(assembly));
+        }
+
+        await Assert.That(hits.ToArray()).IsEmpty();
+    }
+
+    /// <summary>
+    ///     Non-vacuity for the rule above. A sweep that must find nothing cannot
+    ///     tell "clean" from "broken", so the SAME predicate is run against a
+    ///     planted holder — a scope in a field AND a scope in a constructor — and
+    ///     both must be reported. If the predicate ever narrows to something the
+    ///     planted type does not match, it fails here rather than passing the
+    ///     sweep forever.
+    /// </summary>
+    [Test]
+    public async Task ScopeDetector_ReportsThePlantedHolder()
+    {
+        IReadOnlyList<string> hits = FindStoredScopes(typeof(PlantedScopeHolder));
+
+        await Assert.That(hits.Count).IsEqualTo(2);
+    }
+
+    /// <summary>
+    ///     The <c>src/</c>-wide container inventory, pinned. #760 is right that an
+    ///     instance container field is invisible outside the two assemblies the
+    ///     locator rule sweeps; this turns that undetected surface into an asserted
+    ///     number. Dev holds exactly two container-storing product types, both
+    ///     deliberate — see the file header for why each one is the pattern rather
+    ///     than a breach. A third type appearing here is the signal to argue for it
+    ///     in a review, not a blank entry in a list.
+    /// </summary>
+    [Test]
+    public async Task StoredLocatorInventory_IsExactlyTheDeclaredBaseline()
+    {
+        var offenders = new SortedSet<string>(StringComparer.Ordinal);
+        foreach (Assembly assembly in SrcAssemblies())
+        {
+            foreach (string hit in FindStoredLocators(assembly))
+            {
+                // "Namespace.Type.Member (field: …)" → "Namespace.Type".
+                int member = hit.LastIndexOf('.');
+                offenders.Add(member > 0 ? hit[..member] : hit);
+            }
+        }
+
+        // Two declared types, in ordinal order so the message is stable.
+        string actual = string.Join(" | ", offenders);
+        string declared = "Harbor.Desktop.Shared.Locators.ViewModelLocator | Harbor.Ipc.HarborIpcServer";
+
+        await Assert.That(actual).IsEqualTo(declared);
+    }
+
+    // ── #760 planted control types — never constructed, only reflected over ──
+
+    /// <summary>
+    ///     A deliberately-kept offender for <see cref="ScopeDetector_ReportsThePlantedHolder" />.
+    ///     It stores a scope twice — once as a field, once as a constructor
+    ///     parameter — so the control proves the predicate reaches BOTH surfaces,
+    ///     not just the one that happened to match.
+    /// </summary>
+    private sealed class PlantedScopeHolder
+    {
+        private readonly IServiceScope _scope;
+
+        public PlantedScopeHolder(IServiceScope scope) => _scope = scope;
+    }
+
     // ── Detection ────────────────────────────────────────────────────────────
+
+    /// <summary>
+    ///     Every assembly in the main-solution <c>src/</c> tree that this test
+    ///     project can reach. Sourced from the loaded inventory intersected with
+    ///     <see cref="FullLayerMatrixTests.AllSrcAssemblies" /> — the one list that
+    ///     <c>EnforcerIntegrityTests.SrcProjects_AreAllClassified</c> keeps honest —
+    ///     so a new src project is swept the day it is written and an app/composition
+    ///     root is not swept by accident.
+    /// </summary>
+    private static IEnumerable<Assembly> SrcAssemblies()
+    {
+        IReadOnlyDictionary<string, Assembly> loaded = ArchitectureTestHelpers.LoadHarborAssemblies();
+        var inventory = FullLayerMatrixTests.AllSrcAssemblies.ToHashSet(StringComparer.Ordinal);
+
+        foreach ((string name, Assembly assembly) in loaded)
+        {
+            if (inventory.Contains(name))
+            {
+                yield return assembly;
+            }
+        }
+    }
+
+    /// <summary>Every concrete type in <paramref name="assembly" /> that STORES a scope.</summary>
+    private static IReadOnlyList<string> FindStoredScopes(Assembly assembly)
+    {
+        var hits = new List<string>();
+        foreach (Type type in ScannableTypes(SafeGetTypes(assembly)))
+        {
+            hits.AddRange(FindStoredScopes(type));
+        }
+
+        return hits;
+    }
+
+    /// <summary>
+    ///     Types of an assembly, tolerating the ones that will not enumerate. The
+    ///     <c>src/</c> sweep reaches ~60 assemblies, one of which failing to load
+    ///     must not crash the rule — the same tolerance
+    ///     <c>ExtensionAxisFreezeRule.ProductTypes</c> and <c>SeamLeakProbe</c>
+    ///     apply. Discovery is not a silent pass: <c>Sweeps_CoverRealTypes</c>
+    ///     requires the type count to be real.
+    /// </summary>
+    private static IReadOnlyList<Type> SafeGetTypes(Assembly assembly)
+    {
+        try
+        {
+            return assembly.GetTypes();
+        }
+        catch (ReflectionTypeLoadException ex)
+        {
+            return [.. ex.Types.Where(static t => t is not null).Select(static t => t!)];
+        }
+        catch (Exception ex)
+        {
+            _ = ex;
+            return [];
+        }
+    }
+
+    /// <summary>
+    ///     Every field and constructor parameter of <paramref name="type" /> that is
+    ///     a service scope — the captive-dependency primitive, in either position.
+    /// </summary>
+    private static IReadOnlyList<string> FindStoredScopes(Type type)
+    {
+        var hits = new List<string>();
+
+        foreach (FieldInfo field in type.GetFields(
+                     BindingFlags.Instance | BindingFlags.Static |
+                     BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly))
+        {
+            if (IsStoredScope(field.FieldType))
+            {
+                hits.Add($"{type.FullName}.{field.Name} (field: {field.FieldType.Name})");
+            }
+        }
+
+        foreach (ConstructorInfo ctor in type.GetConstructors(
+                     BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic))
+        {
+            foreach (ParameterInfo parameter in ctor.GetParameters())
+            {
+                if (IsStoredScope(parameter.ParameterType))
+                {
+                    hits.Add($"{type.FullName}.{parameter.Name} (ctor parameter: {parameter.ParameterType.Name})");
+                }
+            }
+        }
+
+        return hits;
+    }
+
+    /// <summary>
+    ///     The scope predicate. Matches <see cref="IServiceScope" /> and anything
+    ///     derived from it; deliberately excludes <see cref="IServiceScopeFactory" />,
+    ///     which is the sanctioned per-unit-of-work idiom rather than a retained scope.
+    /// </summary>
+    private static bool IsStoredScope(Type candidate) =>
+        typeof(IServiceScopeFactory).IsAssignableFrom(candidate);
 
     /// <summary>
     ///     Every field and every constructor parameter of <paramref name="type" />
@@ -283,10 +531,12 @@ public class ServiceLocatorBoundaryRules
     private static bool IsLocator(Type candidate) => typeof(IServiceProvider).IsAssignableFrom(candidate);
 
     /// <summary>Every concrete, non-compiler-generated type in <paramref name="assembly" />.</summary>
-    private static IReadOnlyList<Type> ScannableTypes(Assembly assembly) =>
+    private static IReadOnlyList<Type> ScannableTypes(Assembly assembly) => ScannableTypes(assembly.GetTypes());
+
+    /// <summary>Every concrete, non-compiler-generated type among <paramref name="types" />.</summary>
+    private static IReadOnlyList<Type> ScannableTypes(IReadOnlyList<Type> types) =>
     [
-        .. assembly.GetTypes()
-            .Where(t => !t.IsAbstract && !IsCompilerGenerated(t))
+        .. types.Where(t => !t.IsAbstract && !IsCompilerGenerated(t))
     ];
 
     private static int CountScannableTypes(Assembly assembly) => ScannableTypes(assembly).Count;
