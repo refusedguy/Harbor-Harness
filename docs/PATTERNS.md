@@ -116,24 +116,31 @@ follows that hop, because the bridge dispatches into the same `UiStore`.
 ### The known trap (#575)
 
 There were **three** mechanisms for one event stream: 21 `IAgentEventHandler`
-objects across 5 renderer families, one hand-written 18-arm
+objects across 5 renderer families, one hand-written 21-arm
 `switch (AgentEvent)` in `ChatScreenBridge`, and 5 renderers routing through
 `UiStore.Dispatch` + `ChatAppReducer`.
 
-`ChatScreenBridge.HandleEvent` (`src/Harbor.Tui.CellForge/Chat/Streaming/ChatScreenBridge.cs:125`,
-18 outer arms at `:129-314` plus a nested `switch (update.LlmEvent)` with 4 more
-at `:170-193`) receives events through its **own** subscription
+`ChatScreenBridge.HandleEvent` (`src/Harbor.Tui.CellForge/Chat/Streaming/ChatScreenBridge.cs:127`,
+15 outer arms at `:131-390` plus a nested `switch (update.LlmEvent)` with 6 more
+at `:174-189`) receives events through its **own** subscription
 (`Chat/Streaming/EventSubscription.cs:18`), not the base class's dispatcher, and
 is registered as a **singleton** with `autoSubscribe: false`
 (`apps/Harbor.App.Cli/Hosting/CellForgeModule.cs:101-106`).
+
+> The counts in this paragraph were `18` / `:129-314` / `4` until #840 touched
+> the arm set and forced a recount — 18 was 14 outer + 4 nested, i.e. the total,
+> reported as if it were the outer count, and the range had already drifted.
+> Corrected here because a number this paragraph edits should at least end up
+> true; the neighbouring stale pointers are tracked separately.
 
 The consequence is the whole point of #575: **a new `AgentEvent` subclass was
 invisible to `BaseTuiRenderer`, and the next person added a `case` to a
 621-line bridge.** That is exactly what happened for `CompactionFailedEvent` —
 present in the conformance sweep at
-`tests/Harbor.Tui.RendererTests/RendererVisitorRegressionTests.cs:46`, therefore
+`tests/Harbor.Tui.RendererTests/RendererVisitorRegressionTests.cs:63`, therefore
 *required* of the 5 conforming renderers, and **absent** from `ChatScreenBridge`'s
-18 arms. A third classification of the same taxonomy also lives in the base class:
+arms until #840 added the arm. A third classification of the same taxonomy also
+lives in the base class:
 `ShouldRenderPlacement` (`BaseTuiRenderer.cs:289-309`) re-derives "which event
 repaints which placement" as `placement switch { … @event is … }`, so adding one
 event type needed three edits in three shapes — or zero, if you only knew about
@@ -470,9 +477,13 @@ quietly stopped matching is a build failure rather than a stale amnesty.
 
 **One thing this guard does NOT catch**, and you should know before relying on
 it: a *missing* arm with no default. `ChatScreenBridge.HandleEvent` has no
-wildcard arm and still misses `CompactionFailedEvent` — the event falls through
-the switch and nothing happens, silently. A wildcard arm invents an answer; a
-missing arm simply does not. The exhaustiveness half (#578 rule 1 done properly)
+wildcard arm, and it missed `CompactionFailedEvent` for the whole life of the
+event — it fell through the switch and nothing happened, silently. That is the
+one member of the lifecycle the arm census in
+`CompactionLifecycleLineTests.AnsiPlain_EveryCompactionMember_NarratesItself` is
+there to keep true, because as of #840 (PR #859) the arm exists and nothing
+mechanically would put it back. A wildcard arm invents an answer; a missing arm
+simply does not. The exhaustiveness half (#578 rule 1 done properly)
 is the per-union reflection test, and per #578 it lands with each union's
 refactor.
 
@@ -533,7 +544,7 @@ is on screen for the current session") with two owners:
   `_context`, `_gates`, `_displayedMessageIds`; plus `:38` `_toolRetryShown`,
   `:65` `_parentSessionId`, `:70` `_runHadError`, `:74` `_errorCardSeq` —
   **~11 pieces of mutable state**;
-- the transition: `HandleEvent` at `:125`, 18 arms mutating those fields directly;
+- the transition: `HandleEvent` at `:127`, 21 arms mutating those fields directly;
 - the lifetime: `apps/Harbor.App.Cli/Hosting/CellForgeModule.cs:101` registers it
   `AddSingleton`, over a per-process `ChatScreen` (`:76-79`, also a singleton).
 
@@ -575,7 +586,7 @@ the transition and the lifecycle are the same code path rather than two.*
 
 | Anti-convention | Where it lives today | Rule |
 |---|---|---|
-| Visitor as the UI event mechanism | `ChatScreenBridge.cs:125` (18-arm switch) | Use store + reducer (§1) |
+| Visitor as the UI event mechanism | `ChatScreenBridge.cs:127` (21-arm switch) | Use store + reducer (§1) |
 | Third mechanism for one event stream | handler registry + switch + store, all at once | Pick one of the two seams (§1) |
 | Lifecycle promised ≠ lifecycle provided | `CellForgeModule.cs:32` vs `:101` | Doc comment promising an unprovided lifetime is a defect (§8) |
 | Cleanup as a caller convention | `SessionSwitchManager.cs:239-241` | The state object resets itself (§8) |
@@ -584,7 +595,7 @@ the transition and the lifecycle are the same code path rather than two.*
 | Permissive DIM | `IThemeWatcher.cs:31`, `ITool.cs:74`, `ITuiView.cs:32` | Fail towards loudly-wrong (§6) |
 | Dead hook on a live interface | `ITuiView.cs:29,32` — zero callers | Zero callers ⇒ delete it (§6) |
 | Wildcard arm over a Harbor union | 17 sites, baselined in the guard | Name every arm; or log **and** count (§7) |
-| **Missing** arm, no default | `ChatScreenBridge.HandleEvent` misses `CompactionFailedEvent` and falls through silently | The default arm invents an answer; a missing arm just doesn't. Covered by the per-union reflection test, not by the wildcard guard (§7) |
+| **Missing** arm, no default | was `ChatScreenBridge.HandleEvent` missing `CompactionFailedEvent` and falling through silently — **fixed in #840**; the census in `CompactionLifecycleLineTests` is what holds it | The default arm invents an answer; a missing arm just doesn't. Not covered by the wildcard guard (§7); covered by an arm census per family |
 | Hand-maintained name list as a union | `IArgSafetyPolicy.cs:107-110`, `[JsonDerivedType]` tables | It IS a union — test it by reflection (§7) |
 | Unknown id → silent default | fixed in `SessionStoreRegistry`/`HarborModeRegistry` | `TryResolve` returns false; caller fails loudly (§2) |
 | A fake metric | see `TelemetryModule.cs:25-33` for the right shape | Absent surface beats plausible zero (§3) |

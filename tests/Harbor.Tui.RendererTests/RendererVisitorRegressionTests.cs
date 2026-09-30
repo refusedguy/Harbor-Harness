@@ -19,6 +19,23 @@ using TUnit.Assertions.Extensions;
 ///     observable behavior — handled events still paint, unhandled events stay
 ///     silent, and no event type throws on any of the three renderers.
 /// </summary>
+/// <remarks>
+///     <para>
+///         <b>#840 removed <c>CompactionFailedEvent</c> from
+///         <see cref="AnsiPlain_UnhandledEvents_WriteNothing"/>.</b> That line
+///         pinned the bug: the assertion was that this renderer writes the EMPTY
+///         STRING for a compaction that fell back to irreversible truncation. It
+///         was a #185 characterization — "the registry refactor did not change
+///         which events reach a handler" — and it was read as a decision, which
+///         is what let the silence survive. Unhandled events are still silent;
+///         this one is simply not unhandled any more.
+///     </para>
+///     <para>
+///         <c>CompactionFailedEvent</c> is still in
+///         <see cref="FullSweep"/> below: the sweep's job is "no event type
+///         throws on any renderer", which the new arm has to keep true.
+///     </para>
+/// </remarks>
 public class RendererVisitorRegressionTests
 {
     private static AssistantMessage Partial(string id) => AssistantMessage.Empty("s1", id);
@@ -61,7 +78,6 @@ public class RendererVisitorRegressionTests
             await renderer.RenderAsync(new TurnStartEvent(1));
             await renderer.RenderAsync(new TurnEndEvent(Partial("t"), []));
             await renderer.RenderAsync(new ToolExecutionUpdateEvent("tc_1", "partial"));
-            await renderer.RenderAsync(new CompactionFailedEvent("s1", "nope"));
             await renderer.RenderAsync(new SessionChangedEvent("s1"));
             await renderer.RenderAsync(new PluginBlockedEvent("p", "timeout", "detail"));
         }
