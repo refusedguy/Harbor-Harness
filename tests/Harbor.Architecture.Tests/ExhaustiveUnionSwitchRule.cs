@@ -673,11 +673,18 @@ public sealed class ExhaustiveUnionSwitchRule
             "https://github.com/refusedguy/Harbor-Harness/issues/556",
 
         // #575 — the canonical renderer. `ChatScreenBridge.HandleEvent` is NOT a
-        // row: its 18-arm switch has no wildcard arm, which is exactly why the
+        // row: its 21-arm switch has no wildcard arm, which is exactly why the
         // drift there was invisible — `CompactionFailedEvent` fell straight
         // through and did nothing. A missing arm without a default is the more
         // dangerous shape, and this file only catches the default kind. The row
         // below is the Avalonia router, which does carry one.
+        //
+        // #840 added that arm, which makes this comment read as history and
+        // leaves the shape unguarded in the one place it was real: nothing here
+        // would notice the arm being deleted again. The census that does is
+        // `CompactionLifecycleLineTests.AnsiPlain_EveryCompactionMember_NarratesItself`
+        // — a per-family arm census, which is a different instrument from a
+        // scan keyed on the default arm.
         [new("apps/Harbor.App.Avalonia/Hosting/UiEventRouter.cs", "AgentEvent")] =
             "https://github.com/refusedguy/Harbor-Harness/issues/575",
 
@@ -980,9 +987,9 @@ public sealed class ExhaustiveUnionSwitchRule
                    + "roots are wrong");
 
         // The site #575 is about, asserted by name: ChatScreenBridge's switch
-        // over AgentEvent. It is the canonical renderer's 18-arm switch and it
+        // over AgentEvent. It is the canonical renderer's 21-arm switch and it
         // carries no wildcard arm — which is precisely why the missing
-        // CompactionFailedEvent arm was invisible.
+        // CompactionFailedEvent arm was invisible for the whole life of the event.
         bool foundBridge = sites.Any(s =>
             s.File.EndsWith("ChatScreenBridge.cs", StringComparison.Ordinal)
             && s.UnionName == "AgentEvent");

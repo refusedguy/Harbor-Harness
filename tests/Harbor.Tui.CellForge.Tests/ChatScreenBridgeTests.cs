@@ -714,4 +714,72 @@ public class ChatScreenBridgeTests
         await Assert.That(firstAnswerBlocks).IsEqualTo(1);
         await Assert.That(secondAnswerBlocks).IsEqualTo(1);
     }
+
+    // ─────────────────────────────────────────────────────────────────────
+    // #840 — the compaction lifecycle LINE. Distinct from #839's cell guard.
+    //
+    // #773/#839 asserted the status CELL on two projections (ChatAppReducer,
+    // StatusBarViewModel). This asserts the TIMELINE, which is a different
+    // object fed from a different place: `ProjectScreen` hands the store's
+    // UiState to `Status.ProjectedState` and the sidebar only, so the
+    // ChatRole.System line #839 added to `UiState.Chat.Lines` never reaches
+    // `_panel.Timeline`. The bridge owns its own compaction output
+    // ("compacting history…" / "history compacted") and owned none for the
+    // failure — so on the canonical renderer the truncation was invisible even
+    // after #839 landed. Adding this arm is NOT a second copy of #839's fix;
+    // it is the only channel CellForge reads for these two siblings.
+    // ─────────────────────────────────────────────────────────────────────
+
+    [Test]
+    public async Task CompactionFailed_AppendsTheTruncationWarning_AndLeavesCompacting()
+    {
+        var bus = new FakeEventBus();
+        var panel = new ChatTimelinePanel("chat", 20, 4);
+        var status = new StatusViewModel { Model = "m" };
+        using var bridge = new ChatScreenBridge(bus, panel, status);
+
+        await bus.PublishAsync(new CompactionStartedEvent("s1"));
+        await Assert.That(status.Mode).IsEqualTo(StatusBarMode.Compacting);
+        await Assert.That(panel.Timeline.BlockAt(0).RawText()).IsEqualTo("compacting history…");
+
+        await bus.PublishAsync(new CompactionFailedEvent("s1", "summarizer timed out"));
+
+        var tl = panel.Timeline;
+        await Assert.That(tl.Count).IsEqualTo(2)
+            .Because("the started arm and the failed arm are two blocks; a failure that "
+                   + "reused or overwrote the started one would leave the transcript "
+                   + "claiming the compaction was still running");
+
+        await Assert.That(tl.BlockAt(1).Kind).IsEqualTo("system");
+        await Assert.That(tl.BlockAt(1).RawText())
+            .IsEqualTo("compaction failed: summarizer timed out — continuing on truncated history")
+            .Because("this is #839's ChatAppReducer.OnCompactionFailed sentence, asserted as "
+                   + "a literal: the same degradation, said the same way on every "
+                   + "surface, is the whole point of the fix. CompactionBehavior names "
+                   + "the fallback irreversible and then lets the run continue — nothing "
+                   + "downstream of the event tells the user their context was cut");
+
+        await Assert.That(status.Mode).IsEqualTo(StatusBarMode.Running)
+            .Because("this is the bridge's OWN StatusViewModel, not the store projection "
+                   + "that ChatScreenLayout:585 prefers. #839's report called the two "
+                   + "out of step underneath the projection; the fallback path that "
+                   + "reads this one has to agree with its siblings or the bar reads "
+                   + "\"compacting\" for a run that is demonstrably running");
+    }
+
+    [Test]
+    public async Task CompactionFailed_DoesNotReuseTheSuccessMarker()
+    {
+        var bus = new FakeEventBus();
+        var panel = new ChatTimelinePanel("chat", 20, 4);
+        using var bridge = new ChatScreenBridge(bus, panel, new StatusViewModel());
+
+        await bus.PublishAsync(new CompactionFailedEvent("s1", "summarizer timed out"));
+
+        string text = panel.Timeline.BlockAt(0).RawText();
+        await Assert.That(text).DoesNotContain("history compacted")
+            .Because("nothing was compacted. Reusing the success sibling's wording would "
+                   + "tell the reader their history was pruned when the summarizer "
+                   + "failed and the fallback, not the compaction, is what cut it");
+    }
 }

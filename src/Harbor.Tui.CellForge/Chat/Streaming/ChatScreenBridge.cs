@@ -3,6 +3,7 @@ using System.Text.Json;
 using Harbor.Abstractions.Events;
 using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Permissions;
+using Harbor.Terminal.Abstractions.Renderers;
 using Harbor.Terminal.Abstractions.ViewModels;
 using Harbor.Tui.CellForge.Widgets;
 using Harbor.Ui.Framework;
@@ -292,6 +293,23 @@ public sealed class ChatScreenBridge : IDisposable
 
             case CompactionCompletedEvent:
                 AppendSystem("history compacted");
+                _status.Mode = StatusBarMode.Running;
+                break;
+
+            // #840: the third member of a family this switch already declared
+            // twice, and the arm that was missing is the expensive one —
+            // CompactionBehavior calls its truncation fallback irreversible and
+            // then continues the run, so nothing downstream of this event would
+            // have told the user.
+            //
+            // NOT a duplicate of #839. That fix added a ChatRole.System line to
+            // UiState.Chat.Lines, and this timeline never reads it:
+            // CellForgeTuiRenderer.ProjectScreen hands the store's UiState to
+            // Status.ProjectedState and the sidebar and nothing else. The store
+            // projection feeds the desktop app's transcript; this ring is what
+            // HARBOR_TUI=cellforge paints.
+            case CompactionFailedEvent cf:
+                AppendSystem(CompactionLifecycleLines.Failed(cf.Error));
                 _status.Mode = StatusBarMode.Running;
                 break;
 

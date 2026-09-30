@@ -48,6 +48,7 @@ public sealed class NotificationTuiRenderer : BaseTuiRenderer
         RegisterHandler(new AgentErrorNotificationHandler(_backend));
         RegisterHandler(new AgentEndNotificationHandler(_backend));
         RegisterHandler(new CompactionNotificationHandler(_backend));
+        RegisterHandler(new CompactionFailedNotificationHandler(_backend));
         RegisterHandler(new ToolErrorNotificationHandler(_backend));
     }
 
@@ -119,6 +120,57 @@ public sealed class NotificationTuiRenderer : BaseTuiRenderer
             backend.Notify("Harbor — compacted",
                 $"Pruned {cc.PrunedMessageCount} messages, saved ~{cc.TokensSaved} tokens.",
                 false, ct);
+            return Task.CompletedTask;
+        }
+    }
+
+    /// <summary>
+    ///     Notification when compaction FAILED and the loop fell back to tail
+    ///     truncation (issue #840).
+    /// </summary>
+    /// <remarks>
+    ///     <para>
+    ///         <b>Why this renderer's silence was a different question from the
+    ///         other three.</b> The transcript renderers declare the whole
+    ///         lifecycle — started and completed both write a line — so a
+    ///         missing third member there is an incomplete family. This handler
+    ///         deliberately names <b>only</b> <see cref="CompactionCompletedEvent"/>:
+    ///         compaction starts repeatedly through a long run and a toast per
+    ///         start is noise, while a completed compaction is a milestone. So
+    ///         the missing arm here was not a family with a hole in it; it was a
+    ///         policy about which milestones may interrupt the user, and it had
+    ///         to be answered on its own terms rather than by symmetry with the
+    ///         siblings. Answered in favour of notifying.
+    ///     </para>
+    ///     <para>
+    ///         <b>Why the degradation outranks a started toast.</b> This renderer
+    ///         exists for a user who is <i>not</i> at the terminal — that is the
+    ///         scenario its own class doc describes. Compaction failing is the one
+    ///         member of the lifecycle whose consequence outlives the run:
+    ///         <c>CompactionBehavior</c> calls the truncation fallback
+    ///         "irreversible" and continues anyway, so there is no later event
+    ///         that would tell an absent user their session lost history.
+    ///     </para>
+    ///     <para>
+    ///         <b>isError: true</b> — the styling hint, not a claim the run failed:
+    ///         the turn continues, which is why the body says so rather than
+    ///         claiming a crash. It is <c>true</c> because this is the bad branch of
+    ///         the lifecycle and it lands in the same channel seconds after the
+    ///         "compacted" toast; a reader must not have to diff two bodies to
+    ///         learn which one they got. The title is the discriminator, and
+    ///         <c>CompactionLifecycleLineTests</c> pins that it differs.
+    ///     </para>
+    /// </remarks>
+    private sealed class CompactionFailedNotificationHandler(INotificationBackend backend) : IAgentEventHandler
+    {
+        public bool CanHandle(AgentEvent @event) => @event is CompactionFailedEvent;
+
+        public Task HandleAsync(AgentEvent @event, ITuiRenderContext context, CancellationToken ct = default)
+        {
+            var cf = (CompactionFailedEvent)@event;
+            backend.Notify("Harbor — compaction failed",
+                CompactionLifecycleLines.Failed(cf.Error),
+                true, ct);
             return Task.CompletedTask;
         }
     }
