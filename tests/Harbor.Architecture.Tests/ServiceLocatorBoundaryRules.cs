@@ -42,7 +42,14 @@
 //   * `Harbor.Hosting.Modules.*` and every `apps/` composition root. Resolving
 //     from a container AT the root is not a service locator, it is the one
 //     legitimate use. `PanelServices.FromContainer(IServiceProvider)` is called
-//     from exactly such a root, on purpose.
+//     from exactly such a root, on purpose. `App.axaml.cs` is that root for the
+//     desktop app, and `Program.cs` is the file that hands it over — so those two
+//     files are the declared handover channel, named in
+//     `CompositionRootHandoverFiles` and re-asserted by
+//     `DesktopProduct_DoesNotReachTheAmbientContainerOutsideTheCompositionRoot`.
+//     What is ruled is everything ELSE in `apps/` naming the ambient: see #779
+//     below for why `apps/` needed its own scan rather than one more reflection
+//     rule.
 //   * `Harbor.Desktop.Shared.Locators.ViewModelLocator` — a NAMED abstraction
 //     with its own interface, registered in the root and injected at the use
 //     site. Different thing entirely; it is the target of #470, not a breach of
@@ -169,6 +176,33 @@
 // `AddSingleton`, so nothing is captured) and `DemoCellForgeScreen` (a demo
 // screen). Zero of them resolve a scoped service, which is why the captive case is
 // an empty set here rather than a suppressed one.
+
+// apps/ IS composition root AND unreferenced by this project. #779 — the third
+// member of the #470 family, one layer out again
+// -----------------------------------------------------------------------
+// `Harbor.App.Avalonia.App.Services` was `public static IServiceProvider
+// Services { get; set; } = null!` — written once by `Program.cs`, read twelve
+// times from XAML view code-behinds, and primed by two test sites before they
+// could run at all. The views are NOT the root: their dependency is absent from
+// their signature and reachable from anywhere through a static, which is
+// `ToolContext.Services` / `PanelContext.Services` / `SessionFactory._services`
+// again, one layer out.
+//
+// Two things made it invisible here, and BOTH had to be closed — fixing one alone
+// yields a rule that cannot fail:
+//
+//   * `apps/` is not referenced by this test project at all. #760 read it by hand
+//     and found three instance holders; a hand read expires silently.
+//   * it is a static PROPERTY. `FindStoredLocators` reads fields and constructor
+//     parameters; `FindLocatorProperties` exists but is applied only to the three
+//     #470 hot contracts.
+//
+// Hence the source scan over the product trees below. The replacement was NOT a
+// new abstraction — `Harbor.Desktop.Shared.Locators.IViewModelLocator` already
+// existed, already registered by the desktop composition root, already tested,
+// and had ZERO product consumers; its own doc comment says it "replaces the
+// scattered `App.Services.GetService<T>()`". The defect was an unused abstraction
+// living beside a used duplicate, which is #874's shape, not #470's.
 
 using System.Runtime.CompilerServices;
 using Harbor.Abstractions.Tools;
@@ -366,6 +400,178 @@ public class ServiceLocatorBoundaryRules
         string declared = "Harbor.Desktop.Shared.Locators.ViewModelLocator | Harbor.Ipc.HarborIpcServer";
 
         await Assert.That(actual).IsEqualTo(declared);
+    }
+
+    // ── #779: the desktop ambient container, `apps/Harbor.App.Avalonia.App.Services` ──
+
+    /// <summary>
+    ///     The two files that make up the desktop composition root's HANDOVER
+    ///     channel for <c>App.Services</c>, and the only two allowed to name it.
+    /// </summary>
+    /// <remarks>
+    ///     <para>
+    ///         #760 closed the <c>src/</c> container inventory and said out loud what it
+    ///         could not see: "apps/ is composition root and unreferenced by this project".
+    ///         It then read apps/ BY HAND and listed three instance holders. A hand read
+    ///         is not a rule — it is a snapshot that expires silently, which is how
+    ///         <c>SessionFactory</c> survived #470 in the first place (see this file's
+    ///         header).
+    ///     </para>
+    ///     <para>
+    ///         <c>App.Services</c> is invisible to the reflection sweep for TWO independent
+    ///         reasons, which is why the hand read missed it too:
+    ///     </para>
+    ///     <list type="number">
+    ///         <item>
+    ///             It lives in <c>apps/</c>, and <see cref="SrcAssemblies" /> only yields
+    ///             <c>src/</c> projects. The desktop app is not a reference of this test
+    ///             project at all, so it cannot be reached by reflection without a new
+    ///             (and layering-invisible) ProjectReference.
+    ///         </item>
+    ///         <item>
+    ///             It is a static PROPERTY, and <see cref="FindStoredLocators(Type)" />
+    ///             reads fields and constructor parameters only.
+    ///             <see cref="FindLocatorProperties(Type)" /> would match it, but it is
+    ///             applied to the three #470 hot contracts alone, never to an assembly sweep.
+    ///         </item>
+    ///     </list>
+    ///     <para>
+    ///         Closing (1) without (2) would have produced a rule that cannot fail, so
+    ///         this is a SOURCE scan over the product trees instead — the same
+    ///         <see cref="SourceScan" /> helpers the other apps/-walking rules use, and
+    ///         the same "an empty violation list must be explainable" discipline.
+    ///     </para>
+    /// </remarks>
+    private static readonly string[] CompositionRootHandoverFiles =
+    [
+        "apps/Harbor.App.Avalonia/App.axaml.cs",
+        "apps/Harbor.App.Avalonia/Program.cs",
+    ];
+
+    /// <summary>
+    ///     Nothing outside the desktop composition root's handover channel may read
+    ///     the ambient container. On dev, twelve reads sat in XAML view code-behinds —
+    ///     the #470 family one layer out: the dependency is absent from the view's
+    ///     signature and reachable from anywhere, at any time, through a static.
+    /// </summary>
+    [Test]
+    public async Task DesktopProduct_DoesNotReachTheAmbientContainerOutsideTheCompositionRoot()
+    {
+        await Assert.That(FindAmbientContainerReadsOutsideCompositionRoot().ToArray()).IsEmpty();
+    }
+
+    /// <summary>
+    ///     The handover itself must not be null-forgiving. <c>= null!</c> makes
+    ///     "the host was never handed over" representable, and every read of it then
+    ///     fails as a bare <see cref="NullReferenceException" /> at whatever depth the
+    ///     read happened to sit — which is the "works in the REPL, dies in a test"
+    ///     shape this whole file exists to remove. The getter names the missing step
+    ///     instead.
+    /// </summary>
+    [Test]
+    public async Task DesktopAmbientContainer_IsNotNullForgiving()
+    {
+        string? app = ReadProductFile("apps/Harbor.App.Avalonia/App.axaml.cs");
+
+        // Non-vacuity: the file the rule is about must actually have been read, and
+        // must actually be about the ambient at all — otherwise the `= null!` check
+        // below would pass on a file that never mentioned one.
+        await Assert.That(app).IsNotNull();
+        if (app is null)
+        {
+            return;
+        }
+
+        await Assert.That(app.Contains("Services", StringComparison.Ordinal)).IsTrue();
+        await Assert.That(app.Contains("= null!", StringComparison.Ordinal)).IsFalse();
+    }
+
+    /// <summary>
+    ///     Non-vacuity for the source scan above. The SAME predicate is run against
+    ///     planted sources: one file that names the ambient and one that does not.
+    ///     If the matcher ever narrows to something neither reaches — or if the
+    ///     composition-root exemption ever swallows everything — it fails here rather
+    ///     than passing the real sweep forever.
+    /// </summary>
+    [Test]
+    public async Task AmbientContainerDetector_ReportsAReadOutsideTheCompositionRoot()
+    {
+        IReadOnlyList<string> planted = FindAmbientContainerReads(
+            [
+                ("apps/Harbor.App.Avalonia/Views/SomethingView.axaml.cs",
+                    "private IShellChrome C => App.Services.GetRequiredService<IShellChrome>();"),
+                ("apps/Harbor.App.Avalonia/App.axaml.cs",
+                    "var vm = Services.GetRequiredService<MainViewModel>();"),
+                ("apps/Harbor.App.Avalonia/Program.cs",
+                    "App.Services = host.Services;"),
+                ("apps/Harbor.App.Cli/Program.cs",
+                    "var x = 1; // nothing to see"),
+            ]);
+
+        // One file: the view. The root's own file and the writing Program.cs pass.
+        await Assert.That(planted.Count).IsEqualTo(1);
+        await Assert.That(planted[0]).IsEqualTo("apps/Harbor.App.Avalonia/Views/SomethingView.axaml.cs");
+    }
+
+    /// <summary>
+    ///     Product files that name <c>App.Services</c> while NOT being part of the
+    ///     composition root's handover channel, repo-relative and ordinal-sorted.
+    /// </summary>
+    private static IReadOnlyList<string> FindAmbientContainerReadsOutsideCompositionRoot()
+    {
+        var sources = new List<(string Relative, string Text)>();
+        foreach (string file in SourceScan.EnumerateProductCsFiles())
+        {
+            string? text = SourceScan.TryReadAllText(file);
+            if (text is not null)
+            {
+                sources.Add((SourceScan.Relative(file), text));
+            }
+        }
+
+        return FindAmbientContainerReads(sources);
+    }
+
+    /// <summary>
+    ///     Grading for the rule above, split out so the planted control drives the
+    ///     REAL matcher — comment stripping and the composition-root exemption
+    ///     included — rather than a second implementation of it, which is the only way
+    ///     "it can fail" means anything.
+    /// </summary>
+    private static IReadOnlyList<string> FindAmbientContainerReads(
+        IReadOnlyList<(string Relative, string Text)> sources)
+    {
+        var hits = new List<string>();
+        foreach ((string relative, string text) in sources)
+        {
+            if (CompositionRootHandoverFiles.Contains(relative, StringComparer.Ordinal))
+            {
+                continue;
+            }
+
+            // Comments are stripped so prose ABOUT the ambient ("App.Services is
+            // the composition root's handover channel") cannot redden the sweep.
+            string stripped = SourceScan.StripComments(text);
+            if (stripped.Contains("App.Services", StringComparison.Ordinal))
+            {
+                hits.Add(relative);
+            }
+        }
+
+        return [.. hits.OrderBy(h => h, StringComparer.Ordinal)];
+    }
+
+    /// <summary>Reads one repo-relative product file, or <see langword="null" />.</summary>
+    private static string? ReadProductFile(string relative)
+    {
+        string? root = RepoPaths.RepoRoot;
+        if (root is null)
+        {
+            return null;
+        }
+
+        return SourceScan.TryReadAllText(
+            Path.Combine(root, relative.Replace('/', Path.GetDirectorySeparatorChar)));
     }
 
     // ── #760 planted control types — never constructed, only reflected over ──
