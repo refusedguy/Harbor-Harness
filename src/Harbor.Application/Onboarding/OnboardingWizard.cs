@@ -1,4 +1,6 @@
+using System.Globalization;
 using CSharpFunctionalExtensions;
+using Harbor.Abstractions.Agents;
 using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Application.Configuration;
 using Microsoft.Extensions.Logging;
@@ -18,6 +20,7 @@ public sealed class OnboardingWizard
     private readonly IConfigStore _configStore;
     private readonly Abstractions.Providers.IProviderHealthCheck? _healthCheck;
     private readonly Abstractions.Providers.IProviderRegistry? _providers;
+    private readonly Abstractions.Agents.IAgentRegistry? _agents;
     private readonly ILogger<OnboardingWizard>? _logger;
 
     /// <summary>Cap on the numbered live-model list shown during setup.</summary>
@@ -39,17 +42,26 @@ public sealed class OnboardingWizard
     ///     step shows a live list from <c>GetModelsAsync</c>; on failure it
     ///     degrades explicitly to manual entry.
     /// </param>
+    /// <param name="agents">
+    ///     Optional agent registry (#582). When present the agent step lists what
+    ///     the registry holds, so a newly registered builtin agent appears here
+    ///     without an edit to this class. When absent the step still runs, with
+    ///     nothing to list — the same explicit-degradation shape the provider and
+    ///     model steps already use rather than a silent default.
+    /// </param>
     public OnboardingWizard(
         IConfigStore configStore,
         AuthStore authStore,
         ILogger<OnboardingWizard>? logger = null,
         Abstractions.Providers.IProviderHealthCheck? healthCheck = null,
-        Abstractions.Providers.IProviderRegistry? providers = null)
+        Abstractions.Providers.IProviderRegistry? providers = null,
+        Abstractions.Agents.IAgentRegistry? agents = null)
     {
         _configStore = configStore;
         _authStore = authStore;
         _healthCheck = healthCheck;
         _providers = providers;
+        _agents = agents;
         _logger = logger;
     }
 
@@ -369,24 +381,143 @@ public sealed class OnboardingWizard
         return input.Trim();
     }
 
+    /// <summary>
+    ///     The agent step, projected from <see cref="IAgentRegistry" /> (#582).
+    /// </summary>
+    /// <remarks>
+    ///     <para>
+    ///         This used to be three <c>writer("  [1] code — …")</c> literals and a
+    ///         six-arm <c>switch</c> over <c>"1"</c>/<c>"2"</c>/<c>"3"</c> plus three
+    ///         <c>Equals</c> arms — a hand-written copy of the agent set in the one
+    ///         place a first-time user learns the names exist. Every other agent-set
+    ///         consumer in the product already projects from the registry
+    ///         (<c>TaskTool</c>'s available-sub-agent hint, both <c>/agent</c>
+    ///         commands, <c>TaskRunRunner</c>, <c>ReplRunner</c>), so a fourth builtin
+    ///         agent registered there simply did not appear here, with nothing failing.
+    ///     </para>
+    ///     <para>
+    ///         <b>ORDER, AND WHY IT IS NOT THE REGISTRY'S.</b> <c>IAgentRegistry</c> is
+    ///         backed by a <c>ConcurrentDictionary</c> whose enumeration order is
+    ///         unspecified, so a numbered menu over it would number the same agents
+    ///         differently on two runs. The order here is therefore stated rather than
+    ///         inherited: the fallback agent is entry 1, and the rest follow
+    ///         ordinally by name. Entry 1 is the fallback because the empty-input
+    ///         default has always been the fallback and the hint says <c>default: 1</c>;
+    ///         the rest are sorted rather than registration-ordered so the numbering
+    ///         is a property of the SET, not of an unspecified hash layout.
+    ///     </para>
+    ///     <para>
+    ///         Sub-agents are listed too. Filtering <c>IsSubAgent</c> here would be a
+    ///         second place that has to be told which agents exist, and the menu
+    ///         offered <c>explore</c> before this change.
+    ///     </para>
+    /// </remarks>
     private async Task<string> PickAgentAsync(Func<string, Task<string>> reader, Action<string> writer, CancellationToken ct)
     {
-        writer("");
-        writer("Pick a default agent (mode):");
-        writer("  [1] code    — Default. Can read/write/edit files and run commands.");
-        writer("  [2] plan    — Read-only planning. Cannot modify files.");
-        writer("  [3] explore — Fast read-only codebase exploration.");
+        IReadOnlyList<AgentDefinition> agents = SelectableAgents(_agents?.GetAllAgents());
 
-        string input = await reader("Enter number (default: 1): ").ConfigureAwait(false);
-        return input switch
+        if (agents.Count == 0)
         {
-            "" or "1" => "code",
-            "2" => "plan",
-            "3" => "explore",
-            _ when input.Equals("code", StringComparison.OrdinalIgnoreCase) => "code",
-            _ when input.Equals("plan", StringComparison.OrdinalIgnoreCase) => "plan",
-            _ when input.Equals("explore", StringComparison.OrdinalIgnoreCase) => "explore",
-            _ => "code"
-        };
+            writer("");
+            writer("⚠ No agents registered — using " + AgentName.Fallback + ".");
+        }
+        else
+        {
+            writer("");
+        }
+
+        writer("Pick a default agent (mode):");
+        writer("Pick a default agent (mode):");
+        for (int i = 0; i < agents.Count; i++)
+        {
+            AgentDefinition agent = agents[i];
+            string suffix = agent.Name.Value == AgentName.Fallback ? "  (default)" : string.Empty;
+            writer($"  [{i + 1}] {agent.Name.Value,-9} — {agent.Description}{suffix}");
+        }
+
+        string input = await reader("Enter number, or type an agent name (default: 1): ").ConfigureAwait(false);
+
+        if (string.IsNullOrWhiteSpace(input))
+        {
+            return DefaultAgentName(agents);
+        }
+
+        string trimmed = input.Trim();
+        if (int.TryParse(trimmed, NumberStyles.None, CultureInfo.InvariantCulture, out int index)
+            && index >= 1
+            && index <= agents.Count)
+        {
+            return agents[index - 1].Name.Value;
+        }
+
+        foreach (AgentDefinition agent in agents)
+        {
+            if (string.Equals(agent.Name.Value, trimmed, StringComparison.OrdinalIgnoreCase))
+            {
+                return agent.Name.Value;
+            }
+        }
+
+        return DefaultAgentName(agents);
     }
+
+    /// <summary>
+    ///     The agents the picker offers, in the order it lists them: the fallback
+    ///     agent first, then every other registered agent ordered by name.
+    /// </summary>
+    /// <remarks>
+    ///     The fallback agent is not guaranteed to be registered — a host may supply
+    ///     its own registry — so the leading entry is "the fallback if it is there,
+    ///     otherwise the first by name", and the returned list has no duplicates
+    ///     either way. When there are no agents at all the picker still answers, with
+    ///     the fallback name: the wizard must not deadlock a first run on an empty
+    ///     registry, and the session factory falls back to it anyway.
+    /// </remarks>
+    private static IReadOnlyList<AgentDefinition> SelectableAgents(IReadOnlyList<AgentDefinition>? registered)
+    {
+        if (registered is null || registered.Count == 0)
+        {
+            return [];
+        }
+
+        // `registered` comes out of a ConcurrentDictionary, so its own order is
+        // unspecified. Sorting the tail by name makes the numbering a property of
+        // the SET, so two runs of the wizard on the same registry number the same
+        // agents the same way.
+        var rest = new List<AgentDefinition>(registered.Count);
+        AgentDefinition? fallback = null;
+        foreach (AgentDefinition agent in registered)
+        {
+            if (agent.Name.Value == AgentName.Fallback)
+            {
+                fallback = agent;
+            }
+            else
+            {
+                rest.Add(agent);
+            }
+        }
+
+        rest.Sort(static (a, b) => string.CompareOrdinal(a.Name.Value, b.Name.Value));
+
+        // The fallback leads because the empty-input default is the fallback and the
+        // hint reads "default: 1". A host that registers no agent by that name gets
+        // the alphabetically-first agent in its place, so entry 1 still means the
+        // default the wizard will report back.
+        var ordered = new List<AgentDefinition>(rest.Count + 1);
+        ordered.Add(fallback ?? rest[0]);
+        foreach (AgentDefinition agent in rest)
+        {
+            if (!ReferenceEquals(agent, ordered[0]))
+            {
+                ordered.Add(agent);
+            }
+        }
+
+        return ordered;
+    }
+
+    /// <summary>The name the picker lands on when the answer is empty or unusable.</summary>
+    private static string DefaultAgentName(IReadOnlyList<AgentDefinition> agents)
+        => agents.Count > 0 ? agents[0].Name.Value : AgentName.Fallback;
 }

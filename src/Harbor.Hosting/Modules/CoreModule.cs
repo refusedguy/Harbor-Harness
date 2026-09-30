@@ -28,6 +28,14 @@ internal static class CoreModule
         ctx.Logger.LogInformation("Registering core services");
 
         services.AddSingleton<AuthStore>();
+        // #582: the agent step of the wizard is a PROJECTION of the agent registry.
+        // It used to hold its own copy of the set (three menu literals and a six-arm
+        // switch), so a builtin agent registered below was absent from first-run
+        // setup with nothing failing. The wizard's parameter is optional and
+        // ActivatorUtilities fills it from the container when it is registered here —
+        // which RegistriesModule does, later in the chain, as a singleton over the
+        // SAME registry object the plugin pipeline writes into. Resolution is lazy, so
+        // the later registration is the one seen.
         services.AddSingleton<OnboardingWizard>();
         // PROD-UI-0 З.2: cheap "test connection" probe shared by the CLI
         // wizard, the desktop onboarding VM and future model pickers.
