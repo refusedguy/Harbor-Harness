@@ -219,10 +219,10 @@ Domain layer and may reference each other; in practice `Harbor.Tui.Abstractions`
 
 > **Единственный механический источник правды** для рёбер `<ProjectReference>` сегодня —
 > `tests/Harbor.Architecture.Tests`, в первую очередь `FullLayerMatrixTests` (§5.4):
-> data-table на каждый src-assembly главного решения (47/50 строк; вне области по
-> документированным причинам: CodeGen build-tool, Plugins.Host exe, Providers.Shared
-> linked-source). Таблица ниже — устоявшийся TL;DR, полезный как шпаргалка; при
-> расхождении доверяйте тестам.
+> data-table на каждый src-assembly главного решения (вне области по документированным
+> причинам: CodeGen build-tool, Plugins.Host exe; плюс два csproj-less каталога
+> linked-source — `Providers.Shared`, `Storage.Shared`, см. §5.4). Таблица ниже —
+> устоявшийся TL;DR, полезный как шпаргалка; при расхождении доверяйте тестам.
 
 The matrix below is a **coarse-grain summary** of allowed `<ProjectReference>` edges.
 
@@ -490,12 +490,33 @@ table covering **every main-solution src assembly** (45 rows at the time; grown 
 
 Out of scope by design: `Harbor.CodeGen` (source-generator project, consumed via
 `OutputItemType=Analyzer`), `Harbor.Plugins.Host` (OutputType=Exe out-of-process
-MCP server — an app), `Harbor.Providers.Shared` (a shared-source folder with no
-csproj: its files are `<Compile Include>`-linked into the four provider
-assemblies), and `apps/*` composition roots. Every one of these lives in
-`OutOfScopeAssemblies` / `SharedSourceFolders` with a reason, and
-`EnforcerIntegrityTests.SrcProjects_AreAllClassified` fails when a new `src/`
-project is in neither list.
+MCP server — an app), and `apps/*` composition roots. Every one of these lives in
+`OutOfScopeAssemblies` with a reason, and `EnforcerIntegrityTests.SrcProjects_AreAllClassified`
+fails when a new `src/` project is in neither list.
+
+Two further folders are out of scope because they produce no assembly at all:
+`Harbor.Providers.Shared` and `Harbor.Storage.Shared`. Their files are
+`<Compile Include>`-linked into their consumers (four providers, and the Jsonl +
+Sqlite stores) rather than referenced, because the matrix forbids
+Infrastructure→Infrastructure project references and these are exactly the cases
+that would need one. They live in `SharedSourceFolders` as folder → reason.
+
+**A csproj-less folder is not off the map — it is a separate, checked case (#456).**
+`SrcProjects_AreAllClassified` iterates projects that *have* a csproj, so on its own
+it cannot see a folder that has none; `Harbor.Storage.Shared` was undeclared there
+while the gate was green. `SharedSourceLinkRules` closes that, and closes the half
+that mattered more: linked source is compiled *into* the consumer, so the IL matrix
+already judges its references, but a rule walking `src/<project>/**` did not see
+the file at all — so "which files bind the forbidden target?" answered without it.
+`RepoPaths.EnumerateCsFiles` now returns the link items too, which is what makes
+`DocumentExceptions_AreScopedToNamedFiles` and the namespace-ownership map see
+shared code.
+
+Converting either folder to a real assembly is *not* a mechanical follow-up: it
+would mean an Infrastructure assembly referenced by other Infrastructure
+assemblies, i.e. widening the rule the mechanism works around, plus a
+public-surface decision for code that is `internal` in every consumer. That is a
+layer-model change with its own trade-offs and belongs on its own issue.
 
 ### 5.5 Rules about the rules — `EnforcerIntegrityTests.cs` (#450)
 

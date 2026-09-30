@@ -6,6 +6,10 @@ Shared source code compiled into the session-store assemblies via `<Compile Incl
 
 **Storage infrastructure (shared source).** Not a standalone runtime library — files are linked into `Harbor.Storage.Jsonl` and `Harbor.Storage.Sqlite` at build time. No `.csproj` here on purpose: a real project reference between storage assemblies would violate the `Storage_ReferencesOnlyAbstractions` architecture rule.
 
+This folder is declared in `FullLayerMatrixTests.SharedSourceFolders` and held against the real csproj link items by `SharedSourceLinkRules` (#456): a csproj-less folder is invisible to `EnforcerIntegrityTests.SrcProjects_AreAllClassified`, which only enumerates directories that *have* a csproj, so being unlisted is what let the file-set rules read an incomplete picture of both stores. Adding a file here, dropping a `<Compile>` item, or adding a new shared-source folder all fail the gate.
+
+`Harbor.Storage.Memory` links **neither** `SessionLockStrip.cs` nor `SessionStoreErrors.cs` — it has no `<Compile>` item at all, and hand-writes the `SessionNotFound` literal nine times in `MemorySessionStore.cs`. The declaration records that gap rather than implying all three stores share these files.
+
 ## What's in it
 
 | File | Purpose |

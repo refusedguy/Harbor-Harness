@@ -6,6 +6,8 @@ Shared source code compiled into provider assemblies via `<Compile Include>` lin
 
 **Provider infrastructure (shared source).** Not a standalone runtime library — files are linked into `Harbor.Providers.OpenAI` and `Harbor.Providers.OpenAiCompatible` at build time.
 
+This folder is declared in `FullLayerMatrixTests.SharedSourceFolders` and held against the real csproj link items by `SharedSourceLinkRules` (#456). A csproj-less folder is invisible to `EnforcerIntegrityTests.SrcProjects_AreAllClassified`, which only enumerates directories that *have* a csproj; `RepoPaths.EnumerateCsFiles` now resolves `<Compile Include>` items so the rules that key on a project's file set see this code too.
+
 ## What's in it
 
 | File | Purpose |
