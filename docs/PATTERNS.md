@@ -309,7 +309,7 @@ tests/Harbor.Registries.Tests/ToolRegistrySnapshotTests.cs:237-238
 ```
 
 The two sibling registries have **no Composite at all**:
-`src/Harbor.Registries/Providers/ProviderRegistry.cs:15` and
+`src/Harbor.Registries/Providers/ProviderRegistry.cs:16` and
 `src/Harbor.Registries/Agents/AgentRegistry.cs:8` are `ConcurrentDictionary` plus
 a `Builder`. There is no `IProviderSource` / `IAgentSource`, so a second source of
 providers cannot exist without editing the registry class. Both files carry the
@@ -321,9 +321,9 @@ copies, in `src/Harbor.Plugins.Registration/PluginRegistrar.cs:75-87`:
 
 | plugin role | adapter | reaches |
 |---|---|---|
-| `IToolPlugin` | `ToolRegistryBuilderAdapter` (`:122`), `AddTool` at `:147` wraps the tool in `SandboxedPluginTool` (a Decorator) then calls `_host.RegisterTool` | `IPluginLoadHost.RegisterTool` (`IPluginLoadHost.cs:65`) |
-| `IProviderPlugin` | `ProviderRegistryBuilderAdapter` (`:170`) | `IPluginLoadHost.RegisterProvider` (`:74`), called at `:199,210,217` |
-| `IAgentPlugin` | `AgentRegistryBuilderAdapter` (`:86`) | `IPluginLoadHost.RegisterAgent` (`:81`), called at `:247` |
+| `IToolPlugin` | `ToolRegistryBuilderAdapter` (`:202`), `AddTool` at `:227` wraps the tool in `SandboxedPluginTool` (`:231`, a Decorator) then calls `_host.RegisterTool` (`:238`) | `IPluginLoadHost.RegisterTool` (`IPluginLoadHost.cs:67`) |
+| `IProviderPlugin` | `ProviderRegistryBuilderAdapter` (`:249`) | `IPluginLoadHost.RegisterProvider` (`:76`), called at `:279,290,297` |
+| `IAgentPlugin` | `AgentRegistryBuilderAdapter` (`:314`) | `IPluginLoadHost.RegisterAgent` (`:83`), called at `:327` |
 
 Two consequences worth stating plainly:
 
