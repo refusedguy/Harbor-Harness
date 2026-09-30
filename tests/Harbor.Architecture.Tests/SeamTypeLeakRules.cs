@@ -747,8 +747,9 @@ public sealed class SeamTypeLeakRules
         Type banned = ConcreteWriter.Value;
 
         List<SeamLeak> published = SeamLeakProbe.PublishesConcrete(typeof(PublishedWriterProbe), banned);
+        List<string> publishedDetails = [.. published.Select(static h => h.Detail)];
 
-        await Assert.That([.. published.Select(static h => h.Detail)]).Contains("property 'Writer'")
+        await Assert.That(publishedDetails).Contains("property 'Writer'")
             .Because(
                 "PublishedWriterProbe.WRITER-PROPERTY is typed AnsiWriter — the exact shape "
                 + "CellForgeRenderContext.Writer had, which is what issue #494 removed. If the classifier "
@@ -768,8 +769,9 @@ public sealed class SeamTypeLeakRules
         // And the same shape IS caught by rule 1's constructor-inclusive probe,
         // which is the difference between the two rules stated in one place.
         List<SeamLeak> asName = SeamLeakProbe.NamesConcrete(typeof(WiredWriterProbe), banned);
+        List<string> asNameDetails = [.. asName.Select(static h => h.Detail)];
 
-        await Assert.That([.. asName.Select(static h => h.Detail)]).Contains("'ctor' parameter 'writer'")
+        await Assert.That(asNameDetails).Contains("'ctor' parameter 'writer'")
             .Because(
                 "rule 1 counts constructor parameters and rule 2 does not. That asymmetry is deliberate and "
                 "this assertion pins it: WiredWriterProbe is caught by one and not the other, so neither "

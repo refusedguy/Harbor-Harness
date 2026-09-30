@@ -258,18 +258,19 @@ public class ReconnectableRpcClientSeamTests
             await WaitUntilAsync(() => clients.Count >= 5, TimeSpan.FromSeconds(20));
 
             var recovered = clients[4];
-            ulong resumedFrom;
+            ulong? resumedFrom;
             lock (recovered.SubscribesGuard)
             {
                 resumedFrom = recovered.Subscribes.Single().LastSequence;
             }
 
-            await Assert.That(resumedFrom).IsEqualTo(3)
+            await Assert.That(resumedFrom).IsEqualTo((ulong?)3)
                 .Because(
                     "the whole point of the reconnect protocol: the new subscribe presents the last "
                     + "sequence the client processed, so the server replays only what was missed. "
-                    + "Presenting 0 instead would re-deliver frames 1-3 and the consumer would see them "
-                    + "twice");
+                    + "Presenting 0 — or null, which means 'first subscription' — would re-deliver frames "
+                    + "1-3 and the consumer would see them twice. LastSequence is ulong? because null is "
+                    + "the protocol's way of saying a first subscription carries no resume point");
 
             // The recovered generation continues the sequence rather than
             // restarting it.
