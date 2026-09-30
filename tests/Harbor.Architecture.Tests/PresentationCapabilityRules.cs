@@ -621,44 +621,6 @@ public sealed class PresentationCapabilityRules
             //
             // The jump palette row above is untouched — a different defect, open.
         },
-        ["Harbor.Desktop.Abstractions"] = new(StringComparer.Ordinal)
-        {
-            // Configuration/JsonAppConfigStore.cs:117,:124,:173-:178 and
-            // JsonCommonConfigStore.cs:83,:89,:182-:223. These two are the ONLY
-            // reason Harbor.Desktop.Abstractions sits in Presentation rather than
-            // Domain — see the layer-matrix exception on its Harbor.Application
-            // edge (#188) and docs/ARCHITECTURE_LAYERS.md §1's
-            // ICommonConfigReader cycle note.
-            [NoFiles + " Harbor.Desktop.Abstractions.Configuration.JsonAppConfigStore`1"] = new(
-                Reason:
-                    "One of the two rows that decide which layer this project is in: together they "
-                    + "are the ONLY reason Harbor.Desktop.Abstractions sits in Presentation rather "
-                    + "than Domain — see the layer-matrix exception on its Harbor.Application edge "
-                    + "(#188) and §1's ICommonConfigReader cycle note, which exists because this "
-                    + "store is here. The debt is real and #534 tracks the move; the row stays "
-                    + "because deleting it would not move the file, it would only stop counting it.",
-                TrackedBy: "https://github.com/refusedguy/Harbor-Harness/issues/534"),
-            [NoFiles + " Harbor.Desktop.Abstractions.Configuration.JsonCommonConfigStore"] = new(
-                Reason:
-                    "The same argument as the row above, for the common config: these two stores "
-                    + "are the load-bearing reason for this project's layer placement, and the "
-                    + "ICommonConfigReader seam was introduced to make that placement survivable. "
-                    + "#534 tracks moving the file-backed part behind the port.",
-                TrackedBy: "https://github.com/refusedguy/Harbor-Harness/issues/534"),
-            [NoDirectories + " Harbor.Desktop.Abstractions.Configuration.JsonAppConfigStore`1"] = new(
-                Reason:
-                    "Same site as the NoFiles row, second reason: the store creates the directory it "
-                    + "writes config into, so one type needs BOTH rows. The placement argument is the "
-                    + "one above — these two types are why this project is Presentation, and #534 is "
-                    + "the issue that moves them.",
-                TrackedBy: "https://github.com/refusedguy/Harbor-Harness/issues/534"),
-            [NoDirectories + " Harbor.Desktop.Abstractions.Configuration.JsonCommonConfigStore"] = new(
-                Reason:
-                    "The Directory half of the same two types. The config directory is created before "
-                    + "the first write so a fresh install needs no manual setup — a small, deliberate "
-                    + "side effect, in the two types whose LAYER is the tracked debt (#534).",
-                TrackedBy: "https://github.com/refusedguy/Harbor-Harness/issues/534"),
-        },
         //
         // #535 RESOLVED: the two `RecentItemsService` rows are GONE — not
         // re-baselined, and the `["Harbor.Desktop.Shared"]` entry with them,
@@ -689,6 +651,31 @@ public sealed class PresentationCapabilityRules
         // next one — and it also covers the
         // `Environment.GetFolderPath(UserProfile)` read that no capability
         // rule could see.
+        //
+        // #534 RESOLVED: the four Harbor.Desktop.Abstractions rows are GONE — not
+        // re-baselined, not narrowed, and the whole `["Harbor.Desktop.Abstractions"]`
+        // entry went with them, exactly as `["Harbor.DesignSystem"]` did in #742.
+        //
+        // `JsonCommonConfigStore` and `JsonAppConfigStore<T>` were the last two types
+        // in this project that touched a disk. They are persistence — they stat the
+        // file, create ~/.harbor, and write atomically through a sibling `.tmp` — and
+        // they now live in `Harbor.Hosting/Configuration`, next to the
+        // `ConfigurationModule` that already constructed both of them. What stayed in
+        // the leaf is the config schema: the PORTS (`ICommonConfigStore`,
+        // `IAppConfigStore<T>`) and the DTOs (`CommonConfig`, `AppConfigBase`,
+        // `CompositeConfig<T>`). The contract is the schema's; the bytes are an outer
+        // layer's — the same split #742 made for `IThemeStore`.
+        //
+        // `DesktopAbstractionsLeafTakesNoIoRules` is what keeps the leaf from regrowing
+        // the capability. It is a SOURCE scan rather than a `ResolvedViolations` row on
+        // purpose: `ResolvedRows_AreWellFormed` resolves each row's type name against
+        // the real assembly, so a row naming a type that has moved out is a build
+        // failure, not a record. A moved type cannot be expressed in that list.
+        //
+        // Note what this does NOT settle: the `Harbor.Desktop.Abstractions ->
+        // Harbor.Application` matrix exception (#188) stays, because it exists for the
+        // ProviderPresets catalog in the picker/onboarding VMs, not for config
+        // persistence. Retiring that edge is a different move.
     };
 
     /// <summary>
