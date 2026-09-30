@@ -103,6 +103,22 @@ static `IServiceProvider` in `src/` + `apps/`; it is a `suggestion` by written
 policy, not a rule that failed to fire. Anyone reading only the table above
 will get this backwards, and did (#838).
 
+> **Scope of that one, as of #779.** `App.Services` is the desktop composition
+> root's *handover channel* and nothing else: `App.axaml.cs` builds `MainViewModel`,
+> the theme services and `MainWindow` from it. It used to be read twelve more times
+> by XAML view code-behinds — a reach-through no DI rule models, because those views
+> read a global rather than declaring one. They now resolve through
+> `IViewModelLocator`, obtained by `ShellLocator.Of(this)` walking up the logical
+> tree to the `MainWindow` the root builds.
+>
+> That is not visible to any DI rule, so it is pinned by a source scan instead:
+> `ServiceLocatorBoundaryRules.DesktopProduct_DoesNotReachTheAmbientContainerOutsideTheCompositionRoot`
+> names `App.axaml.cs` + `Program.cs` as the only two files in `src/` + `apps/`
+> allowed to say `App.Services`. The scan exists because the reflection sweep could
+> not reach `apps/` (not a reference of the test project) and does not read static
+> *properties* — two independent gaps, either of which alone would have left the
+> rule unable to fail.
+
 **Known breadth, deliberately not fixed here:** the block is four rules deep and
 its reason covers fewer than four. DI003 (captive dependency) is a
 lifetime-graph rule about a singleton retaining a *scoped* service, which is
