@@ -22,12 +22,14 @@
 //
 // Three findings in one class is not three coincidences. #879, #896 and #895
 // were each found by a human reading a document, or by grepping for the WORDING
-// an earlier fix had used ("Domain-labelled", "matrix calls Domain"). A phrase
-// search is bounded by the phrases someone already thought of, which is exactly
-// why the claim outlived two rounds of fixes across five files: the round that
-// fixed §1 never opened the root README, and the round that fixed §1's table
-// never opened a per-project README. Fixing #895's ten sites removes ten
-// statements and leaves the mechanism, so the mechanism is what this file grades.
+// an earlier fix had used — the two shapes below, which are quoted throughout
+// this file in the form the matcher sees them and therefore always describe a
+// claim that is WRONG. A phrase search is bounded by the phrases someone
+// already thought of, which is exactly why the claim outlived two rounds of
+// fixes across five files: the round that fixed §1 never opened the root
+// README, and the round that fixed §1's table never opened a per-project
+// README. Fixing #895's ten sites removes ten statements and leaves the
+// mechanism, so the mechanism is what this file grades.
 //
 // The class, as one rule: A DOCUMENT OR COMMENT THAT ATTRIBUTES A LAYER TO A
 // HARBOR PROJECT MUST AGREE WITH `FullLayerMatrixTests.Matrix`.
@@ -71,11 +73,12 @@
 // provider ids. So the selector is two specific CLAIM SHAPES.
 //
 // The same reasoning settles the second hazard. A claim whose SUBJECT is a
-// pronoun ("this leaf is a published Domain-labelled package") is not gradeable,
-// and a guard that guesses reports the wrong thing confidently — which is worse
-// than reporting nothing. So a claim that names no project is UNRESOLVED, which
-// is RED, and the message says so. The fix is one clause of prose: name the
-// project. That is a ratchet, not a workaround — once named, the claim is
+// pronoun — the shape most of #895's sites used, "this leaf is a published
+// …-labelled package" — is not gradeable, and a guard that guesses reports the
+// wrong thing confidently, which is worse than reporting nothing. So a claim that
+// names no project is UNRESOLVED, which is RED, and the message says so. The
+// fix is one clause of prose: name the project. That is a ratchet, not a
+// workaround — once named, the claim is
 // checkable forever, and it can no longer be silenced by rewording, only by
 // being right.
 //
@@ -186,13 +189,17 @@ public sealed class LayerClaimMatchesMatrixRules
         RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
     /// <summary>
-    ///     "the layer matrix calls|labels|says|names &lt;Layer&gt;" — an explicit
-    ///     attribution to the very artifact this rule checks against, so the
-    ///     subject is the project being discussed. Four verb spellings ship
-    ///     today and all four are the same claim.
+    ///     "the layer matrix calls|labels|says|names|places|puts|marks
+    ///     &lt;Layer&gt;" — an explicit attribution to the very artifact this rule
+    ///     checks against, so the subject is the project being discussed. The
+    ///     verb list is deliberately wide: the finding of #896 is that this claim
+    ///     class survives exactly as long as nobody recognises the next wording
+    ///     of it, so a rule that matched four spellings and not the fifth would
+    ///     have been a description of one afternoon. What bounds the shape is
+    ///     the phrase "the layer matrix", not the verb.
     /// </summary>
     private static readonly Regex MatrixSays = new(
-        @"\blayer\s+matrix\s+(?:calls|labels|says|names)\s+(?<layer>Domain|Presentation|Application|Infrastructure|Composition[\s\-]?Root)\b",
+        @"\blayer\s+matrix\s+(?:calls|labels|says|names|places|puts|marks)\s+(?:it\s+)?(?<layer>Domain|Presentation|Application|Infrastructure|Composition[\s\-]?Root)\b",
         RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
     /// <summary>A Harbor project name as it appears in prose, namespace-shaped included.</summary>
@@ -211,14 +218,23 @@ public sealed class LayerClaimMatchesMatrixRules
     /// <summary>
     ///     Floors, set below today's counts and meant as a ratchet: a
     ///     legitimate removal lowers them in the same diff, where a reviewer can
-    ///     see it. All four are MINIMA, so the assertions are
+    ///     see it. All are MINIMA, so the assertions are
     ///     <c>IsGreaterThan(min - 1)</c>.
     /// </summary>
+    /// <remarks>
+    ///     The prose floors are counted from the FIXED tree, not the broken one,
+    ///     and the first draft got that wrong: it set them from the red run, so
+    ///     correcting the ten sites deleted the very strings the floors counted
+    ///     and the green commit could not have passed. They are deliberately low
+    ///     because the correct fix removes most of the attributions — that is
+    ///     the point of it. Shape LIVENESS does not rest on them:
+    ///     `Shapes_AreLiveOnTextTheTreeDoesNotContain` plants both shapes.
+    /// </remarks>
     private const int MinLayerSections = 25;
 
     private const int MinGradedDeclarations = 20;
-    private const int MinLabelledClaims = 3;
-    private const int MinMatrixSaysClaims = 2;
+    private const int MinLabelledClaims = 1;
+    private const int MinMatrixSaysClaims = 3;
 
     // ---------------------------------------------------------------------
     // Tests.
@@ -276,8 +292,8 @@ public sealed class LayerClaimMatchesMatrixRules
         await Assert.That(failures.Count).IsEqualTo(0).Because(
             "A comment or a document that says a project IS a layer is making a claim the matrix "
             + "already answers, and every one of #895's ten sites was that claim being wrong: "
-            + "'Harbor.Desktop.Abstractions is a published, Domain-labelled package' — in the "
-            + "guard's own header, in its XML doc, in its assertion message, and in six more "
+            + "Harbor.Desktop.Abstractions described as a published package in the wrong band — in "
+            + "the guard's own header, in its XML doc, in its assertion message, and in six more "
             + "files. UNRESOLVED counts as a failure on purpose: the claim names no project within "
             + "the window, so its subject is a pronoun and no grader can check it. Naming the "
             + "project is the fix, and it is why this is a rule and not a word list. Offending "
@@ -314,7 +330,11 @@ public sealed class LayerClaimMatchesMatrixRules
 
     /// <summary>
     ///     A floor per prose shape, for the same reason. A combined total would
-    ///     be satisfied by one live shape while the other matched nothing.
+    ///     be satisfied by one live shape while the other matched nothing. Note
+    ///     that these counts INCLUDE the planted text in
+    ///     <c>Shapes_AreLiveOnTextTheTreeDoesNotContain</c>, so they prove the
+    ///     shapes are live, not that N files still carry the wording — which is
+    ///     the point, since the fix deletes most of that wording on purpose.
     /// </summary>
     [Test]
     public async Task ProseClaims_AreFound()
@@ -389,6 +409,68 @@ public sealed class LayerClaimMatchesMatrixRules
             + "into a list of everything. Over-reported:\n" + string.Join("\n", overReported));
     }
 
+    /// <summary>
+    ///     Shape LIVENESS, proved by text the tree does not contain. The floors
+    ///     in <see cref="ProseClaims_AreFound" /> are a ratchet on the files, and
+    ///     a ratchet is the wrong place to prove a regex works: the first draft
+    ///     of this file counted the floors from the RED tree, so the fix deleted
+    ///     the strings they counted and the green commit could not have passed.
+    ///     Here each shape must match a planted claim and must NOT match a
+    ///     near-miss — the second half matters because a pattern that matches
+    ///     everything satisfies the first.
+    /// </summary>
+    /// <remarks>
+    ///     The planted claims NAME their project and are otherwise ordinary
+    ///     prose, which is not decoration: <c>ProseClaims</c> reads this file
+    ///     too (it must — three of #895's sites are in this directory), so a
+    ///     planted string that said "this leaf is a …-labelled package" would be
+    ///     graded as an UNRESOLVED claim and the control would turn the rule it
+    ///     exists to protect red. Naming the project makes the planted text
+    ///     resolve, and doubles as proof that resolved prose grades green.
+    /// </remarks>
+    [Test]
+    public async Task Shapes_AreLiveOnTextTheTreeDoesNotContain()
+    {
+        (string Name, Regex Shape, string MustMatch, string MustNotMatch)[] probes =
+        [
+            (
+                LabelledShape,
+                Labelled,
+                "Harbor.Ui.Framework.Rendering is a published Presentation-labelled package",
+                "the Domain layer is the innermost ring of the onion"),
+            (
+                MatrixSaysShape,
+                MatrixSays,
+                "Harbor.Tui.Notifications: the layer matrix calls it Presentation (§2)",
+                "the layer matrix forbids Infrastructure to reference Presentation"),
+        ];
+        var dead = new List<string>();
+        var greedy = new List<string>();
+
+        foreach ((string name, Regex shape, string mustMatch, string mustNotMatch) in probes)
+        {
+            if (!shape.IsMatch(mustMatch))
+            {
+                dead.Add($"{name} did not match: {mustMatch}");
+            }
+
+            if (shape.IsMatch(mustNotMatch))
+            {
+                greedy.Add($"{name} matched a near-miss: {mustNotMatch}");
+            }
+        }
+
+        await Assert.That(dead.Count).IsEqualTo(0).Because(
+            "Each claim shape must still match the wording it exists to grade, in text the "
+            + "repository does not contain. This is what keeps the floors a ratchet on FILES rather "
+            + "than the only evidence the matcher works. Dead shapes:\n" + string.Join("\n", dead));
+
+        await Assert.That(greedy.Count).IsEqualTo(0).Because(
+            "The other half: a pattern that also matches 'the Domain layer is the innermost ring' "
+            + "would satisfy the check above while flagging ordinary prose, and a rule whose output "
+            + "is everything is not a rule. Over-matching:\n" + string.Join("\n", greedy));
+    }
+
     // ---------------------------------------------------------------------
     // Verdicts and rendering.
     // ---------------------------------------------------------------------
@@ -443,7 +525,7 @@ public sealed class LayerClaimMatchesMatrixRules
     ///     claim about one of them contradicts nothing.
     /// </summary>
     private static string? MatrixLayerOf(string project)
-        => FullLayerMatrixTests.Matrix.TryGetValue(project, out FullLayerMatrixTests.Row row)
+        => FullLayerMatrixTests.Matrix.TryGetValue(project, out FullLayerMatrixTests.Row? row)
             ? Canonical(row.Layer.ToString())
             : null;
 
@@ -574,10 +656,15 @@ public sealed class LayerClaimMatchesMatrixRules
 
     private static IReadOnlyList<LayerClaim> ReadmeClaims()
     {
+        if (RepoPaths.RepoRoot is not { } root)
+        {
+            return [];
+        }
+
         var claims = new List<LayerClaim>();
         foreach ((string relative, string project) in ProjectReadmes())
         {
-            string? text = SourceScan.TryReadAllText(relative);
+            string? text = ReadText(root, relative);
             if (text is null)
             {
                 continue;
@@ -701,7 +788,7 @@ public sealed class LayerClaimMatchesMatrixRules
         var claims = new List<LayerClaim>();
         foreach (string relative in files.Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal))
         {
-            string? text = SourceScan.TryReadAllText(relative);
+            string? text = ReadText(root, relative);
             if (text is null)
             {
                 continue;
@@ -712,6 +799,22 @@ public sealed class LayerClaimMatchesMatrixRules
 
         return claims;
     }
+
+    /// <summary>
+    ///     Reads a repo-RELATIVE path. The composition with the root is not
+    ///     optional and getting it wrong is what the first CI run of this file
+    ///     measured: <c>SourceScan.TryReadAllText</c> takes whatever
+    ///     <see cref="File" />.ReadAllText takes, so handing it a relative path
+    ///     resolves against the test host's working directory, throws
+    ///     <see cref="FileNotFoundException" />, is swallowed as an
+    ///     <see cref="IOException" /> and comes back <see langword="null" />.
+    ///     Every claim then read as "no claims found" and the rule reported a
+    ///     clean tree. Only the floors noticed, which is precisely what they are
+    ///     for — the two comparison rules passed, on zero subjects, in the same
+    ///     run. See the header on floors.
+    /// </summary>
+    private static string? ReadText(string root, string relative)
+        => SourceScan.TryReadAllText(Path.Combine(root, relative));
 
     private static IEnumerable<string> WalkCs(string root, string relativeTree)
     {
