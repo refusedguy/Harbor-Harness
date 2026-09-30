@@ -100,9 +100,13 @@
 //   4. NO RE-DERIVATION (source): the producer side no longer tests a provider
 //      half against a model half. #729's matcher, applied to the files it did
 //      not cover.
-//   5. SOLE IMPLEMENTER (reflection): one production implementer. A second
-//      producer is a second hand-written answer to "is this pair whole?", which
-//      is the exact failure #729's doc warns a second producer would introduce.
+//   5. SOLE IMPLEMENTER (source): one production implementer. A second producer
+//      is a second hand-written answer to "is this pair whole?", which is the
+//      exact failure #729's doc warns a second producer would introduce. By
+//      SOURCE and not by reflection, because the one implementer lives in
+//      apps/Harbor.App.Avalonia — a composition root this test project does not
+//      reference, so a reflection sweep counts zero and the rule could only ever
+//      be satisfied by an unwired seam. The first CI run of this file proved it.
 //
 // NON-VACUITY
 // -----------
@@ -316,10 +320,8 @@ public sealed class CommonConfigContractRules
     [Test]
     public async Task NarrowSeam_HasExactlyOneProductionImplementer()
     {
-        Type? port = FindType(NarrowSeamName);
-        await Assert.That(port).IsNotNull().Because(NarrowSeamName + " must exist; see rule 1.");
-
-        IReadOnlyList<string> implementers = FindImplementers(port!);
+        string root = RequireRepoRoot();
+        IReadOnlyList<string> implementers = FindSourceImplementers(root);
 
         await Assert.That(implementers.Count).IsEqualTo(1).Because(
             "exactly one production type implements the narrow port — CommonConfigReaderAdapter, "
@@ -330,6 +332,92 @@ public sealed class CommonConfigContractRules
             + "port is injectable and reads nobody's config. Found: "
             + (implementers.Count == 0 ? "(none — the seam is unwired)" : string.Join(", ", implementers))
             + ".");
+    }
+
+    /// <summary>
+    ///     Implementers found by SOURCE, over <c>src/</c> and <c>apps/</c>.
+    /// </summary>
+    /// <remarks>
+    ///     This started as a reflection sweep over loaded production assemblies,
+    ///     which is the shape <c>ThemeStoreSeamRules</c> uses — and the first CI run
+    ///     showed why it cannot work here: the sole implementer,
+    ///     <c>CommonConfigReaderAdapter</c>, lives in <c>apps/Harbor.App.Avalonia</c>,
+    ///     and apps are composition roots that this test project does not reference.
+    ///     The count came back zero and the rule could never be satisfied by correct
+    ///     code — the failure mode a guard must not have. <c>ServiceLocatorBoundaryRules</c>
+    ///     records the same boundary in its own file header.
+    ///     <para>
+    ///         The scan is over the two product trees, and <c>tests/</c> is not one of
+    ///         them, so fakes are excluded by the walk rather than by a name filter.
+    ///         <c>src/</c> and <c>apps/</c> contain the port declaration itself, which
+    ///         is skipped: an interface does not implement itself.
+    ///     </para>
+    /// </remarks>
+    private static IReadOnlyList<string> FindSourceImplementers(string root)
+    {
+        var found = new List<string>();
+        foreach (string tree in new[] { "src", "apps" })
+        {
+            string dir = Path.Combine(root, tree);
+            if (!Directory.Exists(dir))
+            {
+                continue;
+            }
+
+            foreach (string path in Directory.GetFiles(dir, "*.cs", SearchOption.AllDirectories))
+            {
+                if (path.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}", StringComparison.Ordinal)
+                    || path.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}", StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                string relative = Path.GetRelativePath(root, path).Replace('\\', '/');
+                if (IsDeclaration(relative))
+                {
+                    continue;
+                }
+
+                if (MentionsPort(path))
+                {
+                    found.Add(relative);
+                }
+            }
+        }
+
+        found.Sort(StringComparer.Ordinal);
+        return found;
+    }
+
+    private static bool IsDeclaration(string relativePath)
+        => string.Equals(relativePath, $"src/Harbor.Ui.Framework.Abstractions/Configuration/{NarrowSeamName}.cs", StringComparison.Ordinal);
+
+    private static bool MentionsPort(string path)
+    {
+        string[] lines;
+        try
+        {
+            lines = File.ReadAllLines(path);
+        }
+        catch (IOException)
+        {
+            return false;
+        }
+
+        foreach (string line in lines)
+        {
+            if (IsCommentLine(line))
+            {
+                continue;
+            }
+
+            if (line.Contains(NarrowSeamName, StringComparison.Ordinal))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     // ── Non-vacuity ──────────────────────────────────────────────────────────
@@ -359,6 +447,26 @@ public sealed class CommonConfigContractRules
         await Assert.That(FindWriteMembersIn(["ResetAsync", "SettingAsync", "AddressOfAsync"])).IsEmpty().Because(
             "the verb is matched at the START of the name, so a read that merely contains a verb as "
             + "a substring (Reset, Setting, AddressOf) is not a write.");
+    }
+
+    /// <summary>
+    ///     The name lookups this file depends on must be able to FIND something.
+    ///     Rules 1–3 resolve the port by name across loaded assemblies, which is
+    ///     what lets this file be committed red before the port is renamed — but it
+    ///     also means that if the port ever moved out of a referenced assembly, every
+    ///     one of them would report "not found" and read as a verdict.
+    /// </summary>
+    [Test]
+    public async Task PortLookup_CanSeeThePortAssembly()
+    {
+        await Assert.That(PortAssemblyIsVisible()).IsTrue().Because(
+            NarrowSeamName + " must be resolvable by name from this test project's loaded "
+            + "assemblies — it is declared in Harbor.Ui.Framework.Abstractions, which this "
+            + "project references. If this fails, the by-name rules in this file are reporting "
+            + "absence rather than a verdict, and the file's non-vacuity claims are void. Note the "
+            + "asymmetry that forces the split: the port is visible, its IMPLEMENTER is in "
+            + "apps/Harbor.App.Avalonia, which is a composition root this project does not "
+            + "reference — so rule 5 counts implementers by source.");
     }
 
     [Test]
@@ -456,23 +564,17 @@ public sealed class CommonConfigContractRules
         return null;
     }
 
-    /// <summary>Concrete production types implementing <paramref name="port" />, sorted for stable messages.</summary>
-    private static IReadOnlyList<string> FindImplementers(Type port)
-    {
-        var found = new List<string>();
-        foreach (Type type in LoadableTypes(ProductionAssemblies()))
-        {
-            if (type == port || type.IsInterface || type.IsAbstract || !type.IsClass || !port.IsAssignableFrom(type))
-            {
-                continue;
-            }
-
-            found.Add(type.FullName ?? type.Name);
-        }
-
-        found.Sort(StringComparer.Ordinal);
-        return found;
-    }
+    /// <summary>
+    ///     Whether the loaded-assembly sweep can see the port at all — a non-vacuity
+    ///     backstop for the rules that resolve it BY NAME, and the reason rule 5 is
+    ///     a source scan instead. The port is declared in
+    ///     <c>Harbor.Ui.Framework.Abstractions</c>, which this project references, so
+    ///     the name lookups work; the port's IMPLEMENTER is in an app, which it does
+    ///     not. Asserted rather than assumed, because if the port ever moves into an
+    ///     app the name lookups go quiet and every rule in this file reports
+    ///     "not found" rather than a real verdict.
+    /// </summary>
+    private static bool PortAssemblyIsVisible() => FindType(NarrowSeamName) is not null;
 
     private static IReadOnlyList<string> FindWriteMembers(Type contract)
         => FindWriteMembersIn([.. contract.GetMethods().Select(m => m.Name).Distinct(StringComparer.Ordinal)]);

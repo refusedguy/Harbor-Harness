@@ -269,7 +269,17 @@ public class FullLayerMatrixTests
         // declared-but-unbound. An earlier attempt to keep the entry, on the
         // theory that the SDK-generated AssemblyInfo forces the reference, was
         // wrong — the compiled reference list is the authority.
-        ["Harbor.Ui.Framework.Abstractions"] = new(Layer.Domain, []),
+        // #453: the empty set was the honest answer while this project bound no
+        // type from anywhere — it was a leaf over BCL and the logging abstractions
+        // only. The narrow shared-config port now returns Maybe<ModelRef>, and
+        // ModelRef is a type in Harbor.Abstractions.Contracts, so the reference
+        // became a REAL IL edge instead of a transitive one. Domain -> Domain,
+        // the same direction as Harbor.Abstractions -> Harbor.Abstractions.Contracts
+        // below, and the carrier is the whole point of the fix: #729 established
+        // ModelRef as the only type in the repo whose two halves are non-null by
+        // construction, and a port that hands out a pair of nullable strings
+        // cannot be moved onto it without losing the property.
+        ["Harbor.Ui.Framework.Abstractions"] = new(Layer.Domain, ["Harbor.Abstractions.Contracts"]),
 
         // ---- Presentation -------------------------------------------------
         // #450: "Harbor.Ui.Framework" was permitted here but never used. The
