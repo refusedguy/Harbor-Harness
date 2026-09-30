@@ -30,14 +30,28 @@
 #   The per-project result goes to the job summary, which is the same
 #   report-only contract `coverage` uses (issue #99): a table, not a threshold.
 #
-# ONE OPERATIONAL CAVEAT, found by trying it
+# ONE OPERATIONAL CAVEAT — found by trying it, then found AGAIN after merging
 #
-#   GitHub only registers a workflow file that exists on the DEFAULT branch.
-#   While this file is branch-only, `gh workflow run contrib-dryrun.yml --ref
-#   <branch>` returns HTTP 404 — even though the file is present on the branch
-#   and the YAML parses. So this cannot be dispatched until it merges. Same for
-#   any new `workflow_dispatch` workflow; worth knowing before anyone plans to
-#   measure with it pre-merge.
+#   GitHub only registers a workflow file that exists on the DEFAULT branch, and
+#   this repository's default branch is `master`. This file merged into `dev`,
+#   which is NOT the default branch, so it is present and the YAML parses and the
+#   workflow is still not dispatchable:
+#
+#     $ gh workflow list --all | grep -i contrib      # no match
+#     $ gh workflow run contrib-dryrun.yml --ref dev
+#     HTTP 404: workflow contrib-dryrun.yml not found on the default branch
+#
+#   The earlier version of this comment said the file "cannot be dispatched
+#   until it merges". That was wrong in a way that costs a reader a wasted
+#   dispatch: the merge happened, and the 404 did not go away. Merging into
+#   `dev` does not register anything. The condition is presence on `master`.
+#
+#   The fix is the one `goldens.yml` already took — see `c0c6ab52`, "add
+#   goldens regen workflow to master (dispatch requires default-branch copy)":
+#   a copy of this file on `master`. It is a one-file change, adds no trigger
+#   and no gate, and puts no `contrib/` content anywhere near a merge gate.
+#   Until an owner does that, the per-project table below DOES NOT EXIST and
+#   `docs/CONTRIB_BOUNDARY_MEASUREMENT.md` has a static floor, not a count.
 #
 # HOW TO READ THE TABLE
 #
