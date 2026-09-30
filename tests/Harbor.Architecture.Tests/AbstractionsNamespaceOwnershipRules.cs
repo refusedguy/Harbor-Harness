@@ -120,6 +120,12 @@
 // consuming assemblies, not zero, so the honest reading of "which assembly
 // declares this namespace?" is "all of them": the text is identical in every
 // copy, so the verdict is too, and a rule that picks one is picking arbitrarily.
+// `FindAssembliesCompiling` therefore falls back from "the nearest ancestor with
+// a csproj" to "every project whose csproj `<Compile Include>`-links this file",
+// reading the same `RepoPaths.ReadCompileIncludes` that #456's fix reads — the
+// compiler's own input, not a second list that can drift from the build. The
+// fallback is additive: a file that HAS an owning project is still attributed to
+// that project alone, so no existing verdict moves.
 //
 // KNOWN LIMITATIONS — stated, not hidden
 // -------------------------------------
@@ -693,23 +699,53 @@ public class AbstractionsNamespaceOwnershipRules
                 string declared = match.Groups["ns"].Value;
                 int line = i + 1;
 
-                if (FindOwningAssembly(file) is not { } assembly)
+                IReadOnlyList<string> assemblies = FindAssembliesCompiling(file);
+                if (assemblies.Count is 0)
                 {
                     unattributed.Add(
                         $"{relative}:{line} — declares `namespace {declared};` and no assembly owns it. "
-                        + "The nearest ancestor directory holding a `*.csproj` does not exist, so the "
-                        + "ownership walk ends in nothing and neither R1 nor R2 reads this declaration: "
-                        + "the gate reports green having never looked at it. A `<Compile Include>` link "
-                        + "from a consumer gives the file an owner; if nothing links it, no compiler "
-                        + "reads it either. See #763.");
+                        + "The nearest ancestor directory holding a `*.csproj` does not exist, and no "
+                        + "project's csproj `<Compile Include>`-links the file either, so the ownership "
+                        + "walk ends in nothing and neither R1 nor R2 reads this declaration: the gate "
+                        + "reports green having never looked at it. Link the file from its consumers, or "
+                        + "give it a project. See #763.");
                     continue;
                 }
 
-                declarations.Add(new Declaration(relative, assembly, line, declared));
+                // One row per compiling assembly, deliberately. The declaration is the
+                // same string in every copy, so the verdict is too; picking a single
+                // owner would make the answer depend on which copy the walk reached.
+                foreach (string assembly in assemblies)
+                {
+                    declarations.Add(new Declaration(relative, assembly, line, declared));
+                }
             }
         }
 
         return new ScanResult([.. declarations], [.. unattributed]);
+    }
+
+    /// <summary>
+    ///     Every assembly that compiles <paramref name="file" />: the one that owns the
+    ///     directory it sits in, or — when it sits in a csproj-less folder — every
+    ///     assembly that pulls it in through a <c>&lt;Compile Include&gt;</c> link item.
+    /// </summary>
+    /// <remarks>
+    ///     The second arm is the #763 fix, and it is the honest reading rather than a
+    ///     convenient one: the file is compiled into all of those assemblies, so its
+    ///     namespace is declared by all of them, and no single one of them is more
+    ///     entitled to answer for it than the rest.
+    /// </remarks>
+    private static IReadOnlyList<string> FindAssembliesCompiling(string file)
+    {
+        if (FindOwningAssembly(file) is { } owner)
+        {
+            return [owner];
+        }
+
+        return LinkedConsumers.TryGetValue(Path.GetFullPath(file), out IReadOnlyList<string>? consumers)
+            ? consumers
+            : [];
     }
 
     /// <summary>
