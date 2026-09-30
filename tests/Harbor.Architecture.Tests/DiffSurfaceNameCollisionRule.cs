@@ -560,9 +560,14 @@ internal static partial class DiffSurfaceNameCollisionProbe
     {
         string marker = $"{Path.DirectorySeparatorChar}src{Path.DirectorySeparatorChar}";
         int at = absolutePath.IndexOf(marker, StringComparison.Ordinal);
+
+        // The slice starts AT the separator, so it must skip past it: a leading '/'
+        // splits into an empty first segment, and ProjectOf would then read the ROOT
+        // ("src") as the project — which matches no file, and makes the whole derived
+        // layer empty for a reason that has nothing to do with the tree.
         return at < 0
             ? absolutePath.Replace(Path.DirectorySeparatorChar, '/')
-            : absolutePath[at..].Replace(Path.DirectorySeparatorChar, '/');
+            : absolutePath[(at + 1)..].Replace(Path.DirectorySeparatorChar, '/');
     }
 
     /// <summary>
@@ -1108,7 +1113,14 @@ public sealed class DiffSurfaceNameCollisionRule
             ]),
         };
 
-        DiffSurfaceReport report = DiffSurfaceNameCollisionProbe.ScanFiles(pair, engineFilePresent: true);
+        // The ABSOLUTE engine path, exactly as Scan passes it, so the control exercises the
+        // same anchor resolution production does. A control that omits it falls back to the
+        // constant and never touches MakeRelativeFrom — which is how a real bug in the path
+        // handling stayed green in this test while the whole derived layer came back empty.
+        DiffSurfaceReport report = DiffSurfaceNameCollisionProbe.ScanFiles(
+            pair,
+            engineFilePresent: true,
+            engineFilePath: "/checkout/src/Harbor.Ui.Framework.Rendering/Widgets/SyntheticDiff.cs");
 
         await Assert.That(report.VocabularyNames).IsEquivalentTo(["SyntheticRowKind", "SyntheticRow"])
             .Because(
@@ -1218,7 +1230,8 @@ public sealed class DiffSurfaceNameCollisionRule
         {
             DiffSurfaceReport decoyReport = DiffSurfaceNameCollisionProbe.ScanFiles(
                 [pair[0], decoy],
-                engineFilePresent: true);
+                engineFilePresent: true,
+                engineFilePath: "/checkout/src/Harbor.Ui.Framework.Rendering/Widgets/SyntheticDiff.cs");
 
             await Assert.That(decoyReport.ForeignVocabulary).IsEmpty()
                 .Because(
