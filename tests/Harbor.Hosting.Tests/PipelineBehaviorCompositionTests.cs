@@ -24,12 +24,15 @@
 // `IServiceCollection` that the REAL `AddHarbor` returns — the same call the
 // CLI, the desktop apps and the embedders make.
 //
-// The registrations are read, not resolved. `AddHarbor` is executed either way,
-// but resolving `IPipelineBehavior` would invoke each factory — which means
-// needing `ILoggerFactory` in a container that has not been given a logging
-// provider — and would prove something weaker: that the factories happen to
-// build. The invariant #480 is about is whether the axis is OPEN, and a
-// ServiceDescriptor answers exactly that.
+// The behaviours are RESOLVED from the container that the REAL `AddHarbor`
+// produces — the same call the CLI, the desktop apps and the embedders make.
+// Resolving rather than reading descriptors is deliberate and is explained at
+// the method: a factory-registered descriptor carries no ImplementationType, so
+// a descriptor-only reader sees an empty registration set and calls every
+// behaviour unreachable. That is this file's own failure mode, reached from the
+// other side, and `NonVacuity_TheRuleReportsABehaviorNobodyRegistered` is the
+// test that pins it shut: it has to show the probe reads a NON-EMPTY set before
+// it is allowed to assert that the set difference can report a miss.
 //
 // WHAT MAKES THIS RED BY CONSTRUCTION
 // ------------------------------------
@@ -48,6 +51,7 @@ using CSharpFunctionalExtensions;
 using Harbor.Application.Agents;
 using Harbor.Application.Agents.Pipeline;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Harbor.Hosting.Tests;
 
@@ -63,25 +67,43 @@ public class PipelineBehaviorCompositionTests
         Path.Combine(Path.GetTempPath(), "harbor-pipeline-behavior-tests", Guid.NewGuid().ToString("N"));
 
     /// <summary>
-    ///     Runs the real <c>AddHarbor</c> and returns its registrations for
-    ///     <see cref="IPipelineBehavior" /> — the set a composition root offers.
+    ///     Runs the real <c>AddHarbor</c> and returns the types of the behaviours
+    ///     the composed container actually hands out — the set a composition root
+    ///     offers.
     /// </summary>
-    private static HashSet<Type> RegisteredByCompositionRoot()
+    /// <remarks>
+    ///     These are RESOLVED, not read off the descriptors, and that is load
+    ///     bearing. <c>CoreModule</c> registers each behaviour through a factory
+    ///     lambda (it has to, to hand the behaviour its own typed logger), and a
+    ///     factory-registered <see cref="ServiceDescriptor" /> has an
+    ///     <c>ImplementationType</c> of <c>null</c> — a descriptor-only reader
+    ///     finds an EMPTY registration set and reports every behaviour
+    ///     unregistered. That is the exact failure this file exists to prevent,
+    ///     reached from the other direction: a probe that reads nothing.
+    ///
+    ///     Resolving also proves the registrations BUILD, not merely that a
+    ///     descriptor exists — a behaviour whose logger cannot be supplied fails
+    ///     here rather than at the first agent run.
+    ///
+    ///     <c>ILogger&lt;&gt;</c> is supplied as <see cref="NullLogger{T}" />
+    ///     because <c>AddHarbor</c> does not add logging itself: the apps compose
+    ///     on a host that already has it, and a bare <c>ServiceCollection</c> does
+    ///     not. Null keeps the probe hermetic and comes from the Abstractions
+    ///     package this project already references directly.
+    /// </remarks>
+    private static IReadOnlyList<Type> RegisteredByCompositionRoot()
     {
         var services = new ServiceCollection();
+        services.AddSingleton(typeof(ILogger<>), typeof(NullLogger<>));
         services.AddHarbor(new HarborComposeOptions
         {
             HarborDir = TempHarborDir(),
             DefaultStorageBackend = "memory"
         });
 
-        return
-        [
-            .. services
-                .Where(d => d.ServiceType == typeof(IPipelineBehavior))
-                .Select(d => d.ImplementationType ?? d.ImplementationInstance?.GetType())
-                .OfType<Type>()
-        ];
+        using ServiceProvider sp = services.BuildServiceProvider();
+
+        return [.. sp.GetServices<IPipelineBehavior>().Select(behavior => behavior.GetType())];
     }
 
     /// <summary>
@@ -114,7 +136,7 @@ public class PipelineBehaviorCompositionTests
     [Test]
     public async Task EveryPipelineBehavior_IsRegistered()
     {
-        HashSet<Type> registered = RegisteredByCompositionRoot();
+        IReadOnlyList<Type> registered = RegisteredByCompositionRoot();
         List<Type> declared = [.. DeclaredBehaviors()];
 
         var unreachable = declared
@@ -197,16 +219,41 @@ public class PipelineBehaviorCompositionTests
     }
 
     /// <summary>
-    ///     THE POSITIVE CONTROL. A behaviour declared right here, in this file,
-    ///     is by construction not registered by <c>AddHarbor</c> — so the very
-    ///     comparison the rule uses must report it. If it does not, the rule is
-    ///     not running: the set difference it performs cannot produce a failure,
-    ///     and the green above is meaningless.
+    ///     THE POSITIVE CONTROL, and the non-vacuity for the REGISTERED side.
+    ///     Given a container that really does hand out behaviours, the very
+    ///     comparison the rule uses must still report a type that is absent from
+    ///     it.
     /// </summary>
+    /// <remarks>
+    ///     The first half is what makes the second half mean anything. This file
+    ///     shipped one red run whose probe read an EMPTY registration set —
+    ///     factory descriptors have a null <c>ImplementationType</c> — and both
+    ///     rule tests failed for a reason that had nothing to do with the product
+    ///     while the registered set was silently zero. A positive control that
+    ///     passes over an empty set proves nothing: <c>!Contains</c> is trivially
+    ///     true of nothing. So the control first has to show the probe reads a
+    ///     real set, and only then that the set difference can report a miss.
+    /// </remarks>
     [Test]
     public async Task NonVacuity_TheRuleReportsABehaviorNobodyRegistered()
     {
-        HashSet<Type> registered = RegisteredByCompositionRoot();
+        IReadOnlyList<Type> registered = RegisteredByCompositionRoot();
+        string handedOut = string.Join(", ", registered.Select(t => t.Name));
+
+        await Assert.That(registered.Count).IsGreaterThan(0)
+            .Because(
+                "the composition root handed out NO IPipelineBehavior at all. EveryPipelineBehavior_IsRegistered "
+                + "then reports every declared behaviour unreachable no matter what the product does — the exact "
+                + "vacuous shape of this file, reached by a reader that resolved nothing");
+
+        foreach (string expected in new[] { "LoggingBehavior", "PermissionCheckBehavior" })
+        {
+            await Assert.That(handedOut).Contains(expected)
+                .Because(
+                    expected + " is registered by CoreModule and must come back out of the composed container. If "
+                    + "it does not, the probe is reading a set that does not describe the product. Handed out: "
+                    + handedOut);
+        }
 
         bool reported = !registered.Contains(typeof(UnregisteredBehavior));
 
