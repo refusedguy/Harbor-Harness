@@ -203,3 +203,44 @@ Amendment (#453): the two contracts are read/write versus read-only over one fil
 - No circular reference; layering enforced by Harbor.Architecture.Tests.
 - Ui.Framework.Sessions takes the narrow reader as a DECLARED optional constructor parameter (since #470) - hosts without config (tests, minimal) behave as before.
 - Full config surface and all writes stay on the Desktop.Abstractions type; the narrow reader must not grow beyond session-bootstrap needs, and `CommonConfigContractRules` fails it if a write member or a second implementer appears.
+
+# ADR-010: one token-cell notation — measurement normative, choice open
+
+## Status
+**Open — the owner decides.** The measurement in §2-§4 of the long-form document
+is normative and gate-checked; the choice in §6 is not taken and nothing is
+implemented. No product code changed in the commit that recorded this.
+
+## Context
+Issue #788 (follow-up from #682) counted a session's cumulative token spend
+rendered five ways in two notations, and declined to unify them because the
+choice is a rendering decision with golden-frame blast radius. Re-measured on
+`dev` = `2c55def5`, the inventory is six writers and three conventions, not five
+and two: a third convention writes the cell raw with no suffix on the plain/ANSI
+status line, and `M` is uppercase everywhere, so only `K` vs `k` actually
+diverges. The golden frames that would move are text, cover only the status
+widget, and number two files plus one hash manifest — zero binaries.
+
+## Decision
+Deferred to the owner, with the price of each option stated:
+**A** `1.2K↑ 5.7K↓` (align to the status bar) costs 2 text goldens + 1 hash
+manifest + a rewrite of the hand-rolled span token path, and widens cells by two
+columns at round numbers. **B** `1.2k↑ 5.7k↓` (align to the status widget and
+sidebar) costs zero goldens and ~12 test string literals, and never widens a
+cell. **C** raw, no suffix, exists in the tree and costs the most for no
+identified reader. The measurement also records that `goldens.yml` already
+regenerates baselines on a GitHub runner and commits them back to the PR branch,
+so "cannot be verified locally" was not the blocker it was taken to be.
+
+## Consequences
+- The measurement is re-checked against the tree by `tools/check-doc-cites.py`,
+  so the inventory cannot rot into a stale claim.
+- `MoneyCellSingleHomeRules` stays as it is: it freezes the writer COUNT and does
+  not require the undecided choice. Point 4 of #788 (a rule on scale + suffix in
+  one expression) must NOT be written until this ADR is decided — it would be red
+  on all writers at once, which is the standing-red build its own header warns
+  against.
+- A token-side ratchet, if one is ever added, must declare the two model-facing
+  raw token reports as homes from the start or it is red on day one.
+- Full text, citations and the per-option file lists:
+  [ADR-010](ADR-010-token-notation-one-cell.md).
