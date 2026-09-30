@@ -117,7 +117,23 @@ public class MaybeAbsenceTests
     /// <see cref="Exemptions_AreStillUsed"/> deletes the entry once it stops
     /// matching anything.
     /// </summary>
-    private static readonly Dictionary<string, string> NullableTryReturnExemptions = new(StringComparer.Ordinal);
+    private static readonly Dictionary<string, string> NullableTryReturnExemptions = new(StringComparer.Ordinal)
+    {
+        ["src/Harbor.Tui.CellForge.Engine/Rendering/BufferSwapChain.cs"] =
+            "BLOCKED ON A DEPENDENCY DECISION #435/#436 OWN, not a Maybe decision this wave can "
+            + "make (#591). `TryTake` is a pure absence — one state, 'nothing pending' — so "
+            + "Maybe<BufferPair> is the correct target and there is no Result axis here at all. "
+            + "But the engine reaches `Maybe<T>` only TRANSITIVELY: its csproj declares zero "
+            + "PackageReference entries, and CSharpFunctionalExtensions arrives through "
+            + "Harbor.Abstractions and Harbor.Ui.Framework.State — the exact two references #435 "
+            + "deletes. Converting today picks a dependency owner without answering 'direct "
+            + "PackageReference on CSE, or a vendored Maybe<T>?' and would break the build the day "
+            + "#435 lands. Converted the moment that decision lands; the recipe is in #591. "
+            + "Conversion note for whoever does it: CSE's Maybe<T> is a STRUCT, so `?.` and "
+            + "`is not { }` do not bind to its value. The single caller, "
+            + "src/Harbor.Tui.CellForge/Chat/Streaming/ScreenSession.cs:142, becomes "
+            + "`offer.HasValue ? offer.Value : <re-check next frame>`."
+    };
 
     /// <summary>
     ///     Files allowed to keep a nullable out-parameter, each with the reason
