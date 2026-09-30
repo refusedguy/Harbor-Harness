@@ -269,7 +269,9 @@ public class ProviderPayloadWireTests
     {
         using var arguments = JsonDocument.Parse("""{"path":"a.txt"}""");
 
-        var request = Request(messages:
+        // system: "" so messages[0] IS the assistant turn — a non-empty system
+        // prompt is prepended and would be messages[0] instead.
+        var request = Request(system: "", messages:
         [
             new LlmAssistantMessage([new LlmToolCallBlock("call_1", "read", arguments.RootElement)]),
             new LlmToolResultMessage("call_1", "read", "body", IsError: false)
@@ -368,7 +370,7 @@ public class ProviderPayloadWireTests
         using var arguments = JsonDocument.Parse("""{"path":"a.txt"}""");
 
         string body = Body(OpenAiRequestBuilder.BuildResponsesRequest(
-            Request(messages:
+            Request(system: "", messages:
                 [
                     new LlmAssistantMessage(
                         [new LlmToolCallBlock("c1", "read", arguments.RootElement)])
@@ -414,7 +416,8 @@ public class ProviderPayloadWireTests
     {
         using var arguments = JsonDocument.Parse("""{"path":"a.txt"}""");
 
-        var request = Request(messages:
+        // system: "" so messages[0] IS the assistant turn.
+        var request = Request(system: "", messages:
         [
             new LlmAssistantMessage([new LlmToolCallBlock("call_1", "read", arguments.RootElement)]),
             new LlmToolResultMessage("call_1", "read", "body", IsError: false)
