@@ -53,6 +53,47 @@ public class DiffLineNumberWrapTests
     }
 
     /// <summary>
+    /// The counter has to keep <em>counting</em>, and this is the only case
+    /// here that says so.
+    /// <para>
+    /// A saturating helper that returns the next number but never writes it
+    /// back leaves the counter standing on the header's value: every row
+    /// under <c>@@ -10,4 @@</c> is numbered 11, and the block paints a diff
+    /// whose line numbers never advance. At the bound that freeze is
+    /// <em>indistinguishable</em> from correct saturation —
+    /// <see cref="int.MaxValue"/> has nowhere to go — so every at-the-bound
+    /// case above passes a counter that stopped counting. Only a header
+    /// <em>below</em> the bound can tell the two apart.
+    /// </para>
+    /// </summary>
+    [Test]
+    public async Task Parse_HeaderBelowTheBound_EveryRowAdvancesTheCounter()
+    {
+        var lines = UnifiedDiffParser.Parse("@@ -10,4 +20,4 @@\n ctx\n-removed\n+added\n ctx\n");
+
+        var ctx = lines.Where(l => l.Kind == DiffLineKind.Context).ToList();
+        await Assert.That(ctx.Count).IsEqualTo(2)
+            .Because("both context rows under the header must be parsed");
+
+        // oldNo: 10 ->(ctx) 11 ->(delete) 12 ->(ctx) 13
+        // newNo: 20 ->(ctx) 21 ->(add)   22 ->(ctx) 23
+        await Assert.That(ctx[0].OldNo).IsEqualTo(11)
+            .Because("the hunk starts at 10 and its first line is consumed by the first context row");
+        await Assert.That(ctx[0].NewNo).IsEqualTo(21)
+            .Because("the new side starts at 20 on its own counter");
+
+        await Assert.That(lines.Single(l => l.Kind == DiffLineKind.Delete).OldNo).IsEqualTo(12)
+            .Because("the delete is the old side's second row");
+        await Assert.That(lines.Single(l => l.Kind == DiffLineKind.Add).NewNo).IsEqualTo(22)
+            .Because("the add is the new side's second row");
+
+        await Assert.That(ctx[1].OldNo).IsEqualTo(13)
+            .Because("a delete sits between the two context rows, so the old counter advanced twice");
+        await Assert.That(ctx[1].NewNo).IsEqualTo(23)
+            .Because("an add sits between the two context rows, so the new counter advanced twice");
+    }
+
+    /// <summary>
     /// The whole run, not just the first row past the bound. Zero on one
     /// side is meaningful — it is how "n/a for this kind" is spelled, and it
     /// is what <c>DiffBlock.Gutter</c> renders blank — so the assertion is
