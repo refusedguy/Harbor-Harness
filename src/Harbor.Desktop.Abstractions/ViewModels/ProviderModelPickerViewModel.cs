@@ -193,7 +193,7 @@ public partial class ProviderModelPickerViewModel : ObservableObject, IAsyncData
             {
                 group.Models.Add(new PickerModelViewModel(
                     group.Id, m.Id, m.DisplayName,
-                    FormatPricing(m.Pricing.InputPerMillion, m.Pricing.OutputPerMillion),
+                    ModelRateLabel.For(m.Pricing),
                     FormatFeatures(m.SupportsToolUse, m.SupportsVision, m.SupportsReasoning)));
             }
             group.HasModels = group.Models.Count > 0;
@@ -374,13 +374,10 @@ public partial class ProviderModelPickerViewModel : ObservableObject, IAsyncData
         }
     }
 
-    private static string FormatPricing(decimal inputPerMillion, decimal outputPerMillion)
-    {
-        if (inputPerMillion == 0m && outputPerMillion == 0m)
-            return "pricing unknown";
-        return $"${inputPerMillion:F2} in / ${outputPerMillion:F2} out per 1M";
-    }
-
+    // #686: the per-1M rate label used to be built here AND in ModelRowViewModel,
+    // and the two had already drifted on the unknown-price case. It lives in
+    // ModelRateLabel now, which reads Pricing.IsUnknown instead of re-deriving
+    // it from the input and output numbers (which also missed the cache rates).
     private static string FormatFeatures(bool tools, bool vision, bool reasoning)
     {
         var parts = new List<string>(3);

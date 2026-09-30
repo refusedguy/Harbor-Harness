@@ -164,7 +164,7 @@ public sealed partial class ProviderBrowserViewModel : ObservableObject, IAsyncD
             .Select(m => new ModelRowViewModel(
                 m.Id, m.DisplayName, m.ContextWindow, m.MaxOutputTokens,
                 m.SupportsReasoning, m.SupportsVision, m.SupportsToolUse,
-                m.Pricing.InputPerMillion, m.Pricing.OutputPerMillion))
+                ModelRateLabel.For(m.Pricing)))
             .ToImmutableArray();
 
         return Result.Success<IReadOnlyList<ModelRowViewModel>>(models);
@@ -183,8 +183,7 @@ public sealed record ModelRowViewModel(
     bool SupportsReasoning,
     bool SupportsVision,
     bool SupportsToolUse,
-    decimal InputPerMillion,
-    decimal OutputPerMillion)
+    string PricingLabel)
 {
     public string Features =>
         string.Join(", ", new[]
@@ -194,5 +193,12 @@ public sealed record ModelRowViewModel(
             SupportsReasoning ? "reasoning" : null
         }.Where(s => s is not null)!) ?? "—";
 
-    public string PricingLabel => $"${InputPerMillion:F2} in / ${OutputPerMillion:F2} out per 1M";
+    /// <summary>
+    ///     #686: the row now carries the label instead of the two rates, because
+    ///     formatting them here is what let the browser print "$0.00 in / $0.00
+    ///     out per 1M" for a model whose catalogue entry has no rates at all. The
+    ///     wording and the unknown-price decision both live in
+    ///     <see cref="ModelRateLabel" />, shared with the picker dropdown.
+    /// </summary>
+    public string PricingLabel { get; }
 }
