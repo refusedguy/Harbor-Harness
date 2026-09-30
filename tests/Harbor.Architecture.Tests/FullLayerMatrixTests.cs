@@ -98,9 +98,12 @@ public class FullLayerMatrixTests
 
         // #456: this folder was here before the issue was filed and was not on the list at
         // all, so nothing in the enforcer read it. Harbor.Storage.Memory links NEITHER
-        // file and hand-writes the same literals nine times — stated here so the manifest
-        // records the gap instead of letting the declaration imply all three stores share
-        // these files. Unifying Memory is a separate change, tracked on its own issue.
+        // file and hand-writes the same literals ELEVEN times (nine SessionNotFound, two
+        // MessageNotFound) — stated here so the manifest records the gap instead of
+        // letting the declaration imply all three stores share these files. All eleven are
+        // byte-identical in shape to the factories, so this is duplication rather than a
+        // behaviour bug, and SessionStoreFailureTextParityRules (#764) is what holds the
+        // two in agreement. Unifying Memory is a separate change, tracked on #764.
         ["Harbor.Storage.Shared"] =
             "The Jsonl and Sqlite session stores must share one per-session lock strip and one "
             + "set of canonical failure texts, and the layer matrix forbids "

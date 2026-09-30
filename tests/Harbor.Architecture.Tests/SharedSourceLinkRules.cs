@@ -224,8 +224,9 @@ public sealed class SharedSourceLinkRules
             .Because(
                 "Four providers and two storage backends link shared source. Harbor.Storage.Memory "
                 + "does not — it has no Compile item at all, which is why it hand-writes the "
-                + "SessionStoreErrors literals nine times instead of calling them. A new or "
-                + "removed consumer must be a deliberate edit to the declaration in "
+                + "SessionStoreErrors literals eleven times instead of calling them (nine "
+                + "SessionNotFound, two MessageNotFound — #764 inventoried only the first nine). A "
+                + "new or removed consumer must be a deliberate edit to the declaration in "
                 + "FullLayerMatrixTests, not a silent csproj change.");
     }
 
