@@ -104,7 +104,7 @@ internal static class ViewModelRegistration
         services.AddSingleton<Harbor.App.Avalonia.ViewModels.ProviderModelPickerViewModel>();
         services.AddSingleton<SettingsViewModel>();
         services.AddSingleton<CodeEditorViewModel>();
-        services.AddSingleton<Harbor.Ui.Framework.ViewModels.DiffViewModel>();
+        services.AddSingleton<Harbor.Ui.Framework.ViewModels.SideBySideDiffViewModel>();
 
         services.AddSingleton<TokenUsageViewModel>();
 

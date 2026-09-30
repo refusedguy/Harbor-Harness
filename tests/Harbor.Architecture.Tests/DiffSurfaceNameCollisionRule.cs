@@ -450,7 +450,13 @@ public sealed class DiffSurfaceNameCollisionRule
     {
         List<(string Relative, string[] Lines)> colliding = new()
         {
-            // (1) The side-by-side projection, calling the engine.
+            // (1) The side-by-side projection, calling the engine — under its
+            // PRE-#570 name on purpose. The tree no longer looks like this (the
+            // fix renamed it to SideBySideDiffViewModel), so the control uses the
+            // shape #570 reported to prove the matcher still catches it after the
+            // rename. A control written against the post-fix names would pass
+            // against a matcher that had learned the new name instead of the
+            // rule, which is the one thing this test must not do.
             ("src/Harbor.Ui.Framework.ViewModels/ViewModels/DiffViewModel.cs",
             [
                 "using Harbor.Ui.Framework.Rendering.Widgets;",
