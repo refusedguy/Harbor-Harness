@@ -184,9 +184,35 @@ public sealed class SessionForkPortSeamRules
         @"\bAdd(?:Singleton|Scoped|Transient)<\s*" + PortName + @"\s*[,>]",
         RegexOptions.Compiled);
 
-    /// <summary>Normalises line endings and splits, so a CRLF checkout scans the same.</summary>
+    /// <summary>
+    ///     Blanks comments and splits, so a CRLF checkout scans the same and prose about this rule
+    ///     is not read as code.
+    /// </summary>
+    /// <remarks>
+    ///     <para>
+    ///         <see cref="SourceScan.StripComments" /> and NOT
+    ///         <c>SourceCommentStripper.StripAll</c>, which this file used first. The choice is
+    ///         load-bearing and the reason is a defect in the latter, read from its source and
+    ///         <b>not verified by a run</b>: <c>Strip</c> DELETES comment characters rather than
+    ///         blanking them, and <c>StripAll</c> then asks
+    ///         <c>OpensUnterminatedBlockComment</c> — which counts <c>/*</c> and <c>*/</c> — about
+    ///         the already-stripped line. The count is always zero, so <c>inBlockComment</c> is
+    ///         never set and a <c>/* … */</c> comment spanning several lines is NOT carried across
+    ///         lines: its interior is handed downstream as if it were code.
+    ///     </para>
+    ///     <para>
+    ///         For most rules that is harmless, and this file is not the one to fix it — the
+    ///         helper has other callers and the same "declare, do not fix" call #893 made about
+    ///         <c>SourceScan.IsBuildOutput</c>'s blind spots. Here it would be a FALSE POSITIVE
+    ///         source, because an interior line shaped <c>: ISessionForker</c> reads as a base
+    ///         list, so that case is planted as a non-vacuity control below and
+    ///         <c>SourceScan.StripComments</c> blanks the whole region while preserving newlines.
+    ///         The owner should know the <c>StripAll</c> defect exists; it is not this PR's to
+    ///         land.
+    ///     </para>
+    /// </remarks>
     private static string[] StrippedLines(string source) =>
-        SourceCommentStripper.StripAll(source.Replace("\r\n", "\n", StringComparison.Ordinal).Split('\n'));
+        SourceScan.StripComments(source.Replace("\r\n", "\n", StringComparison.Ordinal)).Split('\n');
 
     // =====================================================================
     // Rule 1 — the port exists, in Domain, and the consumer holds it REQUIREDLY.
@@ -690,6 +716,21 @@ public sealed class SessionForkPortSeamRules
             public Task ForkAsync() => Task.CompletedTask;
             """;
 
+        // A MULTI-LINE BLOCK COMMENT whose interior lines carry no leading asterisk, and whose
+        // middle line is shaped like a base list. This is the case a line-level "does this line
+        // start with //, /* or *" test reads as a real implementer — the middle line looks like
+        // `: ISessionForker` to it. It is planted because this file's comment-stripping deviates
+        // from CommonConfigContractRules' line-level test for exactly this reason, and a
+        // deviation with no control is a deviation that gets reverted.
+        const string blockCommentProse = """
+            /*
+             : ISessionForker
+            */
+            public sealed class DocumentedOnly
+            {
+            }
+            """;
+
         foreach (string required in new[]
                  {
                      "public sealed class SessionForkerAdapter : ISessionForker\n",      // the bridge
@@ -704,13 +745,13 @@ public sealed class SessionForkPortSeamRules
                 + "line, wrapped, or as a constraint is still it. Not detected: " + required);
         }
 
-        foreach (string innocent in new[] { caller, registrar, portItself, field, prose })
+        foreach (string innocent in new[] { caller, registrar, portItself, field, prose, blockCommentProse })
         {
             await Assert.That(DeclaresImplementer(StrippedLines(innocent))).IsFalse().Because(
-                "a caller, a registrar, the port's own declaration, a field and a doc comment are five "
-                + "things the rule is supposed to ALLOW — #882's guard would otherwise fail on the code "
-                + "that is correct, and a permanently-red rule is one that gets deleted. Wrongly "
-                + "detected: " + innocent);
+                "a caller, a registrar, the port's own declaration, a field, a line comment and a "
+                + "starless block comment are six things the rule is supposed to ALLOW — #882's guard "
+                + "would otherwise fail on the code that is correct, and a permanently-red rule is one "
+                + "that gets deleted. Wrongly detected: " + innocent);
         }
     }
 
@@ -804,12 +845,32 @@ public sealed class SessionForkPortSeamRules
     ///     Whether a file DECLARES a type implementing the port, as opposed to naming it.
     /// </summary>
     /// <remarks>
-    ///     The distinction is the base list, and the method is
-    ///     <c>CommonConfigContractRules</c>'s matcher rather than a fourth copy of the idea —
-    ///     two rules, one matcher, so a defect in it shows up in both rather than as a quiet
-    ///     disagreement. A line ending in a separator is joined with the next before matching,
-    ///     because base lists wrap. Comments are already blanked by
-    ///     <see cref="StrippedLines" />, so the port's own documentation does not read as code.
+    ///     The idea is <c>CommonConfigContractRules</c>'s — match the port name inside a type's
+    ///     BASE LIST, not "does the file mention the name", because that is the only distinction
+    ///     that separates an implementer from a caller. This predicate DELIBERATELY deviates from
+    ///     that file's copy in two ways, and saying so is the point:
+    ///     <list type="number">
+    ///         <item>
+    ///             Comments are blanked through <see cref="SourceScan.StripComments" /> rather than
+    ///             by a line-level "does this line start with a comment marker" test. The
+    ///             line-level test misses a multi-line block comment whose interior lines carry no
+    ///             leading asterisk — a comment shaped <c>slash-star / newline : ISessionForker /
+    ///             newline star-slash</c> reads to it as a base list, and prose is then counted as a
+    ///             second fork. That shape is planted in the non-vacuity control below, so the
+    ///             deviation cannot be reverted by accident; see <see cref="StrippedLines" /> for why
+    ///             the stripper is not <c>SourceCommentStripper</c>.
+    ///         </item>
+    ///         <item>
+    ///             A line ending in a colon continues a base list too, not only a comma or a pipe.
+    ///             <c>class X :</c> with the port on the next line is the same implementer. Joined
+    ///             only AFTER the single-line reading has failed, so a ternary or a switch label
+    ///             cannot pull an unrelated line into a match.
+    ///         </item>
+    ///     </list>
+    ///     The bound is unchanged and is the same one that file states: this is textual, not a
+    ///     parse, so a base list broken by an intervening comment, or a type aliased onto the
+    ///     port, is missed. That is why rule 1 — which reads the consumer's real signature — is
+    ///     what actually carries the invariant.
     /// </remarks>
     private static bool DeclaresImplementer(string[] cleanLines)
     {
