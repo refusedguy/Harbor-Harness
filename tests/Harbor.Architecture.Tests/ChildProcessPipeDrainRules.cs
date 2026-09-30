@@ -890,7 +890,7 @@ public sealed class ChildProcessPipeDrainRules
         foreach (string needle in needles)
         {
             int at = code.IndexOf(needle, StringComparison.Ordinal);
-            if (at >= 0 && (best < 0 or at < best))
+            if (at >= 0 && (best < 0 || at < best))
             {
                 best = at;
             }
