@@ -72,6 +72,18 @@ Run before building in CI to catch XAML style regressions:
 bash ./tools/ui-hygiene.sh
 ```
 
+## Demo GIFs
+
+The four README GIFs are recorded by the `demo-gifs` workflow, not by the UI test
+suites: they are VHS tapes driving `harbor --demo` with an in-process mock LLM, so
+they need no credentials and no display. The workflow gates the recording against
+`assets/demo/baseline.json` and commits the result back on a push to `dev`/`master`;
+it deliberately does not run on pull requests.
+
+Regenerating one by hand, telling an intended re-record from a foreign one, and
+reading the drift gate's verdicts are all documented in
+[DEMO_GIFS.md](DEMO_GIFS.md).
+
 ## Post-change inspection
 
 After any XAML / style / theme change, run:
