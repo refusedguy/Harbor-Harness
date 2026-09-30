@@ -481,7 +481,7 @@ public class ServiceLocatorBoundaryRules
     ///     which is the sanctioned per-unit-of-work idiom rather than a retained scope.
     /// </summary>
     private static bool IsStoredScope(Type candidate) =>
-        typeof(IServiceScopeFactory).IsAssignableFrom(candidate);
+        typeof(IServiceScope).IsAssignableFrom(candidate);
 
     /// <summary>
     ///     Every field and every constructor parameter of <paramref name="type" />

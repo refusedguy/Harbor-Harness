@@ -202,6 +202,41 @@ of truth. See docs/ARCHITECTURE_LAYERS.md §5 for the rule catalogue.
 
 ---
 
+### Stored container in an instance field — not a defect (#760)
+
+A container kept in an **instance** field is not the same defect as one in a
+**static** field, and no DI rule treats it as one. That is the analyzer's own
+position, not an oversight: DI006's README offers `private readonly
+IServiceProvider _provider;` as the "Better pattern" that replaces a static
+provider cache. The static form is what DI006 owns, and DI006 is `warning`, so
+under `--warnaserror` a static container is a build error.
+
+The reason the instance form is fine is that the danger is not the field, it is
+the **owner**. A singleton that retains a container and hands out a *scoped*
+service from it is a captive dependency — the scoped instance then lives as long
+as the singleton. That class is enforced, at the strictest level, by the rules
+that can see the lifetime graph rather than the field shape:
+
+- **DI003** (captive dependency) → `error`
+- **DI019** (scoped service resolved from root provider) → `error`
+- DI002 / DI004 / DI001 → `warning`
+
+No new analyzer axis is needed for that, and none is added (feature freeze
+issue #555). The one container shape a reflection sweep *can* own is a stored
+`IServiceScope` — unlike a container, a concrete scope has no innocent owner,
+because whoever holds it also owns its disposal. That is
+`ServiceLocatorBoundaryRules.SrcAssemblies_StoreNoServiceScope`, swept over the
+whole `src/` tree. `IServiceScopeFactory` is deliberately excluded: a scope
+factory on a singleton is the correct per-unit-of-work idiom, and both DI011 and
+DI019 list it as a sanctioned exception.
+
+Measured on `dev`: `src/` stores a container in exactly two types
+(`ViewModelLocator`, the named locator abstraction; `HarborIpcServer`, an IPC
+host's own bootstrap constructor, which resolves what it needs and retains
+nothing) and stores **no** service scope in any type. That inventory is asserted
+by `StoredLocatorInventory_IsExactlyTheDeclaredBaseline`, so the previously
+undetected surface is a number in a test rather than an assumption.
+
 ## CI integration
 
 ### `dotnet build`
