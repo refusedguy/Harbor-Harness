@@ -235,11 +235,75 @@ public sealed class ContribBoundaryNameRule
     ///     asked to accept.
     /// </summary>
     /// <remarks>
-    ///     Populated from the red CI run recorded in the #843 PR body; the first version of this
-    ///     array was empty and the rule was red by construction, which is the only way a floor
-    ///     proves it is standing on something.
+    ///     <b>54 names, measured.</b> Taken verbatim from the red run in the #843 PR body (run
+    ///     36722789493, <c>Harbor.Architecture.Tests</c>, 1,043 files read), which is the only
+    ///     reason this list is here at all: the first version of this array was empty, so the
+    ///     first CI run failed and printed the whole set. A floor that was never stood on nothing
+    ///     is not a floor, and reading 164 <c>.cs</c> files in <c>contrib/</c> by eye is how the
+    ///     count came out wrong the first time.
+    ///     <para>
+    ///         Every row is legal in itself, and the header says why the rule therefore counts and
+    ///         does not condemn. What the list is for is the direction of travel: 54 is the number
+    ///         to watch, and a 55th name is the finding.
+    ///     </para>
     /// </remarks>
-    private static readonly string[] MeasuredBaseline = [];
+    private static readonly string[] MeasuredBaseline =
+    [
+        "AgentErrorHandler",
+        "App",
+        "AssistantStreamHandler",
+        "BrushKeyConverter",
+        "ChatBubble",
+        "ChatHistoryView",
+        "ChatMessageViewModel",
+        "ChatScreen",
+        "ChatState",
+        "ChatView",
+        "ChatViewModel",
+        "CodeEditorView",
+        "CodeEditorViewModel",
+        "CommandEntry",
+        "CommandPaletteView",
+        "CommandPaletteViewModel",
+        "CompactionHandler",
+        "CostToUsdConverter",
+        "DiagnosticsPanel",
+        "DialogService",
+        "DiffView",
+        "DiffViewModel",
+        "Entry",
+        "HarborTheme",
+        "InputView",
+        "MainViewModel",
+        "MainWindow",
+        "MarkdownRenderer",
+        "ModelEntryViewModel",
+        "NoopDisposable",
+        "Program",
+        "ProviderBrowserView",
+        "ProviderBrowserViewModel",
+        "ProviderEntryViewModel",
+        "SessionEntryViewModel",
+        "SessionListViewModel",
+        "SessionRow",
+        "SettingsView",
+        "SettingsViewModel",
+        "StatusBadge",
+        "StatusBarView",
+        "StatusTextToBrushConverter",
+        "ThemeService",
+        "TimeAgoConverter",
+        "Toast",
+        "ToastNotificationsView",
+        "ToastService",
+        "ToastViewModel",
+        "TokenBarViewModel",
+        "TokenUsageView",
+        "TokenUsageViewModel",
+        "TokensToCompactConverter",
+        "ToolLifecycleHandler",
+        "ToolStartHandler",
+    ];
 
     private static readonly Lazy<CrossBoundaryReport> Synthetic = new(
         () => ContribBoundaryNameProbe.ScanFiles(
@@ -420,24 +484,30 @@ public sealed class ContribBoundaryNameRule
                 "{",
                 "}",
             ]),
-            // (5) A partial type split across two files of ONE contrib project. Legal C#, one
-            // implementation, and nothing to reconcile with the built tree.
+            // (5) The same name declared in a second contrib PROJECT. This one IS a crossing and
+            // must be — the point is that the finding names every file on both sides, so a reader
+            // sees that contrib/ holds two copies and not one. It is asserted below, not here:
+            // the first version of this control listed it as a decoy, on the theory that a name
+            // duplicated wholly inside contrib had "not crossed the boundary". It has crossed it.
+            // A crossing is not "one copy on each side", it is "at least one on each side", and a
+            // guard that reads it the other way under-reports exactly the drift it exists to see.
+            ("contrib/tui/Harbor.Tui.Other/SyntheticRow.cs",
+            [
+                "namespace Harbor.Tui.Other;",
+                string.Empty,
+                "public sealed class SyntheticRow",
+                "{",
+                "}",
+            ]),
+            // (6) A partial type split across two files of ONE contrib project, and that is
+            // still a crossing for the same reason — the product side declares the name too.
+            // Legal C# and one implementation, but the implementation is a second one, and that
+            // is the shape the #803 pair had. Asserted below, for the same reason as (5).
             ("contrib/apps/Harbor.App.Wpf/ViewModels/SyntheticRow.Parts.cs",
             [
                 "namespace Harbor.App.Wpf.ViewModels;",
                 string.Empty,
                 "public sealed partial class SyntheticRow",
-                "{",
-                "}",
-            ]),
-            // (6) A name that crosses, but between two trees that are BOTH outside CI. Not a
-            // boundary crossing at all, and counting it would inflate the number this rule
-            // exists to keep honest.
-            ("contrib/src/Harbor.Something.Else/SyntheticRow.cs",
-            [
-                "namespace Harbor.Something.Else;",
-                string.Empty,
-                "public sealed class SyntheticRow",
                 "{",
                 "}",
             ]),
@@ -472,13 +542,60 @@ public sealed class ContribBoundaryNameRule
             await Assert.That(string.Join(" | ", decoyReport.Crossings.Select(c => c.Name)))
                 .IsNotEqualTo("SyntheticRow")
                 .Because(
-                    decoy.Relative + " must not be reported as a crossing. Prose naming a type is not a "
-                    + "declaration, a longer name is a different type, a partial type in one project is "
-                    + "one implementation, a name that crosses between two unbuilt projects has not "
-                    + "crossed the CI boundary, and duplication wholly inside the built perimeter is "
-                    + "DiffSurfaceNameCollisionRule's question rather than this one. Reported: "
-                    + Describe(decoyReport.Crossings));
+                    decoy.Relative + " must not be reported as a crossing. Prose naming a type is not "
+                    + "a declaration, a longer name is a different type, and duplication wholly inside "
+                    + "the built perimeter is DiffSurfaceNameCollisionRule's question rather than this "
+                    + "one. Reported: " + Describe(decoyReport.Crossings));
         }
+
+        // The other direction: two files on the SAME contrib side of the boundary is ONE crossing
+        // with two declarations listed, not two crossings and not zero. Pinned because a rule that
+        // de-duplicated by project — the obvious "partials are one implementation" shortcut — would
+        // report one of these and drop the other, and the dropped one is the copy nobody reads.
+        List<(string Relative, string[] Lines)> bothInContrib = new()
+        {
+            ("contrib/apps/Harbor.App.Wpf/ViewModels/SyntheticRow.cs",
+            [
+                "namespace Harbor.App.Wpf.ViewModels;",
+                string.Empty,
+                "public sealed class SyntheticRow",
+                "{",
+                "}",
+            ]),
+            ("contrib/tui/Harbor.Tui.Other/SyntheticRow.cs",
+            [
+                "namespace Harbor.Tui.Other;",
+                string.Empty,
+                "public sealed partial class SyntheticRow",
+                "{",
+                "}",
+            ]),
+        };
+
+        var twoSided = ContribBoundaryNameProbe.ScanFiles(
+        [
+            ("src/Harbor.Desktop.Abstractions/ViewModels/SyntheticRow.cs",
+            [
+                "namespace Harbor.Desktop.Abstractions.ViewModels;",
+                string.Empty,
+                "public sealed class SyntheticRow",
+                "{",
+                "}",
+            ]),
+            .. bothInContrib,
+        ]);
+
+        await Assert.That(twoSided.Crossings.Count).IsEqualTo(1)
+            .Because("a name declared on both sides is ONE crossing however many files declare it on "
+                   + "either side. Counting declarations rather than names would inflate the pinned "
+                   + "number with partial splits — real C# that this tree is full of — and make the "
+                   + "baseline rot on ordinary refactorings");
+
+        await Assert.That(twoSided.Crossings[0].ContribFiles)
+            .IsEquivalentTo(bothInContrib.Select(f => f.Relative).ToArray())
+            .Because("both contrib files must be named, or the finding says \"contrib/ declares this\" "
+                   + "and a reader cannot tell that it declares it TWICE, in two projects, neither of "
+                   + "which CI will ever compile. Reported: " + Describe(twoSided.Crossings));
     }
 
     private static string Describe(IReadOnlyList<CrossBoundaryName> crossings) =>
