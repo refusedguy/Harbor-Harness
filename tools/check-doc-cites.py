@@ -36,11 +36,16 @@ RULES
                      the last line of the file. This is the rule that catches
                      the AgentLoop case: the file is alive, the number is not.
   DOC-TYPE-UNWIRED   a backticked PascalCase name that IS declared as a type
-                     in `src/` or `apps/`, but is referenced by no other
-                     production file. A normative document that names it is
-                     sending a reader down a branch nothing builds. This is the
+                     in `src/` or `apps/`, but that nothing REACHES. This is the
                      half the line fence cannot see: the file exists, the line
                      exists, the type exists — nothing constructs it (#664).
+                     Three shapes, three witnesses (see `unreachable`): a
+                     `static` class is exempt because C# forbids `new` on it; a
+                     `private`/`file` type is witnessed by its OWN file outside
+                     its declaration; a top-level public/internal type is
+                     witnessed by another production file or by an `.axaml`
+                     `x:Class`. Comments and string literals are not witnesses
+                     (#905).
   DOC-CITE-TABLE-UNDECLARED
                      a markdown table that asserts `| path/File.cs | 12 |` —
                      an inventory of members, the shape every generated audit
@@ -204,11 +209,35 @@ KNOWN LIMITATIONS — READ THIS BEFORE TRUSTING A GREEN
   the document does not state what it expects to find. Only DOC-TYPE-UNWIRED
   reaches past the fence, and only for types.
 
-  And DOC-TYPE-UNWIRED has a matching blind spot: a name referenced only from
-  another file's XML doc comment would count as wired. Comments are stripped
-  before counting, so that specific case is handled — but a type referenced
-  from a real (yet never-constructed) helper is still counted as wired. The
-  rule is a floor on honesty, not a substitute for reading the diff.
+  And DOC-TYPE-UNWIRED has a matching blind spot, which #905 closed one
+  half of and left the other half standing. It used to read "no OTHER file
+  names it" — a predicate that is unsatisfiable for two of the three shapes
+  in this repo, so on docs/PATTERNS.md it reported 7 hits and 6 were false,
+  all on ordinary shipped code. Names in comments and in string literals are
+  no longer witnesses, so `"CompositeToolRegistry is read-only"` does not make
+  that type look wired; a type referenced from a real (yet never-constructed)
+  helper still is counted as wired, and that remains open. The rule is a floor
+  on honesty, not a substitute for reading the diff.
+
+WHAT THE FIX IS NOT — measured, not assumed (#905)
+
+  Nesting is NOT the discriminator. 287 declarations in this tree are nested
+  and 129 of those are `public`, 4 `internal` — all reachable from another
+  file by construction. Exempting "nested" wholesale would have silenced the
+  #905 false positives AND 133 legitimate declarations. Visibility decides.
+
+  The top-level branch was NOT widened to "its own file mentions it".
+  ModelEntryViewModel is named four times in SharedDataModels.cs and
+  constructed by nobody; that is a live finding (#788, ADR-010 §4.5) and the
+  widening would have deleted it. Only the confined branch, where no other
+  file CAN reach the type, uses the own-file witness.
+
+  The rule still has subjects. Two findings survive in the four normative
+  documents — `CompositeToolRegistry` and `HarborEventKind` — and both are
+  allow-listed with reasons, so the gate is green on two KNOWN, DISCLOSED
+  facts rather than on nothing. Six of the thirteen allowances that #902 and
+  #478 wrote became holes with no reader and were deleted; #594 set that
+  standard.
 
   What it is good for: the two failure modes that actually happened — a
   deleted/renamed file, a number that drifted past the end of its file, and a
@@ -265,6 +294,7 @@ import re
 import subprocess
 import sys
 from collections import defaultdict
+from typing import NamedTuple
 
 import md_gate
 
@@ -377,6 +407,21 @@ DATED_RECORD = re.compile(
 # Foo` / `public readonly record struct Foo`. Attribute lists and modifiers are
 # allowed to repeat; `record struct` and `record class` put a second keyword
 # between the keyword and the name.
+#
+# The modifier list is captured as its own group so DOC-TYPE-UNWIRED can branch
+# on the visibility modifier, which used to be matched and then thrown away.
+# That is how the rule came to ask a `private` nested class for a SECOND FILE — a
+# witness no legal C# program can supply (#905).
+#
+# The group is NON-CAPTURING and read by re-matching the matched text: making it
+# capturing renumbers the groups, and `m.group(1)` is the type name everywhere in
+# this file. A named group there is a silent, tree-wide break — it was measured
+# doing exactly that (18 sample README findings, the gate green on dev only
+# because it never asked).
+#
+# Nesting is deliberately NOT the discriminator. Measured on this tree: 287
+# declarations are nested, and 129 of those are `public` and 4 `internal`, all
+# reachable from another file by construction. Visibility decides, not nesting.
 DECLARATION = re.compile(
     r"^[ \t]*(?:\[[^\]]*\][ \t]*(?:\r?\n[ \t]*)?)*"
     r"(?:(?:public|internal|protected|private|sealed|abstract|static|partial|"
@@ -387,14 +432,132 @@ DECLARATION = re.compile(
     re.M,
 )
 
-# Line and block comments, so that a type "referenced" only from a doc comment
-# is not counted as wired.
-LINE_COMMENT = re.compile(r"//[^\n]*")
-BLOCK_COMMENT = re.compile(r"/\*.*?\*/", re.S)
+# The visibility/static modifiers, read off the text DECLARATION already matched.
+DECL_MODIFIERS = frozenset(
+    {"public", "internal", "protected", "private", "static", "file"}
+)
+
+
+def decl_modifiers(matched: str) -> frozenset[str]:
+    """The modifier words in a DECLARATION match, up to the type keyword."""
+    head = re.split(r"\b(?:class|interface|enum|struct|record)\b", matched, maxsplit=1)[0]
+    return frozenset(re.findall(r"[A-Za-z]+", head)) & DECL_MODIFIERS
+
+# Comments and literals are blanked by ONE linear scanner rather than by regex.
+#
+# Two reasons, both measured on this tree:
+#
+#   A regex stripper cannot see that `//` inside a string literal is not a
+#   comment. samples/plugins/Harbor.Plugin.WebSearch carries
+#   `"Harbor/0.2 (https://harbor.sh)"`, and the old two-regex strip_comments ate
+#   `//harbor.sh)"` as a line comment — leaving one unbalanced quote that made
+#   every subsequent quote on the file open a literal, so a declared-and-shipped
+#   `WebSearchTool` stopped being seen at all. That was latent: nothing needed
+#   balanced text before this rule. It needs it now.
+#
+#   A regex alternation over verbatim/interpolated/plain literals backtracks
+#   badly enough to blow the wall clock (>900s, no output). A character loop is
+#   linear.
+#
+# The output is the SAME LENGTH as the input with the skipped spans blanked, so
+# every offset in the original still addresses the same character — which is what
+# lets the brace scoping in block_span work on this text directly.
+def strip_comments_and_literals(text: str) -> str:
+    out: list[str] = []
+    i, n = 0, len(text)
+
+    def blank(end: int) -> None:
+        out.append("".join(ch if ch == "\n" else " " for ch in text[i:end]))
+        return None
+
+    while i < n:
+        ch = text[i]
+        two = text[i:i + 2]
+        if two == "//":
+            end = text.find("\n", i)
+            end = n if end < 0 else end
+            blank(end)
+            i = end
+        elif two == "/*":
+            end = text.find("*/", i + 2)
+            end = n if end < 0 else end + 2
+            blank(end)
+            i = end
+        elif ch == "@" and text[i + 1:i + 2] == '"':
+            # Verbatim string: `""` is the escape, and a backslash is literal.
+            end = i + 2
+            while end < n:
+                if text[end:end + 2] == '""':
+                    end += 2
+                    continue
+                if text[end] == '"':
+                    end += 1
+                    break
+                end += 1
+            blank(end)
+            i = end
+        elif text.startswith('"""', i):
+            end = text.find('"""', i + 3)
+            end = n if end < 0 else end + 3
+            blank(end)
+            i = end
+        elif ch == '"':
+            end = i + 1
+            while end < n:
+                if text[end] == "\\":
+                    end += 2
+                    continue
+                if text[end] == '"':
+                    end += 1
+                    break
+                end += 1
+            blank(end)
+            i = end
+        elif ch == "'":
+            # Char literal. A bare apostrophe that opens nothing (a `'` in code
+            # that is not a literal cannot occur in valid C#) ends at the newline
+            # rather than running away.
+            end = i + 1
+            while end < n and text[end] != "'" and text[end] != "\n":
+                if text[end] == "\\":
+                    end += 2
+                    continue
+                end += 1
+            if end < n and text[end] == "'":
+                end += 1
+            blank(end)
+            i = end
+        else:
+            out.append(ch)
+            i += 1
+    return "".join(out)
 
 
 def strip_comments(text: str) -> str:
-    return LINE_COMMENT.sub("", BLOCK_COMMENT.sub("", text))
+    """Backwards-compatible alias for the single-pass scanner."""
+    return strip_comments_and_literals(text)
+
+
+def block_span(text: str, start: int) -> tuple[int, int] | None:
+    """Half-open span of the `{ … }` block that opens after `start`.
+
+    `None` when the declaration has no body brace — a `record Foo(int X);` or a
+    positional enum member. The caller falls back to the declaration LINE in that
+    case, which is the weaker but still correct witness: a one-line declaration
+    cannot contain a use of itself outside its own header.
+    """
+    open_brace = text.find("{", start)
+    if open_brace < 0:
+        return None
+    depth = 0
+    for pos in range(open_brace, len(text)):
+        if text[pos] == "{":
+            depth += 1
+        elif text[pos] == "}":
+            depth -= 1
+            if depth == 0:
+                return open_brace, pos
+    return None
 
 
 def repo_root() -> str:
@@ -412,15 +575,38 @@ def line_counts(path: str, cache: dict[str, int]) -> int:
     return cache[path]
 
 
+class Decl(NamedTuple):
+    """One type declaration, with the facts DOC-TYPE-UNWIRED branches on.
+
+    `confined` is a VISIBILITY property, not a nesting one, and the difference is
+    the whole of #905: a `private` nested class is unreachable from another file,
+    but a `public` nested class is reachable by construction, and this tree has
+    129 of those and 4 `internal` ones. Deciding by nesting would have exempted
+    the first shape and blinded the second.
+    """
+
+    rel: str
+    start: int
+    line_end: int
+    is_static: bool
+    confined: bool
+
+
 def index_sources(repo: str) -> tuple[list[str], dict[str, list[str]], set[str]]:
-    """Tracked `.cs` files, basename -> candidates, and the production subset.
+    """Tracked source files, basename -> candidates, and the production subset.
 
     `contrib/` is excluded from basename resolution: it is unmaintained, not
     compiled by CI, and a doc citing `AppStore.cs:5` must not be satisfied by a
     file that nothing builds.
+
+    `.axaml` is indexed alongside `.cs` since #905: `x:Class` is a construction
+    site, and a type Avalonia builds that way has no `.cs` reference to it
+    anywhere. Globbing only `*.cs` here is what made the first XAML self-test
+    fixture fail — the fixture was tracked by git and still invisible, because
+    nothing ever asked git for it.
     """
     proc = subprocess.run(
-        ["git", "ls-files", "*.cs"],
+        ["git", "ls-files", "*.cs", "*.axaml"],
         cwd=repo,
         capture_output=True,
         text=True,
@@ -551,15 +737,17 @@ def read_allowances(text: str) -> tuple[dict[str, str], list[tuple[str, str, int
 
 def check_types(
     text: str,
-    declared_in: dict[str, set[str]],
+    declared_in: dict[str, list[Decl]],
     production_text: dict[str, str],
+    xaml_text: dict[str, str],
     allowed: set[str],
 ) -> tuple[int, list[tuple[str, str, int]]]:
     """Return (name count, [(code, message, doc line), ...]).
 
     A backticked name that IS a type declared under src/ or apps/ must be
-    referenced by at least one OTHER production file. Comments are stripped,
-    so a `<see cref="..."/>` cannot make a dead type look wired.
+    REFERENCED by something that can reach it. Comments and string literals are
+    stripped, so neither a `<see cref="…"/>` nor a `"… is read-only"` message
+    can make a dead type look wired.
 
     `allowed` is this document's own `allow-unwired` list; each entry had to
     arrive with a reason, so a name cannot be waved through silently.
@@ -581,21 +769,90 @@ def check_types(
         decls = declared_in.get(name)
         if not decls:
             continue
-        wired = [
-            f
-            for f, body in production_text.items()
-            if f not in decls and re.search(rf"\b{re.escape(name)}\b", body)
-        ]
-        if not wired:
+        unreached, why = unreachable(name, decls, production_text, xaml_text)
+        if unreached:
             problems.append(
                 (
                     "DOC-TYPE-UNWIRED",
-                    f"`{name}` is declared in {', '.join(sorted(decls))} but no other "
-                    f"file under src/ or apps/ references it — nothing constructs it",
+                    f"`{name}` is declared in {', '.join(sorted({d.rel for d in decls}))} "
+                    f"and {why}",
                     text.count("\n", 0, m.start()) + 1,
                 )
             )
     return len(seen), problems
+
+
+def unreachable(
+    name: str,
+    decls: list[Decl],
+    production_text: dict[str, str],
+    xaml_text: dict[str, str],
+) -> tuple[bool, str]:
+    """Return (is_unreachable, why). The three shapes are separate questions.
+
+    Before #905 this was one predicate — "a DIFFERENT production file names it" —
+    applied to every declaration. That predicate is unsatisfiable for two of the
+    three shapes in this repo, and the unsatisfiability was invisible: enabling
+    the rule on docs/PATTERNS.md produced 7 hits, 6 of them false, and every one
+    of the six is a completely ordinary shipped declaration.
+
+      STATIC    C# forbids `new` on a static class. "Nothing constructs it" is
+                vacuous, so the rule must not ask: the members are reached
+                through the type, not through an instance of it. 285 static
+                declarations in this tree, `TuiModule` among them.
+
+      CONFINED  `private` / `protected` / `file`. Reachable ONLY from inside its
+                own file, so the second-file witness cannot exist in any legal
+                C# program. The witness is the declaring file itself with the
+                declaration's own block removed — which is the real question:
+                does anything in that file use it? All 223 confined declarations
+                with an own-file use answer yes; none is dead.
+
+      TOP-LEVEL public/internal at namespace scope. Unchanged, and deliberately
+                NOT widened to "its own file mentions it": a same-file mention
+                as a property type or a constructor parameter is not
+                construction. `ModelEntryViewModel` is named four times in
+                SharedDataModels.cs and constructed by nobody — that is a live
+                finding (#788, ADR-010 §4.5), and widening would have deleted it.
+
+    XAML counts as a witness for the top-level shape: `x:Class="…:ChatView"` is a
+    construction performed by the designer, not by C#, and 44 declarations are
+    reachable only that way. Without it the rule reports every Avalonia view in
+    the repo as dead.
+    """
+    if all(d.is_static for d in decls):
+        return False, ""
+
+    pattern = re.compile(rf"\b{re.escape(name)}\b")
+
+    if all(d.confined for d in decls):
+        for decl in decls:
+            body = production_text[decl.rel]
+            # The declaration line AND the body are both "the declaration": the
+            # header carries the name too, so blanking only the block left the
+            # name sitting in the text and every confined type read as wired.
+            span = block_span(body, decl.start)
+            high = span[1] if span else decl.line_end
+            low = decl.start
+            outside = body[:low] + " " * (high - low) + body[high:]
+            if pattern.search(outside):
+                return False, ""
+        return True, (
+            "nothing outside its own declaration references it. It is confined "
+            "to that file, so its own file is the only place a use can be"
+        )
+
+    declaring = {d.rel for d in decls}
+    for rel, body in production_text.items():
+        if rel not in declaring and pattern.search(body):
+            return False, ""
+    for rel, body in xaml_text.items():
+        if pattern.search(body):
+            return False, ""
+    return True, (
+        "no other file under src/ or apps/, and no .axaml, references it — "
+        "nothing constructs it"
+    )
 
 
 def check_table_shape(
@@ -763,7 +1020,7 @@ def scan(repo: str, verbose: bool) -> Scan:
     """Scan the normative documents once and return everything the gate needs."""
     files, by_base, production = index_sources(repo)
 
-    declared_in: dict[str, set[str]] = defaultdict(set)
+    declared_in: dict[str, list[Decl]] = defaultdict(list)
     # The union index DOC-SAMPLE-API-UNDECLARED needs. A SET rather than the
     # dict above because the question it asks is only "does this name exist
     # anywhere a product or a sample could declare it" — WHERE it is declared is
@@ -778,15 +1035,51 @@ def scan(repo: str, verbose: bool) -> Scan:
             continue
         try:
             with open(os.path.join(repo, rel), encoding="utf-8", errors="replace") as fh:
-                body = strip_comments(fh.read())
+                body = fh.read()
         except OSError:
             continue
-        names = {m.group(1) for m in DECLARATION.finditer(body)}
+        if rel.endswith(".axaml"):
+            # A markup file declares no C# type; it is a WITNESS, read below.
+            continue
+        # Comments and literals both go: the type rule's witness must be a USE,
+        # and `<see cref="…"/>` or a `"… is read-only"` message names a type
+        # without constructing it. Offsets are preserved, so `Decl.start`
+        # addresses the same character in `code` that the brace scan walks.
+        code = strip_comments_and_literals(body)
+        names = {m.group(1) for m in DECLARATION.finditer(code)}
         declared_anywhere |= names
         if rel in production:
-            production_text[rel] = body
-            for name in names:
-                declared_in[name].add(rel)
+            production_text[rel] = code
+            for m in DECLARATION.finditer(code):
+                mods = decl_modifiers(m.group(0))
+                line_end = code.find("\n", m.start())
+                declared_in[m.group(1)].append(
+                    Decl(
+                        rel=rel,
+                        start=m.start(),
+                        line_end=len(code) if line_end < 0 else line_end,
+                        is_static="static" in mods,
+                        confined=bool(mods & {"private", "protected", "file"}),
+                    )
+                )
+
+    # XAML is a witness scope of its own: Avalonia constructs a view from
+    # `x:Class="…:ChatView"`, which is C# that never appears in a .cs file.
+    #
+    # Read RAW, not through the C# scanner. Markup is not C#, and its quoted
+    # attribute values are precisely the evidence: `x:Class="Demo.ShellView"` IS
+    # the construction site, so blanking literals erased the witness and the
+    # rule reported every Avalonia view in the repo as dead. (Measured: 44
+    # declarations are reachable only through markup.)
+    xaml_text: dict[str, str] = {}
+    for rel in files:
+        if not rel.endswith(".axaml") or not rel.startswith(("src/", "apps/")):
+            continue
+        try:
+            with open(os.path.join(repo, rel), encoding="utf-8", errors="replace") as fh:
+                xaml_text[rel] = fh.read()
+        except OSError:
+            continue
 
     cache: dict[str, int] = {}
     result = Scan()
@@ -824,7 +1117,9 @@ def scan(repo: str, verbose: bool) -> Scan:
         cites, cite_problems = check_citations(text, repo, by_base, cache)
         table_cites, table_cite_problems = check_table_citations(text, repo, by_base, cache)
         allowance, allowance_problems = read_allowances(text)
-        names, type_problems = check_types(text, declared_in, production_text, set(allowance))
+        names, type_problems = check_types(
+            text, declared_in, production_text, xaml_text, set(allowance)
+        )
         result.citations += cites + table_cites
         result.type_names += names
         result.hits[rel] = (
@@ -948,6 +1243,154 @@ def self_test() -> int:
     )
     st.expect(
         "a declared-but-unwired type fails (the #664 AppStore case)",
+        code == 1 and "DOC-TYPE-UNWIRED" in out,
+        out[-400:],
+    )
+
+    # ---- #905: THE THREE SHAPES, ONE PER CASE ---------------------------------
+    #
+    # The rule used to ask one question — "does a DIFFERENT production file name
+    # this type?" — of every declaration. That question is unsatisfiable for two
+    # of the three shapes in this repo, and on docs/PATTERNS.md it answered
+    # itself six times out of seven, on shipped code. Each case below is the
+    # shape and the shape's own witness, so a future edit cannot re-widen one of
+    # them by accident.
+    norm = "# N\n\n> Status: normative for the current implementation.\n\n"
+
+    # 1. CONFINED and used — the #905 shape. A `private` nested class is
+    #    unreachable from another file, so no second file can ever name it. Its
+    #    witness is its own file, outside its own declaration block.
+    code, out = run(
+        {
+            **live,
+            "src/Demo/Host.cs": (
+                "namespace Demo;\n"
+                "public sealed class Host\n"
+                "{\n"
+                "    private Nested _inner = new Nested();\n"
+                "    private sealed class Nested\n"
+                "    {\n"
+                "        public int Value => 1;\n"
+                "    }\n"
+                "}\n"
+            ),
+            "docs/NORM.md": norm + "The host holds a `Nested`; see `src/Demo/Live.cs:4`.\n",
+        }
+    )
+    st.expect(
+        "a CONFIRMED case: a `private` nested class constructed in its own file passes (#905)",
+        code == 0,
+        out.strip()[-400:],
+    )
+
+    # 2. CONFINED and NOT used — the same shape, genuinely dead. Without this the
+    #    first case would also pass on a rule that had stopped asking.
+    code, out = run(
+        {
+            **live,
+            "src/Demo/Host.cs": (
+                "namespace Demo;\n"
+                "public sealed class Host\n"
+                "{\n"
+                "    private sealed class Orphan\n"
+                "    {\n"
+                "        public int Value => 1;\n"
+                "    }\n"
+                "}\n"
+            ),
+            "docs/NORM.md": norm + "The host holds an `Orphan`; see `src/Demo/Live.cs:4`.\n",
+        }
+    )
+    st.expect(
+        "a `private` nested class nothing uses still fails — the confinement exemption is not a mute button (#905)",
+        code == 1 and "DOC-TYPE-UNWIRED" in out,
+        out[-400:],
+    )
+
+    # 3. STATIC — C# forbids `new` on a static class, so "nothing constructs it"
+    #    is vacuous. `TuiModule` is this shape, and the root calls its MEMBER.
+    code, out = run(
+        {
+            **live,
+            "src/Demo/Setup.cs": (
+                "namespace Demo;\n"
+                "public static class SetupModule\n"
+                "{\n"
+                "    public static void Install() { }\n"
+                "}\n"
+            ),
+            "docs/NORM.md": norm + "Composition calls `SetupModule`; see `src/Demo/Live.cs:4`.\n",
+        }
+    )
+    st.expect(
+        "a STATIC class is not asked for a construction witness (#905)",
+        code == 0,
+        out.strip()[-400:],
+    )
+
+    # 4. A type named only in a STRING is not a witness. This is the blind spot
+    #    the file header already admitted to, and it is what makes
+    #    CompositeToolRegistry a finding rather than a false negative.
+    code, out = run(
+        {
+            **live,
+            "src/Demo/Orphan.cs": (
+                "namespace Demo;\n"
+                "public sealed class Orphan\n"
+                "{\n"
+                '    public string Note => "Orphan is read-only";\n'
+                "}\n"
+            ),
+            "docs/NORM.md": norm + "The tool is `Orphan`; see `src/Demo/Live.cs:4`.\n",
+        }
+    )
+    st.expect(
+        "a type named only inside a string literal is still unwired — a message is not a use (#905)",
+        code == 1 and "DOC-TYPE-UNWIRED" in out,
+        out[-400:],
+    )
+
+    # 5. A type reached only from XAML. Avalonia constructs a view from
+    #    `x:Class`, which is C# that never appears in a .cs file — 44
+    #    declarations in this tree are reachable no other way.
+    code, out = run(
+        {
+            **live,
+            "src/Demo/ShellView.axaml.cs": "namespace Demo;\npublic sealed class ShellView { }\n",
+            "src/Demo/ShellView.axaml": (
+                '<Window xmlns="https://schemas.microsoft.com/winfx/avalonia"\n'
+                '        x:Class="Demo.ShellView" />\n'
+            ),
+            "docs/NORM.md": norm + "The shell window is `ShellView`; see `src/Demo/Live.cs:4`.\n",
+        }
+    )
+    st.expect(
+        "a type constructed only by XAML passes — `x:Class` is a construction site (#905)",
+        code == 0,
+        out.strip()[-400:],
+    )
+
+    # 6. A `//` inside a string literal is not a comment. This one is here
+    #    because the scanner that answers questions 1-5 was WRITTEN with a
+    #    regex stripper that made exactly this mistake, and the result was a
+    #    shipped sample type (`WebSearchTool`) that the rule could not see at
+    #    all. The URL is the trigger.
+    code, out = run(
+        {
+            **live,
+            "src/Demo/Url.cs": (
+                "namespace Demo;\n"
+                "public sealed class UrlThing\n"
+                "{\n"
+                '    public string Agent => "Demo/1.0 (https://example.test/v1)";\n'
+                "    public string Note => \"UrlThing is read-only\";\n"
+                "}\n"
+            ),
+            "docs/NORM.md": norm + "The agent is `UrlThing`; see `src/Demo/Live.cs:4`.\n",
+        }
+    )
+    st.expect(
+        "a `//` inside a string literal does not start a comment and strand the quote (#905)",
         code == 1 and "DOC-TYPE-UNWIRED" in out,
         out[-400:],
     )
