@@ -58,13 +58,17 @@
 // NON-VACUITY
 // -----------
 // A guard that matches nothing is indistinguishable from a guard that is broken,
-// and a broken guard is worse than none because it is believed. Four tests close
+// and a broken guard is worse than none because it is believed. Six tests close
 // that: discovery must find a real file set and a real vocabulary; the table
 // finder must fire on a planted table and stay silent on a comment, on a single
-// lookup, and on a table of non-tool words; the dead-row check must catch a
-// planted unknown name and stay silent on a planted real one; and the derivation
-// must cover a tool that exists NOWHERE in a hand-written list — which is what
-// proves the guard tracks tools rather than a fixed roster.
+// lookup, and on a table of non-tool words; a set of exactly TWO real names must
+// be seen as a table too (#832 — three was the smallest value that kept the
+// corpus green, and #793 shipped the two-name shape it denied); a coincidental
+// mention of two tools among thirty-six slash commands must NOT be; the
+// dead-row check must catch a planted unknown name and stay silent on a planted
+// real one; and the derivation must cover a tool that exists NOWHERE in a
+// hand-written list — which is what proves the guard tracks tools rather than a
+// fixed roster.
 
 using System.Collections.Frozen;
 using System.Text.RegularExpressions;
@@ -149,10 +153,51 @@ public sealed class ToolNameListRule
 
     /// <summary>
     ///     How many tool-SHAPED names a run must contain before it is judged a table
-    ///     at all — real tools or not. This is the gate that separates a table from a
-    ///     JSON schema, which quotes no tool names in bulk.
+    ///     at all — real tools or not. Two, and two is a floor rather than a
+    ///     preference: one quoted name is a lookup, two of them are a set.
     /// </summary>
-    private const int TableMinimumNames = 3;
+    /// <remarks>
+    ///     <para>
+    ///         This was 3 (#832), which declared that a set of exactly two is not a
+    ///         set — and #793 shipped exactly that set. <c>HasSupervisionTools</c>
+    ///         string-matched <c>"session_read"</c> and <c>"session_steer"</c>
+    ///         inline, so the recipe rendered on the default <c>code</c> agent while
+    ///         telling the model to steer with a tool <c>ResolveTools</c> had not
+    ///         offered it. Nothing about the shape was exotic; two names three lines
+    ///         apart is the smallest possible instance of the defect.
+    ///     </para>
+    ///     <para>
+    ///         It was 3 because 3 was the smallest value that kept the corpus green,
+    ///         not because anything distinguishes a triple from a pair. What the count
+    ///         is usually credited with — telling a table from a JSON schema — is
+    ///         already done by the density ratio, and measurably so: the schema runs
+    ///         in <c>PatchTool.cs</c> and <c>RipGrepTool.cs</c> carry 6 and 12
+    ///         distinct names of which exactly ONE is a tool, and the ratio rejects
+    ///         them without the count ever being consulted. Take the schema job away
+    ///         and what the count still does that the ratio does not is the
+    ///         single-name floor, which is what this constant now is.
+    ///     </para>
+    ///     <para>
+    ///         The cost was measured BEFORE the move, not rationalised after it. Over
+    ///         the 26 derived names and the 167 quoted occurrences in <c>src/</c> +
+    ///         <c>apps/</c>, exactly ONE run holds precisely two distinct real tool
+    ///         names — <c>BuiltinToolSafetyProfiles.cs:96-97</c>, <c>session_broadcast
+    ///         </c> and <c>session_inbox</c> — and that file already holds an exemption
+    ///         with a stated reason. So the move adds one table to the corpus and zero
+    ///         offenders. A threshold that reddens a hundred innocent tables is the
+    ///         outcome that was looked for, and it is not the one that happened.
+    ///     </para>
+    ///     <para>
+    ///         At two names the ratio has nothing left to arbitrate, which is why two
+    ///         is a floor and not a compromise: a two-name run is a table exactly when
+    ///         both names are real tools, and two real tool names three lines apart IS
+    ///         the hand-maintained-name-set shape. The coincidence class the ratio
+    ///         exists to exclude — <c>SlashCommandCatalog</c>'s <c>tree</c> and
+    ///         <c>skill</c> among thirty-six slash commands — is a seven-name run, so
+    ///         it is rejected by the ratio and never depended on this number.
+    ///     </para>
+    /// </remarks>
+    private const int TableMinimumNames = 2;
 
     /// <summary>
     ///     The fraction of a run's distinct names that must be REAL tools for the run
@@ -628,14 +673,17 @@ public sealed class ToolNameListRule
     /// <summary>
     ///     Every run of quoted words in the supplied sources that qualifies as a
     ///     TOOL table: at least <see cref="TableMinimumNames" /> tool-shaped names of
-    ///     which <see cref="TableMinimumRealTools" /> are real tools, all within
+    ///     which at least <see cref="RealToolNumerator" /> in
+    ///     <see cref="RealToolDenominator" /> are real tools, all within
     ///     <see cref="TableWindowLines" /> lines of each other in one file.
     /// </summary>
     /// <remarks>
-    ///     Requiring tool-shaped names in bulk is what makes this precise. Matching
-    ///     on "two adjacent quoted words" instead flags every JSON schema and every
-    ///     CLI verb list in the repository — noise a rule gets disabled rather than
-    ///     obeyed. A schema names no tools, so it can never reach the threshold.
+    ///     Requiring tool-shaped names in bulk is what makes this precise, and at two
+    ///     names the density ratio is what keeps it precise: a schema quotes words but
+    ///     names no tool, so it can never reach the ratio, and a CLI verb list that
+    ///     happens to spell two tools among thirty-six names fails it too. What the
+    ///     count still adds over the ratio is the single-name floor — one quoted name
+    ///     is a lookup, which is a fact about syntax rather than about tools.
     /// </remarks>
     private static IReadOnlyList<IReadOnlyList<Mention>> FindToolTables(
         IReadOnlyList<(string Path, string Source)> sources,
