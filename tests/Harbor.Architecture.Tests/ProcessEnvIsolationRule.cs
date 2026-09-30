@@ -188,20 +188,46 @@ public class ProcessEnvIsolationRule
     private const string EnvReadCall = "Environment.GetEnvironmentVariable(";
 
     /// <summary>
-    ///     A restore VALUE: a bare identifier, never a literal. <c>null</c> is the
-    ///     exact token #847 writes back and <c>""</c> the next most common, and
-    ///     neither may satisfy this — which is the point of the rule. An argument
-    ///     that is a call (<c>Path.Combine(a, b)</c>) is not a bare identifier
-    ///     either, because a computed value is not something that was read.
+    ///     <see cref="EnvReadCall" /> and the OTHER way a test legitimately learns
+    ///     what $HOME was. This is not a theoretical second spelling —
+    ///     <c>ViewInflationTests</c> saves with
+    ///     <c>Environment.GetFolderPath(SpecialFolder.UserProfile)</c> at its line
+    ///     205 and restores <c>HOME</c> from it at 240, which is the correct shape.
+    ///     A rule that knew only about <c>GetEnvironmentVariable</c> would report
+    ///     that class as restoring nothing, and the table in this file already
+    ///     names it as a writer <c>#846</c> fixed. The two are equivalent for this
+    ///     purpose: both answer "what was the ambient value".
     /// </summary>
-    private static readonly Regex BareIdentifier = new(@"^[A-Za-z_]\w*$", RegexOptions.Compiled);
+    private const string FolderReadCall = "Environment.GetFolderPath(";
+
+    /// <summary>Either read that yields an ambient value worth restoring.</summary>
+    private static readonly Regex AnyAmbientRead = new(
+        @"(?<![.\w])(?:" + Regex.Escape(EnvReadCall) + "|" + Regex.Escape(FolderReadCall) + ")",
+        RegexOptions.Compiled);
 
     /// <summary>
-    ///     The C# literals that lex exactly like a bare identifier and so pass the
-    ///     shape test, but which can never hold a value that was read. <c>null</c>
-    ///     is the one that matters and it is the entire bug: it is spelled the same
-    ///     as the locals this rule accepts, so a matcher that looked only at shape
-    ///     would wave #847's own restore straight through.
+    ///     An identifier assigned from an ambient READ — the only thing a restore
+    ///     may pass back. Note what this is for: <c>AppHostDiTests</c> writes
+    ///     <c>SetEnvironmentVariable("HOME", tempHome)</c>, and <c>tempHome</c> is a
+    ///     bare identifier too. Shape alone therefore accepts the very first write of
+    ///     a one-shot swap as a restore of itself, which would make the rule report
+    ///     that class as correct and exempt it by accident. Requiring the identifier
+    ///     to have been ASSIGNED FROM A READ is what separates "I kept what was
+    ///     there" from "I am handing back a value I just made up".
+    /// </summary>
+    private static readonly Regex SavedEnvIdentifier = new(
+        @"(?<id>[A-Za-z_]\w*)\s*=\s*[^;]*?(?<![.\w])(?:"
+        + Regex.Escape(EnvReadCall) + "|"
+        + Regex.Escape(FolderReadCall)
+        + ")",
+        RegexOptions.Compiled);
+
+    /// <summary>
+    ///     The keywords and constants that lex exactly like a bare identifier and
+    ///     so pass a shape test, but which can never hold a value that was read.
+    ///     <c>null</c> is the one that matters and it is the entire bug: it is spelled
+    ///     the same as the locals this rule accepts, so a matcher that looked only
+    ///     at shape would wave #847's own restore straight through.
     /// </summary>
     private static readonly HashSet<string> NeverARestoredValue = new(StringComparer.Ordinal)
     {
@@ -496,10 +522,15 @@ public class ProcessEnvIsolationRule
                 continue;
             }
 
+            IReadOnlyList<string> unrestored = UnrestoredVariables(site);
+
             violations.Add(
-                $"{site.File}:{site.WriteLine} — {site.Class} writes {site.FirstVariable} and never "
-                + $"restores a value it read. It pins {site.FirstVariable} at line "
-                + $"{site.WriteLine}, and the environment is process-wide state "
+                $"{site.File}:{site.WriteLine} — {site.Class} writes "
+                + $"{string.Join(", ", unrestored)} and never "
+                + $"restores {(unrestored.Count == 1 ? "that variable" : "those variables")} "
+                + "to a value it read. It pins "
+                + $"{site.WrittenVariables.Length} variable(s) from line {site.WriteLine}, and the "
+                + "environment is process-wide state "
                 + "(Environment.Variables.Unix.cs), so on a runner that exports the variable the "
                 + "teardown DESTROYS it for every test that runs after this one. Read the ambient "
                 + "value first and write that identifier back in the finally.");
@@ -583,15 +614,37 @@ public class ProcessEnvIsolationRule
             .Because("The other declared process-lifetime writer, for the same reason.");
     }
 
-    /// <summary>Whether rule (3) accepts this site: a write handed back a bare identifier.</summary>
+    /// <summary>
+    ///     Whether rule (3) accepts this site. A class passes only if EVERY variable
+    ///     it writes is handed back — one correct restore does not cover a second
+    ///     variable pinned to a literal, which is why this is not
+    ///     <c>Any(...Contains)</c> over the whole class.
+    /// </summary>
     private static bool IsRestored(TypeSite site) =>
-        site.RestoredVariables.Contains(site.FirstVariable, StringComparer.Ordinal);
+        site.WrittenVariables.Length > 0
+        && site.WrittenVariables.All(v => site.RestoredVariables.Contains(v, StringComparer.Ordinal));
 
-    /// <summary>Whether this exact (class, variable) pair is a declared process-lifetime write.</summary>
-    private static bool IsProcessLifetime(TypeSite site) =>
-        ProcessLifetimeWrites.Any(w => w.Project == site.Project
-            && w.Class == site.Class
-            && w.Variable == site.FirstVariable);
+    /// <summary>
+    ///     The variables this site pins without restoring. At least one when the
+    ///     site is a violation, and it is what the message names.
+    /// </summary>
+    private static IReadOnlyList<string> UnrestoredVariables(TypeSite site) =>
+        [.. site.WrittenVariables.Where(v => !site.RestoredVariables.Contains(v, StringComparer.Ordinal))];
+
+    /// <summary>
+    ///     Whether every variable this site writes that it does not restore is a
+    ///     declared process-lifetime write. Partial exemption is not possible: a
+    ///     class cannot be half process-lifetime, so a row naming one of two
+    ///     variables leaves the other one reported.
+    /// </summary>
+    private static bool IsProcessLifetime(TypeSite site)
+    {
+        IReadOnlyList<string> unrestored = UnrestoredVariables(site);
+        return unrestored.Count > 0
+            && unrestored.All(v => ProcessLifetimeWrites.Any(w => w.Project == site.Project
+                && w.Class == site.Class
+                && w.Variable == v));
+    }
 
     /// <summary>
     ///     The process-lifetime table, closed in BOTH directions for the same
@@ -640,7 +693,8 @@ public class ProcessEnvIsolationRule
             {
                 stale.Add(
                     $"{project}/{className} — exempted as never restoring, and it now restores "
-                    + $"{site.FirstVariable}. The exemption should be deleted, not kept for safety.");
+                    + $"{string.Join(", ", site.WrittenVariables)}. The exemption should be deleted, "
+                    + "not kept for safety.");
             }
         }
 
@@ -668,13 +722,16 @@ public class ProcessEnvIsolationRule
         await Assert.That(guess.Name).IsEqualTo("OLLAMA_API_KEY")
             .Because("The variable name must survive the literal-stripping that proves the line is a call.");
 
-        // `null` PASSES the bare-identifier shape test — it is spelled exactly like
-        // `previous` — which is precisely why the keyword table exists. Asserting
-        // only the shape here would have been a green test over a broken rule.
-        await Assert.That(BareIdentifier.IsMatch(guess.Value)).IsTrue()
+        // `previous` is the identifier a save produced; `null` is what #847 hands back
+        // instead. Both lex as bare identifiers, and only the assignment distinguishes
+        // them — which is why the rule matches the SAVE and not the shape.
+        Match guessSave = SavedEnvIdentifier.Match(
+            "        string? previous = Environment.GetEnvironmentVariable(\"OLLAMA_API_KEY\");");
+        await Assert.That(guessSave.Success).IsTrue()
             .Because(
-                "This is the trap the rule has to survive: `null` matches ^[A-Za-z_]\\w*$ just as "
-                + "`previous` does, so shape alone cannot tell a restore from #847's guess.");
+                "The save shape must be recognised: an identifier assigned from the read is the ONLY "
+                + "thing rule (3) accepts as a restore value.");
+
         await Assert.That(NeverARestoredValue.Contains(guess.Value)).IsTrue()
             .Because(
                 "`null` must be excluded by name, or the rule accepts the exact token #847 reports as a "
@@ -683,23 +740,41 @@ public class ProcessEnvIsolationRule
         (string Name, string Value) saved = ReadEnvWriteArguments(
             "        Environment.SetEnvironmentVariable(\"HARBOR_MCP_OAUTH_TOKEN\", previous);");
         await Assert.That(saved.Name).IsEqualTo("HARBOR_MCP_OAUTH_TOKEN");
-        await Assert.That(BareIdentifier.IsMatch(saved.Value)).IsTrue()
+        await Assert.That(saved.Value).IsEqualTo("previous")
             .Because(
-                "`previous` is what `previous = Environment.GetEnvironmentVariable(...)` produced, and a "
-                + "bare identifier is the only shape rule (3) accepts as a restore.");
+                "The value must come through the argument reader as the bare identifier, because that is "
+                + "what the save-set membership test then looks up.");
 
-        // A computed value is not something that was read, so it does not count.
+        // A computed value is not something that was read, so it does not count —
+        // and neither does a bare identifier that was never assigned from a read,
+        // which is the AppHostDiTests shape that would otherwise self-exempt.
         (string Name, string Value) computed = ReadEnvWriteArguments(
             "        Environment.SetEnvironmentVariable(\"HOME\", Path.Combine(a, b));");
-        await Assert.That(BareIdentifier.IsMatch(computed.Value)).IsFalse()
+        await Assert.That(SavedEnvIdentifier.IsMatch(computed.Value)).IsFalse()
             .Because(
                 "Path.Combine(a, b) is a new value, not the one that was there before. Accepting it "
                 + "would let a class pass by rebuilding the ambient value instead of restoring it.");
 
-        // Prose that NAMES the API is still not a call.
-        await Assert.That(ReadEnvWriteArguments("        _logger.LogDebug(\"no Environment.SetEnvironmentVariable(\");").Name)
-            .IsEmpty()
+        (string Name, string Value) invented = ReadEnvWriteArguments(
+            "        Environment.SetEnvironmentVariable(\"HOME\", tempHome);");
+        await Assert.That(invented.Value).IsEqualTo("tempHome");
+        await Assert.That(SavedEnvIdentifier.IsMatch(invented.Value)).IsFalse()
+            .Because(
+                "`tempHome` is a bare identifier and was NEVER read — it is what AppHostDiTests and "
+                + "HostBuilderDiTests hand a one-shot swap. If the rule counted shape alone it would call "
+                + "that a restore of itself, declare both classes correct, and the process-lifetime table "
+                + "would be exempting classes that do not need it.");
+
+        // Prose that NAMES the API is still not a call. ReadEnvWriteArguments is the
+        // RAW argument reader and is deliberately not literal-aware — IsEnvWrite is
+        // the gate that strips, and ReadEnvTraffic consults it before every read of
+        // names. So the assertion is that the GATE stays shut, not that the reader
+        // re-derives the stripping.
+        string[] prose = ["        _logger.LogDebug(\"no Environment.SetEnvironmentVariable(\");"];
+        await Assert.That(IsEnvWrite(prose[0])).IsFalse()
             .Because("A name inside a message must not become a violation; that is what the stripping is for.");
+        await Assert.That(DeclaresEnvRead(prose, 0, 1)).IsFalse()
+            .Because("The same holds for the read side.");
 
         // The read side, which is the necessary condition the rule states.
         await Assert.That(DeclaresEnvRead(
@@ -707,14 +782,33 @@ public class ProcessEnvIsolationRule
             .IsTrue()
             .Because("A class that saves a value is one that can put it back.");
 
+        // GetFolderPath is the OTHER legitimate save, and this control exists
+        // because ViewInflationTests uses exactly that (its line 205) and restores
+        // $HOME from the result at 240. A rule that knew only about
+        // GetEnvironmentVariable would report a class #846 already fixed as
+        // restoring nothing — the crying-wolf failure that gets a guard deleted.
+        string[] folderSave =
+        [
+            "        var originalHome = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);",
+        ];
+        await Assert.That(DeclaresEnvRead(folderSave, 0, 1)).IsTrue()
+            .Because("ViewInflationTests saves $HOME this way, so this must count as a read.");
+        await Assert.That(SavedEnvIdentifier.Match(folderSave[0]).Groups["id"].Value)
+            .IsEqualTo("originalHome")
+            .Because(
+                "And the identifier it binds is what the restore passes back at that class's line 240, so "
+                + "the save-set membership test has to see it under exactly that name.");
+
         await Assert.That(DeclaresEnvRead(["        Environment.SetEnvironmentVariable(\"HOME\", null);"], 0, 1))
             .IsFalse()
             .Because("Writing is not reading, and treating it as both would let the defect through.");
 
         // And the classes #847 actually fixed are named, so the rule has to have
         // been able to see all four.
+        IReadOnlyList<TypeSite> writers = DiscoverWriters();
+
         IReadOnlySet<string> writerFiles =
-            new HashSet<string>(DiscoverWriters().Select(w => w.File), StringComparer.Ordinal);
+            new HashSet<string>(writers.Select(w => w.File), StringComparer.Ordinal);
 
         foreach (string fixedIn847 in ClassesThatRestoredNothing)
         {
@@ -723,6 +817,23 @@ public class ProcessEnvIsolationRule
                     fixedIn847 + " is one of the four classes #847 found restoring nothing, so it is a "
                     + "writer under rule (1) and therefore visible to rule (3). If the walk cannot reach "
                     + "it, rule (3) is not enforcing anything on the class the issue is about.");
+        }
+
+        // And the same four must be the ones rule (3) reports, so a rule that went
+        // quiet for the wrong reason cannot look like a fix.
+        var reportedFiles = new HashSet<string>(
+            from site in writers
+            where !IsRestored(site) && !IsProcessLifetime(site)
+            select site.File,
+            StringComparer.Ordinal);
+
+        foreach (string fixedIn847 in ClassesThatRestoredNothing)
+        {
+            await Assert.That(reportedFiles.Contains(fixedIn847)).IsTrue()
+                .Because(
+                    fixedIn847 + " restores nothing: it pins a variable to null and writes null back. If "
+                    + "rule (3) does not report it, the rule cannot see the defect in the class #847 is "
+                    + "about, and every other green in this file is unearned.");
         }
     }
 
@@ -897,13 +1008,13 @@ public class ProcessEnvIsolationRule
         Parallelism Form,
         bool DeclaresTests,
         int WriteLine,
-        string FirstVariable,
+        string[] WrittenVariables,
         HashSet<string> RestoredVariables,
         bool DeclaresEnvRead)
     {
         /// <summary>A site with no env write at all, for the reader half's lookups.</summary>
         internal static readonly TypeSite None = new(
-            "", "", "", 0, Parallelism.None, false, 0, string.Empty,
+            "", "", "", 0, Parallelism.None, false, 0, [],
             new HashSet<string>(StringComparer.Ordinal), false);
     };
 
@@ -917,6 +1028,19 @@ public class ProcessEnvIsolationRule
     {
         var written = new List<string>();
         var restored = new HashSet<string>(StringComparer.Ordinal);
+
+        // Read the whole extent FIRST, because a save may sit after the write it
+        // serves — McpLoginRunnerTests saves in a field initialiser and restores in
+        // Dispose, and a single forward pass would judge the save as absent.
+        var saved = new HashSet<string>(StringComparer.Ordinal);
+        for (int i = from; i < to && i < code.Length; i++)
+        {
+            Match save = SavedEnvIdentifier.Match(code[i]);
+            if (save.Success)
+            {
+                saved.Add(save.Groups["id"].Value);
+            }
+        }
 
         for (int i = from; i < to && i < code.Length; i++)
         {
@@ -940,12 +1064,15 @@ public class ProcessEnvIsolationRule
                 written.Add(name);
             }
 
-            // A restore is a write whose VALUE is a bare identifier rather than a
-            // literal. `null` is the exact token #847 writes back and `""` the next
-            // most common, so neither can satisfy this — which is the whole point.
-            // The variable must also be one this type writes: a test that saves
-            // ANTHROPIC_API_KEY and restores HOME has restored nothing.
-            if (BareIdentifier.IsMatch(value)
+            // A restore hands back a value that was READ — so the value must be an
+            // identifier this extent assigned from a GetEnvironmentVariable call.
+            // Shape alone is not enough and the repository is why: AppHostDiTests
+            // writes SetEnvironmentVariable("HOME", tempHome), and `tempHome` is a
+            // bare identifier that was never read, so a shape-only rule would call
+            // that one-shot swap a restore of itself and exempt the class by
+            // accident. The variable must also be one this type writes: a test that
+            // saves ANTHROPIC_API_KEY and restores HOME has restored nothing.
+            if (saved.Contains(value)
                 && !NeverARestoredValue.Contains(value)
                 && written.Contains(name, StringComparer.Ordinal))
             {
@@ -1047,7 +1174,7 @@ public class ProcessEnvIsolationRule
     {
         for (int i = from; i < to && i < code.Length; i++)
         {
-            if (StripLiterals(SourceScan.StripComments(code[i])).Contains(EnvReadCall, StringComparison.Ordinal))
+            if (AnyAmbientRead.IsMatch(StripLiterals(SourceScan.StripComments(code[i]))))
             {
                 return true;
             }
@@ -1104,13 +1231,22 @@ public class ProcessEnvIsolationRule
             yield break;
         }
 
+        // Two views of the same lines, for two different questions.
+        //
+        //   * `code` has comments stripped and literals INTACT. Rule (3) needs the
+        //     variable NAME, and StripLiterals — which is what makes prose in a log
+        //     message stop looking like a call — necessarily destroys it. So a
+        //     candidate line is confirmed through IsEnvWrite (which strips, on its
+        //     own, per line) and only then re-read for its name from this view. A
+        //     name inside a message still cannot become a violation: it is filtered
+        //     out before the name is ever read.
+        //   * Length must match, because every line number reported below indexes
+        //     into it. StripComments preserves line count by design; if that ever
+        //     stops being true the numbers point at the wrong source, and failing
+        //     loudly beats reporting confident nonsense.
         string[] code = SourceScan.StripComments(string.Join('\n', lines)).Split('\n');
         if (code.Length != lines.Length)
         {
-            // (unchanged guard, restated for the reader below)
-            // StripComments preserves line count by design. If that ever stops being
-            // true the line numbers below point at the wrong source, and failing
-            // loudly beats reporting confident nonsense.
             yield break;
         }
 
@@ -1174,7 +1310,7 @@ public class ProcessEnvIsolationRule
                 ReadParallelism(code, index),
                 DeclaresTestMethods(code, index, end),
                 FirstEnvWriteBetween(code, index, end),
-                written.Length > 0 ? written[0] : string.Empty,
+                written,
                 restored,
                 DeclaresEnvRead(code, index, end));
         }
