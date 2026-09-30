@@ -29,6 +29,18 @@
 // for the model provider lives in
 // `Harbor.Application.Tests.CachingSystemPromptBuilderTests`.
 //
+// HOW A READ IS NAMED
+// -------------------
+// The renderer does not stop at the member it is reading: it writes
+// `context.Tools.Count`, `context.Skills.OrderBy(…)`, `context.ContextFiles.Count`
+// where the key writes `context.Tools` and stops. So a match is reduced to the
+// context MEMBER it reaches — first segment, plus one more for `Agent`/`Model`,
+// the two record-valued members — and both sides go through the same reduction.
+// Without it the same member reads as three on one side and one on the other and
+// the rule reports all three collections as gaps. (Calibrated against a red CI
+// run, which is where that came from: the first version took matches verbatim
+// and named every chain with its `context.` prefix still attached.)
+//
 // SCOPE — and it is total in-tree, which is why this pair and not a walk
 // ----------------------------------------------------------------------
 // The product has exactly one `ISystemPromptBuilder` implementation
@@ -73,7 +85,7 @@ using System.Text.RegularExpressions;
 namespace Harbor.Architecture.Tests;
 
 /// <summary>One context member the renderer reads.</summary>
-/// <param name="Chain">Dotted path rooted at <c>context</c>, trailing <c>.Value</c> removed.</param>
+/// <param name="Chain">The context member, as named by <see cref="PromptCacheKeyProbe.Canonical" />: <c>Model.ProviderId</c>, <c>Tools</c>.</param>
 /// <param name="Line">1-based line of the read.</param>
 /// <param name="Text">The line, trimmed.</param>
 internal sealed record RenderedContextMember(string Chain, int Line, string Text);
@@ -173,7 +185,7 @@ internal static partial class PromptCacheKeyProbe
             foreach (Match match in ContextChain().Matches(clean[i]))
             {
                 into.Add(new RenderedContextMember(
-                    Normalize(match.Value),
+                    Canonical(match.Value),
                     i + 1,
                     clean[i].Trim()));
             }
@@ -209,20 +221,38 @@ internal static partial class PromptCacheKeyProbe
         {
             foreach (Match match in ContextChain().Matches(clean[i]))
             {
-                into.Add(Normalize(match.Value));
+                into.Add(Canonical(match.Value));
             }
         }
     }
 
     /// <summary>
-    ///     Drops the trailing <c>.Value</c> a strongly-typed id member exposes
-    ///     (<c>Agent.Name.Value</c> is the agent's name, not a member called
-    ///     <c>Value</c>), so both sides of the delta are named the same way.
+    ///     Names the CONTEXT MEMBER a raw match reaches.
     /// </summary>
-    private static string Normalize(string chain) =>
-        chain.EndsWith(".Value", StringComparison.Ordinal)
-            ? chain[..^".Value".Length]
-            : chain;
+    /// <remarks>
+    ///     The raw text reaches past the member it is about: the renderer writes
+    ///     <c>context.Tools.Count</c> and <c>context.Skills.OrderBy(…)</c> where the
+    ///     key writes <c>context.Tools</c> and stops, so a verbatim comparison makes
+    ///     one member look like three on one side and one on the other — and
+    ///     reports all three collections as gaps. The first segment names the
+    ///     member; <c>Agent</c> and <c>Model</c>, the two record-valued members,
+    ///     carry one more. Two segments also drops the trailing <c>.Value</c> of a
+    ///     strongly-typed id. Both sides go through THIS function, which is the
+    ///     point: canonicalising one side only would report every member as a gap.
+    /// </remarks>
+    internal static string Canonical(string rawChain)
+    {
+        string[] parts = rawChain.Split('.');
+        if (parts.Length < 2)
+        {
+            return rawChain;
+        }
+
+        string root = parts[1];
+        return root is "Agent" or "Model" && parts.Length >= 3
+            ? root + "." + parts[2]
+            : root;
+    }
 
     /// <summary>A dotted chain rooted at a parameter literally named <c>context</c>.</summary>
     [GeneratedRegex(@"\bcontext(?:\.[A-Za-z_][A-Za-z0-9_]*)+")]
