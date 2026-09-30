@@ -212,9 +212,9 @@ is normative and gate-checked; the choice in §6 is not taken and nothing is
 implemented. No product code changed in the commit that recorded this.
 
 ## Context
-#788 (follow-up from #682) counted a session's cumulative token spend rendered
-five ways in two notations, and declined to unify them because the choice is a
-rendering decision with golden-frame blast radius. Re-measured on
+Issue #788 (follow-up from #682) counted a session's cumulative token spend
+rendered five ways in two notations, and declined to unify them because the
+choice is a rendering decision with golden-frame blast radius. Re-measured on
 `dev` = `2c55def5`, the inventory is six writers and three conventions, not five
 and two: a third convention writes the cell raw with no suffix on the plain/ANSI
 status line, and `M` is uppercase everywhere, so only `K` vs `k` actually
