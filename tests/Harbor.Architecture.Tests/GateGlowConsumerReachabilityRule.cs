@@ -24,13 +24,10 @@
 // -----------------------------------------
 // `PostFxPipeline` holds a FIXED slot table (`IPostEffect?[] _slots`, 8 entries) and
 // `Flush` runs every armed effect whose region contains the cell. Nothing resets the
-// table between frames. So the drain loop at the tail of `ArmGateGlow` —
-//
-//     for (int i = count; i < VirtualizedChatTimeline.MaxFxDamage; i++)
-//         host.ScreenSession.Effects.Set(i, null);
-//
-// — is the ONLY thing standing between "the gate was answered" and "the gate glows
-// forever". Delete those three lines and every test in `PostFxTests` stays green,
+// table between frames. So the drain at the tail of `ArmGateGlow` — the loop that
+// walks the slots from the ledger's count up to `VirtualizedChatTimeline.MaxFxDamage`
+// writing null into each — is the ONLY thing standing between "the gate was answered"
+// and "the gate glows forever". Delete it and every test in `PostFxTests` stays green,
 // and the reason is worth spelling out because none of them is dumb:
 // `ArmedGlow_TransformsEmittedStyle_AndMirrorsTerminalView` does disarm a glow and
 // does assert that the plain cell is repainted — but it disarms by writing
@@ -80,6 +77,24 @@
 // same shape: assert the far side produced files, and assert it in the same test that
 // consumes the number.
 //
+// WHAT THE FIRST RED RUN CAUGHT, WHICH WAS THIS GUARD SATISFYING ITSELF
+// -----------------------------------------------------------------------
+// The first CI run of this file failed one assertion and passed the other, and
+// the one it passed is the one this issue is about. `EveryGateGlowConsumer_IsNamedByATest`
+// went GREEN with `ArmGateGlow` having no caller anywhere, because the file
+// doing the looking was itself a test file, and its own positive control asserts
+// `IsEqualTo("ArmGateGlow")`. `SourceCommentStripper` strips comments and
+// deliberately KEEPS string literals, so a name that appears only inside an
+// expected-value string counts as a caller. A golden fixture, an
+// expected-string table or a rule's own control would each have done it.
+//
+// So the test side now has literals blanked as well as comments stripped, and the
+// positive control carries the exact shape that did it — a name in prose, a name
+// in a string constant, and a longer identifier that starts with it. That is the
+// finding worth carrying out of #889 rather than a detail of this rule: a guard
+// that greps test files for a name is not measuring coverage, and the file that
+// breaks first is its own.
+//
 // WHAT THIS FILE IS NOT
 // ---------------------
 //   * Not a second `SourceScan` decision. #877 declared the `/tests/` clause correct
@@ -94,7 +109,16 @@
 //     failure message as evidence a human reads; they are not an assertion. The
 //     assertion is reachability, and the drain's semantics are carried by the
 //     behavioural test that calls the real method.
+//   * Not a claim that the name is a WHOLE causal chain. "Some test calls this
+//     method" is a proxy for "deleting the drain turns something red", and it is a
+//     proxy on purpose: a causal dependency between a source edit and a test outcome
+//     is not statically decidable, whereas a call site is. A test that drove the
+//     consumer only INDIRECTLY (through the frame loop) would leave this rule red
+//     even though its coverage was real — the failure message names the method and
+//     says what to do, and widening the rule to indirect coverage is a decision
+//     somebody should make on purpose rather than a gap to paper over.
 
+using System.Text;
 using System.Text.RegularExpressions;
 
 namespace Harbor.Architecture.Tests;
@@ -102,7 +126,7 @@ namespace Harbor.Architecture.Tests;
 /// <summary>One product method that turns the glow ledger into post-fx slot writes.</summary>
 /// <param name="Method">The enclosing method's name — what a test has to name.</param>
 /// <param name="File">Repo-relative declaration file.</param>
-/// <param name="Line">1-based line of the ledger read inside it.</param>
+/// <param name="Line">1-based line of the first ledger read inside it.</param>
 /// <param name="ArmCalls">How many of the FILE's slot writes carry a non-null effect.</param>
 /// <param name="DisarmCalls">How many of the FILE's slot writes carry <c>null</c>.</param>
 /// <param name="NamedBy">Repo-relative test files whose code names <paramref name="Method" />.</param>
@@ -215,7 +239,14 @@ internal static class GateGlowConsumerProbe
 
             if (IsTestFile(source.Relative))
             {
-                testNames.Add((source.Relative, joined));
+                // Literals blanked, not just comments: see BlankLiterals. Without this the guard
+                // satisfies ITSELF — its own positive control asserts
+                // IsEqualTo("ArmGateGlow"), and a string literal survives comment stripping, so the
+                // one file guaranteed to mention the name is the file that must not count. That is
+                // not hypothetical: the first red run of this rule passed its own assertion for
+                // exactly that reason, and the only thing that caught it was the control failing
+                // for an unrelated reason in the same run.
+                testNames.Add((source.Relative, BlankLiterals(joined)));
                 continue;
             }
 
@@ -225,20 +256,16 @@ internal static class GateGlowConsumerProbe
                 continue;
             }
 
-            int readLine = LineOfFirst(source.Stripped, LedgerRead);
-            string? method = EnclosingMethod(source.Stripped, readLine);
-            if (method is null)
+            foreach ((string method, int readLine) in ConsumersIn(source.Stripped))
             {
-                continue;
+                found.Add(new GateGlowConsumer(
+                    method,
+                    source.Relative,
+                    readLine,
+                    CountSlotWrites(source.Stripped, disarm: false),
+                    CountSlotWrites(source.Stripped, disarm: true),
+                    []));
             }
-
-            found.Add(new GateGlowConsumer(
-                method,
-                source.Relative,
-                readLine,
-                CountSlotWrites(source.Stripped, disarm: false),
-                CountSlotWrites(source.Stripped, disarm: true),
-                []));
         }
 
         var consumers = new List<GateGlowConsumer>();
@@ -269,27 +296,182 @@ internal static class GateGlowConsumerProbe
     private static bool IsTestFile(string relative) =>
         relative.StartsWith("tests/", StringComparison.Ordinal);
 
-    /// <summary>1-based line of the first line containing <paramref name="needle" />, or 0.</summary>
-    private static int LineOfFirst(string[] stripped, string needle)
+    /// <summary>
+    ///     Replaces the CONTENTS of every string, verbatim-string and character literal with
+    ///     spaces, leaving the delimiters and the line structure intact.
+    /// </summary>
+    /// <remarks>
+    ///     <para>
+    ///         <see cref="SourceCommentStripper" /> strips comments and deliberately KEEPS string
+    ///         literals, because the rules built on it look for identifiers and a literal rarely
+    ///         carries one. This rule is the exception: what it looks for on the test side is a CALL,
+    ///         and a call is not spelled inside a literal.
+    ///     </para>
+    ///     <para>
+    ///         The self-satisfaction this closes is not a corner case. A rule that greps test files
+    ///         for a method name is satisfied by any test that merely ASSERTS the name — a golden
+    ///         fixture, an expected-string table, a rule's own positive control. All three are
+    ///         ordinary things to have in a test tree, and each one would have turned this guard
+    ///         into a permanent green light with no caller anywhere. Blanking the literals makes the
+    ///         rule answer the question it claims to answer: is the method CALLED from a test.
+    ///     </para>
+    /// </remarks>
+    private static string BlankLiterals(string text)
     {
+        var output = new StringBuilder(text.Length);
+        LiteralState state = LiteralState.Code;
+
+        for (int i = 0; i < text.Length; i++)
+        {
+            char c = text[i];
+            char next = i + 1 < text.Length ? text[i + 1] : '\0';
+
+            if (state == LiteralState.Code)
+            {
+                if (c == '@' && next == '"')
+                {
+                    state = LiteralState.VerbatimString;
+                    output.Append(' ');
+                    i++;
+                    continue;
+                }
+
+                if (c == '"')
+                {
+                    state = LiteralState.String;
+                    output.Append(' ');
+                    continue;
+                }
+
+                if (c == '\'')
+                {
+                    state = LiteralState.Char;
+                    output.Append(' ');
+                    continue;
+                }
+
+                output.Append(c);
+                continue;
+            }
+
+            // Inside a literal: every character is replaced, delimiters included, so no partial
+            // identifier can survive. An escape consumes the next character with it.
+            output.Append(' ');
+
+            if (c == '\\' && next != '\0' && state != LiteralState.VerbatimString)
+            {
+                output.Append(' ');
+                i++;
+                continue;
+            }
+
+            if (state == LiteralState.VerbatimString)
+            {
+                if (c == '"' && next == '"')
+                {
+                    output.Append(' ');
+                    i++;
+                    continue;
+                }
+
+                if (c == '"')
+                {
+                    state = LiteralState.Code;
+                }
+
+                continue;
+            }
+
+            if (state == LiteralState.String && c == '"')
+            {
+                state = LiteralState.Code;
+                continue;
+            }
+
+            if (state == LiteralState.Char && c == '\'')
+            {
+                state = LiteralState.Code;
+            }
+        }
+
+        return output.ToString();
+    }
+
+    private enum LiteralState
+    {
+        Code,
+        String,
+        VerbatimString,
+        Char,
+    }
+
+    /// <summary>1-based line of every line containing <paramref name="needle" />, in order.</summary>
+    private static List<int> LinesOf(string[] stripped, string needle)
+    {
+        var lines = new List<int>();
         for (int i = 0; i < stripped.Length; i++)
         {
             if (stripped[i].Contains(needle, StringComparison.Ordinal))
             {
-                return i + 1;
+                lines.Add(i + 1);
             }
         }
 
-        return 0;
+        return lines;
+    }
+
+    /// <summary>
+    ///     Every method name in one file that reads the ledger, with the line of the first read
+    ///     inside it, deduplicated by name and in first-read order. A file with two consumers
+    ///     yields two entries, which is what makes the rule's "deleting one cannot be masked by
+    ///     adding another" claim true rather than aspirational.
+    /// </summary>
+    /// <remarks>
+    ///     Overloads of the same name collapse to one entry on purpose: what a test has to do is
+    ///     name the method, and a test that names the name has satisfied the rule.
+    /// </remarks>
+    private static List<(string Method, int Line)> ConsumersIn(string[] stripped)
+    {
+        var found = new List<(string Method, int Line)>();
+        var names = new List<string>();
+        foreach (int line in LinesOf(stripped, LedgerRead))
+        {
+            string? method = EnclosingMethod(stripped, line);
+            if (method is null || names.Contains(method))
+            {
+                continue;
+            }
+
+            names.Add(method);
+            found.Add((method, line));
+        }
+
+        return found;
     }
 
     /// <summary>
     ///     The innermost declaration preceding <paramref name="line" /> — the LAST one before it by
-    ///     position, which is what makes a local function win over its enclosing method. No brace
-    ///     matching is involved, deliberately: counting braces correctly across string literals is a
-    ///     second parser, and the property that matters here ("who names the method a test must
-    ///     call") does not need one.
+    ///     position. No brace matching is involved, deliberately: counting braces correctly across
+    ///     string literals is a second parser, and the property that matters here ("who names the
+    ///     method a test must call") does not need one.
     /// </summary>
+    /// <remarks>
+    ///     <para>
+    ///         The cost of not parsing braces is one known false positive, and it is stated here
+    ///         rather than discovered later: a consumer written as a LOCAL FUNCTION is attributed to
+    ///         the local, and no test can call a local, so the rule would demand a name that cannot
+    ///         be reached. That is a loud failure, not a silent one — the message prints the attributed
+    ///         name with its file and line, and an attributed name that is not a member is obvious on
+    ///         sight. The alternative was to walk out to the enclosing member, which needs the brace
+    ///         parser this deliberately does not have, and the glow consumer is a frame-loop method by
+    ///         construction, so the case is not reachable from the code this rule watches today.
+    ///     </para>
+    ///     <para>
+    ///         Class and record primary constructors are accepted as declarations too, which is
+    ///         harmless and slightly useful: they give the walk a floor, so a ledger read that somehow
+    ///         sat directly in a type body is attributed to the type rather than to nothing.
+    ///     </para>
+    /// </remarks>
     internal static string? EnclosingMethod(string[] stripped, int line)
     {
         string? best = null;
@@ -509,17 +691,21 @@ public sealed class GateGlowConsumerReachabilityRule
     // =====================================================================
 
     /// <summary>
-    ///     The real probe, driven over synthetic sources: it finds the consumer and names its
-    ///     enclosing method, and it rejects three shapes that look like one.
+    ///     The real probe, driven over synthetic sources: it finds every consumer and names its
+    ///     enclosing method, and it rejects the shapes that would let it go green for free.
     /// </summary>
     /// <remarks>
     ///     Reusing <see cref="GateGlowConsumerProbe.ScanFiles" /> is the point — a hand-written
-    ///     matcher in the control would prove the control, not the rule. The three decoys are the ways
-    ///     this rule could go green for free: a file that writes post-fx slots without touching the
-    ///     glow ledger, a ledger read that exists only in a comment, and a slot write that exists only
-    ///     in a comment. The nested local function is a fourth case and it pins the attribution
-    ///     choice: a call inside a local function belongs to the local, because that is the method a
-    ///     test would have to call.
+    ///     matcher in the control would prove the control, not the rule. The decoys are the ways this
+    ///     rule could pass without looking at anything: a file that writes post-fx slots without
+    ///     touching the glow ledger, and a file whose two tokens exist only inside comments (whose
+    ///     prose spells both out on purpose, so comment stripping is doing real work). The fourth
+    ///     case is the opposite failure — TWO consumers in one file — which is what makes the rule's
+    ///     per-method claim true rather than aspirational, since a per-file probe would report one
+    ///     and let a deletion hide behind its neighbour. The last tripwire is on the test side, and
+    ///     it is the important one: a mention in prose, a mention in a string constant, and a longer
+    ///     identifier that merely starts with the name are the three ways to fake a caller — and
+    ///     this rule's own first red run was fooled by the middle one.
     /// </remarks>
     [Test]
     public async Task TheConsumerProbe_FindsTheRealShape_AndRejectsTheDecoys()
@@ -576,25 +762,30 @@ public sealed class GateGlowConsumerReachabilityRule
                 "}",
             ]),
 
-            // Case 4: the read sits inside a local function, so the LOCAL is what a test must call.
-            ("apps/Harbor.App.Cli/Repl/ProbeLocal.cs",
+            // Case 4: TWO consumers in one file. The rule asserts a list of method names, not a
+            // count, so it has to find both — a per-file probe would let one deletion hide behind
+            // the other.
+            ("apps/Harbor.App.Cli/Repl/ProbeTwo.cs",
             [
                 "namespace Harbor.App.Cli.Repl;",
-                "internal sealed class ProbeLocal",
+                "internal sealed class ProbeTwo",
                 "{",
-                "    private void Outer()",
+                "    private void ArmOne()",
                 "    {",
-                "        void Inner()",
-                "        {",
-                "            ConsumeGlowRegions(scratch);",
-                "            Effects.Set(0, effect);",
-                "        }",
-                "        Inner();",
+                "        ConsumeGlowRegions(one);",
+                "        Effects.Set(0, first);",
+                "    }",
+                "",
+                "    private void ArmTwo()",
+                "    {",
+                "        ConsumeGlowRegions(two);",
+                "        Effects.Set(1, second);",
                 "    }",
                 "}",
             ]),
 
-            // The test side: one file naming the real consumer, one naming the local, one naming neither.
+            // The test side: one file naming the real consumer, one naming the second of the pair,
+            // and one that fakes a caller twice.
             ("tests/Harbor.GateGlow.Tests/NamesTheConsumer.cs",
             [
                 "namespace Harbor.GateGlow.Tests;",
@@ -603,12 +794,12 @@ public sealed class GateGlowConsumerReachabilityRule
                 "    public void Drive() => new ReplLifecycle(host).ArmGateGlow();",
                 "}",
             ]),
-            ("tests/Harbor.GateGlow.Tests/NamesTheLocal.cs",
+            ("tests/Harbor.GateGlow.Tests/NamesTheSecond.cs",
             [
                 "namespace Harbor.GateGlow.Tests;",
-                "public sealed class NamesTheLocal",
+                "public sealed class NamesTheSecond",
                 "{",
-                "    public void Drive() => Outer();",
+                "    public void Drive() => new ReplLifecycle(host).ArmTwo();",
                 "}",
             ]),
             ("tests/Harbor.GateGlow.Tests/NamesNothing.cs",
@@ -617,18 +808,19 @@ public sealed class GateGlowConsumerReachabilityRule
                 "public sealed class NamesNothing",
                 "{",
                 "    // A comment that MENTIONS ArmGateGlow in prose must not count as a caller.",
+                "    private const string Expected = \"ArmGateGlow\";",
                 "    public void Drive() => ArmGateGlowRenamed();",
                 "}",
             ]),
         ]);
 
         var consumers = report.Consumers;
-        await Assert.That(consumers.Count).IsEqualTo(2)
+        await Assert.That(consumers.Count).IsEqualTo(3)
             .Because(
-                "exactly two synthetic files are glow consumers: the one that reads the ledger and "
-                + "writes slots, and the one that does both inside a local function. Decoy 1 writes "
-                + "slots without reading the ledger, decoy 2 has both only inside comments, and "
-                + "decoy 2's prose deliberately spells both tokens out. Found: "
+                "three synthetic consumers exist: the transcribed ArmGateGlow shape, plus the two "
+                + "methods of ProbeTwo. Decoy 1 writes slots without reading the ledger, decoy 2 has "
+                + "both tokens only inside comments (its prose spells them out on purpose), and a "
+                + "per-file probe would report ProbeTwo once instead of twice. Found: "
                 + string.Join(" | ", consumers.Select(Describe)));
 
         var real = consumers.SingleOrDefault(c => c.File.EndsWith("Probe.cs", StringComparison.Ordinal));
@@ -638,44 +830,44 @@ public sealed class GateGlowConsumerReachabilityRule
             .Because(
                 "the enclosing method is the name a test has to call, so the attribution must be the "
                 + "DECLARATION the ledger read sits inside and not one of the statements around it. "
-                + "Both `Effects.Set(i, …);` lines end in a semicolon and neither is a declaration, so "
-                + "the last declaration before the read is the method. Got: " + real.Method);
+                + "Both Effects.Set lines end in a semicolon and neither is a declaration, so the "
+                + "last declaration before the read is the method. Got: " + real.Method);
         await Assert.That(real.ArmCalls).IsEqualTo(1)
             .Because("the transcribed body writes one non-null effect into a slot");
         await Assert.That(real.DisarmCalls).IsEqualTo(1)
             .Because("the transcribed body writes one null into a slot — the drain this issue is about");
-        await Assert.That(real.NamedBy).IsNotEmpty()
-            .Because("a test file calling ArmGateGlow() is what makes the consumer covered");
 
-        var local = consumers.SingleOrDefault(c => c.File.EndsWith("ProbeLocal.cs", StringComparison.Ordinal));
-        await Assert.That(local).IsNotNull()
-            .Because("a local function that reads the ledger and writes slots is still a consumer");
-        await Assert.That(local!.Method).IsEqualTo("Inner")
-            .Because(
-                "attribution is innermost-by-position, so the local wins over Outer. A test cannot call "
-                + "a local function, which is exactly why the OUTER name would be the useless answer. "
-                + "Got: " + local.Method);
-        await Assert.That(local.NamedBy).IsNotEmpty()
-            .Because("a test file naming Inner is what makes that consumer covered");
-
-        // The whole point of the tripwire. `NamesNothing` is the fourth decoy and it lives on the TEST
-        // side, where the two ways to fake a caller live: a mention in prose, and a longer identifier
-        // that merely starts with the name. Either one counting would let this rule go green without a
-        // single real call.
+        // The whole point of the tripwire. `NamesNothing` is the fifth case and it lives on the
+        // TEST side, where the three ways to fake a caller live: a mention in prose, a mention in a
+        // string literal, and a longer identifier that merely starts with the name. Any one of them
+        // counting would let this rule go green with no caller anywhere — and the literal one is not
+        // hypothetical, it is what this guard did to itself on its first red run.
         await Assert.That(string.Join(" | ", real.NamedBy))
             .IsEqualTo("tests/Harbor.GateGlow.Tests/NamesTheConsumer.cs")
             .Because(
-                "NamesNothing names ArmGateGlow only inside a comment and calls ArmGateGlowRenamed, a "
-                + "different whole word. Comment stripping plus the whole-word boundary are what stop "
-                + "either from counting as a caller, and a rule satisfied by prose is the failure mode "
-                + "this whole file is about. Callers found: " + string.Join(" | ", real.NamedBy));
+                "NamesNothing names ArmGateGlow in a comment, in a string constant, and calls "
+                + "ArmGateGlowRenamed — a different whole word. Comment stripping, literal blanking "
+                + "and the whole-word boundary are the three things that stop it counting, and a rule "
+                + "satisfied by any of them is the failure mode this whole file is about. Callers "
+                + "found: " + string.Join(" | ", real.NamedBy));
 
-        await Assert.That(string.Join(" | ", local.NamedBy))
-            .IsEqualTo("tests/Harbor.GateGlow.Tests/NamesTheLocal.cs")
+        var pair = consumers.Where(c => c.File.EndsWith("ProbeTwo.cs", StringComparison.Ordinal))
+            .Select(c => c.Method)
+            .ToArray();
+        await Assert.That(string.Join(" | ", pair))
+            .IsEqualTo("ArmOne | ArmTwo")
             .Because(
-                "Inner is named by exactly one file — the one that calls Outer(), because Inner is a "
-                + "local function. NamesTheConsumer names ArmGateGlow only, and NamesNothing names "
-                + "neither. Callers found: " + string.Join(" | ", local.NamedBy));
+                "a file holding two consumers must yield two entries, or the rule's per-method claim "
+                + "is really a per-file claim and deleting one consumer would be masked by the other. "
+                + "Found: " + string.Join(" | ", pair));
+
+        var second = consumers.Single(c => c.Method == "ArmTwo");
+        await Assert.That(string.Join(" | ", second.NamedBy))
+            .IsEqualTo("tests/Harbor.GateGlow.Tests/NamesTheSecond.cs")
+            .Because(
+                "the second consumer of the pair is covered by its own file, and the file that names "
+                + "ArmGateGlow does not name it — otherwise a single test naming one method would "
+                + "satisfy the rule for both. Callers found: " + string.Join(" | ", second.NamedBy));
     }
 
     /// <summary>One consumer, rendered for a failure message.</summary>
