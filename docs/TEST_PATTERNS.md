@@ -703,8 +703,46 @@ public class MyMessageTests
 |---|---|
 | `[Test]` | Marks a method as a test (must return `Task` or `void`). |
 | `[Before(HookType.TestDiscovery)]` | Global setup (use in `GlobalSetup` class). |
-| `[NotInParallel("group")]` | Prevents parallel execution with other tests in the same group. |
+| `[NotInParallel]` | Runs the test **completely alone** — no other test in the process overlaps it. |
+| `[NotInParallel("group")]` | Serializes against other tests carrying an **overlapping key only**. Not a global lock — see below. |
 | `[SkipWhenNotLinux]` | Skip on non-Linux. |
+
+### Parallelism: what each `[NotInParallel]` form actually guarantees
+
+Read from TUnit 1.61.0's scheduler, not from the XML docs. This distinction is
+the one that has cost the most: a named key *looks* like a global lock, is not
+one, and the mistake has been made twice (#703's palette flake, #704).
+
+| Form | Serialized against | Scope |
+|---|---|---|
+| `[NotInParallel("a")]` | other tests whose key set **intersects** `{a}` | one test process |
+| `[NotInParallel("a", "b")]` | other tests whose key set intersects `{a}` **or** `{b}` | one test process |
+| `[NotInParallel]` | **every other test, keyed or not** | one test process |
+
+Three consequences, all of them load-bearing:
+
+1. **A keyed test runs concurrently with every unkeyed test in the same
+   assembly.** The two buckets are separate phases joined with
+   `RunPhasesConcurrentlyAsync`, so `ConstraintKeyScheduler` sees only other
+   *keyed* tests. A class that mutates a process-wide static and carries a key
+   is protected from its named peers and from nothing else.
+2. **Keys do not cross processes.** CI runs one `dotnet exec` per test project,
+   so `"pty"` in `Harbor.Tui.CellForge.Tests` and `"pty"` in
+   `Harbor.Tui.CellForge.PtyTests` are two unrelated keys. A key held by exactly
+   one class in its assembly is a label with no effect at all.
+3. **Different keys run concurrently with each other.** A key names *peers*, not
+   a lock tier. `[NotInParallel("pty")]` and `[NotInParallel("ipc")]` never wait.
+
+So: use a key when the set of competitors is knowable and enumerable (a shared
+pseudo-terminal, one headless Avalonia session); use the bare form when you
+mutate a process-wide static and the readers are unkeyed. Prefer not writing
+process state at all — that is what #700 settled on, and it is cheaper than
+either attribute.
+
+If you change the parallelism attribute on a class, say so in the commit
+message and keep the reason as a comment on the attribute. #720 put the key back
+on `ThemeFileWatcherTests` without a word, and the class sat racing unkeyed
+palette readers until this was noticed.
 
 ### Running tests
 
