@@ -66,6 +66,19 @@ public class ReconnectableRpcClientSeamTests
         public Exception? SendFailure { get; set; }
 
         /// <summary>
+        ///     When set, <see cref="ConnectAsync" /> throws this instead of
+        ///     connecting — which is how a failed DIAL is simulated.
+        /// </summary>
+        /// <remarks>
+        ///     It has to be here and not on <see cref="FakeTransport" />: the real
+        ///     client's <c>ConnectAsync</c> is what dials the transport, and the
+        ///     decorator observes the dial only through <c>IRpcClient.ConnectAsync</c>.
+        ///     A fake that returned success here would never fail a dial, and the
+        ///     backoff ladder would never be exercised at all.
+        /// </remarks>
+        public Exception? ConnectFailure { get; set; }
+
+        /// <summary>
         ///     How many times <see cref="ConnectAsync" /> was called. Asserted in
         ///     the headline test: one connect per generation is what "re-dial"
         ///     actually means.
@@ -91,7 +104,9 @@ public class ReconnectableRpcClientSeamTests
         public Task ConnectAsync(CancellationToken ct = default)
         {
             ConnectCount++;
-            return Task.CompletedTask;
+            return ConnectFailure is null
+                ? Task.CompletedTask
+                : Task.FromException(ConnectFailure);
         }
 
         /// <inheritdoc />
@@ -154,9 +169,17 @@ public class ReconnectableRpcClientSeamTests
         /// <summary>When set, <see cref="ConnectAsync" /> throws it — a failed dial.</summary>
         public Exception? DialFailure { get; set; }
 
+        /// <summary>How many times <see cref="ConnectAsync" /> was called.</summary>
+        public int DialCount { get; private set; }
+
         /// <inheritdoc />
         public Task<Stream> ConnectAsync(CancellationToken ct = default)
-            => DialFailure is null ? Task.FromResult<Stream>(Stream.Null) : Task.FromException<Stream>(DialFailure);
+        {
+            DialCount++;
+            return DialFailure is null
+                ? Task.FromResult<Stream>(Stream.Null)
+                : Task.FromException<Stream>(DialFailure);
+        }
 
         /// <inheritdoc />
         public Task DisconnectAsync(CancellationToken ct = default) => Task.CompletedTask;
@@ -178,10 +201,12 @@ public class ReconnectableRpcClientSeamTests
         var transports = new List<FakeTransport>();
         var clients = new List<FakeRpcClient>();
 
-        // Generations 1-3 refuse to dial at the TRANSPORT layer — the "daemon is not
-        // listening yet" case, which is the pre-flight failure the backoff ladder
-        // exists for. Generations 4 and 5 dial normally: 4 is the live one we cut,
-        // 5 is the recovery.
+        // Generations 1-3 fail to CONNECT — the "daemon is not listening yet"
+        // case, which is the pre-flight failure the backoff ladder exists for.
+        // The failure is on the CLIENT, not the transport: MessagePackRpcClient's
+        // ConnectAsync is what actually dials, so a transport that fails while the
+        // client never asks it to connect would leave the ladder untested.
+        // Generations 4 and 5 connect cleanly: 4 is the live one we cut, 5 recovers.
         var wrapper = new ReconnectableRpcClient(
             _ =>
             {
@@ -189,10 +214,6 @@ public class ReconnectableRpcClientSeamTests
                 lock (transports)
                 {
                     transports.Add(transport);
-                    if (transports.Count <= 3)
-                    {
-                        transport.DialFailure = new IOException("daemon not listening");
-                    }
                 }
 
                 return Task.FromResult<IIpcClientTransport>(transport);
@@ -203,6 +224,11 @@ public class ReconnectableRpcClientSeamTests
                 lock (clients)
                 {
                     clients.Add(client);
+
+                    if (clients.Count <= 3)
+                    {
+                        client.ConnectFailure = new IOException("daemon not listening");
+                    }
                 }
 
                 return client;
@@ -219,6 +245,9 @@ public class ReconnectableRpcClientSeamTests
             {
                 try
                 {
+                    // No break once the target is reached: breaking out of the
+                    // enumeration DISPOSES the iterator, and this pump is the
+                    // thing that has to survive the cut and re-dial below.
                     await foreach (var frame in wrapper.SubscribeWithReconnectAsync(
                         _ => { Interlocked.Increment(ref snapshotCalls); return Task.CompletedTask; },
                         cts.Token))
@@ -226,10 +255,6 @@ public class ReconnectableRpcClientSeamTests
                         lock (received)
                         {
                             received.Add(frame);
-                            if (received.Count >= 3)
-                            {
-                                break;
-                            }
                         }
                     }
                 }
@@ -241,6 +266,20 @@ public class ReconnectableRpcClientSeamTests
 
             // Wait until generation 4 is the live one (three failed dials first).
             await WaitUntilAsync(() => clients.Count >= 4, TimeSpan.FromSeconds(20));
+
+            // Generations 1-3 must each have ATTEMPTED a connect and then been
+            // dropped. Asserting the ladder ran is what stops this test from
+            // passing on a decorator that silently skipped the retry entirely.
+            int attemptsOnEarlyGenerations;
+            lock (clients)
+            {
+                attemptsOnEarlyGenerations = clients[0].ConnectCount + clients[1].ConnectCount + clients[2].ConnectCount;
+            }
+
+            await Assert.That(attemptsOnEarlyGenerations).IsEqualTo(3)
+                .Because(
+                    "three failed dials, one connect attempt each. Zero means the decorator gave up; more than "
+                    + "three means it hammered a connection it had already abandoned");
 
             // Generation 4 is the live connection: publish three ordered frames.
             var live = clients[3];
@@ -411,6 +450,8 @@ public class ReconnectableRpcClientSeamTests
             },
             NullLogger.Instance);
 
+        var received = new List<EventFrame>();
+
         await using (wrapper)
         {
             using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(30));
@@ -419,10 +460,13 @@ public class ReconnectableRpcClientSeamTests
             {
                 try
                 {
-                    await foreach (var _ in wrapper.SubscribeWithReconnectAsync(
+                    await foreach (var frame in wrapper.SubscribeWithReconnectAsync(
                         _ => Task.CompletedTask, cts.Token))
                     {
-                        await Task.Delay(10, cts.Token);
+                        lock (received)
+                        {
+                            received.Add(frame);
+                        }
                     }
                 }
                 catch (OperationCanceledException)
@@ -431,13 +475,23 @@ public class ReconnectableRpcClientSeamTests
                 }
             });
 
-            // Wait for the first generation to be live and pumping.
-            await WaitUntilAsync(() => clients.Count >= 1, TimeSpan.FromSeconds(20));
+            // Wait for the first generation to be SUBSCRIBED. The client factory
+            // running is not enough: LostSubscription is attached AFTER the ack,
+            // so raising ConnectionLost before the subscribe would fire at an
+            // object with no listener and the test would hang waiting for a
+            // reconnect that had no cause. Waiting for a delivered FRAME is the
+            // stronger signal — it proves the pump is past the subscription and
+            // inside the read loop, which is exactly when a real read loop dies.
+            await WaitUntilAsync(
+                () => clients.Count >= 1
+                      && SubscribeCount(clients[0]) >= 1
+                      && ReceivedCount(received) >= 1,
+                TimeSpan.FromSeconds(20));
 
             // Now kill it the way a real read loop dies: raise ConnectionLost.
             // This is the LostSubscription path, and the event is the one member
             // of the old concrete client the decorator had no contract for.
-            clients[0].Push(1, 1);
+            clients[0].Push(2, 2);
             clients[0].RaiseConnectionLost();
 
             await WaitUntilAsync(() => clients.Count >= 2, TimeSpan.FromSeconds(20));
@@ -453,17 +507,42 @@ public class ReconnectableRpcClientSeamTests
                     "the generation whose connection died must be disposed, not reused — reusing it would retry "
                     + "against a dead pipe and the reconnect would never actually re-dial");
 
-            // The recovered generation serves the stream again, proving the pump
-            // really resumed rather than the loop merely spinning.
+            // The recovered generation resumes from where the dead one stopped,
+            // and serves the stream again — so the pump really resumed rather
+            // than the loop merely spinning on a fresh, empty connection.
             var recovered = clients[1];
-            recovered.Push(2, 2);
-            await Task.Delay(200);
+            ulong? resumedFrom;
+            lock (recovered.SubscribesGuard)
+            {
+                resumedFrom = recovered.Subscribes.Single().LastSequence;
+            }
+
+            await Assert.That(resumedFrom).IsEqualTo((ulong?)1)
+                .Because(
+                    "the first generation delivered sequence 1 before it died, so the recovered subscribe "
+                    + "must present it. Presenting null would re-deliver frame 1 and the consumer would see "
+                    + "it twice");
 
             await Assert.That(recovered.ConnectCount).IsEqualTo(1)
                 .Because(
                     "the recovered generation is a different client instance that connected once — the "
                     + "signature of a real re-dial");
+
+            recovered.Push(2, 2);
+            await WaitUntilAsync(() => ReceivedCount(received) >= 2, TimeSpan.FromSeconds(20));
         }
+
+        // Exactly-once across the cut: frame 1 was delivered on the dead
+        // generation, frame 2 on the recovered one, and neither appears twice.
+        List<EventFrame> got;
+        lock (received)
+        {
+            got = [.. received];
+        }
+
+        await Assert.That(got.Count).IsEqualTo(2);
+        await Assert.That(got[0].Sequence).IsEqualTo((ulong)1);
+        await Assert.That(got[1].Sequence).IsEqualTo((ulong)2);
     }
 
     /// <summary>
@@ -506,6 +585,27 @@ public class ReconnectableRpcClientSeamTests
     }
 
     // ── Plumbing ───────────────────────────────────────────────────────────
+
+    /// <summary>
+    ///     How many subscribe requests a generation received. Read under the
+    ///     client's own guard, because the pump writes it from another thread.
+    /// </summary>
+    private static int SubscribeCount(FakeRpcClient client)
+    {
+        lock (client.SubscribesGuard)
+        {
+            return client.Subscribes.Count;
+        }
+    }
+
+    /// <summary>How many frames the consumer has seen so far.</summary>
+    private static int ReceivedCount(List<EventFrame> received)
+    {
+        lock (received)
+        {
+            return received.Count;
+        }
+    }
 
     /// <summary>
     ///     Poll until <paramref name="condition" /> holds. Bounded, so a broken
