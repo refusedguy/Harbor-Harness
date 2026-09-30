@@ -293,8 +293,8 @@ keep in step — that is the entire point of the catalog.
 
 `src/Harbor.Abstractions/Tools/IToolSource.cs:6` — `{ GetAllTools, ResolveTools, GetTool }`.
 Composition: `src/Harbor.Registries/Tools/CompositeToolRegistry.cs:6` holds
-`List<IToolSource> _sources`, folds first-success in `GetTool` (`:80-88`), and
-makes `Register`/`Unregister` **read-only** (`:92-94`, each returning an
+`List<IToolSource> _sources`, folds first-success in `GetTool` (`:97`), and
+makes `Register`/`Unregister` **read-only** (`:119,121`, each returning an
 explanatory `Result.Failure`). Two internal sources exist:
 `ToolRegistry.cs:157` (`ConcurrentToolSource`, a `private sealed class` nested in
 `ToolRegistry` itself, unfrozen path) and
