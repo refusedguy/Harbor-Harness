@@ -68,7 +68,33 @@ internal sealed class SlashCommandDispatcher
         SlashCommandDefinition Definition,
         Func<CommandContext, IReadOnlyList<string>, Task<Result>> Execute);
 
-    /// <summary>Lightweight context bag passed to command execute delegates.</summary>
+    /// <summary>
+    ///     The per-call state a command is handed.
+    /// </summary>
+    /// <remarks>
+    ///     <para>
+    ///         #483 — this was a sixteen-member bag handed to all seventeen
+    ///         handlers, and eight of those members were not per-call state at all:
+    ///         they are this dispatcher's OWN lifetime fields, assigned before
+    ///         <c>BuildRegistry()</c> runs. Re-boxing them here handed every command
+    ///         reach it never asked for — <c>/help</c> could name
+    ///         <c>PluginReloadService</c> — and it is why the three host-shape
+    ///         optionals (absent on a MINIMAL host) leaked into the parameter every
+    ///         command receives.
+    ///     </para>
+    ///     <para>
+    ///         Each <c>Register*Commands</c> group now closes over the field it
+    ///         needs instead, so the compiler forbids a command from naming a
+    ///         service it did not ask for. What remains is genuinely per-call: it
+    ///         arrives as a <see cref="HandleCoreAsync" /> argument and changes
+    ///         between dispatches. Narrowing further (four of seventeen commands
+    ///         need only <c>Writer</c>) needs per-command handler types rather than
+    ///         one shared bag.
+    ///     </para>
+    ///     <para>
+    ///         Guarded by <c>tests/Harbor.Architecture.Tests/SlashCommandContextScopeTests.cs</c>.
+    ///     </para>
+    /// </remarks>
     public sealed record CommandContext(
         Action<string> Writer,
         Func<string, Task<string>>? Reader,
@@ -77,15 +103,7 @@ internal sealed class SlashCommandDispatcher
         IAgentRegistry AgentRegistry,
         IProviderRegistry Providers,
         IConfigStore ConfigStore,
-        AuthStore AuthStore,
-        IToolRegistry ToolRegistry,
-        ISessionStore SessionStore,
-        OnboardingWizard Wizard,
-        IPermissionService Permissions,
-        Harbor.Hosting.PluginReloadService? PluginReload = null,
-        Harbor.Hosting.Rendering.IRendererPipeline? RendererPipeline = null,
-        Func<IReadOnlyList<SkillFreshnessEntry>>? SkillRefresh = null,
-        Func<IReadOnlyList<string>, Task<SkillUpdateReport>>? SkillUpdate = null);
+        AuthStore AuthStore);
 
     public SlashCommandDispatcher(
         ILogger<SlashCommandDispatcher> logger,
@@ -157,9 +175,11 @@ internal sealed class SlashCommandDispatcher
             return Task.FromResult(SlashCommandOutcome.Continue);
         }
 
+        // #483: only per-call state travels here. Everything the dispatcher owns
+        // for its own lifetime was closed over by the registration groups, so it
+        // is not re-boxed per dispatch and not in reach of a command.
         var ctx = new CommandContext(writer, reader, session, agent, agentRegistry, providers,
-            configStore, authStore, _tools, _sessions, _wizard, _permissions, _pluginReload, _rendererPipeline,
-            _skillRefresh, _skillUpdate);
+            configStore, authStore);
 
         return ExecuteRegisteredAsync(reg, ctx, args);
     }
@@ -224,7 +244,11 @@ internal sealed class SlashCommandDispatcher
         }
     }
 
-    private static FrozenDictionary<string, SlashCommandRegistration> BuildRegistry()
+    // #483: an INSTANCE method, so each group can close over the lifetime fields
+    // it needs. The constructor assigns every one of them before calling this, so
+    // the closures capture initialised values — the ordering guarantee is at
+    // `SlashCommandDispatcher(...)`, where `_byName = BuildRegistry()` is last.
+    private FrozenDictionary<string, SlashCommandRegistration> BuildRegistry()
     {
         var dict = new Dictionary<string, SlashCommandRegistration>(capacity: 32);
 
@@ -315,7 +339,9 @@ internal sealed class SlashCommandDispatcher
         }
     }
 
-    private static void RegisterCoreCommands(Dictionary<string, SlashCommandRegistration> dict)
+    // #483: an instance method closing over `_wizard`, `_tools` and `_permissions`.
+    // Only genuinely per-call collaborators are read off `ctx` now.
+    private void RegisterCoreCommands(Dictionary<string, SlashCommandRegistration> dict)
     {
         Register(dict, "help", (ctx, _) =>
         {
@@ -337,7 +363,7 @@ internal sealed class SlashCommandDispatcher
 
         Register(dict, "setup", async (ctx, _) =>
         {
-            var result = await ctx.Wizard
+            var result = await _wizard
                 .RunAsync(ctx.Reader!, ctx.Writer).ConfigureAwait(false);
             if (result.IsFailure)
             {
@@ -391,14 +417,17 @@ internal sealed class SlashCommandDispatcher
         Register(dict, "permissions", (ctx, args) =>
         {
             return new PermissionsCommand(
-                    ctx.Permissions,
+                    _permissions,
                     ctx.AgentRegistry,
                     ctx.ConfigStore, ctx.Writer, ctx.Agent, ctx.Session)
                 .ExecuteAsync(args, MakeCtx(ctx));
         });
     }
 
-    private static void RegisterSessionCommands(Dictionary<string, SlashCommandRegistration> dict)
+    // #483: an instance method closing over `_sessions` — the store is the
+    // dispatcher's, not per-call state, so `/sessions` and `/tree` reach it
+    // through the closure and no other command can.
+    private void RegisterSessionCommands(Dictionary<string, SlashCommandRegistration> dict)
     {
         Register(dict, "providers", async (ctx, _) =>
         {
@@ -415,8 +444,7 @@ internal sealed class SlashCommandDispatcher
 
         Register(dict, "sessions", async (ctx, _) =>
         {
-            var store = ctx.SessionStore;
-            var result = await store.ListAsync().ConfigureAwait(false);
+            var result = await _sessions.ListAsync().ConfigureAwait(false);
             if (result.IsFailure)
             {
                 // #603: this had no failure arm and returned Success() anyway,
@@ -432,10 +460,9 @@ internal sealed class SlashCommandDispatcher
             return Result.Success();
         });
 
-        Register(dict, "tree", static async (ctx, _) =>
+        Register(dict, "tree", async (ctx, _) =>
         {
-            var store = ctx.SessionStore;
-            var built = await SessionTreeRunner.BuildAsync(store, ctx.Session.Id).ConfigureAwait(false);
+            var built = await SessionTreeRunner.BuildAsync(_sessions, ctx.Session.Id).ConfigureAwait(false);
             if (built.IsFailure)
             {
                 ctx.Writer($"Cannot list sessions: {built.Error}");
@@ -450,7 +477,7 @@ internal sealed class SlashCommandDispatcher
             return Result.Success();
         });
 
-        Register(dict, "fork", static async (ctx, args) =>
+        Register(dict, "fork", async (ctx, args) =>
         {
             if (args.Count < 2)
             {
@@ -458,7 +485,7 @@ internal sealed class SlashCommandDispatcher
                 return Result.Success();
             }
 
-            var outcome = await new SessionForkRunner(ctx.SessionStore)
+            var outcome = await new SessionForkRunner(_sessions)
                 .ForkAsync(args[0], args[1]).ConfigureAwait(false);
             if (outcome.IsFailure)
             {
@@ -471,12 +498,16 @@ internal sealed class SlashCommandDispatcher
         });
     }
 
-    private static void RegisterHostCommands(Dictionary<string, SlashCommandRegistration> dict)
+    // #483: an instance method closing over `_pluginReload` and `_rendererPipeline`.
+    // Those two are nullable because a MINIMAL host never registers them — and
+    // that host-shape fact now lives HERE, in the one group that can observe it,
+    // instead of in the parameter handed to all seventeen commands.
+    private void RegisterHostCommands(Dictionary<string, SlashCommandRegistration> dict)
     {
         Register(dict, "plugins", (ctx, _) =>
         {
             // Optional host service (absent on MINIMAL — see the field note).
-            if (ctx.PluginReload is { } reload)
+            if (_pluginReload is { } reload)
             {
                 return RunPluginReloadAsync(reload, ctx.Writer);
             }
@@ -500,7 +531,7 @@ internal sealed class SlashCommandDispatcher
         Register(dict, "renderer", (ctx, _) =>
         {
             // Optional host service (absent on headless builds — see the field note).
-            if (ctx.RendererPipeline is not { } pipeline)
+            if (_rendererPipeline is not { } pipeline)
             {
                 ctx.Writer("Renderer pipeline: not available in this build.");
                 return Task.FromResult(Result.Success());
@@ -512,7 +543,10 @@ internal sealed class SlashCommandDispatcher
         });
     }
 
-    private static void RegisterSkillCommands(Dictionary<string, SlashCommandRegistration> dict)
+    // #483: an instance method closing over `_skillRefresh` and `_skillUpdate`.
+    // Both are nullable on a host without a freshness model, and `/skills` is the
+    // only command that ever observes that.
+    private void RegisterSkillCommands(Dictionary<string, SlashCommandRegistration> dict)
     {
         // KILLER_FEATURES §2.7 Feature 10 (issue #23 slice 2, issue #384):
         // `refresh` reseeds the shared SkillFreshnessModel from
@@ -537,13 +571,13 @@ internal sealed class SlashCommandDispatcher
                     return Result.Success();
                 }
 
-                if (ctx.SkillRefresh is null)
+                if (_skillRefresh is null)
                 {
                     ctx.Writer("Skill freshness: not available in this build.");
                     return Result.Success();
                 }
 
-                WriteSkillsSummary(ctx, ctx.SkillRefresh());
+                WriteSkillsSummary(ctx, _skillRefresh());
                 return Result.Success();
             }
 
@@ -553,7 +587,7 @@ internal sealed class SlashCommandDispatcher
                 return Result.Success();
             }
 
-            if (ctx.SkillUpdate is null)
+            if (_skillUpdate is null)
             {
                 ctx.Writer("Skill freshness: not available in this build.");
                 return Result.Success();
@@ -561,12 +595,12 @@ internal sealed class SlashCommandDispatcher
 
             // No names ⇒ every stale skill (resolved against the model).
             var names = args.Count > 1 ? args.Skip(1).ToArray() : Array.Empty<string>();
-            var report = await ctx.SkillUpdate(names).ConfigureAwait(false);
+            var report = await _skillUpdate(names).ConfigureAwait(false);
             ctx.Writer(report.Outcome == SkillUpdateOutcome.Failed
                 ? $"Skills: update failed — {report.Message} (freshness unchanged; run /skills refresh to re-check)"
                 : $"Skills: {report.Message}");
 
-            if (report.Outcome == SkillUpdateOutcome.Updated && ctx.SkillRefresh is { } refresh)
+            if (report.Outcome == SkillUpdateOutcome.Updated && _skillRefresh is { } refresh)
             {
                 WriteSkillsSummary(ctx, refresh());
             }
@@ -605,8 +639,11 @@ internal sealed class SlashCommandDispatcher
             : $"Skills: {entries.Count} checked, {stale} need attention.");
     }
 
-    private static ICommandContext MakeCtx(CommandContext ctx) =>
-        new SimpleCommandContext(ctx.Session, ctx.Agent, ctx.Providers, ctx.ToolRegistry, ctx.Writer, ctx.Reader!);
+    // #483: `_tools` is the dispatcher's own field, so it is closed over here
+    // rather than carried in the bag. The five delegating commands are the only
+    // callers, and they are the only commands that build an `ICommandContext`.
+    private ICommandContext MakeCtx(CommandContext ctx) =>
+        new SimpleCommandContext(ctx.Session, ctx.Agent, ctx.Providers, _tools, ctx.Writer, ctx.Reader!);
 
     private static async Task<Result> RunPluginReloadAsync(
         Harbor.Hosting.PluginReloadService reload, Action<string> writer)
