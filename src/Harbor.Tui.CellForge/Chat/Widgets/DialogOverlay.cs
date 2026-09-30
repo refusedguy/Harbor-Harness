@@ -477,10 +477,27 @@ public sealed class DialogOverlay
     /// <see cref="ConsoleKeyInfo"/> contract, plus Shift/Alt+Enter inserts a
     /// newline in <see cref="DialogKind.Multiline"/> (the composer Enter split:
     /// Ctrl+Enter submits, Shift/Alt+Enter newline, plain Enter submit).
+    /// <para>
+    /// A RELEASE applies nothing (#784). <see cref="KeyEvent"/> is the only
+    /// key vocabulary on this path that carries a phase, so this switch used to
+    /// run twice for one physical keypress: the release of
+    /// <see cref="KeyCode.Char"/> typed the character into the buffer a second
+    /// time, an arrow moved the selection twice, and <see cref="KeyCode.Escape"/>
+    /// dismissed on top of a dismissal that is already invisible. The gate
+    /// accepts {Press, Repeat} — repeat is a real second press, so rejecting
+    /// it would break auto-repeat — and it is deliberately here rather than in
+    /// a converter: <c>KeyEventMapper.ToDto</c> already drops releases, and
+    /// <c>ApprovalGateView.HandleKey</c> already gates on the same pair, so
+    /// the phase was never lost at a boundary, only ignored here.
+    /// <para>
+    /// The legacy <see cref="HandleKey(ConsoleKeyInfo)"/> overload needs no
+    /// twin gate: <see cref="ConsoleKeyInfo"/> has no phase field, because the
+    /// BCL only ever reports presses.
+    /// </para>
     /// </summary>
     public bool HandleKey(in KeyEvent key)
     {
-        if (!Visible)
+        if (!Visible || key.EventType == KeyEventType.Release)
         {
             return false;
         }
