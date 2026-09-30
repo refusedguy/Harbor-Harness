@@ -51,6 +51,7 @@ using CSharpFunctionalExtensions;
 using Harbor.Application.Agents;
 using Harbor.Application.Agents.Pipeline;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Harbor.Hosting.Tests;
