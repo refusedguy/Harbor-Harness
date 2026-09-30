@@ -111,31 +111,51 @@
 // asserting how many rows there are in total, proves nothing about a
 // pre-processing step it skipped.
 //
-// THE THIRD RED RUN, WHICH WAS A GREEN NOBODY COULD EXPLAIN
-// ----------------------------------------------------------
+// THE THIRD AND FOURTH RED RUNS, WHICH WERE A GUARD SATISFYING ITSELF TWICE
+// ------------------------------------------------------------------------
 // With the control fixed, the whole architecture gate went GREEN — `build` and
 // `test (core)` both — while `ArmGateGlow` had no caller anywhere on the tree.
-// The two other tests in this file passed, so the walk read both sides, and the
-// control proved the matcher rejects prose, literals and longer identifiers. That
-// leaves exactly one story: something in `tests/` calls it. Nothing does, and
-// reading the code did not say which part of the rule was wrong.
+// The sibling tests passed, so the walk read both sides; the baseline test
+// passed, so the consumer set was exactly the one row expected with arm=1
+// disarm=1; and the control proved the matcher rejects prose, literals, fields
+// and longer identifiers. Those facts cannot all hold unless a test file CALLS
+// the method. Reading the code did not say which part of the rule was wrong, so
+// the reachability assertion was pinned to an impossible value for one run to
+// get the answer printed. It was:
 //
-// The lesson is not "add more assertions", it is that a guard whose verdict its
-// own author cannot derive is the same defect this issue is about, one level up.
-// Two changes follow from it, and both are about making the rule SAY what it
-// measured instead of asking to be trusted:
+//   named by: tests/Harbor.Architecture.Tests/GateGlowConsumerReachabilityRule.cs
 //
-//   1. The reachability check now requires a CALL SITE — the name as a whole word
-//      followed by a parameter list — rather than a mention. A field, a constant
-//      or a using-alias spells a method's name without calling it, and each of
-//      those is an ordinary thing for a test tree to contain.
-//   2. The consumer set is now a MEASURED BASELINE ("one method, one file, arm=1
-//      disarm=1") rather than a non-emptiness check. An empty set and a set with
-//      a row too many both go red, and the failure prints the live set — so the
-//      next occurrence of an unexplainable green is a one-run diagnosis instead of
-//      an afternoon. The line number is deliberately not in the baseline; it is
-//      printed as a diagnostic, because pinning it would break on any doc comment
-//      added above the method, including the one that makes the rule green.
+// The guard was counting ITSELF. This file has to spell `ArmGateGlow` in a
+// measured baseline, in a positive control and in its own failure messages, and
+// on a tree where nothing calls that method the rule reported it covered. Neither
+// comment stripping nor literal blanking stopped it, and the specific line that
+// satisfied the matcher was NOT established — which is stated here rather than
+// papered over, because a rule whose satisfaction cannot be explained is the same
+// defect this issue is about, one level up.
+//
+// The fix is the one this project already uses for exactly this shape
+// (`SlashCommandRouterShapeRule.SelfRelativePath`): exclude the file BY NAME,
+// fail-closed. A rename makes the exclusion miss, the file starts counting again,
+// and — because the real caller is the behavioural test, not this one — the gate
+// goes RED instead of quietly staying green. A filter keyed on the name would
+// have disarmed the rule instead of fixing it.
+//
+// Three changes, all of them about the rule reporting what it measured rather
+// than asking to be trusted:
+//
+//   1. The self-exclusion, plus two non-vacuity assertions for it: the excluded
+//      path still has to be this file, and the test side still has to hold more
+//      than one file so a walk that returned only the self file cannot pass.
+//   2. The reachability check requires a CALL SITE — the name as a whole word
+//      followed by a parameter list — not a mention. A field, a constant or a
+//      using-alias spells a method's name without calling it, and each of those is
+//      an ordinary thing for a test tree to contain.
+//   3. The consumer set is a MEASURED BASELINE ("one method, one file, arm=1
+//      disarm=1") rather than a non-emptiness check, so an empty set and a set
+//      with a row too many both go red and the failure prints the live set. The
+//      line number is deliberately not in the baseline; it is printed as a
+//      diagnostic, because pinning it would break on any doc comment added above
+//      the method, including the one that makes the rule green.
 //
 // WHAT THIS FILE IS NOT
 // ---------------------
@@ -197,12 +217,27 @@ internal sealed record GateGlowConsumerReport(
 /// <summary>Finds the gate-glow ledger consumers in the product and who names them in tests.</summary>
 internal static class GateGlowConsumerProbe
 {
-    /// <summary>
-    ///     Roots walked in one pass. <c>tests</c> is here rather than scanned separately because the
-    ///     two sides have to be read by the SAME walk: a product-side hit with no test-side read
-    ///     behind it is indistinguishable from a test-side read that found nothing.
-    /// </summary>
+    /// <summary>Repository roots walked in one pass.</summary>
     internal static readonly string[] Roots = ["src", "apps", "tests"];
+
+    /// <summary>
+    ///     This file is the one exclusion from the TEST side of the scan, and it is excluded BY NAME
+    ///     on purpose — the <c>SlashCommandRouterShapeRule.SelfRelativePath</c> idiom, for the same
+    ///     reason. A reachability rule has to SPELL the method name it hunts, so it cannot be in its
+    ///     own scan: this file mentions <c>ArmGateGlow</c> in a measured baseline, in a positive
+    ///     control and in its own failure messages, and on a tree where nothing calls that method
+    ///     the rule reported it covered by ITSELF. Comment stripping and literal blanking both run
+    ///     over this file and neither was enough to stop it.
+    /// </summary>
+    /// <remarks>
+    ///     Naming the file rather than filtering "any file that mentions the name" is what makes this
+    ///     fail CLOSED: rename or move this file and the exclusion misses, the file starts counting
+    ///     again, and — because the real caller is the behavioural test, not this one — the gate goes
+    ///     RED rather than green. A filter keyed on the name would have quietly disarmed the rule
+    ///     instead.
+    /// </remarks>
+    internal const string SelfRelativePath =
+        "tests/Harbor.Architecture.Tests/GateGlowConsumerReachabilityRule.cs";
 
     /// <summary>The ledger read. Presence marks a file as a glow consumer candidate.</summary>
     private const string LedgerRead = "ConsumeGlowRegions(";
@@ -291,6 +326,11 @@ internal static class GateGlowConsumerProbe
 
             if (IsTestFile(source.Relative))
             {
+                if (string.Equals(source.Relative, SelfRelativePath, StringComparison.Ordinal))
+                {
+                    continue; // see SelfRelativePath — fail-closed, excluded by name
+                }
+
                 // Literals blanked as well as comments: see BlankLiterals. Without this the guard
                 // satisfies ITSELF — its own positive control asserts IsEqualTo("ArmGateGlow"), and a
                 // string literal survives comment stripping, so the one file guaranteed to mention
@@ -737,7 +777,7 @@ public sealed class GateGlowConsumerReachabilityRule
         var untested = report.Consumers.Where(c => c.NamedBy.Count == 0).ToArray();
 
         await Assert.That(string.Join(" | ", untested.Select(Describe)))
-            .IsEqualTo("__FORCED_RED_DIAGNOSIS__")
+            .IsEqualTo(string.Empty)
             .Because(
                 "a product method that turns the gate-glow ledger into post-fx slot writes has NO test "
                 + "calling it. The ledger's PRODUCER half is covered (PostFxTests asserts the region "
@@ -815,6 +855,26 @@ public sealed class GateGlowConsumerReachabilityRule
                 + "with its own blast radius (pointing product-scanning rules at tests/ would make every "
                 + "planted positive control fail every other gate), not something to paper over here. "
                 + "Actual count: " + report.SharedHelperTestFilesRead);
+
+        // The self-exclusion is load-bearing, so it gets the same treatment: named by path, and the
+        // path has to still be the file this rule lives in. A rename makes this go red, which is the
+        // point — an exclusion that silently stops matching is worse than no exclusion.
+        string self = Path.Combine(
+            RepoPaths.RepoRoot!, GateGlowConsumerProbe.SelfRelativePath.Replace('/', Path.DirectorySeparatorChar));
+        await Assert.That(File.Exists(self)).IsTrue()
+            .Because(
+                "GateGlowConsumerProbe.SelfRelativePath must still be this file. It is the one path "
+                + "excluded from the test side of the scan, and it is excluded BY NAME precisely so "
+                + "that renaming or moving this file makes the exclusion miss and the rule go RED — "
+                + "the real caller is the behavioural test, not this one, so a missed exclusion cannot "
+                + "quietly keep the gate green. Checked: " + GateGlowConsumerProbe.SelfRelativePath);
+
+        await Assert.That(report.TestFilesRead).IsGreaterThan(1)
+            .Because(
+                "excluding one file must not have emptied the test side — a walk that returned only the "
+                + "self file would satisfy the rule's own exclusion for the wrong reason. Files read — "
+                + "product: " + report.ProductFilesRead + ", tests (self excluded): "
+                + report.TestFilesRead);
     }
 
     // =====================================================================
