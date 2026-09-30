@@ -672,14 +672,28 @@ public sealed class DialogOverlay
             }
             return true;
         }
-        char ch = key.KeyChar;
-        if (!char.IsControl(ch))
+        if (AcceptsTypedChar(key))
         {
-            _input += ch;
+            _input += key.KeyChar;
             return true;
         }
         return false;
     }
+
+    /// <summary>
+    /// Whether a legacy key press types a character into a buffer. Single gate
+    /// for all three editing kinds (#473): the modifier rule the kitty overload
+    /// applies at the <c>KeyCode.Char</c> arm — and that
+    /// <c>ComposerController</c> applies — is <c>(Ctrl|Meta|Alt) == 0</c>, but
+    /// <c>ConsoleKeyInfo</c> carries only Ctrl and Alt, so the legacy side is
+    /// the strict subset of it and the two overloads cannot disagree about a
+    /// gesture again. Before this existed the gate was
+    /// <c>!char.IsControl(KeyChar)</c>, written out three times, which cannot
+    /// see a modifier at all: Alt+char has a printable <c>KeyChar</c>, so it
+    /// typed here while the kitty twin refused it.
+    /// </summary>
+    private static bool AcceptsTypedChar(ConsoleKeyInfo key) =>
+        !key.Alt && !key.Control && !char.IsControl(key.KeyChar);
 
     private bool HandleSelectKey(ConsoleKeyInfo key)
     {
@@ -761,10 +775,9 @@ public sealed class DialogOverlay
                 _editor.DeleteForward();
                 return true;
         }
-        char ch = key.KeyChar;
-        if (!char.IsControl(ch))
+        if (AcceptsTypedChar(key))
         {
-            _editor.InsertChar(ch);
+            _editor.InsertChar(key.KeyChar);
             return true;
         }
         return false;
@@ -795,10 +808,9 @@ public sealed class DialogOverlay
                 _editor.MoveToLineEnd();
                 return true;
         }
-        char ch = key.KeyChar;
-        if (!char.IsControl(ch))
+        if (AcceptsTypedChar(key))
         {
-            _editor.InsertChar(ch);
+            _editor.InsertChar(key.KeyChar);
             return true;
         }
         return false;
