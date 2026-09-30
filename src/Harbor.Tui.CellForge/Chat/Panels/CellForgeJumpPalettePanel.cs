@@ -237,7 +237,7 @@ public sealed class CellForgeJumpPalettePanel : IPanelProvider
     /// </summary>
     private static bool IsTypable(UiKey key) =>
         key.Character is { } c
-        && key.Mods is KeyModifierSet.None or KeyModifierSet.Shift
+        && key.Mods.AcceptsTypedChar()
         && !char.IsControl(c);
 
     /// <summary>Drops the last code point (surrogate-pair safe).</summary>

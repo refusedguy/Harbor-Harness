@@ -34,7 +34,7 @@ public sealed class VimComposerMode
             return composer.HandleKey(key);
         }
 
-        if (NormalMode && key.Key == KeyCode.Char && key.Modifiers == KeyModifiers.None)
+        if (NormalMode && key.Key == KeyCode.Char && key.Modifiers.IsUnmodified())
         {
             var handled = HandleNormal(key.Character, composer);
             if (handled != ComposerAction.Ignored)

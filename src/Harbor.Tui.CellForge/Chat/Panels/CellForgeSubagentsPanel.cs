@@ -129,6 +129,18 @@ public sealed class CellForgeSubagentsPanel : IPanelProvider
     public bool OnKey(UiKey key, PanelContext ctx)
     {
         ArgumentNullException.ThrowIfNull(ctx);
+
+        // #833: a chord is not a refresh or a scroll. The panel is read-only and
+        // holds no text, so it has no claim on a modified rune — Ctrl+r belongs to
+        // the host, which is also why it must not silently kick a refresh and
+        // swallow it. Shift is admitted: the arms below bind 'R', 'J' and 'K'.
+        // One gate here covers both the list and the transcript view, since both
+        // are reached from this method.
+        if (key.Code == UiKeyCode.Char && key.Mods.IsCommandModifier())
+        {
+            return false;
+        }
+
         lock (_gate)
         {
             if (_transcriptSessionId is not null)

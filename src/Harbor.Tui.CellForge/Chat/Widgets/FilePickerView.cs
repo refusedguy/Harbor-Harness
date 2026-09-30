@@ -150,7 +150,7 @@ public sealed class FilePickerView
 
                 return true;
 
-            case KeyCode.Char when key.Modifiers is KeyModifiers.None or KeyModifiers.Shift:
+            case KeyCode.Char when key.Modifiers.AcceptsTypedChar():
                 _query += key.Character.ToString();
                 Refilter();
                 return true;

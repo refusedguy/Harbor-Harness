@@ -53,6 +53,18 @@ public sealed class CellForgeGraphRules
                 continue;
             }
 
+            // #886: this assembly is the rule's own instrument — it references
+            // the engine BECAUSE the rules must be able to load what they judge.
+            // Grading it reports the test project as a layering leak of itself.
+            // Dormant until KeyGateFamilyRules (#833) drove ComposerController as
+            // a real object, which made the engine load for the first time.
+            // Same shape as ExtensionAxisFreezeRule, which already skips test
+            // and benchmark assemblies by name.
+            if (string.Equals(name, "Harbor.Architecture.Tests", StringComparison.Ordinal))
+            {
+                continue;
+            }
+
             var refs = ArchitectureTestHelpers.GetReferencedAssemblyNames(asm);
             if (refs.Contains("Harbor.Tui.CellForge.Engine"))
             {
