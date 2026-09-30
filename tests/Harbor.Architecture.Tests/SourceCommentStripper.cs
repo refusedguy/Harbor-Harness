@@ -82,11 +82,13 @@ internal static class SourceCommentStripper
     ///     starts — and is discarded — in <see cref="StripState.Code" />.
     /// </summary>
     /// <remarks>
-    ///     Returning the state is the whole mechanism. The obvious alternative, asking
-    ///     afterwards whether the line left the lexer inside a block comment, cannot
-    ///     work: this method DELETES the comment characters, so the stripped text no
-    ///     longer contains the <c>/*</c> that would answer the question. That was #919,
-    ///     and it is why the counter it used is gone rather than fixed.
+    ///     Returning the state is the whole mechanism, and the reason is not a
+    ///     preference. This method DELETES the comment characters, so the stripped
+    ///     text no longer holds the <c>/*</c> that would answer "did this line open a
+    ///     block comment" — a question asked afterwards is answered from evidence
+    ///     that is already gone. That was #919, and it is why the counter it used is
+    ///     gone rather than fixed. See <see cref="StripAll" /> for what that counter
+    ///     actually did.
     /// </remarks>
     private static string Strip(string line, ref StripState state)
     {
@@ -207,6 +209,21 @@ internal static class SourceCommentStripper
             }
         }
 
+        // A `//` comment ends at the newline, and the LineComment arm above only
+        // returns to Code on a `\n` — which never arrives, because every caller
+        // hands over lines that have none (`File.ReadAllLines`, `Split('\n')`). So
+        // the states that cannot legally span a line are closed here instead.
+        // `Char` cannot span a line in C# at all and is closed defensively; the
+        // one that matters is `LineComment`, because `///` is the first thing in
+        // a C# file. Carry it and the next line is dropped, and so is every line
+        // after that, since a carried LineComment never finds a newline either.
+        // That is not a subtle degradation: it makes every rule that reads the
+        // file see an empty one.
+        if (state is StripState.LineComment or StripState.Char)
+        {
+            state = StripState.Code;
+        }
+
         return output.ToString();
     }
 
@@ -216,15 +233,18 @@ internal static class SourceCommentStripper
     ///     the result — which is what the rules report.
     /// </summary>
     /// <remarks>
-    ///     The state is carried, not recomputed. It was not always so, and the reason is
-    ///     worth keeping because the fix looks like a simplification and is not:
-    ///     <c>Strip</c> DELETES the comment characters, so no amount of inspecting the
-    ///     stripped line can recover whether it opened a block comment — the evidence is
-    ///     gone by then. The previous version tried anyway, counting <c>/*</c> against
-    ///     <c>*/</c> in text that had just had both removed, so the count was 0 on every
-    ///     input, <c>inBlockComment</c> was never set, and the branch that used it was
-    ///     unreachable. A multi-line <c>/* … */</c> therefore reached every rule as code.
-    ///     See <c>SourceCommentStripperTests</c> (#919).
+    ///     The state is carried, not recomputed, and the reason is worth keeping
+    ///     because the fix looks like a simplification and is not. <c>Strip</c> DELETES
+    ///     real comment characters but PRESERVES string literals, so no inspection of
+    ///     the stripped line can recover what it deleted — but a <c>/*</c> that was
+    ///     never a comment survives in a literal. The previous version counted
+    ///     <c>/*</c> against <c>*/</c> in the stripped text anyway, which made the
+    ///     count zero for every genuine block comment and non-zero for every
+    ///     <c>"src/*"</c>: exactly inverted, so a multi-line <c>/* … */</c> reached
+    ///     every rule as code while a glob pattern in a literal blanked the rest of
+    ///     the file. Measured in <c>src/</c> + <c>apps/</c>: 845 lines of real code
+    ///     across 5 files, 442 of them in <c>PermissionRuleset.cs</c>. See
+    ///     <c>SourceCommentStripperTests</c> (#919).
     /// </remarks>
     internal static string[] StripAll(IEnumerable<string> lines)
     {

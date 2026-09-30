@@ -118,13 +118,12 @@ public sealed class SourceCommentStripperTests
     [Test]
     public async Task MultiLineBlockComment_DoesNotSwallowTheWholeFile()
     {
-        // The degenerate form. An unterminated `/*` runs to end of file, and the
-        // property that matters there is that nothing AFTER it leaks — there is
-        // nothing after it, so the assertion is that the opener does not instead
-        // put the lexer into a state that deletes the following file's worth of
-        // input. Written as its own case because it is the one a state-carrying
-        // fix could plausibly get wrong (an EOF state that resets to Code and
-        // resumes stripping mid-comment).
+        // The degenerate form: an unterminated `/*` runs to end of file, and an
+        // unterminated `@"` likewise. This is its own case because it is the one a
+        // state-carrying fix could plausibly get wrong in the OTHER direction — a
+        // "no closer found, start over" fallback at end of input would resume
+        // stripping mid-comment and let the interior out, which is the same leak
+        // with one more step in it.
         string[] source =
         [
             "var first = 1;",
@@ -232,6 +231,100 @@ public sealed class SourceCommentStripperTests
 
         await Assert.That(text).Contains("https://example.invalid/cfg.json")
             .Because("the URL is inside a string literal, not a comment");
+    }
+
+    [Test]
+    public async Task ALineCommentDoesNotPoisonTheLineAfterIt()
+    {
+        // The trap in the fix itself, and the reason the end-of-line reset in
+        // `Strip` is load-bearing rather than tidiness. `Strip`'s LineComment arm
+        // only returns to Code on a `\n`, and NO caller supplies one — they hand
+        // over `File.ReadAllLines` output, which has no newline in it. So a
+        // carried state arrives at the next line still being LineComment, drops
+        // that line, and stays LineComment for the line after that, forever.
+        //
+        // The trigger is not exotic: it is the first `///` line in any file. An
+        // earlier version of this fix carried the state unconditionally and turned
+        // 1,213 of 1,271 scanned files into mostly-empty ones, which would have
+        // made every rule in the suite pass vacuously. `///` is the FIRST THING in
+        // a C# file and the input here is a plain XML doc comment — the most
+        // ordinary line in the repository.
+        string[] source =
+        [
+            "/// <summary>",
+            "///     A doc comment, which is a `//` comment.",
+            "/// </summary>",
+            "public sealed class Real { }",
+        ];
+
+        string[] clean = SourceCommentStripper.StripAll(source);
+
+        await Assert.That(clean[3]).IsEqualTo("public sealed class Real { }")
+            .Because("three `///` lines must not cost the file its first declaration");
+        await Assert.That(clean[0]).IsEqualTo(string.Empty)
+            .Because("and the doc comment itself is still a comment");
+    }
+
+    [Test]
+    public async Task AStringContinuedWithABackslashKeepsItsLiteralAcrossTheLine()
+    {
+        // Coverage, not discrimination — this passes with or without the fix, and
+        // is here because it is the OTHER state that legally spans a line and the
+        // one with the best reason to be pinned. A `"…"` continued with a trailing
+        // `\` is ordinary C#, and the continuation line may contain `//` without
+        // that being a comment.
+        //
+        // (A `'…'` char literal cannot span a line in C# at all, so closing that
+        // state at end of line in `Strip` is defensive only — a scanner handed a
+        // truncated file, not a scanner handed source. It is reset there anyway,
+        // because "cannot happen" is not a property worth depending on when the
+        // cost of being wrong is the rest of the file.)
+        string[] source =
+        [
+            "var s = \"first \\",
+            "// still the literal, not a comment",
+            "third\";",
+        ];
+
+        string text = string.Join("\n", SourceCommentStripper.StripAll(source));
+
+        await Assert.That(text).Contains("// still the literal")
+            .Because("the `\\` continuation keeps the literal open across the newline");
+        await Assert.That(text).Contains("third")
+            .Because("and the literal does not end until its closing quote");
+    }
+
+    // ── The other half of the inversion: a `/*` inside a STRING LITERAL ───────
+
+    [Test]
+    public async Task BlockMarkerInsideAStringLiteralIsNotACommentBoundary()
+    {
+        // This is the half of #919 the reported symptom does not describe, and it
+        // is the half that was doing damage. `Strip` deletes real comments but
+        // PRESERVES literals, so the old counter — which read the stripped line —
+        // was 0 on every genuine block comment and 1 on every line whose `/*` was
+        // ordinary string content. Exactly inverted.
+        //
+        // So `"src/*"` put 29 rules into "inside a block comment" at that line and
+        // kept them there, and the measured cost in `src/` + `apps/` is 845 lines of
+        // real code blanked across 5 files — 442 of them in `PermissionRuleset.cs`,
+        // the file the contributor guide tells you to edit to add a permission rule.
+        // Three of the rules that walk all of `src/` (`LogLevelMnemonicRule`,
+        // `ExtensionAxisFreezeRule`, `FileLogSinkOwnershipRule`) have been grading
+        // it that way.
+        string[] source =
+        [
+            "new(\"write\", \"src/*\", PermissionAction.Allow),",
+            "var real = 1;",
+            "new(\"edit\", \"*.env\", PermissionAction.Deny),",
+        ];
+
+        string[] clean = SourceCommentStripper.StripAll(source);
+
+        await Assert.That(clean[1]).IsEqualTo("var real = 1;")
+            .Because("a `/*` inside a literal is a glob pattern, not a comment, and must not blank the file after it");
+        await Assert.That(clean[2]).IsEqualTo("new(\"edit\", \"*.env\", PermissionAction.Deny),")
+            .Because("and the line after that one is code too");
     }
 
     // ── Non-vacuity of the suite itself: Strip still works per line ───────────
