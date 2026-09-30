@@ -6,10 +6,8 @@ using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Permissions;
 using Harbor.Abstractions.Providers;
 using Harbor.Abstractions.Sessions;
-using Harbor.Abstractions.Tools;
 using Harbor.Application.Configuration;
 using Harbor.Application.Onboarding;
-using Harbor.Application.Skills;
 using Harbor.App.Cli.Hosting;
 using Harbor.Terminal.Abstractions;
 using Harbor.Tui.CellForge.Input;
@@ -26,6 +24,26 @@ namespace Harbor.App.Cli.Repl;
 ///     CellForge screen graph resolves lazily through <see cref="CellForgeScreens" />
 ///     so the legacy path never touches stdin/screens.
 /// </summary>
+/// <remarks>
+///     <para>
+///         <b>#486 — the constructor is a field-assignment list and nothing else.</b> It declared
+///         21 parameters, five of which (<c>tools</c>, <c>permissions</c>, <c>skillRefresh</c>,
+///         <c>skillUpdate</c>, and the dispatcher's half of <c>loggerFactory</c>) were read exactly
+///         once each, as arguments to a <c>new SlashCommandDispatcher(…)</c> inside the constructor.
+///         They were never stored in a field and never passed on: not dependencies of this class,
+///         but values it resolved for a collaborator and then carried in its own signature. The
+///         slash layer is built once at the composition root now — which is the method that has the
+///         container in scope to resolve its nine collaborators from — and arrives here as a
+///         parameter. Sixteen of the twenty-one were real dependencies and are unchanged.
+///     </para>
+///     <para>
+///         The <c>ReplContext</c> the issue proposed instead would have bundled all twenty-one
+///         behind one name, which MOVES the five masked defaults rather than deleting them: one
+///         name instead of twenty-one, the same twenty-one values, five of which should never have
+///         been supplied. Guarded by
+///         <c>tests/Harbor.Architecture.Tests/ReplConstructorCompositionTests.cs</c>.
+///     </para>
+/// </remarks>
 internal sealed class ReplRunner
 {
     private readonly ILogger<ReplRunner> _logger;
@@ -65,16 +83,13 @@ internal sealed class ReplRunner
         ISessionStore sessionStore,
         IAgentRegistry agentRegistry,
         IProviderRegistry providers,
-        IToolRegistry tools,
-        IPermissionService permissions,
-        ILoggerFactory loggerFactory,
+        SlashCommandDispatcher slashes,
+        ILogger<CellForgeReplRunner> cellForgeLogger,
         Harbor.Hosting.PluginReloadService? pluginReload,
         Harbor.Hosting.Rendering.IRendererPipeline? rendererPipeline,
         ITokenTracker? tokens,
         Func<CellForgeScreens> cellForgeScreens,
         IServiceProvider rendererHost,
-        Func<IReadOnlyList<SkillFreshnessEntry>>? skillRefresh = null,
-        Func<IReadOnlyList<string>, Task<SkillUpdateReport>>? skillUpdate = null,
         IProviderHealthCheck? healthCheck = null)
     {
         _logger = logger;
@@ -87,9 +102,8 @@ internal sealed class ReplRunner
         _sessionStore = sessionStore;
         _agentRegistry = agentRegistry;
         _providers = providers;
-        _cellForgeLogger = loggerFactory.CreateLogger<CellForgeReplRunner>();
-        _slashes = new SlashCommandDispatcher(
-            loggerFactory.CreateLogger<SlashCommandDispatcher>(), tools, sessionStore, wizard, permissions, pluginReload, rendererPipeline, skillRefresh, skillUpdate);
+        _slashes = slashes;
+        _cellForgeLogger = cellForgeLogger;
         _rendererPipeline = rendererPipeline;
         _pluginReload = pluginReload;
         _healthCheck = healthCheck;

@@ -62,6 +62,25 @@ internal static class CliInfrastructure
                 services.GetRequiredService<IApprovalCoordinator>());
         }
 
+        // #486: the ONE construction site of the slash layer. All nine of the
+        // dispatcher's collaborators are registered services, and this is the
+        // method that has the container in scope to resolve them — so this is
+        // where they are resolved. ReplRunner used to build its own dispatcher
+        // from four of its twenty-one constructor parameters, and
+        // LegacySlashRunner.FromServices built a SECOND one through
+        // services.GetRequiredService that nothing ever called. Two wirings of one
+        // type: one dead, one a service locator (#470's shape, third file).
+        var slashes = new SlashCommandDispatcher(
+            services.GetRequiredService<ILogger<SlashCommandDispatcher>>(),
+            services.GetRequiredService<IToolRegistry>(),
+            services.GetRequiredService<ISessionStore>(),
+            services.GetRequiredService<OnboardingWizard>(),
+            services.GetRequiredService<IPermissionService>(),
+            services.GetService<Harbor.Hosting.PluginReloadService>(),
+            services.GetService<Harbor.Hosting.Rendering.IRendererPipeline>(),
+            SkillFreshnessStartup.RefreshCommand(services),
+            SkillFreshnessStartup.UpdateCommand(services));
+
         return new ReplRunner(
             services.GetRequiredService<ILogger<ReplRunner>>(),
             services.GetRequiredService<IConfigStore>(),
@@ -73,16 +92,13 @@ internal static class CliInfrastructure
             services.GetRequiredService<ISessionStore>(),
             services.GetRequiredService<IAgentRegistry>(),
             services.GetRequiredService<IProviderRegistry>(),
-            services.GetRequiredService<IToolRegistry>(),
-            services.GetRequiredService<IPermissionService>(),
-            services.GetRequiredService<ILoggerFactory>(),
+            slashes,
+            services.GetRequiredService<ILogger<CellForgeReplRunner>>(),
             services.GetService<Harbor.Hosting.PluginReloadService>(),
             services.GetService<Harbor.Hosting.Rendering.IRendererPipeline>(),
             services.GetService<ITokenTracker>(),
             Screens,
             services,
-            SkillFreshnessStartup.RefreshCommand(services),
-            SkillFreshnessStartup.UpdateCommand(services),
             services.GetService<IProviderHealthCheck>());
     }
 

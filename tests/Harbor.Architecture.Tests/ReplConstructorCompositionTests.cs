@@ -581,7 +581,7 @@ public sealed class ReplConstructorCompositionTests
     {
         string root = RepoPaths.RepoRoot ?? string.Empty;
         string relative = path.StartsWith(root, StringComparison.Ordinal) ? path[root.Length..] : path;
-        return relative.Replace('\\', '/');
+        return relative.Replace('\\', '/').TrimStart('/');
     }
 
     private static int MatchParen(string text, int open)
