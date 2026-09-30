@@ -81,10 +81,23 @@ public sealed class ProviderModelAbsenceRules
     ///     <c>&amp;&amp;</c> and once with <c>||</c>; the value type makes the
     ///     question disappear instead of documenting it.
     /// </summary>
+    /// <remarks>
+    ///     #453: the PRODUCER was missing from this list, and the gap is the whole
+    ///     reason the rule could be satisfied while the derivation was still there.
+    ///     `CommonConfigReaderAdapter` — not a consumer file — carried the last
+    ///     hand-written half-pair test
+    ///     (<c>IsNullOrEmpty(DefaultProvider) || IsNullOrEmpty(DefaultModel)</c>),
+    ///     and this file did not scan it, so "the consumers no longer re-derive
+    ///     it" was true and the seam still re-derived it. The producer is the
+    ///     adapter, under its new name; the port itself cannot hold the probe
+    ///     (an interface has no body) and is covered by
+    ///     <c>CommonConfigContractRules</c> instead, which also pins the carrier.
+    /// </remarks>
     private static readonly string[] ConsumerFiles =
     [
         "src/Harbor.Ui.Framework.Sessions/Sessions/SessionFactory.cs",
         "src/Harbor.Ui.Framework.Sessions/Sessions/SessionLifecycleService.cs",
+        "apps/Harbor.App.Avalonia/Services/CommonConfigReaderAdapter.cs", // #453: the producer
     ];
 
     /// <summary>
@@ -167,7 +180,7 @@ public sealed class ProviderModelAbsenceRules
     // ── Non-vacuity ──────────────────────────────────────────────────────────
 
     [Test]
-    public async Task CallerRule_ReachesBothConsumerFiles()
+    public async Task CallerRule_ReachesEveryFileItClaimsToPolice()
     {
         string root = RequireRepoRoot();
         var missing = new List<string>();
@@ -183,7 +196,42 @@ public sealed class ProviderModelAbsenceRules
         await Assert.That(missing).IsEmpty()
             .Because(
                 "the scan is rooted at named files; if one was renamed or moved the rule above "
-                + "silently polices nothing. Point these at the new homes: " + string.Join(", ", missing));
+                + "silently polices nothing. Point these at the new homes: " + string.Join(", ", missing)
+                + ". #453 is the proof that this check earns its place: the producer was missing from "
+                + "the list, so the rule passed over a file that still held the derivation.");
+    }
+
+    /// <summary>
+    ///     #453: the producer is genuinely scanned, which is the fact the fix
+    ///     depends on. A "the file is listed" assertion would be satisfied by a
+    ///     path that is listed and then excluded, so this plants the exact line
+    ///     the pre-fix adapter carried and requires the SAME scanner to catch it.
+    /// </summary>
+    [Test]
+    public async Task CallerRule_ScansTheProducer_AndTheProbeWouldFireThere()
+    {
+        string root = RequireRepoRoot();
+        const string producer = "apps/Harbor.App.Avalonia/Services/CommonConfigReaderAdapter.cs";
+
+        // The real file, today: no probe, because the qualification moved to
+        // ModelRef.Qualify. This is the assertion that the fix landed.
+        await Assert.That(FindProbes(root, producer).Count).IsEqualTo(0)
+            .Because(
+                "the adapter is where the half-pair test used to live; it must no longer decide "
+                + "whether a provider/model pair is whole. ModelRef.Qualify is the single answer.");
+
+        // And the scanner is live on that file, proven by planting the exact
+        // pre-fix spelling. If the path were silently skipped this would read 0
+        // and the assertion above would be free.
+        List<ProbeSite> planted = FindProbes(root, producer)
+            .Concat(Scan(["if (string.IsNullOrEmpty(cfg.DefaultProvider) || string.IsNullOrEmpty(cfg.DefaultModel))"])
+                .Select(i => new ProbeSite(producer, i + 1, "(planted control)")))
+            .ToList();
+
+        await Assert.That(planted.Count).IsGreaterThan(0)
+            .Because(
+                "the matcher must still fire on the pre-fix adapter line, or the assertion above "
+                + "cannot distinguish 'the derivation is gone' from 'the producer is not scanned'.");
     }
 
     [Test]
