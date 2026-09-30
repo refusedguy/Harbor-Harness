@@ -182,16 +182,26 @@ public class SystemPromptBuilderTests
     public async Task BuildAsync_DropsGuidelinesLongerThanMaxGuidelineLength()
     {
         var builder = new SystemPromptBuilder();
-        string atCeiling = new('x', SystemPromptBuilder.MaxGuidelineLength);
-        string pastCeiling = new('x', SystemPromptBuilder.MaxGuidelineLength + 1);
-        var tool = Tool("read", "Read a file", "read: Read a file from disk",
-            $"KEEP-{atCeiling}", $"DROP-{pastCeiling}");
+
+        // The ceiling applies to the WHOLE guideline, so the marker is part of
+        // the budget rather than something added on top of it. Padding is
+        // derived from the marker so the two strings cannot drift out of the
+        // boundary this test exists to pin.
+        static string Guideline(string marker, int totalLength) =>
+            marker + new string('x', totalLength - marker.Length);
+
+        string atCeiling = Guideline("KEEP-", SystemPromptBuilder.MaxGuidelineLength);
+        string pastCeiling = Guideline("DROP-", SystemPromptBuilder.MaxGuidelineLength + 1);
+        var tool = Tool("read", "Read a file", "read: Read a file from disk", atCeiling, pastCeiling);
         var ctx = Context(Agent(), new[] { tool });
 
         string prompt = await builder.BuildAsync(ctx);
 
-        await Assert.That(prompt).Contains($"KEEP-{atCeiling}");
-        await Assert.That(prompt.Contains($"DROP-{pastCeiling}")).IsFalse();
+        await Assert.That(prompt).Contains(atCeiling);
+        await Assert.That(prompt.Contains(pastCeiling)).IsFalse()
+            .Because("the boundary is a policy about what the model reads, so it is pinned from BOTH "
+                   + "sides: a guideline exactly at the ceiling is kept and one character past it is "
+                   + "dropped. A single 'long ones are dropped' assertion would pass for any threshold");
     }
 
     [Test]
