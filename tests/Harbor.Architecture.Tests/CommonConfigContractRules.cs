@@ -438,8 +438,8 @@ public sealed class CommonConfigContractRules
             // Join a wrapped base list: a line ending in a separator continues.
             string line = lines[i];
             int guard = 0;
-            while ((line.TrimEnd().EndsWith(',', StringComparison.Ordinal)
-                    || line.TrimEnd().EndsWith('|', StringComparison.Ordinal))
+            while ((line.TrimEnd().EndsWith(",", StringComparison.Ordinal)
+                    || line.TrimEnd().EndsWith("|", StringComparison.Ordinal))
                    && i + 1 < lines.Length
                    && guard++ < 4)
             {
@@ -455,11 +455,11 @@ public sealed class CommonConfigContractRules
             int at = line.IndexOf(NarrowSeamName, StringComparison.Ordinal);
             string before = line[..at].TrimEnd();
             string after = line[(at + NarrowSeamName.Length)..].TrimStart();
-            bool isBaseList = before.EndsWith(':')
-                              || before.EndsWith(',')
-                              || (before.Contains("where T", StringComparison.Ordinal)
-                                  && before.EndsWith(':'));
-            bool isConstraintTail = after.Length == 0 || after.StartsWith(')') || after.StartsWith(',');
+            bool isBaseList = before.EndsWith(":", StringComparison.Ordinal)
+                              || before.EndsWith(",", StringComparison.Ordinal);
+            bool isConstraintTail = after.Length == 0
+                                    || after.StartsWith(')', StringComparison.Ordinal)
+                                    || after.StartsWith(',', StringComparison.Ordinal);
 
             if (isBaseList && isConstraintTail)
             {
