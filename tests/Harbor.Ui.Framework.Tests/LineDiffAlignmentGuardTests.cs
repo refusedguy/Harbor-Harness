@@ -7,7 +7,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using TUnit.Assertions;
 using TUnit.Assertions.Extensions;
-using FrameworkDiffViewModel = Harbor.Ui.Framework.ViewModels.DiffViewModel;
+using FrameworkDiffViewModel = Harbor.Ui.Framework.ViewModels.SideBySideDiffViewModel;
 using DesktopDiffViewModel = Harbor.Desktop.Abstractions.ViewModels.DiffViewModel;
 
 namespace Harbor.Ui.Framework.Tests;

@@ -10,7 +10,7 @@ Shared ViewModels, converters, and animation helpers for the Harbor UI Framework
 
 | Subfolder | Contents |
 |-----------|----------|
-| `ViewModels/` | `ChatLineViewModel`, `ToolCallViewModel`, `DiffViewModel`, `SessionItemViewModel`, `SessionRowViewModel`, `TokenUsageViewModel`, `StoreSubscriberViewModel` (base class that binds a `UiStore` selector to a property). |
+| `ViewModels/` | `ChatLineViewModel`, `ToolCallViewModel`, `SideBySideDiffViewModel`, `SessionItemViewModel`, `SessionRowViewModel`, `TokenUsageViewModel`, `StoreSubscriberViewModel` (base class that binds a `UiStore` selector to a property). |
 | `Converters/` | `StatusMappers` — static brush-key/text/duration/currency mappers for `SessionStatus`, `ToolCallStatus`, cost, time-ago. |
 | `Animation/` | `CostAnimator` — animates cost display from base to target value. |
 
@@ -19,7 +19,7 @@ Shared ViewModels, converters, and animation helpers for the Harbor UI Framework
 - **`StoreSubscriberViewModel<T>`**: base class that subscribes to a `UiStore`, selects a slice of state, and applies it to a property.
 - **`ChatLineViewModel`**: wraps a `ChatLine` with `RoleBrushKey`, `BrushKey`, `RoleLabel`, `TimestampText`, `Preview`.
 - **`ToolCallViewModel`**: tool-call card with `StatusPill`, `DurationText`, `StatusBrushKey`, `Complete(status, result, duration)`.
-- **`DiffViewModel`**: `ObservableCollection<DiffRowViewModel>` with per-row `BrushKey`.
+- **`SideBySideDiffViewModel`**: `ObservableCollection<DiffRowViewModel>` with per-row `BrushKey`. Named for its projection since #570 — the desktop `Harbor.Desktop.Abstractions.ViewModels.DiffViewModel` is a different surface (one flattened `DiffText` string plus a clipboard delegate), and both compute their diff with the shared `LineDiff` engine.
 - **`SessionItemViewModel` / `SessionRowViewModel`**: session list items with `RelativeTime`, `MetaLine`, tooltip metadata.
 - **`TokenUsageViewModel`**: `RecordUsage(UiState)` populates `Bars` and `RecentOutputTokens`; `Reset`/`Clear`.
 - **`StatusMappers`**: static methods converting status → brush key, duration → text, cost → USD string, tokens → compact string, time → relative text.
