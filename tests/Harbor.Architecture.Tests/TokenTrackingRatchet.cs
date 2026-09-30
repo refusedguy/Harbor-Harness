@@ -38,7 +38,7 @@
 //   ICompactionHeuristic   ShouldCompact
 //                          -> CompactionBehavior
 //   IUsageStats            GetStats
-//                          -> ReplLifecycle, PromptPipeline
+//                          -> PromptPipeline (and ReplLifecycle — see the gap below)
 //
 // TurnRunner and CompactionBehavior each need TWO slices, and that is correct:
 // a consumer that genuinely needs two capabilities should depend on two
@@ -46,6 +46,23 @@
 // why RecordTurnUsage and RecordAppendedMessage stay together: TurnRunner is
 // the only caller of the first and it also calls the second, so separating them
 // narrows nobody.
+//
+// A DOCUMENTED GAP: THE REPL STATUS POLLERS
+// -----------------------------------------
+// ReplLifecycle really is a GetStats consumer — `host.Tokens?.GetStats()` at
+// ReplLifecycle.cs:556 — and it is deliberately NOT a row in the table below.
+// The only place its text names the aggregate is a `//` comment at
+// ReplLifecycle.cs:564, so the name-based holder scan strips it and it never
+// enters the measurement. Its twin PromptPipeline is a row because it takes an
+// `ITokenTracker?` parameter directly.
+//
+// So the IUsageStats slice lists ONE scan-proven consumer where there are two
+// real ones, and the split author must not read that as "only PromptPipeline
+// needs it". This is the same shape of bounded gap CfeValueBaselineTests
+// documents for its own type/member-granular baseline: the alternative is
+// trusting a hand-maintained claim the scan cannot check, which is strictly
+// worse. A fix would be to have ReplLifecycle name the type, or to grade by
+// resolved field type rather than by name — split-time work, not ratchet work.
 //
 // TWO FACTS A READER SHOULD NOT HAVE TO RE-DERIVE
 // ------------------------------------------------
@@ -91,8 +108,10 @@
 // -----------------------------------------------------------
 // Two scans, both over src/ + apps/ (SourceScan.ProductTrees), comments
 // stripped first (SourceCommentStripper) so that the XML docs which NAME the
-// aggregate to explain it are not graded as holders of it — ContextUsage.cs:16
-// and StatusViewModel.cs:114 both mention it in prose and neither is a consumer.
+// aggregate to explain it are not graded as holders of it. Three files mention
+// it in prose only and are therefore NOT rows: ContextUsage.cs:16,
+// StatusViewModel.cs:114, and ReplLifecycle.cs:564 — the last of which is a
+// real consumer reached through the host and is discussed under the gap above.
 //
 //   * Holders: files whose comment-stripped text names the type.
 //   * Calls per holder: receiver-AGNOSTIC member access, i.e. `<anything>?.<Member>(`
@@ -196,13 +215,13 @@ public sealed class TokenTrackingRatchet
     private const int MeasuredMemberCount = 7;
 
     /// <summary>How many product files held it when this table was measured.</summary>
-    private const int MeasuredHolderCount = 16;
+    private const int MeasuredHolderCount = 15;
 
     /// <summary>
-    ///     How many holders call at least one member: the seven leaf consumers, plus the
+    ///     How many holders call at least one member: the six leaf consumers, plus the
     ///     implementor row that is over-attributed (see the header).
     /// </summary>
-    private const int MeasuredFilesCallingSomething = 8;
+    private const int MeasuredFilesCallingSomething = 7;
 
     /// <summary>The aggregate's full name, resolved by name rather than by <c>typeof</c>.</summary>
     private const string AggregateFullName = "Harbor.Abstractions.Sessions." + AggregateName;
@@ -231,7 +250,7 @@ public sealed class TokenTrackingRatchet
 
     /// <summary>
     ///     Every product file that holds the aggregate, with the members it calls.
-    ///     Nine composition roots, seven leaf consumers.
+    ///     Nine composition roots, six leaf consumers.
     /// </summary>
     private static readonly TokenHolderBaseline[] BaselineHolders =
     [
@@ -245,8 +264,6 @@ public sealed class TokenTrackingRatchet
             "holds it so the REPL surface can offer it; calls nothing itself",
             true),
         new("apps/Harbor.App.Cli/Repl/PromptPipeline.cs", ["GetStats"],
-            "CLI status line: reads the totals and nothing else", false),
-        new("apps/Harbor.App.Cli/Repl/ReplLifecycle.cs", ["GetStats"],
             "CLI status line: reads the totals and nothing else", false),
         new("apps/Harbor.App.Cli/Repl/ReplRunner.cs", [],
             "holds it to pass down to the behaviours; calls nothing itself",
@@ -305,10 +322,12 @@ public sealed class TokenTrackingRatchet
         ]),
         new("ICompactionHeuristic", ["ShouldCompact"],
         ["src/Harbor.Application/Agents/Pipeline/CompactionBehavior.cs"]),
+        // ReplLifecycle is NOT a row here even though it is a real GetStats consumer: it
+        // reaches the aggregate through the host's Tokens property and never names the
+        // type, so the scan cannot see it. See the header — a bounded, documented gap.
         new("IUsageStats", ["GetStats"],
         [
             "apps/Harbor.App.Cli/Repl/PromptPipeline.cs",
-            "apps/Harbor.App.Cli/Repl/ReplLifecycle.cs",
         ]),
     ];
 
@@ -374,8 +393,8 @@ public sealed class TokenTrackingRatchet
     }
 
     /// <summary>
-    ///     No seventeenth file holds the aggregate. Every row in the table above is a
-    ///     composition root that legitimately needs the wide type, or one of the seven leaf
+    ///     No sixteenth file holds the aggregate. Every row in the table above is a
+    ///     composition root that legitimately needs the wide type, or one of the six leaf
     ///     consumers the split exists for; a new one is coupling being added, not moved.
     /// </summary>
     [Test]
@@ -411,8 +430,9 @@ public sealed class TokenTrackingRatchet
 
     /// <summary>
     ///     No consumer calls more of the aggregate than it did. This is the per-consumer
-    ///     half: the file set can stay at sixteen while a consumer quietly starts calling a
-    ///     member it never wanted, and that is the coupling the split is meant to undo.
+    ///     half: the holder set can stay at fifteen while a consumer quietly starts
+    ///     calling a member it never wanted, and that is the coupling the split is meant
+    ///     to undo.
     /// </summary>
     [Test]
     public async Task Ratchet_NoConsumerCallsMoreOfTheAggregate()
@@ -561,7 +581,7 @@ public sealed class TokenTrackingRatchet
         int calling = measured.Count(static pair => pair.Value.Count > 0);
         await Assert.That(calling).IsEqualTo(MeasuredFilesCallingSomething)
             .Because($"{MeasuredFilesCallingSomething} holders were measured calling something: the "
-                   + "seven leaf consumers, plus TokenTracker.cs, whose two matches are the "
+                   + "six leaf consumers, plus TokenTracker.cs, whose two matches are the "
                    + "over-attributed delegations documented in the header. This is the count that "
                    + "tells you the per-consumer half of the ratchet has rows to grade at all — a "
                    + "ratchet whose every row is empty grades nothing");
@@ -589,10 +609,10 @@ public sealed class TokenTrackingRatchet
     }
 
     /// <summary>
-    ///     Control: a seventeenth holder is reported as a regression.
+    ///     Control: a sixteenth holder is reported as a regression.
     /// </summary>
     [Test]
-    public async Task Control_ASeventeenthHolderIsReportedAsARegression()
+    public async Task Control_ANewHolderIsReportedAsARegression()
     {
         var degraded = new Dictionary<string, IReadOnlyList<string>>(BaselineHolderMap(), StringComparer.Ordinal)
         {
