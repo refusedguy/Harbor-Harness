@@ -318,11 +318,22 @@ internal static partial class DiffSurfaceNameCollisionProbe
                 }
 
                 string[] clean = SourceCommentStripper.StripAll(source.Lines);
-                foreach (string name in DeclaredTypeNames(clean))
+
+                // The SAME shape test as the engine's side, and this symmetry is the point.
+                // A foreign file earns a finding only for a KIND enum it declares beside a
+                // type that carries it — the vocabulary shape — not for merely mentioning
+                // an owned name. The first version of this rule graded names on the foreign
+                // side and shapes on the engine's, and the asymmetry reported a real type
+                // that is not in the conversation: apps/Harbor.App.Avalonia's HdsDiffCompact
+                // declares `record DiffLine(string Text, IBrush Brush)`, a DISPLAY row that
+                // carries no kind at all, and the rule called it a second vocabulary because
+                // it shares a word with the engine's parsed row. A guard that fires on
+                // unrelated types is a guard the team learns to disable.
+                foreach ((string kind, _) in VocabularyPairs(clean))
                 {
-                    if (vocabularyOwners.TryGetValue(name, out string? owner))
+                    if (vocabularyOwners.TryGetValue(kind, out string? owner))
                     {
-                        foreign.Add(new ForeignDiffVocabulary(name, source.Relative, project, owner));
+                        foreign.Add(new ForeignDiffVocabulary(kind, source.Relative, project, owner));
                     }
                 }
             }
@@ -813,6 +824,15 @@ public sealed class DiffSurfaceNameCollisionRule
     ///         derived layer — the kind enums and their carriers, read out of the engine's own
     ///         project at scan time.
     ///     </para>
+    ///     <para>
+    ///         BOTH sides of the comparison are graded by SHAPE, and that symmetry is not
+    ///         tidiness. Grading the engine's side by shape and the foreign side by bare name
+    ///         reports every type that happens to share a word with the engine's vocabulary,
+    ///         and the tree has one: <c>apps/Harbor.App.Avalonia</c>'s
+    ///         <c>HdsDiffCompact</c> declares <c>record DiffLine(string Text, IBrush Brush)</c>
+    ///         — a display row for a compact summary widget, with no kind in it. It is not a
+    ///         second vocabulary, and a rule that says it is gets switched off.
+    ///     </para>
     /// </remarks>
     [Test]
     public async Task DiffVocabulary_IsOwnedByTheEngineProject()
@@ -1223,6 +1243,19 @@ public sealed class DiffSurfaceNameCollisionRule
                 "{",
                 "    // TODO: reuse SyntheticRowKind here one day.",
                 "}",
+            ]),
+            // (8) A type that merely SHARES AN OWNED NAME, carrying no kind at all. This is
+            // apps/Harbor.App.Avalonia/Views/Controls/HdsDiffCompact.axaml.cs verbatim in
+            // shape: `public sealed record DiffLine(string Text, IBrush Brush)` is a DISPLAY
+            // row for a two-line summary widget, while the engine's DiffLine is a PARSED
+            // row with a DiffLineKind and two line numbers. One word, two unrelated types.
+            // The first version of this rule reported it, which is why the foreign side now
+            // gets the same kind-and-carrier test the engine's side does.
+            ("apps/Harbor.App.Avalonia/Views/Controls/SyntheticCompact.cs",
+            [
+                "namespace Harbor.App.Avalonia.Views.Controls;",
+                string.Empty,
+                "public sealed record SyntheticRow(string Text, IBrush Brush);",
             ]),
         };
 
