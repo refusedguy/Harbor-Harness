@@ -51,7 +51,7 @@ public sealed class ProviderHealthCheck : IProviderHealthCheck
             sw.Stop();
 
             if (result.IsFailure)
-                return Result.Failure<ProviderHealth>(Classify(result.Error));
+                return result.ConvertFailure<ProviderHealth>().MapError(Classify);
 
             if (result.Value.Count == 0)
                 return Result.Failure<ProviderHealth>("Provider responded but exposes no models.");
