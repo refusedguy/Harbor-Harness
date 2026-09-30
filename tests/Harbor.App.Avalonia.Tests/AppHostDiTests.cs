@@ -282,10 +282,13 @@ public class AppHostDiTests
     {
         await GetHostAsync();
 
-        await Assert.That(Services.GetService<IDirectoryLister>())
-            .IsTypeOf<SystemDirectoryLister>();
-        await Assert.That(Services.GetService<IFileTreePolicy>())
-            .IsTypeOf<DefaultFileTreePolicy>();
+        // Compared as `typeof`, not with a type assertion: the claim is "this is
+        // the implementation the composition root chose", and a renamed or
+        // swapped implementation has to show up here as a changed row.
+        await Assert.That(Services.GetService<IDirectoryLister>()?.GetType())
+            .IsEqualTo(typeof(SystemDirectoryLister));
+        await Assert.That(Services.GetService<IFileTreePolicy>()?.GetType())
+            .IsEqualTo(typeof(DefaultFileTreePolicy));
         await Assert.That(Services.GetService<ProjectFileTreeScanner>()).IsNotNull();
     }
 

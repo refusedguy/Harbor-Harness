@@ -199,9 +199,11 @@ public sealed class ProjectFileTreeScannerTests
                    + "though this scan did not open it. Dropping it silently would make the tree lie "
                    + "about what is in the project.");
         await Assert.That(scan.Value.Children[0].Children[0].Children.Count).IsEqualTo(0);
-        await Assert.That(lister.Requested).IsEquivalentTo(new[] { Root, Root + "/l1", Root + "/l2" })
-            .Because("l2 was listed, l3 was not: the budget is on the syscall, and the row for l3 is "
-                   + "still there. That is the line the old `if (depth > 3) return;` drew, made explicit.");
+        await Assert.That(lister.Requested).IsEquivalentTo(new[] { Root, Root + "/l1" })
+            .Because(
+                "l1 was opened and l2 was not, because l2 sits at the budget's edge. The ROW for l2 is "
+                + "still on screen. That is the line the old `if (depth > 3) return;` drew — the depth "
+                + "was a cap on the syscall, not on what the tree is allowed to show.");
     }
 
     [Test]
@@ -214,8 +216,7 @@ public sealed class ProjectFileTreeScannerTests
         Result<FileTreeNode> scan = await Scanner(lister, maxDepth: 3, maxNodes: 5).ScanAsync(Root);
 
         // One root row plus four children, and the walk stopped there.
-        await Assert.That(scan.Value.Children.Count).IsEqualTo(4)
-            .Because("the port bounds ONE directory at 4096 entries; only a budget on the WALK bounds a "
+        await Assert.That(scan.Value.Children.Count).IsEqualTo(4)            .Because("the port bounds ONE directory at 4096 entries; only a budget on the WALK bounds a "
                    + "project with thousands of directories. Without it, a depth cap is not a limit, it "
                    + "is a suggestion.");
     }
@@ -226,11 +227,12 @@ public sealed class ProjectFileTreeScannerTests
         List<DirectoryEntry> entries = [Dir(Root, "node_modules"), .. Wide(Root, 3)];
         InMemoryDirectoryLister lister = New(entries.ToArray());
 
-        Result<FileTreeNode> scan = await Scanner(lister, maxDepth: 0, maxNodes: 3).ScanAsync(Root);
+        Result<FileTreeNode> scan = await Scanner(lister, maxDepth: 0, maxNodes: 4).ScanAsync(Root);
 
         await Assert.That(scan.Value.Children.Count).IsEqualTo(3)
-            .Because("a row the policy drops must not consume the budget: the budget is for the tree the "
-                   + "user is shown, and charging it for invisible rows would truncate the visible one");
+            .Because("a budget of four is one root plus three rows, and all three are VISIBLE rows. Had "
+                   + "the policy-rejected directory been charged first, the tree would have stopped at "
+                   + "two and the user would have lost a directory they can see to one they cannot.");
     }
 
     // ── failure and cancellation are different things ─────────────────────

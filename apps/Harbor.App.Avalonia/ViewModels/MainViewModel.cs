@@ -609,12 +609,15 @@ public sealed partial class MainViewModel : StoreSubscriberViewModel
             // replacing it with an empty collection is a lie about the project.
             Logger.LogError("Failed to scan project root {Path}: {Reason}", root, scanned.Error);
         }
-        catch (OperationCanceledException)
+        catch (OperationCanceledException ex)
         {
             // Superseded, or the window is closing. Not an error: the newer scan
             // owns the tree, and painting a failure for a walk nobody is waiting
-            // for any more is a lie the user would have to read.
-            Logger.LogDebug("File-tree scan of {Path} was superseded", root);
+            // for any more is a lie the user would have to read. The exception is
+            // still handed to the logger (S6667) because a cancellation that is
+            // NOT this one — a token the view-model never owned, say — is worth
+            // being able to find in a trace.
+            Logger.LogDebug(ex, "File-tree scan of {Path} was superseded", root);
         }
         catch (Exception ex)
         {

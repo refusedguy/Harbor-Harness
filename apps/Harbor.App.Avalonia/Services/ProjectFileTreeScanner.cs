@@ -176,6 +176,12 @@ public sealed class ProjectFileTreeScanner
                 directory,
                 expanded: true);
 
+            // The root row is the tree's first node, so it is charged like any
+            // other: a budget of one yields a root with nothing under it, which is
+            // still a tree the user can read. `TryTake` cannot answer false here
+            // because the constructor clamps the budget to at least one — the call
+            // is for the accounting, not for the branch.
+            _ = budget.TryTake();
             await PopulateAsync(rootNode, rootListing.Value, depth: 0, budget, cancellationToken)
                 .ConfigureAwait(false);
 
