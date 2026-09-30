@@ -87,7 +87,11 @@
 //      enumerates every live crossing when it fails, which is what makes the CI
 //      log the measurement.
 //   3. NonVacuity_DetectsACrossBoundaryCollisionInSyntheticSources — the positive
-//      control, driving the REAL matcher plus five decoys.
+//      control, driving the REAL matcher plus three decoys and one multi-declaration
+//      case. It also pins the definition of a crossing, which two earlier drafts of it
+//      got backwards: a crossing is "at least one declaration on each side", NOT
+//      "exactly one on each side", so a partial split inside contrib/ and a name
+//      present in two contrib projects are both crossings, not exemptions.
 
 namespace Harbor.Architecture.Tests;
 
@@ -363,8 +367,9 @@ public sealed class ContribBoundaryNameRule
                 + "25+ legitimate same-named types. What it CAN demand is that the hole stops growing: a "
                 + "name added here is a name that has begun to diverge in a project nobody builds. "
                 + "Deleting a row is the intended way to shrink it, and it is deliberate on purpose. "
-                + "Live crossings (" + live.Length + " of " + (live.Length + report.ProductFilesRead) + " scanned), "
-                + "with both sides: " + Describe(report.Crossings)
+                + "Live crossings: " + live.Length + " name(s). Files read — product: "
+                + report.ProductFilesRead + ", contrib: " + report.ContribFilesRead
+                + ". Crossings, with both sides: " + Describe(report.Crossings)
                 + " | baseline held " + MeasuredBaseline.Length + " row(s): " + string.Join(" | ", MeasuredBaseline));
     }
 
@@ -425,7 +430,8 @@ public sealed class ContribBoundaryNameRule
 
     /// <summary>
     ///     THE POSITIVE CONTROL. Two files, one in a built project and one in a project CI never
-    ///     compiles, declaring the same name — plus five decoys it must NOT report.
+    ///     compiles, declaring the same name — plus three decoys it must NOT report, and one
+    ///     multi-declaration case it must report as a SINGLE crossing carrying both files.
     /// </summary>
     [Test]
     public async Task NonVacuity_DetectsACrossBoundaryCollisionInSyntheticSources()
@@ -484,34 +490,7 @@ public sealed class ContribBoundaryNameRule
                 "{",
                 "}",
             ]),
-            // (5) The same name declared in a second contrib PROJECT. This one IS a crossing and
-            // must be — the point is that the finding names every file on both sides, so a reader
-            // sees that contrib/ holds two copies and not one. It is asserted below, not here:
-            // the first version of this control listed it as a decoy, on the theory that a name
-            // duplicated wholly inside contrib had "not crossed the boundary". It has crossed it.
-            // A crossing is not "one copy on each side", it is "at least one on each side", and a
-            // guard that reads it the other way under-reports exactly the drift it exists to see.
-            ("contrib/tui/Harbor.Tui.Other/SyntheticRow.cs",
-            [
-                "namespace Harbor.Tui.Other;",
-                string.Empty,
-                "public sealed class SyntheticRow",
-                "{",
-                "}",
-            ]),
-            // (6) A partial type split across two files of ONE contrib project, and that is
-            // still a crossing for the same reason — the product side declares the name too.
-            // Legal C# and one implementation, but the implementation is a second one, and that
-            // is the shape the #803 pair had. Asserted below, for the same reason as (5).
-            ("contrib/apps/Harbor.App.Wpf/ViewModels/SyntheticRow.Parts.cs",
-            [
-                "namespace Harbor.App.Wpf.ViewModels;",
-                string.Empty,
-                "public sealed partial class SyntheticRow",
-                "{",
-                "}",
-            ]),
-            // (7) A duplicate declared twice inside the product perimeter and NOT in contrib.
+            // (5) A duplicate declared twice inside the product perimeter and NOT in contrib.
             // Real duplication, a different rule's business entirely — and precisely the #843
             // case, where one word legitimately names two unrelated types.
             ("apps/Harbor.App.Cli/Hosting/SyntheticRow.cs",
@@ -548,10 +527,22 @@ public sealed class ContribBoundaryNameRule
                     + "one. Reported: " + Describe(decoyReport.Crossings));
         }
 
-        // The other direction: two files on the SAME contrib side of the boundary is ONE crossing
-        // with two declarations listed, not two crossings and not zero. Pinned because a rule that
-        // de-duplicated by project — the obvious "partials are one implementation" shortcut — would
-        // report one of these and drop the other, and the dropped one is the copy nobody reads.
+        // The other direction, and the reason the two rows above were mis-filed the first time.
+        //
+        // A crossing is NOT "exactly one declaration on each side". It is "at least one on each
+        // side", and everything here is a crossing:
+        //
+        //   * a partial type split across two files of ONE contrib project — legal C#, one
+        //     implementation, and still a second implementation of a name the built tree declares.
+        //     This is the #803 shape: a partial fossil nobody is maintaining.
+        //   * the same name in a SECOND contrib project, which is a genuine third copy and the
+        //     case the live 54 actually contains (`App` in Maui and Wpf, `ThemeService` in Blazor
+        //     and Wpf, `ChatView` in four TUI projects).
+        //
+        // So all of it is ONE crossing carrying every declaration, and that is asserted here
+        // rather than left to inference — a rule that de-duplicated by project, the obvious
+        // "partials are one implementation" shortcut, would report the first file and drop the
+        // rest, and the dropped copy is the one nobody reads.
         List<(string Relative, string[] Lines)> bothInContrib = new()
         {
             ("contrib/apps/Harbor.App.Wpf/ViewModels/SyntheticRow.cs",
