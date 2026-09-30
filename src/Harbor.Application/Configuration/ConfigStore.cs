@@ -122,10 +122,43 @@ public sealed class JsonConfigStore : IConfigStore
     {
         lock (_lock)
         {
+            // #881: the store VALIDATED on read and not on write. `LoadCore`
+            // ends in `.Bind(config => config.Validate())`; this method used to
+            // serialize whatever it was handed, so `UpdateAsync` — which loads,
+            // mutates, then saves — could write a config the same store refuses
+            // to load, and report success doing it. `harbor config set maxsteps
+            // 5000` printed `✓` and left a config.json that every later
+            // `LoadAsync` rejected.
+            //
+            // The guard is HERE rather than at the CLI because the property is
+            // a property of the FILE, not of a command: "what is on disk is
+            // always something this store can read". `SaveAsync` is on the
+            // public `IConfigStore` interface and its callers live in another
+            // assembly, so the store cannot rely on a policy those callers
+            // happen to apply — and #875, which owns the CLI's decision table,
+            // deliberately declined range checks as a separate policy decision.
+            // One rule, honoured in the one place the reader honours it.
+            //
+            // Nothing legitimate is blocked. Every production writer is
+            // `UpdateAsync` = Load(already returned valid) → mutate → Save;
+            // there is no migration writer (legacy field names are folded in
+            // `ConfigNormalizer` at LOAD and never written back) and no caller
+            // persists an intermediate state. Measured: eleven production
+            // `UpdateAsync` sites, zero direct production `SaveAsync` sites.
+            //
+            // `Validate()` returns `Result<HarborConfig>`; `Bind` is what drops
+            // the value and yields the `Result` the interface declares. The
+            // failure therefore carries the READER's own wording — the same
+            // string `LoadAsync` would have produced — so the user is not told
+            // the rule twice in two vocabularies.
+            //
             // rop-final-mile B3 / §4.6: one guard around the sync IO core.
             // Canonical selector (§4.5): OCE propagates instead of masking
-            // cancellation as a save failure — same contract as LoadAsync.
-            return Task.FromResult(Result.Try(() => SaveCore(config), ResultErrors.Message)
+            // cancellation as a save failure — same contract as LoadAsync. The
+            // validation sits INSIDE that guard, not outside it, so a rule that
+            // throws is reported the same way an IO failure is.
+            return Task.FromResult(config.Validate()
+                .Bind(_ => Result.Try(() => SaveCore(config), ResultErrors.Message))
                 .TapError(error => _logger?.LogError("Failed to save config: {Error}", error)));
         }
     }
