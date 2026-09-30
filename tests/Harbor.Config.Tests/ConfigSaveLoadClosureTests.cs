@@ -3,21 +3,19 @@
 //
 // THE DEFECT, IN ONE LINE
 // -----------------------
-// `JsonConfigStore.LoadCore` ends in `.Bind(config => config.Validate())`
-// (ConfigStore.cs:117). `JsonConfigStore.SaveCore` does not. So the store had
-// two different answers to "is this config acceptable", and only the read path
-// asked. `UpdateAsync` is where the two meet:
-//
-//     var loadResult = await LoadAsync(ct);   // validates
-//     var updated    = updater(loadResult.Value);
-//     return await SaveAsync(updated, ct);    // does not
+// `JsonConfigStore.LoadCore` ends by binding the loaded config through
+// `Validate` (ConfigStore.cs:117). `SaveCore` does not. So the store had two
+// different answers to "is this config acceptable", and only the read path
+// asked. `UpdateAsync` is where the two meet: it loads, runs the caller's
+// updater over the result, and hands the outcome to `SaveAsync` — and it is the
+// updater, not the store, that decides what goes in.
 //
 // The gap is not hypothetical. `/config set maxsteps 5000` is accepted by
-// `ConfigValueSetter.Decide` (int.TryParse, no range check — see #875, which
-// deliberately left range checking out as "a separate policy decision"), the
-// updater sets `MaxSteps = 5000`, and `SaveCore` writes it. The command prints
-// `✓ maxsteps = 5000`. Every LATER read then fails `RunLimitsConfig.Validate`,
-// which is the very method the write skipped:
+// `ConfigValueSetter.Decide` — a bare `int.TryParse`, no range check; see
+// #875, which deliberately left range checking out as "a separate policy
+// decision" — the updater sets `MaxSteps` to 5000, and `SaveCore` writes it.
+// The command prints `✓ maxsteps = 5000`. Every LATER read then fails
+// `RunLimitsConfig.Validate`, which is the very method the write skipped:
 //
 //     $ harbor config set maxsteps 5000
 //     ✓ maxsteps = 5000
@@ -37,19 +35,19 @@
 // already goes through.
 //
 // There is also no legitimate caller that needs to write a broken config, which
-// is the usual objection to validating on write. Every production writer is
-// `UpdateAsync` = Load(already returned valid) → mutate → Save; there is no
-// migration writer (legacy field names are folded in `ConfigNormalizer` at LOAD
-// and never written back); and no writer persists an intermediate state. A
-// guard here blocks nothing that works today.
+// is the usual objection to validating on write. Every production writer goes
+// through `UpdateAsync`, whose load step has already returned a valid config
+// before the updater runs; there is no migration writer (legacy field names are
+// folded in `ConfigNormalizer` at LOAD and never written back); and no writer
+// persists an intermediate state. A guard here blocks nothing that works today.
 //
 // WHAT THIS FILE ASSERTS
 // ----------------------
 // Three things, and the third is the one that stops the obvious over-correction:
 //
-//   1. Every config `Validate()` rejects is refused by `SaveAsync`, and nothing
-//      reaches the disk — the four (key, value) pairs below are the COMPLETE
-//      enumeration of what `/config set` can write and the reader then rejects.
+//   1. Every config `Validate` rejects is refused by `SaveAsync`, and nothing
+//      reaches the disk — the rows below are the COMPLETE enumeration of what
+//      `/config set` can write and the reader then rejects.
 //   2. `UpdateAsync` — the shape the CLI actually uses — leaves the previous
 //      file byte-identical, so a refused value costs the user nothing.
 //   3. The boundary values a valid write must STILL accept. A "fix" that made
@@ -75,7 +73,7 @@ public sealed class ConfigSaveLoadClosureTests
     /// </summary>
     /// <remarks>
     ///     <para>
-    ///         Sourced from <c>HarborConfig.Validate()</c>, which aggregates six
+    ///         Sourced from <c>HarborConfig.Validate</c>, which aggregates six
     ///         sections plus one rule per <c>Providers</c> entry. Four of those
     ///         rules are reachable from a <c>/config set</c> key, and each row below
     ///         names the exact message the reader will produce, so this table and
@@ -99,7 +97,7 @@ public sealed class ConfigSaveLoadClosureTests
     ///                 <c>ProviderConfigEntry.Validate</c> (<c>apiType</c> non-empty).
     ///                 Nothing in <c>src/</c> or <c>apps/</c> ever populates
     ///                 <c>HarborConfig.Providers</c>; it is only ever READ by
-    ///                 <c>ToRaw()</c>. A hand-edited file can trip it, which is
+    ///                 <c>ToRaw</c>. A hand-edited file can trip it, which is
     ///                 precisely the state this issue is about preventing.
     ///             </description>
     ///         </item>

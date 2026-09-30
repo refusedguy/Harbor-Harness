@@ -139,12 +139,13 @@ public sealed class JsonConfigStore : IConfigStore
             // deliberately declined range checks as a separate policy decision.
             // One rule, honoured in the one place the reader honours it.
             //
-            // Nothing legitimate is blocked. Every production writer is
-            // `UpdateAsync` = Load(already returned valid) → mutate → Save;
-            // there is no migration writer (legacy field names are folded in
-            // `ConfigNormalizer` at LOAD and never written back) and no caller
-            // persists an intermediate state. Measured: eleven production
-            // `UpdateAsync` sites, zero direct production `SaveAsync` sites.
+            // Nothing legitimate is blocked. Every production writer goes
+            // through `UpdateAsync`, whose load step has already returned a
+            // valid config before the updater runs; there is no migration
+            // writer (legacy field names are folded in `ConfigNormalizer` at
+            // LOAD and never written back) and no caller persists an
+            // intermediate state. Measured: eleven production `UpdateAsync`
+            // sites, zero direct production `SaveAsync` sites.
             //
             // `Validate()` returns `Result<HarborConfig>`; `Bind` is what drops
             // the value and yields the `Result` the interface declares. The
