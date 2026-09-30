@@ -406,9 +406,9 @@ Two more live instances of the banned direction:
   (`AppMsg.KeyInput` via `Ui.Framework.State/State/KeyEventAdapter.cs:23`,
   `ChatAppMsg.Agent` via `CellForgeTuiRenderer.cs:314`), but the old hooks stayed
   on the interface with a no-op default, so the compiler will not tell anyone
-  they are dead. A plugin author reading `ITuiPlugin`
-  (`Terminal.Abstractions/Plugins/ITuiPlugin.cs:14-20` is the documented
-  "register a new view" route) implements `OnEventAsync`, sees no exception, and
+  they are dead. A plugin author following `ITuiPlugin`'s `RegisterTui`
+  (`Terminal.Abstractions/Plugins/ITuiPlugin.cs:124`, and note `:11`: that whole
+  seam is closed as of #564) implements `OnEventAsync`, sees no exception, and
   ships a view that never updates.
 
 ### The rule for your own DIM
