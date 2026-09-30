@@ -609,7 +609,10 @@ cp TodoWritePlugin.cs ~/.harbor/plugins/   # .cs file with both Plugin + Tool cl
 > `ITuiPanelPlugin` and register through `IPanelRegistry` (see Example 5 in
 > PLUGIN_DEVELOPMENT.md). The sample is kept only so the dead route has a name.
 
-> **TODO: confirm with subagent #2** — `ITuiPanelPlugin` may be added separately.
+> The `TODO: confirm … ITuiPanelPlugin may be added separately` that used to sit
+> here is gone because it was false: `ITuiPanelPlugin` **is** added and is the
+> axis every document above points at, so the TODO contradicted the paragraph
+> directly above it.
 
 ```csharp
 // NOT REACHABLE — kept as a record of the closed route.

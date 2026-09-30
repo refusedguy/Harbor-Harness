@@ -116,7 +116,7 @@
 // proves the two together are exactly the set of files that name the seam. The
 // walk is deliberately BOUNDED — the repository root, `docs/`, `src/*/README.md`
 // and `samples/plugins/*/README.md` — because an unbounded walk of this
-// repository finds the same 16 files about 30 more times inside `.worktrees/`,
+// repository finds the same 15 files about 30 more times inside `.worktrees/`,
 // `graft/`, `.serena/` and `.ai-factory/`, none of which is the product. The
 // perimeter is the reader-facing surface, and the settlement rule is what makes
 // declaring it safe: a new document that teaches the seam fails rule 6 until
@@ -141,7 +141,7 @@
 // NON-VACUITY
 // -----------
 //   * `PerimeterSettlement` is itself a non-vacuity control: the walk is
-//     compared against 16 declared entries, so a broken path or a matcher that
+//     compared against 15 declared entries, so a broken path or a matcher that
 //     stopped matching reports an EMPTY derived set and goes red — the opposite
 //     of a silent pass.
 //   * `Perimeter_IsLive_AndTheSeamMatcher_StillDiscriminates` additionally
@@ -492,8 +492,17 @@ public sealed class CellForgeWidgetAxisRules
             // interface's OWN doc carries the closure instead (rule 5), which is
             // where an IntelliSense reader meets it.
             "src/Harbor.Terminal.Abstractions/README.md",
-            // One-line sample blurb for a tool plugin that also names the seam.
-            "samples/plugins/Harbor.Plugin.TodoWrite/README.md",
+            // REMOVED in #794: `samples/plugins/Harbor.Plugin.TodoWrite/README.md`.
+            // It used to sit here as a "one-line sample blurb that also names
+            // the seam", and that blurb was a fabrication — commit 487a68a0
+            // added the README claiming the sample implements `ITuiPlugin` and
+            // ships a `TodoPanelPlugin`, in the same commit, and the sample has
+            // only ever declared `TodoWritePlugin : IToolPlugin` and
+            // `TodoWriteTool : ITool`. #794 corrected the README, which removed
+            // its only seam mention, so the entry is stale by the settlement
+            // rule rather than by omission. Recorded here because the issue
+            // that found it said this edit belonged in its own change, where the
+            // perimeter is the visible decision instead of a side effect.
         }.ToFrozenSet(StringComparer.Ordinal);
 
     /// <summary>

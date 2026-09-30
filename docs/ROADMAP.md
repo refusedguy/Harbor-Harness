@@ -136,7 +136,10 @@ Moved platform-agnostic logic out of `Harbor.App.Avalonia` into `Harbor.Ui.Frame
 - [ ] Support `explore`, `plan`, custom sub-agents
 
 **TUI plugins**
-- [x] `ITuiPlugin.RegisterTui(ViewRegistry, ViewModelRegistry)` — контракт существует, панельный адаптер `Harbor.Plugins.Registration/PanelRegistryPluginAdapter.cs`
+- [x] `ITuiPlugin` — контракт существует, но это **закрытый шов (#564)**: `RegisterTui`
+      не имеет ни одного call site в продукте, а у `IPluginLoadHost.TuiPlugins` нет читателя
+- [x] Панельная ось (единственная живая) — `ITuiPanelPlugin` →
+      `IPluginLoadHost.RegisterPanelProvider` → адаптер `Harbor.Plugins.Registration/PanelRegistryPluginAdapter.cs`
 - [ ] Sample TUI plugin (e.g. token usage chart)
 - [ ] Plugin views override builtin views
 

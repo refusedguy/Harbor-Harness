@@ -129,7 +129,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - name: Check every normative file:line and named type
-        run: python3 tools/check-doc-cites.py --min-files 2 --min-cites 100 --min-types 50
+        run: python3 tools/check-doc-cites.py --min-files 2 --min-cites 100 --min-types 50 --min-api 12
 
   lint:
     name: markdown lint
