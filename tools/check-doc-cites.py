@@ -533,11 +533,6 @@ def strip_comments_and_literals(text: str) -> str:
     return "".join(out)
 
 
-def strip_comments(text: str) -> str:
-    """Backwards-compatible alias for the single-pass scanner."""
-    return strip_comments_and_literals(text)
-
-
 def block_span(text: str, start: int) -> tuple[int, int] | None:
     """Half-open span of the `{ … }` block that opens after `start`.
 
