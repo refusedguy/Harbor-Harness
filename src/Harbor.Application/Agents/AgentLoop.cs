@@ -78,7 +78,15 @@ public sealed class AgentLoop : IAgentLoop
         IBackgroundTaskRegistry? backgroundTasks = null,
         // #49 PR2: forwarded to the fallback dispatcher so tests driving the
         // loop directly still get the commit barrier when they pass one.
-        IApprovalCoordinator? coordinator = null)
+        IApprovalCoordinator? coordinator = null,
+        // #480 A10: the run's cross-cutting behaviours arrive from the
+        // composition root, so a third concern is a registration rather than an
+        // edit to this class. Optional so the direct-construction callers (tests,
+        // benchmarks, load harnesses) keep compiling unchanged — they take
+        // DefaultRunBehaviors below, which is the same two concerns in the same
+        // order. The product half of that claim is gated:
+        // tests/Harbor.Hosting.Tests/PipelineBehaviorCompositionTests.cs.
+        IEnumerable<IPipelineBehavior>? pipelineBehaviors = null)
     {
         _providers = providers;
         _tools = tools;
@@ -104,13 +112,11 @@ public sealed class AgentLoop : IAgentLoop
             ?? new ToolDispatcher(tools, permissions, eventBus, NullLogger<ToolDispatcher>.Instance, coordinator);
         // §3.5 pipeline: run-level cross-cutting concerns are middleware over the
         // whole run; per-turn behaviors (compaction, steering, max steps) are
-        // extracted classes the core loop calls each turn. Behaviors share the
-        // loop's logger so log categories stay identical to pre-extraction.
-        _pipeline = new AgentPipeline(
-        [
-            new LoggingBehavior(logger),
-            new PermissionCheckBehavior(logger),
-        ]);
+        // extracted classes the core loop calls each turn. The list is the
+        // container's (#480 A10), NOT a literal here — that was the defect: an
+        // IPipelineBehavior nobody could register meant a third run-level concern
+        // could only be added by editing the class that runs the agent.
+        _pipeline = new AgentPipeline(pipelineBehaviors ?? DefaultRunBehaviors(logger));
         _compactionBehavior = new CompactionBehavior(compaction, tokenTracker, eventBus, _metrics, logger);
         _steering = new SteeringDrainBehavior(tokenTracker, logger);
         // ROP-D Z3: MCP server instructions flow into the system prompt when a
@@ -128,6 +134,25 @@ public sealed class AgentLoop : IAgentLoop
             _metrics, tokenTracker, retryPolicy, _toolDispatcher, mcpRegistry,
             _compactionBehavior, _steering, _backgroundDrain);
     }
+
+    /// <summary>
+    ///     The run-level behaviours a directly-constructed loop gets when no
+    ///     container supplied any: the two concerns that were hardcoded here
+    ///     before #480 A10, in the same order, so a test-built loop and a
+    ///     host-built one wrap the same chain.
+    /// </summary>
+    /// <remarks>
+    ///     The logger is the loop's own, exactly as before the split, so a
+    ///     directly-constructed loop's log categories do not move. The DI path
+    ///     deliberately differs: <c>CoreModule</c> hands each behaviour its own
+    ///     typed logger, the same call it already makes for
+    ///     <c>IToolDispatcher</c> (ROP-C П.8). The product half of the pair —
+    ///     "every IPipelineBehavior is registered" — is gated by
+    ///     <c>tests/Harbor.Hosting.Tests/PipelineBehaviorCompositionTests.cs</c>,
+    ///     so this fallback cannot drift away from the registered set unnoticed.
+    /// </remarks>
+    private static IEnumerable<IPipelineBehavior> DefaultRunBehaviors(ILogger logger) =>
+        [new LoggingBehavior(logger), new PermissionCheckBehavior(logger)];
 
     /// <summary>
     ///     Run the agent loop to completion: prompt → LLM stream → tool execution → next turn,
