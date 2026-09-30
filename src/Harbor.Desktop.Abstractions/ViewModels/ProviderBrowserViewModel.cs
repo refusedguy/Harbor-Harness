@@ -174,7 +174,17 @@ public sealed partial class ProviderBrowserViewModel : ObservableObject, IAsyncD
 /// <summary>One row in the provider list.</summary>
 public sealed record ProviderRowViewModel(string Id, string Name, string Status);
 
-/// <summary>One row in the model list.</summary>
+/// <summary>
+///     One row in the model list.
+///     <para>
+///         #686: the row carries <c>PricingLabel</c>, not the two rates. A row that
+///         formats its own rates is a row free to disagree with the other row —
+///         which is how the browser came to print "$0.00 in / $0.00 out per 1M"
+///         for a model whose catalogue entry has no rates at all. The wording and
+///         the unknown-price decision both live in <see cref="ModelRateLabel" />,
+///         shared with the picker dropdown.
+///     </para>
+/// </summary>
 public sealed record ModelRowViewModel(
     string Id,
     string DisplayName,
@@ -183,15 +193,6 @@ public sealed record ModelRowViewModel(
     bool SupportsReasoning,
     bool SupportsVision,
     bool SupportsToolUse,
-
-    /// <summary>
-    ///     #686: the row carries the label, not the two rates. A row that formats
-    ///     its own rates is a row free to disagree with the other row — which is
-    ///     how the browser came to print "$0.00 in / $0.00 out per 1M" for a model
-    ///     whose catalogue entry has no rates at all. The wording and the
-    ///     unknown-price decision both live in <see cref="ModelRateLabel" />,
-    ///     shared with the picker dropdown.
-    /// </summary>
     string PricingLabel)
 {
     public string Features =>
