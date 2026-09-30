@@ -22,10 +22,56 @@ namespace Harbor.Config.Tests;
 ///     a function of timing. Every one of these writes is a null-out of a real
 ///     provider key, which is why the collision is a flake rather than a wrong
 ///     answer; it is still a race, and it is now a declared one.
+///     #870 closed the OTHER half: a declared race says nothing about what the last
+///     writer leaves behind, so <see cref="SaveAmbientProviderKeys" /> /
+///     <see cref="RestoreAmbientProviderKeys" /> now give both keys back per test.
 /// </remarks>
 [NotInParallel("process-env")]
 public class OnboardingWizardTests
 {
+    /// <summary>
+    ///     The two provider keys this class pins, saved before each test and handed
+    ///     back after it (#870, mechanism from #847).
+    /// </summary>
+    /// <remarks>
+    ///     <para>
+    ///         Thirty-two writes sit below and not one of them is undone where it
+    ///         happens: each test's <c>finally</c> deletes the temp config directory
+    ///         and stops there, and the environment it nulled out stays nulled for
+    ///         the rest of the process.
+    ///     </para>
+    ///     <para>
+    ///         That is not a test-only name. <c>AuthStore.FromConventionalEnv</c>
+    ///         (<c>AuthStore.cs:65-74</c>) derives <c>&lt;PROVIDER&gt;_API_KEY</c> from
+    ///         the provider id and reads the process environment for it, and the wizard
+    ///         reaches it through <c>_authStore.GetApiKeyAsync</c>
+    ///         (<c>OnboardingWizard.cs:245</c>) — so a nulled <c>OLLAMA_API_KEY</c> is
+    ///         read by PRODUCT code in this same process, by whichever test runs next.
+    ///     </para>
+    ///     <para>
+    ///         One drain per class rather than a save/restore pair at thirty-two call
+    ///         sites: the class reads two names, so two names is what it gives back.
+    ///         Thirty-two hand-written teardowns would be thirty-two places to get it
+    ///         wrong, and every one of them would still be a guess rather than a value.
+    ///     </para>
+    /// </remarks>
+    private string? _ambientOllamaApiKey;
+    private string? _ambientAnthropicApiKey;
+
+    [Before(Test)]
+    public void SaveAmbientProviderKeys()
+    {
+        _ambientOllamaApiKey = Environment.GetEnvironmentVariable("OLLAMA_API_KEY");
+        _ambientAnthropicApiKey = Environment.GetEnvironmentVariable("ANTHROPIC_API_KEY");
+    }
+
+    [After(Test)]
+    public void RestoreAmbientProviderKeys()
+    {
+        Environment.SetEnvironmentVariable("OLLAMA_API_KEY", _ambientOllamaApiKey);
+        Environment.SetEnvironmentVariable("ANTHROPIC_API_KEY", _ambientAnthropicApiKey);
+    }
+
     /// <summary>
     ///     The three builtin agents, as a registry the wizard can project (#582).
     /// </summary>
