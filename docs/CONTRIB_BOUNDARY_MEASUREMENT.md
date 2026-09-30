@@ -130,7 +130,7 @@ downstream of the reference has drifted.
 
 ### What this does to #759's claim
 
-#759 reported that three desktop apps in `contrib/` stopped building. The
+Issue #759 reported that three desktop apps in `contrib/` stopped building. The
 measurement refines it rather than confirming it: two of those three
 (`Harbor.App.Wpf`, `Harbor.App.Maui`) target Windows-only frameworks and are
 already excluded from the solution, so they are not "broken", they are
@@ -164,9 +164,9 @@ package is there implicitly.
 **No, and it could not have.** The two questions are separable and this one has a
 structural answer.
 
-#908's agent found that a `"src/*"` string literal made the comment stripper read
-a file as being inside a block comment, and that 845 lines of real code across 5
-files were blanked. #919 fixed the lexer. The question here is whether any of
+The #908 agent found that a `"src/*"` string literal made the comment stripper
+read a file as being inside a block comment, and that 845 lines of real code
+across 5 files were blanked. #919 fixed the lexer. The question here is whether any of
 that damage landed in `contrib/`.
 
 It did not, for a reason that does not depend on which files the stripper
