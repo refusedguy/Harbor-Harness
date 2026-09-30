@@ -3,9 +3,32 @@ using System.Runtime.CompilerServices;
 namespace Harbor.Ipc.Protocol;
 
 /// <summary>
-///     Self-healing RPC client (sprint 6 A1): wraps dialing, the raw
-///     <see cref="MessagePackRpcClient"/>, and a reconnecting event stream.
+///     Self-healing RPC client (sprint 6 A1): wraps dialing, an
+///     <see cref="IRpcClient"/>, and a reconnecting event stream.
 /// </summary>
+/// <remarks>
+///     <para>
+///         <b>Why the inner client is injected (#494).</b> This type is a
+///         DECORATOR, so its entire value is being substitutable for the thing
+///         it wraps — and it could not be, because every one of its signatures
+///         named the concrete <see cref="MessagePackRpcClient"/>: the
+///         <c>_current</c> field, <c>ConnectAsync</c>'s
+///         <c>Task&lt;MessagePackRpcClient&gt;</c> return, <c>DialAsync</c>'s
+///         <c>Task&lt;(MessagePackRpcClient, …)&gt;</c> tuple,
+///         <c>RegisterLost</c> and the nested <c>LostSubscription</c>. The price
+///         was testability: the backoff ladder, subscribe-before-snapshot
+///         ordering and sequence fencing were reachable only over a real
+///         MessagePack pipe.
+///     </para>
+///     <para>
+///         <see cref="IHarborClient" /> cannot be the contract here — it yields
+///         <see cref="HarborEvent"/>, which has no sequence, and the reconnect
+///         protocol is a sequence protocol. See <see cref="IRpcClient"/> for the
+///         full argument. <c>clientFactory</c> is therefore injected rather than
+///         <c>new</c>-ed here, which is what makes the state machine drivable
+///         from a fake.
+///     </para>
+/// </remarks>
 /// <remarks>
 ///     <para>
 ///         <b>Reconnect protocol</b> (reference: t3code ws.ts): exponential
@@ -31,12 +54,12 @@ public sealed class ReconnectableRpcClient : IAsyncDisposable
 
     private readonly object _lock = new();
     private readonly Func<CancellationToken, Task<IIpcClientTransport>> _transportFactory;
+    private readonly Func<IIpcClientTransport, IRpcClient> _clientFactory;
     private readonly ILogger _logger;
-    private readonly string? _psk;
     private readonly Random _jitter = Random.Shared;
     private int _disposed;
 
-    private MessagePackRpcClient? _current;
+    private IRpcClient? _current;
     private IIpcClientTransport? _currentTransport;
     private ulong _lastSeen;
     private bool _hasSeen;
@@ -45,15 +68,35 @@ public sealed class ReconnectableRpcClient : IAsyncDisposable
     /// <summary>Raised every time a new underlying connection is up (tests/diagnostics).</summary>
     public event EventHandler? Connected = delegate { };
 
+    /// <summary>
+    ///     Construct a reconnecting client over a pair of injected factories.
+    /// </summary>
+    /// <param name="transportFactory">Dials a fresh transport per attempt.</param>
+    /// <param name="clientFactory">
+    ///     Wraps a transport in an RPC client. This is the seam: production
+    ///     passes <c>t =&gt; new MessagePackRpcClient(t, logger, psk)</c>, a test
+    ///     passes a fake and drives the whole reconnect state machine without a
+    ///     pipe (#494).
+    /// </param>
+    /// <param name="logger">Logger.</param>
     public ReconnectableRpcClient(
         Func<CancellationToken, Task<IIpcClientTransport>> transportFactory,
-        ILogger logger,
-        string? psk = null)
+        Func<IIpcClientTransport, IRpcClient> clientFactory,
+        ILogger logger)
     {
         _transportFactory = transportFactory;
+        _clientFactory = clientFactory;
         _logger = logger;
-        _psk = psk;
     }
+
+    /// <summary>
+    ///     The production factory: a real <see cref="MessagePackRpcClient"/>
+    ///     over each transport. Lives here, not in the dial loop, so the loop
+    ///     never names the implementation.
+    /// </summary>
+    public static Func<IIpcClientTransport, IRpcClient> DefaultClientFactory(
+        ILogger logger, string? psk = null)
+        => transport => new MessagePackRpcClient(transport, logger, psk);
 
     /// <summary>Backoff for the Nth consecutive failed attempt (1-based), with jitter.</summary>
     public TimeSpan NextBackoffDelay()
@@ -75,7 +118,7 @@ public sealed class ReconnectableRpcClient : IAsyncDisposable
     }
 
     /// <summary>Dial once and expose the inner client for request/response calls.</summary>
-    public async Task<MessagePackRpcClient> ConnectAsync(CancellationToken ct = default)
+    public async Task<IRpcClient> ConnectAsync(CancellationToken ct = default)
     {
         var (inner, _) = await DialAsync(ct).ConfigureAwait(false);
         return inner;
@@ -104,7 +147,7 @@ public sealed class ReconnectableRpcClient : IAsyncDisposable
 
         while (!ct.IsCancellationRequested)
         {
-            MessagePackRpcClient inner;
+            IRpcClient inner;
             try
             {
                 (inner, _) = await DialAsync(ct).ConfigureAwait(false);
@@ -233,7 +276,7 @@ public sealed class ReconnectableRpcClient : IAsyncDisposable
         }
     }
 
-    private async Task<(MessagePackRpcClient Inner, IIpcClientTransport Transport)> DialAsync(CancellationToken ct)
+    private async Task<(IRpcClient Inner, IIpcClientTransport Transport)> DialAsync(CancellationToken ct)
     {
         lock (_lock)
         {
@@ -244,7 +287,7 @@ public sealed class ReconnectableRpcClient : IAsyncDisposable
         }
 
         IIpcClientTransport transport = await _transportFactory(ct).ConfigureAwait(false);
-        var inner = new MessagePackRpcClient(transport, _logger, _psk);
+        IRpcClient inner = _clientFactory(transport);
         try
         {
             await inner.ConnectAsync(ct).ConfigureAwait(false);
@@ -267,7 +310,7 @@ public sealed class ReconnectableRpcClient : IAsyncDisposable
 
     private async Task DropConnectionAsync()
     {
-        MessagePackRpcClient? inner;
+        IRpcClient? inner;
         IIpcClientTransport? transport;
         lock (_lock)
         {
@@ -306,15 +349,15 @@ public sealed class ReconnectableRpcClient : IAsyncDisposable
         await DropConnectionAsync().ConfigureAwait(false);
     }
 
-    private static IDisposable RegisterLost(MessagePackRpcClient inner, Action onLost)
+    private static IDisposable RegisterLost(IRpcClient inner, Action onLost)
         => new LostSubscription(inner, onLost);
 
     private sealed class LostSubscription : IDisposable
     {
-        private readonly MessagePackRpcClient _inner;
+        private readonly IRpcClient _inner;
         private readonly Action _onLost;
 
-        public LostSubscription(MessagePackRpcClient inner, Action onLost)
+        public LostSubscription(IRpcClient inner, Action onLost)
         {
             _inner = inner;
             _onLost = onLost;

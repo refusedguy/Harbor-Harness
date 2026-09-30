@@ -654,8 +654,14 @@ public sealed class CellForgeRenderContext : ITuiRenderContext
         _writer = new AnsiWriter(backend);
     }
 
-    /// <summary>Exposed for diagnostics and golden-frame tests.</summary>
-    public AnsiWriter Writer => _writer;
+    // The writer is NOT exposed (issue #494). A `public AnsiWriter Writer`
+    // property sat here, documented "exposed for diagnostics and golden-frame
+    // tests", and had no readers: the golden tests substitute one layer down,
+    // at ISyncTerminalBackend — RecordingBackend / CountingBackend /
+    // AsyncOnlyBackend — which is what the parameter above is for. Everything
+    // this context does to the writer is already a member of ITuiRenderContext,
+    // so the property published 28 implementation members to anyone who asked
+    // and bound them to recompile against Harbor.Tui.CellForge.Engine.
 
     public int Width
     {
