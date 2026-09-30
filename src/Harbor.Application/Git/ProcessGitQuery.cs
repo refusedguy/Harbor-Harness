@@ -13,10 +13,12 @@ namespace Harbor.Application.Git;
 /// <remarks>
 ///     <para>
 ///         Read-only by construction: the only argument vectors it ever builds are
-///         <c>rev-parse --abbrev-ref HEAD</c>, <c>status --porcelain</c> and
-///         <c>log -1 --format=%cr</c>. There is no <c>push</c>/<c>commit</c>/<c>reset</c>
-///         path here, and <see cref="GetStatus" /> takes no free-form command string, so
-///         this type cannot be turned into a general shell-out.
+///         <c>rev-parse --abbrev-ref HEAD</c>, <c>status --porcelain</c>,
+///         <c>log -1 --format=%cr</c> and — since #666 —
+///         <c>worktree list --porcelain</c>. There is no <c>push</c>/<c>commit</c>/<c>reset</c>
+///         path here, and neither <see cref="GetStatus" /> nor
+///         <see cref="ListWorktrees" /> takes a free-form command string, so this type
+///         cannot be turned into a general shell-out.
 ///     </para>
 ///     <para>
 ///         Not an <c>ITool</c>, and deliberately so: it serves UI chrome for a
@@ -66,6 +68,32 @@ public sealed class ProcessGitQuery(ILogger<ProcessGitQuery> logger) : IGitQuery
             // outcomes for a UI badge, not exceptions for the caller to handle.
             logger.LogDebug(ex, "Git status failed for {Dir}", directory);
             return GitWorkspaceStatus.None;
+        }
+    }
+
+    /// <inheritdoc />
+    public IReadOnlyList<GitWorktreeInfo> ListWorktrees(
+        string directory,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrEmpty(directory) || !Directory.Exists(directory))
+        {
+            return Array.Empty<GitWorktreeInfo>();
+        }
+
+        try
+        {
+            string? porcelain = RunGit(directory, cancellationToken, "worktree", "list", "--porcelain");
+            return porcelain is null ? Array.Empty<GitWorktreeInfo>() : WorktreePorcelainParser.Parse(porcelain);
+        }
+        catch (Exception ex)
+        {
+            // Not a repository, git missing from PATH, or a timeout — the same
+            // expected outcomes GetStatus absorbs, and the same reason a jump
+            // palette showing no worktree rows is a correct state rather than an
+            // error the user needs to see.
+            logger.LogDebug(ex, "Git worktree list failed for {Dir}", directory);
+            return Array.Empty<GitWorktreeInfo>();
         }
     }
 

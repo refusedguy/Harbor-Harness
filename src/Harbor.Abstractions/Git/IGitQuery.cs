@@ -15,6 +15,29 @@ public sealed record GitWorkspaceStatus(string? Branch, bool IsDirty, int DirtyF
 }
 
 /// <summary>
+///     One linked working tree of the repository that contains
+///     <c>directory</c> — either the main checkout or a <c>git worktree add</c> entry.
+/// </summary>
+/// <remarks>
+///     <para>
+///         <b>Why the record is here and not in the consumer.</b> #666: the
+///         jump-palette panel forked <c>git worktree list --porcelain</c> from a
+///         Presentation assembly and parsed the output in
+///         <c>WorktreeJumpSeeder</c>, which lives in <c>Harbor.Ui.Framework.Services</c>.
+///         Application cannot reference that assembly, so a contract returning
+///         porcelain text would leak the wire format through a Domain interface; and
+///         a record left in the palette's assembly would give each side its own copy
+///         of the same three fields. One record, declared next to
+///         <see cref="GitWorkspaceStatus" />, keeps parsing on the Application side
+///         where <c>ProcessGitQuery</c> already reads git's output.
+///     </para>
+/// </remarks>
+/// <param name="Path">Absolute path of the working tree.</param>
+/// <param name="Branch">Short branch name, or <see langword="null" /> when detached.</param>
+/// <param name="IsBare">True for a <c>bare</c> entry — a repository store rather than a checkout, and never a jump target.</param>
+public sealed record GitWorktreeInfo(string Path, string? Branch, bool IsBare);
+
+/// <summary>
 ///     Read-only git queries for a working directory (issue #537).
 /// </summary>
 /// <remarks>
@@ -51,4 +74,35 @@ public interface IGitQuery
     /// <param name="directory">The working directory to inspect.</param>
     /// <param name="cancellationToken">Cancels the git invocation.</param>
     GitWorkspaceStatus GetStatus(string directory, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    ///     Every linked working tree of the repository that contains
+    ///     <paramref name="directory" />, main checkout first, as git reports
+    ///     them. Returns an empty list for a missing directory, a non-repository,
+    ///     or a git that is missing, times out or exits non-zero — never throws
+    ///     for an expected failure.
+    /// </summary>
+    /// <remarks>
+    ///     <para>
+    ///         Added in #666. The jump palette needs this and had no way to ask:
+    ///         it built its own <c>ProcessStartInfo</c> for
+    ///         <c>git worktree list --porcelain</c> inside a Presentation assembly.
+    ///         That is the same second-path defect #537 fixed for the branch badge,
+    ///         so this is a method on the port that already existed rather than a
+    ///         second port.
+    ///     </para>
+    ///     <para>
+    ///         <b>Read-only, like every other method here.</b> The only argument
+    ///         vector this can produce is <c>worktree list --porcelain</c>; there is
+    ///         no <c>add</c>/<c>remove</c>/<c>prune</c> path, and no free-form command
+    ///         string on the contract, so it cannot be turned into a general
+    ///         shell-out. The permission-gating reasoning in the remarks above is
+    ///         unchanged: this is UI chrome over a directory the user opened, takes
+    ///         no model input, and mutates nothing. The agent's git access still
+    ///         goes through the <c>bash</c> tool and <c>PermissionRuleset</c>.
+    ///     </para>
+    /// </remarks>
+    /// <param name="directory">A directory inside the repository to list worktrees for.</param>
+    /// <param name="cancellationToken">Cancels the git invocation.</param>
+    IReadOnlyList<GitWorktreeInfo> ListWorktrees(string directory, CancellationToken cancellationToken = default);
 }

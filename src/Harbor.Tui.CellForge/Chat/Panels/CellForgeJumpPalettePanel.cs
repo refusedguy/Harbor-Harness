@@ -1,4 +1,4 @@
-using System.Diagnostics;
+using Harbor.Abstractions.Git;
 using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Tools;
 using Harbor.Ui.Framework.Navigation;
@@ -41,12 +41,14 @@ namespace Harbor.Tui.CellForge.Panels;
 ///         LF alias of Ctrl+J must keep toggling the palette closed.
 ///     </para>
 ///     <para>
-///         <b>Seeding:</b> merges real worktrees (<c>git worktree list
-///         --porcelain</c>, parsed by <see cref="WorktreeJumpSeeder" />) with
-///         the active sessions from <see cref="UiState.Chat.Sessions" /> enriched
+///         <b>Seeding:</b> merges real worktrees
+///         (<see cref="IGitQuery.ListWorktrees" />, the Domain port that
+///         <c>ProcessGitQuery</c> implements in Application) with the
+///         active sessions from <see cref="UiState.Chat.Sessions" /> enriched
 ///         read-only through the <see cref="IPanelSessionGateway" /> the host put on
 ///         <see cref="PanelServices" /> (#470 — no per-frame service lookup; an
-///         absent gateway simply leaves the rows un-enriched). Provider-local
+///         absent gateway simply leaves the rows un-enriched, and so does an
+///         absent git query, which leaves the worktree rows empty). Provider-local
 ///         structures are never mutated. The model + seed cache
 ///         are provider-local mutable state guarded by a small lock (same
 ///         compromise as <see cref="CellForgeFileTreePanel" />) so
@@ -54,6 +56,19 @@ namespace Harbor.Tui.CellForge.Panels;
 ///         thread-safe; <c>Build</c> only seeds on the first frame after open
 ///         (<c>!Visible</c>) or an explicit <c>r</c> refresh, never every frame
 ///         (spawning git per frame would stall rendering).
+///     </para>
+///     <para>
+///         <b>#666: the spawn moved out.</b> This panel used to build a
+///         <c>ProcessStartInfo</c> for <c>git worktree list --porcelain</c> in a
+///         private static helper and hand the text to
+///         <c>WorktreeJumpSeeder.ParsePorcelain</c> — a Presentation assembly
+///         forking a process, behind a <c>Func&lt;string&gt;</c> field standing in for
+///         a seam nobody had declared. It now asks <see cref="PanelServices.Git" />
+///         for <see cref="GitWorktreeInfo" /> rows, which is the same port the
+///         branch badge has used since #537. The <c>Func</c> field is gone rather
+///         than kept as a test hook: with a real port a test injects a fake
+///         <see cref="IGitQuery" />, which is a stronger claim than a delegate
+///         returning whatever string the test likes.
 ///     </para>
 /// </remarks>
 public sealed class CellForgeJumpPalettePanel : IPanelProvider
@@ -74,11 +89,18 @@ public sealed class CellForgeJumpPalettePanel : IPanelProvider
     }
 
     /// <summary>
-    ///     Raw <c>git worktree list --porcelain</c> output source. Defaults to
-    ///     spawning git in the current directory (3s timeout, empty on any
-    ///     failure); tests override it for hermetic seeding.
+    ///     Directory the worktree listing is taken from. Defaults to the process
+    ///     working directory, which is what the panel asked git about before
+    ///     <c>IGitQuery</c> existed and what the jump palette means by "here";
+    ///     tests override it so a fake port can assert the directory it was given.
     /// </summary>
-    internal Func<string> WorktreePorcelainReader { get; set; } = ReadWorktreePorcelain;
+    /// <remarks>
+    ///     The port moved the spawn, not the question: the old private helper
+    ///     passed <see cref="Environment.CurrentDirectory" /> as the git working
+    ///     directory, and this is that same value, now on the panel where a test
+    ///     can reach it.
+    /// </remarks>
+    internal string WorktreeDirectory { get; set; } = Environment.CurrentDirectory;
 
     /// <inheritdoc />
     public string Id => OverlayIds.JumpPalette;
@@ -272,17 +294,37 @@ public sealed class CellForgeJumpPalettePanel : IPanelProvider
     private void SeedLocked(PanelContext ctx)
     {
         var sessions = ctx.Deps.Sessions;
-        IReadOnlyList<WorktreeInfo> worktrees;
+        IReadOnlyList<GitWorktreeInfo> worktrees = ReadWorktrees(ctx);
+        _model.Show(WorktreeJumpSeeder.BuildEntries(SessionSeeds(ctx, sessions), worktrees));
+    }
+
+    /// <summary>
+    ///     The repository's linked worktrees, through the Domain port. A host with
+    ///     no git query registered lists sessions only; the panel never falls back
+    ///     to forking <c>git</c> itself, which is the whole point of #666.
+    /// </summary>
+    /// <remarks>
+    ///     The <c>try</c>/<c>catch</c> is belt-and-braces, not the mechanism:
+    ///     <see cref="IGitQuery.ListWorktrees" /> documents that it returns an empty
+    ///     list for every expected failure. It is kept because a palette that throws
+    ///     on a paint path takes the renderer down with it, and the old private
+    ///     helper had the same guard for the same reason.
+    /// </remarks>
+    private IReadOnlyList<GitWorktreeInfo> ReadWorktrees(PanelContext ctx)
+    {
+        if (ctx.Deps.Git is not { } queries)
+        {
+            return Array.Empty<GitWorktreeInfo>();
+        }
+
         try
         {
-            worktrees = WorktreeJumpSeeder.ParsePorcelain(WorktreePorcelainReader());
+            return queries.ListWorktrees(WorktreeDirectory);
         }
         catch
         {
-            worktrees = Array.Empty<WorktreeInfo>();
+            return Array.Empty<GitWorktreeInfo>();
         }
-
-        _model.Show(WorktreeJumpSeeder.BuildEntries(SessionSeeds(ctx, sessions), worktrees));
     }
 
     /// <summary>
@@ -320,50 +362,5 @@ public sealed class CellForgeJumpPalettePanel : IPanelProvider
         }
 
         return seeds;
-    }
-
-    private static string ReadWorktreePorcelain()
-    {
-        try
-        {
-            var psi = new ProcessStartInfo
-            {
-                FileName = "git",
-                WorkingDirectory = Environment.CurrentDirectory,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                UseShellExecute = false,
-                CreateNoWindow = true,
-            };
-            psi.ArgumentList.Add("worktree");
-            psi.ArgumentList.Add("list");
-            psi.ArgumentList.Add("--porcelain");
-
-            using var process = Process.Start(psi);
-            if (process is null)
-            {
-                return string.Empty;
-            }
-
-            if (!process.WaitForExit(TimeSpan.FromSeconds(3)))
-            {
-                try
-                {
-                    process.Kill();
-                }
-                catch
-                {
-                    // Process already exited.
-                }
-
-                return string.Empty;
-            }
-
-            return process.ExitCode == 0 ? process.StandardOutput.ReadToEnd() : string.Empty;
-        }
-        catch
-        {
-            return string.Empty;
-        }
     }
 }
