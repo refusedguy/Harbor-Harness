@@ -3,6 +3,7 @@ using System.Net.Sockets;
 using System.Text;
 using System.Text.Json;
 using CSharpFunctionalExtensions;
+using Harbor.Abstractions.Resilience;
 using Harbor.Tools.Mcp;
 using Microsoft.Extensions.Logging;
 using TUnit.Assertions;
@@ -263,6 +264,116 @@ public class McpRemoteTransportTests
         await Assert.That(server.RequestBodies.Any(b => b.Contains("tools/list"))).IsTrue();
     }
 
+    // ---------- #714: the SSE retry loop was blind to the cause ----------
+
+    /// <summary>
+    ///     The regression this issue exists for. A missing key, a revoked token or a
+    ///     wrong endpoint is not a blip: the same request will fail identically three
+    ///     times, so retrying it is pure latency in front of a guaranteed error — and
+    ///     for <c>401</c> it is three more chances for the provider to flag the key.
+    ///     <para>
+    ///     Asserted on what the SERVER counted, not on the error string: the string
+    ///     already reported 401 before the fix (the status was flattened into it), so
+    ///     asserting on it would have passed against the retrying transport. The
+    ///     request count is the thing that was actually wrong.
+    ///     </para>
+    /// </summary>
+    [Test]
+    public async Task SseTransport_UnauthorizedChannel_AsksOnceAndDoesNotRetry()
+    {
+        using FakeServer server = FakeServer.Start();
+        server.GetStatusCode = 401;
+
+        await using var transport = new McpSseTransport(new Uri(server.Url + "/sse"));
+        using var request = JsonDocument.Parse("""{"jsonrpc":"2.0","id":4,"method":"tools/list","params":{}}""");
+
+        Result<Maybe<JsonDocument>> roundTrip = await transport.TryRoundTripAsync(request.RootElement.Clone(), 4);
+
+        await Assert.That(roundTrip.IsFailure).IsTrue();
+        await Assert.That(roundTrip.Error).Contains("401");
+        await Assert.That(server.HandledRequests)
+            .IsEqualTo(1)
+            .Because("an unauthenticated channel cannot succeed on a second try — the key, not the socket, is missing");
+    }
+
+    /// <summary>
+    ///     The same blind retry reached the message endpoint, one hop further along.
+    ///     Two requests is the whole honest cost: open the channel, be refused the
+    ///     POST. It was six — three full open-and-post round-trips.
+    /// </summary>
+    [Test]
+    public async Task SseTransport_ForbiddenMessageEndpoint_OpensAndPostsOnceEach()
+    {
+        using FakeServer server = FakeServer.Start();
+        server.JsonResponder = static _ => """{"jsonrpc":"2.0","id":5,"result":{"echo":true}}""";
+        // More refusals than attempts, so the queue cannot run dry mid-retry and let
+        // a later attempt succeed — that would hide the defect instead of exposing it.
+        server.QueueStatusCodes.AddRange([403, 403, 403, 403, 403, 403]);
+
+        await using var transport = new McpSseTransport(new Uri(server.Url + "/sse"));
+        using var request = JsonDocument.Parse("""{"jsonrpc":"2.0","id":5,"method":"tools/list","params":{}}""");
+
+        Result<Maybe<JsonDocument>> roundTrip = await transport.TryRoundTripAsync(request.RootElement.Clone(), 5);
+
+        await Assert.That(roundTrip.IsFailure).IsTrue();
+        await Assert.That(roundTrip.Error).Contains("403");
+        await Assert.That(server.HandledRequests)
+            .IsEqualTo(2)
+            .Because("one GET to open the channel plus one POST that was refused; the retry only ever repeated both");
+    }
+
+    /// <summary>
+    ///     The third blind-retry source, and the one the sibling transport already
+    ///     got right: <c>McpHttpTransport</c> resolves the token before entering its
+    ///     loop, so a rejected grant costs one attempt and zero requests. Here the
+    ///     token was resolved per attempt inside the loop, so a grant that can never
+    ///     be granted was asked for three times.
+    /// </summary>
+    [Test]
+    public async Task SseTransport_RejectedOAuthGrant_IsNotRetried()
+    {
+        int tokenCalls = 0;
+        await using var transport = new McpSseTransport(
+            new Uri("http://127.0.0.1:1/sse"),
+            oauthTokenProvider: _ =>
+            {
+                tokenCalls++;
+                return Task.FromResult(Result.Failure<Maybe<string>>("invalid_grant"));
+            });
+
+        using var request = JsonDocument.Parse("""{"jsonrpc":"2.0","id":6,"method":"tools/list","params":{}}""");
+        Result<Maybe<JsonDocument>> roundTrip = await transport.TryRoundTripAsync(request.RootElement.Clone(), 6);
+
+        await Assert.That(roundTrip.IsFailure).IsTrue();
+        await Assert.That(tokenCalls)
+            .IsEqualTo(1)
+            .Because("a rejected grant is an answer, not an outage — asking again cannot change it");
+    }
+
+    /// <summary>
+    ///     The other half, and the reason the fix cannot simply be "stop retrying".
+    ///     A 5xx on the channel IS a blip and must keep its three attempts — this
+    ///     pins the transient set in place so a later reader cannot widen the new
+    ///     terminal branch until retrying is dead everywhere.
+    /// </summary>
+    [Test]
+    public async Task SseTransport_ServerErrorOnChannel_StillRetries()
+    {
+        using FakeServer server = FakeServer.Start();
+        server.GetStatusCode = 503;
+
+        await using var transport = new McpSseTransport(new Uri(server.Url + "/sse"));
+        using var request = JsonDocument.Parse("""{"jsonrpc":"2.0","id":7,"method":"tools/list","params":{}}""");
+
+        Result<Maybe<JsonDocument>> roundTrip = await transport.TryRoundTripAsync(request.RootElement.Clone(), 7);
+
+        await Assert.That(roundTrip.IsFailure).IsTrue();
+        await Assert.That(roundTrip.Error).Contains("503");
+        await Assert.That(server.HandledRequests)
+            .IsEqualTo(TransientFailurePolicy.DefaultMaxAttempts)
+            .Because("5xx is exactly the class of failure the retry budget exists for");
+    }
+
     // ---------- Registry integration ----------
 
     [Test]
@@ -462,6 +573,14 @@ public class McpRemoteTransportTests
         public string? SseResponseBody { get; set; }
         public Func<string, string>? JsonResponder { get; set; }
 
+        /// <summary>
+        ///     Status for the legacy-SSE <c>GET</c> channel. #714: the 401/403/404
+        ///     guards need the channel itself to refuse, and
+        ///     <see cref="QueueStatusCodes" /> only ever applied to the POST.
+        ///     <see langword="null" /> (the default) keeps the announcing behaviour.
+        /// </summary>
+        public int? GetStatusCode { get; set; }
+
         private readonly TaskCompletionSource _postArrived = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
         private FakeServer(HttpListener listener, Uri url)
@@ -512,6 +631,15 @@ public class McpRemoteTransportTests
 
                 if (isGet)
                 {
+                    // #714: a channel the server refuses outright never announces an
+                    // endpoint, so the refusal has to be served before the announce.
+                    if (GetStatusCode is { } refused && refused != 200)
+                    {
+                        context.Response.StatusCode = refused;
+                        context.Response.Close();
+                        return;
+                    }
+
                     // Legacy SSE channel: announce the POST endpoint, then emit the response.
                     context.Response.ContentType = "text/event-stream";
                     await WriteSseAsync(context.Response, $"event: endpoint\ndata: /message\n\n");
