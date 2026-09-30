@@ -59,7 +59,8 @@ Do not re-read whole files when a `graft` crux or `serena` symbol body already a
 src/Harbor.Abstractions/              — base contracts (zero deps)
 src/Harbor.Abstractions.Contracts/    — models, events, ValueObjects, PermissionRuleset
 
-src/Harbor.Registries/                — Agent/Tool/Provider registries (builtin agents: code, plan, explore)
+src/Harbor.Registries/                — Agent/Tool/Provider registries; builtin agents are declared in
+                                       AgentDefinition and registered in ToolsCatalog.CreateAgentRegistry
 src/Harbor.Application/               — sessions, permissions, configuration
 src/Harbor.Hosting/                   — DI modules wired by the CLI (TuiModule, StorageModule, CoreModule, ...)
 src/Harbor.Terminal.Abstractions/     — ITuiRenderer, ITuiRenderContext, BaseTuiRenderer, views/VMs
@@ -203,6 +204,13 @@ I want to...
 │      Implement ISessionStoreFactory, add it to the array in
 │      src/Harbor.Hosting/Modules/SessionStoreRegistry.cs — that array is the only
 │      declaration (the id list in the error text derives from it, #581).
+│
+├── ...add a new builtin agent (a mode)
+│   └─→ docs/EXAMPLES.md §Add a new builtin agent
+│      Two edits: a factory in src/Harbor.Abstractions/Agents/AgentDefinition.cs,
+│      and an AddAgent line in ToolsCatalog.CreateAgentRegistry. Nothing else — the
+│      onboarding wizard's picker (/setup) and both /agent commands project from
+│      the registry, so they pick it up with no edit (#582).
 │
 ├── ...add a new TUI renderer (GUI, web, ...)
 │   └─→ docs/EXAMPLES.md §18 (Switch TUI renderer) + AGENTS.md §Add a TUI view

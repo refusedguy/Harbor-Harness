@@ -76,7 +76,10 @@ public sealed partial class SessionRowViewModel : ObservableObject
     /// <summary>Session title (first user prompt or "New session").</summary>
     public string Title { get; init; }
 
-    /// <summary>Agent name (code/plan/explore).</summary>
+    /// <summary>
+    ///     Agent name the session ran under. Any name the agent registry holds;
+    ///     the set is deliberately not enumerated here (#582).
+    /// </summary>
     public string Agent { get; init; }
 
     /// <summary>Model display name (e.g. <c>qwen2.5-coder:7b</c>).</summary>

@@ -19,9 +19,10 @@
 3. [Storage](#storage) — session persistence
 4. [TUI](#tui) — renderers, views, view models
 5. [Plugins](#plugins) — CS-plugin system
-6. [Sessions](#sessions) — load / branch / compact
-7. [Permissions](#permissions) — allow / ask / deny
-8. [Performance](#performance) — pools / frozen / span
+6. [Agents](#agents) — add a builtin agent / mode
+7. [Sessions](#sessions) — load / branch / compact
+8. [Permissions](#permissions) — allow / ask / deny
+9. [Performance](#performance) — pools / frozen / span
 
 ---
 
@@ -627,6 +628,60 @@ public sealed class LspDiagnosticsPlugin : ITuiPlugin
 ```
 
 See [PLUGIN_DEVELOPMENT.md §LspDiagnosticsPanel](./PLUGIN_DEVELOPMENT.md) for the full 50-line example.
+
+---
+
+## Agents
+
+### 25a. Add a new builtin agent (a mode)
+
+An agent is the one extension axis with **no** menu to keep in sync: the
+onboarding wizard's picker (`/setup`) and both `/agent` commands project from
+`IAgentRegistry`, so a registered agent appears in all of them with no edit
+(#582). Two files, two lines each.
+
+**1. Declare it** — a factory next to `CodeDefault` in
+`src/Harbor.Abstractions/Agents/AgentDefinition.cs`:
+
+```csharp
+public static AgentDefinition ReviewDefault(string model, string providerId) => new(
+    AgentName.Create("review"),
+    "Review",
+    "Read-only reviewer. Comments on a diff; never edits.",
+    model,
+    providerId,
+    // A read-only agent: start from PermissionRuleset.Default and DENY what it
+    // must not do, rather than re-listing what it may. Naming tools to allow is
+    // the part that rots.
+    PermissionRuleset.Default.Merge(new PermissionRuleset(new PermissionRule[]
+    {
+        new("write", "*", PermissionAction.Deny),
+        new("edit", "*", PermissionAction.Deny),
+    })));
+```
+
+`Merge` is last-wins on duplicate `tool:pattern` keys, so the delta above
+overrides the `Default` rows for `write` and `edit` and inherits everything
+else — including rows added to `Default` later. `PlanDefault` and
+`ExploreDefault` predate this and still hand-list their rules; that is a known
+divergence, not a pattern to copy.
+
+**2. Register it** — in `ToolsCatalog.CreateAgentRegistry`
+(`src/Harbor.Hosting/Modules/ToolsCatalog.cs`):
+
+```csharp
+ab.AddAgent(AgentDefinition.ReviewDefault(modelId, providerId));
+```
+
+That is the whole job. It is now reachable as `/agent review`, from the setup
+wizard, as a `DefaultAgent` in `config.json`, and — if you set
+`IsSubAgent: true` — as `task(review)`, because `TaskTool` validates
+sub-agents against the registry too.
+
+`BuiltinAgentPickerProjectionTests` in
+`tests/Harbor.Architecture.Tests/` fails if a picker ever starts spelling an
+agent name again, and `Onboarding_Offers_An_Agent_That_Exists_In_No_Hand_Written_List`
+plants a fourth agent to prove the menu really is a projection.
 
 ---
 

@@ -105,7 +105,16 @@ public sealed class HarborConfig
         return r.IsSuccess ? Result.Success() : r.ConvertFailure();
     }
 
-    /// <summary>Effective agent (mode): code, plan, explore.</summary>
+    /// <summary>
+    ///     Effective agent (mode). Any name the agent registry holds, including one
+    ///     a plugin contributed; falls back to
+    ///     <see cref="IdentityConfig.FallbackAgent" /> when unset.
+    /// </summary>
+    /// <remarks>
+    ///     The valid values are not enumerated: the set is the agent registry's, and
+    ///     a comment that lists it is a list that goes stale the day a builtin agent
+    ///     is added (#582).
+    /// </remarks>
     [JsonIgnore]
     public string Agent
     {
