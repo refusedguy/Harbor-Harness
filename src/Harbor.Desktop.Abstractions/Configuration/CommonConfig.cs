@@ -103,7 +103,9 @@ public sealed record CommonConfig
     ///     CLI makes the Avalonia app open in light mode too. Individual apps
     ///     may keep their own per-app override (e.g.
     ///     <c>AvaloniaConfig.Theme</c>), but the shared value is the source of
-    ///     truth for "what did the user pick globally".
+    ///     truth for "what did the user pick globally". An app that ships named
+    ///     palettes may also accept a palette name here, which carries its own
+    ///     variant; the Avalonia app does (#583).
     /// </summary>
     public string Theme { get; init; } = "system";
 

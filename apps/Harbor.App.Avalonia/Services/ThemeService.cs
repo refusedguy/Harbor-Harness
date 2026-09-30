@@ -81,22 +81,92 @@ public sealed class ThemeService : IThemeService
         Apply(effectiveTheme);
     }
 
+    /// <summary>
+    ///     Apply a theme named either by VARIANT (<c>dark</c> / <c>light</c>) or by
+    ///     PALETTE (any name <see cref="HdsThemeCatalog.PaletteNames" /> holds).
+    /// </summary>
+    /// <remarks>
+    ///     <para>
+    ///         #583: a name that is neither variant is asked of the palette index
+    ///         before it is given up on. This matters because this is the path a
+    ///         launch enters — <c>App.OnFrameworkInitializationCompleted</c> calls
+    ///         <see cref="ApplyFromConfig" />, which calls this — and the path a saved
+    ///         setting is re-applied through on every Settings save. It used to be a
+    ///         closed three-arm switch that named <c>Lumen</c> and
+    ///         <c>CatppuccinMocha</c> and sent everything else to dark, so four of the
+    ///         six shipped palettes could not be applied at all, and a palette chosen
+    ///         in the app was undone by the next launch.
+    ///     </para>
+    ///     <para>
+    ///         The variant arms are unchanged, so <c>system</c> and an unrecognised
+    ///         name still mean "the default dark theme" exactly as before. What is new
+    ///         is that a name the CATALOG recognises is no longer indistinguishable
+    ///         from one it does not.
+    ///     </para>
+    /// </remarks>
+    /// <param name="theme">A variant name or a palette name; case-insensitive.</param>
     public void Apply(string theme)
     {
-        string t = (theme ?? "system").ToLowerInvariant();
-        switch (t)
+        string t = (theme ?? "system").Trim();
+
+        switch (t.ToLowerInvariant())
         {
             case "light":
                 ApplyLight();
-                break;
+                return;
             case "dark":
                 ApplyDark();
-                break;
-            default:
-                ApplyDark();
-                _logger.LogInformation("Theme '{Theme}' requested — leaving default dark theme active", theme);
-                break;
+                return;
         }
+
+        // Not a variant. The only question left is whether it names a palette, and
+        // the index is the one place that can answer that without a name of its own.
+        if (ApplyPalette(t))
+        {
+            return;
+        }
+
+        ApplyDark();
+        _logger.LogInformation("Theme '{Theme}' requested — leaving default dark theme active", theme);
+    }
+
+    /// <summary>
+    ///     Apply the palette <paramref name="name" />, if the catalog ships one by
+    ///     that name, and set the chrome variant the palette itself declares.
+    /// </summary>
+    /// <remarks>
+    ///     <para>
+    ///         This is the startup half of #583, and it is the same answer the
+    ///         Settings screen reaches through <c>IThemeApplier.ApplyHds</c> plus
+    ///         <c>SetThemeVariant</c> — two entry points, one source. Neither this
+    ///         method nor that one holds a list of palettes, or of which of them are
+    ///         dark: both ask <see cref="HdsThemeCatalog" />, and the palette's own
+    ///         <c>HdsThemeVariant</c> key is what answers the variant (#673).
+    ///     </para>
+    ///     <para>
+    ///         Returns false rather than throwing for a name the app does not ship,
+    ///         because a persisted setting outlives the palette it names: a user whose
+    ///         saved <c>Paper</c> is gone should get the default dark theme, not a
+    ///         failed launch.
+    ///     </para>
+    /// </remarks>
+    /// <param name="name">Palette name, e.g. <c>Vapor</c>.</param>
+    /// <returns>True when a palette was applied; false for an unknown name or no application.</returns>
+    public bool ApplyPalette(string name)
+    {
+        if (_app is null) return false;
+
+        HdsThemePreview? palette = HdsThemeCatalog.Find(name);
+        if (palette is null) return false;
+
+        // The catalog's own spelling, not the string that was asked for, so the
+        // resource URI is the one HdsThemeCatalogParityTests bound to the folder.
+        ApplyHds(palette.Name);
+
+        _app.RequestedThemeVariant = palette.IsDark ? ThemeVariant.Dark : ThemeVariant.Light;
+        IsDark = palette.IsDark;
+        _logger.LogInformation("HDS palette {Palette} applied ({Variant})", palette.Name, IsDark ? "dark" : "light");
+        return true;
     }
 
     public void ApplyDark()

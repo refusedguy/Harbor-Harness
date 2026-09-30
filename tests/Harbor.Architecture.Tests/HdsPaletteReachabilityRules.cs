@@ -557,18 +557,21 @@ public sealed class HdsPaletteReachabilityRules
     /// <remarks>
     ///     A declaration whose body cannot be closed before end-of-file (an
     ///     expression-bodied or truncated handler) is recorded with whatever text
-    ///     was available. The failure direction is the safe one: a handler this
-    ///     reader cannot reconstruct produces no hit, and a missing hit is a RED
-    ///     rule rather than a green one.
+    ///     was available. A member with NO braces at all is skipped rather than
+    ///     allowed to swallow the rest of the file. The failure direction is the
+    ///     safe one: a handler this reader cannot reconstruct produces no hit, and
+    ///     a missing hit is a RED rule rather than a green one.
     /// </remarks>
     private static Dictionary<string, string> ReadMethodBodies(IReadOnlyList<string> lines)
     {
         var bodies = new Dictionary<string, string>(StringComparer.Ordinal);
-        for (int i = 0; i < lines.Count; i++)
+        int i = 0;
+        while (i < lines.Count)
         {
             Match declaration = HandlerDeclaration.Match(lines[i]);
             if (!declaration.Success)
             {
+                i++;
                 continue;
             }
 
@@ -598,8 +601,24 @@ public sealed class HdsPaletteReachabilityRules
                 }
             }
 
+            if (!opened)
+            {
+                // An expression-bodied member (`private bool X() => …;`) has no
+                // braces to close, and letting the scan run on would swallow the
+                // rest of the file into one "body" — which could then attribute
+                // some OTHER method's palette reference to this one. Skipping the
+                // declaration is the safe direction: a body this reader cannot
+                // reconstruct yields no hit, and a missing hit is a RED rule.
+                i++;
+                continue;
+            }
+
             bodies[declaration.Groups["handler"].Value] = body.ToString();
-            i = Math.Max(i, j);
+
+            // Resume past the body: a method that closes on its own line leaves j
+            // at that line, and one that never closes runs to the end of the file
+            // rather than to the next declaration.
+            i = j + 1;
         }
 
         return bodies;
