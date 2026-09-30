@@ -69,15 +69,29 @@ public sealed class SystemPromptBuilder : ISystemPromptBuilder
     /// </remarks>
     public const string NoToolsGuidance = "No tools available this turn. Answer from knowledge only.";
 
-    private const string PeerSupervisionRecipe = """
-                                                 ## Peer Supervision
-                                                 Peer sessions run in parallel and may need help: `session_read` shows a neighbor's
-                                                 status, outcome, and recent transcript; `session_steer` delivers a message, a redirect,
-                                                 or a restart directive (asks for approval first).
-                                                 Recipe: read → verdict (ok / stuck / failed) → steer only when needed.
-                                                 Rules: never steer yourself or your own supervisor (the session that steered you);
-                                                 one level only. Reads are snapshots — re-read a working session before acting.
-                                                 """;
+    /// <summary>
+    ///     Opens the recipe's tool list. #793: everything after this is composed
+    ///     from the roles the tools DECLARE, so this file names no tool at all.
+    /// </summary>
+    private const string PeerSupervisionLead = "Peer sessions run in parallel and may need help: ";
+
+    /// <summary>What the observing leg does, for whichever tool declared it.</summary>
+    private const string PeerSupervisionObserveText =
+        "shows a neighbor's status, outcome, and recent transcript";
+
+    /// <summary>What the directing leg does, for whichever tool declared it.</summary>
+    private const string PeerSupervisionDirectText =
+        "delivers a message, a redirect, or a restart directive (asks for approval first)";
+
+    /// <summary>
+    ///     The protocol half of the recipe, printed for every leg combination. It
+    ///     names no tool, so it cannot describe one the turn does not have.
+    /// </summary>
+    private const string PeerSupervisionProtocol = """
+                                                   Recipe: read → verdict (ok / stuck / failed) → steer only when needed.
+                                                   Rules: never steer yourself or your own supervisor (the session that steered you);
+                                                   one level only. Reads are snapshots — re-read a working session before acting.
+                                                   """;
     private readonly ILogger<SystemPromptBuilder> _logger;
 
     public SystemPromptBuilder() : this(NullLogger<SystemPromptBuilder>.Instance) { }
@@ -156,14 +170,11 @@ public sealed class SystemPromptBuilder : ISystemPromptBuilder
             builder.AppendLine();
         }
 
-        // 5b. Peer-supervision recipe (#165): only when the supervision tools
-        // are actually resolved for this turn. The cache key already covers
-        // tool names, so cached prompts stay consistent.
-        if (HasSupervisionTools(context.Tools))
-        {
-            builder.AppendLine(PeerSupervisionRecipe);
-            builder.AppendLine();
-        }
+        // 5b. Peer-supervision recipe (#165, #793): only when at least one
+        // supervision tool resolved for this turn, and it names only the ones
+        // that did. The cache key already covers tool names, so cached prompts
+        // stay consistent.
+        AppendPeerSupervision(builder, context.Tools);
 
         // 6. MCP
         if (!string.IsNullOrEmpty(context.McpInstructions))
@@ -224,13 +235,130 @@ public sealed class SystemPromptBuilder : ISystemPromptBuilder
         return Task.FromResult(builder.ToString());
     }
 
-    private static bool HasSupervisionTools(IReadOnlyList<ToolDescriptor> tools)
+    /// <summary>
+    ///     Appends the <c>## Peer Supervision</c> recipe (#165), naming only the
+    ///     supervision tools this turn actually resolved.
+    /// </summary>
+    /// <remarks>
+    ///     <para>
+    ///         <b>#793 — the roles are READ, the names are not written here.</b>
+    ///         This used to string-match two tool names inline, which made a
+    ///         rename silently drop the recipe: nothing in the repository compared
+    ///         that literal against the tools that register. The roles come from
+    ///         <see cref="BuiltinToolSafetyProfiles" />, the table
+    ///         <c>BuiltinToolSafetyDeclarationsTests</c> keeps equal to what
+    ///         actually registers, so a rename updates one row and the recipe
+    ///         follows.
+    ///     </para>
+    ///     <para>
+    ///         <see cref="Harbor.Application" /> cannot read
+    ///         <c>ITool.SafetyProfile</c> — it does not reference
+    ///         <c>Harbor.Tools.Builtin</c> — and neither axis it CAN read carries
+    ///         this fact: the two tools are <c>Read</c> and <c>Write</c>
+    ///         respectively, so no <see cref="ToolCategory" /> selects them, and
+    ///         both are <c>Opaque</c>, so the safety profile cannot tell them
+    ///         apart. Hence a declared role, not a derivation from an existing one.
+    ///     </para>
+    ///     <para>
+    ///         <b>The bug the rename was hiding.</b> The predicate was an OR and
+    ///         the text named both tools, so the recipe rendered while describing a
+    ///         tool the turn could not call. That is the default configuration,
+    ///         not an edge case: <c>PermissionRuleset.Default</c> allows
+    ///         <c>session_read</c> and ASKS for <c>session_steer</c>,
+    ///         <c>ResolveTools</c> keeps only <c>Allow</c>, and
+    ///         <c>TurnRunner</c> hands that same resolved list to the API as the
+    ///         tool definitions. Gating on both legs instead would have been the
+    ///         smaller change and the wrong one: the observing half is real and
+    ///         reachable on its own, so it keeps its paragraph.
+    ///     </para>
+    /// </remarks>
+    private static void AppendPeerSupervision(StringBuilder builder, IReadOnlyList<ToolDescriptor> tools)
+    {
+        string? observer = null;
+        string? director = null;
+
+        foreach (ToolSafetyDeclaration declaration in BuiltinToolSafetyProfiles.All)
+        {
+            if (declaration.PeerSupervision == PeerSupervisionRole.None)
+            {
+                continue;
+            }
+
+            if (!IsResolved(tools, declaration.ToolName))
+            {
+                continue;
+            }
+
+            // First declaration of a leg wins. Two tools claiming the same leg
+            // would make the recipe's sentence ambiguous, and the second tool's
+            // name would be silently dropped — a claim nothing could check.
+            if (declaration.PeerSupervision == PeerSupervisionRole.Observe)
+            {
+                observer ??= declaration.ToolName;
+            }
+            else
+            {
+                director ??= declaration.ToolName;
+            }
+        }
+
+        if (observer is null && director is null)
+        {
+            return;
+        }
+
+        // Spelled inline, like the five other section headers, so
+        // PromptSectionPolicyRule attributes the bounds check to THIS method
+        // rather than to the whole file.
+        builder.AppendLine("## Peer Supervision");
+        builder.Append(PeerSupervisionLead);
+
+        bool first = true;
+        if (observer is not null)
+        {
+            AppendLeg(builder, ref first, observer, PeerSupervisionObserveText);
+        }
+
+        if (director is not null)
+        {
+            AppendLeg(builder, ref first, director, PeerSupervisionDirectText);
+        }
+
+        builder.Append('.').AppendLine();
+        builder.AppendLine(PeerSupervisionProtocol);
+        builder.AppendLine();
+    }
+
+    /// <summary>
+    ///     Appends one leg's clause, separator first when another clause is
+    ///     already on the line. The tool name is the declaration's, so a rename
+    ///     needs no edit here.
+    /// </summary>
+    private static void AppendLeg(StringBuilder builder, ref bool first, string toolName, string text)
+    {
+        if (!first)
+        {
+            builder.Append("; ");
+        }
+
+        builder.Append('`').Append(toolName).Append("` ").Append(text);
+        first = false;
+    }
+
+    /// <summary>
+    ///     Whether <paramref name="toolName" /> is among the turn's resolved
+    ///     tools. Ordinal-ignore-case because that is how every other lookup
+    ///     against the declaration table compares, so a name that differs only in
+    ///     case is the same tool rather than a silent miss.
+    /// </summary>
+    private static bool IsResolved(IReadOnlyList<ToolDescriptor> tools, string toolName)
     {
         for (int i = 0; i < tools.Count; i++)
         {
-            string name = tools[i].Name.Value;
-            if (name == "session_read" || name == "session_steer")
+            if (string.Equals(tools[i].Name.Value, toolName, StringComparison.OrdinalIgnoreCase))
+            {
                 return true;
+            }
         }
 
         return false;

@@ -58,8 +58,21 @@ public static class BuiltinToolSafetyProfiles
         new("skill", ToolSafetyProfile.Opaque) { Category = ToolCategory.Read },
         new("mcp_prompt", ToolSafetyProfile.Opaque) { Category = ToolCategory.Mcp },
         new("read_mcp_resource", ToolSafetyProfile.Opaque) { Category = ToolCategory.Mcp },
-        new("session_read", ToolSafetyProfile.Opaque) { Category = ToolCategory.Read },
-        new("session_steer", ToolSafetyProfile.Opaque) { Category = ToolCategory.Write },
+        // Peer supervision (#793). The system-prompt recipe used to string-match
+        // these two names inline, so a rename silently stopped it rendering. The
+        // role is what the recipe actually needs — "can observe a peer" and "can
+        // direct a peer" — and it lives here because this table is the one place
+        // `Harbor.Application` can read a tool's declared facts from.
+        new("session_read", ToolSafetyProfile.Opaque)
+        {
+            Category = ToolCategory.Read,
+            PeerSupervision = PeerSupervisionRole.Observe
+        },
+        new("session_steer", ToolSafetyProfile.Opaque)
+        {
+            Category = ToolCategory.Write,
+            PeerSupervision = PeerSupervisionRole.Direct
+        },
 
         // Plugin vocabulary: declared so a plugin that loads later still finds its
         // row, never registered by the builtin host. See
@@ -75,6 +88,11 @@ public static class BuiltinToolSafetyProfiles
         // session IPC tools, not the MCP bridge, so no category describes them
         // honestly; leaving them unclassified keeps the explicit rules in charge,
         // which is also the fail-closed reading of "belongs to no class".
+        //
+        // They carry NO PeerSupervision role either, and that is load-bearing
+        // rather than an oversight: a leg the recipe has no sentence for is a
+        // claim nothing can check, and the builtin host never registers these two,
+        // so a role here would name a capability the recipe cannot describe.
         new("session_broadcast", ToolSafetyProfile.Opaque),
         new("session_inbox", ToolSafetyProfile.Opaque),
     ];
