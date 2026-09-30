@@ -91,18 +91,19 @@ public class SessionStatusFrameReachabilityTests
     ///     make that the owner's call.
     /// </remarks>
     [Test]
-    public async Task NoTest_NamesAFrame_ThatItsOwnProjectCannotReference()
+    public async Task NoTest_DrivesTheSeamDirectly_WhileItsProjectCannotReachTheFrame()
     {
         await Assert.That(Report.Claims).IsEmpty().Because(
-            "a test whose name or comment promises a frame guarantee, in a project with no apps/ "
+            "a test that calls the decision-publish read directly, in a project with no apps/ "
             + "reference, cannot fail when the frame is bypassed — the frame is not in its reference "
-            + "graph at all. #861's test is the live instance: it says \"ChatViewModel.RenderFrameTick "
-            + "calls DeriveStatus on every 16 ms frame … so the presenter is the last writer standing\" "
-            + "and then asserts Presenter.DeriveStatus(state), which its project can reach but the "
-            + "frame cannot. Offenders: "
+            + "graph at all, so the test holds its own presenter and asks a question no product path "
+            + "routes to it any more. #861's test is the live instance: it says "
+            + "\"ChatViewModel.RenderFrameTick calls DeriveStatus on every 16 ms frame … so the "
+            + "presenter is the last writer standing\" and then asserts Presenter.DeriveStatus(state). "
+            + "Offenders: "
             + (Report.Claims.Count == 0
                 ? "(none)"
-                : string.Join(" | ", Report.Claims.Select(c => $"{c.Test}:{c.Line} names {c.FrameMethod}"))));
+                : string.Join(" | ", Report.Claims.Select(c => $"{c.Test}::{c.TestMethod} ({c.Reader})"))));
     }
 
     /// <summary>

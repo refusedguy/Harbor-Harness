@@ -87,13 +87,24 @@
 //   * the FRAME is whoever CALLS a decision-publish reader — so a second frame
 //     appearing is covered without an edit, which is the failure mode that made
 //     #890 delete its `SeamFiles` transcription;
-//   * the CLAIM is matched against the derived frame names, and the reachability
-//     half is read from each test's own `.csproj`.
+//   * the CLAIM is "a test drives the SEAM directly while its own project cannot
+//     reach the frame", with reachability read from each test's `.csproj`.
 //
-// A keyword sweep was tried first and rejected on evidence: grepping test names
-// for `Frame|Tick` returns 78 hits, and 77 of them are CellForge rendering tests
-// where the word is literal and correct. A perimeter built from vocabulary is a
-// perimeter that has to be re-argued at every unrelated render test.
+// A VOCABULARY KEY WAS TRIED FIRST AND REJECTED ON THE MEASUREMENT, and the
+// numbers are the argument:
+//
+//   * matching test NAMES for `Frame`                       → 107 tests, ~all
+//     CellForge rendering tests where the word is literal and correct;
+//   * narrowing to names where a frame is the ACTOR, i.e.
+//     `Frame…Pushes` / `…Write…Frame`                        → 5 tests, 4 false
+//     (`Flush_UsesSingleBackendWritePerFrame`, `EmptyFrame_WritesNothing`);
+//   * naming the SEAM instead — the test calls a decision-publish read, and its
+//     project references no `apps/` assembly                   → 2 tests, both
+//     #861's own file, zero false positives.
+//
+// A perimeter built from vocabulary has to be re-argued at every unrelated render
+// test. One built from the seam cannot be, because the seam is what the test is
+// actually exercising.
 //
 // WHAT IS DELIBERATELY NOT RULED
 // ------------------------------
@@ -174,16 +185,16 @@ internal sealed record SessionStatusReader(
 /// <param name="Method">The frame method's name.</param>
 internal sealed record StatusFrameMethod(string File, int Line, string Method);
 
-/// <summary>A test that NAMES a frame it cannot reach.</summary>
+/// <summary>A test that DRIVES the seam directly while its project cannot reach the frame.</summary>
 /// <param name="Test">Repo-relative path of the test file.</param>
 /// <param name="Project">The test project that owns it.</param>
-/// <param name="Line">1-based line naming the frame.</param>
-/// <param name="FrameMethod">The frame method's name, as the test spells it.</param>
+/// <param name="TestMethod">The test method's name.</param>
+/// <param name="Reader">The decision-publish read it calls directly.</param>
 internal sealed record UnreachableFrameClaim(
     string Test,
     string Project,
-    int Line,
-    string FrameMethod);
+    string TestMethod,
+    string Reader);
 
 /// <summary>Everything the rules need from one repository scan.</summary>
 /// <param name="Readers">Every <c>SessionStatus</c>-returning method found, with its callers.</param>
@@ -287,7 +298,7 @@ internal static partial class SessionStatusFrameProbe
         }
 
         var frames = CollectFrames(readers, sources);
-        var claims = CollectClaims(repoRoot, frames);
+        var claims = CollectClaims(repoRoot, readers, frames);
         var writers = new List<string>();
         foreach ((string relative, string[] lines) in sources)
         {
@@ -348,23 +359,56 @@ internal static partial class SessionStatusFrameProbe
     }
 
     /// <summary>
-    ///     Tests that NAME a frame while their own project cannot reference the
-    ///     assembly that declares it. This is #861's shape, stated as a rule: a test
-    ///     whose name promises a product path its reference graph cannot enter.
+    ///     Tests that DRIVE the seam directly while their own project cannot reach
+    ///     the frame. This is #861's shape, stated as a rule.
     /// </summary>
     /// <remarks>
-    ///     The reachability half is read from the test's own <c>.csproj</c>, so a
-    ///     project that later takes an <c>apps/</c> reference stops being a violator
-    ///     on its own — which is the point. The claim can be made honest by fixing
-    ///     the project OR by fixing the name, and the gate says which one is still
-    ///     outstanding rather than assuming the project must grow.
+    ///     <para>
+    ///         The discriminator is the SEAM, not the word "frame", and getting that
+    ///         wrong is the whole difficulty. Measured on this tree:
+    ///     </para>
+    ///     <list type="bullet">
+    ///         <item>
+    ///             Matching the test's NAME for <c>Frame</c> finds <b>107</b> tests,
+    ///             nearly all CellForge rendering tests where the word is literal and
+    ///             correct.
+    ///         </item>
+    ///         <item>
+    ///             Narrowing to names where a frame is the ACTOR (<c>Frame…Pushes</c>)
+    ///             still finds 5, four of them false: <c>Flush_UsesSingleBackendWritePerFrame</c>,
+    ///             <c>EmptyFrame_WritesNothing</c>.
+    ///         </item>
+    ///         <item>
+    ///             Naming the seam instead — the test calls a decision-publish read
+    ///             at all, and its project references no <c>apps/</c> assembly —
+    ///             finds <b>3</b>, of which one is this file's own control.
+    ///         </item>
+    ///     </list>
+    ///     <para>
+    ///         A rule built on vocabulary has to be re-argued at every unrelated
+    ///         render test; a rule built on the seam cannot. The reachability half is
+    ///         read from the test's own <c>.csproj</c>, so a project that later takes
+    ///         an <c>apps/</c> reference stops being a violator on its own.
+    ///     </para>
     /// </remarks>
     internal static IReadOnlyList<UnreachableFrameClaim> CollectClaims(
         string repoRoot,
+        IReadOnlyList<SessionStatusReader> readers,
         IReadOnlyList<StatusFrameMethod> frames)
     {
         var claims = new List<UnreachableFrameClaim>();
         if (frames.Count == 0)
+        {
+            return claims;
+        }
+
+        // Only the readers that publish the decision are the seam under test.
+        HashSet<string> seam = readers
+            .Where(r => r.PublishesTheDecision)
+            .Select(r => r.Method)
+            .ToHashSet(StringComparer.Ordinal);
+
+        if (seam.Count == 0)
         {
             return claims;
         }
@@ -377,6 +421,15 @@ internal static partial class SessionStatusFrameProbe
 
         foreach (string file in EnumerateSources(testsRoot))
         {
+            // A rule must not police its own fixtures, or its positive control is
+            // a permanent offender — the reason SourceScan.IsBuildOutput rejects
+            // `/tests/` at all.
+            if (Path.GetFileName(file) is "SessionStatusFrameReachabilityRules.cs"
+                or "SessionStatusFrameReachabilityTests.cs")
+            {
+                continue;
+            }
+
             string[] lines;
             try
             {
@@ -387,31 +440,71 @@ internal static partial class SessionStatusFrameProbe
                 continue;
             }
 
-            // Comments count: #861's test carries its whole claim in prose above
-            // the assertions. Stripping comments would make the finding invisible.
-            for (int i = 0; i < lines.Length; i++)
+            string? project = OwningProject(repoRoot, file);
+            if (project is null || ReachesApps(repoRoot, project))
             {
-                foreach (StatusFrameMethod frame in frames)
+                continue;
+            }
+
+            foreach ((string testMethod, IReadOnlyList<string> called) in TestMethods(lines))
+            {
+                foreach (string reader in seam)
                 {
-                    if (!lines[i].Contains(frame.Method, StringComparison.Ordinal))
+                    if (called.Contains(reader, StringComparer.Ordinal))
                     {
-                        continue;
+                        claims.Add(new UnreachableFrameClaim(
+                            MakeRelative(repoRoot, file), project, testMethod, reader));
                     }
-
-                    string? project = OwningProject(repoRoot, file);
-                    if (project is null || ReachesApps(repoRoot, project))
-                    {
-                        continue;
-                    }
-
-                    claims.Add(new UnreachableFrameClaim(
-                        MakeRelative(repoRoot, file), project, i + 1, frame.Method));
                 }
             }
         }
 
         return claims;
     }
+
+    /// <summary>
+    ///     Each <c>[Test]</c> method in a file, with the members it calls — the
+    ///     body up to the next <c>[Test]</c>, which is the shape these files use.
+    /// </summary>
+    internal static IEnumerable<(string Method, IReadOnlyList<string> Called)> TestMethods(
+        string[] lines)
+    {
+        var starts = new List<int>();
+        for (int i = 0; i < lines.Length; i++)
+        {
+            if (lines[i].Contains("[Test]", StringComparison.Ordinal))
+            {
+                starts.Add(i);
+            }
+        }
+
+        for (int index = 0; index < starts.Count; index++)
+        {
+            int from = starts[index];
+            int to = index + 1 < starts.Count ? starts[index + 1] : lines.Length;
+            string body = string.Join("\n", lines[from..to]);
+
+            Match name = TestMethodName().Match(body);
+            if (!name.Success)
+            {
+                continue;
+            }
+
+            var called = new List<string>();
+            foreach (Match call in MethodCall().Matches(body))
+            {
+                called.Add(call.Groups["name"].Value);
+            }
+
+            yield return (name.Groups["name"].Value, called);
+        }
+    }
+
+    /// <summary>A test method's declared name.</summary>
+    [GeneratedRegex(
+        @"public\s+(?:async\s+)?(?:Task|void)\s+(?<name>[A-Za-z_]\w*)\s*\(",
+        RegexOptions.CultureInvariant)]
+    private static partial Regex TestMethodName();
 
     /// <summary>The test project directory a test file belongs to, or null if none.</summary>
     private static string? OwningProject(string repoRoot, string file)
@@ -465,9 +558,47 @@ internal static partial class SessionStatusFrameProbe
         return false;
     }
 
-    /// <summary>Byte offset of the declaration line that encloses a 1-based line.</summary>
+    /// <summary>
+    ///     Byte offset of the method declaration that encloses a 1-based line, or
+    ///     <c>-1</c> when the line is not inside a method this matcher recognises.
+    /// </summary>
+    /// <remarks>
+    ///     Found by taking the LAST declaration that starts at or above the line,
+    ///     which is the enclosing one for the straight-line shape these files use.
+    ///     The first implementation walked backwards over "blank or a declaration"
+    ///     and found nothing on the real tree — the very call it was written for —
+    ///     which is why this one enumerates forwards instead of guessing.
+    /// </remarks>
     private static int EnclosingDeclaration(string text, int line)
     {
+        int lineOffset = OffsetOfLine(text, line);
+        if (lineOffset < 0)
+        {
+            return -1;
+        }
+
+        int best = -1;
+        foreach (Match declaration in MethodDeclaration().Matches(text))
+        {
+            if (declaration.Index > lineOffset)
+            {
+                break;
+            }
+
+            best = declaration.Index;
+        }
+
+        return best;
+    }
+
+    /// <summary>Byte offset at which a 1-based line starts, or -1 if out of range.</summary>
+    private static int OffsetOfLine(string text, int line)
+    {
+        if (line < 1)
+        {
+            return -1;
+        }
+
         int offset = 0;
         for (int current = 1; current < line; current++)
         {
@@ -480,25 +611,7 @@ internal static partial class SessionStatusFrameProbe
             offset = next + 1;
         }
 
-        // Walk backwards over blank and attribute lines to the method signature.
-        while (offset > 0)
-        {
-            int lineStart = text.LastIndexOf('\n', Math.Max(offset - 2, 0)) + 1;
-            if (lineStart <= 0)
-            {
-                lineStart = 0;
-            }
-
-            string candidate = text[lineStart..offset].Trim();
-            if (candidate.Length == 0 || MethodDeclaration().IsMatch(candidate))
-            {
-                return candidate.Length == 0 ? -1 : lineStart;
-            }
-
-            offset = lineStart;
-        }
-
-        return -1;
+        return offset;
     }
 
     /// <summary>A <c>ProjectReference</c> into <c>apps/</c>.</summary>
@@ -528,7 +641,7 @@ internal static partial class SessionStatusFrameProbe
         {
             string name = match.Groups["name"].Value;
             int line = LineOf(text, match.Index);
-            string? parameterType = FirstParameterType(text, match.Index + match.Length);
+            string? parameterType = FirstParameterType(text, match.Index + match.Length - 1);
             var callers = new List<string>();
 
             foreach ((string otherRelative, string[] otherLines) in sources)
@@ -595,20 +708,24 @@ internal static partial class SessionStatusFrameProbe
                 continue;
             }
 
-            // Walk the qualified type name up to the parameter's own name.
+            // Walk the qualified type name.
             int start = i;
             while (i < text.Length
-                   && (char.IsLetterOrDigit(text[i]) || text[i] is '.' or '_' or '<' or '>' or ','))
+                   && (char.IsLetterOrDigit(text[i]) || text[i] is '.' or '_' or '<' or '>'))
             {
                 i++;
             }
 
-            string token = text[start..i].TrimEnd('<', '>', ',');
+            string token = text[start..i].TrimEnd('<', '>');
             if (token.Length == 0)
             {
                 continue;
             }
 
+            // A parameter is (type, name) or a single bare token — `UiState state`
+            // or `CancellationToken`. Either way the token just walked IS the type;
+            // scanning on to read the name would return the name instead, and every
+            // reader would then classify as a tracker read.
             return token;
         }
 
