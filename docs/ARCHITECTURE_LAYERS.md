@@ -605,8 +605,20 @@ that mattered more: linked source is compiled *into* the consumer, so the IL mat
 already judges its references, but a rule walking `src/<project>/**` did not see
 the file at all — so "which files bind the forbidden target?" answered without it.
 `RepoPaths.EnumerateCsFiles` now returns the link items too, which is what makes
-`DocumentExceptions_AreScopedToNamedFiles` and the namespace-ownership map see
-shared code.
+`DocumentExceptions_AreScopedToNamedFiles` see shared code.
+
+**The namespace-ownership rule needed its own resolution, and did not get one (#763).**
+That sentence used to claim `EnumerateCsFiles` was also "what makes the
+namespace-ownership map see shared code". It is not: `AbstractionsNamespaceOwnershipRules`
+has its own project map and its own walk-up for an owning `*.csproj`, and never
+called the helper #456 had just fixed. A file in a csproj-less folder therefore left
+that walk with nothing, and the rule reported green having read none of the six
+linked files. `FindAssembliesCompiling` now falls back to the `<Compile Include>`
+items — the same `RepoPaths.ReadCompileIncludes` the other rules read — and attributes
+a shared file to *every* assembly that compiles it, because the namespace is declared
+by all of them and picking one copy would make the verdict depend on which copy the
+walk reached. `No_Namespace_Declaration_Is_Left_Without_An_Assembly_To_Judge_It` makes
+the leftover case a failure instead of a silent skip.
 
 Converting either folder to a real assembly is *not* a mechanical follow-up: it
 would mean an Infrastructure assembly referenced by other Infrastructure
