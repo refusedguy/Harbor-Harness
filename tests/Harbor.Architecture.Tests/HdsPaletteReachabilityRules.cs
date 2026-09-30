@@ -564,7 +564,7 @@ public sealed class HdsPaletteReachabilityRules
     private static Dictionary<string, string> ReadMethodBodies(IReadOnlyList<string> lines)
     {
         var bodies = new Dictionary<string, string>(StringComparer.Ordinal);
-        for (int i = 0; i < lines.Length; i++)
+        for (int i = 0; i < lines.Count; i++)
         {
             Match declaration = HandlerDeclaration.Match(lines[i]);
             if (!declaration.Success)
@@ -576,7 +576,7 @@ public sealed class HdsPaletteReachabilityRules
             int depth = 0;
             bool opened = false;
             int j = i;
-            for (; j < lines.Length; j++)
+            for (; j < lines.Count; j++)
             {
                 foreach (char c in lines[j])
                 {
