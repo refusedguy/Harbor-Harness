@@ -78,6 +78,15 @@ public sealed class CellForgeHelpPanel : CellForgePanelBase
     {
         if (key.Code == UiKeyCode.Char && key.Character == '?')
         {
+            // #833: a chord is not a toggle. The panel holds no text, so it has
+            // no claim on a modified rune — Ctrl+? belongs to the host. The gate
+            // admits Shift, because `?` IS a shifted rune and a strict
+            // "no modifiers" rule would refuse this panel's own key.
+            if (key.Mods.IsCommandModifier())
+            {
+                return false;
+            }
+
             // #470: the store is an explicit field on PanelServices — no lookup.
             if (ctx.Deps.Store is { } store)
             {
