@@ -54,11 +54,21 @@ public sealed class PluginSourceChangeEventArgs : EventArgs
 ///         <c>MapRank</c>/<c>UnmapRank</c> round-trip of ONE kind (Removed 0, Added 1,
 ///         Modified 2). It is an encoding, not a severity scale, and the enum declares no
 ///         order among the three. Do not accumulate it (<c>Math.Max</c>) to "keep the most
-///         severe kind": a file deleted and re-created inside one window would then report
-///         <c>Modified</c> for a path that only ever appeared new. The
-///         <c>Delete_OutranksEarlierModifications</c> test cannot catch that swap — the
-///         check below forces its <c>Removed</c> either way — so
-///         <c>DebouncedPluginWatcherOrderingTests</c> guards this rule instead.
+///         severe kind": a burst whose last event is a trailing <c>Created</c> on a path
+///         that still exists would then report <c>Modified</c> for a path that only ever
+///         appeared new.
+///     </para>
+///     <para>
+///         <b>This ordering is a record of the implementation, not an enforced
+///         contract.</b> No test distinguishes an overwrite from a max-accumulate, and
+///         the one sequence that could — a burst ending in a bare <c>Created</c> — is not
+///         reliably constructible: <c>File.WriteAllText</c> on a fresh path emits
+///         <c>Created</c> and then <c>Changed</c>, so such a burst ends on the
+///         <c>Changed</c> and both readings report <c>Modified</c>.
+///         <c>Delete_OutranksEarlierModifications</c> cannot catch the swap either — the
+///         filesystem check below forces its <c>Removed</c> under either reading. So a
+///         green run does not vouch for this rule; closing that gap is deliberate work,
+///         not something to infer from CI.
 ///     </para>
 ///     <para>
 ///         Filesystem truth is the one thing that outranks arrival order. inotify may
