@@ -396,6 +396,16 @@ internal static partial class DiffSurfaceNameCollisionProbe
                 continue;
             }
 
+            foreach (int probeIdx in AdjacentDeclarationLines(clean, i))
+            {
+                Console.WriteLine($"PROBE enum={kind}@{i} adj={probeIdx} text=<{clean[probeIdx]}>");
+            }
+
+            if (AdjacentDeclarationLines(clean, i).Any() is false)
+            {
+                Console.WriteLine($"PROBE-NO-ADJACENT enum={kind}@{i} raw=<{clean[i]}>");
+            }
+
             var carriers = new List<string>();
             foreach (int j in AdjacentDeclarationLines(clean, i))
             {
