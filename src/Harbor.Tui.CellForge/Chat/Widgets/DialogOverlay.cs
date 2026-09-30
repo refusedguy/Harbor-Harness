@@ -672,14 +672,34 @@ public sealed class DialogOverlay
             }
             return true;
         }
-        char ch = key.KeyChar;
-        if (!char.IsControl(ch))
+        if (AcceptsTypedChar(key))
         {
-            _input += ch;
+            _input += key.KeyChar;
             return true;
         }
         return false;
     }
+
+    /// <summary>
+    /// Whether a legacy key press types a character into a buffer. Single gate
+    /// for all three editing kinds (#473), and the same expression
+    /// <see cref="DiffViewerOverlay"/> already uses at its own char arm: Ctrl or
+    /// Alt means the gesture is a command, Shift means it is a case.
+    /// <para>
+    /// This is the modifier half of the rule the kitty overload applies at
+    /// <c>KeyCode.Char</c>, and that <c>ComposerController</c> applies to the
+    /// composer. <c>ConsoleKeyInfo.Modifiers</c> has no Meta slot, so
+    /// {Ctrl, Alt} is a strict subset of the kitty side's {Ctrl, Meta, Alt}:
+    /// the two overloads cannot disagree about a gesture again. Before this
+    /// existed the gate was <c>!char.IsControl(KeyChar)</c>, written out three
+    /// times, and it could not see a modifier at all — Alt+char has a
+    /// printable <c>KeyChar</c>, so it typed here while the kitty twin refused
+    /// it.
+    /// </para>
+    /// </summary>
+    private static bool AcceptsTypedChar(ConsoleKeyInfo key) =>
+        (key.Modifiers & (ConsoleModifiers.Control | ConsoleModifiers.Alt)) == 0
+        && !char.IsControl(key.KeyChar);
 
     private bool HandleSelectKey(ConsoleKeyInfo key)
     {
@@ -761,10 +781,9 @@ public sealed class DialogOverlay
                 _editor.DeleteForward();
                 return true;
         }
-        char ch = key.KeyChar;
-        if (!char.IsControl(ch))
+        if (AcceptsTypedChar(key))
         {
-            _editor.InsertChar(ch);
+            _editor.InsertChar(key.KeyChar);
             return true;
         }
         return false;
@@ -795,10 +814,9 @@ public sealed class DialogOverlay
                 _editor.MoveToLineEnd();
                 return true;
         }
-        char ch = key.KeyChar;
-        if (!char.IsControl(ch))
+        if (AcceptsTypedChar(key))
         {
-            _editor.InsertChar(ch);
+            _editor.InsertChar(key.KeyChar);
             return true;
         }
         return false;
