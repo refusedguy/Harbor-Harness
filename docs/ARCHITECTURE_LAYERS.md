@@ -959,13 +959,32 @@ true, the exclusion has become an accident and the scope statement above is a li
 
 ### 5.9 An exemption row must state a reason
 
-Five tables in the architecture tests grant a permission: the Presentation capability
-baseline, the permanent-capability table, `FullLayerMatrixTests.DocumentedExceptions`, the
-declared-but-unbound `<ProjectReference>` list, and the reflection plugin allowance. Before
-[#626](https://github.com/refusedguy/Harbor-Harness/issues/626) each asked "does this row
-have a reason?" in its own words, and the table that most needed the answer — the
-tracked-violation baseline — did not ask at all: its value was the issue URL, and the
-argument for tolerating the violation lived in a `//` comment that no tool can read.
+Permission-granting tables in the architecture tests, and the count has grown. The five this
+section named — the Presentation capability baseline, the permanent-capability table,
+`FullLayerMatrixTests.DocumentedExceptions`, the declared-but-unbound `<ProjectReference>` list,
+and the reflection plugin allowance — are now **ten** across the project. Three joined them since:
+`FullLayerMatrixTests.SharedSourceFolders` (#456),
+`ProviderPayloadSerializationRules.KnownViolations`, and `AotBlockDemotionRules.KnownDemotions`; a
+fourth, `CellForgeEngineAtomicityRules`'s reviewed-imports list, is checked under its own label.
+
+Eight of the ten route through `ExemptionReason.RowsWithoutAReason`. The permanent-capability
+table carries its own blank-reason check, because it owes two rules the others do not (a row may
+not shadow a baseline row, and it has no tracking URL to confuse the reason with).
+`SessionStatusTableProbe.KnownDuplicates` — the allowlist in §5.7 — is not checked at all. Before
+`#626` each table asked "does this row have a reason?" in its own words, and the one that most
+needed the answer — the tracked-violation baseline — did not ask at all: its value was the issue
+URL, and the argument for tolerating the violation lived in a `//` comment that no tool can read.
+
+That last gap is the same shape as the defect fixed in §5.7 above, one level down: a
+permission that is recorded, justified and kept live, which a document then described as if
+it were not there. `SessionStatusTableProbe.KnownDuplicates` grants a real
+permission: it excuses `SubagentsModel` from the single-definition rule, and its entry is valued
+by its reason rather than by a tracking issue, so the row shape is right. What is missing is the
+call. Liveness covers part of it — `RecordedDuplicates_AreStillReal` fails once an entry stops
+being a real duplicate — but liveness catches a stale excuse, not a blank or URL-only one, which
+is exactly what `RowsWithoutAReason` exists to catch. Routing the table through the shared check
+is a small mechanical follow-up; it is left undone here because it changes a guard rather than a
+document, and no local build is available to verify a new test compiles.
 
 `ExemptionReason.RowsWithoutAReason` is now the single answer, and a row that fails it does
 not pass. Three rules, the third being the one that matters: not blank; not the tracking
