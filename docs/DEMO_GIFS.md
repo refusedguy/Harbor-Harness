@@ -194,6 +194,20 @@ stdlib reader — no decoder, no extra package.
 | No baseline entry for a GIF | warn ("new") | — |
 | Missing or unreadable GIF, missing or unreadable manifest | **fail** | — |
 
+**Both sides of every comparison are fresh.** `actual` is the GIF this run just
+recorded; `baseline` is the manifest. No step compares a committed
+`assets/demo/*.gif` against `baseline.json`, and none can: `Normalise frame pacing`
+writes each fresh capture over the checked-out
+`assets/demo/<name>-compressed.gif`, so by the time the gate runs, the workspace
+copy *is* the recording. A `ℹ️ content` verdict therefore says "today's recording
+differs from the last recording a human accepted" — which is what makes step 5 of
+the procedure the right response — and **not** "the shipped GIF no longer matches
+the manifest". The committed bytes are not an input to anything the gate
+computes, so their divergence from `baseline.json` (the three-of-four drift
+described under *What an "intentional update" actually is*) is outside every
+verdict in the table. Treating it as a verdict is what turns a manifest that is
+merely behind into a manifest that looks corrupt.
+
 Content-hash equality is reported in the table, not gated. Two dispatch inputs
 change the posture, and both are logged into the step summary, so the run's mode
 is always visible:
