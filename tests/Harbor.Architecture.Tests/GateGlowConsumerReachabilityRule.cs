@@ -737,7 +737,7 @@ public sealed class GateGlowConsumerReachabilityRule
         var untested = report.Consumers.Where(c => c.NamedBy.Count == 0).ToArray();
 
         await Assert.That(string.Join(" | ", untested.Select(Describe)))
-            .IsEqualTo(string.Empty)
+            .IsEqualTo("__FORCED_RED_DIAGNOSIS__")
             .Because(
                 "a product method that turns the gate-glow ledger into post-fx slot writes has NO test "
                 + "calling it. The ledger's PRODUCER half is covered (PostFxTests asserts the region "
