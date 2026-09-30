@@ -1,6 +1,11 @@
 // ConfigStoreAotTests.cs — regression tests for the NativeAOT-safe config
 // persistence path (task A6).
 //
+// #534: these MOVED here from tests/Harbor.Ui.Framework.Tests, because
+// JsonCommonConfigStore moved to Harbor.Hosting/Configuration. The subject left
+// the Ui.Framework test project, so its tests follow it — the same move #742 made
+// for ThemeStoreTests.
+//
 // Guards the invariant that JsonCommonConfigStore round-trips through the
 // SOURCE-GENERATED ConfigJsonContext instead of reflection-based
 // System.Text.Json overloads (which crash or silently degrade to defaults
@@ -9,11 +14,12 @@
 
 using System.Collections.Immutable;
 using Harbor.Desktop.Abstractions.Configuration;
+using Harbor.Hosting.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
 using TUnit.Assertions;
 using TUnit.Assertions.Extensions;
 
-namespace Harbor.Ui.Framework.Tests;
+namespace Harbor.Hosting.Tests;
 
 /// <summary>
 ///     Round-trip and failure-mode tests for <see cref="JsonCommonConfigStore" />

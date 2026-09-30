@@ -1,6 +1,11 @@
 // ConfigJsonContext.cs — AOT-safe JSON metadata for Harbor configuration
 // persistence.
 //
+// #534: moved here from Harbor.Desktop.Abstractions together with the two stores
+// it serves. It is `internal` and was reachable only from those two files, so it
+// could not stay behind in a leaf the stores no longer live in — and it stays
+// internal at the destination, so this move adds no public type to any package.
+//
 // System.Text.Json's REFLECTION-based serializer is unavailable under
 // NativeAOT (PublishAot) or when
 // `JsonSerializerIsReflectionEnabledByDefault=false`. Before this context
@@ -10,11 +15,13 @@
 // config-persisting call now resolves its metadata from this
 // source-generated JsonSerializerContext instead.
 
+using System.Collections.Immutable;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Text.Json.Serialization.Metadata;
+using Harbor.Desktop.Abstractions.Configuration;
 
-namespace Harbor.Desktop.Abstractions.Configuration;
+namespace Harbor.Hosting.Configuration;
 
 /// <summary>
 ///     Source-generated <see cref="JsonSerializerContext" /> covering every

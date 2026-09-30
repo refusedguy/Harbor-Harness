@@ -20,9 +20,11 @@ namespace Harbor.Desktop.Abstractions.Configuration;
 /// </typeparam>
 /// <remarks>
 ///     <para>
-///         Implementations MUST be thread-safe. The default
-///         <see cref="JsonAppConfigStore{T}" /> uses a <see cref="SemaphoreSlim" />
-///         to serialize Load/Save/Update against concurrent callers.
+///         Implementations MUST be thread-safe. The shipped
+///         <c>JsonAppConfigStore&lt;T&gt;</c> (Harbor.Hosting, since #534 — it is
+///         persistence, and this leaf is a published Domain-labelled package) uses
+///         a <see cref="SemaphoreSlim" /> to serialize Load/Save/Update against
+///         concurrent callers.
 ///     </para>
 ///     <para>
 ///         Load/Save/Update return <see cref="Result{T}" /> (from

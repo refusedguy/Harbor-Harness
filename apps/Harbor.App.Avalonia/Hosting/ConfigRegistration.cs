@@ -1,6 +1,9 @@
 using Harbor.App.Avalonia.Configuration;
 using Harbor.App.Avalonia.Services;
 using Harbor.Desktop.Abstractions.Configuration;
+// #534: the config stores moved to Harbor.Hosting; the ports / CommonConfig /
+// AvaloniaConfig stay in Harbor.Desktop.Abstractions.
+using Harbor.Hosting.Configuration;
 using Harbor.Abstractions.Providers;
 using Harbor.Providers.OpenAiCompatible;
 using Harbor.Ui.Framework.Configuration;

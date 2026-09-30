@@ -57,10 +57,12 @@
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions"/>
     <!--
       CSharpFunctionalExtensions provides Result<T> used directly in the public
-      IAppConfigStore<T> / JsonAppConfigStore<T> API surface (Configuration/).
+      IAppConfigStore<T> / ICommonConfigStore API surface (Configuration/).
       Pulled in transitively via Harbor.Abstractions too, but declaring it
       explicitly here keeps the contract stable if Harbor.Abstractions ever
-      drops the dependency.
+      drops the dependency. #534: the JsonAppConfigStore<T> / JsonCommonConfigStore
+      IMPLEMENTATIONS left this package, but both ports still return Result<T>, so
+      the reference stays.
     -->
     <PackageReference Include="CSharpFunctionalExtensions"/>
   </ItemGroup>

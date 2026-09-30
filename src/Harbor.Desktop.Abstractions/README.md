@@ -16,9 +16,15 @@ UI-framework-agnostic contracts shared by every Harbor desktop app
   screen; platform VMs derive from these and add platform-specific bindings.
   All derive from <see cref="Harbor.Ui.Framework.ViewModels.StoreSubscriberViewModel" />,
   which provides store-subscription + selector-based projection.
-- **Configuration** (`Configuration/`): `IAppConfigStore` / `ICommonConfigStore`
-  and their JSON implementations + the shared config DTOs (`AppConfigBase`,
-  `CommonConfig`, `CompositeConfig`, `ConfigJsonContext`).
+- **Configuration** (`Configuration/`): `IAppConfigStore<T>` /
+  `ICommonConfigStore` plus the shared config DTOs (`AppConfigBase`,
+  `CommonConfig`, `CompositeConfig<T>`). Since #534 this leaf holds the
+  **contracts and the schema only** — the JSON+filesystem stores
+  (`JsonAppConfigStore<T>`, `JsonCommonConfigStore`) and the AOT
+  `ConfigJsonContext` they need live in `Harbor.Hosting/Configuration`,
+  because this project is `IsPackable` (`PackageId: Harbor.Desktop.Abstractions`)
+  and is the one project the layer matrix calls Domain. See
+  `tests/Harbor.Architecture.Tests/DesktopAbstractionsLeafTakesNoIoRules.cs`.
 - **Messages** (`Messages/CrossVmMessages.cs`): typed cross-view-model events.
 - **Service interfaces** (`Services/`): `IDispatcherAdapter`, `IThemeService`,
   `IFilePicker`, `IDialogService`, `IToastService`. Each platform implements

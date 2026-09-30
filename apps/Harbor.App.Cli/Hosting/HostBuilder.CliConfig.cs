@@ -1,6 +1,9 @@
 using Harbor.App.Cli.Configuration;
 using Harbor.Application.Configuration;
 using Harbor.Desktop.Abstractions.Configuration;
+// #534: the config stores moved to Harbor.Hosting; the port / CliConfig /
+// CommonConfig stay in Harbor.Desktop.Abstractions.
+using Harbor.Hosting.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
