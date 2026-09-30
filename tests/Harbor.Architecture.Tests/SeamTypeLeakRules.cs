@@ -124,7 +124,6 @@
 
 using Harbor.Ipc;
 using Harbor.Ipc.Protocol;
-using Harbor.Tui.CellForge.Rendering;
 
 namespace Harbor.Architecture.Tests;
 
@@ -406,13 +405,60 @@ public sealed class SeamTypeLeakRules
     /// </summary>
     private static readonly Lazy<IReadOnlyList<Type>> Governed = new(CollectTypes);
 
-    /// <summary>The concrete MessagePack client — the type seam 1 named.</summary>
+    /// <summary>
+    ///     The concrete MessagePack client — the type seam 1 named. Resolved BY
+    ///     NAME out of the loaded client assembly, for the same reason as
+    ///     <see cref="ConcreteWriter" />: a guard that binds with <c>typeof</c>
+    ///     to the assembly it governs makes Roslyn emit that assembly reference,
+    ///     which a graph rule then reports as the very leak the guard forbids.
+    /// </summary>
     private static readonly Lazy<Type> ConcreteClient = new(
-        () => typeof(MessagePackRpcClient));
+        () => FindIn("Harbor.Ipc.Client", "Harbor.Ipc.Protocol.MessagePackRpcClient"));
 
-    /// <summary>The concrete ANSI writer — the type seam 2 published.</summary>
+    /// <summary>
+    ///     A type in a named assembly, found by full name. Throws rather than
+    ///     returning null: a guard that silently found nothing would report
+    ///     success having read nothing.
+    /// </summary>
+    private static Type FindIn(string assemblyName, string fullName)
+    {
+        Assembly asm = ArchitectureTestHelpers.LoadHarborAssemblies()[assemblyName];
+        Type? found = SeamLeakProbe.SafeGetTypes(asm)
+            .FirstOrDefault(t => string.Equals(t.FullName, fullName, StringComparison.Ordinal));
+
+        return found ?? throw new InvalidOperationException(
+            $"{fullName} is not declared in {assemblyName}. The rules in this file are about that type; "
+            + "without it they report success having checked nothing.");
+    }
+
+    /// <summary>
+    ///     The concrete ANSI writer — the type seam 2 published. Resolved BY NAME
+    ///     out of the loaded engine assembly, never with <c>typeof</c>.
+    /// </summary>
+    /// <remarks>
+    ///     <para>
+    ///         Naming <c>Harbor.Tui.CellForge.Engine</c>'s types directly would
+    ///         break <c>CellForgeGraphRules.UnixTermiosModeController_ConfinedToCellForgeGraph</c>.
+    ///         That rule reads <c>Assembly.GetReferencedAssemblies()</c> and fails
+    ///         if anything outside the CellForge family references the engine —
+    ///         and Roslyn emits an assembly reference only for a type that is
+    ///         actually USED, so a <c>ProjectReference</c> sitting unused in this
+    ///         csproj is invisible to it while one <c>typeof(AnsiWriter)</c> is not.
+    ///         CI proved exactly that.
+    ///     </para>
+    ///     <para>
+    ///         Looking the type up by name is not a workaround, it is the right
+    ///         shape for a guard: the rule should observe the engine's types, not
+    ///         bind to them. A guard that references the assembly it governs cannot
+    ///         be added to this project at all.
+    ///     </para>
+    /// </remarks>
     private static readonly Lazy<Type> ConcreteWriter = new(
-        () => typeof(AnsiWriter));
+        () => FindIn("Harbor.Tui.CellForge.Engine", "Harbor.Tui.CellForge.Rendering.AnsiWriter"));
+
+    /// <summary>The terminal-backend seam the render context substitutes at.</summary>
+    private static readonly Lazy<Type> SyncBackendContract = new(
+        () => FindIn("Harbor.Tui.CellForge.Engine", "Harbor.Tui.CellForge.Rendering.ISyncTerminalBackend"));
 
     // =====================================================================
     // 1. The rules.
@@ -554,20 +600,22 @@ public sealed class SeamTypeLeakRules
     [Test]
     public async Task TheWriterSubstitute_IsAnInterfaceAndIsActuallyUsed()
     {
-        await Assert.That(typeof(ISyncTerminalBackend).IsInterface).IsTrue()
+        Type syncBackend = SyncBackendContract.Value;
+
+        await Assert.That(syncBackend.IsInterface).IsTrue()
             .Because(
                 "ISyncTerminalBackend is the seam every golden-frame test substitutes at — "
                 + "RecordingBackend, CountingBackend and AsyncOnlyBackend all implement it, and "
                 + "SyncBackendCapabilityTests drives the capability flag through it. If it stopped being an "
                 + "interface, issue #494's deletion of CellForgeRenderContext.Writer would have removed the "
-                + "only substitutable handle on the writer instead of a redundant one");
+                + "only substitutable handle on the writer instead of a redundant one. Resolved by name: "
+                + syncBackend.FullName);
 
         ConstructorInfo[] renderContextCtors =
             typeof(Harbor.Tui.CellForge.CellForgeRenderContext).GetConstructors();
 
         bool takesInterface = renderContextCtors.Any(
-            static c => c.GetParameters().Any(
-                static p => typeof(ISyncTerminalBackend).IsAssignableFrom(p.ParameterType)));
+            c => c.GetParameters().Any(p => syncBackend.IsAssignableFrom(p.ParameterType)));
 
         await Assert.That(takesInterface).IsTrue()
             .Because(
@@ -576,7 +624,7 @@ public sealed class SeamTypeLeakRules
                 + "context is wired over a fake backend, and the concrete AnsiWriter never has to be "
                 + "replaced to observe a frame");
 
-        string engineAssembly = typeof(AnsiWriter).Assembly.GetName().Name!;
+        string engineAssembly = ConcreteWriter.Value.Assembly.GetName().Name!;
         string contextAssembly = typeof(Harbor.Tui.CellForge.CellForgeRenderContext).Assembly.GetName().Name!;
 
         await Assert.That(contextAssembly).IsNotEqualTo(engineAssembly)
@@ -693,7 +741,7 @@ public sealed class SeamTypeLeakRules
                 + "site of six");
 
         await Assert.That(planted.Assembly.GetName().Name!)
-            .IsNotEqualTo(typeof(MessagePackRpcClient).Assembly.GetName().Name!)
+            .IsNotEqualTo(banned.Assembly.GetName().Name!)
             .Because(
                 "the planted decorator lives in Harbor.Architecture.Tests while the real one lives in "
                 + "Harbor.Ipc.Client. If rule 1 keyed on the assembly, this control would pass while the "
@@ -701,6 +749,22 @@ public sealed class SeamTypeLeakRules
 
         List<SeamLeak> hits = SeamLeakProbe.NamesConcrete(planted, banned);
         string[] details = [.. hits.Select(static h => h.Detail)];
+
+        // The nested half of the control: LostSubscription. Read separately,
+        // because asserting it against the OUTER type's hits would be vacuous —
+        // the outer type never had a constructor parameter of the banned type.
+        Type nested = selfTypes.SingleOrDefault(
+            static t => SeamLeakProbe.IsPartOfTheReconnectDecorator(t)
+                        && string.Equals(t.Name, "LostSubscription", StringComparison.Ordinal));
+
+        await Assert.That(nested).IsNotNull()
+            .Because(
+                "DecoratorProbeHost.ReconnectableRpcClient.LostSubscription is the nested half of the planted "
+                + "control. It stands in for the real LostSubscription, and the real leak's second half lived "
+                + "there — a rule that only inspected top-level types would have missed it");
+
+        List<SeamLeak> nestedHits = SeamLeakProbe.NamesConcrete(nested, banned);
+        string[] nestedDetails = [.. nestedHits.Select(static h => h.Detail)];
 
         await Assert.That(details).Contains("field '_current'")
             .Because(
@@ -714,11 +778,13 @@ public sealed class SeamTypeLeakRules
                 + "generic wrapper, which is the second of the two leaks an exact-type comparison would "
                 + "have missed. Found: " + string.Join(", ", details));
 
-        await Assert.That(details).Contains("'.ctor' parameter 'inner'")
+        await Assert.That(nestedDetails).Contains("'.ctor' parameter 'inner'")
             .Because(
                 "the nested LostSubscription takes MessagePackRpcClient as a constructor parameter — the "
-                + "rule counts constructor parameters, which is the difference between it and rule 2. "
-                + "Found: " + string.Join(", ", details));
+                + "rule counts constructor parameters, which is the difference between it and rule 2. This is "
+                + "read off the NESTED type, not the outer one, so it is also the assertion that rule 1 walks "
+                + "in rather than only checking the top-level decorator. Outer found: "
+                + string.Join(", ", details) + " | nested found: " + string.Join(", ", nestedDetails));
 
         // -- negative control: an interface-typed member is the shape we want --
         List<SeamLeak> clean = SeamLeakProbe.NamesConcrete(typeof(ContractMemberProbe), banned);
@@ -758,7 +824,8 @@ public sealed class SeamTypeLeakRules
     {
         Type banned = ConcreteWriter.Value;
 
-        List<SeamLeak> published = SeamLeakProbe.PublishesConcrete(typeof(PublishedWriterProbe), banned);
+        Type publishedProbe = typeof(PublishedWriterProbe<>).MakeGenericType(banned);
+        List<SeamLeak> published = SeamLeakProbe.PublishesConcrete(publishedProbe, banned);
         List<string> publishedDetails = [.. published.Select(static h => h.Detail)];
 
         await Assert.That(publishedDetails).Contains("property 'Writer'")
@@ -767,7 +834,8 @@ public sealed class SeamTypeLeakRules
                 + "CellForgeRenderContext.Writer had, which is what issue #494 removed. If the classifier "
                 + "misses it, rule 2 enforces nothing");
 
-        List<SeamLeak> composed = SeamLeakProbe.PublishesConcrete(typeof(WiredWriterProbe), banned);
+        Type wiredProbe = typeof(WiredWriterProbe<>).MakeGenericType(banned);
+        List<SeamLeak> composed = SeamLeakProbe.PublishesConcrete(wiredProbe, banned);
 
         await Assert.That(composed).IsEmpty()
             .Because(
@@ -780,10 +848,10 @@ public sealed class SeamTypeLeakRules
 
         // And the same shape IS caught by rule 1's constructor-inclusive probe,
         // which is the difference between the two rules stated in one place.
-        List<SeamLeak> asName = SeamLeakProbe.NamesConcrete(typeof(WiredWriterProbe), banned);
+        List<SeamLeak> asName = SeamLeakProbe.NamesConcrete(wiredProbe, banned);
         List<string> asNameDetails = [.. asName.Select(static h => h.Detail)];
 
-        await Assert.That(asNameDetails).Contains("'ctor' parameter 'writer'")
+        await Assert.That(asNameDetails).Contains("'.ctor' parameter 'writer'")
             .Because(
                 "rule 1 counts constructor parameters and rule 2 does not. That asymmetry is deliberate and "
                 + "this assertion pins it: WiredWriterProbe is caught by one and not the other, so neither "
@@ -940,30 +1008,41 @@ public sealed class SeamTypeLeakRules
         Task<HarborResponse> SendAsync(HarborRequest request, CancellationToken ct = default);
     }
 
+    // The two rule-2 controls are built over a TYPE PARAMETER rather than
+    // naming AnsiWriter directly. Declaring `public AnsiWriter Writer` here would
+    // make Roslyn emit an assembly reference to Harbor.Tui.CellForge.Engine from
+    // this project, which CellForgeGraphRules then reports as a termios-graph
+    // leak — the guard would be the thing it forbids. Closing these generics over
+    // the runtime-resolved writer type keeps this assembly free of the edge, and
+    // the shapes under test are identical: a property whose type IS the concrete
+    // class, and a constructor that takes it.
+
     /// <summary>
-    ///     POSITIVE CONTROL for rule 2: publishes the concrete writer through a
-    ///     property — the shape CellForgeRenderContext.Writer had.
+    ///     POSITIVE CONTROL for rule 2: publishes T through a property — the
+    ///     shape <c>CellForgeRenderContext.Writer</c> had.
     /// </summary>
-    private sealed class PublishedWriterProbe
+    /// <typeparam name="TWriter">Stands in for the concrete writer.</typeparam>
+    private sealed class PublishedWriterProbe<TWriter>
     {
         /// <summary>The banned shape: a property whose TYPE is the concrete writer.</summary>
-        public AnsiWriter Writer { get; } = null!;
+        public TWriter Writer { get; } = default!;
     }
 
     /// <summary>
     ///     NEGATIVE control for rule 2: CONSUMES the concrete writer by
-    ///     composition — the shape ScreenSession and DiffEngine.Flush both use,
-    ///     and which rule 2 must leave alone.
+    ///     composition — the shape <c>ScreenSession</c> and
+    ///     <c>DiffEngine.Flush</c> both use, and which rule 2 must leave alone.
     /// </summary>
-    private sealed class WiredWriterProbe
+    /// <typeparam name="TWriter">Stands in for the concrete writer.</typeparam>
+    private sealed class WiredWriterProbe<TWriter>
     {
         /// <summary>The composition-root's choice of implementation.</summary>
-        private readonly AnsiWriter _writer;
+        private readonly TWriter _writer;
 
         /// <summary>Wire a writer in, exactly as ScreenSession is wired.</summary>
-        public WiredWriterProbe(AnsiWriter writer) => _writer = writer;
+        public WiredWriterProbe(TWriter writer) => _writer = writer;
 
         /// <summary>Never called; keeps the field from being trimmed.</summary>
-        public int WriterCount => _writer.TrackedX;
+        public Type WiredType => _writer!.GetType();
     }
 }
