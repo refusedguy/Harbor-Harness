@@ -585,42 +585,48 @@ public sealed class PresentationCapabilityRules
         // only exit from a baseline row, and the liveness test
         // (NonVacuity_GrandfatheredViolations_AreStillReal) exists so a row that
         // outlives its violation is a build failure rather than a habit.
-        ["Harbor.Tui.CellForge"] = new(StringComparer.Ordinal)
-        {
-            // Chat/Panels/CellForgeJumpPalettePanel.cs:330,:343 — ProcessStartInfo
-            // / Process.Start. The spawn is `git worktree list --porcelain` in
-            // ReadWorktreePorcelain, redirected, with a 3s timeout.
-            [NoSubprocess + " Harbor.Tui.CellForge.Panels.CellForgeJumpPalettePanel"] = new(
-                Reason:
-                    "Read-only UI chrome over a directory the user already opened: `git worktree "
-                    + "list --porcelain`, stdout/stderr redirected and capped at 3s, with no model "
-                    + "input anywhere in the path — so it never reaches PermissionRuleset and is not "
-                    + "a capability the agent can be talked into using. The AGENT's git access is the "
-                    + "opposite case and IS gated, through the `bash` tool. Same judgement as the "
-                    + "GitService rows #537 deleted; the open question is the PLACEMENT, tracked in "
-                    + "#538, which is why this is a tracked violation and not a permanent capability.",
-                TrackedBy: "https://github.com/refusedguy/Harbor-Harness/issues/538"),
-            // #668 RESOLVED: the JsonThemeLoader / ThemeFileWatcher rows are GONE
-            // — not re-baselined. Those two were a second implementation of theme
-            // loading sitting next to Harbor.DesignSystem's ThemeStore, and a
-            // baseline row is a permission rather than a fix: it would have said
-            // "this Presentation type may touch the filesystem" forever, after
-            // the duplicate was gone. They read through IThemeStore now, and
-            // ThemeStoreSeamRules is the port's own guard — it fails if a second
-            // implementer of that port appears.
-            //
-            // #667 RESOLVED: the two CellForgeFileTreePanel rows are GONE too, not
-            // re-baselined and not narrowed. The panel walked the working directory
-            // from `Build`; it now reads `UiState.Ui.FileTrees` and asks the
-            // `IFileTreeLoader` seam for a listing, with the walk itself behind the
-            // Domain `IDirectoryLister` port and implemented in
-            // `SystemDirectoryLister` (Harbor.Application). Both deletions were
-            // FORCED: `NonVacuity_GrandfatheredViolations_AreStillReal` fails the
-            // build on a stale row, and `ResolvedViolations_HaveNoHits` fails it if
-            // the file-tree capability ever comes back.
-            //
-            // The jump palette row above is untouched — a different defect, open.
-        },
+        // #666 IN FLIGHT: the CellForgeJumpPalettePanel row is GONE — not
+        // re-baselined, not re-pointed at issue 538, and the `["Harbor.Tui.CellForge"]`
+        // entry goes with it, because an entry with no rows is still a claim that
+        // the assembly is dirty. It was the LAST row in it (see the #667/#668
+        // comments below), so after this deletion every capability rule above is
+        // genuinely enforced over Harbor.Tui.CellForge with nothing to fall back on.
+        //
+        // The REASON the old row carried was not wrong, and that is worth being
+        // explicit about, because "the row was justified" is how a tracked
+        // violation becomes a permanent one: it is read-only UI chrome over a
+        // directory the user opened, so it never reaches PermissionRuleset and is
+        // not a capability an agent can be talked into using. All of that is
+        // still true and it is still the call #537 made for the GitService rows.
+        // What the row also had to admit — in its own words — was "the open
+        // question is the PLACEMENT". The placement was the defect, and the
+        // placement is now the same one GitService uses: the narrow query contract
+        // in Domain (`IGitQuery`), the spawn in Application beside `BashTool` /
+        // `WorkspaceInspector` / `ProcessGitQuery`, and the panel asking a port
+        // through `PanelServices`. A read-only judgement about permission gating
+        // is not a reason for a Presentation type to own a child process.
+        //
+        // The negative assertion that keeps it gone is the
+        // `ResolvedViolations` row at the bottom of this file.
+        //
+        // #668 RESOLVED: the JsonThemeLoader / ThemeFileWatcher rows are GONE
+        // — not re-baselined. Those two were a second implementation of theme
+        // loading sitting next to Harbor.DesignSystem's ThemeStore, and a
+        // baseline row is a permission rather than a fix: it would have said
+        // "this Presentation type may touch the filesystem" forever, after
+        // the duplicate was gone. They read through IThemeStore now, and
+        // ThemeStoreSeamRules is the port's own guard — it fails if a second
+        // implementer of that port appears.
+        //
+        // #667 RESOLVED: the two CellForgeFileTreePanel rows are GONE too, not
+        // re-baselined and not narrowed. The panel walked the working directory
+        // from `Build`; it now reads `UiState.Ui.FileTrees` and asks the
+        // `IFileTreeLoader` seam for a listing, with the walk itself behind the
+        // Domain `IDirectoryLister` port and implemented in
+        // `SystemDirectoryLister` (Harbor.Application). Both deletions were
+        // FORCED: `NonVacuity_GrandfatheredViolations_AreStillReal` fails the
+        // build on a stale row, and `ResolvedViolations_HaveNoHits` fails it if
+        // the file-tree capability ever comes back.
 
         //
         // #535 RESOLVED: the two `RecentItemsService` rows are GONE — not
@@ -786,6 +792,15 @@ public sealed class PresentationCapabilityRules
         // stop one. See docs/ARCHITECTURE_LAYERS.md §3.
         ("Harbor.Tui.CellForge", NoFiles, "Harbor.Tui.CellForge.Panels.CellForgeFileTreePanel"),
         ("Harbor.Tui.CellForge", NoDirectories, "Harbor.Tui.CellForge.Panels.CellForgeFileTreePanel"),
+        // #666: CellForgeJumpPalettePanel forked `git worktree list --porcelain`
+        // out of a private static helper on the paint path. The seam was not
+        // absent here — it is #666's whole point, and it is the same one the
+        // GitService rows in #537 already went through: `IGitQuery` in Domain,
+        // `ProcessGitQuery` in Application, the panel asking through
+        // `PanelServices`. What the panel had instead was a second, private path
+        // to the same `git` binary, plus a `Func<string>` field standing in for a
+        // seam nobody had declared. This row is red until that helper is gone.
+        ("Harbor.Tui.CellForge", NoSubprocess, "Harbor.Tui.CellForge.Panels.CellForgeJumpPalettePanel"),
     ];
 
     private static readonly Lazy<IReadOnlyDictionary<string, Assembly>> LoadedAssemblies =

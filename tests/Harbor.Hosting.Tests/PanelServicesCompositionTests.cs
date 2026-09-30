@@ -1,3 +1,4 @@
+using Harbor.Abstractions.Git;
 using Harbor.Abstractions.Lsp;
 using Harbor.Abstractions.Sessions;
 using Harbor.Abstractions.Tools;
@@ -69,6 +70,15 @@ public class PanelServicesCompositionTests
         await Assert.That(deps.Store).IsNotNull();
         await Assert.That(deps.PanelRegistry).IsNotNull();
         await Assert.That(deps.SessionStore).IsNotNull();
+
+        // #666: the jump palette's worktree query. This is the assertion that
+        // catches the mistake the change was most likely to make — registering
+        // `IGitQuery` in the Avalonia app, beside the branch badge that already
+        // had one, and leaving the CLI with a null query. The panel would then
+        // list sessions only, quietly, on the renderer that is the CLI default,
+        // and every gate in this repository would still be green.
+        await Assert.That(sp.GetService<IGitQuery>()).IsNotNull();
+        await Assert.That(deps.Git).IsNotNull();
     }
 
     /// <summary>

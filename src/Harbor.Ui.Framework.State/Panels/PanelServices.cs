@@ -1,3 +1,4 @@
+using Harbor.Abstractions.Git;
 using Harbor.Abstractions.Sessions;
 using Harbor.Ui.Framework.Diagnostics;
 using Harbor.Ui.Framework.State;
@@ -61,6 +62,15 @@ public sealed record PanelServices
     public IPanelSessionGateway? Sessions { get; init; }
 
     /// <summary>
+    ///     Read-only git queries for the jump-palette panel (#666): branch badge
+    ///     facts and, since #666, the repository's linked worktrees. Null on a
+    ///     host that registered none — and the jump palette then lists sessions
+    ///     only. It never falls back to forking <c>git</c> itself, which is the
+    ///     defect <see cref="Git" /> exists to end.
+    /// </summary>
+    public IGitQuery? Git { get; init; }
+
+    /// <summary>
     ///     Project a container into the bag, once, at composition time. Uses
     ///     <see cref="IServiceProvider.GetService(Type)" /> semantics: a service
     ///     the host never registered lands as <see langword="null" /> rather than
@@ -110,6 +120,7 @@ public sealed record PanelServices
             Diagnostics = container.GetService(typeof(IDiagnosticsPanel)) as IDiagnosticsPanel,
             SessionStore = container.GetService(typeof(ISessionStore)) as ISessionStore,
             Sessions = container.GetService(typeof(IPanelSessionGateway)) as IPanelSessionGateway,
+            Git = container.GetService(typeof(IGitQuery)) as IGitQuery,
         };
     }
 

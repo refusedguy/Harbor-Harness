@@ -783,13 +783,14 @@ grandfathers is gone.
 `FullLayerMatrixTests` + `CellForgeGraphRules` are all green. The previously cited counts
 (46 tests = 21 reflection + 25 NetArchTest, 54 executed cases) are historical.
 
-**The CAPABILITY rules added in #455 have 5 known violations, in 3 types across 2 of the
-17 Presentation assemblies.** They are not skipped: each is a row in
-`PresentationCapabilityRules.KnownViolations` that a rule holds only while it is still
-exactly reproduced, and each carries a tracking issue. Fifteen Presentation assemblies
-are clean and fully enforced.
+**The CAPABILITY rules added in #455 have ZERO known violations.** `KnownViolations` is
+an empty table, so all five rules are enforced across all 17 Presentation assemblies with
+nothing held back. The list used to be the other way round — rows each rule held only
+while the violation was still exactly reproduced, each carrying a tracking issue — and
+every one of those rows has now been deleted rather than re-baselined. The table below
+is the per-rule split; §ARCH-5 is why a row was never the answer.
 
-Rows that no longer count, in four issues. #536: the four
+Rows that no longer count, in five issues. #536: the four
 `Harbor.DesignSystem` rows — `ThemeStore` and `ThemeDirectoryWatcher` — are gone, and
 the `["Harbor.DesignSystem"]` entry with them, because an entry with no rows is still a
 claim that the assembly is dirty. That assembly is the HDS v1 package: `IsPackable`,
@@ -815,9 +816,13 @@ terminal `JsonThemeLoader` and `ThemeFileWatcher` were not a filesystem permissi
 second implementation of theme loading beside `ThemeStore`. They read through
 `IThemeStore` now, and `ThemeStoreSeamRules` fails if a second implementation of that
 port appears. #667: the two `CellForgeFileTreePanel` rows — the file tree, described
-below. All four deletions are forced rather than asserted: the liveness test fails the
-build on a row that outlived its violation, and — where the type still exists — the
-resolved-list test fails it if the capability returns.
+below. #666: the last row of all —
+`PRESENTATION-MUST-NOT-SPAWN-SUBPROCESSES` / `CellForgeJumpPalettePanel`, which forked
+`git worktree list --porcelain` from inside a painted frame; the panel now asks the
+Domain `IGitQuery` the branch badge has used since #537, and `ProcessGitQuery` does the
+spawning in Application. All five deletions are forced rather than asserted: the
+liveness test fails the build on a row that outlived its violation, and — where the type
+still exists — the resolved-list test fails it if the capability returns.
 
 A further capability is recorded in `PermanentCapabilities` — not a violation, so not
 counted above. See "Permanent capabilities" in §5.6.
@@ -826,16 +831,18 @@ counted above. See "Permanent capabilities" in §5.6.
 > the per-rule split. The prose had drifted from it three times — "21 … 14 types across
 > 7" when the table held 13 across 6, then "18 … 12 types" when it held 13 across 6
 > again, then "13 … 7 types across 4" when the deletions of #537, #665, #667 and #668
-> had left it holding 11 across 6 — so it now says where the numbers come from rather
-> than only what they are. #536 recomputed both halves from the table.
+> had left it holding 11 across 6, then "5 violations in 3 types across 2 assemblies"
+> when #534 had emptied everything but the jump palette — so it now says where the
+> numbers come from rather than only what they are. #536 recomputed both halves from the
+> table; #666 recomputed them again, and the table is now all zeroes.
 
 | Rule | Violating types | Assemblies | Tracking issues |
 |---|---:|---:|---|
-| `PRESENTATION-MUST-NOT-SPAWN-SUBPROCESSES` | 1 | 1 | [#538](https://github.com/refusedguy/Harbor-Harness/issues/538) (jump palette) |
-| `PRESENTATION-MUST-NOT-TOUCH-THE-FILESYSTEM-FILES` | 2 | 2 | [#534](https://github.com/refusedguy/Harbor-Harness/issues/534) (config stores) |
-| `PRESENTATION-MUST-NOT-TOUCH-THE-FILESYSTEM-DIRECTORIES` | 2 | 1 | [#534](https://github.com/refusedguy/Harbor-Harness/issues/534) (config stores) |
-| `PRESENTATION-MUST-NOT-USE-THE-NETWORK` | 0 | 0 | — clean, unbaselined |
-| `PRESENTATION-MUST-NOT-LOAD-ASSEMBLIES-OR-EMIT-IL` | 0 | 0 | — clean, unbaselined |
+| `PRESENTATION-MUST-NOT-SPAWN-SUBPROCESSES` | 0 | 0 | — clean since [#666](https://github.com/refusedguy/Harbor-Harness/issues/666) |
+| `PRESENTATION-MUST-NOT-TOUCH-THE-FILESYSTEM-FILES` | 0 | 0 | — clean since #534 |
+| `PRESENTATION-MUST-NOT-TOUCH-THE-FILESYSTEM-DIRECTORIES` | 0 | 0 | — clean since #534 |
+| `PRESENTATION-MUST-NOT-USE-THE-NETWORK` | 0 | 0 | — clean, never baselined |
+| `PRESENTATION-MUST-NOT-LOAD-ASSEMBLIES-OR-EMIT-IL` | 0 | 0 | — clean, never baselined |
 
 | Permanent capability | Assembly | Reason |
 |---|---|---|
