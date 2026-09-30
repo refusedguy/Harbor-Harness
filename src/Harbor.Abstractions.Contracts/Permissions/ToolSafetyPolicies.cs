@@ -118,6 +118,36 @@ public sealed record ToolSafetyDeclaration(string ToolName, ToolSafetyProfile Pr
     ///     </para>
     /// </remarks>
     public ToolCategory? Category { get; init; }
+
+    /// <summary>
+    ///     Which leg of cross-session peer supervision (#165) this tool plays, or
+    ///     <see cref="PeerSupervisionRole.None" /> when it plays none.
+    /// </summary>
+    /// <remarks>
+    ///     <para>
+    ///         This is a PROMPT fact, not a safety one, and it rides along for the
+    ///         same reason <see cref="Category" /> does: a second declaration type
+    ///         would be the same tool names written down twice, kept in step by
+    ///         hand, which is the failure mode #595 is about. The declaration is
+    ///         the one place a tool's own facts are written down, and
+    ///         <c>BuiltinToolSafetyDeclarationsTests</c> keeps it equal to what
+    ///         actually registers.
+    ///     </para>
+    ///     <para>
+    ///         It replaces a pair of string literals in
+    ///         <c>SystemPromptBuilder</c> (#793). That builder could not read
+    ///         <c>ITool.SafetyProfile</c> — <c>Harbor.Application</c> does not
+    ///         reference <c>Harbor.Tools.Builtin</c> — and the declaration table
+    ///         in this assembly is the derivation it CAN read, exactly as
+    ///         <c>PathArgExtractionPolicy</c> and <c>ToolCategories</c> read it.
+    ///     </para>
+    ///     <para>
+    ///         Optional, like <see cref="Category" />: "takes no part" is a real
+    ///         and common answer, and there is no version of this fact worth
+    ///         forcing a decision about on every tool.
+    ///     </para>
+    /// </remarks>
+    public PeerSupervisionRole PeerSupervision { get; init; } = PeerSupervisionRole.None;
 }
 
 /// <summary>

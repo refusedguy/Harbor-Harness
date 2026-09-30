@@ -212,6 +212,124 @@ public class SystemPromptSupervisionTests
     }
 
     /// <summary>
+    ///     The DEFAULT configuration, and the reason the recipe used to lie.
+    ///     <c>PermissionRuleset.Default</c> allows <c>session_read</c> and asks
+    ///     for <c>session_steer</c>; <c>ResolveTools</c> keeps only <c>Allow</c>;
+    ///     <c>TurnRunner</c> hands that one list to both the prompt and the API.
+    ///     So a turn resolves the observing leg alone, and the section must still
+    ///     render — the observing half is real — while saying nothing about
+    ///     steering.
+    /// </summary>
+    /// <remarks>
+    ///     A DESIGN assertion, not a copy of the guard above: it pins that the
+    ///     one-leg case degrades instead of disappearing. Gating the whole recipe
+    ///     on both legs would satisfy the liveness guard just as well and would
+    ///     silently switch peer supervision off for the default agent.
+    /// </remarks>
+    [Test]
+    public async Task BuildAsync_ObservingLegOnly_KeepsTheRecipeAndDropsTheSteeringClause()
+    {
+        var builder = new SystemPromptBuilder();
+        var ctx = Context(Tools("read", "session_read"));
+
+        string prompt = await builder.BuildAsync(ctx);
+        string section = PeerSupervisionSection(prompt);
+
+        await Assert.That(section.Length).IsGreaterThan(0)
+            .Because("session_read resolved, so the section must render — dropping it would switch peer "
+                   + "supervision off for the default `code` agent, whose ruleset asks for session_steer "
+                   + "and therefore never resolves it");
+
+        await Assert.That(section).Contains("`session_read`")
+            .Because("the tool that resolved is the one the recipe must describe");
+
+        await Assert.That(section.Contains("`session_steer`", StringComparison.Ordinal)).IsFalse()
+            .Because("TurnRunner sends this same resolved list to the API as the tool definitions, so "
+                   + "naming session_steer here tells the model to call a tool it was not given — the "
+                   + "invented-tool-call failure NoToolsGuidance exists to prevent");
+    }
+
+    /// <summary>
+    ///     The other one-leg case. It needs <c>session_read</c> denied and
+    ///     <c>session_steer</c> allowed, and it must not invert: steering a peer
+    ///     without being able to read one is worse than no recipe, so the reading
+    ///     half goes with it.
+    /// </summary>
+    [Test]
+    public async Task BuildAsync_SteeringLegOnly_KeepsTheRecipeAndDropsTheObservingClause()
+    {
+        var builder = new SystemPromptBuilder();
+        var ctx = Context(Tools("read", "session_steer"));
+
+        string prompt = await builder.BuildAsync(ctx);
+        string section = PeerSupervisionSection(prompt);
+
+        await Assert.That(section.Length).IsGreaterThan(0)
+            .Because("session_steer resolved, so the section must render");
+
+        await Assert.That(section).Contains("`session_steer`")
+            .Because("the tool that resolved is the one the recipe must describe");
+
+        await Assert.That(section.Contains("`session_read`", StringComparison.Ordinal)).IsFalse()
+            .Because("the recipe's verdict step reads a peer before steering it; with no observing tool "
+                   + "the protocol is not executable, and a clause describing a tool the turn does not "
+                   + "have is what the liveness guard forbids");
+    }
+
+    /// <summary>
+    ///     The composition is derived from the DECLARATION, not written here. If
+    ///     the builder had grown its own second copy of the names this test would
+    ///     still pass, so it asserts the derivation itself: a declaration
+    ///     carrying a leg is a tool whose name reaches the section, and a name in
+    ///     the section that no declaration claims is a copy somebody would have to
+    ///     remember to update.
+    /// </summary>
+    [Test]
+    public async Task BuildAsync_NamesOnlyToolsThatDeclaredALeg()
+    {
+        var builder = new SystemPromptBuilder();
+
+        // Both the legs and their names are read off the table; this file writes
+        // no tool name of its own.
+        string[] legs =
+        [
+            .. BuiltinToolSafetyProfiles.All
+                .Where(d => d.PeerSupervision != PeerSupervisionRole.None)
+                .Select(d => d.ToolName)
+        ];
+
+        await Assert.That(legs.Length).IsGreaterThan(0)
+            .Because("the recipe is composed from declared legs; an empty set means the composition has "
+                   + "nothing to read and the section can never render. The liveness guard above would "
+                   + "catch that too, but this is where the fact lives");
+
+        string full = await builder.BuildAsync(Context(Tools(legs)));
+
+        foreach (string name in legs)
+        {
+            await Assert.That(full).Contains($"`{name}`")
+                .Because($"the declaration says {name} takes part in peer supervision, so the section "
+                       + "must name it. If it does not, the composition is not reading the declaration "
+                       + "and the builder is keeping a second, hand-kept copy of the names — the exact "
+                       + "shape #793 is about");
+        }
+
+        // A tool that declares no leg must not reach the recipe even when it
+        // resolved, so every name the section prints has a declaration behind it.
+        string[] withoutLegs =
+            [.. DeclaredBuiltinNames().Where(n => !legs.Contains(n, StringComparer.Ordinal))];
+        string prompt = await builder.BuildAsync(Context(Tools(withoutLegs)));
+        string section = PeerSupervisionSection(prompt);
+
+        foreach (string name in BacktickedWords(section))
+        {
+            await Assert.That(legs.Contains(name, StringComparer.Ordinal)).IsTrue()
+                .Because($"the recipe named `{name}`, which declares no leg — a name in the section that "
+                       + "no declaration claims is a hand-kept copy of the vocabulary");
+        }
+    }
+
+    /// <summary>
     ///     The <c>## Peer Supervision</c> section of a rendered prompt, or an empty
     ///     string when it is absent. Sliced at the NEXT <c>## </c> header so the
     ///     tools listed under <c>## Available Tools</c> — which the builder also
