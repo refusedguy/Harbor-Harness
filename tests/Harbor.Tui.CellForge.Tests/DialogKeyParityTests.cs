@@ -44,11 +44,13 @@ namespace Harbor.Tui.CellForge.Tests;
 ///    (Multiline/Approval x Shift|Alt+Enter) because the legacy
 ///    <c>ConsoleKeyInfo</c> cannot express it. Everything else must match.
 /// 2. <c>ComposerController.cs:173</c> types a char only when
-///    <c>(mods & (Ctrl|Meta|Alt)) == 0</c>; <c>ApprovalGateView.cs:256</c>
-///    refuses any modifier. <c>DialogOverlay</c>'s kitty overload copies the
-///    composer gate verbatim at line 632 — and the legacy overload cannot,
-///    because <c>ConsoleKeyInfo</c>'s <c>Shift</c>/<c>Alt</c>/<c>Control</c>
-///    are read NOWHERE in the file. That asymmetry is the defect.
+///    <c>(mods & (Ctrl|Meta|Alt)) == 0</c>; <c>DiffViewerOverlay.cs:210</c>
+///    refuses <c>Control|Alt</c> and lets <c>Shift</c> through;
+///    <c>ApprovalGateView.cs:256</c> refuses any modifier.
+///    <c>DialogOverlay</c>'s kitty overload copies the composer gate
+///    verbatim at line 632 — and the legacy overload cannot, because
+///    <c>ConsoleKeyInfo.Modifiers</c> is read NOWHERE in the file. That
+///    asymmetry is the defect.
 ///
 /// The red this lands on is that asymmetry, not a refactor: the same gesture
 /// is accepted by one overload and swallowed by the other.
@@ -74,6 +76,8 @@ public class DialogKeyParityTests
     /// encoding a host that forwards the modifier separately produces. Testing
     /// only the first would pass for the wrong reason — the gate that saves it
     /// is <c>IsControl</c>, not the modifier the rule is actually about.
+    /// <c>Meta</c> has no <c>ConsoleKeyInfo</c> slot, so it is not in the
+    /// matrix: it cannot be expressed on the legacy side at all.
     /// </summary>
     private static (string Name, ConsoleKeyInfo Legacy, KeyEvent Kitty)[] Gestures() =>
     [
