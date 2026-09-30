@@ -95,8 +95,7 @@ public class ProviderPayloadWireTests
             request, "https://api.anthropic.com/v1", "key", null, null));
 
         await Assert.That(body).IsEqualTo(
-            """
-            {"model":"claude-opus-4","messages":[{"role":"user","content":"hi"}],"stream":true,"max_tokens":4096,"system":"be brief","temperature":0.7,"top_p":0.9,"top_k":40}""")
+            """{"model":"claude-opus-4","messages":[{"role":"user","content":"hi"}],"stream":true,"max_tokens":4096,"system":"be brief","temperature":0.7,"top_p":0.9,"top_k":40}""")
             .Because("one typo in a wire key here is a provider 400, and the whole point of the "
                    + "writer is that the key is now written by hand rather than inferred");
     }
@@ -108,8 +107,7 @@ public class ProviderPayloadWireTests
             Request(system: ""), "https://api.anthropic.com/v1", "key", null, null));
 
         await Assert.That(body).IsEqualTo(
-            """
-            {"model":"gpt-4o","messages":[],"stream":true,"max_tokens":8192}""")
+            """{"model":"gpt-4o","messages":[],"stream":true,"max_tokens":8192}""")
             .Because("8192 is the default max_tokens, and an empty system prompt must not appear "
                    + "as an empty string");
     }
@@ -122,8 +120,7 @@ public class ProviderPayloadWireTests
             "https://api.anthropic.com/v1", "key", null, null));
 
         await Assert.That(body).IsEqualTo(
-            """
-            {"model":"gpt-4o","messages":[],"stream":true,"max_tokens":8192,"system":[{"type":"text","text":"be brief","cache_control":{"type":"ephemeral"}}]}""");
+            """{"model":"gpt-4o","messages":[],"stream":true,"max_tokens":8192,"system":[{"type":"text","text":"be brief","cache_control":{"type":"ephemeral"}}]}""");
     }
 
     [Test]
@@ -221,8 +218,7 @@ public class ProviderPayloadWireTests
             "https://api.anthropic.com/v1", "key", null, null));
 
         await Assert.That(tools).Contains(
-            """
-            "tools":[{"name":"read","description":"Read a file.","input_schema":{"type":"object","properties":{"path":{"type":"string"}}}}]""")
+            """tools":[{"name":"read","description":"Read a file.","input_schema":{"type":"object","properties":{"path":{"type":"string"}}}}]""")
             .Because("Anthropic names the schema input_schema and does not nest it under function");
     }
 
@@ -243,8 +239,7 @@ public class ProviderPayloadWireTests
             request, "https://api.openai.com/v1", NullLogger.Instance));
 
         await Assert.That(body).IsEqualTo(
-            """
-            {"model":"gpt-4o","messages":[{"role":"system","content":"be brief"},{"role":"user","content":"hi"}],"stream":true,"stream_options":{"include_usage":true},"max_tokens":512,"temperature":0.5,"top_p":0.8}""");
+            """{"model":"gpt-4o","messages":[{"role":"system","content":"be brief"},{"role":"user","content":"hi"}],"stream":true,"stream_options":{"include_usage":true},"max_tokens":512,"temperature":0.5,"top_p":0.8}""");
     }
 
     [Test]
@@ -335,9 +330,7 @@ public class ProviderPayloadWireTests
             .Because("Chat Completions nests the pinned function, unlike Anthropic's flat name");
 
         await Assert.That(auto).Contains(
-            """
-            "tools":[{"type":"function","function":{"name":"read","description":"Read a file.","parameters":{"type":"object","properties":{"path":{"type":"string"}}}}}]
-            """);
+            """tools":[{"type":"function","function":{"name":"read","description":"Read a file.","parameters":{"type":"object","properties":{"path":{"type":"string"}}}}}]""");
     }
 
     // =================================================================
@@ -363,8 +356,7 @@ public class ProviderPayloadWireTests
             request, "https://api.openai.com/v1", NullLogger.Instance));
 
         await Assert.That(body).IsEqualTo(
-            """
-            {"model":"gpt-5","input":[{"role":"system","content":"be brief"},{"role":"user","content":"hi"},{"role":"assistant","content":"sure"},{"type":"function_call_output","call_id":"call_1","output":"body"}],"stream":true,"max_output_tokens":256,"reasoning":{"effort":"high"},"tools":[{"type":"function","name":"read","description":"Read a file.","parameters":{"type":"object","properties":{"path":{"type":"string"}}}}]}""")
+            """{"model":"gpt-5","input":[{"role":"system","content":"be brief"},{"role":"user","content":"hi"},{"role":"assistant","content":"sure"},{"type":"function_call_output","call_id":"call_1","output":"body"}],"stream":true,"max_output_tokens":256,"reasoning":{"effort":"high"},"tools":[{"type":"function","name":"read","description":"Read a file.","parameters":{"type":"object","properties":{"path":{"type":"string"}}}}]}""")
             .Because("the Responses API calls the array `input`, names a tool result "
                    + "`function_call_output` with `call_id`/`output`, and takes the function "
                    + "fields inline instead of nested under `function`");
@@ -405,16 +397,14 @@ public class ProviderPayloadWireTests
             topK: 30);
 
         await Assert.That(OllamaBody(request)).IsEqualTo(
-            """
-            {"model":"llama3","messages":[{"role":"system","content":"be brief"},{"role":"user","content":"hi"}],"stream":true,"options":{"temperature":0.4,"top_p":0.7,"top_k":30,"num_predict":256},"keep_alive":"5m"}""");
+            """{"model":"llama3","messages":[{"role":"system","content":"be brief"},{"role":"user","content":"hi"}],"stream":true,"options":{"temperature":0.4,"top_p":0.7,"top_k":30,"num_predict":256},"keep_alive":"5m"}""");
     }
 
     [Test]
     public async Task Ollama_NoOptions_StillEmitsTheEmptyObject()
     {
         await Assert.That(OllamaBody(Request(system: ""))).IsEqualTo(
-            """
-            {"model":"gpt-4o","messages":[],"stream":true,"options":{},"keep_alive":"5m"}""")
+            """{"model":"gpt-4o","messages":[],"stream":true,"options":{},"keep_alive":"5m"}""")
             .Because("an absent options key is a different request from an empty one for a local "
                    + "model, so the object is written unconditionally");
     }
