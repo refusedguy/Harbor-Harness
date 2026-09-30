@@ -434,10 +434,16 @@ public sealed class SessionStoreFailureTextParityRules
     }
 
     /// <summary>
-    ///     The scan finds literals at all, and in all three stores' directories.
-    ///     Without this, a walk rooted wrongly returns nothing and R1 passes over
-    ///     an empty population.
+    ///     The scan reaches all three stores' directories, and the matcher finds a
+    ///     failure shape at all.
     /// </summary>
+    /// <remarks>
+    ///     Two separate non-vacuity claims, and they are kept separate because they now
+    ///     have different answers. The walk must still reach the stores — that is
+    ///     independent of what the stores contain. The matcher must still match, and it
+    ///     is proved on PLANTED text, because the stores themselves are now clean: see
+    ///     the comment at the planted block for why that distinction is load-bearing.
+    /// </remarks>
     [Test]
     public async Task The_Scan_Finds_The_Stores_And_The_Literals()
     {
@@ -453,14 +459,48 @@ public sealed class SessionStoreFailureTextParityRules
                 "An empty set means the walk is not reading src/ at all, and every rule below is "
                 + "then vacuously true. Found: " + string.Join(", ", scanned));
 
-        List<(string Project, string Shape)> found =
-            [.. ScanStoreLiterals().Select(l => (l.project, l.shape))];
+        // The matcher is proved live on PLANTED source, not on live product code.
+        //
+        // This half used to assert that ScanStoreLiterals() returns something, and it was
+        // correct while Memory still wrote its eleven literals inline — an empty result
+        // would have meant the matcher had stopped discriminating. #887 made that
+        // assertion false for the right reason: all three stores now call the factories, so
+        // zero inline literals IS the correct result, and this check went red on the very
+        // fix it was written to enable. Its first CI run produced exactly that failure.
+        //
+        // Reading product code to decide whether the matcher works couples the matcher to
+        // the defect it exists to detect: the guard can only be green while the bug is
+        // present, so the only way to satisfy it is to reintroduce a failure literal in a
+        // shipped store. A non-vacuity check has to plant the shape it needs.
+        const string Planted =
+            """
+            public sealed class Planted
+            {
+                public string A(string sessionId) => $"Session '{sessionId}' not found.";
+                public string B(string s, string m) => $"Message '{m}' not found in session '{s}'.";
+            }
+            """;
 
-        await Assert.That(found).IsNotEmpty()
+        string[] planted = [.. MatchShapes(Planted)];
+
+        await Assert.That(planted).IsNotEmpty()
             .Because(
                 "A matcher that finds no literals matches nothing, which is the failure mode every "
-                + "planted control in this project exists to rule out. If this fails, the literal "
-                + "pattern no longer matches the shape the stores actually write.");
+                + "planted control in this project exists to rule out. This runs against planted "
+                + "source rather than the stores, so it keeps working when the stores are clean — "
+                + "which they now are. If this fails, LiteralPattern or Normalise no longer reaches "
+                + "the shape the stores used to write inline.");
+
+        // And the planted shapes must be the real ones, or "found something" would be a
+        // vacuous pass on a matcher that matches everything.
+        await Assert.That(planted).IsEquivalentTo(new[]
+        {
+            "Message '{}' not found in session '{}'.",
+            "Session '{}' not found.",
+        })
+            .Because(
+                "The planted control must reproduce the two shapes the stores wrote, hole-normalised "
+                + "exactly as ScanStoreLiterals normalises them. Got: " + string.Join(" | ", planted));
     }
 
     /// <summary>
@@ -577,13 +617,27 @@ public sealed class SessionStoreFailureTextParityRules
                 continue;
             }
 
-            foreach (Match match in LiteralPattern.Matches(SourceScan.StripComments(raw)))
+            foreach (string shape in MatchShapes(raw))
             {
-                string shape = Normalise(match.Groups["body"].Value);
-                if (IsFailureShaped(shape))
-                {
-                    yield return (project, file, shape);
-                }
+                yield return (project, file, shape);
+            }
+        }
+    }
+
+    /// <summary>
+    ///     Every failure-shaped literal in one C# source text, comment-stripped and
+    ///     hole-normalised. Shared by <see cref="ScanStoreLiterals" /> and by the planted
+    ///     control, so both run the SAME matcher — a control that exercised a private copy
+    ///     would keep passing if the real one broke.
+    /// </summary>
+    private static IEnumerable<string> MatchShapes(string source)
+    {
+        foreach (Match match in LiteralPattern.Matches(SourceScan.StripComments(source)))
+        {
+            string shape = Normalise(match.Groups["body"].Value);
+            if (IsFailureShaped(shape))
+            {
+                yield return shape;
             }
         }
     }
