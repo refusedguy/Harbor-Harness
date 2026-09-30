@@ -1,3 +1,5 @@
+using Harbor.Abstractions.Models;
+
 namespace Harbor.Desktop.Abstractions.ViewModels;
 
 /// <summary>
@@ -10,7 +12,7 @@ namespace Harbor.Desktop.Abstractions.ViewModels;
 /// <remarks>
 ///     <para>
 ///         The unknown-price question is not answered here. It is
-///         <see cref="Abstractions.Models.Pricing.IsUnknown" />, the core's own bit,
+///         <see cref="Pricing.IsUnknown" />, the core's own bit,
 ///         and this type only spells its answer. The two were previously
 ///         conflated: the picker re-derived the bit from the input and output
 ///         numbers alone, which not only duplicated a core decision but got the
@@ -35,7 +37,7 @@ public static class ModelRateLabel
     ///     model publishes no price table at all.
     /// </summary>
     /// <param name="pricing">The model's rate table, as the core published it.</param>
-    public static string For(Abstractions.Models.Pricing pricing) =>
+    public static string For(Pricing pricing) =>
         pricing.IsUnknown
             ? UnknownText
             : $"${pricing.InputPerMillion:F2} in / ${pricing.OutputPerMillion:F2} out per 1M";
