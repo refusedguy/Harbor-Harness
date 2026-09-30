@@ -297,33 +297,48 @@ internal static partial class PromptSectionPolicyProbe
             yield break;
         }
 
-        // Two regexes, one per operand order, rather than one alternation
+        // Two matchers, one per operand order, rather than one alternation
         // reusing the group name: .NET does accept a duplicate group name, but
         // relying on that buys nothing here and a [GeneratedRegex] failure is a
         // hard build error rather than a runtime surprise.
-        foreach (Regex pattern in (Regex[])["RightHandBound()", "LeftHandBound()"])
+        foreach (Match match in RightHandBound().Matches(trimmed))
         {
-            foreach (Match match in pattern.Matches(trimmed))
+            string? literal = UsableBound(match);
+            if (literal is not null)
             {
-                string literal = match.Groups["num"].Value;
-
-                // A leading zero is not a bound — it is padding in a literal, and
-                // a slice bound is not what this rule grades.
-                if (literal.Length > 1 && literal[0] == '0')
-                {
-                    continue;
-                }
-
-                // The presence gate. A section needs `Count > 0`, and exempting
-                // zero is what keeps this rule from blocking the next section.
-                if (literal == "0")
-                {
-                    continue;
-                }
-
                 yield return literal;
             }
         }
+
+        foreach (Match match in LeftHandBound().Matches(trimmed))
+        {
+            string? literal = UsableBound(match);
+            if (literal is not null)
+            {
+                yield return literal;
+            }
+        }
+    }
+
+    /// <summary>
+    /// The literal of <paramref name="match" /> when it is a bound this rule
+    /// grades, and <c>null</c> when it is not. <c>null</c> rather than a bool so
+    /// the two callers cannot forget the filter and let a <c>0</c> through.
+    /// </summary>
+    private static string? UsableBound(Match match)
+    {
+        string literal = match.Groups["num"].Value;
+
+        // A leading zero is not a bound — it is padding in a literal, and a
+        // slice bound is not what this rule grades.
+        if (literal.Length > 1 && literal[0] == '0')
+        {
+            return null;
+        }
+
+        // The presence gate. A section needs `Count > 0`, and exempting zero is
+        // what keeps this rule from blocking the next section added.
+        return literal == "0" ? null : literal;
     }
 
     private static IEnumerable<string> EnumerateSources(string repoRoot)
@@ -445,11 +460,12 @@ public sealed class PromptSectionPolicyRule
                    + "every rule here is vacuously green");
 
         await Assert.That(string.Join(" | ", report.Assemblers))
-            .Contains(CanonicalFile)
+            .Contains(PromptSectionPolicyProbe.CanonicalFile)
             .Because(
-                $"the scan found no prompt-assembly method in {CanonicalFile}, which is the file this "
-                + "rule was opened over. Detection is by the `## ` header the assembler emits, so a miss "
-                + "means that signal stopped matching — not that the file is clean. Found: "
+                "the scan found no prompt-assembly method in " + PromptSectionPolicyProbe.CanonicalFile
+                + ", which is the file this rule was opened over. Detection is by the `## ` header the "
+                + "assembler emits, so a miss means that signal stopped matching — not that the file is "
+                + "clean. Found: "
                 + (report.Assemblers.Count == 0 ? "(nothing)" : string.Join(" | ", report.Assemblers)));
     }
 
