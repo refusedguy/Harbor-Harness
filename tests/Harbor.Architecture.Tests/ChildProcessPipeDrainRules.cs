@@ -375,8 +375,10 @@ public sealed class ChildProcessPipeDrainRules
     [Test]
     public async Task A_Hand_Off_Exemption_Does_Not_Cover_A_Member_That_Starts_The_Process_Itself()
     {
-        // `TreeTool`'s spelling: the same redirects, but `new Process` IS the child, so
-        // this member owns the drain and rule 3 must not apply.
+        // `TreeTool`'s PRE-#908 spelling, kept as a fixture: the same redirects, but
+        // `new Process` IS the child, so this member owns the drain and rule 3 must not
+        // apply. It is the control the exemption must not be able to swallow, and it has
+        // to keep the old signature — the point is the shape, not a member that exists.
         const string StartsItself = """
             private static HashSet<string> CollectGitTrackedFiles(string root)
             {
