@@ -458,8 +458,8 @@ public sealed class CommonConfigContractRules
             bool isBaseList = before.EndsWith(":", StringComparison.Ordinal)
                               || before.EndsWith(",", StringComparison.Ordinal);
             bool isConstraintTail = after.Length == 0
-                                    || after.StartsWith(')', StringComparison.Ordinal)
-                                    || after.StartsWith(',', StringComparison.Ordinal);
+                                    || after.StartsWith(")", StringComparison.Ordinal)
+                                    || after.StartsWith(",", StringComparison.Ordinal);
 
             if (isBaseList && isConstraintTail)
             {
