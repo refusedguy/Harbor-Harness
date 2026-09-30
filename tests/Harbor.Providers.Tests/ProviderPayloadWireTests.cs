@@ -162,14 +162,14 @@ public class ProviderPayloadWireTests
                     new LlmThinkingBlock("thinking"),
                     new LlmToolCallBlock("call_1", "read", arguments.RootElement)
                 ]),
-                new LlmToolResultMessage("call_1", "read", "file body", isError: false)
+                new LlmToolResultMessage("call_1", "read", "file body", IsError: false)
             ]);
 
         string body = Body(AnthropicRequestBuilder.BuildRequest(
             request, "https://api.anthropic.com/v1", "key", null, null));
 
         using JsonDocument parsed = JsonDocument.Parse(body);
-        JsonElement[] messages = parsed.RootElement.GetProperty("messages");
+        JsonElement messages = parsed.RootElement.GetProperty("messages");
 
         JsonElement[] first = [.. messages[0].GetProperty("content").EnumerateArray()];
         await Assert.That(first.Length).IsEqualTo(3)
@@ -201,7 +201,7 @@ public class ProviderPayloadWireTests
     {
         // "required" is OpenAI's word for what Anthropic calls "any".
         string required = Body(AnthropicRequestBuilder.BuildRequest(
-            Request(tools: [Tool()], toolChoice: ToolChoice.Required),
+            Request(tools: [Tool()], toolChoice: new ToolChoice.Required()),
             "https://api.anthropic.com/v1", "key", null, null));
 
         await Assert.That(required).Contains("\"tool_choice\":{\"type\":\"any\"}");
@@ -214,7 +214,7 @@ public class ProviderPayloadWireTests
             .Because("a pinned Anthropic tool is a bare name, not a nested function object");
 
         string tools = Body(AnthropicRequestBuilder.BuildRequest(
-            Request(tools: [Tool()], toolChoice: ToolChoice.Auto),
+            Request(tools: [Tool()], toolChoice: new ToolChoice.Auto()),
             "https://api.anthropic.com/v1", "key", null, null));
 
         await Assert.That(tools).Contains(
@@ -272,7 +272,7 @@ public class ProviderPayloadWireTests
         var request = Request(messages:
         [
             new LlmAssistantMessage([new LlmToolCallBlock("call_1", "read", arguments.RootElement)]),
-            new LlmToolResultMessage("call_1", "read", "body", isError: false)
+            new LlmToolResultMessage("call_1", "read", "body", IsError: false)
         ]);
 
         string body = Body(OpenAiRequestBuilder.BuildChatCompletionsRequest(
@@ -317,7 +317,7 @@ public class ProviderPayloadWireTests
     public async Task OpenAi_ChatCompletions_ToolChoice_AndTools_PinTheirShapes()
     {
         string auto = Body(OpenAiRequestBuilder.BuildChatCompletionsRequest(
-            Request(tools: [Tool()], toolChoice: ToolChoice.Auto),
+            Request(tools: [Tool()], toolChoice: new ToolChoice.Auto()),
             "https://api.openai.com/v1", NullLogger.Instance));
 
         await Assert.That(auto).Contains("\"tool_choice\":\"auto\"");
@@ -346,7 +346,7 @@ public class ProviderPayloadWireTests
             [
                 LlmUserMessage.Text("hi"),
                 new LlmAssistantMessage([new LlmTextBlock("sure")]),
-                new LlmToolResultMessage("call_1", "read", "body", isError: false)
+                new LlmToolResultMessage("call_1", "read", "body", IsError: false)
             ],
             tools: [Tool()],
             maxTokens: 256,
@@ -417,11 +417,11 @@ public class ProviderPayloadWireTests
         var request = Request(messages:
         [
             new LlmAssistantMessage([new LlmToolCallBlock("call_1", "read", arguments.RootElement)]),
-            new LlmToolResultMessage("call_1", "read", "body", isError: false)
+            new LlmToolResultMessage("call_1", "read", "body", IsError: false)
         ]);
 
         using JsonDocument parsed = JsonDocument.Parse(OllamaBody(request));
-        JsonElement[] messages = parsed.RootElement.GetProperty("messages");
+        JsonElement messages = parsed.RootElement.GetProperty("messages");
 
         await Assert.That(messages[0].GetProperty("content").GetString()).IsEqualTo("")
             .Because("unlike the OpenAI builders this path substituted \"\" for a missing text "
