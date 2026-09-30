@@ -254,9 +254,17 @@ internal static partial class PromptClockProbe
     /// date can arrive through a project-local helper, and the name is all this
     /// scan has to go on.
     /// </summary>
+    /// <remarks>
+    /// The receiver is part of the match (<c>clock.GetUtcNow</c>, not
+    /// <c>GetUtcNow</c>) because the value is quoted in the failure message, and
+    /// a message naming only the method cannot tell a reader which of several
+    /// clocks in one method was read. The call's <c>(</c> is left to a
+    /// lookahead: including it would put a bracket in the middle of the quoted
+    /// name, and the positive control asserts on the exact string.
+    /// </remarks>
     [GeneratedRegex(
         @"\b(?:DateTimeOffset|DateTime|DateOnly)\s*\.\s*(?:UtcNow|Now|Today|UtcDate|Date|LocalDateTime|FromDateTime|FromDateTimeUtc)\b"
-        + @"|\.\s*(?:Get(?:Utc|Local)Now|Today)\s*\("
+        + @"|[\w\]\)]*\s*\.\s*(?:Get(?:Utc|Local)Now|Today)(?=\s*\()"
         + @"|\bEnvironment\s*\.\s*TickCount\d*")]
     private static partial Regex ClockRead();
 
