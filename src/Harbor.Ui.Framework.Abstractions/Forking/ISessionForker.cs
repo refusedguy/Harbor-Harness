@@ -35,6 +35,17 @@ public sealed record SessionForked(Session Session, int Copied);
 ///         message ids regenerated. A port cannot drift that way — there is only one fork left.
 ///     </para>
 ///     <para>
+///         <b>…and there is only one because something counts them.</b> #882: the port alone did
+///         not keep the number at one. <c>SessionFactory</c>'s constructor requires this
+///         parameter, but a required parameter is checked at <c>new</c> sites and the shipped
+///         host registers the factory instead, so no compiler sees it — and it says nothing about
+///         a second implementer or about a stub bound in this port's place. Both compile, both
+///         wire, and both are the silent second fork above. <c>SessionForkPortSeamRules</c> is
+///         the count: it requires exactly one production implementer, requires that one to be the
+///         composition root's bridge rather than a class sitting beside the consumer, and
+///         requires every composition root that registers <c>SessionFactory</c> to bind it.
+///     </para>
+///     <para>
 ///         <b>What this port is not:</b> an error-message contract. Implementations return the
 ///         underlying store failure verbatim; the calling Presentation layer adds the context it
 ///         owns (which session, how far the copy got).
