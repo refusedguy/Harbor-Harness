@@ -1161,7 +1161,48 @@ public sealed class BashTool : ToolBase<BashTool.Args>
 
 ## 6. Tool definition injection в system prompt
 
+> **Статус раздела: иллюстрация, а не обязательство (#851).** Блок ниже —
+> эскиз v1. По [`README.md`](./README.md) документы 01-07 «сохранены для
+> reference», и «где они расходятся с v2 — приоритет у 14-15»; ни одна из
+> 19 файлов в `docs/specs/` не объявляет `Status: normative` — статуса,
+> которым репозиторий помечает документ, претендующий на утверждение о текущем
+> дереве. Этот код **никогда не компилировался и не был целью сборки**:
+> `AgentInfo`, `tool.Id`, `PromptGuidelines != null`, `IsGitRepo()` и
+> `GetCurrentGitBranch()` не существуют в дереве. Каноническая форма —
+> контракт `ISystemPromptBuilder` и `SystemPromptBuilder.BuildAsync`;
+> ниже показана идея формы, а не то, что реально печатается в промпт.
+>
+> **Что из блока есть в коде:** секции `## Environment`, `## Available Tools`
+> с guidelines, `## MCP Servers`, `## Available Skills` в `<available_skills>`,
+> `## Project Context` в `<project_context>`, `## Additional Instructions`.
+>
+> **Чего нет, и что не является долгом:**
+> - шаг 1, per-provider base prompt (`LoadProviderPromptAsync(model.PromptTemplate)`)
+>   — в коде один `DefaultBasePrompt` на всех провайдеров;
+> - строки `- Git repo:` и `- Git branch:` — не реализованы никогда; ниша для
+>   них есть (`IGitQuery`), но она сознательно объявлена UI-хромом, а не
+>   содержимым промпта ([`IGitQuery`](../../src/Harbor.Abstractions/Git/IGitQuery.cs));
+> - порядок секций: в коде `## Additional Instructions` — **четвёртая**, здесь
+>   она последняя (шаг 7);
+> - в коде есть три секции, которых здесь нет: `## Tool Use`, `## Constraints`,
+>   `## Peer Supervision`, и одна строка окружения, которой здесь нет:
+>   `- Model:`.
+>
+> **Строка `- Today:` удалена намеренно и не возвращается (#814, #841).**
+> Контракт `ISystemPromptBuilder` NOW MUST: реализация — чистая функция
+> `SystemPromptContext`. Дата не член контекста, поэтому ни один ключ,
+> выведенный `CachingSystemPromptBuilder` из контекста, её не покрывает: у
+> декоратора нет ни TTL, ни вытеснения, ни `Clear`, а CLI строит один host на
+> весь REPL — сессия, открытая через 00:00 UTC, получала вчерашнюю дату на
+> каждом следующем ходу. Возврат строки означал бы нарушение MUST, который
+> установлен накануне; поэтому она показана ниже закомментированной, как
+> памятка, а не как образец для переноса.
+
 ```csharp
+// Сигнатура ниже не является реальной: в дереве нет ни `AgentInfo`, ни
+// positional-параметров у BuildAsync. Фактическая форма —
+// `BuildAsync(SystemPromptContext context, CancellationToken ct = default)`,
+// где SystemPromptContext — record из семи членов (#851).
 public sealed class SystemPromptBuilder
 {
     public async Task<string> BuildAsync(
@@ -1176,6 +1217,8 @@ public sealed class SystemPromptBuilder
         var sb = new StringBuilder();
         
         // 1. Base prompt (per provider)
+        //    НЕ РЕАЛИЗОВАНО (#851): LoadProviderPromptAsync не существует.
+        //    В коде один DefaultBasePrompt на всех провайдеров.
         var basePrompt = await LoadProviderPromptAsync(model.PromptTemplate, ct);
         sb.AppendLine(basePrompt);
         sb.AppendLine();
@@ -1184,7 +1227,11 @@ public sealed class SystemPromptBuilder
         sb.AppendLine("## Environment");
         sb.AppendLine($"- Working directory: `{Environment.CurrentDirectory}`");
         sb.AppendLine($"- Platform: {Environment.OSVersion}");
-        sb.AppendLine($"- Today: {DateTimeOffset.Now:yyyy-MM-dd}");
+        //    #814/#841 — УДАЛЕНО, НЕ ВОЗВРАЩАТЬ. Дата не входит в
+        //    SystemPromptContext, поэтому ключ кэша её не покрывает, а у
+        //    CachingSystemPromptBuilder нет TTL/вытеснения/Clear.
+        // sb.AppendLine($"- Today: {DateTimeOffset.Now:yyyy-MM-dd}");
+        //    НЕ РЕАЛИЗОВАНО (#851), как и IsGitRepo/GetCurrentGitBranch ниже.
         sb.AppendLine($"- Git repo: {(IsGitRepo() ? "yes" : "no")}");
         if (IsGitRepo())
             sb.AppendLine($"- Git branch: {GetCurrentGitBranch()}");
@@ -1250,6 +1297,8 @@ public sealed class SystemPromptBuilder
         }
         
         // 7. Agent-specific prompt append
+        //    ПОРЯДОК РАСХОДИТСЯ (#851): в коде эта секция печатается
+        //    ЧЕТВЁРТОЙ, перед списком инструментов, а не последней.
         if (!string.IsNullOrEmpty(agent.SystemPromptAppend))
         {
             sb.AppendLine("## Additional Instructions");
