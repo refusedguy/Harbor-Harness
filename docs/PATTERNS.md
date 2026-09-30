@@ -1,5 +1,21 @@
 # PATTERNS.md — the de-facto convention, and where it actually lives
 
+> Status: normative for the current implementation. Every `file:line` below is
+> cited against this branch. If code and doc disagree, code wins and the doc must
+> be updated in the same PR. This is a working checklist, not a dated record —
+> the "How to use this document" table below is read before designing anything,
+> and four architecture guards quote these sections in their own failure
+> messages, so a number that has rotted sends a reader to the wrong code. The
+> `#826` gate fences every citation on this page
+> (`tools/check-doc-cites.py`, rule `DOC-CITE-MISSING` / `DOC-CITE-EOF`), which
+> is why the declaration is here and not just implied by the prose above.
+>
+> What the fence does **not** do is grade the *meaning* of a line — it proves a
+> line exists, not that it is the right one. #868 is the worked example: eight of
+> §8's ten pointers into `ChatScreenBridge.cs` named a line that exists and holds
+> something else. Cite the symbol next to the number where a section argues from
+> one.
+
 > **Read this before you add a feature.** This is not the GoF catalog. It is the
 > set of patterns Harbor *actually* uses, each one pinned to the line of code
 > that proves it, plus the trap you are about to fall into.
@@ -270,7 +286,8 @@ Composition: `src/Harbor.Registries/Tools/CompositeToolRegistry.cs:6` holds
 `List<IToolSource> _sources`, folds first-success in `GetTool` (`:80-88`), and
 makes `Register`/`Unregister` **read-only** (`:92-94`, each returning an
 explanatory `Result.Failure`). Two internal sources exist:
-`ToolRegistry.cs:129` (`ConcurrentToolSource`, unfrozen path) and
+`ToolRegistry.cs:157` (`ConcurrentToolSource`, a `private sealed class` nested in
+`ToolRegistry` itself, unfrozen path) and
 `FrozenToolView.cs:26` (frozen path). The "single read path" rationale is
 documented at `ToolRegistry.cs:26-29` — including the sentence that states the
 intent: "A third source (e.g. lazy-loaded plugin tools) plugs in as another
@@ -278,6 +295,8 @@ intent: "A third source (e.g. lazy-loaded plugin tools) plugs in as another
 GetTool." That sentence describes a caller that does not exist.
 
 This is a correct Composite.
+
+<!-- check-doc-cites: allow-unwired ConcurrentToolSource - private nested class, constructed and used only inside ToolRegistry.cs:48, so DOC-TYPE-UNWIRED's one-declaring-file heuristic cannot see the wiring -->
 
 ### The known trap (#577)
 
