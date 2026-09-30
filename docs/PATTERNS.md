@@ -224,6 +224,8 @@ warning naming the requested id and every available one
 single**. If you add a fourth registry, copy `SessionStoreRegistry`, not
 `TuiBackendRegistry` — the difference is whether a typo is silent.
 
+<!-- check-doc-cites: allow-unwired TuiModule — the composition root calls the member, not the type: src/Harbor.Hosting/Registration.cs:28 is `.AddHarborTui(ctx)`, an extension method declared inside this static class. The type name appears at no call site, which is what DOC-TYPE-UNWIRED's one-declaring-file heuristic reports as unwired. -->
+
 ---
 
 ## 3. Decorator — for cross-cutting concerns only
@@ -307,6 +309,8 @@ GetTool." That sentence describes a caller that does not exist.
 This is a correct Composite.
 
 <!-- check-doc-cites: allow-unwired ConcurrentToolSource - private nested class, constructed and used only inside ToolRegistry.cs:48, so DOC-TYPE-UNWIRED's one-declaring-file heuristic cannot see the wiring -->
+<!-- check-doc-cites: allow-unwired CompositeToolRegistry — this one is TRUE, and the section above says so in prose: "AddSource has exactly one caller in the repository, and it is a test. No production code constructs a CompositeToolRegistry." The escape hatch is what lets the document name the finding instead of omitting the type from it. -->
+<!-- check-doc-cites: allow-unwired ToolRegistryBuilderAdapter,ProviderRegistryBuilderAdapter,AgentRegistryBuilderAdapter — three private sealed classes nested in PluginRegistrar.cs (:202, :249, :314) and constructed only there (:79, :88, :97). Nested types are invisible to a heuristic that looks for a second file mentioning the name. -->
 
 ### The known trap (#577)
 
@@ -388,6 +392,8 @@ An implementation written before `:31` existed compiles, satisfies the new
 contract, and silently swallows every watcher error the caller explicitly asked
 to see. `IThemeWatcher` is precisely the role that carries `JsonThemeLoader`'s
 parse/IO failures.
+
+<!-- check-doc-cites: allow-unwired JsonThemeLoader — measured: no file under src/ or apps/ references it in code outside its own; every other mention in the tree is a doc comment, which the gate strips. It is a `public static class` in a library assembly, so external consumers are not excluded by this measurement either. Whether that makes it dead is a question about the type, not about this document, and #868 did not adjudicate it — this allowance records what was measured, not a verdict. -->
 
 Two more live instances of the banned direction:
 
@@ -482,6 +488,8 @@ then the default arm invents an answer. Every instance in #578 is the default ar
   the `HarborEventKind` enum values exactly". Here the namespace **does** match
   the project (`Harbor.Ipc.Protocol`), which is exactly why the previous bullet
   is worth writing down.
+
+<!-- check-doc-cites: allow-unwired HarborEventKind — the enum IS the contract, enforced without naming it: the tags above are `[Union(0, …)]`, `[Union(1, …)]`, integer keys that must equal the enum's members in order (src/Harbor.Ipc.Abstractions/HarborEvent.cs:113). The coupling is positional, so the name never has to appear at a second site for the compiler or any reader to see it — which is exactly what a name-in-a-second-file heuristic cannot detect. -->
 - `src/Harbor.Ipc.Abstractions/Protocol/HarborRequest.cs:35-49` — 15 MessagePack
   `[Union(n, typeof(T))]` tags, the request union the guard grades as
   `HarborRequest` since #485. Unlike the three above, the guard does **not** read
