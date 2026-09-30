@@ -185,6 +185,15 @@ public class ReplRunnerConfigLoadTests
         var agent = new RecordingAgent();
         ReplRunner runner = CreateRunner(renderer, agent, new FakeAgentRegistry(TestAgents.AllowAll()), store);
 
+        // #847: the wizard's provider step reads OLLAMA_API_KEY through
+        // AuthStore.FromConventionalEnv, which derives the conventional
+        // <PROVIDER>_API_KEY name from the provider id and reads the process
+        // environment for it. Pinning it to null is what makes this test hermetic
+        // — but writing null back in the finally destroys the variable for every
+        // LATER test in this process, and the product reads it. Save what was there
+        // and put that back instead; `null` is the right value to pin, not the
+        // right value to restore.
+        string? previousOllamaKey = Environment.GetEnvironmentVariable("OLLAMA_API_KEY");
         Environment.SetEnvironmentVariable("OLLAMA_API_KEY", null);
         try
         {
@@ -203,7 +212,7 @@ public class ReplRunnerConfigLoadTests
         }
         finally
         {
-            Environment.SetEnvironmentVariable("OLLAMA_API_KEY", null);
+            Environment.SetEnvironmentVariable("OLLAMA_API_KEY", previousOllamaKey);
         }
     }
 
