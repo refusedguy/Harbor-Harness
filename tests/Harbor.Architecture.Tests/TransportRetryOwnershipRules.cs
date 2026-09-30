@@ -59,6 +59,9 @@
 // discovery step to find both builtin transports, so a rename or a refactor that
 // emptied the set fails loudly instead of going quiet.
 
+using System.Net;
+using System.Net.Http;
+using System.Net.Sockets;
 using System.Reflection;
 using Harbor.Abstractions.Resilience;
 using Harbor.Application.Resilience;
@@ -203,6 +206,19 @@ public class TransportRetryOwnershipRules
     ///     <see cref="RetryPolicy" /> has always retried. Before this the MCP
     ///     transports said "retry" and the policy said "fatal" for the identical
     ///     exception, so one app had two answers.
+    ///     <para>
+    ///         #831 added the third member of that same pre-#572 union. The two
+    ///         private copies this guard deleted read
+    ///         <c>ex is HttpRequestException or IOException or TimeoutException</c>
+    ///         — the header above quotes it — and the hoist kept only the last two
+    ///         arms. <see cref="System.Net.Http.HttpRequestException" /> derives
+    ///         from <see cref="Exception" />, not from <see cref="IOException" />,
+    ///         so the arm that was dropped was the one shape the new pattern could
+    ///         not match: a connection that failed below the HTTP layer got no
+    ///         retry at all on the MCP path while the LLM path retried it three
+    ///         times. Listed here so the set that has to agree is the full union,
+    ///         not the part that happened to survive the refactor.
+    ///     </para>
     /// </summary>
     [Test]
     public async Task Assert_TheMcpPathAndTheLlmPathAgreeOnASocketFailure()
@@ -211,6 +227,11 @@ public class TransportRetryOwnershipRules
         [
             new IOException("connection reset by peer"),
             new TimeoutException("the operation timed out"),
+            // No status code: the request never reached the HTTP layer, so the
+            // server never answered. RetryPolicy.HttpClassifier answers "transient"
+            // for this shape and always has.
+            new HttpRequestException("no such host is known", new SocketException(110)),
+            new HttpRequestException("connection refused", new SocketException(111)),
         ];
 
         foreach (Exception failure in socketFailures)
@@ -225,6 +246,34 @@ public class TransportRetryOwnershipRules
                 $"{failure.GetType().Name} gets a different retry verdict depending on which side of the app caught it "
                 + $"(MCP path: {mcpVerdict}, LLM path: {llmVerdict}). One exception, one answer.");
         }
+    }
+
+    /// <summary>
+    ///     The other direction, and the reason #831 is not a blank cheque to widen
+    ///     the pattern. A status-BEARING
+    ///     <see cref="System.Net.Http.HttpRequestException" /> is a verdict the
+    ///     server did give: 401 is a refusal, 400 is a bad request. #714 spent a
+    ///     whole issue on the fact that retrying those is latency in front of a
+    ///     guaranteed error — and, for a 401, three more chances for a provider to
+    ///     flag the key. Widening the type pattern to a bare
+    ///     <c>is HttpRequestException</c> would hand that verdict back to the
+    ///     retry loop and quietly undo it, which is why the fix constrains the arm
+    ///     to <c>StatusCode: null</c> and this test holds that line.
+    /// </summary>
+    [Test]
+    [Arguments(HttpStatusCode.Unauthorized)]
+    [Arguments(HttpStatusCode.Forbidden)]
+    [Arguments(HttpStatusCode.BadRequest)]
+    [Arguments(HttpStatusCode.NotFound)]
+    [Arguments(HttpStatusCode.Conflict)]
+    public async Task Assert_AStatusBearingHttpFailureIsNeverRetriedByTheSocketSet(HttpStatusCode status)
+    {
+        var refusal = new HttpRequestException($"server said {(int)status}", null, status);
+
+        await Assert.That(TransientFailurePolicy.ShouldRetry(refusal)).IsFalse().Because(
+            $"{(int)status} is an answer, not a blip. This set does not own status classification — the transports weigh "
+            + "a status while the response is still in hand (#714), and RetryPolicy.HttpClassifier owns the same "
+            + "question for the LLM path. A bare `is HttpRequestException` would retry a refused key three times.");
     }
 
     /// <summary>Every non-abstract class in the assembly that implements the transport seam.</summary>
