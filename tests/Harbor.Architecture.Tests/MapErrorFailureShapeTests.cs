@@ -66,7 +66,6 @@ using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Agents;
 using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Sessions;
-using Harbor.Application.Sessions;
 using Harbor.Ui.Framework.Sessions;
 using Microsoft.Extensions.Logging.Abstractions;
 using Harbor.Registries.Agents;
@@ -428,39 +427,37 @@ public sealed class MapErrorFailureShapeTests
             .CreateBranchAsync(source);
 
         await Assert.That(result.IsFailure).IsTrue();
-        await Assert.That(result.Error).IsEqualTo(
-                $"Failed to branch session '{source.Id}': Failed to read source session: {Cause}")
+        await Assert.That(result.Error).IsEqualTo($"Failed to branch session '{source.Id}': {Cause}")
             .Because(
                 "The third converted site, and the only one whose MapError lambda CAPTURES state "
                 + "(`source.Id`) rather than being `static`. A capture is easy to break — dropping it, "
                 + "or shadowing `e` — and this assertion is what notices. Domain context (WHICH "
-                + "session) and cause (WHY) must both survive. Since #670 the cause arrives already "
-                + "wrapped by SessionForkService, which knows WHICH STEP broke; the session id is the "
-                + "half only this layer knows, and neither half may be replaced by a literal.");
+                + "session) and cause (WHY) must both survive. Since #670 the cause arrives from the "
+                + "core fork unchanged (ResultConversionBehaviourTests), so this is exactly the two "
+                + "halves and nothing else: a session-id prefix, and the store's text.");
     }
 
     /// <summary>
-    ///     The fourth site. #670 moved it: "could not read message history" is the fork's own
-    ///     step attribution, and after the duplicate was deleted the only fork left is
-    ///     <see cref="SessionForkService" />. The assertion moves with it rather than being
-    ///     deleted — the discipline it guards (a failure must name the step it broke at) is
-    ///     unchanged, only the owner of that step.
+    ///     The fourth site: the parent exists, the history read does not. Since #670 this goes
+    ///     through the core fork, so it also pins that the chain stays composition rather than
+    ///     substitution — the factory's session id, then the store's own text.
     /// </summary>
     [Test]
-    public async Task SessionForkService_HistoryReadFailure_StillCarriesTheCause()
+    public async Task SessionFactory_CreateBranchAsync_HistoryReadFailure_StillCarriesTheCause()
     {
         const string Cause = "transcript is not readable";
         Session source = Session.Create("/home/user/project", "code", "test-provider", "test-model");
-        var store = new BranchStore(causeOnHistoryRead: Cause, parent: source);
 
-        Result<SessionFork> result = await new SessionForkService().ForkAsync(store, source.Id);
+        Result<Session> result = await NewFactory(new BranchStore(causeOnHistoryRead: Cause, parent: source))
+            .CreateBranchAsync(source);
 
         await Assert.That(result.IsFailure).IsTrue();
-        await Assert.That(result.Error).IsEqualTo($"Failed to read message history: {Cause}")
+        await Assert.That(result.Error).IsEqualTo($"Failed to branch session '{source.Id}': {Cause}")
             .Because(
-                "The store's own text must reach the caller byte-identical, with the step named in "
-                + "front of it. The copy this replaced built the same sentence with MapError; the "
-                + "sentence moved to the single remaining implementation and did not get lost with it.");
+                "The fork reads the parent before it creates the child, so this is reachable only "
+                + "with a parent row to hand back — BranchStore gained one for exactly that. The "
+                + "point of the assertion is unchanged from the pre-#670 shape: the cause arrives "
+                + "byte-identical, with the session id in front of it and nothing dropped.");
     }
 
     /// <summary>
@@ -469,7 +466,7 @@ public sealed class MapErrorFailureShapeTests
     ///     the copy got.
     /// </summary>
     [Test]
-    public async Task SessionForkService_CopyFailure_StillReportsProgressAndCause()
+    public async Task SessionFactory_CreateBranchAsync_CopyFailure_StillReportsProgressAndCause()
     {
         const string Cause = "write-ahead log is full";
         Session source = Session.Create("/home/user/project", "code", "test-provider", "test-model");
@@ -482,16 +479,19 @@ public sealed class MapErrorFailureShapeTests
             NewUserMessage("m3", "now the tests")
         };
 
-        Result<SessionFork> result = await new SessionForkService()
-            .ForkAsync(new BranchStore(causeOnAppend: Cause, history: messages, parent: source), source.Id);
+        Result<Session> result = await NewFactory(
+                new BranchStore(causeOnAppend: Cause, history: messages, parent: source))
+            .CreateBranchAsync(source);
 
         await Assert.That(result.IsFailure).IsTrue();
-        await Assert.That(result.Error).IsEqualTo($"Failed to copy message history (0 of 3 copied): {Cause}")
+        await Assert.That(result.Error).IsEqualTo(
+                $"Failed to branch session '{source.Id}': Failed to copy message history (0 of 3 copied): {Cause}")
             .Because(
-                "The progress number is the reason this site could not be a plain MapError: the context is a "
-                + "function of `copied`, `count` AND the cause. The duplicate that produced it is gone (#670) "
-                + "and the diagnostic came with it to SessionForkService — dropping the progress would leave a "
-                + "half-written child in the store with nothing recording how far it got.");
+                "Three layers of context, each owned by the layer that knows it: the session id by "
+                + "the Presentation layer, the copy progress by the core loop (only it knows where "
+                + "it stopped), the cause by the store. #670 deleted the duplicate fork and brought "
+                + "the progress along with it; dropping it would leave a half-written child in the "
+                + "store with nothing recording how far it reached.");
     }
 
     // ── Helpers ──────────────────────────────────────────────────────────────

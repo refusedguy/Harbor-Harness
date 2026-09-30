@@ -52,8 +52,12 @@ public sealed class SessionForkerAdapter : ISessionForker
         Result<SessionFork> forked = await new SessionForkService()
             .ForkAsync(_store, sessionId, upToMessageId, title, ct).ConfigureAwait(false);
 
+        // ConvertFailure, not Result.Failure<SessionForked>(forked.Error): re-typing a failure is
+        // the member, and the store's own text has to arrive byte-identical
+        // (ResultConversionBehaviourTests). The IsSuccess guard in front is what keeps the
+        // ConvertFailure on the failure arm from throwing on a success.
         return forked.IsSuccess
             ? Result.Success(new SessionForked(forked.Value.Session, forked.Value.Copied))
-            : Result.Failure<SessionForked>(forked.Error);
+            : forked.ConvertFailure<SessionForked>();
     }
 }

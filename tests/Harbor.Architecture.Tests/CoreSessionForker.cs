@@ -37,6 +37,6 @@ internal sealed class CoreSessionForker(ISessionStore store) : ISessionForker
 
         return forked.IsSuccess
             ? Result.Success(new SessionForked(forked.Value.Session, forked.Value.Copied))
-            : Result.Failure<SessionForked>(forked.Error);
+            : forked.ConvertFailure<SessionForked>();
     }
 }
