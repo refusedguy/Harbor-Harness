@@ -401,7 +401,7 @@ internal static partial class DiffSurfaceNameCollisionProbe
             {
                 Match carrier = TypeDeclaration().Match(clean[j]);
                 if (!carrier.Success
-                    || carrier.Value.StartsWith("enum", StringComparison.Ordinal))
+                    || IsEnumDeclaration(clean[j], carrier.Index))
                 {
                     continue;
                 }
@@ -688,15 +688,29 @@ internal static partial class DiffSurfaceNameCollisionProbe
 
     /// <summary>
     ///     A type declaration with its keyword kept, because the vocabulary derivation needs
-    ///     to tell an enum from the class beside it. Anchored on the keyword so a member named
-    ///     <c>Kind</c> or a field of a struct type is not read as a declaration.
+    ///     to tell an enum from the class beside it.
     /// </summary>
-    [GeneratedRegex(@"\b(?<keyword>class|struct|record|interface|enum)\s+(?<name>\w+)")]
+    /// <remarks>
+    ///     <c>record struct</c> and <c>record class</c> are TWO keywords, and getting that
+    ///     wrong is not cosmetic: a naive alternation matches <c>record</c> first and captures
+    ///     <c>struct</c> as the type's NAME, so the derivation would hold a vocabulary called
+    ///     "struct" and miss every row type in the tree. The optional second keyword is
+    ///     consumed as part of the declaration rather than as its name.
+    /// </remarks>
+    [GeneratedRegex(@"\b(?:class|struct|interface|enum|record)\s+(?:(?:struct|class)\s+)?(?<name>\w+)")]
     private static partial Regex TypeDeclaration();
 
     /// <summary>An enum declaration — the left half of a vocabulary pair.</summary>
     [GeneratedRegex(@"\benum\s+(?<name>\w+)")]
     private static partial Regex EnumDeclaration();
+
+    /// <summary>
+    ///     Whether the declaration matched at <paramref name="at" /> is an enum. Asked
+    ///     separately because <see cref="TypeDeclaration" /> deliberately drops the keyword
+    ///     to swallow <c>record struct</c>, so the match text cannot be inspected for it.
+    /// </summary>
+    private static bool IsEnumDeclaration(string line, int at) =>
+        line.AsSpan(0, at).TrimEnd().EndsWith("enum", StringComparison.Ordinal);
 
     private static string MakeRelative(string repoRoot, string path) =>
         Path.GetRelativePath(repoRoot, path).Replace(Path.DirectorySeparatorChar, '/');
