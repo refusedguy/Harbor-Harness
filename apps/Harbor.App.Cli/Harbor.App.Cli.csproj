@@ -103,11 +103,27 @@
     <DefineConstants Condition="'$(HarborWithPlugins)' != 'true' AND '$(HarborWithSpectreTui)' != 'true' AND '$(HarborWithAllProviders)' != 'true' AND '$(HarborWithAllTools)' != 'true'">$(DefineConstants);HARBOR_MINIMAL</DefineConstants>
 
     <!--
-      NativeAOT configuration. Enabled automatically when HARBOR_MINIMAL=true
-      (which disables Roslyn scripting, non-AOT-friendly providers, etc.).
-      Can also be enabled explicitly: dotnet publish -p:HarborWithAot=true.
-      When AOT is on, force all incompatible features off so the trimmed
-      binary stays functional.
+      NativeAOT switch. TWO ways to turn it on and they are NOT equivalent (#747):
+
+        1. HARBOR_MINIMAL=true dotnet publish -c Release -r linux-x64
+           Turns AOT on AND forces HarborWithPlugins, HarborWithSpectreTui,
+           HarborWithAllProviders and HarborWithAllTools to false (the four
+           blocks above are all conditioned on $(HARBOR_MINIMAL)). Roslyn
+           plugin hosting and the provider layer are not compiled in. This is
+           the only path that produces the stripped binary, and the only one
+           that matches what "NativeAOT" is supposed to mean here.
+
+        2. dotnet publish -c Release -r linux-x64 -p:HarborWithAot=true
+           Turns PublishAot on and NOTHING else. The four feature flags keep
+           their `true` defaults because none of them is conditioned on
+           HarborWithAot, so Harbor.Plugins.Compilation (Roslyn — the
+           "non-AOT-friendly" part the comment here used to claim AOT disables)
+           stays in the compile and is expected to produce IL3050. That
+           diagnostic is demoted, not fixed. See the block below.
+
+      The two flags being set independently is why (2) is not just a shorter
+      spelling of (1); whether (2) should strip the features too is a design
+      question tracked in #413 / #48, not settled here.
     -->
     <HarborWithAot Condition="'$(HARBOR_MINIMAL)' == 'true'">true</HarborWithAot>
     <HarborWithAot Condition="'$(HarborWithAot)' == ''">false</HarborWithAot>
@@ -116,10 +132,64 @@
     <DefineConstants Condition="'$(HarborWithAot)' == 'true'">$(DefineConstants);HARBOR_WITH_AOT</DefineConstants>
   </PropertyGroup>
 
-  <!-- NativeAOT: strip, optimize for speed. JSON serialization hot paths
-       are migrated to JsonSerializerContext source generation (§PERF-002/§PERF-005)
-       so AOT analysis passes cleanly. Only third-party assemblies that emit
-       their own trimming warnings (MemoryPack, MessagePack) are suppressed. -->
+  <!-- NativeAOT: strip, optimize for speed. StripSymbols/TrimmerRemoveSymbols
+       (drop debug symbols) and TrimMode=full (aggressive) are the size story.
+
+       This block does NOT mean AOT analysis passes cleanly. It configures the
+       opposite, and the previous comment here claimed the former while the
+       property below did the latter (#747). Concretely:
+
+         TreatWarningsAsErrors is true repo-wide (Directory.Build.props), so
+         every ID in WarningsNotAsErrors below is load-bearing — without it this
+         configuration would fail on code that ships today.
+
+         WarningsNotAsErrors does not suppress; it demotes. The warning is still
+         printed, it just does not fail the build. NoWarn is the property that
+         suppresses, and this csproj already uses it earlier for the S6668 Sonar
+           exemption — so this file distinguishes the two and the old sentence
+           ("are suppressed") used the wrong one.
+
+         The old sentence also scoped the demotion to "third-party assemblies
+         (MemoryPack, MessagePack)". That scope is not expressible by this
+         property: it is a per-project COMPILER property, so it applies to
+         diagnostics reported in this compilation, and IL2026/IL3050 are exactly
+         the first-party "this call site will not survive trimming" ones. The
+           two properties that do govern ILLink/ILC-time warnings about
+           referenced assemblies are the two set to false above, i.e.
+           explicitly "do not fail".
+
+       Per-ID triage (#747 acceptance criterion 2 — item by item, not as a
+       group; kept in step with KnownDemotions in
+       tests/Harbor.Architecture.Tests/AotBlockDemotionRules.cs):
+
+         IL2026  RequiresUnreferencedCode — NOT TRIAGED. No workflow sets
+                 HarborWithAot, so no build in this repo has emitted it here.
+         IL3050  RequiresDynamicCode — NOT TRIAGED, and it has a known live
+                 source: -p:HarborWithAot=true leaves Roslyn in (recipe 2
+                 above). Roslyn needs the JIT.
+         IL2104  ILLink per-assembly trim-warning rollup — NOT TRIAGED, and not
+                 separable from the other two until a publish produces one.
+         IL3053  UNIDENTIFIED. Carried since before #747, not matched to any
+                 documented diagnostic reachable from this checkout. Either
+                 #413 names it or the list loses it. Recorded rather than
+                 dropped because removing an unexplained entry is #413's
+                 decision, taken with a publish in hand.
+
+       What IS true, and is the reason the debt above is four IDs rather than
+       the whole analyzer set: the serialization hot paths do avoid reflection.
+       Fourteen source files use JsonSerializerContext source generation
+       (ConfigJsonContext, JsonlCodecContext, SqliteJsonContext,
+       McpJsonSerializerContext, RemoteJsonContext, ThemeJson, ...) and the
+       provider wire payloads are hand-written over Utf8JsonWriter rather than
+       handed to JsonSerializer (AnthropicRequestBuilder, OpenAiRequestBuilder,
+       OllamaLlmClient). ProviderPayloadSerializationRules holds that second
+       half; the first half is convention, not a rule.
+
+       This is NOT evidence that analysis passes. No workflow in
+       .github/workflows/ sets HarborWithAot or HARBOR_MINIMAL, so this block is
+       never evaluated by any build in the repo and nothing here is currently
+       falsifiable. Owner: #413 (full publish + warning triage, no blanket
+       NoWarn) and #48 (AOT decision state). -->
   <PropertyGroup Condition="'$(HarborWithAot)' == 'true'">
     <PublishAot>true</PublishAot>
     <InvariantGlobalization>false</InvariantGlobalization>
