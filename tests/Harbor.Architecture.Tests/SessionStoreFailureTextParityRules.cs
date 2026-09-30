@@ -95,6 +95,31 @@
 // matcher the rule runs, so a matcher that stopped discriminating would fail
 // rather than pass quietly.
 //
+// RESOLVED — #887, the eleven literals are gone
+// ----------------------------------------------
+// The ratchet below now reads ZERO, and it got there the way its own R2 text
+// said it would: the inventory was emptied in the same commit that linked the
+// home into `Harbor.Storage.Memory` and replaced all eleven sites with factory
+// calls. So the eleven are a floor that was paid off, not a number that is still
+// true — every line above that reads "eleven" is the record of the measurement,
+// dated at 0c29da77, and it is left as written so the size of the hole stays
+// legible next to the rule that closed it.
+//
+// What is new in this commit is R4, and it is the piece #764's guard was missing.
+// R1 and R2 are both statements about literals: R1 grades what a store writes,
+// R2 freezes how much of it is written inline. Neither can see a store that
+// links NO home and therefore has no literal for R2 to count — that was exactly
+// why the ratchet had to carry eleven rows for as long as Memory was unlinked.
+// R4 asks the question underneath: does each store project declare a
+// `<Compile Include>` for the home at all? With R4 red until Memory links it,
+// and R2 empty until the literals are gone, the two halves pin the whole way
+// round — a store cannot get the literals back without the count moving, and it
+// cannot lose the link without R4 going red.
+//
+// Deliberately landed RED in its own commit, before the unification, so that the
+// failure is observed rather than argued: this is the same discipline as
+// `The_Matcher_Rejects_A_Drifted_Shape` below, one level up.
+//
 // WHY THE SCAN DOES NOT USE `RepoPaths.EnumerateCsFiles`
 // -------------------------------------------------------
 // #764's third point, and it decides the shape of this file. `src/
@@ -158,32 +183,21 @@ public sealed class SessionStoreFailureTextParityRules
     ];
 
     /// <summary>
-    ///     Every failure literal a store wrote INLINE when measured, as
-    ///     (project, shape). This is the ratchet: an addition is a regression,
-    ///     and a removal is reported so the owed unification is deliberate.
+    ///     Every failure literal a store writes INLINE. This is the ratchet, and the
+    ///     floor is <b>zero</b>: #887 unified <c>Harbor.Storage.Memory</c>, the last
+    ///     store to hold the texts inline, so the eleven measured rows were deleted in
+    ///     the same commit that emptied them. An addition is a regression and a
+    ///     removal is now impossible, which is the point — the frozen-eleven version
+    ///     could only report the eleven as owed work, and a guard that encodes owed
+    ///     work as an accepted baseline is a to-do list pretending to be a rule.
     /// </summary>
-    private static readonly (string Project, string Shape)[] MeasuredInlineLiterals =
-    [
-        // Nine SessionNotFound: MemorySessionStore.cs:30, :45, :63, :78, :90, :99, :126, :136, :146.
-        // The last one interpolates session.Id rather than the sessionId parameter, which is
-        // the same shape — the hole is the argument, and :146 is what the factory call at the
-        // equivalent Jsonl site (JsonlSessionStore.cs:584) looks like.
-        ("Harbor.Storage.Memory", "Session '{}' not found."),
-        ("Harbor.Storage.Memory", "Session '{}' not found."),
-        ("Harbor.Storage.Memory", "Session '{}' not found."),
-        ("Harbor.Storage.Memory", "Session '{}' not found."),
-        ("Harbor.Storage.Memory", "Session '{}' not found."),
-        ("Harbor.Storage.Memory", "Session '{}' not found."),
-        ("Harbor.Storage.Memory", "Session '{}' not found."),
-        ("Harbor.Storage.Memory", "Session '{}' not found."),
-        ("Harbor.Storage.Memory", "Session '{}' not found."),
-
-        // Two MessageNotFound: MemorySessionStore.cs:69 and :107. #764's inventory listed
-        // neither — it enumerated the nine above and stopped — so the duplication it
-        // reported was one shape and nine sites rather than two shapes and eleven.
-        ("Harbor.Storage.Memory", "Message '{}' not found in session '{}'."),
-        ("Harbor.Storage.Memory", "Message '{}' not found in session '{}'."),
-    ];
+    /// <remarks>
+    ///     Empty is a real measurement, not an absent one: it is what
+    ///     <c>ScanStoreLiterals</c> returns when all three stores call the factories,
+    ///     and <c>The_Scan_Finds_The_Stores_And_The_Literals</c> still asserts the scan
+    ///     reaches the stores, so this cannot go quiet by scanning nothing.
+    /// </remarks>
+    private static readonly (string Project, string Shape)[] MeasuredInlineLiterals = [];
 
     // =====================================================================
     // R1 — parity
@@ -274,15 +288,18 @@ public sealed class SessionStoreFailureTextParityRules
 
         await Assert.That(delta).IsEmpty()
             .Because(
-                "Eleven inline literals at the time of writing — nine SessionNotFound and two "
-                + "MessageNotFound — all byte-identical in shape to "
-                + "src/Harbor.Storage.Shared/SessionStoreErrors.cs, so a person sees the same text on "
-                + "every backend. This is duplication, not a behaviour bug. ADDING one is a "
-                + "regression: it is a new site no ROP suite pins, which is the seven-site hole "
-                + "described in the header. REMOVING one is the owed unification tracked on #764 "
-                + "(add the <Compile> link to Harbor.Storage.Memory and call the factory); when it "
-                + "lands, delete the matching rows here in the same commit and let "
-                + "SharedSourceLinkRules.The_Link_Inventory_Is_Not_Empty record the new consumer. "
+                "Zero inline literals. There were eleven when #764 was measured on dev at "
+                + "0c29da77 — nine SessionNotFound and two MessageNotFound, all in "
+                + "MemorySessionStore.cs — and #887 linked "
+                + "src/Harbor.Storage.Shared/SessionStoreErrors.cs into Harbor.Storage.Memory and "
+                + "replaced all eleven with factory calls, deleting the measured rows in the same "
+                + "commit. Jsonl and Sqlite were already at zero. The texts were byte-identical to "
+                + "the factories throughout, so this was always duplication rather than a behaviour "
+                + "bug, and no string changed: a person saw the same sentence on every backend "
+                + "before and after. What changed is that the sentence now has ONE home, so a "
+                + "twelfth inline literal anywhere — the seven-site hole #764 measured is now the "
+                + "whole store surface — is a red build instead of an unpinned site that ships. "
+                + "ADDING one is the regression this exists to catch: call the factory instead. "
                 + "Deltas:\n"
                 + string.Join("\n", delta));
     }
@@ -307,6 +324,87 @@ public sealed class SessionStoreFailureTextParityRules
                 + "guard that accepts less while still reporting green, and any store still writing "
                 + "that shape would then be flagged for a text the repo no longer declares. Measured: "
                 + string.Join(" | ", now));
+    }
+
+    // =====================================================================
+    // R4 — every store links the home, so R2 can be empty
+    // =====================================================================
+
+    /// <summary>
+    ///     R4 — each of the three store projects declares a <c>&lt;Compile Include&gt;</c>
+    ///     for the home.
+    /// </summary>
+    /// <remarks>
+    ///     <para>
+    ///         R1 and R2 both read literals, so a store that links no home is invisible to
+    ///         both: there is no call to count and no sentence to grade. That is the whole
+    ///         reason the ratchet had to carry eleven Memory rows for as long as Memory
+    ///         stayed unlinked — the guard could only describe the gap, never object to it,
+    ///         because the thing that produced the gap was an absence.
+    ///     </para>
+    ///     <para>
+    ///         R4 reads the csproj instead, which is where the absence lives. The claim is
+    ///         deliberately per-project and not "the folder has a consumer":
+    ///         <c>SharedSourceLinkRules.Every_Declared_Shared_File_Is_Linked_By_At_Least_One_Project</c>
+    ///         already holds that bar, and passing it tells you nothing about Memory
+    ///         specifically. This one goes red on exactly the project that stopped linking
+    ///         the home, and the fix is one csproj line.
+    ///     </para>
+    ///     <para>
+    ///         Only <c>SessionStoreErrors.cs</c> is required, and deliberately so. The
+    ///         folder's other two files are shared for reasons that do not reach Memory:
+    ///         <c>SessionLockStrip</c> is a <c>SemaphoreSlim</c> stripe over a
+    ///         <c>ConcurrentDictionary</c> that the store owns as a field, while Memory
+    ///         takes <c>lock (list)</c> on the per-session <c>List&lt;AgentMessage&gt;</c> —
+    ///         a different primitive with the same exclusion guarantee — and
+    ///         <c>SessionStatsAggregator</c> folds stats from message history, which Memory
+    ///         does not do because it persists the metadata record. Demanding those two
+    ///         would be demanding a code change, not a seam.
+    ///     </para>
+    /// </remarks>
+    [Test]
+    public async Task Every_Store_Links_The_Failure_Text_Home()
+    {
+        var missing = new List<string>();
+
+        foreach (string project in StoreProjects)
+        {
+            string? csproj = RepoPaths.FindSrcProject(project);
+            if (csproj is null)
+            {
+                missing.Add(
+                    $"src/{project}: no csproj, so a store this rule judges is not in the repo at "
+                    + "all — the store list and the build have diverged.");
+                continue;
+            }
+
+            // ReadCompileIncludes hands back the Include strings verbatim, so they are
+            // Windows-separated regardless of the host. Normalising before taking the file
+            // name is what keeps this from resolving to the whole path on Linux.
+            bool linked = RepoPaths.ReadCompileIncludes(csproj)
+                .Any(i => Path.GetFileName(i.Replace('\\', '/')) == HomeFileName);
+
+            if (!linked)
+            {
+                missing.Add(
+                    $"src/{project} declares no <Compile Include> for src/{SharedFolder}/"
+                    + $"{HomeFileName}, so it has no call to make and re-writes the failure texts "
+                    + "inline instead — eleven sites in Memory's case, of which seven were "
+                    + "pinned by no test at all. Add the link and call the factories.");
+            }
+        }
+
+        await Assert.That(missing).IsEmpty()
+            .Because(
+                "SessionNotFound, MessageNotFound and InvalidSessionId are declared once, in "
+                + $"src/{SharedFolder}/{HomeFileName}, and the file is linked source with no csproj — so "
+                + "there is no way for a store to obtain the factories except a <Compile Include> of "
+                + "its own. A store without that link is a second, hand-maintained copy of three "
+                + "strings, and nothing else in this file can see it: R1 grades literals it writes "
+                + "(none, once the copy is gone) and R2 counts them. All three stores are the same "
+                + "contract — #199's ROP acceptance suites assert the same three sentences on all "
+                + "three backends — so all three link the home.\n"
+                + string.Join("\n", missing));
     }
 
     // =====================================================================
