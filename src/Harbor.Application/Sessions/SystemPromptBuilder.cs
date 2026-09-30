@@ -33,6 +33,42 @@ public sealed class SystemPromptBuilder : ISystemPromptBuilder
                                        - No destructive ops without explicit user intent (rm -rf, git push --force, drop db, format).
                                        """;
 
+    /// <summary>
+    ///     How many of a tool's prompt guidelines reach the prompt. The cap is a
+    ///     budget decision, not a formatting detail: raising it grows every turn's
+    ///     system prompt by the length of the extra guidelines, for every tool.
+    /// </summary>
+    /// <remarks>
+    ///     #577: this was the bare literal <c>3</c>, inline in the assembly loop.
+    ///     Nothing named it, so nothing could hold it — <c>PromptSectionPolicyRule</c>
+    ///     now requires a bound that decides what the model reads to be declared.
+    /// </remarks>
+    public const int MaxGuidelinesPerTool = 3;
+
+    /// <summary>
+    ///     Guidelines longer than this are dropped. A guideline is a usage hint,
+    ///     not a specification; an over-long one is a paragraph the prompt pays
+    ///     for on every turn and the model rarely follows verbatim.
+    /// </summary>
+    /// <remarks>
+    ///     #577: this was the bare literal <c>160</c>, inline in the same loop.
+    /// </remarks>
+    public const int MaxGuidelineLength = 160;
+
+    /// <summary>
+    ///     What the model is told when the turn resolved no tools at all. Without
+    ///     it the section header renders over an empty list, and a model told
+    ///     "## Available Tools" and nothing else is left to guess that it has
+    ///     none — the failure mode is invented tool calls.
+    /// </summary>
+    /// <remarks>
+    ///     #577: this text was asserted by no test anywhere in the repository —
+    ///     the empty-tools test checked only that the HEADER renders, so this
+    ///     sentence could be deleted, reworded, or replaced and every test would
+    ///     still pass, while the guidance the model actually reads moved.
+    /// </remarks>
+    public const string NoToolsGuidance = "No tools available this turn. Answer from knowledge only.";
+
     private const string PeerSupervisionRecipe = """
                                                  ## Peer Supervision
                                                  Peer sessions run in parallel and may need help: `session_read` shows a neighbor's
@@ -94,7 +130,7 @@ public sealed class SystemPromptBuilder : ISystemPromptBuilder
         if (context.Tools.Count == 0)
         {
             builder.AppendLine("## Available Tools");
-            builder.AppendLine("No tools available this turn. Answer from knowledge only.");
+            builder.AppendLine(NoToolsGuidance);
             builder.AppendLine();
         }
         else
@@ -110,8 +146,8 @@ public sealed class SystemPromptBuilder : ISystemPromptBuilder
                     int n = 0;
                     foreach (string g in tool.PromptGuidelines)
                     {
-                        if (n >= 3) break;
-                        if (string.IsNullOrWhiteSpace(g) || g.Length > 160) continue;
+                        if (n >= MaxGuidelinesPerTool) break;
+                        if (string.IsNullOrWhiteSpace(g) || g.Length > MaxGuidelineLength) continue;
                         builder.Append("  - ").AppendLine(g);
                         n++;
                     }

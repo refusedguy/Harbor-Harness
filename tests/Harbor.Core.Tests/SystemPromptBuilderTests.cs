@@ -103,6 +103,97 @@ public class SystemPromptBuilderTests
         await Assert.That(prompt).Contains("## Available Tools");
     }
 
+    /// <summary>
+    ///     #577: the empty-tools arm renders a DIFFERENT sentence from the
+    ///     non-empty arm, and that sentence was the one part of the section no
+    ///     test in the repository asserted — the test above pins only the header,
+    ///     which both arms share. So the guidance the model actually reads on a
+    ///     zero-tool turn could change with every test still green, and the
+    ///     failure mode is a model inventing tool calls against a header that
+    ///     promises some.
+    /// </summary>
+    [Test]
+    public async Task BuildAsync_NoTools_SaysThereAreNone()
+    {
+        var builder = new SystemPromptBuilder();
+        var ctx = Context(Agent(), Array.Empty<ToolDescriptor>());
+
+        string prompt = await builder.BuildAsync(ctx);
+
+        await Assert.That(prompt).Contains(SystemPromptBuilder.NoToolsGuidance);
+    }
+
+    /// <summary>
+    ///     #577: the other arm of the same branch. With tools resolved, the
+    ///     "answer from knowledge only" text must NOT appear — it is the opposite
+    ///     instruction, and the header alone does not distinguish the two arms.
+    /// </summary>
+    [Test]
+    public async Task BuildAsync_WithTools_OmitsTheNoToolsGuidance()
+    {
+        var builder = new SystemPromptBuilder();
+        var ctx = Context(Agent(), new[] { Tool("read", "Read a file") });
+
+        string prompt = await builder.BuildAsync(ctx);
+
+        await Assert.That(prompt.Contains(SystemPromptBuilder.NoToolsGuidance)).IsFalse();
+    }
+
+    /// <summary>
+    ///     #577: the guideline cap is a budget decision — it decides how much of
+    ///     every tool's guidance reaches the model on every turn. It was the bare
+    ///     literal <c>3</c>; nothing named it, so raising it to 30 changed the
+    ///     prompt and nothing went red.
+    /// </summary>
+    [Test]
+    public async Task BuildAsync_KeepsAtMostMaxGuidelinesPerTool()
+    {
+        var builder = new SystemPromptBuilder();
+        var tooMany = Enumerable.Range(1, SystemPromptBuilder.MaxGuidelinesPerTool + 2)
+            .Select(i => $"guideline number {i}")
+            .ToArray();
+        var tool = Tool("read", "Read a file", "read: Read a file from disk", tooMany);
+        var ctx = Context(Agent(), new[] { tool });
+
+        string prompt = await builder.BuildAsync(ctx);
+
+        // The cap counts guidelines that SURVIVED the length filter, so a tool
+        // with 5 short guidelines must contribute exactly MaxGuidelinesPerTool of
+        // them — not all 5, and not the first 3 in some other sense.
+        for (int i = 1; i <= SystemPromptBuilder.MaxGuidelinesPerTool; i++)
+        {
+            await Assert.That(prompt).Contains($"guideline number {i}");
+        }
+
+        await Assert.That(prompt.Contains($"guideline number {SystemPromptBuilder.MaxGuidelinesPerTool + 1}"))
+            .IsFalse()
+            .Because("the cap is a budget decision about what the model reads on every turn; raising it "
+                   + "must be a visible change to a named policy, not an edit to a literal nobody names");
+    }
+
+    /// <summary>
+    ///     #577: the per-guideline length ceiling, which was the bare literal
+    ///     <c>160</c>. A guideline at the ceiling is kept and one past it is
+    ///     dropped, so the boundary is pinned from both sides rather than by a
+    ///     single "long ones are dropped" assertion that would pass for any
+    ///     threshold.
+    /// </summary>
+    [Test]
+    public async Task BuildAsync_DropsGuidelinesLongerThanMaxGuidelineLength()
+    {
+        var builder = new SystemPromptBuilder();
+        string atCeiling = new('x', SystemPromptBuilder.MaxGuidelineLength);
+        string pastCeiling = new('x', SystemPromptBuilder.MaxGuidelineLength + 1);
+        var tool = Tool("read", "Read a file", "read: Read a file from disk",
+            $"KEEP-{atCeiling}", $"DROP-{pastCeiling}");
+        var ctx = Context(Agent(), new[] { tool });
+
+        string prompt = await builder.BuildAsync(ctx);
+
+        await Assert.That(prompt).Contains($"KEEP-{atCeiling}");
+        await Assert.That(prompt.Contains($"DROP-{pastCeiling}")).IsFalse();
+    }
+
     [Test]
     public async Task BuildAsync_IncludesAgentSpecificInstructions_WhenPresent()
     {
