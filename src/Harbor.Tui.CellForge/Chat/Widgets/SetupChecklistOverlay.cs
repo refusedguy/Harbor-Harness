@@ -94,6 +94,20 @@ public sealed class SetupChecklistOverlay
 
         if (key.Key == KeyCode.Char && (key.Character.Value is 'q' or '?'))
         {
+            // #833: a chord is not a dismissal. The guide holds no text, so it has
+            // no claim on a modified rune — and it is reached from the product
+            // input loop (ReplInputLoop.cs:237), which meant Ctrl+q closed the
+            // guide AND was consumed, never reaching the composer behind it.
+            //
+            // The gate is AcceptsTypedChar, NOT "no modifiers at all": `?` is
+            // itself a shifted rune, so a strict gate would refuse the widget's
+            // own dismiss key. See KeyModifierGate for why Shift is not a
+            // command modifier.
+            if (key.Modifiers.IsCommandModifier())
+            {
+                return false;
+            }
+
             Hide();
             return true;
         }
