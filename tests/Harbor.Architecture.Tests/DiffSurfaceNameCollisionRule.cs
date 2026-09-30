@@ -896,7 +896,9 @@ public sealed class DiffSurfaceNameCollisionRule
         // Every owner must sit in the engine's project. Graded as a bool list because the
         // assertion is about EVERY entry, and a predicate over the values says that directly
         // where a per-entry loop would only say it one name at a time.
-        await Assert.That(report.VocabularyOwners.Values.Select(v => ProjectOf(v) == engineProject).ToArray())
+        await Assert.That(report.VocabularyOwners.Values
+                .Select(v => DiffSurfaceNameCollisionProbe.ProjectOf(v) == engineProject)
+                .ToArray())
             .IsEquivalentTo(report.VocabularyOwners.Values.Select(_ => true).ToArray())
             .Because(
                 "every vocabulary name is derived from the engine's project and owned by a file in it. A "
