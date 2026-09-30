@@ -169,19 +169,45 @@ read a file as being inside a block comment, and that 845 lines of real code
 across 5 files were blanked. #919 fixed the lexer. The question here is whether any of
 that damage landed in `contrib/`.
 
-It did not, for a reason that does not depend on which files the stripper
-happened to be handed: **no rule can feed `contrib/` to the stripper.** Every
-stripper consumer reaches files through `SourceScan`, which filters through
-`IsBuildOutput`, and that function rejects `/contrib/`. The only walk in the
-suite that reaches `contrib/` at all is the one #863 added, and it does so by
-explicitly taking `contrib` back out of a skip set
-(`tests/Harbor.Architecture.Tests/ContribBoundaryNameRule.cs:128`). No caller
-passes a `contrib` root to `SourceScan.EnumerateCsFiles`.
+It did not. But the first version of this section reached that answer by a
+route that does not hold, and the route is worth correcting because it is the
+kind of claim that gets re-derived and re-cited.
 
-The stripper's own header records the blast radius as `src/` + `apps/`
-(`tests/Harbor.Architecture.Tests/SourceCommentStripper.cs:245`) — which is
-exactly the set it is able to see. The bug and the boundary are the same
-boundary. **`contrib/` is undamaged by #908.**
+**The structural argument is false.** It said no rule can feed `contrib/` to the
+stripper, because every stripper consumer reaches files through `SourceScan` and
+`IsBuildOutput` rejects `/contrib/`. The paragraph then named the exception in
+its own last two sentences, the #863 walk that takes `contrib` back out of the
+skip set, and did not notice that the rule it points at is the caller:
+`ContribBoundaryNameRule` reads every `.cs` file under `["src", "apps", "contrib"]`
+(`:120`, `:140`) and hands each one's **raw** lines to
+`SourceCommentStripper.StripAll` (`:186`). `contrib/` was inside the blast radius
+the whole time. "No caller passes a `contrib` root" is true only of
+`SourceScan.EnumerateCsFiles`, which is not the function in question.
+
+**The conclusion still holds, for a different reason: an absent trigger, not an
+absent path.** #920 names the trigger precisely, a `/*` that survives stripping
+because it sat inside a string literal, so `OpensUnterminatedBlockComment` counts
+an opener with no matching closer. A line-by-line port of the pre-#920 lexer
+finds that predicate true on **6 lines across 4 files, every one of them in
+`src/`** (`PermissionRuleset.cs:139,141,164`, `BashArgMatcher.cs:174`,
+`ProviderPresetCatalog.cs:137`, `ResourceKeyGenerator.cs:52`) and on **zero lines
+in `contrib/`**. With no opener there is no false entry into block mode, so
+`ContribBoundaryNameRule` graded `contrib/` correctly throughout.
+
+That is a coincidence of content, not a property of the boundary, and it should
+be read the way #920 read its own near-miss: the fuse is one `"src/*"`-shaped
+glob literal away from a false crossing. The accurate statement is therefore
+narrower than the first version. **`contrib/` was undamaged by #908 because it
+contains no trigger, not because it was unreachable.** Were that to change, the
+ratchet added in #863 is the rule that would go wrong first, and it would go
+wrong quietly, since it counts declared type names and blanked text declares
+none.
+
+The stripper's own header used to record its blast radius as `src/` + `apps/`
+(`tests/Harbor.Architecture.Tests/SourceCommentStripper.cs:245`). That was an
+understatement of the same kind, and #920 corrected it: the header described the
+set the author expected callers to pass, not the set the code can see. The set it
+can see includes `contrib/`, via the one caller above.
 
 ## 4. The third option: a rule that enumerates and never compiles
 
@@ -241,13 +267,31 @@ projects and prints a per-project pass/fail table into the job summary. It exits
 dispatch converts this document's static floor into a compiled fact, at the cost
 of one non-gating CI run.
 
-One operational caveat, found by trying it: **GitHub only registers a workflow
-file that exists on the default branch, so this cannot be dispatched until it
-merges.** `gh workflow run contrib-dryrun.yml --ref <branch>` returns HTTP 404
-while the file is branch-only, even though the file is present and the YAML
-parses. The same one-dispatch-after-merge shape applies to any new
-`workflow_dispatch` workflow, and it is worth knowing before Option 3 is chosen
-in the expectation of measuring *before* merging this document.
+One operational caveat, found by trying it, and then **found again after the
+merge, which is the part that matters: GitHub registers a workflow file only if
+it exists on the default branch, and this repository's default branch is
+`master`.** `contrib-dryrun.yml` merged into `dev`, so it is on `dev` and
+therefore still not dispatchable:
+
+```
+$ gh workflow list --all | grep -i contrib      # no match
+$ gh workflow run contrib-dryrun.yml --ref dev
+HTTP 404: workflow contrib-dryrun.yml not found on the default branch
+```
+
+"Merged" is therefore not the operative condition, and treating it as one is
+what would have made the next reader dispatch confidently and conclude the
+workflow is broken. The condition is *present on `master`*, and `dev` is 903
+commits ahead of a `master` that last received a workflow file by hand
+(`c0c6ab52`, "add goldens regen workflow to master (dispatch requires
+default-branch copy)").
+
+So Option 3 as merged is **one owner action away, not zero**: the same
+default-branch copy `goldens.yml` already got, which is a one-file change to
+`master` carrying no gate and no `contrib/` content. Until that happens the
+compiled table in this document **does not exist**, and §"What is not
+established" is the current state of knowledge rather than a caveat on a known
+answer.
 
 **Recommendation, as an owner decision with a price: Option 3, then re-decide.**
 The measurement says the *known* price of connecting is small and has a common
