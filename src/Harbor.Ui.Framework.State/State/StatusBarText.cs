@@ -1,4 +1,5 @@
 using System.Globalization;
+using Harbor.Abstractions.Models;
 
 namespace Harbor.Ui.Framework.State;
 
@@ -60,9 +61,20 @@ public static class StatusBarText
     ///     clamps to zero. The <c>$</c> is written literally rather than taken
     ///     from <c>"C4"</c> so the cell never renders a culture currency symbol
     ///     (<c>¤</c>) on a non-en-US host.
+    ///     <para>
+    ///         #682: the implementation moved down to <see cref="UsdCell" /> in
+    ///         Harbor.Abstractions.Contracts, because two of this type's callers
+    ///         are architecturally forbidden to reference this assembly at all
+    ///         (<c>Harbor.Ui.Framework.Rendering</c> is a BCL-only leaf;
+    ///         <c>TuiAbstractions_ReferencesOnlyAbstractions</c> bars
+    ///         <c>Harbor.Terminal.Abstractions</c> from naming any Harbor
+    ///         assembly but Harbor.Abstractions). A canon its own callers cannot
+    ///         call is the first copy, not the canon. This member stays as the
+    ///         projection layer's spelling of the same rule — the shape is now
+    ///         written once, here and in the terminal status bar alike.
+    ///     </para>
     /// </summary>
-    public static string CostToUsd(decimal costUsd) =>
-        "$" + (costUsd < 0 ? 0m : costUsd).ToString("F4", CultureInfo.InvariantCulture);
+    public static string CostToUsd(decimal costUsd) => UsdCell.ToUsd(costUsd);
 
     /// <summary>
     ///     The cost cell, or <see langword="null" /> when nothing was spent —
@@ -97,5 +109,5 @@ public static class StatusBarText
     ///     zero and not silence: it is the one glyph that cannot be misread as an
     ///     amount.
     /// </summary>
-    public const string UnknownCostCell = "—";
+    public const string UnknownCostCell = UsdCell.Unpriced;
 }
