@@ -57,16 +57,18 @@
 //     Tabs.cs:143                             != None
 //     ToolCardTracker.cs:624 + :667           != None
 //     LeaderKeyRouter.cs:94                   != None  (consume-and-disarm)
-//     VimComposerMode.cs:37                   == None
+//     VimComposerMode.cs:37                   == None  (NORMAL MODE ONLY)
 //
 //   BUFFER, BUT NOT A TEXT BUFFER — the taxonomy's sharpest edge, and the
-//   reason the two families are not a spectrum. These three sites hold no text
-//   buffer, yet they correctly ADMIT Shift, because they bind shifted RUNES of
-//   their own: DiffViewerOverlay binds `G` (:310) and ImageViewerOverlay binds
-//   `_` (:139). So "I have no buffer" does NOT imply "refuse Shift"; what
-//   decides it is whether Shift means something AT THIS SITE.
+//   reason the two families are not a spectrum. These sites hold no text
+//   buffer, yet they correctly ADMIT Shift, because Shift means something at
+//   THEM: DiffViewerOverlay binds `G` (:310), ImageViewerOverlay binds `_`
+//   (:139), and VimComposerMode FALLS THROUGH to the composer for any key its
+//   own command gate rejects (:37 → composer :173). So "I have no buffer" does
+//   NOT imply "refuse Shift".
 //     DiffViewerOverlay.cs:282 + :210         (Ctrl|Alt|Meta) != 0
 //     ImageViewerOverlay.cs:124               (Ctrl|Alt|Meta) != 0
+//     VimComposerMode.cs:37 (fall-through)    delegates to the composer
 //
 //   UNGATED — the THIRD state, which the issue's two-family taxonomy cannot
 //   name, and the reason a guard that counts only the two families is not
@@ -87,25 +89,39 @@
 //   printable rune becomes ChatAction.Char, which is the tree deciding "this
 //   is text" in a sixth vocabulary position.
 //
-// So: 22 files, 26 rows (four files hold two families each), three modifier
+// So: 22 files, 27 rows (five files hold two families each), three modifier
 // vocabularies (KeyModifiers, KeyModifierSet, ConsoleModifiers), and THREE
 // families where the issue describes two. The issue's count of "four spellings
 // at eight sites" is the same rule measured at one predicate; read as sites it
 // undercounts by more than half, and read as families it omits the ungated one
 // entirely.
 //
-// WHAT THE FIRST DRAFT GOT WRONG, AND WHAT CI SAID
-// -------------------------------------------------
-// Recorded because the corrections are the argument, not a footnote. This file
-// first classified DiffViewerOverlay and ImageViewerOverlay as COMMAND, and
-// asserted they refuse Shift+char. CI run 36725439283 failed both rows — and
-// they were RIGHT and I was wrong: they bind `G` and `_`. It also failed my
-// legacy-DialogOverlay row, because ConsoleKeyInfo has no Meta slot and my
-// probe mapped Meta onto "no flag", testing a gesture that path cannot express.
-// A third row measured LeaderKeyRouter's consume-and-disarm as "resolved a
-// chord". Three of my own rows were wrong before a single line of product code
-// was read, which is the argument for driving real keys instead of trusting a
-// table: a source read cannot tell you which of two readings the code supports.
+// WHAT THE FIRST DRAFTS GOT WRONG, AND WHAT CI SAID
+// ---------------------------------------------------
+// Recorded because the corrections are the argument, not a footnote. Two CI runs
+// executed this file and failed four of my own rows before a single line of
+// product code was read. Every one of them was me mis-reading the site, and
+// every correction made the taxonomy sharper:
+//
+//   run 36725439283
+//     * DiffViewerOverlay / ImageViewerOverlay filed as COMMAND. They hold no
+//       text buffer, but they bind `G` and `_`, so admitting Shift is correct.
+//     * the legacy-DialogOverlay row iterated the kitty mask {Ctrl, Meta, Alt}
+//       and mapped Meta onto "no flag" — ConsoleKeyInfo has no Meta slot, so
+//       the probe tested a gesture that path cannot express.
+//     * the LeaderKeyRouter row read "returned true" as "resolved the chord";
+//       the router returns true to CONSUME AND DISARM (:96).
+//
+//   run 36726768405
+//     * VimComposerMode filed as COMMAND. Its gate at :37 is the command one,
+//       but anything that FAILS that gate falls through to the composer, which
+//       types it — so Shift+j is consumed as TEXT. It is a fourth widget
+//       wearing both families, split by NormalMode.
+//
+// The pattern: in four of four cases the source supported two readings and only
+// running it settled which. That is the argument for driving real keys here
+// rather than asserting a table's opinion — a table I wrote is exactly the
+// thing #833 is complaining about.
 //
 // WHY BEHAVIOURAL AND TABLE-DRIVEN, NOT A SOURCE SCAN
 // ---------------------------------------------------
@@ -208,13 +224,14 @@ public class KeyGateFamilyRules
 
         // ---- COMMAND: no buffer; runes navigate or vote ------------------------
         new("QuestionFormView(option rows)", KeyGateFamily.Command, "src/Harbor.Ui.Framework.Rendering/Widgets/QuestionFormView.cs"),
+        new("VimComposerMode(normal mode)", KeyGateFamily.Command, "src/Harbor.Tui.CellForge.Engine/Rendering/VimComposerMode.cs"),
+        new("VimComposerMode(fall-through)", KeyGateFamily.Buffer, "src/Harbor.Tui.CellForge.Engine/Rendering/VimComposerMode.cs"),
         new("ApprovalGateView", KeyGateFamily.Command, "src/Harbor.Ui.Framework.Rendering/Widgets/ApprovalGateView.cs"),
         new("TreeView", KeyGateFamily.Command, "src/Harbor.Ui.Framework.Rendering/Widgets/TreeView.cs"),
         new("Tabs", KeyGateFamily.Command, "src/Harbor.Ui.Framework.Rendering/Widgets/Tabs.cs"),
         new("ToolCardTracker(expand)", KeyGateFamily.Command, "src/Harbor.Tui.CellForge/Chat/Streaming/ToolCardTracker.cs"),
         new("ToolCardTracker(image)", KeyGateFamily.Command, "src/Harbor.Tui.CellForge/Chat/Streaming/ToolCardTracker.cs"),
         new("LeaderKeyRouter", KeyGateFamily.Command, "src/Harbor.Tui.CellForge/Chat/Widgets/LeaderKeyRouter.cs"),
-        new("VimComposerMode", KeyGateFamily.Command, "src/Harbor.Tui.CellForge.Engine/Rendering/VimComposerMode.cs"),
 
         // Neither of these holds a text buffer, yet both ADMIT Shift — and they
         // are right to. DiffViewerOverlay binds `G` (:310) and ImageViewerOverlay
@@ -420,10 +437,27 @@ public class KeyGateFamilyRules
             .Because("off the custom row the same rune is navigation (:512/:576), not answer text");
 
         // So the family is a function of (widget, state, key) — three things,
-        // not one. A declared boolean could not carry it.
+        // not one. A declared boolean could not carry it. Three widgets are in
+        // this position (QuestionFormView by cursor, DialogOverlay by _kind,
+        // VimComposerMode by NormalMode), so the count is a measurement, not a
+        // claim about one lucky example.
         await Assert.That(Table.Count(r => r.Where.EndsWith("QuestionFormView.cs", StringComparison.Ordinal)))
             .IsEqualTo(2)
             .Because("one file holds both families, which is the proof the family is not a per-type property");
+
+        string[] bothFamilies =
+        [
+            "src/Harbor.Ui.Framework.Rendering/Widgets/QuestionFormView.cs",
+            "src/Harbor.Tui.CellForge/Chat/Widgets/DialogOverlay.cs",
+            "src/Harbor.Tui.CellForge.Engine/Rendering/VimComposerMode.cs",
+        ];
+
+        foreach (string file in bothFamilies)
+        {
+            int rows = Table.Count(r => string.Equals(r.Where, file, StringComparison.Ordinal));
+            await Assert.That(rows).IsEqualTo(2)
+                .Because($"{file} is a widget that wears both families at once, so it must be two rows");
+        }
     }
 
     // --------------------------------------------------------------- UNGATED --
@@ -597,8 +631,48 @@ public class KeyGateFamilyRules
             ("ApprovalGateView(a)", new ApprovalGateView("bash", "ls -la").HandleKey(Gate('a'))),
             ("TreeView(j)", new TreeView([new TreeNode("root", [])]).HandleKey(Gate('j'))),
             ("Tabs(h)", new Tabs(["one", "two"]).HandleKey(Gate('h'))),
-            ("VimComposerMode(j)", NormalModeComposer().HandleKey(Gate('j'), new ComposerController()) != ComposerAction.Ignored),
         ];
+    }
+
+    /// <summary>
+    /// <see cref="VimComposerMode" /> is a FOURTH widget wearing both families,
+    /// and the split is a mode flag rather than a cursor. In NORMAL mode a rune
+    /// is a command and the gate is <c>Modifiers == None</c> (:37); anything
+    /// that fails that test FALLS THROUGH to the composer, which is a text
+    /// buffer and types the rune.
+    /// <para>
+    /// So <c>Shift+j</c> is consumed — as TEXT, not as a command. Filing this
+    /// site as command-only was my error, and CI run 36726768405 caught it: the
+    /// strict table said "a command site must not consume Shift+char" and the
+    /// site consumed it correctly, as a letter in the composer's buffer.
+    /// </para>
+    /// </summary>
+    [Test]
+    public async Task VimComposer_Mode_Flag_Picks_The_Family_Not_The_Type()
+    {
+        // Normal mode + unmodified rune: a command, and the buffer stays empty.
+        var normal = NormalModeComposer();
+        var normalComposer = new ComposerController();
+        _ = normal.HandleKey(KeyEvent.Char(new Rune('j')), normalComposer);
+        await Assert.That(normalComposer.Buffer.SnapshotText()).IsEqualTo(string.Empty)
+            .Because("in normal mode 'j' is history recall, not text (:76)");
+
+        // Same widget, normal mode, Shift held: the command gate is skipped and
+        // the key falls through to the composer, which TYPES it.
+        var shifted = NormalModeComposer();
+        var shiftedComposer = new ComposerController();
+        _ = shifted.HandleKey(KeyEvent.Char(new Rune('J'), KeyModifiers.Shift), shiftedComposer);
+        await Assert.That(shiftedComposer.Buffer.SnapshotText()).IsEqualTo("J")
+            .Because("Shift+J fails the 'Modifiers == None' test, so it is not a command — and the "
+                + "composer's own gate admits Shift, so it is a capital letter. One type, two families, "
+                + "decided by NormalMode: the fourth proof the family is not a per-type property");
+
+        // …and the buffer half still refuses a command modifier.
+        var ctrl = NormalModeComposer();
+        var ctrlComposer = new ComposerController();
+        _ = ctrl.HandleKey(KeyEvent.Char(new Rune('j'), KeyModifiers.Ctrl), ctrlComposer);
+        await Assert.That(ctrlComposer.Buffer.SnapshotText()).IsEqualTo(string.Empty)
+            .Because("Ctrl+j is a chord the composer's gate refuses (:173)");
     }
 
     /// <summary>
