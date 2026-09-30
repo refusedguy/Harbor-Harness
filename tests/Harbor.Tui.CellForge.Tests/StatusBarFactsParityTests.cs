@@ -15,15 +15,42 @@ namespace Harbor.Tui.CellForge.Tests;
 ///     <c>$0.0000</c> where the other showed nothing (#457 shipped exactly that).
 /// </summary>
 /// <remarks>
-///     Two complementary locks, because either alone is defeatable:
+///     <para>
+///         Three complementary locks, because each alone is defeatable:
+///     </para>
 ///     <list type="number">
 ///         <item>behaviour — for a matrix of states, every cell the footer paints is byte-identical to the
 ///         corresponding projected segment (or, for the optional cells, absent from both);</item>
-///         <item>shape — the layout no longer calls <c>ProjectStatusBar</c> and no longer formats a cost or
-///         a token count itself, and <c>"F4"</c> occurs exactly once across the whole status path.</item>
+///         <item>shape, in this file — the layout no longer calls <c>ProjectStatusBar</c> and no longer
+///         formats a cost or a token count itself, and the projector reaches for <c>StatusBarFacts</c>
+///         rather than <c>ToString</c>.</item>
+///         <item>shape, tree-wide — <c>Harbor.Architecture.Tests.MoneyCellSingleHomeRules</c> (#682)
+///         grades the whole <c>src/</c> + <c>apps/</c> tree for a money cell written by hand.</item>
 ///     </list>
-///     Together: re-adding a private formatting rule to the layout red-lights
-///     both tests, so the divergence cannot come back unnoticed.
+///     <para>
+///         Together: re-adding a private formatting rule to the layout red-lights
+///         this file, and adding one anywhere else in the product red-lights the
+///         third.
+///     </para>
+///     <para>
+///         <b>The third lock used to live here too, and its last run is why it
+///         moved.</b> This file counted the literal <c>"F4"</c> across a
+///         hard-coded four-entry file list. When #682 moved the money cell's shape
+///         out of <c>StatusBarText</c> into
+///         <c>Harbor.Abstractions.Contracts/Models/UsdCell.cs</c>, that test went
+///         red with <c>Expected to be 1, but found 0</c> — not because a second
+///         writer appeared, but because the single writer MOVED to a file the list
+///         does not contain. It was also blind, the whole time, to
+///         <c>TuiViewModels.cs</c> and <c>PanelRows.cs</c>, which really did hold
+///         copies of the rule while it passed green. So it graded a file list
+///         rather than a tree, and a literal rather than a form — and a guard that
+///         cannot tell "a second writer appeared" from "the one writer moved" is
+///         measuring the wrong thing. Its successor grades shape, names the two
+///         surviving conventions with their reasons, and asserts the shape home
+///         still exists and is reachable from both assemblies that are
+///         architecturally forbidden from calling <c>StatusBarText</c> — none of
+///         which this file could do.
+///     </para>
 /// </remarks>
 public class StatusBarFactsParityTests
 {
@@ -210,40 +237,6 @@ public class StatusBarFactsParityTests
         // …and neither does the projector: both read StatusBarFacts.
         await Assert.That(projector).DoesNotContain("ToString(");
         await Assert.That(projector).Contains("StatusBarFacts.Of(state)");
-    }
-
-    [Test]
-    public async Task CostFormatting_ExistsInExactlyOnePlaceAcrossTheStatusPath()
-    {
-        // Every file that renders the status bar, counted as a whole: a second
-        // rule anywhere in this set turns a rendered number back into a
-        // per-host opinion.
-        string[] statusPath =
-        [
-            "src/Harbor.Ui.Framework.State/State/StatusBarText.cs",
-            "src/Harbor.Ui.Framework.Projection/Projection/StatusBarFacts.cs",
-            "src/Harbor.Ui.Framework.Projection/Projection/StatusProjector.cs",
-            "src/Harbor.Tui.CellForge/Chat/Widgets/ChatScreenLayout.cs",
-        ];
-
-        var perFile = new List<int>(statusPath.Length);
-        foreach (string relative in statusPath)
-        {
-            perFile.Add(CountOccurrences(ReadRepoFile(relative.Split('/')), "\"F4\""));
-        }
-
-        await Assert.That(perFile.Sum()).IsEqualTo(1);
-    }
-
-    private static int CountOccurrences(string haystack, string needle)
-    {
-        int count = 0;
-        for (int i = haystack.IndexOf(needle, StringComparison.Ordinal); i >= 0; i = haystack.IndexOf(needle, i + needle.Length, StringComparison.Ordinal))
-        {
-            count++;
-        }
-
-        return count;
     }
 
     private static string ReadRepoFile(params string[] segments) =>

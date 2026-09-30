@@ -1,5 +1,4 @@
 using System.Collections.ObjectModel;
-using System.Globalization;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Harbor.Abstractions.Events;
@@ -113,10 +112,25 @@ public sealed partial class StatusBarViewModel : ObservableObject, ITuiViewModel
     /// <summary>
     ///     The cost cell: the priced total, or "—" when the core could not price
     ///     this model (#653). Never a zero standing in for an unknown price.
+    ///     <para>
+    ///         #682: the shape comes from <c>UsdCell</c> in
+    ///         Harbor.Abstractions.Contracts, not from a second <c>"$" + …"F4"</c>
+    ///         written here. This assembly may not reference
+    ///         Harbor.Ui.Framework.State (<c>TuiAbstractions_ReferencesOnlyAbstractions</c>),
+    ///         so the shared shape had to live in the contracts layer — the same
+    ///         reason <c>ContextUsage</c> is there.
+    ///         <para>
+    ///             The difference from <c>StatusBarText.CostCell</c> is
+    ///             deliberate and is PLACEMENT, not shape: the projected bar hides
+    ///             the money cell at zero (#457), this line cannot drop a slot
+    ///             without shifting every segment after it. Same number, two
+    ///             surfaces, one writer.
+    ///         </para>
+    ///     </para>
     /// </summary>
     private string CostText => IsCostKnown
-        ? "$" + Cost.ToString("F4", CultureInfo.InvariantCulture)
-        : "—";
+        ? UsdCell.ToUsd(Cost)
+        : UsdCell.Unpriced;
 
     /// <inheritdoc />
     public string Id => "status-bar";

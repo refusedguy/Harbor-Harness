@@ -77,7 +77,10 @@ public static class PanelRows
         rows.Add($"in    {PanelText.FormatCount(input).PadLeft(12)}  {PanelText.Bar(input, barWidth, scale)}".TrimEnd());
         rows.Add($"out   {PanelText.FormatCount(output).PadLeft(12)}  {PanelText.Bar(output, barWidth, scale)}".TrimEnd());
         rows.Add(PanelText.Separator);
-        rows.Add($"total {PanelText.FormatCount(input + output).PadLeft(12)}  ${cost.ToString("F4", CultureInfo.InvariantCulture)}");
+        // #682: the money cell's shape is StatusBarText.CostToUsd, not a fifth
+        // hand-rolled "$" + …"F4" in a panel row. Byte-identical output; one
+        // writer.
+        rows.Add($"total {PanelText.FormatCount(input + output).PadLeft(12)}  {StatusBarText.CostToUsd(cost)}");
         rows.Add("(cumulative session totals)");
         return rows;
     }
