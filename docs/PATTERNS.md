@@ -615,14 +615,14 @@ the transition and the lifecycle are the same code path rather than two.*
 | Visitor as the UI event mechanism | `ChatScreenBridge.cs:127` (21-arm switch) | Use store + reducer (§1) |
 | Third mechanism for one event stream | handler registry + switch + store, all at once | Pick one of the two seams (§1) |
 | Lifecycle promised ≠ lifecycle provided | `CellForgeModule.cs:32` vs `:101` | Doc comment promising an unprovided lifetime is a defect (§8) |
-| Cleanup as a caller convention | `SessionSwitchManager.cs:239-241` | The state object resets itself (§8) |
+| Cleanup as a caller convention | `SessionSwitchManager.cs:245-247` | The state object resets itself (§8) |
 | Extension by mutating a concrete registry | `PluginRegistrar.cs:75-87` | Interface + a list of them (§5) |
-| Policy bolted onto an adapter | `SandboxedPluginTool` on tools only, `:145` | Policy at the extension point (§5) |
-| Permissive DIM | `IThemeWatcher.cs:31`, `ITool.cs:74`, `ITuiView.cs:32` | Fail towards loudly-wrong (§6) |
+| Policy bolted onto an adapter | `SandboxedPluginTool` wraps tools only (`PluginRegistrar.cs:231`); the provider and agent paths get none | Policy at the extension point (§5) |
+| Permissive DIM | `IThemeWatcher.cs:31`, `ITool.cs:124`, `ITuiView.cs:32` | Fail towards loudly-wrong (§6) |
 | Dead hook on a live interface | `ITuiView.cs:29,32` — zero callers | Zero callers ⇒ delete it (§6) |
-| Wildcard arm over a Harbor union | 17 sites, baselined in the guard | Name every arm; or log **and** count (§7) |
+| Wildcard arm over a Harbor union | 7 sites, baselined in the guard | Name every arm; or log **and** count (§7) |
 | **Missing** arm, no default | was `ChatScreenBridge.HandleEvent` missing `CompactionFailedEvent` and falling through silently — **fixed in #840**; the census in `CompactionLifecycleLineTests` is what holds it | The default arm invents an answer; a missing arm just doesn't. Not covered by the wildcard guard (§7); covered by an arm census per family |
-| Hand-maintained name list as a union | `IArgSafetyPolicy.cs:107-110`, `[JsonDerivedType]` tables | It IS a union — test it by reflection (§7) |
+| Hand-maintained name list as a union | `PathArgExtractionPolicy.cs:53` (`DefaultTools`), `[JsonDerivedType]` tables | It IS a union — test it by reflection (§7) |
 | Unknown id → silent default | fixed in `SessionStoreRegistry`/`HarborModeRegistry` | `TryResolve` returns false; caller fails loudly (§2) |
 | A fake metric | see `TelemetryModule.cs:25-33` for the right shape | Absent surface beats plausible zero (§3) |
 
