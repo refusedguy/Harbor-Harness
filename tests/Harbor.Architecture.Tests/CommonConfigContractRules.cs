@@ -378,7 +378,7 @@ public sealed class CommonConfigContractRules
                     continue;
                 }
 
-                if (MentionsPort(path))
+                if (ImplementsPort(path))
                 {
                     found.Add(relative);
                 }
@@ -392,7 +392,31 @@ public sealed class CommonConfigContractRules
     private static bool IsDeclaration(string relativePath)
         => string.Equals(relativePath, $"src/Harbor.Ui.Framework.Abstractions/Configuration/{NarrowSeamName}.cs", StringComparison.Ordinal);
 
-    private static bool MentionsPort(string path)
+    /// <summary>
+    ///     Whether a file <b>implements</b> the port, as opposed to naming it.
+    /// </summary>
+    /// <remarks>
+    ///     The distinction is the base list, and the first CI run of this rule
+    ///     showed why it has to be made: a plain "does the file mention the name"
+    ///     scan returned THREE files — the adapter, plus
+    ///     <c>ConfigRegistration</c> (which registers it in DI) and
+    ///     <c>SessionFactory</c> (which consumes it). Neither of those two is a
+    ///     second implementation; one wires the port up and one declares it as a
+    ///     constructor parameter, and both are exactly what the rule is supposed to
+    ///     allow. A guard that cannot tell an implementer from a caller is a guard
+    ///     that gets satisfied by deleting the only real implementer.
+    ///     <para>
+    ///         So the pattern matches the port name inside a type's base list:
+    ///         <c>: … {port}</c>, <c>, {port}</c> on a declaration line, or
+    ///         <c>where T : {port}</c>. Base lists wrap across lines, so a line that
+    ///         ends in a separator is joined with the next before matching. This is
+    ///         textual, not a parse, and the bound is stated here: a base list broken
+    ///         with an intervening comment, or a type aliased onto the port, is
+    ///         missed. Both would be visible in review, and rule 2 (the port's shape)
+    ///         is what actually carries the invariant.
+    ///     </para>
+    /// </remarks>
+    private static bool ImplementsPort(string path)
     {
         string[] lines;
         try
@@ -404,14 +428,40 @@ public sealed class CommonConfigContractRules
             return false;
         }
 
-        foreach (string line in lines)
+        for (int i = 0; i < lines.Length; i++)
         {
-            if (IsCommentLine(line))
+            if (IsCommentLine(lines[i]))
             {
                 continue;
             }
 
-            if (line.Contains(NarrowSeamName, StringComparison.Ordinal))
+            // Join a wrapped base list: a line ending in a separator continues.
+            string line = lines[i];
+            int guard = 0;
+            while ((line.TrimEnd().EndsWith(',', StringComparison.Ordinal)
+                    || line.TrimEnd().EndsWith('|', StringComparison.Ordinal))
+                   && i + 1 < lines.Length
+                   && guard++ < 4)
+            {
+                line = line.TrimEnd() + " " + lines[++i].Trim();
+            }
+
+            if (!line.Contains(NarrowSeamName, StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            // ": <name>" immediately before it, or a generic constraint.
+            int at = line.IndexOf(NarrowSeamName, StringComparison.Ordinal);
+            string before = line[..at].TrimEnd();
+            string after = line[(at + NarrowSeamName.Length)..].TrimStart();
+            bool isBaseList = before.EndsWith(':')
+                              || before.EndsWith(',')
+                              || (before.Contains("where T", StringComparison.Ordinal)
+                                  && before.EndsWith(':'));
+            bool isConstraintTail = after.Length == 0 || after.StartsWith(')') || after.StartsWith(',');
+
+            if (isBaseList && isConstraintTail)
             {
                 return true;
             }
@@ -456,6 +506,42 @@ public sealed class CommonConfigContractRules
     ///     also means that if the port ever moved out of a referenced assembly, every
     ///     one of them would report "not found" and read as a verdict.
     /// </summary>
+    /// <summary>
+    ///     Rule 5's implementer predicate must separate a real implementation from
+    ///     the two legal ways a file merely NAMES the port — registering it in DI
+    ///     and declaring it as a constructor parameter. The first CI run of this
+    ///     file returned three files for a count of one, and the fix must not become
+    ///     a matcher that reports zero instead: both controls below are the reason
+    ///     the pattern can be trusted, and the negative one is the one that failed.
+    /// </summary>
+    [Test]
+    public async Task ImplementerRule_SeesABaseList_AndIgnoresACaller()
+    {
+        string root = RequireRepoRoot();
+        const string adapter = "apps/Harbor.App.Avalonia/Services/CommonConfigReaderAdapter.cs";
+        const string registration = "apps/Harbor.App.Avalonia/Hosting/ConfigRegistration.cs";
+        const string consumer = "src/Harbor.Ui.Framework.Sessions/Sessions/SessionFactory.cs";
+
+        // Positive: the one real implementer, named in a base list.
+        await Assert.That(FindSourceImplementers(root).Contains(adapter)).IsTrue()
+            .Because(
+                "CommonConfigReaderAdapter implements the port and must be counted. If this fails "
+                + "the scan is blind to base lists, and rule 5 is satisfied by an UNWIRED seam.");
+
+        // Negative: the two files that name the port without implementing it. These
+        // are what the first run over-counted, and a count of three is the same
+        // failure as a count of zero in a different costume.
+        await Assert.That(FindSourceImplementers(root).Contains(registration)).IsFalse()
+            .Because(
+                "ConfigRegistration mentions the port in AddSingleton<ICommonConfigModelRefReader> "
+                + "— that is wiring, not a second implementation, and a rule that cannot tell "
+                + "them apart gets satisfied by deleting the real one");
+        await Assert.That(FindSourceImplementers(root).Contains(consumer)).IsFalse()
+            .Because(
+                "SessionFactory declares the port as an optional constructor parameter — that is a "
+                + "caller, which is exactly what a read-only seam exists to be");
+    }
+
     [Test]
     public async Task PortLookup_CanSeeThePortAssembly()
     {
