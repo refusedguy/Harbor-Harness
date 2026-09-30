@@ -137,8 +137,24 @@ public sealed class ModelRateLabelRules
     private const string UnknownDeclarationRelativePath =
         "src/Harbor.Abstractions.Contracts/Models/Session.cs";
 
-    /// <summary>Exact substring identifying the exempted declaration line.</summary>
-    private const string UnknownDeclarationMarker = "InputPerMillion == 0m";
+    /// <summary>
+    ///     The exempted declaration's opening line. The exemption is a SPAN, not a
+    ///     line: <c>IsUnknown</c> is an expression-bodied property whose four
+    ///     comparisons each land on their own line —
+    ///
+    ///     <code>
+    ///     public bool IsUnknown =&gt;
+    ///         InputPerMillion == 0m
+    ///         &amp;&amp; OutputPerMillion == 0m
+    ///         &amp;&amp; (CacheReadPerMillion ?? 0m) == 0m
+    ///         &amp;&amp; (CacheWritePerMillion ?? 0m) == 0m;
+    ///     </code>
+    ///
+    ///     — so a line-precise marker exempts the first comparison and reports the
+    ///     other three, which is the core's own decision reported as a violation.
+    ///     The span runs from this line to the first line ending in <c>;</c>.
+    /// </summary>
+    private const string UnknownDeclarationMarker = "public bool IsUnknown";
 
     /// <summary>Why the core's own zero comparison is not a hand-rolled guess.</summary>
     private const string UnknownDeclarationReason =
@@ -242,10 +258,12 @@ public sealed class ModelRateLabelRules
     [Test]
     public async Task UnknownPrice_IsNotReDerivedFromTheRateNumbers()
     {
+        IReadOnlySet<int> declared = DeclarationSpan();
+
         List<Site> sites =
         [
             .. FindRateZeroSites().Where(s => !(s.RelativePath == UnknownDeclarationRelativePath
-                                              && s.Text.Contains(UnknownDeclarationMarker, StringComparison.Ordinal)))
+                                              && declared.Contains(s.LineNumber)))
         ];
 
         await Assert.That(sites.Count).IsEqualTo(0)
@@ -264,22 +282,59 @@ public sealed class ModelRateLabelRules
     [Test]
     public async Task TheExemption_StillMatchesALineThatStillEarnsIt()
     {
-        List<Site> declaration =
+        IReadOnlySet<int> declared = DeclarationSpan();
+        List<Site> inSpan =
         [
-            .. FindRateZeroSites().Where(s => s.RelativePath == UnknownDeclarationRelativePath)
+            .. FindRateZeroSites().Where(s => s.RelativePath == UnknownDeclarationRelativePath
+                                           && declared.Contains(s.LineNumber))
         ];
 
-        await Assert.That(declaration.Count).IsGreaterThan(0)
+        await Assert.That(declared.Count).IsGreaterThan(0)
             .Because(
-                UnknownDeclarationRelativePath + " no longer compares a rate to zero, so the "
-                + "exemption — and, more importantly, the declaration this guard points readers at "
-                + "— is gone. Either Pricing.IsUnknown moved or the rule needs a new home named.");
-        await Assert.That(declaration.Any(s => s.Text.Contains(UnknownDeclarationMarker, StringComparison.Ordinal)))
-            .IsTrue()
+                "the marker \"" + UnknownDeclarationMarker + "\" no longer opens a declaration in "
+                + UnknownDeclarationRelativePath + ", so the exemption covers nothing and the core's "
+                + "own comparison is reported as a violation. Update the marker with the rename.");
+        await Assert.That(inSpan.Count).IsGreaterThan(0)
             .Because(
-                "no line in " + UnknownDeclarationRelativePath + " matches the marker \""
-                + UnknownDeclarationMarker + "\" any more — update the marker with the rename "
-                + "rather than letting the exemption cover whatever the file now contains.");
+                "the exempt span in " + UnknownDeclarationRelativePath + " no longer compares a rate "
+                + "to zero, so the exemption has outlived its reason — and, more importantly, the "
+                + "declaration this guard points readers at is gone. Either Pricing.IsUnknown moved "
+                + "or the rule needs a new home named.");
+    }
+
+    /// <summary>
+    ///     The 1-based line numbers the core's <c>IsUnknown</c> declaration occupies:
+    ///     from the line carrying <see cref="UnknownDeclarationMarker" /> to the first
+    ///     following line that ends the expression with <c>;</c>. An expression-bodied
+    ///     property spans as many lines as its comparisons, which is why this is a span
+    ///     and not a single exempt line.
+    /// </summary>
+    private static HashSet<int> DeclarationSpan()
+    {
+        var span = new HashSet<int>();
+        string path = Path.Combine(RepoPaths.RepoRoot ?? ".", UnknownDeclarationRelativePath);
+        if (SourceScan.TryReadAllText(path) is not { } text)
+        {
+            return span;
+        }
+
+        string[] lines = SourceScan.StripComments(text).Split('\n');
+        int start = Array.FindIndex(lines, l => l.Contains(UnknownDeclarationMarker, StringComparison.Ordinal));
+        if (start < 0)
+        {
+            return span;
+        }
+
+        for (int i = start; i < lines.Length; i++)
+        {
+            span.Add(i + 1);
+            if (lines[i].TrimEnd().EndsWith(';'))
+            {
+                break;
+            }
+        }
+
+        return span;
     }
 
     /// <summary>
