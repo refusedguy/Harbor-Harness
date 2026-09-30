@@ -648,7 +648,18 @@ internal sealed class ReplLifecycle(CellForgeReplRunner host)
     /// them and before SGR encoding. Zero pending gates → empty pipeline →
     /// frames byte-identical to the plain path.
     /// </summary>
-    private void ArmGateGlow()
+    /// <remarks>
+    /// Internal for the slot-aging unit tests (InternalsVisibleTo) — #889. This is the
+    /// CONSUMER half of the gate glow: <c>PostFxTests</c> covers the ledger this reads
+    /// (<c>VirtualizedChatTimeline.ConsumeGlowRegions</c>) and nothing covered the method
+    /// that acts on it, so the drain below could be deleted with a fully green suite.
+    /// It could not be reached from a test otherwise: the only other path in is
+    /// <c>LoopAsync</c> → <c>RenderFrameGatedAsync</c>, which is gated by a 60 fps frame
+    /// ticker, a version-equality short-circuit and an animation clock — a wall-clock
+    /// test in the one domain that has already produced a flake (#648). This method
+    /// touches no clock, no timer and no async, so opening it is the whole cost.
+    /// </remarks>
+    internal void ArmGateGlow()
     {
         int count = host._timeline.ConsumeGlowRegions(host._glowScratch);
         for (int i = 0; i < count; i++)
