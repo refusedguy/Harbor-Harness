@@ -9,7 +9,20 @@
 //     out-parameter (`out T? x` + `bool`), which makes the caller write the
 //     same null check the signature already promised was impossible;
 //   * a SEARCH over a sequence uses `MaybeExtensions.TryFirst`/`TryFind` — not
-//     `Enumerable.FirstOrDefault` followed by a null test.
+//     `Enumerable.FirstOrDefault` followed by a null test;
+//   * a SINGLE-VALUE accessor declares absence with `Maybe<T>` — not with a
+//     `Try`-prefixed method returning `T?` (#591), which is the same
+//     convention-driven shape wearing a different hat: the `Try` prefix is a
+//     *promise to the caller* ("this cannot fail") carried by nothing but the
+//     spelling of the method name, and a `null` return is indistinguishable
+//     from "there was nothing to give" at the call site.
+//
+// The third rule (#591) extends the scope to `src/Harbor.Tui.CellForge.Engine`
+// and is scoped NARROWER on purpose. That project is mid-flight towards an
+// empty reference list (#33/T2 #435, #33/T3 #436) and has two outstanding
+// absence findings of its own; adopting all of #589's rules there in one wave
+// would drag in unrelated conversions. The scope lists below say exactly which
+// rule applies where, so widening is a one-line decision rather than an audit.
 //
 // The checks are source-text based on purpose, matching BenchmarkContractTests:
 // they need no reference to the converted assemblies, so they run in the
@@ -51,6 +64,19 @@ public class MaybeAbsenceTests
     ];
 
     /// <summary>
+    /// Projects additionally covered by the single-value rule
+    /// (<c>NullableTryReturn</c>). Deliberately a separate list from
+    /// <see cref="GuardedProjects"/>: the Engine is in scope for the one shape
+    /// #591 named, not yet for <c>out T?</c> / <c>FirstOrDefault</c>, which have
+    /// their own open conversions in that project.
+    /// </summary>
+    private static readonly string[] SingleValueAbsenceProjects =
+    [
+        ..GuardedProjects,
+        "src/Harbor.Tui.CellForge.Engine"
+    ];
+
+    /// <summary>
     ///     A nullable out-parameter on a signature — the shape a lookup used when
     ///     it reported absence by convention (<c>out T? x</c> + <c>bool</c>)
     ///     instead of by value.
@@ -58,6 +84,56 @@ public class MaybeAbsenceTests
     private static readonly Regex NullableOutParameter = new(
         @"\bout\s+[A-Za-z_][A-Za-z0-9_<>,\.]*\?\s+[A-Za-z_][A-Za-z0-9_]*\s*[,)]",
         RegexOptions.Compiled);
+
+    /// <summary>
+    /// A single-value accessor that reports absence by convention: a
+    /// <c>Try</c>-prefixed member returning <c>Nullable&lt;T&gt;</c>.
+    /// <list type="bullet">
+    ///     <item><c>public BufferPair? TryTake()</c> — matches (#591).</item>
+    ///     <item><c>public bool TryTakeEvent(out InputEvent e)</c> — no match;
+    ///     <c>bool</c> carries no <c>?</c>, so the absence is a return VALUE,
+    ///     not a nullable.</item>
+    ///     <item><c>public bool SupportsSyncWrites</c> — no match. A predicate is
+    ///     a defined boolean answer, not an absence (#591's "honest
+    ///     rejections").</item>
+    ///     <item><c>public ISyncTerminalBackend SyncBackend =&gt; ...</c> — no
+    ///     match. That is the throw-next-to-a-bool finding, a different rule.</item>
+    ///     <item><c>_focusedId = ...FirstOrDefault(...)?.Id</c> — no match; no
+    ///     access modifier and no <c>Try</c> name. That is
+    ///     <see cref="FirstOrDefault"/>'s business.</item>
+    /// </list>
+    /// The <c>(?:public|protected|internal)</c> anchor is what keeps a bare
+    /// call site such as <c>while (Parser.TryTakeEvent(out var evt))</c> out of
+    /// the net: the rule is about a declared signature, not a use of one.
+    /// </summary>
+    private static readonly Regex NullableTryReturn = new(
+        @"\b(?:public|protected|internal)\b[^;{]*\b[A-Za-z_][A-Za-z0-9_.]*(?:<[^;{}]*>)?\?[ \t]+Try[A-Za-z0-9_]*[ \t]*[(<]",
+        RegexOptions.Compiled);
+
+    /// <summary>
+    /// Files allowed to keep a <c>Try</c>-prefixed nullable return, each with
+    /// the reason it is not converted yet. Adding an entry is a decision, not
+    /// an oversight — the reason is printed in the failure message and
+    /// <see cref="Exemptions_AreStillUsed"/> deletes the entry once it stops
+    /// matching anything.
+    /// </summary>
+    private static readonly Dictionary<string, string> NullableTryReturnExemptions = new(StringComparer.Ordinal)
+    {
+        ["src/Harbor.Tui.CellForge.Engine/Rendering/BufferSwapChain.cs"] =
+            "BLOCKED ON A DEPENDENCY DECISION #435/#436 OWN, not a Maybe decision this wave can "
+            + "make (#591). `TryTake` is a pure absence — one state, 'nothing pending' — so "
+            + "Maybe<BufferPair> is the correct target and there is no Result axis here at all. "
+            + "But the engine reaches `Maybe<T>` only TRANSITIVELY: its csproj declares zero "
+            + "PackageReference entries, and CSharpFunctionalExtensions arrives through "
+            + "Harbor.Abstractions and Harbor.Ui.Framework.State — the exact two references #435 "
+            + "deletes. Converting today picks a dependency owner without answering 'direct "
+            + "PackageReference on CSE, or a vendored Maybe<T>?' and would break the build the day "
+            + "#435 lands. Converted the moment that decision lands; the recipe is in #591. "
+            + "Conversion note for whoever does it: CSE's Maybe<T> is a STRUCT, so `?.` and "
+            + "`is not { }` do not bind to its value. The single caller, "
+            + "src/Harbor.Tui.CellForge/Chat/Streaming/ScreenSession.cs:142, becomes "
+            + "`offer.HasValue ? offer.Value : <re-check next frame>`."
+    };
 
     /// <summary>
     ///     Files allowed to keep a nullable out-parameter, each with the reason
@@ -122,7 +198,7 @@ public class MaybeAbsenceTests
     {
         var violations = new List<string>();
 
-        foreach ((string file, int line, string text) in ScanGuardedFiles())
+        foreach ((string file, int line, string text) in ScanGuardedFiles(GuardedProjects))
         {
             if (!NullableOutParameter.IsMatch(text))
             {
@@ -152,7 +228,7 @@ public class MaybeAbsenceTests
     {
         var violations = new List<string>();
 
-        foreach ((string file, int line, string text) in ScanGuardedFiles())
+        foreach ((string file, int line, string text) in ScanGuardedFiles(GuardedProjects))
         {
             if (!text.Contains("FirstOrDefault(", StringComparison.Ordinal))
             {
@@ -175,6 +251,38 @@ public class MaybeAbsenceTests
                 + "Use MaybeExtensions.TryFirst / TryFind so the absence is in the type. Two cases cannot be "
                 + "converted without changing behaviour: a value-type element (Maybe<T>.From never yields None) "
                 + "and 'no element' vs 'empty element' — add those to FirstOrDefaultExemptions with the reason.");
+    }
+
+    [Test]
+    public async Task GuardedProjects_DeclareNoAbsenceViaNullableTryReturn()
+    {
+        var violations = new List<string>();
+
+        foreach ((string file, int line, string text) in ScanGuardedFiles(SingleValueAbsenceProjects))
+        {
+            if (!NullableTryReturn.IsMatch(text))
+            {
+                continue;
+            }
+
+            string relative = Relative(file);
+            if (NullableTryReturnExemptions.TryGetValue(relative, out string? reason))
+            {
+                _ = reason;
+                continue;
+            }
+
+            violations.Add($"{relative}:{line} — 'Try' + nullable return declares absence by convention: {text.Trim()}");
+        }
+
+        await Assert.That(violations).IsEmpty()
+            .Because(
+                "A single-value accessor must return Maybe<T>, not `T?` under a `Try` prefix (#591). "
+                + "The prefix is a promise to the caller that the signature itself does not keep: a `null` "
+                + "return is indistinguishable from 'there was nothing to give', and nothing in the type "
+                + "makes the caller handle it. `public bool TryX()` is NOT this smell — a predicate has a "
+                + "defined boolean answer. Add the file to NullableTryReturnExemptions with the reason it "
+                + "is not a Maybe.");
     }
 
     [Test]
@@ -204,6 +312,15 @@ public class MaybeAbsenceTests
             if (!File.Exists(absolute) || !ScanFile(absolute).Any(hit => hit.Text.Contains("FirstOrDefault(", StringComparison.Ordinal)))
             {
                 stale.Add($"{relative} — FirstOrDefault exemption no longer matches anything");
+            }
+        }
+
+        foreach (string relative in NullableTryReturnExemptions.Keys)
+        {
+            string absolute = Path.Combine(root, relative);
+            if (!File.Exists(absolute) || !ScanFile(absolute).Any(hit => NullableTryReturn.IsMatch(hit.Text)))
+            {
+                stale.Add($"{relative} — nullable-Try-return exemption no longer matches anything");
             }
         }
 
@@ -237,6 +354,15 @@ public class MaybeAbsenceTests
         await Assert.That(files).IsGreaterThan(50)
             .Because($"The two guarded projects should hold well over 50 source files; found {files}.");
 
+        // The single-value scope adds CellForge.Engine, so a typo in that path
+        // would silently shrink the #591 rule back to two projects. The
+        // difference is the Engine's own file count: it must actually be there.
+        int engineFiles = CountProjectFiles(root, "src/Harbor.Tui.CellForge.Engine");
+        await Assert.That(engineFiles).IsGreaterThan(40)
+            .Because(
+                $"The #591 single-value rule also scans src/Harbor.Tui.CellForge.Engine, which holds ~60 "
+                + $"source files; found {engineFiles}. A path that does not resolve makes the rule vacuous.");
+
         // Comment lines must not count — the converted sites explain themselves in prose.
         int commentHits = GuardedProjects
             .SelectMany(p => Directory.GetFiles(Path.Combine(root, p), "*.cs", SearchOption.AllDirectories))
@@ -249,8 +375,22 @@ public class MaybeAbsenceTests
 
     // ── helpers ──────────────────────────────────────────────────────────
 
-    /// <summary>Every non-comment, non-blank source line of the guarded projects.</summary>
-    private static IEnumerable<(string File, int Line, string Text)> ScanGuardedFiles()
+    /// <summary>Source files of one project, build output excluded.</summary>
+    private static int CountProjectFiles(string root, string project)
+    {
+        string dir = Path.Combine(root, project);
+        if (!Directory.Exists(dir))
+        {
+            return 0;
+        }
+
+        return Directory.GetFiles(dir, "*.cs", SearchOption.AllDirectories)
+            .Count(f => !f.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}", StringComparison.Ordinal)
+                        && !f.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}", StringComparison.Ordinal));
+    }
+
+    /// <summary>Every non-comment, non-blank source line of the given projects.</summary>
+    private static IEnumerable<(string File, int Line, string Text)> ScanGuardedFiles(string[] projects)
     {
         string? root = RepoPaths.RepoRoot;
         if (root is null)
@@ -258,7 +398,7 @@ public class MaybeAbsenceTests
             yield break;
         }
 
-        foreach (string project in GuardedProjects)
+        foreach (string project in projects)
         {
             string dir = Path.Combine(root, project);
             if (!Directory.Exists(dir))
