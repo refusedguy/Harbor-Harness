@@ -28,10 +28,13 @@ public class ReconnectableRpcClientTests
         try
         {
             int snapshotCalls = 0;
+            var logger = sp.GetRequiredService<ILoggerFactory>();
             var wrapper = new ReconnectableRpcClient(
                 _ => Task.FromResult<IIpcClientTransport>(
-                    new ClientPipeTransport(pipe, sp.GetRequiredService<ILoggerFactory>().CreateLogger<ClientPipeTransport>())),
-                sp.GetRequiredService<ILoggerFactory>().CreateLogger<ReconnectableRpcClient>());
+                    new ClientPipeTransport(pipe, logger.CreateLogger<ClientPipeTransport>())),
+                ReconnectableRpcClient.DefaultClientFactory(
+                    logger.CreateLogger<MessagePackRpcClient>()),
+                logger.CreateLogger<ReconnectableRpcClient>());
 
             var received = new List<EventFrame>();
             var gotSix = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -114,9 +117,11 @@ public class ReconnectableRpcClientTests
     public async Task Backoff_DoublesWithJitter_AndCaps()
     {
         var sp = TestHost.Build();
+        var logger = sp.GetRequiredService<ILoggerFactory>();
         var wrapper = new ReconnectableRpcClient(
             _ => throw new InvalidOperationException("not dialed in this test"),
-            sp.GetRequiredService<ILoggerFactory>().CreateLogger<ReconnectableRpcClient>());
+            ReconnectableRpcClient.DefaultClientFactory(logger.CreateLogger<MessagePackRpcClient>()),
+            logger.CreateLogger<ReconnectableRpcClient>());
 
         TimeSpan first = wrapper.NextBackoffDelay();
         TimeSpan second = wrapper.NextBackoffDelay();

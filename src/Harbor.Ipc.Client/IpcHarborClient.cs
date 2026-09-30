@@ -26,7 +26,7 @@ public sealed class IpcHarborClient : IHarborClient
 {
     private readonly EventSubscription _eventSubscription;
     private readonly ILogger<IpcHarborClient> _logger;
-    private readonly MessagePackRpcClient _rpc;
+    private readonly IRpcClient _rpc;
     private readonly IIpcClientTransport _transport;
     private int _connected;
     private int _disposed;

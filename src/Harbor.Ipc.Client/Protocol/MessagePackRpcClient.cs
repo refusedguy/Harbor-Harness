@@ -30,7 +30,7 @@ namespace Harbor.Ipc.Protocol;
 ///         in-flight at once, each waiting on its own TCS.
 ///     </para>
 /// </remarks>
-public sealed class MessagePackRpcClient : IAsyncDisposable
+public sealed class MessagePackRpcClient : IRpcClient
 {
     private readonly CancellationTokenSource _cts = new();
     private readonly Channel<EventFrame> _frameChannel =
@@ -69,16 +69,10 @@ public sealed class MessagePackRpcClient : IAsyncDisposable
         _psk = psk;
     }
 
-    /// <summary>
-    ///     Reader side of the event channel. Frames carry the server-assigned
-    ///     envelope sequence so reconnecting clients can dedup and bookkeep.
-    /// </summary>
+    /// <inheritdoc />
     public ChannelReader<EventFrame> EventFrames => _frameChannel.Reader;
 
-    /// <summary>
-    ///     Raised when the read loop dies from EOF/IO error (NOT on Dispose).
-    ///     Reconnecting callers use this as the "dial again" trigger.
-    /// </summary>
+    /// <inheritdoc />
     public event EventHandler ConnectionLost = delegate { };
 
     /// <inheritdoc />
@@ -113,10 +107,7 @@ public sealed class MessagePackRpcClient : IAsyncDisposable
         _writeLock.Dispose();
     }
 
-    /// <summary>
-    ///     Connect to the server and start the background read loop.
-    ///     Idempotent — calling twice is a no-op.
-    /// </summary>
+    /// <inheritdoc />
     public async Task ConnectAsync(CancellationToken ct = default)
     {
         if (_stream is not null) return;
@@ -134,9 +125,7 @@ public sealed class MessagePackRpcClient : IAsyncDisposable
         }
     }
 
-    /// <summary>
-    ///     Send a request and await the matching response.
-    /// </summary>
+    /// <inheritdoc />
     public async Task<HarborResponse> SendAsync(HarborRequest request, CancellationToken ct = default)
     {
         if (_stream is null)
@@ -276,8 +265,3 @@ public sealed class MessagePackRpcClient : IAsyncDisposable
         }
     }
 }
-
-/// <summary>
-///     One received event plus its server-assigned delivery sequence.
-/// </summary>
-public readonly record struct EventFrame(ulong Sequence, HarborEvent Event);
