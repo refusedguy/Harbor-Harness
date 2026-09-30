@@ -265,7 +265,7 @@ internal static class AnthropicRequestBuilder
     {
         writer.WriteStartObject();
         writer.WriteString("role", role);
-        WriteContentBlocks(writer, content);
+        WriteContent(writer, content);
         writer.WriteEndObject();
     }
 
@@ -273,15 +273,22 @@ internal static class AnthropicRequestBuilder
     ///     A message body: a bare string for a lone text block (Anthropic's compact
     ///     form, and what the model sees as plain prose), otherwise the block array.
     /// </summary>
-    private static void WriteContentBlocks(Utf8JsonWriter writer, IReadOnlyList<LlmContentBlock> blocks)
+    /// <remarks>
+    ///     The property name is written here rather than by the caller because
+    ///     <see cref="Utf8JsonWriter" /> has <c>WriteStartArray(string)</c> and
+    ///     <c>WriteString(string, string)</c> but no unnamed-array equivalent — so a
+    ///     helper that emitted the value in "array element" position could not open
+    ///     an array, only close one.
+    /// </remarks>
+    private static void WriteContent(Utf8JsonWriter writer, IReadOnlyList<LlmContentBlock> blocks)
     {
         if (blocks.Count == 1 && blocks[0] is LlmTextBlock lone)
         {
-            writer.WriteStringValue(lone.Text);
+            writer.WriteString("content", lone.Text);
             return;
         }
 
-        writer.WriteStartArrayValue();
+        writer.WriteStartArray("content");
         for (int i = 0; i < blocks.Count; i++)
         {
             switch (blocks[i])
