@@ -294,7 +294,13 @@ public class ReconnectableRpcClientSeamTests
             // Cut the connection mid-stream. The pump must re-dial (generation 5)
             // and re-subscribe PRESENDING the sequence it already saw.
             await wrapper.CutCurrentConnectionForTestAsync();
-            await WaitUntilAsync(() => clients.Count >= 5, TimeSpan.FromSeconds(20));
+
+            // Same reason as in the lost-path test: the recovered generation must
+            // be SUBSCRIBED, not merely constructed, before its resume point is
+            // read.
+            await WaitUntilAsync(
+                () => clients.Count >= 5 && SubscribeCount(clients[4]) >= 1,
+                TimeSpan.FromSeconds(20));
 
             var recovered = clients[4];
             ulong? resumedFrom;
@@ -478,23 +484,31 @@ public class ReconnectableRpcClientSeamTests
             // Wait for the first generation to be SUBSCRIBED. The client factory
             // running is not enough: LostSubscription is attached AFTER the ack,
             // so raising ConnectionLost before the subscribe would fire at an
-            // object with no listener and the test would hang waiting for a
-            // reconnect that had no cause. Waiting for a delivered FRAME is the
-            // stronger signal — it proves the pump is past the subscription and
-            // inside the read loop, which is exactly when a real read loop dies.
+            // object with no listener and the reconnect would have no cause.
             await WaitUntilAsync(
-                () => clients.Count >= 1
-                      && SubscribeCount(clients[0]) >= 1
-                      && ReceivedCount(received) >= 1,
+                () => clients.Count >= 1 && SubscribeCount(clients[0]) >= 1,
                 TimeSpan.FromSeconds(20));
 
-            // Now kill it the way a real read loop dies: raise ConnectionLost.
-            // This is the LostSubscription path, and the event is the one member
-            // of the old concrete client the decorator had no contract for.
-            clients[0].Push(2, 2);
+            // Then deliver one frame and wait for it to come out the other side.
+            // Seeing a frame is the proof that the pump is past the subscription
+            // and INSIDE the read loop — which is exactly the state a real read
+            // loop dies in, and therefore the only moment at which raising
+            // ConnectionLost is meaningful.
+            clients[0].Push(1, 1);
+            await WaitUntilAsync(() => ReceivedCount(received) >= 1, TimeSpan.FromSeconds(20));
+
+            // Now kill it the way a real read loop dies. This is the
+            // LostSubscription path, and the event is the one member of the old
+            // concrete client the decorator had no contract for.
             clients[0].RaiseConnectionLost();
 
-            await WaitUntilAsync(() => clients.Count >= 2, TimeSpan.FromSeconds(20));
+            // Wait for the recovered generation to be SUBSCRIBED, not merely
+            // constructed: the client factory runs before SendAsync, so
+            // 'clients.Count >= 2' alone would let the assertion below read an
+            // empty subscribe list.
+            await WaitUntilAsync(
+                () => clients.Count >= 2 && SubscribeCount(clients[1]) >= 1,
+                TimeSpan.FromSeconds(20));
 
             bool lostDisposed;
             lock (clients)
