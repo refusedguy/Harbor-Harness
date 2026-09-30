@@ -599,15 +599,18 @@ internal static class PanelLocatorFixture
     ///         assigned from the ctor parameter, which the first red run duly
     ///         reported TWICE — the field first, then the parameter — and the
     ///         exact-string assertion caught the ambiguity the probe had just proved
-    ///         correct. The parameter is named <c>services</c> so the control's expected
-    ///         string is pinned to the parameter's own name.
+    ///         correct. The container is now taken and discarded rather than stored,
+    ///         so the ctor parameter is the only locator on the type, and the control's
+    ///         expected string is pinned to that parameter's own name.
     ///     </para>
     /// </remarks>
     internal sealed class ContainerCtorPanel : IPanelProvider
     {
-        private IServiceProvider _services = null!;
-
-        public ContainerCtorPanel(IServiceProvider services) => _services = services;
+        // The container is taken and DISCARDED: this fixture exists so the probe
+        // reports the ctor PARAMETER and nothing else. Storing it in a field — even
+        // a non-readonly one — makes the probe report both, which is correct
+        // behaviour and a useless control.
+        public ContainerCtorPanel(IServiceProvider services) => _ = services;
 
         public string Id => "fixture-container-ctor";
 
@@ -617,7 +620,7 @@ internal static class PanelLocatorFixture
 
         public int DefaultSize => 10;
 
-        public object? Build(PanelContext ctx) => _services.ToString();
+        public object? Build(PanelContext ctx) => ctx.Deps.ToString();
 
         public bool OnKey(UiKey key, PanelContext ctx) => false;
     }
