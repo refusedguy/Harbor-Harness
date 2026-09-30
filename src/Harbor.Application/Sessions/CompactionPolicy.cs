@@ -25,6 +25,14 @@ namespace Harbor.Application.Sessions;
 ///         <c>CompactionPolicyInvariantTests</c>, which is where the orphan guarantee
 ///         below is enforced rather than merely claimed.
 ///     </para>
+///     <para>
+///         Which of the two truncation policies is live has its answer in one place, and
+///         this is it: <see cref="TruncateToFitStrict" />, from <c>TurnRunner.cs:122</c>, on
+///         a turn where summarization has already failed. <see cref="TruncateToFit" /> is
+///         its non-reducing sibling, has no product call site, and is kept as public
+///         surface pending the owner call on #772. The two read alike on purpose, so check
+///         the member's own doc before reaching for either.
+///     </para>
 /// </remarks>
 public static class CompactionPolicy
 {
@@ -52,6 +60,22 @@ public static class CompactionPolicy
     ///         be rejected by providers. Orphaned results at the boundary are
     ///         dropped together with the head instead. At least one message is
     ///         always kept.
+    ///     </para>
+    ///     <para>
+    ///         <b>No product call site (#772).</b> The live compaction-failure fallback is
+    ///         <see cref="TruncateToFitStrict" />, called at <c>TurnRunner.cs:122</c>. This
+    ///         method is its non-reducing sibling and nothing in the product calls it. The
+    ///         two are near-duplicates by move-history, and this one is the more forgiving —
+    ///         it returns the history unchanged when the history already fits, which is
+    ///         exactly why it was never wired up as the fallback.
+    ///         It is retained deliberately rather than left as weight nobody owns:
+    ///         <c>Harbor.Application</c> is a packable library and this is public surface, so
+    ///         removing it is a product decision (open on #772), not a cleanup. The rules
+    ///         above stay graded while it waits — see
+    ///         <c>CompactionPolicyInvariantTests.TruncateToFit_KeptSliceNeverOpensOnAnOrphanToolResult</c>
+    ///         and <c>TruncateToFit_KeepsTheNewestMessageWhenNothingLegalExists</c> — so the
+    ///         contract documented here is the contract the tests enforce, not a promise
+    ///         about a code path nothing takes.
     ///     </para>
     /// </summary>
     /// <param name="messages">The current message history.</param>
