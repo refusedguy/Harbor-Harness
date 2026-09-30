@@ -562,7 +562,8 @@ public sealed class SeamTypeLeakRules
                 + "interface, issue #494's deletion of CellForgeRenderContext.Writer would have removed the "
                 + "only substitutable handle on the writer instead of a redundant one");
 
-        Type[] renderContextCtors = typeof(Harbor.Tui.CellForge.CellForgeRenderContext).GetConstructors();
+        ConstructorInfo[] renderContextCtors =
+            typeof(Harbor.Tui.CellForge.CellForgeRenderContext).GetConstructors();
 
         bool takesInterface = renderContextCtors.Any(
             static c => c.GetParameters().Any(
@@ -667,11 +668,22 @@ public sealed class SeamTypeLeakRules
     {
         IReadOnlyList<Type> selfTypes = SeamLeakProbe.SafeGetTypes(typeof(SeamTypeLeakRules).Assembly);
         Type banned = ConcreteClient.Value;
-        Type planted = typeof(DecoratorProbeHost.ReconnectableRpcClient);
 
-        await Assert.That(selfTypes).Contains(planted)
-            .Because("the planted decorator is declared in this file; if reflection cannot see it, the "
-                   + "positive control below is testing nothing");
+        // Located by NAME inside this assembly rather than with typeof(): the
+        // planted type is private, so typeof(DecoratorProbeHost.ReconnectableRpcClient)
+        // is a CS0122 from the test method. Going through the inventory is also
+        // the more honest control — it asks "can the scan see a type shaped
+        // like this?", which is the question rule 1 actually has to answer.
+        Type? found = selfTypes.SingleOrDefault(
+            static t => SeamLeakProbe.IsPartOfTheReconnectDecorator(t)
+                        && string.Equals(t.Name, SeamLeakProbe.DecoratedTypeName, StringComparison.Ordinal));
+
+        await Assert.That(found).IsNotNull()
+            .Because(
+                "the planted decorator is declared in this file as DecoratorProbeHost.ReconnectableRpcClient. "
+                + "If the inventory cannot see it, every positive control below is testing nothing");
+
+        Type planted = found!;
 
         await Assert.That(SeamLeakProbe.IsPartOfTheReconnectDecorator(planted)).IsTrue()
             .Because(
