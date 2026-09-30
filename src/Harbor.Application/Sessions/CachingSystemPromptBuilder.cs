@@ -127,13 +127,27 @@ namespace Harbor.Application.Sessions;
 ///         covered on sight (#792's lesson, in a second guise).
 ///     </para>
 ///     <para>
-///         <b>What this contract does NOT cover: ambient reads.</b> The inner
-///         builder has two, and they are named here rather than left to look
-///         like members. <c>GetOsShort()</c> is a process constant, which a
-///         process-long cache cannot serve wrong. <c>DateTimeOffset.UtcNow</c>
-///         is a clock (#814, open): no key coverage can reach it, because it is
-///         not a context member, so the honest options there are to inject a
-///         <c>TimeProvider</c> and key the date, or to drop the line.
+///         <b>What this contract does NOT cover — and what closes the gap:
+///         ambient reads.</b> Everything above is a requirement on the KEY, and
+///         it holds only if the render's inputs are context members. That is a
+///         second requirement, on the RENDER, and it was in no file until #814.
+///         <c>SystemPromptBuilder</c> had two ambient reads:
+///         <c>GetOsShort()</c>, a process constant a process-long cache cannot
+///         serve wrong, and <c>DateTimeOffset.UtcNow</c>, a clock. A clock is not
+///         a context member, so no amount of key coverage reaches it — which is
+///         why the two requirements are not rivals and neither subsumes the
+///         other: covering the context is necessary and NOT sufficient on its
+///         own, and a pure render is necessary and not sufficient on its own.
+///         #841 took the second of the two options named here — drop the line,
+///         rather than inject a <c>TimeProvider</c> and key the date — and
+///         <c>PromptClockPurityRule</c> now states and enforces the render side:
+///         an <see cref="ISystemPromptBuilder" /> implementation reads no clock,
+///         ambient or injected, so the prompt is a function of its context. With
+///         the inventory above, the key holds every input the render reads and
+///         the render reads nothing else — which is what makes a hit correct
+///         rather than merely likely to be. The asymmetry is untouched by this:
+///         over-keying still costs one rebuild, and the seven surplus agent
+///         fields stay declared rather than trimmed.
 ///     </para>
 /// </remarks>
 public sealed class CachingSystemPromptBuilder(ISystemPromptBuilder inner) : ISystemPromptBuilder
