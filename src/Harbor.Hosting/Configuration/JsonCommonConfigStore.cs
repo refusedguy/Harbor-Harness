@@ -30,6 +30,7 @@
 // there is exactly one CommonConfig type, so there is exactly one
 // JsonCommonConfigStore registration per app.
 
+using System.Collections.Immutable;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;

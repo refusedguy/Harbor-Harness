@@ -21,6 +21,7 @@
 // optional constructor parameter; without it the store falls back to the
 // reflection-based resolver, which logs a warning and only works on JIT.
 
+using System.Collections.Immutable;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Text.Json.Serialization.Metadata;

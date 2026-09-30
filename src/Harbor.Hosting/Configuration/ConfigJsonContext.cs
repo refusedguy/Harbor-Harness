@@ -15,6 +15,7 @@
 // config-persisting call now resolves its metadata from this
 // source-generated JsonSerializerContext instead.
 
+using System.Collections.Immutable;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Text.Json.Serialization.Metadata;
