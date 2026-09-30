@@ -111,6 +111,32 @@
 // asserting how many rows there are in total, proves nothing about a
 // pre-processing step it skipped.
 //
+// THE THIRD RED RUN, WHICH WAS A GREEN NOBODY COULD EXPLAIN
+// ----------------------------------------------------------
+// With the control fixed, the whole architecture gate went GREEN — `build` and
+// `test (core)` both — while `ArmGateGlow` had no caller anywhere on the tree.
+// The two other tests in this file passed, so the walk read both sides, and the
+// control proved the matcher rejects prose, literals and longer identifiers. That
+// leaves exactly one story: something in `tests/` calls it. Nothing does, and
+// reading the code did not say which part of the rule was wrong.
+//
+// The lesson is not "add more assertions", it is that a guard whose verdict its
+// own author cannot derive is the same defect this issue is about, one level up.
+// Two changes follow from it, and both are about making the rule SAY what it
+// measured instead of asking to be trusted:
+//
+//   1. The reachability check now requires a CALL SITE — the name as a whole word
+//      followed by a parameter list — rather than a mention. A field, a constant
+//      or a using-alias spells a method's name without calling it, and each of
+//      those is an ordinary thing for a test tree to contain.
+//   2. The consumer set is now a MEASURED BASELINE ("one method, one file, arm=1
+//      disarm=1") rather than a non-emptiness check. An empty set and a set with
+//      a row too many both go red, and the failure prints the live set — so the
+//      next occurrence of an unexplainable green is a one-run diagnosis instead of
+//      an afternoon. The line number is deliberately not in the baseline; it is
+//      printed as a diagnostic, because pinning it would break on any doc comment
+//      added above the method, including the one that makes the rule green.
+//
 // WHAT THIS FILE IS NOT
 // ---------------------
 //   * Not a second `SourceScan` decision. #877 declared the `/tests/` clause correct
@@ -298,7 +324,7 @@ internal static class GateGlowConsumerProbe
             var namedBy = new List<string>();
             foreach ((string relative, string text) in testNames)
             {
-                if (NamesWholeWord(text, consumer.Method))
+                if (IsCalledFrom(text, consumer.Method))
                 {
                     namedBy.Add(relative);
                 }
@@ -587,9 +613,27 @@ internal static class GateGlowConsumerProbe
         return count;
     }
 
-    /// <summary>Whether <paramref name="text" /> names <paramref name="name" /> as a WHOLE word.</summary>
-    private static bool NamesWholeWord(string text, string name) =>
-        Regex.IsMatch(text, $@"(?<![A-Za-z0-9_]){Regex.Escape(name)}(?![A-Za-z0-9_])", RegexOptions.CultureInvariant);
+    /// <summary>
+    ///     Whether <paramref name="text" /> CALLS <paramref name="name" /> — the name as a whole
+    ///     word followed by a parameter list.
+    /// </summary>
+    /// <remarks>
+    ///     <para>
+    ///         A call, not a mention. The bare whole-word form was tried first and it is not strong
+    ///         enough: a field, a constant, a type alias or a using-alias all spell a method's name
+    ///         without calling it, and any of them in any test file would have satisfied the rule. The
+    ///         parentheses are what make the evidence a call site, and a call site is the only thing
+    ///         that makes "delete the drain, watch it go red" true.
+    ///     </para>
+    ///     <para>
+    ///         Comments and literals are already gone by the time this runs (see
+    ///         <see cref="BlankLiterals" />), so what remains is code, and in code a name followed by
+    ///         <c>(</c> is an invocation or a declaration — and a test file does not declare the
+    ///         product's private method.
+    ///     </para>
+    /// </remarks>
+    private static bool IsCalledFrom(string text, string name) =>
+        Regex.IsMatch(text, $@"(?<![A-Za-z0-9_]){Regex.Escape(name)}\s*\(", RegexOptions.CultureInvariant);
 }
 
 /// <summary>
@@ -606,7 +650,62 @@ public sealed class GateGlowConsumerReachabilityRule
     // =====================================================================
 
     /// <summary>
-    ///     Every gate-glow consumer is named by at least one test file.
+    ///     The measured set of glow consumers, as the rule describes it. Asserted rather than
+    ///     inferred, and the reason is in <see cref="TheMeasuredConsumerSetIsTheOneThisRuleIsAbout" />.
+    /// </summary>
+    private static readonly string[] MeasuredConsumers =
+    [
+        "ArmGateGlow (apps/Harbor.App.Cli/Repl/ReplLifecycle.cs, arm=1 disarm=1)",
+    ];
+
+    /// <summary>
+    ///     The live consumer set is exactly the one measured: one method, in one file, with one
+    ///     arming slot write and one draining slot write.
+    /// </summary>
+    /// <remarks>
+    ///     <para>
+    ///         A bare "at least one" is not enough, and this file learned that the hard way. The
+    ///         reachability rule below reported GREEN on a tree where <c>ArmGateGlow</c> had no caller
+    ///         anywhere, and the reason could not be established by reading the code — which is itself
+    ///         the finding: a guard whose pass/fail the author cannot explain is the same defect this
+    ///         issue is about, one level up. Asserting the exact set turns "I do not know why this is
+    ///         green" into a CI run that prints the truth, and it fails in both directions: an EMPTY
+    ///         set (the seam renamed or the product tree no longer read) and a set with a row too
+    ///         many (a second consumer appeared and nobody wrote its test).
+    ///     </para>
+    ///     <para>
+    ///         The line number is deliberately NOT in the baseline. It is carried in the failure
+    ///         message as a diagnostic, because pinning it would make this rule fail every time a
+    ///         doc comment is added above the method — including the one added by the very commit
+    ///         that makes the rule green. A baseline that breaks on an unrelated edit is a baseline
+    ///         people stop reading.
+    ///     </para>
+    /// </remarks>
+    [Test]
+    public async Task TheMeasuredConsumerSetIsTheOneThisRuleIsAbout()
+    {
+        var live = Report.Value.Consumers.Select(Stamp).ToArray();
+
+        await Assert.That(string.Join(" | ", live))
+            .IsEqualTo(string.Join(" | ", MeasuredConsumers))
+            .Because(
+                "the set of product methods that turn the gate-glow ledger into post-fx slot writes "
+                + "is not the one this rule was written against. An EMPTY live set means the seam was "
+                + "renamed (update LedgerRead and SlotWrite in GateGlowConsumerProbe) or the product "
+                + "tree stopped being read; a live set with a row too many means a second consumer "
+                + "appeared and no test drives it. A row too FEW means a consumer lost its slot write, "
+                + "which is a defect in its own right. Live: " + string.Join(" | ", live)
+                + " | baseline held " + MeasuredConsumers.Length + " row(s): "
+                + string.Join(" | ", MeasuredConsumers));
+    }
+
+    /// <summary>One consumer, stamped the way the baseline spells it.</summary>
+    private static string Stamp(GateGlowConsumer consumer) =>
+        consumer.Method + " (" + consumer.File + ", arm=" + consumer.ArmCalls
+        + " disarm=" + consumer.DisarmCalls + ")";
+
+    /// <summary>
+    ///     Every gate-glow consumer is CALLED from at least one test file.
     /// </summary>
     /// <remarks>
     ///     <para>
@@ -624,9 +723,15 @@ public sealed class GateGlowConsumerReachabilityRule
     ///         the consumer is declared, how many of its slot writes arm and how many drain, and how
     ///         many files each side of the walk produced.
     ///     </para>
+    ///     <para>
+    ///         "Called", not "mentioned" — see <see cref="GateGlowConsumerProbe.IsCalledFrom" />.
+    ///         A field, a constant or a using-alias spells a method's name without calling it, and
+    ///         this rule's own history is the argument: it shipped green on a tree with no caller at
+    ///         all, twice, for reasons that were not readable in the code.
+    ///     </para>
     /// </remarks>
     [Test]
-    public async Task EveryGateGlowConsumer_IsNamedByATest()
+    public async Task EveryGateGlowConsumer_IsCalledFromATest()
     {
         var report = Report.Value;
         var untested = report.Consumers.Where(c => c.NamedBy.Count == 0).ToArray();
@@ -635,9 +740,9 @@ public sealed class GateGlowConsumerReachabilityRule
             .IsEqualTo(string.Empty)
             .Because(
                 "a product method that turns the gate-glow ledger into post-fx slot writes has NO test "
-                + "naming it. The ledger's PRODUCER half is covered (PostFxTests asserts the region "
+                + "calling it. The ledger's PRODUCER half is covered (PostFxTests asserts the region "
                 + "count goes to zero once the gate is decided); the CONSUMER half is "
-                + "ReplLifecycle.ArmGateGlow, and nothing under tests/ mentions it. That matters more "
+                + "ReplLifecycle.ArmGateGlow, and nothing under tests/ calls it. That matters more "
                 + "than an average uncovered method because PostFxPipeline's slot table is persistent "
                 + "and Flush runs every armed effect, so the drain loop at the tail of ArmGateGlow is "
                 + "the only thing that turns the glow off. Delete it and PostFxTests stays green while "
@@ -655,7 +760,9 @@ public sealed class GateGlowConsumerReachabilityRule
                 + "writes ScreenSession.Effects slots. If this is empty, either the seam was renamed "
                 + "(update the two literals in GateGlowConsumerProbe) or the product tree stopped being "
                 + "read, and in both cases the assertion above is green while checking nothing. "
-                + "Files read — product: " + report.ProductFilesRead + ", tests: " + report.TestFilesRead);
+                + "TheMeasuredConsumerSetIsTheOneThisRuleIsAbout is the stronger statement of the "
+                + "same fact and reports the live set. Files read — product: "
+                + report.ProductFilesRead + ", tests: " + report.TestFilesRead);
     }
 
     // =====================================================================
@@ -833,6 +940,7 @@ public sealed class GateGlowConsumerReachabilityRule
                 "{",
                 "    // A comment that MENTIONS ArmGateGlow in prose must not count as a caller.",
                 "    private const string Expected = \"ArmGateGlow\";",
+                "    private int ArmGateGlow;",
                 "    public void Drive() => ArmGateGlowRenamed();",
                 "}",
             ]),
@@ -862,18 +970,20 @@ public sealed class GateGlowConsumerReachabilityRule
             .Because("the transcribed body writes one null into a slot — the drain this issue is about");
 
         // The whole point of the tripwire. `NamesNothing` is the fifth case and it lives on the
-        // TEST side, where the three ways to fake a caller live: a mention in prose, a mention in a
-        // string literal, and a longer identifier that merely starts with the name. Any one of them
-        // counting would let this rule go green with no caller anywhere — and the literal one is not
-        // hypothetical, it is what this guard did to itself on its first red run.
+        // TEST side, where the four ways to fake a caller live: a mention in prose, a mention in a
+        // string constant, a bare field of the same name, and a longer identifier that starts with
+        // it. Any one of them counting would let this rule go green with no caller anywhere — and
+        // the literal one is not hypothetical, it is what this guard did to itself on its first
+        // red run.
         await Assert.That(string.Join(" | ", real.NamedBy))
             .IsEqualTo("tests/Harbor.GateGlow.Tests/NamesTheConsumer.cs")
             .Because(
-                "NamesNothing names ArmGateGlow in a comment, in a string constant, and calls "
-                + "ArmGateGlowRenamed — a different whole word. Comment stripping, literal blanking "
-                + "and the whole-word boundary are the three things that stop it counting, and a rule "
-                + "satisfied by any of them is the failure mode this whole file is about. Callers "
-                + "found: " + string.Join(" | ", real.NamedBy));
+                "NamesNothing names ArmGateGlow in a comment, in a string constant and as a field of "
+                + "the same name, and calls ArmGateGlowRenamed — a different whole word with no "
+                + "parameter list. Comment stripping, literal blanking and the call-site requirement "
+                + "are the three things that stop it counting, and a rule satisfied by any of them is "
+                + "the failure mode this whole file is about. Callers found: "
+                + string.Join(" | ", real.NamedBy));
 
         var pair = consumers.Where(c => c.File.EndsWith("ProbeTwo.cs", StringComparison.Ordinal))
             .Select(c => c.Method)
