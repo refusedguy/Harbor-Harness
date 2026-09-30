@@ -11,6 +11,19 @@ namespace Harbor.Config.Tests;
 ///     using stub Func&lt;string, Task&lt;string&gt;&gt; reader and Action&lt;string&gt; writer.
 ///     No real stdin/stdout involved.
 /// </summary>
+/// <remarks>
+///     #823: this class is the largest writer of process environment in the whole
+///     repository and it was not in the issue's list of nine — thirty-two writes,
+///     twenty-four of them <c>OLLAMA_API_KEY</c> and eight
+///     <c>ANTHROPIC_API_KEY</c>, in the same assembly as
+///     <c>AuthStoreTests</c>, which writes the same variables and reaches
+///     <c>AuthStore.ListApiKeysAsync</c>. That method enumerates the entire process
+///     environment (AuthStore.cs:140), so the set of providers this wizard sees is
+///     a function of timing. Every one of these writes is a null-out of a real
+///     provider key, which is why the collision is a flake rather than a wrong
+///     answer; it is still a race, and it is now a declared one.
+/// </remarks>
+[NotInParallel("process-env")]
 public class OnboardingWizardTests
 {
     /// <summary>

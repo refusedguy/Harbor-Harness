@@ -54,6 +54,18 @@ namespace Harbor.App.Cli.Tests;
 ///     #602 — a config the harness cannot read must be reported, not thrown on and
 ///     not silently defaulted around.
 /// </summary>
+/// <remarks>
+///     #823: the one test below clears <c>OLLAMA_API_KEY</c> in the process
+///     environment so the wizard does not demand a key for ollama. That variable
+///     is read by the product (<c>AuthStore.FromConventionalEnv</c>,
+///     <c>EnvVarAuthResolver.ResolveApiKeyAsync</c>), so the write is process
+///     state and belongs in a keyed group with the other classes here that write
+///     it. Separately: the <c>finally</c> restores <c>null</c> rather than the
+///     saved value, so a developer or CI runner that actually exports
+///     <c>OLLAMA_API_KEY</c> loses it for the rest of the process. Tracked
+///     separately; not fixed here, because the guard has nothing to say about it.
+/// </remarks>
+[NotInParallel("process-env")]
 public class ReplRunnerConfigLoadTests
 {
     /// <summary>
