@@ -185,6 +185,7 @@ public sealed record ProviderRowViewModel(string Id, string Name, string Status)
 ///         shared with the picker dropdown.
 ///     </para>
 /// </summary>
+/// <param name="PricingLabel">PROBE-701.</param>
 public sealed record ModelRowViewModel(
     string Id,
     string DisplayName,

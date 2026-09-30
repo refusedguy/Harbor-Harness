@@ -68,7 +68,6 @@ public sealed class ThemeDirectoryWatcher : IDisposable
     /// <summary>Theme applied by the most recent successful reload (null until the first change).</summary>
     public HarborTheme? LastApplied { get; private set; }
 
-    /// <summary>Creates a watcher over a theme directory.</summary>
     /// <param name="directory">
     ///     Directory to watch, or <c>null</c> for <see cref="ThemeStore.DefaultDirectory" />.
     /// </param>
