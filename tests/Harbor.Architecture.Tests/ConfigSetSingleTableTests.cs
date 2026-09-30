@@ -83,13 +83,23 @@ public sealed class ConfigSetSingleTableTests
         RegexOptions.Compiled);
 
     /// <summary>
-    ///     A key offered by the palette's <c>set</c> menu:
-    ///     <c>new("model", "Model", …)</c>. The table must know every key the
-    ///     menu advertises, or the menu offers a key that only ever refuses.
+    ///     A key offered by the palette's <c>set</c> SUBMENU:
+    ///     <c>new("model", "Model", …)</c>.
     /// </summary>
+    /// <remarks>
+    ///     Scoped to the <c>keyItems</c> list, and NOT applied to the whole file.
+    ///     The palette command builds TWO menus: the top-level <c>/config</c> frame
+    ///     (<c>view</c>, <c>set</c>, <c>path</c> — verbs of the command, not config
+    ///     keys) and the <c>config / set</c> submenu this rule is about. An
+    ///     unscoped match reads all six and reports three phantom offenders, which
+    ///     is what the first run of this guard did.
+    /// </remarks>
     private static readonly Regex PaletteKeyOffer = new(
         @"\bnew\s*\(\s*""(?<key>[a-z]+)""\s*,",
         RegexOptions.Compiled);
+
+    /// <summary>The list the <c>config / set</c> frame is built from.</summary>
+    private const string SetSubmenuListDeclaration = "keyItems";
 
     // ── Rule 1, negative half: neither command file may hold its own table ──
 
@@ -164,7 +174,7 @@ public sealed class ConfigSetSingleTableTests
         }
 
         var undecided = new List<string>();
-        foreach ((int line, string text) in Matches(Read(root, PaletteCommandFile), PaletteKeyOffer))
+        foreach ((int line, string text) in MatchesInSetSubmenu(Read(root, PaletteCommandFile), PaletteKeyOffer))
         {
             string key = Match(text, PaletteKeyOffer);
             if (!tableKeys.Contains(key))
@@ -180,9 +190,14 @@ public sealed class ConfigSetSingleTableTests
 
         await Assert.That(undecided).IsEmpty()
             .Because(
-                "The palette's `set` menu lists keys a user picks from. A key it offers that the table has no "
+                "The palette's `set` submenu lists keys a user picks from. A key it offers that the table has no "
                 + "arm for reaches `default:` and can only ever come back as `Unknown config key`, so the menu "
                 + "advertises a setting that cannot be set: " + string.Join(", ", undecided));
+
+        await Assert.That(SubmenuKeys(Read(root, PaletteCommandFile)).Count).IsGreaterThan(0)
+            .Because(
+                "Non-vacuity: the scoped walk has to find the submenu at all. An empty result would satisfy the "
+                + "rule above by finding nothing — the same vacuous pass the whole file is written against.");
     }
 
     // ── Non-vacuity: the matcher must see the shape it was written for ─────
@@ -284,6 +299,65 @@ public sealed class ConfigSetSingleTableTests
             }
         }
     }
+
+    /// <summary>
+    ///     The 1-based line numbers of the <c>keyItems</c> initializer — the list
+    ///     the <c>config / set</c> frame is built from, and nothing else in the
+    ///     file.
+    /// </summary>
+    /// <remarks>
+    ///     Found by brace count from the declaration, not by a fixed line span, so
+    ///     an item added above or below it does not silently fall out of the rule.
+    ///     Braces are counted on the line as written; string literals in this
+    ///     list are short and balanced, so a count that includes them is still the
+    ///     count that ends the initializer.
+    /// </remarks>
+    private static IReadOnlyList<int> SetSubmenuLines(string text)
+    {
+        string[] lines = text.Replace("\r\n", "\n").Split('\n');
+        var span = new List<int>();
+        bool inside = false;
+        int depth = 0;
+
+        for (int i = 0; i < lines.Length; i++)
+        {
+            if (!inside)
+            {
+                if (!IsCommentLine(lines[i]) && lines[i].Contains(SetSubmenuListDeclaration))
+                {
+                    inside = true;
+                    depth = 0;
+                }
+
+                continue;
+            }
+
+            span.Add(i + 1);
+            depth += lines[i].Count(c => c == '{') - lines[i].Count(c => c == '}');
+            if (depth <= 0)
+            {
+                break;
+            }
+        }
+
+        return span;
+    }
+
+    private static IEnumerable<(int Line, string Text)> MatchesInSetSubmenu(string text, Regex regex)
+    {
+        string[] lines = text.Replace("\r\n", "\n").Split('\n');
+        foreach (int line in SetSubmenuLines(text))
+        {
+            string body = lines[line - 1];
+            if (!IsCommentLine(body) && regex.IsMatch(body))
+            {
+                yield return (line, body);
+            }
+        }
+    }
+
+    private static IReadOnlyList<string> SubmenuKeys(string text)
+        => [.. MatchesInSetSubmenu(text, PaletteKeyOffer).Select(m => Match(m.Text, PaletteKeyOffer))];
 
     private static string Match(string text, Regex regex)
     {

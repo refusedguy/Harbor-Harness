@@ -85,10 +85,10 @@ internal static class ConfigValueSetter
 {
     /// <summary>
     ///     The keys <c>set</c> accepts, in the order the palette's menu lists
-    ///     them. Derived from the switch below by
-    ///     <see cref="ConfigSetSingleTableTests" />'s counterpart assertion: the
-    ///     palette may not offer a key this table has no arm for, because such a
-    ///     key can only ever come back as <c>Unknown config key</c>.
+    ///     them. The palette's <c>set</c> submenu is checked against this list by
+    ///     <c>ConfigSetSingleTableTests</c> in the architecture suite: it may not
+    ///     offer a key this table has no arm for, because such a key can only
+    ///     ever come back as <c>Unknown config key</c>.
     /// </summary>
     internal static readonly IReadOnlyList<string> Keys =
     [
@@ -97,11 +97,10 @@ internal static class ConfigValueSetter
 
     /// <summary>
     ///     Decide what <paramref name="value" /> means for <paramref name="key" />,
-    ///     without touching a config.
+    ///     without touching a config. The caller applies the returned mutation to
+    ///     the object the store is about to save — the only object a write may
+    ///     land on — and it does so only after this has said yes.
     /// </summary>
-    /// <param name="config">The config to mutate. Not read, not written — the
-    ///     caller applies the returned mutation to the object the store is about
-    ///     to save, which is the only object a write may land on.</param>
     /// <param name="key">The config key, as the user typed it (case-insensitive).</param>
     /// <param name="value">The value, already joined if it contained spaces.</param>
     /// <returns>
