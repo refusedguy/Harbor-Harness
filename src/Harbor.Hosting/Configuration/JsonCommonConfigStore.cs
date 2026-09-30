@@ -116,7 +116,16 @@ public sealed class JsonCommonConfigStore : ICommonConfigStore
                 _logger.LogWarning("Common config at {Path} deserialized to null, using defaults", path);
                 return Result.Success(_default);
             }
-            return Result.Success(config);
+
+            // #913: pin the directory to the one this store was constructed
+            // with, so the record handed back and the path SaveAsync writes to
+            // can never disagree. `ConfigDirectory` round-trips through the
+            // file, and the merge above lets the FILE's copy win — so before
+            // this, a config.json carrying a stale absolute path (relocated
+            // ~/.harbor, a config copied off another machine, a pinned E2E
+            // sandbox) made LoadAsync return a record that pointed somewhere
+            // other than the file it had just read.
+            return Result.Success(config with { ConfigDirectory = _default.ConfigDirectory });
         }
         catch (JsonException ex)
         {
@@ -190,7 +199,20 @@ public sealed class JsonCommonConfigStore : ICommonConfigStore
         await _lock.WaitAsync(ct).ConfigureAwait(false);
         try
         {
-            string path = config.ConfigFilePath;
+            // #913: the target is the store's OWN file — the same
+            // _default.ConfigFilePath LoadAsync reads from — NOT one
+            // re-derived from the payload's ConfigDirectory. That property is
+            // init-only, round-trips through config.json, and is caller-
+            // controlled, so trusting it made the write destination a function
+            // of unvalidated input: a payload carrying a foreign
+            // configDirectory wrote the whole config to a different tree
+            // (creating it via Directory.CreateDirectory) and then re-persisted
+            // that foreign path, so the split reproduced itself on every
+            // subsequent save. The invariant belongs to the store, so the
+            // store decides where it writes.
+            string path = _default.ConfigFilePath;
+            config = config with { ConfigDirectory = _default.ConfigDirectory };
+
             string? dir = Path.GetDirectoryName(path);
             if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))
             {

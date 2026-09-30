@@ -31,6 +31,12 @@ public class ConfigStoreAotTests
     private static string NewTempDir()
         => Path.Combine(Path.GetTempPath(), "harbor-config-tests-" + Guid.NewGuid().ToString("N"));
 
+    /// <summary>
+    ///     Escape a Windows path for embedding in a hand-written JSON string
+    ///     literal. No-op on POSIX, where temp paths carry no backslashes.
+    /// </summary>
+    private static string Escape(string path) => path.Replace("\\", "\\\\");
+
     private static CommonConfig NewPopulatedConfig(string dir) => new()
     {
         ConfigDirectory = dir,
@@ -268,6 +274,132 @@ public class ConfigStoreAotTests
         finally
         {
             Directory.Delete(dir, recursive: true);
+        }
+    }
+
+    // ── #913: the store owns its path identity ──────────────────────────────
+    //
+    // `ConfigDirectory` is init-only, round-trips through config.json, and the
+    // load-time merge lets the FILE's copy beat the injected default. Before
+    // #913 that made both halves of the store disagree: LoadAsync read the
+    // store's file but returned a record pointing at whatever the file said,
+    // and SaveAsync wrote wherever that record pointed. The guards below pin
+    // the invariant the issue names — the write target is a property of the
+    // store, never of the unvalidated payload.
+
+    [Test]
+    public async Task Save_PayloadPointingAtForeignDirectory_WritesToTheStoresOwnFile()
+    {
+        string dir = NewTempDir();
+        string foreign = NewTempDir();
+        try
+        {
+            Directory.CreateDirectory(dir);
+            var store = new JsonCommonConfigStore(
+                new CommonConfig { ConfigDirectory = dir },
+                NullLogger<JsonCommonConfigStore>.Instance);
+
+            // A payload whose ConfigDirectory points somewhere else entirely —
+            // a relocated ~/.harbor, a config copied off another machine, a
+            // pinned E2E sandbox. Every other field is a normal save.
+            var saveResult = await store.SaveAsync(NewPopulatedConfig(foreign));
+
+            await Assert.That(saveResult.IsSuccess).IsTrue();
+            // Landed in the store's own file…
+            await Assert.That(File.Exists(Path.Combine(dir, "config.json"))).IsTrue();
+            // …and NOT in the directory the payload named, which must not even
+            // have been created.
+            await Assert.That(File.Exists(Path.Combine(foreign, "config.json"))).IsFalse();
+            await Assert.That(Directory.Exists(foreign)).IsFalse();
+
+            // The content is the real save, not a stub.
+            string written = await File.ReadAllTextAsync(Path.Combine(dir, "config.json"));
+            await Assert.That(written.Contains("\"theme\": \"dark\"")).IsTrue();
+        }
+        finally
+        {
+            Directory.Delete(dir, recursive: true);
+            if (Directory.Exists(foreign))
+            {
+                Directory.Delete(foreign, recursive: true);
+            }
+        }
+    }
+
+    [Test]
+    public async Task Save_RepairsStaleConfigDirectory_SoTheSplitCannotReoccur()
+    {
+        string dir = NewTempDir();
+        string stale = NewTempDir();
+        try
+        {
+            Directory.CreateDirectory(dir);
+            await File.WriteAllTextAsync(
+                Path.Combine(dir, "config.json"),
+                "{\"configDirectory\": \"" + Escape(stale) + "\"}");
+
+            var store = new JsonCommonConfigStore(
+                new CommonConfig { ConfigDirectory = dir },
+                NullLogger<JsonCommonConfigStore>.Instance);
+
+            var saveResult = await store.SaveAsync(NewPopulatedConfig(dir));
+
+            await Assert.That(saveResult.IsSuccess).IsTrue();
+            // The stale key is rewritten to the directory the store actually
+            // used, so the next Load has nothing stale left to inherit. Read
+            // the raw bytes — LoadAsync pins the record either way, so only the
+            // file itself shows whether the repair happened.
+            string written = await File.ReadAllTextAsync(Path.Combine(dir, "config.json"));
+            await Assert.That(written.Contains(Escape(stale))).IsFalse();
+            await Assert.That(written.Contains("\"theme\": \"dark\"")).IsTrue();
+
+            var reloaded = await store.LoadAsync();
+            await Assert.That(reloaded.IsSuccess).IsTrue();
+            await Assert.That(reloaded.Value.ConfigDirectory).IsEqualTo(dir);
+            await Assert.That(reloaded.Value.Theme).IsEqualTo("dark");
+        }
+        finally
+        {
+            Directory.Delete(dir, recursive: true);
+            if (Directory.Exists(stale))
+            {
+                Directory.Delete(stale, recursive: true);
+            }
+        }
+    }
+
+    [Test]
+    public async Task Load_FileNamingForeignDirectory_ReturnsRecordPinnedToTheStoresOwn()
+    {
+        string dir = NewTempDir();
+        string foreign = NewTempDir();
+        try
+        {
+            Directory.CreateDirectory(dir);
+            await File.WriteAllTextAsync(
+                Path.Combine(dir, "config.json"),
+                "{\"configDirectory\": \"" + Escape(foreign) + "\", \"theme\": \"dark\"}");
+
+            var store = new JsonCommonConfigStore(
+                new CommonConfig { ConfigDirectory = dir },
+                NullLogger<JsonCommonConfigStore>.Instance);
+
+            var result = await store.LoadAsync();
+
+            await Assert.That(result.IsSuccess).IsTrue();
+            // The rest of the file is still honoured…
+            await Assert.That(result.Value.Theme).IsEqualTo("dark");
+            // …but the record's directory agrees with the file it was read
+            // from, so SaveAsync cannot be sent to a foreign tree by it.
+            await Assert.That(result.Value.ConfigDirectory).IsEqualTo(dir);
+        }
+        finally
+        {
+            Directory.Delete(dir, recursive: true);
+            if (Directory.Exists(foreign))
+            {
+                Directory.Delete(foreign, recursive: true);
+            }
         }
     }
 }
