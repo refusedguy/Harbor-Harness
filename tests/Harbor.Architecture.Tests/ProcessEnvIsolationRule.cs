@@ -320,15 +320,22 @@ public class ProcessEnvIsolationRule
     ];
 
     /// <summary>
-    ///     Every class #847's investigation found restoring nothing. Listed as a
-    ///     REACHABILITY set, not as an expectation: the test that uses it asserts
-    ///     each is a writer rule (3) can see, which is a property of the walk and
-    ///     holds however many of them have since been fixed. Whether a given one is
-    ///     still reported is asserted against its SHAPE (planted lines), never against
-    ///     this list — a control pinned to the repository's current state stops being
-    ///     a control the moment the next fix lands. Three of the four are fixed in
-    ///     #870; the list stays until they are, because it is also what proves the
-    ///     walk still reaches them.
+    ///     Every class #847's investigation found restoring nothing. All four are
+    ///     fixed in this PR, so the list is now purely a REACHABILITY set: the test
+    ///     that uses it asserts each is still a writer rule (3) can see, which is a
+    ///     property of the walk and holds however many of them have since been
+    ///     fixed. Whether a given one is still reported is asserted against its
+    ///     SHAPE (planted lines), never against this list — a control pinned to the
+    ///     repository's current state stops being a control the moment the next fix
+    ///     lands, which is exactly how the first version of this test died.
+    ///     <para>
+    ///         The list outlives the defects on purpose. It is also the cheapest
+    ///         available answer to "did the walk stop early": all four files still
+    ///         write the environment and still hold [Test] methods, so a rule that
+    ///         quietly stopped finding them fails here. Deleting it when the last fix
+    ///         landed would have thrown that away and left the discovery test with
+    ///         one fewer thing to check.
+    ///     </para>
     /// </summary>
     private static readonly string[] ClassesThatRestoredNothing =
     [
@@ -614,13 +621,18 @@ public class ProcessEnvIsolationRule
 
         await Assert.That(clean.Count).IsGreaterThanOrEqualTo(8)
             .Because(
-                "Nine classes write the environment correctly today — the four Harbor.Hosting.Tests "
-                + "sentinels, McpRemoteTransportTests, McpLoginRunnerTests, ViewInflationTests, "
-                + "CellForgeModuleApproverTests, SkillFreshnessPanelRegistrationTests and the "
-                + "ReplRunnerConfigLoadTests this PR fixed — and two more are the declared "
-                + "process-lifetime writes. Fewer than eight means the detector stopped recognising a "
-                + "restore, and rule (3) would report every writer as broken. A rule that reports all of "
-                + "everything is not a rule; it gets deleted.");
+                "Eight is a FLOOR, and it is a floor on the number of writers the detector still "
+                + "recognises a restore in — the four Harbor.Hosting.Tests sentinels, "
+                + "McpRemoteTransportTests, McpLoginRunnerTests, ViewInflationTests, "
+                + "CellForgeModuleApproverTests, SkillFreshnessPanelRegistrationTests, and the four "
+                + "classes #847's investigation found restoring nothing, all of which this PR fixed. "
+                + "The count is well above the floor today; what the floor is for is the shape of the "
+                + "failure. Dropping below it means "
+                + "the detector stopped recognising a restore, and rule (3) would report every writer "
+                + "as broken. A rule that reports all of everything is not a rule; it gets deleted. "
+                + "Stated as a floor rather than an exact count for the reason the rest of this file "
+                + "keeps restating: a control pinned to a number goes red on the next legitimate fix, "
+                + "and a control that goes red for that reason has to be deleted rather than trusted.");
 
         await Assert.That(clean.Any(s => s.Class == "HostBuilderDiTests")).IsTrue()
             .Because(
