@@ -17,15 +17,33 @@ namespace Harbor.Application.Sessions;
 ///     <para>
 ///         Thread-safe by contract (<c>ISystemPromptBuilder</c> implementers
 ///         must be): the dictionary is concurrent and the key derivation is
-///         pure. Cache entries live for the decorator's lifetime — the loop
-///         creates one decorator per instance, so entries die with the loop
-///         (no cross-run staleness beyond what the key covers).
+///         pure. Nothing evicts — no TTL, no size cap, no clear — so the cache
+///         holds one entry per distinct context for as long as the decorator
+///         is reachable.
+///     </para>
+///     <para>
+///         <b>The lifetime is the process, not the run.</b> The decorator is
+///         built in <c>AgentLoop</c>'s constructor, <c>IAgentLoop</c> is a DI
+///         singleton, and the CLI builds its host once around the whole REPL —
+///         so every turn of every run in a session shares this one dictionary.
+///         An earlier version of this comment said the loop "creates one
+///         decorator per instance, so entries die with the loop", and read
+///         from the decorator's construction site alone it is true; the
+///         registration makes it false. Entries outlive the run that filled
+///         them, which is why the key must be complete rather than merely good
+///         enough for one turn's inputs.
 ///     </para>
 ///     <para>
 ///         The key covers every <see cref="SystemPromptContext" /> component
-///         that can influence the rendered prompt. Permission-rule edits that
-///         keep the resolved tool set identical do not change the key —
-///         acceptable, because the default builder renders tools, not rules.
+///         the default builder renders. Permission-rule edits that keep the
+///         resolved tool set identical do not change the key — acceptable,
+///         because the default builder renders tools, not rules. Two inputs
+///         still reach the prompt without reaching the key, and are recorded
+///         rather than fixed here: #815 (<c>ModelInfo.ProviderId</c>, where the
+///         key holds the agent's provider instead of the model's) and #814
+///         (the wall clock, which is not a context component at all). Both are
+///         latent in-tree. The list is here so the coverage claim reads as the
+///         partial claim it is.
 ///     </para>
 /// </remarks>
 public sealed class CachingSystemPromptBuilder(ISystemPromptBuilder inner) : ISystemPromptBuilder
@@ -87,6 +105,18 @@ public sealed class CachingSystemPromptBuilder(ISystemPromptBuilder inner) : ISy
             string raw = _schemaTextCache.GetOrAdd(t.Schema, static d => d.RootElement.GetRawText());
             AppendField(sb, raw);
             AppendField(sb, t.PromptSnippet);
+            // #792: the builder emits up to MaxGuidelinesPerTool of these as
+            // `  - <guideline>` lines, which makes them prompt content exactly
+            // as the three fields above are. Keyed raw — every guideline, not
+            // the capped subset that happens to render — because this decorator
+            // wraps an unknown ISystemPromptBuilder: over-keying costs one
+            // rebuild, under-keying serves the previous turn's text. One field
+            // per guideline, so the count and the order ride along too.
+            var guidelines = t.PromptGuidelines;
+            for (int g = 0; g < guidelines.Count; g++)
+            {
+                AppendField(sb, guidelines[g]);
+            }
         }
 
         var files = context.ContextFiles;
