@@ -182,6 +182,22 @@ public class ProviderConfigTests
 ///     That makes this the one case in #823 with no co-victim in its assembly —
 ///     the key below excludes nobody today and exists so the next writer or reader
 ///     of these names does not have to rediscover that.
+///     <para>
+///         #870, seven writes and zero reads. Three of the four tests that write
+///         here did write <c>null</c> back, which reads like a teardown and
+///         restores nothing — <c>null</c> is a value the class never had. The
+///         fourth, <c>ResolveApiKeyAsync_FailsWhenNeitherOverrideNorEnvVar</c>, had no
+///         teardown at all, so its pin outlived even the test that made it. All four
+///         now read the ambient value and hand that identifier back instead.
+///     </para>
+///     <para>
+///         They do it inline rather than through a class-level drain because every
+///         write goes through an <c>envName</c> local holding a DIFFERENT provider per
+///         test, so there is no set of names to name up front. A wrapper method would
+///         not help either: the call site is the only place the value that was read
+///         is in scope, and hiding the write behind a helper is the very indirection
+///         that made this defect invisible to grep in the first place.
+///     </para>
 /// </remarks>
 [NotInParallel("process-env")]
 public class EnvVarAuthResolverTests
@@ -204,6 +220,9 @@ public class EnvVarAuthResolverTests
     public async Task ResolveApiKeyAsync_EnvVarUsedWhenNoOverride()
     {
         string envName = "TESTPROVIDER_API_KEY";
+        // #847: read before pinning, hand back after. The finally used to write
+        // `null`, which is a value this test never had.
+        string? previousEnv = Environment.GetEnvironmentVariable(envName);
         Environment.SetEnvironmentVariable(envName, "env-key-456");
         try
         {
@@ -215,7 +234,7 @@ public class EnvVarAuthResolverTests
         }
         finally
         {
-            Environment.SetEnvironmentVariable(envName, null);
+            Environment.SetEnvironmentVariable(envName, previousEnv);
         }
     }
 
@@ -224,6 +243,9 @@ public class EnvVarAuthResolverTests
     {
         // Provider id "kilo-code" should map to env var "KILO_CODE_API_KEY".
         string envName = "KILO_CODE_API_KEY";
+        // #847: KILO_API_KEY is the real variable the product reads
+        // (providers/kilocode.json), and this one is its dash-normalised twin.
+        string? previousEnv = Environment.GetEnvironmentVariable(envName);
         Environment.SetEnvironmentVariable(envName, "kilo-key");
         try
         {
@@ -235,7 +257,7 @@ public class EnvVarAuthResolverTests
         }
         finally
         {
-            Environment.SetEnvironmentVariable(envName, null);
+            Environment.SetEnvironmentVariable(envName, previousEnv);
         }
     }
 
@@ -243,19 +265,33 @@ public class EnvVarAuthResolverTests
     public async Task ResolveApiKeyAsync_FailsWhenNeitherOverrideNorEnvVar()
     {
         string envName = "MISSINGPROVIDER_API_KEY";
+        // #847: this one had no teardown at all, so the pin outlived the test that
+        // made it. Reading first and restoring in a finally is what makes the pin
+        // safe to write; the test is unchanged by either.
+        string? previousEnv = Environment.GetEnvironmentVariable(envName);
         Environment.SetEnvironmentVariable(envName, null);
-        var resolver = new EnvVarAuthResolver();
+        try
+        {
+            var resolver = new EnvVarAuthResolver();
 
-        var result = await resolver.ResolveApiKeyAsync("missingprovider");
+            var result = await resolver.ResolveApiKeyAsync("missingprovider");
 
-        await Assert.That(result.IsFailure).IsTrue();
-        await Assert.That(result.Error).Contains("MISSINGPROVIDER_API_KEY");
+            await Assert.That(result.IsFailure).IsTrue();
+            await Assert.That(result.Error).Contains("MISSINGPROVIDER_API_KEY");
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable(envName, previousEnv);
+        }
     }
 
     [Test]
     public async Task ResolveApiKeyAsync_EmptyEnvVar_Fails()
     {
         string envName = "EMPTYPROVIDER_API_KEY";
+        // #847: pinned to the empty string, restored to `null` — two different
+        // values, and only the first was ever read.
+        string? previousEnv = Environment.GetEnvironmentVariable(envName);
         Environment.SetEnvironmentVariable(envName, "");
         try
         {
@@ -266,7 +302,7 @@ public class EnvVarAuthResolverTests
         }
         finally
         {
-            Environment.SetEnvironmentVariable(envName, null);
+            Environment.SetEnvironmentVariable(envName, previousEnv);
         }
     }
 
