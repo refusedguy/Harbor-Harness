@@ -847,8 +847,8 @@ public sealed class DiffSurfaceNameCollisionRule
                 + "foreign declaration undetectable, so \"nothing is foreign\" would be vacuous. Derived: "
                 + Describe(report.VocabularyNames));
 
-        await Assert.That(report.VocabularyOwners.Keys)
-            .Contains(report.VocabularyNames)
+        await Assert.That(report.VocabularyNames.OrderBy(n => n, StringComparer.Ordinal).ToArray())
+            .IsEquivalentTo(report.VocabularyOwners.Keys.OrderBy(n => n, StringComparer.Ordinal).ToArray())
             .Because(
                 "the vocabulary names and the vocabulary owners are the same set by construction, and a "
                 + "mismatch means the grading step is reading a different list than the derivation "
@@ -893,14 +893,19 @@ public sealed class DiffSurfaceNameCollisionRule
                 + "and a vocabulary that names only its enum would leave a second project's own row type "
                 + "free to reuse the same name");
 
-        await Assert.That(report.VocabularyOwners.Values)
-            .AllSatisfy(v => ProjectOf(v) == engineProject)
+        // Every owner must sit in the engine's project. Graded as a bool list because the
+        // assertion is about EVERY entry, and a predicate over the values says that directly
+        // where a per-entry loop would only say it one name at a time.
+        await Assert.That(report.VocabularyOwners.Values.Select(v => ProjectOf(v) == engineProject).ToArray())
+            .IsEquivalentTo(report.VocabularyOwners.Values.Select(_ => true).ToArray())
             .Because(
                 "every vocabulary name is derived from the engine's project and owned by a file in it. A "
                 + "name owned by some other project would mean the layer leaked outwards, and the owner "
-                + "of a vocabulary is precisely what rule 3 exists to keep singular");
+                + "of a vocabulary is precisely what rule 3 exists to keep singular. Owners: "
+                + string.Join(" | ", report.VocabularyOwners.Select(o => o.Key + " -> " + o.Value)));
 
-        await Assert.That(report.VocabularyNames).Contains("DiffLineKind")
+        await Assert.That(report.VocabularyNames.Contains("DiffLineKind", StringComparer.Ordinal))
+            .IsTrue()
             .Because(
                 "DiffLineKind beside DiffLine in src/Harbor.Ui.Framework.Rendering/Widgets/DiffBlock.cs is "
                 + "the #803 name on the engine's side — the unified-diff DOCUMENT vocabulary, which carries "
