@@ -184,16 +184,18 @@ public class ApprovalCoordinatorTupleTests
     [Test]
     public async Task TupleDoubleDecide_SecondIsAlreadyDecided()
     {
+        // #797: stamped with no waiter in flight. A parked waiter forgets the slot
+        // when it consumes, so this assertion raced that ForgetGate (AlreadyDecided
+        // vs StaleGate). The parked order is covered by TupleHappyPath above.
         var coordinator = NewCoordinator();
         coordinator.RegisterGate("g1", "inv-1", 1);
-        var wait = coordinator.WaitForDecisionAsync("g1", CancellationToken.None);
         var ui = new UiApprovalSender(coordinator, "g1", "inv-1", 1);
 
         await Assert.That(ui.Approve()).IsEqualTo(ApprovalDecisionDisposition.Accepted);
         await Assert.That(ui.Deny()).IsEqualTo(ApprovalDecisionDisposition.AlreadyDecided);
 
-        // First decision stands.
-        var outcome = await wait;
+        // First decision stands: the twin's Deny did not overwrite the slot.
+        var outcome = await coordinator.WaitForDecisionAsync("g1", CancellationToken.None);
         await Assert.That(outcome!.Approved).IsTrue();
     }
 
