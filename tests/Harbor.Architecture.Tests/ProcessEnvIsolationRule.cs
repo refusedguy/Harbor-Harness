@@ -838,26 +838,113 @@ public class ProcessEnvIsolationRule
                     + "it, rule (3) is not enforcing anything on a class this investigation named.");
         }
 
-        // Rule (3) must still be reporting the ones that are NOT fixed yet.
-        // #847's own class is deliberately absent from this expectation: it was
-        // reported before its fix and is silent now, and that silence is asserted
-        // above as the discrimination the whole rule rests on. Asserting the full
-        // list here instead would have gone red the moment the fix landed — a control
-        // pinned to the repository's CURRENT state stops being a control and becomes
-        // a change detector. What must hold is the SHAPE, and that is asserted on the
-        // planted lines independently of which classes happen to be fixed today.
-        var reportedFiles = new HashSet<string>(
-            from site in writers
-            where !IsRestored(site) && !IsProcessLifetime(site)
-            select site.File,
-            StringComparer.Ordinal);
-
-        await Assert.That(reportedFiles.Count).IsGreaterThan(0)
+        // Planted classes, run through the WHOLE of rule (3)'s judgement —
+        // ReadEnvTraffic, not the argument reader and not the save matcher. Those
+        // two were shown to be separable above, but neither is the rule: a
+        // detector can read `previous` off a line perfectly and still fail to
+        // credit it to the variable it is written back for, and only
+        // ReadEnvTraffic is where that pairing is decided.
+        //
+        // This replaces an assertion on the repository's current state — "rule (3)
+        // still reports somebody" — which was the same mistake the list above used
+        // to make. It would have gone red on the commit that fixed the last of the
+        // #870 classes, because that commit empties the report, and the honest
+        // reading of such a red is "the control described a moment in time" rather
+        // than "the rule broke". A control that describes a moment stops being a
+        // control. These describe the SHAPE, so they hold before the fixes, during
+        // them and after them, and they still go red if the detector ever stops
+        // pairing a save with the variable it is written back for.
+        string[] plantedLeak =
+        [
+            "public class PlantedLeak",
+            "{",
+            "    public void T()",
+            "    {",
+            "        Environment.SetEnvironmentVariable(\"PLANTED_API_KEY\", null);",
+            "    }",
+            "}",
+        ];
+        var plantedLeakTraffic = ReadEnvTraffic(plantedLeak, 0, plantedLeak.Length);
+        await Assert.That(plantedLeakTraffic.Restored.Contains("PLANTED_API_KEY")).IsFalse()
             .Because(
-                "The remaining inventory in #870 is not fixed yet, so rule (3) must still be naming "
-                + "classes. If it reports none, either they were all fixed — in which case "
-                + "ClassesThatRestoredNothing is stale and must be deleted here — or the detector stopped "
-                + "working. This assertion is what tells those two apart.");
+                "A class that pins a variable and hands back `null` restores nothing, and rule (3) must "
+                + "report it. This is the #847 shape verbatim, on lines that exist in this file rather "
+                + "than in the tree — so it stays a control after every class it names has been fixed, "
+                + "which is exactly when the version pinned to the tree stopped being one.");
+
+        string[] plantedRestore =
+        [
+            "public class PlantedRestore",
+            "{",
+            "    public void T()",
+            "    {",
+            "        string? previous = Environment.GetEnvironmentVariable(\"PLANTED_API_KEY\");",
+            "        Environment.SetEnvironmentVariable(\"PLANTED_API_KEY\", null);",
+            "        Environment.SetEnvironmentVariable(\"PLANTED_API_KEY\", previous);",
+            "    }",
+            "}",
+        ];
+        var plantedRestoreTraffic = ReadEnvTraffic(plantedRestore, 0, plantedRestore.Length);
+        await Assert.That(plantedRestoreTraffic.Restored.Contains("PLANTED_API_KEY")).IsTrue()
+            .Because(
+                "The same class with a save in front of the pin and the saved identifier handed back must "
+                + "be credited, or rule (3) reports every writer in the repository and a rule that reports "
+                + "all of everything gets deleted.");
+
+        // One correct restore does not cover a second variable pinned to a literal.
+        // IsRestored turns on that — it is an All over the written set, not an Any
+        // over the class — and a class that quietly degraded to Any would pass
+        // every writer it has left, so the property is worth a control of its own.
+        string[] plantedPartial =
+        [
+            "public class PlantedPartial",
+            "{",
+            "    public void T()",
+            "    {",
+            "        string? previous = Environment.GetEnvironmentVariable(\"PLANTED_B_API_KEY\");",
+            "        Environment.SetEnvironmentVariable(\"PLANTED_A_API_KEY\", null);",
+            "        Environment.SetEnvironmentVariable(\"PLANTED_B_API_KEY\", null);",
+            "        Environment.SetEnvironmentVariable(\"PLANTED_B_API_KEY\", previous);",
+            "    }",
+            "}",
+        ];
+        var plantedPartialTraffic = ReadEnvTraffic(plantedPartial, 0, plantedPartial.Length);
+        await Assert.That(plantedPartialTraffic.Restored.Contains("PLANTED_B_API_KEY")).IsTrue()
+            .Because("The one variable that WAS saved and handed back is credited, as above.");
+        await Assert.That(plantedPartialTraffic.Restored.Contains("PLANTED_A_API_KEY")).IsFalse()
+            .Because(
+                "PLANTED_A_API_KEY is pinned to a literal and never saved, so crediting it would let one "
+                + "good restore cover a second variable the class never read. That is the All-in-"
+                + "IsRestored this rule depends on, asserted on planted lines so it cannot be lost to the "
+                + "next class someone fixes.");
+
+        // The pairing a line scan genuinely CANNOT make, asserted here as a
+        // documented gap rather than as a guarantee. `previous` is read for
+        // PLANTED_OTHER_KEY and handed back for PLANTED_API_KEY, and the rule
+        // credits it anyway — matching a saved identifier to the variable it was
+        // read for needs name resolution, and the header says so. Left as a
+        // control in the direction the rule actually behaves: if this ever flips
+        // to false, the detector got STRICTER, and the header's limitation is
+        // stale and has to be rewritten rather than the test quietly deleted.
+        string[] plantedCrossed =
+        [
+            "public class PlantedCrossed",
+            "{",
+            "    public void T()",
+            "    {",
+            "        string? previous = Environment.GetEnvironmentVariable(\"PLANTED_OTHER_KEY\");",
+            "        Environment.SetEnvironmentVariable(\"PLANTED_API_KEY\", null);",
+            "        Environment.SetEnvironmentVariable(\"PLANTED_API_KEY\", previous);",
+            "    }",
+            "}",
+        ];
+        var plantedCrossedTraffic = ReadEnvTraffic(plantedCrossed, 0, plantedCrossed.Length);
+        await Assert.That(plantedCrossedTraffic.Restored.Contains("PLANTED_API_KEY")).IsTrue()
+            .Because(
+                "Documented gap, asserted so it stays documented: the rule credits a save read for one "
+                + "variable when it is handed back for another. It is a proxy for 'this class knows what the "
+                + "ambient value was', not proof of symmetric teardown, and that is why the file header "
+                + "lists it under KNOWN LIMITATION instead of leaving it to be discovered.");
     }
 
     /// <summary>How many times a site writes one named variable across its extent.</summary>
