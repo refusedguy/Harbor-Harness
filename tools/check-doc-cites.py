@@ -214,6 +214,42 @@ KNOWN LIMITATIONS — READ THIS BEFORE TRUSTING A GREEN
   deleted/renamed file, a number that drifted past the end of its file, and a
   type that only exists to be documented. See `--self-test`.
 
+THE FIFTH SHAPE — MARKDOWN THAT ONLY LOOKS COMPILABLE (#853)
+
+  `docs/TEST_PATTERNS.md` shipped `[NotInParallel("a", "b")]` (CS1729 — TUnit has
+  no `params` overload) and `[SkipWhenNotLinux]` (CS0246 — it is `internal` to one
+  test project), both in a document titled "Copy-Paste Ready". Neither is visible
+  to any rule here: the first is a claim about constructor ARITY in a package, the
+  second about a name's visibility, and neither is a `file:line` or a type this
+  repository declares.
+
+  Six candidate rules were written far enough to be counted (#853). Every one is
+  unreachable from docs.yml or red on day one, so none was added. The two that
+  look most attractive are worth the specific numbers, because both are wrong in
+  a way that is only visible once measured:
+
+    * TUnit.Core ships a 624 KB `TUnit.Core.xml` that stdlib Python parses fine, so
+      a name-existence check looks free. It is not reachable — docs.yml runs six
+      `python3 tools/…` lines and never restores, so `~/.nuget/packages` is empty
+      there, and no `packages.lock.json` is tracked. And it is not complete: 21 of
+      the 47 attribute types it declares carry NO `#ctor` row, including
+      `NotInParallelAttribute` itself. A rule built on it would be silent on 45% of
+      TUnit's attributes, and silent on the exact one whose arity broke.
+    * Checking names against THIS repository instead needs no package, and found
+      0 of 62 attribute spellings in the actionable "declared only internal"
+      bucket — while 23 of 62 are irreducible false positives, including the real
+      TUnit `RunOn` and `ExcludeOn`.
+
+  Also measured, and also not built: requiring a citation on examples that quote
+  code (131 of 1028 carry one), banning uncited examples (897 of them, across 105
+  documents), fencing the citations non-normative documents already wrote (818 of
+  2662 fail), and resolving a source path named on a fence's first line (82 of 116
+  name files that do not exist, because the convention is a template).
+
+  Full reasoning and the three conditions that would re-open this:
+  docs/adr/ADR-011-doc-example-compile-gate.md. Nothing here is a rule; this
+  paragraph is a pointer so the question is not re-derived from scratch.
+
 USAGE
 
   tools/check-doc-cites.py                      # gate (what docs.yml runs)
