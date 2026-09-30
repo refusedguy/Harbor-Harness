@@ -53,9 +53,21 @@ public sealed class SessionFactory
     /// <param name="forker">
     ///     The core fork, reached through the <see cref="ISessionForker" /> port. Required, not
     ///     optional: #670's copy was only reachable because this constructor had no such
-    ///     parameter to pass. Making it required means a host that wants to fork sessions must
-    ///     name the one implementation, and a host that wires nothing gets a compile error rather
-    ///     than a silently different fork.
+    ///     parameter to pass. Making it required means a host that constructs this factory by
+    ///     hand must name the one implementation.
+    ///     <para>
+    ///         #882 narrowed what that buys, and the narrowing is worth stating here rather than
+    ///         only in a guard's remarks. A required parameter is checked at <c>new</c> sites, and
+    ///         the shipped host does not use one — it registers
+    ///         <c>services.AddSingleton&lt;SessionFactory&gt;()</c>, which is a registration, not a
+    ///         construction, so no compiler sees it and the container is not validated at build
+    ///         time. It also does not stop a second implementer of the port, nor a stub bound in
+    ///         its place: both compile, both wire, and both are the silent second fork this
+    ///         parameter was introduced to prevent. What actually holds the seam is
+    ///         <c>SessionForkPortSeamRules</c> (#882), which counts the port's production
+    ///         implementers and requires the composition root to bind it. Keep this parameter
+    ///         required — that guard also checks it, so the two agree.
+    ///     </para>
     /// </param>
     /// <param name="logger">Diagnostics sink for the create/branch paths.</param>
     /// <param name="configReader">

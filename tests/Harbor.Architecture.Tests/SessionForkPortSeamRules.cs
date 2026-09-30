@@ -123,6 +123,7 @@
 // matcher, and the same reason rule 1 — which reads the consumer's actual
 // signature — is what actually carries the invariant.
 
+using System.Text;
 using System.Text.RegularExpressions;
 
 namespace Harbor.Architecture.Tests;
@@ -830,12 +831,14 @@ public sealed class SessionForkPortSeamRules
 
             // The list wraps. Accumulate forward while the tail keeps asking for more,
             // bounded at four joins — a real base list is short, and an unbounded walk
-            // over a file would eventually pair two unrelated lines.
-            string accumulated = cleanLines[i].Trim();
+            // over a file would eventually pair two unrelated lines. A StringBuilder
+            // rather than `accumulated += …` because the join is a loop (S1643), and this
+            // predicate runs once per product source file.
+            var accumulated = new StringBuilder(cleanLines[i].Trim());
             for (int j = i + 1, guard = 0; j < cleanLines.Length && guard < 4; j++, guard++)
             {
-                accumulated = accumulated + " " + cleanLines[j].Trim();
-                if (IsBaseListEntry(accumulated))
+                accumulated.Append(' ').Append(cleanLines[j].Trim());
+                if (IsBaseListEntry(accumulated.ToString()))
                 {
                     return true;
                 }
