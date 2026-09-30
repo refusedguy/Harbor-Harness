@@ -70,18 +70,29 @@
 //     ImageViewerOverlay.cs:124               (Ctrl|Alt|Meta) != 0
 //     VimComposerMode.cs:37 (fall-through)    delegates to the composer
 //
-//   UNGATED — the THIRD state, which the issue's two-family taxonomy cannot
-//   name, and the reason a guard that counts only the two families is not
-//   enough. Six sites match on a rune with NO modifier test at all, so a chord
-//   modifier rides straight through:
-//     SetupChecklistOverlay.cs:95     REACHED from the product input loop
-//                                      (ReplInputLoop.cs:237) — Ctrl+q closes
-//                                      the guide and is consumed
-//     WhichKeyHelpOverlay.cs:122      '?' with no modifier gate
-//     CellForgeHelpPanel.cs:79        mounted panel, no gate
-//     CellForgeFileTreePanel.cs:135   mounted panel, no gate
-//     CellForgeDiagnosticsPanel.cs:57 mounted panel, no gate
-//     CellForgeSubagentsPanel.cs:164  mounted panel, no gate
+//   UNGATED — a third state the issue's two-family taxonomy cannot name, and the
+//   reason a guard that counts only the two families is not enough. Six sites
+//   matched a rune with NO modifier test at all, so a chord modifier rode
+//   straight through. ONE WAS A LIVE DEFECT: ReplInputLoop.cs:237 calls
+//   SetupChecklistController.HandleKey, so Ctrl+q closed the setup guide AND was
+//   consumed — the chord never reached the composer behind it.
+//     SetupChecklistOverlay.cs:95     product input loop — LIVE
+//     WhichKeyHelpOverlay.cs:122      '?', legacy ConsoleKeyInfo
+//     CellForgeHelpPanel.cs:79        mounted panel
+//     CellForgeFileTreePanel.cs:135   mounted panel
+//     CellForgeDiagnosticsPanel.cs:57 mounted panel
+//     CellForgeSubagentsPanel.cs:164  mounted panel
+//
+//   THE SIXTH CORRECTION, AND IT OVERTURNED THE MODEL: those six are NOT a third
+//   family. Measured, none of the six holds a text buffer, and five of the six
+//   bind shifted runes of their own ('?', 'J', 'K', 'H', 'R') — so all six want
+//   the BUFFER gate, and they are filed under it. What they lacked was not a
+//   family but a DECISION. "Ungated" is the absence of one, and a guard can make
+//   absence unreachable, so it is now a rule (zero rows may be Ungated) rather
+//   than a family a site may declare. The first draft of this file got this
+//   backwards — it filed them as a third family on the reasoning that a two-family
+//   taxonomy has no name for them — and CI caught it, because the first draft's
+//   rule demanded they refuse chords without asking what they bind.
 //   #824's guard enumerates three sites by hand and therefore cannot see any
 //   of these.
 //
@@ -90,11 +101,13 @@
 //   is text" in a sixth vocabulary position.
 //
 // So: 22 files, 27 rows (five files hold two families each), three modifier
-// vocabularies (KeyModifiers, KeyModifierSet, ConsoleModifiers), and THREE
-// families where the issue describes two. The issue's count of "four spellings
-// at eight sites" is the same rule measured at one predicate; read as sites it
-// undercounts by more than half, and read as families it omits the ungated one
-// entirely.
+// vocabularies (KeyModifiers, KeyModifierSet, ConsoleModifiers), and — after
+// measuring the six ungated sites — TWO families, with "ungated" demoted from a
+// family to the absence of a decision. The issue's count of "four spellings at
+// eight sites" is the same rule measured at one predicate; read as sites it
+// undercounts the surface by more than half, and read as families it says the
+// tree has two when the honest answer is "it has one rule and thirty sites that
+// each have to apply it, and six of them had not".
 //
 // WHAT THE FIRST DRAFTS GOT WRONG, AND WHAT CI SAID
 // ---------------------------------------------------
@@ -137,15 +150,53 @@
 // makes the ungated sites visible: a source scan cannot tell you that Ctrl+q
 // closes the setup guide, but a key press can.
 //
-// WHAT THIS DOES NOT DO
-// ---------------------
-// It does not unify the four spellings into one predicate. That is a real
-// refactor with real risk, it needs its own decision about which spelling wins,
-// and #833 itself records that the four are behaviourally equivalent today — so
-// it is maintainability, not correctness. What this file does is make the
-// family EXPLICIT and TOTAL: every site is in the table, each table row states
-// which family it is, and a new widget that routes keys without a row is a
-// coverage failure rather than an invisible drift.
+// THE PREDICATE DID LAND, AND WHY IT IS THREE CLASSES AND NOT ONE
+// -------------------------------------------------------------
+// The first draft of this file refused to extract the rule, on the grounds that
+// collapsing the four spellings needs its own decision about which one wins.
+// That was half right and it stalled: the fix for the live defect had nowhere to
+// live except a sixth hand-written mask. So the half of the rule that IS data
+// — the modifier classification, which is a fact about key ENCODING rather than
+// about any widget — now has an owner, one class per vocabulary:
+//
+//   KeyModifierGate      (KeyModifiers)      Ctrl|Alt|Meta    Rendering/Input
+//   KeyModifierSetGate   (KeyModifierSet)    Ctrl|Alt         Ui.Framework.State
+//   ConsoleModifierGate  (ConsoleModifiers)  Control|Alt      Rendering/Input
+//
+// Three and not one, because the vocabularies are not interchangeable: the
+// latter two have no Meta slot (KeyEventMapper folds Meta into Alt crossing into
+// State), so a single helper would have to invent a Meta one of them cannot
+// express and would be wrong in that one. Each class lives in the assembly that
+// owns its vocabulary, and each states BOTH halves of the rule by name —
+// AcceptsTypedChar (refuse Ctrl/Alt/Meta, admit Shift) and IsUnmodified (refuse
+// everything) — so a call site says which family it is in instead of writing a
+// bare `!= KeyModifiers.None` a reader has to interpret.
+//
+// NOT refactored, deliberately: the composer's chord TABLE (:196-252) and the
+// remaining `(mods & KeyModifiers.Ctrl) != 0` forms. Those match a SPECIFIC
+// chord, which is a different question from "is this a command or text" — Ctrl+C
+// means "clear", not "this is a command" — and routing them through the gate
+// would erase the binding.
+//
+// One site changed SEMANTICS, not just spelling, and it is written down here so
+// a reviewer does not have to find it in the diff: ComposerController's history
+// gate moved from `mods & (Shift|Ctrl|Alt|Meta) != 0` to `mods != None`. The two
+// are identical for every modifier combination the kitty encoding can produce
+// (bits 1-4, super/hyper collapsed into Meta) and differ only on a bit outside
+// that range — where `!= None` refuses and the mask passed the key through. The
+// stricter reading is the one wanted there, but "no behaviour change" would have
+// been the false claim.
+//
+// WHAT THIS FILE STILL IS
+// ----------------------
+// A table in which every site is named and its family stated, plus a coverage
+// scan so a NEW widget that routes keys without a row is a red build. That is
+// still the part a predicate cannot do: the predicate names the RULE, and
+// nothing in the rule can tell you which of the two halves a given widget wants,
+// because that answer is not a property of the widget (see QuestionFormView by
+// cursor, DialogOverlay by _kind, VimComposerMode by NormalMode). A new key
+// widget has to declare its family HERE, out loud, and the review of that
+// declaration is the whole value — the rule it declares is already named.
 //
 // PERIMETER AND NON-VACUITY
 // -------------------------
@@ -178,7 +229,13 @@ internal enum KeyGateFamily
     /// <summary>No buffer; runes are navigation or a vote, and Shift is refused.</summary>
     Command,
 
-    /// <summary>No modifier test at all — the state a two-family taxonomy cannot name.</summary>
+    /// <summary>
+    /// No modifier test at all. NOT a family a site may declare — it is the
+    /// absence of a decision, and the guard exists to make it unreachable. It
+    /// was in the first draft of this file as a third family; that was wrong,
+    /// because every site in it turned out to want the BUFFER gate once measured
+    /// (they bind shifted runes of their own). See the header.
+    /// </summary>
     Ungated,
 }
 
@@ -251,12 +308,12 @@ public class KeyGateFamilyRules
         // from tests today; they are listed because the gate is absent in code
         // regardless of who calls it, and because a wiring change is exactly
         // when that would start to matter.
-        new("SetupChecklistOverlay", KeyGateFamily.Ungated, "src/Harbor.Tui.CellForge/Chat/Widgets/SetupChecklistOverlay.cs"),
-        new("WhichKeyHelpOverlay", KeyGateFamily.Ungated, "src/Harbor.Tui.CellForge/Chat/Widgets/WhichKeyHelpOverlay.cs"),
-        new("CellForgeHelpPanel", KeyGateFamily.Ungated, "src/Harbor.Tui.CellForge/Chat/Panels/CellForgeHelpPanel.cs"),
-        new("CellForgeFileTreePanel", KeyGateFamily.Ungated, "src/Harbor.Tui.CellForge/Chat/Panels/CellForgeFileTreePanel.cs"),
-        new("CellForgeDiagnosticsPanel", KeyGateFamily.Ungated, "src/Harbor.Tui.CellForge/Chat/Panels/CellForgeDiagnosticsPanel.cs"),
-        new("CellForgeSubagentsPanel", KeyGateFamily.Ungated, "src/Harbor.Tui.CellForge/Chat/Panels/CellForgeSubagentsPanel.cs"),
+        new("SetupChecklistOverlay", KeyGateFamily.Buffer, "src/Harbor.Tui.CellForge/Chat/Widgets/SetupChecklistOverlay.cs"),
+        new("WhichKeyHelpOverlay", KeyGateFamily.Buffer, "src/Harbor.Tui.CellForge/Chat/Widgets/WhichKeyHelpOverlay.cs"),
+        new("CellForgeHelpPanel", KeyGateFamily.Buffer, "src/Harbor.Tui.CellForge/Chat/Panels/CellForgeHelpPanel.cs"),
+        new("CellForgeFileTreePanel", KeyGateFamily.Buffer, "src/Harbor.Tui.CellForge/Chat/Panels/CellForgeFileTreePanel.cs"),
+        new("CellForgeDiagnosticsPanel", KeyGateFamily.Buffer, "src/Harbor.Tui.CellForge/Chat/Panels/CellForgeDiagnosticsPanel.cs"),
+        new("CellForgeSubagentsPanel", KeyGateFamily.Buffer, "src/Harbor.Tui.CellForge/Chat/Panels/CellForgeSubagentsPanel.cs"),
     ];
 
     /// <summary>
@@ -460,63 +517,58 @@ public class KeyGateFamilyRules
         }
     }
 
-    // --------------------------------------------------------------- UNGATED --
+    // ------------------------------------------------- FORMERLY UNGATED --
 
     /// <summary>
-    /// THE THIRD FAMILY, and the finding #833's two-family taxonomy cannot
-    /// express. Six sites match on a rune with NO modifier test at all, so a
-    /// chord modifier rides straight through. One of them is reached from the
-    /// product input loop: <c>ReplInputLoop.cs:237</c> calls
-    /// <c>SetupChecklistController.HandleKey</c>, so <c>Ctrl+q</c> closes the
-    /// setup guide AND is consumed — the chord never reaches the composer
-    /// behind it. #824's guard could not see this: it enumerates three sites by
-    /// hand and none of these six are in its list.
+    /// The six sites that had NO modifier gate at all, which is the finding
+    /// #833's two-family taxonomy could not name. One of them was a LIVE defect:
+    /// <c>ReplInputLoop.cs:237</c> calls <c>SetupChecklistController.HandleKey</c>,
+    /// so <c>Ctrl+q</c> closed the setup guide AND was consumed — the chord never
+    /// reached the composer behind it.
     /// <para>
-    /// THIS TEST IS RED AGAINST THE TREE AS IT STANDS, and it asserts the
-    /// DESIRE rather than the measurement. That is the difference from a
-    /// characterisation test, and it is deliberate: a guard that asserts "the
-    /// chord is swallowed today" is green forever and prevents nothing. The
-    /// chord must NOT be swallowed — the overlay holds no buffer, so it has no
-    /// claim on a modified rune — and the fix is one modifier test per site.
-    /// </para>
-    /// <para>
-    /// Note the gate these sites need is the BUFFER one, not the command one.
-    /// <c>?</c> is itself a SHIFTED rune: a real encoder delivers it as the
-    /// <c>?</c> rune PLUS the Shift modifier, so a strict "no modifier at all"
-    /// gate would refuse the very key the widget exists to dismiss. The same
-    /// trap #824 fixed in QuestionFormView, one layer up.
+    /// The first draft of this file filed these as a THIRD family, on the
+    /// reasoning that a two-family taxonomy has no name for them. That was wrong,
+    /// and measuring said so: none of the six holds a text buffer, and five of
+    /// six bind shifted runes of their own (<c>?</c>, <c>J</c>, <c>K</c>,
+    /// <c>H</c>, <c>R</c>). So they want the BUFFER gate — refuse
+    /// <c>Ctrl|Alt|Meta</c>, admit Shift — and they are filed as such. What they
+    /// lacked was not a third family but a decision at all, which is why the
+    /// honest rule is the one below: a site may not consume a rune without
+    /// having chosen.
     /// </para>
     /// </summary>
     [Test]
-    public async Task The_Ungated_Sites_Must_Refuse_A_Chord_Modifier()
+    public async Task The_Formerly_Ungated_Sites_Choose_The_Buffer_Gate()
     {
+        // The live defect, now closed: the chord falls through and the guide stays.
         var checklist = new SetupChecklistOverlay();
         checklist.Show();
-        await Assert.That(checklist.Visible).IsTrue();
-
         await Assert.That(checklist.HandleKey(KeyEvent.Char(new Rune('q'), KeyModifiers.Ctrl))).IsFalse()
             .Because("the setup guide holds no buffer, so Ctrl+q is a chord that belongs to the host — "
-                + "consuming it here is the defect #833's two-family taxonomy could not name");
+                + "consuming it here was the live defect (#833)");
         await Assert.That(checklist.Visible).IsTrue()
             .Because("the chord must fall through to the composer behind the guide, not close it");
 
-        // Control for the control: the gate must MOVE, not be deleted. An
-        // unmodified 'q' still dismisses, and so does '?' — which arrives
-        // carrying Shift, so the gate has to admit Shift.
+        // Control for the control: the gate MOVED, it was not deleted. An
+        // unmodified 'q' still dismisses...
         var plain = new SetupChecklistOverlay();
         plain.Show();
         await Assert.That(plain.HandleKey(KeyEvent.Char(new Rune('q')))).IsTrue();
         await Assert.That(plain.Visible).IsFalse()
             .Because("the unmodified dismiss key is the gesture this widget exists for");
 
+        // ...and so does '?', which arrives CARRYING Shift. This is why the gate
+        // is the buffer one and not IsUnmodified: a strict "no modifiers at all"
+        // rule would refuse the widget's own dismiss key. The #824 trap, one
+        // layer up.
         var shifted = new SetupChecklistOverlay();
         shifted.Show();
         await Assert.That(shifted.HandleKey(KeyEvent.Char(new Rune('?'), KeyModifiers.Shift))).IsTrue()
             .Because("'?' is a shifted rune — a real encoder sends the rune AND Shift — so a strict "
                 + "no-modifier gate would refuse the widget's own dismiss key");
 
-        // The second ungated site, same shape, on the legacy ConsoleKeyInfo
-        // overload it actually has.
+        // The legacy ConsoleKeyInfo site, same shape, on the overload it has. The
+        // narrower vocabulary is the point: ConsoleKeyInfo has no Meta slot.
         var whichKey = new WhichKeyHelpOverlay();
         whichKey.Show();
         await Assert.That(whichKey.HandleKey(new ConsoleKeyInfo(
@@ -528,35 +580,76 @@ public class KeyGateFamilyRules
         await Assert.That(whichKeyPlain.HandleKey(new ConsoleKeyInfo(
             '?', ConsoleKey.Oem2, shift: true, alt: false, control: false))).IsTrue()
             .Because("the plain shifted '?' still dismisses — the gate admits Shift and refuses Ctrl/Alt/Meta");
-
-        // The measured size of the third family. Not decoration: it is the count
-        // the PR quotes against the issue's, so if a fourth site loses its gate
-        // the number has to be argued about rather than drift.
-        await Assert.That(Table.Count(r => r.Family == KeyGateFamily.Ungated)).IsEqualTo(6)
-            .Because("six sites consume a rune with no modifier test; a different number means the "
-                + "inventory moved and the PR's count is stale");
     }
 
     /// <summary>
-    /// The four mounted panels that consume runes with no modifier test. Same
-    /// defect as the overlays above and the same fix; they are separated because
-    /// they are a different assembly layer and a different key vocabulary
-    /// (<c>UiKey</c>/<c>KeyModifierSet</c> rather than
-    /// <c>KeyEvent</c>/<c>KeyModifiers</c>), which is one of the three
-    /// vocabularies the issue's table does not have.
+    /// THE RULE, in its enforceable form: a site that consumes a rune may not do
+    /// so without having chosen a family. Zero sites may be ungated — that is
+    /// the state this guard was written to make unreachable, and it is the whole
+    /// of what #833 adds to the two families the issue named.
+    /// <summary>
+    [Test]
+    public async Task No_Site_Consumes_A_Rune_Without_Having_Chosen_A_Family()
+    {
+        List<string> ungated = Table
+            .Where(r => r.Family == KeyGateFamily.Ungated)
+            .Select(r => r.Name)
+            .ToList();
+
+        await Assert.That(string.Join(", ", ungated)).IsEmpty()
+            .Because("a site that matches a rune with no modifier test is a chord-swallowing bug waiting to be "
+                + "reported; six of them shipped that way, one of them live on the product input loop");
+    }
+
+    /// <summary>
+    /// The four mounted panels, on the third vocabulary
+    /// (<c>KeyModifierSet</c>, which has no <c>Meta</c>). All four bind shifted
+    /// runes of their own — <c>FileTreePanel</c> binds <c>J</c>/<c>K</c>/<c>H</c>/
+    /// <c>R</c>, <c>SubagentsPanel</c> binds <c>R</c>/<c>J</c>/<c>K</c> — so they
+    /// want the buffer gate, and a strict one would refuse their own keys.
     /// </summary>
     [Test]
-    public async Task The_Ungated_Panels_Must_Refuse_A_Chord_Modifier()
+    public async Task The_Formerly_Ungated_Panels_Choose_The_Buffer_Gate()
     {
         var store = new UiStore();
         _ = store.Dispatch(new AppMsg.FocusPanel("help"));
-        var services = new PanelServices { Store = store };
-        var ctx = new PanelContext(store.State, 80, 24, services);
+        var ctx = new PanelContext(store.State, 80, 24, new PanelServices { Store = store });
 
         await Assert.That(new CellForgeHelpPanel().OnKey(UiKey.ForChar('?'), ctx)).IsTrue()
             .Because("the plain '?' still toggles the help panel");
         await Assert.That(new CellForgeHelpPanel().OnKey(UiKey.ForChar('?', KeyModifierSet.Ctrl), ctx)).IsFalse()
             .Because("Ctrl+? is a chord; the panel holds no buffer and must not claim it");
+        await Assert.That(new CellForgeHelpPanel().OnKey(UiKey.ForChar('?', KeyModifierSet.Shift), ctx)).IsTrue()
+            .Because("'?' IS a shifted rune, so the gate must admit Shift — the same reason the setup guide "
+                + "keeps its '?' dismiss key");
+
+        // The three cursor panels. Each is probed with a rune it actually binds,
+        // which is not the same rune for all three: SubagentsPanel binds only
+        // 'R' in its list view — its 'J'/'K' live in the transcript view, behind
+        // a different state this test does not enter. Asserting 'J' on all three
+        // would have measured the panel, not the gate.
+        (IPanelProvider Panel, char Chord, char Shifted)[] cursors =
+        [
+            (new CellForgeFileTreePanel(), 'j', 'J'),
+            (new CellForgeDiagnosticsPanel(), 'j', 'J'),
+            (new CellForgeSubagentsPanel(), 'r', 'R'),
+        ];
+
+        foreach ((IPanelProvider panel, char chord, char shifted) in cursors)
+        {
+            string name = panel.GetType().Name;
+
+            await Assert.That(panel.OnKey(UiKey.ForChar(chord, KeyModifierSet.Ctrl), ctx)).IsFalse()
+                .Because($"{name} holds no buffer, so Ctrl+{chord} is a chord the host owns and the "
+                    + "panel must not claim it");
+
+            await Assert.That(panel.OnKey(UiKey.ForChar(shifted, KeyModifierSet.Shift), ctx)).IsTrue()
+                .Because($"{name} binds '{shifted}' explicitly, so the gate must admit Shift — a strict "
+                    + "no-modifier rule would refuse the panel's own key");
+
+            await Assert.That(panel.OnKey(UiKey.ForChar(shifted), ctx)).IsTrue()
+                .Because($"{name} must still work unmodified; the gate MOVED, it was not deleted");
+        }
     }
 
     // ------------------------------------------------------------ PERIMETER --
