@@ -43,6 +43,12 @@
 //       Application assembly must not borrow a namespace root that belongs to
 //       another layer, and `Harbor.Registries` is the one project #452 is about.
 //
+//   R3  Every namespace declaration in the product tree is attributed to at
+//       least one assembly. R1 and R2 are only as strong as the attribution
+//       behind them: a declaration the walk cannot hand to an assembly is a
+//       declaration no rule in this file judges, and a rule that silently
+//       skips is indistinguishable from a rule that passes (#763).
+//
 // WHY THE RULE IS ABOUT ROOTS AND NOT ABOUT "namespace == assembly name"
 // ----------------------------------------------------------------------
 // The obvious stronger rule — "a namespace must be rooted at its assembly's own
@@ -91,12 +97,37 @@
 // already drops build output, `contrib/` (outside CI by owner decision),
 // `tests/` (a rule must not police its own fixtures) and `.worktrees/`.
 //
+// THOSE TWO TREES ARE NOT THE SAME SET AS "THE CODE THAT COMPILES" (#763)
+// -----------------------------------------------------------------------
+// `EnumerateProductCsFiles` walks the DIRECTORY tree, so it returns the six
+// files under `src/Harbor.Providers.Shared` and `src/Harbor.Storage.Shared` —
+// and the assembly walk that follows, which looks for the nearest ancestor
+// directory holding a `*.csproj`, ran off the top of the repository and found
+// none. So the files were enumerated and then dropped: the rule reported green
+// having read none of them.
+//
+// This is the same structural fact #456 found, and #456's fix does not reach
+// here. That fix taught `RepoPaths.EnumerateCsFiles(projectDir)` to resolve
+// `<Compile Include>` items out of the csproj XML; this rule does not call it.
+// It has its own project map (`MapProjectDirectoryToAssemblyName`) and its own
+// walk-up, so it never learns that those six files are compiled into four
+// provider assemblies and two storage assemblies. The files are not excluded —
+// nothing in this file, in `SourceScan.IsBuildOutput`, or in any table rejects
+// them by path. They are unattributable, which is a different failure with the
+// same symptom.
+//
+// R3 is what makes that difference visible. A shared-source file has N
+// consuming assemblies, not zero, so the honest reading of "which assembly
+// declares this namespace?" is "all of them": the text is identical in every
+// copy, so the verdict is too, and a rule that picks one is picking arbitrarily.
+//
 // KNOWN LIMITATIONS — stated, not hidden
 // -------------------------------------
-//   * A `.cs` file with no owning `.csproj` above it is skipped rather than
-//     guessed at. `src/Harbor.Providers.Shared` is linked source compiled into
-//     each provider project and has no csproj of its own; there is no assembly
-//     to own its namespace, so the rule has nothing to say about it.
+//   * A `.cs` file with no owning `.csproj` above it AND no project linking it
+//     is now a hard failure (R3), not a silent skip. Nothing in the tree is in
+//     that state today — `SharedSourceLinkRules` holds the two csproj-less
+//     folders declared, and holds every file in them linked by someone — so R3
+//     is the assertion that keeps it that way.
 //   * The scan reads the NAMESPACE DECLARATION text. A type declared with an
 //     explicit `namespace` attribute is not a C# shape, so this cannot miss one.
 //   * R2 covers `Harbor.Registries` only. The other 14 assemblies that use a
@@ -162,24 +193,24 @@ public class AbstractionsNamespaceOwnershipRules
     public async Task NoAssemblyOutsideTheContractTrio_DeclaresIntoTheAbstractionsRoot()
     {
         var squatters = new List<string>();
-        IReadOnlyDictionary<string, string> owners = MapProjectDirectoryToAssemblyName();
 
-        foreach ((string file, string assembly, int line, string declared) in ScanDeclarations(owners))
+        foreach (Declaration declaration in ScanDeclarations().Declarations)
         {
-            if (!IsSquattingOnContractRoot(assembly, declared))
+            if (!IsSquattingOnContractRoot(declaration.Assembly, declaration.Declared))
             {
                 continue;
             }
 
             squatters.Add(
-                $"{file}:{line} — assembly `{assembly}` declares `namespace {declared};`. "
+                $"{declaration.File}:{declaration.Line} — assembly `{declaration.Assembly}` declares "
+                + $"`namespace {declaration.Declared};`. "
                 + $"`{ContractRoot}` is the ADR-007 contract root, owned by `{ContractRoot}` itself, "
                 + $"`{ContractRoot}.Contracts` and `Harbor.Extensions` — the Domain facade, the pure "
                 + "contract models and the extension pool. An Application/Infrastructure/Presentation "
                 + "assembly declaring there makes one namespace span two layers: a consumer writing "
-                + $"`using {declared};` binds the contract AND the implementation and cannot see, by "
+                + $"`using {declaration.Declared};` binds the contract AND the implementation and cannot see, by "
                 + "reading, which side of the pyramid the type it just named came from. Declare it under "
-                + $"the owning assembly's own root (`{assembly}.…`). See #452.");
+                + $"the owning assembly's own root (`{declaration.Assembly}.…`). See #452.");
         }
 
         await Assert.That(squatters).IsEmpty()
@@ -195,20 +226,20 @@ public class AbstractionsNamespaceOwnershipRules
     public async Task RegistriesAssembly_DeclaresEveryNamespaceUnderItsOwnRoot()
     {
         var foreign = new List<string>();
-        IReadOnlyDictionary<string, string> owners = MapProjectDirectoryToAssemblyName();
 
-        foreach ((string file, string assembly, int line, string declared) in ScanDeclarations(owners))
+        foreach (Declaration declaration in ScanDeclarations().Declarations)
         {
-            if (!string.Equals(assembly, RegistriesAssembly, StringComparison.Ordinal)
-                || IsRootedAt(declared, RegistriesAssembly))
+            if (!string.Equals(declaration.Assembly, RegistriesAssembly, StringComparison.Ordinal)
+                || IsRootedAt(declaration.Declared, RegistriesAssembly))
             {
                 continue;
             }
 
             foreign.Add(
-                $"{file}:{line} — `{RegistriesAssembly}` declares `namespace {declared};`, which is not "
-                + $"rooted at `{RegistriesAssembly}`. The owning assembly's name is what tells a reader "
-                + "which layer a type came from; a namespace borrowed from another layer takes that away. "
+                $"{declaration.File}:{declaration.Line} — `{RegistriesAssembly}` declares "
+                + $"`namespace {declaration.Declared};`, which is not rooted at `{RegistriesAssembly}`. "
+                + "The owning assembly's name is what tells a reader which layer a type came from; a "
+                + "namespace borrowed from another layer takes that away. "
                 + $"Declare it as `{RegistriesAssembly}.…`. See #452.");
         }
 
@@ -218,6 +249,30 @@ public class AbstractionsNamespaceOwnershipRules
                 + "InMemoryMcpRegistry already live in Harbor.Registries.Tools, and the event middlewares "
                 + "already live in Harbor.Registries.Events; the four registry implementations did not. "
                 + "One project split half and half is the worst of both readings.");
+    }
+
+    /// <summary>
+    ///     R3 — every namespace declaration in the product tree belongs to at least
+    ///     one assembly. The two rules above are only as strong as the attribution
+    ///     under them: a declaration handed to no assembly is a declaration neither
+    ///     of them reads, and the result looks identical to a pass.
+    /// </summary>
+    /// <remarks>
+    ///     #763. On the tree this rule was written against, the six files in
+    ///     <c>src/Harbor.Providers.Shared</c> and <c>src/Harbor.Storage.Shared</c> were
+    ///     enumerated by <see cref="SourceScan.EnumerateProductCsFiles" /> and then
+    ///     dropped, because the walk-up for an owning <c>*.csproj</c> left the tree
+    ///     and came back empty. They compile into four provider assemblies and two
+    ///     storage assemblies, so there was never a question of judging them — only
+    ///     of knowing which assembly to judge them as.
+    /// </remarks>
+    [Test]
+    public async Task No_Namespace_Declaration_Is_Left_Without_An_Assembly_To_Judge_It()
+    {
+        string[] unattributed = ScanDeclarations().Unattributed;
+
+        await Assert.That(unattributed).IsEmpty()
+            .Because(string.Join("\n", unattributed));
     }
 
     // ── non-vacuity ───────────────────────────────────────────────────────
@@ -267,6 +322,13 @@ public class AbstractionsNamespaceOwnershipRules
             // The same shape from any other layer is equally wrong.
             ("Harbor.Application", "Harbor.Abstractions.Sessions"),
             ("Harbor.Storage.Jsonl", "Harbor.Abstractions.Tools"),
+            // #763: a shared-source file is judged as each assembly that compiles it,
+            // so the consumer side of that judgement has to be this same detector. A
+            // provider assembly declaring into the contract root is no less wrong for
+            // having arrived there through a `<Compile Include>` than by living in it.
+            ("Harbor.Providers.OpenAI", "Harbor.Abstractions.Internal"),
+            ("Harbor.Providers.Anthropic", "Harbor.Abstractions.Providers"),
+            ("Harbor.Storage.Sqlite", "Harbor.Abstractions.Sessions"),
         ];
 
         foreach ((string assembly, string declared) in mustFail)
@@ -336,6 +398,105 @@ public class AbstractionsNamespaceOwnershipRules
         }
     }
 
+    /// <summary>
+    ///     The #763 defect, stated as a measurement: every file the csprojs
+    ///     <c>&lt;Compile Include&gt;</c>-link must come back from the namespace scan
+    ///     attributed to every assembly that compiles it.
+    /// </summary>
+    /// <remarks>
+    ///     <para>
+    ///         This is the shape of the hole rather than a planted violation. The six
+    ///         shared-source files declare <c>Harbor.Providers.Internal</c> and
+    ///         <c>Harbor.Storage.Shared</c>, neither under the contract root, so no
+    ///         <em>rule</em> in this file was wrong about anything — the walk simply
+    ///         never reached them. A guard asserting the verdicts alone would have stayed
+    ///         green through that, which is why this asserts the attribution instead.
+    ///     </para>
+    /// </remarks>
+    [Test]
+    public async Task The_Namespace_Scan_Attributes_Every_Shared_Source_File_To_Its_Consumers()
+    {
+        Declaration[] declarations = ScanDeclarations().Declarations;
+        var missing = new List<string>();
+
+        foreach ((string file, IReadOnlyList<string> consumers) in
+                 LinkedConsumers.OrderBy(entry => entry.Key, StringComparer.Ordinal))
+        {
+            string relative = SourceScan.Relative(file);
+
+            var attributed = declarations
+                .Where(d => string.Equals(d.File, relative, StringComparison.Ordinal))
+                .Select(d => d.Assembly)
+                .ToHashSet(StringComparer.Ordinal);
+
+            foreach (string consumer in consumers)
+            {
+                if (attributed.Contains(consumer))
+                {
+                    continue;
+                }
+
+                missing.Add(
+                    $"{relative}: compiled into `{consumer}`, but the #452 ownership scan attributes "
+                    + "no namespace declaration to it. The file has no `*.csproj` above it, so the "
+                    + "walk-up for an owning project leaves the tree and returns nothing, and a "
+                    + "declaration no assembly owns is a declaration this rule does not judge — which "
+                    + "reads exactly like a pass. See #763.");
+            }
+        }
+
+        await Assert.That(missing).IsEmpty()
+            .Because(string.Join("\n", missing));
+    }
+
+    /// <summary>
+    ///     Non-vacuity for the rule above — the linked-file map is real, its key set
+    ///     is the set of files the declared shared-source folders hold, and a consumer
+    ///     is a set rather than a choice.
+    /// </summary>
+    [Test]
+    public async Task The_Linked_File_Map_Covers_Every_Declared_Shared_Source_File()
+    {
+        IReadOnlyDictionary<string, IReadOnlyList<string>> consumers = LinkedConsumers;
+
+        await Assert.That(consumers.Count).IsGreaterThan(0)
+            .Because(
+                "#763's mechanism is a csproj-less folder whose source is compiled into other "
+                + "assemblies by <Compile Include>. An empty map means every shared file in the "
+                + "product tree is unattributable — so R3 above is then failing for the right reason "
+                + "rather than passing for the wrong one.");
+
+        string[] declared =
+        [
+            .. FullLayerMatrixTests.SharedSourceFolders.Keys
+                .Select(RepoPaths.FindProjectDir)
+                .Where(dir => dir is not null)
+                .SelectMany(dir => Directory.GetFiles(dir!, "*.cs", SearchOption.TopDirectoryOnly))
+                .Select(Path.GetFullPath)
+                .OrderBy(p => p, StringComparer.Ordinal)
+        ];
+
+        await Assert.That(consumers.Keys.OrderBy(p => p, StringComparer.Ordinal).ToArray())
+            .IsEquivalentTo(declared)
+            .Because(
+                "Two independent statements of one population: the `.cs` files the declared "
+                + "shared-source folders hold, and the files the csprojs actually link. A file in a "
+                + "declared folder that nobody links is the #456 graveyard case; a linked file outside "
+                + "every declared folder is the #763 hole wearing a different name.");
+
+        int shared = consumers.Count(entry => entry.Value.Count > 1);
+
+        await Assert.That(shared).IsGreaterThan(0)
+            .Because(
+                "The discriminating property of this map is that a consumer is a SET. SsePump.cs is "
+                + "linked into four provider assemblies, so a resolution that picked one owner per file "
+                + "would satisfy every other assertion in this file while re-opening #763 in the shape "
+                + "'pick an assembly and judge the copy'. The invariant is deliberately 'at least one "
+                + "file', not 'every file': SessionStatsAggregator reaches Harbor.Storage.Jsonl alone, "
+                + "so a blanket 'every shared file has many consumers' would be false and would make "
+                + "this control lie rather than discriminate.");
+    }
+
     [Test]
     public async Task CommentProse_NamingAForeignNamespace_CannotTripTheRule()
     {
@@ -399,47 +560,169 @@ public class AbstractionsNamespaceOwnershipRules
            || value.StartsWith(root + ".", StringComparison.Ordinal);
 
     /// <summary>
-    ///     Every namespace declaration in the product tree, paired with the
-    ///     assembly that owns the file it was found in.
+    ///     One namespace DECLARATION paired with one assembly that compiles the file
+    ///     declaring it.
     /// </summary>
-    private static IEnumerable<(string File, string Assembly, int Line, string Declared)> ScanDeclarations(
-        IReadOnlyDictionary<string, string> owners)
+    /// <remarks>
+    ///     A shared-source file compiled into N assemblies yields N of these, carrying
+    ///     identical text. That repetition is the point (#763): the namespace is one
+    ///     string declared by several assemblies at once, and a verdict that depends on
+    ///     which copy the walk happened to reach is a verdict about the walk.
+    /// </remarks>
+    /// <param name="File">Repository-relative path of the declaring file.</param>
+    /// <param name="Assembly">Simple name of one assembly that compiles that file.</param>
+    /// <param name="Line">One-based line of the declaration.</param>
+    /// <param name="Declared">The declared namespace.</param>
+    private sealed record Declaration(string File, string Assembly, int Line, string Declared);
+
+    /// <summary>
+    ///     One pass over the product tree: the declarations it could attribute to an
+    ///     assembly, and the ones it could not.
+    /// </summary>
+    /// <param name="Declarations">Every declaration, paired with each owning assembly.</param>
+    /// <param name="Unattributed">
+    ///     One readable message per declaration no assembly owns. Empty exactly when R3
+    ///     holds; non-empty means part of the tree is being read by nobody.
+    /// </param>
+    private sealed record ScanResult(Declaration[] Declarations, string[] Unattributed);
+
+    /// <summary>
+    ///     The assemblies that compile a <c>*.cs</c> file through a
+    ///     <c>&lt;Compile Include&gt;</c> link item, keyed by the file's absolute path.
+    /// </summary>
+    /// <remarks>
+    ///     <para>
+    ///         The same resolution <see cref="RepoPaths.EnumerateCsFiles" /> performs for
+    ///         #456, walked the other way: #456 asks "which files does this project
+    ///         compile?" and this asks "which projects compile this file?". Both read
+    ///         <see cref="RepoPaths.ReadCompileIncludes" /> — the compiler's own input,
+    ///         not a declared list — so a link item added to a csproj moves both answers
+    ///         together and neither can drift from the build.
+    ///     </para>
+    ///     <para>
+    ///         Memoised behind <see cref="LinkedConsumers" /> because R3 and the attribution
+    ///         check each ask for it on every run, and the underlying per-csproj parse is
+    ///         already memoised by <see cref="RepoPaths" />.
+    ///     </para>
+    /// </remarks>
+    private static readonly Lazy<IReadOnlyDictionary<string, IReadOnlyList<string>>> CachedLinkedConsumers =
+        new(MapLinkedFilesToConsumingAssemblies);
+
+    private static IReadOnlyDictionary<string, IReadOnlyList<string>> LinkedConsumers => CachedLinkedConsumers.Value;
+
+    private static IReadOnlyDictionary<string, IReadOnlyList<string>> MapLinkedFilesToConsumingAssemblies()
     {
-        foreach (string file in SourceScan.EnumerateProductCsFiles())
+        var map = new Dictionary<string, List<string>>(StringComparer.Ordinal);
+
+        foreach ((string projectDir, string assembly) in Owners)
         {
-            if (FindOwningAssembly(file, owners) is not { } assembly)
+            string[] csprojs = Directory.GetFiles(projectDir, "*.csproj", SearchOption.TopDirectoryOnly);
+            if (csprojs.Length is not 1)
             {
                 continue;
             }
 
+            foreach (string include in RepoPaths.ReadCompileIncludes(csprojs[0]))
+            {
+                string resolved = Path.GetFullPath(
+                    Path.Combine(projectDir, include.Replace('\\', Path.DirectorySeparatorChar)));
+
+                // A link item naming a file the project already owns is redundant, and
+                // counting it would let a rule pass on a file that is really the project's
+                // own — the same filter RepoPaths.EnumerateLinkedSourceFiles applies.
+                if (resolved.StartsWith(projectDir + Path.DirectorySeparatorChar, StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                // MSBuild rejects a missing include, so a resolved-but-absent path is not
+                // evidence about the file set. SharedSourceLinkRules R2 is where a link
+                // with nothing behind it IS a defect.
+                if (!File.Exists(resolved))
+                {
+                    continue;
+                }
+
+                if (!map.TryGetValue(resolved, out List<string>? consumers))
+                {
+                    consumers = [];
+                    map[resolved] = consumers;
+                }
+
+                if (!consumers.Contains(assembly, StringComparer.Ordinal))
+                {
+                    consumers.Add(assembly);
+                }
+            }
+        }
+
+        return map.ToDictionary(
+            entry => entry.Key,
+            entry => (IReadOnlyList<string>)entry.Value,
+            StringComparer.Ordinal);
+    }
+
+    /// <summary>
+    ///     Every namespace declaration in the product tree, attributed to the
+    ///     assemblies that compile the declaring file, plus the declarations that could
+    ///     not be attributed to any.
+    /// </summary>
+    private static ScanResult ScanDeclarations()
+    {
+        var declarations = new List<Declaration>();
+        var unattributed = new List<string>();
+
+        foreach (string file in SourceScan.EnumerateProductCsFiles())
+        {
             if (SourceScan.TryReadAllText(file) is not { } raw)
             {
                 continue;
             }
 
             string[] lines = SourceScan.StripComments(raw).Split('\n');
+            string relative = SourceScan.Relative(file);
+
             for (int i = 0; i < lines.Length; i++)
             {
                 Match match = NamespaceDeclaration.Match(lines[i]);
-                if (match.Success)
+                if (!match.Success)
                 {
-                    yield return (SourceScan.Relative(file), assembly, i + 1, match.Groups["ns"].Value);
+                    continue;
                 }
+
+                string declared = match.Groups["ns"].Value;
+                int line = i + 1;
+
+                if (FindOwningAssembly(file) is not { } assembly)
+                {
+                    unattributed.Add(
+                        $"{relative}:{line} — declares `namespace {declared};` and no assembly owns it. "
+                        + "The nearest ancestor directory holding a `*.csproj` does not exist, so the "
+                        + "ownership walk ends in nothing and neither R1 nor R2 reads this declaration: "
+                        + "the gate reports green having never looked at it. A `<Compile Include>` link "
+                        + "from a consumer gives the file an owner; if nothing links it, no compiler "
+                        + "reads it either. See #763.");
+                    continue;
+                }
+
+                declarations.Add(new Declaration(relative, assembly, line, declared));
             }
         }
+
+        return new ScanResult([.. declarations], [.. unattributed]);
     }
 
     /// <summary>
-    ///     The simple assembly name of the project that owns <paramref name="file" />
-    ///     — the nearest ancestor directory that holds a <c>*.csproj</c> — or
+    ///     The simple assembly name of the project that owns <paramref name="file" /> —
+    ///     the nearest ancestor directory that holds a <c>*.csproj</c> — or
     ///     <c>null</c> when the file has no owning project.
     /// </summary>
-    private static string? FindOwningAssembly(string file, IReadOnlyDictionary<string, string> owners)
+    private static string? FindOwningAssembly(string file)
     {
         var dir = new DirectoryInfo(Path.GetDirectoryName(file)!);
         while (dir is not null)
         {
-            if (owners.TryGetValue(dir.FullName, out string? assembly))
+            if (Owners.TryGetValue(dir.FullName, out string? assembly))
             {
                 return assembly;
             }
@@ -449,6 +732,18 @@ public class AbstractionsNamespaceOwnershipRules
 
         return null;
     }
+
+    /// <summary>
+    ///     Cache for <see cref="MapProjectDirectoryToAssemblyName" />.
+    /// </summary>
+    /// <remarks>
+    ///     Memoised for the same reason <see cref="RepoPaths.EnumerateSrcProjects" /> is:
+    ///     the walk parses one csproj per project, and four rules here reach for the
+    ///     result independently. The tree does not change while the gate runs.
+    /// </remarks>
+    private static readonly Lazy<IReadOnlyDictionary<string, string>> CachedOwners = new(MapProjectDirectoryToAssemblyName);
+
+    private static IReadOnlyDictionary<string, string> Owners => CachedOwners.Value;
 
     /// <summary>
     ///     Absolute project directory to produced assembly simple name, for every
