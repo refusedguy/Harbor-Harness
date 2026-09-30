@@ -1,3 +1,4 @@
+using System.Collections.Frozen;
 using Harbor.Abstractions.Filesystem;
 
 namespace Harbor.Application.Filesystem;
