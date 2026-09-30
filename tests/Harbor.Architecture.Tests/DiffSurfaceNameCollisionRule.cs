@@ -569,16 +569,22 @@ internal static partial class DiffSurfaceNameCollisionProbe
     /// </summary>
     private static string MakeRelativeFrom(string absolutePath)
     {
-        string marker = $"{Path.DirectorySeparatorChar}src{Path.DirectorySeparatorChar}";
-        int at = absolutePath.IndexOf(marker, StringComparison.Ordinal);
+        // Normalise FIRST, then look for "/src/" in one spelling. Matching on
+        // Path.DirectorySeparatorChar alone means a path written with the other
+        // separator silently misses, and a silent miss here is not a wrong
+        // answer — it is an EMPTY derived layer, which reads exactly like
+        // "this tree has no diff vocabulary". The Windows job is where the
+        // control's hard-coded "/checkout/src/..." hit that.
+        string normalised = absolutePath.Replace('\\', '/');
+
+        const string Marker = "/src/";
+        int at = normalised.IndexOf(Marker, StringComparison.Ordinal);
 
         // The slice starts AT the separator, so it must skip past it: a leading '/'
         // splits into an empty first segment, and ProjectOf would then read the ROOT
         // ("src") as the project — which matches no file, and makes the whole derived
         // layer empty for a reason that has nothing to do with the tree.
-        return at < 0
-            ? absolutePath.Replace(Path.DirectorySeparatorChar, '/')
-            : absolutePath[(at + 1)..].Replace(Path.DirectorySeparatorChar, '/');
+        return at < 0 ? normalised : normalised[(at + 1)..];
     }
 
     /// <summary>
@@ -1137,10 +1143,15 @@ public sealed class DiffSurfaceNameCollisionRule
         // same anchor resolution production does. A control that omits it falls back to the
         // constant and never touches MakeRelativeFrom — which is how a real bug in the path
         // handling stayed green in this test while the whole derived layer came back empty.
+        //
+        // Built with Path.Combine rather than written as a literal: MakeRelativeFrom looks
+        // for the platform's own separator, so a hard-coded "/checkout/src/..." matches on
+        // Linux and misses on Windows. The Windows job is where that showed up — the
+        // derivation came back empty there and only there.
         DiffSurfaceReport report = DiffSurfaceNameCollisionProbe.ScanFiles(
             pair,
             engineFilePresent: true,
-            engineFilePath: "/checkout/src/Harbor.Ui.Framework.Rendering/Widgets/SyntheticDiff.cs");
+            engineFilePath: AbsoluteEnginePath("SyntheticDiff.cs"));
 
         await Assert.That(report.VocabularyNames).IsEquivalentTo(["SyntheticRowKind", "SyntheticRow"])
             .Because(
@@ -1264,7 +1275,7 @@ public sealed class DiffSurfaceNameCollisionRule
             DiffSurfaceReport decoyReport = DiffSurfaceNameCollisionProbe.ScanFiles(
                 [pair[0], decoy],
                 engineFilePresent: true,
-                engineFilePath: "/checkout/src/Harbor.Ui.Framework.Rendering/Widgets/SyntheticDiff.cs");
+                engineFilePath: AbsoluteEnginePath("SyntheticDiff.cs"));
 
             await Assert.That(decoyReport.ForeignVocabulary).IsEmpty()
                 .Because(
@@ -1275,6 +1286,19 @@ public sealed class DiffSurfaceNameCollisionRule
                     + Describe(decoyReport.ForeignVocabulary));
         }
     }
+
+    /// <summary>
+    ///     An absolute engine-file path in the shape the live scan produces on the running
+    ///     platform, so a control driving the anchor resolution is not quietly testing a
+    ///     different platform's separators.
+    /// </summary>
+    private static string AbsoluteEnginePath(string fileName) => Path.Combine(
+        Path.GetTempPath(),
+        "checkout",
+        "src",
+        "Harbor.Ui.Framework.Rendering",
+        "Widgets",
+        fileName);
 
     private static string Describe(IReadOnlyList<DiffNameCollision> collisions) =>
         collisions.Count == 0
