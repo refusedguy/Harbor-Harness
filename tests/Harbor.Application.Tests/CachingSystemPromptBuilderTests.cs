@@ -259,4 +259,61 @@ public class CachingSystemPromptBuilderTests
         await Assert.That(inner.BuildCalls).IsEqualTo(2);
     }
 
+    // ── #815: the key holds the AGENT's provider; the prompt renders the MODEL's ──
+
+    /// <summary>
+    ///     The stale-string shape of #815, on the real builder.
+    /// </summary>
+    /// <remarks>
+    ///     <para>
+    ///         Both contexts are spelled out rather than routed through
+    ///         <c>Context()</c> so the "everything else is the same object" claim is
+    ///         visible rather than asserted: same agent — and therefore the same
+    ///         <c>Agent.ProviderId</c>, the field the key <i>was</i> holding — same
+    ///         <c>Model.Id</c>, same working directory, no tools. Only
+    ///         <c>Model.ProviderId</c> moves.
+    ///     </para>
+    ///     <para>
+    ///         <c>PromptCacheKeyCoverageRules</c> proves the same gap by reading the
+    ///         two source files. This proves the consequence, which no source scan can
+    ///         assert: that a colliding key really does hand the model the previous
+    ///         prompt.
+    ///     </para>
+    /// </remarks>
+    [Test]
+    public async Task BuildAsync_ModelProviderChanged_ServesRebuiltPrompt()
+    {
+        var caching = new CachingSystemPromptBuilder(new SystemPromptBuilder());
+        var agent = TestAgents.AllowAll();
+
+        string first = await caching.BuildAsync(new SystemPromptContext(
+            agent,
+            TestModel with { ProviderId = "first" },
+            Array.Empty<ToolDescriptor>(),
+            Array.Empty<ContextFile>(),
+            Array.Empty<SkillDescriptor>(),
+            null,
+            WorkDir));
+
+        string second = await caching.BuildAsync(new SystemPromptContext(
+            agent,
+            TestModel with { ProviderId = "second" },
+            Array.Empty<ToolDescriptor>(),
+            Array.Empty<ContextFile>(),
+            Array.Empty<SkillDescriptor>(),
+            null,
+            WorkDir));
+
+        await Assert.That(first).Contains("- Model: first/test-model")
+            .Because("the environment section renders the MODEL's provider; this is the line #815 "
+                   + "left uncovered");
+        await Assert.That(second).Contains("- Model: second/test-model")
+            .Because(
+                "the two contexts differ only in Model.ProviderId, so a key that holds "
+                + "Agent.ProviderId collides and the model reads the PREVIOUS prompt — a hit count, "
+                + "no miss, no log line");
+        await Assert.That(second).DoesNotContain("- Model: first/test-model")
+            .Because("the previous environment line surviving into the next prompt IS the defect; "
+                   + "asserting only that the new one is present would pass a prompt carrying both");
+    }
 }

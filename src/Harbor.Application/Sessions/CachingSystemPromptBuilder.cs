@@ -34,16 +34,106 @@ namespace Harbor.Application.Sessions;
 ///         enough for one turn's inputs.
 ///     </para>
 ///     <para>
-///         The key covers every <see cref="SystemPromptContext" /> component
-///         the default builder renders. Permission-rule edits that keep the
-///         resolved tool set identical do not change the key — acceptable,
-///         because the default builder renders tools, not rules. Two inputs
-///         still reach the prompt without reaching the key, and are recorded
-///         rather than fixed here: #815 (<c>ModelInfo.ProviderId</c>, where the
-///         key holds the agent's provider instead of the model's) and #814
-///         (the wall clock, which is not a context component at all). Both are
-///         latent in-tree. The list is here so the coverage claim reads as the
-///         partial claim it is.
+///         <b>THE CONTRACT, stated once so it stops being a promise in a
+///         comment: the key is a fingerprint of the RENDER, not of the run.</b>
+///         Every <see cref="SystemPromptContext" /> member the inner builder
+///         reads must be in the key. Nothing beyond that is required of it.
+///     </para>
+///     <para>
+///         <b>The contract is asymmetric, and the asymmetry is load-bearing.</b>
+///         UNDER-keying is a defect: a hit is served without calling the inner
+///         builder, so a member the render reads and the key does not hold
+///         means the model reads the previous turn's text, with no miss count
+///         and no log line. OVER-keying is admissible: it costs one rebuild.
+///         #792 was the first violation (<c>ToolDescriptor.PromptGuidelines</c>
+///         rendered as <c>  - &lt;guideline&gt;</c>, never keyed) and it shipped
+///         under a doc that already read as a coverage promise — which is why
+///         the promise is now a computed inventory rather than a sentence:
+///         <c>PromptCacheKeyCoverageRules</c> reads this file and
+///         <c>SystemPromptBuilder</c> and fails when the two disagree.
+///     </para>
+///     <para>
+///         <b>Why "render" and not "run" — the evidence, since this is the
+///         question #815 opened over.</b> Four things in the code already decide
+///         it, and none of them is a preference:
+///         <list type="number">
+///             <item>
+///                 The one exclusion this class has ever documented is justified
+///                 in terms of the renderer: permission-rule edits that keep the
+///                 resolved tool set identical do not move the key,
+///                 "acceptable, because the default builder renders tools, not
+///                 rules". A fingerprint of the run would have no reason to
+///                 consult the renderer.
+///             </item>
+///             <item>
+///                 The key holds no <c>Permission</c>, <c>MaxSteps</c>,
+///                 <c>IsSubAgent</c>, <c>Hidden</c> or
+///                 <c>ToolTimeoutSeconds</c> — the fields that decide what a
+///                 RUN is. (<c>Permission</c> reaches the key indirectly, as the
+///                 resolved tool set.) A run fingerprint would have started
+///                 there.
+///             </item>
+///             <item>
+///                 The key holds <c>ToolDescriptor.Schema</c>, which the builder
+///                 never reads. Over-keying is therefore already accepted here,
+///                 on the same "one rebuild" grounds #792 argued for.
+///             </item>
+///             <item>
+///                 "the key must be complete rather than merely good enough for
+///                 one turn's inputs" measures completeness against the render,
+///                 because the render is the thing a hit has to reproduce.
+///             </item>
+///         </list>
+///     </para>
+///     <para>
+///         <b>The inventory, both directions.</b> Rendered and keyed: eight
+///         context chains (<c>WorkingDirectory</c>, <c>Model.ProviderId</c>,
+///         <c>Model.Id</c>, <c>Agent.SystemPromptAppend</c>, <c>Tools</c>,
+///         <c>Skills</c>, <c>ContextFiles</c>, <c>McpInstructions</c>), plus the
+///         tool, skill and file members reached through locals. Keyed and NOT
+///         rendered: seven agent fields — <c>Name</c>, <c>DisplayName</c>,
+///         <c>Description</c>, <c>Model</c>, <c>ProviderId</c>,
+///         <c>Temperature</c>, <c>ReasoningEffort</c>. Seven, not eight: #815
+///         reported "eight members the builder never reads" and then listed
+///         seven — the eighth <c>AppendField</c> in that block is
+///         <c>SystemPromptAppend</c>, which the builder does read. None of the
+///         seven can serve a stale prompt; each is declared with its reason in
+///         <c>PromptCacheKeyCoverageRules</c> so the surplus stays a maintained
+///         inventory rather than an accident.
+///     </para>
+///     <para>
+///         <b><c>Model.ProviderId</c> and <c>Agent.ProviderId</c> are the same
+///         value and not the same source.</b> That is the whole of #815. The
+///         environment section renders the MODEL's provider; this key used to
+///         hold the AGENT's. They agree in-tree because the model is resolved
+///         <i>through</i> the agent's provider —
+///         <c>TurnRunner.ResolveModelAsync</c> parses <c>agent.ProviderId</c>,
+///         fetches that provider's catalog and picks the entry whose id is
+///         <c>agent.Model</c> — and every catalog stamps
+///         <c>ModelInfo.ProviderId</c> with the fetching provider's own registry
+///         id, at four independent sites: <c>ProviderConfig.ParseModel</c>
+///         (<c>config.Id</c>), <c>OllamaLlmClient</c> (a literal), and the
+///         hardcoded <c>AnthropicModels</c> / <c>OpenAIModels</c> catalogs.
+///     </para>
+///     <para>
+///         <b>So it is latent, and it is a trap rather than a fixed bug.</b> No
+///         stale hit is reachable today: within one process
+///         <c>Model.ProviderId</c> is a function of <c>Agent.ProviderId</c>
+///         alone, so two contexts with equal keys have equal rendered
+///         providers. The coupling lives in four stamping sites, none of them the
+///         agent's field, and nothing type-checks or tests it — a catalog that
+///         stamped anything but its own registry id would collide silently, and
+///         the key holding the agent's provider is what made the block read as
+///         covered on sight (#792's lesson, in a second guise).
+///     </para>
+///     <para>
+///         <b>What this contract does NOT cover: ambient reads.</b> The inner
+///         builder has two, and they are named here rather than left to look
+///         like members. <c>GetOsShort()</c> is a process constant, which a
+///         process-long cache cannot serve wrong. <c>DateTimeOffset.UtcNow</c>
+///         is a clock (#814, open): no key coverage can reach it, because it is
+///         not a context member, so the honest options there are to inject a
+///         <c>TimeProvider</c> and key the date, or to drop the line.
 ///     </para>
 /// </remarks>
 public sealed class CachingSystemPromptBuilder(ISystemPromptBuilder inner) : ISystemPromptBuilder
@@ -83,6 +173,14 @@ public sealed class CachingSystemPromptBuilder(ISystemPromptBuilder inner) : ISy
     ///     SHA-256 over a separator-joined field dump — collision-safe for
     ///     realistic inputs and allocation-light enough for a per-turn call.
     /// </summary>
+    /// <remarks>
+    ///     The two model fields sit next to each other because they are rendered as
+    ///     one line: <c>- Model: &lt;provider&gt;/&lt;id&gt;</c>
+    ///     (<c>SystemPromptBuilder</c>, the Environment section). #815 keyed the
+    ///     agent's provider here and not the model's, and with the pair adjacent the
+    ///     block still read as coverage. <c>PromptCacheKeyCoverageRules</c> compares
+    ///     both chains against the renderer, so the next mismatch cannot land quietly.
+    /// </remarks>
     private static string ComputeKey(SystemPromptContext context)
     {
         var sb = new StringBuilder(512);
@@ -90,10 +188,15 @@ public sealed class CachingSystemPromptBuilder(ISystemPromptBuilder inner) : ISy
         AppendField(sb, context.Agent.DisplayName);
         AppendField(sb, context.Agent.Description);
         AppendField(sb, context.Agent.Model);
+        // Over-keyed, and declared as such in PromptCacheKeyCoverageRules: the
+        // agent's provider is never rendered. It stays because dropping it is not
+        // what fixes #815 — adding the model's is — and because it is the cheapest
+        // per-agent cache separation available.
         AppendField(sb, context.Agent.ProviderId);
         AppendField(sb, context.Agent.Temperature?.ToString(System.Globalization.CultureInfo.InvariantCulture));
         AppendField(sb, context.Agent.ReasoningEffort?.ToString());
         AppendField(sb, context.Agent.SystemPromptAppend);
+        AppendField(sb, context.Model.ProviderId);
         AppendField(sb, context.Model.Id);
 
         var tools = context.Tools;
