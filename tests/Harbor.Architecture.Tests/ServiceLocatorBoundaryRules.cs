@@ -471,19 +471,25 @@ public class ServiceLocatorBoundaryRules
     [Test]
     public async Task DesktopAmbientContainer_IsNotNullForgiving()
     {
-        string? app = ReadProductFile("apps/Harbor.App.Avalonia/App.axaml.cs");
+        string? text = ReadProductFile("apps/Harbor.App.Avalonia/App.axaml.cs");
 
         // Non-vacuity: the file the rule is about must actually have been read, and
-        // must actually be about the ambient at all — otherwise the `= null!` check
-        // below would pass on a file that never mentioned one.
-        await Assert.That(app).IsNotNull();
-        if (app is null)
+        // must actually declare the ambient — otherwise the `= null!` check below
+        // would pass on a file that never mentioned one.
+        await Assert.That(text).IsNotNull();
+        if (text is null)
         {
             return;
         }
 
-        await Assert.That(app.Contains("Services", StringComparison.Ordinal)).IsTrue();
-        await Assert.That(app.Contains("= null!", StringComparison.Ordinal)).IsFalse();
+        // Comments are stripped for the same reason the source scan strips them: this
+        // file DOCUMENTS the shape it used to have ("public static IServiceProvider
+        // Services { get; set; } = null!"), and prose describing a defect must not
+        // re-report it as a defect.
+        string code = SourceScan.StripComments(text);
+
+        await Assert.That(code.Contains("Services", StringComparison.Ordinal)).IsTrue();
+        await Assert.That(code.Contains("= null!", StringComparison.Ordinal)).IsFalse();
     }
 
     /// <summary>

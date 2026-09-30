@@ -3,6 +3,7 @@ using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Markup.Xaml;
+using Harbor.App.Avalonia.Hosting;
 using Harbor.Ui.Framework.Navigation;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -30,5 +31,5 @@ public partial class ModalHostView : UserControl
     }
 
     private IShellChrome? _shellChrome;
-    private IShellChrome ShellChrome => _shellChrome ??= App.Services.GetRequiredService<IShellChrome>();
+    private IShellChrome ShellChrome => _shellChrome ??= ShellLocator.Of(this).Get<IShellChrome>();
 }
