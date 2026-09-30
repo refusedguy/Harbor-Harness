@@ -397,7 +397,7 @@ internal static partial class DiffSurfaceNameCollisionProbe
             }
 
             var carriers = new List<string>();
-            for (int j = 0; j < clean.Length; j++)
+            foreach (int j in AdjacentDeclarationLines(clean, i))
             {
                 Match carrier = TypeDeclaration().Match(clean[j]);
                 if (!carrier.Success
@@ -414,8 +414,7 @@ internal static partial class DiffSurfaceNameCollisionProbe
 
                 // The carrier must MENTION the kind inside its own declaration, which is the
                 // whole claim: a type that does not carry a value of the kind is not part of
-                // its vocabulary, and a `case SomeKind.X:` further down the same file does
-                // not turn every type in that file into one.
+                // its vocabulary.
                 if (DeclarationMentions(clean, j, kind))
                 {
                     carriers.Add(name);
@@ -429,6 +428,72 @@ internal static partial class DiffSurfaceNameCollisionProbe
         }
 
         return pairs;
+    }
+
+    /// <summary>
+    ///     The line indices a type declared BESIDE the enum on <paramref name="enumLine" />
+    ///     could be: the declarations immediately above it, and the first one below its closing
+    ///     brace.
+    /// </summary>
+    /// <remarks>
+    ///     Adjacency is the whole test, and it is what makes this derivation safe to run over a
+    ///     project rather than a file. A vocabulary is written as a pair —
+    ///     <c>enum DiffLineKind</c> then <c>record struct DiffLine(DiffLineKind Kind, …)</c> —
+    ///     and a type further down the file is a different concern that merely happens to
+    ///     mention the enum. Reading the whole file instead would make every later class that
+    ///     uses the kind a "carrier", which in <c>LineDiff.cs</c> would sweep in the static
+    ///     engine class itself: a name derived from a derivation bug is worse than no name at
+    ///     all, because the guard then holds the wrong set.
+    /// </remarks>
+    private static IEnumerable<int> AdjacentDeclarationLines(string[] clean, int enumLine)
+    {
+        // Above: walk back over the enum's own header to the declaration above it.
+        int start = enumLine - 1;
+        while (start >= 0 && !TypeDeclaration().IsMatch(clean[start]) && start > enumLine - 12)
+        {
+            start--;
+        }
+
+        if (start >= 0 && start != enumLine && TypeDeclaration().IsMatch(clean[start]))
+        {
+            yield return start;
+        }
+
+        // Below: the enum's body is a run of members, so the first declaration after its
+        // closing brace is the pair partner.
+        for (int i = enumLine + 1; i < clean.Length; i++)
+        {
+            string line = clean[i];
+            if (line.StartsWith('}') || line == "}")
+            {
+                for (int j = i + 1; j < clean.Length; j++)
+                {
+                    if (TypeDeclaration().IsMatch(clean[j]))
+                    {
+                        yield return j;
+                        yield break;
+                    }
+                }
+
+                yield break;
+            }
+
+            // An enum with no body — a single-line declaration — is over at the `}` on the
+            // same line, which the loop above has already handled, or at the terminator.
+            if (line.TrimEnd().EndsWith('}'))
+            {
+                for (int j = i + 1; j < clean.Length; j++)
+                {
+                    if (TypeDeclaration().IsMatch(clean[j]))
+                    {
+                        yield return j;
+                        yield break;
+                    }
+                }
+
+                yield break;
+            }
+        }
     }
 
     /// <summary>How far past its declaration line a type is followed while being graded.</summary>
