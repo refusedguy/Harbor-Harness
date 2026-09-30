@@ -250,7 +250,7 @@ public sealed class EnforcerIntegrityTests
             }
         }
 
-        foreach (string folder in FullLayerMatrixTests.SharedSourceFolders)
+        foreach (string folder in FullLayerMatrixTests.SharedSourceFolders.Keys)
         {
             if (RepoPaths.FindProjectDir(folder) is null)
             {

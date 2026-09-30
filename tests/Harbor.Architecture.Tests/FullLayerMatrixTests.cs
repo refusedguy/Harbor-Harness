@@ -67,7 +67,35 @@ public class FullLayerMatrixTests
     ///     "no csproj" case is an explicit, checked statement rather than an
     ///     unlisted directory.
     /// </summary>
-    internal static readonly string[] SharedSourceFolders = ["Harbor.Providers.Shared"];
+    /// <remarks>
+    ///     <para>
+    ///         #456: the entries are folder → reason (rather than a bare name) because a folder
+    ///         whose only defense is its own comment is one refactor from being deleted, and a
+    ///         deleted consumer leaves the folder compiling into nothing.
+    ///     </para>
+    ///     <para>
+    ///         <see cref="SharedSourceLinkRules" /> is what holds this list honest: every
+    ///         csproj-less source directory must appear here, and every entry must have a
+    ///         consumer. Without it the list is a comment with a type — a new shared-source
+    ///         folder, or a dropped <c>Compile</c> item, changes nothing a test can see.
+    ///     </para>
+    /// </remarks>
+    internal static readonly Dictionary<string, string> SharedSourceFolders = new(StringComparer.Ordinal)
+    {
+        // The chat-completions SSE pump and wire parser, shared by four sibling provider
+        // assemblies. The matrix forbids Infrastructure→Infrastructure references (see
+        // NetArchLayerRules.ForbiddenForInfrastructure, which names all four providers and all
+        // three storage backends), so there is no way for one provider to reference another;
+        // the single source travels as linked files instead. Linked into all four providers;
+        // OpenAiWire and OpenAiImageContent reach only the two OpenAI-format ones, because
+        // Anthropic and Ollama have their own wire types.
+        ["Harbor.Providers.Shared"] =
+            "Four sibling provider assemblies must share one SSE pump and wire parser, and the "
+            + "layer matrix forbids Infrastructure→Infrastructure project references, so the code "
+            + "is <Compile Include>-linked rather than referenced. Linked into the four providers; "
+            + "OpenAiWire/OpenAiImageContent reach only OpenAI + OpenAiCompatible, whose wire "
+            + "format Anthropic and Ollama do not share.",
+    };
 
     /// <summary>
     ///     Projects referenced as source generators (OutputItemType=Analyzer).

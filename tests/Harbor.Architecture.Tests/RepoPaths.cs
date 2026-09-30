@@ -195,6 +195,32 @@ internal static class RepoPaths
         ];
     }
 
+    /// <summary>
+    ///     The <c>Include</c> paths of every <c>&lt;Compile&gt;</c> item a csproj declares,
+    ///     verbatim (project-relative, un-normalised) and in document order.
+    /// </summary>
+    internal static IReadOnlyList<string> ReadCompileIncludes(string csprojPath)
+    {
+        XDocument document;
+        try
+        {
+            document = XDocument.Load(csprojPath, LoadOptions.None);
+        }
+        catch (Exception ex) when (ex is IOException or System.Xml.XmlException)
+        {
+            return [];
+        }
+
+        return
+        [
+            .. document.Descendants()
+                .Where(e => e.Name.LocalName == "Compile")
+                .Select(e => e.Attribute("Include")?.Value)
+                .Where(v => !string.IsNullOrWhiteSpace(v))
+                .Select(v => v!)
+        ];
+    }
+
     private static string ReadAssemblyName(string csprojPath, string projectDir)
     {
         try
