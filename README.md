@@ -175,7 +175,7 @@ User prompt → IAgent.PromptAsync → AgentLoop.RunAsync → SystemPromptBuilde
 | Observer | `IEventBus` pub/sub for agent events |
 | Value Object | `SessionId`, `MessageId`, `ToolCallId`, `ProviderId`, `ModelRef`, `ToolName`, `AgentName` |
 | Repository | `ISessionStore` (Jsonl / Memory / Sqlite) |
-| Plugin | `IPlugin` + `IToolPlugin` / `IProviderPlugin` / `IAgentPlugin` / `ITuiPlugin` |
+| Plugin | `IPlugin` + `IToolPlugin` / `IProviderPlugin` / `IAgentPlugin` / `ITuiPanelPlugin`; `ITuiPlugin` is a closed seam (#564) |
 | Chain of Responsibility | `AgentLoop`: prompt → LLM stream → tools → next turn → compaction |
 
 Full catalog with real code: [docs/PATTERNS.md](./docs/PATTERNS.md), forbidden practices: [docs/ANTIPATTERNS.md](./docs/ANTIPATTERNS.md).

@@ -210,9 +210,17 @@ I want to...
 │      src/Harbor.Hosting/Modules/TuiBackendRegistry.cs. Nothing else to edit: the
 │      /renderer swap table is derived from that same array (#584).
 │
+├── ...add a TUI panel a plugin can contribute
+│   └─→ docs/PLUGIN_DEVELOPMENT.md §ITuiPanelPlugin
+│      Implement ITuiPanelPlugin.RegisterPanels(IPanelRegistry). This is the one
+│      TUI seam a plugin reaches today. The ITuiPlugin/ITuiView route is a
+│      closed seam (#564) — collected, never rendered; do not teach it.
+│
 ├── ...add a TUI view (status panel, file tree, diagnostics, ...)
-│   └─→ docs/EXAMPLES.md §19 (Add a TUI view model) + §20 (Add a TUI view)
-│      Implement ITuiViewModel (MVVM) + TuiViewBase<T>, register via ITuiPlugin.
+│   └─→ in-tree only: implement ITuiViewModel (MVVM) + TuiViewBase<T> and
+│      register it in the renderer that paints it. NOT a plugin axis —
+│      `ITuiPlugin` is a closed seam (#564) and `ITuiView` is not an extension
+│      point. See docs/EXAMPLES.md §19-20.
 │
 ├── ...write a plugin (tool, provider, agent, TUI)
 │   └─→ docs/PLUGIN_DEVELOPMENT.md (full guide + 5 examples)
@@ -411,24 +419,40 @@ Run: `dotnet run --project tests/Harbor.YourNamespace.Tests -c Release --no-buil
 
 ### Add a TUI view
 
+**In-tree only.** These are ITuiPlugin targets, but `ITuiPlugin` is a **closed
+seam (#564)** — the host collects the plugin and nothing ever calls
+`RegisterTui`, so a view registered that way is never painted. Register the view
+in the renderer that owns it.
+
 1. Create `src/Harbor.Terminal.Abstractions/Views/MyView.cs`.
 2. Inherit `TuiViewBase<TViewModel>` (or implement `ITuiView` directly).
 3. Set a unique `Id`, `DisplayName`, and `TuiViewPlacement`.
 4. Override `RenderAsync(ITuiRenderContext, ct)` to draw.
 5. Optionally override `HandleKey` and `OnEventAsync`.
-6. Register in a renderer (or via `ITuiPlugin`) — the base renderer auto-binds the VM by id.
+6. Register in a renderer — the base renderer auto-binds the VM by id.
+7. For a panel a **plugin** contributes, use `ITuiPanelPlugin` +
+   `IPanelRegistry` instead; that axis is live. A CellForge *cell-level* widget
+   (a `Panel` subclass) is neither: the layout tree is built by
+   `ChatScreen.Build`, so widget work stays in-tree (#555 freezes new axes).
 
 ### Add a CS-source plugin (preferred)
 
 1. Drop a `.cs` file into `~/.harbor/plugins/` (global) or `<project>/.harbor/plugins/` (project-local).
-2. Implement `IPlugin` (and `IToolPlugin` / `IProviderPlugin` / `IAgentPlugin` / `ITuiPlugin`) with a parameterless constructor.
+2. Implement `IPlugin` (and `IToolPlugin` / `IProviderPlugin` / `IAgentPlugin` / `ITuiPanelPlugin`) with a parameterless constructor. `ITuiPlugin` is a closed seam (#564) — it loads and renders nothing; use `ITuiPanelPlugin` for a panel.
 3. The plugin can reference any type already loaded in the host AppDomain (Harbor.Abstractions, System.Text.Json, etc.).
 4. See `samples/plugins-cs/HelloWorldPlugin.cs` for a canonical example.
 5. Read [docs/PLUGIN_SYSTEM.md](./docs/PLUGIN_SYSTEM.md) for the full reference (caching, debugging, security).
 
 CS plugins are compiled in-memory via Roslyn at startup. Cached by source SHA-256 in `~/.harbor/plugins/cache/`. Run in-process with full trust — only drop reviewed source files.
 
-### Add a TUI plugin (DLL-based, legacy path)
+### Add a TUI plugin (DLL-based, legacy path — the seam is CLOSED)
+
+**`ITuiPlugin` is a closed seam (#564).** `PluginRegistrar` dispatches the marker
+and calls `host.RegisterTuiPlugin(...)`, but `IPluginLoadHost.TuiPlugins` has no
+reader in the product, so `RegisterTui` is never called and a plugin view is
+never painted. The steps below are kept so the contract has a name and a future
+wiring has somewhere to land — **they do not add a panel today.** For a plugin
+panel that is actually painted, implement `ITuiPanelPlugin`.
 
 1. Create a class library project referencing `Harbor.Terminal.Abstractions` (`Harbor.Tui.Abstractions` is a deprecated facade slated for removal in v0.6 — do not use for new code).
 2. Implement `ITuiPlugin` — set `Name`, `Version`, `Description`.

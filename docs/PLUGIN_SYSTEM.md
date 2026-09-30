@@ -199,7 +199,7 @@ startup. This always includes:
 | `Harbor.Abstractions.Models` | `Harbor.Abstractions.dll` | `ToolResult`, `AgentMessage`, `UserMessage`, `AssistantMessage`, etc. |
 | `Harbor.Abstractions.Models.Identifiers` | `Harbor.Abstractions.dll` | `ToolName`, `ProviderId`, `AgentName`, `SessionId`, etc. |
 | `Harbor.Abstractions.Events` | `Harbor.Abstractions.dll` | `AgentEvent` and all event sub-types, `IEventBus`. |
-| `Harbor.Tui.Abstractions.Plugins` | `Harbor.Tui.Abstractions.dll` | `ITuiPlugin` for TUI extensions (views, view models). |
+| `Harbor.Terminal.Abstractions.Plugins` | `Harbor.Terminal.Abstractions.dll` | `ITuiPlugin` — closed seam (#564): collected, never rendered. Use `ITuiPanelPlugin`. |
 | `System.Text.Json` | BCL | `JsonDocument`, `JsonElement` for tool schemas and arguments. |
 | `CSharpFunctionalExtensions` | NuGet | `Result`, `Result<T>` for error handling. |
 | `Microsoft.Extensions.Logging` | NuGet | `LogInformation`, `LogError`, etc. extension methods. |
@@ -245,6 +245,13 @@ public interface IAgentPlugin : IPlugin
 
 For TUI extensions:
 
+> **`ITuiPlugin` is a closed seam (#564).** It loads, and nothing ever calls
+> `RegisterTui` — `IPluginLoadHost.TuiPlugins` has no reader in the product — so a
+> plugin view is collected and never rendered. It does not extend `IPlugin`, and
+> the loader does detect each interface independently; the closure is about the
+> *consumer*, not the discovery. Implement `ITuiPanelPlugin` for a panel that is
+> painted. Guarded by `tests/Harbor.Architecture.Tests/CellForgeWidgetAxisRules.cs`.
+
 ```csharp
 public interface ITuiPlugin
 {
@@ -252,12 +259,18 @@ public interface ITuiPlugin
     Version Version { get; }
     string Description { get; }
 
-    void RegisterTui(ViewRegistry views, ViewModelRegistry viewModels);
+    void RegisterTui(ViewRegistry views, ViewModelRegistry viewModels); // never called
 }
 ```
 
-`ITuiPlugin` does NOT extend `IPlugin`. CS-source files can declare a class implementing
-**both** — the loader detects each interface independently.
+For a TUI panel — the live axis:
+
+```csharp
+public interface ITuiPanelPlugin : IPlugin
+{
+    void RegisterPanels(IPanelRegistry registry);
+}
+```
 
 ## Minimal example — a hello tool
 
@@ -335,7 +348,8 @@ See `samples/plugins-cs/HelloWorldPlugin.cs` for the same example as a file.
           IToolPlugin     → RegisterTools(IToolRegistryBuilder)
           IProviderPlugin → RegisterProviders(IProviderRegistryBuilder)
           IAgentPlugin    → RegisterAgents(IAgentRegistryBuilder)
-          ITuiPlugin      → host.RegisterTuiPlugin(plugin)  (deferred until TUI construct)
+          ITuiPlugin      → host.RegisterTuiPlugin(plugin)  (collected; nobody
+                            reads TuiPlugins — closed seam, #564)
           ITuiPanelPlugin → RegisterPanels(IPanelRegistry)  (deferred until renderer starts)
       The SafePluginRegistrar decorator wraps each call in try/catch so one bad plugin
       doesn't abort the rest.
