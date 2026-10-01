@@ -27,14 +27,17 @@
       * `HarborWithAllTools=false`      — (future) keeps only 6 core tools
 
     The legacy `HARBOR_MINIMAL=true` is a shorthand that forces all of the
-    above to `false`. It also defines the `HARBOR_MINIMAL` C# symbol for
-    backward-compat with the existing `#if HARBOR_MINIMAL` directives in
-    HostBuilder.cs.
+    above to `false`. It also defines the `HARBOR_MINIMAL` C# symbol, which no
+    `#if` in the repository reads.
 
     The granular flags additionally define per-feature C# symbols
     (`HARBOR_WITH_PLUGINS`, `HARBOR_WITH_SPECTRE_TUI`,
-    `HARBOR_WITH_ALL_PROVIDERS`) so HostBuilder.cs can use finer-grained
-    `#if` guards.
+    `HARBOR_WITH_ALL_PROVIDERS`, `HARBOR_WITH_ALL_TOOLS`). Their readers are
+    NOT in HostBuilder.cs, which names none of them: `HarborBuildFeatures`
+    (src/Harbor.Hosting/HarborFeatureSet.cs) maps the symbols onto a
+    HarborFeatureSet and the DI modules branch on that record rather than on
+    `#if`. Which symbols have a reader at all is checked, not asserted — see
+    tests/Harbor.Architecture.Tests/FeatureFlagWiringRules.cs.
 
     See docs/BUILD_SYSTEM.md for the full variant × flag matrix.
   -->
@@ -55,8 +58,9 @@
 
     <!--
       Legacy HARBOR_MINIMAL env-var: when 'true', force ALL granular flags
-      to false. Backward-compat with the existing `#if HARBOR_MINIMAL` code
-      path in HostBuilder.cs.
+      to false. There is no `#if HARBOR_MINIMAL` code path to stay compatible
+      with: no directive in the repository reads the symbol this property
+      feeds. FeatureFlagWiringRules is what keeps that statement honest.
     -->
     <HARBOR_MINIMAL Condition="'$(HARBOR_MINIMAL)' == ''">$(env:HARBOR_MINIMAL)</HARBOR_MINIMAL>
 
@@ -95,10 +99,15 @@
     <DefineConstants Condition="'$(HarborWithAllTools)' == 'true'">$(DefineConstants);HARBOR_WITH_ALL_TOOLS</DefineConstants>
 
     <!--
-      Backward-compat: define HARBOR_MINIMAL when ALL granular flags are off.
-      This preserves the existing `#if HARBOR_MINIMAL` semantics in
-      HostBuilder.cs for the minimal shorthand use case (CLI flag spelled
-      with a double-hyphen prefix, omitted here per XML-comment rules).
+      Back-compat symbol for the minimal shorthand (CLI flag spelled with a
+      double-hyphen prefix, omitted here per XML-comment rules). It currently
+      has no reader: nothing in src/ or apps/ branches on it, so the minimal
+      profile is carried by the ProjectReference exclusions above and by
+      HarborBuildFeatures, not by this symbol. The comment here used to claim
+      it preserved "the existing `#if HARBOR_MINIMAL` semantics in
+      HostBuilder.cs"; that file names none of these symbols today.
+      FeatureFlagWiringRules fails the moment a reader appears, so this text
+      cannot quietly go stale again.
     -->
     <DefineConstants Condition="'$(HarborWithPlugins)' != 'true' AND '$(HarborWithSpectreTui)' != 'true' AND '$(HarborWithAllProviders)' != 'true' AND '$(HarborWithAllTools)' != 'true'">$(DefineConstants);HARBOR_MINIMAL</DefineConstants>
 

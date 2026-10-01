@@ -160,12 +160,13 @@ public sealed class FeatureFlagWiringRules
             ["HARBOR_MINIMAL"] = new(
                 "Defined by the four granular flags in apps/Harbor.App.Cli/Harbor.App.Cli.csproj and "
                 + "again in src/Harbor.Hosting/Harbor.Hosting.csproj, and read by no #if or #elif in the "
-                + "repository. Both comments say it preserves \"the existing #if HARBOR_MINIMAL code path "
-                + "in HostBuilder.cs\"; HostBuilder.cs has no such directive, and the symbol's only other "
-                + "occurrences are prose, a doc comment, a code comment, and two user-facing string "
-                + "literals. So the symbol is dead and the comment describing it is stale. Removing the "
-                + "two DefineConstants lines, or restoring a reader, is a change to how the minimal "
-                + "profile is detected and is not this guard's to make. #828 owns the question.",
+                + "repository, so the symbol is dead. Its only occurrences are prose, a doc comment, a "
+                + "code comment, and two user-facing string literals. The csproj comments used to say "
+                + "it preserved \"the existing #if HARBOR_MINIMAL code path in HostBuilder.cs\" — that is "
+                + "the #747 shape, a claim about code the code does not carry, and HostBuilder.cs names "
+                + "no such directive; the text now says so and points here. Whether to drop the two "
+                + "DefineConstants lines or restore a reader changes how the minimal profile is "
+                + "detected, which is not this guard's to make. #828 owns the question.",
                 "#828"),
         };
 
