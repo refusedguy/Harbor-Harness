@@ -8,10 +8,11 @@
 // The walk rule's own header says why it does not forbid `File.*`: folding the
 // file-I/O capability in would make it permanently red, and "the cheap repair for
 // a permanently-red rule is deletion" is written there as a principle. That
-// principle is about a rule that is red *because the sites are still wrong*. Once
-// the sites are converted the same widening would be green — so the honest move is
-// to convert them, then widen somewhere, not to leave the defect standing in order
-// to keep a guard quiet. Two capabilities, two rules, one file each.
+// principle is about a rule that is red *because the sites are still wrong*. This
+// issue converted the sites, so the widening is green-able — which means the
+// honest move was to convert them and then widen somewhere, not to leave the
+// defect standing in order to keep a guard quiet. Two capabilities, two rules,
+// one file each.
 //
 // THE CARVE-OUT WAS FALSE, AND THAT MATTERED MORE THAN THE DEFECT
 // ----------------------------------------------------------------
@@ -27,8 +28,8 @@
 //
 // WHY A SOURCE SCAN AND NOT PresentationCapabilityRules
 // -----------------------------------------------------
-// Same structural reason as the walk rule, and it is worth restating because the
-// reason a rule CANNOT see a project is a property of the rule, not of the tree.
+// Same structural reason as the walk rule, and worth restating because the reason
+// a rule CANNOT see a project is a property of the rule, not of the tree.
 // `FullLayerMatrixTests.Matrix` and `AllSrcAssemblies` are both `src/`-only — the
 // csproj that builds this test project says so in as many words ("App entry
 // points (apps/) are composition roots and are unrestricted by design"), and the
