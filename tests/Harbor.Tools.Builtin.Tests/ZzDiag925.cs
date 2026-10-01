@@ -1,6 +1,6 @@
 using System.Net;
 using System.Net.Sockets;
-using System.Text;
+using System.Text.Json;
 using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Resilience;
 using Harbor.Tools.Mcp;
@@ -58,7 +58,7 @@ public class ZzDiag925
 
         await Assert.That(
                 $"immediate={immediately} afterWait={server.Accepted} waitedMs={sw.ElapsedMilliseconds} "
-                + $"success={roundTrip.IsSuccess} error={roundTrip.IsFailure ? roundTrip.Error : "-"}")
+                + $"success={roundTrip.IsSuccess} error={(roundTrip.IsFailure ? roundTrip.Error : "-")}")
             .IsEqualTo("DIAG925-B");
     }
 
@@ -82,7 +82,7 @@ public class ZzDiag925
 
         await Assert.That(
                 $"immediate={immediately} afterWait={server.Accepted} waitedMs={sw.ElapsedMilliseconds} "
-                + $"success={roundTrip.IsSuccess} error={roundTrip.IsFailure ? roundTrip.Error : "-"}")
+                + $"success={roundTrip.IsSuccess} error={(roundTrip.IsFailure ? roundTrip.Error : "-")}")
             .IsEqualTo("DIAG925-C");
     }
 
