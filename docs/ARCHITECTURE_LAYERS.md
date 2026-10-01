@@ -833,6 +833,7 @@ and nothing in the type system objects.
 
 | Rule | Fact | Issue |
 |---|---|---|
+| `LayerTableDocAgreementRules` | a layer table — any layer-labelled row in any markdown file — agrees with `FullLayerMatrixTests.Matrix`, which is where the layer of a project actually lives; the two tables in this repository are the root `README.md` architecture block and the `CLAUDE.md` layer table | [#922](https://github.com/refusedguy/Harbor-Harness/issues/922) |
 | `SessionStatusSourceRule` | a `SessionStatus` is decided on the transition that establishes it (`ChatAppReducer`, from the core's own `AgentErrorEvent` / `AgentEndEvent`), and no method returning one may read the transcript | [#687](https://github.com/refusedguy/Harbor-Harness/issues/687) |
 | `SessionStatusTableRule` | the `SessionStatus` → label / brush-key table exists in exactly one file (`StatusMappers`), **with one recorded exception** — see the exception note below | [#663](https://github.com/refusedguy/Harbor-Harness/issues/663) |
 | `DiagnosticsClassificationRule` | the detector patterns are declared once, in the core detector, and the LSP counts stay connected to state | [#674](https://github.com/refusedguy/Harbor-Harness/issues/674) |
