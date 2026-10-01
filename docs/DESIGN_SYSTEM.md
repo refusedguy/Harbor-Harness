@@ -156,6 +156,17 @@ change signal (one timestamp versus a stamp dictionary with eviction), and in
 how many files one change loads. What they share is the read, and that has one
 owner (see [#479](https://github.com/refusedguy/Harbor-Harness/issues/479)).
 
+They also have to *behave* the same on the same input, which was a separate
+gap and not implied by the shared read.
+`ThemeFileWatcher` used to apply the reloaded theme only when no `onApplied`
+callback was supplied, while `ThemeDirectoryWatcher` always applied it. Since
+every product caller passes a callback, the single-file arm above reloaded and
+announced itself without repainting — the same document produced different
+colors depending on which branch of the REPL's theme arming ran. Both now apply
+unconditionally; `ThemeWatcherApplyParityTests` drives the two watchers over one
+theme document and compares the ambient palette, so the parity is a measured
+property rather than a claim in this paragraph.
+
 ## The theme axis is exempt from the feature freeze (#622)
 
 The owner freeze [#555](https://github.com/refusedguy/Harbor-Harness/issues/555)
