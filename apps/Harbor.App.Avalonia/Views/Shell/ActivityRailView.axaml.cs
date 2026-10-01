@@ -8,6 +8,7 @@ using Avalonia.Media;
 using Harbor.App.Avalonia.Hosting;
 using Harbor.App.Avalonia.Services;
 using Harbor.App.Avalonia.ViewModels;
+using Harbor.Application.Filesystem;
 using Harbor.Ui.Framework.Navigation;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -166,19 +167,86 @@ public sealed class BoolToWidthConverter : IValueConverter
         throw new NotSupportedException();
 }
 
+/// <summary>
+///     Resolves a file-tree row to the HDS glyph for the icon CATEGORY the
+///     file-tree policy computed for it.
+/// </summary>
+/// <remarks>
+/// <para>
+///     #755. This used to decide the shape from <c>node.IsDirectory</c> and
+///     <c>node.IsExpanded</c> alone, carrying its own three copies of the
+///     <c>IcFolderOpen</c> / <c>IcFolder</c> / <c>IcFileCode</c> path data. The
+///     classification <see cref="FileTreeNode.IconPath" /> holds — source file or
+///     not — was therefore never read by anything, and every non-directory row
+///     was painted with the code glyph whether or not it was code.
+/// </para>
+/// <para>
+///     The category is the policy's, so this class compares against the policy's
+///     own constants rather than re-typing the strings: a rename there breaks
+///     this build instead of silently mis-rendering every row. Expansion is
+///     still read off the node, because <see cref="FileTreeNode.IsExpanded" /> is
+///     view state the scan does not know — the policy classifies files, not how
+///     a folder is drawn open or closed.
+/// </para>
+/// <para>
+///     Geometry comes from the ResourceDictionary, not from a string here, so the
+///     dictionary stays the single source of truth for iconography
+///     (<c>docs/ui/HDS.md</c>; <c>ThemeTokenDuplicationGuardTests</c> enforces it).
+/// </para>
+/// </remarks>
 public sealed class FileTypeToGeometryConverter : IValueConverter
 {
+    /// <summary>Category a classified (source-ish) file row gets.</summary>
+    public const string CodeResourceKey = "IcFileCode";
+
+    /// <summary>Category an unclassified file row gets.</summary>
+    public const string FileResourceKey = "IcFile";
+
+    /// <summary>Category a collapsed directory row gets.</summary>
+    public const string FolderResourceKey = "IcFolder";
+
+    /// <summary>Category an expanded directory row gets.</summary>
+    public const string FolderOpenResourceKey = "IcFolderOpen";
+
+    /// <summary>
+    ///     The HDS resource key that paints <paramref name="node" />, from the
+    ///     category the policy computed plus the expansion state the view owns.
+    /// </summary>
+    /// <remarks>
+    ///     Public and static so the mapping is assertable without standing up an
+    ///     Avalonia <c>Application</c> — the point of #755 is that the
+    ///     classification became observable, and that is a claim about this
+    ///     function, not about the resource plumbing around it.
+    ///     <para>
+    ///         Total by construction: a category no shipped policy emits still
+    ///         resolves, to the generic document, rather than to no icon at all.
+    ///     </para>
+    /// </remarks>
+    public static string IconResourceKeyFor(FileTreeNode node)
+    {
+        ArgumentNullException.ThrowIfNull(node);
+
+        return node.IconPath switch
+        {
+            DefaultFileTreePolicy.FolderIcon => node.IsExpanded ? FolderOpenResourceKey : FolderResourceKey,
+            DefaultFileTreePolicy.CodeIcon => CodeResourceKey,
+            _ => FileResourceKey,
+        };
+    }
+
+    /// <inheritdoc />
     public object? Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
     {
         if (value is not FileTreeNode node) return null;
+        if (global::Avalonia.Application.Current is null) return null;
 
-        string pathData = node.IsDirectory
-            ? (node.IsExpanded
-                ? "M19 19H5V8h14v11zm0-15h-8l-2-2H5c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2z"
-                : "M10 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z")
-            : "M9.4 16.6L6.8 14l2.6-2.6L8 10l-4 4 4 4 1.4-1.4zm5.2.6l2.6-2.6 2.6 2.6L18 17.2l2.6-2.6L18 12l2.6-2.6L18 8.8 15.4 11l-1.2-1.2L14 11l1.2 1.2-1.2 1.2L14 16l1.2-1.2 1.2 1.2-1.2 1.2zm1-7.4V4h5v10h-5v-2.8z";
-
-        return Geometry.Parse(pathData);
+        // TryGetResource, not the direct indexer: it walks the merged
+        // dictionaries, which is where Icons.axaml lives (App.axaml cascade
+        // slot [2]). Same lookup, and same reason, as Views/Converters.cs.
+        return global::Avalonia.Application.Current.TryGetResource(
+                   IconResourceKeyFor(node), null, out object? resource)
+            ? resource
+            : null;
     }
 
     public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture) =>
