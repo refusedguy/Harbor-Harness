@@ -420,11 +420,11 @@ public sealed class RenderInvalidationCoalescingTests
                 "The live spelling must be COUNTED (it is a write) and not FLAGGED. `TryWrite(null)` is the only "
                 + "argument rule A accepts, and it is what all 36 sites in the tree use.");
 
-        await Assert.That(FindFlaggedWrites(PayloadInWake, WakeChannel)).IsEmpty()
+        await Assert.That(FlaggedWakes(PayloadInWake).Count).IsEqualTo(1)
             .Because(
-                "Rule A's own matcher on its own positive control: the write is counted AND reported. Counting and "
-                + "reporting are separate statements and a change to the counting regex must not silently disarm the "
-                + "reporting one.");
+                "Rule A's own verdict on its own positive control: the write is counted AND reported. Counting and "
+                + "reporting are separate statements, and a change to the counting regex must not silently disarm the "
+                + "reporting one — which is exactly what an IsEmpty() here would have hidden.");
 
         await Assert.That(FlaggedWakes(ShapeInsideAComment)).IsEmpty()
             .Because(
@@ -439,7 +439,7 @@ public sealed class RenderInvalidationCoalescingTests
                 + "drained every frame AND read as an AgentEvent — the one queue the issue says must not exist. If "
                 + "this stops matching, rule B2 has no teeth.");
 
-        await Assert.That(BoundedFactories(BoundedEventChannel)).IsEqualTo(1)
+        await Assert.That(BoundedFactories(BoundedEventChannel).Count).IsEqualTo(1)
             .Because(
                 "Positive control for rule B1. A bounded channel with DropWrite plus an unchecked `TryWrite` is a "
                 + "silent domain-event drop — the failure #396's first acceptance line is written to prevent.");
