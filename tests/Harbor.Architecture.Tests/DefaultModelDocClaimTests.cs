@@ -102,6 +102,29 @@
 //   about the ceiling rather than a one-word change. Known instances of the same
 //   drift outside this guard's scope were reported to the owner rather than fixed
 //   here.
+//
+// WHAT THIS GUARD CANNOT DO (#937) — and the one thing it now also checks
+// ------------------------------------------------------------------------
+// Everything above compares a document against `providers/<id>.json`. That
+// makes the JSON the ORACLE, and on #937 the oracle is the thing under
+// dispute: `tencent/hy3:free` is what the file declares, and the provider's own
+// catalogue does not serve it (measured 2026-10-01, unauthenticated GET on the
+// `modelsUrl` this very file reads `providers/*.json` from — see
+// `docs/notes/kilocode-default-model-probe.md`). So this guard was green on a
+// value that a single HTTP request disproves. Checking doc-vs-JSON answers
+// "do the copies agree", never "is the shared value real", and no amount of
+// widening the document set changes that. Liveness needs the network; this is
+// an offline guard, so it does not pretend.
+//
+// What it CAN do without knowing the answer is check that the copies agree
+// with EACH OTHER on the paths that are actually EXECUTED. The live evals
+// runner reads `evals/profiles/*.json` — `model` and `harbor.env.HARBOR_MODEL` —
+// and no gate in this repository compared either against anything. That is why
+// the #937 fork survived twenty days: the two paths disagreed, and every guard
+// in the tree read only one of them. `LiveEvalProfiles_AgreeWith_TheDeclaredDefault`
+// below closes that, and it is deliberately value-AGNOSTIC: it does not say
+// which model is correct, only that a shipped profile and the shipped provider
+// file must not name different ones. It therefore passes whoever wins.
 
 using System.Text.Json;
 using System.Text.RegularExpressions;
@@ -213,6 +236,136 @@ public sealed class DefaultModelDocClaimTests
                 + Describe(violations)
                 + " Fix the DOC (it is the one that is stale) or change providers/<id>.json if the "
                 + "default really moved — never both, and never leave them disagreeing.");
+    }
+
+    /// <summary>
+    ///     The live evals profile must name the same model as the provider file.
+    /// </summary>
+    /// <remarks>
+    ///     This is the check that was missing for #937, and it is the one that
+    ///     could have caught the fork. <see cref="DocumentedClaims_AgreeWith_TheProvidersDeclaredDefault" />
+    ///     reads the root markdown; this reads <c>evals/profiles/*.json</c>, which is what
+    ///     <c>tools/Harbor.Evals</c> actually launches a run with — <c>EvalProfile.Model</c> and
+    ///     <c>harbor.env.HARBOR_MODEL</c> both land in the child process's environment. A stale
+    ///     id there is not a doc problem: the weekly evals run measures a different model
+    ///     than the one every document promises, and reports green.
+    ///     <para>
+    ///     VALUE-AGNOSTIC BY CONSTRUCTION. Nothing here knows that <c>kilo-auto/free</c> is
+    ///     right and <c>tencent/hy3:free</c> is wrong; it only knows they must not differ. So
+    ///     this test goes green the moment the owner picks a winner and moves every site
+    ///     together, and it stays green afterwards. A guard that encoded the current value
+    ///     would instead have to be edited by the same commit that resolves the fork — which
+    ///     is how the disputed value got pinned in the first place.
+    ///     </para>
+    ///     <para>
+    ///     The two fields are checked separately on purpose. <c>model</c> and
+    ///     <c>HARBOR_MODEL</c> are two independent copies of one claim in one file, and
+    ///     <c>WorkspacePreparer</c> writes <c>model</c> into the attempt manifest while the
+    ///     child process reads the env var. A profile where only one was updated would run one
+    ///     model and report another.
+    ///     </para>
+    /// </remarks>
+    [Test]
+    public async Task LiveEvalProfiles_AgreeWith_TheDeclaredDefault()
+    {
+        string root = RequireRepoRoot();
+        Dictionary<string, string> defaults = DeclaredDefaults(root);
+
+        List<(string Profile, string Field, string Model)> claims = ReadLiveProfileClaims(root);
+
+        // Non-vacuity, same property as the doc rule: a guard over zero claims is
+        // indistinguishable from a guard over a path that moved.
+        await Assert.That(claims.Count).IsGreaterThanOrEqualTo(2)
+            .Because("evals/profiles/local.json declares a model in two places — 'model' and "
+                + "'harbor.env.HARBOR_MODEL' — and both reach the runner. Reading fewer than two "
+                + "means the profile moved, was deleted, or the reader stopped finding it, and "
+                + "the rule below would then be satisfied by nothing. Found "
+                + claims.Count + " claim(s).");
+
+        List<string> violations =
+        [
+            .. claims.Where(c => !AgreesWithDeclared(c.Model, defaults))
+                    .Select(c => c.Profile + " ['" + c.Field + "'] names '" + c.Model
+                                 + "' but providers/" + SplitProvider(c.Model)
+                                 + ".json declares defaultModel '"
+                                 + defaults.GetValueOrDefault(SplitProvider(c.Model), "<no such provider>")
+                                 + "'")
+        ];
+
+        await Assert.That(violations).IsEmpty()
+            .Because("a shipped evals profile and the provider file disagree about which model a "
+                + "run uses. That is not cosmetic: tools/Harbor.Evals passes this value to the CLI, "
+                + "so the weekly baseline measures one model while every document promises another, "
+                + "and the run stays green. " + string.Join(" | ", violations)
+                + " Fix by moving BOTH the profile and providers/<id>.json in the same commit — "
+                + "and re-read docs/notes/kilocode-default-model-probe.md first, which records why "
+                + "the fork existed. Never make one side agree by editing only the other.");
+    }
+
+    /// <summary>
+    ///     Every model claim the live evals runner will act on, from every shipped profile.
+    /// </summary>
+    /// <remarks>
+    ///     Both copies are returned rather than judged here so the count assertion above can see
+    ///     them, and so the failure message can name the field that drifted. An unparseable or
+    ///     absent field is <em>not</em> reported by this method: a profile that stops declaring a
+    ///     model is a different defect, and silently treating it as agreement here would let the
+    ///     count assertion carry the weight alone.
+    /// </remarks>
+    private static List<(string Profile, string Field, string Model)> ReadLiveProfileClaims(string root)
+    {
+        var claims = new List<(string, string, string)>();
+        string dir = Path.Combine(root, "evals", "profiles");
+        if (!Directory.Exists(dir))
+        {
+            return claims;
+        }
+
+        foreach (string file in Directory.EnumerateFiles(dir, "*.json").OrderBy(x => x, StringComparer.Ordinal))
+        {
+            string relative = Path.GetRelativePath(root, file).Replace('\\', '/');
+            using JsonDocument doc = JsonDocument.Parse(File.ReadAllText(file));
+
+            if (doc.RootElement.TryGetProperty("model", out JsonElement model)
+                && model.ValueKind == JsonValueKind.String)
+            {
+                claims.Add((relative, "model", model.GetString()!));
+            }
+
+            if (doc.RootElement.TryGetProperty("harbor", out JsonElement harbor)
+                && harbor.ValueKind == JsonValueKind.Object
+                && harbor.TryGetProperty("env", out JsonElement env)
+                && env.ValueKind == JsonValueKind.Object
+                && env.TryGetProperty("HARBOR_MODEL", out JsonElement envModel)
+                && envModel.ValueKind == JsonValueKind.String)
+            {
+                claims.Add((relative, "harbor.env.HARBOR_MODEL", envModel.GetString()!));
+            }
+        }
+
+        return claims;
+    }
+
+    /// <summary>Provider half of a qualified <c>provider/model</c> reference.</summary>
+    private static string SplitProvider(string qualified)
+    {
+        int slash = qualified.IndexOf('/');
+        return slash < 0 ? qualified : qualified[..slash];
+    }
+
+    /// <summary>
+    ///     Model half of a qualified reference, keeping every segment after the first slash.
+    /// </summary>
+    /// <remarks>
+    ///     Deliberately the unlimited split #599 restored, NOT <c>Split('/')[1]</c>: a gateway
+    ///     model id is routinely multi-segment (<c>kilo-auto/free</c>), and a bare index drops
+    ///     everything after the first — the exact truncation that made a default install answer
+    ///     <c>kilocode/hy3:free</c> while the constant promised <c>kilocode/tencent/hy3:free</c>.
+    /// </remarks>
+    private static string ModelHalf(string qualified)
+    {
+        int slash = qualified.IndexOf('/');
+        return slash < 0 ? qualified : qualified[(slash + 1)..];
     }
 
     /// <summary>
@@ -377,6 +530,65 @@ public sealed class DefaultModelDocClaimTests
             .Because("a claim about an unknown provider must be skipped by the JUDGE, not "
                 + "counted as evidence that the shape still works — otherwise the "
                 + "per-shape non-vacuity count can be satisfied by claims the rule never examined");
+    }
+
+    /// <summary>
+    ///     Non-vacuity for the live-profile rule: the same comparison, run against a
+    ///     PLANTED fork, must flag it.
+    /// </summary>
+    /// <remarks>
+    ///     <see cref="LiveEvalProfiles_AgreeWith_TheDeclaredDefault" /> reads a real file, so on a
+    ///     consistent tree it returns an empty violation list — which is also what a broken
+    ///     reader would return. This test is the difference between "found nothing" and "looked
+    ///     and agreed", and it is also what keeps the rule from being pinned to today's value: it
+    ///     plants a profile carrying a model the provider file does NOT declare, and requires the
+    ///     comparison to catch it. The two helper functions are exercised directly rather than
+    ///     through a temp directory, because writing a profile into the repository's own
+    ///     <c>evals/profiles/</c> to make a test fail is the one thing this file must never do.
+    /// </remarks>
+    [Test]
+    public async Task LiveProfileRule_FiresOnAPlantedFork()
+    {
+        string root = RequireRepoRoot();
+        Dictionary<string, string> defaults = DeclaredDefaults(root);
+        string declaredForKilo = defaults["kilocode"];
+        string planted = "kilocode/definitely-not-the-declared-model";
+
+        // A model the provider file does not declare is a violation ...
+        await Assert.That(AgreesWithDeclared(planted, defaults)).IsFalse()
+            .Because("'" + planted + "' is not providers/kilocode.json's declared default '"
+                + declaredForKilo + "', so the live-profile rule must report it");
+
+        // ... the declared value itself is not, which is the half that would break if this rule
+        // were written to pin today's value instead of comparing.
+        await Assert.That(AgreesWithDeclared("kilocode/" + declaredForKilo, defaults)).IsTrue()
+            .Because("the declared default must satisfy the rule, or the rule is a constant "
+                + "rather than a comparison");
+
+        // And the multi-segment id that #599 is about splits correctly on BOTH sides: a
+        // router-style id must not be truncated to its first segment on either side of the
+        // comparison, or the two sides would agree for the wrong reason.
+        foreach (string router in new[] { "kilo-auto/free", "kilo-auto/efficient" })
+        {
+            await Assert.That(ModelHalf(router)).IsEqualTo(router)
+                .Because("'" + router + "' is multi-segment and must survive the split whole");
+        }
+
+        await Assert.That(SplitProvider("kilocode/kilo-auto/free")).IsEqualTo("kilocode")
+            .Because("the provider half is everything before the first slash");
+        await Assert.That(ModelHalf("kilocode/kilo-auto/free")).IsEqualTo("kilo-auto/free")
+            .Because("the model half is everything after the first slash — the truncation "
+                + "DefaultModelSingleSourceTests exists to prevent");
+    }
+
+    /// <summary>
+    ///     The comparison <see cref="LiveEvalProfiles_AgreeWith_TheDeclaredDefault" /> makes,
+    ///     factored out so the planted control above exercises the SAME code path.
+    /// </summary>
+    private static bool AgreesWithDeclared(string qualified, Dictionary<string, string> defaults)
+    {
+        string id = SplitProvider(qualified);
+        return defaults.TryGetValue(id, out string declared) && declared == ModelHalf(qualified);
     }
 
     /// <summary>
