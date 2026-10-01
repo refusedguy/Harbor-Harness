@@ -1,3 +1,6 @@
+using Harbor.Ui.Framework.Rendering;
+using Harbor.Ui.Framework.Rendering.Markdown;
+
 namespace Harbor.Tui.CellForge.Rendering;
 
 /// <summary>

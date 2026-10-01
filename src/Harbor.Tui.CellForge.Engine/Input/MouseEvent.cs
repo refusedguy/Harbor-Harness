@@ -1,3 +1,5 @@
+using Harbor.Ui.Framework.Rendering.Input;
+
 namespace Harbor.Tui.CellForge.Input;
 
 /// <summary>Mouse button identity. Numeric values are wire-id + 1

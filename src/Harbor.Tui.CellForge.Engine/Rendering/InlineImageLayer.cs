@@ -1,5 +1,6 @@
 using System.Runtime.InteropServices;
 using Harbor.Tui.CellForge.Capabilities;
+using Harbor.Ui.Framework.Rendering;
 
 namespace Harbor.Tui.CellForge.Rendering;
 
