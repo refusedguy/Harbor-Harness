@@ -21,24 +21,36 @@
 // are green, and they are right to be: the edges are declared, they are legal,
 // and the gates answer the question they were built to answer.
 //
-// The hole is that NOBODY READS THE IMPORTS. `GlobalUsings.cs` pre-imports
+// The hole was that NOBODY READS THE IMPORTS. `GlobalUsings.cs` pre-imported
 //
 //     global using Harbor.Ui.Framework.Rendering;
 //     global using Harbor.Ui.Framework.Rendering.Input;
 //     global using Harbor.Ui.Framework.Rendering.Markdown;
 //     global using Harbor.Ui.Framework.Rendering.Widgets;
 //
-// and the files that spell `UiMsg` / `UiKeyDto` look CLEAN — no `using` line,
-// nothing for a reference-scanner to find. The vocabulary is borrowed, the
-// declarations are honest, and the engine is not atomic. That is the whole
-// defect, and it is invisible to every gate that exists today.
+// and the files that spelled `UiMsg` / `UiKeyDto` looked CLEAN — no `using`
+// line, nothing for a reference-scanner to find. The vocabulary was borrowed,
+// the declarations were honest, and the engine was not atomic. That was the
+// whole defect, and it was invisible to every gate that existed.
 //
-// So the rule here is deliberately NOT "the engine has no ProjectReference".
-// That question is answered, permitted, and not the issue. The rule is:
+// #795 has now deleted that block, so the borrow is spelled per file and the
+// rule below has something real to grade:
 //
 //     no file the engine compiles imports Harbor.Ui.Framework.* or
-//     Harbor.Abstractions.*, and the Description's 'BCL-only' claim is checked
-//     against both the imports and the references instead of being decoration.
+//     Harbor.Abstractions.* except a reviewed row, the Description's
+//     'BCL-only' claim is checked against both imports and references, and
+//     NO FILE DECLARES A `global using` AT ALL.
+//
+// The last clause is the one that closes the residual hole. The rule in this
+// file reads imports, and an import-reading rule is blind to a borrower that
+// arrives through an ALREADY-BASELINED ambient namespace: by the time the
+// borrow exists, every import line involved is already in the table. That was
+// demonstrated against this file in its merged form — a synthetic file binding
+// six ambient types with no `using` line of its own left both decisive
+// predicates GREEN at 9 rows. So the channel is now forbidden outright instead
+// of merely accounted for: with zero ambient namespaces, a borrow must be
+// spelled in the file that needs it, and spelling it is a line this file can
+// read.
 //
 // WHY THE ORDERING IS "GUARD IMPORTS FIRST" AND NOT "DELETE REFERENCES FIRST"
 // ---------------------------------------------------------------------------
@@ -52,12 +64,19 @@
 //
 // WHAT IS BASELINED, AND WHY IT IS NOT A PERMISSION
 // -------------------------------------------------
-// The nine borrowing imports and the four references exist, and this PR does
+// The 33 borrowing import pairs and the four references exist, and this PR does
 // not remove them: moving `Input/` out is step 3 of #795 (deliberately a
 // separate change so it cannot collide with #435/#436), and the references are
 // #435's and #436's to delete. A permanently-red test is a comment with extra
 // steps, so both tables below list today's violations with a reason and the
 // issue that will delete them.
+//
+// The 33 pairs are 3 rows in `ReviewedImports` (the State translator pair and
+// the Protocol constant) plus 4 groups in `ReviewedVocabulary` expanded to one
+// row per file. Grouping is by namespace because the debt is per namespace;
+// the file list is spelled out because the old shape — one row for
+// `GlobalUsings.cs` serving 24 files — could not name a 25th borrower and so
+// could not fail when one appeared.
 //
 // They are a TO-DO LIST, not an amnesty, and three things keep them that way:
 //
@@ -102,15 +121,18 @@
 //     excludes `contrib/`, `tests/`, `obj/`, `bin/` and `.worktrees/` by
 //     construction.
 //   * This is a SOURCE rule. Whether a type actually binds is a compiler
-//     question. What a text scan can answer honestly — and what is exactly the
-//     leak — is which names the project ASKS FOR. The 20 files that name
-//     `Cell`/`Rect`/`ScreenBuffer`/`KeyEvent` with no `using` line of their own
-//     are reached through `GlobalUsings.cs`; that is why `Harbor.Ui.Framework`
-//     is one row and not twenty.
-//   * "Asks for" is deliberately not "binds": `Harbor.Abstractions.Models` is
-//     named by two files that use no type from it, and that unused import is
-//     still listed. A rule that graded binding rather than declaration would
-//     have missed the very thing this issue reports.
+//     question, and this run is a demonstration of why that distinction must not
+//     be blurred: a text scan used to plan the deletion of the ambient block
+//     reported `UnicodeWidth` and `TerminalBackgroundProbe` as absent from two
+//     files, and the build disagreed with CS0103. The scan's own comment
+//     stripper desynchronised on the char literal `'\n'` and blanked the rest of
+//     the file. What a text scan can answer honestly — and what is exactly the
+//     leak — is which names the project ASKS FOR; whether the request resolves
+//     is the compiler's job, and this file's rows are therefore written from
+//     the compiler's own error list rather than from a scan's silence.
+//   * "Asks for" is deliberately not "binds": a reviewed row is a declaration
+//     that may stand, and the two `Harbor.Abstractions.Models` lines that named
+//     no type at all were deleted as drive-bys rather than baselined.
 //
 // NON-VACUITY — FOUR PLACES, ALL OF WHICH CAN GO RED
 // ---------------------------------------------------
@@ -127,6 +149,10 @@
 //      prefix, `Harbor.DesignSystem`, and `Harbor.Plugins.*`. A matcher that
 //      fires on prose is deleted by the first person it annoys; one that fires
 //      on nothing enforces nothing.
+//   2b. `NonVacuityTheGlobalUsingMatcherFiresOnPlantedAmbientUsingsOnly` — the
+//      same contract for the ambient channel, because a channel rule that
+//      cannot see `global using` is the merged guard's blind spot rebuilt one
+//      clause later.
 //   3. `TheBclOnlyClaimIsCheckedAgainstRealProjectReferences` reads a real
 //      csproj through the same helper the planted control uses.
 //   4. The liveness tests above — a stale row is red.
@@ -209,48 +235,6 @@ public sealed class CellForgeEngineAtomicityRules
     private static readonly (string FileName, string Namespace, ExemptionReason.Row Allowance)[] ReviewedImports =
     [
         (
-            "GlobalUsings.cs",
-            "Harbor.Ui.Framework.Rendering",
-            new ExemptionReason.Row(
-                "The renderer-agnostic cell vocabulary (Cell, Rect, ScreenBuffer, UnicodeWidth, "
-                + "TextWrap) has no BCL equivalent and is named by 20 engine files that declare no "
-                + "using of their own — this line IS their import. Where the vocabulary eventually "
-                + "lives is #436's decision; the Input/ move that unblocks it is #795 step 3.",
-                TrackedBy: "https://github.com/refusedguy/Harbor-Harness/issues/795")
-        ),
-        (
-            "GlobalUsings.cs",
-            "Harbor.Ui.Framework.Rendering.Input",
-            new ExemptionReason.Row(
-                "KeyEvent, KeyCode, KeyModifiers and IFocusTarget are the shared input vocabulary "
-                + "the parser, FocusRouter and ComposerController all speak. FocusRouter.cs names "
-                + "IFocusTarget through this line with no using of its own, so deleting it here "
-                + "breaks the build rather than removing a leak — which is exactly the point this "
-                + "guard makes. Tracked by #795 step 3.",
-                TrackedBy: "https://github.com/refusedguy/Harbor-Harness/issues/795")
-        ),
-        (
-            "GlobalUsings.cs",
-            "Harbor.Ui.Framework.Rendering.Markdown",
-            new ExemptionReason.Row(
-                "No engine file names any of the five types in this namespace, so the import buys "
-                + "nothing today. It is listed rather than quietly dropped so that the removal is a "
-                + "reviewed edit with a reason attached, and so the liveness test forces this row "
-                + "out in the same commit that deletes the line.",
-                TrackedBy: "https://github.com/refusedguy/Harbor-Harness/issues/795")
-        ),
-        (
-            "GlobalUsings.cs",
-            "Harbor.Ui.Framework.Rendering.Widgets",
-            new ExemptionReason.Row(
-                "LineDiff and WordDiff live here after #679 and the engine references neither, so "
-                + "this line is unused vocabulary parked in a global block. It is held for the same "
-                + "reason as the Markdown row: deleting it here would make this PR's single claim "
-                + "'the guard is armed' untrue, and the row's liveness test retires it the moment "
-                + "the line goes.",
-                TrackedBy: "https://github.com/refusedguy/Harbor-Harness/issues/795")
-        ),
-        (
             "Input/MouseRouter.cs",
             "Harbor.Ui.Framework.State",
             new ExemptionReason.Row(
@@ -258,20 +242,10 @@ public sealed class CellForgeEngineAtomicityRules
                 + "state-layer message — and TimelineWheelTarget dispatches it. That is the "
                 + "translator half of Input/, which #795 step 3 relocates to "
                 + "Harbor.Tui.CellForge/Chat; a translator between the terminal protocol and the UI "
-                + "vocabulary has two languages by definition and cannot be BCL.",
-                TrackedBy: "https://github.com/refusedguy/Harbor-Harness/issues/795")
-        ),
-        (
-            "Input/MouseRouter.cs",
-            "Harbor.Abstractions.Models",
-            new ExemptionReason.Row(
-                "MEASURED UNUSED, not merely tolerated. MouseRouter.cs binds no type from this "
-                + "namespace — its AppMsg/ChatAction/UiKey all come from Harbor.Ui.Framework.State "
-                + "(see the row above), and EnforcerIntegrityTests already records this project's "
-                + "Harbor.Abstractions edge as emitting no IL. The line is a leftover from before the "
-                + "vocabulary moved to the shared layer. Deleting it costs nothing, but it is a source "
-                + "edit to a file #795 step 3 relocates anyway, so it waits for that move rather than "
-                + "landing here as a drive-by.",
+                + "vocabulary has two languages by definition and cannot be BCL. All six names it "
+                + "binds are declared in Harbor.Ui.Framework.State, not in .ViewModels — measured "
+                + "by reading the declaration file of each, because 'which State project' was the "
+                + "open question this row had to answer.",
                 TrackedBy: "https://github.com/refusedguy/Harbor-Harness/issues/795")
         ),
         (
@@ -285,17 +259,6 @@ public sealed class CellForgeEngineAtomicityRules
                 TrackedBy: "https://github.com/refusedguy/Harbor-Harness/issues/795")
         ),
         (
-            "Rendering/ComposerController.cs",
-            "Harbor.Abstractions.Models",
-            new ExemptionReason.Row(
-                "MEASURED UNUSED, same finding as the MouseRouter pair: ComposerController binds no "
-                + "type from this namespace. Its InputMsg, EnterKeyPolicy and ChatAction all come "
-                + "from Harbor.Ui.Framework.State, which is why this project's Harbor.Abstractions "
-                + "edge produces no IL. Listed rather than deleted for the same reason as the pair "
-                + "above — the file is relocated by #795 step 3.",
-                TrackedBy: "https://github.com/refusedguy/Harbor-Harness/issues/795")
-        ),
-        (
             "Rendering/DiffEngine.cs",
             "Harbor.Ui.Framework.Rendering.Protocol",
             new ExemptionReason.Row(
@@ -306,6 +269,113 @@ public sealed class CellForgeEngineAtomicityRules
                 TrackedBy: "https://github.com/refusedguy/Harbor-Harness/issues/795")
         ),
     ];
+
+    /// <summary>
+    ///     The cell vocabulary the engine still borrows, one row per namespace
+    ///     with the CLOSED list of files that may import it. This is the row
+    ///     shape the ambient block used to hide: before #795 a single
+    ///     <c>global using</c> line in <c>GlobalUsings.cs</c> served 24 files,
+    ///     so the table had one row per NAMESPACE and no file could be named.
+    ///     Grouping is still by namespace, because the debt (#436 decides where
+    ///     the vocabulary lives) is per namespace, but the file list is spelled
+    ///     out, so a 25th borrower is a red row rather than an invisible one.
+    /// </summary>
+    /// <param name="Namespace">The borrowed namespace.</param>
+    /// <param name="Files">
+    ///     Every engine file allowed to import it. A file outside this list is
+    ///     reported by <see cref="NoEngineFileImportsTheUiVocabularyOutsideTheReviewedRows" />.
+    /// </param>
+    /// <param name="Allowance">Why this vocabulary may stay, and what removes it.</param>
+    private static readonly (string Namespace, string[] Files, ExemptionReason.Row Allowance)[] ReviewedVocabulary =
+    [
+        (
+            "Harbor.Ui.Framework.Rendering",
+            [
+                "Input/MouseRouter.cs",
+                "Rendering/AnsiWriter.cs",
+                "Rendering/BufferSwapChain.cs",
+                "Rendering/CodeHighlightPalette.cs",
+                "Rendering/CodeSyntaxTokenizer.cs",
+                "Rendering/CodeTokenizer.cs",
+                "Rendering/DiffEngine.cs",
+                "Rendering/DirtyRect.cs",
+                "Rendering/FlexLayout.cs",
+                "Rendering/FrameDiff.cs",
+                "Rendering/InlineImageLayer.cs",
+                "Rendering/InlineSession.cs",
+                "Rendering/LayoutTree.cs",
+                "Rendering/OverlayStack.cs",
+                "Rendering/PostFx.cs",
+                "Rendering/PromptBuffer.cs",
+                "Rendering/PromptRenderer.cs",
+                "Rendering/PromptViewport.cs",
+            ],
+            new ExemptionReason.Row(
+                "The renderer-agnostic cell vocabulary — Cell, Rect, ScreenBuffer, CellStyle, "
+                + "PackedColor, StyleAttr, UnicodeWidth, TextWrap, IInlineImageSink — has no BCL "
+                + "equivalent. All 18 files now spell the import themselves; what they must not do "
+                + "is borrow it invisibly, which is what the deleted global block did. Where the "
+                + "vocabulary eventually lives is #436's decision.",
+                TrackedBy: "https://github.com/refusedguy/Harbor-Harness/issues/436")
+        ),
+        (
+            "Harbor.Ui.Framework.Rendering.Input",
+            [
+                "Input/FocusRouter.cs",
+                "Input/InputEvent.cs",
+                "Input/MouseEvent.cs",
+                "Parsing/EscapeSequenceParser.cs",
+                "Rendering/ComposerController.cs",
+                "Rendering/OverlayStack.cs",
+                "Rendering/VimComposerMode.cs",
+            ],
+            new ExemptionReason.Row(
+                "KeyEvent, KeyCode, KeyModifiers, KeyEventType and IFocusTarget are the shared "
+                + "input vocabulary the byte state-machine parser, FocusRouter, OverlayStack and "
+                + "ComposerController all speak. Parsing/ is the engine proper and needs it, so this "
+                + "is NOT the #795 step 3 translator move — that is the State row above.",
+                TrackedBy: "https://github.com/refusedguy/Harbor-Harness/issues/436")
+        ),
+        (
+            "Harbor.Ui.Framework.Rendering.Markdown",
+            [
+                "Rendering/CodeSyntaxTokenizer.cs",
+                "Rendering/CodeTokenizer.cs",
+            ],
+            new ExemptionReason.Row(
+                "MdLine and MdStyle are read by the two code tokenizers to classify spans. NOTE: the "
+                + "merged version of this row claimed no engine file names anything in this namespace "
+                + "and that the import 'buys nothing today' — false, and the build found it when the "
+                + "ambient block was deleted and these two files stopped compiling. Corrected here "
+                + "because a baseline row that misstates its own debt cannot be reviewed.",
+                TrackedBy: "https://github.com/refusedguy/Harbor-Harness/issues/436")
+        ),
+        (
+            "Harbor.Ui.Framework.Rendering.Widgets",
+            [
+                "Rendering/CodeHighlightPalette.cs",
+                "Rendering/PostFx.cs",
+            ],
+            new ExemptionReason.Row(
+                "ChatPalette (CodeHighlightPalette, four call sites) and PanelFx.Lerp (PostFx) are "
+                + "read here. The merged version of this row called the line 'unused vocabulary "
+                + "parked in a global block' on the grounds that LineDiff and WordDiff are "
+                + "referenced by neither — true of those two types and beside the point, since the "
+                + "namespace is imported for these. Corrected for the same reason as the row above.",
+                TrackedBy: "https://github.com/refusedguy/Harbor-Harness/issues/436")
+        ),
+    ];
+
+    /// <summary>
+    ///     Every reviewed import row, vocabulary groups expanded to one row per
+    ///     file. Both tables are read through this so a rule cannot accidentally
+    ///     check one and ignore the other.
+    /// </summary>
+    private static readonly (string FileName, string Namespace, ExemptionReason.Row Allowance)[] ReviewedAll =
+        ReviewedImports
+            .Concat(ReviewedVocabulary.SelectMany(v =>
+                v.Files.Select(f => (f, v.Namespace, v.Allowance))))
+            .ToArray();
 
     /// <summary>
     ///     The four `<ProjectReference>` edges the csproj declares while calling
@@ -468,7 +538,7 @@ public sealed class CellForgeEngineAtomicityRules
 
     /// <summary>Whether an import is covered by a reviewed row.</summary>
     private static bool IsReviewed(string fileName, string ns) =>
-        ReviewedImports.Any(r =>
+        ReviewedAll.Any(r =>
             string.Equals(r.FileName, fileName, StringComparison.Ordinal)
             && string.Equals(r.Namespace, ns, StringComparison.Ordinal));
 
@@ -476,7 +546,99 @@ public sealed class CellForgeEngineAtomicityRules
     private static string ReviewedImportKeys() =>
         string.Join(
             " | ",
-            ReviewedImports.Select(r => $"{r.FileName}: {r.Namespace}").OrderBy(k => k, StringComparer.Ordinal));
+            ReviewedAll.Select(r => $"{r.FileName}: {r.Namespace}").OrderBy(k => k, StringComparer.Ordinal));
+
+    // =====================================================================
+    // 1b. The channel itself. A `global using` is what made the borrow
+    //     invisible, so the channel is now forbidden outright.
+    // =====================================================================
+
+    /// <summary>
+    ///     Every <c>global using</c> in every file the engine compiles. The
+    ///     merged guard could not see a borrower that arrives through an
+    ///     already-baselined ambient namespace: by the time the borrow exists,
+    ///     every import line involved is already in the table, so no
+    ///     import-reading rule and no reference-reading rule can catch it. That
+    ///     was demonstrated on the merged guard with a synthetic file binding
+    ///     six ambient types and no <c>using</c> line of its own — 9 rows found,
+    ///     both decisive predicates green. Deleting the block closes the hole
+    ///     for today; this rule is what stops it being reopened, because with
+    ///     zero ambient namespaces there is no channel left to borrow through.
+    /// </summary>
+    private static IReadOnlyList<(string FileName, int Line)> AllGlobalUsings()
+    {
+        var found = new List<(string, int)>();
+
+        if (RepoPaths.FindProjectDir(ProjectDir) is not { } projectRoot)
+        {
+            return found;
+        }
+
+        foreach (string path in RepoPaths.EnumerateCsFiles(ProjectDir))
+        {
+            string? source = SourceScan.TryReadAllText(path);
+            if (source is null)
+            {
+                continue;
+            }
+
+            string fileName = Path.GetRelativePath(projectRoot, path).Replace('\\', '/');
+            string[] lines = SourceScan.StripComments(source).Split('\n');
+
+            for (int i = 0; i < lines.Length; i++)
+            {
+                if (GlobalUsingDirective.IsMatch(lines[i]))
+                {
+                    found.Add((fileName, i + 1));
+                }
+            }
+        }
+
+        return found;
+    }
+
+    /// <summary>
+    ///     An ambient <c>using</c>, in any of its spellings
+    ///     (<c>global using X;</c>, <c>global using static X;</c>).
+    ///     Comment-stripped input only, so a doc comment mentioning the phrase
+    ///     cannot be reported — and so cannot be the thing that keeps this rule
+    ///     from ever going red.
+    /// </summary>
+    private static readonly Regex GlobalUsingDirective = new(
+        @"^\s*global\s+using\s+",
+        RegexOptions.Compiled | RegexOptions.CultureInvariant);
+
+    /// <summary>
+    ///     No file the engine compiles may declare a <c>global using</c>. This is
+    ///     the predicate the merged guard was missing: it is the one question
+    ///     whose answer makes every borrow in this project necessarily visible,
+    ///     because a file with no ambient namespace can only reach a type it
+    ///     asked for by name, and asking is a line this project can read.
+    /// </summary>
+    [Test]
+    public async Task NoEngineFileDeclaresAGlobalUsing()
+    {
+        IReadOnlyList<(string FileName, int Line)> globals = AllGlobalUsings();
+
+        var offenders = globals
+            .Select(g => $"{g.FileName}:{g.Line}")
+            .OrderBy(k => k, StringComparer.Ordinal)
+            .ToList();
+
+        await Assert.That(offenders).IsEmpty()
+            .Because(
+                "a global using is the one construct that makes a borrow invisible to every rule in "
+                + "this file. When Harbor.Tui.CellForge.Engine/GlobalUsings.cs pre-imported four "
+                + "Harbor.Ui.Framework.Rendering.* namespaces, 24 files reached Cell, Rect, "
+                + "ScreenBuffer, KeyEvent, MdLine, ChatPalette and PanelFx with no import line of "
+                + "their own, and the import rule below was green the whole time. A synthetic file "
+                + "doing the same on the merged guard left both decisive predicates green at 9 rows, "
+                + "because by then every import involved was already baselined. No import-reading "
+                + "rule and no reference-reading rule can close that; removing the channel can. So "
+                + "the borrow must be spelled in the file that needs it — which is exactly what the "
+                + "33 reviewed rows above now enumerate, one per file. Ambient usings found: "
+                + Offenders(offenders));
+    }
 
     // =====================================================================
     // 1. The rule this issue asked for: imports, not references.
@@ -625,7 +787,7 @@ public sealed class CellForgeEngineAtomicityRules
         IReadOnlyList<(ImportHit Hit, int Line)> actual = AllForbiddenImports();
         var stale = new List<string>();
 
-        foreach ((string fileName, string ns, _) in ReviewedImports)
+        foreach ((string fileName, string ns, _) in ReviewedAll)
         {
             bool stillViolated = actual.Any(a =>
                 string.Equals(a.Hit.FileName, fileName, StringComparison.Ordinal)
@@ -685,9 +847,9 @@ public sealed class CellForgeEngineAtomicityRules
     [Test]
     public async Task ReviewedRowsStateWhyTheyAreTolerated()
     {
-        var rows = new List<(string Key, ExemptionReason.Row Row)>(ReviewedImports.Length + ReviewedReferences.Length);
+        var rows = new List<(string Key, ExemptionReason.Row Row)>(ReviewedAll.Length + ReviewedReferences.Length);
 
-        foreach ((string fileName, string ns, ExemptionReason.Row allowance) in ReviewedImports)
+        foreach ((string fileName, string ns, ExemptionReason.Row allowance) in ReviewedAll)
         {
             rows.Add(($"ReviewedImports[{fileName}: {ns}]", allowance));
         }
@@ -750,6 +912,61 @@ public sealed class CellForgeEngineAtomicityRules
                 + "is that it is currently false, not that it should stop being made. If the phrase "
                 + "disappears, that is a decision for a human to record by editing this file, not a "
                 + "side effect of an unrelated csproj change.");
+    }
+
+    /// <summary>
+    ///     The ambient-channel matcher must fire on every spelling of
+    ///     <c>global using</c> and stay silent on the two things that are most
+    ///     likely to make it look like it works. The silent cases are the ones
+    ///     that matter: a doc comment saying <c>global using</c> is what
+    ///     <c>FocusRouter.cs</c> used to carry, and a plain per-file
+    ///     <c>using</c> is the 33 rows above — if this matcher fired on either,
+    ///     the rule would be red for a tree that is doing exactly the right
+    ///     thing.
+    /// </summary>
+    [Test]
+    public async Task NonVacuityTheGlobalUsingMatcherFiresOnPlantedAmbientUsingsOnly()
+    {
+        (string Name, string Source)[] ambient =
+        [
+            ("plain.cs", "global using Harbor.Ui.Framework.Rendering;"),
+            ("static.cs", "global using static Harbor.Ui.Framework.Rendering.Widgets;"),
+            ("indented.cs", "    global using Harbor.Abstractions.Models;"),
+            ("nested-in-class.cs", "public sealed class C { } // global using X;"),
+        ];
+
+        (string Name, string Source)[] quiet =
+        [
+            ("per-file.cs", "using Harbor.Ui.Framework.Rendering;"),
+            ("comment.cs", "// GlobalUsings.cs used to carry global using of the UI namespaces."),
+            ("doc.cs", "/// <c>global using</c> is what this project deleted."),
+            ("string.cs", "var s = \"global using Harbor.Ui.Framework.Rendering;\";"),
+            ("notusing.cs", "public sealed class GlobalUsing {}"),
+        ];
+
+        foreach ((string name, string source) in ambient)
+        {
+            bool fired = SourceScan.StripComments(source).Split('\n')
+                .Any(l => GlobalUsingDirective.IsMatch(l));
+
+            await Assert.That(fired).IsTrue()
+                .Because($"'{name}' declares an ambient using, so the matcher must see it. Zero here "
+                       + "means the rule cannot fire at all, and a rule that cannot fire is the "
+                       + "merged guard's blind spot rebuilt one clause later.");
+        }
+
+        foreach ((string name, string source) in quiet)
+        {
+            bool fired = SourceScan.StripComments(source).Split('\n')
+                .Any(l => GlobalUsingDirective.IsMatch(l));
+
+            await Assert.That(fired).IsFalse()
+                .Because($"'{name}' is NOT an ambient using. A per-file using is the 33 reviewed "
+                       + "rows this project now requires, prose is documentation, and a string "
+                       + "literal is data. A rule that fires on any of them would be deleted by the "
+                       + "first person it annoyed — and this rule exists precisely because the "
+                       + "previous shape let a borrower through unseen.");
+        }
     }
 
     /// <summary>
