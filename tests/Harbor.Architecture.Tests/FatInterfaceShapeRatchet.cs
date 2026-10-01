@@ -37,12 +37,13 @@
 //                      EstimateTokens(IReadOnlyList<AgentMessage>) while the
 //                      ITokenEstimator that already exists next door declares
 //                      EstimateMessages(IEnumerable<AgentMessage>).
-//   IApprovalCoordinator  9 declared member SIGNATURES (7 names — two members
-//                      are overload pairs). The issue's number is right, and so
-//                      is its central claim: 8 of the 9 are used by exactly ONE
-//                      consumer, so the demand really is non-overlapping. This
-//                      is the one slice where "proven by consumers" means what
-//                      it says.
+//   IApprovalCoordinator  9 distinct SIGNATURES, which is 7 member NAMES —
+//                      RegisterGate and DecideApproval are each an overload
+//                      pair. The issue's number is right, and so is its central
+//                      claim: 6 of the 7 names are used by exactly ONE consumer
+//                      and only RequestCancel is shared (5 callers), so the
+//                      demand really is non-overlapping. This is the one slice
+//                      where "proven by consumers" means what it says.
 //
 // WHY IReplHost IS NOT THE FOUR-WAY SPLIT THE ISSUE ASKS FOR
 // -----------------------------------------------------------
@@ -169,9 +170,21 @@ public sealed class FatInterfaceShapeRatchet
     ///     gave it <c>TokenTrackingRatchet.cs</c>, and two ratchets grading one type
     ///     would be two places to forget to update.
     /// </summary>
-    private static readonly AggregateShape[] Aggregates =
+    /// <remarks>
+    ///     <c>IReplHost</c> is NOT in this table and cannot be. It is
+    ///     <c>internal</c> to <c>Harbor.App.Cli</c>, and this test project has
+    ///     no <c>ProjectReference</c> to the CLI app — an application, not a
+    ///     library, and the layering suite deliberately grades <c>src/</c>
+    ///     without it. So there is no assembly to reflect over and no way to
+    ///     reach the type by name: an earlier draft of this file asserted 31
+    ///     members through <c>Resolve</c> and measured 0, every time, which is
+    ///     the shape of a guard that is green for the wrong reason. Its members
+    ///     are counted from SOURCE instead, by
+    ///     <see cref="MeasureMembersFromSource" />, which reads the declaration
+    ///     the same way the consumer scan reads its callers.
+    /// </remarks>
+    private static readonly AggregateShape[] ReflectedAggregates =
     [
-        new(ReplHostName, "Harbor.App.Cli.Repl.Commands.IReplHost", MeasuredReplHostMembers),
         new(ThemeServiceName, "Harbor.Ui.Framework.Services.IThemeService", MeasuredThemeAliasMembers),
         new(ApprovalCoordinatorName, "Harbor.Abstractions.Permissions.IApprovalCoordinator", MeasuredApprovalMembers),
     ];
@@ -338,7 +351,7 @@ public sealed class FatInterfaceShapeRatchet
     [Test]
     public async Task Ratchet_NoAggregateDeclaresMoreMembersThanMeasured()
     {
-        foreach (AggregateShape aggregate in Aggregates)
+        foreach (AggregateShape aggregate in ReflectedAggregates)
         {
             await Assert.That(Resolve(aggregate.Name) is not null)
                 .IsTrue()
@@ -442,7 +455,8 @@ public sealed class FatInterfaceShapeRatchet
         await Assert.That(measured.Count).IsEqualTo(MeasuredApprovalMembers)
             .Because($"IApprovalCoordinator declared {MeasuredApprovalMembers} distinct member signatures "
                    + "when this table was measured. This is the one slice of #471 whose issue figure is "
-                   + "correct, and 8 of the 9 are used by exactly one consumer, so the split it proposes "
+                   + "correct, and 6 of its 7 member names are used by exactly one consumer (only "
+                   + "RequestCancel is shared), so the split it proposes "
                    + "is well founded. A tenth is a new obligation on the implementor and on every test "
                    + "double. Measured now (" + measured.Count + "): "
                    + (measured.Count == 0 ? "(none)" : string.Join(" | ", measured)));
@@ -488,6 +502,31 @@ public sealed class FatInterfaceShapeRatchet
         await Assert.That(delta.Improvements).IsEmpty()
             .Because("a signature left the coordinator; re-measure the table. Removed: "
                    + string.Join(", ", delta.Improvements));
+    }
+
+    /// <summary>
+    ///     <c>IReplHost</c> still declares no more than the 31 members measured,
+    ///     counted from SOURCE because the type is <c>internal</c> to an
+    ///     application this assembly does not reference. See
+    ///     <see cref="ReflectedAggregates" /> for why reflection cannot reach it.
+    /// </summary>
+    [Test]
+    public async Task Ratchet_IReplHost_DeclaresNoMoreThanTheThirtyOneMeasuredMembers()
+    {
+        IReadOnlyList<string> measured = MeasureMembersFromSource(ReplHostName);
+
+        await Assert.That(measured.Count).IsGreaterThan(0)
+            .Because($"the source scan found NO members of {ReplHostName}. Either the interface moved, "
+                   + "was renamed, or the scan stopped matching — and a ratchet over an empty measurement "
+                   + "is green forever, which is the one failure mode a ratchet has to avoid. A non-zero "
+                   + "count is also what proves this assertion is looking at the real declaration");
+
+        await Assert.That(measured.Count).IsLessThanOrEqualTo(MeasuredReplHostMembers)
+            .Because($"{ReplHostName} declared {MeasuredReplHostMembers} members when this table was "
+                   + "measured and may only hold that line. A 32nd is a member every implementor and every "
+                   + "test double must satisfy, added to an interface that is already the subject of an "
+                   + "unpaid ISP violation (#471), and one that has grown in five of its last six commits. "
+                   + $"Declared now ({measured.Count}): " + string.Join(", ", measured));
     }
 
     /// <summary>
@@ -587,24 +626,36 @@ public sealed class FatInterfaceShapeRatchet
     }
 
     /// <summary>
-    ///     <c>IReplHost</c> really is 31 members, and it inherits nothing — so the
-    ///     figure counts properties, methods and events together without
-    ///     double-counting anything inherited. This is the number the issue calls
-    ///     24, stated so a future reader can check it rather than trust it.
+    ///     <c>IReplHost</c> really is 31 members, counted from source because the
+    ///     type is <c>internal</c> to an application this assembly does not
+    ///     reference — see <see cref="ReflectedAggregates" />. This is the
+    ///     number the issue calls 24, stated so a future reader can check it
+    ///     rather than trust it.
     /// </summary>
     [Test]
-    public async Task Claim_IReplHost_IsThirtyOneMembersAndInheritsNothing()
+    public async Task Claim_IReplHost_IsThirtyOneMembers()
     {
-        await Assert.That(MeasureDeclaredMembers(ReplHostName).Count).IsEqualTo(MeasuredReplHostMembers)
-            .Because("the issue's '24 members' is wrong in a way that matters: it is neither the member "
-                   + "count nor the consumer count (19 product consumers). If this number has moved, the "
-                   + "member table and the consumer table both need re-deriving");
+        IReadOnlyList<string> measured = MeasureMembersFromSource(ReplHostName);
 
-        IReadOnlyList<Type> inherited = Resolve(ReplHostName)!.GetInterfaces();
-        await Assert.That(inherited).IsEmpty()
-            .Because("IReplHost declared no base interfaces when measured, so all 31 members are its own. "
-                   + "An interface appearing here would mean some of the counted members are inherited, "
-                   + "and the count above would need re-deriving against the source rather than the type");
+        await Assert.That(measured.Count).IsEqualTo(MeasuredReplHostMembers)
+            .Because("the issue's '24 members' is wrong in a way that matters: it is neither the member "
+                   + "count (this one) nor the consumer count (18 product consumers). If this number has "
+                   + "moved, the member table and the consumer table both need re-deriving. Measured ("
+                   + measured.Count + "): " + string.Join(", ", measured));
+
+        // The "nothing inherited" half is a SOURCE claim for the same reason: a
+        // reflection-based check would need the type, and there is no type to
+        // reach. A `:` clause after the name is the only way a base can enter.
+        string declaration = FindInterfaceDeclaration(ReplHostName);
+        string header = declaration[..Math.Min(declaration.Length, 400)];
+        int brace = header.IndexOf('{');
+        string bases = brace < 0 ? header : header[..brace];
+
+        await Assert.That(bases.Contains(':')).IsFalse()
+            .Because("IReplHost declared no base interfaces when measured, so all 31 counted members are "
+                   + "its own and none is inherited. A ':' after the type name means a base was added, "
+                   + "which would mean the count above is no longer the whole surface and needs "
+                   + "re-deriving. Header: " + bases.Trim());
     }
 
     /// <summary>
@@ -734,10 +785,23 @@ public sealed class FatInterfaceShapeRatchet
             .Because("comparing the table to itself must be silent; this is the control's own precondition, "
                    + "and it is what makes the next assertion meaningful");
 
+        // The comparator takes the WHOLE measurement, so the degraded state has
+        // to be the baseline with ONE row changed — not just that row. Passing a
+        // single-entry dictionary makes every other file look removed, which
+        // drowns the one regression this control exists to show in a hundred
+        // spurious improvements.
         var degraded = new Dictionary<string, IReadOnlyList<string>>(StringComparer.Ordinal)
         {
             [Consumer] = ["Bridge", "ConfigStore", "Palette", "SessionStore", "WakeUp"],
         };
+        foreach (ReplHostConsumerBaseline row in ReplHostConsumers)
+        {
+            if (!degraded.ContainsKey(row.File))
+            {
+                degraded[row.File] = row.Members;
+            }
+        }
+
         ShapeDelta memberDelta = CompareMemberCalls(degraded);
 
         await Assert.That(memberDelta.Regressions)
@@ -852,11 +916,34 @@ public sealed class FatInterfaceShapeRatchet
         [
             .. type
                 .GetMembers(BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly)
-                .Where(static m => m.MemberType is not MemberTypes.Constructor)
+                .Where(static m => m.MemberType
+                                  is MemberTypes.Method
+                                    or MemberTypes.Property
+                                    or MemberTypes.Event)
                 .Select(static m => m.Name)
+                // Reflection over a PROPERTY or an EVENT also surfaces its
+                // accessors as methods — `string Current { get; }` yields both
+                // the PropertyInfo "Current" and the MethodInfo "get_Current",
+                // and `event E` yields "add_E" and "remove_E". Counting those
+                // would report IThemeReader as four members instead of two, and
+                // would make a property look like it gained a member when it
+                // gained nothing. Keeping only the PropertyInfo/EventInfo and
+                // dropping accessor-shaped method names is what makes this a
+                // count of MEMBERS rather than a count of IL.
+                .Where(static n => !IsAccessorName(n))
                 .OrderBy(static n => n, StringComparer.Ordinal)
         ];
     }
+
+    /// <summary>
+    ///     Whether a reflected member name is a property or event ACCESSOR rather
+    ///     than the member itself: the compiler's fixed prefixes.
+    /// </summary>
+    private static bool IsAccessorName(string name) =>
+        name.StartsWith("get_", StringComparison.Ordinal)
+        || name.StartsWith("set_", StringComparison.Ordinal)
+        || name.StartsWith("add_", StringComparison.Ordinal)
+        || name.StartsWith("remove_", StringComparison.Ordinal);
 
     /// <summary>
     ///     <c>IApprovalCoordinator</c>'s distinct member SIGNATURES. Counting by
@@ -1113,6 +1200,170 @@ public sealed class FatInterfaceShapeRatchet
     ///     that outlives the constructor and is never consulted.
     /// </summary>
     private static readonly Regex WriteOnlyFieldCandidate = BuildWriteOnlyCandidate();
+
+    /// <summary>
+    ///     The text from an interface's name to the end of the line it is declared
+    ///     on, or <see cref="string.Empty" /> when no product file declares it.
+    ///     Used to read the BASE LIST, which is the one part of an internal
+    ///     interface's shape that reflection cannot supply.
+    /// </summary>
+    private static string FindInterfaceDeclaration(string typeName)
+    {
+        foreach (string path in SourceScan.EnumerateProductCsFiles())
+        {
+            if (SourceScan.TryReadAllText(path) is not { } text)
+            {
+                continue;
+            }
+
+            foreach (string line in SourceCommentStripper.StripAll(text.Split('\n')))
+            {
+                int at = line.IndexOf("interface " + typeName, StringComparison.Ordinal);
+                if (at >= 0)
+                {
+                    return line[at..];
+                }
+            }
+        }
+
+        return string.Empty;
+    }
+
+    /// <summary>
+    ///     Counts the members an interface DECLARES, read from source rather than
+    ///     reflection. This exists for <c>IReplHost</c>, which is
+    ///     <c>internal</c> to an application this test assembly does not
+    ///     reference, so there is no loaded type to inspect — see
+    ///     <see cref="ReflectedAggregates" />.
+    ///     <para>
+    ///         Comment-stripped first, then the interface body is taken by brace
+    ///         matching and each line classified: a <c>Name(</c> is a method, an
+    ///         <c>event ... Name;</c> is an event, a <c>Name { get</c> is a
+    ///         property. Line-oriented on purpose — an interface body is one
+    ///         declaration per line in this codebase, and a multi-line
+    ///         declaration would need a statement parser, which is the wrong
+    ///         instrument for a count.
+    ///     </para>
+    ///     <para>
+    ///         The property form is the load-bearing part. A naive scan that only
+    ///         looked for <c>(</c> would report IReplHost's 10 methods and miss its
+    ///         21 properties — 10 instead of 31 — and that is the direction a
+    ///         measurement error hides in.
+    ///     </para>
+    /// </summary>
+    /// <returns>The declared member names, ordinal-sorted. Empty when not found.</returns>
+    private static IReadOnlyList<string> MeasureMembersFromSource(string typeName)
+    {
+        foreach (string path in SourceScan.EnumerateProductCsFiles())
+        {
+            if (SourceScan.TryReadAllText(path) is not { } text)
+            {
+                continue;
+            }
+
+            string stripped = SourceScan.StripComments(text);
+            int declaration = stripped.IndexOf(
+                "interface " + typeName,
+                StringComparison.Ordinal);
+            if (declaration < 0)
+            {
+                continue;
+            }
+
+            int open = stripped.IndexOf('{', declaration);
+            if (open < 0)
+            {
+                return [];
+            }
+
+            var members = new SortedSet<string>(StringComparer.Ordinal);
+            int depth = 0;
+            foreach (string raw in stripped[open..].Split('\n'))
+            {
+                string line = raw.Trim();
+                if (line.Length == 0)
+                {
+                    continue;
+                }
+
+                // Classify BEFORE tracking depth, and only once inside the body.
+                // The order is load-bearing: `IAgent Agent { get; }` both opens
+                // and closes a brace on one line, so a scan that tracked depth
+                // first and `continue`d on the closing brace would skip every
+                // property in the interface and report IReplHost's 10 methods
+                // as its whole surface.
+                if (depth >= 1)
+                {
+                    ClassifyMemberLine(line, members);
+                }
+
+                depth += line.Count('{') - line.Count('}');
+
+                // depth back to 0 means the closing brace of the interface body.
+                if (depth <= 0)
+                {
+                    break;
+                }
+            }
+
+            return [.. members];
+        }
+
+        return [];
+    }
+
+    /// <summary>
+    ///     Classifies one comment-stripped line of an interface body into a member
+    ///     name, or ignores it. Split out so the three shapes are readable side
+    ///     by side — a count this load-bearing should not hide its cases inside a
+    ///     loop body.
+    /// </summary>
+    private static void ClassifyMemberLine(string line, SortedSet<string> members)
+    {
+        Match eventMatch = EventDeclaration.Match(line);
+        if (eventMatch.Success)
+        {
+            members.Add(eventMatch.Groups["name"].Value);
+            return;
+        }
+
+        Match methodMatch = MethodDeclaration.Match(line);
+        if (methodMatch.Success)
+        {
+            members.Add(methodMatch.Groups["name"].Value);
+            return;
+        }
+
+        Match propertyMatch = PropertyDeclaration.Match(line);
+        if (propertyMatch.Success)
+        {
+            members.Add(propertyMatch.Groups["name"].Value);
+        }
+    }
+
+    /// <summary>
+    ///     An interface method: an identifier immediately followed by
+    ///     <c>(</c>, with an optional generic argument list between them so a
+    ///     generic method cannot hide. The name is the LAST identifier before
+    ///     the paren, which is why the return type is consumed first.
+    /// </summary>
+    private static readonly Regex MethodDeclaration = new(
+        @"(?:[A-Za-z_][\w\.<>,\?\[\]]*\s+)?(?<name>[A-Za-z_]\w*)\s*(?:<[^>]*>)?\s*\(",
+        RegexOptions.Compiled);
+
+    /// <summary>
+    ///     A property: an identifier followed by <c>{ get</c>. Anchored on
+    ///     <c>{ get</c> rather than a bare <c>;</c> so a method is not also
+    ///     counted as a property.
+    /// </summary>
+    private static readonly Regex PropertyDeclaration = new(
+        @"(?:[A-Za-z_][\w\.<>,\?\[\]]*\s+)?(?<name>[A-Za-z_]\w*)\s*\{\s*get",
+        RegexOptions.Compiled);
+
+    /// <summary>An interface event: <c>event T Name;</c>.</summary>
+    private static readonly Regex EventDeclaration = new(
+        @"\bevent\s+[A-Za-z_][\w\.<>,\?\[\]]*\s+(?<name>[A-Za-z_]\w*)",
+        RegexOptions.Compiled);
 
     /// <summary>
     ///     Whether <paramref name="field" /> is assigned and never read, over
