@@ -22,7 +22,47 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.Extensions.Http"/>
+    <!--
+      §ARCH-003 sweep (#910): `Microsoft.Extensions.Http` was vestigial and is
+      gone. This client takes a plain `HttpClient` in its constructor
+      (OpenAiCompatibleLlmClient.cs, ProviderConfig.cs) — `HttpClient` is
+      System.Net.Http, the BCL — and neither `IHttpClientFactory` nor
+      `AddHttpClient` appears in this project or in the three linked
+      Harbor.Providers.Shared sources.
+
+      This is the one place where removal is observable, because this project
+      is IsPackable=true. Resolved against the net10.0 dependency groups of the
+      real nuspecs, the reference carried 11 further packages into the pack's
+      dependency group — Configuration{,.Abstractions,.Binder}, DependencyInjection,
+      Diagnostics{,.Abstractions}, Logging, Options, Options.ConfigurationExtensions,
+      Primitives, plus Http itself. The two that remain are Logging.Abstractions
+      (direct) and DependencyInjection.Abstractions (its own dependency).
+
+      Note this is a PACK-time claim only. The shipped binary is unchanged:
+      src/Harbor.Hosting and apps/Harbor.App.Cli each carry their own
+      Microsoft.Extensions.Http, and Microsoft.Extensions.Http 10.0.10 ships
+      IsAotCompatible metadata, so nothing here was ever an AOT blocker.
+
+      BLAST RADIUS, because this one is NOT cosmetic and the difference from
+      the Harbor.Tui.Tests half of #910 is exactly this. Three of the seven
+      projects that ProjectReference this one were resolving the package only
+      THROUGH it, and lose it from their compile closure with this line gone:
+      tests/Harbor.Benchmarks (3 packages), tests/Harbor.LoadTests (6), and
+      tests/Harbor.Providers.Tests (9 — including the FULL
+      Microsoft.Extensions.DependencyInjection, .Logging, .Options and
+      .Configuration). Checked: none of the three names IServiceCollection,
+      ServiceDescriptor, Add*, BuildServiceProvider, IOptions, IConfiguration,
+      ConfigurationBuilder, IHostedService, LoggerFactory, AddLogging,
+      DiagnosticListener, IHttpClientFactory or AddHttpClient, in any .cs file
+      or any using directive — so none of them was leaning on the leak. The
+      other four consumers (Harbor.Hosting, apps/Harbor.App.Cli,
+      apps/Harbor.App.Avalonia, tests/Harbor.Architecture.Tests) keep it by
+      their own references or other routes.
+
+      NOT VERIFIED BY COMPILE — `dotnet` was out of scope for this change. The
+      three-consumer check above is a static nuspec walk plus a text probe; CI
+      is what actually proves it.
+    -->
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions"/>
   </ItemGroup>
 

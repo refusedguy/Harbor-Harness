@@ -14,8 +14,33 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!--
+      §ARCH-003 sweep (#910): `Microsoft.Extensions.DependencyInjection` is
+      gone. No IServiceCollection, ServiceDescriptor, Add* or
+      BuildServiceProvider appears anywhere in this project; the only occurrence
+      of the token was the PackageReference line itself.
+
+      ASYMMETRY WITH THE OTHER #910 REFERENCE, and the reason the two are in
+      separate commits: this removal is COSMETIC. Resolved against the net10.0
+      dependency groups of the real nuspecs, after deleting this line the
+      package still reaches this project by three routes:
+
+        Microsoft.Extensions.Logging      (src/Harbor.Application,
+                                         src/Harbor.Registries,
+                                         src/Harbor.Ui.Framework.Services,
+                                         src/Harbor.Ui.Framework.Sessions)
+        Microsoft.Extensions.Hosting       (contrib/tui/Harbor.Tui.Termina)
+        RazorConsole.Core                  (contrib/tui/Harbor.Tui.RazorConsole)
+
+      So the assembly stays in the compile closure and nothing about the build
+      or the shipped binary changes. The line was still false and is still
+      worth deleting, but deleting it is not evidence of anything — in
+      particular it is not an AOT win: Microsoft.Extensions.DependencyInjection
+      10.0.10 ships IsAotCompatible metadata, and no workflow in
+      .github/workflows/ publishes with HarborWithAot=true anyway, so "this
+      package was an AOT liability" is not a claim anything here can falsify.
+    -->
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions"/>
-    <PackageReference Include="Microsoft.Extensions.DependencyInjection"/>
   </ItemGroup>
 
 </Project>
