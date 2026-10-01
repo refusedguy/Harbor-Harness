@@ -322,6 +322,16 @@ CITATION = re.compile(
     r":(\d+(?:-\d*)?(?:,\d+(?:-\d*)?)*)"
 )
 
+# The same extension list, as data, so the basename index can be built from it
+# instead of from a hardcoded `git ls-files *.cs` that CITATION never agreed
+# with (#807). One list, two consumers — the regex is the definition, this is
+# what git is asked for. Deriving it from CITATION's own text would be cleverer
+# and would also make a typo in the regex silently change what is scanned.
+CITABLE_EXT = (
+    ".cs", ".json", ".yml", ".yaml", ".csproj", ".slnx",
+    ".props", ".targets", ".py", ".axaml", ".xaml", ".editorconfig",
+)
+
 # Backticked `SomeType` or `SomeType.Member` — PascalCase head, at least 3
 # chars. The dotted form matters: #664's dead subscriber was named in the
 # prose as `EventBusAppStoreDispatcher.OnAgentEvent` and in the diagram with no
@@ -588,7 +598,7 @@ class Decl(NamedTuple):
 
 
 def index_sources(repo: str) -> tuple[list[str], dict[str, list[str]], set[str]]:
-    """Tracked source files, basename -> candidates, and the production subset.
+    """Tracked citable files, basename -> candidates, and the production subset.
 
     `contrib/` is excluded from basename resolution: it is unmaintained, not
     compiled by CI, and a doc citing `AppStore.cs:5` must not be satisfied by a
@@ -599,31 +609,93 @@ def index_sources(repo: str) -> tuple[list[str], dict[str, list[str]], set[str]]
     anywhere. Globbing only `*.cs` here is what made the first XAML self-test
     fixture fail — the fixture was tracked by git and still invisible, because
     nothing ever asked git for it.
+
+    The BASENAME index covers every extension CITATION accepts, not just
+    `.cs`/`.axaml` (#807). CITATION matches `.csproj`, `.props`, `.targets`,
+    `.slnx` and `.json` as first-class citation targets and `check_citations`
+    even fences line numbers inside `.csproj` and `.slnx` — but a bare
+    `Harbor.App.Cli.csproj:145-224` could never resolve, because the index that
+    answered the question was built from `*.cs`. The rule reported
+    DOC-CITE-MISSING for a file sitting in the tree:
+
+        apps/Harbor.App.Cli/README.md:197  Harbor.App.Cli.csproj:145-224
+        apps/Harbor.App.Cli/PLAN.md:14     Harbor.App.Cli.csproj:216-224
+
+    Sixteen live claims across the tree were that shape. This is #905's lesson
+    one level up: the rule both works and lies, and here it lied by being
+    unable to see. `production` stays `.cs` under `src/`+`apps/` — that set
+    feeds the type rule, which must not read a `.csproj` looking for a
+    declaration.
     """
+    # ONE `git ls-files`, no pathspec, filtered here. The pathspec form
+    # (`git ls-files '*.cs' '*.props' …`) looks tidier and is wrong in a way
+    # that fails silently: a pathspec of `.cs` is a LITERAL path named `.cs`, not
+    # a glob, so the extension list has to be spelled `*<ext>` or the whole index
+    # comes back holding one entry. It did, and the gate reported 112 citations
+    # as missing in files that are in the tree. The unfiltered list is ~2.9k
+    # paths, so filtering in Python costs nothing and cannot be misread.
     proc = subprocess.run(
-        ["git", "ls-files", "*.cs", "*.axaml"],
+        ["git", "ls-files"],
         cwd=repo,
         capture_output=True,
         text=True,
         check=True,
         env=md_gate.git_env(),
     )
-    files = sorted(f for f in proc.stdout.split() if f)
+    tracked = sorted(f for f in proc.stdout.split() if f)
+
+    # The type rule reads C# and XAML only — never a .csproj looking for a
+    # declaration.
+    files = [f for f in tracked if f.endswith((".cs", ".axaml"))]
+
     by_base: dict[str, list[str]] = defaultdict(list)
-    for f in files:
-        by_base[os.path.basename(f)].append(f)
+    for f in tracked:
+        if os.path.splitext(f)[1] in CITABLE_EXT:
+            by_base[os.path.basename(f)].append(f)
     production = [f for f in files if f.startswith(("src/", "apps/"))]
     return files, dict(by_base), set(production)
 
 
+# Where a project lives, for the project-relative form. A sweep or a README
+# writes `Harbor.TestKit/Fakes.cs:13` or `Input/ITerminalModeController.cs:9`
+# — the project or the folder, not the path from the root — and a rule that
+# only tries the root form calls a live file missing.
+#
+# Ordered, not a set: the first hit wins and `src/` is tried before `tests/`,
+# so the answer is deterministic and reviewable. `tools/` is here because the
+# gates are cited by path from the repo root more often than not.
+PROJECT_ROOTS = ("src/", "apps/", "tests/", "tools/")
+
+
 def resolve_citation(
-    target: str, repo: str, by_base: dict[str, list[str]]
+    target: str, repo: str, by_base: dict[str, list[str]], doc_rel: str | None = None
 ) -> tuple[str | None, str]:
-    """Return (absolute path, kind). `kind` is 'path', 'basename' or 'miss'."""
+    """Return (absolute path, kind). `kind` is 'path', 'basename' or 'miss'.
+
+    A slash-bearing target is tried, in order:
+
+      1. repo-relative, as written
+      2. relative to the citing document's own directory — a README in
+         `src/Harbor.Tui.CellForge.Engine/` writing `Input/MouseRouter.cs:25`
+         means the file beside it, which is how a human reads it
+      3. each of PROJECT_ROOTS, for the project-relative form
+
+    This is the resolution `check_table_citations` already did for rows and
+    `resolve_citation` did NOT do for prose, so the two shapes disagreed about
+    the same string: a path in a table resolved, the identical path in a
+    paragraph was DOC-CITE-MISSING. Both shapes now call this one function, so
+    the table rule is exactly as capable as the prose rule instead of strictly
+    more so.
+    """
     if "/" in target:
-        full = os.path.join(repo, target)
-        if os.path.isfile(full):
-            return full, "path"
+        tries = [target]
+        if doc_rel:
+            tries.append(os.path.normpath(os.path.join(os.path.dirname(doc_rel), target)))
+        tries.extend(root + target for root in PROJECT_ROOTS)
+        for cand in tries:
+            full = os.path.join(repo, cand)
+            if os.path.isfile(full):
+                return full, "path"
         return None, "miss"
     candidates = [c for c in by_base.get(target, []) if not c.startswith("contrib/")]
     if len(candidates) == 1:
@@ -654,6 +726,7 @@ def parse_ranges(spec: str) -> list[tuple[int, int]]:
 
 def check_citations(
     text: str,
+    rel: str,
     repo: str,
     by_base: dict[str, list[str]],
     cache: dict[str, int],
@@ -664,7 +737,7 @@ def check_citations(
     for m in CITATION.finditer(text):
         target, spec = m.group(1), m.group(2)
         line_no = text.count("\n", 0, m.start()) + 1
-        full, kind = resolve_citation(target, repo, by_base)
+        full, kind = resolve_citation(target, repo, by_base, rel)
         if full is None:
             if kind == "ambiguous":
                 problems.append(
@@ -679,9 +752,10 @@ def check_citations(
                     ("DOC-CITE-MISSING", f"{target}:{spec} — no such file in the tree", line_no)
                 )
             continue
-        if not full.endswith((".cs", ".json", ".yml", ".yaml", ".csproj", ".slnx")):
-            # A path that exists is a path that exists; only the formats we
-            # can count lines for get a fence.
+        if os.path.splitext(full)[1] not in CITABLE_EXT:
+            # CITATION matched it, so by construction the extension is in
+            # CITABLE_EXT; this is unreachable in practice and stays only as the
+            # assertion that the fence and the matcher cannot drift apart again.
             continue
         total = line_counts(full, cache)
         for start, end in parse_ranges(spec):
@@ -895,27 +969,24 @@ def check_table_shape(
 
 
 def check_table_citations(
-    text: str, repo: str, by_base: dict[str, list[str]], cache: dict[str, int]
+    text: str, rel: str, repo: str, by_base: dict[str, list[str]], cache: dict[str, int]
 ) -> tuple[int, list[tuple[str, str, int]]]:
     """Fence the table rows of a NORMATIVE document.
 
     Only normative: for a dated record these numbers are the snapshot, and
-    policing them would be the gate demanding a history be corrected. Paths in
-    these tables are project-relative (`Harbor.Abstractions/...`, the column
-    header a project sweep writes), so `src/` and `apps/` are tried after the
-    repo-relative form.
+    policing them would be the gate demanding a history be corrected. Path
+    resolution is `resolve_citation`, shared with the prose rule: this function
+    used to carry its own three-candidate loop, so the two shapes disagreed
+    about the same string — a table row could resolve where the identical prose
+    citation was DOC-CITE-MISSING. One resolver, so the table rule is exactly as
+    capable as the prose rule and not strictly more so (#807).
     """
     found = 0
     problems: list[tuple[str, str, int]] = []
     for m in TABLE_CITATION.finditer(text):
         target, spec = m.group("target"), m.group("spec")
         line_no = text.count("\n", 0, m.start()) + 1
-        full = None
-        for candidate in (os.path.join(repo, target), os.path.join(repo, "src", target),
-                          os.path.join(repo, "apps", target)):
-            if os.path.isfile(candidate):
-                full = candidate
-                break
+        full, _kind = resolve_citation(target, repo, by_base, rel)
         if full is None:
             problems.append(
                 ("DOC-CITE-MISSING", f"{target}:{spec} — no such file in the tree", line_no)
@@ -1109,8 +1180,10 @@ def scan(repo: str, verbose: bool) -> Scan:
                 result.hits[rel] = shape_problems
             continue
         result.files += 1
-        cites, cite_problems = check_citations(text, repo, by_base, cache)
-        table_cites, table_cite_problems = check_table_citations(text, repo, by_base, cache)
+        cites, cite_problems = check_citations(text, rel, repo, by_base, cache)
+        table_cites, table_cite_problems = check_table_citations(
+            text, rel, repo, by_base, cache
+        )
         allowance, allowance_problems = read_allowances(text)
         names, type_problems = check_types(
             text, declared_in, production_text, xaml_text, set(allowance)
@@ -1595,6 +1668,92 @@ def self_test() -> int:
         "a rename breaks the citation rather than passing silently",
         code == 1 and "DOC-CITE-MISSING" in out,
         out[-400:],
+    )
+
+    # ---- RESOLUTION: what the fence could not SEE (#807) ----------------------
+    # CITATION matches `.csproj`/`.props`/`.targets`/`.py` and check_citations
+    # fences `.csproj` line numbers — but the basename index was built from
+    # `git ls-files '*.cs' '*.axaml'`, so a bare `Demo.csproj:3` resolved to
+    # nothing and was reported MISSING for a file in the tree. Four shapes, one
+    # per way the old resolver answered "no":
+
+    # 1. a non-.cs tracked format, by bare basename.
+    code, out = run(
+        {
+            **live,
+            "src/Demo/Demo.csproj": "<Project>\n  <PropertyGroup>\n    <A>1</A>\n  </PropertyGroup>\n</Project>\n",
+            "docs/NORM.md": clean_norm.replace("`src/Demo/Live.cs:4` and `Live.cs:4`",
+                                                "`Demo.csproj:3`"),
+        }
+    )
+    st.expect(
+        "a bare `.csproj:3` resolves — the index is not `.cs`-only (#807)",
+        code == 0, out.strip()[-400:],
+    )
+
+    # 2. the project-relative form a sweep writes: `Demo/Live.cs:4` for a file
+    # at `src/Demo/Live.cs`. The TABLE rule always tried `src/`+`apps/`; the
+    # PROSE rule did not, so the same string was red in a paragraph and green in
+    # a table. That asymmetry is the defect, so the case is a PROSE citation.
+    code, out = run(
+        {
+            **live,
+            "docs/NORM.md": clean_norm.replace("`src/Demo/Live.cs:4` and `Live.cs:4`",
+                                                "`Demo/Live.cs:4`"),
+        }
+    )
+    st.expect(
+        "a project-relative prose citation `Demo/Live.cs:4` resolves to src/Demo/Live.cs",
+        code == 0, out.strip()[-400:],
+    )
+
+    # 3. and the same string must be fenced, not merely resolved: project-relative
+    # AND past EOF. Without this the previous case could pass by not resolving at
+    # all while looking identical on stdout.
+    code, out = run(
+        {
+            **live,
+            "docs/NORM.md": clean_norm.replace("`src/Demo/Live.cs:4` and `Live.cs:4`",
+                                                "`Demo/Live.cs:999`"),
+        }
+    )
+    st.expect(
+        "a project-relative citation is FENCED, not just resolved (past EOF fails)",
+        code == 1 and "DOC-CITE-EOF" in out, out[-400:],
+    )
+
+    # 4. relative to the citing document: a README inside the project writing
+    # `Input/MouseRouter.cs:25`, which is how a human reads its own repo.
+    # `Mouse` is named in backticks AND wired, because the `--min-types` floor
+    # counts backticked names: a fixture with none exits 1 on the floor and would
+    # prove nothing about resolution. (It did, on the first run.)
+    code, out = run(
+        {
+            **live,
+            "src/Demo/Input/Mouse.cs": "namespace Demo;\npublic sealed class Mouse { }\n",
+            "src/Demo/Reader.cs": "namespace Demo;\npublic sealed class Reader { public Mouse M { get; } = new(); }\n",
+            "src/Demo/README.md": "# R\n\n> Status: normative.\n\n"
+            "The router is `Mouse`; see `Input/Mouse.cs:2`.\n",
+        }
+    )
+    st.expect(
+        "a citation relative to the citing document resolves (README beside the file)",
+        code == 0, out.strip()[-400:],
+    )
+
+    # And the one shape that must stay a MISS after all that widening: a path
+    # that exists nowhere. Widening the resolver is not a way to make every
+    # citation resolve — if it were, the rule would stop meaning anything.
+    code, out = run(
+        {
+            **live,
+            "docs/NORM.md": clean_norm.replace("`src/Demo/Live.cs:4` and `Live.cs:4`",
+                                                "`Demo/Ghost/Live.cs:4`"),
+        }
+    )
+    st.expect(
+        "a project-relative citation to a file that exists NOWHERE still fails",
+        code == 1 and "DOC-CITE-MISSING" in out, out[-400:],
     )
 
     # ---- THE FOURTH SHAPE (#794) ------------------------------------------------
