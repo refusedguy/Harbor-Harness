@@ -551,31 +551,30 @@ dotnet_diagnostic.ADP0001.severity = suggestion
 # ============================================================================
 
 
-# Desktop apps: relax DI rules for process-lifetime singletons
-# (root provider, static IServiceProvider cache, transient VMs with process lifetime)
+# Desktop composition root: three lifetime rules relaxed for a process-lifetime
+# graph. ONE reason per row, and the reason is the row's name — a single
+# sentence covering several rows is how the 4th row below went unaudited for a
+# year (#865). Guarded by DesktopAppDiDemotionRules in
+# tests/Harbor.Architecture.Tests: a demoted row whose own section does not
+# name it fails the build, and so does a section whose directory is gone.
 [apps/Harbor.App.Avalonia/**.cs]
-dotnet_diagnostic.DI003.severity = suggestion
+# DI006 — the XAML object graph has to be handed a container, and
+# App.Services is where it is parked (App.axaml.cs).
 dotnet_diagnostic.DI006.severity = suggestion
+# DI008 — the app's only transient is a disposable view model
+# (OnboardingViewModel, ViewModelRegistration.cs) that lives for the process.
 dotnet_diagnostic.DI008.severity = suggestion
+# DI014 — a process-lifetime root provider is disposed at exit, by design
+# (App.axaml.cs disposes Host on shutdown). Kept visible, non-blocking.
 dotnet_diagnostic.DI014.severity = suggestion
-
-[apps/Harbor.App.Wpf/**.cs]
-dotnet_diagnostic.DI003.severity = suggestion
-dotnet_diagnostic.DI006.severity = suggestion
-dotnet_diagnostic.DI008.severity = suggestion
-dotnet_diagnostic.DI014.severity = suggestion
-
-[apps/Harbor.App.Maui/**.cs]
-dotnet_diagnostic.DI003.severity = suggestion
-dotnet_diagnostic.DI006.severity = suggestion
-dotnet_diagnostic.DI008.severity = suggestion
-dotnet_diagnostic.DI014.severity = suggestion
-
-[apps/Harbor.App.Blazor/**.cs]
-dotnet_diagnostic.DI003.severity = suggestion
-dotnet_diagnostic.DI006.severity = suggestion
-dotnet_diagnostic.DI008.severity = suggestion
-dotnet_diagnostic.DI014.severity = suggestion
+# DI003 is NOT demoted here and is not to be added. It is a lifetime-GRAPH rule
+# (a singleton or long-lived factory retaining a scoped/transient service), not
+# a process-lifetime rule, so "process-lifetime singletons" never covered it.
+# Nothing about this root needs it relaxed: the app registers no scoped service
+# at all (0 AddScoped, and 0 repo-wide under src/ + apps/), and its single
+# transient is resolved from the root at App.axaml.cs:163 rather than captured,
+# so there is no DI003 site to hide. It stays at the repo-wide `error` its
+# sibling composition root apps/Harbor.App.Cli is held to.
 
 # Renderer golden-frame tests (Phase 5): no diagnostics fire in this file
 # today; the section is reserved for the NickConsoleEx capture test, which

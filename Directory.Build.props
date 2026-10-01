@@ -200,9 +200,17 @@
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
-    <!-- DI lifetime analyzer (DI001 captive dependency, DI002 lifetime mismatch,
-         DI003 circular dependency, DI004 transient disposed by singleton).
-         Solution-wide: every project that consumes Microsoft.Extensions.DependencyInjection
+    <!-- DI lifetime analyzer — ships 26 diagnostics, DI001..DI027 (the package
+         ships DI001-DI027; DI023 is not used). The four high-signal ones are
+         DI003 captive dependency, DI015 unresolvable dependency, DI017 circular
+         dependency and DI019 scoped service resolved from the root provider;
+         the per-rule severity table is .editorconfig, which is the ONLY place
+         the mapping is written down. The numbering used to be mis-stated right
+         here ("DI001 captive dependency ... DI003 circular dependency") and the
+         mismatch is not cosmetic: a reader told DI003 means a cycle audits for a
+         cycle, finds none, and concludes the rule is satisfied — while the rule
+         it needed to read is the captive-dependency one (#865). -->
+    <!-- Solution-wide: every project that consumes Microsoft.Extensions.DependencyInjection
          gets checked. Severity is configured in .editorconfig (default = warning). -->
     <PackageReference Include="DependencyInjection.Lifetime.Analyzers">
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
