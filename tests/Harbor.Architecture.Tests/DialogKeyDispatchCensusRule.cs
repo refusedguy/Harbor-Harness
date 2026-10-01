@@ -506,7 +506,7 @@ public sealed class DialogKeyDispatchCensusRule
             + "vacuous pass, so the path is asserted before anything is measured.");
 
         IReadOnlyList<string> kinds = DialogKeyDispatchProbe.ScanKinds(OverlayText.Value);
-        await Assert.That(kinds).IsEquivalentTo(AllKinds).Because(
+        await Assert.That(kinds.ToArray()).IsEquivalentTo(AllKinds).Because(
             "seven dialog kinds are declared, and the census is one row per kind. A new "
             + "kind, a removed kind or a re-expressed enum is an explicit edit here rather "
             + "than a row that silently stops existing. Measured: " + Describe(kinds));
@@ -577,22 +577,22 @@ public sealed class DialogKeyDispatchCensusRule
     {
         DialogKeyPathOverlap overlap = Overlap.Value;
 
-        await Assert.That(overlap.Shared).IsEquivalentTo(SharedKeyCases).Because(
+        await Assert.That(overlap.Shared.ToArray()).IsEquivalentTo(SharedKeyCases).Because(
             "Escape, Tab, Left and Right are the shared prefix. #472 calls the two handlers "
             + "'248 lines for identical logic'; measured, they share four case labels and "
             + "diverge completely after them.");
 
-        await Assert.That(overlap.KittyOnly).IsEquivalentTo(KittyOnlyKeyCases).Because(
+        await Assert.That(overlap.KittyOnly.ToArray()).IsEquivalentTo(KittyOnlyKeyCases).Because(
             "these ten key cases exist ONLY on the in KeyEvent path — Up, Down, PageUp, "
             + "PageDown, Home, End, Backspace, Delete, Char, and the modifier-aware Enter that "
             + "implements the composer's Shift/Alt+Enter newline split. This row is the one "
             + "that makes the 'duplicate' reading dangerous: collapsing the kitty path into "
             + "the legacy one deletes all ten behaviours. Measured: " + Describe(overlap.KittyOnly));
 
-        await Assert.That(overlap.LegacyOnly).IsEquivalentTo(Array.Empty<string>()).Because(
+        await Assert.That(overlap.LegacyOnly.ToArray()).IsEquivalentTo(Array.Empty<string>()).Because(
             "the legacy path has no case the kitty path lacks. The divergence is entirely "
-            "one-directional, which is what a shared-prefix-plus-different-vocabulary pair "
-            "looks like and what two interchangeable copies do not look like.");
+            + "one-directional, which is what a shared-prefix-plus-different-vocabulary pair "
+            + "looks like and what two interchangeable copies do not look like.");
     }
 
     /// <summary>
@@ -626,12 +626,12 @@ public sealed class DialogKeyDispatchCensusRule
             }
         }
 
-        await Assert.That(Distinct(alert)).IsEquivalentTo(new[] { "src/Harbor.Tui.CellForge/Chat/Onboarding/OnboardingFlow.cs" }).Because(
+        await Assert.That(Distinct(alert).ToArray()).IsEquivalentTo(new[] { "src/Harbor.Tui.CellForge/Chat/Onboarding/OnboardingFlow.cs" }).Because(
             "ShowAlert is the live half of the product-reachable set, and it is reached only "
             + "from the onboarding flow's own DialogOverlay instance — not the one "
             + "ChatScreenLayout seats on the overlay stack. Measured: " + Describe(alert));
 
-        await Assert.That(Distinct(prompt)).IsEquivalentTo(new[] { "src/Harbor.Tui.CellForge/Chat/Onboarding/OnboardingFlow.cs" }).Because(
+        await Assert.That(Distinct(prompt).ToArray()).IsEquivalentTo(new[] { "src/Harbor.Tui.CellForge/Chat/Onboarding/OnboardingFlow.cs" }).Because(
             "ShowPrompt is the other half, same file. Four call sites, all onboarding. "
             + "Measured: " + Describe(prompt));
 
@@ -680,7 +680,6 @@ public sealed class DialogKeyDispatchCensusRule
         IReadOnlyList<DialogKindCensus> rows =
             DialogKeyDispatchProbe.Scan(synthetic, [("synthetic.cs", synthetic)]);
 
-        await Assert.That(rows).IsNotNull();
         DialogKindCensus alpha = rows.Single(static r => r.Name == "Alpha");
         DialogKindCensus beta = rows.Single(static r => r.Name == "Beta");
 
@@ -690,21 +689,21 @@ public sealed class DialogKeyDispatchCensusRule
 
         await Assert.That(beta.HasDedicatedHandler).IsTrue().Because(
             "the synthetic source declares HandleBetaKey, so the dedicated-handler matcher "
-            "must find it too — the same both-directions proof for the second matcher.");
+            + "must find it too — the same both-directions proof for the second matcher.");
 
         await Assert.That(alpha.OnLegacyConsolePath).IsFalse().Because(
             "Alpha is declared but never dispatched. The scanner must be able to say 'no', or "
-            "the Alert row — the sharpest finding in this census — is unfalsifiable.");
+            + "the Alert row — the sharpest finding in this census — is unfalsifiable.");
 
         await Assert.That(beta.OnKittyPath).IsFalse().Because(
             "the synthetic kitty body mentions no kind at all, so the kitty column must read "
-            "false even where the legacy column reads true. The two columns are measured "
-            "separately and this proves they are not the same test.");
+            + "false even where the legacy column reads true. The two columns are measured "
+            + "separately and this proves they are not the same test.");
 
         await Assert.That(rows.Count(static r => r.ShownInProduct)).IsEqualTo(0).Because(
             "the synthetic source contains no Show*( call on a receiver, so reachability must "
-            "read false for both kinds — the leading dot is what keeps a declaration from "
-            "counting as a call.");
+            + "read false for both kinds — the leading dot is what keeps a declaration from "
+            + "counting as a call.");
     }
 
     /// <summary>
@@ -738,11 +737,11 @@ public sealed class DialogKeyDispatchCensusRule
             + "absence; returning an empty body here would make the method 'found and empty'.");
 
         DialogKeyPathOverlap overlap = DialogKeyDispatchProbe.ScanOverlap(noKittyPath);
-        await Assert.That(overlap.Shared).IsEmpty().Because(
+        await Assert.That(overlap.Shared.ToArray()).IsEmpty().Because(
             "with one path absent there is nothing to share. The failure mode this controls "
             + "is the opposite one — reporting agreement when a path could not be read.");
 
-        await Assert.That(overlap.KittyOnly).IsEmpty().Because(
+        await Assert.That(overlap.KittyOnly.ToArray()).IsEmpty().Because(
             "an unreadable path contributes no cases, so the 'ten cases exist only on the "
             + "kitty path' row would go red rather than pass. That is the correct direction: "
             + "the census is supposed to notice, not to shrug.");
