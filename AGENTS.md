@@ -12,7 +12,7 @@
 > **Связанные документы:**
 > - [docs/ROADMAP.md](./docs/ROADMAP.md) — full roadmap with priorities + tech-debt backlog
 > - [docs/COMPONENT_CATALOG.md](./docs/COMPONENT_CATALOG.md) — reusable UI components (Avalonia/Blazor/WPF)
-> - [docs/PATTERNS.md](./docs/PATTERNS.md) — 18 pattern catalog with real code.
+> - [docs/PATTERNS.md](./docs/PATTERNS.md) — 8 pattern catalog with real code.
 > - [docs/ANTIPATTERNS.md](./docs/ANTIPATTERNS.md) — 38 antipatterns we forbid.
 > - [docs/EXAMPLES.md](./docs/EXAMPLES.md) — 40+ recipes ("How do I...?").
 > - [docs/PLUGIN_DEVELOPMENT.md](./docs/PLUGIN_DEVELOPMENT.md) — Roslyn plugin system.
@@ -103,10 +103,14 @@ samples/plugins-cs/                   — CS-source sample plugins (HelloWorldPl
 samples/mcp/                          — sample MCP servers (node/python/rust/csharp-hello)
 providers/                            — 13 JSON LLM provider configs (embedded via <EmbedProviders>)
 docs/specs/                           — 19 design specification documents (top-level specs/ no longer exists)
-docs/                                 — 136 top-level docs (architecture, tools catalog, roadmap, patterns, …)
+docs/                                 — 62 top-level docs (architecture, tools catalog, roadmap, patterns, …)
                                         + adr/, specs/, standards/, ui/, themes/, notes/, .kilo-docs/ (archived sprint notes)
-tests/                                — 36 test/bench project directories
+tests/                                — 36 test/bench projects, one directory each
                                         incl. shared Harbor.TestKit and Harbor.Benchmarks
+                                        (`tests/` holds 37 directories: the 36 projects plus
+                                        `fixtures/`, which is data and has no .csproj — so a
+                                        plain `ls -d tests/*/ | wc -l` reads 37 and is the
+                                        wrong number to quote)
 ```
 
 Two solution files exist: `Harbor.slnx` (main) and `Harbor.Samples.slnx` (samples). Building works normally (`dotnet build`); testing must be done per project — see [Build & test commands](#build--test-commands).
@@ -236,7 +240,7 @@ I want to...
 │      Drop a .cs in ~/.harbor/plugins/, restart Harbor.
 │
 ├── ...understand the codebase
-│   └─→ docs/PATTERNS.md (18 patterns with real code)
+│   └─→ docs/PATTERNS.md (8 patterns with real code)
 │      Then docs/ARCHITECTURE.md (concrete code flow + sequence diagrams)
 │
 ├── ...understand what NOT to do
