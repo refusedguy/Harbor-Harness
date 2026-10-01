@@ -181,6 +181,102 @@ Three options, with what each costs:
 A and B are not exclusive. B is the thing that keeps A honest: a symbol
 citation can rot too, and B is what notices.
 
+## Appendix: the red run, verbatim
+
+Captured with the guard in place and **nothing repaired** — exit code 1,
+`=== VIOLATIONS (87 in 33 documents) ===`. The same command on the parent
+commit prints `OK` and exits 0, and **zero** of the 87 carry a `DOC-*` code: all
+of them are the population no rule in this repository had ever read.
+
+```
+         66  TEST-CITE-DRIFT
+          9  TEST-CITE-MISSING
+          7  TEST-CITE-BLANK
+          5  TEST-CITE-AMBIGUOUS
+          0  past EOF
+```
+
+Five files, chosen because between them they cover all four codes and both of
+the shapes the issue named by hand.
+
+### `TokenTrackingRatchet.cs` — the issue's first named case, verbatim
+
+```
+L83: [TEST-CITE-DRIFT] AgentLoop.cs:91 — 99b73bfe wrote it over
+     `_tokenTracker = tokenTracker;`; that line now reads `_providers = providers;`
+```
+
+The rule did not need to be told this was wrong, and it did not need a human to
+confirm it. `git blame` names the commit that wrote the sentence, that commit's
+`AgentLoop.cs` had `_tokenTracker` on line 91, and HEAD does not.
+
+### `UiConfigDefaultsRule.cs` — the self-reproducing case
+
+```
+L19: [TEST-CITE-DRIFT] CommonConfig.cs:127 — ffc40d61 wrote it over
+     `public string DefaultProvider { get; init; } = "anthropic…`
+     that line now reads `/// Default provider ID used on first launch / when the u…`
+L20: [TEST-CITE-DRIFT] CommonConfig.cs:150 — ffc40d61 wrote it over
+     `public string StorageBackend { get; init; } = "";`
+     that line now reads `/// <para>`
+L92: [TEST-CITE-BLANK] apps/Harbor.App.Avalonia/ViewModels/ThemeSettingsViewModel.cs:74
+     — the line is blank
+```
+
+Three of the four drift into **doc comments**. That is the fingerprint of the
+class: an XML doc block inserted above a property pushes the property down, and
+the citation lands on the documentation instead of the declaration. It is also
+why a "the line has code" fence is useless here — a `///` line has text on it.
+
+`L92` is reported **twice**, once per code, and both are true: the line is blank
+AND it no longer holds what its author meant. Overlapping codes are intentional
+rather than deduplicated — a reader who came for one of them is told about the
+other at the same time.
+
+### `ModifierGateFamilyTests.cs` — nine findings, one commit
+
+```
+L17: [TEST-CITE-DRIFT] ComposerController.cs:173 — d4997e4b wrote it over
+     `if ((mods & (KeyModifiers.Ctrl | KeyModifiers.Meta | KeyM…`
+     that line now reads `if (mods.AcceptsTypedChar())`
+L24: [TEST-CITE-DRIFT] ApprovalGateView.cs:254 — d4997e4b wrote it over
+     `if (key.Modifiers != KeyModifiers.None)`
+     that line now reads `if (!key.Modifiers.IsUnmodified())`
+L25: [TEST-CITE-DRIFT] TreeView.cs:269 — d4997e4b wrote it over
+     `|| key.Modifiers != KeyModifiers.None)`
+     that line now reads `|| !key.Modifiers.IsUnmodified())`
+```
+
+`d4997e4b` (#824) replaced a hand-written modifier test with
+`AcceptsTypedChar()` / `IsUnmodified()` extension calls across five files, and
+every citation in that header block moved with them. This is the shape a
+whole-file mechanical sweep would repair as nine unrelated edits; they are one
+commit.
+
+### `SessionStoreFailureTextParityRules.cs` — where the refactor's prose moved past the numbers
+
+```
+L24: [TEST-CITE-DRIFT] MemorySessionStore.cs:69 — 29dbb315 wrote it over
+     `return Task.FromResult(Result.Failure($"Message '{message…`
+     that line now reads `return Task.FromResult(Result.Failure(SessionStoreErrors.…`
+```
+
+`L35` is the case the issue called worse than a wrong line:
+`MemorySessionStore.cs:146` now reads `}`. A citation pointing at a closing
+brace cannot be spotted by eye — the reader is sent somewhere with nothing in it.
+
+### `ProjectorThreadSafetyTests.cs` — the smallest drift, stated plainly
+
+```
+L4: [TEST-CITE-DRIFT] apps/Harbor.App.Avalonia/Hosting/ServiceRegistration.cs:130
+    — 9917daed wrote it over `services.AddSingleton<DefaultUiProjector>();`
+    that line now reads `//`
+```
+
+The file exists. Line 130 exists. It is not blank. It is not past EOF. It holds a
+comment marker, and every mechanical question anyone would think to ask about it
+answers "fine". Only "did it mean this?" has an answer, and it is no.
+
 ## Perimeter
 
 Three issues touch `tests/Harbor.Architecture.Tests`; this one is distinct from
