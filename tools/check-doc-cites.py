@@ -54,6 +54,14 @@ RULES
                      banner. See "THE THIRD SHAPE" below: this rule is the one
                      that would have caught #807 on the day the table was
                      written.
+  DOC-COUNT-STALE    a document that states a total for a table it contains —
+                     "Total members audited: 2861" over 2842 rows — and never
+                     says which of the two is historical. NOT the same class as
+                     the rules above, and the distinction is the whole point:
+                     every other rule asks whether a number is inside a FILE,
+                     and this one asks whether a number agrees with the ROWS
+                     BESIDE IT, so a file:line fence cannot see it at all. See
+                     "THE ONE THING A `file:line` FENCE CANNOT SEE".
   DOC-SAMPLE-API-UNDECLARED
                      a backticked type name in the `## Public API` section of a
                      `samples/plugins/*/README.md` that no tracked `.cs` file
@@ -64,6 +72,7 @@ RULES
   The escape hatch is a line IN THE SAME DOCUMENT, and it must carry a reason:
 
       <!-- check-doc-cites: allow-unwired TypeFilterMiddleware — <why> -->
+      <!-- check-doc-cites: allow-stale-count "Total members audited" — <why> -->
 
   Per-document and reason-mandatory on purpose. A global allow-list in this
   script would be the "allow-list that verified zero files" failure the repo
@@ -71,21 +80,33 @@ RULES
   sentence that needed it, so adding one is a reviewable act rather than an
   edit to a file nobody reads.
 
+  The `allow-stale-count` form additionally requires a QUOTED LABEL naming the
+  figure it covers. `allow-unwired` did not need one because a type name is
+  already unambiguous; a document's figures are not, and a waiver that does not
+  say which number it is excusing would silence every number the document will
+  ever print. That is the hole #921 found in the list #902 grew and closed.
+
 SCOPE — WHY THIS IS NOT A GLOBAL SCAN
 
   Only documents carrying the marker line `Status: normative` are checked.
 
-  That is a pre-existing convention in this repo (EVENT_TOPOLOGY.md and
-  EVENT_BUS_SINKS.md are the two that declare it today), and it is a
-  self-selector rather than an allow-list: a new normative document is
-  covered by writing the marker, and nobody has to remember to edit a list
-  here. The alternative — scanning all 310 tracked .md files — is not
-  available at this strength: measured over the whole tree, the two fence
-  rules find 141 pre-existing violations in 23 files (docs/STATE_OWNERSHIP.md
-  alone has 20), most of them in archived material under docs/.kilo-docs/.
-  A gate red on 141 unrelated findings on day one is a gate that gets
-  switched off, which is the exact failure md_gate.require_non_vacuous
-  exists to prevent.
+  That is a pre-existing convention in this repo (four documents declare it
+  today), and it is a self-selector rather than an allow-list: a new normative
+  document is covered by writing the marker, and nobody has to remember to edit
+  a list here. The alternative — scanning all tracked .md files — is not
+  available at this strength: measured over the whole tree on dev at 787c777d,
+  the fence rules find 85 pre-existing violations in 24 non-normative documents,
+  most of them in archived material under docs/.kilo-docs/ and in PLAN.md files
+  that describe an intention rather than the tree. A gate red on 85 unrelated
+  findings on day one is a gate that gets switched off, which is the exact
+  failure md_gate.require_non_vacuous exists to prevent.
+
+  The figure was 141 in an earlier draft of this file and is now 85. That drop
+  is not a scope change — it is the resolver getting accurate. The other 56 were
+  citations that always resolved, reported as missing because the basename
+  index was `.cs`-only and the prose resolver never tried `src/`+`apps/`. The
+  one that matters for this argument is the direction: it went DOWN, so the case
+  for keeping the fence opt-in did not weaken.
 
   Deleting the marker from a document is therefore not a bypass: it shrinks
   the scanned set, and the `--min-files` / `--min-cites` floors in
@@ -129,6 +150,51 @@ THE THIRD SHAPE — WHY #807 HAPPENED AT ALL (#807)
   What this rule deliberately does NOT do: verify that a declared record's
   numbers are right. A запись is allowed to be wrong about today. It only has
   to stop pretending to be an эталон.
+
+AND THE ONE THING A `file:line` FENCE CANNOT SEE AT ALL (#807)
+
+  Every rule above asks the same question in a different costume: is this NUMBER
+  inside that FILE? DOC-CITE-EOF, DOC-CITE-MISSING, DOC-CITED-TABLE-UNDECLARED
+  all put a cited line next to a path on disk. So a number that is wrong about
+  the DOCUMENT IT SITS IN is outside the perimeter of the entire script, and
+  that is not a gap in one rule — it is the shape of all of them.
+
+  DOC-COUNT-STALE asks the other question: does the number agree with the rows
+  next to it. Measured, this is real and it is not one document's problem:
+
+      docs/XML_DOC_AUDIT.md  states 2861, ships 2842 rows  — 19 short
+
+  and the 19 decomposes exactly, because every deleted row had an XML doc:
+
+      a917e308 (#732)  14 rows:  9 HIGH, 5 MED   the deleted Reducers layer
+      c2eba3fd (#749)   5 rows:  4 HIGH, 1 MED   RecentItemsService moved
+
+  The reason a rule about counts is worth more than the 19: the Summary in that
+  file is INTERNALLY CONSISTENT. 808+543+670 = 2021, 303+222+315 = 840, and
+  2021+840 = 2861 — every sum a reader can do checks out, and every one of them
+  checks out against a number the file does not contain. The `Without Doc` cells
+  are exact; only the documented columns drift. It is a table that passes the
+  reader's own arithmetic and is still wrong, which is why a count guard has to
+  compare against the rows rather than trust that the totals add up.
+
+  It asks the same question DOC-CITED-TABLE-UNDECLARED asks — does the document
+  SAY which kind of thing it is — and not "is the number true", because for a
+  dated record 2861 can be a true statement about the sweep it recorded and a
+  false one about the file it is in. That is what a запись is. The rule requires
+  the difference to be declared on a line in the document, with a reason and the
+  label of the figure it is about:
+
+      <!-- check-doc-cites: allow-stale-count "Total members audited" — why -->
+
+  Requiring the quoted label is not decoration: a waiver that does not say WHICH
+  figure it covers is a mute button for every number the document will ever
+  print, which is the hole #921 found in the allow-unwired list and closed.
+
+  Measured before writing it: across all tracked markdown exactly ONE document
+  has both a `| path | line |` table and a prose total. The rule is
+  exception-free today without a list of known breakages to keep it quiet —
+  which is the shape #847's owner rejected, avoided by measuring the shape
+  first rather than after.
 
 THE FOURTH SHAPE — THE NAME THAT NO TREE DECLARES (#794)
 
@@ -209,6 +275,16 @@ KNOWN LIMITATIONS — READ THIS BEFORE TRUSTING A GREEN
   the document does not state what it expects to find. Only DOC-TYPE-UNWIRED
   reaches past the fence, and only for types.
 
+  And the fence could not always see the file at all. `CITATION` matches twelve
+  extensions and `check_citations` fences line numbers inside `.csproj`, but the
+  basename index was built from `git ls-files '*.cs' '*.axaml'`, so a bare
+  `Harbor.App.Cli.csproj:145-224` was reported MISSING for a file in the tree —
+  and the prose resolver never tried `src/`+`apps/`, which the table resolver
+  did, so the same string was red in a paragraph and green in a table. Measured
+  over the 511 prose citations in the 311 non-normative documents, widening the
+  resolver removed 56 of 140 false findings and added none. See
+  `index_sources` and `resolve_citation`.
+
   And DOC-TYPE-UNWIRED has a matching blind spot, which #905 closed one
   half of and left the other half standing. It used to read "no OTHER file
   names it" — a predicate that is unsatisfiable for two of the three shapes
@@ -271,9 +347,22 @@ THE FIFTH SHAPE — MARKDOWN THAT ONLY LOOKS COMPILABLE (#853)
 
   Also measured, and also not built: requiring a citation on examples that quote
   code (131 of 1028 carry one), banning uncited examples (897 of them, across 105
-  documents), fencing the citations non-normative documents already wrote (818 of
-  2662 fail), and resolving a source path named on a fence's first line (82 of 116
-  name files that do not exist, because the convention is a template).
+  documents), fencing the citations non-normative documents already wrote, and
+  resolving a source path named on a fence's first line (82 of 116 name files
+  that do not exist, because the convention is a template).
+
+  The "widen the prose fence" figure was recorded here as "818 of 2662" when
+  #826 wrote it, and it was already wrong when it was written — the same disease
+  this section is about, in the section that catalogs the disease. Re-measured on
+  dev at 787c777d: 812 of 3353 fail (85 of 511 prose citations, 672 of 2842
+  table rows). The conclusion is unchanged and is the reason the fence stays
+  opt-in: two thirds of the failures are the XML_DOC_AUDIT rows a dated record
+  is allowed to have, and of the 85 prose failures a large share are archived
+  sprint notes under docs/.kilo-docs/. Widening would still be red on day one.
+
+  Narrowing it by making the rule accurate instead: see `resolve_citation`.
+  Those 85 were 140 before, and the 55 that went away were citations that were
+  correct all along.
 
   Full reasoning and the three conditions that would re-open this:
   docs/adr/ADR-011-doc-example-compile-gate.md. Nothing here is a rule; this
