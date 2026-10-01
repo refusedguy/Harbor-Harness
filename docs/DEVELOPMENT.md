@@ -945,7 +945,7 @@ dotnet-gcdump collect -n harbor
 - [ ] `JsonSerializer.Serialize/Deserialize<T>` — только через `JsonSerializerContext` source-gen.
 - [ ] No reflection: `Type.GetProperties()`, `Activator.CreateInstance` — запрещены в Core/Storage/Providers.
 - [ ] No `Assembly.Load` / `AssemblyLoadContext` collectible (использовать out-of-process plugins).
-- [ ] `dotnet build -c Release` — 0 IL2026 warnings.
+- [ ] `dotnet build -c Release` — 0 IL2026 warnings. **Только для 4 проектов с `IsAotCompatible=true`** (`Harbor.DesignSystem`, `Harbor.Ui.Framework.Rendering`, `Harbor.Tui.CellForge`, `Harbor.Tui.CellForge.Engine`): IL2026 выдаёт trim/AOT-анализатор, а он запускается лишь там, где проект сам opt-in, либо при publish с `PublishAot=true` — а такого publish не делает ни один workflow в `.github/workflows/`. `Harbor.App.Cli` (единственный проект, который публикуется как AOT) в эту проверку не входит, так что галочка здесь не утверждает ничего о поставляемом бинарнике. Запрет динамического кода проверяется отдельно и реально enforce-тся (`ReflectionConventionRule`, #626); publish-гейт — #413.
 
 ## SpectreTUI development (contrib)
 
