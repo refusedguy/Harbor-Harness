@@ -43,7 +43,7 @@ public sealed class AgentLoop : IAgentLoop
     private readonly IRetryPolicy _retryPolicy;
     private readonly ISystemPromptBuilder _promptBuilder;
     private readonly IProviderRegistry _providers;
-    private readonly ITokenTracker _tokenTracker;
+    // #471: no ITokenTracker field — it was assigned and never read (#981).
     private readonly IToolDispatcher _toolDispatcher;
     private readonly IToolRegistry _tools;
     private readonly IBackgroundTaskRegistry? _backgroundTasks;
@@ -96,7 +96,7 @@ public sealed class AgentLoop : IAgentLoop
         // template assembly every turn.
         _promptBuilder = new CachingSystemPromptBuilder(promptBuilder);
         _compaction = compaction;
-        _tokenTracker = tokenTracker;
+        // #471: the tracker reaches the four behaviours below as this parameter.
         _retryPolicy = retryPolicy;
         _eventBus = eventBus;
         _permissions = permissions;

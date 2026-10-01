@@ -78,16 +78,23 @@
 //     narrower parameter. Collapsing them is a RENAME, and a rename is a
 //     product decision — a reader should not discover that by trying it.
 //
-// AND THE AGENTLOOP FIELD IS DEAD WEIGHT
-// --------------------------------------
-// `AgentLoop._tokenTracker` is assigned at AgentLoop.cs:91 and read ZERO times.
-// check-doc-cites: record-drift AgentLoop.cs:91 now="_providers = providers;" [#947: written over `_tokenTracker = tokenTracker;`; repair deferred to the owner's symbol-rename decision] -->
-// The constructor parameter it is fed from exists only to be forwarded to
-// CompactionBehavior / SteeringDrainBehavior / BackgroundDrain / TurnRunner. So
-// AgentLoop is a ninth HOLDER of the aggregate and a consumer of nothing. This
-// ratchet measures that rather than trusting the prose: the row below is marked
-// a composition root with an EMPTY member list, so the day someone starts
-// reading that field the row grows and the build goes red.
+// AND THE AGENTLOOP FIELD WAS DEAD WEIGHT — NOW GONE
+// ---------------------------------------------------
+// `AgentLoop` used to declare `private readonly ITokenTracker _tokenTracker`,
+// assign it in the constructor, and read it ZERO times. #981 removed it: the
+// constructor parameter it was fed from exists only to be forwarded to
+// CompactionBehavior / SteeringDrainBehavior / BackgroundDrain / TurnRunner,
+// all of which take the PARAMETER, so the field only pinned a reference on a
+// hot object. The one line it occupied is now a comment, deliberately keeping
+// AgentLoop.cs's line numbering stable for the `file:line` citations other
+// tests anchor to this file.
+// So AgentLoop is still a HOLDER of the aggregate and still a consumer of
+// nothing — it names the type as a constructor parameter and calls no member.
+// This ratchet measures that rather than trusting the prose: the row below is
+// marked a composition root with an EMPTY member list, so the day someone
+// starts calling through it the row grows and the build goes red.
+// FatInterfaceShapeRatchet.Ratchet_NoAggregateIsStoredInAWriteOnlyField is the
+// axis that keeps the deleted field from coming back.
 //
 // RATCHET SEMANTICS — WHY IT ALSO FIRES WHEN THE SHAPE SHRINKS
 // ------------------------------------------------------------
@@ -159,13 +166,15 @@ namespace Harbor.Architecture.Tests;
 /// <param name="Members">
 ///     Members of the aggregate it actually CALLS, ordinal-sorted. Empty is a real
 ///     and meaningful measurement, not missing data: a composition root that hands
-///     the aggregate on, and <c>AgentLoop</c>, whose field is write-only.
+///     the aggregate on, and <c>AgentLoop</c>, which names the type and calls
+///     nothing.
 /// </param>
 /// <param name="Role">What this file does with the aggregate, and why the row exists.</param>
 /// <param name="IsCompositionRoot">
 ///     <see langword="true" /> when the file HOLDS the aggregate without exercising it —
 ///     the declaration, the implementor, DI registration and resolution, a pass-through,
-///     and the write-only field. Composition roots legitimately name the wide type;
+///     and AgentLoop, which used to hold a write-only field (#981 removed it).
+///     Composition roots legitimately name the wide type;
 ///     leaf consumers are the ones the split is for, so the plan's consumer lists are
 ///     derived over the <see langword="false" /> rows only.
 /// </param>
@@ -273,8 +282,9 @@ public sealed class TokenTrackingRatchet
         new("src/Harbor.Abstractions/Sessions/ITokenTracker.cs", [],
             "the declaration itself", true),
         new("src/Harbor.Application/Agents/AgentLoop.cs", [],
-            "the write-only field: assigned at AgentLoop.cs:91, read zero times. The ctor "
-            + "parameter it is fed from exists only to be forwarded to the four behaviours",
+            "names the type as a ctor parameter and calls no member. That parameter exists "
+            + "only to be forwarded to the four behaviours; the field that used to hold it was "
+            + "write-only and #981 removed it",
             true),
         new("src/Harbor.Application/Agents/BackgroundDrain.cs", ["RecordAppendedMessage"],
             "appends drained background output to the running estimate", false),
@@ -570,7 +580,7 @@ public sealed class TokenTrackingRatchet
                    + "ratchet has to avoid");
 
         await Assert.That(measured.ContainsKey("src/Harbor.Application/Agents/AgentLoop.cs")).IsTrue()
-            .Because("the write-only holder is the finding the header makes a point of, so its "
+            .Because("the zero-member holder is the finding the header makes a point of, so its "
                    + "absence from the measurement must be noticed. If the file genuinely stopped "
                    + "naming the aggregate, delete the row from BaselineHolders deliberately "
                    + "rather than letting a ratchet quietly stop watching it");
@@ -582,9 +592,9 @@ public sealed class TokenTrackingRatchet
                    + "ratchet above grades with");
 
         await Assert.That(measured["src/Harbor.Application/Agents/AgentLoop.cs"].Count).IsEqualTo(0)
-            .Because("the field is assigned at AgentLoop.cs:91 and read zero times, so the correct "
-                   + "measurement is EMPTY. A non-empty result here would mean the write-only claim "
-                   + "in the header is no longer true, and the row above is no longer a finding");
+            .Because("AgentLoop names the aggregate as a constructor parameter and calls no member, "
+                   + "so the correct measurement is EMPTY. A non-empty result here would mean the "
+                   + "header's claim is no longer true, and the row above is no longer a finding");
 
         int calling = measured.Count(static pair => pair.Value.Count > 0);
         await Assert.That(calling).IsEqualTo(MeasuredFilesCallingSomething)
