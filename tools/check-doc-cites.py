@@ -88,6 +88,21 @@ RULES
                      the DRIFT comparison cannot be made and would silently
                      report nothing. Reported so that "fewer findings" and "the
                      anchored rule did not run" are never the same sentence.
+  TEST-CITE-UNANCHORED
+                     the comparison needs BOTH sides and this citation has only
+                     one: no commit is attributed to the citing line, or the
+                     target did not exist when it was written, or the cited line
+                     was past the end of the file as it was then. Reported
+                     rather than skipped — a silent skip here is a hole shaped
+                     like the one this rule closes. All three paths are taken
+                     zero times on this tree today.
+  TEST-CITE-RECORD-STALE
+  TEST-CITE-RECORD-NOREASON
+                     a `record-drift` line is excusing a site that no longer
+                     disagrees, or carries no quoted reason. These are what stop
+                     the record form from being #847's table: a record has to be
+                     deletable, so it cannot be permanently, silently wrong.
+                     See RECORD_DRIFT.
 
   The escape hatch is a line IN THE SAME DOCUMENT, and it must carry a reason:
 
@@ -436,6 +451,51 @@ THE SIXTH SHAPE — A `file:line` IN A TEST'S PROSE (#947)
   `docs.yml` sets `fetch-depth: 0`. The first fix is a bug someone corrects; the
   second is what stops the rule from lying while looking healthy.
 
+WHAT THE RULE DOES WITH WHAT IT FINDS — A DISJUNCTION, NOT A RED QUEUE
+
+  87 findings on the first run, and a red head in a shared merge queue is not a
+  measurement, it is a stall: a permanent red stops being noticed, and the queue
+  is drained by merging green. So the rule is a disjunction, the shape #937
+  settled on:
+
+      the two sides agree                            -> silent
+      the two sides disagree AND the site is RECORDED  -> silent
+      ... and nothing is recorded                     -> TEST-CITE-DRIFT
+      a record whose site no longer drifts             -> TEST-CITE-RECORD-STALE
+
+  All 87 are recorded, each in the citing file next to its citation, with a
+  quoted reason and a `now=` fingerprint of what the cited line reads today. The
+  fingerprint is load-bearing: a record keyed on the site alone survives a line
+  being inserted above it, and would go on excusing a divergence nobody has
+  looked at since. Five one-sided changes against a green head are the
+  self-test; the proof against the real tree is in
+  docs/CITATION_DRIFT_MEASUREMENT.md.
+
+  What this does NOT do is make the 87 less true. Every one is still computed,
+  still printable with the same message, and still greppable — and one of them
+  (`docs/CITATION_DRIFT_MEASUREMENT.md`) is the reason a reader can still find
+  out what they are without running anything.
+
+THREE DELIMITER BUGS, ONE CLASS
+
+  A field whose job is to be exact has to survive the contents of the tree it
+  describes, and three times it did not:
+
+    1. `now="..."` ended at the first `"` inside an interpolated string, so the
+       fingerprint parsed as a DIFFERENT, shorter one — and could never match.
+       `fingerprint()` folds `"` to `'` and is used by both the comparison and
+       the printed message, so the string a reader copies is the string the gate
+       compares.
+    2. `\[([^\]]+)\]` truncated a reason at the first `]`, and these reasons
+       quote real code: `mergedKeys[provider] = newKey` came out as
+       `provider] = newKey`. Greedy to the last `]` on the line.
+    3. The record line itself matched CITATION, so the population grew 235 -> 322
+       the moment 87 records landed and `--min-test-cites` began measuring the
+       gate's own annotations. Record spans are masked before matching.
+
+  Each one parses something, believes it, and is wrong — which is the failure
+  this whole file exists to end, committed by the fix for it.
+
 USAGE
 
   tools/check-doc-cites.py                      # gate (what docs.yml runs)
@@ -598,11 +658,17 @@ ALLOW_STALE_COUNT = re.compile(
 # rule, and it behaves correctly in the interesting direction: the record goes
 # stale the moment the file appears.
 RECORD_DRIFT = re.compile(
-    r"(?:<!--)?\s*check-doc-cites:\s*record-drift\s+"
+    r"(?:<!--)?[ \t]*check-doc-cites:[ \t]*record-drift[ \t]+"
     r"(?P<target>[A-Za-z0-9_][A-Za-z0-9_./\-]*\.[A-Za-z]+):"
-    r"(?P<line>\d+)\s+"
-    r"now=\"(?P<now>[^\"]*)\"\s*"
-    r"(?:\[(?P<why>[^\]]+)\]\s*)?(?:-->)?"
+    r"(?P<line>\d+)[ \t]+"
+    r"now=\"(?P<now>[^\"]*)\"[ \t]*"
+    # GREEDY, and to the LAST `]` on the line. The reasons here quote real code —
+    # `mergedKeys[provider] = newKey`, `["Harbor.Registries"] = new(...)` — and a
+    # lazy `[^\]]+` truncates a reason at the first `]`, silently producing a
+    # record whose stated reason is a fragment. A wrong reason is worse than no
+    # reason: it is an assertion the gate cannot check and a reviewer will
+    # believe. `.` excludes `\n`, so greedy still stops at the line end.
+    r"(?:\[(?P<why>.*)\])?"
 )
 
 SiteKey = tuple[str, int]  # (target, cited line), within the citing file

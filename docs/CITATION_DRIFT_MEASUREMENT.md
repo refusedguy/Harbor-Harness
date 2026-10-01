@@ -160,6 +160,14 @@ Both numbers are stated because either alone is the wrong decision: `4/66` makes
 the cheap guard look useless, `236 citations` makes the expensive one look
 unavoidable. The repair profile is what separates them — see below.
 
+**What the tax is in practice, now that the form is a disjunction.** It is not
+"the gate is red forever". It is: when you insert a line above a recorded
+citation, the gate goes red on that one record, and the work is to decide —
+repair the number, or write a new record for the new divergence. Case B in the
+proof below is exactly that, on a real file. A permanent red that nobody can act
+on is what the shared merge queue cannot tolerate; a red that names one line and
+one decision is a normal review comment.
+
 ## Repair profile of the 66, and the three options
 
 Where did the content each author meant actually go? (on `a7a40335`)
@@ -247,6 +255,110 @@ fixture and asserts the gate goes red with `TEST-CITE-NO-HISTORY` and says
 "absent, not zero". The `file://` is load-bearing — git ignores `--depth` on a
 plain local-path clone, so the first version of the case asserted nothing and
 passed vacuously.
+
+## The form, and proof that it does not degenerate
+
+Head is green. That is not the same as the finding having gone away, and the
+difference is a disjunction — the shape #937 settled on when the same problem
+came up there:
+
+```
+the two sides agree                            -> silent
+the two sides disagree AND the site is RECORDED  -> silent
+the two sides disagree and nothing is recorded   -> TEST-CITE-DRIFT
+a record exists but its site no longer drifts    -> TEST-CITE-RECORD-STALE
+a record exists with no quoted reason            -> TEST-CITE-RECORD-NOREASON
+```
+
+A `record-drift` line sits in the citing file, next to the citation it
+qualifies, and names the target, the line, what that line reads today
+(`now="…"`), and why in a quoted label:
+
+```csharp
+// `AgentLoop._tokenTracker` is assigned at AgentLoop.cs:91 and read ZERO times.
+// check-doc-cites: record-drift AgentLoop.cs:91 now="_providers = providers;" [#947: written over `_tokenTracker = tokenTracker;`; repair deferred to the owner's symbol-rename decision] -->
+```
+
+**This is not #847.** That table was a global list with no reason: the guard
+went green and the reason for each silence lived nowhere. A record here is per
+file, names the line, quotes the reason, quotes the line's current content, and
+goes red the moment its site stops drifting. #847's shape cannot be deleted by
+fixing a bug; this one has to be.
+
+### Proven, not asserted
+
+Five one-sided changes against a head that is currently exit 0. Each touches one
+half of one pair, or one record, and nothing else.
+
+| change | result |
+|---|---|
+| baseline, nothing touched | **exit 0** — 0 DRIFT, 0 RECORD-STALE |
+| **A** repair the CITATION (`AgentLoop.cs:91` → `:99`), keep the record | **exit 1** — `TEST-CITE-RECORD-STALE` |
+| **B** move the TARGET's line, keep citation *and* record | **exit 1** — 3 `TEST-CITE-DRIFT` + 2 `TEST-CITE-RECORD-STALE` |
+| **C** edit one record's REASON text, nothing else | **exit 0** — correct: a reason is not the gate |
+| **D** delete one record, change nothing else | **exit 1** — `TEST-CITE-DRIFT` |
+| **E** add a record for a site that does NOT drift | **exit 1** — `TEST-CITE-RECORD-STALE` |
+
+Verbatim output:
+
+```
+=== BASELINE — head is green, records present, nothing touched ===
+   exit 0   DRIFT 0   RECORD-STALE 0
+
+=== SIDE A — repair the CITATION (AgentLoop.cs:91 -> :99), keep the record ===
+   exit 1   {'TEST-CITE-DRIFT': 0, 'TEST-CITE-RECORD-STALE': 1}
+     L84: [TEST-CITE-RECORD-STALE] AgentLoop.cs:91 — recorded with now="_providers = providers;"
+          [#947: written over `_tokenTracker = tokenTracker;`; repair deferred to the owner's
+
+=== SIDE B — move the TARGET's line, keep citation AND record ===
+   exit 1   {'TEST-CITE-DRIFT': 3, 'TEST-CITE-RECORD-STALE': 2}
+     L48: [TEST-CITE-DRIFT] AgentLoop.cs:97 — fdcb1150 wrote it over
+          `_promptBuilder = new CachingSystemPromptBuilder(promptBui…`;
+          that line now reads `// template assembly every t
+
+=== SIDE C — edit ONE record's REASON text, nothing else ===
+   exit 0  (the CLAIM is unchanged, so this must stay green — a reason is not the gate)
+
+=== SIDE D — delete ONE record, change nothing else ===
+   exit 1   {'TEST-CITE-DRIFT': 1, 'TEST-CITE-RECORD-STALE': 0}
+     L83: [TEST-CITE-DRIFT] AgentLoop.cs:91 — 99b73bfe wrote it over
+          `_tokenTracker = tokenTracker;`; that line now reads `_providers = providers;`
+
+=== SIDE E — add a record for a site that does NOT drift ===
+   exit 1   {'TEST-CITE-DRIFT': 0, 'TEST-CITE-RECORD-STALE': 1}
+     L2: [TEST-CITE-RECORD-STALE] AgentLoop.cs:42 — recorded with now="x" [padded to look busy],
+        but the citation and the file no longer disagree that way.
+```
+
+**B is the case a site-keyed record cannot catch.** Inserting one line at the top
+of `AgentLoop.cs` moves every cited line down one. The record names `AgentLoop.cs:91`,
+and `AgentLoop.cs:91` still exists and still drifts — so a record keyed on the
+site alone would have gone on excusing a divergence nobody had looked at since.
+The `now=` fingerprint is what makes the record describe **one divergence**
+rather than one line number.
+
+**C is the control, and it is the one that could have been got wrong.** Editing
+a reason must stay green: the gate asks whether the citation and the file agree,
+not whether the reason is well-worded. A rule that reddened on wording would be
+a rule about prose, and would be red on this repository within a week.
+
+## The one-sided hole, and what closing it cost
+
+The first version of the anchored comparison had three silent `continue`s:
+
+- no `git blame` attribution for the citing line,
+- the target did not exist at the citing commit,
+- the cited line was past the end of the file **as it was then**.
+
+Each dropped a citation without ever reading its file side — a hole shaped
+exactly like the one this rule exists to close: green about a thing nobody
+looked at. All three are now `TEST-CITE-UNANCHORED` findings, and a `git blame`
+attributing an uncommitted line to the null oid counts as unattributed.
+
+Measured over the 235 citations on this tree, **all three paths are taken zero
+times today**. So closing it changed no count at all. It is in the rule anyway:
+a silent skip is a defect whether or not anything currently falls into it, and
+the day a citation does fall in, the gate must be red rather than quiet.
 
 ## Appendix: the red run, verbatim
 
