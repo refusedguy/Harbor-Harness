@@ -118,6 +118,9 @@ internal sealed class PluginLoadHost : IPluginLoadHost
     /// <inheritdoc />
     public Result RegisterAgent(AgentDefinition agent) => _agents.Register(agent);
 
+    /// <summary>
+    ///     Accept a TUI plugin contributed by a CS plugin, and keep nothing.
+    /// </summary>
     /// <remarks>
     ///     <b>Stores nothing (#916).</b> This used to append to a
     ///     <c>TuiPlugins</c> list on this class; the list had zero readers
@@ -134,8 +137,8 @@ internal sealed class PluginLoadHost : IPluginLoadHost
     ///         is what <c>ExtensionAxisFreezeRule</c> grades, and removing the door
     ///         would fail <c>EverySealedAxis_IsDispatchedAndOpened</c> and quietly
     ///         reopen the freeze question rather than settle it. So a TUI plugin still
-    ///         loads, still logs success, and still paints nothing: nothing in the
-    ///         product calls <see cref="ITuiPlugin.RegisterTui" />.
+    ///         loads, is still accepted without error, and still paints nothing:
+    ///         nothing in the product calls <see cref="ITuiPlugin.RegisterTui" />.
     ///     </para>
     ///     <para>
     ///         What a future change that does wire a renderer has to add is a field
@@ -143,8 +146,8 @@ internal sealed class PluginLoadHost : IPluginLoadHost
     ///         that a deliberate edit rather than an accident is
     ///         <c>tests/Harbor.Architecture.Tests/CellForgeWidgetAxisRules.cs</c>:
     ///         <c>ViewSeam_DeclaredStatusMatchesWhatTheProductRenders</c> is two-sided on
-    ///         the consumer, and <c>ViewSeam_HasNoFirstImplementor</c> (#916) turns red
-    ///         the moment a type implements the marker.
+    ///         the consumer, and <c>ViewSeam_HasNoFirstImplementorInProductSource</c>
+    ///         (#916) turns red the moment a type implements the marker.
     ///     </para>
     /// </remarks>
     public Result RegisterTuiPlugin(ITuiPlugin plugin)

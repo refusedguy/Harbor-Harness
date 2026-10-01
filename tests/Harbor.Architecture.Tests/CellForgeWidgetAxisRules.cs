@@ -795,9 +795,9 @@ public sealed class CellForgeWidgetAxisRules
 
         // NON-VACUITY, in the same test. A probe that cannot detect the shape it
         // exists for is a rule that reads as though it enforces something. The
-        // planted lines are the three ways the marker legitimately appears in
-        // product source today, plus a wrapped base list, plus the implementor
-        // itself — driven through the REAL regex, not a copy of it.
+        // planted lines are four ways to DECLARE the marker, and the four ways
+        // the marker legitimately appears in product source without declaring an
+        // implementor — driven through the REAL regex, not a copy of it.
         string[] mustMatch =
         [
             "public sealed class ClockPlugin : ITuiPlugin",
