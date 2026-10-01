@@ -59,7 +59,7 @@
 //     Tabs.cs:143                             != None
 //     ToolCardTracker.cs:624 + :667           != None
 //     LeaderKeyRouter.cs:94                   != None  (consume-and-disarm)
-//     VimComposerMode.cs:37                   == None  (NORMAL MODE ONLY)
+//     VimComposerMode.cs:38                   == None  (NORMAL MODE ONLY)
 //
 //   BUFFER, BUT NOT A TEXT BUFFER — the taxonomy's sharpest edge, and the
 //   reason the two families are not a spectrum. These sites hold no text
@@ -71,7 +71,7 @@
 //     DiffViewerOverlay.cs:282 + :210         (Ctrl|Alt|Meta) != 0
 //     ImageViewerOverlay.cs:124               (Ctrl|Alt|Meta) != 0
 // check-doc-cites: record-drift ImageViewerOverlay.cs:124 now="case KeyCode.Left:" [#947: written over `if (key.Modifiers.IsCommandModifier())`; repair deferred to the owner's symbol-rename decision] -->
-//     VimComposerMode.cs:37 (fall-through)    delegates to the composer
+//     VimComposerMode.cs:38 (fall-through)    delegates to the composer
 //
 //   UNGATED — a third state the issue's two-family taxonomy cannot name, and the
 //   reason a guard that counts only the two families is not enough. Six sites
