@@ -68,9 +68,10 @@ public interface ITextFileStore
     ///     Async for the reason above: the existence probe is the syscall that was
     ///     synchronous on the UI thread, and moving it behind an interface that kept
     ///     it synchronous would have relocated the hazard instead of removing it.
-    ///     <see cref="false" /> means "not there"; a probe that could not answer
-    ///     (a permission denial on the parent directory, a malformed path) is a
-    ///     FAILED result, never a <see cref="false" /> that reads as a missing file.
+    ///     A <see langword="false" /> means "not there"; a probe that could not
+    ///     answer (a permission denial on the parent directory, a malformed path) is
+    ///     a FAILED result, never a <see langword="false" /> that reads as a
+    ///     missing file.
     /// </remarks>
     /// <param name="path">Path to probe. An empty value means the process working directory.</param>
     /// <param name="cancellationToken">Cancels the probe.</param>
