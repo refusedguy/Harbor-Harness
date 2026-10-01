@@ -388,14 +388,23 @@ public class SlashPanelsCommandTests
 
         await new JumpCommand().ExecuteAsync(new ReplCommandContext(host, "jump"), CancellationToken.None);
 
-        // One session row + the one non-bare worktree it does not own.
+        // One session row + the one non-bare worktree it does not own. The
+        // merge order (sessions first, then unmatched worktrees path-sorted)
+        // survives because the frame is pushed with PreserveOrder — the
+        // palette's default empty-query sort is group-then-title, which would
+        // have reordered these two and made row 0 a coin flip.
         await Assert.That(host.Palette.Results).Count().IsEqualTo(2);
         await Assert.That(git.AskedFor).IsEqualTo(Environment.CurrentDirectory);
 
         CommandItem sessionRow = host.Palette.Results[0];
         await Assert.That(sessionRow.Id).IsEqualTo("ccc00003");
-        // Branch came from the session record itself.
-        await Assert.That(sessionRow.Detail).Contains("no-branch");
+        // The stored session carries no GitBranch, so the seeder's documented
+        // fallback applies: the worktree whose Path equals the session's
+        // Directory supplies the branch. This is the arm that makes the worktree
+        // list worth merging rather than appending, and it is the reason the
+        // command needs IGitQuery even when every row is a session.
+        await Assert.That(sessionRow.Detail).Contains("main");
+        await Assert.That(sessionRow.Detail).Contains("/wts/one");
 
         CommandItem worktreeRow = host.Palette.Results[1];
         await Assert.That(worktreeRow.Title).IsEqualTo("scratch");
