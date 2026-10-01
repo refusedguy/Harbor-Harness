@@ -176,8 +176,8 @@ internal static class DiSeverityDemotionProbe
 
             // Any OTHER section header — `[*]`, `[*.{cs,csx}]`, `[Makefile]` —
             // ends the path section. The tree-wide block above the
-            # PATH-SCOPED SEVERITY OVERRIDES banner sets 200+ severities under a
-            // per-rule table, and judging those rows here would be judging the
+            // "PATH-SCOPED SEVERITY OVERRIDES" banner sets 200+ severities under
+            // a per-rule table, and judging those rows here would be judging the
             // wrong claim: those are the rule's own severity, not a permission
             // granted to a subset of the tree.
             if (raw.TrimStart().StartsWith('['))
