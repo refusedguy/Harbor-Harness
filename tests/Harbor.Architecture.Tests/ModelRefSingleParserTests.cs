@@ -6,6 +6,7 @@
 // Identifiers.cs) is, in the words of the declaration it grew out of, "the only
 // function in the repo written to read a `provider/model` reference"
 // (ConfigSections.cs:27). It is the only one that gets the two things right that
+// check-doc-cites: record-drift ConfigSections.cs:27 now="public const string FallbackAgent = AgentName.Fallback;" [#947: written over `/// <c>kilo-auto</c>). <c>ModelRef.TryPa`; repair deferred to the owner's symbol-rename decision] -->
 // a hand-rolled cut does not:
 //
 //   * it splits with COUNT 2, so a multi-segment model id

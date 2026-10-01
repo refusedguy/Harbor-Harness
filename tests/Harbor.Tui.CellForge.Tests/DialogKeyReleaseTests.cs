@@ -41,6 +41,7 @@ namespace Harbor.Tui.CellForge.Tests;
 ///   * <c>TerminalQueries.KittyPush</c> (CSI <c>&gt; flags u</c>) is defined
 ///     and referenced only from tests. The enter-alt-screen sequence
 ///     (CellForgeReplRunner.cs:98) is alt-screen + hide-cursor + paste +
+// check-doc-cites: record-drift CellForgeReplRunner.cs:98 now="/// constants so the byte order can never drift from the …" [#947: written over `internal const string SeqEnterAltScreen `; repair deferred to the owner's symbol-rename decision] -->
 ///     mouse, and no kitty push. The prober QUERIES the current flags
 ///     (CapabilityProber.cs:87) and records them, then pushes nothing.
 ///   * Without the push there is no report-event-types flag, so a conforming

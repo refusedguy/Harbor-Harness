@@ -81,6 +81,7 @@
 // AND THE AGENTLOOP FIELD IS DEAD WEIGHT
 // --------------------------------------
 // `AgentLoop._tokenTracker` is assigned at AgentLoop.cs:91 and read ZERO times.
+// check-doc-cites: record-drift AgentLoop.cs:91 now="_providers = providers;" [#947: written over `_tokenTracker = tokenTracker;`; repair deferred to the owner's symbol-rename decision] -->
 // The constructor parameter it is fed from exists only to be forwarded to
 // CompactionBehavior / SteeringDrainBehavior / BackgroundDrain / TurnRunner. So
 // AgentLoop is a ninth HOLDER of the aggregate and a consumer of nothing. This

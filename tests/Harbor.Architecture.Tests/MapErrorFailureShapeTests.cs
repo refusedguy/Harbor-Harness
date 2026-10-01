@@ -32,6 +32,7 @@
 //     the method returns `Result<T>` is a RE-TYPE. `MapError` cannot express it
 //     (it would hand back `Result<S>`), and `ConvertFailure<T>()` — which can —
 //     THROWS `InvalidOperationException` on success (ConvertFailure.cs:10-16), so it
+// check-doc-cites: record-drift ConvertFailure.cs:10 now="unresolved" [no tracked file, and none in git history: the citation names a DEPENDENCY's source (TUnit / CSharpFunctionalExtensions), which no rule in this repo can resolve] -->
 //     is only safe already inside a failure branch.
 //   * Only a site whose success type is unchanged is a `MapError` site.
 //

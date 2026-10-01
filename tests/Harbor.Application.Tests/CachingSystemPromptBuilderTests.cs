@@ -200,6 +200,7 @@ public class CachingSystemPromptBuilderTests
         // The KEY is order-sensitive. This used to be justified by a comment
         // claiming the rendered prompt lists tools in context order — the
         // builder sorts them by name (SystemPromptBuilder.cs:139), so the
+        // check-doc-cites: record-drift SystemPromptBuilder.cs:139 now="builder.AppendLine();" [#947: written over `// Header is "## Available Tools" per sp`; repair deferred to the owner's symbol-rename decision] -->
         // prompt is byte-identical across this reorder and the entry is an
         // over-invalidation, not a required miss. Harmless, and kept: the key
         // walking the list as given is the cheaper property to keep than the

@@ -22,6 +22,7 @@
 // factories rather than one. #764's list of nine line numbers is exactly the
 // `SessionNotFound` sites; the two `MessageNotFound` sites —
 // MemorySessionStore.cs:69 and :107 — are not in the issue at all. Any count
+// check-doc-cites: record-drift MemorySessionStore.cs:69 now="return Task.FromResult(Result.Failure(SessionStoreErrors.…" [#947: written over `return Task.FromResult(Result.Failure($"`; repair deferred to the owner's symbol-rename decision] -->
 // downstream of that list was wrong by two, and the missing two are a different
 // shape, so "the same literal nine times" understated both the size and the
 // variety of the duplication.
@@ -33,10 +34,13 @@
 // the parameter name varies at the equivalent factory call site:
 //
 //   MemorySessionStore.cs:146  $"Session '{session.Id}' not found."
+// check-doc-cites: record-drift MemorySessionStore.cs:146 now="}" [#947: written over `return Task.FromResult(Result.Failure($"`; repair deferred to the owner's symbol-rename decision] -->
 //       == SessionStoreErrors.SessionNotFound(session.Id)
 //   MemorySessionStore.cs:69   $"Message '{message.Id}' not found in session '{sessionId}'."
+// check-doc-cites: record-drift MemorySessionStore.cs:69 now="return Task.FromResult(Result.Failure(SessionStoreErrors.…" [#947: written over `return Task.FromResult(Result.Failure($"`; repair deferred to the owner's symbol-rename decision] -->
 //       == SessionStoreErrors.MessageNotFound(sessionId, message.Id)
 //   MemorySessionStore.cs:107  $"Message '{messageId}' not found in session '{sessionId}'."
+// check-doc-cites: record-drift MemorySessionStore.cs:107 now="return Task.FromResult(Result.Failure<int>(SessionStoreEr…" [#947: written over `$"Message '{messageId}' not found in ses`; repair deferred to the owner's symbol-rename decision] -->
 //       == SessionStoreErrors.MessageNotFound(sessionId, messageId)
 //
 // A person sees the same string whichever backend `HARBOR_STORAGE` selects
@@ -60,6 +64,7 @@
 // (MemorySessionStoreRopTests:31-38). The other SEVEN are pinned by nothing:
 //
 //   MemorySessionStore.cs:63, 69, 99, 107, 126, 136, 146
+// check-doc-cites: record-drift MemorySessionStore.cs:63 now="return Task.FromResult(Result.Success());" [#947: written over `return Task.FromResult(Result.Failure($"`; repair deferred to the owner's symbol-rename decision] -->
 //
 // Those seven are the hole. A twelfth literal, or a divergent spelling at any
 // of them, would compile, would ship, and would not turn any test red — and

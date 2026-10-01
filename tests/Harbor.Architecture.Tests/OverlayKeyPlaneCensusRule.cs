@@ -20,6 +20,7 @@
 //                                    ReplInputLoop.cs:289; IsModal = true.
 //         SetupChecklistOverlayLayer  field _setupLayer, pushed at :838;
 //                                    opened at SetupCommand.cs:27;
+// check-doc-cites: record-drift SetupCommand.cs:27 now="ambiguous:2" [2 tracked files share this basename, so the citation does not identify one] -->
 //                                    IsModal = false.
 //
 //       REGISTERED BUT PARKED (3)

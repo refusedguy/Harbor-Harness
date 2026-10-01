@@ -27,6 +27,7 @@
 //
 // Q2 is the one that was still duplicated, and the remaining copy is not a taste question.
 // #683's own comment, at SessionLifecycleService.cs:189-194, names the straggler:
+// check-doc-cites: record-drift SessionLifecycleService.cs:189 now="}" [#947: written over `// back to "whichever entry the registry`; repair deferred to the owner's symbol-rename decision] -->
 //
 //   "Falling back to 'whichever entry the registry enumerates first' is what #683 removed
 //    from the sibling path; leaving it here would reopen the same hole one method away."
@@ -80,6 +81,7 @@
 // * contrib/ is not scanned. It is not in Harbor.slnx, nothing in apps/ or src/ references
 //   it, and no CI job compiles it (AGENTS.md §Project structure). Its single
 //   `globals.Agents.GetAllAgents()` (contrib/scripting/.../JintScriptEngine.cs:437) is a
+// check-doc-cites: record-drift contrib/scripting/.../JintScriptEngine.cs:437 now="unresolved" [the path is elided with `...` and contrib/ is excluded by construction] -->
 //   name LIST for a scripting sandbox, not a resolution at all.
 //
 // NON-VACUITY

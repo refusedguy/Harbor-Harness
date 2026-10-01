@@ -13,6 +13,7 @@
 //   * `PanelContext.Services` is not an `IServiceProvider`. It is `PanelServices?`
 //     — an immutable record of six named, typed, nullable fields
 //     (src/Harbor.Ui.Framework.State/Panels/PanelContext.cs:22, PanelServices.cs:34).
+// check-doc-cites: record-drift PanelServices.cs:34 now="/// </remarks>" [#947: written over `public sealed record PanelServices`; repair deferred to the owner's symbol-rename decision] -->
 //     #470 / PR #573 removed the container. The replacement is documented in the
 //     prose of both files, at the exact lines the audit cited.
 //   * Zero `ctx.Services?.GetService<T>()` calls remain. The only occurrence of

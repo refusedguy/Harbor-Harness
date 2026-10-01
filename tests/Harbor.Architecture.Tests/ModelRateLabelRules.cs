@@ -8,9 +8,11 @@
 // question about the SAME model with two different answers.
 //
 //   ProviderModelPickerViewModel.cs:377 — a private FormatPricing helper, which
+// check-doc-cites: record-drift ProviderModelPickerViewModel.cs:377 now="ambiguous:2" [2 tracked files share this basename, so the citation does not identify one] -->
 //     returned the literal "pricing unknown" when both rates were zero, and
 //     otherwise spelled "$X in / $Y out per 1M" with an F2 format on each rate.
 //   ProviderBrowserViewModel.cs:197 — a PricingLabel property that spelled the same
+// check-doc-cites: record-drift ProviderBrowserViewModel.cs:197 now="{" [#947: written over `public string Features =>`; repair deferred to the owner's symbol-rename decision] -->
 //     sentence, and had no zero case at all.
 //
 // Both are LIVE, and #686's own caveat ("if one copy is in a test or a dead

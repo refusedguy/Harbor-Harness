@@ -72,6 +72,28 @@ def tracked_md(repo: str) -> list[str]:
     return sorted(proc.stdout.split())
 
 
+def tracked_cs(repo: str) -> list[str]:
+    """Every tracked `*.cs` path, relative to `repo`, sorted.
+
+    `tracked_md`'s sibling, and the same reason: the INDEX, not a glob. The
+    `tests/**/*.cs` population of #947 is only trustworthy if an untracked
+    scratch file cannot add citations and a tracked file cannot hide from it.
+
+    The pathspec is `*.cs` and not `.cs` — a git pathspec without a leading
+    `*` is a LITERAL path, which #944's own commit message records as having
+    silently produced a one-entry index.
+    """
+    proc = subprocess.run(
+        ["git", "ls-files", "*.cs"],
+        cwd=repo,
+        capture_output=True,
+        text=True,
+        check=True,
+        env=git_env(),
+    )
+    return sorted(proc.stdout.split())
+
+
 def require_non_vacuous(
     label: str,
     files: int,
@@ -179,6 +201,34 @@ def make_fixture(script: str, files: Mapping[str, str]) -> str:
     if os.environ.get("HARBOR_MD_GATE_KEEP") != "1":
         atexit.register(shutil.rmtree, root, True)
     return root
+
+
+def commit_fixture(root: str, message: str = "fixture: baseline") -> str:
+    """Commit the staged tree and return the new commit sha.
+
+    `make_fixture` deliberately stops at `git add`, because every gate that
+    used it reads the INDEX and none of them read history. A rule anchored on
+    `git blame` cannot be tested without commits, so this is the second half of
+    the fixture builder rather than a replacement: call `make_fixture`, write
+    the drifted file, `commit_fixture`, write the fixed one, `commit_fixture`
+    again, and the rule has the two-point history it asks about.
+
+    Identity is pinned rather than inherited. `git commit` refuses to run
+    without `user.email`, and a CI runner's global identity may be unset — a
+    self-test that fails on the runner's git configuration is a self-test that
+    proves nothing about the rule. `-c` keeps the config local to this
+    throwaway repo.
+    """
+    env = git_env()
+    subprocess.run(
+        ["git", "-c", "user.name=fixture", "-c", "user.email=fixture@example.invalid",
+         "commit", "-q", "--no-verify", "-m", message],
+        cwd=root, check=True, env=env,
+    )
+    return subprocess.run(
+        ["git", "rev-parse", "HEAD"], cwd=root, check=True, env=env,
+        capture_output=True, text=True,
+    ).stdout.strip()
 
 
 def run_gate(root: str, script: str, *args: str) -> tuple[int, str]:

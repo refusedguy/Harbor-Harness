@@ -9,10 +9,12 @@
 //         get { TryGetValue(key, out var value); return value; }   // bool DISCARDED
 //
 // (src/Avalonia.Base/Controls/ResourceDictionary.cs:35-41) and `TryGetValue`
+// check-doc-cites: record-drift src/Avalonia.Base/Controls/ResourceDictionary.cs:35 now="unresolved" [no tracked file, and none in git history: the citation names a DEPENDENCY's source, which no rule in this repo can resolve] -->
 // (:239-275) reads `_inner` and nothing else. The walk over
 // `MergedDictionaries` and `ThemeDictionary` lives in `TryGetResource`
 // (:188-237), which the indexer never calls. So the comment at
 // Views/Converters.cs:25-26 is CORRECT, and `Resources[key]` resolves the top
+// check-doc-cites: record-drift Views/Converters.cs:25 now="unresolved" [resolver blind spot — apps/Harbor.App.Avalonia/Views/Converters.cs is in the tree and PROJECT_ROOTS cannot reach it] -->
 // level only.
 //
 // Two things follow, and both are load-bearing:

@@ -15,7 +15,9 @@
 //       `return provider.OnKey(key, ctx);` — inside
 //       `CellForgePanelAdapter.RouteKey`, whose only caller in the whole tree is
 //       `ChatScreenLayout.cs:1449`.
+// check-doc-cites: record-drift ChatScreenLayout.cs:1449 now="if (view.GetState(id) != TuiPanelState.Focused)" [#947: written over `return CellForgePanelAdapter.RouteKey(pr`; repair deferred to the owner's symbol-rename decision] -->
 //   src/Harbor.Tui.CellForge/Chat/Panels/CellForgeJumpPaletteOverlayLayer.cs:170
+// check-doc-cites: record-drift src/Harbor.Tui.CellForge/Chat/Panels/CellForgeJumpPaletteOverlayLayer.cs:170 now="/// sees it." [#947: written over `return _panel.OnKey(`; repair deferred to the owner's symbol-rename decision] -->
 //       `return _panel.OnKey(` — inside that layer's own `OnKey`, and the layer
 //       is never constructed outside tests.
 //
@@ -60,6 +62,7 @@
 //   * it dispatches `AppMsg.FocusPanel("logs")` by hand first, because
 //     `RoutePanelKey` returns early unless the panel is `Focused`
 //     (`ChatScreenLayout.cs:1434-1437`) and the product's F12 path only ever
+// check-doc-cites: record-drift ChatScreenLayout.cs:1434 now="if (provider is null)" [#947: written over ``; repair deferred to the owner's symbol-rename decision] -->
 //     reaches `Visible` — `AppReducer.TogglePanel` (`:172-187`) toggles
 //     Hidden↔Visible and never sets `FocusedPanelId`. NO product host dispatches
 //     `AppMsg.FocusPanel` with a non-null id; the one non-test dispatch is

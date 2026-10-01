@@ -15,15 +15,24 @@ namespace Harbor.Tui.CellForge.Tests;
 ///
 ///   TEXT BUFFER — a rune can be appended to something the user is filling in.
 ///     - <c>ComposerController.cs:173</c>   composer body          (Ctrl|Meta|Alt)
+// check-doc-cites: record-drift ComposerController.cs:173 now="if (mods.AcceptsTypedChar())" [#947: written over `if ((mods & (KeyModifiers.Ctrl | KeyModi`; repair deferred to the owner's symbol-rename decision] -->
 ///     - <c>DialogOverlay.cs:632</c>       reject reason, prompt, multiline (Ctrl|Meta|Alt)
 ///     - <c>FilePickerView.cs:153</c>, <c>CommandPaletteView.cs:254</c>  (None or Shift)
+// check-doc-cites: record-drift CommandPaletteView.cs:254 now="case KeyCode.Char when key.Modifiers.AcceptsTypedChar():" [#947: written over `case KeyCode.Char when key.Modifiers is `; repair deferred to the owner's symbol-rename decision] -->
+// check-doc-cites: record-drift FilePickerView.cs:153 now="case KeyCode.Char when key.Modifiers.AcceptsTypedChar():" [#947: written over `case KeyCode.Char when key.Modifiers is `; repair deferred to the owner's symbol-rename decision] -->
 ///     - <c>QuestionFormView.cs:498</c>    custom answer         (!= None)  <-- the defect
 ///
 ///   COMMAND ONLY — no buffer; runes are navigation (h/j/k/l) or a 3-letter
 ///   vote (y/n/a). Shift changes nothing a user could want here.
 ///     - <c>ApprovalGateView.cs:254</c>    y/n/a + Enter/Escape
+// check-doc-cites: record-drift ApprovalGateView.cs:254 now="if (!key.Modifiers.IsUnmodified())" [#947: written over `if (key.Modifiers != KeyModifiers.None)`; repair deferred to the owner's symbol-rename decision] -->
 ///     - <c>TreeView.cs:269</c>, <c>Tabs.cs:143</c>, <c>ToolCardTracker.cs:624</c>
+// check-doc-cites: record-drift ToolCardTracker.cs:624 now="|| !key.Modifiers.IsUnmodified())" [#947: written over `|| key.Modifiers != KeyModifiers.None)`; repair deferred to the owner's symbol-rename decision] -->
+// check-doc-cites: record-drift Tabs.cs:143 now="|| !key.Modifiers.IsUnmodified())" [#947: written over `|| key.Modifiers != KeyModifiers.None)`; repair deferred to the owner's symbol-rename decision] -->
+// check-doc-cites: record-drift TreeView.cs:269 now="|| !key.Modifiers.IsUnmodified())" [#947: written over `|| key.Modifiers != KeyModifiers.None)`; repair deferred to the owner's symbol-rename decision] -->
 ///     - <c>DiffViewerOverlay.cs:210</c>, <c>ImageViewerOverlay.cs:124</c>
+// check-doc-cites: record-drift ImageViewerOverlay.cs:124 now="case KeyCode.Left:" [#947: written over `if ((key.Modifiers & (KeyModifiers.Ctrl `; repair deferred to the owner's symbol-rename decision] -->
+// check-doc-cites: record-drift DiffViewerOverlay.cs:210 now="if (key.Modifiers.IsCommandModifier())" [#947: written over `if ((key.Modifiers & (ConsoleModifiers.C`; repair deferred to the owner's symbol-rename decision] -->
 ///
 /// So <c>ApprovalGateView</c> is not the dissenter the issue named: it holds
 /// no buffer, its letters are case-folded (<c>Rune.ToUpperInvariant</c>) so a

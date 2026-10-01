@@ -68,6 +68,41 @@ RULES
                      under src/, apps/ or samples/ declares. See "THE FOURTH
                      SHAPE" below: this rule is the one that would have caught
                      #794 the day the sample README was written.
+  TEST-CITE-MISSING / TEST-CITE-AMBIGUOUS
+                     the `file:line` shape above, in a TEST's prose rather than
+                     a document's. `Status: normative` cannot select a .cs file,
+                     so the markdown fence above is structurally blind to every
+                     one of them (#947).
+  TEST-CITE-EOF / TEST-CITE-BLANK
+                     likewise, and mechanical: past the last line, or the cited
+                     line is empty.
+  TEST-CITE-DRIFT  the cited line resolves, is not blank, and is the WRONG
+                     line: what the commit that wrote the citation meant by N is
+                     not what N holds today. It is the only one of these five
+                     that catches the class the others cannot see — over the
+                     whole tests/ population they catch 4 of the 66 that are
+                     provably wrong. See "THE SIXTH SHAPE" below for the
+                     measurement and the cost.
+  TEST-CITE-NO-HISTORY
+                     not a finding about a sentence: the clone is truncated, so
+                     the DRIFT comparison cannot be made and would silently
+                     report nothing. Reported so that "fewer findings" and "the
+                     anchored rule did not run" are never the same sentence.
+  TEST-CITE-UNANCHORED
+                     the comparison needs BOTH sides and this citation has only
+                     one: no commit is attributed to the citing line, or the
+                     target did not exist when it was written, or the cited line
+                     was past the end of the file as it was then. Reported
+                     rather than skipped — a silent skip here is a hole shaped
+                     like the one this rule closes. All three paths are taken
+                     zero times on this tree today.
+  TEST-CITE-RECORD-STALE
+  TEST-CITE-RECORD-NOREASON
+                     a `record-drift` line is excusing a site that no longer
+                     disagrees, or carries no quoted reason. These are what stop
+                     the record form from being #847's table: a record has to be
+                     deletable, so it cannot be permanently, silently wrong.
+                     See RECORD_DRIFT.
 
   The escape hatch is a line IN THE SAME DOCUMENT, and it must carry a reason:
 
@@ -368,6 +403,99 @@ THE FIFTH SHAPE — MARKDOWN THAT ONLY LOOKS COMPILABLE (#853)
   docs/adr/ADR-011-doc-example-compile-gate.md. Nothing here is a rule; this
   paragraph is a pointer so the question is not re-derived from scratch.
 
+THE SIXTH SHAPE — A `file:line` IN A TEST'S PROSE (#947)
+
+  `Status: normative` is a self-selector for MARKDOWN, so every rule above is
+  structurally unable to see a test file: `file:line` citations live in the prose
+  of `tests/**/*.cs` — 236 of them on a7a40335, 235 on bb33437a, the tree having
+  moved in between with no test edited — and no rule in this repository had ever
+  read one.
+
+  They drift, and the shape of the drift is the reason a cheap version of this
+  rule was measured and NOT shipped. Over that population the mechanical fence
+  this file already knows how to write — resolves, not past EOF, not blank —
+  reports 22 and stays silent on 214. Against the 66 citations that are provably
+  wrong today (established by comparing the target file at the commit that wrote
+  the citation against HEAD), it catches 4 and misses 62.
+
+  The two figures are on different trees and both are stated with their commit,
+  because this file is where `DOC-COUNT-STALE` was written and the discipline
+  applies to it first: a measurement that does not say which tree it measured is
+  a measurement that will be wrong silently. docs/CITATION_DRIFT_MEASUREMENT.md
+  is the full write-up, with every table pinned the same way.
+
+  So the rule is anchored on HISTORY. `git blame` the citing line, read the
+  target at that commit and at HEAD, and ask whether line N still names what its
+  author meant. That catches the class the cheap fence is blind to by
+  construction, including `TokenTrackingRatchet.cs:83` citing `AgentLoop.cs:91`
+  for `_tokenTracker` when line 91 is `_providers = providers;`.
+
+  The cost is stated rather than buried: this makes a gate that has to be re-run
+  at every substantive edit, because a line inserted above a cited one changes
+  what the number means. That is a standing tax, and it is only worth paying
+  because the alternative was measured at 4 of 66 rather than assumed.
+  See `check_cite_drift`.
+
+  ONE THING THIS RULE GOT WRONG ON ITS FIRST CI RUN, recorded because it is the
+  failure mode the rest of this file is about
+
+  It reported 87 findings in a worktree and 21 in CI, with no diagnostic.
+  `actions/checkout` defaults to `fetch-depth: 1`; in a depth-1 clone `git blame`
+  attributes every line to the shallow boundary commit, so the comparison becomes
+  HEAD against HEAD and finds nothing. The mechanical classes never touch history
+  and kept working, so the gate stayed GREEN on the one rule that catches the
+  class while reporting a smaller, entirely plausible number.
+
+  Hence `repo_is_shallow()`: the gate refuses on a truncated clone
+  (TEST-CITE-NO-HISTORY) and says the anchored findings are absent, not zero.
+  `docs.yml` sets `fetch-depth: 0`. The first fix is a bug someone corrects; the
+  second is what stops the rule from lying while looking healthy.
+
+WHAT THE RULE DOES WITH WHAT IT FINDS — A DISJUNCTION, NOT A RED QUEUE
+
+  87 findings on the first run, and a red head in a shared merge queue is not a
+  measurement, it is a stall: a permanent red stops being noticed, and the queue
+  is drained by merging green. So the rule is a disjunction, the shape #937
+  settled on:
+
+      the two sides agree                            -> silent
+      the two sides disagree AND the site is RECORDED  -> silent
+      ... and nothing is recorded                     -> TEST-CITE-DRIFT
+      a record whose site no longer drifts             -> TEST-CITE-RECORD-STALE
+
+  All 87 are recorded, each in the citing file next to its citation, with a
+  quoted reason and a `now=` fingerprint of what the cited line reads today. The
+  fingerprint is load-bearing: a record keyed on the site alone survives a line
+  being inserted above it, and would go on excusing a divergence nobody has
+  looked at since. Five one-sided changes against a green head are the
+  self-test; the proof against the real tree is in
+  docs/CITATION_DRIFT_MEASUREMENT.md.
+
+  What this does NOT do is make the 87 less true. Every one is still computed,
+  still printable with the same message, and still greppable — and one of them
+  (`docs/CITATION_DRIFT_MEASUREMENT.md`) is the reason a reader can still find
+  out what they are without running anything.
+
+THREE DELIMITER BUGS, ONE CLASS
+
+  A field whose job is to be exact has to survive the contents of the tree it
+  describes, and three times it did not:
+
+    1. `now="..."` ended at the first `"` inside an interpolated string, so the
+       fingerprint parsed as a DIFFERENT, shorter one — and could never match.
+       `fingerprint()` folds `"` to `'` and is used by both the comparison and
+       the printed message, so the string a reader copies is the string the gate
+       compares.
+    2. `\[([^\]]+)\]` truncated a reason at the first `]`, and these reasons
+       quote real code: `mergedKeys[provider] = newKey` came out as
+       `provider] = newKey`. Greedy to the last `]` on the line.
+    3. The record line itself matched CITATION, so the population grew 235 -> 322
+       the moment 87 records landed and `--min-test-cites` began measuring the
+       gate's own annotations. Record spans are masked before matching.
+
+  Each one parses something, believes it, and is wrong — which is the failure
+  this whole file exists to end, committed by the fix for it.
+
 USAGE
 
   tools/check-doc-cites.py                      # gate (what docs.yml runs)
@@ -380,6 +508,7 @@ from __future__ import annotations
 import argparse
 import os
 import re
+import shutil
 import subprocess
 import sys
 from collections import defaultdict
@@ -471,6 +600,122 @@ ALLOW_STALE_COUNT = re.compile(
     r"<!--\s*check-doc-cites:\s*allow-stale-count\s+(?P<label>[^>]+?)"
     r"(?:\s+[-—:]\s*(?P<reason>.+?))?\s*-->"
 )
+
+# THE RECORD, NOT THE ALLOWANCE (#947)
+#
+# `allow-unwired` and `allow-stale-count` above excuse a CLAIM that is true of
+# the tree (`LiveThing` really is unwired; 2861 really was the sweep's count).
+# This one is different in kind and the difference is the whole design: a
+# drifted citation is a claim that is FALSE. Writing it down does not make it
+# true — it makes the falsity attributable, which is the most a gate can do
+# about a known-wrong sentence.
+#
+# So the rule is a DISJUNCTION, exactly as #937 settled it:
+#
+#     either the two sides agree              -> no finding
+#     or the disagreement is RECORDED, with a reason -> no finding, but the
+#                                                     record must still be true
+#
+# and the second clause is what stops this being #847's rejected shape. #847's
+# table of known breakages was a global list with no reason: the guard was green
+# and the reason lived nowhere. Here a record is
+#
+#   * PER SITE, not per file and not global — it names the citing file and the
+#     line, so it cannot become a blanket over a file's other citations;
+#   * REASON-MANDATORY, with a quoted label, the same discipline as the two
+#     waivers above;
+#   * SELF-VERIFYING — a record whose site no longer drifts is a FINDING
+#     (`TEST-CITE-RECORD-STALE`). This is the clause that matters most, and it
+#     is what makes the form non-degenerate: the moment someone repairs the
+#     citation, the record that was excusing it goes red until it is deleted.
+#     A record that only ever silences can never be deleted, which means it can
+#     never be wrong about the present.
+#
+# The site key is (cited target, cited LINE) — the fact being excused — scoped to
+# the file the record sits in. NOT the citing line, and that is deliberate twice
+# over. Placement: a record is inserted NEXT TO the citation it qualifies, so
+# inserting it shifts the citing line, and a key that named the citing line
+# would invalidate itself the moment it was written. Scope: two sentences citing
+# the same `File.cs:91` are asserting the same fact about the same line, so one
+# record covering both is honest rather than a blanket.
+#
+# The record is therefore per-FILE, which is the anti-#847 property that
+# matters: it cannot excuse a citation in another file, and it cannot excuse a
+# different line number in this one.
+#
+# `now="…"` is the FINGERPRINT and it is what closes the last hole in the form.
+# Without it a record silences a SITE, so inserting a line above a recorded
+# citation changes the divergence without changing the site, and the record goes
+# on excusing a disagreement nobody has looked at since. Quoting what the cited
+# line reads today — as `truncate()` renders it, the SAME string the gate prints
+# in its finding, so the two can be diffed by eye — means the record describes
+# ONE divergence: touch either side of the pair, move the target's line or
+# repair the citation, and the fingerprint stops matching, the excuse lapses,
+# and the gate goes red on the record itself.
+#
+# For a site that does not resolve there is no line to quote, so the
+# fingerprint is the resolution verdict (`unresolved`, `ambiguous:2`). Same
+# rule, and it behaves correctly in the interesting direction: the record goes
+# stale the moment the file appears.
+RECORD_DRIFT = re.compile(
+    r"(?:<!--)?[ \t]*check-doc-cites:[ \t]*record-drift[ \t]+"
+    r"(?P<target>[A-Za-z0-9_][A-Za-z0-9_./\-]*\.[A-Za-z]+):"
+    r"(?P<line>\d+)[ \t]+"
+    r"now=\"(?P<now>[^\"]*)\"[ \t]*"
+    # GREEDY, and to the LAST `]` on the line. The reasons here quote real code —
+    # `mergedKeys[provider] = newKey`, `["Harbor.Registries"] = new(...)` — and a
+    # lazy `[^\]]+` truncates a reason at the first `]`, silently producing a
+    # record whose stated reason is a fragment. A wrong reason is worse than no
+    # reason: it is an assertion the gate cannot check and a reviewer will
+    # believe. `.` excludes `\n`, so greedy still stops at the line end.
+    r"(?:\[(?P<why>.*)\])?"
+)
+
+SiteKey = tuple[str, int]  # (target, cited line), within the citing file
+
+
+def drift_records(text: str) -> tuple[dict[SiteKey, tuple[int, str, str]], list[tuple[int, int]]]:
+    """(SiteKey -> (where, `now` fingerprint, reason), spans to mask).
+
+    A record with no quoted reason is NOT honoured and is reported by the caller
+    as `TEST-CITE-RECORD-NOREASON`, for the reason the two waivers above are
+    reason-mandatory: an unlabelled one is a mute button for every future
+    finding on that line.
+
+    The spans matter as much as the keys. A record NAMES a `File.cs:91`, so
+    without masking it the record is itself a citation, the population grows by
+    one per record (235 -> 322 the first time this ran), and the rule ends up
+    checking whether its own bookkeeping is true about the tree. A gate that
+    counts its own annotations is a gate whose floor means nothing.
+    """
+    out: dict[SiteKey, tuple[int, str, str]] = {}
+    spans: list[tuple[int, int]] = []
+    for m in RECORD_DRIFT.finditer(text):
+        where = text.count("\n", 0, m.start()) + 1
+        out[(m.group("target"), int(m.group("line")))] = (
+            where,
+            m.group("now"),
+            (m.group("why") or "").strip(),
+        )
+        end = text.find("\n", m.end())
+        spans.append((m.start(), n if (n := (len(text) if end < 0 else end)) else m.end()))
+    return out, spans
+
+
+def mask_spans(text: str, spans: list[tuple[int, int]]) -> str:
+    """`text` with each span blanked to spaces, newlines preserved.
+
+    Same contract as `strip_comments_and_literals`: offsets survive, so a line
+    number computed on the result is the line number in the original.
+    """
+    if not spans:
+        return text
+    out = list(text)
+    for start, end in spans:
+        for i in range(start, min(end, len(out))):
+            if out[i] != "\n":
+                out[i] = " "
+    return "".join(out)
 
 # A stated total for a table the document itself contains — "Total members
 # audited: 2861", "audited 2861" — in prose or a bullet, never in a table cell.
@@ -681,6 +926,428 @@ def block_span(text: str, start: int) -> tuple[int, int] | None:
             if depth == 0:
                 return open_brace, pos
     return None
+
+
+# ---------------------------------------------------------------------------
+# THE SIXTH SHAPE — A `file:line` IN A TEST'S PROSE (#947)
+# ---------------------------------------------------------------------------
+#
+# Every rule above reads MARKDOWN, and this one reads `tests/**/*.cs`. That is
+# not a new kind of question: the fence already asks "is this number inside
+# that file", and this asks the same thing about the population the fence
+# cannot see. #922 scoped the prose fence to documents carrying
+# `Status: normative`, which is a SELF-SELECTOR for markdown and, by
+# construction, leaves every test file outside it. 245 `.cs:NNN` citations live
+# in 68 test files, and no rule in this repo had ever read one.
+#
+# WHY THE NAIVE VERSION OF THIS RULE IS NOT ENOUGH — measured, not asserted
+#
+# The obvious rule is the mechanical one this file already knows how to write:
+# the cited line must not be blank, must not be past EOF, the file must
+# resolve. Over the 236 prose citations in tests/*.cs that reports 22 and stays
+# silent on 214.
+#
+# And 22 is not a finding count. It is a FLOOR, and it is a floor that misses
+# the class this issue is about. Measured against the 66 citations that are
+# PROVABLY wrong today (see `check_cite_drift` below for how that is established
+# without a human reading 235 claims):
+#
+#     mechanically decidable (blank / EOF / unresolved)   22
+#     PROVABLY wrong today                               66
+#     the mechanical rule CATCHES                         4
+#     the mechanical rule MISSES                         62
+#
+# Four of sixty-six. The 62 are citations whose cited line is real, has code on
+# it, and is the wrong code — `TokenTrackingRatchet.cs:83` cites
+# `AgentLoop.cs:91` for `_tokenTracker`, and line 91 today is
+# `_providers = providers;`. A "points at a line with code" fence is green on
+# that, which is why it is not the rule.
+#
+# SO THE RULE IS ANCHORED ON HISTORY, NOT ON THE CURRENT LINE
+#
+# `git blame` on the citing line gives the commit that WROTE the citation. Read
+# the target file at that commit and at HEAD, and compare what line N holds.
+# If the author's N named X and today's N names Y, the citation is wrong — no
+# semantics, no judgement, no table of known breakages. This is the only form
+# of the rule that catches the class the issue calls most expensive.
+#
+# The anchor is per citing LINE, not per citing FILE. Anchoring on the file's
+# last commit undercounts, and not slightly: `e46e0048` re-touched
+# TokenTrackingRatchet.cs a day after `99b73bfe` wrote the citation, so a
+# file-anchored baseline reads the already-stale state as the reference and
+# reports the citation as correct forever.
+#
+# WHAT IT COSTS, STATED PLAINLY
+#
+# This rule makes a gate that must be re-run at every substantive edit. A guard
+# built this way is not a one-time fix; it is a standing tax on whoever inserts
+# a line above a cited one. That is the honest price and it is why the cheap
+# mechanical fence was measured rather than shipped — but the price is only
+# worth paying if the alternative is measured too, and it was: 4/64.
+
+# Tests are the subject. `contrib/` is not scanned at all — it is unmaintained,
+# and a citation inside it is not a claim this repo makes about itself.
+TEST_CITATION_SCOPE = ("tests/",)
+
+
+def comments_only(text: str) -> str:
+    """`text` with everything OUTSIDE comments blanked, offsets preserved.
+
+    The inverse of `strip_comments_and_literals`, which keeps code and drops
+    prose. A `file:line` in a test is almost always in a comment, so this keeps
+    the comments and drops the code — and, critically, drops STRING LITERALS
+    too. A test that builds a synthetic compiler diagnostic as data
+    (`PanelExtractorsTests.cs:358` writes `"src/a.cs:12 CS0246: type not
+    found"`) is not making a claim about this repository, and a rule that
+    counted it would be reporting a test's fixture back at the test.
+    """
+    out: list[str] = []
+    i, n = 0, len(text)
+
+    def keep(end: int) -> None:
+        out.append(text[i:end])
+        return None
+
+    def blank(end: int) -> None:
+        out.append("".join(ch if ch == "\n" else " " for ch in text[i:end]))
+        return None
+
+    while i < n:
+        ch = text[i]
+        two = text[i:i + 2]
+        if two == "//":
+            end = text.find("\n", i)
+            end = n if end < 0 else end
+            keep(end)
+            i = end
+        elif two == "/*":
+            end = text.find("*/", i + 2)
+            end = n if end < 0 else end + 2
+            keep(end)
+            i = end
+        elif ch == "@" and text[i + 1:i + 2] == '"':
+            end = i + 2
+            while end < n:
+                if text[end:end + 2] == '""':
+                    end += 2
+                    continue
+                if text[end] == '"':
+                    end += 1
+                    break
+                end += 1
+            blank(end)
+            i = end
+        elif text.startswith('"""', i):
+            end = text.find('"""', i + 3)
+            end = n if end < 0 else end + 3
+            blank(end)
+            i = end
+        elif ch == '"':
+            end = i + 1
+            while end < n:
+                if text[end] == "\\":
+                    end += 2
+                    continue
+                if text[end] == '"':
+                    end += 1
+                    break
+                end += 1
+            blank(end)
+            i = end
+        elif ch == "'":
+            end = i + 1
+            while end < n and text[end] != "'" and text[end] != "\n":
+                if text[end] == "\\":
+                    end += 2
+                    continue
+                end += 1
+            if end < n and text[end] == "'":
+                end += 1
+            blank(end)
+            i = end
+        else:
+            blank(i + 1)
+            i += 1
+    return "".join(out)
+
+
+def _blame_map(repo: str, rel: str, cache: dict[str, dict[int, str]]) -> dict[int, str]:
+    """citing line number -> sha of the commit that wrote that line."""
+    if rel not in cache:
+        m: dict[int, str] = {}
+        proc = subprocess.run(
+            ["git", "blame", "--line-porcelain", "--", rel],
+            cwd=repo, capture_output=True, text=True, env=md_gate.git_env(),
+        )
+        sha = lineno = None
+        for raw in proc.stdout.splitlines():
+            head = raw.split(" ")
+            if len(head) >= 3 and len(head[0]) == 40 and head[1].isdigit() and head[2].isdigit():
+                sha, lineno = head[0], int(head[2])
+            elif raw.startswith("\t") and sha is not None and lineno is not None:
+                m[lineno] = sha
+        cache[rel] = m
+    return cache[rel]
+
+
+def _lines_at(repo: str, rev: str, rel: str, cache: dict[tuple[str, str], list[str]]) -> list[str] | None:
+    """Stripped lines of `rel` at `rev`, or None when it did not exist there."""
+    key = (rev, rel)
+    if key not in cache:
+        proc = subprocess.run(
+            ["git", "show", f"{rev}:{rel}"], cwd=repo, capture_output=True, text=True,
+            env=md_gate.git_env(),
+        )
+        # A path absent at that rev makes git exit non-zero with output on
+        # stderr. That is the "the file was added later" case, not drift, and it
+        # must not read as an empty file whose every line is blank.
+        cache[key] = None if proc.returncode != 0 else [l.strip() for l in proc.stdout.splitlines()]
+    return cache[key]
+
+
+def repo_is_shallow(repo: str) -> bool:
+    """True when the clone has truncated history.
+
+    This is not a hypothetical. The first CI run of TEST-CITE-DRIFT did exactly
+    this: `actions/checkout` defaults to `fetch-depth: 1`, `git blame` then
+    attributes every line to the shallow boundary commit, and the rule's
+    comparison becomes HEAD-versus-HEAD. Measured on that run: 21 findings
+    instead of 87, with no diagnostic — the mechanical classes still worked, so
+    the build stayed green while the only rule that catches the class went
+    blind.
+
+    A rule that cannot see is worse than no rule, because nothing turns red. So
+    the gate refuses to run the anchored comparison on a truncated clone and
+    says so, instead of reporting the smaller number as if it were the whole
+    truth. `docs.yml` sets `fetch-depth: 0` for the same reason.
+    """
+    proc = subprocess.run(
+        ["git", "rev-parse", "--is-shallow-repository"],
+        cwd=repo, capture_output=True, text=True, env=md_gate.git_env(),
+    )
+    return proc.returncode == 0 and proc.stdout.strip() == "true"
+
+
+def check_cite_drift(
+    repo: str, by_base: dict[str, list[str]]
+) -> tuple[int, dict[str, list[tuple[str, str, int]]]]:
+    """Return (citations seen, {citing file: [(code, message, line), ...]}).
+
+    A DISJUNCTION, per citation site (#947, shaped as #937 settled it):
+
+        the two sides agree                              -> silent
+        the two sides disagree AND the site is RECORDED   -> silent
+        the two sides disagree and no record              -> TEST-CITE-DRIFT
+        a record exists but its site no longer drifts      -> TEST-CITE-RECORD-STALE
+        a record exists with no quoted reason              -> TEST-CITE-RECORD-NOREASON
+
+    The second clause is what makes the form non-degenerate. A record is not a
+    mute button: it names one citing line, it must say why in a quoted label,
+    and the moment the citation is repaired the record goes RED until it is
+    deleted. So a record can always be deleted and therefore can never be
+    silently wrong about the present.
+
+    Mechanical facts come first (unresolved / past EOF / blank), because they
+    are free and they are what the rule would have been without the anchor.
+
+    Keyed by the CITING file, not the target: a red run has to point at the
+    line someone has to edit, and the whole defect is that a reader following
+    a stale number lands somewhere that is not the prose.
+    """
+    seen = 0
+    problems: dict[str, list[tuple[str, str, int]]] = defaultdict(list)
+    # Reported once, against no citing file, because it is a statement about the
+    # REPOSITORY and not about any sentence in it.
+    if repo_is_shallow(repo):
+        problems["(repository)"].append(
+            (
+                "TEST-CITE-NO-HISTORY",
+                "the clone is shallow, so TEST-CITE-DRIFT cannot compare a "
+                "citation against the commit that wrote it and will report "
+                "nothing. Re-run with full history (actions/checkout: "
+                "fetch-depth: 0). The mechanical TEST-CITE-* results below are "
+                "still valid; the anchored ones are absent, not zero.",
+                0,
+            )
+        )
+    blame_cache: dict[str, dict[int, str]] = {}
+    hist_cache: dict[tuple[str, str], list[str] | None] = {}
+    head_cache: dict[str, list[str]] = {}
+
+    for rel in md_gate.tracked_cs(repo):
+        if not rel.startswith(TEST_CITATION_SCOPE):
+            continue
+        try:
+            with open(os.path.join(repo, rel), encoding="utf-8", errors="replace") as fh:
+                body = fh.read()
+        except OSError:
+            continue
+        prose = comments_only(body)
+        if ":" not in prose:
+            continue
+        blames = _blame_map(repo, rel, blame_cache)
+        records, record_spans = drift_records(prose)
+        # The record's own `File.cs:91` is not a claim about the tree — it is
+        # the bookkeeping that records one. Masked before CITATION runs, so the
+        # population is the citations a human wrote.
+        prose = mask_spans(prose, record_spans)
+        # Every record this file carries, so the stale check at the end can tell
+        # "excused a real finding" from "excusing nothing at all".
+        used: set[tuple[str, int]] = set()
+
+        for m in CITATION.finditer(prose):
+            target, spec = m.group(1), m.group(2)
+            doc_line = prose.count("\n", 0, m.start()) + 1
+            seen += 1
+            full, kind = resolve_citation(target, repo, by_base, rel)
+            ranges = parse_ranges(spec)
+
+            if full is None:
+                code = "TEST-CITE-AMBIGUOUS" if kind == "ambiguous" else "TEST-CITE-MISSING"
+                detail = (
+                    f"{len(by_base.get(target, []))} tracked files share this name"
+                    if kind == "ambiguous"
+                    else "no such file in the tree"
+                )
+                # An unresolvable site has no line to quote, so the fingerprint
+                # is the verdict itself. It goes stale the moment the file
+                # appears, which is the direction that matters.
+                verdict = f"ambiguous:{len(by_base.get(target, []))}" if kind == "ambiguous" else "unresolved"
+                excused = False
+                for start, _ in ranges:
+                    rec = records.get((target, start))
+                    if rec and rec[2] and rec[1] == verdict:
+                        used.add((target, start))
+                        excused = True
+                if not excused:
+                    problems[rel].append((code, f"{target}:{spec} — {detail}", doc_line))
+                continue
+            rel_target = os.path.relpath(full, repo)
+            if rel_target not in head_cache:
+                try:
+                    with open(full, encoding="utf-8", errors="replace") as fh:
+                        head_cache[rel_target] = [l.strip() for l in fh.read().splitlines()]
+                except OSError:
+                    head_cache[rel_target] = []
+            head = head_cache[rel_target]
+            for start, end in ranges:
+                if start > len(head):
+                    problems[rel].append(
+                        ("TEST-CITE-EOF", f"{target}:{start} — file has {len(head)} lines", doc_line)
+                    )
+                    continue
+                if head[start - 1] == "":
+                    key = (target, start, doc_line)
+                    rec = records.get((target, start))
+                    if rec and rec[2] and rec[1] == "":
+                        used.add((target, start))
+                    else:
+                        problems[rel].append(
+                            ("TEST-CITE-BLANK", f"{target}:{start} — the line is blank", doc_line)
+                        )
+                    continue
+
+            # The anchored comparison — the two sides. Only for a citation whose
+            # author is known and whose target existed when they wrote it.
+            sha = blames.get(doc_line)
+            # `git blame` attributes an uncommitted line to the null oid, all
+            # zeros. That is not an author, so there is no second side to read.
+            if not sha or set(sha) == {"0"}:
+                # One-sided: without an author there is no second side to read,
+                # so the file side is never compared against anything. Reported
+                # rather than skipped, because a silent `continue` here is a
+                # hole shaped exactly like the one this rule closes.
+                problems[rel].append(
+                    ("TEST-CITE-UNANCHORED",
+                     f"{target}:{spec} — no commit is attributed to this line, so "
+                     f"there is nothing to compare it against", doc_line)
+                )
+                continue
+            was = _lines_at(repo, sha, rel_target, hist_cache)
+            if was is None:
+                problems[rel].append(
+                    ("TEST-CITE-UNANCHORED",
+                     f"{target}:{spec} — the target did not exist when {sha[:8]} "
+                     f"wrote this citation, so there is no prior side", doc_line)
+                )
+                continue
+            for start, _end in ranges:
+                if start > len(was):
+                    problems[rel].append(
+                        ("TEST-CITE-UNANCHORED",
+                         f"{target}:{start} — past the end of the file as {sha[:8]} "
+                         f"left it ({len(was)} lines); the citation named a line "
+                         f"that did not exist when it was written", doc_line)
+                    )
+                    continue
+                before = was[start - 1]
+                after = head[start - 1]
+                if before == after:
+                    continue
+                rec = records.get((target, start))
+                # Compared against `truncate(after)`, not the raw line: the
+                # record holds the same rendering the gate prints, so a reader
+                # can diff the two by eye instead of trusting that they match.
+                if rec and rec[2] and rec[1] == fingerprint(after):
+                    used.add((target, start))
+                    continue
+                problems[rel].append(
+                    (
+                        "TEST-CITE-DRIFT",
+                        f"{target}:{start} — {sha[:8]} wrote it over "
+                        f"`{truncate(before)}`; that line now reads "
+                        f"`{fingerprint(after)}`",
+                        doc_line,
+                    )
+                )
+
+        # A record that excused nothing. This is the clause that stops the form
+        # from decaying into #847's table: a record whose site agrees again has
+        # to be DELETED, and until it is, the gate is red on the record itself.
+        for (rtarget, rline), (rwhere, rnow, rwhy) in sorted(
+            records.items(), key=lambda kv: kv[1][0]
+        ):
+            if (rtarget, rline) in used:
+                continue
+            if not rwhy:
+                problems[rel].append(
+                    ("TEST-CITE-RECORD-NOREASON",
+                     f"{rtarget}:{rline} — this record carries no quoted reason, so "
+                     f"it cannot say which disagreement it is excusing", rwhere)
+                )
+                continue
+            problems[rel].append(
+                ("TEST-CITE-RECORD-STALE",
+                 f"{rtarget}:{rline} — recorded with now=\"{rnow}\" [{rwhy}], but "
+                 f"the citation and the file no longer disagree that way. Touching "
+                 f"either side of the pair retires the record; delete it and, if "
+                 f"the divergence is real, write a new one.", rwhere)
+            )
+    return seen, problems
+
+
+def truncate(s: str, width: int = 58) -> str:
+    """One-line, width-capped rendering of a line of code for a message."""
+    s = " ".join(s.split())
+    return s if len(s) <= width else s[: width - 1] + "…"
+
+
+def fingerprint(s: str) -> str:
+    """The record's `now=` value for a cited line holding `s`.
+
+    `truncate`, then `"` folded to `'`. C# is full of double quotes — an
+    interpolated string on the very line a citation names is ordinary — and the
+    record quotes its fingerprint in double quotes, so an unfolded value would
+    end the field at the first inner quote and silently parse as a DIFFERENT,
+    shorter fingerprint. That is the worst possible failure for a field whose
+    whole job is to be exact: it would mismatch forever and the finding could
+    never be recorded.
+
+    Defined once and used by BOTH the comparison and the reported message, so
+    the string a reader copies into a record is the string the gate compares
+    against, by construction rather than by agreement.
+    """
+    return truncate(s).replace('"', "'")
 
 
 def repo_root() -> str:
@@ -1258,6 +1925,12 @@ class Scan:
         self.count_docs = 0
         self.api_names = 0
         self.api_docs = 0
+        # `file:line` citations inside tests/**/*.cs prose (#947). A separate
+        # population from `citations`, which counts markdown only, because the
+        # two have nothing in common but the regex: different files, different
+        # authors, and — for the drift rule — a different question.
+        self.test_cites = 0
+        self.test_cite_files = 0
         self.hits: dict[str, list[tuple[str, str, int]]] = defaultdict(list)
 
     @property
@@ -1389,6 +2062,19 @@ def scan(repo: str, verbose: bool) -> Scan:
         )
         if verbose:
             print(f"  {rel}: {cites + table_cites} citations, {names} type names, {rows} table rows")
+
+    # The sixth shape (#947). OUTSIDE the markdown loop and outside the
+    # `normative` gate on purpose: `tests/**/*.cs` is not a document that could
+    # carry a `Status: normative` banner, so putting this behind that self-
+    # selector would scope it to nothing — the same scoping accident #922's
+    # design causes for every test file, which is the whole of this issue.
+    test_seen, test_problems = check_cite_drift(repo, by_base)
+    result.test_cites = test_seen
+    result.test_cite_files = len(
+        [r for r in md_gate.tracked_cs(repo) if r.startswith(TEST_CITATION_SCOPE)]
+    )
+    for rel, probs in test_problems.items():
+        result.hits.setdefault(rel, []).extend(probs)
     return result
 
 
@@ -2186,6 +2872,303 @@ def self_test() -> int:
         code == 0, out.strip()[-400:],
     )
 
+    # -----------------------------------------------------------------------
+    # #947 — the sixth shape: a `file:line` in a TEST's prose.
+    #
+    # These need history, which `make_fixture` does not create (it stops at
+    # `git add`), so they are the first cases built with `commit_fixture`. Each
+    # one writes the citation, commits, moves the target's lines, commits
+    # again — the exact two-point shape the rule compares across.
+    # -----------------------------------------------------------------------
+    target_v1 = "namespace Demo;\npublic sealed class Target\n{\n    public int Keep = 1;\n}\n"
+    # Same file, two lines inserted at the top. `_tokenTracker` in the repo's
+    # real case; `Keep` here. Line 4 was `Keep`, now line 4 is `{`.
+    target_v2 = "// inserted\n// inserted\nnamespace Demo;\npublic sealed class Target\n{\n    public int Keep = 1;\n}\n"
+    citing = (
+        "namespace Demo.Tests;\n"
+        "public sealed class Cites\n{\n"
+        "    // the field is assigned at Target.cs:4 and read nowhere\n"
+        "    public void Check() { }\n"
+        "}\n"
+    )
+
+    def run_history(v1: str, v2: str, citing_text: str, *args: str) -> tuple[int, str]:
+        """Two commits, one citation; returns the gate's verdict."""
+        root = md_gate.make_fixture(
+            "check-doc-cites.py",
+            {**live, "src/Demo/Target.cs": v1, "tests/Demo/Cites.cs": citing_text},
+        )
+        md_gate.commit_fixture(root, "fixture: baseline")
+        # Second commit: the target grows ABOVE the cited line. Nothing in the
+        # citing file changed, so its blame still points at the first commit —
+        # which is the reference the rule needs.
+        with open(os.path.join(root, "src/Demo/Target.cs"), "w", encoding="utf-8") as fh:
+            fh.write(v2)
+        subprocess.run(["git", "add", "-A"], cwd=root, check=True, env=md_gate.git_env())
+        md_gate.commit_fixture(root, "fixture: target grows above the cited line")
+        return md_gate.run_gate(root, "check-doc-cites.py", *args)
+
+    code, out = run_history(target_v1, target_v2, citing)
+    st.expect(
+        "#947: a test citation whose line now names different code fails",
+        code == 1 and "TEST-CITE-DRIFT" in out, out.strip()[-500:],
+    )
+
+    # -----------------------------------------------------------------------
+    # THE DISJUNCTION, AND PROOF THAT IT DOES NOT DEGENERATE (#937's shape)
+    #
+    #     the two sides agree                            -> silent
+    #     they disagree AND the site is RECORDED          -> silent
+    #     they disagree and nothing is recorded           -> DRIFT
+    #     a record exists but its site no longer drifts   -> RECORD-STALE
+    #     a record exists with no quoted reason           -> RECORD-NOREASON
+    #
+    # The last two are what separate this from #847's rejected table. Each of
+    # the four cases below is a ONE-SIDED change — touch one half of the pair
+    # and leave the other — and each must be red. A form that only ever silences
+    # would pass all four.
+    # -----------------------------------------------------------------------
+    RECORD = (
+        '// check-doc-cites: record-drift Target.cs:4 now="'
+        # Derived from the fixture, never hand-typed: a test that types its own
+        # fingerprint is a test that can pass for the wrong reason, and this one
+        # did exactly that on its first run.
+        + fingerprint(target_v2.splitlines()[3].strip())
+        + '" [#947: deferred to the owner] -->\n'
+    )
+    citing_with_record = (
+        "namespace Demo.Tests;\n"
+        "public sealed class Cites\n{\n"
+        "    // the field is assigned at Target.cs:4 and read nowhere\n"
+        + RECORD +
+        "    public void Check() { }\n"
+        "}\n"
+    )
+
+    def run_recorded(target_now: str, citing_text: str, *args: str) -> tuple[int, str]:
+        root = md_gate.make_fixture(
+            "check-doc-cites.py",
+            {**live, "docs/NORM.md": clean_norm, "src/Demo/Target.cs": target_v1,
+             "tests/Demo/Cites.cs": citing_text},
+        )
+        md_gate.commit_fixture(root, "fixture: baseline, with the record")
+        if target_now != target_v1:
+            with open(os.path.join(root, "src/Demo/Target.cs"), "w", encoding="utf-8") as fh:
+                fh.write(target_now)
+            subprocess.run(["git", "add", "-A"], cwd=root, check=True, env=md_gate.git_env())
+            md_gate.commit_fixture(root, "fixture: target moves")
+        return md_gate.run_gate(root, "check-doc-cites.py", *args)
+
+    code, out = run_recorded(target_v2, citing_with_record)
+    st.expect(
+        "#947: a recorded divergence is GREEN — this is the whole point of the "
+        "form, and it is what the previous shape could not be",
+        code == 0 and "TEST-CITE-DRIFT" not in out, out.strip()[-500:],
+    )
+
+    # ONE-SIDED CHANGE #1: repair the citation, leave the record. The record is
+    # now excusing nothing, so it must go red until it is deleted. Without this
+    # a record is permanent, and a permanent record is a mute button.
+    citing_repaired = citing_with_record.replace(
+        "assigned at Target.cs:4", f"assigned at Target.cs:{len(target_v1.splitlines())}"
+    )
+    code, out = run_recorded(target_v1, citing_repaired)
+    st.expect(
+        "#947: ONE-SIDED CHANGE (citation repaired, record kept) is red — the "
+        "record retires",
+        code == 1 and "TEST-CITE-RECORD-STALE" in out, out.strip()[-500:],
+    )
+
+    # ONE-SIDED CHANGE #2: leave the citation, move the target AGAIN so the
+    # line reads something else. The site is unchanged, so a record keyed on the
+    # site alone would go on excusing a divergence nobody has looked at since.
+    # The `now=` fingerprint is what catches this.
+    target_v3 = "// moved\n// moved\n// moved\n" + target_v2
+    code, out = run_recorded(target_v3, citing_with_record)
+    st.expect(
+        "#947: ONE-SIDED CHANGE (target moved again, record kept) is red — the "
+        "fingerprint pins one divergence, not one line number",
+        code == 1 and "TEST-CITE-DRIFT" in out, out.strip()[-500:],
+    )
+
+    # A record naming a DIFFERENT line than the prose cites is a record for a
+    # different fact, and must not silence this one.
+    wrong_line = citing_with_record.replace("Target.cs:4 now=", "Target.cs:5 now=")
+    code, out = run_recorded(target_v2, wrong_line)
+    st.expect(
+        "#947: a record naming a different LINE does not silence this one",
+        code == 1 and "TEST-CITE-DRIFT" in out, out.strip()[-500:],
+    )
+
+    # Reason-mandatory, like the two waivers above.
+    no_reason = citing_with_record.replace('" [#947: deferred to the owner] -->', '" -->')
+    code, out = run_recorded(target_v2, no_reason)
+    st.expect(
+        "#947: a record with no quoted reason is NOT honoured",
+        code == 1 and "TEST-CITE-DRIFT" in out, out.strip()[-500:],
+    )
+    st.expect(
+        "#947: ... and it says so, rather than passing quietly",
+        code == 1 and "TEST-CITE-RECORD-NOREASON" in out, out.strip()[-500:],
+    )
+
+    # The record must not become a citation of its own. A record NAMES
+    # `Target.cs:4`, so without masking the population grows by one per record
+    # and the rule ends up checking its own bookkeeping.
+    code, out = run_recorded(target_v2, citing_with_record)
+    st.expect(
+        "#947: a record does not count itself as a citation — otherwise the "
+        "population and the floor both drift",
+        "anchored 1 `file:line` citations" in out, out.strip()[-500:],
+    )
+
+    # The case the whole issue turns on. The cited line still EXISTS, still
+    # holds code, still resolves — and is the wrong code. A fence that asked
+    # only "is there code there" is green on exactly this fixture.
+    code, out = run_history(target_v1, target_v2, citing)
+    st.expect(
+        "#947: the finding is not reachable by asking whether the line has code "
+        "(it does — the rule reports DRIFT, not BLANK)",
+        code == 1 and "TEST-CITE-BLANK" not in out and "TEST-CITE-DRIFT" in out,
+        out.strip()[-500:],
+    )
+
+    # Unmoved target: the same citation against a file that never moved. This
+    # is the case that makes the rule a gate rather than a tripwire — if the
+    # comparison were "did anything change in the repo", this would fail too.
+    root = md_gate.make_fixture(
+        "check-doc-cites.py",
+        {**live, "docs/NORM.md": clean_norm, "src/Demo/Target.cs": target_v1,
+         "tests/Demo/Cites.cs": citing},
+    )
+    md_gate.commit_fixture(root, "fixture: baseline")
+    os.makedirs(os.path.join(root, "docs"), exist_ok=True)
+    with open(os.path.join(root, "docs/NOTE.md"), "w", encoding="utf-8") as fh:
+        fh.write("# Note\n\nNot normative.\n")
+    subprocess.run(["git", "add", "-A"], cwd=root, check=True, env=md_gate.git_env())
+    md_gate.commit_fixture(root, "fixture: unrelated change")
+    code, out = md_gate.run_gate(root, "check-doc-cites.py")
+    st.expect(
+        "#947: an unmoved citation passes — the rule compares, it does not "
+        "complain that the repo changed",
+        code == 0, out.strip()[-700:],
+    )
+
+    # A citation in a test's STRING DATA is not a claim about this repo. The
+    # repo's own case is `PanelExtractorsTests.cs:358`, which builds
+    # `"src/a.cs:12 CS0246: type not found"` as a fixture for a parser.
+    data_citing = (
+        "namespace Demo.Tests;\n"
+        "public sealed class Synth\n{\n"
+        "    // a synthetic diagnostic, quoted as data\n"
+        "    public string Msg = \"Target.cs:4 CS0246: type not found\";\n"
+        "}\n"
+    )
+    root = md_gate.make_fixture(
+        "check-doc-cites.py",
+        {**live, "docs/NORM.md": clean_norm, "src/Demo/Target.cs": target_v1,
+         "tests/Demo/Synth.cs": data_citing},
+    )
+    md_gate.commit_fixture(root, "fixture: baseline")
+    code, out = md_gate.run_gate(root, "check-doc-cites.py")
+    st.expect(
+        "#947: a `file:line` inside a test's string literal is data, not a claim",
+        code == 0 and "TEST-CITE" not in out, out.strip()[-500:],
+    )
+    st.expect(
+        "#947: ... and it is EXCLUDED, not merely un-reported: the count says "
+        "zero, so the exclusion cannot be implemented by matching everything "
+        "and staying quiet",
+        "anchored 0 `file:line` citations" in out, out.strip()[-500:],
+    )
+
+    # ... and the counterpart: a real comment citation IS counted, so the case
+    # above is not passing because the rule stopped reading test files.
+    mixed = (
+        "namespace Demo.Tests;\n"
+        "public sealed class Mixed\n{\n"
+        "    // see Target.cs:4\n"
+        "    public string Msg = \"Target.cs:4 CS0246: type not found\";\n"
+        "}\n"
+    )
+    root = md_gate.make_fixture(
+        "check-doc-cites.py",
+        {**live, "docs/NORM.md": clean_norm, "src/Demo/Target.cs": target_v1,
+         "tests/Demo/Mixed.cs": mixed},
+    )
+    md_gate.commit_fixture(root, "fixture: baseline")
+    code, out = md_gate.run_gate(root, "check-doc-cites.py", "--min-test-cites", "1")
+    st.expect(
+        "#947: the comment citation in the same file IS counted — one file, one "
+        "comment cite + one string cite, and the count is 1",
+        code == 0 and "anchored 1 `file:line` citations" in out, out.strip()[-500:],
+    )
+
+    # A citation past EOF and one on a blank line: the two mechanical classes.
+    # Kept because they were the whole rule before the history anchor existed,
+    # and a rule that is superseded rather than deleted still has to work.
+    eof_citing = (
+        "namespace Demo.Tests;\npublic sealed class Eof\n{\n"
+        "    // see Target.cs:999\n    public void Check() { }\n}\n"
+    )
+    root = md_gate.make_fixture(
+        "check-doc-cites.py",
+        {**live, "docs/NORM.md": clean_norm, "src/Demo/Target.cs": target_v1,
+         "tests/Demo/Eof.cs": eof_citing},
+    )
+    md_gate.commit_fixture(root, "fixture: baseline")
+    code, out = md_gate.run_gate(root, "check-doc-cites.py")
+    st.expect(
+        "#947: a citation past the end of the file still fails",
+        code == 1 and "TEST-CITE-EOF" in out, out.strip()[-500:],
+    )
+
+    # The floor: a fixture with no tests/ at all must not trip it, and a
+    # narrowed scan must. Same opt-in discipline as --min-api/--min-counts.
+    code, out = run(
+        {**live, "docs/NORM.md": clean_norm, "src/Demo/Target.cs": target_v1,
+         "tests/Demo/Cites.cs": citing},
+        "--min-test-cites", "5",
+    )
+    st.expect(
+        "#947: `--min-test-cites` fails when the tests/ citation count shrinks",
+        code == 1 and "floor" in out, out[-400:],
+    )
+
+    # The failure this rule actually made on its first CI run, reproduced on
+    # purpose. A shallow clone cannot answer "what did this line mean when the
+    # citation was written", and the first version of the rule reported the
+    # smaller number as if it were the whole truth: 21 findings instead of 87,
+    # build green, anchored rule silently blind. The gate must now REFUSE rather
+    # than under-report, which is what this case pins.
+    shallow = subprocess.run(
+        # `file://` is REQUIRED and not decorative: git ignores `--depth` on a
+        # plain local-path clone (it hardlinks the object store instead), so
+        # this would produce a FULL clone and the case would assert nothing.
+        ["git", "clone", "--depth", "1", "--quiet",
+         "file://" + os.path.abspath(root), root + "-shallow"],
+        capture_output=True, text=True, env=md_gate.git_env(),
+    )
+    if shallow.returncode != 0:
+        st.expect(
+            "#947: a shallow clone of the fixture is refused rather than "
+            "silently under-reported",
+            False, shallow.stderr.strip()[-300:],
+        )
+    else:
+        code, out = md_gate.run_gate(root + "-shallow", "check-doc-cites.py")
+        st.expect(
+            "#947: a shallow clone reports TEST-CITE-NO-HISTORY instead of "
+            "quietly dropping the anchored rule",
+            code == 1 and "TEST-CITE-NO-HISTORY" in out, out.strip()[-500:],
+        )
+        st.expect(
+            "#947: ... and says the anchored findings are ABSENT, not zero — a "
+            "smaller number and a different number are not the same claim",
+            "absent, not zero" in out, out.strip()[-500:],
+        )
+        shutil.rmtree(root + "-shallow", ignore_errors=True)
+
     return st.finish()
 
 
@@ -2210,6 +3193,13 @@ def main() -> int:
         default=0,
         help="fail unless at least this many `## Public API` type names were examined "
         "in samples/plugins/*/README.md (0 = off)",
+    )
+    ap.add_argument(
+        "--min-test-cites",
+        type=int,
+        default=0,
+        help="fail unless at least this many `file:line` citations were examined "
+        "in tests/**/*.cs prose (#947; 0 = off)",
     )
     ap.add_argument(
         "--self-test",
@@ -2237,6 +3227,11 @@ def main() -> int:
     print(
         f"and checked {result.api_names} `## Public API` type names in "
         f"{result.api_docs} sample README(s) (#794: names no tree declares)"
+    )
+    print(
+        f"and anchored {result.test_cites} `file:line` citations in tests/**/*.cs "
+        f"on the commit that wrote each one (#947: a number that still resolves "
+        f"can still name the wrong line)"
     )
 
     # Two calls, one per unit, so a parser that silently stops matching is
@@ -2282,6 +3277,20 @@ def main() -> int:
             "documents whose stated total was compared to their rows",
             1,
             args.min_counts,
+        )
+    # Same discipline, and the same reason it is opt-in: a fixture with no
+    # tests/ directory would exit 1 on this floor and prove nothing about
+    # TEST-CITE-DRIFT. `--min-test-cites 1` is what says the rule is still being
+    # asked of something — without it, a `CITATION` regex that stopped matching
+    # .cs files would be indistinguishable from a repo that cites nothing.
+    if args.min_test_cites > 0:
+        problems += md_gate.require_non_vacuous(
+            "doc-cites/test-drift",
+            result.test_cite_files,
+            result.test_cites,
+            "tests/**/*.cs file:line citations",
+            1,
+            args.min_test_cites,
         )
 
     if result.violations:

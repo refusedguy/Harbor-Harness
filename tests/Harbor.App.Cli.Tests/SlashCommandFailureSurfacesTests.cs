@@ -253,6 +253,7 @@ public class SlashCommandFailureSurfacesTests
         // ("Non-interactive input or setup aborted."), so the wizard fails for
         // real without a fake. Its Result is consumed on the boot path
         // (ReplRunner.cs:150); on the slash path it used to be returned into the
+        // check-doc-cites: record-drift ReplRunner.cs:150 now="await _renderer.WriteLineAsync($'Failed: {configResult.Er…" [#947: written over `{`; repair deferred to the owner's symbol-rename decision] -->
         // dispatcher and dropped, leaving the prompts with no ending.
         var lines = await DispatchAsync("/setup", new EmptyStore());
 

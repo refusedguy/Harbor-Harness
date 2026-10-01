@@ -74,6 +74,7 @@ public class ResultMaybeSignatureTests
     ///     Unwrapping a <c>Maybe&lt;T&gt;</c> back to a nullable reference is
     ///     <c>m.HasValue ? m.Value : null</c> — the pattern
     ///     <c>src/Harbor.Lsp/LspServerSession.cs:158</c> already uses. Do
+    // check-doc-cites: record-drift src/Harbor.Lsp/LspServerSession.cs:158 now="new LspWire.TextDocumentCapabilities(new LspWire.SyncCapa…" [#947: written over `return location.HasValue ? location.Valu`; repair deferred to the owner's symbol-rename decision] -->
     ///     <b>not</b> reach for <c>.AsNullable()</c>: in 3.7.0 it is declared
     ///     <c>AsNullable&lt;T&gt;(ref Maybe&lt;T&gt;) where T : struct</c>, so it does
     ///     not apply to a reference-type <c>T</c> at all and the build rejects it

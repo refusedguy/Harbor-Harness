@@ -138,6 +138,7 @@ public sealed class AgentStateContractRules
     public async Task FabricationScan_FlagsTheSpellingThatShipped()
     {
         // Verbatim on purpose: this is DefaultAgent.cs:119 exactly as it shipped,
+        // check-doc-cites: record-drift DefaultAgent.cs:119 now="" [#947: cited line is blank; repair deferred to the owner's decision] -->
         // rewritten only into the form the scanner takes. A miss means rule 2 is
         // inert and its passing on the real tree means nothing.
         const string Shipped = """

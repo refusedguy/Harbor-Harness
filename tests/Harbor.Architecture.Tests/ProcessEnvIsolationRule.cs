@@ -19,6 +19,7 @@
 // -------------------------------------
 // Read from TUnit 1.61.0's scheduler, not from the XML docs.
 // `TestScheduler.ExecuteAllPhasesAsync` (TestScheduler.cs:194-219) starts the
+// check-doc-cites: record-drift TestScheduler.cs:194 now="unresolved" [no tracked file, and none in git history: the citation names a DEPENDENCY's source (TUnit / CSharpFunctionalExtensions), which no rule in this repo can resolve] -->
 // unconstrained `Parallel` bucket and the `KeyedNotInParallel` bucket and joins
 // them with `RunPhasesConcurrentlyAsync` — the two buckets run CONCURRENTLY.
 // Bare `[NotInParallel]` is the only form that takes the `NotInParallelLock`

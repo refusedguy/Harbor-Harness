@@ -76,6 +76,7 @@
 // ONE OUT-OF-SCOPE PROJECT, BY PATH
 // --------------------------------
 // `src/Harbor.Terminal.Abstractions` (ViewModels/TuiViewModels.cs:117) calls
+// check-doc-cites: record-drift ViewModels/TuiViewModels.cs:117 now="unresolved" [resolver blind spot — src/Harbor.Terminal.Abstractions/ViewModels/TuiViewModels.cs is in the tree and PROJECT_ROOTS cannot reach it] -->
 // `_pricing.CalculateCost(sf.Usage)` and is NOT in the scanned set: the trees are
 // `Harbor.Ui.Framework*` and `Harbor.Tui.*`, and that project is neither. That
 // call is CORRECT — it prices with the model's real, cache-aware rate table

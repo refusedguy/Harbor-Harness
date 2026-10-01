@@ -34,6 +34,7 @@
 // The one product key ingress IS live and IS walked on every keystroke:
 //
 //   Program.cs:99/138 -> InteractiveVerb.RunAsync (:29 RunInteractiveAsync)
+// check-doc-cites: record-drift Program.cs:99 now="ambiguous:9" [9 tracked files share this basename, so the citation does not identify one] -->
 //     -> ReplRunner.RunInteractiveAsync (:124; :162 TuiMode.IsCellForgeSelected
 //        is the default backend) -> RunCellForgeAsync (:174) -> :383 RunAsync
 //     -> CellForgeReplRunner.RunAsync:369 -> ReplLifecycle.RunAsync
