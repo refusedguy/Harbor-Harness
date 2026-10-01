@@ -91,7 +91,7 @@ public sealed class LeaderKeyRouter
         }
 
         _armedAtMs = long.MinValue;
-        if (key.Key != KeyCode.Char || key.Modifiers != KeyModifiers.None)
+        if (key.Key != KeyCode.Char || !key.Modifiers.IsUnmodified())
         {
             return true; // armed but not a plain char — consume and disarm
         }

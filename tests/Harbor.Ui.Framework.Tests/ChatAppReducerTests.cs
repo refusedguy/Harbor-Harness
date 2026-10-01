@@ -205,6 +205,69 @@ public class ChatAppReducerTests
     }
 
     /// <summary>
+    ///     #773 — a failed compaction is a DEGRADATION notice, not a failed run.
+    ///     <c>CompactionBehavior.PublishFailureAsync</c> publishes the event and
+    ///     returns <c>TruncationFallback: true</c>; the turn continues on a
+    ///     truncated history. So the cell must leave "compacting" (set by the sibling
+    ///     <c>CompactionStartedEvent</c> arm) and say "running" — which is what
+    ///     <c>OnMessageStart</c> would have said a moment later anyway.
+    ///     <para>
+    ///         It must NOT be "error". <c>AgentEndEvent</c> deliberately
+    ///         preserves an "error" status past the end of a run
+    ///         (<c>Status == "error" ? "error" : "idle"</c>), so an "error" here
+    ///         would repaint a run that completed as a failed one — a worse and
+    ///         permanent lie than the transient one this issue filed.
+    ///     </para>
+    ///     <para>
+    ///         The line is what makes the truncation non-silent: without an arm
+    ///         the degradation left no trace in the transcript at all.
+    ///     </para>
+    /// </summary>
+    [Test]
+    public async Task Compaction_Failed_LeavesCompacting_WarnsAboutTruncation()
+    {
+        var started = ChatAppReducer.Update(new UiState(),
+            new ChatAppMsg.Agent(new CompactionStartedEvent("s"))).State;
+        await Assert.That(started.Chat.Status).IsEqualTo("compacting");
+
+        var failed = ChatAppReducer.Update(started,
+            new ChatAppMsg.Agent(new CompactionFailedEvent("s", "summarizer timed out"))).State;
+
+        await Assert.That(failed.Chat.Status).IsEqualTo("running")
+            .Because("the turn continues on truncated history — it is not a failed run, and "
+                   + "\"error\" would survive AgentEndEvent and misreport a completed run");
+
+        await Assert.That(failed.Chat.Lines.Length).IsEqualTo(1)
+            .Because("the truncation fallback is a silent degradation otherwise — the run continues "
+                   + "on a shorter history and the transcript never says so");
+
+        await Assert.That(failed.Chat.Lines[0].Role).IsEqualTo(ChatRole.System)
+            .Because("a compaction outcome is a system notice, matching OnCompactionCompleted");
+
+        await Assert.That(failed.Chat.Lines[0].Text).Contains("compaction failed")
+            .Because("the user has to be able to tell a degraded turn from a normal one");
+    }
+
+    /// <summary>
+    ///     The failure arm must not claim the run's outcome. #687's
+    ///     <c>SessionStatus</c> is decided by the transition that establishes it
+    ///     — here the run keeps going, and <c>AgentEndEvent</c> is the fact that
+    ///     settles it. Writing an error status here would be the projection
+    ///     judging a run it has not seen end.
+    /// </summary>
+    [Test]
+    public async Task Compaction_Failed_DoesNotTouchSessionStatus()
+    {
+        var started = ChatAppReducer.Update(new UiState(),
+            new ChatAppMsg.Agent(new CompactionStartedEvent("s"))).State;
+
+        var failed = ChatAppReducer.Update(started,
+            new ChatAppMsg.Agent(new CompactionFailedEvent("s", "summarizer timed out"))).State;
+
+        await Assert.That(failed.Chat.SessionStatus).IsEqualTo(started.Chat.SessionStatus);
+    }
+
+    /// <summary>
     ///     #653: the reducer's whole remaining job for money — copy the total the
     ///     core published, cache-aware and model-correct, and nothing else.
     /// </summary>

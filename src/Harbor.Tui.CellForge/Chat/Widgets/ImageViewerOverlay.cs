@@ -121,7 +121,7 @@ public sealed class ImageViewerOverlay
                 ZoomOut();
                 return true;
             case KeyCode.Char:
-                if ((key.Modifiers & (KeyModifiers.Ctrl | KeyModifiers.Alt | KeyModifiers.Meta)) != 0)
+                if (key.Modifiers.IsCommandModifier())
                 {
                     return false;
                 }

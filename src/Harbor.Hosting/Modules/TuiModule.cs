@@ -2,8 +2,10 @@ using System.Collections.Frozen;
 using Harbor.Hosting.Rendering;
 using Harbor.Ui.Framework.State;
 using Harbor.Abstractions.Filesystem;
+using Harbor.Abstractions.Git;
 using Harbor.Abstractions.Models;
 using Harbor.Application.Filesystem;
+using Harbor.Application.Git;
 using Harbor.Ui.Framework.Services;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -78,6 +80,18 @@ internal static class TuiModule
         // resolves neither simply gets a null loader and a panel that says so.
         services.AddSingleton<IDirectoryLister, SystemDirectoryLister>();
         services.AddSingleton<IFileTreeLoader, FileTreeLoader>();
+
+        // #666: the same shape, for git. The jump-palette panel used to fork
+        // `git worktree list --porcelain` from inside a Presentation assembly; it
+        // now asks `IGitQuery` and the spawn lives in `ProcessGitQuery`, in
+        // Application, beside BashTool and WorkspaceInspector. Registered HERE for
+        // the same reason as the file-tree seam above: the consumer is a TUI panel,
+        // so registering it in an app would leave the CLI — where CellForge is the
+        // default backend — with a null query and a palette that silently lists
+        // sessions only. Before #666 only Avalonia registered `IGitQuery`, for
+        // GitService's branch badge, and that is a different composition root with
+        // a different renderer.
+        services.AddSingleton<IGitQuery, ProcessGitQuery>();
 
         // Phase 6.3: hot-swappable renderer runtime. The pipeline owns the
         // published renderer (CAS-gated swaps), restores the UiState snapshot

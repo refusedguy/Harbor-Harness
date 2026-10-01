@@ -9,13 +9,14 @@ AgentLoop, EventBus, ToolRegistry, ProviderRegistry, compaction, system prompt b
 ## Run
 
 ```bash
-dotnet test tests/Harbor.Core.Tests
+dotnet run --project tests/Harbor.Core.Tests -c Release --no-build -- --minimum-expected-tests 1
 ```
 
 Or filter to a single test class:
 
 ```bash
-dotnet test tests/Harbor.Core.Tests --filter "FullyQualifiedName~AgentLoop"
+dotnet run --project tests/Harbor.Core.Tests -c Release --no-build -- \
+  --minimum-expected-tests 1 --treenode-filter "/*/*/AgentLoop/*"
 ```
 
 ## Layer

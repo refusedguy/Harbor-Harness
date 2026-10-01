@@ -4,7 +4,7 @@ The **composition root** for all Harbor applications. `Registration.AddHarbor(..
 
 ## Layer
 
-**Infrastructure (composition root).** Owns feature flags (`HARBOR_WITH_PLUGINS`, `HARBOR_WITH_SPECTRE_TUI`, `HARBOR_WITH_ALL_PROVIDERS`) and the fixed call-order module registration.
+**Composition Root (composition root).** The matrix gives `Harbor.Hosting` its own `CompositionRoot` layer — not Infrastructure — and that layer is unrestricted: it may reference Domain, Application, Infrastructure and Presentation alike. Owns feature flags (`HARBOR_WITH_PLUGINS`, `HARBOR_WITH_SPECTRE_TUI`, `HARBOR_WITH_ALL_PROVIDERS`) and the fixed call-order module registration.
 
 ## What's in it
 

@@ -609,7 +609,10 @@ cp TodoWritePlugin.cs ~/.harbor/plugins/   # .cs file with both Plugin + Tool cl
 > `ITuiPanelPlugin` and register through `IPanelRegistry` (see Example 5 in
 > PLUGIN_DEVELOPMENT.md). The sample is kept only so the dead route has a name.
 
-> **TODO: confirm with subagent #2** — `ITuiPanelPlugin` may be added separately.
+> The `TODO: confirm … ITuiPanelPlugin may be added separately` that used to sit
+> here is gone because it was false: `ITuiPanelPlugin` **is** added and is the
+> axis every document above points at, so the TODO contradicted the paragraph
+> directly above it.
 
 ```csharp
 // NOT REACHABLE — kept as a record of the closed route.
@@ -711,15 +714,25 @@ if (compaction.ShouldCompact(messages, model))
 }
 ```
 
-### 28. Branch a session (planned v0.6)
+### 28. Branch a session
 
 ```csharp
-// Future API:
-var branched = await store.BranchAsync(sessionId, "try-different-approach");
-// branched.ParentSessionId == sessionId
+// Harbor.Application.Sessions.SessionForkService — the ONE fork.
+// upToMessageId is an INCLUSIVE cut point; null copies the whole history.
+var forked = await new SessionForkService().ForkAsync(store, sessionId, upToMessageId);
+// forked.Value.Session.ParentSessionId == sessionId
+// forked.Value.Copied                      == messages written into the child
 ```
 
-Today: just create a new session and replay messages.
+The child is stamped with `ParentSessionId` and titled `Fork of {parent title}`, and
+copied messages keep their original ids — so a message named in the parent is
+namable in the child, and `/tree` renders the fork indented under its parent.
+
+The UI framework reaches this same service through the `ISessionForker` port
+(`Harbor.Ui.Framework.Abstractions/Forking/`, adapted by `SessionForkerAdapter` in
+the Avalonia composition root). It used to carry a hand-written second copy, which
+drifted until a desktop fork set no lineage, persisted no title and regenerated
+every copied message id — issue #670, closed by deleting the copy.
 
 ---
 

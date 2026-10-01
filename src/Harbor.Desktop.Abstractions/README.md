@@ -23,7 +23,8 @@ UI-framework-agnostic contracts shared by every Harbor desktop app
   (`JsonAppConfigStore<T>`, `JsonCommonConfigStore`) and the AOT
   `ConfigJsonContext` they need live in `Harbor.Hosting/Configuration`,
   because this project is `IsPackable` (`PackageId: Harbor.Desktop.Abstractions`)
-  and is the one project the layer matrix calls Domain. See
+  and the layer matrix calls it **Presentation** — which
+  `PresentationCapabilityRules` bars from `System.IO.File*` in any case. See
   `tests/Harbor.Architecture.Tests/DesktopAbstractionsLeafTakesNoIoRules.cs`.
 - **Messages** (`Messages/CrossVmMessages.cs`): typed cross-view-model events.
 - **Service interfaces** (`Services/`): `IDispatcherAdapter`, `IThemeService`,

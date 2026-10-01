@@ -111,6 +111,28 @@ public class MaybeAbsenceTests
         RegexOptions.Compiled);
 
     /// <summary>
+    ///     The engine file whose <c>TryTake</c> this exemption exists for, and the
+    ///     pin it has to agree with.
+    /// </summary>
+    private const string BufferSwapChainPath =
+        "src/Harbor.Tui.CellForge.Engine/Rendering/BufferSwapChain.cs";
+
+    /// <summary>
+    ///     A project name appearing inside the <see cref="NullableTryReturnExemptions"/>
+    ///     reason for <see cref="BufferSwapChainPath"/>.
+    /// </summary>
+    /// <remarks>
+    ///     Scoped to <c>Harbor\.</c>-prefixed dotted names. The reason is prose, so the
+    ///     matcher cannot be "any capitalised word" — that would fire on <c>#435</c>,
+    ///     <c>CSharpFunctionalExtensions</c> and <c>BufferPair</c>. A dotted name starting
+    ///     with the repo's own assembly prefix is the only shape in this text that means
+    ///     "a project in the reference closure".
+    /// </remarks>
+    private static readonly Regex ProjectNameInProse = new(
+        @"\bHarbor\.[A-Za-z0-9_.]+",
+        RegexOptions.Compiled);
+
+    /// <summary>
     /// Files allowed to keep a <c>Try</c>-prefixed nullable return, each with
     /// the reason it is not converted yet. Adding an entry is a decision, not
     /// an oversight — the reason is printed in the failure message and
@@ -124,11 +146,16 @@ public class MaybeAbsenceTests
             + "make (#591). `TryTake` is a pure absence — one state, 'nothing pending' — so "
             + "Maybe<BufferPair> is the correct target and there is no Result axis here at all. "
             + "But the engine reaches `Maybe<T>` only TRANSITIVELY: its csproj declares zero "
-            + "PackageReference entries, and CSharpFunctionalExtensions arrives through "
-            + "Harbor.Abstractions and Harbor.Ui.Framework.State — the exact two references #435 "
-            + "deletes. Converting today picks a dependency owner without answering 'direct "
-            + "PackageReference on CSE, or a vendored Maybe<T>?' and would break the build the day "
-            + "#435 lands. Converted the moment that decision lands; the recipe is in #591. "
+            + "PackageReference entries, and CSharpFunctionalExtensions arrives through THREE "
+            + "projects — Harbor.Abstractions and Harbor.Ui.Framework.State by direct edge, plus "
+            + "Harbor.Abstractions.Contracts via Harbor.Ui.Framework.Rendering, which #435 keeps "
+            + "and only #436 removes. #789 and #591 recorded two carriers: true of the two direct "
+            + "edges, wrong about the closure, which #809 measured. The ladder is 3 today -> 1 "
+            + "after #435 -> 0 after #436, so #435 alone does NOT make the engine CSE-free, and "
+            + "a PackageReference added on the day it lands would be an answer to that open "
+            + "question nobody made deliberately. Converting today picks a dependency owner "
+            + "without answering 'direct PackageReference on CSE, or a vendored Maybe<T>?'. "
+            + "Converted the moment that decision lands; the recipe is in #591. "
             + "Conversion note for whoever does it: CSE's Maybe<T> is a STRUCT, so `?.` and "
             + "`is not { }` do not bind to its value. The single caller, "
             + "src/Harbor.Tui.CellForge/Chat/Streaming/ScreenSession.cs:142, becomes "
@@ -328,6 +355,121 @@ public class MaybeAbsenceTests
             .Because(
                 "An exemption that no longer matches is silently dead: it would let the pattern come back "
                 + "with nobody watching. Delete it, or update the reason to describe the new shape.");
+    }
+
+    /// <summary>
+    ///     The BufferSwapChain exemption reason and
+    ///     <see cref="CellForgeEngineCseOwnershipTests.PinnedCseCarriers"/> state the same
+    ///     fact — which projects hand CSharpFunctionalExtensions to the engine — and the
+    ///     reason is the copy a reader meets FIRST.
+    /// </summary>
+    /// <remarks>
+    ///     <para>
+    ///         #809 measured the closure, found the count was three rather than the two
+    ///         #789 recorded, and pinned the three in executable form. It did not correct
+    ///         the OTHER copy: this exemption's reason still says CSE arrives "through
+    ///         Harbor.Abstractions and Harbor.Ui.Framework.State — the exact two references
+    ///         #435 deletes", and that sentence is printed verbatim in
+    ///         <see cref="NullableTryReturns_AreAbsent"/>'s failure message. So the stale
+    ///         count is not a comment nobody reads — it is the text the next person is shown
+    ///         when a scan trips, and it is wrong in the one direction that matters: it tells
+    ///         the author of #435 that their slice ends the dependency, when the third carrier
+    ///         (<c>Harbor.Abstractions.Contracts</c>, reached via
+    ///         <c>Harbor.Ui.Framework.Rendering</c>) survives until #436.
+    ///     </para>
+    ///     <para>
+    ///         Nothing cross-checked them: <c>Exemptions_AreStillUsed</c> asks whether the
+    ///         row still MATCHES the pattern, never whether its reason is accurate, and the
+    ///         two files never referenced each other. This is the drift the
+    ///         <c>ExemptionReason</c> header names as deliberately out of its scope — "whether
+    ///         the reason is TRUE" — so it is not a gap in that helper, it is the one claim
+    ///         here that is mechanically checkable.
+    ///     </para>
+    /// </remarks>
+    [Test]
+    public async Task BufferSwapChainExemptionReason_NamesEveryMeasuredCseCarrier()
+    {
+        string? reason = NullableTryReturnExemptions.GetValueOrDefault(BufferSwapChainPath);
+        await Assert.That(reason).IsNotNull()
+            .Because(
+                $"{BufferSwapChainPath} must stay in NullableTryReturnExemptions while it keeps a "
+                + "Try-prefixed nullable return. Without the row this rule has nothing to grade.");
+
+        if (reason is null)
+        {
+            return;
+        }
+
+        var named = ProjectNameInProse.Matches(reason)
+            .Select(m => m.Value.TrimEnd('.'))
+            .ToHashSet(StringComparer.Ordinal);
+
+        var missing = CellForgeEngineCseOwnershipTests.PinnedCseCarriers
+            .Where(carrier => !named.Contains(carrier))
+            .OrderBy(c => c, StringComparer.Ordinal)
+            .ToArray();
+
+        await Assert.That(missing).IsEmpty()
+            .Because(
+                "This reason and CellForgeEngineCseOwnershipTests.PinnedCseCarriers are the same claim "
+                + "about which projects hand CSharpFunctionalExtensions to the engine, and the reason is "
+                + "the copy printed into the failure message. #809 measured the closure as THREE and "
+                + "pinned it; this text was left saying \"the exact two references #435 deletes\", which "
+                + "omits "
+                + nameof(HarborAbstractionsContractsCarrierNote)
+                + " — the carrier reached via Harbor.Ui.Framework.Rendering, which #435 keeps and only "
+                + "#436 removes. The ladder is 3 today -> 1 after #435 -> 0 after #436, so an author "
+                + "landing #435 who trusts this sentence sees the package still resolve, concludes it is "
+                + "needed, and adds a direct PackageReference — answering #789's open owner question as a "
+                + "side effect of a slice meant to drop two references. Name every carrier here, or fix "
+                + "the pin, but the two must not disagree.");
+    }
+
+    /// <summary>
+    ///     Anchors the third carrier in a compile-checked symbol so the sentence above
+    ///     cannot drift into naming a project that does not exist.
+    /// </summary>
+    private const string HarborAbstractionsContractsCarrierNote = "Harbor.Abstractions.Contracts";
+
+    /// <summary>
+    ///     The matcher and the reason both have to be real, or the rule above is green
+    ///     because it compared an empty set against an empty expectation.
+    /// </summary>
+    [Test]
+    public async Task CarrierProseMatcher_IsNotVacuous()
+    {
+        // The matcher finds project names in the reason as it stands today, and stays
+        // silent on the words a looser matcher would catch.
+        string? reason = NullableTryReturnExemptions.GetValueOrDefault(BufferSwapChainPath);
+        await Assert.That(reason).IsNotNull();
+
+        if (reason is null)
+        {
+            return;
+        }
+
+        var hits = ProjectNameInProse.Matches(reason).Select(m => m.Value).ToArray();
+        await Assert.That(hits.Length).IsGreaterThan(0)
+            .Because(
+                "ProjectNameInProse matched no Harbor.* name in the BufferSwapChain reason, so "
+                + "BufferSwapChainExemptionReason_NamesEveryMeasuredCseCarrier compared an empty "
+                + "named-set against three carriers and would have failed for the wrong reason — or, if "
+                + "the carrier list ever emptied, passed for none.");
+
+        // It must not fire on the non-project tokens the reason also contains.
+        foreach (string notAProject in new[] { "#435", "#436", "#591", "CSharpFunctionalExtensions", "Maybe", "BufferPair" })
+        {
+            await Assert.That(ProjectNameInProse.IsMatch(notAProject)).IsFalse()
+                .Because($"'{notAProject}' is not a project name; a matcher that reported it would be "
+                    + "matching capitalised words rather than the reference closure.");
+        }
+
+        // And the pin it grades is the one the CSE guard actually enforces.
+        await Assert.That(CellForgeEngineCseOwnershipTests.PinnedCseCarriers.Length).IsEqualTo(3)
+            .Because(
+                "The ladder this rule documents is 3 carriers today -> 1 after #435 -> 0 after #436. If "
+                + "#435 or #436 landed, the count moves and both the pin and the reason are due an edit — "
+                + "a count of 2 here means #435 landed, a count of 0 means both did.");
     }
 
     [Test]

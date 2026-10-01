@@ -206,12 +206,15 @@ public sealed class SharedSourceLinkRules
     {
         LinkItem[] links = EnumerateLinkItems();
 
-        await Assert.That(links.Length).IsEqualTo(13)
+        await Assert.That(links.Length).IsEqualTo(14)
             .Because(
-                "13 `<Compile Include>` link items: SsePump into four providers, OpenAiWire and "
+                "14 `<Compile Include>` link items: SsePump into four providers, OpenAiWire and "
                 + "OpenAiImageContent into OpenAI + OpenAiCompatible, and three files out of "
-                + "Harbor.Storage.Shared into the Jsonl and Sqlite stores. A different count means "
-                + "a link was added or removed and R2 is judging a set that is not the build's.");
+                + "Harbor.Storage.Shared into the Jsonl and Sqlite stores plus one more into Memory. "
+                + "A different count means a link was added or removed and R2 is judging a set that "
+                + "is not the build's. The fourteenth is #887's: Memory links SessionStoreErrors.cs "
+                + "alone, so all three stores share the failure texts while each store still links "
+                + "only what it has a use for — see The_Per_Project_File_Walk_Does_Not_Invent_Links.");
 
         string[] consumers = [.. links.Select(l => l.Consumer).Distinct(StringComparer.Ordinal)];
 
@@ -219,14 +222,19 @@ public sealed class SharedSourceLinkRules
         {
             "Harbor.Providers.Anthropic", "Harbor.Providers.Ollama",
             "Harbor.Providers.OpenAI", "Harbor.Providers.OpenAiCompatible",
-            "Harbor.Storage.Jsonl", "Harbor.Storage.Sqlite",
+            "Harbor.Storage.Jsonl", "Harbor.Storage.Memory", "Harbor.Storage.Sqlite",
         })
             .Because(
-                "Four providers and two storage backends link shared source. Harbor.Storage.Memory "
-                + "does not — it has no Compile item at all, which is why it hand-writes the "
-                + "SessionStoreErrors literals nine times instead of calling them. A new or "
-                + "removed consumer must be a deliberate edit to the declaration in "
-                + "FullLayerMatrixTests, not a silent csproj change.");
+                "Four providers and three storage backends link shared source. Memory joined in "
+                + "#887, when it linked SessionStoreErrors.cs and stopped hand-writing the eleven "
+                + "failure texts #764 inventoried (nine SessionNotFound, two MessageNotFound — "
+                + "#764's own list held only the first nine). It links that one file and NOT the "
+                + "folder's other two, for reasons that are semantic rather than convenient: "
+                + "SessionLockStrip is a SemaphoreSlim stripe over a store-owned dictionary where "
+                + "Memory takes lock (list) on its per-session List, and SessionStatsAggregator "
+                + "folds stats from message history which Memory does not do because it persists the "
+                + "metadata record. A new or removed consumer must be a deliberate edit to the "
+                + "declaration in FullLayerMatrixTests, not a silent csproj change.");
     }
 
     // ---- R3: the declaration matches the build -----------------------------
@@ -353,37 +361,79 @@ public sealed class SharedSourceLinkRules
     }
 
     /// <summary>
-    ///     R5 negative control — the walk must not hand a shared file to a project that does
-    ///     not link it, so R5 above cannot be satisfied by enumerating every shared file
-    ///     unconditionally.
+    ///     R5 negative control — the walk must hand a project exactly the shared files it
+    ///     declares and nothing more, so R5 above cannot be satisfied by enumerating every
+    ///     shared file for every consumer.
     /// </summary>
+    /// <remarks>
+    ///     <para>
+    ///         #887 changed this subject's shape and made the control sharper instead of
+    ///         retiring it. Memory used to be the control because it linked NOTHING from
+    ///         <c>Harbor.Storage.Shared</c>, which only showed the walk is per-PROJECT. It
+    ///         now links <c>SessionStoreErrors.cs</c> and still not the folder's other two,
+    ///         so the same subject now shows the stronger property: the walk is per-
+    ///         <c>&lt;Compile Include&gt;</c> ITEM. Neither "give every storage project every
+    ///         shared storage file" nor "give every consumer every file in the folder" can
+    ///         pass, and both would hand Memory code it does not compile.
+    ///     </para>
+    ///     <para>
+    ///         The sets are derived from the csproj link items and the folder on disk rather
+    ///         than from hard-coded file names, so adding a fourth file to the folder or a
+    ///         second link to Memory moves the expected set instead of failing on a stale
+    ///         literal in a test.
+    ///     </para>
+    /// </remarks>
     [Test]
     public async Task The_Per_Project_File_Walk_Does_Not_Invent_Links()
     {
-        // Harbor.Storage.Memory is the control precisely because it links NEITHER shared
-        // storage file: a walk that resolved every shared file for every storage project
-        // would pass R5 above while quietly giving Memory code it does not compile.
-        string[] memory = [.. RepoPaths.EnumerateCsFiles("Harbor.Storage.Memory")];
+        const string Consumer = "Harbor.Storage.Memory";
+        const string StorageShared = "Harbor.Storage.Shared";
+
+        string[] memory = [.. RepoPaths.EnumerateCsFiles(Consumer)];
 
         await Assert.That(memory.Length).IsGreaterThan(0)
             .Because(
-                "Harbor.Storage.Memory has its own sources; an empty set means the walk is not "
-                + "reading this project at all and the negative control below proves nothing.");
+                $"{Consumer} has its own sources; an empty set means the walk is not reading this "
+                + "project at all and the control below proves nothing.");
 
-        var shared = EnumerateLinkItems()
-            .Where(l => l.SharedFolder == "Harbor.Storage.Shared")
+        var declared = EnumerateLinkItems()
+            .Where(l => l.Consumer == Consumer && l.SharedFolder == StorageShared)
             .Select(l => l.Resolved)
-            .Distinct(StringComparer.Ordinal)
             .ToHashSet(StringComparer.Ordinal);
 
-        var invented = memory.Where(shared.Contains).ToList();
+        // The positive half, so the control is not satisfied by an EMPTY intersection: a walk
+        // that returned no shared file at all would trivially "invent" nothing.
+        var missing = declared
+            .Where(d => !memory.Contains(d, StringComparer.Ordinal))
+            .OrderBy(p => p, StringComparer.Ordinal)
+            .ToList();
+
+        await Assert.That(missing).IsEmpty()
+            .Because(
+                $"{Consumer} declares these <Compile Include> items from src/{StorageShared}, so "
+                + "RepoPaths.EnumerateCsFiles must return them — R5 is unsatisfiable if the walk "
+                + "ignores the links:\n"
+                + string.Join("\n", missing.Select(Path.GetFileName)));
+
+        string? dir = RepoPaths.FindProjectDir(StorageShared);
+        string[] inFolder = dir is null
+            ? []
+            : [.. Directory.GetFiles(dir, "*.cs", SearchOption.TopDirectoryOnly)];
+
+        var invented = memory
+            .Where(inFolder.Contains)
+            .Where(f => !declared.Contains(Path.GetFullPath(f)))
+            .OrderBy(p => p, StringComparer.Ordinal)
+            .ToList();
 
         await Assert.That(invented).IsEmpty()
             .Because(
-                "Harbor.Storage.Memory declares no Compile item, so no file from "
-                + "src/Harbor.Storage.Shared is compiled into it. A walk that reported one anyway "
-                + "would make every file-set rule judge Memory on code it does not contain: "
-                + string.Join(", ", invented.Select(Path.GetFileName)));
+                $"{Consumer} declares {declared.Count} <Compile Include> item(s) from "
+                + $"src/{StorageShared}, so no other file in that folder is compiled into it. A walk "
+                + "that reported one anyway would make every file-set rule judge this project on "
+                + "code it does not contain — and a walk that handed out the whole folder would "
+                + "satisfy R5 above while doing exactly that. Report only what the csproj declares:\n"
+                + string.Join("\n", invented.Select(Path.GetFileName)));
     }
 
     // ---- discovery ---------------------------------------------------------

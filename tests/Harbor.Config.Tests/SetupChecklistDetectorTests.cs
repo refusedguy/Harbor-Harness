@@ -13,6 +13,18 @@ namespace Harbor.Config.Tests;
 /// present, a stored provider key, a resolved workspace, first-run gating via
 /// the onboarded flag, and the optional provider health probe.
 /// </summary>
+/// <remarks>
+/// #823: this class writes nothing, which is exactly why it is easy to miss. It
+/// constructs an <see cref="AuthStore" />, and
+/// <c>SetupChecklistDetector.DetectAsync</c> calls
+/// <c>AuthStore.ListApiKeysAsync</c> (SetupChecklistDetector.cs:176), which
+/// enumerates the ENTIRE process environment (AuthStore.cs:140) and synthesises a
+/// provider entry for every <c>*_API_KEY</c> in it. Two classes in this assembly
+/// write exactly those variables. No assertion here can be flipped by that today —
+/// <c>ProviderKeyStored</c> is true whenever any key is present, and this test
+/// stores one — but that is a property of one assertion, not of the design.
+/// </remarks>
+[NotInParallel("process-env")]
 public sealed class SetupChecklistDetectorTests
 {
     private sealed class StubHealthCheck(Result<ProviderHealth> outcome, Exception? throws = null) : IProviderHealthCheck

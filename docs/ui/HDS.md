@@ -59,6 +59,29 @@ stricter ratchet test rejects *any* colour literal in that C# tree. `HdsThemeCat
 stays on the right side of this rule — it is an index that **reads** the dictionaries
 via `ResourceInclude`, not a second declaration of their values.
 
+## C# icon geometry — also FORBIDDEN (#755)
+
+The same rule covers the other half of the design system. A `StreamGeometry` path
+declared in `Themes/Hds/Icons.axaml` is a token like any colour, so it must not be
+re-typed into `apps/Harbor.App.Avalonia/**/*.cs` either. Two more tests in
+`ThemeTokenDuplicationGuardTests` enforce it: one rejects a value that matches a
+declared `Ic*` entry, the ratchet one rejects *any* SVG path data in that C# tree.
+
+Resolve the key through the dictionary instead — the lookup that walks merged
+dictionaries (where `Icons.axaml` lives, cascade slot `[2]`) is
+
+```csharp
+Application.Current.TryGetResource("IcFileCode", null, out object? resource)
+```
+
+`Application.Current.Resources[key]` is **not** equivalent: the direct indexer
+checks the top-level dictionary only, and every `Ic*` glyph sits in a merged one.
+
+This is not a style rule. Eight `Geometry.Parse` calls in the app's C# were
+carrying their own copies of glyphs the dictionary already declared, and two of
+them had already drifted from it: `ToastConverters`' info glyph had its dot and
+bar swapped relative to `IcInfo`, which no colour check could ever have seen.
+
 ## Palette index — `HdsThemeCatalog`
 
 `apps/Harbor.App.Avalonia/Themes/HdsThemeCatalog.cs` lists the palette names and

@@ -54,6 +54,18 @@ namespace Harbor.App.Cli.Tests;
 ///     #602 — a config the harness cannot read must be reported, not thrown on and
 ///     not silently defaulted around.
 /// </summary>
+/// <remarks>
+///     #823: the one test below clears <c>OLLAMA_API_KEY</c> in the process
+///     environment so the wizard does not demand a key for ollama. That variable
+///     is read by the product (<c>AuthStore.FromConventionalEnv</c>,
+///     <c>EnvVarAuthResolver.ResolveApiKeyAsync</c>), so the write is process
+///     state and belongs in a keyed group with the other classes here that write
+///     it. Separately: the <c>finally</c> restores <c>null</c> rather than the
+///     saved value, so a developer or CI runner that actually exports
+///     <c>OLLAMA_API_KEY</c> loses it for the rest of the process. Tracked
+///     separately; not fixed here, because the guard has nothing to say about it.
+/// </remarks>
+[NotInParallel("process-env")]
 public class ReplRunnerConfigLoadTests
 {
     /// <summary>
@@ -173,6 +185,15 @@ public class ReplRunnerConfigLoadTests
         var agent = new RecordingAgent();
         ReplRunner runner = CreateRunner(renderer, agent, new FakeAgentRegistry(TestAgents.AllowAll()), store);
 
+        // #847: the wizard's provider step reads OLLAMA_API_KEY through
+        // AuthStore.FromConventionalEnv, which derives the conventional
+        // <PROVIDER>_API_KEY name from the provider id and reads the process
+        // environment for it. Pinning it to null is what makes this test hermetic
+        // — but writing null back in the finally destroys the variable for every
+        // LATER test in this process, and the product reads it. Save what was there
+        // and put that back instead; `null` is the right value to pin, not the
+        // right value to restore.
+        string? previousOllamaKey = Environment.GetEnvironmentVariable("OLLAMA_API_KEY");
         Environment.SetEnvironmentVariable("OLLAMA_API_KEY", null);
         try
         {
@@ -191,7 +212,7 @@ public class ReplRunnerConfigLoadTests
         }
         finally
         {
-            Environment.SetEnvironmentVariable("OLLAMA_API_KEY", null);
+            Environment.SetEnvironmentVariable("OLLAMA_API_KEY", previousOllamaKey);
         }
     }
 

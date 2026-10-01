@@ -1,137 +1,114 @@
 // DiSeverityDemotionRules.cs — the guard for issue #865.
 //
-// THE DEFECT THIS GUARDS
-// ----------------------
-// `.editorconfig` demotes analyzer severities in PATH-SCOPED sections, and
-// nothing read them. Four sections did it, one reason sentence covered all
-// four, and the sentence named three of the four rules:
+// WHAT #865 IS, AND WHAT IS ALREADY GUARDED
+// -----------------------------------------
+// #865: the Avalonia block in `.editorconfig` demoted four DI rules under one
+// sentence that named three of them. DI003 — captive dependency — was covered by
+// neither the sentence nor the parenthetical that tried to enumerate the rest.
+// That is a contradiction rather than a drift: the reason was written for a
+// narrower demotion and a row was added underneath it, and nothing could say so
+// because the reason is a COMMENT.
 //
-//     # Desktop apps: relax DI rules for process-lifetime singletons
-//     # (root provider, static IServiceProvider cache, transient VMs with
-//     #  process lifetime)
-//     [apps/Harbor.App.Avalonia/**.cs]
-//     dotnet_diagnostic.DI003.severity = suggestion   <- not covered
-//     dotnet_diagnostic.DI006.severity = suggestion   <- "static IServiceProvider cache"
-//     dotnet_diagnostic.DI008.severity = suggestion   <- "transient VMs with process lifetime"
-//     dotnet_diagnostic.DI014.severity = suggestion   <- "root provider"
+// `AnalyzerSeverityScopeRules` (merged for #838) already owns the other two
+// halves of this same file: that a path-scoped section resolves to a real path
+// (`PathScopedSections_ResolveToRealPaths`), that `docs/ANALYZERS.md` accounts
+// for every path-scoped DI override, and that the set of relaxed paths is the
+// declared inventory. This file is the third half and does not repeat the other
+// two: a section can point at a real path, be documented, and still demote a
+// rule that nothing in the file says why.
 //
-// DI003 is a lifetime-GRAPH rule (a singleton or long-lived factory retaining
-// a scoped/transient service); process lifetime says nothing about it, so the
-// row granted an exception whose stated justification did not exist. Nobody
-// noticed for a year, and the reason it went unnoticed is the shape below.
+// WHY THE REASON IS INVISIBLE, WHICH IS THE WHOLE FINDING
+// -------------------------------------------------------
+// A severity demotion survives into no metadata — it is an editorconfig key. So
+// the reflection sweeps that carry the rest of this project's rules cannot reach
+// it by construction, and `ExemptionReason.cs` — the ONE place here that asks
+// "does this tolerated row state a reason?" — fixes that for five C# exemption
+// tables whose rows are VALUES. A config demotion is the sixth, and it is the one
+// with no value at all: its justification is prose above the section, which
+// `ExemptionReason`'s own header names as the defect it exists to kill
+// ("the prose explaining why the violation is tolerated lived in a `//` comment
+// above the row, which no compiler and no runtime can see").
 //
-// WHY THE REASON WAS NOT CHECKABLE, AND WHY THAT IS THE REAL FINDING
-// ------------------------------------------------------------------
-// A demotion's reason lives in a `//` comment above the rows. It is invisible
-// to the compiler, to the analyzer it demotes, and to every one of the
-// repository gates in this project — none of which read `.editorconfig` at
-// all except `CfeValueBaselineTests`, which greps for one specific diagnostic
-// id. `ExemptionReason.cs` is the ONE place in this project that answers "does
-// this tolerated row state a reason?", and its own header names this exact
-// failure:
+// So the check reads the file the compiler already reads, and asks the one
+// question nothing asks: does the row say what it authorises?
 //
-//     "the prose explaining why the violation is tolerated lived in a `//`
-//      comment above the row, which no compiler and no runtime can see"
+// THE RULE
+// --------
+//   Every severity set in a path-scoped section has its diagnostic id named in
+//   the comment that governs it — the run directly above the row if it has one,
+//   otherwise the run above the section header. Both shapes are accepted because
+//   both are readable (a reason per row, or one reason over a block of rows);
+//   what matters is only that a row never inherits a justification written for
+//   its neighbours. Inheritance is precisely the #865 shape: three rows named,
+//   a fourth silently covered by their sentence.
 //
-// …and then fixes it for FIVE tables (a baseline violation, a permanent
-// capability, a documented layer exception, a declared-but-unbound reference, a
-// plugin allowance) — none of which is a config demotion. The single check that
-// exists skipped the one permission whose row is not even a value.
+//   A row with no comment at all fails, which is the case that matters most —
+//   the row the section's header does not mention and its author did not either.
+//   The TUnit0055 block for NickConsoleExGoldenFrameTests is the live example:
+//   it set a severity to `none` for a rule it never named, under a comment
+//   arguing "no diagnostics fire in this file today" — a reason for DELETING the
+//   row, kept in the place a reason for keeping it belongs.
 //
-// This file is that check applied to the sixth. No allow-list is introduced
-// and no table is duplicated: the rows stay in `.editorconfig`, where the
-// compiler reads them, and the check asks only whether each row is answerable.
-//
-// THE TWO RULES
-// -------------
-//   R1  Every rule demoted in a path-scoped section is NAMED in that section's
-//       own comment. One sentence above four rows is the shape that hid DI003:
-//       a reason covering N rows is only checkable if it names them, and this
-//       is the mechanical form of "the reason must be the row's name".
-//
-//   R2  Every path-scoped section has a subject: the directory its glob is
-//       rooted at exists and holds real source. The three sibling blocks
-//       [apps/Harbor.App.Wpf|Maui|Blazor/**.cs] survived d3b26e4d, which moved
-//       those projects to contrib/apps/ — outside the solution and outside CI.
-//       Their globs matched nothing, so they had been demoting severities for
-//       code no build compiles: a permission that cannot be observed, reading
-//       exactly like one that can. A guard that only asked R1 would pass on
-//       them forever, since a dead section's rows are still named.
-//
-// WHY A TEXT SCAN AND NOT A COMPILED CHECK
-// ----------------------------------------
-// A severity demotion survives into no metadata: it is an editorconfig key.
-// `CfeValueBaselineTests` already reads this same file with the same approach
-// and lives in this same project, so the form is established and the reader is
-// the build that already runs it. No new axis (#555) and no new project.
-//
-// PERIMETER
-// ---------
-// Only PATH-SCOPED sections are judged. The global `[*.{cs,csx}]` section sets
-// severities for the whole repo and each rule there is documented in the
-// severity table a few lines above it; R1 is about a section that overrides
-// the global answer for a subset of the tree, which is a different claim and
-// needs its own.
+// WHY NOT EXTEND `AnalyzerSeverityScopeRules` INSTEAD
+// --------------------------------------------------
+// Two considerations, and the second decided it. First, the other file's own
+// header scopes itself to the DI family on purpose: `DiSeverityAssignment` is
+// anchored on `DI\d{3}`, so the Excubo and TUnit reservations that are scoped to
+// paths are deliberately out of its view. Widening it to every analyzer id would
+// make its DI-scoped inventory and its doc-coverage rule answer for rules the
+// severity table does not document, which is a different question from the one
+// it was written for. Second, a second reader of the same file means a second
+// parse to keep alive, and a guard whose two halves can disagree about what a
+// "section" is reports one defect as two or none. This file reads the file and
+// judges one thing; that file reads the same file and judges the other three.
 //
 // NON-VACUITY
 // -----------
 //   1. Scan_IsLive — `.editorconfig` is in the checkout, parses, and yields at
-//      least one path-scoped section with at least one demoted row. Zero rows
-//      would satisfy R1 by having nothing to grade.
-//   2. NonVacuity_R1_DetectsAnUnnamedDemotionInSyntheticEditorConfig — the
-//      POSITIVE CONTROL. A synthetic section with one named and one unnamed
-//      demotion MUST report the unnamed one and MUST NOT report the named one.
-//      Without it, a matcher that stopped matching would leave the rule green
-//      while enforcing nothing.
-//   3. NonVacuity_R2_DetectsASectionWithNoSubject — the same for R2.
+//      least one path-scoped section carrying at least one row. Zero rows would
+//      satisfy the rule by having nothing to grade.
+//   2. NonVacuity_DetectsAnUnnamedRowInSyntheticEditorConfig — the POSITIVE
+//      CONTROL. A synthetic section with one named and one unnamed row MUST
+//      report the unnamed one and MUST NOT report the named one, and a comment
+//      naming a DIFFERENT rule must not satisfy the check by proximity — the
+//      failure mode that would leave the rule looking like it works while
+//      checking nothing.
 //
 // WHAT THIS DOES NOT CLAIM
 // ------------------------
 // That a demotion is CORRECT is not checked, and cannot be by a text scan —
 // whether a captive dependency exists is a question only a strict build
-// answers, which is why the #865 fix is measured and cited in .editorconfig
-// rather than asserted here. This file asks the narrower question that was
-// never asked at all: is the row answerable, and does it point at anything.
+// answers, which is why the #865 narrowing is measured and cited in
+// `.editorconfig` rather than asserted here. This asks the narrower question
+// that was never asked at all.
 
 using System.Text.RegularExpressions;
 using TUnit.Assertions;
 
 namespace Harbor.Architecture.Tests;
 
-/// <summary>One analyzer severity a path-scoped section sets.</summary>
-/// <param name="Id">The diagnostic id, e.g. <c>DI003</c>.</param>
+/// <summary>One analyzer severity a path-scoped <c>.editorconfig</c> section sets.</summary>
+/// <param name="Id">The diagnostic id, e.g. <c>DI003</c> or <c>TUnit0055</c>.</param>
 /// <param name="Severity">The severity it is set to.</param>
+/// <param name="Line">1-based line of the assignment in the source file.</param>
 /// <param name="Reason">
-///     The comment run that applies to this row: the one directly above it if it
-///     has one, otherwise the run above the section header. Both shapes are
-///     accepted because both are readable — a reason per row, or one reason over
-///     a block of rows — and the check that matters is only whether the row's own
-///     id appears in whichever run governs it.
+///     The comment run that governs this row: the one directly above it if it
+///     has one, otherwise the run above the section header. A run is consumed by
+///     the row it governs, so the next row cannot inherit it.
 /// </param>
-internal sealed record DemotedSeverity(string Id, string Severity, string Reason);
-
-/// <summary>One path-scoped <c>.editorconfig</c> section, with the comment above it.</summary>
-/// <param name="Header">The section header verbatim, e.g. <c>[apps/…/**.cs]</c>.</param>
-/// <param name="Glob">The glob inside the header, without brackets.</param>
-/// <param name="Line">1-based line of the header in the source file.</param>
-/// <param name="Comment">The contiguous comment block directly above the header.</param>
-/// <param name="Demotions">Every severity the section sets.</param>
-internal sealed record EditorConfigSection(
-    string Header,
-    string Glob,
+internal sealed record SeverityRowClaim(
+    string Id,
+    string Severity,
     int Line,
-    string Comment,
-    IReadOnlyList<DemotedSeverity> Demotions);
+    string Reason,
+    string Header);
 
-/// <summary>What one <c>.editorconfig</c> parse found.</summary>
-/// <param name="Sections">Every path-scoped section, in file order.</param>
-internal sealed record EditorConfigReport(IReadOnlyList<EditorConfigSection> Sections)
-{
-    /// <summary>How many severity rows the sections set in total.</summary>
-    internal int DemotionCount => Sections.Sum(s => s.Demotions.Count);
-}
+/// <summary>Every severity row found in a path-scoped section.</summary>
+/// <param name="Claims">The rows, in file order.</param>
+/// <param name="SectionCount">How many path-scoped sections were parsed.</param>
+internal sealed record DemotionReport(IReadOnlyList<SeverityRowClaim> Claims, int SectionCount);
 
-/// <summary>Finds path-scoped analyzer-severity demotions and whether each states why.</summary>
+/// <summary>Finds path-scoped analyzer-severity rows and whether each states why.</summary>
 internal static class DiSeverityDemotionProbe
 {
     /// <summary>Repo-relative path of the file every demotion lives in.</summary>
@@ -139,8 +116,11 @@ internal static class DiSeverityDemotionProbe
 
     /// <summary>
     ///     A section header that scopes to a path rather than to a file type.
-    ///     <c>[*.{cs,csx}]</c> and <c>[*.cs]</c> are global; anything containing a
-    ///     <c>/</c> narrows the answer to part of the tree and is what R1/R2 judge.
+    ///     <c>[*.{cs,csx}]</c> and <c>[Makefile]</c> are not repo paths; anything
+    ///     anchoring on one is, and is what this rule judges. The anchor is the
+    ///     literal text before the first glob character, matching how a reader
+    ///     decides "which directory is this about?" — deliberately not an
+    ///     evaluation of editorconfig glob semantics, which no shipped rule does.
     /// </summary>
     private static readonly Regex PathScopedHeader =
         new(@"^\[(?<glob>[^\]]*/[^\]]*)\]$", RegexOptions.Compiled);
@@ -153,13 +133,15 @@ internal static class DiSeverityDemotionProbe
     /// <summary>A comment line, the form <c>.editorconfig</c> reasons are written in.</summary>
     private static readonly Regex CommentLine = new(@"^\s*[#;]\s?(?<text>.*)$", RegexOptions.Compiled);
 
-    /// <summary>Parses already-split lines. Exposed so a positive control drives the real parser.</summary>
-    internal static EditorConfigReport ParseLines(string[] lines)
+    /// <summary>Parses already-split lines. Exposed so the positive control drives the real parser.</summary>
+    internal static DemotionReport ParseLines(string[] lines)
     {
-        var sections = new List<EditorConfigSection>();
-        var pendingComment = new List<string>();
-        EditorConfigSection? open = null;
-        var demotions = new List<DemotedSeverity>();
+        var claims = new List<SeverityRowClaim>();
+        var pending = new List<string>();
+        string header = string.Empty;
+        string headerComment = string.Empty;
+        int sectionCount = 0;
+        bool inPathSection = false;
 
         for (int i = 0; i < lines.Length; i++)
         {
@@ -168,80 +150,88 @@ internal static class DiSeverityDemotionProbe
             Match comment = CommentLine.Match(raw);
             if (comment.Success)
             {
-                pendingComment.Add(comment.Groups["text"].Value.Trim());
+                pending.Add(comment.Groups["text"].Value.Trim());
                 continue;
             }
 
             if (raw.Trim().Length == 0)
             {
-                // A blank line ends the comment run, so two adjacent sections
-                // cannot borrow each other's prose — and a section's reason has
-                // to sit directly above it, not at the top of the file.
-                pendingComment.Clear();
+                // A blank line ends the comment run, so a reason written above
+                // one section cannot be borrowed by the next — otherwise the
+                // file's leading prose becomes a reason for every row in it.
+                pending.Clear();
                 continue;
             }
 
-            Match header = PathScopedHeader.Match(raw.Trim());
-            if (header.Success)
+            Match scoped = PathScopedHeader.Match(raw.Trim());
+            if (scoped.Success)
             {
-                if (open is not null)
-                {
-                    sections.Add(open with { Demotions = demotions });
-                }
+                sectionCount++;
+                header = raw.Trim();
+                headerComment = string.Join(' ', pending);
+                pending.Clear();
+                inPathSection = true;
+                continue;
+            }
 
-                open = new EditorConfigSection(
-                    raw.Trim(),
-                    header.Groups["glob"].Value,
-                    i + 1,
-                    string.Join(' ', pendingComment),
-                    []);
-                demotions = [];
-                pendingComment.Clear();
+            // Any OTHER section header — `[*]`, `[*.{cs,csx}]`, `[Makefile]` —
+            // ends the path section. The tree-wide block above the
+            # PATH-SCOPED SEVERITY OVERRIDES banner sets 200+ severities under a
+            // per-rule table, and judging those rows here would be judging the
+            // wrong claim: those are the rule's own severity, not a permission
+            // granted to a subset of the tree.
+            if (raw.TrimStart().StartsWith('['))
+            {
+                inPathSection = false;
+                pending.Clear();
                 continue;
             }
 
             Match row = SeverityRow.Match(raw);
             if (row.Success)
             {
-                // A comment run directly above a row is that row's reason; with
-                // no such run, the run above the section header governs it. The
-                // run is then consumed, so the next row cannot inherit it — that
-                // inheritance is how one sentence ends up looking like the
-                // justification for four rows, which is the #865 shape.
-                string reason = pendingComment.Count > 0
-                    ? string.Join(' ', pendingComment)
-                    : (open?.Comment ?? string.Empty);
+                if (!inPathSection)
+                {
+                    pending.Clear();
+                    continue;
+                }
 
-                demotions.Add(new DemotedSeverity(row.Groups["id"].Value, row.Groups["sev"].Value, reason));
-                pendingComment.Clear();
+                string reason = pending.Count > 0 ? string.Join(' ', pending) : headerComment;
+
+                claims.Add(new SeverityRowClaim(
+                    row.Groups["id"].Value,
+                    row.Groups["sev"].Value,
+                    i + 1,
+                    reason,
+                    header));
+
+                // The run is consumed by the row it governs. This single line is
+                // the difference between "one reason names three rows" (allowed)
+                // and "the fourth row is covered by a sentence about the other
+                // three" (the #865 defect, not allowed).
+                pending.Clear();
                 continue;
             }
 
-            // A non-comment, non-header, non-severity line ends the comment run
-            // without being a reason for anything.
-            pendingComment.Clear();
+            // Anything else ends the run without being a reason.
+            pending.Clear();
         }
 
-        if (open is not null)
-        {
-            sections.Add(open with { Demotions = demotions });
-        }
-
-        return new EditorConfigReport(sections);
+        return new DemotionReport(claims, sectionCount);
     }
 
     /// <summary>Reads the file out of a checkout. A missing root parses nothing, which the rule reports.</summary>
-    internal static EditorConfigReport Scan(string? repoRoot)
+    internal static DemotionReport Scan(string? repoRoot)
     {
         if (repoRoot is null || !Directory.Exists(repoRoot))
         {
-            return new EditorConfigReport([]);
+            return new DemotionReport([], 0);
         }
 
         string path = Path.Combine(repoRoot, EditorConfigRelativePath);
         if (!File.Exists(path))
         {
-            return new EditorConfigReport([]);
+            return new DemotionReport([], 0);
         }
 
         string[] lines;
@@ -251,66 +241,37 @@ internal static class DiSeverityDemotionProbe
         }
         catch (IOException)
         {
-            return new EditorConfigReport([]);
+            return new DemotionReport([], 0);
         }
 
         return ParseLines(lines);
     }
 
     /// <summary>
-    ///     Severity rows whose diagnostic id is not named anywhere in the section's
-    ///     own comment. The match is on the whole id token, so a comment that
-    ///     discusses a different rule does not accidentally satisfy this one.
+    ///     Rows whose diagnostic id is not named in the comment governing them.
+    ///     The match is on the whole id token, so a comment that discusses a
+    ///     different rule cannot satisfy this one by proximity.
     /// </summary>
-    internal static IReadOnlyList<string> UnnamedDemotions(EditorConfigReport report)
+    internal static IReadOnlyList<string> UnnamedRows(DemotionReport report)
     {
         var offenders = new List<string>();
 
-        foreach (EditorConfigSection section in report.Sections)
+        foreach (SeverityRowClaim claim in report.Claims)
         {
-            foreach (DemotedSeverity demotion in section.Demotions)
-            {
-                if (demotion.Reason.Contains(demotion.Id, StringComparison.OrdinalIgnoreCase))
-                {
-                    continue;
-                }
-
-                offenders.Add(
-                    $"{EditorConfigRelativePath}:{section.Line} {section.Header} sets {demotion.Id} to "
-                    + $"'{demotion.Severity}' without naming {demotion.Id} in the comment that governs it. That "
-                    + "comment is the only thing that says what the demotion authorises, and it is invisible to "
-                    + "every tool that reads this file — the compiler, the demoted analyzer, and this guard all see "
-                    + "only the key. Write the argument next to the row it authorises, and name the rule: one "
-                    + "sentence covering several rows is the shape that let this one sit unexamined for a year "
-                    + $"(#865). Comment as read: \"{TrimForMessage(demotion.Reason)}\"");
-            }
-        }
-
-        return offenders;
-    }
-
-    /// <summary>Path-scoped sections whose subject directory holds no real source file.</summary>
-    internal static IReadOnlyList<string> SectionsWithNoSubject(EditorConfigReport report, string? repoRoot)
-    {
-        var offenders = new List<string>();
-
-        if (repoRoot is null || !Directory.Exists(repoRoot))
-        {
-            return offenders;
-        }
-
-        foreach (EditorConfigSection section in report.Sections)
-        {
-            if (HasSubject(repoRoot, section.Glob))
+            if (claim.Reason.Contains(claim.Id, StringComparison.OrdinalIgnoreCase))
             {
                 continue;
             }
 
             offenders.Add(
-                $"{EditorConfigRelativePath}:{section.Line} {section.Header} scopes to a path with no source behind "
-                + $"it, so every severity it sets is unreachable. A demotion no build compiles is a comment that "
-                + $"reads like a permission — and it survives a directory move, because nothing resolves the glob. "
-                + $"Resolved: {DirectoryForGlob(repoRoot, section.Glob)}");
+                $"{EditorConfigRelativePath}:{claim.Line} {claim.Header} sets {claim.Id} to "
+                + $"'{claim.Severity}' without naming {claim.Id} in the comment that governs it. That comment "
+                + "is the only thing that says what the demotion authorises, and it is invisible to every tool "
+                + "that reads this file — the compiler, the demoted analyzer, and this guard all see only the "
+                + "key. Write the argument next to the row it authorises and name the rule: a row that inherits "
+                + "its neighbours' sentence is how one sat unexamined for a year (#865, where DI003 was demoted "
+                + "under a reason about process-lifetime singletons). Comment as read: \""
+                + TrimForMessage(claim.Reason) + "\"");
         }
 
         return offenders;
@@ -319,176 +280,75 @@ internal static class DiSeverityDemotionProbe
     /// <summary>Shortens a value so a failure message stays readable.</summary>
     internal static string TrimForMessage(string value) =>
         value.Length <= 160 ? value : value[..157] + "...";
-
-    /// <summary>
-    ///     The absolute directory a glob is rooted at: everything before the first
-    ///     wildcard segment, or the last directory before a wildcard-free
-    ///     file-name glob. <c>apps/…/**.cs</c> and <c>tests/…/File.cs</c> both resolve
-    ///     to the directory that has to exist for the section to have a subject.
-    /// </summary>
-    internal static string DirectoryForGlob(string repoRoot, string glob)
-    {
-        string normalized = glob.Replace('\\', '/');
-
-        int wildcard = normalized.IndexOfAny(['*', '?', '{', '[']);
-        string prefix = wildcard < 0 ? normalized : normalized[..wildcard];
-
-        int lastSlash = prefix.LastIndexOf('/');
-        string directory = lastSlash <= 0 ? string.Empty : prefix[..lastSlash];
-
-        return Path.GetFullPath(Path.Combine(repoRoot, directory));
-    }
-
-    /// <summary>
-    ///     Whether the section's subject directory exists and holds at least one
-    ///     <c>.cs</c> file that is not build output. Only the existence of a subject
-    ///     is at issue here — whether the project is IN the solution is a separate
-    ///     question this rule does not ask, and a section pointing at a project
-    ///     that is out of the solution but present on disk is a coverage question,
-    ///     not a dead-glob question.
-    /// </summary>
-    private static bool HasSubject(string repoRoot, string glob)
-    {
-        string directory = DirectoryForGlob(repoRoot, glob);
-        if (!Directory.Exists(directory))
-        {
-            return false;
-        }
-
-        try
-        {
-            foreach (string file in Directory.EnumerateFiles(directory, "*.cs", SearchOption.AllDirectories))
-            {
-                if (!IsBuildOutput(file))
-                {
-                    return true;
-                }
-            }
-        }
-        catch (IOException)
-        {
-            return false;
-        }
-        catch (UnauthorizedAccessException)
-        {
-            return false;
-        }
-
-        return false;
-    }
-
-    /// <summary>Build output is not a subject: a stale obj/ copy would keep a moved project alive.</summary>
-    private static bool IsBuildOutput(string path) =>
-        HasSegment(path, "obj")
-        || HasSegment(path, "bin")
-        || HasSegment(path, ".worktrees");
-
-    /// <summary>Whether a path segment appears as a whole directory name.</summary>
-    private static bool HasSegment(string path, string segment) =>
-        path.Contains(Path.DirectorySeparatorChar + segment + Path.DirectorySeparatorChar, StringComparison.Ordinal);
 }
 
 /// <summary>
-///     Issue #865: every path-scoped analyzer-severity demotion names the rule it
-///     demotes, and every path-scoped section points at a path that exists.
+///     Issue #865: every analyzer severity a path-scoped <c>.editorconfig</c>
+///     section sets is named in the comment that governs it.
 /// </summary>
 public class DiSeverityDemotionRules
 {
-    private static readonly Lazy<EditorConfigReport> Report = new(
+    private static readonly Lazy<DemotionReport> Report = new(
         () => DiSeverityDemotionProbe.Scan(RepoPaths.RepoRoot));
 
-    // =====================================================================
-    // 1. R1 — a demoted rule is named where it is demoted.
-    // =====================================================================
-
     /// <summary>
-    ///     Every severity set in a path-scoped section has its rule named in that
-    ///     section's own comment. This is the row that failed: DI003 was demoted
-    ///     under a sentence that described process-lifetime singletons, which is a
-    ///     different rule of a different kind.
+    ///     Every severity set in a path-scoped section has its rule named where it
+    ///     is set. This is the row that failed: DI003 was demoted under a sentence
+    ///     that described process-lifetime singletons, which is a different rule of
+    ///     a different kind.
     /// </summary>
     [Test]
     public async Task PathScopedSection_NamesEveryRuleItSets()
     {
-        IReadOnlyList<string> offenders = DiSeverityDemotionProbe.UnnamedDemotions(Report.Value);
+        IReadOnlyList<string> offenders = DiSeverityDemotionProbe.UnnamedRows(Report.Value);
 
         await Assert.That(offenders).IsEmpty()
             .Because(
-                "a demotion's reason is a comment, and a comment is invisible to the compiler, to the analyzer it "
-                + "silences, and to every gate in this project — so an unnamed row is one nobody can audit later. "
-                + "#865 sat that way: DI003 (captive dependency, a lifetime-GRAPH rule) was set to 'suggestion' under "
-                + "a reason about process-lifetime singletons, which covered neither the rule nor the breadth of the "
-                + "section. Write the argument next to the row it authorises. Offending rows: "
+                "a demotion's reason is a comment, so it is invisible to the compiler, to the analyzer it "
+                + "silences, and to every gate in this project — an unnamed row is one nobody can audit later. "
+                + "#865 sat that way: DI003 (captive dependency, a lifetime-GRAPH rule) was set to 'suggestion' "
+                + "under a reason about process-lifetime singletons, which covered neither the rule nor the "
+                + "breadth of the section. Write the argument next to the row it authorises. Offending rows: "
                 + (offenders.Count == 0 ? "(none)" : string.Join(" | ", offenders)));
     }
 
-    // =====================================================================
-    // 2. R2 — a path-scoped section has a subject.
-    // =====================================================================
-
     /// <summary>
-    ///     Every path-scoped section resolves to at least one real source file.
-    ///     The three <c>Harbor.App.Wpf|Maui|Blazor</c> blocks outlived d3b26e4d,
-    ///     which moved those projects under <c>contrib/apps/</c> — so they had
-    ///     been setting severities for code no build compiles.
-    /// </summary>
-    [Test]
-    public async Task PathScopedSection_HasRealSourceBehindIt()
-    {
-        IReadOnlyList<string> offenders =
-            DiSeverityDemotionProbe.SectionsWithNoSubject(Report.Value, RepoPaths.RepoRoot);
-
-        await Assert.That(offenders).IsEmpty()
-            .Because(
-                "a path-scoped demotion whose path is gone grants nothing and reads exactly like one that does, which "
-                + "is how three dead blocks survived a directory move unnoticed. If the project moved, the block is "
-                + "either re-pointed at its new home or deleted — a block aimed at contrib/ (out of the solution and "
-                + "out of CI) has no build to demote. Subjectless sections: "
-                + (offenders.Count == 0 ? "(none)" : string.Join(" | ", offenders)));
-    }
-
-    // =====================================================================
-    // 3. Non-vacuity.
-    // =====================================================================
-
-    /// <summary>
-    ///     The scan really read the checkout and really found path-scoped sections
-    ///     that set severities. A report with none satisfies R1 and R2 by having
-    ///     nothing to grade, which is indistinguishable from a broken reader.
+    ///     The scan really read the checkout and really found path-scoped rows.
+    ///     A report with none satisfies the rule by having nothing to grade, which
+    ///     is indistinguishable from a broken reader.
     /// </summary>
     [Test]
     public async Task Scan_IsLive()
     {
         await Assert.That(RepoPaths.RepoRoot).IsNotNull()
-            .Because("the scan needs a repository checkout; without one it parses zero sections and both rules "
-                   + "here are satisfied by having nothing to look at");
+            .Because("the scan needs a repository checkout; without one it parses zero rows and the rule above "
+                   + "is satisfied by having nothing to look at");
 
-        EditorConfigReport report = Report.Value;
+        DemotionReport report = Report.Value;
 
-        await Assert.That(report.Sections.Count).IsGreaterThan(0)
+        await Assert.That(report.SectionCount).IsGreaterThan(0)
             .Because($"{DiSeverityDemotionProbe.EditorConfigRelativePath} yielded no path-scoped section, so the "
-                   + "header matcher stopped working and both rules are vacuously green");
+                   + "header matcher stopped working and the rule is vacuously green");
 
-        await Assert.That(report.DemotionCount).IsGreaterThan(0)
-            .Because($"no severity row was read out of {DiSeverityDemotionProbe.EditorConfigRelativePath}, so R1 "
-                   + "compares against an empty set and passes for any file whatsoever");
+        await Assert.That(report.Claims.Count).IsGreaterThan(0)
+            .Because($"no severity row was read out of {DiSeverityDemotionProbe.EditorConfigRelativePath}, so "
+                   + "the rule compares against an empty set and passes for any file whatsoever");
     }
 
     /// <summary>
-    ///     THE POSITIVE CONTROL for R1. A synthetic section setting one named and
-    ///     one unnamed rule MUST report the unnamed one and MUST NOT report the
-    ///     named one — and a comment that discusses a DIFFERENT rule must not
-    ///     satisfy R1 by proximity, which is the failure mode that would make the
-    ///     rule look like it works while checking nothing.
+    ///     THE POSITIVE CONTROL. A synthetic section with one named and one
+    ///     unnamed row MUST report the unnamed one and MUST NOT report the named
+    ///     one. Without this, a matcher that stopped matching would leave the
+    ///     rule green while enforcing nothing.
     /// </summary>
     [Test]
-    public async Task NonVacuity_R1_DetectsAnUnnamedRowInSyntheticEditorConfig()
+    public async Task NonVacuity_DetectsAnUnnamedRowInSyntheticEditorConfig()
     {
-        EditorConfigReport Parse(string content) =>
+        DemotionReport Parse(string content) =>
             DiSeverityDemotionProbe.ParseLines(content.Split('\n'));
 
         // The shape a correct edit has: every rule named.
-        EditorConfigReport named = Parse(
+        DemotionReport named = Parse(
             """
             # DI006 — the XAML object graph needs a container handed to it.
             # DI014 — a process-lifetime root provider is disposed at exit.
@@ -497,8 +357,8 @@ public class DiSeverityDemotionRules
             dotnet_diagnostic.DI014.severity = suggestion
             """);
 
-        // The #865 shape: three named, the fourth not.
-        EditorConfigReport unnamed = Parse(
+        // The #865 shape: three named, the fourth covered by their sentence.
+        DemotionReport inherited = Parse(
             """
             # DI006 — the XAML object graph needs a container handed to it.
             # DI008 — a disposable transient that lives for the whole process.
@@ -512,7 +372,7 @@ public class DiSeverityDemotionRules
 
         // A comment naming a rule the section does NOT set must not count as
         // covering the one it does.
-        EditorConfigReport unrelated = Parse(
+        DemotionReport unrelated = Parse(
             """
             # DI015 is unrelated to this section and appears here only as prose.
             [apps/Some.App/**.cs]
@@ -520,8 +380,8 @@ public class DiSeverityDemotionRules
             """);
 
         // A blank line ends the comment run, so prose above an unrelated
-        // section cannot be borrowed as this section's reason.
-        EditorConfigReport notBorrowed = Parse(
+        // section cannot be borrowed.
+        DemotionReport notBorrowed = Parse(
             """
             # DI003 — a reason that belongs to a different section, not this one.
 
@@ -529,96 +389,39 @@ public class DiSeverityDemotionRules
             dotnet_diagnostic.DI003.severity = suggestion
             """);
 
-        await Assert.That(DiSeverityDemotionProbe.UnnamedDemotions(named)).IsEmpty()
-            .Because("both rules in the first snippet are named in the section's own comment, which is the shape a "
-                   + "correct edit looks like — R1 firing on it would forbid the fix it exists to demand");
+        // A row with no comment anywhere: the case that matters most, being the
+        // row neither the section header nor the author mentioned.
+        DemotionReport bare = Parse(
+            """
+            [apps/Some.App/**.cs]
+            dotnet_diagnostic.TUnit0055.severity = none
+            """);
 
-        IReadOnlyList<string> unnamedOffenders = DiSeverityDemotionProbe.UnnamedDemotions(unnamed);
-        await Assert.That(unnamedOffenders.Count).IsEqualTo(1)
-            .Because("the second snippet is the exact #865 shape: DI003 is set to 'suggestion' under a comment that "
-                   + "names the other three and not it. A miss here means the id reader or the comment attachment "
-                   + "stopped working and the rule enforces nothing. Reported: " + unnamedOffenders.Count);
+        await Assert.That(DiSeverityDemotionProbe.UnnamedRows(named)).IsEmpty()
+            .Because("both rules in the first snippet are named in the comment that governs them, which is the "
+                   + "shape a correct edit has — the rule firing on it would forbid the fix it exists to demand");
 
-        await Assert.That(unnamedOffenders[0]).Contains("DI003")
-            .Because("the failure must name the rule that is unaccounted for, or the message cannot tell the author "
-                   + "which row needs a reason");
+        IReadOnlyList<string> inheritedOffenders = DiSeverityDemotionProbe.UnnamedRows(inherited);
+        await Assert.That(inheritedOffenders.Count).IsEqualTo(1)
+            .Because("the second snippet is the exact #865 shape: DI003 inherits a sentence written about the "
+                   + "other three. A miss here means the run-consumption or the id reader stopped working and the "
+                   + "rule enforces nothing. Reported: " + inheritedOffenders.Count);
 
-        await Assert.That(DiSeverityDemotionProbe.UnnamedDemotions(unrelated).Count).IsEqualTo(1)
-            .Because("a comment naming DI015 does not cover a DI003 row. A rule that matched on 'the comment mentions "
-                   + "some diagnostic id' would pass any section that has ever been discussed");
+        await Assert.That(inheritedOffenders[0]).Contains("DI003")
+            .Because("the failure must name the rule that is unaccounted for, or the message cannot tell the "
+                   + "author which row needs a reason");
 
-        await Assert.That(DiSeverityDemotionProbe.UnnamedDemotions(notBorrowed).Count).IsEqualTo(1)
+        await Assert.That(DiSeverityDemotionProbe.UnnamedRows(unrelated).Count).IsEqualTo(1)
+            .Because("a comment naming DI015 does not cover a DI003 row; a rule that matched on 'the comment "
+                   + "mentions some diagnostic id' would pass any section that has ever been discussed");
+
+        await Assert.That(DiSeverityDemotionProbe.UnnamedRows(notBorrowed).Count).IsEqualTo(1)
             .Because("a blank line ends a comment run, so a reason written above a different section cannot be "
                    + "borrowed — otherwise the file's leading prose becomes a reason for every row in it");
-    }
 
-    /// <summary>
-    ///     THE POSITIVE CONTROL for R2: a section aimed at a path that does not
-    ///     exist MUST be reported, one aimed at a real directory MUST NOT, and a
-    ///     directory whose only <c>.cs</c> files are build output MUST NOT keep a
-    ///     section alive.
-    /// </summary>
-    [Test]
-    public async Task NonVacuity_R2_DetectsASectionWithNoSubject()
-    {
-        string? maybeRoot = RepoPaths.RepoRoot;
-        await Assert.That(maybeRoot).IsNotNull()
-            .Because("the R2 positive control needs a repository checkout; without one there is no filesystem "
-                   + "to resolve a glob against, and both halves of the control would be unreachable");
-
-        if (maybeRoot is not { } root)
-        {
-            return;
-        }
-
-        // The block d3b26e4d left behind, reproduced verbatim.
-        EditorConfigReport dead = DiSeverityDemotionProbe.ParseLines(
-            [
-                "[apps/Harbor.App.Wpf/**.cs]",
-                "dotnet_diagnostic.DI006.severity = suggestion",
-            ]);
-
-        // A section over a directory that is on disk.
-        EditorConfigReport live = DiSeverityDemotionProbe.ParseLines(
-            [
-                "[apps/Harbor.App.Cli/**.cs]",
-                "dotnet_diagnostic.DI006.severity = suggestion",
-            ]);
-
-        // A directory that exists but holds nothing but build output must not
-        // count as a subject.
-        string stale = Path.Combine(root, "src", "Harbor.Abstractions", "obj", "DiSeverityDemotionRulesProbe");
-        Directory.CreateDirectory(stale);
-        try
-        {
-            await File.WriteAllTextAsync(Path.Combine(stale, "Generated.cs"), "// build output, not a subject\n");
-
-            await Assert.That(DiSeverityDemotionProbe.SectionsWithNoSubject(dead, root).Count).IsEqualTo(1)
-                .Because("the Wpf block is the shape #865's fix deleted: a path-scoped demotion whose project had "
-                       + "moved to contrib/apps/ and whose glob had matched nothing ever since");
-
-            await Assert.That(DiSeverityDemotionProbe.SectionsWithNoSubject(live, root)).IsEmpty()
-                .Because("apps/Harbor.App.Cli is on disk and holds sources — R2 firing on it would forbid every "
-                       + "path-scoped demotion in the file, which is not what this rule is for");
-
-            EditorConfigReport buildOutputOnly = DiSeverityDemotionProbe.ParseLines(
-                ["[src/Harbor.Abstractions/obj/DiSeverityDemotionRulesProbe/**.cs]"]);
-
-            await Assert.That(DiSeverityDemotionProbe.SectionsWithNoSubject(buildOutputOnly, root).Count)
-                .IsEqualTo(1)
-                .Because("a directory that exists but contains only obj/ output is not a subject: a stale build "
-                       + "artefact is the one thing that must not keep a moved project's demotion alive");
-        }
-        finally
-        {
-            try
-            {
-                Directory.Delete(stale, recursive: true);
-            }
-            catch (IOException)
-            {
-                // A leftover directory under obj/ is build output by definition.
-            }
-        }
+        await Assert.That(DiSeverityDemotionProbe.UnnamedRows(bare).Count).IsEqualTo(1)
+            .Because("a row with no comment at all is the case worth catching: it is the row neither the "
+                   + "section header nor its author mentioned, and the TUnit0055 block was in exactly this "
+                   + "state — a severity set to 'none' under a comment that never named the rule");
     }
 }

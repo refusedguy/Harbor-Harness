@@ -9,13 +9,14 @@ Builtin tools - read, write, edit, bash, glob, grep, ls, task
 ## Run
 
 ```bash
-dotnet test tests/Harbor.Tools.Builtin.Tests
+dotnet run --project tests/Harbor.Tools.Builtin.Tests -c Release --no-build -- --minimum-expected-tests 1
 ```
 
 Or filter to a single test class:
 
 ```bash
-dotnet test tests/Harbor.Tools.Builtin.Tests --filter "FullyQualifiedName~Tools"
+dotnet run --project tests/Harbor.Tools.Builtin.Tests -c Release --no-build -- \
+  --minimum-expected-tests 1 --treenode-filter "/*/*/Tools/*"
 ```
 
 ## Layer

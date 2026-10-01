@@ -1,6 +1,6 @@
 # Harbor.Plugin.FileTree
 
-Sample plugin that adds a `file_tree` tool — renders a tree view of a directory. Demonstrates `IToolPlugin`.
+Sample plugin that adds a `tree` tool — renders a tree view of a directory. Demonstrates `IToolPlugin`.
 
 ## Layer
 
@@ -15,8 +15,7 @@ Sample plugin — implements `IPlugin` (+ `IToolPlugin`) from `Harbor.Abstractio
 ## Public API
 
 - `FileTreePlugin` — implements `IToolPlugin`
-- `FileTreeTool` — the `ITool` implementation
-- `TreeNode` — internal tree node record
+- `TreeTool` — the `ITool` implementation (tool name `tree`)
 
 ## Usage
 
@@ -33,7 +32,7 @@ await host.LoadAllAsync(ct);
 
 ## How it works
 
-Walks the directory tree (depth-limited, ignored paths filtered via `.gitignore`), builds a `TreeNode` forest, renders as ASCII art (with `├──`/`└──`/`│   ` connectors). Returns the rendered string as a `ToolResult`.
+Walks the directory tree depth-first (`depth`, default 3, max 10), skipping a hardcoded `IgnoredDirs` list (`node_modules`, `bin`, `obj`, `.git`, `dist`, …) and, unless `all=true`, dot-prefixed entries. There is no intermediate node type: entries are appended straight to a `StringBuilder` as ASCII art with `├──`/`└──`/`│   ` connectors, and file sizes go through a `FormatSize` helper. Returns the rendered string as a `ToolResult`.
 
 ## See also
 

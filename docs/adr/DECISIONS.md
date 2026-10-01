@@ -244,3 +244,51 @@ so "cannot be verified locally" was not the blocker it was taken to be.
   raw token reports as homes from the start or it is red on day one.
 - Full text, citations and the per-option file lists:
   [ADR-010](ADR-010-token-notation-one-cell.md).
+
+---
+
+# ADR-011: a gate for documentation examples that only LOOK compilable — measured, not built
+
+## Status
+Accepted as a record. **No gate was added.**
+
+## Date
+2026-09-30 (issue #853; follows the #849 defect fixed by PR #855)
+
+## Context
+`docs/TEST_PATTERNS.md`, titled "Copy-Paste Ready", shipped two untrue rows in its
+attribute table and was caught only when another PR copied the text: a CS1729 arity
+error (`[NotInParallel("a","b")]` — TUnit has no `params` overload) and a CS0246
+non-existent type (`[SkipWhenNotLinux]` is `internal` to one test project). The
+question was whether the stdlib-only, dotnet-free docs gate can catch either class.
+
+## Decision
+Build nothing. Six candidates were implemented far enough to be counted, and every one
+is unreachable from `docs.yml` or red on day one. The decisive measurements on
+`dev` = `538d9f1c`:
+
+| candidate | verdict | number |
+|---|---|---|
+| A — name from TUnit's shipped XML doc | unreachable **and** incomplete | `docs.yml` runs 6 `python3` lines, no restore, no lockfile; and 21 of 47 attribute types carry no `#ctor` row, incl. `NotInParallelAttribute` |
+| A′ — name from this repository | zero work, 23/62 false positives | 0 of 62 spellings are "declared only `internal`"; the false positives include the real TUnit `RunOn` and `ExcludeOn` |
+| B — examples that quote code must cite | red on the corpus | 131 of 1028 copy-paste blocks cite (12.7%); 0 provenance markers of any kind exist |
+| C — ban unprovenanced examples | would outlaw the docs | 897 blocks in 105 documents; 103 elide bodies, 175 are ASCII/shell fences |
+| D — fence every citation already written | red on day one | 2662 citations in non-normative docs, 818 fail across 26 documents |
+| E — a path on a fence's first line must resolve | the convention is a template | 116 fences use it, 34 resolve, 82 name files that do not exist |
+
+## Consequences
+- No code changed and no rule was added. A check that cannot fail is worse than none:
+  it is indistinguishable from a check that works.
+- `docs/TEST_PATTERNS.md` still declares neither `Status: normative` nor a dated
+  banner, so the densest copy-paste document in the repo is outside every fence.
+  Marking it normative is a one-line edit and a judgement call about that document's
+  claims; it is left to the owner.
+- Nothing conflicts with the merged work: `#826`'s `DOC-CITED-TABLE-UNDECLARED` is
+  untouched, and `#811`'s ADR-010 is normative, cites code lines that the prose rule
+  already fences, and stays green.
+- Re-open conditions are recorded in the ADR so the decision is revisited on evidence
+  rather than re-argued.
+
+## References
+Full text, the per-candidate reasoning and the re-open conditions:
+[ADR-011](ADR-011-doc-example-compile-gate.md).

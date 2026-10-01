@@ -43,6 +43,24 @@
 //     would fail on a red the owner of #492 cannot fix inside this PR, and the
 //     cheap repair for a permanently-red rule is deletion.
 //
+//     A CORRECTION to what this comment used to say, because the wrong version
+//     is worse than no version (#681). It claimed these two sites were owned by
+//     #534 and #535. They are not, and never were: #534 and #535 were
+//     about `JsonCommonConfigStore` / `JsonAppConfigStore` / `RecentItemsService`
+//     in `Harbor.Desktop.Abstractions` and `Harbor.Desktop.Shared` — different
+//     projects, different types — and both are CLOSED with their baseline rows
+//     deleted (`PresentationCapabilityRules.ResolvedViolations` names the
+//     resolved types; `git log -S CodeEditorViewModel -- .../PresentationCapabilityRules.cs`
+//     and the same for ThemeService are both empty, so neither type was ever in
+//     that table). So the carve-out was citing a tracking issue that does not
+//     cover the code it excuses, which is the shape that lets a real defect look
+//     owned: a reader checking the citation finds the issue closed and concludes
+//     the capability is handled. `CodeEditorViewModel` is a view-model reading and
+//     writing files directly with no seam — the SAME defect #681 is about, one
+//     capability over from the walk. It is tracked now, in the issue named in the
+//     assertion below, which is why the citation here points at a live issue
+//     rather than at two closed ones.
+//
 // NON-VACUITY
 // -----------
 // A source guard that silently matches nothing is worse than no guard. Four
@@ -288,12 +306,116 @@ public class AvaloniaFileTreeWalkRules
         await Assert.That(DetectIn("Unrelated.cs", unrelatedIo)).IsEmpty()
             .Because(
                 "creating the app's own config directory and reading the file the user picked are two other "
-                + "capabilities, tracked elsewhere (#534, #535). Folding them in here would make the rule "
-                + "permanently red and therefore deletable.");
+                + "capabilities. Folding them in here would make the rule permanently red and therefore "
+                + "deletable. The file-I/O half of that carve-out is tracked in #934 — NOT in #534/#535, "
+                + "which this text used to cite: those two are closed and were about JsonCommonConfigStore / "
+                + "JsonAppConfigStore / RecentItemsService in different projects, and never covered "
+                + "CodeEditorViewModel or ThemeService. A carve-out citing a closed issue that does not "
+                + "cover the code it excuses reads as 'handled' to the next person who checks.");
         await Assert.That(DetectIn("Strings.cs", pureStringPathWork)).IsEmpty()
             .Because(
                 "`Path.GetExtension` / `Path.GetFileName` are string operations, not syscalls. The icon "
                 + "mapping keys on an extension, so forbidding this would forbid the fix.");
+    }
+
+    /// <summary>
+    ///     The <c>File.*</c> carve-out in the file remarks must cite a LIVE issue
+    ///     that actually covers the code it excuses (#681).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    ///     The remarks used to justify excluding <c>File.*</c> by pointing at
+    ///     #534 and #535. Both are closed, both were about
+    ///     <c>JsonCommonConfigStore</c> / <c>JsonAppConfigStore</c> /
+    ///     <c>RecentItemsService</c> in <c>Harbor.Desktop.Abstractions</c> and
+    ///     <c>Harbor.Desktop.Shared</c> — different projects, different types —
+    ///     and neither ever named <c>CodeEditorViewModel</c> or
+    ///     <c>ThemeService</c>. So the citation did not merely rot, it pointed
+    ///     somewhere that never contained the thing being excused: a reader who
+    ///     checked it found a closed issue and concluded the capability was
+    ///     handled. <c>CodeEditorViewModel</c> is a view-model reading and
+    ///     writing files with no seam, which is the defect #681 is about one
+    ///     capability over from the walk, and it had no rule at all — the IL
+    ///     probe never opens an app assembly, and this file does not forbid
+    ///     <c>File.*</c>.
+    /// </para>
+    /// <para>
+    ///     <b>Why a text rule.</b> The thing worth enforcing is a SHAPE: an
+    ///     excluded capability must name a live owner. Whether #534's types were
+    ///     closed is a fact about GitHub, not about this working tree, so the
+    ///     test checks what the repo can see — that the carve-out cites an issue
+    ///     number, that it does not cite the two closed ones, and that the
+    ///     capability it excuses has a live tracking issue. That is the part
+    ///     that was silently untrue.
+    /// </para>
+    /// </remarks>
+    [Test]
+    public async Task FileIoCarveOut_CitesALiveOwner_NotTheClosedIssues()
+    {
+        // Read the rule's own source out of the working tree, the same way every
+        // other test in this file finds what it polices. Deriving the path from
+        // the assembly location instead would resolve to a build output folder
+        // that has no .cs beside it.
+        string? root = RepoPaths.RepoRoot;
+        await Assert.That(root).IsNotNull()
+            .Because(
+                "This rule reads its own source text. With no Harbor.slnx above AppContext.BaseDirectory "
+                + "the read fails and the test reports green while enforcing nothing.");
+
+        if (root is null)
+        {
+            return;
+        }
+
+        string source = File.ReadAllText(
+            Path.Combine(root, "tests", "Harbor.Architecture.Tests", "AvaloniaFileTreeWalkRules.cs"));
+
+        // (1) The carve-out still exists and still names the capability, or the
+        // text was deleted instead of corrected — which would hide it rather than
+        // fix it. A missing justification is how the next reader re-adds a false
+        // one without noticing there was ever a claim here at all.
+        await Assert.That(source).Contains("File.*")
+            .Because(
+                "the `File.*` carve-out is a real exclusion with a real reason; deleting the sentence "
+                + "would leave the exclusion unexplained and the defect untracked rather than fixed.");
+
+        // (2) The specific FALSE citation must be gone — the verbatim phrase that
+        // made the defect look owned. Pinned on the exact wording rather than on
+        // the issue NUMBERS, because the numbers themselves are legitimate in two
+        // places and must stay: the `Directory.CreateDirectory` carve-out is
+        // genuinely grandfathered by those two config stores, and the correction
+        // below names them precisely because saying "these do NOT cover this" is
+        // the point. A test that banned the numbers would force the fix to
+        // delete the very sentence that records what the numbers got wrong.
+        // Assembled at runtime, not written out: this test reads its OWN source
+        // text, so a literal spelling of the phrase it forbids would match itself
+        // and the rule would be red forever — a guard that cannot pass is a guard
+        // that gets deleted. Splitting the string keeps the forbidden text out of
+        // the file while pinning exactly what must not come back.
+        string tail = ", #535)";
+        foreach (string stale in new[]
+                 {
+                     "tracked elsewhere (#534" + tail,
+                     "tracked elsewhere (#534" + "/#535)",
+                     "elsewhere (#534" + tail,
+                 })
+        {
+            await Assert.That(source).DoesNotContain(stale)
+                .Because(
+                    "the `File.*` carve-out was justified by claiming the sites were 'tracked elsewhere "
+                    + "(#534, #535)'. They were not: both are CLOSED, both were about "
+                    + "JsonCommonConfigStore / JsonAppConfigStore / RecentItemsService in other projects, "
+                    + "and neither ever named CodeEditorViewModel or ThemeService. This exact wording is "
+                    + "what let an untracked view-model read as handled — see the correction in this file's "
+                    + "remarks, and #934 for the live owner.");
+        }
+
+        // (3) The capability actually has a live owner named next to the carve-out.
+        await Assert.That(source).Contains("#934")
+            .Because(
+                "the `File.*` carve-out must name a live tracking issue. #934 covers CodeEditorViewModel "
+                + "reading and writing files with no seam — the same defect #681 is about, one capability "
+                + "over from the walk. Delete that reference and the carve-out is unowned again.");
     }
 
     [Test]

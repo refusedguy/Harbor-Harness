@@ -36,6 +36,16 @@ namespace Harbor.App.Avalonia.Tests;
 ///         palette values, not a copy of these dictionaries. <c>contrib/</c> is
 ///         not built by CI and is not scanned.
 ///     </para>
+///     <para>
+///         <b>#755 — the same rule for ICON GEOMETRY.</b> The colour guard was
+///         blind to the other half of the same design system.
+///         <c>Themes/Hds/Icons.axaml</c> declares every <c>Ic*</c> glyph as
+///         <c>StreamGeometry</c> path data, and the app's C# re-typed that data
+///         and <c>Geometry.Parse</c>'d it per call: six values byte-identical to a
+///         declared <c>Ic*</c> key, plus two near-copies of <c>IcInfo</c> whose
+///         subpaths had already drifted from the dictionary. That is the failure
+///         this file exists to prevent, in the one place it could not see.
+///     </para>
 /// </remarks>
 public class ThemeTokenDuplicationGuardTests
 {
@@ -98,6 +108,114 @@ public class ThemeTokenDuplicationGuardTests
         "ResourceDictionary instead of typing a colour here.";
 
     private sealed record HexSite(string File, int Line, string Value);
+
+    /// <summary>
+    ///     #755 — the geometry half of the rule above. A <c>StreamGeometry</c>
+    ///     value declared in <c>Themes/Hds/Icons.axaml</c> must not be re-typed
+    ///     into the app's C#: the C# re-declares a design-system value, and
+    ///     nothing ties the two together afterwards.
+    /// </summary>
+    /// <remarks>
+    ///     SCOPE — the same tree as the colour guard above (<c>apps/</c>, not
+    ///     <c>contrib/</c>, not <c>bin/</c>/<c>obj/</c>), read from the same
+    ///     <c>Themes/</c> directory, and for the same reason: <c>docs/ui/HDS.md</c>
+    ///     names <c>Icons.axaml</c> as a cascade layer of the same design
+    ///     system, so a value in it is a token like any other.
+    /// </remarks>
+    [Test]
+    public async Task No_Hds_Icon_Path_Appears_In_Avalonia_App_CSharp()
+    {
+        var declared = DeclaredIconPaths();
+        await Assert.That(declared.Count).IsGreaterThan(0);
+
+        List<string> violations = IconPathLiteralsInAppCSharp()
+            .Where(site => declared.Any(d => site.Value.Contains(d.Data, StringComparison.Ordinal)))
+            .Select(site => DescribeIcon(site, declared.First(d => site.Value.Contains(d.Data, StringComparison.Ordinal)).Key))
+            .ToList();
+
+        foreach (string violation in violations)
+            Console.WriteLine(violation);
+
+        await Assert.That(violations).IsEmpty();
+    }
+
+    /// <summary>
+    ///     The ratchet form of the same rule, mirroring
+    ///     <see cref="Avalonia_App_CSharp_Contains_No_Color_Literal_At_All" />:
+    ///     once the converters resolve their glyphs through the dictionary, the
+    ///     app's C# holds no SVG path data at all, so no future literal can be a
+    ///     copy of one.
+    /// </summary>
+    /// <remarks>
+    ///     This is strictly stronger than the exact-match test above, and it is
+    ///     the one that catches the case that had ALREADY gone wrong: two of the
+    ///     literals were near-copies of <c>IcInfo</c> whose subpaths had drifted,
+    ///     so no byte comparison would ever have flagged them.
+    /// </remarks>
+    [Test]
+    public async Task Avalonia_App_CSharp_Contains_No_Icon_Path_Literal_At_All()
+    {
+        List<string> violations = IconPathLiteralsInAppCSharp().Select(DescribeIcon).ToList();
+
+        foreach (string violation in violations)
+            Console.WriteLine(violation);
+
+        await Assert.That(violations).IsEmpty();
+    }
+
+    private static string DescribeIcon(IconPathSite site) =>
+        $"{Path.GetRelativePath(FindRepoRoot(), site.File).Replace('\\', '/')}:{site.Line} " +
+        $"'{Shorten(site.Value)}' is SVG path data — resolve an 'Ic*' key through " +
+        "Themes/Hds/Icons.axaml instead of carrying a second copy of a glyph.";
+
+    private static string DescribeIcon(IconPathSite site, string key) =>
+        $"{Path.GetRelativePath(FindRepoRoot(), site.File).Replace('\\', '/')}:{site.Line} " +
+        $"'{Shorten(site.Value)}' is a verbatim copy of '{key}' from Themes/Hds/Icons.axaml — " +
+        "resolve the key through the ResourceDictionary instead.";
+
+    private static string Shorten(string value) =>
+        value.Length <= 24 ? value : value[..24] + "…";
+
+    private sealed record IconPathSite(string File, int Line, string Value);
+
+    private sealed record DeclaredIconPath(string Key, string Data);
+
+    /// <summary>
+    ///     A quoted string that opens like SVG path data: an absolute moveto
+    ///     followed by a long run of coordinates. The 20-character floor is what
+    ///     keeps it off short strings that merely start with a capital M and a
+    ///     digit — a log format, a message.
+    /// </summary>
+    private static readonly Regex SvgPathLiteral = new(
+        @"""M[0-9][^""]{20,}""",
+        RegexOptions.Compiled | RegexOptions.CultureInvariant);
+
+    /// <summary>
+    ///     The <c>&lt;StreamGeometry x:Key="Ic…"&gt;path&lt;/StreamGeometry&gt;</c>
+    ///     entries of the icon dictionary, read from the XML as text so the guard
+    ///     needs no Avalonia <c>Application</c> — the same reason
+    ///     <c>IconTests</c> validates the file as XML.
+    /// </summary>
+    private static readonly Regex DeclaredIconPathEntry = new(
+        @"x:Key=""(?<key>Ic[A-Za-z0-9]+)""\s*>(?<path>M[^<]+)<",
+        RegexOptions.Compiled | RegexOptions.CultureInvariant);
+
+    private static IReadOnlyList<DeclaredIconPath> DeclaredIconPaths() =>
+        ThemeFiles()
+            .SelectMany(file => DeclaredIconPathEntry.Matches(File.ReadAllText(file))
+                .Select(m => new DeclaredIconPath(m.Groups["key"].Value, m.Groups["path"].Value)))
+            .GroupBy(p => p.Key, StringComparer.Ordinal)
+            .Select(g => g.First())
+            .OrderBy(p => p.Key, StringComparer.Ordinal)
+            .ToArray();
+
+    private static IReadOnlyList<IconPathSite> IconPathLiteralsInAppCSharp() =>
+        AppCSharpFiles()
+            .SelectMany(file => File.ReadAllLines(file)
+                .Select((text, index) => (text, line: index + 1))
+                .SelectMany(entry => SvgPathLiteral.Matches(entry.text)
+                    .Select(match => new IconPathSite(file, entry.line, match.Value))))
+            .ToArray();
 
     private static IReadOnlyList<HexSite> ColorLiteralsInAppCSharp() =>
         AppCSharpFiles()

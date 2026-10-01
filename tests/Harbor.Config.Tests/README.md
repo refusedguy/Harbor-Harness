@@ -9,13 +9,14 @@ Configuration loading, provider config binding, environment variable overrides
 ## Run
 
 ```bash
-dotnet test tests/Harbor.Config.Tests
+dotnet run --project tests/Harbor.Config.Tests -c Release --no-build -- --minimum-expected-tests 1
 ```
 
 Or filter to a single test class:
 
 ```bash
-dotnet test tests/Harbor.Config.Tests --filter "FullyQualifiedName~Config"
+dotnet run --project tests/Harbor.Config.Tests -c Release --no-build -- \
+  --minimum-expected-tests 1 --treenode-filter "/*/*/Config/*"
 ```
 
 ## Layer

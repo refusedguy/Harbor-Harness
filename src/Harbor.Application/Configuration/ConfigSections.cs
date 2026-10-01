@@ -97,9 +97,6 @@ public sealed record IdentityConfig(
 /// <summary>
 ///     Plugin + builtin-tool toggles.
 /// </summary>
-/// <summary>
-///     Plugin + builtin-tool toggles.
-/// </summary>
 public sealed record ToolingConfig(
     IReadOnlyList<string> EnabledPlugins,
     IReadOnlyList<string> DisabledTools,
@@ -147,11 +144,26 @@ public sealed record CompactionConfig(
 
     public Result<CompactionConfig> Validate()
     {
-        var errors = new List<string>(3);
-        if (ReserveTokens <= 0) errors.Add("compaction.reserveTokens must be > 0");
-        if (KeepRecentTokens <= 0) errors.Add("compaction.keepRecentTokens must be > 0");
-        if (TailTurns <= 0) errors.Add("compaction.tailTurns must be > 0");
-        return errors.Count == 0
+        // #799: the accumulator is created by the first violation, not on entry.
+        // It used to be `new List<string>(3)` above the predicates, and
+        // List<T>'s capacity ctor allocates the backing array inside the ctor —
+        // so the well-formed config, which is the shape CompactionConfig.Default
+        // already has, paid for a List and a string[3] and dropped both having
+        // added nothing. `errors is null` IS the "nothing wrong" test now, which
+        // is why the three predicates are not also spelled a second time in a
+        // guard ladder in front of them: a rule written twice is a rule that
+        // will one day be honoured once (see FallbackModel above, and #599).
+        //
+        // The message still names EVERY violation, not just the first. That is
+        // deliberate, and it is the reason this is not the guard ladder the four
+        // sibling Validate methods use: HarborConfig.Validate joins this into
+        // one failure the config store shows the user, so reporting one bad
+        // field per reload would turn one edit into three.
+        List<string>? errors = null;
+        if (ReserveTokens <= 0) (errors ??= new List<string>(3)).Add("compaction.reserveTokens must be > 0");
+        if (KeepRecentTokens <= 0) (errors ??= new List<string>(3)).Add("compaction.keepRecentTokens must be > 0");
+        if (TailTurns <= 0) (errors ??= new List<string>(3)).Add("compaction.tailTurns must be > 0");
+        return errors is null
             ? Result.Success(this)
             : Result.Failure<CompactionConfig>(string.Join("; ", errors));
     }

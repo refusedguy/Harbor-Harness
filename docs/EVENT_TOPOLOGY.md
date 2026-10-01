@@ -88,18 +88,25 @@ is the subscriber's business, and the live branches are:
   (`ReplLifecycle.cs:205-209`).
 - **Avalonia desktop** — `UiEventRouter` resolves the session-scoped store and
   dispatches there (`apps/Harbor.App.Avalonia/Hosting/UiEventRouter.cs:61-80`).
-<!-- check-doc-cites: allow-unwired AppState — named once here as the shape the deleted branch used to fold AgentEvent into. #594 removed that branch, so AppState now has readers (two benchmarks) but no writer under src/ or apps/. It is deliberately left in place rather than deleted with the branch: it lives in the live Harbor.Ui.Framework.State project, and docs/ROADMAP.md records the decision as an open item. Deleting the sentence would hide a true and useful fact — that the legacy shape is producer-less. -->
 - **The flat-`AppState` branch no longer exists.** This document used to carry a
   "dead branch, do not follow it" entry here describing
   `EventBusAppStoreDispatcher` → `AppStore` → `Harbor.Ui.Framework.Reducers.AppReducer`
   as the second UI-state projection, with a note that no composition root
   constructed any of it. That note is gone because the code is: #594 deleted
   all three, and with them the whole `src/Harbor.Ui.Framework.Reducers`
-  project. The caveat is not lost, it is enforced —
+  project. #597 then deleted the records the branch used to fold into, so
+  `AppState` / `ChatViewState` / `ChromeViewState` / `SessionsViewState` are
+  gone too, and no subscriber list here names them. `SessionInfo` moved to its
+  own file rather than away — it is live, and `ChatDomainState.Sessions` holds
+  it.
+  The caveat is not lost, it is enforced —
   `tests/Harbor.Architecture.Tests/LegacyFlatTeaBranchRule.cs` fails the build
   if any of it returns, and fails it in the same assertion block that requires
   `State/ChatAppReducer.cs` + `State/UiStore.cs` to still be present, so the
-  rule cannot be satisfied by deleting the *live* fold instead.
+  rule cannot be satisfied by deleting the *live* fold instead. It also fails on
+  the two view-model *shadows* `ChatViewState.cs` used to declare, matched by
+  (name, namespace) so the live `Harbor.Ui.Framework.ViewModels` copies are
+  never condemned.
 - **Session persistence** is a separate claim: `ISessionStore` implementations
   (Jsonl/Memory/Sqlite) are written on the agent path, **not** via bus
   subscription — there is no atomicity between "event published" and "message

@@ -1,5 +1,6 @@
 using Avalonia.Controls;
 using Avalonia.Interactivity;
+using Harbor.App.Avalonia.Hosting;
 using Harbor.Ui.Framework.Navigation;
 using Microsoft.Extensions.DependencyInjection;
 namespace Harbor.App.Avalonia.Views.Shell;
@@ -10,7 +11,7 @@ namespace Harbor.App.Avalonia.Views.Shell;
 public partial class RightDrawerView : UserControl
 {
     private IShellChrome? _shellChrome;
-    private IShellChrome ShellChrome => _shellChrome ??= App.Services.GetRequiredService<IShellChrome>();
+    private IShellChrome ShellChrome => _shellChrome ??= ShellLocator.Of(this).Get<IShellChrome>();
 
     private void Close_Click(object? sender, RoutedEventArgs e) =>
         ShellChrome.ToggleSidebar();

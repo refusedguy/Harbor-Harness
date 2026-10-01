@@ -30,10 +30,7 @@ composition only.
 | `State/AppReducer.cs` | **Generic** reducer: `Update(UiState, AppMsg, IAppReducerPlugin?)` + panel/scroll/input/focus helpers. Declares `ReduceResult` and the `IAppReducerPlugin` extension point. |
 | `State/ChatAppReducer.cs` | **Harbor chat** extension: `Reduce(UiState, AgentEvent)`, `Update(UiState, AppMsg)`, plus the `ChatAppReducerPlugin` adapter for `IAppReducerPlugin`. **The one place a `SessionStatus` is decided** (#687): `CoreEndedRun` reads the core's own terminal facts (`AgentEndEvent.Cancelled`, a preceding `AgentErrorEvent`) and `HostClosedRun` keeps `TuiEffectHost`'s close-out from re-judging a run the core already ended. Everything downstream reads `ChatDomainState.SessionStatus`. |
 | `State/UiStore.cs` | `UiStore` — the Elm-style store that owns state, dispatches messages, and runs `TuiEffect`s via `ITuiEffectRunner`. |
-| `AppState.cs` | Legacy flat app state. **Not** on the TEA read path. Producer-less since #594 — the `Harbor.Ui.Framework.Reducers` branch that folded `AgentEvent` into it was deleted as dead. See `docs/ROADMAP.md`. |
-| `State/ChatViewState.cs` | Chat transcript state: `Lines`, `ToolCalls` (each carries the shared `ToolCallState` lifecycle enum from `Harbor.Ui.Framework.Abstractions`, #567), `IsStreaming`, `IsThinking`, `StreamingBuffer`, `PendingStreaming`. |
-| `State/ChromeViewState.cs` | Chrome state: `ActiveSessionId`, `NavigationStack`, `ActiveModal`, `Toasts`, plus helper reducers. |
-| `State/SessionsViewState.cs` | Sessions list state: `Sessions`, `ActiveSessionId`, `IsLoading`. |
+| `SessionInfo.cs` | One immutable session entry: `SessionId`, `Title`, timestamps, `Status`, `IsSubagent`. **Live** — held by `ChatDomainState.Sessions`, projected by `PanelRows.SessionRows`, constructed by the CLI's `SessionSwitchManager`. Moved here from `SessionsViewState.cs` in #597, which had to be split because the dead `SessionsViewState` record and this live type shared one file. |
 | `Panels/` | `IPanelRegistry`, `PanelRegistry`, `IPanelProvider`, `TuiPanel`, `TuiPanelPlacement`, `TuiPanelState`, `PanelContext`, `ITuiPanelPlugin`. |
 | `State/AsyncData.cs` | `AsyncData<T>` struct: `Idle`, `Loading`, `Success`, `Error`, `Refreshing`. |
 | `State/AsyncFeed.cs` | `AsyncFeed<T>` — disposable async data source with `RefreshAsync`. |

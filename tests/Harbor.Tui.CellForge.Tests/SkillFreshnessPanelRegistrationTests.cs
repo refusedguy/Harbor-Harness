@@ -11,6 +11,14 @@ namespace Harbor.Tui.CellForge.Tests;
 ///     <see cref="PanelWiringTests" /> stays intact), and the
 ///     <c>HARBOR_SKILL_FRESHNESS</c> flag gates the CLI wiring.
 /// </summary>
+/// <remarks>
+///     #823: the test below writes the opt-in variable into the process
+///     environment and <see cref="SkillFreshnessPanelRegistration" /> reads it back
+///     (SkillFreshnessPanelRegistration.cs:44), so the write is process state.
+///     Sole writer in this assembly, so the key excludes nobody today; it is here
+///     so the next class that reads the flag does not have to rediscover that.
+/// </remarks>
+[NotInParallel("process-env")]
 public class SkillFreshnessPanelRegistrationTests
 {
     [Test]

@@ -19,21 +19,21 @@
 // The four rules, each quoted from the code that claims it
 // ---------------------------------------------------------
 //   1. NEITHER TRUNCATION MAY OPEN THE KEPT SLICE ON AN ORPHAN TOOL RESULT.
-//      CompactionPolicy.cs:50-52 ("The cut point never lands on a ToolResultMessage:
+//      CompactionPolicy.cs:58-60 ("The cut point never lands on a ToolResultMessage:
 //      orphan tool results whose assistant tool_call was dropped would be rejected by
-//      providers") and :133-134 (the same claim in TruncateToFitStrict).
+//      providers") and :147-148 (the same claim in TruncateToFitStrict).
 //   2. TruncateToFitStrict ALWAYS REDUCES STRICTLY ABOVE THE KEEP FLOOR.
-//      CompactionPolicy.cs:120-122 ("Whenever total > 4 the target is strictly below
+//      CompactionPolicy.cs:144-146 ("Whenever total > 4 the target is strictly below
 //      total, so reduction is guaranteed even when the whole history would trivially
 //      fit"). 4 is a real threshold in the code, not one invented here: it is
-//      `MinimumKeptMessages` at :144.
+//      `MinimumKeptMessages` at :168.
 //   3. MaterializeCompactedView IS IDEMPOTENT.
 //      The compacted view is recomputed from the raw append-only history on every turn
 //      (TurnRunner.cs:106, CompactionBehavior.cs:78). Materializing a view that has
 //      already been materialized must not shrink it again, or the session bleeds one
 //      turn at a time.
 //   4. MaterializeCompactedView FAILS SAFE.
-//      CompactionPolicy.cs:203-206 ("when no summary exists, or the anchor id cannot be
+//      CompactionPolicy.cs:228-230 ("when no summary exists, or the anchor id cannot be
 //      resolved, the input instance is returned unchanged rather than risking silent
 //      history loss"). Silent history loss is the worst outcome this subsystem has.
 //
@@ -151,7 +151,7 @@ public class CompactionPolicyInvariantTests
         }
 
         await Assert.That(violations).IsEmpty()
-            .Because("CompactionPolicy.TruncateToFit documents at CompactionPolicy.cs:50 "
+            .Because("CompactionPolicy.TruncateToFit documents at CompactionPolicy.cs:58 "
                    + "that the cut point never lands on a ToolResultMessage, because an orphan "
                    + "result whose assistant tool_call was dropped is rejected by the "
                    + "provider. These histories broke that: "

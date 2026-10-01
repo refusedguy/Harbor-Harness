@@ -34,17 +34,27 @@ Two halves of the layering contract, both mechanically enforced:
    repository text scans over `src/` + `apps/`, each with a liveness check and a
    positive control.
 5. **Configuration rules** — a build setting that is a *permission* has to state
-   what it authorises: `DiSeverityDemotionRules` (#865, every path-scoped
-   `.editorconfig` severity demotion names the rule it demotes, and every
-   path-scoped section has a path that exists). Sits with `ExemptionReason.cs`,
-   which is the one place that answers "does this tolerated row state a reason?"
-   for the five C# exemption tables; a demotion's row is a config key rather
-   than a value, so it is checked here instead.
+   what it authorises. Two readers of the same `.editorconfig`, each owning one
+   question, and the split is deliberate (see `DiSeverityDemotionRules`' header):
+   * `AnalyzerSeverityScopeRules` (#838) — a path-scoped section resolves to a
+     real path, `docs/ANALYZERS.md` accounts for it, and the set of relaxed
+     paths is the declared inventory. Scoped to the `DI###` family on purpose.
+   * `DiSeverityDemotionRules` (#865) — every severity a path-scoped section
+     sets names its own rule in the comment governing it, for EVERY analyzer
+     family, since a demotion's reason is a comment and a comment is invisible
+     to the compiler, to the analyzer it silences, and to every other gate here.
+   Sits with `ExemptionReason.cs`, which is the one place that answers "does
+   this tolerated row state a reason?" for the five C# exemption tables; a
+   config demotion is the sixth, and the only one whose row is not a value.
 
 ## Run
 
-> `dotnet test` discovers zero tests in this repo (broken MTP bridge). Run the
-> test project as a plain executable:
+> `dotnet test` is not used in this repo — every CI job runs each test project
+> as a plain executable, and no job runs `dotnet test`, so its behaviour here is
+> unverified (an earlier version of this line claimed it "discovers zero tests",
+> which was wrong; see
+> [CONTRIBUTING.md §Why not `dotnet test`](../../CONTRIBUTING.md#why-not-dotnet-test)).
+> Run the test project as a plain executable:
 
 ```bash
 dotnet build tests/Harbor.Architecture.Tests/Harbor.Architecture.Tests.csproj

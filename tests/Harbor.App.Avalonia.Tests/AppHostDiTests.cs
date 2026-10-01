@@ -24,6 +24,14 @@ namespace Harbor.App.Avalonia.Tests;
 ///     Avalonia composition root (which wires a subset of services — no MCP,
 ///     no plugins, no Jsonl providers).
 /// </summary>
+// #823: `process-env` is a NAMED key, and the class that races this one is
+// ViewInflationTests — which already holds `avalonia-headless` and so sits in
+// the same keyed bucket without ever excluding this class. The two swap the
+// same `HOME` and both call AppHost.BuildAsync, which reads it back through
+// AppHost.ResolveHarborDir (AppHost.cs:121-126). Keyless was the alternative and
+// #700 already priced it: it holds this whole assembly alone for all 28 of
+// these methods, forever.
+[NotInParallel("process-env")]
 public class AppHostDiTests
 {
     private static readonly Lazy<Task<IHost>> _hostLazy = new(() =>

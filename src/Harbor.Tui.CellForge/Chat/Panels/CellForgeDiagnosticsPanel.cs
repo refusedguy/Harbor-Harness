@@ -59,6 +59,15 @@ public sealed class CellForgeDiagnosticsPanel : CellForgePanelBase
             return false;
         }
 
+        // #833: a chord is not a cursor move. This panel holds no text, so it has
+        // no claim on a modified rune — Ctrl+j belongs to the host, which is
+        // also why it must not silently move the cursor and swallow it. Shift is
+        // admitted: the rows below bind 'J' and 'K' explicitly.
+        if (key.Mods.IsCommandModifier())
+        {
+            return false;
+        }
+
         switch (key.Character)
         {
             case 'j':

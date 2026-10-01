@@ -1,4 +1,5 @@
 using System.Reflection;
+using Harbor.Abstractions.Git;
 using Harbor.Ui.Framework.Diagnostics;
 using Harbor.Ui.Framework.Panels;
 using Harbor.Ui.Framework.State;
@@ -72,11 +73,13 @@ public class PanelServicesTests
         var registry = new PanelRegistry();
         var diagnostics = new InMemoryDiagnosticsPanel();
         var sessions = new StubGateway();
+        var git = new StubGitQuery();
         var container = new StubContainer()
             .Add<UiStore>(store)
             .Add<IPanelRegistry>(registry)
             .Add<IDiagnosticsPanel>(diagnostics)
-            .Add<IPanelSessionGateway>(sessions);
+            .Add<IPanelSessionGateway>(sessions)
+            .Add<IGitQuery>(git);
 
         PanelServices deps = PanelServices.FromContainer(container);
 
@@ -84,6 +87,10 @@ public class PanelServicesTests
         await Assert.That(deps.PanelRegistry).IsSameReferenceAs(registry);
         await Assert.That(deps.Diagnostics).IsSameReferenceAs(diagnostics);
         await Assert.That(deps.Sessions).IsSameReferenceAs(sessions);
+        // #666 added the Git field; registering it here keeps this test's claim
+        // ("every registered service lands in its field") true of the bag as it
+        // is now, rather than true of a bag that no longer exists.
+        await Assert.That(deps.Git).IsSameReferenceAs(git);
         // ISessionStore was never registered above → honestly null, no throw.
         await Assert.That(deps.SessionStore).IsNull();
     }
@@ -99,6 +106,7 @@ public class PanelServicesTests
         await Assert.That(deps.Diagnostics).IsNull();
         await Assert.That(deps.SessionStore).IsNull();
         await Assert.That(deps.Sessions).IsNull();
+        await Assert.That(deps.Git).IsNull();
     }
 
     /// <summary>
@@ -159,5 +167,21 @@ public class PanelServicesTests
         public bool? GetIsSubagent(string sessionId) => null;
 
         public Task<bool> OpenPanelSessionAsync(string sessionId) => Task.FromResult(false);
+    }
+
+    /// <summary>
+    ///     #666 added <see cref="IGitQuery" /> to the bag for the jump palette. This
+    ///     bag's test only cares that the projection reaches the container, so the
+    ///     double answers with nothing and is identified by reference.
+    /// </summary>
+    private sealed class StubGitQuery : IGitQuery
+    {
+        public IReadOnlyList<GitWorktreeInfo> ListWorktrees(
+            string directory,
+            CancellationToken cancellationToken = default)
+            => Array.Empty<GitWorktreeInfo>();
+
+        public GitWorkspaceStatus GetStatus(string directory, CancellationToken cancellationToken = default)
+            => GitWorkspaceStatus.None;
     }
 }

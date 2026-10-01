@@ -26,11 +26,54 @@ namespace Harbor.App.Avalonia;
 public partial class App : global::Avalonia.Application
 {
     /// <summary>
-    ///     The DI container. Set by <c>Program.cs</c> in the Avalonia
-    ///     <c>AfterSetup</c> callback before <see cref="OnFrameworkInitializationCompleted" />
+    ///     The handover backing <see cref="Services" />. Null until
+    ///     <c>Program.cs</c> hands the built host over.
+    /// </summary>
+    /// <remarks>
+    ///     #779: this used to be one <c>public static IServiceProvider Services
+    ///     { get; set; } = null!</c>, read twelve times from XAML view code-behinds
+    ///     as well as here. Those twelve reads are gone — they resolve through
+    ///     <c>ShellLocator</c>, which walks up to the window this class builds.
+    /// </remarks>
+    private static IServiceProvider? s_services;
+
+    /// <summary>
+    ///     The DI container, handed over by <c>Program.cs</c> in the Avalonia
+    ///     <c>AfterSetup</c> callback, before <see cref="OnFrameworkInitializationCompleted" />
     ///     runs.
     /// </summary>
-    public static IServiceProvider Services { get; set; } = null!;
+    /// <remarks>
+    ///     <para>
+    ///         Reading this before the handover used to fail as a bare
+    ///         <see cref="NullReferenceException" /> from whatever line happened to
+    ///         touch it — including the <c>FirstChanceException</c> handler below,
+    ///         which runs while Avalonia is still bringing itself up. That is the
+    ///         "works in the REPL, dies in a test" shape: the failure named nothing
+    ///         about the step that was missed. The getter names it now.
+    ///     </para>
+    ///     <para>
+    ///         This stays for <see cref="OnFrameworkInitializationCompleted" /> and the
+    ///         two window paths only, because that IS the composition root:
+    ///         <c>ServiceLocatorBoundaryRules</c> exempts container use at the root as
+    ///         the one legitimate use, and pins this file plus <c>Program.cs</c> as the
+    ///         only two allowed to name the ambient. Removing the handover entirely
+    ///         would mean moving Avalonia startup ordering out of
+    ///         <see cref="Application" />, which Avalonia instantiates with a
+    ///         parameterless constructor — a change to WHEN the window is built, not a
+    ///         change to how it is wired. That is a separate decision for the owner, not
+    ///         a quiet part of this one.
+    ///     </para>
+    /// </remarks>
+    public static IServiceProvider Services
+    {
+        get => s_services ?? throw new InvalidOperationException(
+            "App.Services was read before Program.cs handed over the built host. " +
+            "Program.cs assigns it in AppBuilder.AfterSetup, which runs before the " +
+            "desktop lifetime starts; anything that touches the container earlier — a " +
+            "test that constructs App directly, or a host built outside Program.cs — " +
+            "must hand it over itself.");
+        set => s_services = value;
+    }
 
     /// <summary>
     ///     The host built by <c>AppHost.BuildAsync</c>. Held so we can stop it

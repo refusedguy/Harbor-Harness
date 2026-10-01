@@ -2,6 +2,7 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
+using Harbor.App.Avalonia.Hosting;
 using Harbor.Ui.Framework.Navigation;
 using Microsoft.Extensions.DependencyInjection;
 namespace Harbor.App.Avalonia.Views;
@@ -29,5 +30,5 @@ public partial class FocusSessionView : UserControl
     }
 
     private IShellChrome? _shellChrome;
-    private IShellChrome ShellChrome => _shellChrome ??= App.Services.GetRequiredService<IShellChrome>();
+    private IShellChrome ShellChrome => _shellChrome ??= ShellLocator.Of(this).Get<IShellChrome>();
 }

@@ -13,7 +13,7 @@
         Icons:
             IcAdd, IcSearch, IcSettings, IcSend, IcStop, IcTrash, IcChevronRight,
             IcChevronDown, IcChevronUp, IcChevronLeft, IcHome, IcTerminal,
-            IcFileCode, IcMore, IcCheck, IcX, IcCopy, IcPaste, IcLoading,
+            IcFileCode, IcFile, IcMore, IcCheck, IcX, IcCopy, IcPaste, IcLoading,
             IcPause, IcPlay, IcRefresh, IcDownload, IcUpload, IcLink,
             IcExternalLink, IcInfo, IcWarning, IcError, IcSuccess, IcMenu,
             IcClose, IcMinimize, IcMaximize, IcFolder, IcFolderOpen, IcBold,
@@ -58,8 +58,13 @@
     <!-- Terminal -->
     <StreamGeometry x:Key="IcTerminal">M14 12H4v2h10v-2zm4-9v2h-2V3h2zM4 7.5h6v6H4V7.5zm16 13.5H4v-2h16v2z</StreamGeometry>
 
-    <!-- File Code -->
+    <!-- File Code — the glyph IFileTreePolicy.CodeIcon selects (#755) -->
     <StreamGeometry x:Key="IcFileCode">M9.4 16.6L6.8 14l2.6-2.6L8 10l-4 4 4 4 1.4-1.4zm5.2.6l2.6-2.6 2.6 2.6L18 17.2l2.6-2.6L18 12l2.6-2.6L18 8.8 15.4 11l-1.2-1.2L14 11l1.2 1.2-1.2 1.2L14 16l1.2-1.2 1.2 1.2-1.2 1.2zm1-7.4V4h5v10h-5v-2.8z</StreamGeometry>
+
+    <!-- File — the generic document, the glyph a row the policy does not
+         classify gets. #755 added it: the sidebar was painting IcFileCode for
+         EVERY file, so a classified file and an unclassified one looked alike. -->
+    <StreamGeometry x:Key="IcFile">M6 2c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 1.99 2H18c1.1 0 2-.9 2-2V8l-6-6H6zm7 7V3.5L18.5 9H13z</StreamGeometry>
 
     <!-- More (three dots) -->
     <StreamGeometry x:Key="IcMore">M12 8a4 4 0 1 1-4 4 4 4 0 0 1 4-4m0-2a6 6 0 1 0 6 6 6 6 0 0 0-6-6zm8.25-3.75a1.25 1.25 0 1 1-1.25 1.25 1.25 1.25 0 0 1 1.25-1.25zm-10.5 0a1.25 1.25 0 1 1-1.25 1.25 1.25 1.25 0 0 1 1.25-1.25z</StreamGeometry>

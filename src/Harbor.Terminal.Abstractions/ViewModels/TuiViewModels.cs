@@ -183,6 +183,22 @@ public sealed partial class StatusBarViewModel : ObservableObject, ITuiViewModel
             case CompactionCompletedEvent:
                 Status = "running";
                 break;
+            // #773: the third arm of the lifecycle. This VM has no
+            // MessageStartEvent arm, so unlike the store projection nothing
+            // would have cleared a stale "compacting" — the cell would have
+            // read "compacting" from the failure until the AgentEndEvent arm
+            // above reset it to "idle". The run continues on truncated
+            // history, so "running" is the truth, and the degradation itself
+            // is narrated by the renderers that have a transcript.
+            //
+            // Not "error", for two reasons: the turn is not failing, and this
+            // VM's AgentEndEvent arm resets to "idle" unconditionally — so an
+            // "error" would not even survive to the end of the run, and would
+            // disagree with the store projection, which deliberately preserves
+            // it (#687).
+            case CompactionFailedEvent:
+                Status = "running";
+                break;
         }
         return Task.CompletedTask;
     }

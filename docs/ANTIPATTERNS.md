@@ -264,6 +264,29 @@ public sealed class MyService
 > (`ToolsCatalog.CreateToolRegistry`) — a plugin that needs a service declares it
 > in its own constructor and the host wires it.
 
+> **Removed in #779, for views.** `Harbor.App.Avalonia.App.Services` was
+> `public static IServiceProvider Services { get; set; } = null!`, and ten XAML view
+> code-behinds reached it — twelve reads against one writer, plus two test sites
+> that had to prime product global state before they could run. A static is a
+> defensible substitute for a constructor parameter only where the framework builds
+> the object, and Avalonia builds both `Application` and every `UserControl` in the
+> tree, so a dozen views were resolving through a global that no signature
+> mentioned.
+>
+> The fix was not to add an abstraction. `IViewModelLocator` already existed, was
+> already registered by the desktop composition root, and already had its own tests
+> — and had **zero** product consumers. Its own doc comment says it replaces exactly
+> these calls. `MainWindow`, the one shell view the root builds itself, now carries
+> it, and `ShellLocator.Of(this)` walks up the logical tree to find it. A view with
+> no host throws by name, because there is deliberately no ambient left to fall back
+> on.
+>
+> `App.Services` survives at the composition root, which `ServiceLocatorBoundaryRules`
+> exempts by name, and the `= null!` is gone — reading it before the handover names
+> the missing step instead of throwing `NullReferenceException`. Deleting the
+> handover too would mean moving Avalonia's startup ordering out of `Application`;
+> that is an owner decision, recorded in `App.axaml.cs` rather than made quietly.
+
 ### 8. Open class for inheritance when not designed for it
 
 **What.** Non-`sealed` class that isn't designed for subclassing (no virtual

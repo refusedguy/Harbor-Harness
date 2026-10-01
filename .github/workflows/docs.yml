@@ -116,10 +116,19 @@ jobs:
   # The floors are ~25% below today's numbers (2 normative documents, 143 line
   # citations, 68 backticked type names) and are a ratchet, like the ones above.
   # Scope is the `Status: normative` marker rather than every .md: measured over
-  # the whole tree the same rules find 141 pre-existing violations in 23 files,
-  # most of them archived sprint notes, and a gate that is red on 141 unrelated
-  # findings on day one is a gate that gets switched off. Deleting the marker
-  # from a document shrinks the scanned set, which the floors then catch.
+  # the whole tree the same rules find 85 pre-existing violations in 24
+  # non-normative documents, most of them archived sprint notes under
+  # docs/.kilo-docs/ and PLAN.md files that state an intention, and a gate that
+  # is red on 85 unrelated findings on day one is a gate that gets switched off.
+  # Deleting the marker from a document shrinks the scanned set, which the floors
+  # then catch.
+  #
+  # --min-counts 1 is the floor for DOC-COUNT-STALE, which is NOT opt-in: it
+  # asks every document that has a `| path | line |` table whether its stated
+  # total matches its own rows. Measured, exactly one document in the tree is
+  # in that shape, so the rule is exception-free today; the floor is what keeps
+  # it that way, since a COUNT_TOTAL matcher that quietly stopped matching would
+  # be indistinguishable from a tree with nothing to ask.
   cites:
     name: normative citations
     runs-on: ubuntu-latest
@@ -129,7 +138,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - name: Check every normative file:line and named type
-        run: python3 tools/check-doc-cites.py --min-files 2 --min-cites 100 --min-types 50
+        run: python3 tools/check-doc-cites.py --min-files 2 --min-cites 100 --min-types 50 --min-api 12 --min-counts 1
 
   lint:
     name: markdown lint

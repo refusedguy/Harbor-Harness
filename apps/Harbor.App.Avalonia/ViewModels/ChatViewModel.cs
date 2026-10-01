@@ -139,6 +139,15 @@ public sealed partial class ChatViewModel : ChatViewModelBase
             // tracker's value, so anything that recomputed a verdict here (it
             // used to read the transcript's last line's role) became a second
             // opinion on a question the core had already answered.
+            //
+            // #861: until now that claim was unchecked — the test named after this
+            // frame could not reach it, because tests/Harbor.Ui.Framework.Tests
+            // references no apps/ assembly. Inlining a verdict here
+            // (`SetStatus(id, SessionStatus.Idle)`) would have left the suite
+            // green with the presenter dead. The frame is now pinned by
+            // SessionStatusFrameReachabilityTests in
+            // tests/Harbor.Architecture.Tests/, which derives the frame from the
+            // tree rather than naming it, so inlining a status here is a red build.
             _sessionManager.SetStatus(activeSession.Id, _renderEngine.DeriveStatus(state));
             _sessionManager.NotifyMessageCount(activeSession.Id, state.Chat.Lines.Length);
         }

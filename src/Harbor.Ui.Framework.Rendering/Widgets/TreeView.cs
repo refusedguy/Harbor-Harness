@@ -266,7 +266,7 @@ public sealed class TreeView : IChatBlock, IFocusTarget
     public bool HandleKey(in KeyEvent key)
     {
         if ((key.EventType != KeyEventType.Press && key.EventType != KeyEventType.Repeat)
-            || key.Modifiers != KeyModifiers.None)
+            || !key.Modifiers.IsUnmodified())
         {
             return false;
         }

@@ -549,14 +549,46 @@ dotnet_diagnostic.ADP0001.severity = suggestion
 # the corresponding architecture test will fail with a clear list of the
 # forbidden references.
 # ============================================================================
-
-
-# Desktop composition root: three lifetime rules relaxed for a process-lifetime
-# graph. ONE reason per row, and the reason is the row's name — a single
-# sentence covering several rows is how the 4th row below went unaudited for a
-# year (#865). Guarded by DesktopAppDiDemotionRules in
-# tests/Harbor.Architecture.Tests: a demoted row whose own section does not
-# name it fails the build, and so does a section whose directory is gone.
+# PATH-SCOPED SEVERITY OVERRIDES (#838, narrowed at #865)
+# ============================================================================
+# Everything above this line is tree-wide. This block is the ONE place where a
+# diagnostic's severity is a function of (rule x path) rather than of the rule
+# alone, and it is the reason docs/ANALYZERS.md read as though it were lying
+# about the build: the doc summarised the rule half of the severity model and
+# omitted this half, so `apps/Harbor.App.Avalonia/App.axaml.cs` —
+# `public static IServiceProvider Services { get; set; }`, the exact shape
+# DI006's own README puts in its "Problem" block — compiled clean while the
+# same document said a static container is a build error. It was never an
+# enforcement gap and never a hole in the rule. Read the two together.
+#
+# WHY THE DESKTOP ROOT IS RELAXED: an Avalonia composition root has to hand its
+# container to the XAML object graph, which cannot take constructor parameters,
+# so the static root provider IS the idiom there. The CLI root resolves through
+# DI and keeps DI006 at `warning`, and apps/Harbor.App.Cli is deliberately
+# absent from this list. That asymmetry is observed, not assumed: #837 planted a
+# static container in the CLI root and the build failed with `error DI006`
+# before a test ran, in the same session that found the Avalonia root's
+# equivalent compiling clean.
+#
+# THE THREE SIBLING BLOCKS ARE GONE (#838). `apps/Harbor.App.{Wpf,Maui,Blazor}`
+# carried identical four-rule relaxations, and none of those directories exists:
+# those composition roots live under contrib/, which is not in Harbor.slnx and
+# is not built by CI. They were inert configuration that read like live policy —
+# a re-added `Harbor.App.Blazor` would have inherited a four-rule DI relaxation
+# nobody chose for it, with no diagnostic anywhere to say so.
+# `AnalyzerSeverityScopeRules.PathScopedSections_ResolveToRealPaths` in
+# tests/Harbor.Architecture.Tests/ now fails if such a block reappears, and
+# `DiSeverityOverrides_AreScopedToExactlyTheDeclaredRoot` pins this one path as
+# the whole surface.
+#
+# ONE REASON PER ROW, AND THE REASON IS THE ROW'S OWN NAME (#865). The block
+# used to be four rules deep under a single sentence that named three of them,
+# and the fourth was covered by neither the sentence nor the parenthetical that
+# tried to enumerate the rest. A reason that covers N rows is only auditable if
+# it names them, so each row below carries its own. `DiSeverityDemotionRules.
+# PathScopedSection_NamesEveryRuleItSets` fails the build when one does not —
+# the reason is a comment, and a comment is invisible to the compiler, to the
+# analyzer it silences, and to every other gate here.
 [apps/Harbor.App.Avalonia/**.cs]
 # DI006 — the XAML object graph has to be handed a container, and
 # App.Services is where it is parked (App.axaml.cs).
@@ -581,5 +613,8 @@ dotnet_diagnostic.DI014.severity = suggestion
 # TUnit0055 — "assertion not awaited" — fires on the fire-and-await shapes
 # the capture harness needs (a frame assertion raised from a callback the
 # test does not await), and there is no awaited form of that harness today.
+# The reason this row names the rule: the comment it replaces said "no
+# diagnostics fire in this file today", which is an argument for DELETING the
+# row, not for keeping it (#865).
 [tests/Harbor.Tui.RendererTests/NickConsoleExGoldenFrameTests.cs]
 dotnet_diagnostic.TUnit0055.severity = none

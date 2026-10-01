@@ -41,10 +41,15 @@ find . -type d \( -name bin -o -name obj \) -not -path '*/node_modules/*' -exec 
 
 ## Test commands
 
-> **Known limitation:** `dotnet test` discovers ZERO tests in this repo (the
-> `dotnet test` → MTP bridge exits 5 with a silent discovery error — verified
-> per project on SDK 10.0.302). Always run test projects **as plain
-> executables, one at a time**: `dotnet run --project tests/<Project> -c Release --no-build`.
+> **Known limitation:** `dotnet test` is not used in this repo — every CI job
+> runs each test project as a plain executable, one at a time:
+> `dotnet run --project tests/<Project> -c Release --no-build -- --minimum-expected-tests 1`.
+> The earlier wording here ("discovers ZERO tests … the `dotnet test` → MTP
+> bridge exits 5 with a silent discovery error — verified per project on SDK
+> 10.0.302") was **wrong**: exit 5 is the MTP *invalid command-line arguments*
+> code and a genuine zero-discovery run exits 8, so exit 5 was never evidence
+> of zero discovery. See [CONTRIBUTING.md §Why not `dotnet test`](../CONTRIBUTING.md#why-not-dotnet-test)
+> for the two real causes and for what is still unverified.
 
 ```bash
 # Build everything first (tests use --no-build)
@@ -403,7 +408,7 @@ The current UTC time is 2026-07-16T14:23:45.1234567Z.
 # 0 warnings, 0 errors
 dotnet build -c Release
 
-# Affected test projects pass (per-project executables; `dotnet test` discovers zero tests here)
+# Affected test projects pass (per-project executables — the form CI runs; `dotnet test` is not used)
 dotnet run --project tests/Harbor.Tools.Builtin.Tests -c Release --no-build -- --minimum-expected-tests 1
 
 # Code review checklist (see CLAUDE.md §Code review checklist)
@@ -940,7 +945,7 @@ dotnet-gcdump collect -n harbor
 - [ ] `JsonSerializer.Serialize/Deserialize<T>` — только через `JsonSerializerContext` source-gen.
 - [ ] No reflection: `Type.GetProperties()`, `Activator.CreateInstance` — запрещены в Core/Storage/Providers.
 - [ ] No `Assembly.Load` / `AssemblyLoadContext` collectible (использовать out-of-process plugins).
-- [ ] `dotnet build -c Release` — 0 IL2026 warnings.
+- [ ] `dotnet build -c Release` — 0 IL2026 warnings. **Только для 4 проектов с `IsAotCompatible=true`** (`Harbor.DesignSystem`, `Harbor.Ui.Framework.Rendering`, `Harbor.Tui.CellForge`, `Harbor.Tui.CellForge.Engine`): IL2026 выдаёт trim/AOT-анализатор, а он запускается лишь там, где проект сам opt-in, либо при publish с `PublishAot=true` — а такого publish не делает ни один workflow в `.github/workflows/`. `Harbor.App.Cli` (единственный проект, который публикуется как AOT) в эту проверку не входит, так что галочка здесь не утверждает ничего о поставляемом бинарнике. Запрет динамического кода проверяется отдельно и реально enforce-тся (`ReflectionConventionRule`, #626); publish-гейт — #413.
 
 ## SpectreTUI development (contrib)
 

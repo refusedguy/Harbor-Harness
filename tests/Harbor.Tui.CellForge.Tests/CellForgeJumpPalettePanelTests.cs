@@ -1,6 +1,7 @@
 using System.Collections.Immutable;
 using System.Text;
 using CSharpFunctionalExtensions;
+using Harbor.Abstractions.Git;
 using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Tui.CellForge.Panels;
@@ -26,9 +27,20 @@ namespace Harbor.Tui.CellForge.Tests;
 ///     and the centred-modal presentation
 ///     (<see cref="CellForgeJumpPaletteOverlayLayer" /> +
 ///     <see cref="ChatScreenPanelDock" /> releasing the dock slot). The model is
-///     injected (fake), so no git and no real sessions are involved — except
-///     the seeding tests, which pin the porcelain reader.
+///     injected (fake), so no git and no real sessions are involved.
 /// </summary>
+/// <remarks>
+/// <para>
+///     #666: the worktree seam is <see cref="IGitQuery" /> on
+///     <see cref="PanelServices" />, injected as
+///     <see cref="FakeGitQuery" />, where it used to be an
+///     <c>internal Func&lt;string&gt;</c> returning raw porcelain the panel parsed
+///     itself. The fake counts calls for the same reason the old delegate did — the
+///     "an unchanged frame asks git nothing" test is a real claim about the paint
+///     path — but it is now a port with a typed surface, and a test can assert the
+///     directory the panel asked about.
+/// </para>
+/// </remarks>
 public class CellForgeJumpPalettePanelTests
 {
     private sealed class FakeSessionManager : ISessionManager
@@ -120,19 +132,39 @@ public class CellForgeJumpPalettePanelTests
     ];
 
     /// <summary>Two worktrees, no sessions — the reopen/reseed fixture.</summary>
-    private static string Porcelain() =>
-        "worktree /repo/.worktrees/jump-palette\nbranch refs/heads/feat/jump-palette\n"
-        + "worktree /repo/.worktrees/worddiff\nbranch refs/heads/feat/word-diff\n";
+    private static GitWorktreeInfo[] Worktrees() =>
+    [
+        new("/repo/.worktrees/jump-palette", "feat/jump-palette", false),
+        new("/repo/.worktrees/worddiff", "feat/word-diff", false),
+    ];
+
+    /// <summary>
+    ///     The #666 seam. Counts calls and records the directory asked about, so
+    ///     a test can prove both that the panel reaches the port and that it does
+    ///     NOT reach it on a frame that changed nothing.
+    /// </summary>
+    private sealed class FakeGitQuery(IReadOnlyList<GitWorktreeInfo>? worktrees = null) : IGitQuery
+    {
+        public int ListWorktreesCalls { get; private set; }
+
+        public List<string> AskedDirectories { get; } = new();
+
+        public IReadOnlyList<GitWorktreeInfo> ListWorktrees(string directory, CancellationToken cancellationToken = default)
+        {
+            ListWorktreesCalls++;
+            AskedDirectories.Add(directory);
+            return worktrees ?? Array.Empty<GitWorktreeInfo>();
+        }
+
+        public GitWorkspaceStatus GetStatus(string directory, CancellationToken cancellationToken = default) =>
+            GitWorkspaceStatus.None;
+    }
 
     private static CellForgeJumpPalettePanel WithModel(out WorktreeJumpPaletteModel model)
     {
         model = new WorktreeJumpPaletteModel();
         model.Show(Entries);
-        var panel = new CellForgeJumpPalettePanel(model)
-        {
-            WorktreePorcelainReader = () => string.Empty,
-        };
-        return panel;
+        return new CellForgeJumpPalettePanel(model);
     }
 
     private static PanelContext Ctx(UiState state, PanelServices? services = null) =>
@@ -178,10 +210,7 @@ public class CellForgeJumpPalettePanelTests
     [Test]
     public async Task Contract_Id_Title_Placement_Size()
     {
-        var panel = new CellForgeJumpPalettePanel
-        {
-            WorktreePorcelainReader = () => string.Empty,
-        };
+        var panel = new CellForgeJumpPalettePanel();
 
         await Assert.That(panel.Id).IsEqualTo("jump");
         await Assert.That(panel.Id).IsEqualTo(OverlayIds.JumpPalette);
@@ -251,10 +280,7 @@ public class CellForgeJumpPalettePanelTests
     {
         var model = new WorktreeJumpPaletteModel();
         model.Show([new WorktreeJumpEntry(string.Empty, "detached-wt", "/repo/.worktrees/detached-wt", null, "no-session")]);
-        var panel = new CellForgeJumpPalettePanel(model)
-        {
-            WorktreePorcelainReader = () => string.Empty,
-        };
+        var panel = new CellForgeJumpPalettePanel(model);
         var manager = new FakeSessionManager();
         var store = VisibleJumpStore();
         var services = new PanelServices { Store = store, Sessions = manager };
@@ -355,12 +381,9 @@ public class CellForgeJumpPalettePanelTests
     public async Task OnKey_Escape_ClearsQuery_ReopenStartsEmpty()
     {
         var model = new WorktreeJumpPaletteModel();
-        var panel = new CellForgeJumpPalettePanel(model)
-        {
-            WorktreePorcelainReader = () => Porcelain(),
-        };
+        var panel = new CellForgeJumpPalettePanel(model);
         var store = VisibleJumpStore();
-        var services = new PanelServices { Store = store };
+        var services = new PanelServices { Store = store, Git = new FakeGitQuery(Worktrees()) };
         var ctx = Ctx(new UiState(), services);
 
         _ = panel.Build(ctx);
@@ -389,53 +412,41 @@ public class CellForgeJumpPalettePanelTests
     [Test]
     public async Task OnKey_R_Reseeds_KeepingQuery()
     {
-        int reads = 0;
+        var git = new FakeGitQuery(Worktrees());
+        var services = new PanelServices { Git = git };
         var model = new WorktreeJumpPaletteModel();
         model.Show(Entries);
-        var panel = new CellForgeJumpPalettePanel(model)
-        {
-            WorktreePorcelainReader = () =>
-            {
-                reads++;
-                return Porcelain();
-            },
-        };
+        var panel = new CellForgeJumpPalettePanel(model);
 
         // A plain char types without touching git.
-        _ = panel.OnKey(UiKey.ForChar('j'), Ctx(new UiState()));
+        _ = panel.OnKey(UiKey.ForChar('j'), Ctx(new UiState(), services));
         await Assert.That(model.Query).IsEqualTo("j");
-        await Assert.That(reads).IsEqualTo(0);
+        await Assert.That(git.ListWorktreesCalls).IsEqualTo(0);
 
         // 'r' re-reads git AND types normally — the refresh keeps the filter.
-        await Assert.That(panel.OnKey(UiKey.ForChar('r'), Ctx(new UiState()))).IsTrue();
-        await Assert.That(reads).IsEqualTo(1);
+        await Assert.That(panel.OnKey(UiKey.ForChar('r'), Ctx(new UiState(), services))).IsTrue();
+        await Assert.That(git.ListWorktreesCalls).IsEqualTo(1);
         await Assert.That(model.Visible).IsTrue();
         await Assert.That(model.Query).IsEqualTo("jr");
     }
 
     [Test]
-    public async Task Build_VisiblePalette_DoesNotReseed_OrSpawnGit()
+    public async Task Build_VisiblePalette_DoesNotReseed_OrAskGit()
     {
-        int reads = 0;
+        var git = new FakeGitQuery([new GitWorktreeInfo("/repo/.worktrees/other", null, false)]);
+        var services = new PanelServices { Git = git };
         var model = new WorktreeJumpPaletteModel();
         model.Show(Entries);
-        var panel = new CellForgeJumpPalettePanel(model)
-        {
-            WorktreePorcelainReader = () =>
-            {
-                reads++;
-                return "worktree /repo/.worktrees/other\n";
-            },
-        };
+        var panel = new CellForgeJumpPalettePanel(model);
 
-        _ = panel.Build(Ctx(new UiState()));
-        await Assert.That(reads).IsEqualTo(0);
+        _ = panel.Build(Ctx(new UiState(), services));
+        await Assert.That(git.ListWorktreesCalls).IsEqualTo(0);
 
         // Rebuilding with the palette already visible must not re-seed — an
-        // unchanged frame spawns no git process.
-        _ = panel.Build(Ctx(new UiState()));
-        _ = panel.Build(Ctx(new UiState()));
-        await Assert.That(reads).IsEqualTo(0);
+        // unchanged frame asks git nothing.
+        _ = panel.Build(Ctx(new UiState(), services));
+        _ = panel.Build(Ctx(new UiState(), services));
+        await Assert.That(git.ListWorktreesCalls).IsEqualTo(0);
     }
 
     [Test]
@@ -444,10 +455,7 @@ public class CellForgeJumpPalettePanelTests
         // #381: centred modal overlay, not a Right dock panel.
         var model = new WorktreeJumpPaletteModel();
         model.Show(Entries);
-        var panel = new CellForgeJumpPalettePanel(model)
-        {
-            WorktreePorcelainReader = () => string.Empty,
-        };
+        var panel = new CellForgeJumpPalettePanel(model);
         var store = VisibleJumpStore();
         var layer = new CellForgeJumpPaletteOverlayLayer(panel);
         var viewport = new Rect(0, 0, 120, 40);
@@ -477,10 +485,7 @@ public class CellForgeJumpPalettePanelTests
     {
         var model = new WorktreeJumpPaletteModel();
         model.Show(Entries);
-        var panel = new CellForgeJumpPalettePanel(model)
-        {
-            WorktreePorcelainReader = () => string.Empty,
-        };
+        var panel = new CellForgeJumpPalettePanel(model);
         var store = HiddenJumpStore();
         var layer = new CellForgeJumpPaletteOverlayLayer(panel);
         layer.Sync(new Rect(0, 0, 120, 40), new PanelContext(store.State, 120, 40, new PanelServices { Store = store }));
@@ -502,10 +507,7 @@ public class CellForgeJumpPalettePanelTests
         // The Right dock leaf the palette used to occupy is released: a Center
         // provider is the modal overlay plane and never docks.
         var owner = new CellForgePanelRegistry();
-        owner.Register(new CellForgeJumpPalettePanel
-        {
-            WorktreePorcelainReader = () => string.Empty,
-        });
+        owner.Register(new CellForgeJumpPalettePanel());
         var store = new UiStore();
         _ = owner.EnsureSeeded(store);
         _ = store.Dispatch(new AppMsg.FocusPanel(OverlayIds.JumpPalette));
@@ -538,11 +540,9 @@ public class CellForgeJumpPalettePanelTests
         var manager = new FakeSessionManager();
         manager.AddContext(session);
         var state = StateWithSessions(Info("s1", "Jump Palette"));
-        var services = new PanelServices { Sessions = manager };
-        var panel = new CellForgeJumpPalettePanel
-        {
-            WorktreePorcelainReader = () => "worktree /repo/.worktrees/jump-palette\nbranch refs/heads/feat/jump-palette\n",
-        };
+        var git = new FakeGitQuery([new GitWorktreeInfo("/repo/.worktrees/jump-palette", "feat/jump-palette", false)]);
+        var services = new PanelServices { Sessions = manager, Git = git };
+        var panel = new CellForgeJumpPalettePanel { WorktreeDirectory = "/repo" };
 
         string text = Joined(panel.Build(Ctx(state, services)));
 
@@ -550,5 +550,70 @@ public class CellForgeJumpPalettePanelTests
         await Assert.That(text).Contains("feat/jump-palette");
         await Assert.That(text).Contains("/repo/.worktrees/jump-palette");
         await Assert.That(manager.Opened).IsEmpty();
+
+        // #666: the panel asked the port, and about the directory it was told to
+        // ask about — there is no other path to a worktree list now.
+        await Assert.That(git.ListWorktreesCalls).IsEqualTo(1);
+        await Assert.That(git.AskedDirectories).IsEquivalentTo(new[] { "/repo" });
+    }
+
+    /// <summary>
+    ///     A host that registered no git query must degrade to a sessions-only
+    ///     palette — and must not reach for a process of its own. The "no
+    ///     fallback" half is the point: the old panel always had a working
+    ///     reader, so absence was not a state it had to handle at all.
+    /// </summary>
+    [Test]
+    public async Task Build_NoGitQueryRegistered_ShowsSessionsOnly_AndThrows()
+    {
+        var session = Session.Create("/repo", "code", "kilocode", "kilo-auto", "Main")
+            with
+            {
+                Id = "s1",
+                GitBranch = "main",
+            };
+        var manager = new FakeSessionManager();
+        manager.AddContext(session);
+        var state = StateWithSessions(Info("s1", "Main"));
+        var panel = new CellForgeJumpPalettePanel();
+
+        string text = Joined(panel.Build(Ctx(state, new PanelServices { Sessions = manager })));
+
+        await Assert.That(text).Contains("Main");
+        await Assert.That(text).DoesNotContain(".worktrees");
+    }
+
+    /// <summary>
+    ///     A port that throws cannot take the renderer down with it. The
+    ///     <c>IGitQuery</c> contract says it never throws for an expected
+    ///     failure, so this is the belt-and-braces half — a paint path is the
+    ///     worst possible place for an exception to escape.
+    /// </summary>
+    [Test]
+    public async Task Build_ThrowingGitQuery_DegradesToSessionsOnly()
+    {
+        var session = Session.Create("/repo", "code", "kilocode", "kilo-auto", "Main")
+            with
+            {
+                Id = "s1",
+            };
+        var manager = new FakeSessionManager();
+        manager.AddContext(session);
+        var state = StateWithSessions(Info("s1", "Main"));
+        var services = new PanelServices { Sessions = manager, Git = new ThrowingGitQuery() };
+        var panel = new CellForgeJumpPalettePanel();
+
+        string text = Joined(panel.Build(Ctx(state, services)));
+
+        await Assert.That(text).Contains("Main");
+    }
+
+    private sealed class ThrowingGitQuery : IGitQuery
+    {
+        public IReadOnlyList<GitWorktreeInfo> ListWorktrees(string directory, CancellationToken cancellationToken = default) =>
+            throw new InvalidOperationException("git is having a day");
+
+        public GitWorkspaceStatus GetStatus(string directory, CancellationToken cancellationToken = default) =>
+            throw new InvalidOperationException("git is having a day");
     }
 }

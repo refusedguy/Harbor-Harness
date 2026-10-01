@@ -170,7 +170,7 @@ public sealed class ComposerController
         // Plain text never arrives with Alt set: legacy terminals encode
         // M-x as ESC-prefix (Meta), kitty/CSI-u set the Alt bit. Routing
         // those to insertion made readline chords unreachable.
-        if ((mods & (KeyModifiers.Ctrl | KeyModifiers.Meta | KeyModifiers.Alt)) == 0)
+        if (mods.AcceptsTypedChar())
         {
             _ = Buffer.Insert(key.Character);
             return ComposerAction.Edited;
@@ -272,17 +272,17 @@ public sealed class ComposerController
             static (c, key) => { _ = c.Buffer.MoveWordLeft(); return ComposerAction.Edited; }),
         new(static k => k.Key == KeyCode.Right && (k.Modifiers & (KeyModifiers.Ctrl | KeyModifiers.Meta)) != 0 && (k.Modifiers & (KeyModifiers.Shift | KeyModifiers.Alt)) == 0,
             static (c, key) => { _ = c.Buffer.MoveWordRight(); return ComposerAction.Edited; }),
-        new(static k => k.Key == KeyCode.Backspace && (k.Modifiers == KeyModifiers.None || k.Modifiers == KeyModifiers.Shift),
+        new(static k => k.Key == KeyCode.Backspace && k.Modifiers.AcceptsTypedChar(),
             static (c, key) => { _ = c.Buffer.Backspace(); return ComposerAction.Edited; }),
-        new(static k => k.Key == KeyCode.Delete && k.Modifiers == KeyModifiers.None,
+        new(static k => k.Key == KeyCode.Delete && k.Modifiers.IsUnmodified(),
             static (c, key) => { _ = c.Buffer.DeleteForward(); return ComposerAction.Edited; }),
         new(static k => k.Key == KeyCode.Left && (k.Modifiers & (KeyModifiers.Ctrl | KeyModifiers.Meta)) == 0,
             static (c, key) => { _ = c.Buffer.MoveLeft(); return ComposerAction.Edited; }),
         new(static k => k.Key == KeyCode.Right && (k.Modifiers & (KeyModifiers.Ctrl | KeyModifiers.Meta)) == 0,
             static (c, key) => { _ = c.Buffer.MoveRight(); return ComposerAction.Edited; }),
-        new(static k => k.Key == KeyCode.Home && k.Modifiers == KeyModifiers.None,
+        new(static k => k.Key == KeyCode.Home && k.Modifiers.IsUnmodified(),
             static (c, key) => { _ = c.Buffer.MoveToLineStart(); return ComposerAction.Edited; }),
-        new(static k => k.Key == KeyCode.End && k.Modifiers == KeyModifiers.None,
+        new(static k => k.Key == KeyCode.End && k.Modifiers.IsUnmodified(),
             static (c, key) => { _ = c.Buffer.MoveToLineEnd(); return ComposerAction.Edited; }),
     ];
 
@@ -290,7 +290,13 @@ public sealed class ComposerController
     private ComposerAction HandleHistoryKey(KeyEvent key)
     {
         var mods = key.Modifiers;
-        if ((mods & (KeyModifiers.Shift | KeyModifiers.Ctrl | KeyModifiers.Alt | KeyModifiers.Meta)) != 0)
+
+        // Deliberately NOT KeyModifierGate.AcceptsTypedChar: history recall
+        // refuses Shift as well, because Shift+Up has no meaning here — it is not
+        // a case anyone can type into a history. That is the OTHER half of the
+        // rule (the "unmodified command" family) rather than the typing half, and
+        // collapsing the two would make Shift+Up walk the draft.
+        if (mods != KeyModifiers.None)
         {
             return ComposerAction.Ignored;
         }

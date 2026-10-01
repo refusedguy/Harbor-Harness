@@ -80,22 +80,25 @@ is the legacy shorthand forcing all of them off. The NUKE build
 ## Run tests
 
 ```bash
-# Run a specific test project — the known-good pattern (Release, no rebuild)
-dotnet test tests/Harbor.Core.Tests -c Release --no-build
+# Run a specific test project — the known-good pattern (Release, no rebuild).
+# Tests run as plain executables, one project at a time; this is what CI does.
+dotnet run --project tests/Harbor.Core.Tests -c Release --no-build -- --minimum-expected-tests 1
 
-# Run a specific test class — TUnit uses --treenode-filter, not --filter
-dotnet test tests/Harbor.Abstractions.Tests -c Release --no-build \
-  --treenode-filter "/*/*/IdentifiersTests/*"
+# Run a specific test class — TUnit uses --treenode-filter, not --filter,
+# and it is forwarded to the test host after --
+dotnet run --project tests/Harbor.Abstractions.Tests -c Release --no-build -- \
+  --minimum-expected-tests 1 --treenode-filter "/*/*/IdentifiersTests/*"
 
 # Run with detailed output
-dotnet test tests/Harbor.Core.Tests -c Release --no-build --logger "console;verbosity=detailed"
+dotnet run --project tests/Harbor.Core.Tests -c Release --no-build -- \
+  --minimum-expected-tests 1 --output Detailed
 ```
 
 Tests use [TUnit](https://github.com/thomhurst/TUnit) — fastest .NET test framework, source-generated.
 
-> **Known limitation:** running the whole `Harbor.slnx` suite with a single
-> `dotnet test` breaks under the MTP host. Always target one test-project
-> directory at a time (`tests/<Project>`); there are 28 of them.
+> **Note:** `dotnet test` is not used in this repo and no CI job runs it, so its
+> behaviour here is unverified. See
+> [CONTRIBUTING.md §Why not `dotnet test`](../CONTRIBUTING.md#why-not-dotnet-test).
 
 ## Run the CLI
 
@@ -204,9 +207,9 @@ jobs:
         with:
           dotnet-version: '10.0.x'
       - run: dotnet build -c Release --warnaserror
-      # NOTE: per-project test invocations — whole-solution dotnet test breaks
-      # under the MTP host. Use the NUKE build or loop over tests/*/.
-      - run: for t in tests/Harbor.*.Tests; do dotnet test "$t" -c Release --no-build; done
+      # NOTE: per-project test invocations as plain executables — one process
+      # per project, matching ci.yml. Use the NUKE build or loop over tests/*/.
+      - run: for t in tests/Harbor.*.Tests; do dotnet run --project "$t" -c Release --no-build -- --minimum-expected-tests 1; done
 
   publish:
     needs: build

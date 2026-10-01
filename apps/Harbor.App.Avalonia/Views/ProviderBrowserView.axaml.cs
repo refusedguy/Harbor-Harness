@@ -2,6 +2,7 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
+using Harbor.App.Avalonia.Hosting;
 using Harbor.App.Avalonia.ViewModels;
 using Harbor.Ui.Framework.Navigation;
 using Harbor.Abstractions.Tools;
@@ -82,7 +83,7 @@ public partial class ProviderBrowserView : UserControl
     }
 
     private IShellChrome? _shellChrome;
-    private IShellChrome ShellChrome => _shellChrome ??= App.Services.GetRequiredService<IShellChrome>();
+    private IShellChrome ShellChrome => _shellChrome ??= ShellLocator.Of(this).Get<IShellChrome>();
 
     private void Provider_SelectionChanged(object? sender, SelectionChangedEventArgs e)
     {

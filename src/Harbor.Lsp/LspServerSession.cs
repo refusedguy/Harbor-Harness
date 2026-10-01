@@ -11,6 +11,28 @@ namespace Harbor.Lsp;
 ///     open/change/close traffic → diagnostics cache. Owns the transport and
 ///     shuts the process down on dispose.
 /// </summary>
+/// <remarks>
+///     <para>
+///         <b>Every redirected pipe is drained for the whole life of the child</b> (#908).
+///         stdout goes to <see cref="LspClient" />, which reads it in a continuous loop for
+///         the session's lifetime. stderr is drained by the reader
+///         <see cref="StartAsync" /> starts before it waits. stderr was redirected and read
+///         by nothing, and a language server is the worst case for that: it logs to stderr
+///         by design, its pipe is a bounded buffer, and once it overruns, the server blocks
+///         in <c>write()</c> and stops answering. Nothing kills it — unlike #884's git,
+///         which had a ceiling and a kill and so degraded to an empty answer instead of a
+///         hung server.
+///     </para>
+///     <para>
+///         Neither half of this is new. The EXPOSURE is <c>McpProcessClient</c>'s — an MCP
+///         stdio server is a chatty child on a redirected stderr, and that type already
+///         recognises the shape and drains it. The READER is <c>ProcessGitQuery</c>'s, the
+///         <c>BeginErrorReadLine</c> pair <c>BashTool</c> and <c>RipGrepTool</c> already
+///         use. This spawn is async, so an async drain would also have been admissible; the
+///         event-driven one is used because it leaves no task for the caller to remember to
+///         await.
+///     </para>
+/// </remarks>
 public sealed class LspServerSession : IAsyncDisposable
 {
     /// <summary>Budget for the initialize handshake — a hung server must not block file opens.</summary>
@@ -44,6 +66,41 @@ public sealed class LspServerSession : IAsyncDisposable
     public LspServerDefinition Definition => _definition;
 
     /// <summary>Spawn the server process and complete the initialize handshake.</summary>
+    /// <remarks>
+    ///     <para>
+    ///         <b>stderr is drained here, before anything waits</b> (#908). It was
+    ///         redirected and read by nothing. A language server logs to stderr BY DESIGN —
+    ///         that is where indexing progress, "could not find Cargo.toml" and parse
+    ///         warnings go — and a redirected pipe is a bounded buffer, so once the server
+    ///         has written more than fits it blocks in <c>write()</c> and stops. Not "the
+    ///         first file open is slow": the server is wedged for the rest of the session,
+    ///         because nothing kills it. #884's git had a 3 s ceiling and a kill, so it
+    ///         degraded to an empty answer; this has no ceiling at all, which makes it the
+    ///         worse of the two.
+    ///     </para>
+    ///     <para>
+    ///         <b>NOT VERIFIED</b> by running anything: no language server and no dotnet on
+    ///         this host, so "they log to stderr" is read off documented behaviour rather
+    ///         than measured. The fix does not depend on it. The defect is a property of the
+    ///         CALLER, which redirected a pipe and cannot bound how much a child writes; a
+    ///         server that is silent today is a server whose logging can change without a
+    ///         line of product code moving.
+    ///     </para>
+    ///     <para>
+    ///         The reader is event-driven — the <c>BeginErrorReadLine</c> pair
+    ///         <c>ProcessGitQuery</c>, <c>BashTool</c> and <c>RipGrepTool</c> already use
+    ///         — rather than a <c>ReadToEndAsync</c> join. This is the spawn, so the reader
+    ///         can start here and stay started for the life of the child, and the drain then
+    ///         needs no cancellation of its own: it ends when the child closes the pipe, or
+    ///         when <see cref="DisposeAsync" /> disposes the process.
+    ///     </para>
+    ///     <para>
+    ///         stderr is logged at Debug rather than discarded, for the same reason
+    ///         <c>ProcessGitQuery</c> does: a server that dies mid-session says why on
+    ///         stderr and nowhere else, and a dead server otherwise presents as "no
+    ///         diagnostics" — the same unexplained-empty-answer bug #884 was.
+    ///     </para>
+    /// </remarks>
     public static async Task<LspServerSession> StartAsync(
         LspServerDefinition definition,
         string workspaceRoot,
@@ -67,6 +124,18 @@ public sealed class LspServerSession : IAsyncDisposable
 
         var process = Process.Start(psi)
             ?? throw new InvalidOperationException($"Failed to start language server '{definition.Command}'.");
+
+        // The stderr reader starts here, next to the redirect that needs it, and before
+        // anything below can wait on the child. stdout is handed to LspClient, which
+        // reads it in a loop for the session's lifetime; stderr had no reader at all.
+        process.ErrorDataReceived += (_, e) =>
+        {
+            if (e.Data is { Length: > 0 } line)
+            {
+                logger.LogDebug("LSP: {Language} server stderr: {Line}", definition.Language, line);
+            }
+        };
+        process.BeginErrorReadLine();
 
         logger.LogInformation(
             "LSP: started {Language} server ({Command}) pid={Pid} root={Root}",
@@ -437,6 +506,9 @@ public sealed class LspServerSession : IAsyncDisposable
                 _logger.LogDebug(ex, "LSP: kill of {Language} server failed", _definition.Language);
             }
 
+            // Disposing the process closes the stderr pipe the reader `StartAsync` started,
+            // which is what ends it: the drain is tied to the child's lifetime rather than
+            // to a task this type has to remember to await (#908).
             _process.Dispose();
         }
     }

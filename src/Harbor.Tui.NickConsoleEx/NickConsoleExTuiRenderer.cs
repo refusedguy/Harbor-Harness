@@ -140,8 +140,13 @@ public sealed partial class NickConsoleExTuiRenderer : BaseTuiRenderer
     /// <summary>Compaction lifecycle lines.</summary>
     private sealed class CompactionHandler(NickConsoleExTuiRenderer owner) : IAgentEventHandler
     {
+        // #840: the third member, for the reason AnsiPlain's copy of this
+        // handler has it. Near-copy is the hazard here — this class and the
+        // AnsiPlain one were written to stay in step, and a new lifecycle arm
+        // added to one of them is exactly the drift that leaves one backend
+        // silent about an irreversible context truncation.
         public bool CanHandle(AgentEvent @event) =>
-            @event is CompactionStartedEvent or CompactionCompletedEvent;
+            @event is CompactionStartedEvent or CompactionCompletedEvent or CompactionFailedEvent;
 
         public Task HandleAsync(AgentEvent @event, ITuiRenderContext context, CancellationToken ct = default)
         {
@@ -153,6 +158,20 @@ public sealed partial class NickConsoleExTuiRenderer : BaseTuiRenderer
 
                 case CompactionCompletedEvent cc:
                     owner.Append($"[dim]compacted: pruned {cc.PrunedMessageCount} msgs, saved ~{cc.TokensSaved} tokens[/]");
+                    break;
+
+                // The error text is escaped: it is the summarizer's own message
+                // and can carry square brackets, which this surface reads as
+                // markup. The siblings interpolate only counts, so they never
+                // needed it.
+                //
+                // Dim like its siblings rather than louder. AnsiPlain steps this
+                // one arm up to TuiColor.Yellow, but the colour vocabulary there
+                // is Harbor's own; here it is SharpConsoleUI's markup parser, and
+                // the vendored submodule is not something to guess a tag name
+                // against. The sentence is what carries this either way.
+                case CompactionFailedEvent cf:
+                    owner.Append($"[dim]{Escape(CompactionLifecycleLines.Failed(cf.Error))}[/]");
                     break;
             }
 

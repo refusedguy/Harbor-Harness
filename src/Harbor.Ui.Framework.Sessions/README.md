@@ -19,7 +19,7 @@ Session orchestration for the Harbor UI Framework — session factory, manager, 
 | `Sessions/SessionLifecycleService.cs` | `SessionLifecycleService` — session lifecycle orchestration. |
 | `Sessions/SessionStatusService.cs` | `SessionStatusService` — `ISessionStatusTracker` adapter over `SessionStatusTracker`. |
 | `Sessions/SessionOptionalFactories.cs` | `SessionOptionalFactories` — explicit Func-factories for host-only deps (no Service Locator). |
-| `Sessions/SessionFactory.cs` | `SessionFactory` — creates default, new, or branched sessions; resolves provider/model/agent from config. |
+| `Sessions/SessionFactory.cs` | `SessionFactory` — creates default and new sessions; resolves provider/model/agent from config; **forks** through the core's `SessionForkService` via the `ISessionForker` port (issue #670 — it used to carry its own copy of the fork, which had drifted). |
 | `Sessions/SessionSwitcher.cs` | `SessionSwitcher` — opens a session and hydrates its `UiStore` into a target store. |
 | `Sessions/SessionContext.cs` | `SessionContext` — binds a `Session`, `UiStore`, status, git branch, and hydration flag together. |
 | `Sessions/SessionGitTracker.cs` | `SessionGitTracker` — refreshes git status for a session directory. |
@@ -27,7 +27,7 @@ Session orchestration for the Harbor UI Framework — session factory, manager, 
 
 ## Public API summary
 
-- **`SessionFactory`**: `CreateDefaultAsync`, `CreateNewAsync`, `CreateBranchAsync`, `ResolveProviderModelFromConfigAsync`, `ResolveAgentDefinitionAsync`, `MessageToChatLine`.
+- **`SessionFactory`**: `CreateDefaultAsync`, `CreateNewAsync`, `CreateBranchAsync` (delegates to `ISessionForker` — the core fork, not a local copy), `ResolveProviderModelFromConfigAsync`, `ResolveAgentDefinitionAsync`, `MessageToChatLine`.
 - **`SessionManager`**: thin facade — `Active`, `ActiveContext`, `GetContext`, `GetStatus`, `SetStatus`, `NotifyMessageCount`, `GetGitInfo`, `RefreshGitInfo`, lifecycle ops, events for status/count changes. All logic lives in the services below.
 - **`SessionEventRouter`**: live + tombstoned contexts, `GetOrCreateContext`, `ParkContext`, `ActiveContext`.
 - **`SessionLifecycleService`**: `EnsureDefaultSessionAsync`, `New/Open/Branch/Delete/RenameSessionAsync`, `RebindFromCommonConfigAsync`.

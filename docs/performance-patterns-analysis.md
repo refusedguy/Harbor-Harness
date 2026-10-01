@@ -118,7 +118,7 @@ Harbor already has **strong performance foundations** for a .NET 10 terminal + d
 - `MemoryPack` source generators produce zero-allocation formatters for `ChatLine`, `Session`, `Usage`, etc.
 - `ChunkedBuffer` (`ImmutableStack<string>`) replaces O(N²) string concatenation in streaming reducers.
 - `StreamingSync` caps pending-lag at 2 048 chars; materializes only at flush points.
-- `UiState` and `ChatViewState` use `ImmutableArray<ChatLine>` and `record struct` — allocation-free to read.
+- `UiState` (via `ChatDomainState`) uses `ImmutableArray<ChatLine>` and `record struct` — allocation-free to read.
 
 **Benchmarks guard the design**:
 - `StreamingCoalescerBenchmark`: measures delta append + materialize under 10/100/1000 delta counts.
@@ -205,7 +205,7 @@ Harbor already has **strong performance foundations** for a .NET 10 terminal + d
 
 **State side**:
 - `UiState.Lines` is `ImmutableArray<ChatLine>` — snapshot is allocation-free to read.
-- `ChatViewState` uses `ImmutableArray<ToolCallViewModel>`.
+- `ChatDomainState` uses `ImmutableArray<ToolCallSnapshot>`, projected to `ObservableCollection<ToolCallViewModel>` by `ToolCallProjection`.
 
 ### 5.3 Concrete gaps & optimizations
 

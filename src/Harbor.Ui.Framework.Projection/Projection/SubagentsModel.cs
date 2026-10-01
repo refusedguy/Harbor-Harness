@@ -72,9 +72,38 @@ public static class SubagentsModel
     }
 
     /// <summary>
-    ///     Short display text for a session status (same vocabulary as
-    ///     <c>SessionContext.StatusText</c>: running / done / error / aborted / idle).
+    ///     Short display text for a session status: <c>running</c> / <c>done</c> /
+    ///     <c>error</c> / <c>aborted</c> / <c>idle</c>.
     /// </summary>
+    /// <remarks>
+    ///     <para>
+    ///         <b>One label differs from <c>SessionContext.StatusText</c>.</b> That
+    ///         property reads the framework's single table
+    ///         (<c>StatusMappers.SessionStatusToText</c>, #663) and renders
+    ///         <c>Working</c> as <c>"working"</c>; this method renders it as
+    ///         <c>"running"</c>. The other four labels agree. A previous version of
+    ///         this comment asserted the two were "the same vocabulary" and listed
+    ///         <c>running</c> as if it were <c>SessionContext</c>'s own word — they
+    ///         were never the same vocabulary, on the day the sentence was written
+    ///         as much as now (#862).
+    ///     </para>
+    ///     <para>
+    ///         The divergence is recorded rather than collapsed, because it cannot
+    ///         be collapsed from here: the canonical table lives in
+    ///         <c>Harbor.Ui.Framework.ViewModels</c>, and this file's project —
+    ///         <c>Harbor.Ui.Framework.Projection</c> — is a Presentation-layer
+    ///         sibling that may not reference it (the matrix in
+    ///         <c>docs/ARCHITECTURE_LAYERS.md</c> §2). The exception is listed with
+    ///         its reason in <c>SessionStatusTableRule.KnownDuplicates</c>
+    ///         (<c>tests/Harbor.Architecture.Tests/</c>), which is why this switch is
+    ///         still graded rather than skipped. <c>"running"</c> is also pinned as
+    ///         visible CellForge output by
+    ///         <c>CellForgeSubagentsPanelTests.FormatAge_And_StatusText_CoverVocabulary</c>,
+    ///         so relabelling is a visible-output decision owed its own issue — not
+    ///         something a reader of this comment should do on the strength of a
+    ///         "same vocabulary" claim.
+    ///     </para>
+    /// </remarks>
     public static string StatusText(SessionStatus status) => status switch
     {
         SessionStatus.Working => "running",

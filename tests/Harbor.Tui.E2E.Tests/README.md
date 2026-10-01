@@ -9,13 +9,14 @@ End-to-end TUI smoke tests - feed a scripted agent event stream, capture rendere
 ## Run
 
 ```bash
-dotnet test tests/Harbor.Tui.E2E.Tests
+dotnet run --project tests/Harbor.Tui.E2E.Tests -c Release --no-build -- --minimum-expected-tests 1
 ```
 
 Or filter to a single test class:
 
 ```bash
-dotnet test tests/Harbor.Tui.E2E.Tests --filter "FullyQualifiedName~E2E"
+dotnet run --project tests/Harbor.Tui.E2E.Tests -c Release --no-build -- \
+  --minimum-expected-tests 1 --treenode-filter "/*/*/E2E/*"
 ```
 
 ## Layer

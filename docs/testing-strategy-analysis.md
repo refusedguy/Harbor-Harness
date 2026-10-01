@@ -105,7 +105,7 @@ Harbor is a .NET 10 AI coding agent harness with multiple TUI renderers, an Aval
   1. **Fast**: In-memory render tests (render frame → golden string comparison) for CI
   2. **Slow**: PTY-based integration tests (`ratatui_testlib` paradigm or .NET equivalent) for keyboard protocols and escape sequences
 - For `AnsiTuiRenderer` / `PlainTuiRenderer`: capture stdout to a buffer and diff against golden files
-- For IPC/headless mode: test the JSON-RPC transport with `dotnet test` + in-memory channels
+- For IPC/headless mode: test the JSON-RPC transport from a test project (run as a plain executable — `dotnet test` is not used in this repo) + in-memory channels
 
 ---
 
