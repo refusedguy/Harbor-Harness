@@ -171,6 +171,25 @@
 // skeleton; the two are cross-referenced in each other's remarks so the next
 // reader does not re-open this question from the issue text alone.
 //
+// A NOTE ON WHAT THAT ARGUMENT DID NOT COVER (#479-A6), because it was read as
+// covering the whole pair and that is how a visible bug got through. Every point
+// above is about the POLL. None of them is about the APPLY, and the apply is the
+// half a user sees: `ThemeFileWatcher` applied only when the caller passed no
+// `onApplied` callback, `ThemeDirectoryWatcher` always applied. Both product call
+// sites pass a callback, so `HARBOR_THEME_FILE` / `~/.harbor/theme.json` polled,
+// printed "theme: live-reload → …", marked the screen dirty
+// (`ReplLifecycle.cs:248`) and changed no color, while the `~/.harbor/themes/`
+// directory arm repainted. Same document, different colors by which branch ran.
+//
+// Why no rule caught it, and why none of these rules would: they are source
+// scanners over the READ. The divergence is behavioural, so it needed a test that
+// runs both watchers — `ThemeWatcherApplyParityTests`, which drives them over one
+// document and compares the ambient palette. Its second test differs from the
+// file arm of the first ONLY by the absent callback, so the callback is the named
+// discriminator and a live palette read is proved rather than assumed; without it
+// a pair of identically-broken watchers would compare equal and report a green
+// that meant nothing. Both apply unconditionally now.
+//
 
 using System.Text.RegularExpressions;
 
