@@ -1108,8 +1108,27 @@ string handling and explicitly not forbidden.
 Two baseline rows are gone, and both deletions are enforced in both directions:
 `NonVacuity_GrandfatheredViolations_AreStillReal` fails the build on a row that outlived
 its violation, and `ResolvedViolations_HaveNoHits` fails it if the capability returns.
-The second is the one worth copying for the remaining #538 sites — a removed violation
+The second is the one worth copying whenever a violation is removed — a removed violation
 with nothing guarding its removal is indistinguishable from one that was never paid for.
+
+**#538 is closed, and this is the whole of it.** Its "Done when" asked for the seven
+baseline rows across `Harbor.Tui.Notifications`, `Harbor.Tui.CellForge` and
+`Harbor.Tui.CellForge.Engine` to be deleted, *or* the `TerminalInputStream` row to be
+re-homed under a terminal-specific rule. Both hold, so no product change is outstanding:
+the table above is all zeroes, and the one surviving capability sits in
+`PermanentCapabilities` (#669). The row count went to zero across five merged
+sub-issues — #665 (notifications behind `INotificationProcessRunner`), #666 (the jump
+palette behind `IGitQuery`), #667 (the file tree behind `IDirectoryLister`, off the
+render thread), #668 (theme loading behind `IThemeStore`, which also deleted the
+duplicate), #669 (the re-home).
+
+This matters for reading the paragraph above: "the remaining #538 sites" was written when
+four of the five were still open, and there are none now. What an emptied baseline buys
+is not that the capability is gone — that was the code change — but that any **new**
+`System.Diagnostics.Process*` / `System.IO.File*` / `System.IO.Directory*` reach from a
+Presentation type is red on the spot, in all 17 Presentation assemblies, with nothing to
+grandf. The five rules that carry no baseline (`KnownViolations` is empty) are fully
+armed rather than merely green.
 
 ### ARCH-6 completed — the desktop file tree (#492)
 
