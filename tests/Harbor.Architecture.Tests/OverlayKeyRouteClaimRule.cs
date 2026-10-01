@@ -93,6 +93,24 @@
 //   3. `EveryClaimShapeFiresOnTheStaleSentence` — a planted control per shape.
 //      The only thing that proves a matcher still works is that it still fails.
 //
+// A FOURTH mechanism was written, caught a real bug, and was then deleted. It is
+// recorded because the reasoning matters more than the code:
+//
+//   * The first draft's `HostSeatsLayer` shape fired on its planted control while
+//     matching NOTHING in the tree — the real sentence wraps a line and wraps the
+//     type name in `<c>`, so `host seats …\w*OverlayLayer` never matched. Every
+//     other non-vacuity assertion passed, and the guard reported a clean tree. A
+//     control proves a matcher CAN fire; only the real tree proves it fires THERE.
+//     The fix was `Normalize`, plus this note.
+//   * So a per-shape floor against the real tree ("every shape matches at least
+//     one site") was added — and it is wrong, and was removed. It makes "the tree
+//     is clean" indistinguishable from "the matcher is dead": the correct end
+//     state of this issue is ZERO claims, so a rule that requires every shape to
+//     have a live claim can never go green. That is the #847 shape — a guard whose
+//     green means nothing. `Normalize` is the durable fix; the floor was the
+//     detector, not the cure, and keeping it would have meant keeping a gate that
+//     forbids the fix it is part of.
+//
 // PLUS THE THING THAT MAKES IT A RATCHET RATHER THAN A SNAPSHOT
 // --------------------------------------------------------------
 // `NoDocCommentClaimsAnOverlayKeyRouteNoProductCodeEnters` is only meaningful
@@ -449,44 +467,5 @@ public sealed class OverlayKeyRouteClaimRule
             "every shape the rule iterates needs a control, or a newly added shape ships with "
             + "no proof it can fail. Shapes: " + OverlayKeyRouteClaimProbe.Shapes.Length
             + ", controls: " + controls.Length + ".");
-    }
-
-    /// <summary>
-    ///     Every shape must be ABLE to match, proven against the real tree rather than
-    ///     against a planted sentence.
-    /// </summary>
-    /// <remarks>
-    ///     This assertion exists because of a defect in the first draft of this file, and
-    ///     the shape that carried it is worth naming. <c>HostSeatsLayer</c> was written
-    ///     <c>host seats (the )?\w*OverlayLayer</c> and fired perfectly on its planted
-    ///     control — while matching NOTHING in the tree, because the real sentence wraps
-    ///     over a line break and wraps the type name in <c>&lt;c&gt;</c>. Every other
-    ///     non-vacuity assertion passed. A control proves a matcher can fire; only
-    ///     running it against the real tree proves it fires THERE, and a shape that has
-    ///     died quietly is indistinguishable from a shape with no violations.
-    ///
-    ///     The floor is 1, not the observed count, so that fixing a violation legitimately
-    ///     empties a shape without failing here — this asserts the shape is still wired up,
-    ///     not that the tree is still dirty.
-    /// </remarks>
-    [Test]
-    public async Task EveryClaimShapeCanStillMatchTheRealTree()
-    {
-        IReadOnlyList<OverlayKeyRouteClaimProbe.Claim> claims = Claims.Value;
-
-        foreach (OverlayKeyRouteClaimProbe.ClaimShape shape in OverlayKeyRouteClaimProbe.Shapes)
-        {
-            int hits = claims.Count(c =>
-                string.Equals(c.Shape, shape.Name, StringComparison.Ordinal));
-
-            await Assert.That(hits).IsGreaterThanOrEqualTo(1).Because(
-                "the \"" + shape.Name + "\" shape matched nothing on the real tree. Either the "
-                + "sentence it was written for is gone — in which case delete the shape "
-                + "deliberately, do not leave it matching nothing — or the matcher has stopped "
-                + "matching the way the sentence is now written (a line wrap, an XML tag, a "
-                + "renamed member). A dead shape is worse than no shape: it reads as coverage. "
-                + "Distinct shapes seen: " + string.Join(", ",
-                    claims.Select(c => c.Shape).Distinct().OrderBy(s => s, StringComparer.Ordinal)));
-        }
     }
 }

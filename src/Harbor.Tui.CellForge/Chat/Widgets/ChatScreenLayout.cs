@@ -1399,9 +1399,20 @@ public static class ChatScreenPanelDock
     /// unknown to the registry, or the panel is not in
     /// <see cref="TuiPanelState.Focused"/> — <c>Build</c> runs for every visible
     /// state, but <c>OnKey</c> is a focus-only contract. Center-placed providers
-    /// (#381, the jump palette) are excluded: they are keyed through their
-    /// modal <c>IOverlayLayer.OnKey</c>, never through the dock.
+    /// (#381, the jump palette) are excluded because they are not docked, so the
+    /// dock is not where they live.
     /// </summary>
+    /// <remarks>
+    ///     (#858) The exclusion used to be justified by the modal overlay plane — the
+    ///     comment claimed Center-placed providers take keys via their
+    ///     <c>IOverlayLayer.OnKey</c> rather than the dock. That was the load-bearing
+    ///     reason and it was false: <see cref="OverlayStack.RouteKey" /> has no product
+    ///     call site, and no product code constructs
+    ///     <c>CellForgeJumpPaletteOverlayLayer</c>. So the dock exclusion is not what makes
+    ///     the palette reachable or unreachable; the host keys the /jump frame itself, in
+    ///     <c>ReplInputLoop.HandleKeyAsync</c> (#857). The stated reason is now the true
+    ///     one, which keeps the branch honest without pretending the overlay plane is live.
+    /// </remarks>
     public static bool RoutePanelKey(
         PanelRegistry registry,
         UiState state,
@@ -1425,8 +1436,10 @@ public static class ChatScreenPanelDock
             return false;
         }
 
-        // #381: Center-placed providers live on the modal overlay plane and
-        // are keyed through their IOverlayLayer.OnKey, never through the dock.
+        // #381: Center-placed providers are not docked, so they never take a key
+        // through the dock. (#858: this comment used to justify that with the modal
+        // overlay plane — no product host calls OverlayStack.RouteKey, so it was a
+        // reason for a branch that does not exist.)
         if (provider.DefaultPlacement == TuiPanelPlacement.Center)
         {
             return false;
