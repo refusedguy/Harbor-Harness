@@ -159,8 +159,17 @@ jobs:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
+      # `--min-guide-usings` and `--min-base-lists` are the #564 floors. Both are
+      # counts of things that are EXPECTED to shrink — the view seam closed, the
+      # `Harbor.Tui.Abstractions` facade is gone — so the day the last plugin
+      # guide stops fencing a `using` there is nothing left to check, and a rule
+      # that goes quiet by succeeding is indistinguishable from one that went
+      # quiet by breaking. The floors are what say which happened.
+      #
+      # The numbers are the tree's, measured not guessed: 3 guides / 37 `using`
+      # lines and 2 base lists on dev@7aff0c87.
       - name: Check every normative file:line and named type
-        run: python3 tools/check-doc-cites.py --min-files 2 --min-cites 100 --min-types 50 --min-api 12 --min-counts 1 --min-test-cites 200
+        run: python3 tools/check-doc-cites.py --min-files 2 --min-cites 100 --min-types 50 --min-api 12 --min-counts 1 --min-test-cites 200 --min-guide-usings 30 --min-base-lists 2
 
   lint:
     name: markdown lint
