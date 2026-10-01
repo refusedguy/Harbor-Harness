@@ -21,13 +21,18 @@
 #
 # WHAT RUNS HERE
 #
-#   selftest  all three gates against fixtures that are known-broken. A checker
+#   selftest  all four gates against fixtures that are known-broken. A checker
 #             that has quietly stopped finding anything is still green on every
-#             PR, so the failure path is tested on every docs change (33 + 10
-#             assertions, ~2s).
+#             PR, so the failure path is tested on every docs change.
 #   links     internal link + GitHub anchor resolution, with a file/ref floor.
 #   cites     `file:line` in a normative document resolves, and a type it names
 #             is constructed by something (#664).
+#   facts     a COUNT the onboarding documents state still equals the count of
+#             tracked files it is counting (#933). This is the only one of the
+#             four that asks a numeric question, and it is deliberately not a
+#             cross-check between the copies of a prose fact: measured, that
+#             gate is red on dated records and green on the live defect. The
+#             `facts` job's comment carries the measurement.
 #   lint      markdown structural invariants, with a file/line floor.
 #
 # THE FLOORS ARE THE POINT
@@ -58,6 +63,7 @@ on:
       - 'tools/check-md-links.py'
       - 'tools/md-lint.py'
       - 'tools/check-doc-cites.py'
+      - 'tools/check-doc-facts.py'
       - 'tools/md_gate.py'
       - '.github/workflows/docs.yml'
   pull_request:
@@ -75,6 +81,7 @@ on:
       - 'tools/check-md-links.py'
       - 'tools/md-lint.py'
       - 'tools/check-doc-cites.py'
+      - 'tools/check-doc-facts.py'
       - 'tools/md_gate.py'
       - '.github/workflows/docs.yml'
   workflow_dispatch:
@@ -109,6 +116,15 @@ jobs:
       # nothing is indistinguishable from a rule that found nothing.
       - name: Citation checker fails on a stale file:line and an unwired type
         run: python3 tools/check-doc-cites.py --self-test
+      # #933. The fourth gate is the only one that asks whether a COUNT the
+      # onboarding documents state still equals the count of tracked files.
+      # Its failure path is tested for the same reason as the other three: the
+      # fixtures here include the two shapes that made a draft of this gate
+      # wrong — a rule compared against the wrong population (green on a
+      # number that is not the one in the document) and a rule whose capture
+      # group was edited away (reported BLIND, the one verdict CI passes).
+      - name: Repo-map counter fails on a stale count and detects its own blindness
+        run: python3 tools/check-doc-facts.py --self-test
 
   links:
     name: internal links
@@ -172,3 +188,35 @@ jobs:
       - uses: actions/checkout@v7
       - name: Check markdown invariants
         run: python3 tools/md-lint.py --min-files 250 --min-lines 60000
+
+  # #933. Fourth question, and the only one a copy-consistency gate could not
+  # answer honestly: not "do the links resolve", not "is the file shaped
+  # right", not "does the file:line exist" but "does a number the onboarding
+  # documents state still equal the count of tracked files it is counting".
+  #
+  # The scope is AGENTS.md and CLAUDE.md, not every tracked markdown, and the
+  # reason is the measurement rather than convenience. #933 asked for a gate
+  # that cross-checks the COPIES of a fact, and measuring the tree says that
+  # gate cannot be built for prose: the builtin tool count is stated 16 times
+  # with six different values (4/5/7/14/20/26), and every divergent copy is a
+  # document that has already declared itself historical — a CHANGELOG release
+  # note, a "Historical plan (pre-sprint-2)", or docs/specs/, which #983
+  # declared a dated record. A prose gate would be red on ten sites allowed to
+  # be wrong and green on the live defect. A count is different: it either
+  # equals the tree or it does not, and a record quoting an old count cannot
+  # make the number agree.
+  #
+  # --min-facts is the floor. Measured today: 6 counts compared. The floor is
+  # 5, so a rule that silently stops matching drives the number down and this
+  # job goes red instead of reporting a clean tree — the #591 shape, which the
+  # --self-test also pins from the other side.
+  facts:
+    name: repo-map counts
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+      - name: Check every repo-map count against the tree
+        run: python3 tools/check-doc-facts.py --min-facts 5
