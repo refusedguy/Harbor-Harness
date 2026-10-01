@@ -1,4 +1,5 @@
 using System.Text;
+using Harbor.Ui.Framework.Rendering.PerformanceContracts;
 
 namespace Harbor.Ui.Framework.Rendering.Markdown;
 
@@ -143,6 +144,11 @@ public sealed class StreamingMarkdownRenderer
             return false;
         }
 
+        // #409: past the memo, so the Measure-then-Paint pair a frame issues
+        // counts once. Counting at entry would report the repeat call — which
+        // exists precisely to be free — as a second materialization.
+        UiStageCounters.CountMaterialization();
+
         // Snapshot: a Push on the event thread mid-render must not be able to
         // make this call memoize a length it did not actually render (that
         // would let the next frame skip a needed repaint).
@@ -173,6 +179,12 @@ public sealed class StreamingMarkdownRenderer
 
         int tailBase = _frozenSourceChars;
         var tail = source.Slice(tailBase);
+
+        // #409 parse stage. This is the only production caller of
+        // MarkdownBlockParser.ParseInto, which is what makes "MarkdownParses ==
+        // 0 on the store path" a falsifiable claim (DefaultUiProjector never
+        // reaches this type) rather than a tautology about this file.
+        UiStageCounters.CountMarkdownParse();
 
         // TODO(principles)[PERF, low]: this scan is O(lines in the open block)
         // per frame, so a single huge paragraph is still O(N) CPU (now

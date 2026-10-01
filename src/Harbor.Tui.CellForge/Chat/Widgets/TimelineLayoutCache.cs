@@ -1,5 +1,7 @@
 namespace Harbor.Tui.CellForge.Widgets;
 
+using Harbor.Ui.Framework.Rendering.PerformanceContracts;
+
 /// <summary>What <see cref="TimelineLayoutCache.PrepareLayout"/> did this frame.</summary>
 public enum LayoutOutcome : byte
 {
@@ -391,6 +393,7 @@ public sealed class TimelineLayoutCache
             if (!s.Measured)
             {
                 var m = _blocks[i].Measure(_width);
+                UiStageCounters.CountBlockLayout(); // #409 layout stage — next to the existing measure tally
                 s = m.IsExact ? Slot.ExactMeasured(m.MaxLines) : Slot.Estimated(m.BestGuess);
                 _measureCallsThisFrame++;
                 changed = true;

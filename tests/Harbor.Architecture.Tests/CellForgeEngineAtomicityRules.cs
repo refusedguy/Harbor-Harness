@@ -64,15 +64,15 @@
 //
 // WHAT IS BASELINED, AND WHY IT IS NOT A PERMISSION
 // -------------------------------------------------
-// The 33 borrowing import pairs and the four references exist, and this PR does
+// The 34 borrowing import pairs and the four references exist, and this PR does
 // not remove them: moving `Input/` out is step 3 of #795 (deliberately a
 // separate change so it cannot collide with #435/#436), and the references are
 // #435's and #436's to delete. A permanently-red test is a comment with extra
 // steps, so both tables below list today's violations with a reason and the
 // issue that will delete them.
 //
-// The 33 pairs are 3 rows in `ReviewedImports` (the State translator pair and
-// the Protocol constant) plus 4 groups in `ReviewedVocabulary` expanded to one
+// The 34 pairs are 3 rows in `ReviewedImports` (the State translator pair and
+// the Protocol constant) plus 5 groups in `ReviewedVocabulary` expanded to one
 // row per file. Grouping is by namespace because the debt is per namespace;
 // the file list is spelled out because the old shape — one row for
 // `GlobalUsings.cs` serving 24 files — could not name a 25th borrower and so
@@ -288,6 +288,27 @@ public sealed class CellForgeEngineAtomicityRules
     /// <param name="Allowance">Why this vocabulary may stay, and what removes it.</param>
     private static readonly (string Namespace, string[] Files, ExemptionReason.Row Allowance)[] ReviewedVocabulary =
     [
+        (
+            // #409. Placed first because it is the newest borrow and the one a
+            // reader is most likely to mistake for a stray: AnsiWriter spells it
+            // on its own line, which is exactly what #795's deletion of the
+            // global block was for.
+            "Harbor.Ui.Framework.Rendering.PerformanceContracts",
+            ["Rendering/AnsiWriter.cs"],
+            new ExemptionReason.Row(
+                "#409's per-stage counters name four pipeline stages. Three sit in "
+                + "Harbor.Ui.Framework.Rendering and one sits here, because AnsiWriter is the only type "
+                + "in the engine that reaches a terminal backend — so the write stage is counted at this "
+                + "site or not at all. The row exists rather than an engine-local counter because a "
+                + "second tally is the failure mode: four stage numbers read off two types can drift "
+                + "apart silently, which is the #970 shape (an instrument matching more than reality). "
+                + "UiStageCounters is a counter and nothing else — nothing is constructed here, no "
+                + "engine logic reads a value, and the call sits behind a guard that is off by default, "
+                + "so the engine is no less BCL in behaviour than before, only one file longer in its "
+                + "list of spelled borrows. Same shape as the ReviewedImports Protocol row below, where "
+                + "a shared constant exists precisely so two differs cannot disagree.",
+                TrackedBy: "https://github.com/refusedguy/Harbor-Harness/issues/795")
+        ),
         (
             "Harbor.Ui.Framework.Rendering",
             [
@@ -636,7 +657,7 @@ public sealed class CellForgeEngineAtomicityRules
                 + "because by then every import involved was already baselined. No import-reading "
                 + "rule and no reference-reading rule can close that; removing the channel can. So "
                 + "the borrow must be spelled in the file that needs it — which is exactly what the "
-                + "33 reviewed rows above now enumerate, one per file. Ambient usings found: "
+                + "34 reviewed rows above now enumerate, one per file. Ambient usings found: "
                 + Offenders(offenders));
     }
 
@@ -920,7 +941,7 @@ public sealed class CellForgeEngineAtomicityRules
     ///     likely to make it look like it works. The silent cases are the ones
     ///     that matter: a doc comment saying <c>global using</c> is what
     ///     <c>FocusRouter.cs</c> used to carry, and a plain per-file
-    ///     <c>using</c> is the 33 rows above — if this matcher fired on either,
+    ///     <c>using</c> is among the 34 rows above — if this matcher fired on either,
     ///     the rule would be red for a tree that is doing exactly the right
     ///     thing.
     /// </summary>
@@ -963,7 +984,7 @@ public sealed class CellForgeEngineAtomicityRules
                 .Any(l => GlobalUsingDirective.IsMatch(l));
 
             await Assert.That(fired).IsFalse()
-                .Because($"'{name}' is NOT an ambient using. A per-file using is the 33 reviewed "
+                .Because($"'{name}' is NOT an ambient using. A per-file using is one of the 34 reviewed "
                        + "rows this project now requires, prose is documentation, and a string "
                        + "literal is data. A rule that fires on any of them would be deleted by the "
                        + "first person it annoyed — and this rule exists precisely because the "

@@ -48,6 +48,7 @@
 | P2 | `PatchTool` apply | 10.1 ms / **9.3 MB** @5000 hunks | стримить вместо List<string>+Join |
 | P2 | `DefaultUiProjector` | 20.8 ms @5000 строк за кадр (холодный полный проход; инкрементальный кэш уже влито — см. ниже) | инкрементальная проекция по revision |
 | OK | `DefaultUiProjector` инкремент | 1000 дельт → 1001 проекция: **962 no-op reuse, 38 tail (флаши), 1 history**; markdown-парсов на store-пути 0; итого 475 µs / 1.03 MB (2026-09-10, `StreamingDeltaFrequencyBenchmark`, регрессия — `StreamingFrequencyTests`) | пожара нет; следить за transcript-композицией при росте history. С 2026-10-01 абсолютная цифра перестала быть гейтом: **#410** закрыл путь `UiStore.Dispatch` + `DefaultUiProjector` относительными гейтами в `test (ui)` — см. §5 «Store-path scaling gates (#410)» |
+| OK | «markdown-парсов на store-пути 0» — **больше не только проза** | 200 дельт через `UiStore.Dispatch` + `DefaultUiProjector.Project` → `UiStageCounters.MarkdownParses == 0`; контроль в том же файле требует 1 при реальном парсе, так что 0 — измерение, а не тавтология (`StorePathSkipsMarkdownParseTests`, #409, 2026-10-01) | клетка проверяется, а не цитируется; **#410** тем временем считает ту же нулевую форму прямо в своём скрипте, без продуктового счётчика — см. §5 ниже |
 | P3 | `SessionId` Dictionary key | медленнее string (7.9 vs 6.3 µs), HashSet быстрее — проверить GetHashCode | override hash |
 | P3 | `OpenAiWire.TryParseChatChunkLine` | плоские ~10 µs floor на любой чанк | Utf8JsonReader поверх span без ToString() |
 | OK | `StatusBarLayout.Fit` (per painted frame) | ✅ resolved: O(n²) width lookups under a process-global monitor → **exactly one lookup per segment, per-thread cache, no lock** (#487, §5.6). Machine-independent count, stopwatch rows pending a BDN run | — |
@@ -620,6 +621,68 @@ exactly once, whatever the outcome — is a property of the algorithm, so
 only. Before the fix a 24-segment row packed down to its 2-segment fixed pair issued 323 of them;
 it now issues 24, and the assertion holds on any machine. This is the #465 lesson applied: a
 wall-clock assertion only fails on a machine slow enough to notice.
+
+### Per-stage counters — what the instrumentation costs (#409, #46 slice 2)
+
+**There is no per-stage *time* breakdown of the TextDelta → visible-frame pipeline in this file,
+and the reason is structural, not an omission.** The four stage names are not four sequential
+steps. On the shipped CellForge path the first three are one nested call chain:
+
+```
+frame → TimelineLayoutCache.PrepareLayout → SettleVisible → IChatBlock.Measure
+                                                            ↓  (Measure calls this FIRST)
+                                                        EnsureRendered / RenderTail
+                                                            ↓  (only past the memo)
+                                                        MarkdownBlockParser.ParseInto
+frame → DiffEngine.Flush → AnsiWriter → backend.WriteAsync      ← the only separate stage
+```
+
+A block cannot report its own height without rendering itself, so **layout drives materialize,
+and materialize contains parse**. Only `write` is genuinely downstream — a different assembly
+(`Harbor.Tui.CellForge.Engine`), after paint, and the only stage that reaches a device. The
+consequence for anyone reading counters: the invariant is
+`TerminalWrites ≥ Materializations ≥ MarkdownParses`, **the four do not sum to anything**, and no
+gate may assert on their total. What they buy is frequency, which is what #410 gates on and
+what #412 needs in order to prove virtualization is real.
+
+So #409 counts **call frequencies at four existing boundaries** — no split of the fused chain, no
+hot-path refactor, no behaviour change. `UiStageCounters`
+(`Harbor.Ui.Framework.Rendering/PerformanceContracts/`) holds one `long` per stage behind a single
+`Enabled` switch, incremented with `Interlocked`.
+
+**Cost of the instrument, measured.** A single-file probe (20 M iterations, Release, the same
+guard/counter shape) timed three arms — guard off (branch only), guard on with one
+`Interlocked.Increment`, and six increments:
+
+| Arm | Cost | Hits counted |
+|---|--:|--:|
+| guard off — one static bool read + branch | 3.92 ns | 0 |
+| guard on — +1 `Interlocked.Increment` | 11.48 ns (**+7.56 ns**) | exactly 1 per call |
+| guard on — +6 `Interlocked.Increment` | 46.33 ns (**+42.41 ns**) | exactly 6 per call |
+
+Against the rows above, which are the source of truth for the stages being instrumented:
+
+| Placement | Ratio |
+|---|--:|
+| 1 counter **per frame** vs the 51.3 µs idle frame | **0.015 %** |
+| all 4 counters **per frame** vs the 51.3 µs idle frame | **0.083 %** |
+| all 4 counters **per frame** vs the 805 µs solve+paint+diff+encode frame | **0.005 %** |
+| 1 counter **per delta** vs the 475 ns/delta store path | **1.59 %** |
+
+**Decision, recorded because it is the one that matters.** Every counter here fires per frame or
+rarer — none per delta — so the instrument lands at 0.083 % of an idle frame and is in. The
+per-delta store path is deliberately left uninstrumented: at 1.59 % per counter it is the same
+order as the quantity it would measure, and #984 struck rows rather than converting them for
+exactly this reason — a per-frame budget is not "once per call". Six counters on the per-delta
+path would have cost **8.9 %** of the 475 µs run it was meant to explain. That is the counter
+placement this slice declines, not a counter it omits.
+
+Probe machine: linux-x64, .NET 10 Release JIT. The probe is gated on non-vacuity in both
+directions — guard-off counted **exactly 0** and guard-on **exactly N**, and guard-on was
+strictly slower than guard-off — because an instrument that reads 0 for free is the #591 shape and
+would make every ratio above fiction. `UiStageCounterTests` carries the same discipline into CI,
+including a guard-off arm over an identical workload whose occurrence is proved by the backend's
+recorded write and the layout cache's own tally rather than by a counter.
 
 ### Allocation-budget tripwires (#186, CI-enforced)
 
