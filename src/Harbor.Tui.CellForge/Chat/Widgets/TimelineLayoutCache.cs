@@ -51,10 +51,11 @@ public sealed class TimelineLayoutCache
     private int _dirtyFrom = int.MaxValue;     // first index whose cached height may be stale
     private int _measureCallsThisFrame;
 
-    // Scroll anchor: block identity + row within it, captured before rebuilds.
+    // Scroll anchor: block IDENTITY + row within it, captured before rebuilds.
+    // There is deliberately no pixel field (#416): the anchor is restored from
+    // identity alone, so a stale Y can never be returned as a substitute.
     private IChatBlock? _anchorBlock;
     private int _anchorRow;
-    private long _anchorY;
 
     public int Count => _count;
 
@@ -162,13 +163,29 @@ public sealed class TimelineLayoutCache
         ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(index, _count);
         ArgumentNullException.ThrowIfNull(block);
 
+        var superseded = _blocks[index];
         _blocks[index] = block;
         _slots[index] = default;
         _unmeasuredFrom = Math.Min(_unmeasuredFrom, index);
         _dirtyFrom = Math.Min(_dirtyFrom, index);
+
+        // #416: the replacement is the SAME message in the SAME slot, so an
+        // anchor pointing at the superseded instance must follow it. Without
+        // this, the streaming commit path (FinishStream -> Replace) orphans
+        // the anchor, and the next width flip degrades it to row 0 instead of
+        // holding the block the user was reading.
+        if (ReferenceEquals(_anchorBlock, superseded))
+        {
+            _anchorBlock = block;
+        }
     }
 
-    /// <summary>Captures the viewport top so a width-change rebuild can restore it.</summary>
+    /// <summary>
+    /// Captures the viewport top as <b>identity</b> — (block reference, row
+    /// within it) — so a width-change rebuild can restore the anchored CONTENT
+    /// rather than the same pixel. The pixel is only ever an input here, used to
+    /// resolve which block the viewport top lands in; it is never retained.
+    /// </summary>
     public void PinAnchor(long scrollTopY)
     {
         if (_count == 0)
@@ -180,7 +197,6 @@ public sealed class TimelineLayoutCache
         int idx = EntryAtY(Math.Clamp(scrollTopY, 0, maxTop));
         _anchorBlock = _blocks[idx];
         _anchorRow = (int)Math.Clamp(scrollTopY - _virtual[idx], 0, Math.Max(0, EffectiveHeight(idx) - 1));
-        _anchorY = scrollTopY;
     }
 
     /// <summary>
@@ -221,12 +237,31 @@ public sealed class TimelineLayoutCache
         return SettleVisible(viewportH, scrollY) ? LayoutOutcome.Patched : LayoutOutcome.Unchanged;
     }
 
-    /// <summary>Post-rebuild scroll fix-up: keeps the anchored block at its row.</summary>
+    /// <summary>
+    /// Post-rebuild scroll fix-up: keeps the anchored block at its row.
+    ///
+    /// <para><b>Degradation is specified, never guessed (#416).</b> When the
+    /// anchored block is no longer resident — evicted by the ring, or replaced
+    /// in place by a newer instance of the same message — the anchor degrades to
+    /// the <b>nearest surviving position</b> (the top of the rebuilt timeline,
+    /// row 0) rather than to the pixel offset captured before the rebuild. That
+    /// offset belonged to the <i>previous</i> geometry: after a width flip every
+    /// row height was re-estimated, so re-applying it lands the viewport on
+    /// unrelated content, or past the end of a shrunken timeline. The old code
+    /// returned that stale pixel and left the caller to clamp, which is why the
+    /// eviction AC ("degrades in a specified way, not a silent jump") was
+    /// unmeetable — the degradation was a coincidence, not a rule.</para>
+    ///
+    /// <para>Returning row 0 is the same answer for the two null cases that
+    /// previously fell through here by luck (<c>PinAnchor</c> never called, and
+    /// <c>Clear</c> just run), so this is behaviour-identical there and only
+    /// changes the case that was wrong.</para>
+    /// </summary>
     public long RestoreAnchor()
     {
         if (_anchorBlock is null || _count == 0)
         {
-            return _anchorY;
+            return 0;
         }
 
         for (int i = 0; i < _count; i++)
@@ -237,7 +272,7 @@ public sealed class TimelineLayoutCache
             }
         }
 
-        return _anchorY; // anchored block was evicted — caller clamps
+        return 0; // anchored block is gone (evicted, or replaced in place)
     }
 
     /// <summary>Index of the block whose span contains row <paramref name="y"/> (binary search).</summary>
@@ -415,6 +450,5 @@ public sealed class TimelineLayoutCache
         _dirtyFrom = int.MaxValue;
         _anchorBlock = null;
         _anchorRow = 0;
-        _anchorY = 0;
     }
 }
