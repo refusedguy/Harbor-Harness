@@ -290,6 +290,17 @@ public class KeyGateFamilyRules
         new("ToolCardTracker(image)", KeyGateFamily.Command, "src/Harbor.Tui.CellForge/Chat/Streaming/ToolCardTracker.cs"),
         new("LeaderKeyRouter", KeyGateFamily.Command, "src/Harbor.Tui.CellForge/Chat/Widgets/LeaderKeyRouter.cs"),
 
+        // ReplInputLoop's two palette chords (#857 added ctrl+j beside the
+        // existing ctrl+p). Neither holds a text buffer and both require an
+        // EXACT modifier set, so an unmodified 'p'/'j' is not claimed and
+        // Shift is refused — the COMMAND gate, in a file whose slash shortcut
+        // is a BUFFER site. Fourth widget to wear both families, so the
+        // both-families assertion above counts the named three by name rather
+        // than over the whole table; this row is the declaration the coverage
+        // check cannot make for a file that already has one.
+        new("ReplInputLoop(ctrl+p palette)", KeyGateFamily.Command, "apps/Harbor.App.Cli/Repl/ReplInputLoop.cs"),
+        new("ReplInputLoop(ctrl+j jump, #857)", KeyGateFamily.Command, "apps/Harbor.App.Cli/Repl/ReplInputLoop.cs"),
+
         // Neither of these holds a text buffer, yet both ADMIT Shift — and they
         // are right to. DiffViewerOverlay binds `G` (:310) and ImageViewerOverlay
         // binds `_` (:139), so Shift+<rune> is a bound gesture here, exactly as a
