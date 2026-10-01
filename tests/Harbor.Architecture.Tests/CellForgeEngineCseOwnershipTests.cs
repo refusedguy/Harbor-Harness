@@ -81,7 +81,16 @@ public class CellForgeEngineCseOwnershipTests
     ///     <c>&lt;PackageReference Include="CSharpFunctionalExtensions" /&gt;</c>,
     ///     sorted. Pinned, not derived — see the header for the 3 -> 1 -> 0 ladder.
     /// </summary>
-    private static readonly string[] PinnedCseCarriers =
+    /// <remarks>
+    ///     <c>internal</c> because <c>MaybeAbsenceTests</c> grades the OTHER copy of this
+    ///     same claim. The <c>NullableTryReturnExemptions</c> reason for
+    ///     <c>BufferSwapChain.cs</c> names the carriers as well, and it is the copy printed
+    ///     into a failure message — so
+    ///     <c>MaybeAbsenceTests.BufferSwapChainExemptionReason_NamesEveryMeasuredCseCarrier</c>
+    ///     reads this array to check the two agree. They already drifted once: #809 measured
+    ///     three carriers and corrected this file, leaving the reason still saying two.
+    /// </remarks>
+    internal static readonly string[] PinnedCseCarriers =
     [
         "Harbor.Abstractions",
         "Harbor.Abstractions.Contracts",
