@@ -1,5 +1,6 @@
 using Harbor.Abstractions.Events;
 using Harbor.Abstractions.Models;
+using Harbor.DesignSystem;
 using Harbor.Tui.CellForge.Rendering;
 using Harbor.Tui.CellForge.Streaming;
 using Harbor.Tui.CellForge.Widgets;
@@ -12,18 +13,59 @@ namespace Harbor.Tui.CellForge.Tests;
 /// wiggle — short overlay sequences that override the mood frames, tinted by
 /// event accent, played exactly once per signal. Deterministic ticks only.
 /// <para>
-/// Serialized under the same <c>"pty"</c> key as the theme tests. The reaction
-/// assertions read exact <c>ChatPalette</c> styles off a painted buffer, and
-/// <c>ChatPalette</c> is a process-wide static catalog that
-/// <c>TerminalColorPalette.Apply</c> re-publishes — so running beside a theme
-/// swap lets a concurrently-swapped palette decide
-/// <c>buffer.Get(x, y).Style == ChatPalette.ToolError</c>. That is a test-order
-/// dependency, not a rendering bug: nothing here reads the clock.
+/// The tint asserts end in an exact <c>buffer.Get(x, y).Style ==
+/// ChatPalette.ToolError</c>: the left side is a cell painted at one instant,
+/// the right side is read from a process-wide static catalog that
+/// <c>TerminalColorPalette.Apply</c> re-publishes. Two things keep that
+/// comparison honest, and this header used to name only the first — the one that
+/// did nothing.
+/// </para>
+/// <para>
+/// 1. <b>The catalog is pinned</b> (<c>ChatPalette.PinFrame</c>) across each
+/// paint-and-read, so both sides of the equality resolve against a single
+/// projection even when a theme is published mid-test. This is the class's own
+/// protection; it does not depend on what a neighbour happens to be doing.
+/// See <c>BlinkTint_IgnoresAThemePublishedMidTest</c> for the reproduction.
+/// </para>
+/// <para>
+/// 2. <b>Every palette mutator is keyless.</b> <see cref="TerminalColorPalette" />
+/// writers carry bare <c>[NotInParallel]</c> — the only form that is a global
+/// lock — so they exclude every other test, keyed or not.
+/// </para>
+/// <para>
+/// The <c>"pty"</c> key this class used to carry belonged to neither. The
+/// deleted sentence claimed it serialized the class "under the same key as the
+/// theme tests"; the theme tests have not carried <c>"pty"</c> since #703, and
+/// a named key is a mutex over same-key peers only, so it could not have kept a
+/// theme swap off this class even when they did. The key is gone; the honest
+/// description of the arrangement is above. Semantics of the attribute forms:
+/// docs/TEST_PATTERNS.md.
 /// </para>
 /// </summary>
-[NotInParallel("pty")]
+// #891: bare [NotInParallel] = one test at a time GLOBALLY, replacing the
+// ("pty") key this class used to carry. The key could not do the job the header
+// claimed for it — a named key is a mutex over same-key peers only, and no
+// palette mutator in this assembly has carried ("pty") since #703 — but that
+// was harmless while the class only READ the catalog. It no longer only reads:
+// BlinkTint_IgnoresAThemePublishedMidTest calls TerminalColorPalette.Apply
+// itself, so the class is a process-global writer and must take the one form
+// that is a global lock. A keyed writer is exactly the #720 defect #820 undid.
+[NotInParallel]
 public class MascotReactionTests
 {
+    /// <summary>Restores the two process-wide things this class now touches.
+    /// The palette pin is <c>[ThreadStatic]</c> and TUnit reuses threads, so a
+    /// test that ever ended up holding one would hand it to whichever test lands
+    /// on that thread next. Both are released in a <c>finally</c> as well; this
+    /// is the belt to the braces, matching ThemeSwitchTests and HotSwapTests.
+    /// </summary>
+    [After(Test)]
+    public void RestoreDefaultTheme()
+    {
+        ChatPalette.UnpinFrame();
+        TerminalColorPalette.Apply(HarborTheme.HarborDark);
+    }
+
     private static (ChatScreen Screen, ScreenBuffer Buffer) BuildFooterScreen(int cols = 120, int rows = 8)
     {
         var composer = new ComposerController();
@@ -83,14 +125,27 @@ public class MascotReactionTests
         var (screen, buffer) = BuildFooterScreen();
         var status = screen.Status.Vm;
 
-        _ = PaintLastFrame(screen, buffer, 1);
-        status.SignalMascot(MascotReaction.ErrorBlink);
-        _ = PaintLastFrame(screen, buffer, 1); // notify paint — settled tint
+        // #891: pin the catalog across the paint AND the read, so both sides of
+        // the equality below resolve against one projection. Unpinned, this
+        // compares a buffer cell painted under one catalog against a global
+        // that a concurrent TerminalColorPalette.Apply may already have
+        // replaced — the flake #703 recorded on four unrelated PRs.
+        ChatPalette.PinFrame();
+        try
+        {
+            _ = PaintLastFrame(screen, buffer, 1);
+            status.SignalMascot(MascotReaction.ErrorBlink);
+            _ = PaintLastFrame(screen, buffer, 1); // notify paint — settled tint
 
-        // The '(' of the blink face sits at the trailing edge of the status row.
-        int x = screen.Status.Rect.Right - AmbientMascot.Width(AmbientMascot.ErrorBlinkFrames[0]);
-        int y = screen.Status.Rect.Y;
-        await Assert.That(buffer.Get(x, y).Style == ChatPalette.ToolError).IsTrue();
+            // The '(' of the blink face sits at the trailing edge of the status row.
+            int x = screen.Status.Rect.Right - AmbientMascot.Width(AmbientMascot.ErrorBlinkFrames[0]);
+            int y = screen.Status.Rect.Y;
+            await Assert.That(buffer.Get(x, y).Style == ChatPalette.ToolError).IsTrue();
+        }
+        finally
+        {
+            ChatPalette.UnpinFrame();
+        }
     }
 
     [Test]
@@ -173,6 +228,48 @@ public class MascotReactionTests
         await Assert.That(status.ConsumeMascotSignal()).IsEqualTo(MascotReaction.None);
     }
 
+    // #891: the non-vacuity proof for the pin added above, and a reproduction
+    // of the flake it exists to prevent. Frame 0 is painted on the DARK
+    // catalog; a theme is then published before the style is read back. Under
+    // a pin both sides of `Style == ChatPalette.ToolError` resolve against ONE
+    // projection and this holds. Delete the `PinFrame` call and it goes red:
+    // the cell keeps DARK ink (Error #FF6B6B) while the right-hand side
+    // resolves to the LIGHT catalog (Error #DC2626). No clock, no sleep, no
+    // thread race — the swap is published by this test on purpose.
+    [Test]
+    public async Task BlinkTint_IgnoresAThemePublishedMidTest()
+    {
+        TerminalColorPalette.Apply(HarborTheme.HarborDark);
+
+        var composer = new ComposerController();
+        var status = new StatusViewModel { Model = "m", Mode = StatusBarMode.Idle };
+        var screen = ChatScreen.Build(composer, status, includeSidebar: false, mascotMode: MascotMode.Panel);
+        var buffer = new ScreenBuffer(120, 24);
+        screen.Tree.Solve(120, 24);
+        var mascot = screen.Mascot!;
+
+        ChatPalette.PinFrame();
+        try
+        {
+            mascot.Paint(buffer); // settle
+            status.SignalMascot(MascotReaction.ErrorBlink);
+            mascot.Paint(buffer); // frame 0, painted on the pinned DARK catalog
+
+            // Publish mid-test. Harmless to a pinned reader, fatal to an
+            // unpinned one — which is what these asserts used to be.
+            TerminalColorPalette.Apply(HarborTheme.HarborLight);
+
+            int x = mascot.Rect.X + 3;
+            int y = mascot.Rect.Y + 1; // face row
+            await Assert.That(buffer.Get(x, y).Style == ChatPalette.ToolError).IsTrue();
+        }
+        finally
+        {
+            ChatPalette.UnpinFrame();
+            TerminalColorPalette.Apply(HarborTheme.HarborDark);
+        }
+    }
+
     [Test]
     public async Task PanelMode_Blink_ShowsFlatEars_AndTint()
     {
@@ -183,18 +280,29 @@ public class MascotReactionTests
         screen.Tree.Solve(120, 24);
         var mascot = screen.Mascot!;
 
-        mascot.Paint(buffer); // settle
+        // #891: same pin as Blink_TintsMascot_WithEventAccent — the style
+        // equality at the end compares a painted cell against the global
+        // catalog, so both sides must come from one projection.
+        ChatPalette.PinFrame();
+        try
+        {
+            mascot.Paint(buffer); // settle
 
-        status.SignalMascot(MascotReaction.ErrorBlink);
-        mascot.Paint(buffer); // notify paint — frame 0, settled tint
+            status.SignalMascot(MascotReaction.ErrorBlink);
+            mascot.Paint(buffer); // notify paint — frame 0, settled tint
 
-        string art = GridDump.Art(buffer);
-        await Assert.That(art).Contains(AmbientMascot.ErrorBlinkFrames[0]);
-        await Assert.That(art).Contains(AmbientMascot.ReactionEars(MascotReaction.ErrorBlink)[0]);
+            string art = GridDump.Art(buffer);
+            await Assert.That(art).Contains(AmbientMascot.ErrorBlinkFrames[0]);
+            await Assert.That(art).Contains(AmbientMascot.ReactionEars(MascotReaction.ErrorBlink)[0]);
 
-        int fx = mascot.Rect.X + 3;
-        int fy = mascot.Rect.Y + 1; // face row
-        await Assert.That(buffer.Get(fx, fy).Style == ChatPalette.ToolError).IsTrue();
+            int fx = mascot.Rect.X + 3;
+            int fy = mascot.Rect.Y + 1; // face row
+            await Assert.That(buffer.Get(fx, fy).Style == ChatPalette.ToolError).IsTrue();
+        }
+        finally
+        {
+            ChatPalette.UnpinFrame();
+        }
     }
 
     [Test]
