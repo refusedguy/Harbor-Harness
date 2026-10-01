@@ -55,22 +55,24 @@ public sealed class TimelineLayoutCache
     /// round trip free, which is the shape a real session produces (drag the
     /// splitter back, open a second pane, toggle a sidebar). The bound is
     /// fixed on purpose — memory per retained width is
-    /// <c>Count × sizeof(Slot)</c> (12 bytes), so the ring is not a cache of
-    /// unbounded width history. Measured cost of the miss path is documented
-    /// on <see cref="PrepareLayout"/>.
+    /// <c>Count × sizeof(Slot)</c> (12 bytes: two ints and a bool), so the
+    /// ring is not a cache of unbounded width history. Measured cost of the
+    /// miss path is documented on <see cref="PrepareLayout"/>.
     /// </summary>
     private const int MaxRetainedWidths = 2;
 
     /// <summary>
-    /// One block's height, and the width that height is authoritative for.
+    /// One block's height, for the width its array was laid out at.
     /// <para>
     /// <c>exactH</c> is the measured row count (-1 when unmeasured),
-    /// <c>estH</c> the estimated one, <c>measured</c> which one is live.
-    /// <c>width</c> is the layout width an exact height belongs to, 0 for
-    /// estimates — they carry no authority at any width. The stamp matters
-    /// because an exact height is reusable only by a layout running at that
-    /// same width; without it, re-adopting a retained width would also re-adopt
-    /// measurements that have since gone stale.
+    /// <c>estH</c> the estimated one, <c>measured</c> which one is live. No
+    /// width stamp is carried here, and none is needed: every array belongs to
+    /// exactly one layout width (the active one, or one slot in
+    /// <see cref="_retained"/>), so a height's authority is implied by which
+    /// array holds it rather than by a field inside it. Staleness that is not
+    /// implied by that — an append, a replace, an evict, a mutated card — is
+    /// cleared across every array at once by <see cref="ResetSlotAt"/> and
+    /// <see cref="ClearMeasuredAt"/>.
     /// </para>
     /// <para>
     /// Rejected here: seeding a new width by scaling the outgoing width's row
@@ -87,17 +89,14 @@ public sealed class TimelineLayoutCache
     /// counts it.
     /// </para>
     /// </summary>
-    private readonly struct Slot(int exactH, int estH, bool measured, int width = 0)
+    private readonly struct Slot(int exactH, int estH, bool measured)
     {
         public int ExactH { get; } = exactH;
         public int EstH { get; } = estH;
         public bool Measured { get; } = measured;
 
-        /// <summary>Width this exact height belongs to; 0 when not measured.</summary>
-        public int MeasuredWidth { get; } = measured ? width : 0;
-
         public static Slot Estimated(int est) => new(-1, Math.Max(1, est), false);
-        public static Slot ExactMeasured(int h, int width) => new(h, h, true, width);
+        public static Slot ExactMeasured(int h) => new(h, h, true);
     }
 
     /// <summary>A layout width plus the heights measured/estimated for it.</summary>
@@ -675,7 +674,7 @@ public sealed class TimelineLayoutCache
             {
                 var m = _blocks[i].Measure(_width);
                 UiStageCounters.CountBlockLayout(); // #409 layout stage — next to the existing measure tally
-                s = m.IsExact ? Slot.ExactMeasured(m.MaxLines, _width) : Slot.Estimated(m.BestGuess);
+                s = m.IsExact ? Slot.ExactMeasured(m.MaxLines) : Slot.Estimated(m.BestGuess);
                 _measureCallsThisFrame++;
                 changed = true;
                 patchFrom = Math.Min(patchFrom, i);

@@ -941,7 +941,7 @@ transcript to lay out ~40 visible rows.
 | Cold layout, 10 000 blocks, width A — `Measure` | 4 | 4 | ≤ visible window (4 blocks) ✅ |
 | Cold layout — `CheapEstimate` | 10 000 | 10 000 | == Count: unavoidable at first layout, documented ✅ |
 | Characters scanned on that cold layout | 12 120 000 | 12 120 000 | O(transcript), once ✅ |
-| Scroll frame through measured heights (worst of 400) | 0 est / 2 meas | 0 est / 2 meas | est == 0, meas ≤ viewportH ✅ |
+| Scroll frame through measured heights (worst of 2 000) | 0 est / 2 meas | 0 est / 2 meas | est == 0, meas ≤ viewportH ✅ |
 | Flip to unseen width B — `CheapEstimate` | 10 000 | 10 000 | == Count, ring miss ✅ |
 | **Return to measured width A** — `CheapEstimate` | **10 000** | **0** | == 0 ✅ |
 | **Return to measured width A** — `Measure` | 4 | 0 | == 0 ✅ |

@@ -270,8 +270,9 @@ public class TimelineLayoutCacheTests
     ///
     /// Before #412 the first layout measured 4 blocks (correct — Measure was
     /// always viewport-bounded) but called <c>CheapEstimate</c> on ALL 10 000,
-    /// scanning 12.1M characters to lay out 40 visible rows: a 2500× per-item
-    /// charge for a 4-block window.
+    /// scanning 12.12M characters (10 000 × <see cref="WrappingBlock.Chars"/>)
+    /// to lay out 40 visible rows: a 2500× per-item charge for a 4-block
+    /// window.
     ///
     /// Bounds stated here, and why:
     /// <list type="bullet">
@@ -507,7 +508,8 @@ public class TimelineLayoutCacheTests
     /// <summary>
     /// A scroll through already-measured heights costs nothing — the everyday
     /// case, and the one #46 S3's scale gate will ride on. Measured worst case
-    /// over 400 frames: 2 measure calls (blocks newly entering the window), 0
+    /// over the whole 40 036-row timeline stepped 20 rows at a time (2 000
+    /// frames): 2 measure calls (blocks newly entering the window), 0
     /// estimates.
     /// </summary>
     [Test]
