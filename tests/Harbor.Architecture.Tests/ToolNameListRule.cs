@@ -55,6 +55,22 @@
 //      already identified as tool tables, so it cannot fire on a JSON schema
 //      property or a CLI verb.
 //
+// Neither rule is keyed on a tool NAME, which is the point of deriving the
+// vocabulary: renaming a tool does not disarm either rule, it re-points them.
+// Measured, not assumed — taking `read`, `glob`, `lsp`, `ripgrep` and
+// `session_read` out of the derived vocabulary one at a time, in each case the
+// dead-row rule reports the stale name and rule 1 still sees nine tables. A
+// name-keyed rule would have gone quiet on exactly that edit.
+//
+// THE EXEMPTION LIST IS NOT THE FILE SET
+// --------------------------------------
+// `PolicyExemptions` is a set of TOLERATED files inside a scan that covers all
+// of `src/` and `apps/`, so nothing is unchecked because of it and a rename or
+// a move makes a key stop matching loudly. The list's own risk runs the other
+// way — an entry outliving the table it tolerates — so a third test re-probes
+// every entry against the finder (#860). Two of eight entries carried no table
+// at all and are gone; the guard for the guard is what stops the next one.
+//
 // NON-VACUITY
 // -----------
 // A guard that matches nothing is indistinguishable from a guard that is broken,
@@ -95,6 +111,21 @@ public sealed class ToolNameListRule
     ///     of the tool, so neither can be read off <c>ITool</c>. A guard that
     ///     cannot tell a policy from a stale copy of a declaration gets the policy
     ///     deleted instead.
+    ///     <para>
+    ///         This list is NOT the file set the rule checks, and that difference is
+    ///         the whole safety argument, so it is measured rather than asserted. The
+    ///         scan is <see cref="SourceScan.ProductTrees" /> — every <c>.cs</c> file
+    ///         under <c>src/</c> and <c>apps/</c>, 993 of them — and this table is a
+    ///         set of tolerated files inside it. Nothing outside the list goes
+    ///         unchecked because of the list: a new file carrying a tool table is
+    ///         enforced, and a rename or a move makes the key stop matching, which is
+    ///         a RED test rather than a silent gap. That is the safe direction, and
+    ///         the cost runs the other way — the list cannot tell a live policy from a
+    ///         fossil, which is what the liveness test below is for. Six entries, all
+    ///         six carrying a table the finder recognises, across nine recognised
+    ///         tables in six files and zero offenders; #860 removed the two that
+    ///         carried none. The count is a measurement, not a target.
+    ///     </para>
     /// </remarks>
     private static readonly Dictionary<string, string> PolicyExemptions = new(StringComparer.Ordinal)
     {
@@ -113,13 +144,6 @@ public sealed class ToolNameListRule
             "The plan/explore agents' default permissions. What an agent may do is a "
             + "statement about the AGENT, not about each tool.",
 
-        ["src/Harbor.Tui.CellForge/Chat/Widgets/ReadGroupBlock.cs"] =
-            "ReadGroupBlock is a presentation grouping, not a safety or permission fact: "
-            + "it decides which completed cards coalesce into one read-group panel, and a "
-            + "tool does not know whether a renderer wants to fold it. Its dead \"list\" "
-            + "arm is caught by the dead-row rule below, which is the check that "
-            + "actually applies to this file.",
-
         ["src/Harbor.Ui.Framework.Projection/Projection/PanelExtractors.cs"] =
             "TrackedTools is the set of tools whose edits the Recent-Changes panel "
             + "watches — a projection concern with no tool-side declaration.",
@@ -132,17 +156,29 @@ public sealed class ToolNameListRule
             "The same renderer-owned decision as the Ui.Framework.State copy, in the "
             + "engine. The duplication between the two renderers is tracked separately; "
             + "neither copy is derivable from a tool.",
-
-        ["src/Harbor.Tools.Builtin/Tools/RipGrep/RipGrepTool.cs"] =
-            "The tool's own JSON schema. Its property names sit next to the tool's name "
-            + "and a schema is data, not a table of tools.",
     };
 
     /// <summary>
-    ///     A file that holds a hand-written tool table today, named so the
+    ///     The file that used to hold the hand-written tool table, named so the
     ///     non-vacuity check can prove discovery still sees it. Not an exemption.
     /// </summary>
-    private const string KnownTableFileRelativePath =
+    /// <remarks>
+    ///     Renamed from "Known", and the claim behind it corrected, because it no
+    ///     longer holds one: <c>PathArgExtractionPolicy</c> derived its set away in
+    ///     #595 (it reads the <c>ToolArgKind.Path</c> rows of
+    ///     <c>BuiltinToolSafetyProfiles.All</c>), so the file now quotes no tool name
+    ///     and the finder recognises no table in it. The constant stays as the
+    ///     discovery canary, because a scan rooted at a wrong path returns an empty
+    ///     set and would satisfy every rule in this file — the trap the check exists
+    ///     to catch. What it can no longer do is assert a property the file does not
+    ///     have: it proves discovery SEES the path, and it cannot tell "discovery sees
+    ///     a file" from "discovery sees a table". The vocabulary assertions beside it
+    ///     carry that weight instead, because they read the derivation and so cannot
+    ///     rot into a claim about one file's contents. Same rename
+    ///     <c>ProviderIdDispatchRule</c> made to its
+    ///     <c>FormerTableFileRelativePath</c>.
+    /// </remarks>
+    private const string FormerTableFileRelativePath =
         "src/Harbor.Application/Permissions/PathArgExtractionPolicy.cs";
 
     /// <summary>One quoted, tool-shaped word on a code line.</summary>
@@ -181,11 +217,15 @@ public sealed class ToolNameListRule
     ///         The cost was measured BEFORE the move, not rationalised after it. Over
     ///         the 26 derived names and the 167 quoted occurrences in <c>src/</c> +
     ///         <c>apps/</c>, exactly ONE run holds precisely two distinct real tool
-    ///         names — <c>BuiltinToolSafetyProfiles.cs:96-97</c>, <c>session_broadcast
-    ///         </c> and <c>session_inbox</c> — and that file already holds an exemption
-    ///         with a stated reason. So the move adds one table to the corpus and zero
-    ///         offenders. A threshold that reddens a hundred innocent tables is the
-    ///         outcome that was looked for, and it is not the one that happened.
+    ///         names — the <c>session_broadcast</c> / <c>session_inbox</c> pair in
+    ///         <c>BuiltinToolSafetyProfiles.cs</c> — and that file already holds an
+    ///         exemption with a stated reason. The names are the citation and not a
+    ///         line range: a <c>.cs:NNN</c> in prose is an anchor nothing re-probes, and
+    ///         it drifts the first time a row is inserted above it, which is the same
+    ///         defect <see cref="FormerTableFileRelativePath" /> had. So the move adds
+    ///         one table to the corpus and zero offenders. A threshold that reddens a
+    ///         hundred innocent tables is the outcome that was looked for, and it is
+    ///         not the one that happened.
     ///     </para>
     ///     <para>
     ///         At two names the ratio has nothing left to arbitrate, which is why two
@@ -312,6 +352,85 @@ public sealed class ToolNameListRule
         await Assert.That(offenders).IsEmpty().Because(string.Join("\n", offenders));
     }
 
+    /// <summary>
+    ///     THE EXEMPTION STAYS HONEST. <see cref="PolicyExemptions" /> is a list of
+    ///     files whose tool tables are tolerated, so an entry that no longer
+    ///     tolerates anything grants a permission nothing reads — and the next
+    ///     person to add a real table to that file inherits it without re-reading
+    ///     the reason.
+    /// </summary>
+    /// <remarks>
+    ///     <para>
+    ///         This is the same check <c>ProviderIdDispatchRule</c> runs over
+    ///         <c>DispatchExemptions</c>, and the same liveness half
+    ///         <see cref="ExemptionReason" /> deliberately does NOT do: that helper
+    ///         checks that a row states an argument, and says outright that whether
+    ///         "the debt it describes still exists" is "a different question" which
+    ///         "the tables that can answer it already do it by liveness — every
+    ///         baseline row is re-probed against reality and fails when the violation
+    ///         it grandfathers is gone". This table is one of the ones that can answer
+    ///         it, because the rule it suppresses can be re-run on the one file.
+    ///     </para>
+    ///     <para>
+    ///         Liveness is measured against the finder, not against the reason prose.
+    ///         <c>RipGrepTool.cs</c>'s entry said "the tool's own JSON schema … a
+    ///         schema is data, not a table of tools", but the reason is not the test:
+    ///         the schema run there is twelve distinct names of which exactly one is a
+    ///         tool, so the density ratio rejects it before the count is consulted,
+    ///         and the file contributes no table at all. Probing the finder rather
+    ///         than the prose is what makes the row falsifiable — the prose can be
+    ///         true of a file the rule would never have flagged.
+    ///     </para>
+    /// </remarks>
+    [Test]
+    public async Task Every_Policy_Exemption_Names_A_File_That_Still_Carries_A_Tool_Table()
+    {
+        FrozenSet<string> known = ToolNameInventory.Names;
+
+        // Ordered so a failure message does not depend on dictionary iteration —
+        // the same reason `Sorted` exists.
+        var rows = PolicyExemptions
+            .OrderBy(kv => kv.Key, StringComparer.Ordinal)
+            .Select(kv => (Key: kv.Key, Row: new ExemptionReason.Row(kv.Value, null)));
+
+        IReadOnlyList<string> unreasoned = ExemptionReason.RowsWithoutAReason(
+            $"{nameof(ToolNameListRule)}.{nameof(PolicyExemptions)}",
+            rows);
+
+        await Assert.That(unreasoned).IsEmpty()
+            .Because("an entry here suppresses rule 1 for a whole file, and one that does not say why "
+                   + "is indistinguishable from an oversight: " + string.Join(" | ", unreasoned));
+
+        HashSet<string> scanned = SourceScan.EnumerateProductCsFiles()
+            .Select(SourceScan.Relative)
+            .ToHashSet(StringComparer.Ordinal);
+
+        HashSet<string> carrying = FindToolTables(ReadProductSources(), known)
+            .Select(table => table[0].RelativePath)
+            .ToHashSet(StringComparer.Ordinal);
+
+        var dead = new List<string>();
+        foreach (string path in PolicyExemptions.Keys.Order(StringComparer.Ordinal))
+        {
+            if (!scanned.Contains(path))
+            {
+                dead.Add($"{path} — names a file the scan does not see, so the entry was dead on arrival");
+            }
+            else if (!carrying.Contains(path))
+            {
+                dead.Add($"{path} — carries no tool table the finder recognises, so nothing is being "
+                       + "exempted and the entry only widens the rule");
+            }
+        }
+
+        await Assert.That(dead).IsEmpty()
+            .Because("a dead exemption is worse than no entry: the next person to add a table to that "
+                   + "file inherits a permission nobody re-reads, and the guard cannot tell a live "
+                   + "policy from a stale copy of a declaration. Delete the entry and let the rule "
+                   + "apply — if the file really does need one, the finder will say so and the reason "
+                   + "can be written against a table that exists. Dead entries: " + string.Join(" | ", dead));
+    }
+
     // =====================================================================
     // 2. Non-vacuity.
     // =====================================================================
@@ -331,10 +450,11 @@ public sealed class ToolNameListRule
             .Because("the scan found almost no .cs files under src/+apps/; the product trees are "
                    + "wrong and every rule in this file is then satisfied by an empty scan");
 
-        await Assert.That(productFiles.Select(SourceScan.Relative).Contains(KnownTableFileRelativePath))
+        await Assert.That(productFiles.Select(SourceScan.Relative).Contains(FormerTableFileRelativePath))
             .IsTrue()
-            .Because($"{KnownTableFileRelativePath} exists and holds a tool table today; if "
-                   + "discovery cannot see it, the scan is broken rather than clean");
+            .Because($"{FormerTableFileRelativePath} exists and is inside the scanned set — it is the "
+                   + "file that used to carry the derived-away table, so its absence means discovery is "
+                   + "broken rather than the tree being clean");
 
         await Assert.That(ToolNameInventory.Names.Count).IsGreaterThan(10)
             .Because("the tool-name vocabulary is empty or nearly so, so both rules would accept "
