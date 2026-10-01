@@ -154,15 +154,15 @@ public sealed class ConfigHalfPairWriteRules
             .ToList();
 
         await Assert.That(derived.Count).IsGreaterThan(2).Because(
-            "the derivation has to find more than the one file it was written for, or it is a "
+            "the derivation has to find more than the one file it was written for, or it is a " +
             "transcription of that file. Found: " + string.Join(", ", derived) + ".");
 
         IReadOnlyList<string> perimeter = Perimeter();
         var unpoliced = derived.Where(f => !perimeter.Contains(f, StringComparer.Ordinal)).ToList();
 
         await Assert.That(unpoliced).IsEmpty().Because(
-            "a product file that assigns one half of the default pair can write a half-pair into "
-            "the config, so it is on this seam by construction. A typed list cannot promise that: "
+            "a product file that assigns one half of the default pair can write a half-pair into " +
+            "the config, so it is on this seam by construction. A typed list cannot promise that: " +
             "becoming relevant is not an event a list records. Unpoliced: "
             + string.Join(", ", unpoliced) + ".");
 
@@ -170,11 +170,11 @@ public sealed class ConfigHalfPairWriteRules
         // recorded here rather than left as a suggestion nobody re-measures.
         await Assert.That(derived.Any(f => f.EndsWith("ToolsCatalog.cs", StringComparison.Ordinal))).IsFalse()
             .Because(
-                "ToolsCatalog re-qualifies the pair by hand, and is deliberately NOT in this "
-                "perimeter: it does not ASSIGN a half, so it cannot write one, and the ad-hoc cut "
-                "it performs is already covered — as an inventoried REAL DEBT entry with a "
-                "reason — by `ModelRefSingleParserTests`. This rule and that one grade different "
-                "questions, and folding the second into the first is how #894's two sites came to "
+                "ToolsCatalog re-qualifies the pair by hand, and is deliberately NOT in this " +
+                "perimeter: it does not ASSIGN a half, so it cannot write one, and the ad-hoc cut " +
+                "it performs is already covered — as an inventoried REAL DEBT entry with a " +
+                "reason — by `ModelRefSingleParserTests`. This rule and that one grade different " +
+                "questions, and folding the second into the first is how #894's two sites came to " +
                 "be described as one defect when they are two.");
     }
 
