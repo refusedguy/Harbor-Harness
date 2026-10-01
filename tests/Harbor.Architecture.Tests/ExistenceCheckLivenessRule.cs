@@ -13,13 +13,12 @@
 //   :467  `DocumentedExceptions`          -> "no src project directory"
 //
 // Every one of them asks `RepoPaths.FindProjectDir(name) is null`. And
-// `FindProjectDir` is NOT an existence check:
-//
-//     internal static string? FindProjectDir(string projectDir)
-//         => RepoRoot is null ? null : Path.Combine(RepoRoot, "src", projectDir);
+// `FindProjectDir` is not an existence check. Read `RepoPaths.cs:85-86`: it
+// returns null when `RepoRoot` is null, and otherwise hands the name straight to
+// `Path.Combine(RepoRoot, "src", projectDir)`.
 //
 // It CONCATENATES. `Path.Combine` returns a string for any input, and the only
-// way it returns null is when `RepoRoot` is null — i.e. when the test host is
+// way this returns null is when `RepoRoot` is null — i.e. when the test host is
 // not running from a checkout. Inside a checkout the answer is non-null for
 // EVERY name, including names that have never existed. So all four checks
 // reduce to "is the repository root discoverable", which a different test
@@ -112,6 +111,30 @@
 // no local dotnet in the authoring environment, so the red run's log is the
 // only execution of these matchers there has ever been, and the follow-up
 // commit transcribes it.
+//
+// WHAT THE RED RUN PROVED (run 36822292544, job 110240325437)
+// -----------------------------------------------------------
+// One test failed and the other two passed, and the two that passed are the ones
+// that make the failure mean something:
+//
+//   * `EveryPermissionRow_NamesAProjectThatExists` FAILED, and the message is
+//     the measurement: "Live stale rows (6) of 42 measured", naming all six.
+//   * `TheExistenceProbeCanSayNo` PASSED. So the probe is not a constant that
+//     happens to say no: it also found 36 of 42 rows present, and it reported a
+//     synthetic name as absent. Without this pass, "six rows are stale" would be
+//     indistinguishable from "the instrument always says no" — the same defect
+//     this file is about, reproduced inside its own probe.
+//   * `TheDeadChecksAreDead` PASSED. All four sites accepted a project that does
+//     not exist. So the four checks are confirmed dead by execution, not by
+//     reading `Path.Combine`, and each witness name was itself confirmed absent
+//     first — otherwise the control would have been asserting the defect against
+//     a name that might turn out to exist.
+//
+// The red run also corrected the file. It flagged S125 on the header's quoted
+// `=>` expression-bodied member as commented-out code; the header now cites
+// `RepoPaths.cs:85-86` in prose instead of quoting the member, since a build
+// gate that claims zero warnings is not a gate if the guard's own header
+// introduces one.
 
 namespace Harbor.Architecture.Tests;
 
@@ -205,7 +228,8 @@ public sealed class ExistenceCheckLivenessRule
 
     /// <summary>
     ///     The rows whose project does not exist under <c>src/</c>. MEASURED, not
-    ///     assumed: see the red run quoted in the PR body.
+    ///     assumed: transcribed verbatim from the red run (run 36822292544, job
+    ///     110240325437) — "Live stale rows (6) of 42 measured".
     /// </summary>
     /// <remarks>
     ///     <para>
@@ -217,14 +241,25 @@ public sealed class ExistenceCheckLivenessRule
     ///         edit that deserves review.
     ///     </para>
     ///     <para>
-    ///         All six are <c>Harbor.Hosting -&gt; a renderer</c>, and all six name a
-    ///         project that moved from <c>src/</c> to <c>contrib/tui/</c> on
-    ///         2026-08-23. <c>Harbor.Hosting.csproj</c> still declares the reference,
+    ///         Six of forty-two rows, all of them
+    ///         <c>Harbor.Hosting -&gt; a renderer</c>, and all six name a project
+    ///         that moved from <c>src/</c> to <c>contrib/tui/</c> on 2026-08-23.
+    ///         <c>Harbor.Hosting.csproj:139-146</c> still declares the reference,
     ///         inside an <c>ItemGroup</c> conditioned on
     ///         <c>$(HarborWithSpectreTui)</c> — a property defined nowhere, so the
     ///         group never opens and the edge really is dead, which is what the
     ///         exemption claims. The row is wrong about WHERE the project lives, not
     ///         about whether the edge is bound.
+    ///     </para>
+    ///     <para>
+    ///         The other thirty-six rows are sound, and that is the half of the
+    ///         measurement worth having. <c>OutOfScopeAssemblies</c> (2) and
+    ///         <c>SharedSourceFolders</c> (2) name real <c>src/</c> directories — the
+    ///         latter two have no <c>.csproj</c> at all, being linked-source folders,
+    ///         which is why an existence probe keyed on a project FILE would have
+    ///         condemned two perfectly good rows. <c>DocumentedExceptions</c> (4) and
+    ///         the remaining twenty-eight <c>DeclaredButUnboundProjectReferences</c>
+    ///         rows name projects that are all still there.
     ///     </para>
     ///     <para>
     ///         Not a deletion, and this file does not make it one:
@@ -236,7 +271,15 @@ public sealed class ExistenceCheckLivenessRule
     ///         unjustified references permitted by nothing.
     ///     </para>
     /// </remarks>
-    private static readonly string[] MeasuredStaleRows = [];
+    private static readonly string[] MeasuredStaleRows =
+    [
+        "EnforcerIntegrityTests.DeclaredButUnboundProjectReferences[Harbor.Hosting -> Harbor.Tui.RazorConsole]",
+        "EnforcerIntegrityTests.DeclaredButUnboundProjectReferences[Harbor.Hosting -> Harbor.Tui.Spectre]",
+        "EnforcerIntegrityTests.DeclaredButUnboundProjectReferences[Harbor.Hosting -> Harbor.Tui.Spectre.Fullscreen]",
+        "EnforcerIntegrityTests.DeclaredButUnboundProjectReferences[Harbor.Hosting -> Harbor.Tui.SpectreTui]",
+        "EnforcerIntegrityTests.DeclaredButUnboundProjectReferences[Harbor.Hosting -> Harbor.Tui.Termina]",
+        "EnforcerIntegrityTests.DeclaredButUnboundProjectReferences[Harbor.Hosting -> Harbor.Tui.TerminalGui]",
+    ];
 
     /// <summary>
     ///     Every row the four checks police names a real <c>src/</c> project —
