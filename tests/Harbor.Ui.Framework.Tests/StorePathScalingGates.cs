@@ -72,13 +72,15 @@
 //     MarkdownParses  == 0             — see `LineRestyles` for what is actually
 //                                          counted and why it stands in.
 //
-// `TailRebuilds` and `Materializations` are the SAME event seen from two sides:
-// a flush materialises the synced buffer, and the projector then rebuilds the
-// tail because that buffer's reference changed. Stated rather than hidden —
-// they are equal on a correct tree, and both bounds are kept because they fail
-// for different reasons. A reducer that materialised per delta breaks the
-// second; a projector that rebuilt the tail on deltas which did not flush
-// breaks the first, and the second would not notice.
+// `TailRebuilds` and `Materializations` describe the same underlying event from
+// two sides, and are deliberately counted from DIFFERENT observations so they
+// can disagree: a flush materialises the reducer's synced buffer, and the
+// projector then rebuilds its tail. `Materializations` reads the reducer's
+// buffer reference; `TailRebuilds` reads the projector's transcript instance.
+// A reducer that materialised per delta breaks the first bound and not the
+// second. A projector that re-resolved the tail on deltas which did not flush
+// breaks the second and not the first. Either bug is invisible to the other
+// counter, which is why both bounds exist.
 //
 // THE SCRIPT: WHY TWO MESSAGES
 // ----------------------------
@@ -125,6 +127,15 @@
 //      limit (1.05x) that had to fail on a correct tree, and the follow-up
 //      relaxed it to 3x with the reasoning. A gate never observed red is not a
 //      gate; the run log is quoted in the commit that fixed it.
+//   4. That red run also caught a bound of mine that was too TIGHT rather than
+//      too loose: the tail-rebuild bound started as `flushes + 1`, and the
+//      correct tree measured exactly 67 against a bound of 67. A gate that
+//      passes by zero margin fails on the next runner for a reason that has
+//      nothing to do with the code, which is the same class of defect as an
+//      absolute millisecond and one step further from visible. The bound is
+//      now derived — tail rebuilds are also caused by every `IsStreaming`
+//      transition, of which this script produces `2 * Messages - 1` — and the
+//      correct tree sits at 67 against 69.
 
 using System.Diagnostics;
 using Harbor.Abstractions.Events;
@@ -179,7 +190,7 @@ public sealed class StorePathScalingGates
     ///         the quadratic shape the gate exists to catch.
     ///     </para>
     /// </remarks>
-    private const double GrowthLimit = 1.05;
+    private const double GrowthLimit = 3.0;
 
     /// <summary>
     ///     Rounds per leg, best-of. The minimum is the estimator that noise can
@@ -423,14 +434,28 @@ public sealed class StorePathScalingGates
         // over the same chunk sizes, so a projector rebuilding the tail on
         // deltas which did not flush exceeds it rather than being compared
         // against itself.
+        //
+        // The slack term is DERIVED, not fitted. A tail rebuild is not only
+        // caused by a flush: `ProjectTail` treats `IsStreaming` as part of the
+        // tail's identity (`cache.IsStreaming == state.Chat.IsStreaming`), so
+        // every streaming transition forces a rebuild that no flush explains.
+        // The script has one MessageEnd per message plus one MessageStart
+        // between each pair of them, so 2*Messages - 1 of them. Measured 67
+        // against a bound of 69 — the first cut of this bound was
+        // `flushes + 1`, which the run log shows the correct tree landing
+        // exactly on, and a gate that passes by zero is not a gate.
+        int streamingTransitions = (2 * Messages) - 1;
         await Assert.That(drive.TailRebuilds)
-            .IsLessThanOrEqualTo(drive.PolicyFlushes + 1)
+            .IsLessThanOrEqualTo(drive.PolicyFlushes + streamingTransitions)
             .Because(
-                "tailRebuilds/policyFlushes = " + drive.TailRebuilds + "/" + drive.PolicyFlushes
-                + " against a limit of flushes + 1 = " + (drive.PolicyFlushes + 1) + " at N = " + Deltas
-                + ". The projector rebuilds the streaming tail exactly when the reducer replaced the synced "
-                + "buffer, so at most one rebuild per flush plus the end-of-message drain. A projector "
-                + "re-resolving the tail on every delta would report " + drive.Projects + " here and fail.");
+                "tailRebuilds = " + drive.TailRebuilds + " against a limit of policyFlushes + streaming "
+                + "transitions = " + drive.PolicyFlushes + " + " + streamingTransitions + " = "
+                + (drive.PolicyFlushes + streamingTransitions) + " at N = " + Deltas
+                + ". The projector rebuilds the streaming tail when the reducer replaced the synced buffer, and "
+                + "also whenever IsStreaming flips, because IsStreaming is part of the tail's identity "
+                + "(DefaultUiProjector.ProjectTail). The script produces " + streamingTransitions
+                + " such flips. A projector re-resolving the tail on every delta would report " + drive.Projects
+                + " here and fail.");
 
         // The reducer's copy work, sublinear in the delta count. Deltas/10 is a
         // shape bound, not a millisecond one: the flush policy caps the pending

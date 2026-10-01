@@ -722,15 +722,15 @@ hardware is a wrong METRIC, not a badly chosen number: no value fixes it,
 because a tighter one flakes more and a looser one stops testing what it was
 written for.
 
-| Test | Relative claim | Gate |
-|---|---|---|
-| `Cost_GrowsSubLinearly_InDeltas` | time over the store path, 1000 → 2000 deltas — warm-up discarded, best-of-3, linux-gated | ratio ≤ 3.0 (linear ≈ 2.0; O(N²) ≈ 4.0) |
-| `Cost_GrowsSubLinearly_InDeltas` | the same claim for allocations, which do not move with runner speed at all | ratio ≤ 3.0 |
-| `Shape_IsBoundedBy_Folds_And_Flushes_NotBy_Deltas` | transcript recomposed per FOLD, never per delta | `FullProjections ≤ folds + 2` (measured 2 of 2) |
-| `Shape_IsBoundedBy_Folds_And_Flushes_NotBy_Deltas` | the projector rebuilds the tail at most once per reducer flush — counted from the **projector's own signal** (a new transcript model), so a projector re-resolving the tail on unflushed deltas moves this counter and not the reducer's | `TailRebuilds ≤ PolicyFlushes + 1`, against `StreamingSync.ShouldFlush` replayed over the same chunks |
-| `Shape_IsBoundedBy_Folds_And_Flushes_NotBy_Deltas` | the reducer's string-copy work is sublinear in deltas — the O(N²) `+` that `ChunkedBuffer` exists to prevent | `Materializations ≤ deltas/10` (measured 66/1000, 78/2000) |
-| `Shape_IsBoundedBy_Folds_And_Flushes_NotBy_Deltas` | `MarkdownParses == 0` on the store path, measured through a proxy: already-projected transcript lines returning as a **different instance**. The store path styles whole lines with no parser behind it (`DefaultUiProjector.ResolveSpans`), and any parse — markdown included — necessarily allocates a new line instance | exactly 0 |
-| `TheRatioRuleAnswersTheDeclaredQuestion` | the ratio rule itself, over a fixed table of synthetic shapes with the limit carried **per row**, so retuning the constant cannot silently rewrite the control. Five of the seven rows must be **rejected**, including a zero and a negative baseline | 0 mismatches |
+| Test | Relative claim | Gate | Measured (run 36860503050) |
+|---|---|---|---|
+| `Cost_GrowsSubLinearly_InDeltas` | time over the store path, 1000 → 2000 deltas — warm-up discarded, best-of-3, linux-gated | ratio ≤ 3.0 (linear ≈ 2.0; O(N²) ≈ 4.0) | **1.99** (0.996 → 1.985 ms) |
+| `Cost_GrowsSubLinearly_InDeltas` | the same claim for allocations, which do not move with runner speed at all | ratio ≤ 3.0 | **1.99** (1157.8 → 2298.7 KiB) |
+| `Shape_IsBoundedBy_Folds_And_Flushes_NotBy_Deltas` | transcript recomposed per FOLD, never per delta | `FullProjections ≤ folds + 2` | 2 ≤ 4 (2 folds) |
+| `Shape_IsBoundedBy_Folds_And_Flushes_NotBy_Deltas` | the projector rebuilds the tail at most once per reducer flush **plus once per `IsStreaming` flip** (`IsStreaming` is part of the tail's identity in `ProjectTail`). Counted from the **projector's own signal** — a new transcript model — so a projector re-resolving the tail on unflushed deltas moves this counter and not the reducer's | `TailRebuilds ≤ PolicyFlushes + (2·Messages − 1)`, against `StreamingSync.ShouldFlush` replayed over the same chunks | 67 ≤ 69 (66 policy flushes) |
+| `Shape_IsBoundedBy_Folds_And_Flushes_NotBy_Deltas` | the reducer's string-copy work is sublinear in deltas — the O(N²) `+` that `ChunkedBuffer` exists to prevent | `Materializations ≤ deltas/10` | 64 ≤ 100 (fast-path share 0.932) |
+| `Shape_IsBoundedBy_Folds_And_Flushes_NotBy_Deltas` | `MarkdownParses == 0` on the store path, measured through a proxy: already-projected transcript lines returning as a **different instance**. The store path styles whole lines with no parser behind it (`DefaultUiProjector.ResolveSpans`), and any parse — markdown included — necessarily allocates a new line instance | exactly 0 | 0 |
+| `TheRatioRuleAnswersTheDeclaredQuestion` | the ratio rule itself, over a fixed table of synthetic shapes with the limit carried **per row**, so retuning the constant cannot silently rewrite the control. Five of the seven rows must be **rejected**, including a zero and a negative baseline | 0 mismatches | 0 |
 
 Two properties make these gates rather than decorations, and both were paid for
 in failures first:
@@ -741,12 +741,21 @@ in failures first:
   This is the #901 shape — checks passing on zero subjects.
 - **The gate shipped red.** The first commit carried a deliberately tightened
   1.05× limit, which fails on a correct tree, and the follow-up relaxed it to
-  3.0× with the reasoning recorded in the constant's own doc comment. The run
-  log is quoted in the commit that fixed it. A gate never observed red is not a
-  gate — and it is also why the factor is 3 and not 2 (2 reddens a correct tree
-  whenever one leg took a collection the other did not: the #939 shape) nor 8
-  (8 sits above the quadratic shape the gate exists to catch, which is what
-  #465 rejected).
+  3.0× with the reasoning recorded in the constant's own doc comment. Run
+  36860503050 measured ratios of 1.99 against the 1.05 limit — the failure
+  message is the gate working. A gate never observed red is not a gate — and it
+  is also why the factor is 3 and not 2 (2 reddens a correct tree whenever one
+  leg took a collection the other did not: the #939 shape) nor 8 (8 sits above
+  the quadratic shape the gate exists to catch, which is what #465 rejected).
+- **That same red run caught a bound that was too TIGHT rather than too
+  loose.** `TailRebuilds ≤ flushes + 1` was my first cut, and the correct tree
+  measured exactly 67 against a bound of 67. A gate that passes by zero margin
+  fails on the next runner for a reason that has nothing to do with the code —
+  the same class of defect as an absolute millisecond, one step further from
+  visible. The bound is now derived rather than fitted: a tail rebuild is
+  caused by every `IsStreaming` transition as well as by every flush, and the
+  script produces `2 · Messages − 1` of those, so the correct tree sits at 67
+  against 69.
 
 The script is **two** streaming messages, not one, and that is a non-vacuity
 requirement rather than realism: with a single message the transcript is empty
