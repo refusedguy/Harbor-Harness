@@ -457,14 +457,38 @@ HARBOR_DEMO=1 dotnet run --project tests/Harbor.Tui.E2E.Tests -c Release
 Stated rather than hidden, because a guide that claims more than it can deliver
 is worse than a short one.
 
-- **There is no PR-time A/B verdict, and building one honestly would be a lie.**
-  The natural guard — "a PR that changes a GIF without changing a recording
-  input is case B" — needs the changed-file list relative to the base ref, and CI
-  checks out at depth 1, so a TUnit process cannot compute it. A check that
-  claimed to answer it would be passing on an empty comparison. What is built
-  instead is the half that *is* statically knowable: the trigger surface, which is
-  what makes case A detectable at all. The review-time half stays a human
-  judgement, and it is the first step of the procedure above for that reason.
+- **There is no PR-time A/B *verdict*, and building one is not obviously worth
+  it.** The discriminating guard — "a PR that changes a GIF without changing a
+  recording input is case B" — needs the changed-file list relative to the base
+  ref. That list *is* now obtainable: `pr-no-gifs` checks out at `fetch-depth: 0`
+  and runs `git diff --name-only "$BASE_SHA" HEAD` in a shell job. What is not
+  built is the A/B distinction itself, because the repository's rule is the
+  blanket one — no recorded asset in a PR, no exceptions to classify — and the
+  only commit that ever needed the exception is #639. A discriminator would
+  therefore permit a shape (GIF + recording input in one PR) that the prose does
+  not permit, and would have to be maintained against a bulk-migration exception
+  that has not recurred in 29 recorder commits. The static half — the trigger
+  surface — is what makes case A detectable at all, and
+  [`DemoGifTriggerSurfaceTests`](../tests/Harbor.Architecture.Tests/DemoGifTriggerSurfaceTests.cs)
+  pins it. Note the asymmetry: `DemoGifTriggerSurfaceTests` still declines to
+  compute the changed-file list *in-process*, because a TUnit job checks out at
+  depth 1; the shell job above is where depth can be chosen.
+- **The manifest is stale, and has been since the recorder's output moved.** It
+  records `hero` at 216/18000 and `approval` at 312/26000 against consistent
+  recordings of 204/17000 and 264/22000, so the drift gate fails on roughly 92 %
+  of runs and the commit step never runs — the README GIFs have been frozen since
+  2026-09-29 for the same reason. Nothing in the repository detects *that*: the
+  gate cannot tell "this render regressed" from "this reference was never
+  re-declared", and there is no run-history signal to compare against. The repair
+  is `gh workflow run demo.yml -f record_baseline=true`, and it needs an owner
+  because it pushes regenerated binaries to `dev` without review. Recorded here
+  because a permanent red that is documented is at least not mistaken for a
+  passing gate — see
+  [The manifest is currently stale](#the-manifest-is-currently-stale-and-that-is-why-every-run-is-red).
+- **`bytes` and `framesSha256` cannot be gated at all.** They are not
+  reproducible: 22 distinct byte sizes and 23 distinct content hashes for one
+  unchanged `hero` across 25 runs. Any threshold over them measures the encoder.
+  See [What is reproducible, and what is not](#what-is-reproducible-and-what-is-not).
 - **The manifest tracks only numbers, not pixels.** A re-record that changes the
   image while preserving size, frame count and duration is not detected. That is
   inherent to a stdlib block-structure walker; visual regression would need a
