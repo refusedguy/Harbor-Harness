@@ -508,7 +508,9 @@ public interface ISessionStore
 См. обновлённый `07-tui.md` §10. Кратко:
 
 - TUI plugins — отдельная категория, грузятся в TUI процессе (JIT).
-- Контракт: `ITuiPlugin` + `TuiPluginContext`.
+- Контракт: `ITuiPlugin`. (`TuiPluginContext`, упомянутый здесь в редакции
+  2026-08, в репозитории не существует — 0 файлов; состояние шва на 2026-10:
+  закрыт, #564.)
 - Доступ к: EventBus, Views, Commands, StatusBar, ChatHistory.
 - SharpTS-loaded (TS plugins) или AssemblyLoadContext (C# plugins).
 

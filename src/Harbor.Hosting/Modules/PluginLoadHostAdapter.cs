@@ -22,19 +22,17 @@ namespace Harbor.Hosting;
 ///     <see cref="IPluginLoadHost" />.
 /// </summary>
 /// <remarks>
-///     Thread-safety is provided by the underlying registries (<c>ConcurrentDictionary</c>
-///     -backed). The <c>TuiPlugins</c> list uses a lock since
-///     <see cref="List{T} " /> is not thread-safe. Panel providers are forwarded
-///     directly into the host-owned <see cref="PanelRegistry" /> singleton, which is
-///     itself thread-safe.
+///     Thread-safety is provided by the underlying registries
+///     (<c>ConcurrentDictionary</c>-backed), and by the host-owned
+///     <see cref="PanelRegistry" /> singleton, which is itself thread-safe. Nothing
+///     here is guarded by a lock: <see cref="RegisterTuiPlugin" /> stores nothing
+///     (#916).
 /// </remarks>
 internal sealed class PluginLoadHost : IPluginLoadHost
 {
     private readonly IAgentRegistry _agents;
     private readonly IProviderRegistry _providers;
     private readonly IToolRegistry _tools;
-    private readonly object _tuiLock = new();
-    private readonly List<ITuiPlugin> _tuiPlugins = new();
 
     /// <summary>
     ///     Session-store backends contributed via <see cref="RegisterSessionStore" />,
@@ -83,22 +81,6 @@ internal sealed class PluginLoadHost : IPluginLoadHost
         get;
     }
 
-    /// <summary>
-    ///     The TUI plugins collected via <see cref="RegisterTuiPlugin" />. The renderer
-    ///     reads this list after construction and calls
-    ///     <see cref="ITuiPlugin.RegisterTui" /> for each entry.
-    /// </summary>
-    public IReadOnlyList<ITuiPlugin> TuiPlugins
-    {
-        get
-        {
-            lock (_tuiLock)
-            {
-                return _tuiPlugins.ToArray();
-            }
-        }
-    }
-
     /// <inheritdoc />
     public IServiceCollection Services
     {
@@ -136,13 +118,41 @@ internal sealed class PluginLoadHost : IPluginLoadHost
     /// <inheritdoc />
     public Result RegisterAgent(AgentDefinition agent) => _agents.Register(agent);
 
-    /// <inheritdoc />
+    /// <summary>
+    ///     Accept a TUI plugin contributed by a CS plugin, and keep nothing.
+    /// </summary>
+    /// <remarks>
+    ///     <b>Stores nothing (#916).</b> This used to append to a
+    ///     <c>TuiPlugins</c> list on this class; the list had zero readers
+    ///     anywhere in the repository, and the member was never on
+    ///     <see cref="IPluginLoadHost" /> — it was born on this
+    ///     <c>internal sealed class</c> in <c>ce522a9a</c> — so the seven documents
+    ///     that named <c>IPluginLoadHost.TuiPlugins</c> were naming a member that has
+    ///     never existed on that interface. Deleting the list makes those sentences
+    ///     true by construction and removes the only writable copy of the door's
+    ///     payload.
+    ///     <para>
+    ///         The door itself stays, and deliberately so:
+    ///         <c>ITuiPlugin</c> is a <b>closed seam (#564)</b> — a marker plus a door
+    ///         is what <c>ExtensionAxisFreezeRule</c> grades, and removing the door
+    ///         would fail <c>EverySealedAxis_IsDispatchedAndOpened</c> and quietly
+    ///         reopen the freeze question rather than settle it. So a TUI plugin still
+    ///         loads, is still accepted without error, and still paints nothing:
+    ///         nothing in the product calls <see cref="ITuiPlugin.RegisterTui" />.
+    ///     </para>
+    ///     <para>
+    ///         What a future change that does wire a renderer has to add is a field
+    ///         to collect into and the reader that enumerates it. The guard that makes
+    ///         that a deliberate edit rather than an accident is
+    ///         <c>tests/Harbor.Architecture.Tests/CellForgeWidgetAxisRules.cs</c>:
+    ///         <c>ViewSeam_DeclaredStatusMatchesWhatTheProductRenders</c> is two-sided on
+    ///         the consumer, and <c>ViewSeam_HasNoFirstImplementorInProductSource</c>
+    ///         (#916) turns red the moment a type implements the marker.
+    ///     </para>
+    /// </remarks>
     public Result RegisterTuiPlugin(ITuiPlugin plugin)
     {
-        lock (_tuiLock)
-        {
-            _tuiPlugins.Add(plugin);
-        }
+        ArgumentNullException.ThrowIfNull(plugin);
         return Result.Success();
     }
 

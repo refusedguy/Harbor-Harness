@@ -246,8 +246,9 @@ public interface IAgentPlugin : IPlugin
 For TUI extensions:
 
 > **`ITuiPlugin` is a closed seam (#564).** It loads, and nothing ever calls
-> `RegisterTui` — `IPluginLoadHost.TuiPlugins` has no reader in the product — so a
-> plugin view is collected and never rendered. It does not extend `IPlugin`, and
+> `RegisterTui` — the host door has stored nothing since #916, when its unread
+> `TuiPlugins` list was deleted — so a plugin view is collected and never
+> rendered. It does not extend `IPlugin`, and
 > the loader does detect each interface independently; the closure is about the
 > *consumer*, not the discovery. Implement `ITuiPanelPlugin` for a panel that is
 > painted. Guarded by `tests/Harbor.Architecture.Tests/CellForgeWidgetAxisRules.cs`.
@@ -348,8 +349,8 @@ See `samples/plugins-cs/HelloWorldPlugin.cs` for the same example as a file.
           IToolPlugin     → RegisterTools(IToolRegistryBuilder)
           IProviderPlugin → RegisterProviders(IProviderRegistryBuilder)
           IAgentPlugin    → RegisterAgents(IAgentRegistryBuilder)
-          ITuiPlugin      → host.RegisterTuiPlugin(plugin)  (collected; nobody
-                            reads TuiPlugins — closed seam, #564)
+          ITuiPlugin      → host.RegisterTuiPlugin(plugin)  (accepted and
+                            discarded; closed seam, #564)
           ITuiPanelPlugin → RegisterPanels(IPanelRegistry)  (deferred until renderer starts)
       The SafePluginRegistrar decorator wraps each call in try/catch so one bad plugin
       doesn't abort the rest.

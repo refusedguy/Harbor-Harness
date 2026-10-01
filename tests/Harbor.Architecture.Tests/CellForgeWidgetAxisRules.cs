@@ -40,12 +40,14 @@
 // and `host.RegisterTuiPlugin(tuiPlugin)` really is invoked. What is missing is
 // a fourth thing, which #620's marker/door pair has no name for:
 //
-//   * `IPluginLoadHost.TuiPlugins`
-//     (`src/Harbor.Hosting/Modules/PluginLoadHostAdapter.cs:91`) has NO reader
-//     anywhere under `src/` or `apps/`. Confirmed by scan, and by the fact that
-//     the only other `TuiPlugins` hits in the repository are a test fake whose
-//     property is named `RegisteredTuiPlugins` and therefore is not even a
-//     compile coupling to the interface.
+//   * there is NO RECEIVER. This bullet originally read "`IPluginLoadHost.
+//     TuiPlugins` has NO reader" — but that member never existed on
+//     `IPluginLoadHost`: it was born on the concrete `internal sealed class
+//     PluginLoadHost` and had no reader anywhere under `src/` or `apps/`, so
+//     #916 deleted it and the host door `RegisterTuiPlugin` now stores nothing.
+//     Seven documents had named the non-existent interface member, three of
+//     them teaching documents this file polices and one of them the interface's
+//     own IntelliSense.
 //   * therefore `ITuiPlugin.RegisterTui(ViewRegistry, ViewModelRegistry)` has no
 //     call site in the product, and a plugin that implements it loads, logs
 //     success, and paints nothing.
@@ -167,10 +169,20 @@
 //   would not be seen. The same boundary `ExtensionAxisFreezeRule` records for
 //   "nothing calls it", and for the same reason: these are members on a host
 //   object no plugin is ever handed, so a property hand-off cannot fake a read.
-// * `TuiPlugins` is matched as `.TuiPlugins` — a read through a receiver. The
-//   declaration on `PluginLoadHostAdapter` has no leading dot, so re-writing
-//   the property cannot make a dead seam look wired. That asymmetry is the whole
-//   point, and it is the same one `ExtensionAxisFreezeRule.OpenedDoor` uses.
+// * A collected-plugins read is matched as `.TuiPlugins` — a read through a
+//   receiver, not the declaration, so re-writing a property cannot make a dead
+//   seam look wired. That asymmetry is the whole point, and it is the same one
+//   `ExtensionAxisFreezeRule.OpenedDoor` uses. Since #916 the member is deleted,
+//   so this probe is vacuous until someone reintroduces the collection *and* a
+//   reader of it; it is kept because the reintroduction is the event rule 3 is
+//   two-sided for.
+// * #916 added the guard this file did not have: rules 1-3 are two-sided on the
+//   CONSUMER, so a declaration was invisible to all of them and the first
+//   `class Foo : ITuiPlugin` in `src/`+`apps/` would have left all seven rules
+//   here and all six in `ExtensionAxisFreezeRule` green.
+//   `ViewSeam_HasNoFirstImplementorInProductSource` closes that, matching the
+//   marker in a BASE LIST rather than on a receiver — the one shape that is a
+//   declaration and not a use.
 //
 // STATUS: never compiled. Local dotnet builds are forbidden in this repository
 // (8 concurrent agents on a 7 GB box), so CI is the only thing that has ever run
@@ -387,11 +399,27 @@ internal static partial class CellForgeSeamProbe
     }
 
     /// <summary>
-    ///     A reader of the seam: <c>.TuiPlugins</c> — a property read THROUGH A
-    ///     RECEIVER. The declaration on <c>PluginLoadHostAdapter</c> has no
-    ///     leading dot, so the seam cannot be made to look consumed by rewriting
-    ///     the property, which is the asymmetry that makes this a probe.
+    ///     A reader of the seam: a property read THROUGH A RECEIVER, of the
+    ///     collection the host door used to fill. The declaration had no leading
+    ///     dot, so the seam could not be made to look consumed by rewriting the
+    ///     property, which is the asymmetry that makes this a probe.
     /// </summary>
+    /// <remarks>
+    ///     <para>
+    ///         <b>Vacuous since #916, and that is the point.</b> The member this
+    ///         matched — <c>PluginLoadHost.TuiPlugins</c> — was deleted once it was
+    ///         measured to have zero readers anywhere in the repository, so the regex
+    ///         can no longer match a reader of a list that does not exist. It is
+    ///         kept, deliberately, because the seam is still two-sided on the
+    ///         consumer: a change that wires a renderer must reintroduce both the
+    ///         collection and the reader, and this catches the second half. Note the
+    ///         literal it looks for is a <b>property read through a receiver</b> —
+    ///         it is not the seven documents that named
+    ///         <c>IPluginLoadHost.TuiPlugins</c>, a member that never existed on that
+    ///         interface, which is why the naming had to be fixed in prose and
+    ///         cannot be fixed by any rule here.
+    ///     </para>
+    /// </remarks>
     [GeneratedRegex(@"\.\s*TuiPlugins\b")]
     internal static partial Regex SeamReaderRegex();
 
@@ -415,9 +443,77 @@ internal static partial class CellForgeSeamProbe
     [GeneratedRegex(@"ITuiPlugin|ITuiView|ViewRegistry|TuiViewBase")]
     internal static partial Regex NamesSeamRegex();
 
+    /// <summary>
+    ///     A type that lists the view-seam marker in its BASE LIST:
+    ///     <c>class ClockPlugin : ITuiPlugin</c>.
+    /// </summary>
+    /// <remarks>
+    ///     The class keyword is what makes this a declaration rather than a use:
+    ///     the interface's own <c>public interface ITuiPlugin</c> has no
+    ///     <c>class</c> before the name and cannot match, and neither can a
+    ///     parameter, a collection element or an <c>is</c> test.
+    /// </remarks>
+    [GeneratedRegex(@"\b(?:class|record|struct)\s+\w+\s*:\s*[^{;>]*\bITuiPlugin\b")]
+    internal static partial Regex SeamImplementorRegex();
+
     /// <summary>A declaration of the named type, for the receiving-end probe.</summary>
     private static Regex TypeDeclarationRegex(string typeName) =>
         new($@"\b(class|record|struct|interface)\s+{Regex.Escape(typeName)}\b", RegexOptions.Compiled);
+
+    /// <summary>
+    ///     Every product type that NAMES <paramref name="marker" /> in its base
+    ///     list, as <c>file:line</c> — the first implementor of a closed seam.
+    /// </summary>
+    /// <remarks>
+    ///     <para>
+    ///         Comments are stripped over the whole file first, with line count
+    ///         preserved, so a <c>/// public sealed class ClockPlugin : ITuiPlugin</c>
+    ///         in a doc comment is invisible — that exact line is in
+    ///         <c>ITuiPlugin.cs</c>, and reading it as a second implementor would
+    ///         make this rule red on the tree it was written for.
+    ///     </para>
+    ///     <para>
+    ///         The match is over the whole stripped text rather than line by line
+    ///         because a base list may wrap, and
+    ///         <c>public sealed class Foo\n    : ITuiPlugin</c> is legal C# that a
+    ///         per-line probe would miss. The character class stops at <c>{</c>,
+    ///         <c>;</c> and <c>&gt;</c> so the marker has to be in the base list
+    ///         and not in a body, a parameter list or a generic argument: that is
+    ///         what keeps <c>RegisterTuiPlugin(ITuiPlugin plugin)</c>,
+    ///         <c>List&lt;ITuiPlugin&gt;</c> and <c>is ITuiPlugin tuiPlugin</c> out
+    ///         of the result.
+    ///     </para>
+    /// </remarks>
+    internal static IReadOnlyList<string> FindImplementors(Regex declaration)
+    {
+        var hits = new List<string>();
+        foreach (string file in SourceScan.EnumerateCsFiles(ProductTrees))
+        {
+            string? text = SourceScan.TryReadAllText(file);
+            if (text is null)
+            {
+                continue;
+            }
+
+            string stripped = SourceScan.StripComments(text);
+            foreach (Match match in declaration.Matches(stripped))
+            {
+                int line = 1;
+                for (int i = 0; i < match.Index; i++)
+                {
+                    if (stripped[i] == '\n')
+                    {
+                        line++;
+                    }
+                }
+
+                hits.Add($"{SourceScan.Relative(file)}:{line}");
+            }
+        }
+
+        hits.Sort(StringComparer.Ordinal);
+        return hits;
+    }
 }
 
 /// <summary>
@@ -638,6 +734,106 @@ public sealed class CellForgeWidgetAxisRules
     }
 
     /// <summary>
+    ///     The view seam has no implementor in product source — the closure holds
+    ///     against its first user, not only against being wired up.
+    /// </summary>
+    /// <remarks>
+    ///     <para>
+    ///         <b>The gap #916 found, and it is a hole in the CLOSURE rather than in
+    ///         the documentation.</b> Rule 3 counts <c>readers + calls</c>, and both
+    ///         probes are anchored on a receiver, so neither can see a declaration.
+    ///         <c>ExtensionAxisFreezeRule</c> grades the axis as
+    ///         <c>SealedAxis("ITuiPlugin", "RegisterTuiPlugin")</c>, which it already
+    ///         passes — that pass is why the problem survived. So the first
+    ///         <c>class Foo : ITuiPlugin</c> written anywhere under <c>src/</c> or
+    ///         <c>apps/</c> would leave all seven rules in this file green and all six
+    ///         in <c>ExtensionAxisFreezeRule</c> green.
+    ///     </para>
+    ///     <para>
+    ///         What that costs is the failure mode this whole file exists to
+    ///         prevent, and it is worse than the original: such a type compiles,
+    ///         loads, logs success and paints nothing, and the reader has no way to
+    ///         learn that. The documents' central instruction — <c>Do not implement
+    ///         this; implement ITuiPanelPlugin</c> — stops being checkable at exactly
+    ///         the moment somebody takes it literally to see what happens.
+    ///     </para>
+    ///     <para>
+    ///         This is deliberately a probe inside the existing guard rather than a
+    ///         new axis, tool or CI job: #555 freezes the extension surface, and a
+    ///         rule that grades one already-declared seam's implementors opens
+    ///         nothing. The status stays owned by <see cref="ViewSeamStatus" />, so
+    ///         the deliberate edit that reopens the seam is the same one it already
+    ///         is.
+    ///     </para>
+    /// </remarks>
+    [Test]
+    public async Task ViewSeam_HasNoFirstImplementorInProductSource()
+    {
+        IReadOnlyList<string> implementors =
+            CellForgeSeamProbe.FindImplementors(CellForgeSeamProbe.SeamImplementorRegex());
+
+        bool expectImplementors = string.Equals(ViewSeamStatus, "Open", StringComparison.Ordinal);
+
+        await Assert.That(implementors.Count > 0).IsEqualTo(expectImplementors)
+            .Because(
+                "a closed seam that collects nothing is closed by ACCIDENT — of nobody having written the "
+                + "first implementor — and that accident is invisible to every other rule here. Rule 3 is "
+                + "two-sided on the CONSUMER, so it counts a reader of the collected list and a call of "
+                + "RegisterTui, and a declaration is neither; the marker and the door are both already "
+                + "present, which is what makes this seam pass ExtensionAxisFreezeRule today. So the first "
+                + "`class Foo : ITuiPlugin` in product source would pass all seven rules in this file and "
+                + "all six in ExtensionAxisFreezeRule, and the type it produces is the exact failure #564 "
+                + "is about: it loads, logs success, and paints nothing, and the documents tell plugin "
+                + "authors not to write it while nothing can tell whether they did. Implement ITuiPanelPlugin "
+                + "instead — that axis is live end to end. If a first implementor is genuinely wanted, flip "
+                + "ViewSeamStatus to 'Open' in this file, which is the same deliberate single-place edit "
+                + "that rule 3 already requires for a consumer. Found "
+                + implementors.Count + " implementor(s)"
+                + (implementors.Count == 0 ? " (the seam is closed against its first user)." : ".")
+                + " Implementors: "
+                + (implementors.Count == 0 ? "(none)" : string.Join(", ", implementors)));
+
+        // NON-VACUITY, in the same test. A probe that cannot detect the shape it
+        // exists for is a rule that reads as though it enforces something. The
+        // planted lines are four ways to DECLARE the marker, and the four ways
+        // the marker legitimately appears in product source without declaring an
+        // implementor — driven through the REAL regex, not a copy of it.
+        string[] mustMatch =
+        [
+            "public sealed class ClockPlugin : ITuiPlugin",
+            "internal class Foo : IPlugin, ITuiPlugin",
+            "public record struct Bar : ITuiPlugin",
+            "public sealed class Wrapped\n    : ITuiPlugin",
+        ];
+        string[] mustNotMatch =
+        [
+            "public interface ITuiPlugin",
+            "    public Result RegisterTuiPlugin(ITuiPlugin plugin)",
+            "    private readonly List<ITuiPlugin> _tuiPlugins = new();",
+            "                    if (plugin.Instance is ITuiPlugin tuiPlugin)",
+        ];
+
+        await Assert.That(
+                string.Join(" | ", mustMatch.Where(l => !CellForgeSeamProbe.SeamImplementorRegex().IsMatch(l))))
+            .IsEmpty()
+            .Because(
+                "this probe is the only thing standing between the seam and its first user, so it has to "
+                + "fire on the declaration it names. If the class keyword stopped anchoring it, the rule "
+                + "would go green on the first implementor and read as though the closure were guarded. "
+                + "The wrapped base list is the case a per-line probe would miss.");
+
+        await Assert.That(
+                string.Join(" | ", mustNotMatch.Where(l => CellForgeSeamProbe.SeamImplementorRegex().IsMatch(l))))
+            .IsEmpty()
+            .Because(
+                "the other half of the discrimination: the marker appears in product source in four "
+                + "shapes that are NOT implementors — the interface's own declaration, a parameter, a "
+                + "collection element, and the dispatch branch that satisfies ExtensionAxisFreezeRule. A "
+                + "probe that swept any of those in would be red on the tree it was written for, and the "
+                + "fix for that red would be to delete the rule.");
+    }
+
+    /// <summary>
     ///     The declared status of the view seam matches what the product
     ///     actually renders — in BOTH directions.
     /// </summary>
@@ -651,8 +847,8 @@ public sealed class CellForgeWidgetAxisRules
     ///     </para>
     ///     <para>
     ///         This is the rule that makes the closure a decision rather than a
-    ///         freeze. If a future change wires a renderer to read
-    ///         <c>IPluginLoadHost.TuiPlugins</c> and calls <c>RegisterTui</c>,
+    ///         freeze. If a future change collects the registered plugins and
+    ///         wires a renderer to read them, calling <c>RegisterTui</c>,
     ///         the seam is genuinely open and this test goes RED and says so —
     ///         at which point <see cref="ViewSeamStatus" /> is flipped to
     ///         <c>Open</c> here, and rule 4 in turn goes red until the documents
@@ -675,7 +871,7 @@ public sealed class CellForgeWidgetAxisRules
                 "ITuiPlugin is the axis this file is about, and its status is written down exactly once, "
                 + "as ViewSeamStatus. It has to agree with the product in both directions, or the status "
                 + "is the thing that is wrong rather than the code. A reader of "
-                + "IPluginLoadHost.TuiPlugins, or a call of ITuiPlugin.RegisterTui on a receiver, is what "
+                + "a read of the collected plugins, or a call of ITuiPlugin.RegisterTui on a receiver, is what "
                 + "makes the seam real: PluginRegistrar dispatches the marker and invokes "
                 + "host.RegisterTuiPlugin(...), which is the whole reason this seam PASSES "
                 + "ExtensionAxisFreezeRule — a marker and a door are present and connected, and the "
@@ -721,7 +917,7 @@ public sealed class CellForgeWidgetAxisRules
                 "a documented contract that no shipped renderer honours is worse than no contract, "
                 + "because the next reader trusts it. ITuiPlugin is dispatched and its host door is "
                 + "invoked, so it passes #620's axis freeze, and nothing consumes the result: "
-                + "IPluginLoadHost.TuiPlugins has no reader and ITuiPlugin.RegisterTui has no call site, "
+                + "the host door stores nothing (#916) and ITuiPlugin.RegisterTui has no call site, "
                 + "so a plugin view is never painted by any renderer — and in the canonical CellForge "
                 + "screen it could not be, because that screen is drawn by the cell-diff layout tree "
                 + "rather than by the base renderer's four placements. Each document that teaches this "

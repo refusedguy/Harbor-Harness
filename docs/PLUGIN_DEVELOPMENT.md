@@ -129,9 +129,9 @@ public interface IAgentPlugin : IPlugin
 ### `ITuiPlugin` — closed seam (#564), adds nothing today
 
 **`ITuiPlugin` is a closed seam (#564).** The marker is dispatched and
-`host.RegisterTuiPlugin(...)` is invoked, but `IPluginLoadHost.TuiPlugins` has no
-reader in the product, so `RegisterTui` is never called: a plugin view is
-collected and never rendered. The canonical CellForge screen could not paint it
+`host.RegisterTuiPlugin(...)` is invoked, but since #916 that door stores nothing,
+so `RegisterTui` is never called: a plugin view is collected and never rendered.
+The canonical CellForge screen could not paint it
 even if it were called — that screen is drawn by the cell-diff layout tree, not
 by the four placements `ShouldRenderPlacement` queries. **Do not implement this
 for a panel; implement `ITuiPanelPlugin` below.** The contract is kept so the

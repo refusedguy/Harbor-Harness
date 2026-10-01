@@ -21,7 +21,7 @@ Terminal UI contracts — renderer, view, view-model, plugin, and navigation abs
 
 - **Renderer**: `ITuiRenderer` (initialize, render, readline, write, clear, dispose) and `BaseTuiRenderer` partial implementation.
 - **Views/ViewModels**: `TuiViewBase<T>` with `Id`, `DisplayName`, `Placement`, `RenderAsync`; builtin VMs via CommunityToolkit.Mvvm `ObservableObject`.
-- **Plugin**: `ITuiPlugin.RegisterPanels(IPanelRegistry)` for terminal panel extensions.
+- **Plugin**: `ITuiPlugin` — a **closed seam (#564)**: `Name`, `Version`, `Description`, `RegisterTui`, and nothing ever calls `RegisterTui`, so it is collected and never rendered. It has no `RegisterPanels`. For a plugin-contributed panel the contract is `ITuiPanelPlugin.RegisterPanels(IPanelRegistry)`, which lives in `Harbor.Ui.Framework.State` — a different assembly.
 - **Render context**: `ITuiRenderContext` with color/style abstractions (renderer-specific implementations).
 
 ## Dependencies
