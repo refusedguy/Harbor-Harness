@@ -6,13 +6,18 @@ namespace Harbor.Tui.CellForge.Widgets;
 /// <summary>
 /// PRIM12 seating (#308): <see cref="DiffViewerOverlay"/> as an
 /// <see cref="IOverlayLayer"/> on the PRIM2a z-stack. Modal and opaque — the
-/// fullscreen viewer occludes layers beneath, wins hit-tests over the full
-/// viewport, and forms a TGui input barrier (<see cref="IOverlayLayer.IsModal"/>)
-/// so panels beneath starve while it is visible. Keys route top-down through
-/// <see cref="OnKey"/> (btea message-routing pattern). The host pushes one
-/// instance onto <c>LayoutTree.Overlays</c> and calls <see cref="Sync"/> per
-/// frame (or on resize); hidden paint stays a no-op so goldens are
-/// byte-identical while the viewer is closed.
+/// fullscreen viewer occludes layers beneath and wins hit-tests over the full
+/// viewport. The host pushes one instance onto <c>LayoutTree.Overlays</c> and
+/// calls <see cref="Sync"/> per frame (or on resize); hidden paint stays a
+/// no-op so goldens are byte-identical while the viewer is closed.
+///
+/// <para><b>Key ingress is NOT the stack.</b> (#858) <see cref="OnKey"/> still
+/// forwards a decoded key for any host that routes through
+/// <see cref="OverlayStack.RouteKey"/>, and <see cref="IsModal"/> still declares
+/// the barrier such a host would enforce — but no product code calls
+/// <c>RouteKey</c>, and no product code calls <c>DiffViewerOverlay.Show</c>, so
+/// this layer is never visible in the product and claims no key. The live
+/// overlays are keyed by hand in <c>ReplInputLoop.HandleKeyAsync</c>.</para>
 /// </summary>
 public sealed class DiffViewerOverlayLayer : IOverlayLayer
 {

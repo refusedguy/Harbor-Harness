@@ -28,7 +28,12 @@ public sealed class CellForgeTokenBreakdownPanel : CellForgePanelBase
     {
         ArgumentNullException.ThrowIfNull(ctx);
         return PanelText.Clip(
-            PanelRows.TokenRows(ctx.State.Chat.Cost.TokensIn, ctx.State.Chat.Cost.TokensOut, ctx.State.Chat.Cost.CostUsd, ctx.Width),
+            PanelRows.TokenRows(
+                ctx.State.Chat.Cost.TokensIn,
+                ctx.State.Chat.Cost.TokensOut,
+                ctx.State.Chat.Cost.CostUsd,
+                ctx.Width,
+                ctx.State.Chat.Cost.IsCostUnpriced),
             ctx.Width,
             ctx.Height);
     }

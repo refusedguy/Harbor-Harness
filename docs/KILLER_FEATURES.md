@@ -783,6 +783,12 @@ Each entry: **Feature / Source path / Description / Why it matters / Implementat
     (`CellForgeJumpPaletteOverlayLayer`, an `IOverlayLayer` on the existing
     `LayoutTree.Overlays` stack with `IsModal ⇒` input barrier), so the Right
     dock slot is released and typing never leaks into the composer.
+    **As of #858 the overlay layer itself is not seated:** no product code
+    constructs `CellForgeJumpPaletteOverlayLayer`, and `OverlayStack.RouteKey`
+    has no product call site, so the centred modal box described above is not
+    what the product draws today. #857 gave the same palette a live route —
+    the command palette frame, keyed by hand in `ReplInputLoop.HandleKeyAsync`
+    — and that is the path a keystroke takes now.
     Covered by `tests/Harbor.Tui.CellForge.Tests/CellForgeJumpPalettePanelTests.cs`.
 
 ---

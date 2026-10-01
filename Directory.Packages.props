@@ -188,9 +188,10 @@
     <PackageVersion Include="Nuke.Common" Version="10.1.0" />
     <!-- ── DI analyzers ──────────────────────────────────────────────────── -->
     <!--
-      DependencyInjection.Lifetime.Analyzers (DI001–DI005) detects captive
-      dependencies, lifetime mismatches, and circular DI graphs at compile time.
-      Consumed solution-wide via Directory.Build.props so every project that
+      DependencyInjection.Lifetime.Analyzers (DI001–DI022, DI024–DI027; 26
+      diagnostics, DI023 unused) detects captive dependencies, lifetime
+      mismatches, and circular DI graphs at compile time. Consumed
+      solution-wide via Directory.Build.props so every project that
       references Microsoft.Extensions.DependencyInjection gets checked.
 
       Excubo.Analyzers.DependencyInjectionValidation (DIV0xx) provides

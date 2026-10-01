@@ -82,7 +82,6 @@ severity to a path instead, and it is this one:
 
 ```ini
 [apps/Harbor.App.Avalonia/**.cs]
-dotnet_diagnostic.DI003.severity = suggestion   # captive dependency
 dotnet_diagnostic.DI006.severity = suggestion   # static IServiceProvider cache
 dotnet_diagnostic.DI008.severity = suggestion   # disposable transient service
 dotnet_diagnostic.DI014.severity = suggestion   # root provider not disposed
@@ -119,13 +118,29 @@ will get this backwards, and did (#838).
 > *properties* — two independent gaps, either of which alone would have left the
 > rule unable to fail.
 
-**Known breadth, deliberately not fixed here:** the block is four rules deep and
-its reason covers fewer than four. DI003 (captive dependency) is a
-lifetime-graph rule about a singleton retaining a *scoped* service, which is
-not what "process-lifetime singletons" means, and the demotion covers the whole
-`apps/Harbor.App.Avalonia` tree rather than the app root alone. Narrowing it
-needs one strict build to learn whether the desktop app has a real captive
-dependency; #838 ran no build, so the breadth is recorded rather than guessed at.
+**Why each row exists, and what was removed at #865.** One sentence over a block
+of rows is only auditable if it names them, so each row above carries its own
+reason in `.editorconfig` and
+`DiSeverityDemotionRules.PathScopedSection_NamesEveryRuleItSets` fails the build
+when one does not. The block used to be **four** rules deep under a single
+sentence — "relax DI rules for process-lifetime singletons" — that named three of
+them. The fourth, **DI003 (captive dependency)**, was covered by neither the
+sentence nor the parenthetical trying to enumerate the rest, and it is a
+lifetime-*graph* rule about a singleton retaining a scoped or transient service,
+which is not what "process-lifetime singletons" means.
+
+DI003 is not in the list above any more. It was not removed because a strict
+build proved a captive dependency absent — no build was run for this either — but
+because reading the source settles it: `AddScoped` occurs **0** times in
+`apps/Harbor.App.Avalonia`, and 0 times repo-wide under `src/` + `apps/`, so
+there is no scoped service for a singleton to retain. The single transient
+(`OnboardingViewModel`, the only `AddTransient` in the app) is resolved from the
+root provider inside `App.ShowOnboardingThenMain` and captured by no constructor.
+DI003 therefore has no site to hide here, and it stays at the tree-wide `error`
+that `apps/Harbor.App.Cli` — the same class of composition root — is held to.
+The breadth is still the whole app tree rather than the app root's own files;
+that is unchanged and unremarkable now that the remaining three rows are each
+about the root's own handover.
 
 Three sibling blocks used to sit here for `apps/Harbor.App.{Wpf,Maui,Blazor}`.
 They were removed in #838: none of those directories exists — those roots live
@@ -333,7 +348,7 @@ of *(rule, path)* — see §Path-scoped severity overrides.
 | `error` | DI003, DI013, DI015, DI017, DI019 | build error (also an error at `suggestion`-less defaults) |
 | `warning` | DI001, DI002, DI004, DI005, DI006, DI008, DI009, DI014, DI018, DI020, DI021, DI024, DI025, DI027 | visible, and promoted to an error by `TreatWarningsAsErrors` |
 | `suggestion` | DI007, DI010, DI011, DI012, DI016, DI022, DI026 | not in the build log; IDE-surfaced at most, hidden by default in most IDEs |
-| `suggestion`, one path only | DI003, DI006, DI008, DI014 under `apps/Harbor.App.Avalonia/` | as above, in the Avalonia desktop root |
+| `suggestion`, one path only | DI006, DI008, DI014 under `apps/Harbor.App.Avalonia/` | as above, in the Avalonia desktop root |
 
 - Excubo EDI rules and `ADP0001` → `suggestion` throughout.
 - `.editorconfig` is the source of truth for all of the above. This table

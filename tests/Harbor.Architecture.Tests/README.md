@@ -33,6 +33,19 @@ Two halves of the layering contract, both mechanically enforced:
    `CostPricedInCoreRules` (#653, money is priced in the core). These are
    repository text scans over `src/` + `apps/`, each with a liveness check and a
    positive control.
+5. **Configuration rules** — a build setting that is a *permission* has to state
+   what it authorises. Two readers of the same `.editorconfig`, each owning one
+   question, and the split is deliberate (see `DiSeverityDemotionRules`' header):
+   * `AnalyzerSeverityScopeRules` (#838) — a path-scoped section resolves to a
+     real path, `docs/ANALYZERS.md` accounts for it, and the set of relaxed
+     paths is the declared inventory. Scoped to the `DI###` family on purpose.
+   * `DiSeverityDemotionRules` (#865) — every severity a path-scoped section
+     sets names its own rule in the comment governing it, for EVERY analyzer
+     family, since a demotion's reason is a comment and a comment is invisible
+     to the compiler, to the analyzer it silences, and to every other gate here.
+   Sits with `ExemptionReason.cs`, which is the one place that answers "does
+   this tolerated row state a reason?" for the five C# exemption tables; a
+   config demotion is the sixth, and the only one whose row is not a value.
 
 ## Run
 

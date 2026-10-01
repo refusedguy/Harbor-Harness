@@ -28,10 +28,12 @@ namespace Harbor.Tui.CellForge.Panels;
 ///         <b>Presentation (#381):</b> <see cref="DefaultPlacement" /> is
 ///         <see cref="TuiPanelPlacement.Center" />, so the palette no longer
 ///         steals a Right dock slot — <c>ChatScreenPanelDock</c> skips
-///         Center-placed providers and the host seats
-///         <c>CellForgeJumpPaletteOverlayLayer</c> (an <c>IOverlayLayer</c>,
-///         <c>IsModal</c> ⇒ input barrier) on the existing
-///         <c>LayoutTree.Overlays</c> stack. No new z-layer system.
+///         Center-placed providers. <c>CellForgeJumpPaletteOverlayLayer</c> is the
+///         layer this provider would be seated on (an <c>IOverlayLayer</c>,
+///         <c>IsModal</c> ⇒ input barrier) and needs no new z-layer system to do
+///         it, but as of #858 no product code constructs or seats it. The palette
+///         the user drives today is the command palette frame, keyed by
+///         <c>ReplInputLoop.HandleKeyAsync</c> (#857).
 ///     </para>
 ///     <para>
 ///         <b>Input barrier:</b> every key <c>OnKey</c> handles returns

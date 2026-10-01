@@ -549,7 +549,7 @@ dotnet_diagnostic.ADP0001.severity = suggestion
 # the corresponding architecture test will fail with a clear list of the
 # forbidden references.
 # ============================================================================
-# PATH-SCOPED SEVERITY OVERRIDES (#838)
+# PATH-SCOPED SEVERITY OVERRIDES (#838, narrowed at #865)
 # ============================================================================
 # Everything above this line is tree-wide. This block is the ONE place where a
 # diagnostic's severity is a function of (rule x path) rather than of the rule
@@ -570,17 +570,6 @@ dotnet_diagnostic.ADP0001.severity = suggestion
 # before a test ran, in the same session that found the Avalonia root's
 # equivalent compiling clean.
 #
-# SCOPE — the block is four rules deep and its reason covers fewer than four.
-# DI006 (static root provider) and DI014 (root provider not disposed) ARE the
-# process-lifetime singletons. DI008 is defensible for process-lifetime view
-# models. DI003 (CAPTIVE DEPENDENCY) is a lifetime-graph rule about a singleton
-# retaining a SCOPED service, which is not what this relaxation is for, and the
-# demotion covers the whole apps/Harbor.App.Avalonia tree rather than the app
-# root alone. Narrowing it was NOT attempted here: promoting DI003 back to
-# `error` needs one strict build to learn whether the desktop app actually has a
-# captive dependency, and #838 ran no build. Do not read this paragraph as an
-# endorsement of the breadth — it is a known gap, filed separately.
-#
 # THE THREE SIBLING BLOCKS ARE GONE (#838). `apps/Harbor.App.{Wpf,Maui,Blazor}`
 # carried identical four-rule relaxations, and none of those directories exists:
 # those composition roots live under contrib/, which is not in Harbor.slnx and
@@ -591,15 +580,42 @@ dotnet_diagnostic.ADP0001.severity = suggestion
 # tests/Harbor.Architecture.Tests/ now fails if such a block reappears, and
 # `DiSeverityOverrides_AreScopedToExactlyTheDeclaredRoot` pins this one path as
 # the whole surface.
+#
+# ONE REASON PER ROW, AND THE REASON IS THE ROW'S OWN NAME (#865). The block
+# used to be four rules deep under a single sentence that named three of them,
+# and the fourth was covered by neither the sentence nor the parenthetical that
+# tried to enumerate the rest. A reason that covers N rows is only auditable if
+# it names them, so each row below carries its own. `DiSeverityDemotionRules.
+# PathScopedSection_NamesEveryRuleItSets` fails the build when one does not —
+# the reason is a comment, and a comment is invisible to the compiler, to the
+# analyzer it silences, and to every other gate here.
 [apps/Harbor.App.Avalonia/**.cs]
-dotnet_diagnostic.DI003.severity = suggestion
+# DI006 — the XAML object graph has to be handed a container, and
+# App.Services is where it is parked (App.axaml.cs).
 dotnet_diagnostic.DI006.severity = suggestion
+# DI008 — the app's only transient is a disposable view model
+# (OnboardingViewModel, ViewModelRegistration.cs) that lives for the process.
 dotnet_diagnostic.DI008.severity = suggestion
+# DI014 — a process-lifetime root provider is disposed at exit, by design
+# (App.axaml.cs disposes Host on shutdown). Kept visible, non-blocking.
 dotnet_diagnostic.DI014.severity = suggestion
+# DI003 is NOT demoted here and is not to be added. It is a lifetime-GRAPH rule
+# (a singleton or long-lived factory retaining a scoped/transient service), not
+# a process-lifetime rule, so "process-lifetime singletons" never covered it.
+# Nothing about this root needs it relaxed: the app registers no scoped service
+# at all (0 AddScoped, and 0 repo-wide under src/ + apps/), and its single
+# transient (OnboardingViewModel) is resolved from the root inside
+# App.ShowOnboardingThenMain rather than captured by a constructor, so there is
+# no DI003 site to hide. It stays at the repo-wide `error` its sibling
+# composition root apps/Harbor.App.Cli is held to.
 
-# Renderer golden-frame tests (Phase 5): no diagnostics fire in this file
-# today; the section is reserved for the NickConsoleEx capture test, which
-# drives SharpConsoleUI window-system internals that may trip TUnit
-# analyzers as they evolve.
+# Renderer golden-frame tests (Phase 5): reserved for the NickConsoleEx
+# capture test, which drives SharpConsoleUI window-system internals.
+# TUnit0055 — "assertion not awaited" — fires on the fire-and-await shapes
+# the capture harness needs (a frame assertion raised from a callback the
+# test does not await), and there is no awaited form of that harness today.
+# The reason this row names the rule: the comment it replaces said "no
+# diagnostics fire in this file today", which is an argument for DELETING the
+# row, not for keeping it (#865).
 [tests/Harbor.Tui.RendererTests/NickConsoleExGoldenFrameTests.cs]
 dotnet_diagnostic.TUnit0055.severity = none
