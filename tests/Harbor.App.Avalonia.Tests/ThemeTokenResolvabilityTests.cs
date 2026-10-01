@@ -385,6 +385,18 @@ public class ThemeTokenResolvabilityTests
     ///         35 keys are dead but self-consistent rather than broken. Only an
     ///         edge that leaves the declaring file is reported.
     ///     </para>
+    ///     <para>
+    ///         Nor is a name a reachable dictionary also declares. The four
+    ///         orphan files re-declare the whole HDS vocabulary next to their own
+    ///         values — <c>TextBrush</c>, <c>UiFont</c>,
+    ///         <c>BorderStrongBrush</c>, <c>AccentPrimaryBrush</c> and some ninety
+    ///         more are in <c>Dark.axaml</c> AND in every palette — and those
+    ///         resolve, because the palette is the file the app loads. The first
+    ///         run of this test reported 1504 edges for that reason; filtering on
+    ///         "no reachable dictionary declares this name" leaves the 3 that are
+    ///         real. A guard that is red for a reason that is not a defect gets
+    ///         muted, and a muted guard catches nothing.
+    ///     </para>
     /// </remarks>
     [Test]
     public async Task No_Token_From_A_Dictionary_The_App_Never_Merges_Is_Consumed_From_Outside_It()
@@ -393,6 +405,16 @@ public class ThemeTokenResolvabilityTests
         var declared = orphans.ToDictionary(
             static file => file,
             file => DeclaredKeysIn(file).ToArray());
+
+        // A name declared in an unmerged dictionary is only interesting when NO
+        // REACHABLE dictionary declares it too. All four orphan files re-declare
+        // the whole HDS vocabulary alongside their own values — `TextBrush`,
+        // `UiFont`, `BorderStrongBrush`, `AccentPrimaryBrush` and ~90 others are
+        // declared in Dark.axaml AND in every palette — and those resolve fine,
+        // because the palette is what the app actually loads. Keeping only the
+        // names that no reachable dictionary provides takes this from 1504
+        // reported edges to the 3 that are real.
+        var reachable = new HashSet<string>(DeclaredThemeTokenNames(), StringComparer.Ordinal);
 
         // Everything that could consume a name: the chain files, plus app C#.
         var consumers = new List<(string File, int Line, string Key)>();
@@ -413,6 +435,9 @@ public class ThemeTokenResolvabilityTests
         List<string> violations = [];
         foreach ((string file, int line, string key) in consumers)
         {
+            if (reachable.Contains(key))
+                continue;
+
             foreach ((string orphan, string[] keys) in declared)
             {
                 if (!keys.Contains(key, StringComparer.Ordinal))
