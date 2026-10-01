@@ -382,10 +382,12 @@ public sealed class FeatureFlagWiringRules
             .Because("the reader must report a flag that no ItemGroup or PropertyGroup conditions, "
                    + "or it can never fail on the real project");
 
-        await Assert.That(unwired.Contains("HarborWithPlugins", StringComparer.Ordinal)).IsFalse()
+        await Assert.That(unwired.Contains("HarborWithPlugins", StringComparer.Ordinal)).IsTrue()
             .Because("HarborWithPlugins declares itself twice in this synthetic project and nothing "
-                   + "conditions it, so it belongs in the unwired set — a reader that reported the "
-                   + "empty set here would be counting a declaration as a body");
+                   + "conditions it, so it belongs in the unwired set. Its declarations are property "
+                   + "elements inside a PropertyGroup, not groups, so a reader that counted a "
+                   + "declaration as a body would leave it out — and would then report all five real "
+                   + "flags as wired, which is the shape this whole file exists to catch.");
 
         foreach (string flag in FeatureFlags(wiredDocuments[0]))
         {
