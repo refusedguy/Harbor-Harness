@@ -71,17 +71,23 @@ RULES
   TEST-CITE-MISSING / TEST-CITE-AMBIGUOUS
                      the `file:line` shape above, in a TEST's prose rather than
                      a document's. `Status: normative` cannot select a .cs file,
-                     so the markdown fence above is structurally blind to all
-                     236 of them (#947).
+                     so the markdown fence above is structurally blind to every
+                     one of them (#947).
   TEST-CITE-EOF / TEST-CITE-BLANK
                      likewise, and mechanical: past the last line, or the cited
                      line is empty.
   TEST-CITE-DRIFT  the cited line resolves, is not blank, and is the WRONG
                      line: what the commit that wrote the citation meant by N is
                      not what N holds today. It is the only one of these five
-                     that catches the class the others cannot see — over the 236
-                     they catch 4 of the 64 that are provably wrong. See "THE
-                     SIXTH SHAPE" below for the measurement and the cost.
+                     that catches the class the others cannot see — over the
+                     whole tests/ population they catch 4 of the 66 that are
+                     provably wrong. See "THE SIXTH SHAPE" below for the
+                     measurement and the cost.
+  TEST-CITE-NO-HISTORY
+                     not a finding about a sentence: the clone is truncated, so
+                     the DRIFT comparison cannot be made and would silently
+                     report nothing. Reported so that "fewer findings" and "the
+                     anchored rule did not run" are never the same sentence.
 
   The escape hatch is a line IN THE SAME DOCUMENT, and it must carry a reason:
 
@@ -385,15 +391,23 @@ THE FIFTH SHAPE — MARKDOWN THAT ONLY LOOKS COMPILABLE (#853)
 THE SIXTH SHAPE — A `file:line` IN A TEST'S PROSE (#947)
 
   `Status: normative` is a self-selector for MARKDOWN, so every rule above is
-  structurally unable to see a test file: 236 `file:line` citations live in the
-  prose of `tests/**/*.cs` and no rule in this repository had ever read one.
+  structurally unable to see a test file: `file:line` citations live in the prose
+  of `tests/**/*.cs` — 236 of them on a7a40335, 235 on bb33437a, the tree having
+  moved in between with no test edited — and no rule in this repository had ever
+  read one.
 
   They drift, and the shape of the drift is the reason a cheap version of this
   rule was measured and NOT shipped. Over that population the mechanical fence
   this file already knows how to write — resolves, not past EOF, not blank —
-  reports 22 and stays silent on 214. Against the 64 citations that are provably
+  reports 22 and stays silent on 214. Against the 66 citations that are provably
   wrong today (established by comparing the target file at the commit that wrote
-  the citation against HEAD), it catches 4 and misses 60.
+  the citation against HEAD), it catches 4 and misses 62.
+
+  The two figures are on different trees and both are stated with their commit,
+  because this file is where `DOC-COUNT-STALE` was written and the discipline
+  applies to it first: a measurement that does not say which tree it measured is
+  a measurement that will be wrong silently. docs/CITATION_DRIFT_MEASUREMENT.md
+  is the full write-up, with every table pinned the same way.
 
   So the rule is anchored on HISTORY. `git blame` the citing line, read the
   target at that commit and at HEAD, and ask whether line N still names what its
@@ -758,16 +772,16 @@ def block_span(text: str, start: int) -> tuple[int, int] | None:
 # silent on 214.
 #
 # And 22 is not a finding count. It is a FLOOR, and it is a floor that misses
-# the class this issue is about. Measured against the 64 citations that are
-# PROVABLY wrong today (see `cite_drift` below for how that is established
-# without a human reading 236 claims):
+# the class this issue is about. Measured against the 66 citations that are
+# PROVABLY wrong today (see `check_cite_drift` below for how that is established
+# without a human reading 235 claims):
 #
 #     mechanically decidable (blank / EOF / unresolved)   22
-#     PROVABLY wrong today                               64
+#     PROVABLY wrong today                               66
 #     the mechanical rule CATCHES                         4
-#     the mechanical rule MISSES                         60
+#     the mechanical rule MISSES                         62
 #
-# Four of sixty-four. The 60 are citations whose cited line is real, has code on
+# Four of sixty-six. The 62 are citations whose cited line is real, has code on
 # it, and is the wrong code — `TokenTrackingRatchet.cs:83` cites
 # `AgentLoop.cs:91` for `_tokenTracker`, and line 91 today is
 # `_providers = providers;`. A "points at a line with code" fence is green on
@@ -945,7 +959,7 @@ def check_cite_drift(
 
     Mechanical facts first (unresolved / past EOF / blank), because they are
     free and they are what the rule would have been without the history anchor.
-    Then the anchored comparison, which is the part that finds the 60.
+    Then the anchored comparison, which is the part that finds the 62.
 
     Keyed by the CITING file, not the target: a red run has to point at the
     line someone has to edit, and the whole defect is that a reader following
