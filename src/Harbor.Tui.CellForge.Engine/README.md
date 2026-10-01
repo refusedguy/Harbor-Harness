@@ -79,7 +79,7 @@ hint rectangles. Also here: `OverlayStack` (modal/overlay compositing),
 `ComposerController`/`VimComposerMode` (input editing),
 `CodeSyntaxTokenizer` with `LanguageSupportRegistry` and per-language
 `ILanguageSupport` implementations (`CSharpLanguageSupport` and friends) for
-syntax highlighting, `DiffEngine`/`DiffPreview`, the `PostFxPipeline` /
+syntax highlighting, `DiffEngine`, the `PostFxPipeline` /
 `SpringFx` post-effect chain, and the OSC helpers `Osc52Clipboard`,
 `Osc777Notify`, `Osc99Notify`, `Osc1337Image`.
 
@@ -152,7 +152,7 @@ hint rectangles. Also here: `OverlayStack` (modal/overlay compositing),
 `ComposerController`/`VimComposerMode` (input editing),
 `CodeSyntaxTokenizer` with `LanguageSupportRegistry` and per-language
 `ILanguageSupport` implementations (`CSharpLanguageSupport` and friends) for
-syntax highlighting, `DiffEngine`/`DiffPreview`, the `PostFxPipeline` /
+syntax highlighting, `DiffEngine`, the `PostFxPipeline` /
 `SpringFx` post-effect chain, and the OSC helpers `Osc52Clipboard`,
 `Osc777Notify`, `Osc99Notify`, `Osc1337Image`.
 
