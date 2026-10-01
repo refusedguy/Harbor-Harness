@@ -34,6 +34,10 @@
 //     AllExpectedHarborAssembliesAreLoaded` pins that it is LOADED. There is no
 //     product-side incompleteness to buy, so "convert the 17 consumers" would
 //     change no verdict — it would relocate a perimeter that already holds.
+//
+//     Measured before writing this file: 51 src/ assemblies reachable from the
+//     test project, 50 = AllSrcAssemblies exactly, 0 of 52 src csprojs
+//     unreachable (Plugins.Host is OutputType=Exe and declared out-of-scope).
 //   * THE INCOMPLETENESS IS ON BOTH OTHER SIDES, AND BOTH ARE DECLARABLE. The
 //     inventory carries a measured number of NON-PRODUCT members, and misses a
 //     measured number of NON-PRODUCT PROJECTS that genuinely reference product
@@ -91,7 +95,13 @@
 //      it is pinned.
 //
 // This file first shipped with EMPTY baselines, on purpose: the red run is the
-// measurement, and there is no local dotnet in the authoring environment.
+// measurement, and there is no local dotnet in the authoring environment. The
+// first CI run also caught a compile error and a logic error in this file's own
+// probe, both fixed in the follow-up commit and recorded here rather than
+// quietly amended: the compile error was `.Length` on an `IReadOnlyList`, and
+// the logic error was `TreeOf` being asked about an ABSOLUTE path, whose first
+// segment is empty — which made every project non-product and the whole
+// measurement vacuous. `TreeOf` now takes the root and normalises.
 
 namespace Harbor.Architecture.Tests;
 
@@ -110,7 +120,7 @@ internal static class ScanUniverseProbe
     /// </summary>
     internal static readonly string[] NeverWalked = [".git", ".worktrees", "bin", "obj", "node_modules"];
 
-    /// <summary>Every <c>*.csproj</c> in the repository, as repository-relative paths.</summary>
+    /// <summary>Every <c>*.csproj</c> in the repository, as ABSOLUTE paths.</summary>
     internal static IReadOnlyList<string> CsprojPaths()
     {
         if (RepoPaths.RepoRoot is not { } root)
@@ -192,8 +202,17 @@ internal static class ScanUniverseProbe
         return Path.GetFileName(Path.GetDirectoryName(csprojPath)!) is { } dir ? dir : "<unknown>";
     }
 
-    /// <summary>The <c>ProjectReference</c> targets a csproj declares, as project directory names.</summary>
-    internal static IReadOnlyList<string> ReferencedProjectDirs(string csprojPath)
+    /// <summary>
+    ///     The ABSOLUTE paths of the <c>&lt;ProjectReference&gt;</c> targets a csproj
+    ///     declares, resolved against that csproj's own directory.
+    /// </summary>
+    /// <remarks>
+    ///     Resolved to paths, not to directory names, so the caller can ask which TREE each
+    ///     target sits in. A name-keyed map would silently collapse the two
+    ///     <c>Harbor.Tui.Spectre.Fullscreen</c>-style names that exist in more than one tree,
+    ///     and the wrong one would decide whether an edge counts as a product edge.
+    /// </remarks>
+    internal static IReadOnlyList<string> ReferencedProjectPaths(string csprojPath)
     {
         try
         {
@@ -213,9 +232,8 @@ internal static class ScanUniverseProbe
                     continue;
                 }
 
-                string resolved = Path.GetFullPath(
-                    Path.Combine(projectDir, include.Replace('\\', Path.DirectorySeparatorChar)));
-                result.Add(Path.GetFileName(resolved));
+                result.Add(Path.GetFullPath(
+                    Path.Combine(projectDir, include.Replace('\\', Path.DirectorySeparatorChar))));
             }
 
             return result;
@@ -227,34 +245,58 @@ internal static class ScanUniverseProbe
     }
 
     /// <summary>
-    ///     The partition predicate, stated once: an assembly name is PRODUCT iff some
-    ///     <c>src/**/*.csproj</c> produces it.
+    ///     The partition predicate, stated once and stated PURELY: an assembly name is
+    ///     PRODUCT iff some project under the <c>src</c> tree produces it.
     /// </summary>
     /// <remarks>
-    ///     This is the whole boundary, and it is deliberately a definition over the DISK
-    ///     rather than over a manifest or over <c>FullLayerMatrixTests.AllSrcAssemblies</c>.
-    ///     A hand-maintained name list would be a second thing to forget, and a manifest
-    ///     would be a thing already known to be unreconciled (<c>Harbor.Samples.slnx</c>).
+    ///     <para>
+    ///         This is the whole boundary. It is deliberately a predicate over a (tree,
+    ///         assembly) PAIR and not over a path, not over a manifest, and not over
+    ///         <c>FullLayerMatrixTests.AllSrcAssemblies</c>: the tree half is what makes it
+    ///         correct, and it is the half a manifest or a hand-maintained name list cannot
+    ///         supply. <c>Harbor.Samples.slnx</c> names projects that no longer exist;
+    ///         <c>AllSrcAssemblies</c> is a second list somebody has to remember.
+    ///     </para>
+    ///     <para>
+    ///         Taking a pair rather than a path is what lets the positive control exercise
+    ///         the predicate with no filesystem at all. The measurement resolves paths to
+    ///         pairs before calling this; the control never touches the disk.
+    ///     </para>
     /// </remarks>
-    internal static HashSet<string> ProductAssemblyNames(IReadOnlyList<string> csprojs)
+    internal static HashSet<string> ProductAssemblyNames(IEnumerable<(string Tree, string Assembly)> projects)
     {
         var result = new HashSet<string>(StringComparer.Ordinal);
-        foreach (string csproj in csprojs)
+        foreach ((string tree, string assembly) in projects)
         {
-            if (TreeOf(csproj) == "src")
+            if (IsProductTree(tree))
             {
-                result.Add(AssemblyNameOf(csproj));
+                result.Add(assembly);
             }
         }
 
         return result;
     }
 
-    /// <summary>The top-level tree a repository-relative path lives under.</summary>
-    internal static string TreeOf(string relativePath)
+    /// <summary>The one question this file's partition asks: is this the product tree?</summary>
+    internal static bool IsProductTree(string tree) => string.Equals(tree, "src", StringComparison.Ordinal);
+
+    /// <summary>
+    ///     The top-level tree an ABSOLUTE path lives under, relative to
+    ///     <paramref name="root" />, with forward slashes so the answer does not depend on
+    ///     the platform's directory separator.
+    /// </summary>
+    /// <remarks>
+    ///     Normalising matters and was a real bug in the first draft of this file: an
+    ///     absolute path such as <c>/home/runner/…/src/X.csproj</c> has an empty first
+    ///     segment, so a walk that asked this question of the raw path concluded that no
+    ///     project was product and the whole measurement became vacuous — passing on a
+    ///     partition that had found nothing.
+    /// </remarks>
+    internal static string TreeOf(string root, string absolutePath)
     {
-        int slash = relativePath.IndexOf('/');
-        return slash < 0 ? relativePath : relativePath[..slash];
+        string relative = Path.GetRelativePath(root, absolutePath).Replace('\\', '/');
+        int slash = relative.IndexOf('/');
+        return slash < 0 ? relative : relative[..slash];
     }
 }
 
@@ -303,43 +345,65 @@ public sealed class ScanUniverseRule
 
     private static UniverseReport Measure()
     {
-        if (RepoPaths.RepoRoot is null)
+        if (RepoPaths.RepoRoot is not { } root)
         {
             return new UniverseReport(0, 0, [], [], []) { ProductSideIsPresent = false };
         }
 
         IReadOnlyList<string> csprojs = ScanUniverseProbe.CsprojPaths();
-        HashSet<string> product = ScanUniverseProbe.ProductAssemblyNames(csprojs);
 
-        // Directory name -> the assembly it produces, for resolving ProjectReference targets.
-        var assemblyOfDir = new Dictionary<string, string>(StringComparer.Ordinal);
+        // The (tree, assembly) pairs the partition is defined over, and the set of absolute
+        // paths that ARE the product graph — the second is what decides whether a declared
+        // edge is a product edge, and it is keyed on PATH so two projects that share a
+        // directory name in different trees cannot be confused for one another.
+        var pairs = new List<(string Tree, string Assembly)>();
+        var productPaths = new HashSet<string>(StringComparer.Ordinal);
+        var assemblyOfPath = new Dictionary<string, string>(StringComparer.Ordinal);
+
         foreach (string csproj in csprojs)
         {
-            string dir = Path.GetFileName(Path.GetDirectoryName(csproj)!);
-            assemblyOfDir[dir] = ScanUniverseProbe.AssemblyNameOf(csproj);
+            string tree = ScanUniverseProbe.TreeOf(root, csproj);
+            string assembly = ScanUniverseProbe.AssemblyNameOf(csproj);
+            pairs.Add((tree, assembly));
+            assemblyOfPath[csproj] = assembly;
+            if (ScanUniverseProbe.IsProductTree(tree))
+            {
+                productPaths.Add(csproj);
+            }
         }
+
+        HashSet<string> product = ScanUniverseProbe.ProductAssemblyNames(pairs);
 
         var loaded = ArchitectureTestHelpers.LoadHarborAssemblies();
         var nonProduct = loaded.Keys.Where(name => !product.Contains(name)).Order(StringComparer.Ordinal).ToArray();
 
-        // The blind side: a non-product project that declares a ProjectReference into a
-        // directory some src/ project occupies, and whose own assembly the inventory does
-        // NOT hold. The instrument is excluded from the walk: it is in the inventory by
-        // construction and is measured above, not here.
+        // The blind side: a non-product project that declares a ProjectReference whose
+        // TARGET is a src/ project, and whose own assembly the inventory does NOT hold. The
+        // instrument is excluded here: it is in the inventory by construction and is
+        // measured above, not here.
         var blind = new List<string>();
         foreach (string csproj in csprojs)
         {
-            string dir = Path.GetFileName(Path.GetDirectoryName(csproj)!);
-            string tree = ScanUniverseProbe.TreeOf(Path.GetRelativePath(RepoPaths.RepoRoot, csproj));
-            if (tree == "src" || dir == "Harbor.Architecture.Tests")
+            string tree = ScanUniverseProbe.TreeOf(root, csproj);
+            if (ScanUniverseProbe.IsProductTree(tree))
             {
                 continue;
             }
 
-            bool reachesProduct = ScanUniverseProbe.ReferencedProjectDirs(csproj)
-                .Any(target => assemblyOfDir.TryGetValue(target, out string? a) && product.Contains(a));
+            string ownAssembly = assemblyOfPath[csproj];
+            string dir = Path.GetFileName(Path.GetDirectoryName(csproj)!);
 
-            if (reachesProduct && !loaded.ContainsKey(assemblyOfDir[dir]))
+            // The instrument is measured above; counting it here would double-count the
+            // one non-product member this project already knows it has.
+            if (dir == "Harbor.Architecture.Tests")
+            {
+                continue;
+            }
+
+            bool reachesProduct = ScanUniverseProbe.ReferencedProjectPaths(csproj)
+                .Any(target => productPaths.Contains(target));
+
+            if (reachesProduct && !loaded.ContainsKey(ownAssembly))
             {
                 blind.Add(tree + "/" + dir);
             }
@@ -394,8 +458,8 @@ public sealed class ScanUniverseRule
                 + "the tree, each added by a rule that was bitten. A NEW non-product member means a "
                 + "reference or a copy-local arrived that no rule has agreed how to treat; an EMPTY "
                 + "member list means the filter grew a product filter and that is a reviewed change, "
-                + "not a cleanup. Live (" + live.Length + "): "
-                + (live.Length == 0 ? "(none)" : string.Join(" | ", live))
+                + "not a cleanup. Live (" + live.Count + "): "
+                + (live.Count == 0 ? "(none)" : string.Join(" | ", live))
                 + " | baseline held " + MeasuredNonProductMembers.Length + ": "
                 + (MeasuredNonProductMembers.Length == 0 ? "(empty)" : string.Join(" | ", MeasuredNonProductMembers)));
     }
@@ -516,16 +580,14 @@ public sealed class ScanUniverseRule
     [Test]
     public async Task ThePartitionPredicateAnswersTheDeclaredQuestion()
     {
-        var wrong = DeclaredPartitionContract
-            .Where(pair => ScanUniverseProbe.ProductAssemblyNames(pair.Csprojs)
-                               .Contains(pair.Assembly, StringComparer.Ordinal) != pair.IsProduct)
-            .Select(pair => pair.Assembly + " (expected "
-                               + (pair.IsProduct ? "product" : "non-product") + ", got "
-                               + (ScanUniverseProbe.ProductAssemblyNames(pair.Csprojs)
-                                          .Contains(pair.Assembly, StringComparer.Ordinal)
-                                      ? "product"
-                                      : "non-product") + ")")
-            .ToArray();
+        string[] wrong =
+        [
+            .. DeclaredPartitionContract
+                .Where(row => ScanUniverseProbe.IsProductTree(row.Tree) != row.IsProduct)
+                .Select(row => row.Tree + "/" + row.Assembly + " (expected "
+                               + (row.IsProduct ? "product" : "non-product") + ", got "
+                               + (ScanUniverseProbe.IsProductTree(row.Tree) ? "product" : "non-product") + ")")
+        ];
 
         await Assert.That(string.Join(" | ", wrong))
             .IsEqualTo(string.Empty)
@@ -533,31 +595,41 @@ public sealed class ScanUniverseRule
                 "the excess measured by NonProductMembers_MatchTheMeasuredBaseline and the blindness measured "
                 + "by BlindProjects_MatchTheMeasuredBaseline are both stated as 'what src/ does not produce'. If "
                 + "that definition stops holding, both baselines keep passing while measuring a different "
-                + "question. The rows below cover each side of the definition: a src/ project IS product, a "
-                + "non-src/ project with the SAME assembly name is NOT (the src/-by-location half, which is the "
-                + "one a prefix match would get wrong), and a name no project produces is not. Mismatches: "
-                + (wrong.Length == 0 ? "(none)" : string.Join(" | ", wrong)));
+                + "question. The rows below cover both halves of the definition: a src/ project IS product, and the "
+                + "SAME assembly name one directory over is NOT — which is the row a `StartsWith(\"Harbor\")` match "
+                + "gets wrong, and the whole difference between this predicate and the one LoadHarborAssemblies "
+                + "uses. Mismatches: " + (wrong.Length == 0 ? "(none)" : string.Join(" | ", wrong)));
     }
 
     /// <summary>
-    ///     The declared partition, as a table. Paths are synthetic: this is a control over
-    ///     the PREDICATE, and it must not depend on the repository it runs in.
+    ///     The declared partition, as a table of (tree, assembly) PAIRS. Deliberately
+    ///     filesystem-free: this is a control over the PREDICATE, and it must keep
+    ///     answering the same way whatever the repository looks like on the day it runs.
     /// </summary>
-    private static readonly (string Assembly, bool IsProduct, string[] Csprojs)[] DeclaredPartitionContract =
+    private static readonly (string Tree, string Assembly, bool IsProduct)[] DeclaredPartitionContract =
     [
         // A src/ project IS product.
-        ("Harbor.Synthetic", true, ["src/Harbor.Synthetic/Harbor.Synthetic.csproj"]),
+        ("src", "Harbor.Synthetic", true),
 
-        // The SAME assembly name one directory over, NOT under src/, is not. This is the
-        // row a prefix or name match gets wrong, and it is the whole difference between
-        // this predicate and the `name.StartsWith("Harbor")` test LoadHarborAssemblies uses.
-        ("Harbor.Synthetic", false, ["tests/Harbor.Synthetic/Harbor.Synthetic.csproj"]),
-        ("Harbor.Synthetic", false, ["contrib/tui/Harbor.Synthetic/Harbor.Synthetic.csproj"]),
-        ("Harbor.Synthetic", false, ["samples/plugins/Harbor.Synthetic/Harbor.Synthetic.csproj"]),
+        // The SAME assembly name outside src/ is not. This is the row that separates this
+        // predicate from a name-prefix match, and the one that matters: the instrument
+        // itself, Harbor.Architecture.Tests, is exactly this row.
+        ("tests", "Harbor.Architecture.Tests", false),
+        ("tests", "Harbor.Synthetic", false),
+        ("contrib", "Harbor.Tui.Spectre", false),
+        ("samples", "Harbor.Plugin.WebSearch", false),
+        ("tools", "Harbor.Evals", false),
 
-        // A name no project in the set produces is not product either — so "not in the
-        // product set" never quietly becomes "is a product" for an unknown name.
-        ("Harbor.Synthetic", false, []),
+        // Every other top-level tree in this repository, so a tree that appears later is a
+        // row somebody has to think about rather than one that falls through silently.
+        ("apps", "Harbor.App.Cli", false),
+        ("analyzers", "Harbor.Synthetic.Analyzer", false),
+        ("build", "Harbor.Synthetic.Build", false),
+        ("external", "SharpConsoleUI", false),
+
+        // A src/-nested tree is still the product tree: this predicate asks the FIRST
+        // segment only, so a project at src/Harbor.X/sub/Y.csproj stays product.
+        ("src", "harbor-renamed-by-AssemblyName", true),
     ];
 
     private static string Describe(IReadOnlyList<string> projects) =>
