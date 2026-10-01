@@ -10,16 +10,37 @@ Harbor is a modular .NET 10 AI coding harness. Before changing anything, read
 dotnet build
 ```
 
-Tests run as **plain executables**. Do not use `dotnet test`: under this
-repository's Microsoft.Testing.Platform host it discovers zero tests and exits 5
-with a silent discovery error, and whole-solution invocations are doubly broken.
-Run one project at a time:
+Tests run as **plain executables** — that is the form every CI job executes. Run
+one project at a time:
 
 ```bash
 dotnet run --project tests/<Project> -c Release --no-build -- --minimum-expected-tests 1
 ```
 
 TUnit filters use `--treenode-filter` (forwarded after `--`), not `--filter`.
+
+### Why not `dotnet test`
+
+`global.json` selects `Microsoft.Testing.Platform` as the `dotnet test` runner,
+which changes what that command accepts. Two real breakages, which earlier
+versions of this file conflated into a single wrong explanation:
+
+- **VSTest-era options are rejected.** `--logger` and `--filter` are not
+  recognised by the MTP runner and come back as *invalid command-line
+  arguments* — exit code **5**. A run that genuinely discovers no tests exits
+  **8**. `CHANGELOG.md` (sprint *ci-cd-maturity*) records that removing a single
+  `--logger` flag turned `renderer-perf-gate.yml` green.
+- **11 of the 36 test projects still reference `Microsoft.NET.Test.Sdk`**
+  (pinned in `Directory.Packages.props:71`). TUnit's installation docs state
+  that package must not be used with TUnit because it stops test discovery.
+  `TUNIT_MTP_AUDIT.md` proposes removing it; that change has not landed.
+
+Because of the second point the earlier claim that `dotnet test` "discovers zero
+tests repo-wide" cannot be right as written — 25 of the 36 test projects never
+reference the package blamed for it. No CI job has run `dotnet test` since, so
+its current per-project behaviour is **unverified** rather than known. That is
+why the plain-executable form above is the only one documented, and why you
+should not read `dotnet test` as "safe, just undocumented".
 Run [`tests/Harbor.Architecture.Tests/`](tests/Harbor.Architecture.Tests) after
 **every** project-reference change — the layering matrix is enforced there and
 nowhere else.

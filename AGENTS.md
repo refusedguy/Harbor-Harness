@@ -4,7 +4,7 @@
 >
 > **Quick state (branch dev):**
 > - Solutions are `.slnx` files: `Harbor.slnx` (main) and `Harbor.Samples.slnx`; no plain `.sln`.
-> - Tests must be run **per project as plain executables** (`dotnet run --project tests/<Project> -c Release --no-build -- --minimum-expected-tests 1`); `dotnet test` discovers ZERO tests under the Microsoft.Testing.Platform (MTP) bridge in this repo (host exits 5 with a silent discovery error) and whole-solution invocations are doubly broken — do not use either.
+> - Tests must be run **per project as plain executables** (`dotnet run --project tests/<Project> -c Release --no-build -- --minimum-expected-tests 1`); that is the form every CI job executes. Do not use `dotnet test` — not per-project, not solution-wide. The old wording for this ("discovers ZERO tests … host exits 5 with a silent discovery error") was **wrong and has been corrected**: exit 5 is the MTP *invalid command-line arguments* code, while a run that genuinely discovers no tests exits 8, so exit 5 was never evidence of zero discovery. What is actually true: `global.json` selects the Microsoft.Testing.Platform runner, which rejects the VSTest-era options (`--logger`, `--filter`) our old commands passed (`CHANGELOG.md`, sprint *ci-cd-maturity*, records that deleting one `--logger` turned a job green); and 11 of the 36 test projects still reference `Microsoft.NET.Test.Sdk`, which TUnit documents as stopping discovery (`TUNIT_MTP_AUDIT.md` proposes the removal; unlanded). No CI job has run `dotnet test` since, so its current behaviour is **unverified**, not known — which is why only the plain-executable form is documented.
 > - Known/flaky tests historically cited (verify against `docs/ROADMAP.md` before counting on current numbers): Avalonia-12 headless `MarkdownRenderer`/`CodeBlock`/`TypewriterStreamingText` ("Stack empty" in `SetInheritanceParent`), the IPC named-pipe event-stream class on Linux (self-skips unless `HARBOR_IPC_EVENTSTREAM=1`), and an occasional `ChatView_Inflates` ListBoxItem `StaticResource` flake.
 > - CellForge (+ Engine — fullscreen cell-diff terminal renderer) is the canonical interactive backend (`HARBOR_TUI=cellforge`, `consoleex` kept as legacy alias); AnsiPlain covers ANSI-streaming + plain pipes/CI; MCP tools ship out-of-process; plugin hosting is split across the `Harbor.Plugins.*` projects.
 > - **Markdown is gated.** `ci.yml` ignores `**.md` and `docs/**` on purpose, so a docs-only PR gets its own fast workflow: `.github/workflows/docs.yml` runs `tools/check-md-links.py` (links + anchors) and `tools/md-lint.py` (encoding/headings/fences), each with a scan-size floor, plus a self-test that proves both still fail on broken input (#509). Run both locally before pushing a doc change — see [docs/DEVELOPMENT.md §Documentation checks](./docs/DEVELOPMENT.md#documentation-checks). Do not "fix" this by deleting `paths-ignore` from `ci.yml`.
@@ -42,7 +42,7 @@ A modular .NET 10 AI coding harness. Modular = every concern behind an interface
 7. Read [docs/ROADMAP.md](./docs/ROADMAP.md) for current state + planned next steps.
 8. If touching the interactive shell or any renderer — read [docs/SPECTRE_TUI_DEEP_DIVE.md](./docs/SPECTRE_TUI_DEEP_DIVE.md) for render-loop anatomy + recipes for opencode/kilocode/pi-agent features. The canonical renderer is `src/Harbor.Tui.CellForge`; the interactive Spectre shell is `src/Harbor.Tui.Spectre` (the similarly-named `contrib/` copies are unmaintained, see the project map).
 9. Run `dotnet build` to make sure the project compiles.
-10. Run the affected test projects individually (`dotnet run --project tests/<Project> -c Release --no-build`) — **including `tests/Harbor.Architecture.Tests/`** after every project-reference change. `dotnet test` discovers zero tests in this repo (broken MTP bridge) — never use it.
+10. Run the affected test projects individually (`dotnet run --project tests/<Project> -c Release --no-build`) — **including `tests/Harbor.Architecture.Tests/`** after every project-reference change. Do not use `dotnet test` (see the MTP note in "Quick state" above for why, and for what is still unverified).
 
 ## MCP preference
 
@@ -413,7 +413,7 @@ public class YourTests
 }
 ```
 
-Run: `dotnet run --project tests/Harbor.YourNamespace.Tests -c Release --no-build -- --minimum-expected-tests 1` (run `dotnet build` first; `dotnet test` discovers zero tests in this repo — never use it).
+Run: `dotnet run --project tests/Harbor.YourNamespace.Tests -c Release --no-build -- --minimum-expected-tests 1` (run `dotnet build` first; never use `dotnet test` — see "Quick state" above).
 
 ### Add a TUI view model
 
@@ -704,15 +704,17 @@ Harbor следует принципам OOP/SOLID/GoF/FP/ROP/perf. Полный
 dotnet build
 
 # Run a specific test project (recommended way to test).
-# Tests run as plain executables — `dotnet test` discovers ZERO tests in this
-# repo (broken MTP bridge: host exits 5 with a silent discovery error).
+# Tests run as plain executables — this is the form CI executes. `dotnet test`
+# is not used: global.json selects the MTP runner, which rejects the VSTest-era
+# options our old commands passed, and 11 of 36 test projects still carry
+# Microsoft.NET.Test.Sdk. No CI job runs `dotnet test`, so it is unverified.
 # TUnit uses --treenode-filter for filtering (forwarded after --), NOT --filter.
 dotnet run --project tests/Harbor.Core.Tests -c Release --no-build -- --minimum-expected-tests 1
 dotnet run --project tests/Harbor.Tui.Tests -c Release --no-build -- --treenode-filter "/*/*/DefaultUiProjectorTests/*"
 
-# WARNING: do NOT use `dotnet test` at all here — neither per-project nor
-# across the whole Harbor.slnx. Always run test .csproj files via `dotnet run`
-# (or execute the built test DLL directly), one project at a time.
+# WARNING: do NOT use `dotnet test` — neither per-project nor across the whole
+# Harbor.slnx. Always run test .csproj files via `dotnet run` (or execute the
+# built test DLL directly), one project at a time.
 
 # Run CLI
 dotnet run --project apps/Harbor.App.Cli
@@ -729,7 +731,7 @@ dotnet run --project apps/Harbor.App.Cli -- sessions
 
 1. Make the change.
 2. `dotnet build` — must succeed with 0 warnings.
-3. Run the affected test projects individually with `dotnet run --project tests/<Project> -c Release --no-build` — all tests in them must pass. Do not use `dotnet test` (see MTP warning above).
+3. Run the affected test projects individually with `dotnet run --project tests/<Project> -c Release --no-build` — all tests in them must pass. Do not use `dotnet test` (see the MTP note in "Quick state").
 4. If you added a new tool — add tests for it.
 5. If you changed an interface — update all implementations.
 6. Run the CLI manually to verify: `dotnet run --project apps/Harbor.App.Cli -- help`.
