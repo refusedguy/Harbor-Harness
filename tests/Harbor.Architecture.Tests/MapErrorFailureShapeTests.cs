@@ -176,22 +176,33 @@ public sealed class MapErrorFailureShapeTests
                 + "here — the hand-built string is the honest shape until the signature moves."),
             ["src/Harbor.Tools.Builtin/Tools/Mcp/McpOAuthHandler.cs"] = new(
                 2,
-                "Two re-types: `McpOAuthFlow.RefreshAsync` is Result<TokenResponse> → Result<string> "
-                + "(138) and `ExchangeCodeAsync` is Result<TokenResponse> → Result<string> (204). The "
-                + "public surface is a token STRING; the OAuth flow returns a token RESPONSE. MapError "
-                + "cannot cross that boundary, and flattening to `ex => ex` would throw the server name "
-                + "away — the very loss this wave exists to prevent."),
+                "Two re-types: `McpOAuthFlow.RefreshAsync` is Result<McpOAuthTokens> → "
+                + "Result<Maybe<string>> (131) and `ExchangeCodeAsync` is Result<McpOAuthTokens> → "
+                + "Result<string> (209). The public surface is a token STRING (Maybe<string> on the "
+                + "cached-token path); the OAuth flow returns a token RESPONSE. MapError cannot cross "
+                + "that boundary, and flattening to `ex => ex` would throw the server name away — the "
+                + "very loss this wave exists to prevent. Site 131 is the one this guard could not see "
+                + "before #976: its generic argument is the nested `<Maybe<string>>`, which the "
+                + "pattern's old `[^<>()]*` treated as unmatchable, so this reason was written against "
+                + "line numbers that had since drifted and nothing could report it."),
             ["src/Harbor.Tools.Builtin/Tools/Mcp/McpRegistry.cs"] = new(
-                1,
-                "One re-type: `entry.GetTransport` is Result<IMcpRemoteTransport> → Result<string> "
-                + "(409). The registry's contract is a JSON-RPC string; the transport factory returns a "
-                + "transport. The hand-built prefix keeps `server.method`, which is the only thing that "
-                + "identifies WHICH call failed."),
+                2,
+                "Two re-types: `entry.GetTransport` is Result<IMcpRemoteTransport> → Result<string> "
+                + "(409) and `TryRoundTripAsync` is Result<Maybe<JsonDocument>> → Result<string> "
+                + "(428). The registry's contract is a JSON-RPC string; the transport factory returns a "
+                + "transport and the round trip returns a document. The hand-built prefix keeps "
+                + "`server.method`, which is the only thing identifying WHICH call failed. Site 428 is "
+                + "an owner decision rather than an oversight — #587 weighed MapError there and "
+                + "rejected it in a comment at the call site: the transport's own diagnostic (endpoint, "
+                + "HTTP status, attempt count, latency) must arrive untouched, and only the registered "
+                + "server name is prepended. The reason counted ONE site until #976, because "
+                + "AllowList_EveryEntryStillMatchesSomething could not see a second one hiding behind "
+                + "the file-level exemption."),
             ["src/Harbor.Application/Agents/SubAgentRunner.cs"] = new(
                 4,
                 "Four re-types: Result<Session> → Result<SubAgentRunResult> (109), "
                 + "Result<IReadOnlyList<AgentMessage>> → Result<SubAgentRunResult> (132), "
-                + "Result<AgentRunResult> → Result<SubAgentRunResult> (178) and the same at 189. The "
+                + "Result<AgentRunResult> → Result<SubAgentRunResult> (185) and the same at 196. The "
                 + "sub-run rail has its own payload type; the three trailer sites also wrap the text in "
                 + "SubAgentFailureFormat.WithResumeTrailer, which is still a function of `e` and would "
                 + "compose with MapError the moment the types line up."),
@@ -499,11 +510,15 @@ public sealed class MapErrorFailureShapeTests
             List<int> live = AllHandBuiltLines(File.ReadAllText(absolute));
             if (live.Count != exemption.Sites)
             {
+                // The reason is echoed back because the count is only half the claim: the
+                // question to answer is whether that many sites is what the reason covers,
+                // and a bare integer does not let anyone judge it.
                 wrong.Add(
                     $"{relative} — reason claims {exemption.Sites} site(s), the file holds "
-                    + $"{live.Count} at line(s) {string.Join(", ", live)}. Update the count and the "
-                    + "reason together, or convert the extra site: "
-                    + "ResultFailureMessage_IsMapped_NotHandBuilt cannot see inside an exempt file.");
+                    + $"{live.Count} at line(s) {string.Join(", ", live)}. Stated reason: "
+                    + $"{exemption.Reason}. Update the count and the reason together, or convert "
+                    + "the extra site: ResultFailureMessage_IsMapped_NotHandBuilt cannot see inside "
+                    + "an exempt file.");
             }
         }
 
