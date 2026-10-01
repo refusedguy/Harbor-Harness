@@ -15,7 +15,7 @@ documentation defect rather than an architectural one.
 
 ## Context
 
-#564's title claims three things. Measured on `dev` = `7aff0c87`:
+Issue #564's title claims three things. Measured on `dev` = `7aff0c87`:
 
 | claim | verdict |
 |---|---|
