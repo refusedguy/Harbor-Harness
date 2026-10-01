@@ -14,7 +14,7 @@ public class ZzDiag925
     [Test]
     public async Task Zz925_A_RawSendAsyncSeamExceptionShape()
     {
-        using var diagServer = new RstServer();
+        using var diagServer = RstServer.Start();
         using var client = new HttpClient(new SocketsHttpHandler()) { Timeout = TimeSpan.FromSeconds(5) };
         List<string> shapes = [];
         for (int i = 0; i < 4; i++)
@@ -41,7 +41,7 @@ public class ZzDiag925
     [Test]
     public async Task Zz925_B_SseRoundTripAttemptCount()
     {
-        using var server = new RstServer();
+        using var server = RstServer.Start();
         await using var transport = new McpSseTransport(
             new Uri($"http://127.0.0.1:{server.Port}/sse"),
             requestTimeout: TimeSpan.FromSeconds(5));
@@ -65,7 +65,7 @@ public class ZzDiag925
     [Test]
     public async Task Zz925_C_HttpRoundTripAttemptCount()
     {
-        using var server = new RstServer();
+        using var server = RstServer.Start();
         await using var transport = new McpHttpTransport(
             new Uri($"http://127.0.0.1:{server.Port}/mcp"),
             requestTimeout: TimeSpan.FromSeconds(5));
