@@ -91,13 +91,7 @@ public sealed partial class VestigialExtensionsPackageReferenceRule
 
                 var globals = ProjectGlobalUsings(project);
 
-                // 1. does the project bind any name this package declares? The
-                //    binding is resolved through each file's using-scopes, so a
-                //    same-named type in another assembly does not count.
-                if (NamesBoundTo(sources, declared, [pkg], globals).Count > 0)
-                    continue;
-
-                // 2. what does deleting the line actually take away? If the package
+                // 1. what does deleting the line actually take away? If the package
                 //    still arrives by another route the deletion is cosmetic — real,
                 //    and still a deletion worth reporting. If it does NOT, then every
                 //    type the package carries leaves with it, and the next check is
@@ -105,10 +99,29 @@ public sealed partial class VestigialExtensionsPackageReferenceRule
                 var (before, after) = Closures(project, pkg, deps);
                 var lost = before.Except(after, StringComparer.OrdinalIgnoreCase).ToHashSet();
 
-                // 3. does the project bind anything that was only reachable THROUGH
-                //    this reference? (Harbor.Tui.Tests is the proof that a project can
-                //    hold a package it never spells and lose nothing; this is the
-                //    opposite direction, and it is the one that breaks a build.)
+                // 2. does the project bind a name that stops resolving? This is the
+                //    whole question, and the two things it must NOT be are worth naming
+                //    because both were wrong in earlier revisions of this rule:
+                //
+                //    * "does it bind a name THIS package declares" is too strong. A
+                //      package can declare a name that also lives in a package the
+                //      project reaches by another route — `BuildServiceProvider` is
+                //      declared by BOTH DependencyInjection and
+                //      DependencyInjection.Abstractions, and the two test projects
+                //      below get Abstractions from Hosting. Binding the name is not
+                //      what makes the reference load-bearing; still resolving it is.
+                //    * "does it bind a name this package DRAGS in" is the right test,
+                //      and it is the one #910's OpenAiCompatible half turns on.
+                //
+                //    Harbor.Tui.Tests is the proof that a project can hold a package it
+                //    never spells (cosmetic), and these two test projects are the proof
+                //    that a project can spell a name and still not need the package
+                //    (also cosmetic). Neither is visible to a rule that reads one file.
+                var stillReachable = Closure(after, deps);
+                if (NamesBoundTo(sources, declared, [pkg], globals).Count > 0
+                    && !stillReachable.Contains(pkg))
+                    continue;
+
                 if (lost.Any(d => declared.ContainsKey(d)
                                  && NamesBoundTo(sources, declared, [d], globals).Count > 0))
                     continue;
@@ -497,6 +510,11 @@ public sealed partial class VestigialExtensionsPackageReferenceRule
             return result;
         }
     }
+
+    /// <summary>Transitive closure of a set of package roots over the nuspec graph.</summary>
+    private static HashSet<string> Closure(IEnumerable<string> roots,
+                                           Dictionary<string, HashSet<string>> deps) =>
+        Walk(roots, deps);
 
     /// <summary>What the project can see with the reference present, and without it.</summary>
     private static (HashSet<string> Before, HashSet<string> After) Closures(

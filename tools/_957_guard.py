@@ -185,13 +185,21 @@ for full, d in sorted(projs.items()):
     g = globals_of(files)
     for pkg in pk:
         if not DECL.get(pkg): continue
-        if bound(files, [pkg], g): continue
         roots = set(d["pk"]) | ({"TUnit"} if d["name"].endswith(".Tests") else set())
-        lost = walk(roots) - walk(roots - {pkg})
+        after = walk(roots - {pkg})
+        lost = walk(roots) - after
+        # The whole question: does a name stop RESOLVING? Binding a name is not
+        # what makes a reference load-bearing -- still resolving it is.
+        # BuildServiceProvider is declared by BOTH DependencyInjection and
+        # DependencyInjection.Abstractions, and these two test projects get
+        # Abstractions from Hosting.
+        if bound(files, [pkg], g) and pkg not in after: continue
         if any(DECL.get(l) and bound(files, [l], g) for l in lost): continue
         cons = [c for c, cd in projs.items() if c != full and full in cd["prs"]]
         risk = []
         for c in cons:
+            if pkg in projs[c]["pk"]:
+                continue          # declares it itself: unaffected by this project
             cf = sources(projs[c]["dir"])
             if not cf: continue
             cg = globals_of(cf)
@@ -202,7 +210,7 @@ for full, d in sorted(projs.items()):
             # package and lost it anyway.
             needs = bool(bound(cf, [pkg], cg)) or \
                     any(DECL.get(l) and bound(cf, [l], cg) for l in lost)
-            if needs and pkg not in projs[c]["pk"]:
+            if needs:
                 risk.append(c)
         if risk: continue
         findings.append((full, pkg))
