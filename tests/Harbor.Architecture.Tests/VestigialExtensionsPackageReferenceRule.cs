@@ -1,3 +1,5 @@
+using System.Reflection.Metadata;
+using System.Reflection.PortableExecutable;
 using System.Text;
 using System.Xml.Linq;
 
@@ -54,9 +56,11 @@ public sealed partial class VestigialExtensionsPackageReferenceRule
         foreach (var f in findings)
             report.AppendLine($"  {f.Project,-52} {f.Package}");
 
-        await Assert.That(findings)
-            .IsEmpty("a PackageReference that no reachable type resolves to — delete it, or "
-                     + "say why it is load-bearing:\n" + report);
+        await Assert.That(findings).IsEmpty().Because(
+            "a PackageReference is vestigial when no type or member it declares is reachable "
+            + "from the project, nothing it drags in is used, and no consumer was relying on it "
+            + "arriving through here. Delete the line, or record why it is load-bearing. "
+            + "Unhonoured:\n" + report);
     }
 
     // ---------------------------------------------------------------- the walk
@@ -64,7 +68,9 @@ public sealed partial class VestigialExtensionsPackageReferenceRule
     private static List<(string Project, string Package)> Scan(string root)
     {
         var packages = PackagesInPlay(root);
-        var declared = packages.ToDictionary(p => p, PackageSurface.Read, StringComparer.OrdinalIgnoreCase);
+        var declared = new Dictionary<string, HashSet<string>?>(StringComparer.OrdinalIgnoreCase);
+        foreach (var p in packages)
+            declared[p] = PackageSurface.Read(p);
         var deps = packages.ToDictionary(p => p, p => NuspecDependencies.Read(p), StringComparer.OrdinalIgnoreCase);
         var findings = new List<(string, string)>();
 
@@ -105,16 +111,34 @@ public sealed partial class VestigialExtensionsPackageReferenceRule
                     continue;
 
                 // 4. a CONSUMER may be relying on the package arriving through here.
-                //    This is #910's OpenAiCompatible half: the line no project used,
-                //    and deleting it silently emptied three other projects. Only
-                //    consumers that actually bind a name the package declares are
-                //    at risk — a consumer with no such binding is unaffected by
-                //    whatever this project declares, and blanket-skipping every
-                //    project with a consumer would make the rule silent everywhere,
-                //    since almost every src/ project has one.
-                var atRisk = ProjectConsumers(project, root).Where(c => c.PackageReferences.Contains(pkg));
-                if (atRisk.Any(c => NamesBoundTo(ProjectSources(c), declared, [pkg],
-                                                  ProjectGlobalUsings(c)).Count > 0))
+                var atRisk = false;
+                foreach (var consumer in ProjectConsumers(project, root))
+                {
+                    // A consumer is at risk when it binds a name this package — or
+                    // something only this reference supplied — provides, AND does not
+                    // declare the package itself. That is #910's OpenAiCompatible half
+                    // exactly: Harbor.Benchmarks, Harbor.LoadTests and
+                    // Harbor.Providers.Tests never mentioned the package, and deleting
+                    // the line emptied three projects. Skipping every project that HAS a
+                    // consumer would silence the rule almost everywhere, since nearly
+                    // every src/ project has one.
+                    if (consumer.PackageReferences.Contains(pkg, StringComparer.OrdinalIgnoreCase))
+                        continue;
+                    var consumerSources = ProjectSources(consumer);
+                    if (consumerSources.Count == 0)
+                        continue;
+                    var consumerGlobals = ProjectGlobalUsings(consumer);
+                    if (NamesBoundTo(consumerSources, declared, [pkg], consumerGlobals).Count > 0
+                        || lost.Any(d => declared.ContainsKey(d)
+                                         && NamesBoundTo(consumerSources, declared, [d],
+                                                         consumerGlobals).Count > 0))
+                    {
+                        atRisk = true;
+                        break;
+                    }
+                }
+
+                if (atRisk)
                     continue;
 
                 findings.Add((project.Relative, pkg));
@@ -180,11 +204,12 @@ public sealed partial class VestigialExtensionsPackageReferenceRule
     ///     a <c>global using Microsoft.Extensions.Logging;</c> in
     ///     <c>GlobalUsings.cs</c>, so a per-file scan of the two call sites
     ///     reports them as bare identifiers and misses the dependency entirely.
-    ///     A short name counts only when some using-scope in the file is a
-    ///     namespace prefix of a name this package declares.
+    ///     A short name counts only when a using-scope in the file covers
+    ///     the namespace that declares it — or, for an extension or instance
+    ///     member, the namespace its owning type lives in.
     /// </remarks>
     private static HashSet<string> NamesBoundTo(IReadOnlyList<string> sources,
-                                                IReadOnlyDictionary<string, HashSet<string>> declared,
+                                                IReadOnlyDictionary<string, HashSet<string>?> declared,
                                                 IEnumerable<string> packages,
                                                 IEnumerable<string> extraScopes)
     {
@@ -223,24 +248,60 @@ public sealed partial class VestigialExtensionsPackageReferenceRule
 
             foreach (Match m in Name().Matches(body))
             {
-                if (!index.TryGetValue(m.Value, out var namespaces))
+                if (!index.TryGetValue(m.Value, out var owners))
                     continue;
-                foreach (var ns in namespaces)
-                    if (scopes.Contains(ns))
-                    {
-                        hits.Add(m.Value);
-                        break;
-                    }
+                if (owners.Any(o => scopes.Contains(o)))
+                {
+                    hits.Add(m.Value);
+                    continue;
+                }
+                // A MEMBER binds through the namespace its OWNER lives in, not through
+                // a static using of the owner: LoggerExtensions.LogInformation and
+                // ConsoleLoggerExtensions.AddSimpleConsole are called on an ILogger /
+                // ILoggingBuilder with only `using Microsoft.Extensions.Logging;` — or a
+                // global using — in scope. Without this the extension-method shape reads
+                // as an unused package, which is exactly how the four
+                // samples/plugins/Harbor.Plugin.* projects look deletable (they call
+                // context.CreateLogger<T>().LogInformation(...)) and how
+                // src/Harbor.Ipc.Server hides two AddSimpleConsole() call sites behind
+                // GlobalUsings.cs. Those are load-bearing, and a probe that misses the
+                // shape reports deleting them as a cleanup.
+                if (owners.Any(o => scopes.Any(s => o.StartsWith(s + ".", StringComparison.Ordinal))))
+                    hits.Add(m.Value);
             }
         }
 
         return hits;
     }
 
+    /// <summary>
+    ///     The SDK's implicit using set, in scope in every file because
+    ///     <c>ImplicitUsings</c> is <c>enable</c> repo-wide
+    ///     (Directory.Build.props:8) and no using directive points at them.
+    /// </summary>
+    /// <remarks>
+    ///     <c>System.Net.Http</c> is the one that changes a verdict. It is where
+    ///     <c>IHttpClientFactory</c> lives, it is declared by
+    ///     <c>Microsoft.Extensions.Http</c>, and
+    ///     <c>tests/Harbor.App.Cli.Tests/HostBuilderDiTests.cs:273</c> calls
+    ///     <c>Services.GetService&lt;IHttpClientFactory&gt;()</c> while declaring only
+    ///     <c>DependencyInjection</c> and <c>Hosting</c> — neither of which depends on
+    ///     <c>Http</c>. That test reaches the package through
+    ///     <c>apps/Harbor.App.Cli</c>, so deleting App.Cli's line breaks a test project
+    ///     the <c>test</c> job runs on every PR. Leaving implicit usings out makes the
+    ///     rule call that reference vestigial, which is the most expensive possible
+    ///     error for it to make.
+    /// </remarks>
+    private static readonly string[] ImplicitUsings =
+    [
+        "System", "System.Collections.Generic", "System.IO", "System.Linq",
+        "System.Net.Http", "System.Threading", "System.Threading.Tasks",
+    ];
+
     /// <summary>The namespaces a single file brings into scope.</summary>
     private static HashSet<string> ProjectScopes(string text)
     {
-        var scopes = new HashSet<string>(StringComparer.Ordinal);
+        var scopes = new HashSet<string>(ImplicitUsings, StringComparer.Ordinal);
         foreach (Match m in GlobalUsing().Matches(text))
             scopes.Add(m.Groups[1].Value);
         foreach (Match m in Using().Matches(text))
@@ -264,7 +325,60 @@ public sealed partial class VestigialExtensionsPackageReferenceRule
     /// <summary>Which declared types/members each package owns — read from the package.</summary>
     private static class PackageSurface
     {
-        private static readonly Dictionary<string, HashSet<string>> Cache = new(StringComparer.OrdinalIgnoreCase);
+        private static readonly Dictionary<string, HashSet<string>?> Cache = new(StringComparer.OrdinalIgnoreCase);
+
+        /// <summary>
+        ///     Every public type the package's net10.0 assembly declares, by full name.
+        /// </summary>
+        /// <remarks>
+        ///     Loaded reflectively from the file on disk, not referenced: the guard has
+        ///     to work for a package the test project does not reference. Only names
+        ///     under <c>Microsoft.Extensions.</c> and <c>System.Net.Http</c> are kept —
+        ///     the latter because that is where <c>IHttpClientFactory</c> lives, and it
+        ///     is the type that decides App.Cli's Http reference.
+        /// </remarks>
+        private static HashSet<string> DeclaredTypes(string dir)
+        {
+            var found = new HashSet<string>(StringComparer.Ordinal);
+
+            var dll = Directory.GetFiles(dir, "*.dll", SearchOption.AllDirectories)
+                .FirstOrDefault(f => f.Contains($"{Path.DirectorySeparatorChar}net10.0{Path.DirectorySeparatorChar}",
+                                                StringComparison.Ordinal)
+                                && !Path.GetFileName(f).Contains("Resources.", StringComparison.Ordinal));
+            if (dll is null)
+                return found;
+
+            try
+            {
+                using var reader = new PEReader(File.OpenRead(dll));
+                if (!reader.HasMetadata)
+                    return found;
+                var md = reader.GetMetadataReader();
+                foreach (var handle in md.TypeDefinitions)
+                {
+                    var def = md.TypeDefinitions[handle];
+                    if (!def.IsPublic)
+                        continue;
+                    var ns = md.GetString(def.Namespace);
+                    if (ns.Length == 0)
+                        continue;   // <Module> and the like
+                    var full = ns + "." + md.GetString(def.Name);
+                    if (full.StartsWith(ExtPrefix, StringComparison.Ordinal)
+                        || full.StartsWith("System.Net.Http.", StringComparison.Ordinal))
+                        found.Add(full);
+                }
+            }
+            catch (BadImageFormatException)
+            {
+                return found;       // a satellite or native asset: nothing to read
+            }
+            catch (IOException)
+            {
+                return found;
+            }
+
+            return found;
+        }
 
         internal static HashSet<string>? Read(string package)
         {
@@ -314,10 +428,21 @@ public sealed partial class VestigialExtensionsPackageReferenceRule
                     }
                 }
 
+                // The XML doc file is NOT a complete surface, and the gap is
+                // load-bearing. Microsoft.Extensions.Http mentions IHttpClientFactory
+                // 64 times and gives it no T: entry at all, because the interface is
+                // undocumented. A surface built from the XML alone cannot see the one
+                // type tests/Harbor.App.Cli.Tests actually binds, so it would declare
+                // App.Cli's Microsoft.Extensions.Http reference vestigial — and
+                // deleting it breaks a project the test job runs on every PR. The
+                // assembly's own TypeDef table is the ground truth, so it is unioned in.
+                foreach (var declared in DeclaredTypes(dir))
+                    names.Add(declared);
+
                 result = names.Count > 0 ? names : null;
             }
 
-            lock (Cache) { Cache[package] = result!; }
+            lock (Cache) { Cache[package] = result; }
             return result;
         }
     }

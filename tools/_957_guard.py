@@ -67,7 +67,38 @@ for r in ("src", "apps", "tests", "samples"):
                 prs=prs, name=os.path.basename(f)[:-7], dir=os.path.dirname(full))
 
 allme = sorted({p for d in projs.values() for p in d["pk"] if p.startswith(EXT)})
-DECL = {p: surface(p) for p in allme}
+
+def asm_surface(pkg):
+    """Every TypeDef in the package's net10.0 assembly.
+
+    The XML doc file is NOT a complete surface, and the gap is load-bearing:
+    Microsoft.Extensions.Http mentions IHttpClientFactory 64 times and gives it
+    no T: entry at all. A guard built on the XML alone cannot see the one type
+    tests/Harbor.App.Cli.Tests actually binds -- so it would call App.Cli's
+    Microsoft.Extensions.Http reference vestigial, and deleting it would break a
+    test project CI runs on every PR. The TypeDef table is the ground truth.
+    """
+    import importlib.util
+    spec = importlib.util.spec_from_file_location(
+        "_957_asm%d" % abs(hash(pkg)), "tools/_957_asm.py")
+    mod = importlib.util.module_from_spec(spec)
+    try:
+        spec.loader.exec_module(mod)
+    except Exception:
+        return set()
+    dlls = glob.glob(os.path.join(pdir(pkg), "lib", TF, "*.dll"))
+    if not dlls: return set()
+    try:
+        return {t for t in mod.public_types(dlls[0])
+                if t.startswith(EXT) or t.startswith("System.Net.Http.")}
+    except Exception:
+        return set()
+
+DECL = {}
+for p in allme:
+    s = surface(p) or set()
+    s |= asm_surface(p)
+    DECL[p] = s or None
 DEPS = {p: deps(p) for p in allme}
 
 def walk(roots):
@@ -82,6 +113,17 @@ GU = re.compile(r'(?m)^\s*global\s+using\s+(?!static\s)([A-Za-z_][\w.]*)\s*;')
 US = re.compile(r'(?m)^\s*using\s+(static\s+)?([A-Za-z_][\w.]*)\s*;')
 NM = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
 STR = re.compile(r'@"(?:[^"]|"")*"|"(?:\\.|[^"\\\n])*"')
+
+# The SDK's implicit using set for a console/library project. ImplicitUsings is
+# `enable` repo-wide (Directory.Build.props:8), so these are in scope in EVERY
+# file with no using directive to point at. Dropping them is how
+# `IHttpClientFactory` — namespace System.Net.Http, declared by
+# Microsoft.Extensions.Http — reads as unused in tests/Harbor.App.Cli.Tests,
+# whose only Microsoft usings are DependencyInjection and Hosting.
+IMPLICIT_USINGS = {
+    "System", "System.Collections.Generic", "System.IO", "System.Linq",
+    "System.Net.Http", "System.Threading", "System.Threading.Tasks",
+}
 
 src_cache = {}
 def sources(d):
@@ -110,7 +152,7 @@ def bound(files, packages, extra):
     hits = set()
     for f in files:
         t = open(f, encoding="utf-8", errors="replace").read()
-        sc = set(extra)
+        sc = set(extra) | IMPLICIT_USINGS
         sc |= {m.group(1) for m in GU.finditer(t)}
         sc |= {m.group(2) for m in US.finditer(t) if not m.group(1)}
         b = re.sub(r'//[^\n]*', ' ', t)
