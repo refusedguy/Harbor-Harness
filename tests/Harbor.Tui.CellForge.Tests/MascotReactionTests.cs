@@ -1,5 +1,6 @@
 using Harbor.Abstractions.Events;
 using Harbor.Abstractions.Models;
+using Harbor.DesignSystem;
 using Harbor.Tui.CellForge.Rendering;
 using Harbor.Tui.CellForge.Streaming;
 using Harbor.Tui.CellForge.Widgets;
@@ -21,9 +22,30 @@ namespace Harbor.Tui.CellForge.Tests;
 /// dependency, not a rendering bug: nothing here reads the clock.
 /// </para>
 /// </summary>
-[NotInParallel("pty")]
+// #891: bare [NotInParallel] = one test at a time GLOBALLY, replacing the
+// ("pty") key this class used to carry. The key could not do the job the header
+// claimed for it — a named key is a mutex over same-key peers only, and no
+// palette mutator in this assembly has carried ("pty") since #703 — but that
+// was harmless while the class only READ the catalog. It no longer only reads:
+// BlinkTint_IgnoresAThemePublishedMidTest calls TerminalColorPalette.Apply
+// itself, so the class is a process-global writer and must take the one form
+// that is a global lock. A keyed writer is exactly the #720 defect #820 undid.
+[NotInParallel]
 public class MascotReactionTests
 {
+    /// <summary>Restores the two process-wide things this class now touches.
+    /// The palette pin is <c>[ThreadStatic]</c> and TUnit reuses threads, so a
+    /// test that ever ended up holding one would hand it to whichever test lands
+    /// on that thread next. Both are released in a <c>finally</c> as well; this
+    /// is the belt to the braces, matching ThemeSwitchTests and HotSwapTests.
+    /// </summary>
+    [After(Test)]
+    public void RestoreDefaultTheme()
+    {
+        ChatPalette.UnpinFrame();
+        TerminalColorPalette.Apply(HarborTheme.HarborDark);
+    }
+
     private static (ChatScreen Screen, ScreenBuffer Buffer) BuildFooterScreen(int cols = 120, int rows = 8)
     {
         var composer = new ComposerController();
@@ -184,6 +206,48 @@ public class MascotReactionTests
         _ = PaintLastFrame(screen, buffer, 1); // panel consumed it
 
         await Assert.That(status.ConsumeMascotSignal()).IsEqualTo(MascotReaction.None);
+    }
+
+    // #891: the non-vacuity proof for the pin added above, and a reproduction
+    // of the flake it exists to prevent. Frame 0 is painted on the DARK
+    // catalog; a theme is then published before the style is read back. Under
+    // a pin both sides of `Style == ChatPalette.ToolError` resolve against ONE
+    // projection and this holds. Delete the `PinFrame` call and it goes red:
+    // the cell keeps DARK ink (Error #FF6B6B) while the right-hand side
+    // resolves to the LIGHT catalog (Error #DC2626). No clock, no sleep, no
+    // thread race — the swap is published by this test on purpose.
+    [Test]
+    public async Task BlinkTint_IgnoresAThemePublishedMidTest()
+    {
+        TerminalColorPalette.Apply(HarborTheme.HarborDark);
+
+        var composer = new ComposerController();
+        var status = new StatusViewModel { Model = "m", Mode = StatusBarMode.Idle };
+        var screen = ChatScreen.Build(composer, status, includeSidebar: false, mascotMode: MascotMode.Panel);
+        var buffer = new ScreenBuffer(120, 24);
+        screen.Tree.Solve(120, 24);
+        var mascot = screen.Mascot!;
+
+        ChatPalette.PinFrame();
+        try
+        {
+            mascot.Paint(buffer); // settle
+            status.SignalMascot(MascotReaction.ErrorBlink);
+            mascot.Paint(buffer); // frame 0, painted on the pinned DARK catalog
+
+            // Publish mid-test. Harmless to a pinned reader, fatal to an
+            // unpinned one — which is what these asserts used to be.
+            TerminalColorPalette.Apply(HarborTheme.HarborLight);
+
+            int x = mascot.Rect.X + 3;
+            int y = mascot.Rect.Y + 1; // face row
+            await Assert.That(buffer.Get(x, y).Style == ChatPalette.ToolError).IsTrue();
+        }
+        finally
+        {
+            ChatPalette.UnpinFrame();
+            TerminalColorPalette.Apply(HarborTheme.HarborDark);
+        }
     }
 
     [Test]
