@@ -802,6 +802,65 @@ dotnet exec tests/Harbor.Tui.CellForge.Tests/bin/Release/net10.0/Harbor.Tui.Cell
 
 Machine: Linux x64, .NET 10 Release JIT, no tty I/O (discarding backend).
 
+### One RENDER invalidation, and what a burst of them costs (#396)
+
+**The unit of currency for any coalescing decision on the frame loop is one repaint
+invalidation, and it was already measured above** — so nothing here needs a new
+timer. From the two tables above:
+
+| Cost of ONE repaint invalidation | Value | Source |
+|---|--:|---|
+| Hinted diff only, 120×500 live chat timeline | **0.317 ms** | `RendererMoatPerfTests` |
+| Full frame (solve + paint + hinted diff + encode), 120×500 | **0.805 ms** | `RendererMoatPerfTests` |
+| Token frame (~300 changed cells), 200×50 grid | **52.8 µs** | `DiffEngineBenchmark` |
+| Full repaint, 200×50 / 400×120 grid | 137 µs / 665 µs | `DiffEngineBenchmark` |
+
+Budget is `< 16 ms/frame` (`specs/07-tui.md`), so a repaint costs **0.3–0.8 % of the
+frame budget** on a real feed. Multiply by the burst depth and the fire is obvious:
+a token stream emitting 1000 deltas/s at one repaint each would ask for
+**~800 ms of frame time per second** — the UI stops being a UI. That multiplication is
+the entire justification for coalescing, and it is why the number above is the one to
+design against rather than intuition.
+
+**Measured verdict for #396: the coalescing is already in place, and the fire is
+already out.** The frame loop keeps two channels with deliberately different semantics
+(`ReplLifecycle.LoopAsync`):
+
+| Channel | Type | Semantics | Invalidation count for a burst of N deltas |
+|---|---|---|---|
+| `_events` | `Channel<AgentEvent>` | lossless, arrival order, drained to empty **before** the frame renders | N domain events, never coalesced |
+| `_wake` | `Channel<object?>` | level-triggered — every write is the literal `null`, and `DrainWake` discards the token contents | **1 repaint** |
+
+Four independent levels collapse a burst, which is why the answer is "already done"
+rather than "already partially done":
+
+1. `DrainWake()` — N wake writes collapse to one frame (`ReplLifecycle.cs`).
+2. `_events` is drained by `while (TryRead)` in one pass, then the frame renders once.
+3. `RenderFrameGatedAsync` — a wake whose model version is unchanged produces **zero**
+   terminal writes; `FrameTicker` paces to 60 fps and defers, never drops.
+4. `StreamCoalescer` — the paced reveal: N deltas mark damage once per tick, and
+   `CommitTickPacer` reveals at most one line per tick (Smooth) or drains the backlog
+   (CatchUp).
+
+So there is no queue of render invalidations to put a priority lane on, and adding one
+would be a new axis under the #555 freeze for no measured gain. An approval, a
+cancellation or a permission request is in `_events`; `_events` is drained in the same
+loop iteration that paints the burst, and `ChatScreenBridge.Tick` drains the gate queue
+before the paced reveal — the ordering inside `Tick` is the lane, and it is now pinned
+by `ApprovalRequestedBehindABurst_LandsOnTheSameTick_NotAfterItDrains`.
+
+**The one asymmetry, measured and left alone.** `StreamCoalescer.IncomingThinking`
+marks damage per thinking delta (`MarkDirty(_thinkStream)`), while the text path marks
+once per tick from `DrainPaced`. It is not a fire: `MarkDirty` folds into
+`_pendingDirtyFrom` with a `Math.Min` and `MarkHeightsDirty(lastIndex)` is O(1) for the
+tail block, so the marks are idempotent and the frame still paints once. It is recorded
+here rather than fixed because the fix would be cosmetic — the missing piece is a
+per-delta counter (epic #46/#409), not a code change.
+
+Machine for this section: same as the two tables above (Linux x64, .NET 10 Release JIT,
+no tty I/O). No new timer was run for it — every figure is copied from the rows it
+names, per the rule at the top of this file.
+
 ## 6. Test suite
 
 ### 6.1 Per-project results (Debug, no-build) — local run, linux-x64 container, .NET 10.0.302, pre-#186 counts
