@@ -416,7 +416,8 @@ public class McpRemoteTransportTests
         using DeadServer server = DeadServer.Start();
 
         await using IMcpRemoteTransport transport = build(new Uri($"http://127.0.0.1:{server.Port}{path}"));
-        using var request = JsonDocument.Parse($$"""{"jsonrpc":"2.0","id":{{requestId}},"method":"tools/list","params":{}}""");
+        using var request = JsonDocument.Parse(
+            $$$"""{"jsonrpc":"2.0","id":{{{requestId}}},"method":"tools/list","params":{}}""");
 
         Result<Maybe<JsonDocument>> roundTrip = await transport.TryRoundTripAsync(request.RootElement.Clone(), requestId);
 
