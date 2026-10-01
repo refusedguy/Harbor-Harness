@@ -2867,100 +2867,6 @@ this document's answer.
 
 | File | Line | Member | Has XML doc? | Priority |
 |------|------|--------|--------------|----------|
-| Harbor.Ui.Framework.State/AppState.cs | 23 | record AppState | YES | LOW |
-| Harbor.Ui.Framework.State/AppState.cs | 28 | ImmutableArray<ChatLine> Lines | YES | LOW |
-| Harbor.Ui.Framework.State/AppState.cs | 31 | ActiveMessage Active | YES | LOW |
-| Harbor.Ui.Framework.State/AppState.cs | 34 | bool IsStreaming | YES | LOW |
-| Harbor.Ui.Framework.State/AppState.cs | 37 | bool IsThinking | YES | LOW |
-| Harbor.Ui.Framework.State/AppState.cs | 40 | string Status | YES | LOW |
-| Harbor.Ui.Framework.State/AppState.cs | 43 | CostSnapshot Cost | YES | LOW |
-| Harbor.Ui.Framework.State/AppState.cs | 46 | string Model | YES | LOW |
-| Harbor.Ui.Framework.State/AppState.cs | 49 | string Provider | YES | HIGH |
-| Harbor.Ui.Framework.State/AppState.cs | 52 | string AgentName | YES | LOW |
-| Harbor.Ui.Framework.State/AppState.cs | 55 | bool IsAgentRunning | YES | LOW |
-| Harbor.Ui.Framework.State/AppState.cs | 60 | bool WasRunning | YES | LOW |
-| Harbor.Ui.Framework.State/AppState.cs | 63 | bool ShouldQuit | YES | LOW |
-| Harbor.Ui.Framework.State/AppState.cs | 68 | InputModel Input | YES | LOW |
-| Harbor.Ui.Framework.State/AppState.cs | 71 | FocusMode Focus | YES | LOW |
-| Harbor.Ui.Framework.State/AppState.cs | 76 | int ScrollOffset | YES | LOW |
-| Harbor.Ui.Framework.State/AppState.cs | 79 | int ViewportLines | YES | LOW |
-| Harbor.Ui.Framework.State/AppState.cs | 82 | int TotalLines | YES | LOW |
-| Harbor.Ui.Framework.State/AppState.cs | 108 | string? FocusedPanelId | YES | LOW |
-| Harbor.Ui.Framework.State/AppState.cs | 111 | ImmutableArray<string> RegisteredPanelIds | YES | LOW |
-| Harbor.Ui.Framework.State/AppState.cs | 117 | string ActiveDrawerTab | YES | LOW |
-| Harbor.Ui.Framework.State/AppState.cs | 122 | string StreamingBuffer | YES | LOW |
-| Harbor.Ui.Framework.State/AppState.cs | 125 | string ThinkingBuffer | YES | LOW |
-| Harbor.Ui.Framework.State/AppState.cs | 131 | ChunkedBuffer PendingStreamText | YES | LOW |
-| Harbor.Ui.Framework.State/AppState.cs | 137 | ChunkedBuffer PendingStreamThink | YES | LOW |
-| Harbor.Ui.Framework.State/AppState.cs | 142 | ChromeState? Chrome | YES | LOW |
-| Harbor.Ui.Framework.State/AppState.cs | 149 | record ChatState | YES | LOW |
-| Harbor.Ui.Framework.State/AppState.cs | 152 | ImmutableArray<ChatLine> Lines | YES | LOW |
-| Harbor.Ui.Framework.State/AppState.cs | 155 | bool IsStreaming | YES | LOW |
-| Harbor.Ui.Framework.State/AppState.cs | 158 | bool IsThinking | YES | LOW |
-| Harbor.Ui.Framework.State/AppState.cs | 161 | bool IsAgentRunning | YES | LOW |
-| Harbor.Ui.Framework.State/AppState.cs | 164 | string StreamingBuffer | YES | LOW |
-| Harbor.Ui.Framework.State/AppState.cs | 167 | string StatusMessage | YES | LOW |
-| Harbor.Ui.Framework.State/AppState.cs | 170 | ImmutableArray<ToolCall> ToolCalls | YES | LOW |
-| Harbor.Ui.Framework.State/AppState.cs | 173 | double PullProgress | YES | LOW |
-| Harbor.Ui.Framework.State/AppState.cs | 176 | long PullOffset | YES | LOW |
-| Harbor.Ui.Framework.State/AppState.cs | 179 | bool CanLoadOlder | YES | LOW |
-| Harbor.Ui.Framework.State/AppState.cs | 182 | bool ShowPullIndicator | YES | LOW |
-| Harbor.Ui.Framework.State/AppState.cs | 185 | double ContentScale | YES | LOW |
-| Harbor.Ui.Framework.State/AppState.cs | 191 | record ChromeState | YES | LOW |
-| Harbor.Ui.Framework.State/AppState.cs | 194 | SessionId? ActiveSessionId | YES | LOW |
-| Harbor.Ui.Framework.State/AppState.cs | 197 | ImmutableStack<Route> NavigationStack | YES | LOW |
-| Harbor.Ui.Framework.State/AppState.cs | 200 | Modal? ActiveModal | YES | LOW |
-| Harbor.Ui.Framework.State/AppState.cs | 203 | ImmutableArray<Toast> Toasts | YES | LOW |
-| Harbor.Ui.Framework.State/AppState.cs | 209 | record Route | YES | LOW |
-| Harbor.Ui.Framework.State/AppState.cs | 213 | record Chat | YES | LOW |
-| Harbor.Ui.Framework.State/AppState.cs | 216 | record Settings | YES | LOW |
-| Harbor.Ui.Framework.State/AppState.cs | 219 | record AgentLog | YES | LOW |
-| Harbor.Ui.Framework.State/AppState.cs | 222 | record ProviderPicker | YES | LOW |
-| Harbor.Ui.Framework.State/AppState.cs | 225 | record Onboarding | YES | LOW |
-| Harbor.Ui.Framework.State/AppState.cs | 231 | record Modal | YES | LOW |
-| Harbor.Ui.Framework.State/AppState.cs | 237 | record Confirm | YES | LOW |
-| Harbor.Ui.Framework.State/AppState.cs | 242 | record Alert | YES | LOW |
-| Harbor.Ui.Framework.State/AppState.cs | 252 | record Toast | YES | LOW |
-| Harbor.Ui.Framework.State/AppState.cs | 255 | enum ToastSeverity | YES | LOW |
-| Harbor.Ui.Framework.State/AppState.cs | 269 | record ToolCall | YES | LOW |
-| Harbor.Ui.Framework.State/ChatViewState.cs | 16 | record ChatViewState | YES | LOW |
-| Harbor.Ui.Framework.State/ChatViewState.cs | 19 | ImmutableArray<ChatLineViewModel> Lines | YES | LOW |
-| Harbor.Ui.Framework.State/ChatViewState.cs | 22 | ImmutableArray<ToolCallViewModel> ToolCalls | YES | LOW |
-| Harbor.Ui.Framework.State/ChatViewState.cs | 25 | bool IsStreaming | YES | LOW |
-| Harbor.Ui.Framework.State/ChatViewState.cs | 28 | bool IsThinking | YES | LOW |
-| Harbor.Ui.Framework.State/ChatViewState.cs | 31 | bool IsAgentRunning | YES | LOW |
-| Harbor.Ui.Framework.State/ChatViewState.cs | 34 | string StreamingBuffer | YES | LOW |
-| Harbor.Ui.Framework.State/ChatViewState.cs | 40 | ChunkedBuffer PendingStreaming | YES | LOW |
-| Harbor.Ui.Framework.State/ChatViewState.cs | 43 | string StatusMessage | YES | LOW |
-| Harbor.Ui.Framework.State/ChatViewState.cs | 46 | double PullProgress | YES | LOW |
-| Harbor.Ui.Framework.State/ChatViewState.cs | 49 | double PullOffset | YES | LOW |
-| Harbor.Ui.Framework.State/ChatViewState.cs | 52 | bool CanLoadOlder | YES | LOW |
-| Harbor.Ui.Framework.State/ChatViewState.cs | 55 | bool ShowPullIndicator | YES | LOW |
-| Harbor.Ui.Framework.State/ChatViewState.cs | 58 | double ContentScale | YES | LOW |
-| Harbor.Ui.Framework.State/ChatViewState.cs | 67 | record ChatLineViewModel | YES | LOW |
-| Harbor.Ui.Framework.State/ChatViewState.cs | 70 | DateTime? TimestampUtc | YES | LOW |
-| Harbor.Ui.Framework.State/ChatViewState.cs | 88 | record ToolCallViewModel | YES | LOW |
-| Harbor.Ui.Framework.State/ChromeViewState.cs | 21 | record ChromeViewState | YES | LOW |
-| Harbor.Ui.Framework.State/ChromeViewState.cs | 24 | SessionId? ActiveSessionId | YES | LOW |
-| Harbor.Ui.Framework.State/ChromeViewState.cs | 27 | ImmutableStack<Route> NavigationStack | YES | LOW |
-| Harbor.Ui.Framework.State/ChromeViewState.cs | 30 | Modal? ActiveModal | YES | LOW |
-| Harbor.Ui.Framework.State/ChromeViewState.cs | 33 | ImmutableArray<Toast> Toasts | YES | LOW |
-| Harbor.Ui.Framework.State/ChromeViewState.cs | 38 | public ChromeViewState PushRoute(Route route) => this with { NavigationStack = NavigationStack.Push(route) }; | YES | MED |
-| Harbor.Ui.Framework.State/ChromeViewState.cs | 43 | public ChromeViewState PopRoute() => this with { NavigationStack = NavigationStack.Pop() }; | YES | MED |
-| Harbor.Ui.Framework.State/ChromeViewState.cs | 48 | public ChromeViewState ShowModal(Modal modal) => this with { ActiveModal = modal }; | YES | MED |
-| Harbor.Ui.Framework.State/ChromeViewState.cs | 53 | public ChromeViewState DismissModal() => this with { ActiveModal = null }; | YES | MED |
-| Harbor.Ui.Framework.State/ChromeViewState.cs | 58 | public ChromeViewState AddToast(Toast toast) => this with { Toasts = Toasts.Add(toast) }; | YES | HIGH |
-| Harbor.Ui.Framework.State/ChromeViewState.cs | 63 | record Route | YES | LOW |
-| Harbor.Ui.Framework.State/ChromeViewState.cs | 67 | record Chat | YES | LOW |
-| Harbor.Ui.Framework.State/ChromeViewState.cs | 70 | record Settings | YES | LOW |
-| Harbor.Ui.Framework.State/ChromeViewState.cs | 73 | record AgentLog | YES | LOW |
-| Harbor.Ui.Framework.State/ChromeViewState.cs | 76 | record ProviderPicker | YES | LOW |
-| Harbor.Ui.Framework.State/ChromeViewState.cs | 79 | record Onboarding | YES | LOW |
-| Harbor.Ui.Framework.State/ChromeViewState.cs | 85 | record Modal | YES | LOW |
-| Harbor.Ui.Framework.State/ChromeViewState.cs | 91 | record Confirm | YES | LOW |
-| Harbor.Ui.Framework.State/ChromeViewState.cs | 96 | record Alert | YES | LOW |
-| Harbor.Ui.Framework.State/ChromeViewState.cs | 106 | record Toast | YES | LOW |
-| Harbor.Ui.Framework.State/ChromeViewState.cs | 109 | enum ToastSeverity | YES | LOW |
 | Harbor.Ui.Framework.State/ChunkedBuffer.cs | 22 | class ChunkedBuffer | YES | MED |
 | Harbor.Ui.Framework.State/ChunkedBuffer.cs | 37 | ImmutableStack<string> ChunksReversed | YES | LOW |
 | Harbor.Ui.Framework.State/ChunkedBuffer.cs | 40 | int Length | YES | LOW |
@@ -2994,11 +2900,6 @@ this document's answer.
 | Harbor.Ui.Framework.State/Panels/TuiPanel.cs | 6 | enum TuiPanelPlacement | YES | LOW |
 | Harbor.Ui.Framework.State/Panels/TuiPanel.cs | 32 | enum TuiPanelState | YES | LOW |
 | Harbor.Ui.Framework.State/Panels/TuiPanel.cs | 58 | record TuiPanel | YES | LOW |
-| Harbor.Ui.Framework.State/SessionsViewState.cs | 21 | record SessionsViewState | YES | LOW |
-| Harbor.Ui.Framework.State/SessionsViewState.cs | 24 | ImmutableArray<SessionInfo> Sessions | YES | LOW |
-| Harbor.Ui.Framework.State/SessionsViewState.cs | 27 | SessionId? ActiveSessionId | YES | LOW |
-| Harbor.Ui.Framework.State/SessionsViewState.cs | 30 | bool IsLoading | YES | LOW |
-| Harbor.Ui.Framework.State/SessionsViewState.cs | 41 | record SessionInfo | YES | LOW |
 | Harbor.Ui.Framework.State/State/AsyncData.cs | 10 | record struct | YES | LOW |
 | Harbor.Ui.Framework.State/State/AsyncData.cs | 17 | public AsyncData<T> ToLoading() => Status is AsyncStatus.Success | **NO** | HIGH |
 | Harbor.Ui.Framework.State/State/AsyncData.cs | 21 | public static AsyncData<T> Success(T value) => new(AsyncStatus.Success, value); | **NO** | MED |
@@ -3116,6 +3017,7 @@ this document's answer.
 | Harbor.Ui.Framework.State/State/UiStore.cs | 147 | public void Reset() => Transition(_ => new UiState()); | YES | HIGH |
 | Harbor.Ui.Framework.State/State/UiStore.cs | 151 | class UiStateChangedEventArgs | YES | MED |
 | Harbor.Ui.Framework.State/State/UiStore.cs | 159 | UiState State | YES | HIGH |
+| Harbor.Ui.Framework.State/SessionInfo.cs | 30 | record SessionInfo | YES | LOW |
 | Harbor.Ui.Framework.State/StreamingSync.cs | 23 | class StreamingSync | YES | MED |
 | Harbor.Ui.Framework.State/StreamingSync.cs | 40 | public static bool ShouldFlush(int syncedLength, int pendingLength) | YES | HIGH |
 | Harbor.Ui.Framework.State/StreamingSync.cs | 54 | public static string Concat(string prefix, ChunkedBuffer pending) | YES | MED |
