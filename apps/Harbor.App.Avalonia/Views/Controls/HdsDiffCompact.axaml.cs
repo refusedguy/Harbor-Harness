@@ -77,10 +77,7 @@ public sealed partial class HdsDiffCompact : UserControl
         }
     }
 
-    private IBrush? TryGetBrush(string key)
-    {
-        return global::Avalonia.Application.Current?.Resources[key] as IBrush;
-    }
+    private IBrush? TryGetBrush(string key) => ThemeBrushResolver.Resolve(key);
 
     private void RootBorder_PointerPressed(object? sender, PointerPressedEventArgs e)
     {

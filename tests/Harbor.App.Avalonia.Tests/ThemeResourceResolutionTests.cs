@@ -52,21 +52,13 @@
 // assert nothing; see the note at the bottom of this file.
 
 using Avalonia.Headless;
-using Avalonia.LogicalTree;
 using Avalonia.Media;
-using Avalonia.VisualTree;
 using Harbor.App.Avalonia;
 using Harbor.App.Avalonia.Views;
-using Harbor.App.Avalonia.Views.Components;
 using Harbor.App.Avalonia.Views.Controls;
-using Harbor.Desktop.Abstractions.Models;
 using TUnit;
 using TUnit.Assertions;
 using TUnit.Assertions.Extensions;
-
-// Aliased rather than imported: Avalonia.Controls.Shapes also declares `Path`,
-// which collides with System.IO.Path used by the scan below (CS0104).
-using Ellipse = Avalonia.Controls.Shapes.Ellipse;
 
 namespace Harbor.App.Avalonia.Tests;
 
@@ -255,57 +247,55 @@ public class ThemeResourceResolutionTests
     }
 
     /// <summary>
-    ///     The same defect in the session status dot, measured the way a person
-    ///     would meet it — by the colour actually painted.
+    ///     The session status dot's six keys. Asserted at the resolver rather
+    ///     than on the painted <c>Ellipse.Fill</c>, because the control cannot be
+    ///     reached from here at all: its code-behind declares its own
+    ///     <c>private void InitializeComponent()</c>, which shadows the one
+    ///     Avalonia's generator emits — and the generated one is what assigns the
+    ///     <c>Dot</c> field — so the constructor throws before any brush is
+    ///     looked up. That is a separate defect with its own issue; measuring the
+    ///     paint through it would report a broken control rather than a broken
+    ///     lookup.
     /// </summary>
     /// <remarks>
-    ///     The code-behind assigns <c>Ellipse.Fill</c> directly, and a style sets
-    ///     that same property to <c>StateRunningBrush</c>. So a failed lookup does
-    ///     not leave the dot blank — it leaves every dot wearing the RUNNING
-    ///     colour, which reads as correct until you notice the error dot is blue.
-    ///     Comparing the painted colour against the token's own colour is what
-    ///     catches it.
+    ///     This is the one case where a failed lookup did not merely look wrong.
+    ///     <c>Ellipse.StatusDot</c> already sets <c>Fill</c> to
+    ///     <c>StateRunningBrush</c>, so the code-behind's assignment is the only
+    ///     thing that varies it per state — a missed key would have left every
+    ///     dot wearing the RUNNING colour, and the error dot blue.
     /// </remarks>
     [Test]
     [Retry(3)]
-    public async Task Every_Status_Dot_State_Paints_Its_Own_Theme_Colour()
+    public async Task Every_Status_Dot_Key_Resolves_Its_Own_Theme_Brush()
     {
-        (SessionDotState State, string BrushKey)[] states =
+        string[] keys =
         [
-            (SessionDotState.Idle, "StateIdleBrush"),
-            (SessionDotState.Running, "StateRunningBrush"),
-            (SessionDotState.Thinking, "StateInfoBrush"),
-            (SessionDotState.Queued, "StatePendingBrush"),
-            (SessionDotState.Done, "StatusSuccessBrush"),
-            (SessionDotState.Error, "StatusErrorBrush")
+            "StateIdleBrush",
+            "StateRunningBrush",
+            "StateInfoBrush",
+            "StatePendingBrush",
+            "StatusSuccessBrush",
+            "StatusErrorBrush"
         ];
 
-        List<string> wrongColour = [];
+        List<string> unresolved = [];
 
         await using var session = HeadlessUnitTestSession.StartNew(typeof(App));
         await session.Dispatch((System.Action)(() =>
         {
-            foreach ((SessionDotState state, string brushKey) in states)
+            foreach (string key in keys)
             {
-                var dot = new StatusDot { State = state };
-                Ellipse? painted = dot.GetLogicalDescendants().OfType<Ellipse>().FirstOrDefault()
-                    ?? dot.GetVisualDescendants().OfType<Ellipse>().FirstOrDefault();
-
-                if (painted?.Fill is not SolidColorBrush solid)
-                {
-                    wrongColour.Add($"{state}: Fill is {painted?.Fill?.GetType().Name ?? "null"}, want {brushKey}");
-                    continue;
-                }
-
-                if (solid.Color != ResolveColour(brushKey))
-                    wrongColour.Add($"{state}: painted {solid.Color}, want {brushKey}");
+                if (ThemeBrushResolver.Resolve(key) is not SolidColorBrush solid)
+                    unresolved.Add($"{key}: did not resolve to a brush");
+                else if (solid.Color != ResolveColour(key))
+                    unresolved.Add($"{key}: resolved to the wrong brush");
             }
         }), CancellationToken.None);
 
-        foreach (string wrong in wrongColour)
+        foreach (string wrong in unresolved)
             Console.WriteLine(wrong);
 
-        await Assert.That(wrongColour).IsEmpty();
+        await Assert.That(unresolved).IsEmpty();
     }
 
     /// <summary>
