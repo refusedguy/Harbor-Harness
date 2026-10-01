@@ -54,6 +54,14 @@ RULES
                      banner. See "THE THIRD SHAPE" below: this rule is the one
                      that would have caught #807 on the day the table was
                      written.
+  DOC-COUNT-STALE    a document that states a total for a table it contains —
+                     "Total members audited: 2861" over 2842 rows — and never
+                     says which of the two is historical. NOT the same class as
+                     the rules above, and the distinction is the whole point:
+                     every other rule asks whether a number is inside a FILE,
+                     and this one asks whether a number agrees with the ROWS
+                     BESIDE IT, so a file:line fence cannot see it at all. See
+                     "THE ONE THING A `file:line` FENCE CANNOT SEE".
   DOC-SAMPLE-API-UNDECLARED
                      a backticked type name in the `## Public API` section of a
                      `samples/plugins/*/README.md` that no tracked `.cs` file
@@ -64,6 +72,7 @@ RULES
   The escape hatch is a line IN THE SAME DOCUMENT, and it must carry a reason:
 
       <!-- check-doc-cites: allow-unwired TypeFilterMiddleware — <why> -->
+      <!-- check-doc-cites: allow-stale-count "Total members audited" — <why> -->
 
   Per-document and reason-mandatory on purpose. A global allow-list in this
   script would be the "allow-list that verified zero files" failure the repo
@@ -71,21 +80,33 @@ RULES
   sentence that needed it, so adding one is a reviewable act rather than an
   edit to a file nobody reads.
 
+  The `allow-stale-count` form additionally requires a QUOTED LABEL naming the
+  figure it covers. `allow-unwired` did not need one because a type name is
+  already unambiguous; a document's figures are not, and a waiver that does not
+  say which number it is excusing would silence every number the document will
+  ever print. That is the hole #921 found in the list #902 grew and closed.
+
 SCOPE — WHY THIS IS NOT A GLOBAL SCAN
 
   Only documents carrying the marker line `Status: normative` are checked.
 
-  That is a pre-existing convention in this repo (EVENT_TOPOLOGY.md and
-  EVENT_BUS_SINKS.md are the two that declare it today), and it is a
-  self-selector rather than an allow-list: a new normative document is
-  covered by writing the marker, and nobody has to remember to edit a list
-  here. The alternative — scanning all 310 tracked .md files — is not
-  available at this strength: measured over the whole tree, the two fence
-  rules find 141 pre-existing violations in 23 files (docs/STATE_OWNERSHIP.md
-  alone has 20), most of them in archived material under docs/.kilo-docs/.
-  A gate red on 141 unrelated findings on day one is a gate that gets
-  switched off, which is the exact failure md_gate.require_non_vacuous
-  exists to prevent.
+  That is a pre-existing convention in this repo (four documents declare it
+  today), and it is a self-selector rather than an allow-list: a new normative
+  document is covered by writing the marker, and nobody has to remember to edit
+  a list here. The alternative — scanning all tracked .md files — is not
+  available at this strength: measured over the whole tree on dev at 787c777d,
+  the fence rules find 85 pre-existing violations in 24 non-normative documents,
+  most of them in archived material under docs/.kilo-docs/ and in PLAN.md files
+  that describe an intention rather than the tree. A gate red on 85 unrelated
+  findings on day one is a gate that gets switched off, which is the exact
+  failure md_gate.require_non_vacuous exists to prevent.
+
+  The figure was 141 in an earlier draft of this file and is now 85. That drop
+  is not a scope change — it is the resolver getting accurate. The other 56 were
+  citations that always resolved, reported as missing because the basename
+  index was `.cs`-only and the prose resolver never tried `src/`+`apps/`. The
+  one that matters for this argument is the direction: it went DOWN, so the case
+  for keeping the fence opt-in did not weaken.
 
   Deleting the marker from a document is therefore not a bypass: it shrinks
   the scanned set, and the `--min-files` / `--min-cites` floors in
@@ -129,6 +150,51 @@ THE THIRD SHAPE — WHY #807 HAPPENED AT ALL (#807)
   What this rule deliberately does NOT do: verify that a declared record's
   numbers are right. A запись is allowed to be wrong about today. It only has
   to stop pretending to be an эталон.
+
+AND THE ONE THING A `file:line` FENCE CANNOT SEE AT ALL (#807)
+
+  Every rule above asks the same question in a different costume: is this NUMBER
+  inside that FILE? DOC-CITE-EOF, DOC-CITE-MISSING, DOC-CITED-TABLE-UNDECLARED
+  all put a cited line next to a path on disk. So a number that is wrong about
+  the DOCUMENT IT SITS IN is outside the perimeter of the entire script, and
+  that is not a gap in one rule — it is the shape of all of them.
+
+  DOC-COUNT-STALE asks the other question: does the number agree with the rows
+  next to it. Measured, this is real and it is not one document's problem:
+
+      docs/XML_DOC_AUDIT.md  states 2861, ships 2842 rows  — 19 short
+
+  and the 19 decomposes exactly, because every deleted row had an XML doc:
+
+      a917e308 (#732)  14 rows:  9 HIGH, 5 MED   the deleted Reducers layer
+      c2eba3fd (#749)   5 rows:  4 HIGH, 1 MED   RecentItemsService moved
+
+  The reason a rule about counts is worth more than the 19: the Summary in that
+  file is INTERNALLY CONSISTENT. 808+543+670 = 2021, 303+222+315 = 840, and
+  2021+840 = 2861 — every sum a reader can do checks out, and every one of them
+  checks out against a number the file does not contain. The `Without Doc` cells
+  are exact; only the documented columns drift. It is a table that passes the
+  reader's own arithmetic and is still wrong, which is why a count guard has to
+  compare against the rows rather than trust that the totals add up.
+
+  It asks the same question DOC-CITED-TABLE-UNDECLARED asks — does the document
+  SAY which kind of thing it is — and not "is the number true", because for a
+  dated record 2861 can be a true statement about the sweep it recorded and a
+  false one about the file it is in. That is what a запись is. The rule requires
+  the difference to be declared on a line in the document, with a reason and the
+  label of the figure it is about:
+
+      <!-- check-doc-cites: allow-stale-count "Total members audited" — why -->
+
+  Requiring the quoted label is not decoration: a waiver that does not say WHICH
+  figure it covers is a mute button for every number the document will ever
+  print, which is the hole #921 found in the allow-unwired list and closed.
+
+  Measured before writing it: across all tracked markdown exactly ONE document
+  has both a `| path | line |` table and a prose total. The rule is
+  exception-free today without a list of known breakages to keep it quiet —
+  which is the shape #847's owner rejected, avoided by measuring the shape
+  first rather than after.
 
 THE FOURTH SHAPE — THE NAME THAT NO TREE DECLARES (#794)
 
@@ -209,6 +275,16 @@ KNOWN LIMITATIONS — READ THIS BEFORE TRUSTING A GREEN
   the document does not state what it expects to find. Only DOC-TYPE-UNWIRED
   reaches past the fence, and only for types.
 
+  And the fence could not always see the file at all. `CITATION` matches twelve
+  extensions and `check_citations` fences line numbers inside `.csproj`, but the
+  basename index was built from `git ls-files '*.cs' '*.axaml'`, so a bare
+  `Harbor.App.Cli.csproj:145-224` was reported MISSING for a file in the tree —
+  and the prose resolver never tried `src/`+`apps/`, which the table resolver
+  did, so the same string was red in a paragraph and green in a table. Measured
+  over the 511 prose citations in the 311 non-normative documents, widening the
+  resolver removed 56 of 140 false findings and added none. See
+  `index_sources` and `resolve_citation`.
+
   And DOC-TYPE-UNWIRED has a matching blind spot, which #905 closed one
   half of and left the other half standing. It used to read "no OTHER file
   names it" — a predicate that is unsatisfiable for two of the three shapes
@@ -271,9 +347,22 @@ THE FIFTH SHAPE — MARKDOWN THAT ONLY LOOKS COMPILABLE (#853)
 
   Also measured, and also not built: requiring a citation on examples that quote
   code (131 of 1028 carry one), banning uncited examples (897 of them, across 105
-  documents), fencing the citations non-normative documents already wrote (818 of
-  2662 fail), and resolving a source path named on a fence's first line (82 of 116
-  name files that do not exist, because the convention is a template).
+  documents), fencing the citations non-normative documents already wrote, and
+  resolving a source path named on a fence's first line (82 of 116 name files
+  that do not exist, because the convention is a template).
+
+  The "widen the prose fence" figure was recorded here as "818 of 2662" when
+  #826 wrote it, and it was already wrong when it was written — the same disease
+  this section is about, in the section that catalogs the disease. Re-measured on
+  dev at 787c777d: 812 of 3353 fail (85 of 511 prose citations, 672 of 2842
+  table rows). The conclusion is unchanged and is the reason the fence stays
+  opt-in: two thirds of the failures are the XML_DOC_AUDIT rows a dated record
+  is allowed to have, and of the 85 prose failures a large share are archived
+  sprint notes under docs/.kilo-docs/. Widening would still be red on day one.
+
+  Narrowing it by making the rule accurate instead: see `resolve_citation`.
+  Those 85 were 140 before, and the 55 that went away were citations that were
+  correct all along.
 
   Full reasoning and the three conditions that would re-open this:
   docs/adr/ADR-011-doc-example-compile-gate.md. Nothing here is a rule; this
@@ -322,6 +411,16 @@ CITATION = re.compile(
     r":(\d+(?:-\d*)?(?:,\d+(?:-\d*)?)*)"
 )
 
+# The same extension list, as data, so the basename index can be built from it
+# instead of from a hardcoded `git ls-files *.cs` that CITATION never agreed
+# with (#807). One list, two consumers — the regex is the definition, this is
+# what git is asked for. Deriving it from CITATION's own text would be cleverer
+# and would also make a typo in the regex silently change what is scanned.
+CITABLE_EXT = (
+    ".cs", ".json", ".yml", ".yaml", ".csproj", ".slnx",
+    ".props", ".targets", ".py", ".axaml", ".xaml", ".editorconfig",
+)
+
 # Backticked `SomeType` or `SomeType.Member` — PascalCase head, at least 3
 # chars. The dotted form matters: #664's dead subscriber was named in the
 # prose as `EventBusAppStoreDispatcher.OnAgentEvent` and in the diagram with no
@@ -361,6 +460,35 @@ TABLE_CITATION = re.compile(
     r"(?:cs|json|yml|yaml|csproj|slnx|props|targets|py|axaml|xaml|editorconfig))"
     r"\s*\|\s*(?P<spec>\d+(?:-\d*)?(?:,\d+(?:-\d*)?)*)\s*\|",
     re.M,
+)
+
+# The per-document escape hatch for DOC-COUNT-STALE, and the second rule to
+# use this shape. Same discipline as allow-unwired and for the same reason: the
+# claim "this total is history, not a claim about these rows" is exactly the
+# thing a reader needs to see, and a global list would hide it in a file nobody
+# opens. A quoted label is required so the waiver says WHICH figure it is about.
+ALLOW_STALE_COUNT = re.compile(
+    r"<!--\s*check-doc-cites:\s*allow-stale-count\s+(?P<label>[^>]+?)"
+    r"(?:\s+[-—:]\s*(?P<reason>.+?))?\s*-->"
+)
+
+# A stated total for a table the document itself contains — "Total members
+# audited: 2861", "audited 2861" — in prose or a bullet, never in a table cell.
+#
+# Anchored to a line that cannot be a `| a | b |` row, so the Priority Breakdown
+# table's own `| HIGH | 1111 | ...` cells are out of reach. Without that anchor
+# the rule would compare a table's column total against the table it belongs to
+# and report a correct table as wrong.
+#
+# Word-anchored rather than "any number on any line": a document that says
+# "672 of 2842" has two figures on one line and neither is a total, and a rule
+# that guessed between them is a rule that cries wolf on the first honest
+# sentence a sweep writes.
+COUNT_TOTAL = re.compile(
+    r"(?im)^[ \t>*-]*[^\n|]{0,90}?"
+    r"\b(?:total\s+(?:members|rows|files|types|items|tests|projects|cases)"
+    r"|(?:members|rows|files|types|tests|projects)\s+(?:audited|total)"
+    r"|audited)\b[^\n\d]{0,40}?(?P<n>\d[\d,]*)"
 )
 
 # THE FOURTH SHAPE (#794). A component README whose `## Public API` section is
@@ -588,7 +716,7 @@ class Decl(NamedTuple):
 
 
 def index_sources(repo: str) -> tuple[list[str], dict[str, list[str]], set[str]]:
-    """Tracked source files, basename -> candidates, and the production subset.
+    """Tracked citable files, basename -> candidates, and the production subset.
 
     `contrib/` is excluded from basename resolution: it is unmaintained, not
     compiled by CI, and a doc citing `AppStore.cs:5` must not be satisfied by a
@@ -599,31 +727,93 @@ def index_sources(repo: str) -> tuple[list[str], dict[str, list[str]], set[str]]
     anywhere. Globbing only `*.cs` here is what made the first XAML self-test
     fixture fail — the fixture was tracked by git and still invisible, because
     nothing ever asked git for it.
+
+    The BASENAME index covers every extension CITATION accepts, not just
+    `.cs`/`.axaml` (#807). CITATION matches `.csproj`, `.props`, `.targets`,
+    `.slnx` and `.json` as first-class citation targets and `check_citations`
+    even fences line numbers inside `.csproj` and `.slnx` — but a bare
+    `Harbor.App.Cli.csproj:145-224` could never resolve, because the index that
+    answered the question was built from `*.cs`. The rule reported
+    DOC-CITE-MISSING for a file sitting in the tree:
+
+        apps/Harbor.App.Cli/README.md:197  Harbor.App.Cli.csproj:145-224
+        apps/Harbor.App.Cli/PLAN.md:14     Harbor.App.Cli.csproj:216-224
+
+    Sixteen live claims across the tree were that shape. This is #905's lesson
+    one level up: the rule both works and lies, and here it lied by being
+    unable to see. `production` stays `.cs` under `src/`+`apps/` — that set
+    feeds the type rule, which must not read a `.csproj` looking for a
+    declaration.
     """
+    # ONE `git ls-files`, no pathspec, filtered here. The pathspec form
+    # (`git ls-files '*.cs' '*.props' …`) looks tidier and is wrong in a way
+    # that fails silently: a pathspec of `.cs` is a LITERAL path named `.cs`, not
+    # a glob, so the extension list has to be spelled `*<ext>` or the whole index
+    # comes back holding one entry. It did, and the gate reported 112 citations
+    # as missing in files that are in the tree. The unfiltered list is ~2.9k
+    # paths, so filtering in Python costs nothing and cannot be misread.
     proc = subprocess.run(
-        ["git", "ls-files", "*.cs", "*.axaml"],
+        ["git", "ls-files"],
         cwd=repo,
         capture_output=True,
         text=True,
         check=True,
         env=md_gate.git_env(),
     )
-    files = sorted(f for f in proc.stdout.split() if f)
+    tracked = sorted(f for f in proc.stdout.split() if f)
+
+    # The type rule reads C# and XAML only — never a .csproj looking for a
+    # declaration.
+    files = [f for f in tracked if f.endswith((".cs", ".axaml"))]
+
     by_base: dict[str, list[str]] = defaultdict(list)
-    for f in files:
-        by_base[os.path.basename(f)].append(f)
+    for f in tracked:
+        if os.path.splitext(f)[1] in CITABLE_EXT:
+            by_base[os.path.basename(f)].append(f)
     production = [f for f in files if f.startswith(("src/", "apps/"))]
     return files, dict(by_base), set(production)
 
 
+# Where a project lives, for the project-relative form. A sweep or a README
+# writes `Harbor.TestKit/Fakes.cs:13` or `Input/ITerminalModeController.cs:9`
+# — the project or the folder, not the path from the root — and a rule that
+# only tries the root form calls a live file missing.
+#
+# Ordered, not a set: the first hit wins and `src/` is tried before `tests/`,
+# so the answer is deterministic and reviewable. `tools/` is here because the
+# gates are cited by path from the repo root more often than not.
+PROJECT_ROOTS = ("src/", "apps/", "tests/", "tools/")
+
+
 def resolve_citation(
-    target: str, repo: str, by_base: dict[str, list[str]]
+    target: str, repo: str, by_base: dict[str, list[str]], doc_rel: str | None = None
 ) -> tuple[str | None, str]:
-    """Return (absolute path, kind). `kind` is 'path', 'basename' or 'miss'."""
+    """Return (absolute path, kind). `kind` is 'path', 'basename' or 'miss'.
+
+    A slash-bearing target is tried, in order:
+
+      1. repo-relative, as written
+      2. relative to the citing document's own directory — a README in
+         `src/Harbor.Tui.CellForge.Engine/` writing `Input/MouseRouter.cs:25`
+         means the file beside it, which is how a human reads it
+      3. each of PROJECT_ROOTS, for the project-relative form
+
+    This is the resolution `check_table_citations` already did for rows and
+    `resolve_citation` did NOT do for prose, so the two shapes disagreed about
+    the same string: a path in a table resolved, the identical path in a
+    paragraph was DOC-CITE-MISSING. Both shapes now call this one function, so
+    the table rule is exactly as capable as the prose rule instead of strictly
+    more so.
+    """
     if "/" in target:
-        full = os.path.join(repo, target)
-        if os.path.isfile(full):
-            return full, "path"
+        tries = [target]
+        if doc_rel:
+            tries.append(os.path.normpath(os.path.join(os.path.dirname(doc_rel), target)))
+        tries.extend(root + target for root in PROJECT_ROOTS)
+        for cand in tries:
+            full = os.path.join(repo, cand)
+            if os.path.isfile(full):
+                return full, "path"
         return None, "miss"
     candidates = [c for c in by_base.get(target, []) if not c.startswith("contrib/")]
     if len(candidates) == 1:
@@ -654,6 +844,7 @@ def parse_ranges(spec: str) -> list[tuple[int, int]]:
 
 def check_citations(
     text: str,
+    rel: str,
     repo: str,
     by_base: dict[str, list[str]],
     cache: dict[str, int],
@@ -664,7 +855,7 @@ def check_citations(
     for m in CITATION.finditer(text):
         target, spec = m.group(1), m.group(2)
         line_no = text.count("\n", 0, m.start()) + 1
-        full, kind = resolve_citation(target, repo, by_base)
+        full, kind = resolve_citation(target, repo, by_base, rel)
         if full is None:
             if kind == "ambiguous":
                 problems.append(
@@ -679,9 +870,10 @@ def check_citations(
                     ("DOC-CITE-MISSING", f"{target}:{spec} — no such file in the tree", line_no)
                 )
             continue
-        if not full.endswith((".cs", ".json", ".yml", ".yaml", ".csproj", ".slnx")):
-            # A path that exists is a path that exists; only the formats we
-            # can count lines for get a fence.
+        if os.path.splitext(full)[1] not in CITABLE_EXT:
+            # CITATION matched it, so by construction the extension is in
+            # CITABLE_EXT; this is unreachable in practice and stays only as the
+            # assertion that the fence and the matcher cannot drift apart again.
             continue
         total = line_counts(full, cache)
         for start, end in parse_ranges(spec):
@@ -850,6 +1042,71 @@ def unreachable(
     )
 
 
+def check_stated_count(
+    text: str, rows: int
+) -> list[tuple[str, str, int]]:
+    """Does the document's own headline total equal the rows it ships?
+
+    The class #902 called out and no `file:line` fence can reach: every rule in
+    this script asks whether a NUMBER is inside a FILE. None of them can ask
+    whether a number agrees with the document's own contents, because the rows
+    are the thing being counted. A fence proves `CompactionService.cs:209` is a
+    line; it says nothing about whether "2861 members" is how many members the
+    document lists.
+
+    So the drift is invisible to all of it. Measured on this tree, the audit's
+    Summary says 2861 and the document holds 2842 rows — 19 short, because two
+    commits deleted documented rows and left the count:
+
+        #732  a917e308  14 rows (9 HIGH, 5 MED) — the deleted Reducers layer
+        #749  c2eba3fd   5 rows (4 HIGH, 1 MED) — RecentItemsService moved
+
+    13 + 6 = 19, and every one is a row that HAD an XML doc, which is why the
+    per-priority `With Doc` column is short by exactly 13 and 6 while every
+    `Without Doc` cell is still exact. The arithmetic is a fingerprint, not a
+    coincidence, and it is why a summary that "looks fine" is the failure mode.
+
+    This is deliberately NOT a rule about whether the count is TRUE. A dated
+    record's count may be a true statement about the sweep it recorded and a
+    false statement about the file it is in — that is what a record IS, and
+    #826 already settled that for this document. The rule asks one question:
+    does the document admit the difference?
+
+        <!-- check-doc-cites: allow-stale-count "Total members audited" — why -->
+
+    Without that line the rule reports the gap, because an undeclared gap is the
+    defect; a declared one is a sentence a reader can weigh. Same discipline as
+    allow-unwired: per-document, reason-mandatory, no global list, and it shows
+    up in the diff next to the sentence it qualifies.
+    """
+    if rows == 0:
+        return []
+    m = COUNT_TOTAL.search(text)
+    if not m:
+        return []
+    claimed = int(m.group("n").replace(",", ""))
+    if claimed == rows:
+        return []
+    if ALLOW_STALE_COUNT.search(text):
+        return []
+    line_no = text.count("\n", 0, m.start()) + 1
+    return [
+        (
+            "DOC-COUNT-STALE",
+            f"this document states {claimed} but ships {rows} "
+            f"`| path | line |` row(s) — a gap of {claimed - rows}. A `file:line` "
+            f"fence cannot see this: every other rule here asks whether a number "
+            f"is inside a FILE, and this one asks whether a number agrees with "
+            f"the rows next to it. If {claimed} is a true figure for the sweep "
+            f"this document records and the rows were edited afterwards, say so "
+            f"on a line in this document: "
+            f'<!-- check-doc-cites: allow-stale-count "Total members audited" '
+            f"— which count is historical, and what moved -->",
+            line_no,
+        )
+    ]
+
+
 def check_table_shape(
     text: str, rel: str, normative: bool
 ) -> tuple[int, list[tuple[str, str, int]]]:
@@ -895,27 +1152,24 @@ def check_table_shape(
 
 
 def check_table_citations(
-    text: str, repo: str, by_base: dict[str, list[str]], cache: dict[str, int]
+    text: str, rel: str, repo: str, by_base: dict[str, list[str]], cache: dict[str, int]
 ) -> tuple[int, list[tuple[str, str, int]]]:
     """Fence the table rows of a NORMATIVE document.
 
     Only normative: for a dated record these numbers are the snapshot, and
-    policing them would be the gate demanding a history be corrected. Paths in
-    these tables are project-relative (`Harbor.Abstractions/...`, the column
-    header a project sweep writes), so `src/` and `apps/` are tried after the
-    repo-relative form.
+    policing them would be the gate demanding a history be corrected. Path
+    resolution is `resolve_citation`, shared with the prose rule: this function
+    used to carry its own three-candidate loop, so the two shapes disagreed
+    about the same string — a table row could resolve where the identical prose
+    citation was DOC-CITE-MISSING. One resolver, so the table rule is exactly as
+    capable as the prose rule and not strictly more so (#807).
     """
     found = 0
     problems: list[tuple[str, str, int]] = []
     for m in TABLE_CITATION.finditer(text):
         target, spec = m.group("target"), m.group("spec")
         line_no = text.count("\n", 0, m.start()) + 1
-        full = None
-        for candidate in (os.path.join(repo, target), os.path.join(repo, "src", target),
-                          os.path.join(repo, "apps", target)):
-            if os.path.isfile(candidate):
-                full = candidate
-                break
+        full, _kind = resolve_citation(target, repo, by_base, rel)
         if full is None:
             problems.append(
                 ("DOC-CITE-MISSING", f"{target}:{spec} — no such file in the tree", line_no)
@@ -998,6 +1252,10 @@ class Scan:
         self.type_names = 0
         self.table_rows = 0
         self.table_docs = 0
+        # Documents whose stated total was compared against their own rows
+        # (#807). Counted separately from table_docs because the question is
+        # asked of every document that has rows, declared or not.
+        self.count_docs = 0
         self.api_names = 0
         self.api_docs = 0
         self.hits: dict[str, list[tuple[str, str, int]]] = defaultdict(list)
@@ -1093,6 +1351,13 @@ def scan(repo: str, verbose: bool) -> Scan:
         if rows:
             result.table_docs += 1
             result.table_rows += rows
+            result.count_docs += 1
+            # ... and the count question rides on the same row count, on every
+            # tracked document and not just the declared ones. A dated record's
+            # rows are allowed to be stale; its HEADLINE TOTAL still has to be
+            # either true of the file or declared historical, because that
+            # sentence is the first thing a reader copies.
+            shape_problems = shape_problems + check_stated_count(text, rows)
 
         # ... and so does the fourth shape (#794), for the same reason and with
         # the same one-line fix. A sample README's `## Public API` list is a
@@ -1109,8 +1374,10 @@ def scan(repo: str, verbose: bool) -> Scan:
                 result.hits[rel] = shape_problems
             continue
         result.files += 1
-        cites, cite_problems = check_citations(text, repo, by_base, cache)
-        table_cites, table_cite_problems = check_table_citations(text, repo, by_base, cache)
+        cites, cite_problems = check_citations(text, rel, repo, by_base, cache)
+        table_cites, table_cite_problems = check_table_citations(
+            text, rel, repo, by_base, cache
+        )
         allowance, allowance_problems = read_allowances(text)
         names, type_problems = check_types(
             text, declared_in, production_text, xaml_text, set(allowance)
@@ -1597,6 +1864,92 @@ def self_test() -> int:
         out[-400:],
     )
 
+    # ---- RESOLUTION: what the fence could not SEE (#807) ----------------------
+    # CITATION matches `.csproj`/`.props`/`.targets`/`.py` and check_citations
+    # fences `.csproj` line numbers — but the basename index was built from
+    # `git ls-files '*.cs' '*.axaml'`, so a bare `Demo.csproj:3` resolved to
+    # nothing and was reported MISSING for a file in the tree. Four shapes, one
+    # per way the old resolver answered "no":
+
+    # 1. a non-.cs tracked format, by bare basename.
+    code, out = run(
+        {
+            **live,
+            "src/Demo/Demo.csproj": "<Project>\n  <PropertyGroup>\n    <A>1</A>\n  </PropertyGroup>\n</Project>\n",
+            "docs/NORM.md": clean_norm.replace("`src/Demo/Live.cs:4` and `Live.cs:4`",
+                                                "`Demo.csproj:3`"),
+        }
+    )
+    st.expect(
+        "a bare `.csproj:3` resolves — the index is not `.cs`-only (#807)",
+        code == 0, out.strip()[-400:],
+    )
+
+    # 2. the project-relative form a sweep writes: `Demo/Live.cs:4` for a file
+    # at `src/Demo/Live.cs`. The TABLE rule always tried `src/`+`apps/`; the
+    # PROSE rule did not, so the same string was red in a paragraph and green in
+    # a table. That asymmetry is the defect, so the case is a PROSE citation.
+    code, out = run(
+        {
+            **live,
+            "docs/NORM.md": clean_norm.replace("`src/Demo/Live.cs:4` and `Live.cs:4`",
+                                                "`Demo/Live.cs:4`"),
+        }
+    )
+    st.expect(
+        "a project-relative prose citation `Demo/Live.cs:4` resolves to src/Demo/Live.cs",
+        code == 0, out.strip()[-400:],
+    )
+
+    # 3. and the same string must be fenced, not merely resolved: project-relative
+    # AND past EOF. Without this the previous case could pass by not resolving at
+    # all while looking identical on stdout.
+    code, out = run(
+        {
+            **live,
+            "docs/NORM.md": clean_norm.replace("`src/Demo/Live.cs:4` and `Live.cs:4`",
+                                                "`Demo/Live.cs:999`"),
+        }
+    )
+    st.expect(
+        "a project-relative citation is FENCED, not just resolved (past EOF fails)",
+        code == 1 and "DOC-CITE-EOF" in out, out[-400:],
+    )
+
+    # 4. relative to the citing document: a README inside the project writing
+    # `Input/MouseRouter.cs:25`, which is how a human reads its own repo.
+    # `Mouse` is named in backticks AND wired, because the `--min-types` floor
+    # counts backticked names: a fixture with none exits 1 on the floor and would
+    # prove nothing about resolution. (It did, on the first run.)
+    code, out = run(
+        {
+            **live,
+            "src/Demo/Input/Mouse.cs": "namespace Demo;\npublic sealed class Mouse { }\n",
+            "src/Demo/Reader.cs": "namespace Demo;\npublic sealed class Reader { public Mouse M { get; } = new(); }\n",
+            "src/Demo/README.md": "# R\n\n> Status: normative.\n\n"
+            "The router is `Mouse`; see `Input/Mouse.cs:2`.\n",
+        }
+    )
+    st.expect(
+        "a citation relative to the citing document resolves (README beside the file)",
+        code == 0, out.strip()[-400:],
+    )
+
+    # And the one shape that must stay a MISS after all that widening: a path
+    # that exists nowhere. Widening the resolver is not a way to make every
+    # citation resolve — if it were, the rule would stop meaning anything.
+    code, out = run(
+        {
+            **live,
+            "docs/NORM.md": clean_norm.replace("`src/Demo/Live.cs:4` and `Live.cs:4`",
+                                                "`Demo/Ghost/Live.cs:4`"),
+        }
+    )
+    st.expect(
+        "a project-relative citation to a file that exists NOWHERE still fails",
+        code == 1 and "DOC-CITE-MISSING" in out, out[-400:],
+    )
+
     # ---- THE FOURTH SHAPE (#794) ------------------------------------------------
     # A name no tree declares, in a section that is a contract inventory. Each
     # "must pass" fixture carries `clean_norm` so the floors are satisfied and
@@ -1729,6 +2082,110 @@ def self_test() -> int:
         out.strip()[-400:],
     )
 
+    # ---- THE COUNT (#807) -----------------------------------------------------
+    # A number that disagrees with the rows beside it. No `file:line` fence can
+    # reach this: the other rules ask whether a number is inside a FILE, and
+    # this asks whether it agrees with the document's own contents.
+    #
+    # Each "must pass" case carries `clean_norm` so the floors hold and the case
+    # can only pass for the reason it names.
+    audit_rows = (
+        "| File | Line | Member | Has XML doc? | Priority |\n|---|---|---|---|---|\n"
+        "| Demo/Live.cs | 4 | class LiveThing | YES | HIGH |\n"
+        "| Demo/Live.cs | 5 | public int Value | YES | MED |\n"
+    )
+    stale_banner = "# A\n\n> **Status (2026-08-27):** a dated record.\n\n## Summary\n\n"
+
+    code, out = run(
+        {
+            **live,
+            "docs/NORM.md": clean_norm,
+            "docs/AUDIT.md": stale_banner + "- **Total members audited:** 5\n\n"
+            + audit_rows,
+        }
+    )
+    st.expect(
+        "a headline total that disagrees with the document's own rows fails (#807)",
+        code == 1 and "DOC-COUNT-STALE" in out, out[-400:],
+    )
+
+    code, out = run(
+        {
+            **live,
+            "docs/NORM.md": clean_norm,
+            "docs/AUDIT.md": stale_banner + "- **Total members audited:** 2\n\n"
+            + audit_rows,
+        }
+    )
+    st.expect(
+        "a total that MATCHES the rows passes — the rule is not a blanket complaint",
+        code == 0, out.strip()[-400:],
+    )
+
+    code, out = run(
+        {
+            **live,
+            "docs/NORM.md": clean_norm,
+            "docs/AUDIT.md": stale_banner + "- **Total members audited:** 5\n\n"
+            + audit_rows
+            + '<!-- check-doc-cites: allow-stale-count "Total members audited" '
+            + "— 5 is the sweep figure; two documented rows were deleted after it -->\n",
+        }
+    )
+    st.expect(
+        "a declared historical count with a reason is allowed (a запись may be a "
+        "true statement about the sweep and a false one about its own rows)",
+        code == 0, out.strip()[-400:],
+    )
+
+    # The waiver must name WHICH figure it is about, or it is a mute button for
+    # every future count in the document. Same reason-mandatory discipline as
+    # allow-unwired, and it is the hole #921 found and closed.
+    code, out = run(
+        {
+            **live,
+            "docs/NORM.md": clean_norm,
+            "docs/AUDIT.md": stale_banner + "- **Total members audited:** 5\n\n"
+            + audit_rows
+            + "<!-- check-doc-cites: allow-stale-count -->\n",
+        }
+    )
+    st.expect(
+        "a waiver with no quoted label is NOT honoured — it must say which figure",
+        code == 1 and "DOC-COUNT-STALE" in out, out[-400:],
+    )
+
+    # The row table's OWN cells must not be read as a stated total: a Priority
+    # Breakdown whose `Total` column is 1111 is not a document claiming 1111
+    # members, and an unanchored rule would call every correct summary wrong.
+    code, out = run(
+        {
+            **live,
+            "docs/NORM.md": clean_norm,
+            "docs/AUDIT.md": stale_banner
+            + "| Priority | Total | With Doc | Without Doc |\n|---|---|---|---|\n"
+            + "| HIGH | 1111 | 808 | 303 |\n| MED | 765 | 543 | 222 |\n\n"
+            + audit_rows,
+        }
+    )
+    st.expect(
+        "a table's own Total COLUMN is not a stated total — no prose, no complaint",
+        code == 0, out.strip()[-400:],
+    )
+
+    # And a document with rows but no headline figure at all is not asked.
+    code, out = run(
+        {
+            **live,
+            "docs/NORM.md": clean_norm,
+            "docs/AUDIT.md": stale_banner + audit_rows,
+        }
+    )
+    st.expect(
+        "a table with no stated total is not asked a question it cannot answer",
+        code == 0, out.strip()[-400:],
+    )
+
     return st.finish()
 
 
@@ -1740,6 +2197,13 @@ def main() -> int:
     ap.add_argument("--min-files", type=int, default=0, help="fail unless at least this many normative docs were scanned (0 = off)")
     ap.add_argument("--min-cites", type=int, default=0, help="fail unless at least this many line citations were examined (0 = off)")
     ap.add_argument("--min-types", type=int, default=0, help="fail unless at least this many backticked type names were examined (0 = off)")
+    ap.add_argument(
+        "--min-counts",
+        type=int,
+        default=0,
+        help="fail unless at least this many documents had a stated total compared "
+        "against their own `| path | line |` rows (#807; 0 = off)",
+    )
     ap.add_argument(
         "--min-api",
         type=int,
@@ -1766,7 +2230,9 @@ def main() -> int:
     if result.table_rows:
         print(
             f"and declared {result.table_rows} `| path | line |` table rows in "
-            f"{result.table_docs} document(s) (#807: the shape the prose fence is blind to)"
+            f"{result.table_docs} document(s), comparing a stated total against "
+            f"those rows in {result.count_docs} of them (#807: the shape the prose "
+            f"fence is blind to)"
         )
     print(
         f"and checked {result.api_names} `## Public API` type names in "
@@ -1801,6 +2267,21 @@ def main() -> int:
             "`## Public API` type names",
             args.min_files,
             args.min_api,
+        )
+    # Same opt-in-only discipline, and the same reason: this floor counts
+    # DOCUMENTS WITH ROWS, so a fixture with no table would exit 1 on it and
+    # prove nothing about DOC-COUNT-STALE. `--min-counts 1` is what says "the
+    # count question is still being asked of something" — without it, a parser
+    # that stopped matching COUNT_TOTAL would be indistinguishable from a
+    # document that simply states no totals.
+    if args.min_counts > 0:
+        problems += md_gate.require_non_vacuous(
+            "doc-cites/counts",
+            result.count_docs,
+            result.count_docs,
+            "documents whose stated total was compared to their rows",
+            1,
+            args.min_counts,
         )
 
     if result.violations:
