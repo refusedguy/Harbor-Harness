@@ -247,8 +247,8 @@ public sealed class FeatureFlagWiringRules
     public async Task The_Rows_Are_WellFormed()
     {
         IEnumerable<(string Key, ExemptionReason.Row Row)> rows =
-            UnwiredFlags.Select(pair => (Key: pair.Key, Row: pair.Row))
-                .Concat(UnreadSymbols.Select(pair => (Key: $"symbol {pair.Key}", Row: pair.Row)));
+            UnwiredFlags.Select(pair => (pair.Key, pair.Value))
+                .Concat(UnreadSymbols.Select(pair => ($"symbol {pair.Key}", pair.Value)));
 
         IReadOnlyList<string> failures = ExemptionReason.RowsWithoutAReason(
             $"{nameof(FeatureFlagWiringRules)}.{nameof(UnwiredFlags)}/{nameof(UnreadSymbols)}",
