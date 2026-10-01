@@ -48,15 +48,25 @@ internal sealed class CountingBlock : IChatBlock
 /// </summary>
 internal sealed class WrappingBlock : IChatBlock
 {
-    public WrappingBlock(string kind, int logicalLines, int lineChars)
+    /// <param name="honestEstimate">
+    /// When true, <see cref="CheapEstimate"/> returns the exact row count, so
+    /// an estimate and a measurement are indistinguishable by height. Use it
+    /// ONLY in guards that compare heights per block: a lossy estimate is
+    /// allowed to disagree with truth (that is what an estimate is), so such a
+    /// comparison would be a false failure. Use the default (over-estimating)
+    /// everywhere else, where a test must be able to tell the two apart.
+    /// </param>
+    public WrappingBlock(string kind, int logicalLines, int lineChars, bool honestEstimate = false)
     {
         Kind = kind;
         Chars = logicalLines * (lineChars + 1);
+        HonestEstimate = honestEstimate;
     }
 
     public string Kind { get; }
     public bool IsStreamContinuation => false;
     public int Chars { get; }
+    public bool HonestEstimate { get; }
     public int BudgetBytes => 32 + (Chars * 2);
 
     public int MeasureCalls;
@@ -74,10 +84,15 @@ internal sealed class WrappingBlock : IChatBlock
     }
 
     /// <summary>
-    /// Over-estimates on purpose (one row per logical line, never more) so a
-    /// test can tell an estimate from a measurement by height alone.
+    /// Over-estimates on purpose (never more than the true row count) so a
+    /// test can tell an estimate from a measurement by height alone — except
+    /// when <see cref="HonestEstimate"/> is set.
     /// </summary>
-    public int CheapEstimate(int width) => Math.Max(1, Chars / (width * 4) + 1);
+    public int CheapEstimate(int width)
+    {
+        EstimateCalls++;
+        return HonestEstimate ? RowsAt(width) : Math.Max(1, Chars / (width * 4) + 1);
+    }
 
     public void Paint(in BlockPaintContext ctx) { }
 
@@ -285,8 +300,6 @@ public class TimelineLayoutCacheTests
         }
 
         var outcome = cache.PrepareLayout(width: 100, viewportH: ViewportH, scrollY: 0);
-        var (first, last) = cache.VisibleRange(0, ViewportH);
-        int windowBlocks = last - first + 1;
 
         await Assert.That(outcome).IsEqualTo(LayoutOutcome.FullRebuild);
 
@@ -294,12 +307,27 @@ public class TimelineLayoutCacheTests
         await Assert.That(cache.EstimateCallsLastFrame).IsEqualTo(Count);
         await Assert.That(blocks.Sum(b => b.EstimateCalls)).IsEqualTo(Count);
 
-        // The exact call is window-bounded: the per-item cost of MEASURING.
-        await Assert.That(cache.MeasureCallsLastFrame).IsLessThanOrEqualTo(windowBlocks);
+        // The exact call is window-bounded. The bound is computed INDEPENDENTLY
+        // here — by summing the blocks' own estimates until the viewport is
+        // full — rather than read back from the cache's VisibleRange. A range
+        // read back after the settle reflects the MEASURED heights, which are
+        // what the passes were bounded by, so using it would compare the
+        // result against itself.
+        int estimatedWindow = 0;
+        int rows = 0;
+        while (rows < ViewportH && estimatedWindow < Count)
+        {
+            rows += blocks[estimatedWindow].CheapEstimate(100);
+            estimatedWindow++;
+        }
+
+        await Assert.That(cache.MeasureCallsLastFrame).IsLessThanOrEqualTo(estimatedWindow);
         await Assert.That(blocks[Count - 1].MeasureCalls).IsEqualTo(0); // far below, never asked
 
-        // And the window really is ~4 blocks, which is what makes the ratio 2500×.
-        await Assert.That(windowBlocks).IsLessThan(Count / 100);
+        // And the window really is a small fraction of the transcript, which is
+        // what makes the ratio 2500x: the user sees ~10 of 10 000 blocks while
+        // layout still asks every one of them for an estimate.
+        await Assert.That(estimatedWindow).IsLessThan(Count / 100);
     }
 
     /// <summary>
@@ -442,7 +470,9 @@ public class TimelineLayoutCacheTests
         var blocks = new List<WrappingBlock>();
         for (int i = 0; i < Count; i++)
         {
-            var b = new WrappingBlock($"e{i}", logicalLines: 4, lineChars: 40);
+            // honestEstimate: this guard compares heights per block, and a
+            // lossy estimate is allowed to disagree with truth.
+            var b = new WrappingBlock($"e{i}", logicalLines: 4, lineChars: 40, honestEstimate: true);
             blocks.Add(b);
             cache.Append(b);
         }
@@ -463,14 +493,13 @@ public class TimelineLayoutCacheTests
         await Assert.That(cache.BlockAt(0).RawText()).IsEqualTo($"e{Evict}");
         await Assert.That(cache.BlockAt(cache.Count - 1).RawText()).IsEqualTo($"e{Count - 1}");
 
-        // Per-block height truth at width A, measured one block at a time.
+        // Per-block height truth at width A, measured one block at a time. A
+        // retained array that failed to shift would give block i the row count
+        // of block i-1, and this catches it per block rather than in a total.
         for (int i = 0; i < cache.Count; i++)
         {
-            var solo = new TimelineLayoutCache();
-            solo.Append(blocks[i + Evict]);
-            _ = solo.PrepareLayout(WidthA, viewportH: 1, scrollY: 0); // 1-row viewport: this block is visible
             await Assert.That(cache.EffectiveHeight(i))
-                .IsEqualTo(solo.EffectiveHeight(0))
+                .IsEqualTo(blocks[i + Evict].RowsAt(WidthA))
                 .Because($"block {i} must carry the height width {WidthA} gives it");
         }
     }
@@ -559,16 +588,15 @@ public class TimelineLayoutCacheTests
         _ = cache.PrepareLayout(100, ViewportH, 0);
         _ = cache.PrepareLayout(60, ViewportH, 0);
 
-        var tall = new WrappingBlock("tall", logicalLines: 40, lineChars: 100);
+        // honestEstimate: block 0 is in the visible window here, so it is measured
+        // exactly — but compare against the block's own RowsAt rather than a
+        // solo cache, so a stale retained height cannot be masked.
+        var tall = new WrappingBlock("tall", logicalLines: 40, lineChars: 100, honestEstimate: true);
         cache.Replace(0, tall);
         _ = cache.PrepareLayout(60, ViewportH, 0);
-
-        var solo = new TimelineLayoutCache();
-        solo.Append(tall);
-        _ = solo.PrepareLayout(100, viewportH: 1, scrollY: 0);
-
         _ = cache.PrepareLayout(100, ViewportH, 0); // back to a retained width
-        await Assert.That(cache.EffectiveHeight(0)).IsEqualTo(solo.EffectiveHeight(0));
+
+        await Assert.That(cache.EffectiveHeight(0)).IsEqualTo(tall.RowsAt(100));
     }
 
     /// <summary>
@@ -597,10 +625,9 @@ public class TimelineLayoutCacheTests
         cache.Append(fresh);
         _ = cache.PrepareLayout(100, ViewportH, 0);
 
-        var solo = new TimelineLayoutCache();
-        solo.Append(fresh);
-        _ = solo.PrepareLayout(100, viewportH: 1, scrollY: 0);
-        await Assert.That(cache.EffectiveHeight(0)).IsEqualTo(solo.EffectiveHeight(0));
+        // The only block is visible, so it is measured — a surviving snapshot
+        // from before the Clear would hand back the previous session's rows.
+        await Assert.That(cache.EffectiveHeight(0)).IsEqualTo(fresh.RowsAt(100));
     }
 
     [Test]
