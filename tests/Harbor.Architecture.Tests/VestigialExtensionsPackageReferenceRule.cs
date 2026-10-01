@@ -228,9 +228,9 @@ public sealed partial class VestigialExtensionsPackageReferenceRule
                 if (cut <= 0)
                     continue;
                 var ns = fq[..cut];
-                var short = fq[(cut + 1)..];
-                if (!index.TryGetValue(short, out var set))
-                    index[short] = set = new HashSet<string>(StringComparer.Ordinal);
+                var simple = fq[(cut + 1)..];
+                if (!index.TryGetValue(simple, out var set))
+                    index[simple] = set = new HashSet<string>(StringComparer.Ordinal);
                 set.Add(ns);
             }
         }
@@ -465,10 +465,11 @@ public sealed partial class VestigialExtensionsPackageReferenceRule
             var nuspec = dir is null ? null : Directory.GetFiles(dir, "*.nuspec").FirstOrDefault();
             if (nuspec is not null)
             {
-                XDocument doc;
+                XDocument? doc = null;
                 try { doc = XDocument.Parse(Read(nuspec)); }
-                catch (XmlException) { }
-                else
+                catch (XmlException) { /* a malformed nuspec: no routes to report */ }
+
+                if (doc is not null)
                 {
                     foreach (var group in doc.Descendants("group"))
                     {
