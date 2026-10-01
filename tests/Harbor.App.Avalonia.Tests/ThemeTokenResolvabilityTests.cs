@@ -244,9 +244,17 @@ public class ThemeTokenResolvabilityTests
     ///     </para>
     ///     <para>
     ///         The floors are the numbers measured when #971 landed, not round
-    ///         numbers: 118 distinct keys across 49 chain files for the markup
-    ///         scan, 31 for the C# scan. They are floors, so they may only go up
-    ///         without this failing.
+    ///         numbers. The markup scan's floor is 115, not the 118 it read
+    ///         before the fix in this same PR: that commit pointed three
+    ///         consumers at three different tokens, so three distinct names
+    ///         left the set — <c>CodeFont</c> and <c>TextMonoBrush</c> went out
+    ///         without a replacement being new (both replacements were already
+    ///         asked for elsewhere), and <c>BorderDefaultBrush</c> became
+    ///         <c>BorderSubtleBrush</c>, which was already in the set. The floor
+    ///         is set from the post-fix run (115) so it can only go up from
+    ///         here; keeping 118 would have pinned a number that the fix
+    ///         legitimately lowered, and a floor that a correct change trips is
+    ///         a floor that gets deleted.
     ///     </para>
     /// </remarks>
     [Test]
@@ -272,8 +280,8 @@ public class ThemeTokenResolvabilityTests
             .Because("Themes/ holds nine ResourceDictionary files; finding fewer means the parse stopped working");
         await Assert
             .That(markup.Count)
-            .IsGreaterThanOrEqualTo(118)
-            .Because("118 distinct theme keys were asked for in markup when #971 landed; fewer means the regex stopped matching");
+            .IsGreaterThanOrEqualTo(115)
+            .Because("115 distinct theme keys were asked for in markup after #971; fewer means the regex stopped matching");
         await Assert
             .That(csharp.Count)
             .IsGreaterThanOrEqualTo(31)
