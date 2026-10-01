@@ -263,3 +263,53 @@ is the subscriber's business, and the live branches are:
    sinks** in #47/S3 — see `docs/EVENT_BUS_SINKS.md`. A *subscriber*-side kind
    is still redundant while the fast path requires zero subscribers, and becomes
    necessary only if a future topology ever fans out to a partial set.
+6. `IEventBus.PublishAsync` stays `Task` — **decided in #47/S4**, against the
+   measurement rather than by preference (the issue's own criterion #1 offered
+   `Task` as an answer; criterion #2 forbade the redesign without an allocation
+   sample first). Three findings, in the order they matter:
+   - **There is no state machine to unbox.** `InMemoryEventBus.PublishAsync`
+     (`InMemoryEventBus.cs:398`) is not an `async` method — it is a plain method
+     with three returns. A state machine must exist before it can be boxed.
+   - **Nothing on the synchronous path suspends.** A subscriber that returns an
+     already-completed `ValueTask` — the common case, and the one
+     `PublishAsync_1Sub` measures — takes `DispatchToOneAsync`'s
+     `IsCompletedSuccessfully` branch (`InMemoryEventBus.cs:1137`) and returns
+     without a real suspension, so the `async Task` helpers beneath it stay
+     structs on the stack and hand back the builder's cached completed task.
+   - **The bytes that remain are not the interface's.** 200 B/publish on the
+     one-subscriber path, attributed exhaustively in `docs/BENCHMARKS.md` §5.4.3:
+     80 B (`Task<(bool, AgentEvent)>` from `RunMiddlewareAsync`), 80 B **per
+     subscriber** (`Task<(DispatchOutcome, Task?)>` from `DispatchToOneAsync`),
+     40 B (the fan-out method's own `Task`). All three are `private` results. A
+     `ValueTask` on the *interface* cannot reach any of them; re-shaping those
+     three *private* signatures can, and needs no interface change.
+
+   The two neighbouring seams are already `ValueTask` and stay that way —
+   `Subscribe(Func<…, ValueTask>)` and `IEventBusMiddleware.ProcessAsync`
+   (`IEventBusMiddleware.cs`) — so the shape here is not an inconsistency: it
+   follows what each seam's own allocations demand.
+
+   What this decision costs, recorded so it is not rediscovered as a fresh idea:
+   the 200 B is still there. Removing it is a **separate, private, three-signature
+   change** (`RunMiddlewareAsync`, `DispatchToOneAsync`,
+   `DispatchToSubscribersAsync`), gated on its own allocation measurement — not a
+   public interface edit smuggled in under a performance heading.
+
+   Blast radius, searched rather than recalled (issue criterion #3): 315
+   `PublishAsync` call sites repo-wide, of which **29 are product code**
+   (`src/Harbor.Application` 28, `src/Harbor.Plugins.Registration` 1) and the rest
+   are tests and benchmarks; **5 implementors** (`InMemoryEventBus`, `NullEventBus`,
+   `FakeEventBus`, `RecordingEventBus`, `BenchEventBus`); `contrib/` has **zero**
+   call sites, which is also why an interface change there would have gone
+   unverified — CI does not compile it. All 29 product sites await exactly once
+   (290 awaited / 15 pass-through / 5 sync-waited / 1 expression-bodied helper
+   whose 5 call sites all await), so the `Task`→`ValueTask` single-await hazard
+   would not have broken anything today — and would still be a hazard, silently,
+   at the seam 29 call sites would be re-pointed at.
+
+   Enforced by `tests/Harbor.Registries.Tests/EventBusPublishShapeTests.cs`,
+   which pins the shared-instance property on the fast path and on the
+   synchronous fan-out (plus G5 delivery, so "one cached task" can never be bought
+   by skipping a subscriber) and carries the positive control that makes those two
+   assertions falsifiable: a genuinely suspending subscriber *must* return a
+   per-call task.
