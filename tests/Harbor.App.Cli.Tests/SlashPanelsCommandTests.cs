@@ -412,11 +412,19 @@ public class SlashPanelsCommandTests
         await Assert.That(worktreeRow.Detail).Contains("no-session");
         await Assert.That(worktreeRow.Detail).Contains("/wts/scratch");
 
-        // Enter on the session-less row switches nothing and only closes.
+        // Move onto the session-LESS row before confirming. Enter with the
+        // selection still on row 0 would have switched the session instead,
+        // which is the row-0-is-a-session point above; the point here is that
+        // a row with no session id is confirmable and inert.
+        _ = host.Palette.HandleKey(KeyEvent.Simple(KeyCode.Down));
+        await Assert.That(host.Palette.SelectedIndex).IsEqualTo(1);
         _ = host.Palette.HandleKey(KeyEvent.Simple(KeyCode.Enter));
         var pending = host.Palette.TakePendingCommit();
         await Assert.That(pending).IsNotNull();
-        await pending!.Value.Handler(pending.Value.Item, CancellationToken.None);
+        await Assert.That(pending!.Value.Item.Id).IsEqualTo(string.Empty).Because(
+            "the committed row is the session-less worktree, so the handler must "
+            + "see the empty id the seeder writes and take the close-only branch");
+        await pending.Value.Handler(pending.Value.Item, CancellationToken.None);
 
         await Assert.That(host.Switched).IsEmpty();
         await Assert.That(host.Palette.Visible).IsFalse();
