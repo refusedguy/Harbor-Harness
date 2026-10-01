@@ -45,8 +45,21 @@ public sealed class ShellLocatorTests
     [Retry(3)]
     public async Task Of_ResolvesThroughTheAncestorHost()
     {
+        // The tree is built on the UI thread (Avalonia controls), and every
+        // ASSERTION is made outside the dispatch. `Dispatch(async () => …)` binds to
+        // `Dispatch(Action)` — HeadlessUnitTestSession declares no `Func<Task>`
+        // overload — so the body ran as `async void`: it detached at its first
+        // `await Assert`, and none of the three assertions below could fail the
+        // test (#972, #766; see AvaloniaDispatchAsyncVoidRule). Each one captured a
+        // value instead, and the value is checked here where a failure lands.
+        IViewModelLocator? foundOnView = null;
+        IViewModelLocator? composedLocator = null;
+        SharedShellVm? resolvedFromView = null;
+        SharedShellVm? resolvedFromRoot = null;
+        InvalidOperationException? orphanFailure = null;
+
         await using var session = HeadlessUnitTestSession.StartNew(typeof(App));
-        await session.Dispatch(async () =>
+        await session.Dispatch((System.Action)(() =>
         {
             // ── the whole product composition, at its smallest ──────────────────
             var services = new ServiceCollection();
@@ -54,6 +67,7 @@ public sealed class ShellLocatorTests
             services.AddViewModelLocator();
             using var provider = services.BuildServiceProvider();
             var locator = provider.GetRequiredService<IViewModelLocator>();
+            composedLocator = locator;
 
             // ── the shell tree, shaped the way MainWindow.axaml shapes it ────────
             var host = new LocatorHost(locator);
@@ -63,22 +77,28 @@ public sealed class ShellLocatorTests
             host.Content = panel;
 
             // 1. The locator is found by walking up — not by a global.
-            await Assert.That(ShellLocator.Of(view)).IsSameReferenceAs(locator);
+            foundOnView = ShellLocator.Of(view);
 
             // 2. And it resolves real registrations, so a view's dependency is the
             //    same instance the root would hand the constructor.
-            var vm = ShellLocator.Of(view).Get<SharedShellVm>();
-            await Assert.That(vm).IsSameReferenceAs(provider.GetRequiredService<SharedShellVm>());
+            resolvedFromView = ShellLocator.Of(view).Get<SharedShellVm>();
+            resolvedFromRoot = provider.GetRequiredService<SharedShellVm>();
 
             // 3. A view with no host fails BY NAME. This is the assertion that keeps
             //    #779 from returning: the removed `App.Services` was `= null!`, so the
             //    failure here used to be a bare NullReferenceException naming nothing.
             var orphan = new UserControl();
-            InvalidOperationException thrown =
+            orphanFailure =
                 Assert.Throws<InvalidOperationException>(() => ShellLocator.Of(orphan));
-            await Assert.That(thrown.Message.Contains(nameof(IShellLocatorHost), StringComparison.Ordinal))
-                .IsTrue();
-        }, CancellationToken.None);
+        }), CancellationToken.None);
+
+        // 1. Walked up to the host's locator — the very instance the root composed.
+        await Assert.That(foundOnView).IsSameReferenceAs(composedLocator);
+        // 2. Resolved the root's registration, not a fresh instance.
+        await Assert.That(resolvedFromView).IsSameReferenceAs(resolvedFromRoot);
+        // 3. Names the missing host.
+        await Assert.That(orphanFailure!.Message.Contains(nameof(IShellLocatorHost), StringComparison.Ordinal))
+            .IsTrue();
     }
 
     /// <summary>

@@ -125,32 +125,69 @@ public class HdsThemeCatalogParityTests
     [Retry(3)]
     public async Task Catalog_Resolves_Preview_Brushes_From_The_Palette_Dictionaries()
     {
+        // The catalog walk needs Avalonia's asset loader, so it runs inside the
+        // dispatch; every assertion is made OUTSIDE it. `Dispatch(async () => …)`
+        // binds to `Dispatch(Action)` — there is no `Func<Task>` overload — so the
+        // body ran as `async void` and detached at its first `await Assert`, which
+        // meant a palette whose brushes disagreed with the .axaml could not fail
+        // this test at all (#972, #766; see AvaloniaDispatchAsyncVoidRule). Each
+        // disagreement is now RECORDED inside the loop and reported by name below,
+        // so one bad palette no longer hides the state of the rest.
+        var mismatches = new List<string>();
+
         await using var session = HeadlessUnitTestSession.StartNew(typeof(global::Harbor.App.Avalonia.App));
-        await session.Dispatch(async () =>
+        await session.Dispatch((System.Action)(() =>
         {
             foreach (string name in HdsThemeCatalog.PaletteNames)
             {
-                HdsThemePreview preview = HdsThemeCatalog.Find(name);
-                await Assert.That(preview).IsNotNull();
+                HdsThemePreview? preview = HdsThemeCatalog.Find(name);
+                if (preview is null)
+                {
+                    mismatches.Add(name + ": Find returned null");
+                    continue;
+                }
 
                 string path = Path.Combine(HdsThemesDir, name + ".axaml");
 
-                await Assert.That(ColorOf(preview.Surface))
-                    .IsEqualTo(DeclaredColor(path, "AppBackgroundBrush"));
-                await Assert.That(ColorOf(preview.Accent))
-                    .IsEqualTo(DeclaredColor(path, "AccentBrush"));
-                await Assert.That(ColorOf(preview.Text))
-                    .IsEqualTo(DeclaredColor(path, "TextBrush"));
+                Compare(mismatches, name, "Surface", ColorOf(preview.Surface), DeclaredColor(path, "AppBackgroundBrush"));
+                Compare(mismatches, name, "Accent", ColorOf(preview.Accent), DeclaredColor(path, "AccentBrush"));
+                Compare(mismatches, name, "Text", ColorOf(preview.Text), DeclaredColor(path, "TextBrush"));
 
                 string declared = ReadValue(path, HdsThemeCatalog.VariantKey) ?? string.Empty;
                 bool expectDark = string.Equals(
                     declared, ThemeVariant.Dark.Key.ToString() ?? "Dark", StringComparison.Ordinal);
 
-                await Assert.That(preview.IsDark).IsEqualTo(expectDark);
-                await Assert.That(preview.Variant)
-                    .IsEqualTo(expectDark ? ThemeVariant.Dark : ThemeVariant.Light);
+                if (preview.IsDark != expectDark)
+                {
+                    mismatches.Add(name + ": IsDark was " + preview.IsDark + ", the file says " + expectDark);
+                }
+
+                ThemeVariant expectVariant = expectDark ? ThemeVariant.Dark : ThemeVariant.Light;
+                if (preview.Variant != expectVariant)
+                {
+                    mismatches.Add(name + ": Variant was " + preview.Variant + ", expected " + expectVariant);
+                }
             }
-        }, CancellationToken.None);
+        }), CancellationToken.None);
+
+        await Assert.That(string.Join(" | ", mismatches))
+            .IsEqualTo(string.Empty)
+            .Because(
+                "each thumbnail's three brushes must resolve at runtime to the colours its own .axaml "
+                + "declares, and its dark/light answer must travel with the palette. The walk above runs "
+                + "inside the headless dispatch because the catalog needs Avalonia's asset loader, and it "
+                + "RECORDS every disagreement by palette and by brush instead of asserting inside the "
+                + "loop — which is what a detached `async void` body made impossible. Mismatches: "
+                + (mismatches.Count == 0 ? "(none)" : string.Join(" | ", mismatches)));
+    }
+
+    /// <summary>Records one brush disagreement, named, rather than asserting on it here.</summary>
+    private static void Compare(List<string> mismatches, string palette, string brush, Color actual, Color expected)
+    {
+        if (actual != expected)
+        {
+            mismatches.Add(palette + ": " + brush + " resolved to " + actual + ", the file declares " + expected);
+        }
     }
 
     /// <summary>Every declared palette loads — none is silently dropped.</summary>
@@ -158,13 +195,22 @@ public class HdsThemeCatalogParityTests
     [Retry(3)]
     public async Task Catalog_Loads_One_Preview_Per_Declared_Palette()
     {
+        int loaded = -1;
+        int expected = HdsThemeCatalog.PaletteNames.Count;
+        bool vaporFound = false;
+        bool unknownFound = true;
+
         await using var session = HeadlessUnitTestSession.StartNew(typeof(global::Harbor.App.Avalonia.App));
-        await session.Dispatch(async () =>
+        await session.Dispatch((System.Action)(() =>
         {
-            await Assert.That(HdsThemeCatalog.ReadAll().Count).IsEqualTo(HdsThemeCatalog.PaletteNames.Count);
-            await Assert.That(HdsThemeCatalog.Find("Vapor")).IsNotNull();
-            await Assert.That(HdsThemeCatalog.Find("NoSuchPalette")).IsNull();
-        }, CancellationToken.None);
+            loaded = HdsThemeCatalog.ReadAll().Count;
+            vaporFound = HdsThemeCatalog.Find("Vapor") is not null;
+            unknownFound = HdsThemeCatalog.Find("NoSuchPalette") is not null;
+        }), CancellationToken.None);
+
+        await Assert.That(loaded).IsEqualTo(expected);
+        await Assert.That(vaporFound).IsTrue();
+        await Assert.That(unknownFound).IsFalse();
     }
 
     /// <summary>
@@ -183,15 +229,35 @@ public class HdsThemeCatalogParityTests
     [Retry(3)]
     public async Task DisplayName_Is_Derived_From_The_Palette_Id()
     {
-        await using var session = HeadlessUnitTestSession.StartNew(typeof(global::Harbor.App.Avalonia.App));
-        await session.Dispatch(async () =>
+        // Recorded inside the dispatch, asserted outside it — the reason is in
+        // Catalog_Resolves_Preview_Brushes_From_The_Palette_Dictionaries.
+        var labels = new (string Id, string? Actual)[]
         {
-            await Assert.That(HdsThemeCatalog.Find("CatppuccinMocha")?.DisplayName).IsEqualTo("Catppuccin Mocha");
-            await Assert.That(HdsThemeCatalog.Find("Vapor")?.DisplayName).IsEqualTo("Vapor");
-            await Assert.That(HdsThemeCatalog.Find("Lumen")?.DisplayName).IsEqualTo("Lumen");
-            await Assert.That(HdsThemeCatalog.Find("HarborDesignTokens")?.DisplayName).IsEqualTo("Harbor Design Tokens");
-            await Assert.That(HdsThemeCatalog.Find("NoSuchPalette")).IsNull();
-        }, CancellationToken.None);
+            ("CatppuccinMocha", null),
+            ("Vapor", null),
+            ("Lumen", null),
+            ("HarborDesignTokens", null),
+        };
+        bool unknownFound = true;
+
+        await using var session = HeadlessUnitTestSession.StartNew(typeof(global::Harbor.App.Avalonia.App));
+        await session.Dispatch((System.Action)(() =>
+        {
+            for (int i = 0; i < labels.Length; i++)
+            {
+                labels[i] = (labels[i].Id, HdsThemeCatalog.Find(labels[i].Id)?.DisplayName);
+            }
+
+            unknownFound = HdsThemeCatalog.Find("NoSuchPalette") is not null;
+        }), CancellationToken.None);
+
+        // "CatppuccinMocha" reads as "Catppuccin Mocha"; single-word names are left
+        // alone; "HarborDesignTokens" splits on the capital runs.
+        await Assert.That(labels[0].Actual).IsEqualTo("Catppuccin Mocha");
+        await Assert.That(labels[1].Actual).IsEqualTo("Vapor");
+        await Assert.That(labels[2].Actual).IsEqualTo("Lumen");
+        await Assert.That(labels[3].Actual).IsEqualTo("Harbor Design Tokens");
+        await Assert.That(unknownFound).IsFalse();
     }
 
     private static Color ColorOf(IBrush brush) =>

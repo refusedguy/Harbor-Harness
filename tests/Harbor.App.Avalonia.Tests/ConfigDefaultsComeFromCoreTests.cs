@@ -373,16 +373,62 @@ public class ConfigDefaultsComeFromCoreTests
     ///     <c>ThemeSettingsViewModel</c>, whose palette previews are Avalonia
     ///     brushes.
     /// </summary>
+    /// <remarks>
+    ///     The <c>System.Action</c> cast is the whole point of this helper, and it
+    ///     is not stylistic. <c>HeadlessUnitTestSession</c> declares four
+    ///     <c>Dispatch</c> overloads and none of them takes a
+    ///     <c>Func&lt;Task&gt;</c>:
+    ///     <code>
+    ///     Task                 Dispatch(Action,        CancellationToken)
+    ///     Task&lt;TResult&gt;      Dispatch&lt;TResult&gt;(Func&lt;TResult&gt;,     CancellationToken)
+    ///     Task&lt;TResult&gt;      Dispatch&lt;TResult&gt;(Func&lt;Task&lt;TResult&gt;&gt;, CancellationToken)
+    ///     </code>
+    ///     An <c>async () =&gt; { … }</c> lambda with no return value is convertible
+    ///     only to the void-returning delegate, so <c>Dispatch(async () =&gt; …)</c>
+    ///     binds to <c>Dispatch(Action)</c> and the body runs as <c>async void</c>:
+    ///     it yields at its first genuine suspension, <c>Dispatch</c>'s task
+    ///     completes, and everything after that point is DETACHED — its failure is
+    ///     discarded and the test reports green without having checked anything
+    ///     (#972; measured, not inferred: eight headless tests passed against a live
+    ///     bug in #952, and the only assertion that failed was the one outside the
+    ///     dispatch).
+    ///     <para>
+    ///         That defect and the flake this file was reported for (#766) are the
+    ///         same one. The reported stack —
+    ///         <c>EnsureIsolatedApplication → DefaultRenderLoop.Add →
+    ///         Dispatcher.VerifyAccess</c>, "a different thread owns it" — is
+    ///         Avalonia's PROCESS-GLOBAL dispatcher being bootstrapped by the next
+    ///         test while the previous test's detached body is still running on the
+    ///         one before it. <c>NotInParallel("avalonia-headless")</c> serialises the
+    ///         TESTS; it cannot serialise a continuation that has already left the
+    ///         test that started it. So a body that outlives its <c>Dispatch</c> is
+    ///         not only a silent skip — it is the mechanism that makes the next
+    ///         test's session bootstrap race.
+    ///     </para>
+    ///     <para>
+    ///         So the work is STARTED inside a deliberately synchronous dispatch and
+    ///         AWAITED outside it. <c>body(vm)</c> is invoked on the UI thread and
+    ///         runs to completion there if it never suspends; if it does suspend, its
+    ///         continuation is posted to the still-live headless dispatcher and
+    ///         <c>await</c> resumes this test method when it lands. Either way the
+    ///         awaited task is this method's, so a failed assertion inside
+    ///         <paramref name="body" /> fails THIS test instead of vanishing, and
+    ///         the session is not disposed while the body is still in flight.
+    ///     </para>
+    /// </remarks>
     private static async Task InAvaloniaSessionAsync(
         Func<SettingsViewModel, Task> body,
         RecordingCommonStore commonStore,
         RecordingAppStore appStore)
     {
+        SettingsViewModel vm = null!;
+        Task work = Task.CompletedTask;
+
         await using var session = HeadlessUnitTestSession.StartNew(typeof(App));
         await session.Dispatch(
-            async () =>
+            (System.Action)(() =>
             {
-                SettingsViewModel vm = new(
+                vm = new SettingsViewModel(
                     new StubThemeReader(),
                     new StubThemeApplier(),
                     NullLogger<SettingsViewModel>.Instance,
@@ -393,9 +439,13 @@ public class ConfigDefaultsComeFromCoreTests
                     new EmptyProviderRegistry(),
                     new StubAuthResolver());
 
-                await body(vm);
-            },
+                work = body(vm);
+            }),
             CancellationToken.None);
+
+        // Outside the dispatch, and therefore not detachable: this is the await that
+        // makes the body's assertions able to fail the test at all.
+        await work;
     }
 
     // ── stubs ─────────────────────────────────────────────────────────────

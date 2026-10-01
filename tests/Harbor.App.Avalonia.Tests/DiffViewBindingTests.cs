@@ -1,3 +1,5 @@
+using System.Collections.ObjectModel;
+using System.Windows.Input;
 using Avalonia.Controls;
 using Avalonia.Headless;
 using Avalonia.VisualTree;
@@ -34,8 +36,24 @@ public class DiffViewBindingTests
     [Retry(3)]
     public async Task DiffView_ResolvesFrameworkBindings()
     {
+        // Everything the view needs is read INSIDE the dispatch (the visual tree
+        // only exists on the UI thread); every assertion is made OUTSIDE it.
+        // `Dispatch(async () => …)` binds to `Dispatch(Action)` — there is no
+        // `Func<Task>` overload — so the body detached at its first `await Assert`
+        // and none of the six checks below could fail the test (#972, #766; see
+        // AvaloniaDispatchAsyncVoidRule).
+        List<string> texts = [];
+        string? leftText = null;
+        string? rightText = null;
+        ICommand? boundComputeCommand = null;
+        ICommand? expectedComputeCommand = null;
+        object? rowSource = null;
+        ObservableCollection<DiffRowViewModel>? expectedRows = null;
+        int rowItemCount = -1;
+        int computedRowCount = -1;
+
         await using var session = HeadlessUnitTestSession.StartNew(typeof(App));
-        await session.Dispatch(async () =>
+        await session.Dispatch((System.Action)(() =>
         {
             var vm = new SideBySideDiffViewModel(NullLogger<SideBySideDiffViewModel>.Instance)
             {
@@ -47,24 +65,33 @@ public class DiffViewBindingTests
             var view = new DiffView { DataContext = vm };
 
             // LeftText/RightText → the two input boxes (empty on silent no-resolve).
-            var texts = view.GetVisualDescendants()
+            texts = view.GetVisualDescendants()
                 .OfType<TextBox>()
                 .Select(b => b.Text)
                 .ToList();
-            await Assert.That(texts.Contains(vm.LeftText)).IsTrue();
-            await Assert.That(texts.Contains(vm.RightText)).IsTrue();
+            leftText = vm.LeftText;
+            rightText = vm.RightText;
 
             // ComputeCommand → Compute button (null on silent no-resolve).
             var computeButton = view.GetVisualDescendants()
                 .OfType<Button>()
                 .Single(b => Equals(b.Content, "Compute"));
-            await Assert.That(computeButton.Command).IsSameReferenceAs(vm.ComputeCommand);
+            boundComputeCommand = computeButton.Command;
+            expectedComputeCommand = vm.ComputeCommand;
 
             // Rows → row list (null source / zero items on silent no-resolve).
             var rows = view.GetVisualDescendants().OfType<ItemsControl>().Single();
-            await Assert.That(rows.ItemsSource).IsSameReferenceAs(vm.Rows);
-            await Assert.That(rows.Items.Count).IsEqualTo(vm.Rows.Count);
-            await Assert.That(vm.Rows.Count).IsEqualTo(2);
-        }, CancellationToken.None);
+            rowSource = rows.ItemsSource;
+            rowItemCount = rows.Items.Count;
+            expectedRows = vm.Rows;
+            computedRowCount = vm.Rows.Count;
+        }), CancellationToken.None);
+
+        await Assert.That(texts.Contains(leftText!)).IsTrue();
+        await Assert.That(texts.Contains(rightText!)).IsTrue();
+        await Assert.That(boundComputeCommand).IsSameReferenceAs(expectedComputeCommand);
+        await Assert.That(rowSource).IsSameReferenceAs(expectedRows);
+        await Assert.That(rowItemCount).IsEqualTo(expectedRows!.Count);
+        await Assert.That(computedRowCount).IsEqualTo(2);
     }
 }
