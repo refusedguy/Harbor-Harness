@@ -477,7 +477,11 @@ public class ThemeTokenResolvabilityTests
                 "App.axaml declares Application.Resources with MergedDictionaries and none are present; "
                 + "the palette slot the app relies on does not exist.");
 
-        merged[1] = new Avalonia.Markup.Xaml.Styling.ResourceInclude(HdsThemeCatalog.BaseUri)
+        // `global::` is required, not decoration: this file has `using Harbor.App.Avalonia;`,
+        // and a bare `Avalonia.Markup...` binds to `Harbor.App.Avalonia.Avalonia` and fails
+        // to resolve. Every other Avalonia type here is either imported or already qualified
+        // for the same reason.
+        merged[1] = new global::Avalonia.Markup.Xaml.Styling.ResourceInclude(HdsThemeCatalog.BaseUri)
         {
             Source = HdsThemeCatalog.PaletteUri(palette)
         };
@@ -770,7 +774,7 @@ public class ThemeTokenResolvabilityTests
     // Paths
     // =====================================================================
 
-    private static string AppCSharpFiles() =>
+    private static IReadOnlyList<string> AppCSharpFiles() =>
         Directory
             .EnumerateFiles(Path.Combine(RepoRoot, AppRelative), "*.cs", SearchOption.AllDirectories)
             .Where(static file =>
