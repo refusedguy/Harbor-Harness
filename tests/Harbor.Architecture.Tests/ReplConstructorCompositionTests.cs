@@ -66,6 +66,61 @@
 // definition, and they will drift: the two sites already disagree about
 // nothing today only because the dead one was copied and never run.
 //
+// SECOND MEASUREMENT — the OTHER mega-constructor, and what the 24 are
+// ------------------------------------------------------------------
+// Rule 1 and rule 2 above were written against `ReplRunner`, which the issue
+// filed as "20/22 parameters". That class is down to 18 and the finding there
+// is CLOSED (PR #776). The issue's finding 3 — `CellForgeReplRunner`,
+// "22 parameters, same dependency shape spread across two runners" — was never
+// measured by anyone, so it is measured here. From the tree:
+//
+//   ReplRunner           18 parameters   (was 21 when #776 measured it)
+//   CellForgeReplRunner  24 parameters   (the issue says 22 — it has grown
+//                                         by two: IPanelRegistry, and
+//                                         IGitQuery from #857/#929)
+//
+// And the 24 are NOT twenty-four dependencies. Derived, by type, from the
+// primary constructor's own text:
+//
+//   12  plain container services (IConfigStore, IProviderRegistry,
+//       IAgentRegistry, AuthStore, ISessionStore, IRendererPipeline,
+//       IEventBus, ITokenTracker, IAgent, ILogger<>, PluginReloadService,
+//       IProviderHealthCheck)
+//    6  MEMBERS OF ONE AGGREGATE THE ROOT ALREADY BUILDS — `CellForgeScreens`
+//       (ReplRunner.cs:542), which the composition root constructs as a single
+//       value and then hands over PIECE BY PIECE: ScreenSession, ChatScreen,
+//       ChatScreenBridge, TerminalInputSource, ITerminalBackend,
+//       IApprovalCoordinator. Six of the twenty-four parameters are one
+//       dependency spelled six times.
+//    3  optional ports the CONSUMER resolves for itself, through
+//       `_rendererHost.GetService<…>()`: IPanelRegistry,
+//       DiagnosticsAggregator, IGitQuery — #470's service-locator shape, in
+//       the composition root's own consumer
+//    2  per-run values, not services at all: the `Session` that
+//       `RunCellForgeAsync` just created, and the `ITerminalModeController`
+//       `CreateModeController()` picked for this OS
+//    1  container-owned adapter the CONSUMER builds by hand, from five
+//       registered services: `new LegacySlashRunner(_slashes, _agentRegistry,
+//       _configStore, _authStore, _providers)` at ReplRunner.cs:355
+//
+// So the god-object reading is false, and the "bundle them in a ReplContext"
+// prescription is not affordable either: the six loose aggregate members are
+// already bundled (in `CellForgeScreens`), so a context would add a SECOND
+// bundle beside the first rather than remove one. #776 reached the same verdict
+// for the other runner and this guard is where that verdict is kept.
+//
+// WHAT IS STILL LIVE — and it is exactly what rule 2 is for
+// ----------------------------------------------------------
+// #776 moved `SlashCommandDispatcher` to the composition root and deleted the
+// dead second wiring. It did not touch the adapter that dispatcher arrived in:
+// `LegacySlashRunner` is built BY HAND inside the consumer that serves it,
+// from five collaborators the container already owns — the identical shape, one
+// level down, in the same method. Rule 2 was written against one hard-coded
+// type name, so it cannot see this: it asks "where is `SlashCommandDispatcher`
+// constructed?" and the answer is a clean single site at the root. The rule is
+// now stated over the slash LAYER — both adapters, named once — which is what
+// makes it red on the tree this commit lands on.
+//
 // WHY A SOURCE SCAN
 // -----------------
 // "Is this parameter retained by its constructor" and "how many times is this
@@ -95,6 +150,21 @@
 // named in prose in five files under src/, and a gate that fires on a doc
 // comment is a gate that gets switched off.
 //
+// `SiteScan_FlagsTheAdapterWiredByAConsumer` is the control for the SECOND
+// type rule 2 now grades: the adapter's site inside a consumer directory must
+// be reported, and the same spelling at the root must not be. Without it,
+// widening rule 2 from one name to a set is indistinguishable from widening it
+// to "any type", which would fire on `new CellForgeReplRunner(` — a type that
+// legitimately cannot be container-resolved, because it needs the `Session`
+// that was created one statement earlier.
+//
+// `CellForgeRunnerParameters_AreMeasured` re-derives the table in the header
+// and asserts its two load-bearing numbers: that the primary-constructor walk
+// recovers the whole signature, and that every member of the root-built
+// aggregate reaches the runner — either as loose parameters (today) or as the
+// aggregate itself (the split this issue still owes). It is the measurement
+// half of the finding, and it is written to stay green through that split.
+//
 // `Perimeter_Files_StillExist` keeps both rules from passing over a tree they
 // no longer describe.
 
@@ -123,11 +193,49 @@ public sealed class ReplConstructorCompositionTests
     private const string DispatcherType = "SlashCommandDispatcher";
 
     /// <summary>
+    ///     The adapter the dispatcher arrives in, and the second half of the slash
+    ///     layer rule 2 grades. It is container-owned in the same sense as the
+    ///     dispatcher: every one of its five collaborators is a registered service,
+    ///     and the composition root builds it from them. Building it inside
+    ///     <c>ReplRunner.RunCellForgeAsync</c> is #486 finding 2's shape one level
+    ///     down — the same defect #776 fixed for the dispatcher, which this rule
+    ///     could not see while it was written against one type name.
+    /// </summary>
+    private const string AdapterType = "LegacySlashRunner";
+
+    /// <summary>
+    ///     The slash layer, in the two types it is spelled in. A named SET and not a
+    ///     general "is this type container-owned" walk, on purpose: the walk is
+    ///     textual, and "container-owned" has no textual definition. Guessing would
+    ///     grade <c>new CellForgeReplRunner(</c> too — a type that cannot be
+    ///     resolved from a container at all, because it is handed the <c>Session</c>
+    ///     that <c>RunCellForgeAsync</c> created one statement earlier, plus the
+    ///     <c>ITerminalModeController</c> this OS needs. Two names, each justified
+    ///     where it is declared, is the honest shape.
+    /// </summary>
+    private static readonly string[] SlashLayerTypes = [DispatcherType, AdapterType];
+
+    /// <summary>
     ///     The composition root for the REPL: the one place allowed to build the
     ///     dispatcher's collaborators, because it is the method that has the
     ///     <c>IServiceProvider</c> in scope to resolve them from.
     /// </summary>
     private const string CompositionRootRelative = "apps/Harbor.App.Cli/Commands/CliInfrastructure.cs";
+
+    /// <summary>
+    ///     The runner the issue's finding 3 is about — "22 parameters, same
+    ///     dependency shape spread across two runners", never measured until now.
+    ///     Primary constructor, so it needs its own walk (see
+    ///     <see cref="ReadPrimaryConstructorParameters" />).
+    /// </summary>
+    private const string CellForgeRunnerRelative = "apps/Harbor.App.Cli/Repl/CellForgeReplRunner.cs";
+
+    /// <summary>
+    ///     The aggregate the root ALREADY builds for that runner and then hands over
+    ///     one member at a time. Six of the runner's twenty-four parameters are this
+    ///     one record.
+    /// </summary>
+    private const string AggregateType = "CellForgeScreens";
 
     /// <summary>
     ///     A consumer directory: a file under <c>Repl/</c> is a CONSUMER of the slash
@@ -196,40 +304,178 @@ public sealed class ReplConstructorCompositionTests
                 + "satisfy 'exactly one site' trivially. " + sources.Count + " .cs files were enumerated "
                 + "under apps/ and src/." );
 
-        var sites = new List<string>();
+        // One pass over the tree, both types graded from the same evidence. Reading
+        // each file once and matching both names in it keeps this a single scan —
+        // and keeps the two verdicts comparable, which is the point of asking about
+        // the layer rather than about one class.
+        var sitesByType = SlashLayerTypes.ToDictionary(type => type, type => new List<string>());
         foreach (string path in sources)
         {
-            foreach (int _ in ConstructionSites(File.ReadAllText(path), DispatcherType).ToList())
+            string text = File.ReadAllText(path);
+            foreach (string type in SlashLayerTypes)
             {
-                sites.Add(Relative(path));
+                foreach (int _ in ConstructionSites(text, type).ToList())
+                {
+                    sitesByType[type].Add(Relative(path));
+                }
             }
         }
 
-        var offenders = new List<string>();
-        foreach (string site in sites)
+        foreach (string type in SlashLayerTypes)
         {
-            if (site.Contains(ConsumerDirectory, StringComparison.Ordinal))
-            {
-                offenders.Add(
-                    site + " constructs a " + DispatcherType + " from inside the layer it serves. That is "
-                    + "composition away from the composition root: the container-owned collaborators are "
-                    + "resolved here, so the type is unreachable to DI and cannot be substituted without "
-                    + "building all nine of them by hand.");
-            }
+            List<string> sites = sitesByType[type];
+            List<string> offenders =
+            [
+                .. sites
+                    .Where(site => site.Contains(ConsumerDirectory, StringComparison.Ordinal))
+                    .Select(site =>
+                        site + " constructs a " + type + " from inside the layer it serves. That is "
+                        + "composition away from the composition root: the container-owned collaborators are "
+                        + "resolved here, so the type is unreachable to DI and cannot be substituted without "
+                        + "building all of them by hand.")
+            ];
+
+            await Assert.That(sites.Count).IsEqualTo(1)
+                .Because(
+                    type + " is container-owned — its collaborators are all registered services — so every "
+                    + "`new` of it is a re-wiring of the same dependencies. Two sites means two wirings, and "
+                    + "two wirings drift: nothing at either call site says the other exists. One site and zero "
+                    + "sites are both wrong here — zero means this scan stopped recognising the spelling, "
+                    + "which would make the consumer check below pass vacuously. Sites found:"
+                    + Environment.NewLine + string.Join(Environment.NewLine, sites));
+
+            await Assert.That(offenders).IsEmpty()
+                .Because(
+                    "The single site must be the composition root, not a consumer. Consumers of the slash "
+                    + "layer take it as a parameter; the root builds it once, from the services it is "
+                    + "already resolving. Offenders:" + Environment.NewLine + string.Join(Environment.NewLine, offenders));
+        }
+    }
+
+    // ── The measurement half: what the other 24 parameters actually are ────
+
+    [Test]
+    public async Task CellForgeRunnerParameters_AreMeasured()
+    {
+        if (RepoPaths.RepoRoot is null)
+        {
+            return;
         }
 
-        await Assert.That(sites.Count).IsEqualTo(1)
-            .Because(
-                DispatcherType + " is container-owned — its nine collaborators are all registered "
-                + "services — so every `new` of it is a re-wiring of the same nine dependencies. Two "
-                + "sites means two wirings, and two wirings drift: nothing at either call site says the "
-                + "other exists. Sites found:" + Environment.NewLine + string.Join(Environment.NewLine, sites));
+        string runnerText = File.ReadAllText(Path.Combine(RepoPaths.RepoRoot, CellForgeRunnerRelative));
+        string aggregateText = File.ReadAllText(Path.Combine(RepoPaths.RepoRoot, RunnerRelative));
 
-        await Assert.That(offenders).IsEmpty()
+        IReadOnlyList<string> parameters = ReadPrimaryConstructorParameters(runnerText, "CellForgeReplRunner");
+        IReadOnlyList<string> parameterTypes = ReadPrimaryConstructorParameterTypes(runnerText, "CellForgeReplRunner");
+        IReadOnlyList<string> aggregate = ReadRecordMemberTypes(aggregateText, AggregateType);
+
+        await Assert.That(parameters.Count).IsGreaterThan(8)
             .Because(
-                "The single site must be the composition root, not a consumer. Consumers of the slash "
-                + "layer take it as a parameter; the root builds it once, from the services it is "
-                + "already resolving. Offenders:" + Environment.NewLine + string.Join(Environment.NewLine, offenders));
+                "Non-vacuity, and the premise of the measurement: this is the constructor issue #486's "
+                + "finding 3 calls \"22 parameters\". The walk below recovered " + parameters.Count
+                + " — if a primary-constructor rewrite, a moved file or a stop matching mid-list silently "
+                + "shortened the signature, the arithmetic in the header of this file would be wrong and "
+                + "the composition conclusion drawn from it would be an artefact of the matcher, not of "
+                + "the code.");
+
+        await Assert.That(parameterTypes.Count).IsEqualTo(parameters.Count)
+            .Because(
+                "The two walks must agree on the same signature: names are used to report, types are used "
+                + "to classify, and a classification computed over a shorter list than the count it "
+                + "accompanies is a silent subset — which is how a rule ends up passing on half a "
+                + "constructor. Names:" + string.Join(", ", parameters) + " / types:"
+                + string.Join(", ", parameterTypes));
+
+        // Every member of the one aggregate the root already builds must reach the
+        // runner — today as six loose parameters, after the split this issue still
+        // owes as the aggregate itself. Either shape is the finding; a third one
+        // (a member quietly dropped, or the aggregate invented locally) is not, and
+        // is what this catches.
+        var unreached = aggregate.Where(t => !parameterTypes.Contains(t) && !parameterTypes.Contains(AggregateType)).ToList();
+
+        await Assert.That(unreached).IsEmpty()
+            .Because(
+                AggregateType + " is built ONCE by the composition root and handed to the runner; its "
+                + "members are therefore one dependency, not six. If a member type reaches the runner "
+                + "neither as a loose parameter nor through the aggregate itself, the wiring has forked and "
+                + "the table in this file's header no longer describes the tree. Aggregate members:"
+                + string.Join(", ", aggregate) + "; runner parameter types:" + string.Join(", ", parameterTypes)
+                + "; unreached:" + string.Join(", ", unreached));
+
+        await Assert.That(aggregate.Count).IsGreaterThan(1)
+            .Because(
+                "Non-vacuity for the classification itself: an aggregate of one member is not an aggregate, "
+                + "and the whole reading of the twenty-four parameters as \"twelve services plus one bundle "
+                + "spelled six times\" rests on there being several. Members recovered: " + aggregate.Count);
+    }
+
+    // ── Control for the second type rule 2 grades ─────────────────────────
+
+    [Test]
+    public async Task SiteScan_FlagsTheAdapterWiredByAConsumer()
+    {
+        // The shape the fix removes: the adapter built inside the consumer that
+        // serves it. This is the positive control for the adapter half of rule 2 —
+        // without it, widening the rule from one type name to a set cannot be
+        // distinguished from widening it to "any type".
+        const string WiredByConsumer = """
+            // ReplRunner.cs — RunCellForgeAsync
+            var runner = new CellForgeReplRunner(
+                _configStore,
+                new LegacySlashRunner(
+                    _slashes,
+                    _agentRegistry,
+                    _configStore,
+                    _authStore,
+                    _providers),
+                sessionResult.Value);
+            """;
+
+        // The shape the fix produces: the same spelling, at the root.
+        const string WiredAtRoot = """
+            // CliInfrastructure.cs
+            var slashes = new SlashCommandDispatcher(
+                services.GetRequiredService<ILogger<SlashCommandDispatcher>>(),
+                services.GetRequiredService<IToolRegistry>());
+            var legacySlash = new LegacySlashRunner(
+                slashes,
+                services.GetRequiredService<IAgentRegistry>(),
+                services.GetRequiredService<IConfigStore>(),
+                services.GetRequiredService<AuthStore>(),
+                services.GetRequiredService<IProviderRegistry>());
+            """;
+
+        // And the cry-wolf control for the set: a type that is genuinely NOT
+        // container-owned and IS legitimately built where it is used, because it
+        // needs the value the previous statement produced. Rule 2 names its types;
+        // it must not be a "any `new` in a consumer" rule wearing a name.
+        const string NotSlashLayer = """
+            // ReplRunner.cs — RunCellForgeAsync
+            var runner = new CellForgeReplRunner(
+                configStore,
+                new PromptPipeline(this, _catalog, logger, Tokens, new Lazy<LegacySlashRunner>(static () => null!)),
+                sessionResult.Value);
+            """;
+
+        var byConsumer = ConstructionSites(WiredByConsumer, AdapterType).Count();
+        await Assert.That(byConsumer).IsEqualTo(1)
+            .Because(
+                "The positive control for the adapter rule: the product built the adapter inside the "
+                + "consumer, and that spelling must still be recognised. A count of zero means the walk no "
+                + "longer matches a `new` nested inside another `new`'s argument list — the exact shape "
+                + "this site has — and the gate would go green with the defect in place.");
+
+        await Assert.That(ConstructionSites(WiredAtRoot, AdapterType).Count()).IsEqualTo(1)
+            .Because(
+                "The single site at the root is the shape the fix produces, at both types' spelling. "
+                + "Flagging it would make the gate unsatisfiable.");
+
+        await Assert.That(ConstructionSites(NotSlashLayer, AdapterType).Count()).IsEqualTo(0)
+            .Because(
+                "Rule 2 grades the slash layer by name, and nothing else. A type that cannot be resolved from "
+                + "a container — one that takes the Session created one statement earlier, or the mode "
+                + "controller this OS needs — is built where it is used by design, and a rule that flagged it "
+                + "would be a \"no `new` in a consumer\" rule, which is neither this finding nor #486's.");
     }
 
     // ── Self-checks: neither rule may run vacuously ─────────────────────────
@@ -471,7 +717,7 @@ public sealed class ReplConstructorCompositionTests
             return;
         }
 
-        foreach (string relative in new[] { RunnerRelative, CompositionRootRelative })
+        foreach (string relative in new[] { RunnerRelative, CompositionRootRelative, CellForgeRunnerRelative })
         {
             await Assert.That(File.Exists(Path.Combine(RepoPaths.RepoRoot, relative))).IsTrue()
                 .Because(
@@ -482,6 +728,103 @@ public sealed class ReplConstructorCompositionTests
     }
 
     // ── scanning ────────────────────────────────────────────────────────────
+
+    /// <summary>
+    ///     The parameter names of a PRIMARY constructor — <c>class C(A a, B b)</c> —
+    ///     which <see cref="ReadConstructorParameters" /> cannot see: that one looks
+    ///     for <c>public C(</c>, and the class under measurement here has no explicit
+    ///     constructor at all. Comments are stripped BEFORE the comma split, because
+    ///     the primary constructor is the one place in this tree where the parameter
+    ///     list carries block comments (the #49 and #857 rationales), and an
+    ///     unbalanced parenthesis inside one would desynchronise the depth counter
+    ///     and tear a parameter in half.
+    /// </summary>
+    private static IReadOnlyList<string> ReadPrimaryConstructorParameters(string text, string typeName) =>
+        [.. PrimaryConstructorEntries(text, typeName).Select(entry => entry.Name)];
+
+    /// <summary>
+    ///     The same walk, keeping each parameter's declared type — the classification
+    ///     the finding is about is a comparison of TYPES against the aggregate's, not
+    ///     of names (the runner calls its <c>ChatScreen</c> parameter <c>screen</c>).
+    /// </summary>
+    private static IReadOnlyList<string> ReadPrimaryConstructorParameterTypes(string text, string typeName) =>
+        [.. PrimaryConstructorEntries(text, typeName).Select(entry => entry.Type)];
+
+    /// <summary>
+    ///     The declared types of a positional record's members — the other half of the
+    ///     comparison. A record's parameter list is spelled like a primary
+    ///     constructor's, so the same walk reads it.
+    /// </summary>
+    private static IReadOnlyList<string> ReadRecordMemberTypes(string text, string typeName)
+    {
+        string clean = StripCommentsAndLiterals(text);
+        Match declaration = RecordDeclaration(typeName).Match(clean);
+        if (!declaration.Success)
+        {
+            return [];
+        }
+
+        int open = clean.IndexOf('(', declaration.Index);
+        int close = MatchParen(clean, open);
+        return close < 0 ? [] : [.. SplitTypeAndName(clean[(open + 1)..close]).Select(pair => pair.Type)];
+    }
+
+    private static IReadOnlyList<(string Type, string Name)> PrimaryConstructorEntries(string text, string typeName)
+    {
+        string clean = StripCommentsAndLiterals(text);
+        Match declaration = PrimaryConstructorDeclaration(typeName).Match(clean);
+        if (!declaration.Success)
+        {
+            return [];
+        }
+
+        int open = clean.IndexOf('(', declaration.Index);
+        int close = MatchParen(clean, open);
+        return close < 0 ? [] : SplitTypeAndName(clean[(open + 1)..close]);
+    }
+
+    private static Regex PrimaryConstructorDeclaration(string typeName) => new(
+        $@"class\s+{Regex.Escape(typeName)}\s*\(",
+        RegexOptions.Compiled);
+
+    private static Regex RecordDeclaration(string typeName) => new(
+        $@"record\s+{Regex.Escape(typeName)}\s*\(",
+        RegexOptions.Compiled);
+
+    /// <summary>
+    ///     Splits a parameter list into (type, name) pairs, dropping the default value
+    ///     at depth 0 first. <c>TrimEnd</c> before the split is load-bearing for the
+    ///     same reason it is in <see cref="ReadConstructorParameters" />: cutting at
+    ///     '=' leaves a trailing space, the depth-0 space search then finds THAT
+    ///     space, and every defaulted parameter is silently reported with an empty
+    ///     name — which is five of the twenty-four measured here.
+    /// </summary>
+    private static IReadOnlyList<(string Type, string Name)> SplitTypeAndName(string list)
+    {
+        var entries = new List<(string Type, string Name)>();
+        foreach (string parameter in SplitTopLevel(list))
+        {
+            string head = CutAtDepthZero(parameter, '=').TrimEnd();
+            if (string.IsNullOrWhiteSpace(head))
+            {
+                continue;
+            }
+
+            int split = LastSpaceAtDepthZero(head);
+            if (split <= 0 || split >= head.Length - 1)
+            {
+                continue;
+            }
+
+            string name = head[(split + 1)..].Trim();
+            if (name.Length > 0)
+            {
+                entries.Add((head[..split].Trim(), name));
+            }
+        }
+
+        return entries;
+    }
 
     /// <summary>
     ///     The parameters of <paramref name="typeName" />'s explicit constructor, in
