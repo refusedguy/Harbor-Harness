@@ -52,6 +52,9 @@ on:
     branches: [dev, master]
     paths:
       - '**.md'
+      - 'tests/**/*.cs'
+      - 'src/**/*.cs'
+      - 'apps/**/*.cs'
       - 'tools/check-md-links.py'
       - 'tools/md-lint.py'
       - 'tools/check-doc-cites.py'
@@ -60,6 +63,15 @@ on:
   pull_request:
     paths:
       - '**.md'
+      # #947. TEST-CITE-DRIFT reads `tests/**/*.cs`, so a PR that inserts a
+      # line above a cited one — the only way this defect is ever created —
+      # touches none of the paths above unless .cs is here. Without these three
+      # the rule is unreachable on exactly the PRs it exists for, which is the
+      # #509 failure (a `paths-ignore` that made a gate green by never running)
+      # wearing a different hat.
+      - 'tests/**/*.cs'
+      - 'src/**/*.cs'
+      - 'apps/**/*.cs'
       - 'tools/check-md-links.py'
       - 'tools/md-lint.py'
       - 'tools/check-doc-cites.py'
@@ -138,7 +150,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - name: Check every normative file:line and named type
-        run: python3 tools/check-doc-cites.py --min-files 2 --min-cites 100 --min-types 50 --min-api 12 --min-counts 1
+        run: python3 tools/check-doc-cites.py --min-files 2 --min-cites 100 --min-types 50 --min-api 12 --min-counts 1 --min-test-cites 200
 
   lint:
     name: markdown lint
