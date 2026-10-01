@@ -5,6 +5,7 @@ using System.Linq;
 using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Agents;
 using Harbor.Abstractions.Events;
+using Harbor.Abstractions.Git;
 using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Abstractions.Permissions;
@@ -84,7 +85,11 @@ internal sealed class CellForgeReplRunner(
     Harbor.Hosting.PluginReloadService? pluginReload = null,
     IProviderHealthCheck? healthCheck = null,
     Harbor.Ui.Framework.Panels.IPanelRegistry? panelRegistry = null,
-    Harbor.Application.Diagnostics.DiagnosticsAggregator? diagnosticsAggregator = null)
+    Harbor.Application.Diagnostics.DiagnosticsAggregator? diagnosticsAggregator = null,
+    // #857: the worktree column of the /jump palette. Null in test doubles and
+    // in a host that registered no query — the command then lists sessions
+    // only, the degradation the jump panel already documents.
+    IGitQuery? gitQuery = null)
     : IReplHost
 {
     /// <summary>
@@ -187,6 +192,7 @@ internal sealed class CellForgeReplRunner(
     Harbor.Hosting.PluginReloadService? IReplHost.PluginReload => pluginReload;
     IProviderHealthCheck? IReplHost.HealthCheck => healthCheck;
     Harbor.Ui.Framework.Panels.IPanelRegistry? IReplHost.PanelRegistry => panelRegistry;
+    IGitQuery? IReplHost.Git => gitQuery;
 
     /// <summary>Images staged by <c>/attach</c> for the next user turn (#386).</summary>
     internal readonly ImageAttachmentStash _attachments = new();

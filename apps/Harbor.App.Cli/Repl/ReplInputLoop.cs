@@ -214,6 +214,35 @@ internal sealed class ReplInputLoop(CellForgeReplRunner host)
             return;
         }
 
+        // Jump palette: ctrl+j toggles the /jump frame, dispatched through the
+        // catalog exactly as the ctrl+p block above dispatches its own palette
+        // (#857). This chord is intercepted HERE, ahead of the store
+        // dual-write further down, because ChatKeyMap's `ChatAction.JumpPalette`
+        // is the panel-plane route: it toggles a `Center`-placed
+        // IPanelProvider whose OnKey no host can reach, so it resolved and
+        // painted nothing. Claiming the key here gives Ctrl+J a route that
+        // exists, without adding a second input path — and the bare-LF alias
+        // stays on the keymap for the desktop host, which is not this loop.
+        if (key.Key == KeyCode.Char && key.Modifiers == KeyModifiers.Ctrl
+            && char.ToLowerInvariant((char)key.Character.Value) == 'j')
+        {
+            // Only the jump frame itself toggles closed. Any other visible
+            // frame (ctrl+p's command list, /tree) is somebody else's palette
+            // and must survive a Ctrl+J.
+            if (host._palette.Visible && host._palette.CurrentBreadcrumb == JumpCommand.Breadcrumb)
+            {
+                host._palette.Hide();
+            }
+            else
+            {
+                await host.Commands.ExecutePaletteItemAsync(
+                    new CommandItem(JumpCommand.Id, JumpCommand.Title), ct).ConfigureAwait(false);
+            }
+
+            host._wake.Writer.TryWrite(null);
+            return;
+        }
+
         if (host._palette.Visible && host._palette.HandleKey(key))
         {
             // Frame-carried continuations: no host-side stacks. Esc/Hide drops
