@@ -61,13 +61,32 @@ public sealed class TimelineLayoutCache
     /// </summary>
     private const int MaxRetainedWidths = 2;
 
-    /// <param name="width">
-    /// Width the height was measured at — 0 for estimates, which carry no
-    /// authority at any width. Stamped by <see cref="TimelineLayoutCache"/>
-    /// because an exact height is only reusable by a layout running at the
-    /// same width; without the stamp, re-adopting a retained width would also
-    /// re-adopt measurements that have since gone stale.
-    /// </param>
+    /// <summary>
+    /// One block's height, and the width that height is authoritative for.
+    /// <para>
+    /// <c>exactH</c> is the measured row count (-1 when unmeasured),
+    /// <c>estH</c> the estimated one, <c>measured</c> which one is live.
+    /// <c>width</c> is the layout width an exact height belongs to, 0 for
+    /// estimates — they carry no authority at any width. The stamp matters
+    /// because an exact height is reusable only by a layout running at that
+    /// same width; without it, re-adopting a retained width would also re-adopt
+    /// measurements that have since gone stale.
+    /// </para>
+    /// <para>
+    /// Rejected here: seeding a new width by scaling the outgoing width's row
+    /// counts by <c>from/to</c> instead of asking the block. It made a
+    /// first-time width change cost zero <see cref="IChatBlock.CheapEstimate"/>
+    /// calls, and it was wrong — a wrapped line is not
+    /// <c>ceil(totalChars/width)</c>; word breaks, collapse budgets and
+    /// height-invariant blocks (images, tool headers) all break that ratio.
+    /// Against a cold-cache oracle a 200→50 flip reported
+    /// <c>TotalHeight</c> 10288 where the truth was 4998, so
+    /// <c>EntryAtY</c> and the scrollbar extent were both wrong. Cheap was not
+    /// worth wrong: the estimate pass is the honest price of a width this cache
+    /// has never seen, and <see cref="TimelineLayoutCache.EstimateCallsLastFrame"/>
+    /// counts it.
+    /// </para>
+    /// </summary>
     private readonly struct Slot(int exactH, int estH, bool measured, int width = 0)
     {
         public int ExactH { get; } = exactH;
@@ -79,21 +98,6 @@ public sealed class TimelineLayoutCache
 
         public static Slot Estimated(int est) => new(-1, Math.Max(1, est), false);
         public static Slot ExactMeasured(int h, int width) => new(h, h, true, width);
-
-        /// <summary>
-        /// Placeholder for "no usable height here": the width seed once lived
-        /// in this slot as <c>ReseededTo</c>, scaling the outgoing width's row
-        /// count by <c>from/to</c> instead of asking the block. It made a
-        /// first-time width change cost zero <see cref="IChatBlock.CheapEstimate"/>
-        /// calls — and it was wrong. A wrapped line is not
-        /// <c>ceil(totalChars/width)</c>: word breaks, collapse budgets and
-        /// height-invariant blocks (images, tool headers) all break that ratio.
-        /// Against a cold-cache oracle a 200→50 flip reported
-        /// <c>TotalHeight</c> 10288 where the truth was 4998, so
-        /// <c>EntryAtY</c> and the scrollbar extent were both wrong. Cheap was
-        /// not worth wrong — the estimate pass is the honest price of a width
-        /// this cache has never seen, and it is counted.
-        /// </summary>
     }
 
     /// <summary>A layout width plus the heights measured/estimated for it.</summary>
@@ -114,11 +118,11 @@ public sealed class TimelineLayoutCache
     private int _measureCallsThisFrame;
     private int _estimateCallsThisFrame;
 
-    // (#412) Width-keyed layout memory. `_slots` is the active width's array;
-    // up to MaxRetainedWidths others sit in `_retained`, so a width already
-    // laid out costs zero re-estimates when the viewport returns to it. Every
-    // array is kept index-aligned with `_blocks` (see ResetSlotAt /
-    // EvictFirst), which is what makes adopting one sound.
+    // (#412) Width-keyed layout memory. The active width keeps its own heights in
+    // _slots; up to MaxRetainedWidths other layouts sit in _retained, so a
+    // width already laid out costs zero re-estimates when the viewport returns
+    // to it. Every array stays index-aligned with the block array (see
+    // ResetSlotAt and EvictFirst), which is what makes adopting one sound.
     private readonly WidthSnapshot[] _retained = new WidthSnapshot[MaxRetainedWidths];
     private int _retainedCount;
 
