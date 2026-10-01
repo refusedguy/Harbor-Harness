@@ -1230,7 +1230,7 @@ See `specs/` for the full design rationale. Key decisions:
 
 ## When in doubt
 
-- Read the spec — `docs/specs/14-architecture-revised.md` for current architecture.
+- Read the spec — `docs/specs/14-architecture-revised.md` for **why** the architecture is shaped this way. It is a dated record ([docs/specs/README.md](./docs/specs/README.md)), not the current state; for that, read `docs/ARCHITECTURE.md`.
 - Check existing patterns — `Harbor.Tools.Builtin/Read/ReadTool.cs` is a good reference.
 - Look at tests — `tests/Harbor.Abstractions.Tests/` for assertion patterns.
 - Check `.editorconfig` for analyzer suppressions.
