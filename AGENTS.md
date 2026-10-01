@@ -12,7 +12,7 @@
 > **Связанные документы:**
 > - [docs/ROADMAP.md](./docs/ROADMAP.md) — full roadmap with priorities + tech-debt backlog
 > - [docs/COMPONENT_CATALOG.md](./docs/COMPONENT_CATALOG.md) — reusable UI components (Avalonia/Blazor/WPF)
-> - [docs/PATTERNS.md](./docs/PATTERNS.md) — 18 pattern catalog with real code.
+> - [docs/PATTERNS.md](./docs/PATTERNS.md) — 8 pattern catalog with real code.
 > - [docs/ANTIPATTERNS.md](./docs/ANTIPATTERNS.md) — 38 antipatterns we forbid.
 > - [docs/EXAMPLES.md](./docs/EXAMPLES.md) — 40+ recipes ("How do I...?").
 > - [docs/PLUGIN_DEVELOPMENT.md](./docs/PLUGIN_DEVELOPMENT.md) — Roslyn plugin system.
@@ -103,10 +103,14 @@ samples/plugins-cs/                   — CS-source sample plugins (HelloWorldPl
 samples/mcp/                          — sample MCP servers (node/python/rust/csharp-hello)
 providers/                            — 13 JSON LLM provider configs (embedded via <EmbedProviders>)
 docs/specs/                           — 19 design specification documents (top-level specs/ no longer exists)
-docs/                                 — 136 top-level docs (architecture, tools catalog, roadmap, patterns, …)
+docs/                                 — 62 top-level docs (architecture, tools catalog, roadmap, patterns, …)
                                         + adr/, specs/, standards/, ui/, themes/, notes/, .kilo-docs/ (archived sprint notes)
-tests/                                — 36 test/bench project directories
+tests/                                — 36 test/bench projects, one directory each
                                         incl. shared Harbor.TestKit and Harbor.Benchmarks
+                                        (`tests/` holds 37 directories: the 36 projects plus
+                                        `fixtures/`, which is data and has no .csproj — so a
+                                        plain `ls -d tests/*/ | wc -l` reads 37 and is the
+                                        wrong number to quote)
 ```
 
 Two solution files exist: `Harbor.slnx` (main) and `Harbor.Samples.slnx` (samples). Building works normally (`dotnet build`); testing must be done per project — see [Build & test commands](#build--test-commands).
@@ -236,7 +240,7 @@ I want to...
 │      Drop a .cs in ~/.harbor/plugins/, restart Harbor.
 │
 ├── ...understand the codebase
-│   └─→ docs/PATTERNS.md (18 patterns with real code)
+│   └─→ docs/PATTERNS.md (8 patterns with real code)
 │      Then docs/ARCHITECTURE.md (concrete code flow + sequence diagrams)
 │
 ├── ...understand what NOT to do
@@ -509,6 +513,22 @@ panel that is actually painted, implement `ITuiPanelPlugin`.
 End-to-end tests verify the full agent pipeline against a real provider. Harbor's
 **E2E-verified** provider is **Kilocode** with the free `tencent/hy3:free` model —
 no credit card required, $0 cost per call.
+
+> **Unverified default — check before you spend a run on it.** "E2E-verified" is a
+> label from a manual run, not a gate: no `HARBOR_E2E`-guarded provider test
+> exists anywhere in `tests/`, so nothing in CI re-confirms it. And the repo
+> disagrees with itself about this model. `providers/kilocode.json` declares
+> `tencent/hy3:free` and has since the initial commit; `de9fb741` ("evals: switch
+> live model to kilocode/kilo-auto/free **(hy3 dead)**") switched the live evals
+> path to `kilo-auto/free`, and that path still says so today —
+> `evals/profiles/local.json`, plus `docs/EVALS.md` and `CHANGELOG.md`. So the
+> declared default carries live evidence *against* it that nothing has settled.
+> The value is also duplicated into `ConfigSections.FallbackModel` (what a default
+> install with no `HARBOR_MODEL` actually gets) and asserted by
+> `DefaultModelIdentityTests`, so it is 12+ places that must move together — see
+> the issue linked from this PR. Confirm the id against
+> `providers/kilocode.json`'s `modelsUrl` with a real key before relying on the
+> output samples below being reproducible.
 
 ### Running the E2E smoke test
 
