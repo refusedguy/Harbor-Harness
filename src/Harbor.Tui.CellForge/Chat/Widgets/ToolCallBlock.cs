@@ -1,7 +1,7 @@
 using System.Text;
 using CSharpFunctionalExtensions;
-using Harbor.Tui.CellForge.Rendering;
 using Harbor.Ui.Framework;
+using Harbor.Ui.Framework.State;
 using FrameworkStatusMappers = Harbor.Ui.Framework.Converters.StatusMappers;
 using VmToolCall = Harbor.Ui.Framework.ViewModels.ToolCallViewModel;
 
@@ -16,7 +16,7 @@ namespace Harbor.Tui.CellForge.Widgets;
 /// <summary>
 /// Identity of the call: stable id + display name + truncated args.
 /// CF-E-011: optional diff-preview surface filled from
-/// <see cref="Rendering.DiffPreview"/> — <c>FilePath</c> extracted from the
+/// <see cref="DiffPreview"/> — <c>FilePath</c> extracted from the
 /// args payload, <c>DiffPreview</c> the 6-line inline preview, <c>DiffFull</c>
 /// the full (≤80-line) diff backing the expand path. All optional so existing
 /// call sites stay source-compatible.
@@ -621,11 +621,18 @@ public sealed class ToolCallBlock : ICollapsibleChatBlock
 /// <c>DiffBlock</c> lands (W2.3): sign + colored line, no gutter numbers, no
 /// syntax overlay. Pure functions over the diff text.
 /// CF-E-011: inline preview budget mirrors <c>HdsDiffCompact.MaxLines</c>
-/// (Avalonia) — at most <see cref="DiffPreview.MaxPreviewLines"/> content rows,
-/// then a single <c>"… diff truncated"</c> overflow row, so an unbounded
-/// foreign <c>DiffText</c> can no longer blow the card's line budget
-/// (<see cref="DiffPreview.DiffTruncatedSentinel"/> is the single source of
-/// truth for the marker text).
+/// (Avalonia) — at most <see cref="DiffPreview.MaxPreviewLines"/> content
+/// rows, then a single <c>"… diff truncated"</c> overflow row, so an unbounded
+/// foreign <c>DiffText</c> can no longer blow the card's line budget.
+/// <para>
+///     The budget and the marker text are read from <c>Harbor.Ui.Framework.State.DiffPreview</c>,
+///     which builds the very block this class renders and is the one producer of it. They used to
+///     come from a second <c>Harbor.Tui.CellForge.Rendering.DiffPreview</c> — a third copy of the
+///     same index-alignment walk, in this assembly, with no product caller and identical values
+///     (#570). CellForge did not compute a preview here at all: the card's diff text arrives
+///     already built, so the copy was reachable only through these two constants. Constants are
+///     compile-time inlined, which is why nothing noticed it was never called.
+/// </para>
 /// </summary>
 internal static class DiffRenderer
 {

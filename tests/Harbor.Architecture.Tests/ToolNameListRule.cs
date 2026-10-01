@@ -151,11 +151,6 @@ public sealed class ToolNameListRule
         ["src/Harbor.Ui.Framework.State/Diff/DiffPreview.cs"] =
             "The diff preview must decide which tool calls render a diff. A tool does "
             + "not declare that it is diff-shaped; the renderer owns that.",
-
-        ["src/Harbor.Tui.CellForge.Engine/Rendering/DiffPreview.cs"] =
-            "The same renderer-owned decision as the Ui.Framework.State copy, in the "
-            + "engine. The duplication between the two renderers is tracked separately; "
-            + "neither copy is derivable from a tool.",
     };
 
     /// <summary>

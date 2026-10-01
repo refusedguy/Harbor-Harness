@@ -18,10 +18,24 @@ namespace Harbor.Ui.Framework.State;
 ///         that should have carried the diff into the UI never ran.
 ///     </para>
 ///     <para>
-///         The CellForge renderer keeps its own allocation-tuned port
-///         (<c>Harbor.Tui.CellForge.Engine.Rendering.DiffPreview</c>, CF-E-011)
-///         because it is called from the paint path, where it is benchmarked. The
-///         two produce the same text; this one is the state producer's.
+///         THE ONE PRODUCER OF THE CONTEXT-DIFF BLOCK (#570). This used to say the
+///         CellForge renderer "keeps its own allocation-tuned port … because it is
+///         called from the paint path, where it is benchmarked". All three clauses
+///         were false, and the sentence is why the copy survived: CellForge never
+///         called <c>ExtractDiff</c> — the card's diff text arrives already built,
+///         and <c>ToolCallBlock.DiffRenderer</c> reached the copy only for two
+///         constants, which C# inlines at compile time, so nothing noticed there
+///         was no caller. There was no benchmark either: the two
+///         <c>ExtractDiff_*</c> tripwires that cited it measured a method nothing
+///         invoked, and both rows are struck from BENCHMARKS.md rather than
+///         re-pointed here, because this runs ONCE per tool call from
+///         <see cref="ChatAppReducer" />, not per frame.
+///     </para>
+///     <para>
+///         The copy is gone, and the pair it made is now inside the perimeter of
+///         <c>DiffSurfaceNameCollisionRule</c> — which could not see it before,
+///         because both files re-implement the alignment instead of calling
+///         <c>LineDiff</c>, and that rule's perimeter was "calls the engine".
 ///     </para>
 /// </remarks>
 public static class DiffPreview
