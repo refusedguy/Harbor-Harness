@@ -90,24 +90,42 @@ innermost layer (Domain/Abstractions) references nothing but the BCL.
 
 | Layer            | Harbor projects                                                                                              | May reference                                |
 |------------------|--------------------------------------------------------------------------------------------------------------|----------------------------------------------|
-| **Domain**       | `Harbor.Abstractions`, `Harbor.Tui.Abstractions`                                                             | BCL only (no other Harbor project, except Tui.Abstractions → Abstractions) |
-| **Application**  | `Harbor.Application`, `Harbor.Registries`, `Harbor.Plugins.Runtime`, `Harbor.Scripting`                    | Domain only (NOT each other, NOT Infrastructure, NOT Presentation) |
-| **Infrastructure** | `Harbor.Storage.*`, `Harbor.Providers.*`, `Harbor.Tools.Builtin`                                           | Domain only (NOT Application, NOT each other) |
-| **Presentation** | `Harbor.App.Cli`, `Harbor.App.Avalonia`, `Harbor.Tui.AnsiPlain/CellForge/NickConsoleEx/Notifications`, `contrib/tui/*` (SpectreTui shell, Fullscreen, TerminalGui, Termina, RazorConsole) | Domain only (NOT Application, NOT Infrastructure, NOT each other) |
-| **Composition Root** | `apps/Harbor.App.Cli/Hosting/HostBuilder.cs` (+ `src/Harbor.Hosting/Modules/*`) | Everything — the ONLY place that `new`s concrete impls |
+| **Domain**       | `Harbor.Abstractions` (+ `.Contracts`), `Harbor.Diagnostics.Abstractions`, `Harbor.Extensions`, `Harbor.Ipc.Abstractions`, `Harbor.Ui.Framework.Abstractions` | BCL only, except the Domain→Domain edge `Harbor.Abstractions` → `Harbor.Abstractions.Contracts` |
+| **Application**  | `Harbor.Application`, `Harbor.Registries`, `Harbor.Plugins.Abstractions`                                  | Domain only (NOT each other, NOT Infrastructure, NOT Presentation) |
+| **Infrastructure** | `Harbor.Storage.*`, `Harbor.Providers.*`, `Harbor.Tools.Builtin`, `Harbor.Ipc.{Client,InProcess,Server}`, `Harbor.Plugins.{Compilation,Hosting,Instantiation,Registration,Runtime,Storage}` | Domain only (NOT Application, NOT each other) |
+| **Presentation** | `Harbor.Terminal.Abstractions`, `Harbor.Ui.Framework` (+ `.State`/`.ViewModels`/`.Projection`/`.Rendering`/`.Services`/`.Sessions`), `Harbor.Desktop.*`, `Harbor.DesignSystem`, `Harbor.Tui.{AnsiPlain,CellForge,NickConsoleEx,Notifications}`, `Harbor.App.Avalonia` | Domain only, plus Presentation→Presentation siblings (NOT Application, NOT Infrastructure) |
+| **Composition Root** | `apps/Harbor.App.Cli/Hosting/HostBuilder.cs` (+ `src/Harbor.Hosting/Modules/*`, `src/Harbor.Plugins.Host`) | Everything — the ONLY place that `new`s concrete impls |
+
+`Harbor.Tui.Abstractions` and `Harbor.Scripting` are named nowhere above because they
+no longer exist under those names: the terminal contracts project is
+`Harbor.Terminal.Abstractions` (Presentation), and `Harbor.Scripting.*` moved to
+`contrib/scripting/` and is out of enforcement. The canonical layer table is
+[ARCHITECTURE_LAYERS.md §2](./docs/ARCHITECTURE_LAYERS.md#2-allowed-and-forbidden-project-references);
+`tests/Harbor.Architecture.Tests/LayerTableDocAgreementRules.cs` fails the build if a row
+here or in the root `README.md` disagrees with `FullLayerMatrixTests.Matrix`.
 
 ### Hard rules (CI-enforced via `Harbor.Architecture.Tests`)
 
-1. `Harbor.Abstractions` references ZERO other Harbor assemblies.
-2. `Harbor.Tui.Abstractions` references only `Harbor.Abstractions`.
-3. `Harbor.Application` and `Harbor.Registries` each reference only `Harbor.Abstractions`, and not each other.
-4. `Harbor.Plugins.Runtime` references `Harbor.Abstractions` + `Harbor.Tui.Abstractions` only.
-5. `Harbor.Scripting` (moved to `contrib/scripting`) references `Harbor.Abstractions` only.
+These are the dependency shapes behind the table above, restated per family. They are
+prose summaries, not the gate: `FullLayerMatrixTests.Matrix` is the enforced list and
+`MatrixTable_RespectsLayerRules` / `EverySrcAssembly_ReferenceSet_MatchesMatrix` are
+what fail the build.
+
+1. `Harbor.Abstractions` references only `Harbor.Abstractions.Contracts` — both Domain.
+2. `Harbor.Terminal.Abstractions` references only `Harbor.Abstractions` (the former
+   `Harbor.Tui.Abstractions`, renamed).
+3. `Harbor.Application` and `Harbor.Registries` reference `Harbor.Abstractions`, and not each other.
+4. `Harbor.Plugins.Runtime` is a facade over the six layered plugin projects plus
+   `Harbor.Abstractions`; `Harbor.Plugins.Abstractions` alone is Application.
+5. `Harbor.Scripting.*` moved to `contrib/scripting/` and is out of enforcement entirely.
 6. `Harbor.Providers.*` references `Harbor.Abstractions` only — **NOT** Application.
 7. `Harbor.Storage.*` references `Harbor.Abstractions` only — **NOT** Application.
 8. `Harbor.Tools.Builtin` references `Harbor.Abstractions` only — **NOT** Application.
-9. `Harbor.Tui.*` concrete renderers reference `Harbor.Abstractions` + `Harbor.Tui.Abstractions` only.
-10. `Harbor.App.Cli` may reference everything (it is the Composition Root host).
+9. `Harbor.Tui.*` concrete renderers reference `Harbor.Abstractions` +
+   `Harbor.Terminal.Abstractions`, and the UI-framework Presentation siblings they
+   actually consume (`Harbor.Ui.Framework.*`, `Harbor.DesignSystem`).
+10. `Harbor.App.Cli` and `Harbor.Plugins.Host` may reference everything — both are
+    `OutputType=Exe` composition roots.
 
 ### Soft rules (code-review-enforced — not mechanically checkable)
 
@@ -115,11 +133,11 @@ innermost layer (Domain/Abstractions) references nothing but the BCL.
   `DefaultAgent`, `InMemoryEventBus`, etc.) are `new`'d only inside
   `apps/Harbor.App.Cli/Hosting/HostBuilder.cs` and the DI modules in
   `src/Harbor.Hosting/Modules/`. `Program.cs` resolves them from DI by interface.
-- New interfaces go in `Harbor.Abstractions` (or `Harbor.Tui.Abstractions` for UI-only
+- New interfaces go in `Harbor.Abstractions` (or `Harbor.Terminal.Abstractions` for UI-only
   contracts), never in `Harbor.Application` / `Harbor.Registries`.
 - New value objects / records go in `Harbor.Abstractions/Models`, never in `Harbor.Application` / `Harbor.Registries`.
-- Application projects must not cross-reference each other (e.g. `Harbor.Scripting` must
-  not reference `Harbor.Application`). If two Application projects need to share a type, the type
+- Application projects must not cross-reference each other (e.g. `Harbor.Plugins.Abstractions`
+  must not reference `Harbor.Application`). If two Application projects need to share a type, the type
   belongs in Domain.
 
 ### Interface Segregation (ISP) — §ARCH-002
@@ -128,8 +146,8 @@ innermost layer (Domain/Abstractions) references nothing but the BCL.
 `AbortSource`, `WaitForIdleAsync`) and `IAgent : IAgentRunner, IDisposable` (adds
 `State`, `Subscribe`, `Steer`, `FollowUp`, `Initialize`, `PromptAsync(UserMessage, ct)`).
 Callers that only need to "send a prompt and wait for idle" take `IAgentRunner`. This
-keeps `Harbor.Tui.Abstractions` in the Domain layer — it never needs to reference
-`Harbor.Application` for agent types.
+is what keeps `Harbor.Terminal.Abstractions` on the Domain side of the boundary —
+it never needs to reference `Harbor.Application` for agent types.
 
 ### Before adding a `<ProjectReference>` — checklist
 
@@ -1204,7 +1222,7 @@ See `specs/` for the full design rationale. Key decisions:
 - [ ] NativeAOT: 0 IL2026 warnings in `dotnet build -c Release`.
 - [ ] **Layering:** every new `<ProjectReference>` is allowed per [ARCHITECTURE_LAYERS.md §2](./docs/ARCHITECTURE_LAYERS.md). Run `dotnet test tests/Harbor.Architecture.Tests/` — it must stay green.
 - [ ] **Layering:** no concrete impl type (`AnthropicLlmClient`, `JsonlSessionStore`, `AgentLoop`, `DefaultAgent`, `InMemoryEventBus`, `SharpTsScriptEngine`, `JintScriptEngine`, `RoslynPluginCompiler`, …) is `new`'d outside `apps/Harbor.App.Cli/Hosting/HostBuilder.cs` and `src/Harbor.Hosting/Modules/`. `Program.cs` resolves services by interface from DI.
-- [ ] **Layering:** new interfaces go in `Harbor.Abstractions` (or `Harbor.Tui.Abstractions` for UI-only contracts), never in `Harbor.Application` / `Harbor.Registries`.
+- [ ] **Layering:** new interfaces go in `Harbor.Abstractions` (or `Harbor.Terminal.Abstractions` for UI-only contracts), never in `Harbor.Application` / `Harbor.Registries`.
 - [ ] **Layering:** new value objects / records go in `Harbor.Abstractions/Models`, never in `Harbor.Application` / `Harbor.Registries`.
 
 ## When in doubt
