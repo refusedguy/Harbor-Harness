@@ -1,3 +1,4 @@
+using System.Reflection;
 using System.Reflection.Metadata;
 using System.Reflection.PortableExecutable;
 using System.Text;
@@ -356,9 +357,15 @@ public sealed partial class VestigialExtensionsPackageReferenceRule
                 if (!reader.HasMetadata)
                     return found;
                 var md = reader.GetMetadataReader();
-                foreach (var def in md.TypeDefinitions)
+                // TypeDefinitions enumerates HANDLES; the struct is fetched per
+                // handle. Iterating the structs directly does not compile.
+                foreach (var handle in md.TypeDefinitions)
                 {
-                    if (!def.IsPublic)
+                    var def = md.GetTypeDefinition(handle);
+                    // TypeDefinition has no IsPublic; visibility is a bit field on
+                    // Attributes, and only the top-level Public value is a type a
+                    // consumer can name.
+                    if ((def.Attributes & TypeAttributes.VisibilityMask) != TypeAttributes.Public)
                         continue;
                     var ns = md.GetString(def.Namespace);
                     if (ns.Length == 0)
@@ -399,7 +406,7 @@ public sealed partial class VestigialExtensionsPackageReferenceRule
                     if (!xml.Contains($"{Path.DirectorySeparatorChar}net10.0{Path.DirectorySeparatorChar}"))
                         continue;
                     XDocument doc;
-                    try { doc = XDocument.Parse(Read(xml)); }
+                    try { doc = XDocument.Parse(File.ReadAllText(xml, Encoding.UTF8)); }
                     catch (XmlException) { continue; }
 
                     foreach (var member in doc.Descendants("member"))
@@ -467,7 +474,7 @@ public sealed partial class VestigialExtensionsPackageReferenceRule
             if (nuspec is not null)
             {
                 XDocument? doc = null;
-                try { doc = XDocument.Parse(Read(nuspec)); }
+                try { doc = XDocument.Parse(File.ReadAllText(nuspec, Encoding.UTF8)); }
                 catch (XmlException) { /* a malformed nuspec: no routes to report */ }
 
                 if (doc is not null)
@@ -480,7 +487,7 @@ public sealed partial class VestigialExtensionsPackageReferenceRule
                             continue;
                         foreach (var dep in group.Elements("dependency"))
                             if (dep.Attribute("id")?.Value is { } id)
-                                result.Add(id.Value);
+                                result.Add(id);
                         break;
                     }
                 }
@@ -657,7 +664,7 @@ public sealed partial class VestigialExtensionsPackageReferenceRule
         foreach (var v in doc.Descendants("PackageVersion"))
             if (v.Attribute("Include")?.Value == package
                 && v.Attribute("Version")?.Value is { } version)
-                return version.Value;
+                return version;
 
         return "0.0.0";
     }
