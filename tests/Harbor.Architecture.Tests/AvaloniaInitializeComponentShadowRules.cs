@@ -74,8 +74,12 @@
 // the rule carries four checks that make it failable:
 //
 //   * `Scanner_FindsTheGuardedProject` — the walk really reached the app (91
-//     .cs files), and comment lines are dropped so this file's own prose and the
-//     six fixed files' explanatory comments cannot fail the build.
+//     .cs files). Without a repo root every rule in this file passes vacuously.
+//   * `ProseDescribingTheDefectIsNotADeclaration` — the scanner drops comments,
+//     and the regex does match the commented form. That pair is the proof the
+//     rule can explain itself: StatusDot's constructor carries a comment naming
+//     the overload that used to shadow it, and matching prose is harmless only
+//     because prose never reaches the matcher.
 //   * `Detector_FiresOnEveryDeclarationFoundInTheGuardedTree` — the six exact
 //     (path, line, verbatim line) sites the scan reported before the fix, as
 //     literals, so the record survives the fix that deletes them and the claim
@@ -180,21 +184,38 @@ public class AvaloniaInitializeComponentShadowRules
         await Assert.That(files).IsGreaterThan(50)
             .Because($"The guarded Avalonia shell holds well over 50 source files; found {files}. "
                      + "A near-zero count means the path is stale and the rule guards nothing.");
+    }
 
-        // Comment lines are excluded, so prose describing this defect — in this
-        // file, in the fixed controls, and in ThemeResourceResolutionTests —
-        // cannot fail the build. A guard that fails on its own documentation is
-        // a guard nobody keeps.
-        int commentHits = GuardedProjects
-            .SelectMany(p => Directory.GetFiles(Path.Combine(root, p), "*.cs", SearchOption.AllDirectories))
-            .Where(f => !IsBuildOutput(f))
-            .SelectMany(ScanFile)
-            .Count(hit => hit.Text.TrimStart().StartsWith("//", StringComparison.Ordinal)
-                          && Declaration.IsMatch(hit.Text));
+    [Test]
+    public async Task ProseDescribingTheDefectIsNotADeclaration()
+    {
+        // The scanner drops comments, so this rule can explain itself — and so can
+        // the controls it fixed. StatusDot's constructor now carries a comment
+        // naming the overload that used to shadow it, and ThemeResourceResolutionTests
+        // documents the whole mechanism. None of that may be reported.
+        //
+        // The earlier version of this file asserted "zero lines in the guarded tree
+        // both start with // and match the declaration regex". That was the wrong
+        // invariant: it forbade the documentation rather than the defect, so the
+        // first honest comment explaining the bug would have failed the build. What
+        // actually has to hold is that the scanner drops prose, which is what these
+        // two cases pin.
+        await Assert.That(IsProseOrBlank("        // a hand-written InitializeComponent copy")).IsTrue()
+            .Because("A comment naming the defect is prose. If the scanner reported it, a guard would fail on "
+                     + "the documentation of its own rule, and the documentation would get deleted instead.");
 
-        await Assert.That(commentHits).IsEqualTo(0)
-            .Because("A commented-out declaration is prose, not a declaration. If one were counted, this "
-                     + "file could not explain the rule it enforces.");
+        await Assert.That(IsProseOrBlank("   ")).IsTrue()
+            .Because("A blank line carries no declaration either.");
+
+        await Assert.That(IsProseOrBlank("    private void InitializeComponent()")).IsFalse()
+            .Because("This is the defect. If the scanner dropped it, the rule would report nothing and pass.");
+
+        // And the pairing that makes the rule work at all: prose is dropped AND a
+        // declaration is kept, so the difference between them is the whole rule.
+        await Assert.That(Declaration.IsMatch("        // private void InitializeComponent()")).IsTrue()
+            .Because("The regex does match the commented form — which is precisely why the scanner has to drop "
+                     + "comments first, and why this pair of assertions is the non-vacuity proof: matching prose "
+                     + "is harmless ONLY because prose never reaches the matcher.");
     }
 
     [Test]
@@ -332,6 +353,18 @@ public class AvaloniaInitializeComponentShadowRules
         path.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}", StringComparison.Ordinal)
         || path.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}", StringComparison.Ordinal);
 
+    /// <summary>
+    ///     Whether the scanner drops this line as blank or as prose. The single
+    ///     place that decision is made, so the rule and
+    ///     <see cref="ProseDescribingTheDefectIsNotADeclaration" /> cannot disagree
+    ///     about it.
+    /// </summary>
+    internal static bool IsProseOrBlank(string line)
+    {
+        string trimmed = line.TrimStart();
+        return trimmed.Length == 0 || trimmed.StartsWith("//", StringComparison.Ordinal);
+    }
+
     /// <summary>Every non-comment, non-blank source line of the guarded projects.</summary>
     private static IEnumerable<(string File, int Line, string Text)> ScanGuardedFiles()
     {
@@ -379,8 +412,7 @@ public class AvaloniaInitializeComponentShadowRules
         for (int i = 0; i < lines.Length; i++)
         {
             string text = lines[i];
-            string trimmed = text.TrimStart();
-            if (trimmed.Length == 0 || trimmed.StartsWith("//", StringComparison.Ordinal))
+            if (IsProseOrBlank(text))
             {
                 continue;
             }
