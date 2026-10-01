@@ -30,8 +30,16 @@ namespace Harbor.Ui.Framework.Tests;
 ///         0 below a measurement rather than a tautology about a wiring that
 ///         does not exist.
 ///     </para>
+///     <para>
+///         The bare <see cref="NotInParallelAttribute" /> is load-bearing for the same reason it is
+///         in <c>UiStageCounterTests</c>: the counters are process-global by contract, a keyed
+///         attribute only excludes tests that share that key, and any concurrently-running test
+///         touching the instrumented renderer would move the number this suite asserts is zero.
+///         Exclusive execution is what makes "zero here" a measurement rather than a race that
+///         happened to land.
+///     </para>
 /// </remarks>
-[NotInParallel("ui-stage-counters")]
+[NotInParallel]
 public class StorePathSkipsMarkdownParseTests
 {
     private const int DeltaCount = 200;

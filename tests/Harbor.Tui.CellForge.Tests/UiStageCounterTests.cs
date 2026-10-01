@@ -39,8 +39,23 @@ namespace Harbor.Tui.CellForge.Tests;
 ///             write and the cache's own tally — not by a counter.
 ///         </description></item>
 ///     </list>
+///     <para>
+///         <b>The bare <c>[NotInParallel]</c> is load-bearing, and it was found the hard way.</b>
+///         The first run of this class used the keyed form,
+///         <c>[NotInParallel("ui-stage-counters")]</c>, and four of these tests failed — all inside
+///         the same millisecond. TUnit documents that a keyed attribute only excludes tests that
+///         <i>share that key</i>; every other test in the assembly still runs alongside. That
+///         matters because the counters are process-global <b>by contract</b> — a diagnostics
+///         surface reads them from a different thread than the one that rendered, so a thread-local
+///         would make the public read API useless in production — and the neighbouring CellForge
+///         tests exercise the very paths under instrumentation, so any concurrent
+///         <c>AnsiWriter</c> test moves <c>TerminalWrites</c>. The bare attribute is TUnit's
+///         "run exclusively" form. Serializing an assembly for eight sub-millisecond tests is the
+///         cheap side of that trade; the alternative is an exact-count assertion that no amount of
+///         care can make deterministic.
+///     </para>
 /// </remarks>
-[NotInParallel("ui-stage-counters")]
+[NotInParallel]
 public class UiStageCounterTests
 {
     /// <summary>
