@@ -1,6 +1,7 @@
 using System.Text;
 using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Agents;
+using Harbor.Abstractions.Git;
 using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Providers;
 using Harbor.Abstractions.Sessions;
@@ -95,6 +96,7 @@ public class SlashPanelsCommandTests
         public IRendererPipeline? RendererPipeline => null;
         public Harbor.Hosting.PluginReloadService? PluginReload => null;
         public IProviderHealthCheck? HealthCheck => null;
+        public IGitQuery? Git { get; set; }
         public Harbor.Ui.Framework.Panels.IPanelRegistry? PanelRegistry { get; set; }
         public Harbor.App.Cli.Repl.ImageAttachmentStash? Attachments => null;
         public void WakeUp() { }
@@ -296,6 +298,156 @@ public class SlashPanelsCommandTests
         await Assert.That(pending).IsNotNull();
         await pending!.Value.Handler(pending.Value.Item, CancellationToken.None);
         await Assert.That(host.Palette.Visible).IsFalse();
+    }
+
+    // ── /jump (#857) ──────────────────────────────────────────────────────
+    //
+    // The jump palette's panel-plane route is unreachable: Ctrl+J resolved to
+    // `ChatAction.JumpPalette`, which toggles a `Center`-placed
+    // IPanelProvider whose `OnKey` no host can enter, so it painted nothing
+    // and took no query. These tests drive the route that IS live — the frame
+    // stack `ReplInputLoop` keys directly — so a break here is a real break
+    // and not the #857 shape of a green test over a dead path.
+
+    /// <summary>Git query returning a fixed worktree list, recording the directory asked for.</summary>
+    private sealed class FakeGit(params GitWorktreeInfo[] worktrees) : IGitQuery
+    {
+        public string? AskedFor { get; private set; }
+
+        public IReadOnlyList<GitWorktreeInfo> ListWorktrees(string directory, CancellationToken cancellationToken = default)
+        {
+            AskedFor = directory;
+            return worktrees;
+        }
+
+        public GitWorkspaceStatus GetStatus(string directory, CancellationToken cancellationToken = default) =>
+            GitWorkspaceStatus.None;
+    }
+
+    [Test]
+    public async Task Jump_OpensFrame_WithSessionRows()
+    {
+        var t0 = new DateTimeOffset(2026, 5, 2, 0, 0, 0, TimeSpan.Zero);
+        var store = new FakeStore();
+        store.Add(Make("jump0001", "Refactor parser", t0) with
+        {
+            Directory = "/wts/parser",
+            GitBranch = "feat/parser",
+        });
+        var host = new FakeHost(store.Sessions["jump0001"], store, new AuthStore(new JsonConfigStore()));
+
+        await new JumpCommand().ExecuteAsync(new ReplCommandContext(host, "jump"), CancellationToken.None);
+
+        await Assert.That(host.Palette.Visible).IsTrue();
+        await Assert.That(host.Palette.CurrentBreadcrumb).IsEqualTo("worktrees / jump");
+        await Assert.That(host.Palette.Results).Count().IsEqualTo(1);
+
+        // Title bold, the rest of the row dimmed — the same split RowText used.
+        CommandItem row = host.Palette.Results[0];
+        await Assert.That(row.Title).IsEqualTo("Refactor parser");
+        await Assert.That(row.Detail).Contains("feat/parser");
+        await Assert.That(row.Detail).Contains("/wts/parser");
+        await Assert.That(row.Id).IsEqualTo("jump0001");
+    }
+
+    [Test]
+    public async Task Jump_FiltersAsYouType_ThenEnterSwitches()
+    {
+        var t0 = new DateTimeOffset(2026, 5, 3, 0, 0, 0, TimeSpan.Zero);
+        var store = new FakeStore();
+        store.Add(Make("aaa00001", "Fix login bug", t0) with { Directory = "/wts/one" });
+        store.Add(Make("bbb00002", "Write docs", t0) with { Directory = "/wts/two" });
+        var host = new FakeHost(store.Sessions["aaa00001"], store, new AuthStore(new JsonConfigStore()));
+
+        await new JumpCommand().ExecuteAsync(new ReplCommandContext(host, "jump"), CancellationToken.None);
+        await Assert.That(host.Palette.Results).Count().IsEqualTo(2);
+
+        Type(host.Palette, "docs");
+        await Assert.That(host.Palette.Results).Count().IsEqualTo(1);
+        _ = host.Palette.HandleKey(KeyEvent.Simple(KeyCode.Enter));
+        var pending = host.Palette.TakePendingCommit();
+        await Assert.That(pending).IsNotNull();
+        await pending!.Value.Handler(pending.Value.Item, CancellationToken.None);
+
+        await Assert.That(host.Switched).Contains("bbb00002");
+        await Assert.That(host.Palette.Visible).IsFalse();
+    }
+
+    [Test]
+    public async Task Jump_AppendsWorktreesWithNoSession_AndEnterOnOneOnlyCloses()
+    {
+        var t0 = new DateTimeOffset(2026, 5, 4, 0, 0, 0, TimeSpan.Zero);
+        var store = new FakeStore();
+        store.Add(Make("ccc00003", "Only session", t0) with { Directory = "/wts/one" });
+        var git = new FakeGit(
+            new GitWorktreeInfo("/wts/one", "main", IsBare: false),
+            new GitWorktreeInfo("/wts/scratch", "wip", IsBare: false),
+            // A bare store is never a jump target — the seeder drops it.
+            new GitWorktreeInfo("/wts/bare.git", null, IsBare: true));
+        var host = new FakeHost(store.Sessions["ccc00003"], store, new AuthStore(new JsonConfigStore())) { Git = git };
+
+        await new JumpCommand().ExecuteAsync(new ReplCommandContext(host, "jump"), CancellationToken.None);
+
+        // One session row + the one non-bare worktree it does not own.
+        await Assert.That(host.Palette.Results).Count().IsEqualTo(2);
+        await Assert.That(git.AskedFor).IsEqualTo(Environment.CurrentDirectory);
+
+        CommandItem sessionRow = host.Palette.Results[0];
+        await Assert.That(sessionRow.Id).IsEqualTo("ccc00003");
+        // Branch came from the session record itself.
+        await Assert.That(sessionRow.Detail).Contains("no-branch");
+
+        CommandItem worktreeRow = host.Palette.Results[1];
+        await Assert.That(worktreeRow.Title).IsEqualTo("scratch");
+        await Assert.That(worktreeRow.Id).IsEqualTo(string.Empty);
+        await Assert.That(worktreeRow.Detail).Contains("no-session");
+        await Assert.That(worktreeRow.Detail).Contains("/wts/scratch");
+
+        // Enter on the session-less row switches nothing and only closes.
+        _ = host.Palette.HandleKey(KeyEvent.Simple(KeyCode.Enter));
+        var pending = host.Palette.TakePendingCommit();
+        await Assert.That(pending).IsNotNull();
+        await pending!.Value.Handler(pending.Value.Item, CancellationToken.None);
+
+        await Assert.That(host.Switched).IsEmpty();
+        await Assert.That(host.Palette.Visible).IsFalse();
+    }
+
+    [Test]
+    public async Task Jump_WithoutGitQuery_StillListsSessions()
+    {
+        var t0 = new DateTimeOffset(2026, 5, 5, 0, 0, 0, TimeSpan.Zero);
+        var store = new FakeStore();
+        store.Add(Make("ddd00004", "Solo", t0) with { Directory = "/wts/solo" });
+        var host = new FakeHost(store.Sessions["ddd00004"], store, new AuthStore(new JsonConfigStore()));
+
+        await new JumpCommand().ExecuteAsync(new ReplCommandContext(host, "jump"), CancellationToken.None);
+
+        // Documented degradation: no query, sessions only — never a git fork.
+        await Assert.That(host.Palette.Visible).IsTrue();
+        await Assert.That(host.Palette.Results).Count().IsEqualTo(1);
+        await Assert.That(host.Palette.Results[0].Title).IsEqualTo("Solo");
+    }
+
+    [Test]
+    public async Task Jump_HidesSubagentSessions_ButKeepsUserForks()
+    {
+        var t0 = new DateTimeOffset(2026, 5, 6, 0, 0, 0, TimeSpan.Zero);
+        var store = new FakeStore();
+        store.Add(Make("usr00001", "User session", t0) with { Directory = "/wts/a" });
+        store.Add(Make("sub00002", "task(code): delegated", t0) with
+        {
+            Directory = "/wts/b",
+            ParentSessionId = "usr00001",
+        });
+        var host = new FakeHost(store.Sessions["usr00001"], store, new AuthStore(new JsonConfigStore()));
+
+        await new JumpCommand().ExecuteAsync(new ReplCommandContext(host, "jump"), CancellationToken.None);
+
+        // The legacy parent-id + "task(" shape classifies as subagent without
+        // the Kind stamp, and is hidden the way the seeder documents.
+        await Assert.That(host.Palette.Results).Count().IsEqualTo(1);
+        await Assert.That(host.Palette.Results[0].Title).IsEqualTo("User session");
     }
 
     [Test]
