@@ -386,94 +386,70 @@ public class McpRemoteTransportTests
     }
 
     /// <summary>
-    ///     #831, end to end and counted at the far end. A server that accepts the
-    ///     connection and closes it without a byte of HTTP in reply is the everyday
-    ///     network blip — a dropped VPN, a proxy that hung up, a container
-    ///     restarting — and it surfaces as a status-less
-    ///     <c>HttpRequestException</c>.
+    ///     #925, the transport-level half. The policy test above proves the set now
+    ///     matches a bare <see cref="SocketException" />; this proves the set is
+    ///     actually reached from the wire, where the defect was reported.
     ///     <para>
-    ///         Before the fix this cost ONE dial. <c>TransientFailurePolicy</c>
-    ///         tested <c>is IOException or TimeoutException</c>, and
-    ///         <c>HttpRequestException</c> derives from <c>Exception</c>, so the
-    ///         drop matched neither arm: the loop fell through to its terminal
-    ///         catch and reported the failure after a single attempt. The LLM path
-    ///         retried the identical exception. That asymmetry is the defect, and
-    ///         this is the direction it failed in — too FEW retries.
+    ///         The bound is "re-dialled", not "re-dialled N times", and the
+    ///         difference is deliberate. How many TCP connections one logical
+    ///         attempt consumes depends on whether
+    ///         <see cref="System.Net.Http.SocketsHttpHandler" /> wraps the socket
+    ///         error or lets it through bare, and on the CI runner that split was
+    ///         measured at 23 wrapped / 17 bare out of 40 — so pinning an exact
+    ///         count would encode a coin flip as a contract. What is asserted is
+    ///         the part the issue is about: the drop is retried rather than
+    ///         reported on the first attempt, and the budget is still a ceiling.
     ///     </para>
     ///     <para>
-    ///         Asserted on the listener's own accept count rather than the error
-    ///         string, for #822's reason: the string names the attempt count
-    ///         (<c>"... after N attempt(s)"</c>), so it would track the fix without
-    ///         proving the connection was re-dialled. The count is the fact.
-    ///     </para>
-    ///     <para>
-    ///         The bound is "re-dialled", not "re-dialled three times", and the
-    ///         difference is deliberate. CI observed TWO accepts here where the
-    ///         streamable-HTTP sibling below reached three, and this test does not
-    ///         claim to know why — <see cref="SocketsHttpHandler" /> retries once
-    ///         on a stale pooled connection internally, which plausibly accounts
-    ///         for one dial being consumed without a logical attempt, but that is
-    ///         a hypothesis and it was not verified. Pinning 3 would encode a
-    ///         guess about handler internals as a contract, and pinning the
-    ///         observed 2 would encode a Linux-runner artifact as one. What is
-    ///         asserted is the part this issue is actually about: the drop is
-    ///         retried rather than reported on the first attempt, and the budget
-    ///         is still an upper bound.
+    ///         One shape for both transports, because #925 is the same defect in
+    ///         both loops reading the same owner, and a guard that only covered
+    ///         one of them is the #572 duplication this file was written to end.
+    ///         The caller names the transport so a failure says which one gave up.
     ///     </para>
     /// </summary>
-    [Test]
-    public async Task SseTransport_DroppedConnection_ReDialsInsteadOfReportingOnTheFirstAttempt()
+    private static async Task AssertReDialsOnDroppedConnectionAsync(
+        Func<Uri, IMcpRemoteTransport> build,
+        string path,
+        int requestId,
+        string transportName)
     {
         using DeadServer server = DeadServer.Start();
 
-        await using var transport = new McpSseTransport(
-            new Uri($"http://127.0.0.1:{server.Port}/sse"),
-            requestTimeout: TimeSpan.FromSeconds(5));
-        using var request = JsonDocument.Parse("""{"jsonrpc":"2.0","id":8,"method":"tools/list","params":{}}""");
+        await using IMcpRemoteTransport transport = build(new Uri($"http://127.0.0.1:{server.Port}{path}"));
+        using var request = JsonDocument.Parse(
+            $$$"""{"jsonrpc":"2.0","id":{{{requestId}}},"method":"tools/list","params":{}}""");
 
-        Result<Maybe<JsonDocument>> roundTrip = await transport.TryRoundTripAsync(request.RootElement.Clone(), 8);
+        Result<Maybe<JsonDocument>> roundTrip = await transport.TryRoundTripAsync(request.RootElement.Clone(), requestId);
 
         await Assert.That(roundTrip.IsFailure).IsTrue();
         await Assert.That(server.ConnectionsAccepted)
             .IsGreaterThan(1)
             .Because(
-                "a connection dropped below the HTTP layer carries no status code and no answer — it is the same "
-                + "physical event as the IOException arm, and the retry budget exists for exactly that. One dial is "
-                + "not a budget being spent, it is the budget being skipped: the user saw the error instead of the "
-                + "reconnect the policy already pays for on the LLM path");
+                $"{transportName} shares the retry owner with its sibling, so a connection dropped below the HTTP layer "
+                + "must be re-dialled there too. One dial means the status-less arm is not being reached: the user saw the "
+                + "error instead of the reconnect the policy already pays for on the LLM path. The BCL hands this event "
+                + "back both wrapped in HttpRequestException and as a bare SocketException, and the set has to answer for "
+                + "both — before this, the bare shape fell through and the round-trip reported on its first attempt");
         await Assert.That(server.ConnectionsAccepted)
             .IsLessThanOrEqualTo(TransientFailurePolicy.DefaultMaxAttempts)
             .Because("the retry budget is a ceiling on attempts; a dropped connection must not buy attempts beyond it");
     }
 
-    /// <summary>
-    ///     The sibling, on the other transport. Both loops read the same owner, so
-    ///     a fix that landed in one and not the other would be invisible to a
-    ///     single-transport guard — which is precisely the shape of the #572
-    ///     duplication this file was written for.
-    /// </summary>
     [Test]
-    public async Task HttpTransport_DroppedConnection_ReDialsInsteadOfReportingOnTheFirstAttempt()
-    {
-        using DeadServer server = DeadServer.Start();
+    public Task SseTransport_DroppedConnection_ReDialsInsteadOfReportingOnTheFirstAttempt()
+        => AssertReDialsOnDroppedConnectionAsync(
+            uri => new McpSseTransport(uri, requestTimeout: TimeSpan.FromSeconds(5)),
+            "/sse",
+            8,
+            "McpSseTransport");
 
-        await using var transport = new McpHttpTransport(
-            new Uri($"http://127.0.0.1:{server.Port}/mcp"),
-            requestTimeout: TimeSpan.FromSeconds(5));
-        using var request = JsonDocument.Parse("""{"jsonrpc":"2.0","id":9,"method":"tools/list","params":{}}""");
-
-        Result<Maybe<JsonDocument>> roundTrip = await transport.TryRoundTripAsync(request.RootElement.Clone(), 9);
-
-        await Assert.That(roundTrip.IsFailure).IsTrue();
-        await Assert.That(server.ConnectionsAccepted)
-            .IsGreaterThan(1)
-            .Because(
-                "the streamable-HTTP transport shares the owner with the legacy SSE one, so the same dropped connection "
-                + "must be retried there too; one dial means the status-less arm is not being reached");
-        await Assert.That(server.ConnectionsAccepted)
-            .IsLessThanOrEqualTo(TransientFailurePolicy.DefaultMaxAttempts)
-            .Because("the retry budget is a ceiling on attempts; a dropped connection must not buy attempts beyond it");
-    }
+    [Test]
+    public Task HttpTransport_DroppedConnection_ReDialsInsteadOfReportingOnTheFirstAttempt()
+        => AssertReDialsOnDroppedConnectionAsync(
+            uri => new McpHttpTransport(uri, requestTimeout: TimeSpan.FromSeconds(5)),
+            "/mcp",
+            9,
+            "McpHttpTransport");
 
     // ---------- Registry integration ----------
 
@@ -829,7 +805,7 @@ public class McpRemoteTransportTests
     }
 
     /// <summary>
-    ///     #831: accepts the TCP connection and hangs up without writing a byte.
+    ///     #831/#925: accepts the TCP connection and hangs up without writing a byte.
     ///     <para>
     ///         Deliberately a raw <see cref="TcpListener" /> rather than an
     ///         extension of <c>FakeServer</c>. <c>FakeServer</c> speaks HTTP, and
