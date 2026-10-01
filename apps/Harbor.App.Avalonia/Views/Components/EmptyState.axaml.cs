@@ -1,7 +1,6 @@
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
-using Avalonia.Markup.Xaml;
 using Avalonia.Input;
 using System.Collections.ObjectModel;
 using System.Windows.Input;
@@ -59,11 +58,6 @@ public sealed partial class EmptyState : UserControl
     {
         if (global::Avalonia.Application.Current is not null)
             InitializeComponent();
-    }
-
-    private void InitializeComponent()
-    {
-        AvaloniaXamlLoader.Load(this);
     }
 }
 

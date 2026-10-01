@@ -2,7 +2,6 @@ using System.Collections;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Data;
-using Avalonia.Markup.Xaml;
 
 namespace Harbor.App.Avalonia.Views.Components;
 
@@ -26,11 +25,6 @@ public partial class SegmentedControl : UserControl
     public SegmentedControl()
     {
         InitializeComponent();
-    }
-
-    private void InitializeComponent()
-    {
-        AvaloniaXamlLoader.Load(this);
     }
 
     public IEnumerable? Items
