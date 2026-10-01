@@ -373,6 +373,35 @@ TABLE_CITATION = re.compile(
     re.M,
 )
 
+# The per-document escape hatch for DOC-COUNT-STALE, and the second rule to
+# use this shape. Same discipline as allow-unwired and for the same reason: the
+# claim "this total is history, not a claim about these rows" is exactly the
+# thing a reader needs to see, and a global list would hide it in a file nobody
+# opens. A quoted label is required so the waiver says WHICH figure it is about.
+ALLOW_STALE_COUNT = re.compile(
+    r"<!--\s*check-doc-cites:\s*allow-stale-count\s+(?P<label>[^>]+?)"
+    r"(?:\s+[-—:]\s*(?P<reason>.+?))?\s*-->"
+)
+
+# A stated total for a table the document itself contains — "Total members
+# audited: 2861", "audited 2861" — in prose or a bullet, never in a table cell.
+#
+# Anchored to a line that cannot be a `| a | b |` row, so the Priority Breakdown
+# table's own `| HIGH | 1111 | ...` cells are out of reach. Without that anchor
+# the rule would compare a table's column total against the table it belongs to
+# and report a correct table as wrong.
+#
+# Word-anchored rather than "any number on any line": a document that says
+# "672 of 2842" has two figures on one line and neither is a total, and a rule
+# that guessed between them is a rule that cries wolf on the first honest
+# sentence a sweep writes.
+COUNT_TOTAL = re.compile(
+    r"(?im)^[ \t>*-]*[^\n|]{0,90}?"
+    r"\b(?:total\s+(?:members|rows|files|types|items|tests|projects|cases)"
+    r"|(?:members|rows|files|types|tests|projects)\s+(?:audited|total)"
+    r"|audited)\b[^\n\d]{0,40}?(?P<n>\d[\d,]*)"
+)
+
 # THE FOURTH SHAPE (#794). A component README whose `## Public API` section is
 # an inventory of the types that component declares — the sample-plugin
 # version of a contract table, and the one shape where "does this name exist?"
@@ -924,6 +953,71 @@ def unreachable(
     )
 
 
+def check_stated_count(
+    text: str, rows: int
+) -> list[tuple[str, str, int]]:
+    """Does the document's own headline total equal the rows it ships?
+
+    The class #902 called out and no `file:line` fence can reach: every rule in
+    this script asks whether a NUMBER is inside a FILE. None of them can ask
+    whether a number agrees with the document's own contents, because the rows
+    are the thing being counted. A fence proves `CompactionService.cs:209` is a
+    line; it says nothing about whether "2861 members" is how many members the
+    document lists.
+
+    So the drift is invisible to all of it. Measured on this tree, the audit's
+    Summary says 2861 and the document holds 2842 rows — 19 short, because two
+    commits deleted documented rows and left the count:
+
+        #732  a917e308  14 rows (9 HIGH, 5 MED) — the deleted Reducers layer
+        #749  c2eba3fd   5 rows (4 HIGH, 1 MED) — RecentItemsService moved
+
+    13 + 6 = 19, and every one is a row that HAD an XML doc, which is why the
+    per-priority `With Doc` column is short by exactly 13 and 6 while every
+    `Without Doc` cell is still exact. The arithmetic is a fingerprint, not a
+    coincidence, and it is why a summary that "looks fine" is the failure mode.
+
+    This is deliberately NOT a rule about whether the count is TRUE. A dated
+    record's count may be a true statement about the sweep it recorded and a
+    false statement about the file it is in — that is what a record IS, and
+    #826 already settled that for this document. The rule asks one question:
+    does the document admit the difference?
+
+        <!-- check-doc-cites: allow-stale-count "Total members audited" — why -->
+
+    Without that line the rule reports the gap, because an undeclared gap is the
+    defect; a declared one is a sentence a reader can weigh. Same discipline as
+    allow-unwired: per-document, reason-mandatory, no global list, and it shows
+    up in the diff next to the sentence it qualifies.
+    """
+    if rows == 0:
+        return []
+    m = COUNT_TOTAL.search(text)
+    if not m:
+        return []
+    claimed = int(m.group("n").replace(",", ""))
+    if claimed == rows:
+        return []
+    if ALLOW_STALE_COUNT.search(text):
+        return []
+    line_no = text.count("\n", 0, m.start()) + 1
+    return [
+        (
+            "DOC-COUNT-STALE",
+            f"this document states {claimed} but ships {rows} "
+            f"`| path | line |` row(s) — a gap of {claimed - rows}. A `file:line` "
+            f"fence cannot see this: every other rule here asks whether a number "
+            f"is inside a FILE, and this one asks whether a number agrees with "
+            f"the rows next to it. If {claimed} is a true figure for the sweep "
+            f"this document records and the rows were edited afterwards, say so "
+            f"on a line in this document: "
+            f'<!-- check-doc-cites: allow-stale-count "Total members audited" '
+            f"— which count is historical, and what moved -->",
+            line_no,
+        )
+    ]
+
+
 def check_table_shape(
     text: str, rel: str, normative: bool
 ) -> tuple[int, list[tuple[str, str, int]]]:
@@ -1069,6 +1163,10 @@ class Scan:
         self.type_names = 0
         self.table_rows = 0
         self.table_docs = 0
+        # Documents whose stated total was compared against their own rows
+        # (#807). Counted separately from table_docs because the question is
+        # asked of every document that has rows, declared or not.
+        self.count_docs = 0
         self.api_names = 0
         self.api_docs = 0
         self.hits: dict[str, list[tuple[str, str, int]]] = defaultdict(list)
@@ -1164,6 +1262,13 @@ def scan(repo: str, verbose: bool) -> Scan:
         if rows:
             result.table_docs += 1
             result.table_rows += rows
+            result.count_docs += 1
+            # ... and the count question rides on the same row count, on every
+            # tracked document and not just the declared ones. A dated record's
+            # rows are allowed to be stale; its HEADLINE TOTAL still has to be
+            # either true of the file or declared historical, because that
+            # sentence is the first thing a reader copies.
+            shape_problems = shape_problems + check_stated_count(text, rows)
 
         # ... and so does the fourth shape (#794), for the same reason and with
         # the same one-line fix. A sample README's `## Public API` list is a
@@ -1888,6 +1993,110 @@ def self_test() -> int:
         out.strip()[-400:],
     )
 
+    # ---- THE COUNT (#807) -----------------------------------------------------
+    # A number that disagrees with the rows beside it. No `file:line` fence can
+    # reach this: the other rules ask whether a number is inside a FILE, and
+    # this asks whether it agrees with the document's own contents.
+    #
+    # Each "must pass" case carries `clean_norm` so the floors hold and the case
+    # can only pass for the reason it names.
+    audit_rows = (
+        "| File | Line | Member | Has XML doc? | Priority |\n|---|---|---|---|---|\n"
+        "| Demo/Live.cs | 4 | class LiveThing | YES | HIGH |\n"
+        "| Demo/Live.cs | 5 | public int Value | YES | MED |\n"
+    )
+    stale_banner = "# A\n\n> **Status (2026-08-27):** a dated record.\n\n## Summary\n\n"
+
+    code, out = run(
+        {
+            **live,
+            "docs/NORM.md": clean_norm,
+            "docs/AUDIT.md": stale_banner + "- **Total members audited:** 5\n\n"
+            + audit_rows,
+        }
+    )
+    st.expect(
+        "a headline total that disagrees with the document's own rows fails (#807)",
+        code == 1 and "DOC-COUNT-STALE" in out, out[-400:],
+    )
+
+    code, out = run(
+        {
+            **live,
+            "docs/NORM.md": clean_norm,
+            "docs/AUDIT.md": stale_banner + "- **Total members audited:** 2\n\n"
+            + audit_rows,
+        }
+    )
+    st.expect(
+        "a total that MATCHES the rows passes — the rule is not a blanket complaint",
+        code == 0, out.strip()[-400:],
+    )
+
+    code, out = run(
+        {
+            **live,
+            "docs/NORM.md": clean_norm,
+            "docs/AUDIT.md": stale_banner + "- **Total members audited:** 5\n\n"
+            + audit_rows
+            + '<!-- check-doc-cites: allow-stale-count "Total members audited" '
+            + "— 5 is the sweep figure; two documented rows were deleted after it -->\n",
+        }
+    )
+    st.expect(
+        "a declared historical count with a reason is allowed (a запись may be a "
+        "true statement about the sweep and a false one about its own rows)",
+        code == 0, out.strip()[-400:],
+    )
+
+    # The waiver must name WHICH figure it is about, or it is a mute button for
+    # every future count in the document. Same reason-mandatory discipline as
+    # allow-unwired, and it is the hole #921 found and closed.
+    code, out = run(
+        {
+            **live,
+            "docs/NORM.md": clean_norm,
+            "docs/AUDIT.md": stale_banner + "- **Total members audited:** 5\n\n"
+            + audit_rows
+            + "<!-- check-doc-cites: allow-stale-count -->\n",
+        }
+    )
+    st.expect(
+        "a waiver with no quoted label is NOT honoured — it must say which figure",
+        code == 1 and "DOC-COUNT-STALE" in out, out[-400:],
+    )
+
+    # The row table's OWN cells must not be read as a stated total: a Priority
+    # Breakdown whose `Total` column is 1111 is not a document claiming 1111
+    # members, and an unanchored rule would call every correct summary wrong.
+    code, out = run(
+        {
+            **live,
+            "docs/NORM.md": clean_norm,
+            "docs/AUDIT.md": stale_banner
+            + "| Priority | Total | With Doc | Without Doc |\n|---|---|---|---|\n"
+            + "| HIGH | 1111 | 808 | 303 |\n| MED | 765 | 543 | 222 |\n\n"
+            + audit_rows,
+        }
+    )
+    st.expect(
+        "a table's own Total COLUMN is not a stated total — no prose, no complaint",
+        code == 0, out.strip()[-400:],
+    )
+
+    # And a document with rows but no headline figure at all is not asked.
+    code, out = run(
+        {
+            **live,
+            "docs/NORM.md": clean_norm,
+            "docs/AUDIT.md": stale_banner + audit_rows,
+        }
+    )
+    st.expect(
+        "a table with no stated total is not asked a question it cannot answer",
+        code == 0, out.strip()[-400:],
+    )
+
     return st.finish()
 
 
@@ -1899,6 +2108,13 @@ def main() -> int:
     ap.add_argument("--min-files", type=int, default=0, help="fail unless at least this many normative docs were scanned (0 = off)")
     ap.add_argument("--min-cites", type=int, default=0, help="fail unless at least this many line citations were examined (0 = off)")
     ap.add_argument("--min-types", type=int, default=0, help="fail unless at least this many backticked type names were examined (0 = off)")
+    ap.add_argument(
+        "--min-counts",
+        type=int,
+        default=0,
+        help="fail unless at least this many documents had a stated total compared "
+        "against their own `| path | line |` rows (#807; 0 = off)",
+    )
     ap.add_argument(
         "--min-api",
         type=int,
@@ -1925,7 +2141,9 @@ def main() -> int:
     if result.table_rows:
         print(
             f"and declared {result.table_rows} `| path | line |` table rows in "
-            f"{result.table_docs} document(s) (#807: the shape the prose fence is blind to)"
+            f"{result.table_docs} document(s), comparing a stated total against "
+            f"those rows in {result.count_docs} of them (#807: the shape the prose "
+            f"fence is blind to)"
         )
     print(
         f"and checked {result.api_names} `## Public API` type names in "
@@ -1960,6 +2178,21 @@ def main() -> int:
             "`## Public API` type names",
             args.min_files,
             args.min_api,
+        )
+    # Same opt-in-only discipline, and the same reason: this floor counts
+    # DOCUMENTS WITH ROWS, so a fixture with no table would exit 1 on it and
+    # prove nothing about DOC-COUNT-STALE. `--min-counts 1` is what says "the
+    # count question is still being asked of something" — without it, a parser
+    # that stopped matching COUNT_TOTAL would be indistinguishable from a
+    # document that simply states no totals.
+    if args.min_counts > 0:
+        problems += md_gate.require_non_vacuous(
+            "doc-cites/counts",
+            result.count_docs,
+            result.count_docs,
+            "documents whose stated total was compared to their rows",
+            1,
+            args.min_counts,
         )
 
     if result.violations:
