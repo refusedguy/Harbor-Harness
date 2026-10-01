@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Sockets;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Resilience;
 using Harbor.Tools.Mcp;
@@ -8,89 +9,97 @@ using TUnit.Assertions;
 
 namespace Harbor.Tools.Builtin.Tests;
 
-/// <summary>TEMPORARY diagnostic for #925 — deleted before the PR is final.</summary>
+/// <summary>TEMPORARY diagnostic v2 for #925 — tallies instead of long strings so TUnit does not truncate.</summary>
 public class ZzDiag925
 {
     [Test]
-    public async Task Zz925_A_RawSendAsyncSeamExceptionShape()
+    public async Task Zz925_D_RawSeamTally()
     {
         using var diagServer = RstServer.Start();
         using var client = new HttpClient(new SocketsHttpHandler()) { Timeout = TimeSpan.FromSeconds(5) };
-        List<string> shapes = [];
-        for (int i = 0; i < 4; i++)
+        SortedDictionary<string, int> tally = [];
+        for (int i = 0; i < 40; i++)
         {
             using var req = new HttpRequestMessage(HttpMethod.Get, $"http://127.0.0.1:{diagServer.Port}/sse");
             req.Headers.Accept.Add(new System.Net.Http.Headers.MediaTypeWithQualityHeaderValue("text/event-stream"));
             try
             {
                 using var resp = await client.SendAsync(req, HttpCompletionOption.ResponseHeadersRead);
-                shapes.Add($"{i}:NO-THROW status={(int)resp.StatusCode}");
+                Bump(tally, $"NO-THROW/{(int)resp.StatusCode}");
             }
             catch (Exception ex)
             {
-                shapes.Add(
-                    $"{i}:{ex.GetType().Name}|inner={ex.InnerException?.GetType().Name ?? "-"}"
-                    + $"|retry={TransientFailurePolicy.ShouldRetry(ex)}|msg={ex.Message}");
+                Bump(tally, $"{ex.GetType().Name}/retry={TransientFailurePolicy.ShouldRetry(ex)}");
             }
         }
 
-        await Assert.That(string.Join(" ;; ", shapes) + $" || accepted={diagServer.Accepted}")
-            .IsEqualTo("DIAG925-A");
+        await Assert.That(Fmt(tally)).IsEqualTo("DIAG-D");
     }
 
     [Test]
-    public async Task Zz925_B_SseRoundTripAttemptCount()
+    public async Task Zz925_E_SseAttemptTally()
     {
-        using var server = RstServer.Start();
-        await using var transport = new McpSseTransport(
-            new Uri($"http://127.0.0.1:{server.Port}/sse"),
-            requestTimeout: TimeSpan.FromSeconds(5));
-        using var request = JsonDocument.Parse("""{"jsonrpc":"2.0","id":8,"method":"tools/list","params":{}}""");
-
-        Result<Maybe<JsonDocument>> roundTrip = await transport.TryRoundTripAsync(request.RootElement.Clone(), 8);
-
-        int immediately = server.Accepted;
-        var sw = System.Diagnostics.Stopwatch.StartNew();
-        while (server.Accepted < 2 && sw.Elapsed < TimeSpan.FromSeconds(5))
+        SortedDictionary<string, int> attempts = [];
+        SortedDictionary<string, int> causes = [];
+        for (int i = 0; i < 10; i++)
         {
-            await Task.Delay(25);
+            using var server = RstServer.Start();
+            await using var transport = new McpSseTransport(
+                new Uri($"http://127.0.0.1:{server.Port}/sse"),
+                requestTimeout: TimeSpan.FromSeconds(5));
+            using var request = JsonDocument.Parse("""{"jsonrpc":"2.0","id":8,"method":"tools/list","params":{}}""");
+
+            Result<Maybe<JsonDocument>> roundTrip = await transport.TryRoundTripAsync(request.RootElement.Clone(), 8);
+
+            string error = roundTrip.IsFailure ? roundTrip.Error : "SUCCESS";
+            Match m = Regex.Match(error, @"after (\d+) attempt\(s\) in (\d+)ms: (.*)$");
+            Bump(attempts, m.Success ? $"attempts={m.Groups[1].Value}/ms={m.Groups[2].Value}" : "UNPARSED");
+            Bump(causes, m.Success ? m.Groups[3].Value : error);
+            Bump(attempts, $"accepts={server.Accepted}");
         }
 
-        await Assert.That(
-                $"immediate={immediately} afterWait={server.Accepted} waitedMs={sw.ElapsedMilliseconds} "
-                + $"success={roundTrip.IsSuccess} error={(roundTrip.IsFailure ? roundTrip.Error : "-")}")
-            .IsEqualTo("DIAG925-B");
+        await Assert.That(Fmt(attempts) + " || " + Fmt(causes)).IsEqualTo("DIAG-E");
     }
 
     [Test]
-    public async Task Zz925_C_HttpRoundTripAttemptCount()
+    public async Task Zz925_F_HttpAttemptTally()
     {
-        using var server = RstServer.Start();
-        await using var transport = new McpHttpTransport(
-            new Uri($"http://127.0.0.1:{server.Port}/mcp"),
-            requestTimeout: TimeSpan.FromSeconds(5));
-        using var request = JsonDocument.Parse("""{"jsonrpc":"2.0","id":9,"method":"tools/list","params":{}}""");
-
-        Result<Maybe<JsonDocument>> roundTrip = await transport.TryRoundTripAsync(request.RootElement.Clone(), 9);
-
-        int immediately = server.Accepted;
-        var sw = System.Diagnostics.Stopwatch.StartNew();
-        while (server.Accepted < 2 && sw.Elapsed < TimeSpan.FromSeconds(5))
+        SortedDictionary<string, int> attempts = [];
+        SortedDictionary<string, int> causes = [];
+        for (int i = 0; i < 10; i++)
         {
-            await Task.Delay(25);
+            using var server = RstServer.Start();
+            await using var transport = new McpHttpTransport(
+                new Uri($"http://127.0.0.1:{server.Port}/mcp"),
+                requestTimeout: TimeSpan.FromSeconds(5));
+            using var request = JsonDocument.Parse("""{"jsonrpc":"2.0","id":9,"method":"tools/list","params":{}}""");
+
+            Result<Maybe<JsonDocument>> roundTrip = await transport.TryRoundTripAsync(request.RootElement.Clone(), 9);
+
+            string error = roundTrip.IsFailure ? roundTrip.Error : "SUCCESS";
+            Match m = Regex.Match(error, @"after (\d+) attempt\(s\) in (\d+)ms: (.*)$");
+            Bump(attempts, m.Success ? $"attempts={m.Groups[1].Value}/ms={m.Groups[2].Value}" : "UNPARSED");
+            Bump(causes, m.Success ? m.Groups[3].Value : error);
+            Bump(attempts, $"accepts={server.Accepted}");
         }
 
-        await Assert.That(
-                $"immediate={immediately} afterWait={server.Accepted} waitedMs={sw.ElapsedMilliseconds} "
-                + $"success={roundTrip.IsSuccess} error={(roundTrip.IsFailure ? roundTrip.Error : "-")}")
-            .IsEqualTo("DIAG925-C");
+        await Assert.That(Fmt(attempts) + " || " + Fmt(causes)).IsEqualTo("DIAG-F");
     }
+
+    private static void Bump(SortedDictionary<string, int> tally, string key)
+    {
+        string k = key.Length > 60 ? key[..60] : key;
+        tally[k] = tally.TryGetValue(k, out int n) ? n + 1 : 1;
+    }
+
+    private static string Fmt(SortedDictionary<string, int> tally)
+        => string.Join(" ", tally.Select(kv => $"{kv.Key}x{kv.Value}"));
 
     /// <summary>Accepts TCP and hangs up with RST, counting accepts — the #925 DeadServer shape.</summary>
     private sealed class RstServer : IDisposable
     {
         private readonly TcpListener _listener;
-        private readonly CancellationTokenSource _cts = new(TimeSpan.FromSeconds(60));
+        private readonly CancellationTokenSource _cts = new(TimeSpan.FromSeconds(120));
         private readonly Task _loop;
         private int _accepted;
 
