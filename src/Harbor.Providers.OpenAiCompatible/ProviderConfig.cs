@@ -303,9 +303,28 @@ public sealed class DynamicModelCatalog : IModelCatalog
 
     public async Task<Result<IReadOnlyList<ModelInfo>>> GetModelsAsync(ProviderConfig config, CancellationToken ct = default)
     {
-        // Hardcoded models in config
+        // Hardcoded models in config.
+        //
+        // #848: stamped from `config.Id`, NOT returned as the JSON spelled it.
+        // This branch used to hand back `config.Models` verbatim, so the
+        // `providerId` inside a provider JSON's `models` array was a second,
+        // unchecked source of truth for "which provider am I" — while
+        // `JsonProviderDiscovery` registered the same file under its `id`. A
+        // gateway entry stamped with its upstream (`{ "id": "gateway",
+        // "models": [ { ..., "providerId": "anthropic" } ] }`) therefore
+        // answered to the registry key `gateway` and told every reader
+        // `anthropic`: the prompt rendered `- Model: anthropic/…`,
+        // ProviderModelPickerViewModel's `m.ProviderId == group.Id` filter hid
+        // the model, and CompactionService resolved the wrong ILlmClient to
+        // summarize with.
+        //
+        // `ParseModel` already stamps `config.Id` for the fetched path; this
+        // makes the hardcoded path obey the same invariant. The file's `id` is
+        // the one registry key, so the stamp is DERIVED here rather than
+        // trusted — and `~/.harbor/providers/*.json` (user-writable, and
+        // checked first) can no longer diverge from it.
         if (config.Models is { Count: > 0 })
-            return Result.Success<IReadOnlyList<ModelInfo>>(config.Models);
+            return Result.Success(StampWithOwnProvider(config.Models, config.Id));
 
         if (string.IsNullOrEmpty(config.ModelsUrl))
             return Result.Failure<IReadOnlyList<ModelInfo>>($"Provider '{config.Id}' has no modelsUrl and no hardcoded models.");
@@ -428,6 +447,83 @@ public sealed class DynamicModelCatalog : IModelCatalog
         {
             return Result.Failure<IReadOnlyList<ModelInfo>>($"Failed to parse models response: {ex.Message}");
         }
+    }
+
+    /// <summary>
+    ///     Re-stamp a hardcoded catalog with the id of the config that carries
+    ///     it (#848).
+    /// </summary>
+    /// <remarks>
+    ///     <para>
+    ///         A catalog is fetched under exactly one registry key, so every
+    ///         entry it returns must carry that key — see the call site for what
+    ///         a divergent stamp costs. The JSON's own <c>providerId</c> is not a
+    ///         second source of truth for "which provider am I"; the file's
+    ///         <c>id</c> is, because that is what
+    ///         <c>JsonProviderDiscovery</c> registers the file under.
+    ///     </para>
+    ///     <para>
+    ///         ALLOCATION: the list is returned as-is when every entry already
+    ///         agrees, which is the case for every catalog the bundled provider
+    ///         JSONs ship today. Only a diverging entry allocates a replacement
+    ///         <see cref="ModelInfo" /> (and the array holding it), so the fix
+    ///         costs nothing on the happy path and cannot be defeated by an
+    ///         unrelated member being rewritten — <c>with</c> copies the record
+    ///         and changes one member.
+    ///     </para>
+    /// </remarks>
+    private static IReadOnlyList<ModelInfo> StampWithOwnProvider(IReadOnlyList<ModelInfo> models, string providerId)
+    {
+        List<ModelInfo>? restamped = null;
+
+        for (int i = 0; i < models.Count; i++)
+        {
+            ModelInfo model = models[i];
+
+            if (restamped is null)
+            {
+                // Ordinal, not case-insensitive: a registry lookup is ordinal
+                // (`ProviderId.Create`, the `seenIds` HashSet in
+                // JsonProviderDiscovery), so "OpenRouter" is NOT the id
+                // "openrouter" is registered under, and passing it off as
+                // agreeing would bless a provider string nothing resolves.
+                if (string.Equals(model.ProviderId, providerId, StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                // First divergence: start the replacement, carrying every
+                // entry before it verbatim.
+                restamped = CopyUpTo(models, i);
+            }
+
+            // Past this point every entry is appended, whether it agreed or
+            // not — an agreeing entry that FOLLOWS a divergent one still has
+            // to reach the caller, or the fix would silently shorten the
+            // catalog.
+            restamped.Add(
+                string.Equals(model.ProviderId, providerId, StringComparison.Ordinal)
+                    ? model
+                    : model with { ProviderId = providerId });
+        }
+
+        return (IReadOnlyList<ModelInfo>?)restamped ?? models;
+    }
+
+    /// <summary>
+    ///     A fresh list holding entries <c>[0, count)</c> of <paramref name="source" />
+    ///     verbatim — used to build the replacement lazily, so a catalog that
+    ///     needs no re-stamping allocates nothing.
+    /// </summary>
+    private static List<ModelInfo> CopyUpTo(IReadOnlyList<ModelInfo> source, int count)
+    {
+        var copy = new List<ModelInfo>(source.Count);
+        for (int i = 0; i < count; i++)
+        {
+            copy.Add(source[i]);
+        }
+
+        return copy;
     }
 
     private static ModelInfo? ParseModel(JsonElement item, ProviderConfig config, ModelMapping mapping)

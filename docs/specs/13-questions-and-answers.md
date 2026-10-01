@@ -60,7 +60,17 @@
 
 - **Модульность**: `IPlugin` interface, `IToolPlugin`, `IProviderPlugin`, `IAgentPlugin`. Plugin = DLL + `plugin.json` manifest. Грузятся из `~/.harbor/plugins/` (global) или `.harbor/plugins/` (project-local, с trust prompt). См. `02-plugins.md`.
 
-- **Tools в system prompt**: да, `SystemPromptBuilder` собирает из зарегистрированных tools snippets для injection. Структура: base prompt (per-provider) + env + tools list + guidelines + skills + MCP instructions + context files. См. `04-tools.md` §6.
+- **Tools в system prompt**: да, `SystemPromptBuilder` собирает из зарегистрированных tools snippets для injection. Секции: `## Environment` + `## Additional Instructions` + `## Available Tools` (с guidelines) + `## MCP Servers` + `## Available Skills` + `## Project Context`. Канон — контракт `ISystemPromptBuilder` и `SystemPromptBuilder.BuildAsync`, не §6 ниже.
+  > **Правлено в #867.** Список секций был верен — все шесть печатаются в коде. Лгало
+  > **предложение**, а не данные, в двух местах, и оба — в клаузе, которую оно само
+  > и объявляло общей:
+  > 1. «base prompt **(per-provider)**» — в коде один `DefaultBasePrompt` на всех
+  >    провайдеров. `ModelInfo.PromptTemplate` существует и **не читается нигде** в
+  >    `src/`/`apps/`; per-provider промптов ноль, не девять.
+  > 2. «См. `04-tools.md` §6» — §6 помечен как **иллюстрация, а не обязательство**
+  >    (#851), и его порядок секций расходится с кодом. Указатель вёл в блок, который
+  >    сам объявил себя не-спецификацией.
+  > Порядок тоже поправлен: skills идёт **после** MCP, а не до.
 
 - **Compaction**: triggered when `estimatedTokens > contextWindow - reserveTokens`. Алгоритм: find cut point (walk backwards, accumulate tokens until `keepRecentTokens`), generate structured Markdown summary (Goal/Constraints/Progress/Key Decisions/Next Steps/Critical Context/Files), insert as `is_summary=true` message, mark head as compacted. См. `05-sessions.md` §4.
 
@@ -94,6 +104,13 @@
 9. **System prompt caching** (provider-specific) — Anthropic `cache_control: { type: "ephemeral" }` на system prompt + last 2 messages. Экономит tokens и cache hit rate.
 
 10. **Per-provider system prompts** — Anthropic любит один формат, GPT другой, Gemini третий. 9 вариантов промптов.
+    > **v1-скоуп, не текущее состояние (#867).** Этот пункт отвечает на вопрос
+    > «что я упустил», а не «что уже есть», — список §Q4 целиком есть, но он не датирован
+    > и не помечен, а читается как опись того, что построено. Per-provider промптов в
+    > дереве **ноль**: один `DefaultBasePrompt` на всех провайдеров, а
+    > `ModelInfo.PromptTemplate` не читается нигде. «9 вариантов» — это то, что
+    > предлагается взять у kilocode, а не то, что есть; честная формулировка этой
+    > же строки в [`10-repo-analysis.md`](./10-repo-analysis.md) помечает её `v1`.
 
 11. **OAuth для subscription-based** (Anthropic Pro/Max, OpenAI Codex, GitHub Copilot) — нужен PKCE flow, token storage, auto-refresh.
 

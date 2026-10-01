@@ -10,7 +10,6 @@ Infrastructure — LLM provider implementation. References `Harbor.Abstractions`
 
 - `Harbor.Abstractions` (Domain)
 - `Microsoft.Extensions.Logging.Abstractions`
-- `Microsoft.Extensions.Http`
 
 ## Public API
 
