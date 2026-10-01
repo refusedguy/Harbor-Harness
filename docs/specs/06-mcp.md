@@ -439,6 +439,19 @@ The following MCP servers are connected and provide additional tools:
 </mcp_instructions>
 ```
 
+> **Статус блока: иллюстрация, а не обязательство (#867).** В коде печатается
+> **Markdown-список**, а не этот XML: заголовок `## MCP Servers` и следом —
+> `WorkspaceContextSource.FormatMcpInstructions` (`src/Harbor.Application/Sessions/WorkspaceContextSource.cs:132`),
+> который склеивает `Instructions from connected MCP servers:` и по буллету
+> `- <ServerName>: <instructions>` на сервер. Обёртка `<mcp_instructions>` и теги
+> `<server name=…>` **не выводятся нигде** в `src/`/`apps/` — проверено поиском по
+> всему дереву, совпадений нет.
+>
+> Заголовок секции `## MCP Servers` — единственная часть блока, которая верна, и
+> она совпадает с `SystemPromptBuilder.BuildAsync`. Формат инструкций не был
+> обещан как обязательство: [`10-repo-analysis.md`](./10-repo-analysis.md) относит
+> MCP целиком к `v1`, и дерево на 2026-10-01 реализует его частично.
+
 ## 6. MCP resources
 
 Resources — read-only данные, которые MCP server exposes. Могут быть static (`file://path`) или templated (`file://path/{name}`).
