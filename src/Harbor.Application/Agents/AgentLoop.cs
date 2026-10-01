@@ -43,6 +43,7 @@ public sealed class AgentLoop : IAgentLoop
     private readonly IRetryPolicy _retryPolicy;
     private readonly ISystemPromptBuilder _promptBuilder;
     private readonly IProviderRegistry _providers;
+    // #471: no ITokenTracker field — it was assigned and never read (#981).
     private readonly IToolDispatcher _toolDispatcher;
     private readonly IToolRegistry _tools;
     private readonly IBackgroundTaskRegistry? _backgroundTasks;
@@ -95,11 +96,7 @@ public sealed class AgentLoop : IAgentLoop
         // template assembly every turn.
         _promptBuilder = new CachingSystemPromptBuilder(promptBuilder);
         _compaction = compaction;
-        // #471: no field for `tokenTracker`. It was assigned here and read
-        // nowhere — the four behaviours below take the CONSTRUCTOR PARAMETER,
-        // so the field only pinned a reference on a hot object. Removing it is
-        // the one concrete instance of this issue's ISP cost: AgentLoop named
-        // the wide type and stored it in state that nothing consulted.
+        // #471: the tracker reaches the four behaviours below as this parameter.
         _retryPolicy = retryPolicy;
         _eventBus = eventBus;
         _permissions = permissions;
