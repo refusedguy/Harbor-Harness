@@ -1,3 +1,5 @@
+using Harbor.Terminal.Abstractions;
+
 namespace Harbor.Terminal.Abstractions.Plugins;
 
 /// <summary>TEMPORARY red-direction probe for #916 — deleted in the next commit.</summary>
@@ -13,7 +15,7 @@ internal sealed class RedProbe : ITuiPlugin
     public string Description => "red probe";
 
     /// <inheritdoc />
-    public void RegisterTui(Navigation.ViewRegistry views, Navigation.ViewModelRegistry viewModels)
+    public void RegisterTui(ViewRegistry views, ViewModelRegistry viewModels)
     {
     }
 }
