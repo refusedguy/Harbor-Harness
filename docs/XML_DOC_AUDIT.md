@@ -46,6 +46,12 @@ writes it lands, which is the whole argument for the fence in
 
 ## Summary
 
+<!-- check-doc-cites: allow-stale-count "Total members audited" — 2861 is the
+     SWEEP figure from 2026-08-27 and is left as written, because a запись that
+     renumbers itself after the fact is no longer a record of the sweep. The
+     tables now hold 2842 rows: two later commits deleted 19 documented rows
+     and left this total alone (see "The count is 19 stale" below). -->
+
 - **Total members audited:** 2861
 - **With XML doc:** 2021 (70%)
 - **Without XML doc:** 840 (29%)
@@ -57,6 +63,34 @@ writes it lands, which is the whole argument for the fence in
 | HIGH     | 1111     | 808       | 303         |
 | MED      | 765    | 543       | 222         |
 | LOW      | 985    | 670       | 315         |
+
+### The count is 19 stale, and here is exactly which way
+
+The Summary above is internally consistent — 808 + 543 + 670 = 2021, and
+303 + 222 + 315 = 840, and 2021 + 840 = 2861. It is consistent with **2861**,
+not with the **2842** rows this file actually ships, and that is the whole
+hazard: a reader who adds the table up gets the right answer and the wrong
+number.
+
+Nineteen rows were deleted after the sweep, and every one of them was a row
+that *had* an XML doc:
+
+| Commit | Rows | Priorities | Why |
+|---|---|---|---|
+| `a917e308` (#732) | 14 | 9 HIGH, 5 MED | the deleted `Harbor.Ui.Framework.Reducers` layer |
+| `c2eba3fd` (#749) | 5 | 4 HIGH, 1 MED | `RecentItemsService` moved out of `Harbor.Desktop.Shared` |
+
+That is why the gap has a fingerprint rather than showing up as noise: the
+`With Doc` column is short by exactly 13 (HIGH) and 6 (MED), while all three
+`Without Doc` cells — 303, 222, 315 — are still exact against the rows. A
+summary can pass a reader's arithmetic and still be wrong, and here the part
+that survives the check is the part that has no reason to have drifted.
+
+This is the one class of drift in this file that no `file:line` fence can see.
+Every other rule in `tools/check-doc-cites.py` asks whether a number is inside
+a *file*; this one asks whether a number agrees with the *rows beside it*.
+`DOC-COUNT-STALE` is what asks it, and the `allow-stale-count` line above is
+this document's answer.
 
 ## Project: Harbor.Abstractions
 
