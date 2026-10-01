@@ -514,6 +514,22 @@ End-to-end tests verify the full agent pipeline against a real provider. Harbor'
 **E2E-verified** provider is **Kilocode** with the free `tencent/hy3:free` model —
 no credit card required, $0 cost per call.
 
+> **Unverified default — check before you spend a run on it.** "E2E-verified" is a
+> label from a manual run, not a gate: no `HARBOR_E2E`-guarded provider test
+> exists anywhere in `tests/`, so nothing in CI re-confirms it. And the repo
+> disagrees with itself about this model. `providers/kilocode.json` declares
+> `tencent/hy3:free` and has since the initial commit; `de9fb741` ("evals: switch
+> live model to kilocode/kilo-auto/free **(hy3 dead)**") switched the live evals
+> path to `kilo-auto/free`, and that path still says so today —
+> `evals/profiles/local.json`, plus `docs/EVALS.md` and `CHANGELOG.md`. So the
+> declared default carries live evidence *against* it that nothing has settled.
+> The value is also duplicated into `ConfigSections.FallbackModel` (what a default
+> install with no `HARBOR_MODEL` actually gets) and asserted by
+> `DefaultModelIdentityTests`, so it is 12+ places that must move together — see
+> the issue linked from this PR. Confirm the id against
+> `providers/kilocode.json`'s `modelsUrl` with a real key before relying on the
+> output samples below being reproducible.
+
 ### Running the E2E smoke test
 
 ```bash
