@@ -100,6 +100,7 @@
 //
 // NOT verified: no build was run for #838, so the size of the DI006 diagnostic
 // at `App.axaml.cs:33` was never measured. The demotion is an inference from
+// check-doc-cites: record-drift App.axaml.cs:33 now="/// #779: this used to be one <c>public static IServicePr…" [#947: written over `public static IServiceProvider Services `; repair deferred to the owner's symbol-rename decision] -->
 // configuration plus a green `dev`, and it is a complete one — the shape is in
 // the rule's own "Problem" block, and `suggestion` is not promoted — but it is
 // an inference. `TreatWarningsAsErrors` promotes warnings, not suggestions, and

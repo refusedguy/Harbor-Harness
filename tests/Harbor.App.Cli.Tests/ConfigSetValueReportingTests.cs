@@ -37,8 +37,10 @@
 //     refuses `maxsteps`/`costlimit` with `✗ Invalid MaxSteps value: '…'`
 //     BEFORE the store is touched. Half this table already had the answer.
 //   * `Commands/ModelCommand.cs:81-86` writes `ProviderId.TryCreate`'s own
+// check-doc-cites: record-drift Commands/ModelCommand.cs:81 now="unresolved" [2 tracked files end with this path, so the citation does not identify one] -->
 //     reason and returns `ConvertFailure()` — never a `✓`.
 //   * `Commands/AuthCommand.cs:57-61` is `✓` on success, `✗ Failed: …` on
+// check-doc-cites: record-drift Commands/AuthCommand.cs:57 now="unresolved" [2 tracked files end with this path, so the citation does not identify one] -->
 //     failure, and returns the Failure.
 //   * `HarborConfig.TrySetProvider` / `TrySetModel` / `TrySetAgent` exist ONLY
 //     to return the parse reason ("ROP boundary #101") and had no production
@@ -46,6 +48,7 @@
 //
 // The `/model` command DOES take a bare id and qualify it with the current
 // provider (`ModelCommand.cs:143-150`). That is not a competing policy, and
+// check-doc-cites: record-drift ModelCommand.cs:143 now="ambiguous:2" [2 tracked files share this basename, so the citation does not identify one] -->
 // the reason is spelled out in `ModelRef`'s own docs: a bare id is free text
 // for a command whose job is "switch to a model", where the provider is
 // whatever the user already has. `/config set model` writes one specific

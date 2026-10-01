@@ -44,7 +44,9 @@ namespace Harbor.Tui.CellForge.Tests;
 ///    (Multiline/Approval x Shift|Alt+Enter) because the legacy
 ///    <c>ConsoleKeyInfo</c> cannot express it. Everything else must match.
 /// 2. <c>ComposerController.cs:173</c> types a char only when
+// check-doc-cites: record-drift ComposerController.cs:173 now="if (mods.AcceptsTypedChar())" [#947: written over `if ((mods & (KeyModifiers.Ctrl | KeyModi`; repair deferred to the owner's symbol-rename decision] -->
 ///    <c>(mods & (Ctrl|Meta|Alt)) == 0</c>; <c>DiffViewerOverlay.cs:210</c>
+// check-doc-cites: record-drift DiffViewerOverlay.cs:210 now="if (key.Modifiers.IsCommandModifier())" [#947: written over `if ((key.Modifiers & (ConsoleModifiers.C`; repair deferred to the owner's symbol-rename decision] -->
 ///    refuses <c>Control|Alt</c> and lets <c>Shift</c> through;
 ///    <c>ApprovalGateView.cs:256</c> refuses any modifier.
 ///    <c>DialogOverlay</c>'s kitty overload copies the composer gate
@@ -269,6 +271,7 @@ public class DialogKeyParityTests
     public async Task Control_Shift_Char_Still_Types_By_Both_Overloads()
     {
         // Pins the gate to (Ctrl|Meta|Alt) exactly, as ComposerController.cs:173
+        // check-doc-cites: record-drift ComposerController.cs:173 now="if (mods.AcceptsTypedChar())" [#947: written over `if ((mods & (KeyModifiers.Ctrl | KeyModi`; repair deferred to the owner's symbol-rename decision] -->
         // has it — Shift is a case-shaper, not a command modifier. Without this
         // row the rule could be "satisfied" by refusing every modifier, which
         // would break Shift+a in every text field.

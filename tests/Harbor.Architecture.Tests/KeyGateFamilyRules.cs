@@ -48,7 +48,9 @@
 //     FilePickerView.cs:153                   is None or Shift
 //     CommandPaletteView.cs:254               is None or Shift
 //     CellForgeJumpPalettePanel.cs:216        is None or Shift && !IsControl
+// check-doc-cites: record-drift CellForgeJumpPalettePanel.cs:216 now="ReseedLocked(ctx);" [#947: written over `}`; repair deferred to the owner's symbol-rename decision] -->
 //     ReplInputLoop.cs:261                    is None or Shift
+// check-doc-cites: record-drift ReplInputLoop.cs:261 now="}" [#947: written over `&& key.Modifiers.AcceptsTypedChar()`; repair deferred to the owner's symbol-rename decision] -->
 //
 //   COMMAND (no buffer; runes are h/j/k/l or a y/n/a vote; Shift refused)
 //     QuestionFormView.cs:512 + :576          != None / == None  (option rows)
@@ -68,12 +70,14 @@
 //   NOT imply "refuse Shift".
 //     DiffViewerOverlay.cs:282 + :210         (Ctrl|Alt|Meta) != 0
 //     ImageViewerOverlay.cs:124               (Ctrl|Alt|Meta) != 0
+// check-doc-cites: record-drift ImageViewerOverlay.cs:124 now="case KeyCode.Left:" [#947: written over `if (key.Modifiers.IsCommandModifier())`; repair deferred to the owner's symbol-rename decision] -->
 //     VimComposerMode.cs:37 (fall-through)    delegates to the composer
 //
 //   UNGATED — a third state the issue's two-family taxonomy cannot name, and the
 //   reason a guard that counts only the two families is not enough. Six sites
 //   matched a rune with NO modifier test at all, so a chord modifier rode
 //   straight through. ONE WAS A LIVE DEFECT: ReplInputLoop.cs:237 calls
+// check-doc-cites: record-drift ReplInputLoop.cs:237 now="// Only the jump frame itself toggles closed. Any other v…" [#947: written over `if (host.Setup.HandleKey(key))`; repair deferred to the owner's symbol-rename decision] -->
 //   SetupChecklistController.HandleKey, so Ctrl+q closed the setup guide AND was
 //   consumed — the chord never reached the composer behind it.
 //     SetupChecklistOverlay.cs:95     product input loop — LIVE
@@ -82,6 +86,7 @@
 //     CellForgeFileTreePanel.cs:135   mounted panel
 //     CellForgeDiagnosticsPanel.cs:57 mounted panel
 //     CellForgeSubagentsPanel.cs:164  mounted panel
+// check-doc-cites: record-drift CellForgeSubagentsPanel.cs:164 now="" [#947: cited line is blank; repair deferred to the owner's decision] -->
 //
 //   THE SIXTH CORRECTION, AND IT OVERTURNED THE MODEL: those six are NOT a third
 //   family. Measured, none of the six holds a text buffer, and five of the six
@@ -315,6 +320,7 @@ public class KeyGateFamilyRules
         // ---- UNGATED: no modifier test at all (#833's real finding) ------------
         // SetupChecklistOverlay is REACHED from the product input loop
         // (ReplInputLoop.cs:237 → SetupChecklistController), so its missing
+        // check-doc-cites: record-drift ReplInputLoop.cs:237 now="// Only the jump frame itself toggles closed. Any other v…" [#947: written over `if (host.Setup.HandleKey(key))`; repair deferred to the owner's symbol-rename decision] -->
         // gate is a live chord-swallowing defect. The rest are reachable only
         // from tests today; they are listed because the gate is absent in code
         // regardless of who calls it, and because a wiring change is exactly
@@ -534,6 +540,7 @@ public class KeyGateFamilyRules
     /// The six sites that had NO modifier gate at all, which is the finding
     /// #833's two-family taxonomy could not name. One of them was a LIVE defect:
     /// <c>ReplInputLoop.cs:237</c> calls <c>SetupChecklistController.HandleKey</c>,
+    // check-doc-cites: record-drift ReplInputLoop.cs:237 now="// Only the jump frame itself toggles closed. Any other v…" [#947: written over `if (host.Setup.HandleKey(key))`; repair deferred to the owner's symbol-rename decision] -->
     /// so <c>Ctrl+q</c> closed the setup guide AND was consumed — the chord never
     /// reached the composer behind it.
     /// <para>

@@ -5,6 +5,7 @@
 // The layers are declared but the NAMES do not reflect them. A type that lives
 // in Harbor.Registries (an Application-layer assembly, see
 // FullLayerMatrixTests.cs:404) was declared in a namespace that READS like a
+// check-doc-cites: record-drift FullLayerMatrixTests.cs:404 now="['Harbor.Desktop.Animations'] = new(Layer.Presentation," [#947: written over `["Harbor.Registries"] = new(Layer.Applic`; repair deferred to the owner's symbol-rename decision] -->
 // contract:
 //
 //   src/Harbor.Registries/Agents/AgentRegistry.cs     ->  Harbor.Abstractions.Agents

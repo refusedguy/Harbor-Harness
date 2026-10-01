@@ -4,12 +4,14 @@
 // answered it three ways, from three different data sources:
 //
 //   1. apps/Harbor.App.Avalonia/ViewModels/SettingsViewModel.cs:173 asked
+// check-doc-cites: record-drift apps/Harbor.App.Avalonia/ViewModels/SettingsViewModel.cs:173 now="// Restore, not assignment: a saved value may be a PALETT…" [#947: written over `authenticated = _authResolver.ResolveApi`; repair deferred to the owner's symbol-rename decision] -->
 //      IAuthResolver — the abstraction whose own doc comment
 //      (src/Harbor.Abstractions/Providers/IAuthResolver.cs:9) declares it
 //      "the single auth abstraction for ALL ILlmClient implementations",
 //      reading config stores, OS keychains, CLI overrides AND conventional
 //      environment variables. Correct.
 //   2. src/Harbor.Desktop.Abstractions/ViewModels/ProviderModelPickerViewModel.cs:250
+// check-doc-cites: record-drift src/Harbor.Desktop.Abstractions/ViewModels/ProviderModelPickerViewModel.cs:250 now="CurrentModelLabel = $'{active.ProviderId}/{active.Model}';" [#947: written over `CurrentModelLabel = $"{result.Value.Defa`; repair deferred to the owner's symbol-rename decision] -->
 //      asked the CommonConfig.ApiKeys dictionary directly, so it could not see
 //      an env-var key and painted "✗ No API key" on a provider the Settings tab
 //      calls "Authenticated" — two answers to one question, in one app.
@@ -23,6 +25,7 @@
 // The second half of the subject is the timeout. A provider probe had TWO
 // budgets under one concept: the canonical IProviderHealthCheck.DefaultTimeout
 // = 10s (IProviderHealthCheck.cs:15), which OnboardingViewModel.cs:459 already
+// check-doc-cites: record-drift OnboardingViewModel.cs:459 now="ambiguous:2" [2 tracked files share this basename, so the citation does not identify one] -->
 // spends, and a bare 5s literal inside ProviderConfigViewModel.TestConnectionAsync
 // with a user-facing string promising "Timed out after 5s". Two numbers, one
 // meaning — and the number shown to the user was not the canonical one.

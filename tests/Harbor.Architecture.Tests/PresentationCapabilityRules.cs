@@ -731,6 +731,7 @@ public sealed class PresentationCapabilityRules
             ["Harbor.Tui.CellForge.Engine"] = new(StringComparer.Ordinal)
             {
                 // Input/TerminalInputStream.cs:26 — FileStream over the inherited
+                // check-doc-cites: record-drift Input/TerminalInputStream.cs:26 now="unresolved" [resolver blind spot — src/Harbor.Tui.CellForge.Engine/Input/TerminalInputStream.cs is in the tree and PROJECT_ROOTS cannot reach it] -->
                 // fd 0. Not a violation and not fixable: fd 0 is the renderer's
                 // input medium and reading the console is renderer work, so the
                 // only refactor that removes this deletes the renderer.

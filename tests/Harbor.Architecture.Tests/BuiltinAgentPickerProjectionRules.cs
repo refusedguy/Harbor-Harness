@@ -11,6 +11,7 @@
 //   2. src/Harbor.Hosting/Modules/ToolsCatalog.cs:27-29                registration
 //   3. src/Harbor.Application/Onboarding/OnboardingWizard.cs:376-390   the menu
 //   4. apps/Harbor.App.Cli/Commands/AgentCommand.cs:25                 /agent's own text
+// check-doc-cites: record-drift apps/Harbor.App.Cli/Commands/AgentCommand.cs:25 now="" [#947: cited line is blank; repair deferred to the owner's decision] -->
 //   5. src/Harbor.Application/Configuration/HarborConfig.cs:108        doc comment
 //   6. src/Harbor.Desktop.Abstractions/Configuration/CommonConfig.cs  doc comment
 //   7. src/Harbor.Ui.Framework.ViewModels/ViewModels/SessionRowViewModel.cs:79

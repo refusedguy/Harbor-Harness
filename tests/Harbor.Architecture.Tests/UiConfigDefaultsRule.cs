@@ -13,14 +13,18 @@
 //   apps/Harbor.App.Avalonia/ViewModels/SettingsViewModel.cs:119  ? "jsonl"   : …
 //   apps/Harbor.App.Avalonia/ViewModels/SettingsViewModel.cs:120  ? "info"    : …
 //   src/Harbor.Desktop.Abstractions/ViewModels/OnboardingViewModel.cs:99
+// check-doc-cites: record-drift src/Harbor.Desktop.Abstractions/ViewModels/OnboardingViewModel.cs:99 now="/// that can disagree. Skip (<c>overwriteDefaults: false<…" [#947: written over `mergedKeys[provider] = newKey;`; repair deferred to the owner's symbol-rename decision] -->
 //                                                               ? "jsonl"   : …
 //
 // while the records that own those fields say:
 //   CommonConfig.DefaultProvider = "anthropic"   (CommonConfig.cs:127)
+// check-doc-cites: record-drift CommonConfig.cs:127 now="/// Default provider ID used on first launch / when the u…" [#947: written over `public string DefaultProvider { get; ini`; repair deferred to the owner's symbol-rename decision] -->
 //   CommonConfig.StorageBackend  = ""           (CommonConfig.cs:150 — "not chosen";
+// check-doc-cites: record-drift CommonConfig.cs:150 now="/// <para>" [#947: written over `public string StorageBackend { get; init`; repair deferred to the owner's symbol-rename decision] -->
 //                                                 the composition preset decides:
 //                                                 CLI jsonl, desktop memory)
 //   CommonConfig.LogLevel       = "info"       (CommonConfig.cs:167)
+// check-doc-cites: record-drift CommonConfig.cs:167 now="/// way would plant the forbidden shape in the one place …" [#947: written over `public string LogLevel { get; init; } = `; repair deferred to the owner's symbol-rename decision] -->
 //   AvaloniaConfig.FontFamily   = "Inter"      (AvaloniaConfig.cs)
 //
 // and the desktop composition root says:
@@ -90,6 +94,8 @@
 // `Theme` is deliberately NOT in R1's field list. Two lines outside this
 // issue's file scope have the same shape and are owned by another wave:
 //   apps/Harbor.App.Avalonia/ViewModels/ThemeSettingsViewModel.cs:74
+// check-doc-cites: record-drift apps/Harbor.App.Avalonia/ViewModels/ThemeSettingsViewModel.cs:74 now="" [#947: written over `private string _theme = "system";`; repair deferred to the owner's symbol-rename decision] -->
+// check-doc-cites: record-drift apps/Harbor.App.Avalonia/ViewModels/ThemeSettingsViewModel.cs:74 now="" [#947: cited line is blank; repair deferred to the owner's decision] -->
 //   src/Harbor.Desktop.Abstractions/ViewModels/ThemeSettingsViewModelBase.cs:39
 // The third site, SettingsViewModel.cs:114, was fixed in the same commit that
 // added this file — but a guard that named `Theme` would be red on day one, and

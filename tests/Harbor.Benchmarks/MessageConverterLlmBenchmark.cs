@@ -10,6 +10,7 @@ namespace Harbor.Benchmarks;
 ///     Benchmarks <see cref="MessageConverter.ToLlmMessages"/> — the Adapter (GOF) that
 ///     converts domain <see cref="AgentMessage"/>s to provider-agnostic <see cref="LlmMessage"/>s.
 ///     Called every turn in <c>AgentLoop.cs:235</c> to build the <see cref="LlmRequest.Messages"/>
+// check-doc-cites: record-drift AgentLoop.cs:235 now="// (and WaitForIdleAsync consumers) can distinguish it fr…" [#947: written over `var llmMessages = _messageConverter.ToLl`; repair deferred to the owner's symbol-rename decision] -->
 ///     payload before each <c>ILlmClient.StreamAsync</c> call.
 /// </summary>
 /// <remarks>
