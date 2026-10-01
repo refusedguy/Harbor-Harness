@@ -1,9 +1,8 @@
 using System.Collections.ObjectModel;
 using System.Windows.Input;
-using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Headless;
-using Avalonia.VisualTree;
+using Avalonia.LogicalTree;
 using Harbor.App.Avalonia;
 using Harbor.App.Avalonia.Views;
 using Harbor.Ui.Framework.ViewModels;
@@ -24,18 +23,22 @@ namespace Harbor.App.Avalonia.Tests;
 ///     against it.
 /// </summary>
 /// <remarks>
-///     Deliberately minimal: no <c>Window.Show</c> and no render timer — the view
-///     is applied, measured and arranged in place, which is enough to put the axaml
-///     content into the tree this test walks. Keeps clear of the known Avalonia 12
-///     headless flakes (see <c>ViewInflationTests</c> known-issue notes).
+///     Deliberately minimal, and now for a reason that was MEASURED rather than
+///     assumed: no <c>Window.Show</c>, no <c>ApplyTemplate</c>, no measure/arrange.
+///     The walk is over the LOGICAL tree, because a <c>UserControl</c>'s axaml
+///     content is a logical child from the moment <c>InitializeComponent</c> runs —
+///     putting it into the VISUAL tree needs a <c>ContentPresenter</c> from the
+///     templated subtree, which needs a real <c>TopLevel</c>. Keeps clear of the
+///     known Avalonia 12 headless flakes (see <c>ViewInflationTests</c> notes).
 ///     <para>
-///         This remark used to claim realized containers were NOT needed. That was
-///         wrong, and it was wrong in the way that hides things: with nothing
-///         realized, <c>GetVisualDescendants()</c> walks an empty tree,
-///         <c>.Single(b =&gt; b.Content == "Compute")</c> throws, and the throw was
+///         This remark used to say "realized containers are not needed", which was
+///         right about the conclusion and wrong about the walk: the file walked
+///         <c>GetVisualDescendants()</c>, which finds nothing here, so
+///         <c>.Single(b =&gt; b.Content == "Compute")</c> threw — and the throw was
 ///         discarded because the assertions ran as a detached <c>async void</c>
-///         inside <c>Dispatch(Action)</c>. The file had been green while checking
-///         none of its five claims. See the note at the realization call.
+///         inside <c>Dispatch(Action)</c> (#972, #766). The file had been green
+///         while checking none of its five claims. The two failed CI runs that got
+///         here are recorded at the walk site.
 ///     </para>
 /// </remarks>
 [NotInParallel("avalonia-headless")]
@@ -75,33 +78,45 @@ public class DiffViewBindingTests
 
             var view = new DiffView { DataContext = vm };
 
-            // The tree MUST be realized before it can be walked, and this block is
-            // the reason the test is worth anything. It was missing entirely, and
-            // the test still reported green: `GetVisualDescendants()` found no
-            // Compute button, `.Single(b => b.Content == "Compute")` threw
-            // "Sequence contains no matching element", and — because the body was
-            // an `async void` inside `Dispatch(Action)` (#972, #766) — the throw was
-            // discarded with the detached continuation. So the bindings this file
+            // This walk is the reason the test is worth anything, and getting it
+            // right took three CI runs, so the reasoning is recorded rather than
+            // the conclusion alone.
+            //
+            // What was wrong: the file walked `GetVisualDescendants()`, found no
+            // Compute button, and `.Single(b => b.Content == "Compute")` threw
+            // "Sequence contains no matching element" — inside an `async void`
+            // body, so the throw was discarded with the detached continuation
+            // (#972, #766) and the test reported Passed. The bindings this file
             // exists to pin (#160) have never once been checked.
             //
-            // The file's remark claimed "realized containers are not needed". That
-            // claim was the bug.
+            // MEASURED, not assumed — three attempts, two of them wrong:
             //
-            // MEASURED, not assumed, about how far realization has to go:
-            // `ApplyTemplate()` ALONE is not enough. With it, the first CI run
-            // still reported "Button contents found: (none)" — a `ContentControl`
-            // applies its own template, but the inner `ContentPresenter` only
-            // builds its child during MEASURE. The full
-            // apply/measure/arrange sequence is what puts the axaml content into
-            // the visual tree, and `GetVisualDescendants()` walks the visual tree.
-            // So this is a layout pass, which the old remark said it was avoiding;
-            // it cannot be avoided and have a tree to walk.
-            view.ApplyTemplate();
-            view.Measure(new Size(900, 600));
-            view.Arrange(new Rect(0, 0, 900, 600));
+            // Attempt 1, `GetVisualDescendants()` with no realization: empty
+            //   walk. `.Single(...)` threw, the `async void` swallowed it, green.
+            // Attempt 2, `ApplyTemplate()`: still "Button contents found: (none)".
+            //   A `ContentControl` applies its own template, but the inner
+            //   `ContentPresenter` builds its child during measure.
+            // Attempt 3, apply + `Measure` + `Arrange`: STILL none. Measure and
+            //   arrange drive layout, and layout alone does not move a
+            //   `ContentControl`'s content into the VISUAL tree here.
+            //
+            // What is actually true: the axaml content of a `UserControl` is a
+            // LOGICAL child from the moment `InitializeComponent` runs. The
+            // `ContentPresenter` that would re-parent it into the visual tree is
+            // part of the templated subtree, which needs a real
+            // `TopLevel`/`Window` — and this file deliberately does not open one.
+            //
+            // So the walk is `GetLogicalDescendants()`, which is both the correct
+            // tree for this shape and the reason the no-Window remark can stand.
+            // The claims under test are about BINDINGS — does `{Binding
+            // LeftText}` on a declared control resolve, does the button's Command
+            // equal the view-model's — and a binding is declared on the control
+            // regardless of which tree currently parents it. What this test is
+            // NOT is a layout or render test; nothing here should depend on a
+            // presenter having run.
 
             // LeftText/RightText → the two input boxes (empty on silent no-resolve).
-            texts = view.GetVisualDescendants()
+            texts = view.GetLogicalDescendants()
                 .OfType<TextBox>()
                 .Select(b => b.Text)
                 .ToList();
@@ -114,7 +129,7 @@ public class DiffViewBindingTests
             // found. `.Single` threw an opaque "Sequence contains no matching
             // element" from inside a detached `async void`, which is how a missing
             // button went unnoticed here in the first place.
-            List<Button> buttons = view.GetVisualDescendants().OfType<Button>().ToList();
+            List<Button> buttons = view.GetLogicalDescendants().OfType<Button>().ToList();
             buttonContents = buttons.Select(b => b.Content?.ToString() ?? "(null)").ToList();
             int computeIndex = buttonContents.FindIndex(c => c == "Compute");
             if (computeIndex >= 0)
@@ -125,7 +140,7 @@ public class DiffViewBindingTests
             expectedComputeCommand = vm.ComputeCommand;
 
             // Rows → row list (null source / zero items on silent no-resolve).
-            List<ItemsControl> lists = view.GetVisualDescendants().OfType<ItemsControl>().ToList();
+            List<ItemsControl> lists = view.GetLogicalDescendants().OfType<ItemsControl>().ToList();
             listCount = lists.Count;
             if (lists.Count > 0)
             {
