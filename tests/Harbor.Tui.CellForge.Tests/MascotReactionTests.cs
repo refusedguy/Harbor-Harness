@@ -13,13 +13,33 @@ namespace Harbor.Tui.CellForge.Tests;
 /// wiggle — short overlay sequences that override the mood frames, tinted by
 /// event accent, played exactly once per signal. Deterministic ticks only.
 /// <para>
-/// Serialized under the same <c>"pty"</c> key as the theme tests. The reaction
-/// assertions read exact <c>ChatPalette</c> styles off a painted buffer, and
-/// <c>ChatPalette</c> is a process-wide static catalog that
-/// <c>TerminalColorPalette.Apply</c> re-publishes — so running beside a theme
-/// swap lets a concurrently-swapped palette decide
-/// <c>buffer.Get(x, y).Style == ChatPalette.ToolError</c>. That is a test-order
-/// dependency, not a rendering bug: nothing here reads the clock.
+/// The tint asserts end in an exact <c>buffer.Get(x, y).Style ==
+/// ChatPalette.ToolError</c>: the left side is a cell painted at one instant,
+/// the right side is read from a process-wide static catalog that
+/// <c>TerminalColorPalette.Apply</c> re-publishes. Two things keep that
+/// comparison honest, and this header used to name only the first — the one that
+/// did nothing.
+/// </para>
+/// <para>
+/// 1. <b>The catalog is pinned</b> (<c>ChatPalette.PinFrame</c>) across each
+/// paint-and-read, so both sides of the equality resolve against a single
+/// projection even when a theme is published mid-test. This is the class's own
+/// protection; it does not depend on what a neighbour happens to be doing.
+/// See <c>BlinkTint_IgnoresAThemePublishedMidTest</c> for the reproduction.
+/// </para>
+/// <para>
+/// 2. <b>Every palette mutator is keyless.</b> <see cref="TerminalColorPalette" />
+/// writers carry bare <c>[NotInParallel]</c> — the only form that is a global
+/// lock — so they exclude every other test, keyed or not.
+/// </para>
+/// <para>
+/// The <c>"pty"</c> key this class used to carry belonged to neither. The
+/// deleted sentence claimed it serialized the class "under the same key as the
+/// theme tests"; the theme tests have not carried <c>"pty"</c> since #703, and
+/// a named key is a mutex over same-key peers only, so it could not have kept a
+/// theme swap off this class even when they did. The key is gone; the honest
+/// description of the arrangement is above. Semantics of the attribute forms:
+/// docs/TEST_PATTERNS.md.
 /// </para>
 /// </summary>
 // #891: bare [NotInParallel] = one test at a time GLOBALLY, replacing the
