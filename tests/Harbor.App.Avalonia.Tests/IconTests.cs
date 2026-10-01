@@ -72,7 +72,7 @@ public class IconTests
         string[] required = {
             "IcAdd", "IcSearch", "IcSettings", "IcSend", "IcStop",
             "IcTrash", "IcChevronRight", "IcChevronDown", "IcChevronUp",
-            "IcChevronLeft", "IcHome", "IcTerminal", "IcFileCode", "IcMore",
+            "IcChevronLeft", "IcHome", "IcTerminal", "IcFileCode", "IcFile", "IcMore",
             "IcCheck", "IcX", "IcCopy", "IcPaste", "IcLoading", "IcPause",
             "IcPlay", "IcRefresh", "IcDownload", "IcUpload", "IcLink",
             "IcExternalLink", "IcInfo", "IcWarning", "IcError", "IcSuccess",
