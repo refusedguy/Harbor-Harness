@@ -3,22 +3,33 @@ using Harbor.Abstractions.Models;
 namespace Harbor.Ui.Framework.Panels;
 /// <summary>
 ///     Provider contract for one dockable panel. Implementations live either in the
-///     SpectreTUI host assembly (builtins) or in plugin assemblies. The host queries
-///     <see cref="Build" /> every frame the panel is visible; <see cref="OnKey" /> is
-///     invoked only while the panel owns focus (<see cref="TuiPanelState.Focused" />).
+///     CellForge host assembly (the builtins, under <c>Harbor.Tui.CellForge</c>) or in
+///     plugin assemblies. The host queries <see cref="Build" /> every frame the panel is
+///     visible; <see cref="OnKey" /> is invoked only while the panel owns focus
+///     (<see cref="TuiPanelState.Focused" />).
 /// </summary>
 /// <remarks>
 ///     <para>
-///         <b>Widget type:</b> <see cref="Build" /> returns <see cref="object" /> because
-///         <c>Harbor.Terminal.Abstractions</c> is intentionally free of any TUI-framework
-///         dependency. Each concrete renderer casts the returned widget to its native
-///         widget type — SpectreTUI panels return <c>Spectre.Tui.IWidget</c>. Plugin
-///         authors that want to support multiple renderers should ship one
-///         <see cref="IPanelProvider" /> per renderer assembly.
+///         <b>Widget type — return text rows, not a widget.</b> <see cref="Build" />
+///         returns <see cref="object" /> because this project is intentionally free of
+///         any TUI-framework dependency, but the signature is <b>not</b> an invitation
+///         to return a framework widget. The only renderer with a panel path is
+///         CellForge, and its decoder
+///         (<c>CellForgePanelAdapter.WidgetToRows</c>) matches exactly three shapes —
+///         <see cref="string" />, an <c>IReadOnlyList&lt;string&gt;</c> and an
+///         <c>IEnumerable&lt;string&gt;</c> — and flattens each into rows. <b>Anything
+///         else falls through to <c>widget.ToString()</c>, so a returned widget object
+///         paints its own type name.</b> There is no cast to a native widget type in any
+///         shipped renderer; <c>AnsiPlain</c> and <c>NickConsoleEx</c> have no panel
+///         path at all. All 12 in-tree providers return
+///         <c>PanelText.Clip(rows, ctx.Width, ctx.Height)</c>. The <c>object</c> return
+///         leaves room for a native widget; the decoder has no case for one yet, which
+///         is #564's open question and an owner decision under the #555 feature freeze,
+///         not something a provider can rely on.
 ///     </para>
 ///     <para>
 ///         <b>Purity:</b> <see cref="Build" /> MUST be side-effect free (read
-///         <see cref="PanelContext.State" />, return a widget). <see cref="OnKey" /> may
+///         <see cref="PanelContext.State" />, return rows). <see cref="OnKey" /> may
 ///         mutate provider-local cache but must dispatch state transitions through
 ///         <c>UiStore.Dispatch</c> via the supplied services — never mutate the
 ///         <see cref="UiState" /> record directly.
@@ -49,14 +60,19 @@ public interface IPanelProvider
     public int DefaultSize { get; }
 
     /// <summary>
-    ///     Build a renderer-native widget for the current frame. Called only when the
+    ///     Build the panel's text rows for the current frame. Called only when the
     ///     panel is in <see cref="TuiPanelState.Visible" />, <see cref="TuiPanelState.Focused" />,
     ///     or <see cref="TuiPanelState.Pinned" /> — never when <see cref="TuiPanelState.Hidden" />.
     /// </summary>
     /// <param name="ctx">Per-frame context (state + geometry + typed <see cref="PanelServices" />).</param>
     /// <returns>
-    ///     A renderer-native widget (e.g. <c>Spectre.Tui.IWidget</c> for SpectreTUI).
-    ///     Return <see langword="null" /> to render an empty placeholder.
+    ///     Rows of text: a <see cref="string" />, or an
+    ///     <c>IReadOnlyList&lt;string&gt;</c> / <c>IEnumerable&lt;string&gt;</c>. The
+    ///     builtins clip to the dock with
+    ///     <c>PanelText.Clip(rows, ctx.Width, ctx.Height)</c> — a provider is
+    ///     responsible for its own geometry. Any other type is flattened by
+    ///     <c>ToString()</c> and paints its own type name. Return
+    ///     <see langword="null" /> to render an empty placeholder.
     /// </returns>
     public object? Build(PanelContext ctx);
 
