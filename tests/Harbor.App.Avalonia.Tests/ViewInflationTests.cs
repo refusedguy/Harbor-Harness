@@ -182,6 +182,53 @@ public class ViewInflationTests
     }
 
     [Test]
+    public async Task SessionCardView_Inflates_WithAnApplicationRunning()
+    {
+        // #973. The test above is the only inflation coverage this card had, and
+        // it could not have caught what was wrong with it.
+        //
+        // It constructs the view with no Avalonia Application, and StatusDot's
+        // constructor enters its body only `if (Application.Current is not null)`
+        // — so with no application the whole body, including the line that
+        // dereferenced the unassigned `Dot` field, was skipped. Green either way.
+        // That is not a flaky test, it is a test pointed the wrong way: the
+        // branch that crashed is the branch a real user is always in.
+        //
+        // So boot an actual headless application first. Same pattern as
+        // ChatView_Inflates / SettingsView_Inflates above — and deliberately NOT
+        // the `Dispatch(async () => …)` spelling those two use, which binds to
+        // Dispatch(Action), runs the body as async void, and drops everything
+        // after the first await (#972). The work here is synchronous, so the
+        // Action overload is spelled explicitly.
+        await using var session = HeadlessUnitTestSession.StartNew(typeof(App));
+
+        Exception? thrown = null;
+        await session.Dispatch((System.Action)(() =>
+        {
+            try
+            {
+                _ = new SessionCardView();
+            }
+            catch (Exception ex)
+            {
+                thrown = ex;
+            }
+        }), CancellationToken.None);
+
+        await Assert.That(thrown).IsNull()
+            .Because(
+                "A user with one stored session who opens the Sessions tab inflates one SessionCardView per "
+                + "session, and each card's status pill contains <comp:StatusDot/> (SessionCardView.axaml:16). "
+                + "StatusDot's constructor called InitializeComponent, whose hand-written copy shadowed the "
+                + "generator's overload — different signature, so it compiled, but the parameterless call bound "
+                + "to the copy and skipped the `Dot = FindNameScope()?.Find<Ellipse>(\"Dot\")` assignment. The "
+                + "next line dereferenced Dot and threw. AvaloniaInitializeComponentShadowRules in "
+                + "Harbor.Architecture.Tests now forbids the shadow itself; this test is what proves the crash "
+                + "is gone rather than merely unreachable."
+                + (thrown is null ? "" : $" Actual: {thrown.GetType().Name}: {thrown.Message}"));
+    }
+
+    [Test]
     [Skip("Known flake: headless Avalonia dispose race / virtualization timing in CI is non-deterministic. See issue #14.")]
     public async Task MainWindow_Inflates_Without_Cast_Errors()
     {

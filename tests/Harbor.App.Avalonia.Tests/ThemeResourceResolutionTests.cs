@@ -250,21 +250,39 @@ public class ThemeResourceResolutionTests
 
     /// <summary>
     ///     The session status dot's six keys. Asserted at the resolver rather
-    ///     than on the painted <c>Ellipse.Fill</c>, because the control cannot be
-    ///     reached from here at all: its code-behind declares its own
-    ///     <c>private void InitializeComponent()</c>, which shadows the one
-    ///     Avalonia's generator emits — and the generated one is what assigns the
-    ///     <c>Dot</c> field — so the constructor throws before any brush is
-    ///     looked up. That is a separate defect with its own issue; measuring the
-    ///     paint through it would report a broken control rather than a broken
-    ///     lookup.
+    ///     than on the painted <c>Ellipse.Fill</c>, because the thing #948 was
+    ///     about is the LOOKUP: <c>Resources[key]</c> versus
+    ///     <c>TryGetResource</c>. Measuring the paint would fold a broken
+    ///     control into a broken lookup and lose the distinction, and the control
+    ///     side is covered on its own terms — see
+    ///     <c>ViewInflationTests.SessionCardView_Inflates_WithAnApplicationRunning</c>
+    ///     and <c>AvaloniaInitializeComponentShadowRules</c> in
+    ///     <c>Harbor.Architecture.Tests</c>.
     /// </summary>
     /// <remarks>
-    ///     This is the one case where a failed lookup did not merely look wrong.
-    ///     <c>Ellipse.StatusDot</c> already sets <c>Fill</c> to
-    ///     <c>StateRunningBrush</c>, so the code-behind's assignment is the only
-    ///     thing that varies it per state — a missed key would have left every
-    ///     dot wearing the RUNNING colour, and the error dot blue.
+    ///     <para>
+    ///         This test used to carry a second reason for stopping at the
+    ///         resolver, and that reason is gone. <c>StatusDot</c>'s code-behind
+    ///         declared a <c>private void InitializeComponent()</c> that shadowed
+    ///         the overload Avalonia's name generator emits, so the generated
+    ///         <c>Dot</c> field was never assigned and the control's constructor
+    ///         threw before any brush was looked up (#973). Fixed: the six
+    ///         hand-written copies are deleted and
+    ///         <c>AvaloniaInitializeComponentShadowRules</c> forbids the shape.
+    ///     </para>
+    ///     <para>
+    ///         The reason that remains is the one above, and it is the reason
+    ///         worth keeping: a control that cannot be constructed reports a
+    ///         resolver failure as a constructor failure, which is a different
+    ///         bug with a different owner.
+    ///     </para>
+    ///     <para>
+    ///         This is the one case where a failed lookup did not merely look wrong.
+    ///         <c>Ellipse.StatusDot</c> already sets <c>Fill</c> to
+    ///         <c>StateRunningBrush</c>, so the code-behind's assignment is the only
+    ///         thing that varies it per state — a missed key would have left every
+    ///         dot wearing the RUNNING colour, and the error dot blue.
+    ///     </para>
     /// </remarks>
     [Test]
     [Retry(3)]
