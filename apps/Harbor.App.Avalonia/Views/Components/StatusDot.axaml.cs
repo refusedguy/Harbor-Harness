@@ -62,7 +62,7 @@ public sealed partial class StatusDot : UserControl
         var state = _states[(int)State];
         Dot.Classes.Set("running", state.pulse);
 
-        if (global::Avalonia.Application.Current?.Resources[state.brushKey] is SolidColorBrush brush)
+        if (ThemeBrushResolver.Resolve(state.brushKey) is SolidColorBrush brush)
             Dot.Fill = brush;
     }
 
