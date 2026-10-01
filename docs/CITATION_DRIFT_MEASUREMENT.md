@@ -30,6 +30,13 @@ The cheap guard was written and measured before it was adopted, because the
 issue had already established — from one hand-read case — that it could not
 catch the class that matters.
 
+Measured on `a7a40335`. **Every table on this page carries the commit it was
+measured on**, and the populations differ between them: the tree moved under a
+rebase between `a7a40335` and `bb33437a` with no test edited (see *The
+measurement moved under a rebase* below), so a figure quoted without its commit
+would already be stale by the time this document is read — which is the defect
+this whole page is about, and the reason `DOC-COUNT-STALE` exists.
+
 | | count |
 |---|---:|
 | prose citations in `tests/**/*.cs` | 236 |
@@ -45,6 +52,12 @@ So the rule shipped is anchored on history instead: `git blame` the citing
 line, read the target at the commit that wrote the citation and at HEAD, and
 compare. That is what makes "provably wrong" a measurement rather than an
 opinion.
+
+The `4 of 66` here and the `87 / 66` of the red run below are **different
+questions on the same population**: the 66 is the count of provably-wrong
+citations, the 87 is the count of the guard's findings (66 drift + 21
+mechanical, some overlapping). Both are on `a7a40335` / `bb33437a`
+respectively and neither is a subset of the other.
 
 ## Both cases the issue named, reproduced by the rule
 
@@ -149,7 +162,7 @@ unavoidable. The repair profile is what separates them — see below.
 
 ## Repair profile of the 66, and the three options
 
-Where did the content each author meant actually go?
+Where did the content each author meant actually go? (on `a7a40335`)
 
 | | count |
 |---|---:|
@@ -157,12 +170,19 @@ Where did the content each author meant actually go?
 | found at **several** places (needs a human to pick) | 7 |
 | **not present at HEAD at all** | 21 |
 
-And would a **symbol name** instead of a number have survived?
+And would a **symbol name** instead of a number have survived? (on `a7a40335`)
 
 | | count |
 |---|---:|
 | an identifier named on the cited line still exists in the file | 58 (90%) |
 | nothing named on that line survives — a human is needed regardless | 6 (9%) |
+
+Both tables partition the same 66, and they answer different questions. The
+second decides **option A** — *would a symbol name have held*. The first
+decides **the repair** — *where did the intended line actually go*, and only 36
+of 66 can be placed mechanically. A citation can be in the "a symbol would hold"
+half and still need a human to place, and most of them do: 58 would survive a
+symbol rename, but only 36 can be renumbered without judgement.
 
 **That 90% is the whole decision.** A `Type.member` citation survives an insert
 above it by construction, and would have held for 58 of the 66. It is the
