@@ -1,6 +1,10 @@
 using Harbor.DesignSystem;
 using Harbor.Hosting.Themes;
 using Harbor.Tui.CellForge.Widgets;
+// RgbColor is defined in the Harbor.DesignSystem ASSEMBLY but keeps the
+// Harbor.Ui.Framework.Projection NAMESPACE for source compatibility, so the
+// using is not implied by the one above.
+using Harbor.Ui.Framework.Projection;
 
 namespace Harbor.Tui.CellForge.Tests;
 
