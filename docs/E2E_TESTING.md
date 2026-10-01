@@ -150,33 +150,41 @@ Both build commands pull in the framework + app under test as project refs
 ### 4.2 Run the CLI E2E suite
 
 ```bash
-dotnet test tests/Harbor.E2E.Cli --no-build
+dotnet run --project tests/Harbor.E2E.Cli -c Release --no-build -- --minimum-expected-tests 1
 ```
 
-Expected: `Passed! - Failed: 0, Passed: 7, Skipped: 0, Total: 7`.
+Expected: 7 tests, none failed. A run that discovers nothing exits non-zero
+via `--minimum-expected-tests`, so an empty run cannot be mistaken for a pass.
 
 ### 4.3 Run the Blazor E2E suite
 
+This suite lives in `contrib/`, which CI does not build (see `AGENTS.md`
+§Project structure), so it is **not** in `Harbor.slnx` and is not part of any
+test gate:
+
 ```bash
-dotnet test contrib/tests/Harbor.E2E.App.Blazor --no-build
+dotnet run --project contrib/tests/Harbor.E2E.App.Blazor -c Release --no-build
 ```
 
-Expected: `Passed! - Failed: 0, Passed: 3, Skipped: 0, Total: 3`.
+Expected: 3 tests, none failed.
 
 ### 4.4 Filter by Category
 
 All E2E tests are tagged `[Category("E2E")]`. Run only E2E tests within one
-project (whole-solution `dotnet test` breaks under the MTP host — always
-target a single project directory):
+project — always one project at a time, as a plain executable (`dotnet test`
+is not used here; see
+[CONTRIBUTING.md §Why not `dotnet test`](../CONTRIBUTING.md#why-not-dotnet-test)):
 
 ```bash
-dotnet test tests/Harbor.E2E.Cli --no-build --treenode-filter "/*/*/CliE2ETests/*"
+dotnet run --project tests/Harbor.E2E.Cli -c Release --no-build -- \
+  --minimum-expected-tests 1 --treenode-filter "/*/*/CliE2ETests/*"
 ```
 
 ### 4.5 Detailed per-test output
 
 ```bash
-dotnet test tests/Harbor.E2E.Cli --no-build -- --output detailed
+dotnet run --project tests/Harbor.E2E.Cli -c Release --no-build -- \
+  --minimum-expected-tests 1 --output Detailed
 ```
 
 ---
@@ -324,11 +332,11 @@ Test thread (TUnit)                 UI thread (dedicated)
 
 ```bash
 dotnet build tests/Harbor.E2E.App.Avalonia/Harbor.E2E.App.Avalonia.csproj
-dotnet test tests/Harbor.E2E.App.Avalonia --no-build
+dotnet run --project tests/Harbor.E2E.App.Avalonia -c Release --no-build -- --minimum-expected-tests 1
 ls -la ~/.harbor/test-screenshots/
 ```
 
-Expected: `Passed! - Failed: 0, Passed: 7, Skipped: 0, Total: 7`.
+Expected: 7 tests, none failed.
 Screenshots at `~/.harbor/test-screenshots/01-main-window.png` through
 `07-onboarding.png` — open them in any image viewer to SEE what the UI
 looks like without running the app.
