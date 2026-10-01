@@ -17,7 +17,14 @@ namespace Harbor.Tui.CellForge.Tests;
 ///     itself, a fake-driven test could not be written at all, because there
 ///     would be nothing to inject.
 /// </remarks>
-[NotInParallel("pty")] // mutates global theme state
+// #648/#703: bare [NotInParallel] = one at a time GLOBALLY. The watcher applies
+// themes to the process-global palette, which every painter in this assembly
+// reads; the old ("pty") constraint key only excluded other "pty" tests, so
+// unkeyed readers (PostFxTests, PanelFxTests, MascotPanelTests) still ran
+// through the swap — that is the race behind #703's Timeline_PublishesGateGlowRegions
+// flake, observed on four PRs. #720 put the key back while porting the watcher
+// to IThemeStore and said nothing about the trade; this restores #703's form.
+[NotInParallel]
 public class ThemeFileWatcherTests
 {
     private string _path = null!;
@@ -82,9 +89,10 @@ public class ThemeFileWatcherTests
         await File.WriteAllTextAsync(_path, """{ "name": "good", "accent": "#666666" }""");
         watcher.Poll();
         // Deterministic core: this watcher's own application record. The
-        // global Current is NOT asserted here — under a parallel runner
-        // another theme test may hold the palette between our Poll and the
-        // read; ambient assertions live only behind NotInParallel keys.
+        // global Current is NOT asserted here — it was reachable only because
+        // this class is [NotInParallel] (one at a time globally, #648), so
+        // no other theme test can hold the palette between our Poll and a read
+        // of the shared static.
         await Assert.That(watcher.LastApplied.Value.Name).IsEqualTo("good");
 
         await File.WriteAllTextAsync(_path, "totally not json");

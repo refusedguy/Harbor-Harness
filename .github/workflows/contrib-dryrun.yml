@@ -1,0 +1,199 @@
+# Harbor CI — contrib/ DRY RUN. Measures; never gates.
+#
+# WHY THIS FILE EXISTS (issue #915)
+#
+#   `contrib/` holds 279 tracked files (164 `.cs`, 26 `.csproj`) and no workflow
+#   builds any of them. `Harbor.slnx` does not reference it, and neither
+#   `Harbor.Samples.slnx` nor `contrib/Contrib.slnx` is named anywhere under
+#   `.github/`. So the question "what would it cost to connect `contrib/` to the
+#   build?" has never had an answer backed by a compiler.
+#
+#   `docs/CONTRIB_BOUNDARY_MEASUREMENT.md` answers it statically and names the
+#   limit of that method: a static pass cannot see signature drift, deleted
+#   members, generic arity, or analyzer failures. This workflow closes exactly
+#   that gap, for the price of one CI run.
+#
+# WHAT IT IS NOT
+#
+#   It is NOT a gate, and it is NOT a step toward making contrib/ build.
+#   Deliberate properties, each load-bearing:
+#
+#     * `workflow_dispatch` ONLY. No `push`, no `pull_request`. A check that
+#       never triggers cannot appear in `gh pr checks`, so this can never block
+#       a merge. Do not add a `pull_request:` trigger to "get it running" —
+#       that is the decision #915 is about, and it is not this file's to make.
+#     * `continue-on-error: true` on the build step AND a final `exit 0`. A red
+#       table is the measurement working. A red workflow would be indistinguishable
+#       from a broken CI, and would train people to ignore it.
+#     * It writes no code and modifies nothing under `contrib/`.
+#
+#   The per-project result goes to the job summary, which is the same
+#   report-only contract `coverage` uses (issue #99): a table, not a threshold.
+#
+# ONE OPERATIONAL CAVEAT — found by trying it, then found AGAIN after merging
+#
+#   GitHub only registers a workflow file that exists on the DEFAULT branch, and
+#   this repository's default branch is `master`. This file merged into `dev`,
+#   which is NOT the default branch, so it is present and the YAML parses and the
+#   workflow is still not dispatchable:
+#
+#     $ gh workflow list --all | grep -i contrib      # no match
+#     $ gh workflow run contrib-dryrun.yml --ref dev
+#     HTTP 404: workflow contrib-dryrun.yml not found on the default branch
+#
+#   The earlier version of this comment said the file "cannot be dispatched
+#   until it merges". That was wrong in a way that costs a reader a wasted
+#   dispatch: the merge happened, and the 404 did not go away. Merging into
+#   `dev` does not register anything. The condition is presence on `master`.
+#
+#   The fix is the one `goldens.yml` already took — see `c0c6ab52`, "add
+#   goldens regen workflow to master (dispatch requires default-branch copy)":
+#   a copy of this file on `master`. It is a one-file change, adds no trigger
+#   and no gate, and puts no `contrib/` content anywhere near a merge gate.
+#   Until an owner does that, the per-project table below DOES NOT EXIST and
+#   `docs/CONTRIB_BOUNDARY_MEASUREMENT.md` has a static floor, not a count.
+#
+# HOW TO READ THE TABLE
+#
+#   `skipped (windows TFM)` — the project targets `net10.0-windows*` and cannot
+#   build on `ubuntu-latest` at all. Four of them do, and `Contrib.slnx` already
+#   comments them out for this reason. This row is a fact about the runner, not
+#   about the code, and it is why "connect contrib/ to CI" is never a one-line
+#   `ci.yml` edit: it needs a second runner and two workloads.
+#
+#   `pass` / `FAIL` — a real `dotnet build -c Release` of that project alone,
+#   with the repository's own `Directory.Build.props` policy in force. Note that
+#   `contrib/tests/Directory.Build.props` sets `TreatWarningsAsErrors=false` while
+#   the tui/scripting/apps projects keep it `true`, so a test project that passes
+#   here would be held to a *looser* standard than the `build` job holds `src/`.
+#   That asymmetry is real and is itself part of the price.
+#
+#   The walk is over every `contrib/**/*.csproj` on disk (26), not over the 22
+#   active in `Contrib.slnx`, so the four that the solution excludes are still
+#   measured. They report `skipped (windows TFM)` or, if that changes, a result
+#   nobody is currently looking at.
+name: contrib-dryrun
+
+on:
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: contrib-dryrun-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: true
+  NUGET_CERT_REVOCATION_MODE: offline
+  MSBuildEnableWorkloadResolver: false
+
+jobs:
+  # Report-only by construction. The job succeeds whatever the table says; the
+  # table is the artefact. See the header.
+  measure:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    steps:
+      # No `submodules: recursive`: nothing under `external/` is involved in a
+      # contrib build, and the docs gate already records that a dotnet job here
+      # would be the first thing to need it.
+      - uses: actions/checkout@v7
+
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: "10.0.x"
+          cache: true
+          cache-dependency-path: Directory.Packages.props
+
+      - name: Build each contrib project and record the result
+        # The measurement itself must not be the thing that fails.
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -uo pipefail
+
+          summary="$GITHUB_STEP_SUMMARY"
+          {
+            echo "## contrib/ dry run (issue #915 — measurement, not a gate)"
+            echo
+            echo "_Report-only. This workflow is \`workflow_dispatch\`-only and exits 0"
+            echo "regardless of the table. See \`docs/CONTRIB_BOUNDARY_MEASUREMENT.md\`._"
+            echo
+            echo "| project | TargetFramework | result | first error |"
+            echo "|---|---|---|---|"
+          } >> "$summary"
+
+          : > /tmp/opencode-contrib-status.tsv
+          total=0; pass=0; fail=0; skip=0
+
+          # Sorted so two runs of the same commit produce the same table.
+          while IFS= read -r proj; do
+            [ -n "$proj" ] || continue
+            total=$((total + 1))
+            name="$(basename "$proj" .csproj)"
+            dir="$(dirname "$proj")"
+
+            tfm="$(grep -o -m1 -E '<TargetFrameworks?>[^<]+' "$proj" \
+                   | head -1 | sed -E 's/<TargetFrameworks?>//' || true)"
+            [ -n "$tfm" ] || tfm="(none)"
+
+            case "$tfm" in
+              *-windows*)
+                printf '%s\t%s\tskipped (windows TFM)\t-\n' "$name" "$tfm" \
+                  >> /tmp/opencode-contrib-status.tsv
+                skip=$((skip + 1))
+                continue
+                ;;
+            esac
+
+            echo "::group::build $name"
+            log="/tmp/opencode-contrib-build.log"
+            if dotnet build "$proj" -c Release -p:ContinuousIntegrationBuild=true \
+                 > "$log" 2>&1; then
+              result="pass"; pass=$((pass + 1)); first="-"
+            else
+              result="FAIL"; fail=$((fail + 1))
+              # First real error line, so the table points at a cause rather
+              # than at "it did not build". `error ` covers CS and MSB; NU is
+              # restore, which fails the build before any compile.
+              first="$(grep -m1 -E '(error |: error |NU[0-9]{4})' "$log" \
+                      | cut -c1-160 || true)"
+              [ -n "$first" ] || first="(no error line captured)"
+              echo "----- build log tail -----"
+              tail -40 "$log"
+              echo "-------------------------"
+            fi
+            echo "::endgroup::"
+
+            printf '%s\t%s\t%s\t%s\n' "$name" "$tfm" "$result" "$first" \
+              >> /tmp/opencode-contrib-status.tsv
+          done < <(find contrib -name '*.csproj' | sort)
+
+          while IFS=$'\t' read -r name tfm result first; do
+            echo "| \`$name\` | \`$tfm\` | $result | \`$first\` |" >> "$summary"
+          done < /tmp/opencode-contrib-status.tsv
+
+          {
+            echo
+            echo "**$total projects: $pass pass, $fail FAIL, $skip skipped (windows TFM).**"
+            echo
+            echo "Full logs: the \`contrib-dryrun\` job log for this run."
+          } >> "$summary"
+
+          echo "contrib dry run: $total projects, $pass pass, $fail FAIL, $skip skipped"
+          exit 0
+
+      - name: Upload per-project build logs
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: contrib-dryrun-logs
+          path: /tmp/opencode-contrib-*.log
+          if-no-files-found: ignore
+          retention-days: 7

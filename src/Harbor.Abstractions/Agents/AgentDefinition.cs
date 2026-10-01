@@ -75,6 +75,37 @@ public sealed record AgentDefinition(
     /// <param name="model">Model id (without provider prefix).</param>
     /// <param name="providerId">Provider id (e.g. <c>anthropic</c>).</param>
     /// <returns>A ready-to-use <see cref="AgentDefinition" /> that cannot modify files.</returns>
+    /// <remarks>
+    ///     <para>
+    ///         The bash allow-rules are a SUBSET of <see cref="PermissionRuleset.Default" />'s, and
+    ///         that is the invariant rather than a preference: an agent whose description says it
+    ///         cannot modify files must not reach, unprompted, a shell command the full-access
+    ///         <c>code</c> agent is itself only allowed after narrower enumeration.
+    ///     </para>
+    ///     <para>
+    ///         The git row used to be <c>new("bash", "git *", Allow)</c>, and it was the hole
+    ///         #798 did not report. A trailing <c>*</c> in a rule pattern is OPEN-ENDED, so
+    ///         <c>git *</c> matches <c>git push --force</c>: that single rule authorized 16 of 16
+    ///         mutating git subcommands (<c>commit</c>, <c>push</c>, <c>reset --hard</c>,
+    ///         <c>checkout .</c>, <c>clean -fdx</c>, <c>rebase</c>, <c>apply</c>) at
+    ///         <see cref="PermissionAction.Allow" />, with no prompt, in an agent that documents
+    ///         itself as unable to modify files. <c>Default</c> allows three read-only git verbs;
+    ///         the read-only agent was allowing all of git, and <c>ExploreDefault</c>, its
+    ///         sibling, allowed none.
+    ///     </para>
+    ///     <para>
+    ///         The tool LIST was not the defence either. <c>IToolRegistry.ResolveTools</c> hides
+    ///         <c>bash</c> from this agent because its catch-all is <c>Deny</c>, but
+    ///         <c>ToolDispatcher</c> resolves a called tool against the FULL registry and gates
+    ///         only on the ruleset. The tool list shapes the prompt; the ruleset is the boundary,
+    ///         and the ruleset said yes.
+    ///     </para>
+    ///     <para>
+    ///         <c>ReadOnlyAgentShellAllowRule</c> (tests/Harbor.Architecture.Tests) grades that
+    ///         subset relation against <c>Default</c> itself, so a fourth read-only agent or a
+    ///         sixth shell verb is covered without a written roster.
+    ///     </para>
+    /// </remarks>
     public static AgentDefinition PlanDefault(string model, string providerId) => new(
         AgentName.Create("plan"),
         "Plan",
@@ -89,7 +120,9 @@ public sealed record AgentDefinition(
             new("ls", "*", PermissionAction.Allow),
             new("bash", "ls *", PermissionAction.Allow),
             new("bash", "cat *", PermissionAction.Allow),
-            new("bash", "git *", PermissionAction.Allow),
+            new("bash", "git status", PermissionAction.Allow),
+            new("bash", "git diff *", PermissionAction.Allow),
+            new("bash", "git log *", PermissionAction.Allow),
             new("bash", "*", PermissionAction.Deny),
             new("edit", "*", PermissionAction.Deny),
             new("write", "*", PermissionAction.Deny)

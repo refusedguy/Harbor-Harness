@@ -34,7 +34,8 @@ namespace Harbor.Desktop.Abstractions.Configuration;
 ///     <para>
 ///         <b>Thread safety:</b> implementations MUST be thread-safe. The
 ///         shipped <c>JsonCommonConfigStore</c> (Harbor.Hosting, since #534 — it
-///         is persistence, and this leaf is a published Domain-labelled package)
+///         is persistence, and <c>Harbor.Desktop.Abstractions</c> is a published
+///         Presentation-labelled package)
 ///         uses a <see cref="SemaphoreSlim" /> to serialise Load/Save/Update
 ///         against concurrent callers.
 ///     </para>

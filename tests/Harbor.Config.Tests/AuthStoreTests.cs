@@ -5,8 +5,57 @@ namespace Harbor.Config.Tests;
 ///     Tests for AuthStore — manages per-provider API keys in HarborConfig
 ///     with env-var fallback.
 /// </summary>
+/// <remarks>
+///     #823: every write here is process-wide state that
+///     <see cref="AuthStore" /> reads back, and two of them are read by something
+///     wider than this class — <c>ListApiKeysAsync</c> enumerates the ENTIRE
+///     process environment (AuthStore.cs:140) and synthesises a provider entry for
+///     every <c>*_API_KEY</c> it finds. <c>OnboardingWizardTests</c> is in this
+///     same assembly, writes 32 of the same variables, and is not in #823's list of
+///     nine. Both carry <c>process-env</c> now.
+/// </remarks>
+[NotInParallel("process-env")]
 public class AuthStoreTests
 {
+    /// <summary>
+    ///     The three literal-named keys this class pins, saved before each test and
+    ///     handed back after it (#870, mechanism from #847).
+    /// </summary>
+    /// <remarks>
+    ///     <para>
+    ///         These are the writes whose variable name is a string literal, so the
+    ///         class knows up front which names it is about to destroy and can put
+    ///         them back without a teardown at each call site. The three tests that
+    ///         write through an <c>envName</c> local cannot be here — that name is a
+    ///         different provider in each of them, known only inside the method — and
+    ///         they save and restore inline instead.
+    ///     </para>
+    ///     <para>
+    ///         <c>ANTHROPIC_API_KEY</c> is the one that costs: it is a real key, on a
+    ///         runner that exports it, and this class is in the same assembly as
+    ///         <c>OnboardingWizardTests</c>, which reached it first.
+    ///     </para>
+    /// </remarks>
+    private string? _ambientAnthropicApiKey;
+    private string? _ambientUnknownProviderApiKey;
+    private string? _ambientListTestProviderApiKey;
+
+    [Before(Test)]
+    public void SaveAmbientProviderKeys()
+    {
+        _ambientAnthropicApiKey = Environment.GetEnvironmentVariable("ANTHROPIC_API_KEY");
+        _ambientUnknownProviderApiKey = Environment.GetEnvironmentVariable("UNKNOWNPROVIDER_API_KEY");
+        _ambientListTestProviderApiKey = Environment.GetEnvironmentVariable("LISTTESTPROVIDER_API_KEY");
+    }
+
+    [After(Test)]
+    public void RestoreAmbientProviderKeys()
+    {
+        Environment.SetEnvironmentVariable("ANTHROPIC_API_KEY", _ambientAnthropicApiKey);
+        Environment.SetEnvironmentVariable("UNKNOWNPROVIDER_API_KEY", _ambientUnknownProviderApiKey);
+        Environment.SetEnvironmentVariable("LISTTESTPROVIDER_API_KEY", _ambientListTestProviderApiKey);
+    }
+
     private static string NewTempConfigPath() =>
         Path.Combine(Path.GetTempPath(), $"harbor-auth-{Guid.NewGuid():N}", "config.json");
 
@@ -44,6 +93,10 @@ public class AuthStoreTests
     {
         (var auth, _, string path) = CreateAuthStore();
         string envName = "ACMEPROVIDER_API_KEY";
+        // #847: `null` is the right value to pin, not the right value to restore.
+        // Nothing here ever read the ambient value, so writing null back destroyed
+        // the variable for every test that ran after this one.
+        string? previousEnv = Environment.GetEnvironmentVariable(envName);
         Environment.SetEnvironmentVariable(envName, "env-value-xyz");
         try
         {
@@ -54,7 +107,7 @@ public class AuthStoreTests
         }
         finally
         {
-            Environment.SetEnvironmentVariable(envName, null);
+            Environment.SetEnvironmentVariable(envName, previousEnv);
             if (File.Exists(path)) File.Delete(path);
             string? dir = Path.GetDirectoryName(path);
             if (dir is not null && Directory.Exists(dir)) Directory.Delete(dir, true);
@@ -66,6 +119,9 @@ public class AuthStoreTests
     {
         (var auth, _, string path) = CreateAuthStore();
         string envName = "DUALPROVIDER_API_KEY";
+        // #847: the key is still exported on a developer machine or a CI runner, and
+        // this test's teardown used to destroy it rather than hand it back.
+        string? previousEnv = Environment.GetEnvironmentVariable(envName);
         Environment.SetEnvironmentVariable(envName, "env-value");
         try
         {
@@ -78,7 +134,7 @@ public class AuthStoreTests
         }
         finally
         {
-            Environment.SetEnvironmentVariable(envName, null);
+            Environment.SetEnvironmentVariable(envName, previousEnv);
             if (File.Exists(path)) File.Delete(path);
             string? dir = Path.GetDirectoryName(path);
             if (dir is not null && Directory.Exists(dir)) Directory.Delete(dir, true);
@@ -188,6 +244,10 @@ public class AuthStoreTests
     {
         (var auth, _, string path) = CreateAuthStore();
         string envName = "ENVLISTPROVIDER_API_KEY";
+        // #847: this is the one that mattered most — ListApiKeysAsync enumerates the
+        // ENTIRE process environment (AuthStore.cs:140), so a key destroyed here is
+        // gone from a set this very class reads back.
+        string? previousEnv = Environment.GetEnvironmentVariable(envName);
         Environment.SetEnvironmentVariable(envName, "from-env");
         try
         {
@@ -199,7 +259,7 @@ public class AuthStoreTests
         }
         finally
         {
-            Environment.SetEnvironmentVariable(envName, null);
+            Environment.SetEnvironmentVariable(envName, previousEnv);
             if (File.Exists(path)) File.Delete(path);
             string? dir = Path.GetDirectoryName(path);
             if (dir is not null && Directory.Exists(dir)) Directory.Delete(dir, true);

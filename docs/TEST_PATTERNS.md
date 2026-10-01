@@ -2,7 +2,10 @@
 
 > **Framework:** TUnit 1.61 (`[Test]` attribute, `await Assert.That(...)` assertions).
 > **Run command:** `dotnet run --project tests/<Project> -c Release --no-build -- --minimum-expected-tests 1`
-> **Never** use `dotnet test` — the MTP bridge in this repo discovers zero tests.
+> **Never** use `dotnet test` — every CI job runs each test project as a plain
+> executable, and no job runs `dotnet test`, so its behaviour here is unverified.
+> (An earlier version of this line said it "discovers zero tests"; that was
+> wrong — see [CONTRIBUTING.md §Why not `dotnet test`](../CONTRIBUTING.md#why-not-dotnet-test).)
 > **Shared helpers** live in `tests/Harbor.TestKit/` and are referenced by test projects
 > via `<ProjectReference Include="../Harbor.TestKit/Harbor.TestKit.csproj" />`.
 
@@ -703,8 +706,73 @@ public class MyMessageTests
 |---|---|
 | `[Test]` | Marks a method as a test (must return `Task` or `void`). |
 | `[Before(HookType.TestDiscovery)]` | Global setup (use in `GlobalSetup` class). |
-| `[NotInParallel("group")]` | Prevents parallel execution with other tests in the same group. |
-| `[SkipWhenNotLinux]` | Skip on non-Linux. |
+| `[NotInParallel]` | Runs the test **completely alone** — no other test in the process overlaps it. |
+| `[NotInParallel("group")]` | Serializes against other tests carrying an **overlapping key only**. Not a global lock — see below. |
+| `[RunOn(OS.Linux)]` | Run only on Linux; skipped elsewhere. Also `[ExcludeOn(OS.Windows \| OS.MacOs)]` for the inverse. |
+
+Every row above is a TUnit type that resolves in any test project. The one
+bespoke attribute this file used to list here, `[SkipWhenNotLinux]`, is
+`internal` to `tests/Harbor.Tools.Builtin.Tests` and resolves nowhere else —
+copying it into another project is CS0246, not a skip.
+
+### Parallelism: what each `[NotInParallel]` form actually guarantees
+
+Read from TUnit 1.61.0's scheduler, not from the XML docs. This distinction is
+the one that has cost the most: a named key *looks* like a global lock, is not
+one, and the mistake has been made twice (#703's palette flake, #704).
+
+| Form | Serialized against | Scope |
+|---|---|---|
+| `[NotInParallel("a")]` | other tests whose key set **intersects** `{a}` | one test process |
+| `[NotInParallel(new[] { "a", "b" })]` | other tests whose key set intersects `{a}` **or** `{b}` | one test process |
+| `[NotInParallel]` | **every other test, keyed or not** | one test process |
+
+**The array is not optional shorthand — the two-argument form does not compile.**
+TUnit 1.61.0's `NotInParallelAttribute` (`src/TUnit.Core/Attributes/TestMetadata/`
+`NotInParallelAttribute.cs`, tag `v1.61.0`) declares exactly three constructors —
+`()`, `(string constraintKey)` and `(string[] constraintKeys)`. There is no
+`params` overload, so `[NotInParallel("a", "b")]` is **CS1729** — this table
+shipped that spelling for a day before CI caught it (#849). The array spelling is
+also what TUnit's own XML documentation uses for its two-key example.
+
+Two keys and one shared key are not the same thing, and the array is not a lock
+tier. `new[] { "a", "b" }` means *wait for anyone holding `a`, and for anyone
+holding `b`* — the union of two peer sets, never the two sets locking each other.
+It collapses to a single shared key `c` **only** if every class holding `a` and
+every class holding `b` is re-keyed to `c` as well; a class that keeps only `a`
+stays invisible to `c`. So use one shared key when you are free to name both
+groups — fewer names to keep straight, and it is the only form whose intent is
+readable from the key — and use the array when `a` and `b` are existing groups
+you did not get to name. That is the case #823 hit.
+
+The array constructor is also the only one that checks its input, and it does so
+at **runtime**: `[NotInParallel(new[] { "a", "a" })]` compiles and then throws
+`ArgumentException("Duplicate constraint keys are not allowed.")`.
+
+Three consequences, all of them load-bearing:
+
+1. **A keyed test runs concurrently with every unkeyed test in the same
+   assembly.** The two buckets are separate phases joined with
+   `RunPhasesConcurrentlyAsync`, so `ConstraintKeyScheduler` sees only other
+   *keyed* tests. A class that mutates a process-wide static and carries a key
+   is protected from its named peers and from nothing else.
+2. **Keys do not cross processes.** CI runs one `dotnet exec` per test project,
+   so `"pty"` in `Harbor.Tui.CellForge.Tests` and `"pty"` in
+   `Harbor.Tui.CellForge.PtyTests` are two unrelated keys. A key held by exactly
+   one class in its assembly is a label with no effect at all.
+3. **Different keys run concurrently with each other.** A key names *peers*, not
+   a lock tier. `[NotInParallel("pty")]` and `[NotInParallel("ipc")]` never wait.
+
+So: use a key when the set of competitors is knowable and enumerable (a shared
+pseudo-terminal, one headless Avalonia session); use the bare form when you
+mutate a process-wide static and the readers are unkeyed. Prefer not writing
+process state at all — that is what #700 settled on, and it is cheaper than
+either attribute.
+
+If you change the parallelism attribute on a class, say so in the commit
+message and keep the reason as a comment on the attribute. #720 put the key back
+on `ThemeFileWatcherTests` without a word, and the class sat racing unkeyed
+palette readers until this was noticed.
 
 ### Running tests
 

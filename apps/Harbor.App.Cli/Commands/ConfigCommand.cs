@@ -1,5 +1,6 @@
 using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Tui;
+using Harbor.App.Cli.Configuration;
 using Harbor.Application.Configuration;
 
 namespace Harbor.App.Cli.Commands;
@@ -55,23 +56,39 @@ public sealed class ConfigCommand : ISlashCommand
             string key = args[1];
             string value = string.Join(' ', args.Skip(2));
 
+            // #709: the value used to be assigned through `HarborConfig`'s
+            // property setters — `_ = TrySetModel(value)` — which PARSE and, on
+            // failure, discard the value and null the field. The `✓` below was
+            // then printed anyway, and the store write succeeded, so a bare
+            // model id was reported as written while actually replacing the
+            // user's own model with the built-in default.
+            //
+            // The decision now happens BEFORE the store is touched, and it hands
+            // back the mutation rather than performing it: `UpdateAsync`'s
+            // updater cannot report a failure, and `HarborConfig.TrySet*` mutate
+            // before they report — validating through them inside the updater
+            // would apply a refused value as a deletion.
+            var decision = ConfigValueSetter.Decide(key, value);
+            if (decision.IsFailure)
+            {
+                // The typed value is the reason the user needs, and it is the
+                // reason the write below was never attempted — so it is reported
+                // in preference to any store error that would follow it.
+                _writer($"✗ {decision.Error}");
+                return decision.ConvertFailure();
+            }
+
+            // Read the mutation HERE, in the block the guard above already left.
+            // Inside the `UpdateAsync` lambda the check and the read sit in
+            // different scopes, and CFE0001 — the guard that stops `.Value` on a
+            // failed `Result` from throwing §ROP-001's crash into production —
+            // cannot see across that boundary. `ModelCommand.cs:87-93` reads its
+            // `Result` the same way, in the body and not in a closure.
+            Action<HarborConfig> apply = decision.Value;
+
             var updateResult = await _configStore.UpdateAsync(c =>
             {
-                switch (key.ToLowerInvariant())
-                {
-                    case "provider": c.Provider = value; break;
-                    case "model": c.Model = value; break;
-                    case "agent": c.Agent = value; break;
-                    case "tui": c.Tui = value; break;
-                    case "storage": c.Storage = value; break;
-                    case "maxsteps":
-                        if (int.TryParse(value, out int ms)) c.MaxSteps = ms;
-                        break;
-                    case "costlimit":
-                        if (decimal.TryParse(value, out decimal cl)) c.CostLimit = cl;
-                        break;
-                    default: _writer($"Unknown config key: {key}"); break;
-                }
+                apply(c);
                 return c;
             }, ct).ConfigureAwait(false);
 
@@ -99,6 +116,10 @@ public sealed class ConfigCommand : ISlashCommand
         _writer("Usage:");
         _writer("  /config               Show current config");
         _writer("  /config set <k> <v>   Set config value");
+        // #709: an unknown key is now a refusal rather than a message followed by
+        // a `✓`, which makes the accepted keys part of the command's contract
+        // instead of a detail. Derived from the one table, so it cannot go stale.
+        _writer($"    keys: {string.Join(", ", ConfigValueSetter.Keys)}");
         _writer("  /config path          Show config file path");
         return Result.Success();
     }

@@ -5,20 +5,30 @@ using Harbor.Abstractions.Models;
 namespace Harbor.Benchmarks;
 
 /// <summary>
-///     Benchmarks structural equality and diffing of <see cref=\"AppState\" />
+///     Benchmarks structural equality and diffing of <see cref="UiState" />
 ///     snapshots — the operation renderers perform to decide whether a
-///     full repaint is necessary. Measures <see cref=\"EqualityComparer\" />
+///     full repaint is necessary. Measures <see cref="EqualityComparer" />
 ///     on immutable record trees of varying depth, plus manual field-by-field
 ///     comparison for early-exit scenarios.
 /// </summary>
+/// <para>
+///     <b>Repointed by #597.</b> This benchmark used to measure <c>AppState</c>,
+///     the flat pre-split record that #594's deletion left producer-less. The
+///     measurement is unchanged in kind and the payload is unchanged in shape:
+///     <c>AppState</c>'s transcript/status/streaming fields are
+///     <c>UiState.Chat</c>'s, and its input/focus/scroll fields are
+///     <c>UiState.Ui</c>'s. What is measured is now the state every renderer
+///     actually reads, so the number prices the real fold rather than a shape
+///     nothing constructs.
+/// </para>
 /// <para><b>Measurement contract (#408)</b> — what this number includes:</para>
 /// <list type="bullet">
 ///          <item><c>Operation:</c> one structural equality check between two <see
-///          cref="AppState" /> snapshots (identical reference, changed value), one hand-rolled
+///          cref="UiState" /> snapshots (identical reference, changed value), one hand-rolled
 ///          early-exit field comparison, or one line-count delta.</item>
 ///          <item><c>Payload:</c> a <c>LineCount</c>-line transcript; the "changed" snapshot
-///          differs in <c>Status</c>, <c>IsStreaming</c>, <c>StreamingBuffer</c> and one usage
-///          counter.</item>
+///          differs in <c>Chat.Status</c>, <c>Chat.IsStreaming</c>, <c>Chat.Active.TextBuffer</c>
+///          and one usage counter.</item>
 ///          <item><c>StateReset:</c> none — the three snapshots are immutable and built once
 ///          in <c>Setup</c>; no equality call mutates them.</item>
 ///          <item><c>Drain:</c> none — comparison is synchronous.</item>
@@ -33,9 +43,9 @@ namespace Harbor.Benchmarks;
 [SimpleJob(warmupCount: 3, iterationCount: 5)]
 public class StateDiffingBenchmark
 {
-    private AppState _oldState = null!;
-    private AppState _newState = null!;
-    private AppState _identicalState = null!;
+    private UiState _oldState = null!;
+    private UiState _newState = null!;
+    private UiState _identicalState = null!;
 
     [Params(0, 100, 1000)]
     public int LineCount;
@@ -54,32 +64,40 @@ public class StateDiffingBenchmark
                 default);
         }
 
-        _oldState = new AppState
+        _oldState = new UiState
         {
-            Lines = lines.ToImmutableArray(),
-            Status = "idle",
-            IsStreaming = false,
-            StreamingBuffer = string.Empty,
-            ThinkingBuffer = string.Empty,
-            Cost = new CostSnapshot(1000, 500, 0.05m),
-            Model = "model-a",
-            Provider = "provider-a",
-            AgentName = "code",
-            IsAgentRunning = false,
-            WasRunning = false,
-            Input = new InputModel("hello", ImmutableArray<string>.Empty, -1),
-            Focus = FocusMode.Input,
-            ScrollOffset = 0,
-            ViewportLines = 40,
-            TotalLines = LineCount
+            Ui = new TerminalUiState
+            {
+                Input = new InputModel("hello", ImmutableArray<string>.Empty, -1),
+                Focus = FocusMode.Input,
+                ScrollOffset = 0,
+                ViewportLines = 40,
+                TotalLines = LineCount
+            },
+            Chat = new ChatDomainState
+            {
+                Lines = lines.ToImmutableArray(),
+                Status = "idle",
+                IsStreaming = false,
+                Active = ActiveMessage.Empty,
+                Cost = new CostSnapshot(1000, 500, 0.05m),
+                Model = "model-a",
+                Provider = "provider-a",
+                AgentName = "code",
+                IsAgentRunning = false,
+                WasRunning = false
+            }
         };
 
         _newState = _oldState with
         {
-            Status = "running",
-            IsStreaming = true,
-            StreamingBuffer = "partial text",
-            Cost = _oldState.Cost with { TokensOut = 501 }
+            Chat = _oldState.Chat with
+            {
+                Status = "running",
+                IsStreaming = true,
+                Active = new ActiveMessage("partial text", string.Empty),
+                Cost = _oldState.Chat.Cost with { TokensOut = 501 }
+            }
         };
 
         _identicalState = _oldState;
@@ -95,12 +113,12 @@ public class StateDiffingBenchmark
     public bool ManualCompare_EarlyExit()
     {
         if (ReferenceEquals(_oldState, _newState)) return true;
-        if (_oldState.Status != _newState.Status) return false;
-        if (_oldState.IsStreaming != _newState.IsStreaming) return false;
-        if (_oldState.StreamingBuffer != _newState.StreamingBuffer) return false;
+        if (_oldState.Chat.Status != _newState.Chat.Status) return false;
+        if (_oldState.Chat.IsStreaming != _newState.Chat.IsStreaming) return false;
+        if (_oldState.Chat.Active.TextBuffer != _newState.Chat.Active.TextBuffer) return false;
         return true;
     }
 
     [Benchmark(Description = "Compute Lines.Length delta")]
-    public int Compute_LinesDelta() => Math.Abs(_oldState.Lines.Length - _newState.Lines.Length);
+    public int Compute_LinesDelta() => Math.Abs(_oldState.Chat.Lines.Length - _newState.Chat.Lines.Length);
 }

@@ -251,7 +251,7 @@ public sealed class ApprovalGateView : IChatBlock, IFocusTarget
             return false;
         }
 
-        if (key.Modifiers != KeyModifiers.None)
+        if (!key.Modifiers.IsUnmodified())
         {
             return false;
         }

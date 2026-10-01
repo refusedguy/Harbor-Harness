@@ -63,7 +63,7 @@ EventBus fixed alloc (8.1 KB/publish). Полная таблица и план P
 ## Known broken / pre-existing
 
 - **CI `build` job red on `dev` (Sep 2026, fixed in worktree):** unresolved merge markers (`CS8300`) in `src/Harbor.CodeGen/{EscapeCodeGenerator,MoodFrameGenerator}.cs` from the codegen-boilerplate merge, a missing CodeGen-analyzer reference in `Harbor.Terminal.Abstractions`, HEAD-side consumers (`Harbor.CodeGen.*Attribute`, hand-rolled `EscapeCodes`) vs sprint-side contracts, plus Avalonia-12 API drift (`Selection.StartOffset`, `Dispatcher.UIThread`, `HierarchicalDataTemplate`/`TreeView.Virtualize`). All fixed; `dotnet build Harbor.slnx -c Release` is green (0 errors).
-- **`dotnet test` discovers zero tests repo-wide** (MTP bridge exits 5 with one silent discovery error; same DLLs run green via `dotnet run --project` / direct exec). CI + NUKE + docs switched to `dotnet run --project tests/<X> -- --minimum-expected-tests 1` (issue #24).
+- **The sanctioned test runner is a plain executable, not `dotnet test`.** `global.json` selects the Microsoft.Testing.Platform runner, which rejects the VSTest-era options (`--logger`, `--filter`) the old commands passed — that is exit code 5, *invalid command-line arguments*; a run that genuinely discovers no tests exits **8**, so "exits 5" was never evidence of zero discovery, and an earlier version of this file said it was. `CHANGELOG.md` (sprint *ci-cd-maturity*) records the real origin: `renderer-perf-gate.yml` printed `Zero tests ran` / exit 5 until one `--logger` flag was deleted. Separately, 11 of the 36 test projects still reference `Microsoft.NET.Test.Sdk`, which TUnit documents as stopping discovery; `TUNIT_MTP_AUDIT.md` proposes the removal and it never landed. No CI job has run `dotnet test` since 2026-09-04, so its current per-project behaviour is **unverified** (issue #24 did the switch; #802 corrected the explanation).
 - **Golden CRLF trap on Windows:** `*.golden.txt` blobs are LF; without normalization Windows checkouts (CRLF) fail string compares. Fixed via `Golden.Normalize` in both helpers + `.gitattributes` (`*.golden.txt text eol=lf`).
 - **Windows-only test isolation leak:** `GetFolderPath(UserProfile)` ignores a swapped `USERPROFILE` env, so `Build_Registers_CommonConfig` read the dev-box config. Fixed via `HARBOR_HOME` override (`HarborPaths`) + test isolation.
 - **3 Avalonia 12 headless test failures** (на момент свипа 22.08): `MarkdownRenderer_SetMarkdown_DoesNotThrow`, `CodeBlock_Default_Code_IsEmpty`, `TypewriterStreamingText_CanSet_Text` — fail with `InvalidOperationException: Stack empty` in `AvaloniaPropertyDictionaryPool.Get()`. Похоже на баг пакета Avalonia.Headless, не Harbor-кода; re-check ROP-D (25.08) фиксировал красными только пару флакующих `ChatView_Inflates` / `TryGet_ReturnsNullForUnregistered` (introduced 61ee126).
@@ -124,8 +124,12 @@ dotnet run --project apps/Harbor.App.Avalonia
 dotnet run --project contrib/apps/Harbor.App.Blazor
 # → open http://localhost:5000
 
-# Запуск тестов ВАЖНО: `dotnet test` в этом репо находит НОЛЬ тестов (сломанный
-# MTP-bridge: хост выходит с кодом 5 и одной silent-ошибкой discovery).
+# Запуск тестов ВАЖНО: тесты — обычные exe, по одному проекту, той же формой,
+# которую исполняет CI. `dotnet test` здесь не используется и ни одним CI-job
+# не запускается, поэтому его поведение НЕ ПРОВЕРЕНО (см. CONTRIBUTING.md
+# §Why not `dotnet test`; прежняя запись «находит НОЛЬ тестов, хост выходит с
+# кодом 5» была неверной: код 5 — это «неверные аргументы командной строки», а
+# реальное отсутствие тестов даёт код 8).
 # Прогоняйте per-project как обычные exe:
 dotnet run --project tests/Harbor.Core.Tests -c Release --no-build -- --minimum-expected-tests 1
 dotnet run --project tests/Harbor.Tui.CellForge.PtyTests -c Release --no-build   # CE-5 PTY e2e

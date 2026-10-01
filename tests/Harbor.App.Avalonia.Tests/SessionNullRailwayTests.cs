@@ -4,6 +4,7 @@ using Harbor.Abstractions.Events;
 using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Abstractions.Sessions;
+using Harbor.App.Avalonia.Services;
 using Harbor.Storage.Memory;
 using Harbor.Ui.Framework.Services;
 using Harbor.Ui.Framework.Sessions;
@@ -136,7 +137,7 @@ public class SessionNullRailwayTests
         var sessionStore = store ?? new ControllableStore();
         var agent = new FakeAgent();
         var agents = new FakeAgentRegistry();
-        var factory = new SessionFactory(agents, agent, sessionStore, new FakeLogger<SessionFactory>());
+        var factory = new SessionFactory(agents, agent, sessionStore, new SessionForkerAdapter(sessionStore), new FakeLogger<SessionFactory>());
         var switcher = new SessionSwitcher(agent, sessionStore, factory, new FakeLogger<SessionSwitcher>());
         var router = new SessionEventRouter();
         var status = new SessionStatusService(new SessionStatusTracker());
@@ -203,6 +204,13 @@ public class SessionNullRailwayTests
         await Assert.That(result.Error.Contains("boom-create")).IsTrue();
     }
 
+    /// <summary>
+    ///     #670: this asserted the copy's behaviour, which is what the issue is about — a branch
+    ///     whose title was never written, whose lineage was never stamped, and whose message ids
+    ///     were regenerated so nothing named in the parent could be named in the child. Now that
+    ///     the fork IS <c>SessionForkService</c>, the same three facts are asserted the other way
+    ///     round, against the persisted child.
+    /// </summary>
     [Test]
     public async Task CreateBranch_Success_CopiesAndReparentsMessages()
     {
@@ -216,37 +224,61 @@ public class SessionNullRailwayTests
         await Assert.That(result.IsSuccess).IsTrue();
         var branch = result.Value;
         await Assert.That(branch.Id).IsNotEqualTo(source.Id);
-        await Assert.That(branch.Title).IsEqualTo(source.Title + " (branch)");
+        await Assert.That(branch.Title).IsEqualTo($"Fork of {source.Title}");
+        await Assert.That(branch.ParentSessionId).IsEqualTo(source.Id);
+
+        // The returned record and the stored row must be the same object: the old copy handed
+        // back a `with`-stamped title the store had never seen.
+        var persisted = (await store.GetAsync(branch.Id).ConfigureAwait(false)).Value;
+        await Assert.That(persisted.Title).IsEqualTo(branch.Title);
+        await Assert.That(persisted.ParentSessionId).IsEqualTo(source.Id);
+
         var copied = (await store.GetMessagesAsync(branch.Id).ConfigureAwait(false)).Value;
         await Assert.That(copied.Count).IsEqualTo(2);
         await Assert.That(copied.All(m => m.SessionId == branch.Id)).IsTrue();
-        var sourceIds = (await store.GetMessagesAsync(source.Id).ConfigureAwait(false)).Value.Select(m => m.Id).ToHashSet();
-        await Assert.That(copied.All(m => !sourceIds.Contains(m.Id))).IsTrue();
+
+        // Re-parented, not re-identified: a message id means the same thing on both sides.
+        var sourceIds = (await store.GetMessagesAsync(source.Id).ConfigureAwait(false)).Value.Select(m => m.Id).ToArray();
+        await Assert.That(copied.Select(m => m.Id)).IsEquivalentTo(sourceIds);
     }
 
     [Test]
     public async Task CreateBranch_CreateFailure_ReturnsFailure()
     {
-        var (_, factory, store) = CreateGraph(new ControllableStore { FailCreate = true });
-        var source = Session.Create("/tmp", "code", "p", "m");
+        // The parent has to exist first: the core fork reads it BEFORE it creates the child, so
+        // an unpersisted `Session` would fail on the parent read and never reach `CreateAsync`.
+        var controllable = new ControllableStore();
+        var (_, factory, store) = CreateGraph(controllable);
+        var source = (await store.CreateAsync("/tmp", "code", "p", "m").ConfigureAwait(false)).Value;
+        controllable.FailCreate = true;
 
         var result = await factory.CreateBranchAsync(source).ConfigureAwait(false);
 
         await Assert.That(result.IsFailure).IsTrue();
         await Assert.That(result.Error.Contains("boom-create")).IsTrue();
-        _ = store;
     }
 
+    /// <summary>
+    ///     The core reads the parent's history before creating anything, so a history failure
+    ///     must leave the store exactly as it found it — no orphan child shell.
+    /// </summary>
     [Test]
-    public async Task CreateBranch_HistoryReadFailure_ReturnsFailureInsteadOfSilentEmptyBranch()
+    public async Task CreateBranch_HistoryReadFailure_LeavesNoOrphanChild()
     {
-        var (_, factory, store) = CreateGraph(new ControllableStore { FailGetMessages = true });
+        var controllable = new ControllableStore();
+        var (_, factory, store) = CreateGraph(controllable);
         var source = (await store.CreateAsync("/tmp", "code", "p", "m").ConfigureAwait(false)).Value;
+        controllable.FailGetMessages = true;
 
         var result = await factory.CreateBranchAsync(source).ConfigureAwait(false);
 
         await Assert.That(result.IsFailure).IsTrue();
         await Assert.That(result.Error.Contains("boom-history")).IsTrue();
+        await Assert.That((await store.ListAsync().ConfigureAwait(false)).Value.Count).IsEqualTo(1)
+            .Because(
+                "The copy created the child FIRST and read the transcript second, so every "
+                + "history-read failure stranded an empty session in the user's list with nothing "
+                + "to relate it to anything.");
     }
 
     [Test]

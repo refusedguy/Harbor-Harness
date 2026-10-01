@@ -14,7 +14,7 @@
 
 ## Layer
 
-**Infrastructure (helper).** Not pure infrastructure (no HTTP clients, no DI registration, no filesystem code) — just the small set of pooling / materializer helpers that other infrastructure projects (`Harbor.Storage.*`, `Harbor.Providers.*`, `Harbor.Tools.*`) and the application layer (`Harbor.Application`) need to keep allocations low on hot paths.
+**Domain (helper).** The matrix places it in **Domain**, not Infrastructure — zero Harbor references, no HTTP clients, no DI registration, no filesystem code, and a Domain row may reference Domain only. Just the small set of pooling / materializer helpers that other infrastructure projects (`Harbor.Storage.*`, `Harbor.Providers.*`, `Harbor.Tools.*`) and the application layer (`Harbor.Application`) need to keep allocations low on hot paths.
 
 ## Dependencies
 

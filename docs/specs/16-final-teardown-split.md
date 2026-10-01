@@ -61,8 +61,10 @@ Done already: `{Ui: TerminalUiState, Chat: ChatDomainState}` composition,
 
 ## 4. #33 Low/Suggested (only after §1–§2 green)
 
-- [ ] `ChatViewState`/`ChromeViewState`, `StreamingSync`, chat VMs
+- [ ] ~~`ChatViewState`/`ChromeViewState`~~, `StreamingSync`, chat VMs
       (`ToolCall/TokenUsage/StatusMappers`), `Sessions/` → Chat-ext project.
+      (The two records were deleted as producer-less in #597; `SessionInfo`
+      stays — it is live, held by `ChatDomainState.Sessions`.)
 - [ ] `Harbor.Ui.Framework` + Engine packable (`IsPackable>true`), versioned.
 - [ ] Theme via `IThemeService` (today: direct wiring — `Watch` swallows
       errors/names; fix the service first, then route).

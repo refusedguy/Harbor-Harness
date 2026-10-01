@@ -203,10 +203,13 @@ internal static class RepoPaths
     ///     <para>
     ///         The set is read from the csproj XML, so it is the compiler's own input rather
     ///         than a second hand-maintained list that could drift from the build. A project
-    ///         that links nothing extra is unaffected: <c>Harbor.Storage.Memory</c> still
-    ///         returns its own files only, which is what
+    ///         that links nothing extra is unaffected — it returns its own files only. What
+    ///         keeps the walk honest is that each project gets exactly what its csproj
+    ///         declares and no more, which is what
     ///         <c>SharedSourceLinkRules.The_Per_Project_File_Walk_Does_Not_Invent_Links</c>
-    ///         pins.
+    ///         pins: <c>Harbor.Storage.Memory</c> links
+    ///         <c>src/Harbor.Storage.Shared/SessionStoreErrors.cs</c> (#887) and still must not
+    ///         be handed the other two files in that folder.
     ///     </para>
     /// </remarks>
     internal static IReadOnlyList<string> EnumerateCsFiles(string projectDir)

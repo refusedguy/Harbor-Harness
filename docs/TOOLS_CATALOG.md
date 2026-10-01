@@ -262,7 +262,7 @@ timeout, returns non-zero exit codes as `ToolResult.Error`.
 {"command": "dotnet build"}
 
 // 2. Run tests, longer timeout
-{"command": "dotnet test tests/Harbor.Tools.Builtin.Tests --treenode-filter \"/*/*/*/*[Category=Integration]\"", "timeoutMs": 300000}
+{"command": "dotnet run --project tests/Harbor.Tools.Builtin.Tests -c Release --no-build -- --minimum-expected-tests 1 --treenode-filter \"/*/*/*/*[Category=Integration]\"", "timeoutMs": 300000}
 
 // 3. Pipe to grep
 {"command": "rg TODO | wc -l"}
@@ -278,7 +278,7 @@ timeout, returns non-zero exit codes as `ToolResult.Error`.
 - For file reads, prefer `read` (gets line numbers + binary rejection).
 - For content search, prefer `ripgrep` (faster, respects gitignore).
 - For directory listing, prefer `ls` (structured output) or `tree` (overview).
-- Set `timeoutMs` generously for `dotnet test` / `npm install` style commands.
+- Set `timeoutMs` generously for a full-suite test run / `npm install` style commands.
 
 ---
 
@@ -1065,7 +1065,7 @@ The classic TDD loop:
 [{"tool":"edit", "args":{"path":"src/Calculator.cs","oldString":"return a + b;","newString":"return a + b + 1;"}}]
 
 // Turn 3
-[{"tool":"bash", "args":{"command":"dotnet test tests/Calculator.Tests"}}]
+[{"tool":"bash", "args":{"command":"dotnet run --project tests/Calculator.Tests -c Release"}}]
 ```
 
 ### Chain 2 — grep → read → patch
@@ -1763,9 +1763,12 @@ dotnet run --project tests/Harbor.Tools.Builtin.Tests -c Release --no-build -- \
   --treenode-filter "/*/*/WebFetchToolTests/*"
 ```
 
-> **Known limitation:** `dotnet test` discovers zero tests in this repo (broken
-> MTP bridge). Run test projects as plain executables, one at a time
-> (`dotnet run --project tests/<X> -c Release --no-build`).
+> **Known limitation:** `dotnet test` is not used in this repo — every CI job
+> runs each test project as a plain executable, one at a time
+> (`dotnet run --project tests/<X> -c Release --no-build -- --minimum-expected-tests 1`).
+> See [CONTRIBUTING.md §Why not `dotnet test`](../CONTRIBUTING.md#why-not-dotnet-test)
+> for the causes; the earlier "discovers zero tests (broken MTP bridge)" wording
+> here was wrong.
 
 ---
 

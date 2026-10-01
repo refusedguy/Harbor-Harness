@@ -107,7 +107,8 @@ system спросит подтверждение, если сработает `A
 harbor> Run the Harbor.Core.Tests project and tell me which tests fail
 ```
 
-LLM вызовет `bash` с `dotnet test tests/Harbor.Core.Tests`. Вывод вернётся в
+LLM вызовет `bash` с `dotnet run --project tests/Harbor.Core.Tests -c Release
+--no-build -- --minimum-expected-tests 1`. Вывод вернётся в
 `ToolResult.Output`, LLM его прочитает и резюмирует.
 
 ### Task 4: Debug an error

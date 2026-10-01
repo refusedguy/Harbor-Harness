@@ -5,9 +5,24 @@ namespace Harbor.App.Cli.Tests;
 /// <summary>
 ///     Tests for <see cref="McpLoginRunner" /> — list/login/logout against an
 ///     isolated mcp.json pointed at by <c>HARBOR_MCP_CONFIG</c>. A class-wide
-///     lock serializes the env mutation (no other suite touches the variable);
-///     blocking waits stay inside the lock, TUnit assertions outside it.
+///     lock serializes the env mutation; blocking waits stay inside the lock,
+///     TUnit assertions outside it.
 /// </summary>
+/// <remarks>
+///     <para>
+///         <b>#823.</b> The class-wide <see cref="Gate" /> was never enough, and
+///         the reason is worth keeping: it is <c>private static</c>, so it
+///         excludes this class from itself and nothing else. The two lines below
+///         that admitted a CI flake are now explained — <c>HostBuilderDiTests</c>
+///         composes the CLI host in the same process and reads
+///         <c>HARBOR_MCP_CONFIG</c> through <c>ToolsCatalog.CreateMcpRegistry</c>
+///         (<c>ToolsCatalog.cs:72</c>), and neither class held a key, so the
+///         scheduler put them in different buckets. Both carry
+///         <c>process-env</c> now; the lock stays because it also orders this
+///         class's own methods against each other.
+///     </para>
+/// </remarks>
+[NotInParallel("process-env")]
 public class McpLoginRunnerTests : IDisposable
 {
     private static readonly Lock Gate = new();

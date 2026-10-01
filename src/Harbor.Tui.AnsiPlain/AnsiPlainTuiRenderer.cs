@@ -139,8 +139,12 @@ public partial class AnsiPlainTuiRenderer : BaseTuiRenderer
     /// <summary>Compaction lifecycle lines.</summary>
     private sealed class CompactionHandler : IAgentEventHandler
     {
+        // #840: the third member. CanHandle used to name started and completed
+        // and not failed, so a compaction that fell back to truncation wrote
+        // nothing at all — in the renderer whose output a CI transcript diff
+        // compares, that is byte-identical to a run that never compacted.
         public bool CanHandle(AgentEvent @event) =>
-            @event is CompactionStartedEvent or CompactionCompletedEvent;
+            @event is CompactionStartedEvent or CompactionCompletedEvent or CompactionFailedEvent;
 
         public Task HandleAsync(AgentEvent @event, ITuiRenderContext context, CancellationToken ct = default)
         {
@@ -154,6 +158,18 @@ public partial class AnsiPlainTuiRenderer : BaseTuiRenderer
 
                 case CompactionCompletedEvent cc:
                     context.WriteStyled($"[compacted: pruned {cc.PrunedMessageCount} msgs, saved ~{cc.TokensSaved} tokens in {cc.Duration.TotalSeconds:F1}s]", TuiStyle.Dim);
+                    context.WriteLine();
+                    break;
+
+                // Not the sibling's Dim: StatusBarView already maps the
+                // compaction state to yellow, and a session that silently lost
+                // history deserves a step up from routine lifecycle chatter.
+                // The plain strategy emits no colour, so HARBOR_TUI=plain's
+                // bytes are identical either way — the sentence is what carries
+                // this, not the styling.
+                case CompactionFailedEvent cf:
+                    context.WriteLine();
+                    context.WriteColored($"[{CompactionLifecycleLines.Failed(cf.Error)}]", TuiColor.Yellow);
                     context.WriteLine();
                     break;
             }

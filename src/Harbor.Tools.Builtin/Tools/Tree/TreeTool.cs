@@ -246,12 +246,59 @@ public sealed class TreeTool : ITool
     ///     now visible in trace logs.
     /// </summary>
     private HashSet<string>? TryGetGitTrackedFiles(string root) =>
-        Result.Try(() => CollectGitTrackedFiles(root), ResultErrors.Message)
+        Result.Try(() => CollectGitTrackedFiles(root, _logger), ResultErrors.Message)
             .TapError(reason => _logger.LogTrace("tree: gitignore pruning disabled: {Reason}", reason))
             .AsMaybe()
             .GetValueOrDefault();
 
-    private static HashSet<string> CollectGitTrackedFiles(string root)
+    /// <summary>
+    ///     <c>git ls-files</c> for the prune list, read as a set of repo-relative paths.
+    /// </summary>
+    /// <remarks>
+    ///     <para>
+    ///         <b>Both pipes are drained for the whole life of the child</b> (#908). This
+    ///         redirected stdout AND stderr, waited <see cref="GitTimeoutMs" /> ms, and only
+    ///         then read stdout line by line — under a comment that said "don't begin async
+    ///         read — read synchronously with a hard timeout". That comment was the bug.
+    ///     </para>
+    ///     <para>
+    ///         A redirected pipe is a bounded buffer. <c>ls-files --others</c> prints one
+    ///         line per untracked-but-not-ignored path, so on a large repository it
+    ///         overruns a 4 KiB Linux pipe at roughly a thousand files and then blocks in
+    ///         <c>write()</c>. Nothing was draining it, so the child never exited, the wait
+    ///         gave up at the ceiling, <c>ToolErrors.KillQuietly</c> killed it, and the
+    ///         throw became a <c>Result</c> failure that
+    ///         <see cref="TryGetGitTrackedFiles" /> turns into <c>null</c> — i.e. no
+    ///         gitignore pruning. The timeout did not make this safe; it is what made the
+    ///         deadlock look like a slow git.
+    ///     </para>
+    ///     <para>
+    ///         The readers are event-driven rather than <c>ReadToEndAsync</c> because this
+    ///         method is sync and its caller is sync. A join on the read tasks would be the
+    ///         <c>TaskAwaiter&lt;T&gt;.GetResult</c> that <c>BannedSymbols.txt</c> bans, and
+    ///         <c>BeginOutputReadLine</c>/<c>BeginErrorReadLine</c> is the BCL's own
+    ///         sync-side drain — the same pair <c>ProcessGitQuery</c> uses, for the same
+    ///         reason.
+    ///     </para>
+    ///     <para>
+    ///         The parameterless <see cref="Process.WaitForExit()" /> after the timed one is
+    ///         load-bearing, not decoration, and it runs on the timeout path too: the timed
+    ///         overload is documented NOT to wait for asynchronous readers, so it is this
+    ///         that makes the collected set complete rather than a race with a thread-pool
+    ///         callback. It cannot block on the child — either the child exited, or the kill
+    ///         above ended it, and in both cases the pipes are at EOF.
+    ///     </para>
+    ///     <para>
+    ///         Line-oriented reassembly loses one thing <c>ReadToEnd</c> would have kept:
+    ///         whether the child's last line ended in a newline. Nothing here needs it — a
+    ///         path is a path, and <c>ls-files</c> emits one per line — and blank lines are
+    ///         skipped exactly as the old <c>ReadLine</c> loop skipped them. stderr is
+    ///         logged rather than discarded, because a non-zero exit is otherwise
+    ///         unexplainable: it is the reason <c>TryGetGitTrackedFiles</c> answers
+    ///         <c>null</c> and pruning silently turns off.
+    ///     </para>
+    /// </remarks>
+    private static HashSet<string> CollectGitTrackedFiles(string root, ILogger logger)
     {
         var psi = new ProcessStartInfo
         {
@@ -269,22 +316,52 @@ public sealed class TreeTool : ITool
 
         using var p = new Process { StartInfo = psi };
         p.Start();
-        // Don't begin async read — read synchronously with a hard timeout.
-        if (!p.WaitForExit(GitTimeoutMs))
+
+        // Both readers first, for both pipes (#908). See the remarks: the timeout this
+        // used to rely on is what the deadlock hid behind.
+        var set = new HashSet<string>(StringComparer.Ordinal);
+        p.OutputDataReceived += (_, e) =>
+        {
+            // git emits LF on every platform and the paths are compared after
+            // normalising the separator, so the child's own bytes are kept as they are.
+            if (e.Data is { Length: > 0 } line)
+            {
+                set.Add(line.Replace('\\', '/'));
+            }
+        };
+        p.ErrorDataReceived += (_, e) =>
+        {
+            if (e.Data is { } line)
+            {
+                logger.LogTrace("git ls-files wrote to stderr: {Line}", line);
+            }
+        };
+        p.BeginOutputReadLine();
+        p.BeginErrorReadLine();
+
+        bool exited = p.WaitForExit(GitTimeoutMs);
+        if (!exited)
         {
             ToolErrors.KillQuietly(p);
+        }
+
+        // Waits for the asynchronous readers as well as the child, and it runs on BOTH
+        // paths on purpose. The timed overload is documented not to wait for asynchronous
+        // readers, so this is what makes `set` a statement rather than a race with a
+        // thread-pool callback — and on the timeout path the readers are still live, so
+        // skipping it would dispose the process out from under them. It cannot block on the
+        // child: either the child exited, or the kill above ended it, and in both cases the
+        // pipes are at EOF.
+        p.WaitForExit();
+
+        if (!exited)
+        {
             throw new TimeoutException($"git ls-files did not finish within {GitTimeoutMs}ms.");
         }
 
         if (p.ExitCode != 0)
             throw new InvalidOperationException($"git ls-files exited with code {p.ExitCode}.");
 
-        var set = new HashSet<string>(StringComparer.Ordinal);
-        string? line;
-        while ((line = p.StandardOutput.ReadLine()) is not null)
-        {
-            if (line.Length > 0) set.Add(line.Replace('\\', '/'));
-        }
         return set;
     }
 

@@ -48,6 +48,10 @@ internal sealed class ReplCommandCatalog
         catalog.Register(new AgentCommand());
         catalog.Register(new SessionsCommand());
         catalog.Register(new SessionTreeCommand());
+        // #857: the jump palette. The fourth command on the palette axis, and
+        // the one Ctrl+J dispatches — the jump palette's own panel-plane route
+        // is unreachable, so this is what makes the keystroke do something.
+        catalog.Register(new JumpCommand());
         // Legacy text fallback registers BEFORE the panel commands so the
         // panels win "providers"/"plugins" while "permissions" stays textual.
         catalog.Register(new InfoCommand());

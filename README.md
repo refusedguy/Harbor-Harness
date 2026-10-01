@@ -29,7 +29,7 @@ Reproduce locally:
 ```bash
 vhs demo/hero.tape          # requires vhs (charmbracelet) — one GIF per demo/*.tape
 # or drive the recorder directly:
-HARBOR_DEMO=1 dotnet test tests/Harbor.Tui.E2E.Tests
+HARBOR_DEMO=1 dotnet run --project tests/Harbor.Tui.E2E.Tests -c Release
 # or just watch the scripted playback:
 dotnet run --project apps/Harbor.App.Cli -- --demo
 ```
@@ -140,19 +140,24 @@ Numbers and methodology live in [docs/BENCHMARKS.md](./docs/BENCHMARKS.md). Hist
 Clean / Hexagonal layering enforced mechanically by [tests/Harbor.Architecture.Tests](./tests/Harbor.Architecture.Tests). Canonical reference: [docs/ARCHITECTURE_LAYERS.md](./docs/ARCHITECTURE_LAYERS.md).
 
 ```
-Domain            Harbor.Abstractions (+ .Contracts), Harbor.Terminal.Abstractions,
-                  Harbor.Desktop.Abstractions, Harbor.Diagnostics.Abstractions
-Application       Harbor.Application, Harbor.Registries,
-                  Harbor.Ipc.*, Harbor.Ui.Framework.* (TEA-style state/reducers/projection),
-                  Harbor.Plugins.* (Abstractions/Compilation/Instantiation/
-                                    Registration/Hosting/Runtime/Host/Storage)
+Domain            Harbor.Abstractions (+ .Contracts), Harbor.Diagnostics.Abstractions,
+                  Harbor.Extensions, Harbor.Ipc.Abstractions,
+                  Harbor.Ui.Framework.Abstractions
+Application       Harbor.Application, Harbor.Registries, Harbor.Plugins.Abstractions
 Infrastructure    Harbor.Storage.{Jsonl,Memory,Sqlite}, Harbor.Providers.{Anthropic,
                   OpenAI,Ollama,OpenAiCompatible,Shared}, Harbor.Tools.Builtin,
                   Harbor.Logging, Harbor.Telemetry.*, Harbor.Transport.Remote,
-                  Harbor.CodeGen, Harbor.Extensions
-Presentation      apps/Harbor.App.Cli (composition root), apps/Harbor.App.Avalonia,
-                  Harbor.Tui.{Plain,Ansi,ConsoleEx,Notifications},
-                  contrib/tui/* (extra interactive shells compiled in by default)
+                  Harbor.Lsp, Harbor.Terminal.Pty,
+                  Harbor.Ipc.{Client,InProcess,Server},
+                  Harbor.Plugins.{Compilation,Hosting,Instantiation,Registration,
+                                  Runtime,Storage}
+Presentation      Harbor.Ui.Framework (+ .State/.ViewModels/.Projection/.Rendering/
+                  .Services/.Sessions — TEA-style state/reducers/projection),
+                  Harbor.Desktop.{Abstractions,Shared,Animations},
+                  Harbor.DesignSystem, Harbor.Terminal.Abstractions,
+                  Harbor.Tui.{AnsiPlain,CellForge,NickConsoleEx,Notifications},
+                  apps/Harbor.App.Avalonia
+Composition Root  apps/Harbor.App.Cli (+ src/Harbor.Hosting, Harbor.Plugins.Host)
 ```
 
 All IDs are strongly-typed value objects (`SessionId`, `ProviderId`, `ToolName`, …) defined in `Harbor.Abstractions.Models.Identifiers`. Agent state reaches every UI exclusively as `AgentEvent`s published on `IEventBus` — renderers never touch Core.
@@ -184,13 +189,14 @@ Full catalog with real code: [docs/PATTERNS.md](./docs/PATTERNS.md), forbidden p
 
 ```bash
 # Build first, then run tests per project (recommended):
-dotnet test tests/Harbor.Core.Tests -c Release --no-build
-
-# Warning: running dotnet test against the whole solution currently fails under
-# the Microsoft.Testing.Platform host — always target a single test project.
+dotnet run --project tests/Harbor.Core.Tests -c Release --no-build -- --minimum-expected-tests 1
 ```
 
 Framework: [TUnit](https://github.com/thomhurst/TUnit). Shared helpers: [tests/Harbor.TestKit](./tests/Harbor.TestKit). Known/flaky tests are listed in [docs/ROADMAP.md](./docs/ROADMAP.md); don't treat those as your regression.
+
+`dotnet test` is not used in this repository and no CI job runs it, so its
+behaviour here is unverified — see
+[CONTRIBUTING.md §Why not `dotnet test`](./CONTRIBUTING.md#why-not-dotnet-test).
 
 ## Documentation
 

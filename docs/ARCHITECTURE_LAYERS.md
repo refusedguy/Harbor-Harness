@@ -27,10 +27,15 @@ inner layer, never the other way around. The innermost layer (Domain/Abstraction
 │  - apps/Harbor.App.Avalonia (cross-platform desktop GUI)        │
 │  - contrib/apps/: Harbor.App.Wpf / App.Maui / App.Blazor        │
 │  - In-solution TUI renderers: Tui.AnsiPlain (unified ANSI +     │
-│    plain) / Tui.CellForge (+ .Engine) / Tui.NickConsoleEx /    │
+│    plain) / Tui.CellForge (+ .Engine) / Tui.NickConsoleEx /     │
 │    Tui.Notifications                                            │
 │  - Optional contrib/tui renderers: Spectre / .Fullscreen /      │
 │    SpectreTui / TerminalGui / Termina / RazorConsole / Sixel    │
+│  - Harbor.Desktop.Abstractions (config schema: CommonConfig,    │
+│    ICommonConfigStore; desktop VM bases)                        │
+│  - Harbor.Terminal.Abstractions (TUI interfaces, ITuiPlugin)    │
+│  - Harbor.DesignSystem (HDS v1 token catalog — zero Harbor      │
+│    references; RgbColor + the cell-style primitives live here)  │
 │  Depends on: Application + Ui.Framework + Abstractions          │
 └─────────────────────────────────────────────────────────────────┘
                                   ▲
@@ -40,16 +45,17 @@ inner layer, never the other way around. The innermost layer (Domain/Abstraction
 │  UI FRAMEWORK (TEA + reusable VMs + components)                 │
 │  - Harbor.Ui.Framework (+ split projects Abstractions/, State/, │
 │    ViewModels/, Rendering/, Projection/, Services/, Sessions/;  │
-│    shell csproj is a meta-package)                             │
+│    shell csproj is a meta-package)                              │
 │    State/      (UiStore, UiState{Ui,Chat}, AppMsg/ChatAppMsg,   │
-│                AppReducer/ChatAppReducer — TEA)                  │
+│                AppReducer/ChatAppReducer — TEA)                 │
 │    ViewModels/ (ChatLineVM, ToolCallVM, TokenUsageVM, ...)      │
 │    Rendering/  (ChatMessageRenderer, ChatStreamingPresenter)    │
 │    Sessions/   (SessionFactory, SessionSwitcher, SessionContext,│
 │                 SessionGitTracker, IChatViewBinder)             │
 │    Panels/     (dockable panel system)                          │
-│    Services/   (IDispatcherAdapter, IThemeService, IToastService,│
-│                 GitService, SessionStatusTracker)               │
+│    Services/   (IDispatcherAdapter, IThemeService,              │
+│                 IToastService, GitService,                      │
+│                 SessionStatusTracker)                           │
 │    Configuration/ (ICommonConfigModelRefReader — read-only half │
 │                    of the shared-config contract pair)          │
 │  Depends on: Abstractions + Desktop.Abstractions                │
@@ -63,14 +69,10 @@ inner layer, never the other way around. The innermost layer (Domain/Abstraction
 │  - Harbor.Application (AgentLoop, Sessions, Agents,             │
 │                        Configuration, Permissions, Onboarding)  │
 │  - Harbor.Registries                                            │
-│  - Harbor.Plugins.{Abstractions, Runtime, Hosting, Registration,│
-│    Instantiation, Compilation, Storage, Host} (8 projects)      │
+│  - Harbor.Plugins.Abstractions (the plugin contract surface)    │
 │  - contrib/scripting: Harbor.Scripting.* (ScriptHost, Bridge)   │
-│  - Harbor.Ipc.{Abstractions, InProcess, Server, Client}         │
-│  - Harbor.Logging (Serilog per-run timestamped files)           │
 │  Depends on: Domain ONLY (Harbor.Abstractions +                 │
-│              Harbor.Abstractions.Contracts +                    │
-│              Harbor.Desktop.Abstractions)                       │
+│              Harbor.Abstractions.Contracts)                     │
 └─────────────────────────────────────────────────────────────────┘
                                   ▲
                                   │ implements
@@ -83,7 +85,11 @@ inner layer, never the other way around. The innermost layer (Domain/Abstraction
 │  - Harbor.Tools.Builtin — все builtin tools в одном проекте,    │
 │    каталог Tools/ (20 tools — см. docs/TOOLS_CATALOG.md;        │
 │    MCP-клиент в подкаталоге Mcp/)                               │
-│  - DesignSystem — отдельный проект src/Harbor.DesignSystem/     │
+│  - Harbor.Ipc.{Client, InProcess, Server} — RPC endpoints       │
+│    (MessagePack over named pipes / in-process)                  │
+│  - Harbor.Logging (Serilog per-run timestamped files)           │
+│  - Harbor.Plugins.{Runtime, Hosting, Registration,              │
+│    Instantiation, Compilation, Storage} — plugin machinery      │
 │  Depends on: Domain ONLY                                        │
 └─────────────────────────────────────────────────────────────────┘
                                   ▲
@@ -97,28 +103,125 @@ inner layer, never the other way around. The innermost layer (Domain/Abstraction
 │    ToolResult, Usage, Pricing etc.; namespace                   │
 │    `Harbor.Abstractions.Models`. Бывший `Harbor.Domain.dll` —   │
 │    переименован в F1 decoupling (ADR-007, commit fa8d3ae).      │
-│  - Harbor.Desktop.Abstractions (Configuration: CommonConfig,    │
-│    ICommonConfigStore; base VMs for cross-platform reuse)       │
-│  - Harbor.Terminal.Abstractions (TUI interfaces, ITuiPlugin)    │
-│  Depends on: NOTHING (only BCL + CSharpFunctionalExtensions +   │
-│              Microsoft.Extensions.Logging.Abstractions etc. —   │
-│              no other Harbor project)                           │
-│  EXCEPTION: Harbor.Desktop.Abstractions → Harbor.Ui.Framework   │
-│             (direct, plus five more Ui.Framework.* edges).       │
-│             Worked around via ICommonConfigModelRefReader in    │
-│             Ui.Framework.Abstractions — the read-only half of    │
-│             the pair; see #453 and ADR-009.                     │
+│  - Harbor.Ipc.Abstractions (IPC contracts)                      │
+│  - Harbor.Ui.Framework.Abstractions (the read-only config port) │
+│    — the read-only half of the shared-config contract pair)     │
+│  - Harbor.Diagnostics.Abstractions, Harbor.Extensions (leaves)  │
+│  Depends on: Harbor.Abstractions.Contracts ONLY, plus BCL +     │
+│              CSharpFunctionalExtensions +                       │
+│              Microsoft.Extensions.Logging.Abstractions — no     │
+│              Application / Infrastructure / Presentation.       │
 └─────────────────────────────────────────────────────────────────┘
 ```
+
+> **Two of this box's entries were wrong until #751, and they were wrong from the
+> start, not out of date.** `Harbor.Desktop.Abstractions` and
+> `Harbor.Terminal.Abstractions` were both listed here as Domain.
+> `FullLayerMatrixTests` has carried `new(Layer.Presentation, …)` for both **since the
+> matrix row was created** (2026-08-25, `5d2df19f`) — nothing was renamed and nothing
+> moved, so this was a description disagreeing with the thing it describes rather than
+> text left behind by a change. For `Desktop.Abstractions` the correction is mechanical,
+> not editorial: `MatrixTable_RespectsLayerRules` lets a `Domain` row reference Domain
+> only, and the project has five live edges into
+> `Harbor.Ui.Framework.{ViewModels,State,Services,Sessions,Rendering}` — all
+> Presentation — so marking it Domain would fail the architecture tests. §2 and the tests
+> were always the truth; this box is only a summary of them.
+>
+> The `-Abstractions` suffix carries no layer meaning, which is why the name could not
+> settle it: Domain holds `Harbor.Abstractions.Contracts`,
+> `Harbor.Diagnostics.Abstractions`, `Harbor.Extensions` and
+> `Harbor.Ui.Framework.Abstractions`; Presentation holds
+> `Harbor.Terminal.Abstractions` and `Harbor.Desktop.Abstractions`. Which name a project
+> *should* have is a layering decision (#555), not a docs one.
+>
+> The `Harbor.Desktop.Abstractions → Harbor.Ui.Framework.*` edges this box used to carry
+> as an EXCEPTION are ordinary Presentation-to-Presentation edges the matrix permits; the
+> circular-dependency workaround they caused is unchanged and is described in the next
+> subsection. The `Harbor.Ui.Framework` *shell* edge that old EXCEPTION named is dead —
+> that project has no `.cs` files at all and an empty allowed set (#450).
+
+> **Fourteen more entries in this diagram were wrong until #888, in three boxes, and the
+> same way: never right.** `FullLayerMatrixTests.Matrix` is measured from
+> `Assembly.GetReferencedAssemblies()`; every list above is hand-typed, and until #888
+> nothing compared the two. Measured against the matrix, the APPLICATION box named 16
+> assemblies and agreed on 3:
+>
+> | §1 said | §1 placed | matrix says |
+> |---|---|---|
+> | `Harbor.Plugins.{Runtime, Hosting, Registration, Instantiation, Compilation, Storage}` | Application | Infrastructure (6 projects) |
+> | `Harbor.Ipc.{Client, InProcess, Server}` | Application | Infrastructure |
+> | `Harbor.Ipc.Abstractions` | Application | **Domain** — it is in this box's DOMAIN list too, one screen up |
+> | `Harbor.Logging` | Application | Infrastructure |
+> | `Harbor.Plugins.Host` | Application | **not a layer at all** — `OutOfScopeAssemblies`: "a composition root" |
+> | `Harbor.DesignSystem` | Infrastructure | Presentation |
+>
+> `Harbor.Plugins.Host` is why it is no longer in any layer box. The matrix declines to
+> classify it, so a diagram that puts it in a layer is asserting a third answer to a
+> question the gate answers with "neither" — it is an `OutputType=Exe` out-of-process MCP
+> stdio server, the same kind of thing as `apps/*`.
+>
+> **Why the diagram was wrong and the gate was not.** The Allowed sets are measurements.
+> The plugin classification is then *forced* rather than chosen: the matrix permits
+> Infrastructure→Infrastructure only through its `Family()` carve-out, and two
+> `SharedSourceFolders` reasons exist precisely because the matrix "forbids
+> Infrastructure→Infrastructure project references" — so reading those six rows as
+> Application contradicts the same file four times over. The `Layer` enum's own doc comment
+> already said it: Infrastructure is "providers, storage, tools, **IPC endpoints**,
+> telemetry, plugin machinery" (`FullLayerMatrixTests.cs:37`).
+>
+> The honest limit, because it decides what may be claimed: for the IPC rows the *edges*
+> do not force the class. `Harbor.Ipc.Server`'s Allowed set is two Domain targets and
+> `MatrixTable_RespectsLayerRules` would accept that row as Domain, Application or
+> Infrastructure alike. The layer there is a judgement, corroborated by what the projects
+> contain — MessagePack framing in `Harbor.Ipc.Client`, named pipes and broadcast fanout
+> in `Harbor.Ipc.Server`, pure `[Union]` request/response records and no I/O in
+> `Harbor.Ipc.Abstractions`. What is measured is the Allowed set, and it is not in dispute.
+> No edge is wrong; the prose was.
+>
+> **Fourteen, not the thirteen the guard's first red run reported — the difference was a
+> bug in the guard that found the other thirteen.** `Harbor.Plugins.Instantiation`
+> produced no finding, and not because this box was right about it. The extractor read
+> each row as `line[1..].Trim()`, which leaves the row's closing `│` in place: it is not
+> whitespace, so trimming keeps it. On a brace form wrapped across two lines that bar
+> lands *inside* the braces, so the item became `│Instantiation`, the extracted name was
+> `Harbor.Plugins.│Instantiation`, and that key is not in the matrix — so the assembly
+> was counted as unjudged and produced nothing. Only a name beginning a *wrapped* line is
+> affected, which is why five siblings in the same brace list were flagged and the sixth
+> was not. `InnerText` strips the trailing bar, and
+> `The_Extractor_Reads_Wrapped_And_Repeated_Brace_Forms` plants this exact shape.
+>
+> Recorded in the document as well as in the guard's history, because the failure mode is
+> the dangerous kind: a silently *unchecked* assembly, in a guard whose whole subject is
+> unchecked claims. A rule that under-reports is harder to catch than one that
+> over-reports, and `13` was wrong for a reason no reader of that run could have derived.
+>
+> **This is the third time, which is why #888 also added the check.** #879 found three
+> false rows in §5.6's capability table; #896 found nine here, two of them false since the
+> matrix row was created; #888 found fourteen, one of which (`Harbor.Ipc.Abstractions`
+> appearing in two layer boxes at once) is #896's own residue. Three doc edits and the file
+> still lied, because `ci.yml` ignores `**.md` and `docs/**` by design (#509) and
+> `check-doc-cites.py` proves a cited `file:line` still *exists* — it says itself that this
+> is "necessary but NOT sufficient". Layer assignment is prose, so no existing gate saw it
+> at all. `LayerDocAgreementRule.cs` in `tests/Harbor.Architecture.Tests/` now compares
+> these boxes to the matrix rows, and **§1 is the only section it covers** — the
+> abbreviations this diagram still uses (`Harbor.Storage.Jsonl / Memory / Sqlite`) and the
+> `UI FRAMEWORK` box, which has no counterpart in the gate's five layers, are declared
+> holes in that file's header rather than things it pretends to check.
 
 ### Why so many projects in the Domain layer?
 
 | Project | Why it's separate | Why it's in Domain (not Application) |
 |---|---|---|
-| `Harbor.Abstractions` | Pure contract surface for the agent harness (LLM, tools, sessions, events, permissions, plugins). A headless consumer (CLI script, MCP bridge, test harness) can reference just this. | Zero dependencies — only BCL + CSharpFunctionalExtensions. |
+| `Harbor.Abstractions` | Pure contract surface for the agent harness (LLM, tools, sessions, events, permissions, plugins). A headless consumer (CLI script, MCP bridge, test harness) can reference just this. | Contracts only — `Harbor.Abstractions.Contracts` and the BCL, no I/O. |
 | `Harbor.Abstractions.Contracts` | Holds the concrete model types (`Session`, `ContentPart`, `ToolResult`, `Usage`, etc.). They declare `namespace Harbor.Abstractions.Models` so consumers don't need a second `using`. Бывший `Harbor.Domain.dll` — переименован в F1 decoupling (ADR-007, commit fa8d3ae, 2026-08-24). | Pure data + formatters — no I/O. |
-| `Harbor.Desktop.Abstractions` | Cross-platform contracts shared by every desktop app (Avalonia / WPF / MAUI / Blazor): `CommonConfig`, `ICommonConfigStore`, base VMs. | Configuration schema + VM contracts are stable across platforms. |
-| `Harbor.Terminal.Abstractions` | TUI contracts: `ITuiRenderer`, `ITuiPlugin`, panel system entry points. Kept separate from `Harbor.Ui.Framework` because terminal vocabulary (Spectre, ANSI) is not relevant to desktop GUIs. | Used by both `Harbor.Ui.Framework` (panel system) and concrete TUI renderers. |
+| `Harbor.Ipc.Abstractions` | IPC contracts for the daemon/remote transport, so a client can be referenced without `Harbor.Ipc.Server` / `Harbor.Ipc.Client`. | Contracts only — `Harbor.Abstractions`, no I/O. |
+| `Harbor.Ui.Framework.Abstractions` | Holds `ICommonConfigModelRefReader`, the narrow read-only port `Harbor.Ui.Framework.Sessions` needs for session bootstrap (#453, ADR-009). It is Domain so the port can sit *below* its consumer instead of beside it. | One narrow contract, no I/O. |
+| `Harbor.Diagnostics.Abstractions`, `Harbor.Extensions` | Telemetry contracts (`ITracer`, `IMetrics`, `CorrelationContext`) and small cross-cutting helpers. | Zero Harbor references — leaves over BCL. |
+
+Projects named `-Abstractions` that are **not** in this layer: `Harbor.Terminal.Abstractions`
+(TUI contracts — Presentation) and `Harbor.Desktop.Abstractions` (config schema + desktop
+VM bases — Presentation). Both were rows in this table's Domain column until #751; see the
+note above the diagram.
 
 ### Circular-dependency workaround: `ICommonConfigModelRefReader`
 
@@ -150,6 +253,34 @@ normal pre-onboarding state. They cannot be merged — the cycle above — and
 narrow one grows a write member, a second implementer, or a re-derivation of
 "is this reference whole?".
 
+### Presentation → Application is a violation, not a preference: `ISessionForker`
+
+The UI framework forks sessions, and the fork is Application-layer business logic
+(`SessionForkService`). `FullLayerMatrixTests.Matrix_AllowedEntries_RespectLayerRules`
+draws `Presentation → Application` as a violation, so `Harbor.Ui.Framework.Sessions`
+cannot reference `Harbor.Application` — and the single existing exception on that
+edge (`Harbor.Desktop.Abstractions` → `ProviderPresets`, #188/#96) is a named debt
+with a stated fix, not a precedent to widen.
+
+**What that cost, and the fix (#670).** `SessionFactory.CreateBranchAsync` used to
+fork sessions itself, and the copy drifted until a desktop fork set no
+`ParentSessionId`, persisted no title, and regenerated every copied message id — a
+fork the user could not recognise as a fork. The same answer as the config seam
+above applies: declared **`ISessionForker`** in
+`Harbor.Ui.Framework.Abstractions/Forking/`, a Domain project the UI framework
+already references, and had the composition root adapt it —
+`SessionForkerAdapter` in Avalonia forwards to `SessionForkService`, which is
+where `Harbor.App.Cli` already called it from. **Zero new `ProjectReference`s**:
+the port adds Domain→nothing, the framework edge Presentation→Domain already
+existed, and the adapter sits in a `CompositionRoot`, which the matrix permits
+unrestricted.
+
+`SessionFactory`'s constructor takes the port as a **required** parameter. That is
+the load-bearing part: a required dependency means a host that wants to fork names
+the one implementation, and a host that wires nothing gets a compile error instead
+of silently falling back to a second, different fork — which is exactly how the
+duplicate survived.
+
 ### Mermaid diagram
 
 ```mermaid
@@ -159,6 +290,7 @@ flowchart TB
         TuiAnsi["Harbor.Tui.AnsiPlain (ANSI + plain)<br/>/ .Notifications"]
         TuiConsoleEx["Harbor.Tui.CellForge (+ .Engine)<br/>/ .NickConsoleEx (cell-diff backends)"]
         TuiContrib["contrib/tui: Spectre / SpectreTui<br/>/ TerminalGui / Termina / RazorConsole / Sixel"]
+        DesktopAbs["Harbor.Desktop.Abstractions<br/>(config schema, desktop VM bases)"]
     end
 
     subgraph App["Application (use cases)"]
@@ -175,6 +307,9 @@ flowchart TB
 
     subgraph Domain["Domain / Abstractions (hexagon core)"]
         Abs["Harbor.Abstractions + Abstractions.Contracts<br/>(IAgent, ITool, ILlmClient, ISessionStore, ...)"]
+    end
+
+    subgraph UiPres["Presentation (UI contracts)"]
         TuiAbs["Harbor.Terminal.Abstractions<br/>(ITuiRenderer, UiState, panels)"]
     end
 
@@ -185,6 +320,8 @@ flowchart TB
     Cli --> Tools
     Cli --> Abs
     Cli --> TuiAbs
+
+    DesktopAbs --> Abs
 
     TuiAnsi --> Abs
     TuiAnsi --> TuiAbs
@@ -209,26 +346,40 @@ flowchart TB
     classDef infra fill:#fff3cd,stroke:#ffc107,stroke-width:2px
     classDef pres fill:#f8d7da,stroke:#dc3545,stroke-width:2px
 
-    class Abs,TuiAbs domain
+    class Abs domain
     class AppLayer,Core,Plugins app
     class Storage,Providers,Tools infra
-    class Cli,TuiAnsi,TuiConsoleEx,TuiContrib pres
+    class Cli,TuiAnsi,TuiConsoleEx,TuiContrib,DesktopAbs,TuiAbs pres
 ```
+
+`Harbor.Terminal.Abstractions` sits in a Presentation subgraph rather than the Domain
+one: it is an `-Abstractions`-named project that the matrix does not place in Domain.
+Corrected in #751 — see the note under the ASCII diagram above.
 
 **Dependency direction = inward only.** Outer layers may reference inner layers;
 inner layers never reference outer layers. The Domain layer has no inbound
-arrows from Harbor projects — only outbound to BCL / third-party NuGet packages.
+arrows from outside itself — only outbound to BCL / third-party NuGet packages, plus
+Domain-to-Domain edges *within* the layer (`Harbor.Abstractions` →
+`Harbor.Abstractions.Contracts`, `Harbor.Ipc.Abstractions` → `Harbor.Abstractions`,
+`Harbor.Ui.Framework.Abstractions` → `Harbor.Abstractions.Contracts`).
 
 
-### Why two projects in the Domain layer?
+### Why so many projects in the Domain layer? (the split, not the count)
 
 `Harbor.Abstractions` is the contract surface for the agent harness (LLM, tools, sessions,
-events, permissions). `Harbor.Tui.Abstractions` is the contract surface for the UI layer
-(views, view models, renderers, panels, UI state). They are kept separate so that a
-headless consumer (CLI script, MCP bridge, test harness) can reference just
-`Harbor.Abstractions` without dragging in any UI vocabulary. Both projects are in the
-Domain layer and may reference each other; in practice `Harbor.Tui.Abstractions` references
-`Harbor.Abstractions` (for `IAgent`, `AgentEvent`, `Session`), never the reverse.
+events, permissions). `Harbor.Abstractions.Contracts` holds the concrete model types
+those contracts speak in, split off in F1 decoupling (ADR-007) so a consumer can take the
+contracts without the data. They are kept separate so that a headless consumer
+(CLI script, MCP bridge, test harness) can reference just `Harbor.Abstractions` without
+dragging in model DTOs. Both are Domain and reference each other in one direction only:
+`Harbor.Abstractions` → `Harbor.Abstractions.Contracts`, never the reverse.
+
+> This subsection used to be headed "Why **two** projects in the Domain layer?" and named
+> `Harbor.Tui.Abstractions` as the second one. That project does not exist — it was a
+> deprecated facade, it has no matrix row, and `src/` has no directory for it any more.
+> The Domain layer is six projects deep in the matrix, and §1's diagram lists them. The
+> `-Abstractions`-named projects that are **not** Domain are `Harbor.Terminal.Abstractions`
+> and `Harbor.Desktop.Abstractions` (both Presentation) — corrected in #751.
 
 ---
 
@@ -320,9 +471,19 @@ Concrete implementations of:
   owns only `CsPluginLoader` + compiled-result types; hosting graph lives in
   `Harbor.Plugins.Hosting`; source sources in `Harbor.Plugins.Storage`;
   instantiation/lifecycle in `Harbor.Plugins.Instantiation`; registration in
-  `Harbor.Plugins.Registration`. The Architecture tests treat the whole
-  `Harbor.Plugins.*` family as Application-layer projects for dependency-direction
-  purposes.
+  `Harbor.Plugins.Registration`. **The Architecture tests do NOT treat the whole
+  `Harbor.Plugins.*` family as Application-layer projects** — §1 listed all eight as
+  Application until #888 corrected it. Only `Harbor.Plugins.Abstractions` is Application;
+  the other six in-solution projects are classified Infrastructure, and
+  `Harbor.Plugins.Host` is not classified at all (`OutOfScopeAssemblies` — an
+  `OutputType=Exe` composition root). The reason the six are Infrastructure rather than
+  Application is not a preference: they reference each other, and
+  `MatrixTable_RespectsLayerRules` forbids Infrastructure→Infrastructure except *within* a
+  family, via the `Harbor.Plugins.*` prefix in its `Family()` helper. Application sits a
+  layer **above** Infrastructure, so an implementation stack that composes its own
+  machinery cannot be an Application project. `Harbor.Plugins.Runtime`'s row says this
+  outright: "classified Infrastructure-plugins rather than Application because of those
+  intra-family edges".
 
 ### Infrastructure
 
@@ -386,7 +547,7 @@ Concrete implementations of:
 | Infrastructure projects (Storage.*, Providers.*, Tools.Builtin) reference Domain only — never Application, never each other, never Presentation. | Architecture tests       |
 | Presentation projects (Tui.* renderers) reference Domain only — never Application, never Infrastructure, never each other. | Architecture tests       |
 | Presentation projects exercise no I/O capability of their own: no subprocess, no `System.IO.File`/`Directory`, no network, no reflection emit (§3 table, §5.6). | Architecture tests (`PresentationCapabilityRules`) |
-| A domain fact decided by the core is decided in ONE place, and the presentation layer reads it: no `SessionStatus`-returning method derives it from the transcript (#687), the `SessionStatus` label/brush table exists once (#663), the core classifies diagnostics (#674), money is priced in the core (#653). | Architecture tests (`SessionStatusSourceRule`, `SessionStatusTableRule`, `DiagnosticsClassificationRule`, `CostPricedInCoreRules`) |
+| A domain fact decided by the core is decided in ONE place, and the presentation layer reads it: no `SessionStatus`-returning method derives it from the transcript (#687), the `SessionStatus` label/brush table exists once, bar one recorded exception (§5.7) (#663), the core classifies diagnostics (#674), money is priced in the core (#653). | Architecture tests (`SessionStatusSourceRule`, `SessionStatusTableRule`, `DiagnosticsClassificationRule`, `CostPricedInCoreRules`) |
 | `apps/Harbor.App.Cli` references everything — it is the Composition Root.                         | (by convention)          |
 | Concrete impl types (`AnthropicLlmClient`, `JsonlSessionStore`, …) are `new`'d only inside `HostBuilder.cs`. | Code review              |
 | `Program.cs` resolves services by interface from DI; it does not `new` Infrastructure types.       | Code review              |
@@ -526,8 +687,20 @@ that mattered more: linked source is compiled *into* the consumer, so the IL mat
 already judges its references, but a rule walking `src/<project>/**` did not see
 the file at all — so "which files bind the forbidden target?" answered without it.
 `RepoPaths.EnumerateCsFiles` now returns the link items too, which is what makes
-`DocumentExceptions_AreScopedToNamedFiles` and the namespace-ownership map see
-shared code.
+`DocumentExceptions_AreScopedToNamedFiles` see shared code.
+
+**The namespace-ownership rule needed its own resolution, and did not get one (#763).**
+That sentence used to claim `EnumerateCsFiles` was also "what makes the
+namespace-ownership map see shared code". It is not: `AbstractionsNamespaceOwnershipRules`
+has its own project map and its own walk-up for an owning `*.csproj`, and never
+called the helper #456 had just fixed. A file in a csproj-less folder therefore left
+that walk with nothing, and the rule reported green having read none of the six
+linked files. `FindAssembliesCompiling` now falls back to the `<Compile Include>`
+items — the same `RepoPaths.ReadCompileIncludes` the other rules read — and attributes
+a shared file to *every* assembly that compiles it, because the namespace is declared
+by all of them and picking one copy would make the verdict depend on which copy the
+walk reached. `No_Namespace_Declaration_Is_Left_Without_An_Assembly_To_Judge_It` makes
+the leftover case a failure instead of a silent skip.
 
 Converting either folder to a real assembly is *not* a mechanical follow-up: it
 would mean an Infrastructure assembly referenced by other Infrastructure
@@ -660,8 +833,9 @@ and nothing in the type system objects.
 
 | Rule | Fact | Issue |
 |---|---|---|
+| `LayerTableDocAgreementRules` | a layer table — any layer-labelled row in any markdown file — agrees with `FullLayerMatrixTests.Matrix`, which is where the layer of a project actually lives; the two tables in this repository are the root `README.md` architecture block and the `CLAUDE.md` layer table | [#922](https://github.com/refusedguy/Harbor-Harness/issues/922) |
 | `SessionStatusSourceRule` | a `SessionStatus` is decided on the transition that establishes it (`ChatAppReducer`, from the core's own `AgentErrorEvent` / `AgentEndEvent`), and no method returning one may read the transcript | [#687](https://github.com/refusedguy/Harbor-Harness/issues/687) |
-| `SessionStatusTableRule` | the `SessionStatus` → label / brush-key table exists in exactly one file (`StatusMappers`) | [#663](https://github.com/refusedguy/Harbor-Harness/issues/663) |
+| `SessionStatusTableRule` | the `SessionStatus` → label / brush-key table exists in exactly one file (`StatusMappers`), **with one recorded exception** — see the exception note below | [#663](https://github.com/refusedguy/Harbor-Harness/issues/663) |
 | `DiagnosticsClassificationRule` | the detector patterns are declared once, in the core detector, and the LSP counts stay connected to state | [#674](https://github.com/refusedguy/Harbor-Harness/issues/674) |
 | `CostPricedInCoreRules` | money is priced by the core from the model that made the call; no renderer recomputes it | [#653](https://github.com/refusedguy/Harbor-Harness/issues/653) |
 
@@ -676,6 +850,39 @@ so a file's own doc comment quoting the rule it violates is not graded as code.
 **Perimeters are derived, not re-typed.** `SessionStatusSourceRule` reads its Presentation
 set from `FullLayerMatrixTests.PresentationLayerAssemblies()` for the same reason §5.6
 does, so a new Presentation project is covered the moment it gets a matrix row.
+
+**The recorded exception to "exactly one file" — and why it is not removable here.**
+`SessionStatusTableRule` carries the only allowlist in this section:
+`SessionStatusTableProbe.KnownDuplicates`, with exactly one entry,
+`src/Harbor.Ui.Framework.Projection/Projection/SubagentsModel.cs`. So the honest count is
+**two tables in the tree, one of them recorded** — the wording above is the rule's
+aspiration, not the whole current tree.
+
+The second table is a real `SessionStatus` → label switch that had already drifted
+(`Working` → `"running"`, where `StatusMappers` says `"working"`), so it is not a
+harmless copy. It survives for a structural reason, and the reason is still true today:
+
+- The canonical table lives in `Harbor.Ui.Framework.ViewModels`.
+- `Harbor.Ui.Framework.Projection` does not reference it, and the matrix in §2 puts both
+  in `Layer.Presentation`, so the edge is not available to add.
+- Collapsing it means either a cross-project call or relocating the canonical table
+  downward — an architecture change, not a doc fix.
+- `"running"` is pinned as visible CellForge output by
+  `CellForgeSubagentsPanelTests.FormatAge_And_StatusText_CoverVocabulary`, so relabelling
+  is a visible-output decision owed its own issue.
+
+Two things keep the record honest rather than an allowlist that rots into a blanket
+permission. `RecordedDuplicates_AreStillReal` fails the moment the entry stops being a
+real duplicate, so the excuse has to be deleted in the same commit that removes the table;
+and the entry is valued by its **reason**, not by a tracking issue, per §5.9. Note that
+the entry is graded rather than skipped — the switch in `SubagentsModel` is still scanned
+and would still fail the rule if the entry were ever dropped.
+
+This sentence exists because the summary table above used to state "exactly one file" with
+no mention of the exception, while the rule file recorded one — the guard and the prose
+disagreed, and only the prose was wrong. Related: [#862](https://github.com/refusedguy/Harbor-Harness/issues/862),
+[#896](https://github.com/refusedguy/Harbor-Harness/issues/896),
+[#902](https://github.com/refusedguy/Harbor-Harness/issues/902).
 
 **Non-vacuity.** Each rule carries a liveness check (the scan really walked a checkout,
 the canonical file really exists, the rule table is non-empty) and a positive control that
@@ -753,13 +960,33 @@ true, the exclusion has become an accident and the scope statement above is a li
 
 ### 5.9 An exemption row must state a reason
 
-Five tables in the architecture tests grant a permission: the Presentation capability
-baseline, the permanent-capability table, `FullLayerMatrixTests.DocumentedExceptions`, the
-declared-but-unbound `<ProjectReference>` list, and the reflection plugin allowance. Before
-[#626](https://github.com/refusedguy/Harbor-Harness/issues/626) each asked "does this row
-have a reason?" in its own words, and the table that most needed the answer — the
-tracked-violation baseline — did not ask at all: its value was the issue URL, and the
-argument for tolerating the violation lived in a `//` comment that no tool can read.
+Permission-granting tables in the architecture tests, and the count has grown. The five this
+section named — the Presentation capability baseline, the permanent-capability table,
+`FullLayerMatrixTests.DocumentedExceptions`, the declared-but-unbound `<ProjectReference>` list,
+and the reflection plugin allowance — are now **ten** across the project. Three joined them since:
+`FullLayerMatrixTests.SharedSourceFolders` (#456),
+`ProviderPayloadSerializationRules.KnownViolations`, and `AotBlockDemotionRules.KnownDemotions`; a
+fourth, `CellForgeEngineAtomicityRules`'s reviewed-imports list, is checked under its own label.
+
+Eight of the ten route through `ExemptionReason.RowsWithoutAReason`. The permanent-capability
+table carries its own blank-reason check, because it owes two rules the others do not (a row may
+not shadow a baseline row, and it has no tracking URL to confuse the reason with).
+`SessionStatusTableProbe.KnownDuplicates` — the allowlist in §5.7 — is not checked at all. Before
+[#626](https://github.com/refusedguy/Harbor-Harness/issues/626) each table asked "does this row
+have a reason?" in its own words, and the one that most needed the answer — the tracked-violation
+baseline — did not ask at all: its value was the issue URL, and the argument for tolerating the
+violation lived in a `//` comment that no tool can read.
+
+That last gap is the same shape as the defect fixed in §5.7 above, one level down: a
+permission that is recorded, justified and kept live, which a document then described as if
+it were not there. `SessionStatusTableProbe.KnownDuplicates` grants a real
+permission: it excuses `SubagentsModel` from the single-definition rule, and its entry is valued
+by its reason rather than by a tracking issue, so the row shape is right. What is missing is the
+call. Liveness covers part of it — `RecordedDuplicates_AreStillReal` fails once an entry stops
+being a real duplicate — but liveness catches a stale excuse, not a blank or URL-only one, which
+is exactly what `RowsWithoutAReason` exists to catch. Routing the table through the shared check
+is a small mechanical follow-up; it is left undone here because it changes a guard rather than a
+document, and no local build is available to verify a new test compiles.
 
 `ExemptionReason.RowsWithoutAReason` is now the single answer, and a row that fails it does
 not pass. Three rules, the third being the one that matters: not blank; not the tracking
@@ -783,13 +1010,14 @@ grandfathers is gone.
 `FullLayerMatrixTests` + `CellForgeGraphRules` are all green. The previously cited counts
 (46 tests = 21 reflection + 25 NetArchTest, 54 executed cases) are historical.
 
-**The CAPABILITY rules added in #455 have 5 known violations, in 3 types across 2 of the
-17 Presentation assemblies.** They are not skipped: each is a row in
-`PresentationCapabilityRules.KnownViolations` that a rule holds only while it is still
-exactly reproduced, and each carries a tracking issue. Fifteen Presentation assemblies
-are clean and fully enforced.
+**The CAPABILITY rules added in #455 have ZERO known violations.** `KnownViolations` is
+an empty table, so all five rules are enforced across all 17 Presentation assemblies with
+nothing held back. The list used to be the other way round — rows each rule held only
+while the violation was still exactly reproduced, each carrying a tracking issue — and
+every one of those rows has now been deleted rather than re-baselined. The table below
+is the per-rule split; §ARCH-5 is why a row was never the answer.
 
-Rows that no longer count, in four issues. #536: the four
+Rows that no longer count, in five issues. #536: the four
 `Harbor.DesignSystem` rows — `ThemeStore` and `ThemeDirectoryWatcher` — are gone, and
 the `["Harbor.DesignSystem"]` entry with them, because an entry with no rows is still a
 claim that the assembly is dirty. That assembly is the HDS v1 package: `IsPackable`,
@@ -815,9 +1043,13 @@ terminal `JsonThemeLoader` and `ThemeFileWatcher` were not a filesystem permissi
 second implementation of theme loading beside `ThemeStore`. They read through
 `IThemeStore` now, and `ThemeStoreSeamRules` fails if a second implementation of that
 port appears. #667: the two `CellForgeFileTreePanel` rows — the file tree, described
-below. All four deletions are forced rather than asserted: the liveness test fails the
-build on a row that outlived its violation, and — where the type still exists — the
-resolved-list test fails it if the capability returns.
+below. #666: the last row of all —
+`PRESENTATION-MUST-NOT-SPAWN-SUBPROCESSES` / `CellForgeJumpPalettePanel`, which forked
+`git worktree list --porcelain` from inside a painted frame; the panel now asks the
+Domain `IGitQuery` the branch badge has used since #537, and `ProcessGitQuery` does the
+spawning in Application. All five deletions are forced rather than asserted: the
+liveness test fails the build on a row that outlived its violation, and — where the type
+still exists — the resolved-list test fails it if the capability returns.
 
 A further capability is recorded in `PermanentCapabilities` — not a violation, so not
 counted above. See "Permanent capabilities" in §5.6.
@@ -826,16 +1058,18 @@ counted above. See "Permanent capabilities" in §5.6.
 > the per-rule split. The prose had drifted from it three times — "21 … 14 types across
 > 7" when the table held 13 across 6, then "18 … 12 types" when it held 13 across 6
 > again, then "13 … 7 types across 4" when the deletions of #537, #665, #667 and #668
-> had left it holding 11 across 6 — so it now says where the numbers come from rather
-> than only what they are. #536 recomputed both halves from the table.
+> had left it holding 11 across 6, then "5 violations in 3 types across 2 assemblies"
+> when #534 had emptied everything but the jump palette — so it now says where the
+> numbers come from rather than only what they are. #536 recomputed both halves from the
+> table; #666 recomputed them again, and the table is now all zeroes.
 
 | Rule | Violating types | Assemblies | Tracking issues |
 |---|---:|---:|---|
-| `PRESENTATION-MUST-NOT-SPAWN-SUBPROCESSES` | 1 | 1 | [#538](https://github.com/refusedguy/Harbor-Harness/issues/538) (jump palette) |
-| `PRESENTATION-MUST-NOT-TOUCH-THE-FILESYSTEM-FILES` | 2 | 2 | [#534](https://github.com/refusedguy/Harbor-Harness/issues/534) (config stores) |
-| `PRESENTATION-MUST-NOT-TOUCH-THE-FILESYSTEM-DIRECTORIES` | 2 | 1 | [#534](https://github.com/refusedguy/Harbor-Harness/issues/534) (config stores) |
-| `PRESENTATION-MUST-NOT-USE-THE-NETWORK` | 0 | 0 | — clean, unbaselined |
-| `PRESENTATION-MUST-NOT-LOAD-ASSEMBLIES-OR-EMIT-IL` | 0 | 0 | — clean, unbaselined |
+| `PRESENTATION-MUST-NOT-SPAWN-SUBPROCESSES` | 0 | 0 | — clean since [#666](https://github.com/refusedguy/Harbor-Harness/issues/666) |
+| `PRESENTATION-MUST-NOT-TOUCH-THE-FILESYSTEM-FILES` | 0 | 0 | — clean since #534 |
+| `PRESENTATION-MUST-NOT-TOUCH-THE-FILESYSTEM-DIRECTORIES` | 0 | 0 | — clean since #534 |
+| `PRESENTATION-MUST-NOT-USE-THE-NETWORK` | 0 | 0 | — clean, never baselined |
+| `PRESENTATION-MUST-NOT-LOAD-ASSEMBLIES-OR-EMIT-IL` | 0 | 0 | — clean, never baselined |
 
 | Permanent capability | Assembly | Reason |
 |---|---|---|

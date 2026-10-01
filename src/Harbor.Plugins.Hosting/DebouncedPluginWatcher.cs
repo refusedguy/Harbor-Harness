@@ -32,7 +32,11 @@ public sealed class PluginSourceChangeEventArgs : EventArgs
     /// <summary>Absolute path of the affected <c>.cs</c> file.</summary>
     public string Path { get; }
 
-    /// <summary>The most severe outcome of the burst.</summary>
+    /// <summary>
+    ///     The burst's single reported outcome — the LAST raw event of the burst, after
+    ///     the fire-time filesystem check. Not a severity merge: see
+    ///     <see cref="DebouncedPluginWatcher" />.
+    /// </summary>
     public PluginSourceChangeKind Kind { get; }
 }
 
@@ -40,16 +44,49 @@ public sealed class PluginSourceChangeEventArgs : EventArgs
 ///     Debounced <see cref="FileSystemWatcher" /> over one or more CS-source plugin
 ///     directories. Editors rarely write a file once (save → atomic replace → metadata
 ///     touch): raw watcher events for the same path within the debounce window are
-///     collapsed into at most one <see cref="ChangesReady" /> callback per burst, where
-///     the most severe outcome wins — Modified &gt; Added &gt; Removed — so quick-save
-///     bursts stay visible while a removal keeps outranking earlier re-add noise.
+///     collapsed into at most one <see cref="ChangesReady" /> callback per burst, and
+///     the reported kind is the LAST raw event of that burst — last-event-wins in
+///     arrival order, deliberately NOT a severity merge.
 /// </summary>
 /// <remarks>
-///     Debounce correctness relies on generations instead of a shared timer map: every
-///     raw event bumps the pending generation and arms a private timer; on wake a timer
-///     fires only if it still matches the latest generation, so stale timers degrade to
-///     no-ops without any cancellation races. The component knows nothing about
-///     compilation or registries; callbacks fire on thread-pool threads.
+///     <para>
+///         The <c>Rank</c> byte on <see cref="PendingChange" /> is a lossless
+///         <c>MapRank</c>/<c>UnmapRank</c> round-trip of ONE kind (Removed 0, Added 1,
+///         Modified 2). It is an encoding, not a severity scale, and the enum declares no
+///         order among the three. Do not accumulate it (<c>Math.Max</c>) to "keep the most
+///         severe kind": a burst whose last event is a trailing <c>Created</c> on a path
+///         that still exists would then report <c>Modified</c> for a path that only ever
+///         appeared new.
+///     </para>
+///     <para>
+///         <b>This ordering is a record of the implementation, not an enforced
+///         contract.</b> No test distinguishes an overwrite from a max-accumulate, and
+///         the one sequence that could — a burst ending in a bare <c>Created</c> — is not
+///         reliably constructible: <c>File.WriteAllText</c> on a fresh path emits
+///         <c>Created</c> and then <c>Changed</c>, so such a burst ends on the
+///         <c>Changed</c> and both readings report <c>Modified</c>.
+///         <c>Delete_OutranksEarlierModifications</c> cannot catch the swap either — the
+///         filesystem check below forces its <c>Removed</c> under either reading. So a
+///         green run does not vouch for this rule; closing that gap is deliberate work,
+///         not something to infer from CI.
+///     </para>
+///     <para>
+///         Filesystem truth is the one thing that outranks arrival order. inotify may
+///         deliver a stale <c>Changed</c> AFTER <c>Deleted</c> for the same path, and plain
+///         last-event-wins would then report <c>Modified</c> for a file that no longer
+///         exists; reload scope keys on existence, so a non-<c>Added</c> kind whose file is
+///         gone is reported <see cref="PluginSourceChangeKind.Removed" />. This is what
+///         makes <c>Delete_OutranksEarlierModifications</c> deterministic under parallel
+///         load — it is not redundant with the last-event-wins rule, and a refactor that
+///         drops it reintroduces that flake.
+///     </para>
+///     <para>
+///         Debounce correctness relies on generations instead of a shared timer map: every
+///         raw event bumps the pending generation and arms a private timer; on wake a timer
+///         fires only if it still matches the latest generation, so stale timers degrade to
+///         no-ops without any cancellation races. The component knows nothing about
+///         compilation or registries; callbacks fire on thread-pool threads.
+///     </para>
 /// </remarks>
 public sealed class DebouncedPluginWatcher : IDisposable
 {
@@ -66,7 +103,8 @@ public sealed class DebouncedPluginWatcher : IDisposable
 
     /// <summary>
     ///     Tracks one path mid-burst. Rank always holds the MOST RECENT raw event's
-    ///     kind; Generation is bumped per raw event and arms the matching timer.
+    ///     kind — it is overwritten, never merged with the previous one; Generation is
+    ///     bumped per raw event and arms the matching timer.
     /// </summary>
     private readonly record struct PendingChange(byte Rank, long Generation);
 
@@ -151,7 +189,9 @@ public sealed class DebouncedPluginWatcher : IDisposable
         while (true)
         {
             PendingChange current = _pending.GetOrAdd(fullPath, new PendingChange(incomingRank, 0));
-            PendingChange next = new(incomingRank, current.Generation + 1); // last event wins, chronologically
+            // Last event wins, chronologically — deliberately NOT a severity max, see
+            // the class remarks on why Rank must not be accumulated.
+            PendingChange next = new(incomingRank, current.Generation + 1);
             if (_pending.TryUpdate(fullPath, next, current))
             {
                 armedGeneration = next.Generation;

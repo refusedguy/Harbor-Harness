@@ -9,13 +9,14 @@ Storage contract conformance - same tests against Memory and Sqlite backends
 ## Run
 
 ```bash
-dotnet test tests/Harbor.Storage.Tests
+dotnet run --project tests/Harbor.Storage.Tests -c Release --no-build -- --minimum-expected-tests 1
 ```
 
 Or filter to a single test class:
 
 ```bash
-dotnet test tests/Harbor.Storage.Tests --filter "FullyQualifiedName~Storage"
+dotnet run --project tests/Harbor.Storage.Tests -c Release --no-build -- \
+  --minimum-expected-tests 1 --treenode-filter "/*/*/Storage/*"
 ```
 
 ## Layer

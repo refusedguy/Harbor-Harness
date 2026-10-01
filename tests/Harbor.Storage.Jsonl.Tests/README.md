@@ -9,13 +9,14 @@ JSONL session persistence, append-only writes, compaction round-trip, concurrenc
 ## Run
 
 ```bash
-dotnet test tests/Harbor.Storage.Jsonl.Tests
+dotnet run --project tests/Harbor.Storage.Jsonl.Tests -c Release --no-build -- --minimum-expected-tests 1
 ```
 
 Or filter to a single test class:
 
 ```bash
-dotnet test tests/Harbor.Storage.Jsonl.Tests --filter "FullyQualifiedName~JsonlSession"
+dotnet run --project tests/Harbor.Storage.Jsonl.Tests -c Release --no-build -- \
+  --minimum-expected-tests 1 --treenode-filter "/*/*/JsonlSession/*"
 ```
 
 ## Layer

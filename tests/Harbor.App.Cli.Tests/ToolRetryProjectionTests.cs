@@ -1,6 +1,7 @@
 using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Agents;
 using Harbor.Abstractions.Events;
+using Harbor.Abstractions.Git;
 using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Abstractions.Permissions;
@@ -123,6 +124,7 @@ public class ToolRetryProjectionTests
         public IRendererPipeline? RendererPipeline => null;
         public Harbor.Hosting.PluginReloadService? PluginReload => null;
         public IProviderHealthCheck? HealthCheck => null;
+        public IGitQuery? Git => null;
         public Harbor.Ui.Framework.Panels.IPanelRegistry? PanelRegistry => null;
         public Harbor.App.Cli.Repl.ImageAttachmentStash? Attachments => null;
         public void WakeUp() { }

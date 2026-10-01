@@ -3,6 +3,7 @@ using System.Net.Sockets;
 using System.Text;
 using System.Text.Json;
 using CSharpFunctionalExtensions;
+using Harbor.Abstractions.Resilience;
 using Harbor.Tools.Mcp;
 using Microsoft.Extensions.Logging;
 using TUnit.Assertions;
@@ -14,6 +15,17 @@ namespace Harbor.Tools.Builtin.Tests;
 ///     Remote MCP transports (streamable HTTP + legacy SSE) and their registry
 ///     integration, verified against local fake MCP servers.
 /// </summary>
+/// <remarks>
+///     #823: the two tests below write <c>HARBOR_MCP_OAUTH_TOKEN</c> and
+///     <c>HARBOR_HOME</c> into the process environment, and the product reads both
+///     back — the token in <c>McpRegistry.GetTransport</c>'s no-auth branch
+///     (McpRegistry.cs:575), the home in <c>McpOAuthTokenCache.DefaultDirectory</c>.
+///     <c>McpTransportFactoryTests</c> reaches that same branch through
+///     <c>registry.InvokeAsync</c> and is not in the issue's list. Both carry
+///     <c>process-env</c> now; neither held any key before, so the scheduler was
+///     free to run them at the same time.
+/// </remarks>
+[NotInParallel("process-env")]
 public class McpRemoteTransportTests
 {
     private static readonly TimeSpan TestTimeout = TimeSpan.FromSeconds(10);
@@ -263,6 +275,182 @@ public class McpRemoteTransportTests
         await Assert.That(server.RequestBodies.Any(b => b.Contains("tools/list"))).IsTrue();
     }
 
+    // ---------- #714: the SSE retry loop was blind to the cause ----------
+
+    /// <summary>
+    ///     The regression this issue exists for. A missing key, a revoked token or a
+    ///     wrong endpoint is not a blip: the same request will fail identically three
+    ///     times, so retrying it is pure latency in front of a guaranteed error — and
+    ///     for <c>401</c> it is three more chances for the provider to flag the key.
+    ///     <para>
+    ///     Asserted on what the SERVER counted, not on the error string: the string
+    ///     already reported 401 before the fix (the status was flattened into it), so
+    ///     asserting on it would have passed against the retrying transport. The
+    ///     request count is the thing that was actually wrong.
+    ///     </para>
+    /// </summary>
+    [Test]
+    public async Task SseTransport_UnauthorizedChannel_AsksOnceAndDoesNotRetry()
+    {
+        using FakeServer server = FakeServer.Start();
+        server.GetStatusCode = 401;
+
+        await using var transport = new McpSseTransport(new Uri(server.Url + "/sse"));
+        using var request = JsonDocument.Parse("""{"jsonrpc":"2.0","id":4,"method":"tools/list","params":{}}""");
+
+        Result<Maybe<JsonDocument>> roundTrip = await transport.TryRoundTripAsync(request.RootElement.Clone(), 4);
+
+        await Assert.That(roundTrip.IsFailure).IsTrue();
+        await Assert.That(roundTrip.Error).Contains("401");
+        await Assert.That(server.HandledRequests)
+            .IsEqualTo(1)
+            .Because("an unauthenticated channel cannot succeed on a second try — the key, not the socket, is missing");
+    }
+
+    /// <summary>
+    ///     The same blind retry reached the message endpoint, one hop further along.
+    ///     Two requests is the whole honest cost: open the channel, be refused the
+    ///     POST. It was six — three full open-and-post round-trips.
+    /// </summary>
+    [Test]
+    public async Task SseTransport_ForbiddenMessageEndpoint_OpensAndPostsOnceEach()
+    {
+        using FakeServer server = FakeServer.Start();
+        server.JsonResponder = static _ => """{"jsonrpc":"2.0","id":5,"result":{"echo":true}}""";
+        // More refusals than attempts, so the queue cannot run dry mid-retry and let
+        // a later attempt succeed — that would hide the defect instead of exposing it.
+        server.QueueStatusCodes.AddRange([403, 403, 403, 403, 403, 403]);
+
+        await using var transport = new McpSseTransport(new Uri(server.Url + "/sse"));
+        using var request = JsonDocument.Parse("""{"jsonrpc":"2.0","id":5,"method":"tools/list","params":{}}""");
+
+        Result<Maybe<JsonDocument>> roundTrip = await transport.TryRoundTripAsync(request.RootElement.Clone(), 5);
+
+        await Assert.That(roundTrip.IsFailure).IsTrue();
+        await Assert.That(roundTrip.Error).Contains("403");
+        await Assert.That(server.HandledRequests)
+            .IsEqualTo(2)
+            .Because("one GET to open the channel plus one POST that was refused; the retry only ever repeated both");
+    }
+
+    /// <summary>
+    ///     The third blind-retry source, and the one the sibling transport already
+    ///     got right: <c>McpHttpTransport</c> resolves the token before entering its
+    ///     loop, so a rejected grant costs one attempt and zero requests. Here the
+    ///     token was resolved per attempt inside the loop, so a grant that can never
+    ///     be granted was asked for three times.
+    /// </summary>
+    [Test]
+    public async Task SseTransport_RejectedOAuthGrant_IsNotRetried()
+    {
+        int tokenCalls = 0;
+        await using var transport = new McpSseTransport(
+            new Uri("http://127.0.0.1:1/sse"),
+            oauthTokenProvider: _ =>
+            {
+                tokenCalls++;
+                return Task.FromResult(Result.Failure<Maybe<string>>("invalid_grant"));
+            });
+
+        using var request = JsonDocument.Parse("""{"jsonrpc":"2.0","id":6,"method":"tools/list","params":{}}""");
+        Result<Maybe<JsonDocument>> roundTrip = await transport.TryRoundTripAsync(request.RootElement.Clone(), 6);
+
+        await Assert.That(roundTrip.IsFailure).IsTrue();
+        await Assert.That(tokenCalls)
+            .IsEqualTo(1)
+            .Because("a rejected grant is an answer, not an outage — asking again cannot change it");
+    }
+
+    /// <summary>
+    ///     The other half, and the reason the fix cannot simply be "stop retrying".
+    ///     A 5xx on the channel IS a blip and must keep its three attempts — this
+    ///     pins the transient set in place so a later reader cannot widen the new
+    ///     terminal branch until retrying is dead everywhere.
+    /// </summary>
+    [Test]
+    public async Task SseTransport_ServerErrorOnChannel_StillRetries()
+    {
+        using FakeServer server = FakeServer.Start();
+        server.GetStatusCode = 503;
+
+        await using var transport = new McpSseTransport(new Uri(server.Url + "/sse"));
+        using var request = JsonDocument.Parse("""{"jsonrpc":"2.0","id":7,"method":"tools/list","params":{}}""");
+
+        Result<Maybe<JsonDocument>> roundTrip = await transport.TryRoundTripAsync(request.RootElement.Clone(), 7);
+
+        await Assert.That(roundTrip.IsFailure).IsTrue();
+        await Assert.That(roundTrip.Error).Contains("503");
+        await Assert.That(server.HandledRequests)
+            .IsEqualTo(TransientFailurePolicy.DefaultMaxAttempts)
+            .Because("5xx is exactly the class of failure the retry budget exists for");
+    }
+
+    /// <summary>
+    ///     #925, the transport-level half. The policy test above proves the set now
+    ///     matches a bare <see cref="SocketException" />; this proves the set is
+    ///     actually reached from the wire, where the defect was reported.
+    ///     <para>
+    ///         The bound is "re-dialled", not "re-dialled N times", and the
+    ///         difference is deliberate. How many TCP connections one logical
+    ///         attempt consumes depends on whether
+    ///         <see cref="System.Net.Http.SocketsHttpHandler" /> wraps the socket
+    ///         error or lets it through bare, and on the CI runner that split was
+    ///         measured at 23 wrapped / 17 bare out of 40 — so pinning an exact
+    ///         count would encode a coin flip as a contract. What is asserted is
+    ///         the part the issue is about: the drop is retried rather than
+    ///         reported on the first attempt, and the budget is still a ceiling.
+    ///     </para>
+    ///     <para>
+    ///         One shape for both transports, because #925 is the same defect in
+    ///         both loops reading the same owner, and a guard that only covered
+    ///         one of them is the #572 duplication this file was written to end.
+    ///         The caller names the transport so a failure says which one gave up.
+    ///     </para>
+    /// </summary>
+    private static async Task AssertReDialsOnDroppedConnectionAsync(
+        Func<Uri, IMcpRemoteTransport> build,
+        string path,
+        int requestId,
+        string transportName)
+    {
+        using DeadServer server = DeadServer.Start();
+
+        await using IMcpRemoteTransport transport = build(new Uri($"http://127.0.0.1:{server.Port}{path}"));
+        using var request = JsonDocument.Parse(
+            $$$"""{"jsonrpc":"2.0","id":{{{requestId}}},"method":"tools/list","params":{}}""");
+
+        Result<Maybe<JsonDocument>> roundTrip = await transport.TryRoundTripAsync(request.RootElement.Clone(), requestId);
+
+        await Assert.That(roundTrip.IsFailure).IsTrue();
+        await Assert.That(server.ConnectionsAccepted)
+            .IsGreaterThan(1)
+            .Because(
+                $"{transportName} shares the retry owner with its sibling, so a connection dropped below the HTTP layer "
+                + "must be re-dialled there too. One dial means the status-less arm is not being reached: the user saw the "
+                + "error instead of the reconnect the policy already pays for on the LLM path. The BCL hands this event "
+                + "back both wrapped in HttpRequestException and as a bare SocketException, and the set has to answer for "
+                + "both — before this, the bare shape fell through and the round-trip reported on its first attempt");
+        await Assert.That(server.ConnectionsAccepted)
+            .IsLessThanOrEqualTo(TransientFailurePolicy.DefaultMaxAttempts)
+            .Because("the retry budget is a ceiling on attempts; a dropped connection must not buy attempts beyond it");
+    }
+
+    [Test]
+    public Task SseTransport_DroppedConnection_ReDialsInsteadOfReportingOnTheFirstAttempt()
+        => AssertReDialsOnDroppedConnectionAsync(
+            uri => new McpSseTransport(uri, requestTimeout: TimeSpan.FromSeconds(5)),
+            "/sse",
+            8,
+            "McpSseTransport");
+
+    [Test]
+    public Task HttpTransport_DroppedConnection_ReDialsInsteadOfReportingOnTheFirstAttempt()
+        => AssertReDialsOnDroppedConnectionAsync(
+            uri => new McpHttpTransport(uri, requestTimeout: TimeSpan.FromSeconds(5)),
+            "/mcp",
+            9,
+            "McpHttpTransport");
+
     // ---------- Registry integration ----------
 
     [Test]
@@ -462,6 +650,14 @@ public class McpRemoteTransportTests
         public string? SseResponseBody { get; set; }
         public Func<string, string>? JsonResponder { get; set; }
 
+        /// <summary>
+        ///     Status for the legacy-SSE <c>GET</c> channel. #714: the 401/403/404
+        ///     guards need the channel itself to refuse, and
+        ///     <see cref="QueueStatusCodes" /> only ever applied to the POST.
+        ///     <see langword="null" /> (the default) keeps the announcing behaviour.
+        /// </summary>
+        public int? GetStatusCode { get; set; }
+
         private readonly TaskCompletionSource _postArrived = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
         private FakeServer(HttpListener listener, Uri url)
@@ -512,6 +708,15 @@ public class McpRemoteTransportTests
 
                 if (isGet)
                 {
+                    // #714: a channel the server refuses outright never announces an
+                    // endpoint, so the refusal has to be served before the announce.
+                    if (GetStatusCode is { } refused && refused != 200)
+                    {
+                        context.Response.StatusCode = refused;
+                        context.Response.Close();
+                        return;
+                    }
+
                     // Legacy SSE channel: announce the POST endpoint, then emit the response.
                     context.Response.ContentType = "text/event-stream";
                     await WriteSseAsync(context.Response, $"event: endpoint\ndata: /message\n\n");
@@ -588,6 +793,103 @@ public class McpRemoteTransportTests
             int port = ((IPEndPoint)probe.LocalEndpoint).Port;
             probe.Stop();
             return port;
+        }
+
+        public void Dispose()
+        {
+            _cts.Cancel();
+            try { _listener.Stop(); } catch { /* not started */ }
+            try { _acceptLoop.Wait(1000); } catch { /* loop ended */ }
+            _cts.Dispose();
+        }
+    }
+
+    /// <summary>
+    ///     #831/#925: accepts the TCP connection and hangs up without writing a byte.
+    ///     <para>
+    ///         Deliberately a raw <see cref="TcpListener" /> rather than an
+    ///         extension of <c>FakeServer</c>. <c>FakeServer</c> speaks HTTP, and
+    ///         an HTTP server that stays silent still has to produce a status code
+    ///         or a clean close — both of which are a different failure class. This
+    ///         one never reaches the HTTP layer at all, which is the entire point:
+    ///         the failure arrives as <c>HttpRequestException</c> with
+    ///         <c>StatusCode == null</c>, the shape #572's hoist could not match.
+    ///     </para>
+    ///     <para>
+    ///         Linger-zero disposal makes the hang-up a TCP RST rather than a
+    ///         graceful FIN, so the client's socket errors instead of seeing a
+    ///         half-open connection — a FIN would surface as
+    ///         <c>HttpRequestError.ConnectionError</c> too, but the RST is the
+    ///         shape a genuinely dropped connection produces and does not depend on
+    ///         the client noticing a clean shutdown.
+    ///     </para>
+    ///     <para>
+    ///         The accept count is read through <see cref="Volatile" /> because
+    ///         the loop increments on a pool thread while the assertions run on the
+    ///         test's, and the assertion is the whole proof — a lost increment would
+    ///         read as "the retry never happened".
+    ///     </para>
+    /// </summary>
+    private sealed class DeadServer : IDisposable
+    {
+        private readonly TcpListener _listener;
+        private readonly CancellationTokenSource _cts = new(TimeSpan.FromSeconds(10));
+        private readonly Task _acceptLoop;
+        private int _connectionsAccepted;
+
+        private DeadServer(TcpListener listener)
+        {
+            _listener = listener;
+            _acceptLoop = Task.Run(AcceptAndDropAsync);
+        }
+
+        public int Port { get; private set; }
+
+        /// <summary>How many times something dialled this listener — the retry count, measured at the far end.</summary>
+        public int ConnectionsAccepted => Volatile.Read(ref _connectionsAccepted);
+
+        public static DeadServer Start()
+        {
+            var listener = new TcpListener(IPAddress.Loopback, 0);
+            listener.Start();
+            var server = new DeadServer(listener)
+            {
+                Port = ((IPEndPoint)listener.LocalEndpoint).Port,
+            };
+            return server;
+        }
+
+        private async Task AcceptAndDropAsync()
+        {
+            while (!_cts.IsCancellationRequested)
+            {
+                Socket socket;
+                try
+                {
+                    socket = await _listener.AcceptSocketAsync(_cts.Token).ConfigureAwait(false);
+                }
+                catch (Exception) when (_cts.IsCancellationRequested)
+                {
+                    return;
+                }
+                catch (OperationCanceledException)
+                {
+                    return;
+                }
+
+                Interlocked.Increment(ref _connectionsAccepted);
+                try
+                {
+                    // Drop it the way a vanishing peer does: RST, not a tidy close.
+                    socket.LingerState = new LingerOption(true, 0);
+                }
+                catch (SocketException)
+                {
+                    // Already gone — the hang-up below is the behaviour under test.
+                }
+
+                socket.Dispose();
+            }
         }
 
         public void Dispose()

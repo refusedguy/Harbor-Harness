@@ -16,6 +16,18 @@ namespace Harbor.Abstractions.Sessions;
 ///     <para>
 ///         Implementations MUST be thread-safe.
 ///     </para>
+///     <para>
+///         Implementations MUST also be <b>pure functions of the context</b>: the
+///         same context yields the same prompt, byte for byte, at any time of
+///         day. #814: this was implied and never stated, which let a wall-clock
+///         read into the prompt — <c>- Today: 2026-09-29</c> — reach the model
+///         through a cache that cannot be keyed on a date, so a session left
+///         open across midnight kept serving yesterday's. Anything the prompt
+///         needs that varies — the date, a machine name, a counter — arrives as a
+///         member of <see cref="SystemPromptContext" />, where the cache key
+///         already reaches it. Enforced by <c>PromptClockPurityRule</c> in the
+///         architecture tests.
+///     </para>
 /// </remarks>
 public interface ISystemPromptBuilder
 {

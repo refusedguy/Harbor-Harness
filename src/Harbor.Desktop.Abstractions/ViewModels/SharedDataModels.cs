@@ -7,8 +7,15 @@ namespace Harbor.Desktop.Abstractions.ViewModels;
 // These are the canonical shapes shared by every desktop shell (WPF,
 // Avalonia, MAUI, Blazor). They intentionally carry NO WPF-specific types.
 // vm-dedup canon (audit 27-G): platform VMs inherit/project these shapes
-// (WPF DiffLine/DiffHunk/TokenBar heirs); Desktop *Base VMs + TuiViewModels
-// own behavior, Framework hosts TEA-projection VMs.
+// (WPF TokenBar heirs); Desktop *Base VMs + TuiViewModels own behavior,
+// Framework hosts TEA-projection VMs.
+//
+// One clause of that canon was withdrawn by #803: the diff shapes
+// (DiffLineKind / DiffLineViewModel / DiffHunkViewModel) are gone, because
+// their only heir is the WPF shell under contrib/, which CI does not build,
+// and no shell in the compiled product ever used them. The canon said these
+// are shared by "every desktop shell"; the ones that compile did not share
+// them. See the Diff section below for the whole argument.
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Chat
@@ -139,47 +146,48 @@ public class CommandEntry
 // ─────────────────────────────────────────────────────────────────────────────
 // Diff
 // ─────────────────────────────────────────────────────────────────────────────
-
-/// <summary>Kind of diff line.</summary>
-public enum DiffLineKind
-{
-    Context,
-    Added,
-    Removed
-}
-
-/// <summary>A single diff line.</summary>
-public class DiffLineViewModel
-{
-    public string Text { get; init; }
-    public DiffLineKind Kind { get; init; }
-
-    public DiffLineViewModel(string text, DiffLineKind kind)
-    {
-        Text = text;
-        Kind = kind;
-    }
-
-    public string LineBrushKey => Kind switch
-    {
-        DiffLineKind.Added => "DiffAddedBrush",
-        DiffLineKind.Removed => "DiffRemovedBrush",
-        _ => "DiffContextBrush"
-    };
-}
-
-/// <summary>A single diff hunk.</summary>
-public class DiffHunkViewModel
-{
-    public string Header { get; init; }
-    public IReadOnlyList<DiffLineViewModel> Lines { get; init; }
-
-    public DiffHunkViewModel(string header, IReadOnlyList<DiffLineViewModel> lines)
-    {
-        Header = header;
-        Lines = lines;
-    }
-}
+// The diff shapes that used to live here — DiffLineKind / DiffLineViewModel /
+// DiffHunkViewModel — are GONE, and the reason is that the only consumer of
+// them is not in this repository (#803).
+//
+// They were extracted here from the isolated WPF shell, and the WPF shell is
+// the one caller: contrib/apps/Harbor.App.Wpf/ViewModels/DiffViewModel.cs and
+// its Views/DiffView.xaml DataTemplate. Nothing under src/, apps/ or tests/
+// ever constructed a DiffLineViewModel, read a LineBrushKey, or named a
+// DiffHunkViewModel — verified by grep over all three, zero hits. So the
+// desktop contract advertised three types that no desktop shell in the
+// compiled product consumed, and the cheapest consumer of any of them was a
+// file CI never builds.
+//
+// That mattered more than dead code usually does, because the enum was named
+// DiffLineKind and so was the live one: src/Harbor.Ui.Framework.Rendering/
+// Widgets/DiffBlock.cs:7, five members, Context/Add/Delete/HunkHeader/
+// FileHeader. Two public enums, one simple name, two assemblies, and INCOMPATIBLE
+// members — Add/Delete against Added/Removed. Only Context is spelled the same
+// in both. A reader who internalised one reaches for a member the other does
+// not have, the compiler accepts both, and the error names the wrong file.
+// The live one is the one a diff view must use; this one was the decoy.
+//
+// The live vocabulary is the engine's, and
+// DiffSurfaceNameCollisionRule (Harbor.Architecture.Tests) now holds that: the
+// kind enums and their carriers are read out of the project that owns
+// Rendering.Widgets.LineDiff, and no other project may declare one of those
+// names. The two genuinely distinct vocabularies are LineDiffRowKind (a row
+// the engine COMPUTED) and DiffLineKind (a line of a unified diff DOCUMENT,
+// which is why it has hunk and file headers) — both in the engine's project,
+// both earning the name, and neither mergeable with the other.
+//
+// Deleting rather than renaming is the honest call here and not a style
+// preference: the type had no shape worth a second name, because the
+// pre-#679 index-alignment rows it described are no longer produced by
+// anything. LineDiff is the one diff algorithm (#694) and the desktop
+// DiffViewModel now hands its rows to it. What is left of the old contract is
+// three classes describing a result no code computes.
+//
+// If a WPF/MAUI/Blazor shell is ever revived under contrib/, the shapes come
+// back from Rendering.Widgets.DiffLine rather than as a new vocabulary: that
+// type already carries Kind, OldNo, NewNo and Text, and it is the one the
+// guards know about.
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Token usage

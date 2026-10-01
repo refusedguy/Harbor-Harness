@@ -1,5 +1,21 @@
 # PATTERNS.md — the de-facto convention, and where it actually lives
 
+> Status: normative for the current implementation. Every `file:line` below is
+> cited against this branch. If code and doc disagree, code wins and the doc must
+> be updated in the same PR. This is a working checklist, not a dated record —
+> the "How to use this document" table below is read before designing anything,
+> and four architecture guards quote these sections in their own failure
+> messages, so a number that has rotted sends a reader to the wrong code. The
+> `#826` gate fences every citation on this page
+> (`tools/check-doc-cites.py`, rule `DOC-CITE-MISSING` / `DOC-CITE-EOF`), which
+> is why the declaration is here and not just implied by the prose above.
+>
+> What the fence does **not** do is grade the *meaning* of a line — it proves a
+> line exists, not that it is the right one. #868 is the worked example: eight of
+> §8's ten pointers into `ChatScreenBridge.cs` named a line that exists and holds
+> something else. Cite the symbol next to the number where a section argues from
+> one.
+
 > **Read this before you add a feature.** This is not the GoF catalog. It is the
 > set of patterns Harbor *actually* uses, each one pinned to the line of code
 > that proves it, plus the trap you are about to fall into.
@@ -101,7 +117,7 @@ by `tests/Harbor.Core.Tests/EventBusSinkVerdictTests.cs:309-330`.
 2. **Handler seam (for imperative side effects).** A renderer that must act on an
    event outside the state fold registers an `IAgentEventHandler` via
    `RegisterHandler` (`src/Harbor.Terminal.Abstractions/BaseTuiRenderer.cs:238`;
-   the contract is `Renderers/AgentEventHandler.cs:12-21`, whose doc comment
+   the contract is `src/Harbor.Terminal.Abstractions/Renderers/AgentEventHandler.cs:12-21`, whose doc comment
    states the intent outright: "instead of duplicating a per-renderer
    `switch (AgentEvent)`"). Canonical:
    `src/Harbor.Tui.AnsiPlain/AnsiPlainTuiRenderer.cs:85-88`.
@@ -110,30 +126,37 @@ AnsiPlain does both (`:74` dispatches to the store, `:79` runs the handlers) —
 that is fine and is not a third mechanism. Three renderers reach the store seam
 one hop away, through a `*TeaBridge` field
 (`contrib/tui/Harbor.Tui.TerminalGui/TerminalGuiRenderer.cs:36` →
-`TerminalGuiTeaBridge.cs:56`, and the Termina/RazorConsole pair) — the guard
+`contrib/tui/Harbor.Tui.TerminalGui/TerminalGuiTeaBridge.cs:56`, and the Termina/RazorConsole pair) — the guard
 follows that hop, because the bridge dispatches into the same `UiStore`.
 
 ### The known trap (#575)
 
 There were **three** mechanisms for one event stream: 21 `IAgentEventHandler`
-objects across 5 renderer families, one hand-written 18-arm
+objects across 5 renderer families, one hand-written 21-arm
 `switch (AgentEvent)` in `ChatScreenBridge`, and 5 renderers routing through
 `UiStore.Dispatch` + `ChatAppReducer`.
 
-`ChatScreenBridge.HandleEvent` (`src/Harbor.Tui.CellForge/Chat/Streaming/ChatScreenBridge.cs:125`,
-18 outer arms at `:129-314` plus a nested `switch (update.LlmEvent)` with 4 more
-at `:170-193`) receives events through its **own** subscription
-(`Chat/Streaming/EventSubscription.cs:18`), not the base class's dispatcher, and
+`ChatScreenBridge.HandleEvent` (`src/Harbor.Tui.CellForge/Chat/Streaming/ChatScreenBridge.cs:127`,
+15 outer arms at `:131-390` plus a nested `switch (update.LlmEvent)` with 6 more
+at `:174-189`) receives events through its **own** subscription
+(`src/Harbor.Tui.CellForge/Chat/Streaming/EventSubscription.cs:18`), not the base class's dispatcher, and
 is registered as a **singleton** with `autoSubscribe: false`
 (`apps/Harbor.App.Cli/Hosting/CellForgeModule.cs:101-106`).
+
+> The counts in this paragraph were `18` / `:129-314` / `4` until #840 touched
+> the arm set and forced a recount — 18 was 14 outer + 4 nested, i.e. the total,
+> reported as if it were the outer count, and the range had already drifted.
+> Corrected here because a number this paragraph edits should at least end up
+> true; the neighbouring stale pointers are tracked separately.
 
 The consequence is the whole point of #575: **a new `AgentEvent` subclass was
 invisible to `BaseTuiRenderer`, and the next person added a `case` to a
 621-line bridge.** That is exactly what happened for `CompactionFailedEvent` —
 present in the conformance sweep at
-`tests/Harbor.Tui.RendererTests/RendererVisitorRegressionTests.cs:46`, therefore
+`tests/Harbor.Tui.RendererTests/RendererVisitorRegressionTests.cs:63`, therefore
 *required* of the 5 conforming renderers, and **absent** from `ChatScreenBridge`'s
-18 arms. A third classification of the same taxonomy also lives in the base class:
+arms until #840 added the arm. A third classification of the same taxonomy also
+lives in the base class:
 `ShouldRenderPlacement` (`BaseTuiRenderer.cs:289-309`) re-derives "which event
 repaints which placement" as `placement switch { … @event is … }`, so adding one
 event type needed three edits in three shapes — or zero, if you only knew about
@@ -158,36 +181,46 @@ is two renderers declared in the test file — one with a seam, one without — 
 plus a frozen index**, not a `switch`. The three registries in
 `src/Harbor.Hosting/Modules/` have the same shape on purpose:
 
-| Registry | id table | `Build()` | `TryResolve` |
+| Registry | id table | `Build()` | `Resolve` |
 |---|---|---|---|
-| `TuiBackendRegistry.cs` | `FallbackBackendId` `:174`/`:177` | `:181-210` | falls back to that single id `:227` |
-| `SessionStoreRegistry.cs` | `KnownIds` `:67`/`:70` | `:74-84` | `:92-100` |
-| `HarborModeRegistry.cs` | `KnownIds` `:72` | `:75-83` | `:91-105` |
+| `TuiBackendRegistry.cs` | `FallbackBackendId` `:228`/`:231` | `:235` | falls back to that single id `:302` |
+| `SessionStoreRegistry.cs` | **none** — the id set is `Build()`'s own keys | `:108` | `:158-163` |
+| `HarborModeRegistry.cs` | **none** — the id set is `Build()`'s own keys | `:80` | `:98-103` |
 
 Every one of them is:
 
 ```csharp
-internal const string KnownIds = "…";                    // next to the factory set,
-                                                            // so error text cannot drift
-internal static FrozenDictionary<string, TStrategy> Build();   // built once, frozen
-internal static bool TryResolve(…, string rawId, out TStrategy? s);  // unknown id → false
+internal static FrozenDictionary<string, TStrategy> Build();  // built once, frozen;
+                                                            // its Keys ARE the id list
+internal static Maybe<TStrategy> Resolve(FrozenDictionary<string, TStrategy> registry,
+                                         string rawId);    // unknown id → None
 ```
 
+> `KnownIds` is **gone**, and its absence is the point. Both
+> `SessionStoreRegistry` and `HarborModeRegistry` used to carry a second
+> hand-written copy of their own key set next to the factory set, on the strength
+> of a doc comment claiming adjacency prevented drift. #581 deleted both: "there
+> is no second list left to drift; the registry below is the only declaration"
+> (`SessionStoreRegistry.cs:20-23`). A table of pointers is also a hand-maintained
+> list — which is §7 rule 3, one section up.
+
 `Build()` returns a `FrozenDictionary` — no per-lookup allocation, no lock.
-`TryResolve` returns `false` for an unknown id and the **caller fails loudly**:
-`SessionStoreRegistry`'s own doc comment says a `HARBOR_STORAGE` typo "used to
-boot on jsonl and silently split the session history".
+`Resolve` returns `Maybe.None` for an unknown id and the **caller fails loudly**:
+`SessionStoreRegistry`'s own header says the silent fallback "is gone: unknown
+ids fail fast" (`SessionStoreRegistry.cs:11`).
 
 Provider factories follow the same shape without the id index, because a
 provider is looked up by a strong id rather than a raw string:
-`src/Harbor.Hosting/Modules/ProviderFactories.cs:75`, `:93`, `:113`, `:135` —
+`src/Harbor.Hosting/Modules/ProviderFactories.cs:76`, `:94`, `:114`, `:136` —
 each `IProviderFactory` with `ProviderId` and `CreateClient(ILoggerFactory)`.
 
 ### The known trap
 
 `TuiBackendRegistry` is the one exception, and it is a *deliberate* one: unknown
-`HARBOR_TUI` falls back to ANSI and `TuiModule` logs a warning naming the
-requested id (`:216`). A fallback is acceptable **only when it is loud and
+`HARBOR_TUI` falls back to a single id — `"ansi"` when Spectre is compiled in,
+`"plain"` otherwise (`TuiBackendRegistry.cs:226-232`) — and `TuiModule` logs a
+warning naming the requested id and every available one
+(`TuiModule.cs:50-54`). A fallback is acceptable **only when it is loud and
 single**. If you add a fourth registry, copy `SessionStoreRegistry`, not
 `TuiBackendRegistry` — the difference is whether a typo is silent.
 
@@ -198,7 +231,7 @@ single**. If you add a fourth registry, copy `SessionStoreRegistry`, not
 **The convention.** Cross-cutting policy is a decorator registered **at the DI
 boundary**, wrapping the concrete instance. Three sites, same shape:
 
-- `src/Harbor.Hosting/Modules/RegistriesModule.cs:101-104`:
+- `src/Harbor.Hosting/Modules/RegistriesModule.cs:115-121`:
   ```csharp
   // sprint3-C C1: instrument at the DI boundary. Plugins keep mutating the
   // RAW registries (ctx.Registries) before Freeze; consumers resolving the
@@ -206,7 +239,7 @@ boundary**, wrapping the concrete instance. Three sites, same shape:
   services.AddSingleton<IToolRegistry>(new InstrumentedToolRegistry(
       toolRegistry, MeterMetrics.Instance, ActivityTracer.Instance));
   ```
-- `src/Harbor.Hosting/Modules/CoreModule.cs:58`: `IAgent` → `TracingAgentProxy`
+- `src/Harbor.Hosting/Modules/CoreModule.cs:83-86`: `IAgent` → `TracingAgentProxy`
   over the real `DefaultAgent`.
 - `src/Harbor.Hosting/Modules/TelemetryModule.cs:8-15`: the doc comment states
   the rule — the decorators wrap in `AddHarborRegistries`/`AddHarborCore`, "one
@@ -260,10 +293,11 @@ keep in step — that is the entire point of the catalog.
 
 `src/Harbor.Abstractions/Tools/IToolSource.cs:6` — `{ GetAllTools, ResolveTools, GetTool }`.
 Composition: `src/Harbor.Registries/Tools/CompositeToolRegistry.cs:6` holds
-`List<IToolSource> _sources`, folds first-success in `GetTool` (`:80-88`), and
-makes `Register`/`Unregister` **read-only** (`:92-94`, each returning an
+`List<IToolSource> _sources`, folds first-success in `GetTool` (`:97`), and
+makes `Register`/`Unregister` **read-only** (`:119,121`, each returning an
 explanatory `Result.Failure`). Two internal sources exist:
-`ToolRegistry.cs:129` (`ConcurrentToolSource`, unfrozen path) and
+`ToolRegistry.cs:157` (`ConcurrentToolSource`, a `private sealed class` nested in
+`ToolRegistry` itself, unfrozen path) and
 `FrozenToolView.cs:26` (frozen path). The "single read path" rationale is
 documented at `ToolRegistry.cs:26-29` — including the sentence that states the
 intent: "A third source (e.g. lazy-loaded plugin tools) plugs in as another
@@ -271,6 +305,8 @@ intent: "A third source (e.g. lazy-loaded plugin tools) plugs in as another
 GetTool." That sentence describes a caller that does not exist.
 
 This is a correct Composite.
+
+<!-- check-doc-cites: allow-unwired CompositeToolRegistry — this one is TRUE, and the section above says so in prose: "AddSource has exactly one caller in the repository, and it is a test. No production code constructs a CompositeToolRegistry." The escape hatch is what lets the document name the finding instead of omitting the type from it. -->
 
 ### The known trap (#577)
 
@@ -283,7 +319,7 @@ tests/Harbor.Registries.Tests/ToolRegistrySnapshotTests.cs:237-238
 ```
 
 The two sibling registries have **no Composite at all**:
-`src/Harbor.Registries/Providers/ProviderRegistry.cs:15` and
+`src/Harbor.Registries/Providers/ProviderRegistry.cs:16` and
 `src/Harbor.Registries/Agents/AgentRegistry.cs:8` are `ConcurrentDictionary` plus
 a `Builder`. There is no `IProviderSource` / `IAgentSource`, so a second source of
 providers cannot exist without editing the registry class. Both files carry the
@@ -295,9 +331,9 @@ copies, in `src/Harbor.Plugins.Registration/PluginRegistrar.cs:75-87`:
 
 | plugin role | adapter | reaches |
 |---|---|---|
-| `IToolPlugin` | `ToolRegistryBuilderAdapter` (`:122`), `AddTool` at `:147` wraps the tool in `SandboxedPluginTool` (a Decorator) then calls `_host.RegisterTool` | `IPluginLoadHost.RegisterTool` (`IPluginLoadHost.cs:65`) |
-| `IProviderPlugin` | `ProviderRegistryBuilderAdapter` (`:170`) | `IPluginLoadHost.RegisterProvider` (`:74`), called at `:199,210,217` |
-| `IAgentPlugin` | `AgentRegistryBuilderAdapter` (`:86`) | `IPluginLoadHost.RegisterAgent` (`:81`), called at `:247` |
+| `IToolPlugin` | `ToolRegistryBuilderAdapter` (`:202`), `AddTool` at `:227` wraps the tool in `SandboxedPluginTool` (`:231`, a Decorator) then calls `_host.RegisterTool` (`:238`) | `IPluginLoadHost.RegisterTool` (`IPluginLoadHost.cs:67`) |
+| `IProviderPlugin` | `ProviderRegistryBuilderAdapter` (`:249`) | `IPluginLoadHost.RegisterProvider` (`:76`), called at `:279,290,297` |
+| `IAgentPlugin` | `AgentRegistryBuilderAdapter` (`:314`) | `IPluginLoadHost.RegisterAgent` (`:83`), called at `:327` |
 
 Two consequences worth stating plainly:
 
@@ -355,20 +391,24 @@ parse/IO failures.
 
 Two more live instances of the banned direction:
 
-- `src/Harbor.Abstractions/Tools/ITool.cs:98` — `ValidateArguments(args) =>
+- `src/Harbor.Abstractions/Tools/ITool.cs:124` — `ValidateArguments(args) =>
   Result.Success()` accepts any argument shape. Currently harmless **only**
-  because all 26 in-tree `ITool` implementations override it — which is exactly
-  why it is safe to delete rather than reason about.
+  because all 22 in-tree `ITool` implementations override it (`grep -rnE "class
+  [A-Za-z0-9_]+ *: *[A-Za-z0-9_.]*ITool" src/`, 22 distinct types, none in a file
+  without a `ValidateArguments`) — which is exactly why it is safe to delete
+  rather than reason about. §9 cited this same member at `:74`, which is a
+  doc-comment line on `SafetyProfile`; two numbers for one claim in one document,
+  and neither was right.
 - `src/Harbor.Terminal.Abstractions/Views/ITuiView.cs:32` —
   `OnEventAsync(...) => Task.CompletedTask`, and the hook has **zero callers**.
   `BaseTuiRenderer` only calls `view.RenderAsync`
   (`BaseTuiRenderer.cs:318-330`). Key and event handling moved to the reducer
-  (`AppMsg.KeyInput` via `Ui.Framework.State/State/KeyEventAdapter.cs:23`,
+  (`AppMsg.KeyInput` via `src/Harbor.Ui.Framework.State/State/KeyEventAdapter.cs:23`,
   `ChatAppMsg.Agent` via `CellForgeTuiRenderer.cs:314`), but the old hooks stayed
   on the interface with a no-op default, so the compiler will not tell anyone
-  they are dead. A plugin author reading `ITuiPlugin`
-  (`Terminal.Abstractions/Plugins/ITuiPlugin.cs:14-20` is the documented
-  "register a new view" route) implements `OnEventAsync`, sees no exception, and
+  they are dead. A plugin author following `ITuiPlugin`'s `RegisterTui`
+  (`src/Harbor.Terminal.Abstractions/Plugins/ITuiPlugin.cs:124`, and note `:11`: that whole
+  seam is closed as of #564) implements `OnEventAsync`, sees no exception, and
   ships a view that never updates.
 
 ### The rule for your own DIM
@@ -422,13 +462,16 @@ then the default arm invents an answer. Every instance in #578 is the default ar
 | #556 | `ChatRole → (label, markdown?)` written 4×, all four `_ =>` arms **silently relabelling** a new role |
 | #567 | tool-call lifecycle as three enums, all `_ =>` render a new state as `running` — a cancelled call spins forever |
 | #553 | `Rect.Width < 2` guard lost in 2 of 7 copies; corners drawn **outside** the requested rect |
-| #557 | `PathGuardSafetyPolicy.DefaultTools` (`IArgSafetyPolicy.cs:107-110`) is a hand-rolled tool-name list; omitting a path-taking write-tool means `new("mytool","src/*",Allow)` authorises `src/../../../etc/passwd` |
+| #557 | the tool-name list behind the path guard — `PathArgExtractionPolicy.DefaultTools` (`PathArgExtractionPolicy.cs:53`), a hand-rolled set rather than a union; omitting a path-taking write-tool means `new("mytool","src/*",Allow)` authorises `src/../../../etc/passwd`. #557's fix was to make `ITool.SafetyProfile` a required member and derive the set from it, so what is cited here today is the derived fallback, not the literal that caused it |
 
 ### The wire unions, which are the hand-maintained lists
 
 - `src/Harbor.Abstractions.Contracts/Events/AgentEvent.cs:9-25` — 17
   `[JsonDerivedType]` entries for the `AgentEvent` record union; the nested
-  `LlmEvent` union has 13 at `:191-203`. Declared in **`Harbor.Abstractions.Events`**,
+  `LlmEvent` union has 13 at `:210-222` (immediately above
+  `public abstract record LlmEvent;` at `:223` — the tags are on the *members*,
+  so the block that counts them is the one above the declaration, not the one
+  below). Declared in **`Harbor.Abstractions.Events`**,
   not `Harbor.Abstractions.Contracts.Events` — the *project* is
   `Harbor.Abstractions.Contracts`, the *namespace* is not under it. Read the
   `namespace` line; do not infer it from the folder.
@@ -439,6 +482,8 @@ then the default arm invents an answer. Every instance in #578 is the default ar
   the `HarborEventKind` enum values exactly". Here the namespace **does** match
   the project (`Harbor.Ipc.Protocol`), which is exactly why the previous bullet
   is worth writing down.
+
+<!-- check-doc-cites: allow-unwired HarborEventKind — the enum IS the contract, enforced without naming it: the tags above are `[Union(0, …)]`, `[Union(1, …)]`, integer keys that must equal the enum's members in order (src/Harbor.Ipc.Abstractions/HarborEvent.cs:113). The coupling is positional, so the name never has to appear at a second site for the compiler or any reader to see it — which is exactly what a name-in-a-second-file heuristic cannot detect. -->
 - `src/Harbor.Ipc.Abstractions/Protocol/HarborRequest.cs:35-49` — 15 MessagePack
   `[Union(n, typeof(T))]` tags, the request union the guard grades as
   `HarborRequest` since #485. Unlike the three above, the guard does **not** read
@@ -456,11 +501,12 @@ copy.
 ### The known trap, and the sequencing
 
 Issue #578 is explicit: *"Do NOT try to land one giant enforcement PR. Add the
-guard in the same PR as the refactor of each union."* There are 17 sites in the tree today
-that carry a wildcard arm over one of these unions, and every one is a real
-finding. Landing the rule bare would be a permanently red build; landing it as a
-ratchet means **the set may shrink but never grow**, and each existing row names
-the issue that owns removing it.
+guard in the same PR as the refactor of each union."* The ratchet opened at 17
+rows and stands at **7** — `WildcardBaseline` in the guard is the number, not
+this sentence, and every deletion from it is a fix that landed. Landing the rule
+bare would be a permanently red build; landing it as a ratchet means **the set
+may shrink but never grow**, and each existing row names the issue that owns
+removing it.
 
 The ratchet is not decorative. It already fired once: the two IPC projections
 were four rows, #495 was fixed on `dev` while this document was being written,
@@ -470,9 +516,13 @@ quietly stopped matching is a build failure rather than a stale amnesty.
 
 **One thing this guard does NOT catch**, and you should know before relying on
 it: a *missing* arm with no default. `ChatScreenBridge.HandleEvent` has no
-wildcard arm and still misses `CompactionFailedEvent` — the event falls through
-the switch and nothing happens, silently. A wildcard arm invents an answer; a
-missing arm simply does not. The exhaustiveness half (#578 rule 1 done properly)
+wildcard arm, and it missed `CompactionFailedEvent` for the whole life of the
+event — it fell through the switch and nothing happened, silently. That is the
+one member of the lifecycle the arm census in
+`CompactionLifecycleLineTests.AnsiPlain_EveryCompactionMember_NarratesItself` is
+there to keep true, because as of #840 (PR #859) the arm exists and nothing
+mechanically would put it back. A wildcard arm invents an answer; a missing arm
+simply does not. The exhaustiveness half (#578 rule 1 done properly)
 is the per-union reflection test, and per #578 it lands with each union's
 refactor.
 
@@ -496,7 +546,9 @@ union by reflection and **refuse to start** when coverage is incomplete.
 **Guard:** `tests/Harbor.Architecture.Tests/ExhaustiveUnionSwitchRule.cs` — the
 union census comes from reflection, the wildcard-arm scan runs over
 `src/`, `apps/`, `contrib/tui/`, `contrib/apps/`, and the current set must be a
-subset of a 17-row baseline. The scan is deliberately conservative: a switch must
+subset of the baseline — **7 rows** (`WildcardBaseline`, down from 17; read the
+dictionary, do not read this sentence, it is the number that goes stale). The
+scan is deliberately conservative: a switch must
 name at least 2 distinct members of a registered union before it counts as "a
 switch over that union", so unrelated switches are never graded for
 exhaustiveness they were not claiming.
@@ -516,8 +568,8 @@ consistent throughout:
 | state | `State/UiState.cs` (immutable record) |
 | messages | `State/AppMsg.cs`, `State/ChatAppMsg.cs` |
 | transitions | `State/AppReducer.cs`, `State/ChatAppReducer.cs` |
-| store / lifecycle | `State/UiStore.cs:175` `Dispatch` → `:211` `Notify`, with a revision ledger and a stale-drop guard |
-| consumption | `CellForgeTuiRenderer.cs:314` dispatch, `:299` `PumpProjection()` — the renderer reads the fold **as data** |
+| store / lifecycle | `src/Harbor.Ui.Framework.State/State/UiStore.cs:175` `Dispatch` → `:211` `Notify`, with a revision ledger and a stale-drop guard |
+| consumption | `CellForgeTuiRenderer.cs:314` dispatch, `:290` `PumpProjection()` — the renderer reads the fold **as data** |
 
 The split is deliberate: `AppReducer` is domain-free (panels, scroll, input,
 focus, quit) and the chat half plugs in through `IAppReducerPlugin`, so a
@@ -529,16 +581,16 @@ non-chat host uses the generic reducer alone.
 parallel state machine for the same `AgentEvent` stream** — the same fact ("what
 is on screen for the current session") with two owners:
 
-- the state, as fields: `:20-30` `_panel`, `_status`, `_streams`, `_cards`,
-  `_context`, `_gates`, `_displayedMessageIds`; plus `:38` `_toolRetryShown`,
-  `:65` `_parentSessionId`, `:70` `_runHadError`, `:74` `_errorCardSeq` —
+- the state, as fields: `:41-61` `_panel`, `_status`, `_streams`, `_cards`,
+  `_context`, `_gates`, `_displayedMessageIds`; plus `:59` `_toolRetryShown`,
+  `:68` `_parentSessionId`, `:72` `_runHadError`, `:74` `_errorCardSeq` —
   **~11 pieces of mutable state**;
-- the transition: `HandleEvent` at `:125`, 18 arms mutating those fields directly;
+- the transition: `HandleEvent` at `:127`, 21 arms mutating those fields directly;
 - the lifetime: `apps/Harbor.App.Cli/Hosting/CellForgeModule.cs:101` registers it
-  `AddSingleton`, over a per-process `ChatScreen` (`:76-79`, also a singleton).
+  `AddSingleton`, over a per-process `ChatScreen` (`:77-79`, also a singleton).
 
 Meanwhile the reducer side *is* per session: `CellForgeTuiRenderer.cs:226`
-(`ActiveStore => _sessions?.ActiveContext?.Store ?? _store`) and `:236-255`
+(`ActiveStore => _sessions?.ActiveContext?.Store ?? _store`) and `:236-258`
 (`EnsureSubscribedToActiveStore`) re-bind on switch.
 
 **The module's own doc comment claims the opposite** — `CellForgeModule.cs:32`
@@ -549,21 +601,28 @@ lifetime the container does not provide is a defect**, and that is the rule.
 The concrete cost, all visible in the current tree:
 
 1. `SessionChangedEvent` — *the* "new session" transition — is handled at
-   `ChatScreenBridge.cs:299-303` by assigning **one** field (`_parentSessionId`).
+   `ChatScreenBridge.cs:339-343` (`case SessionChangedEvent changed:`) by
+   assigning **one** field (`_parentSessionId`).
    `_runHadError`, `_errorCardSeq`, `_toolRetryShown`, `_displayedMessageIds` and
    everything inside `_cards` / `_streams` / `_gates` survive the switch.
 2. The cleanup that does exist lives in a **caller**:
-   `apps/Harbor.App.Cli/Repl/SessionSwitchManager.cs:244`
+   `apps/Harbor.App.Cli/Repl/SessionSwitchManager.cs:245-247`
    (`host.Bridge.ResetMessageTracking(); host.Timeline.Clear(); host.Selection.Clear();`)
    — the contract is "whoever switches sessions must remember to poke three
    internals", enforced by nothing and documented nowhere in the interface. The
    one method that comes close, `ResetMessageTracking()`
-   (`ChatScreenBridge.cs:439`), covers exactly one of ~11 fields, and `MarkSeen`'s
-   own doc comment (`:445-446`) admits the coupling: "`ResetMessageTracking`
+   (`ChatScreenBridge.cs:494`), covers exactly one of ~11 fields, and `MarkSeen`'s
+   own doc comment (`:500-501`) admits the coupling: "`ResetMessageTracking`
    re-arms on session switch/new session, where the timeline is cleared
    alongside."
-3. `Dispose()` (`:617`) releases only the bus subscription, so a renderer swap
+3. `Dispose()` (`:722`) releases only the bus subscription, so a renderer swap
    mid-session leaves every accumulated field in place for the next subscriber.
+
+Every number in this list was off when #868 measured it — the field block, both
+caller citations, the method and the doc comment. They are named with the symbol
+they point at for that reason: a `Dispose()` at `:617` is a line 87 lines above
+the `Dispose` the sentence is about, and it still *exists*, so nothing but a
+reader notices.
 
 **The rule:** *if a type holds session-derived mutable state, it needs a
 `Reset`/`ResetTo(sessionId)` — and the "new session" transition must call it, so
@@ -575,18 +634,18 @@ the transition and the lifecycle are the same code path rather than two.*
 
 | Anti-convention | Where it lives today | Rule |
 |---|---|---|
-| Visitor as the UI event mechanism | `ChatScreenBridge.cs:125` (18-arm switch) | Use store + reducer (§1) |
+| Visitor as the UI event mechanism | `ChatScreenBridge.cs:127` (21-arm switch) | Use store + reducer (§1) |
 | Third mechanism for one event stream | handler registry + switch + store, all at once | Pick one of the two seams (§1) |
 | Lifecycle promised ≠ lifecycle provided | `CellForgeModule.cs:32` vs `:101` | Doc comment promising an unprovided lifetime is a defect (§8) |
-| Cleanup as a caller convention | `SessionSwitchManager.cs:239-241` | The state object resets itself (§8) |
+| Cleanup as a caller convention | `SessionSwitchManager.cs:245-247` | The state object resets itself (§8) |
 | Extension by mutating a concrete registry | `PluginRegistrar.cs:75-87` | Interface + a list of them (§5) |
-| Policy bolted onto an adapter | `SandboxedPluginTool` on tools only, `:145` | Policy at the extension point (§5) |
-| Permissive DIM | `IThemeWatcher.cs:31`, `ITool.cs:74`, `ITuiView.cs:32` | Fail towards loudly-wrong (§6) |
+| Policy bolted onto an adapter | `SandboxedPluginTool` wraps tools only (`PluginRegistrar.cs:231`); the provider and agent paths get none | Policy at the extension point (§5) |
+| Permissive DIM | `IThemeWatcher.cs:31`, `ITool.cs:124`, `ITuiView.cs:32` | Fail towards loudly-wrong (§6) |
 | Dead hook on a live interface | `ITuiView.cs:29,32` — zero callers | Zero callers ⇒ delete it (§6) |
-| Wildcard arm over a Harbor union | 17 sites, baselined in the guard | Name every arm; or log **and** count (§7) |
-| **Missing** arm, no default | `ChatScreenBridge.HandleEvent` misses `CompactionFailedEvent` and falls through silently | The default arm invents an answer; a missing arm just doesn't. Covered by the per-union reflection test, not by the wildcard guard (§7) |
-| Hand-maintained name list as a union | `IArgSafetyPolicy.cs:107-110`, `[JsonDerivedType]` tables | It IS a union — test it by reflection (§7) |
-| Unknown id → silent default | fixed in `SessionStoreRegistry`/`HarborModeRegistry` | `TryResolve` returns false; caller fails loudly (§2) |
+| Wildcard arm over a Harbor union | 7 sites, baselined in the guard | Name every arm; or log **and** count (§7) |
+| **Missing** arm, no default | was `ChatScreenBridge.HandleEvent` missing `CompactionFailedEvent` and falling through silently — **fixed in #840**; the census in `CompactionLifecycleLineTests` is what holds it | The default arm invents an answer; a missing arm just doesn't. Not covered by the wildcard guard (§7); covered by an arm census per family |
+| Hand-maintained name list as a union | `PathArgExtractionPolicy.cs:53` (`DefaultTools`), `[JsonDerivedType]` tables | It IS a union — test it by reflection (§7) |
+| Unknown id → silent default | fixed in `SessionStoreRegistry`/`HarborModeRegistry` | `Resolve` returns `Maybe.None`; caller fails loudly (§2) |
 | A fake metric | see `TelemetryModule.cs:25-33` for the right shape | Absent surface beats plausible zero (§3) |
 
 ---

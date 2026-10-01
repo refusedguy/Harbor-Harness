@@ -384,9 +384,9 @@ public sealed class RetryPolicy : IRetryPolicy
     }
 
     /// <summary>
-    ///     The socket verdict (#572) — <see cref="IOException" /> and
-    ///     <see cref="TimeoutException" /> — and the shared retry budget the
-    ///     remote-MCP transports consume. This classifier is total and defers
+    ///     The socket verdict (#572, widened by #925 to include the bare
+    ///     <see cref="System.Net.Sockets.SocketException" />) and the shared retry
+    ///     budget the remote-MCP transports consume. This classifier is total and defers
     ///     entirely to <see cref="TransientFailurePolicy.ShouldRetry" />: it must
     ///     not restate the type set, or it becomes the fourth copy of the answer
     ///     this issue removed.

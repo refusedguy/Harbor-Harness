@@ -4,6 +4,7 @@ using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Abstractions.Sessions;
 using Harbor.Ui.Framework.Configuration;
+using Harbor.Ui.Framework.Forking;
 using Harbor.Ui.Framework.State;
 using Microsoft.Extensions.Logging;
 namespace Harbor.Ui.Framework.Sessions;
@@ -19,7 +20,8 @@ namespace Harbor.Ui.Framework.Sessions;
 ///         UiStore directly — store binding + history replay is done by
 ///         <see cref="SessionSwitcher.OpenAsync" /> on the per-session
 ///         UiStore owned by <see cref="SessionContext" />. The factory just
-///         creates the session record (and, for branches, copies messages).
+///         creates the session record — forking is the core's <c>SessionForkService</c>, reached
+///         through the <see cref="ISessionForker" /> port (#670), not a second implementation here.
 ///     </para>
 ///     <para>
 ///         <b>No service locator (#470):</b> the optional
@@ -40,6 +42,7 @@ public sealed class SessionFactory
     private readonly IAgent _agent;
     private readonly IAgentRegistry _agents;
     private readonly ICommonConfigModelRefReader? _configReader;
+    private readonly ISessionForker _forker;
     private readonly ILogger<SessionFactory> _logger;
     private readonly ISessionStore _sessionStore;
 
@@ -47,6 +50,25 @@ public sealed class SessionFactory
     /// <param name="agents">Registry the agent definition is resolved from.</param>
     /// <param name="agent">The agent instance new sessions are created around.</param>
     /// <param name="sessionStore">Persistence each created session is written to.</param>
+    /// <param name="forker">
+    ///     The core fork, reached through the <see cref="ISessionForker" /> port. Required, not
+    ///     optional: #670's copy was only reachable because this constructor had no such
+    ///     parameter to pass. Making it required means a host that constructs this factory by
+    ///     hand must name the one implementation.
+    ///     <para>
+    ///         #882 narrowed what that buys, and the narrowing is worth stating here rather than
+    ///         only in a guard's remarks. A required parameter is checked at <c>new</c> sites, and
+    ///         the shipped host does not use one — it registers
+    ///         <c>services.AddSingleton&lt;SessionFactory&gt;()</c>, which is a registration, not a
+    ///         construction, so no compiler sees it and the container is not validated at build
+    ///         time. It also does not stop a second implementer of the port, nor a stub bound in
+    ///         its place: both compile, both wire, and both are the silent second fork this
+    ///         parameter was introduced to prevent. What actually holds the seam is
+    ///         <c>SessionForkPortSeamRules</c> (#882), which counts the port's production
+    ///         implementers and requires the composition root to bind it. Keep this parameter
+    ///         required — that guard also checks it, so the two agree.
+    ///     </para>
+    /// </param>
     /// <param name="logger">Diagnostics sink for the create/branch paths.</param>
     /// <param name="configReader">
     ///     Reads the persisted provider/model. Declared rather than looked up, so
@@ -61,12 +83,14 @@ public sealed class SessionFactory
         IAgentRegistry agents,
         IAgent agent,
         ISessionStore sessionStore,
+        ISessionForker forker,
         ILogger<SessionFactory> logger,
         ICommonConfigModelRefReader? configReader = null)
     {
         _agents = agents;
         _agent = agent;
         _sessionStore = sessionStore;
+        _forker = forker;
         _logger = logger;
         _configReader = configReader;
     }
@@ -318,69 +342,58 @@ public sealed class SessionFactory
     }
 
     /// <summary>
-    ///     Branch a session — create a new session with the same messages and
-    ///     metadata but a new id, then re-parent every message to the new id.
-    ///     The caller is responsible for switching to the branch.
+    ///     Branch a session — the UI framework's entry into the core's one fork, reached through
+    ///     the <see cref="ISessionForker" /> port. The caller is responsible for switching to the
+    ///     branch.
     /// </summary>
-    /// <param name="source">The session to branch from.</param>
+    /// <param name="source">The session to branch from. Its <see cref="Session.Id" /> selects the parent; the store row is authoritative for everything else.</param>
     /// <returns>The branched session, or a failure carrying the store error.</returns>
+    /// <remarks>
+    ///     <para>
+    ///         #670: this body used to fork the session itself — create a child, stamp a title
+    ///         with <c>with { Title = … }</c> and copy the transcript — and the copy had drifted
+    ///         from <c>SessionForkService</c> until a UI fork was not recognisable as one. It set
+    ///         no <see cref="Session.ParentSessionId" />, so the child rendered as an unrelated
+    ///         root in the session tree; it applied a title it never wrote, so the store kept the
+    ///         <c>Session {timestamp}</c> default while <see cref="SessionLifecycleService.BranchActiveAsync" />
+    ///         returned the other one to a success toast; and it regenerated every copied message
+    ///         id, so no id named in the parent could be named in the child.
+    ///     </para>
+    ///     <para>
+    ///         The port cannot drift that way — there is one fork left, in the core. What stays
+    ///         here is what belongs to the Presentation layer: which session failed, at what
+    ///         point, and what the copy had managed before it broke. The store's own text is
+    ///         carried through untouched, because "which session" and "why" are both diagnosis.
+    ///     </para>
+    ///     <para>
+    ///         <b>The parent is re-read from the store</b>, where the old body trusted the
+    ///         caller's in-memory record for Directory/Agent/ProviderId/Model. Forking a session
+    ///         that was never persisted now fails, which is the honest answer: there is no parent
+    ///         to branch from.
+    ///     </para>
+    /// </remarks>
     public async Task<Result<Session>> CreateBranchAsync(Session source)
     {
-        var branchResult = await _sessionStore.CreateAsync(
-            source.Directory, source.Agent, source.ProviderId, source.Model).ConfigureAwait(false);
-        if (branchResult.IsFailure)
-        {
-            _logger.LogError("Branch session {Id} failed: {Error}", source.Id, branchResult.Error);
-            return branchResult.MapError(e => $"Failed to branch session '{source.Id}': {e}");
-        }
+        Result<SessionForked> forked = await _forker
+            .ForkAsync(source.Id, ct: CancellationToken.None)
+            .ConfigureAwait(false);
 
-        var branch = branchResult.Value with { Title = source.Title + " (branch)" };
-        var messagesResult = await _sessionStore.GetMessagesAsync(source.Id).ConfigureAwait(false);
-        if (messagesResult.IsFailure)
+        if (forked.IsFailure)
         {
-            _logger.LogError("Branch session {Id} failed: could not read message history: {Error}",
-                source.Id, messagesResult.Error);
+            _logger.LogError("Branch session {Id} failed: {Error}", source.Id, forked.Error);
 
-            // #600: the store returns Result<IReadOnlyList<AgentMessage>> and this path
-            // owes the caller a Result<Session> — a re-type, which MapError cannot
-            // express (it is Result<T> → Result<T>). ConvertFailure<K>() CAN, and it is
-            // the member the repo already uses for exactly this shape (HunkParser.cs:123,
-            // PatchTool.cs:373). The IsFailure branch in front is what keeps it from
-            // throwing on a success. MapError then does what it is for: the context
-            // becomes a function of `e`, so it cannot be edited to drop the cause.
-            return messagesResult
+            // The re-type is the one the store's Result<IReadOnlyList<…>>/Result<SessionForked>
+            // shape forces, and MapError is what makes the context a function of `e` so a later
+            // edit cannot drop the cause. The store said which step broke and how far the copy
+            // got; the session id is the half only this layer knows.
+            return forked
                 .ConvertFailure<Session>()
-                .MapError(e => $"Failed to branch session '{source.Id}': could not read message history: {e}");
+                .MapError(e => $"Failed to branch session '{source.Id}': {e}");
         }
 
-        int copied = 0;
-        int total = messagesResult.Value.Count;
-        foreach (var msg in messagesResult.Value)
-        {
-            // Re-parent the message to the new session id and persist it.
-            var reborn = msg with { SessionId = branch.Id, Id = Guid.NewGuid().ToString("N") };
-            var appendResult = await _sessionStore.AppendMessageAsync(branch.Id, reborn).ConfigureAwait(false);
-            if (appendResult.IsFailure)
-            {
-                _logger.LogError(
-                    "Branch session {Id} failed: could not copy message history ({Copied} of {Total} copied): {Error}",
-                    source.Id, copied, total, appendResult.Error);
-
-                // Same re-type as above, and the progress number is the reason the
-                // context cannot be a bare string: the branch already exists in the
-                // store with a truncated transcript, and "{copied} of {total} copied"
-                // is the only record of how far the copy got. As a MapError closure that
-                // is state the failure carries; as an interpolated literal it was
-                // something a later edit could silently drop.
-                return appendResult
-                    .ConvertFailure<Session>()
-                    .MapError(e =>
-                        $"Failed to branch session '{source.Id}': could not copy message history ({copied} of {total} copied): {e}");
-            }
-            copied++;
-        }
-
-        _logger.LogInformation("Branched session {Old} → {New}", source.Id, branch.Id);
+        Session branch = forked.Value.Session;
+        _logger.LogInformation(
+            "Branched session {Old} → {New} ({Copied} messages)", source.Id, branch.Id, forked.Value.Copied);
         return Result.Success(branch);
     }
 

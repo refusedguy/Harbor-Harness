@@ -1,14 +1,6 @@
-namespace Harbor.Ui.Framework.Overlays;
+using Harbor.Abstractions.Git;
 
-/// <summary>
-///     One parsed <c>git worktree list --porcelain</c> record: a linked working
-///     tree (or the main checkout) with its branch. Bare repos carry
-///     <see cref="IsBare" /> and never become jump targets.
-/// </summary>
-/// <param name="Path">Absolute worktree directory.</param>
-/// <param name="Branch">Short branch name (<c>null</c> when detached or bare).</param>
-/// <param name="IsBare">True for <c>bare</c> records (the repo store, not a checkout).</param>
-public sealed record WorktreeInfo(string Path, string? Branch, bool IsBare);
+namespace Harbor.Ui.Framework.Overlays;
 
 /// <summary>
 ///     Session-side seed row. The host maps this from <c>SessionInfo</c> plus
@@ -34,80 +26,27 @@ public sealed record SessionSeed(
 
 /// <summary>
 ///     Pure jump-palette seeding (KILLER_FEATURES §2.7 Feature 3, slice 2):
-///     parses <c>git worktree list --porcelain</c> output and merges it with the
-///     active sessions into <see cref="WorktreeJumpEntry" /> rows. BCL-only, zero
-///     Harbor dependencies — the panel owns process spawning and session reads.
+///     merges the linked working trees of the current repository with the
+///     active sessions into <see cref="WorktreeJumpEntry" /> rows. BCL-plus-
+///     contracts, zero Harbor dependencies beyond the Domain records it is
+///     handed — it reads nothing, spawns nothing, and the panel owns both.
 /// </summary>
+/// <remarks>
+///     <para>
+///         <b>#666: the porcelain parser left this file.</b> It used to sit here as
+///         <c>ParsePorcelain</c>, beside the panel that forked <c>git</c>, and it is now
+///         <c>WorktreePorcelainParser</c> in <c>Harbor.Application</c> — next to the
+///         <c>Process.Start</c> whose output it reads. The panel asks
+///         <see cref="IGitQuery" /> for <see cref="GitWorktreeInfo" /> rows instead of
+///         forking <c>git worktree list --porcelain</c> and interpreting the text here,
+///         so git's wire format no longer crosses into a Presentation assembly. What
+///         stayed is the merge, which was always clean and never spawned anything.
+///     </para>
+/// </remarks>
 public static class WorktreeJumpSeeder
 {
     /// <summary>Status text for worktrees that have no session to switch to.</summary>
     public const string NoSessionStatus = "no-session";
-
-    /// <summary>
-    ///     Parse <c>git worktree list --porcelain</c> output into records.
-    ///     Malformed lines are ignored; a null/empty input yields no records.
-    /// </summary>
-    public static IReadOnlyList<WorktreeInfo> ParsePorcelain(string? output)
-    {
-        var infos = new List<WorktreeInfo>();
-        if (string.IsNullOrEmpty(output))
-        {
-            return infos;
-        }
-
-        string? path = null;
-        string? branch = null;
-        bool bare = false;
-        void Flush()
-        {
-            if (!string.IsNullOrEmpty(path))
-            {
-                infos.Add(new WorktreeInfo(path, branch, bare));
-            }
-
-            path = null;
-            branch = null;
-            bare = false;
-        }
-
-        // Split on '\n' and trim a trailing '\r' per line (git emits LF; tolerate CRLF).
-        int start = 0;
-        for (int i = 0; i <= output.Length; i++)
-        {
-            bool end = i == output.Length || output[i] == '\n';
-            if (!end)
-            {
-                continue;
-            }
-
-            int len = i - start;
-            if (len > 0 && output[i - 1] == '\r')
-            {
-                len--;
-            }
-
-            string line = len > 0 ? output.Substring(start, len) : string.Empty;
-            start = i + 1;
-            if (line.StartsWith("worktree ", StringComparison.Ordinal))
-            {
-                Flush();
-                string candidate = line.Substring("worktree ".Length).Trim();
-                path = candidate.Length > 0 ? candidate : null;
-            }
-            else if (line.StartsWith("branch refs/heads/", StringComparison.Ordinal))
-            {
-                string candidate = line.Substring("branch refs/heads/".Length).Trim();
-                branch = candidate.Length > 0 ? candidate : null;
-            }
-            else if (line == "bare")
-            {
-                bare = true;
-            }
-        }
-
-        Flush();
-        return infos;
-    }
 
     /// <summary>
     ///     Merge sessions with worktrees into palette rows. Sessions keep their
@@ -122,13 +61,13 @@ public static class WorktreeJumpSeeder
     /// </summary>
     public static IReadOnlyList<WorktreeJumpEntry> BuildEntries(
         IReadOnlyList<SessionSeed> sessions,
-        IReadOnlyList<WorktreeInfo> worktrees,
+        IReadOnlyList<GitWorktreeInfo> worktrees,
         bool includeSubagents = false)
     {
         ArgumentNullException.ThrowIfNull(sessions);
         ArgumentNullException.ThrowIfNull(worktrees);
 
-        var byPath = new Dictionary<string, WorktreeInfo>(StringComparer.Ordinal);
+        var byPath = new Dictionary<string, GitWorktreeInfo>(StringComparer.Ordinal);
         for (int i = 0; i < worktrees.Count; i++)
         {
             var wt = worktrees[i];
@@ -162,7 +101,7 @@ public static class WorktreeJumpSeeder
             }
         }
 
-        var rest = new List<WorktreeInfo>(byPath.Values);
+        var rest = new List<GitWorktreeInfo>(byPath.Values);
         rest.Sort(static (a, b) => StringComparer.Ordinal.Compare(a.Path, b.Path));
         for (int i = 0; i < rest.Count; i++)
         {

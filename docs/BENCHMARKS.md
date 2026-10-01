@@ -764,10 +764,13 @@ Machine: Linux x64, .NET 10 Release JIT, no tty I/O (discarding backend).
 
 ### 6.2 Test execution
 
-> `dotnet test` discovers ZERO tests in this repo (broken MTP bridge: the
-> host exits 5 with a silent discovery error). Run test projects as plain
-> executables, one project at a time — never whole-solution, never
-> `dotnet test`.
+> `dotnet test` is not used in this repo — run test projects as plain
+> executables, one project at a time, which is what every CI job does. Never
+> whole-solution. (An earlier version of this note said `dotnet test` "discovers
+> ZERO tests … the host exits 5 with a silent discovery error"; that was wrong —
+> exit 5 is MTP's *invalid command-line arguments* code, and a real
+> zero-discovery run exits 8. See
+> [CONTRIBUTING.md §Why not `dotnet test`](../CONTRIBUTING.md#why-not-dotnet-test).)
 
 ```bash
 # Build first, then run a single project (Release, no-build)

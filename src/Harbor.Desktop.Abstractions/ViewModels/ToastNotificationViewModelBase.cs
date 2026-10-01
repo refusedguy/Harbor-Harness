@@ -28,7 +28,7 @@ public abstract class ToastNotificationViewModelBase : StoreSubscriberViewModel
 
     /// <summary>
     ///     Override in a derived view-model to project toast state from the store
-    ///     (e.g. <see cref="ChromeViewState.Toasts" />). The default returns an
+    ///     (e.g. from a toast list the store publishes). The default returns an
     ///     empty array so the base class is safe to use without store integration.
     /// </summary>
     /// <returns>Active toast notifications to display.</returns>

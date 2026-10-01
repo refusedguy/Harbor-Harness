@@ -244,3 +244,98 @@ so "cannot be verified locally" was not the blocker it was taken to be.
   raw token reports as homes from the start or it is red on day one.
 - Full text, citations and the per-option file lists:
   [ADR-010](ADR-010-token-notation-one-cell.md).
+
+---
+
+# ADR-011: a gate for documentation examples that only LOOK compilable — measured, not built
+
+## Status
+Accepted as a record. **No gate was added.**
+
+## Date
+2026-09-30 (issue #853; follows the #849 defect fixed by PR #855)
+
+## Context
+`docs/TEST_PATTERNS.md`, titled "Copy-Paste Ready", shipped two untrue rows in its
+attribute table and was caught only when another PR copied the text: a CS1729 arity
+error (`[NotInParallel("a","b")]` — TUnit has no `params` overload) and a CS0246
+non-existent type (`[SkipWhenNotLinux]` is `internal` to one test project). The
+question was whether the stdlib-only, dotnet-free docs gate can catch either class.
+
+## Decision
+Build nothing. Six candidates were implemented far enough to be counted, and every one
+is unreachable from `docs.yml` or red on day one. The decisive measurements on
+`dev` = `538d9f1c`:
+
+| candidate | verdict | number |
+|---|---|---|
+| A — name from TUnit's shipped XML doc | unreachable **and** incomplete | `docs.yml` runs 6 `python3` lines, no restore, no lockfile; and 21 of 47 attribute types carry no `#ctor` row, incl. `NotInParallelAttribute` |
+| A′ — name from this repository | zero work, 23/62 false positives | 0 of 62 spellings are "declared only `internal`"; the false positives include the real TUnit `RunOn` and `ExcludeOn` |
+| B — examples that quote code must cite | red on the corpus | 131 of 1028 copy-paste blocks cite (12.7%); 0 provenance markers of any kind exist |
+| C — ban unprovenanced examples | would outlaw the docs | 897 blocks in 105 documents; 103 elide bodies, 175 are ASCII/shell fences |
+| D — fence every citation already written | red on day one | 2662 citations in non-normative docs, 818 fail across 26 documents |
+| E — a path on a fence's first line must resolve | the convention is a template | 116 fences use it, 34 resolve, 82 name files that do not exist |
+
+## Consequences
+- No code changed and no rule was added. A check that cannot fail is worse than none:
+  it is indistinguishable from a check that works.
+- `docs/TEST_PATTERNS.md` still declares neither `Status: normative` nor a dated
+  banner, so the densest copy-paste document in the repo is outside every fence.
+  Marking it normative is a one-line edit and a judgement call about that document's
+  claims; it is left to the owner.
+- Nothing conflicts with the merged work: `#826`'s `DOC-CITED-TABLE-UNDECLARED` is
+  untouched, and `#811`'s ADR-010 is normative, cites code lines that the prose rule
+  already fences, and stays green.
+- Re-open conditions are recorded in the ADR so the decision is revisited on evidence
+  rather than re-argued.
+
+## References
+Full text, the per-candidate reasoning and the re-open conditions:
+[ADR-011](ADR-011-doc-example-compile-gate.md).
+
+# ADR-012: вендоренная пара `CollapseWhitespace` — правка в чужом репозитории, решение за владельцем
+
+## Status
+**Open — the owner decides.** The measurement in §2-§4 of the long-form document
+is normative; the choice in §6 is not taken and nothing is implemented. No product
+code changed in the commit that recorded this.
+
+## Context
+Issue #726 recorded three `CollapseWhitespace` behaviours under one name, the
+third of them vendored. #878 checked that third claim: there are **two** vendored
+copies, not one behaviour, and they diverge from **each other** — ASCII-six
+whitespace vs `char.IsWhiteSpace`, and leading/trailing edges trimmed on one side
+and kept on the other. Re-typed and compared on an exhaustive alphabet, the two
+disagree on 758 of 781 strings (97.1 %), and the boundary is described exactly by
+"has an edge whitespace or a non-ASCII-six whitespace inside".
+
+The frame-changing fact is ownership: `external/ConsoleEx` is a **git submodule**
+(160000) pointing at `github.com/nickprotop/ConsoleEx` — a third-party
+repository, with no Harbor remote to send a fix to. It is also, contrary to the
+claim in #726, **compiled**: `Harbor.Tui.NickConsoleEx` sits in `Harbor.slnx` with
+an unconditional `ProjectReference` and CI checks out `submodules: recursive`. And
+it is **unreachable**: no `.cs` under `src/` or `apps/` names `HtmlControl`,
+`HtmlBuilder` or any other type in the `Html/` surface.
+
+## Decision
+Deferred to the owner, with the price of each option stated. **A** change nothing.
+**B** fork the submodule and patch deliberately, accepting merge debt on every
+upstream release. **C** replace the surface. Reachability reorders the price: no
+Harbor user can see either output today, so A is the default and B/C buy
+consistency in code that no user path executes.
+
+## Consequences
+- The long-form document is a **dated record, not `Status: normative`**, and says
+  why: the `cites` job checks out without submodules, so a `file:line` fence on
+  `external/ConsoleEx/` would read as `DOC-CITE-MISSING` on a tree where the file
+  exists. A normative banner would claim a machine-checkability this file lacks.
+- **No guard is proposed for the two copies.** Both are `private static` inside a
+  submodule at a moving pin, so any test on them is reflection over a third party's
+  private API that can only ever go red on a change we cannot make. The live
+  perimeters are already guarded by #717 (`WhitespaceCollapseDivergenceTests`) on
+  our own files. What *is* guarded instead is the premise this ADR rests on —
+  that the HTML surface is unreachable — by `VendoredHtmlSurfaceRules`.
+- This is **not** the #915/#923/#924 shape: `external/ConsoleEx` is not `contrib/`
+  and does build. The two must not be conflated in either direction.
+- Full text, measurements and the per-option costs:
+  [ADR-012](ADR-012-vendored-html-collapse-whitespace-pair.md).

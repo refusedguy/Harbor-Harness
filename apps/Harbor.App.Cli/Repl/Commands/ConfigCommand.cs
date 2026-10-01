@@ -1,4 +1,5 @@
 using System.Text;
+using Harbor.App.Cli.Configuration;
 using Harbor.Application.Configuration;
 using Harbor.Tui.CellForge.Widgets;
 
@@ -112,39 +113,35 @@ internal sealed class ConfigCommand : IReplCommand
 
     private static async Task ApplyValueAsync(IReplHost host, string keyId, string value, CancellationToken ct)
     {
-        // ROP: validate before touching the store — Parse inside UpdateAsync
-        // would throw out instead of returning Result.
-        int parsedMaxSteps = 0;
-        decimal parsedCostLimit = 0;
-        if (keyId == "maxsteps" && !int.TryParse(value, out parsedMaxSteps))
+        // #709: this command had its own key table and disagreed with the slash
+        // command (and therefore with `harbor config`) about half of it. It
+        // already refused `maxsteps`/`costlimit` in words; `model`/`provider`/
+        // `agent` went through `HarborConfig`'s `_ = TrySet…(value)` setters, so
+        // a discarded value still got a `✓ Set model = …`. One table now decides,
+        // and the messages below are the ones this file already used.
+        //
+        // The decision happens BEFORE the store is touched (ROP: `UpdateAsync`'s
+        // updater cannot report a failure, and `HarborConfig.TrySet*` mutate
+        // before they report, so validating through them inside the updater would
+        // apply a refused value as a deletion).
+        var decision = ConfigValueSetter.Decide(keyId, value);
+        if (decision.IsFailure)
         {
-            host.Bridge.AppendSystemLine($"✗ Invalid MaxSteps value: '{value}' (expected integer)");
+            host.Bridge.AppendSystemLine($"✗ {decision.Error}");
             host.Palette.Hide();
             host.WakeUp();
             return;
         }
 
-        if (keyId == "costlimit" && !decimal.TryParse(value, System.Globalization.NumberStyles.Number, System.Globalization.CultureInfo.InvariantCulture, out parsedCostLimit))
-        {
-            host.Bridge.AppendSystemLine($"✗ Invalid CostLimit value: '{value}' (expected decimal)");
-            host.Palette.Hide();
-            host.WakeUp();
-            return;
-        }
+        // Read the mutation in the block the guard above already left, not inside
+        // the `UpdateAsync` lambda: there the check and the read sit in different
+        // scopes and CFE0001 cannot see across the boundary.
+        Action<HarborConfig> apply = decision.Value;
 
         var configStore = host.ConfigStore;
         var updateResult = await configStore.UpdateAsync(c =>
         {
-            switch (keyId)
-            {
-                case "model": c.Model = value; break;
-                case "provider": c.Provider = value; break;
-                case "agent": c.Agent = value; break;
-                case "tui": c.Tui = value; break;
-                case "storage": c.Storage = value; break;
-                case "maxsteps": c.MaxSteps = parsedMaxSteps; break;
-                case "costlimit": c.CostLimit = parsedCostLimit; break;
-            }
+            apply(c);
             return c;
         }, ct).ConfigureAwait(false);
 

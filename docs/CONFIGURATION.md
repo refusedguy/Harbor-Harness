@@ -75,6 +75,40 @@ is still loaded by the CLI's `AuthStore` / `OnboardingWizard` (via the
 `IConfigStore` / `JsonConfigStore` types in `Harbor.Application.Configuration`) —
 both layers coexist during the migration window. See §6 below.
 
+#### Two writers, one file (known, unresolved)
+
+The coexistence above is not a clean layering — it is two stores writing the
+same path, and they do not agree on how. Verified against the source while
+fixing #913:
+
+| | `JsonCommonConfigStore` (Hosting) | `JsonConfigStore` (Application) |
+| --- | --- | --- |
+| Owns | the shared `CommonConfig` schema | the legacy `HarborConfig` schema |
+| Writes via | the Avalonia/WPF/MAUI/Blazor settings VMs | the CLI (`config set`, `auth`, …) |
+| Merge on save | **merges** — preserves keys it does not model | **no merge** — writes `ToRaw()` only |
+| Validates on load | no | yes (`HarborConfig.Validate()`) |
+
+Consequences worth knowing before touching either store:
+
+- **A CLI save drops the common-only keys.** `JsonConfigStore.SaveCore` writes
+  only the ~21 fields `ToRaw()` models, so `theme`, `permissionMode`,
+  `httpProxy`, `alwaysAllowTools`, `alwaysDenyTools`, `maxLogFiles`,
+  `configVersion`, `userAgent`, `storagePath` and the rest are removed from
+  `config.json` on any `config set`.
+- **Five keys are owned by both schemas.** `ConfigJsonContext` writes camelCase
+  and `RawConfigDto` reads camelCase, so `apiKeys`, `defaultProvider`,
+  `defaultModel`, `storageBackend` and `onboardingCompleted` are each claimed
+  by `CommonConfig` *and* `HarborConfig`, with different in-memory shapes.
+- **The CLI registers `ICommonConfigStore` but never resolves it.**
+  `ConfigurationModule` registers it (default `RegisterCommonConfigStore =
+  true`), and nothing under `apps/Harbor.App.Cli` asks for it — the CLI reads
+  the common layer eagerly at composition time and writes only through
+  `IConfigStore`. Do not read the DI registration as a live CLI write path.
+
+The resolution is the "fold `HarborConfig` into `CommonConfig`" item in §11,
+not a patch to either store: the two schemas cannot be made to stop
+overlapping while they share one file.
+
 ---
 
 ## 2. Common fields (shared across every app)

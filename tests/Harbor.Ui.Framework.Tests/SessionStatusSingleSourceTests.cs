@@ -24,11 +24,32 @@
 //      transcript on every 16 ms render frame and pushed that second opinion
 //      into SessionStatusTracker over the top of the first.
 //
-// NOT claimed here: SessionLifecycleService writes Error straight into
+// WHAT THIS FILE CANNOT REACH, AND WHERE THAT HALF LIVES (#861)
+// -------------------------------------------------------------
+// The fix for case 3 has two halves, and only one of them is here.
+//
+// HERE: the presentation layer's read. `ChatStreamingPresenter.DeriveStatus`
+// returns `ChatDomainState.SessionStatus` and computes nothing, so whatever the
+// reducer decided survives the projection. Structural rule A in
+// tests/Harbor.Architecture.Tests/SessionStatusSourceRule.cs grades that.
+//
+// NOT HERE: the FRAME. `ChatViewModel.RenderFrameTick`
+// (apps/Harbor.App.Avalonia/ViewModels/ChatViewModel.cs:142) is what pushes that
+// read into the tracker every 16 ms, and this test project references no apps/
+// assembly — four src/ projects, zero apps/ — so the frame was never reachable
+// from here and no rewrite of this file could reach it. A test named after the
+// frame, calling the presenter's read directly, is a name that outruns its
+// reference graph: the presenter could be bypassed entirely (the frame inlining
+// `SessionStatus.Idle`) with this file entirely green.
+//
+// That half is pinned by tests/Harbor.Architecture.Tests/
+// SessionStatusFrameReachabilityTests.cs, which derives the frame from the tree
+// rather than naming it.
+//
+// NOT claimed here either: SessionLifecycleService writes Error straight into
 // SessionStatusTracker (a branch that would not open), bypassing the store, so
 // the next frame still replaces that value — now with the reducer's answer
-// rather than a transcript guess. Unifying that writer is its own change; see
-// the note on WhateverTheReducerDecided_IsWhatTheNextFramePushes.
+// rather than a transcript guess. Unifying that writer is its own change.
 
 using System.Collections.Immutable;
 using Harbor.Abstractions.Events;
@@ -105,15 +126,30 @@ public class SessionStatusSingleSourceTests
     // ── 3. the presenter adds no opinion of its own ────────────────────────
 
     [Test]
-    public async Task WhateverTheReducerDecided_IsWhatTheNextFramePushes()
+    public async Task ThePresentersRead_AddsNoOpinion_OfItsOwn()
     {
-        // The overwriting half of #687, at the seam that does it.
-        // ChatViewModel.RenderFrameTick calls DeriveStatus on every 16 ms frame
-        // and writes the answer into SessionStatusTracker, so the presenter is
-        // the last writer standing on that tracker's value. A presenter that
-        // recomputed from the transcript would replace whatever the reducer had
-        // decided on the previous frame — including a status this test set by
-        // hand, standing in for any writer the reducer does not own.
+        // What this test can honestly prove, and what it CANNOT (#861).
+        //
+        // The claim is about the PRESENTATION LAYER'S READ: whatever the reducer
+        // decided sits in ChatDomainState.SessionStatus, and the presenter hands
+        // that value back without recomputing it. A presenter that re-derived from
+        // the transcript would disagree with the core on every state whose answer
+        // is not a function of the last line's role — which is the whole of #687.
+        //
+        // What it CANNOT prove is that the FRAME publishes this answer. The frame
+        // is ChatViewModel.RenderFrameTick (apps/Harbor.App.Avalonia/ViewModels/
+        // ChatViewModel.cs:142), and this test project references no apps/
+        // assembly — not by oversight, but by its reference graph, which is four
+        // src/ projects and zero apps/. So the frame was never in reach here, and
+        // the previous name ("…_IsWhatTheNextFramePushes") asserted a guarantee
+        // the body could not reach: rewriting that frame line to write
+        // SessionStatus.Idle inline leaves this test green with the presenter dead.
+        //
+        // The frame's reachability is now pinned where it can be seen, by
+        // SessionStatusFrameReachabilityTests in
+        // tests/Harbor.Architecture.Tests/ — which is where the production comment
+        // at ChatViewModel.cs:139-141 ("the last writer standing on the tracker's
+        // value") gets a check behind it. This test keeps the pure read.
         var state = StreamedAssistantMessage();
         state = ChatAppReducer.Update(state, new ChatAppMsg.Agent(new AgentEndEvent([]))).State;
 
@@ -124,7 +160,7 @@ public class SessionStatusSingleSourceTests
 
         await Assert.That(Presenter.DeriveStatus(decided)).IsEqualTo(SessionStatus.Error)
             .Because("the presenter is a read; recomputing here is what let a transcript guess "
-                   + "overwrite a status one frame after it was written");
+                   + "overwrite a status the core had already settled");
 
         // NOT fixed by #687, recorded rather than claimed: SessionLifecycleService
         // writes Error into SessionStatusTracker directly (on a branch that
@@ -133,7 +169,7 @@ public class SessionStatusSingleSourceTests
         // guess. Unifying that writer is a separate change; this test pins only
         // that the projection layer stopped contributing a second opinion.
         await Assert.That(Presenter.DeriveStatus(state)).IsEqualTo(SessionStatus.Done)
-            .Because("without a hand-set value the reducer's own decision is what the frame reads");
+            .Because("without a hand-set value the reducer's own decision is what the read returns");
     }
 
     // ── the other terminals ────────────────────────────────────────────────
@@ -275,6 +311,13 @@ public class SessionStatusSingleSourceTests
         // Walk all five outcomes against a transcript that would have driven the
         // OLD heuristic to Done (ends on an assistant line, not running, no
         // error string), so a presenter that recomputed anything cannot pass.
+        //
+        // #861 counted this one with the frame test: it drives the seam directly
+        // and its project cannot reach the frame. That is true of it, and the
+        // claim it makes is the presenter's, not the frame's — which is why the
+        // rename next door was the fix and this one needed only the note. Both
+        // are named by SessionStatusFrameReachabilityTests, so neither can drift
+        // back into claiming a path its project cannot enter.
         SessionStatus[] expected =
         [
             SessionStatus.Idle, SessionStatus.Working, SessionStatus.Done,

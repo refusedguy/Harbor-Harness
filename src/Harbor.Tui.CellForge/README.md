@@ -94,9 +94,9 @@ GNOME Terminal, Windows Terminal*). Деградация явная: без 256 
 ## Разработка
 
 ```bash
-dotnet test tests/Harbor.Tui.CellForge.Tests          # unit/golden тесты движка
-dotnet test tests/Harbor.Tui.CellForge.PtyTests       # L2: реальный процесс в псевдотерминале (CE-5)
-dotnet test tests/Harbor.App.Cli.Tests                # E2E-smoke полного REPL-цикла
+dotnet run --project tests/Harbor.Tui.CellForge.Tests -c Release --no-build    # unit/golden тесты движка
+dotnet run --project tests/Harbor.Tui.CellForge.PtyTests -c Release --no-build # L2: реальный процесс в псевдотерминале (CE-5)
+dotnet run --project tests/Harbor.App.Cli.Tests -c Release --no-build         # E2E-smoke полного REPL-цикла
 HARBOR_UPDATE_GOLDENS=1 dotnet exec <test.dll>        # пересев golden-фикстур
 ```
 

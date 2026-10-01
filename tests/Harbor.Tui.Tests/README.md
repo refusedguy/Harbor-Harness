@@ -9,13 +9,14 @@ TUI unit tests - AppReducer state folding, UiStore, view-model behavior, command
 ## Run
 
 ```bash
-dotnet test tests/Harbor.Tui.Tests
+dotnet run --project tests/Harbor.Tui.Tests -c Release --no-build -- --minimum-expected-tests 1
 ```
 
 Or filter to a single test class:
 
 ```bash
-dotnet test tests/Harbor.Tui.Tests --filter "FullyQualifiedName~AppReducer"
+dotnet run --project tests/Harbor.Tui.Tests -c Release --no-build -- \
+  --minimum-expected-tests 1 --treenode-filter "/*/*/AppReducer/*"
 ```
 
 ## Layer

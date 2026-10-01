@@ -66,7 +66,7 @@ Second render path for the interactive REPL (`src/Harbor.Tui.CellForge/`, opt-in
 
 - **Reusable components** (`StatusBadge`, `ChatBubble`, `SessionRow`) implemented in 3 platforms (Avalonia / Blazor / WPF) with identical prop names + shared `StatusMappers` helpers
 - **Platform-agnostic `ToolCallViewModel`** in `Harbor.Ui.Framework` (replaced `IBrush` with `string StatusBrushKey`)
-- **`StatusMappers`** in `Harbor.Ui.Framework.Converters` — single source of truth for status→brush-key / status→label / time-ago / token-compact / cost formatting
+- **StatusMappers** in `Harbor.Ui.Framework.Converters` — status→brush-key / status→label / time-ago. `TokensToCompact` and `CostToUsd` are thin adapters onto `StatusBarText` (`Harbor.Ui.Framework.State`, #488), and status→label has one recorded duplicate in `SubagentsModel` — see ARCHITECTURE_LAYERS.md section 5.7
 - **`ChatLineViewModel`** extended with `TimestampUtc` + `TimestampText` + `Preview` (80-char truncation)
 - **`StatusBarViewModel`** extracted from `MainViewModel`
 
@@ -136,7 +136,10 @@ Moved platform-agnostic logic out of `Harbor.App.Avalonia` into `Harbor.Ui.Frame
 - [ ] Support `explore`, `plan`, custom sub-agents
 
 **TUI plugins**
-- [x] `ITuiPlugin.RegisterTui(ViewRegistry, ViewModelRegistry)` — контракт существует, панельный адаптер `Harbor.Plugins.Registration/PanelRegistryPluginAdapter.cs`
+- [x] `ITuiPlugin` — контракт существует, но это **закрытый шов (#564)**: `RegisterTui`
+      не имеет ни одного call site в продукте, а у `IPluginLoadHost.TuiPlugins` нет читателя
+- [x] Панельная ось (единственная живая) — `ITuiPanelPlugin` →
+      `IPluginLoadHost.RegisterPanelProvider` → адаптер `Harbor.Plugins.Registration/PanelRegistryPluginAdapter.cs`
 - [ ] Sample TUI plugin (e.g. token usage chart)
 - [ ] Plugin views override builtin views
 
@@ -235,7 +238,11 @@ Moved platform-agnostic logic out of `Harbor.App.Avalonia` into `Harbor.Ui.Frame
 - [ ] IPC tests: 8/35 failing — timing issues with named-pipe disposal on Linux.
 - [ ] **Two live file log sinks, deliberately NOT unified (#558).** `apps/Harbor.App.Cli/Logging/` (hand-rolled `ILoggerProvider`) and `src/Harbor.Logging/LoggerSetup.cs` (Serilog, used by Avalonia) both write `harbor-*.log` into `~/.harbor/logs/`. The issue proposed folding the CLI onto Serilog; that is **refused as out of scope under the #555 freeze**, because they are two different requirements sharing a goal, not two copies of one behaviour: different level model (`LogLevel` Trace..None vs `LogEventLevel` Verbose..Fatal), different line format, different exception rendering (Serilog writes the full `{Exception}` chain; the hand-rolled provider writes one `Exception:` line plus a single `Inner:` line, so a third-level inner exception is dropped), different retention owner. They are also **app-disjoint** — no process loads both, so no line is ever written twice. What #558 did fix is the third instance: a 474-line copy in `apps/Harbor.App.Avalonia/Logging/` with **zero callers**, deleted, with `FileLogSinkOwnershipRule` in `tests/Harbor.Architecture.Tests/` as the guard. Unifying the two survivors, if ever wanted, is a behaviour change to both log formats and needs its own decision.
 - [ ] **Both log sinks sweep the same `harbor-*.log` glob** over `~/.harbor/logs` (`LoggerSetup.CleanupOldLogs` and the CLI's `RollingLogCleaner`), so either can delete the other's files — and Serilog additionally self-trims via `retainedFileCountLimit: 50`, so files can be deleted twice over. Pre-existing, unchanged by #558, recorded rather than fixed silently. Needs one retention owner per directory, or a per-prefix glob.
-- [ ] **The four legacy flat UI-state records are now producer-less (#594).** Deleting the `Harbor.Ui.Framework.Reducers` branch removed the last thing that ever constructed `AppState`, `ChatViewState`, `ChromeViewState` or `SessionsViewState` — so these four are now records with readers (benchmarks, and one `<see cref>` from `Harbor.Desktop.Abstractions`) and **no writer in `src/` or `apps/`**. `tools/check-doc-cites.py` `DOC-TYPE-UNWIRED` already reports this for `AppState`. Left in place deliberately: they live in `Harbor.Ui.Framework.State`, a project that is very much alive, `ChromeViewState` is still referenced from a live XML doc, and removing them is a different blast radius from #594 (which named the Reducers *layer*). The follow-up is to decide per record whether to delete it or to give it a producer on the live `UiState` path — and `Harbor.Tui.Abstractions` is slated for removal in v0.6, which is where the `ChromeViewState.Toasts` consumer goes with it.
+- [x] **The four legacy flat UI-state records are deleted (#597, closing the #594 item).** #594 deleted the `Harbor.Ui.Framework.Reducers` branch and left these four records behind with no writer in `src/` or `apps/`, deliberately, recording the per-record decision as an open item. #597 took the decision: all four are deleted rather than given a producer, because the live `UiState` already carries every field they had (`ChatDomainState` + `TerminalUiState` replace the flat shape field-for-field) — a producer would have been a second way to say the same thing. Two of the four were not the "just delete the file" shape the item assumed:
+  - **`SessionsViewState.cs` also declared `SessionInfo`, which is LIVE** — 9 production sites including a `new SessionInfo(...)` in the CLI's `SessionSwitchManager` and `ChatDomainState.Sessions`. The record was deleted and `SessionInfo` moved to its own file; deleting by path would have taken a live type with it, with every pre-existing gate green.
+  - **`ChatViewState.cs` also declared `ChatLineViewModel` and `ToolCallViewModel` in the `State` namespace** — same simple names as the LIVE `Harbor.Ui.Framework.ViewModels` pair that all 20 consumer sites bind to, via aliases or full qualification. Zero sites bound to the State copies. Deleting them removes a duplicate-name collision, which is the #558 failure mode; `LegacyFlatTeaBranchRule` now matches them by (name, namespace) so the live pair can never be condemned with them.
+  - `AppState` had two **benchmark** readers (`StateDiffingBenchmark`, `SelectorMemoizationBenchmark`). Both measure real shapes, so both were repointed at `UiState` rather than deleted — the numbers now price the state every renderer actually reads.
+  - `ChromeViewState`'s one live reader was a `<see cref>` from `Harbor.Desktop.Abstractions`, rewritten to describe the seam instead of naming a deleted type.
 
 ### Testing debt
 

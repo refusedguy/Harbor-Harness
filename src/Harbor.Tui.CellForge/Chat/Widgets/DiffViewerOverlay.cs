@@ -207,7 +207,7 @@ public sealed class DiffViewerOverlay
                 return true;
         }
 
-        if ((key.Modifiers & (ConsoleModifiers.Control | ConsoleModifiers.Alt)) != 0)
+        if (key.Modifiers.IsCommandModifier())
         {
             return false;
         }
@@ -279,7 +279,7 @@ public sealed class DiffViewerOverlay
                 LastHunk();
                 return true;
             case KeyCode.Char:
-                if ((key.Modifiers & (KeyModifiers.Ctrl | KeyModifiers.Alt | KeyModifiers.Meta)) != 0)
+                if (key.Modifiers.IsCommandModifier())
                 {
                     return false;
                 }

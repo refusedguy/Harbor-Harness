@@ -1,8 +1,10 @@
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
+using Harbor.App.Avalonia.Hosting;
 using Harbor.App.Avalonia.Services;
 using Harbor.App.Avalonia.ViewModels;
+using Harbor.Desktop.Shared.Locators;
 using Harbor.Ui.Framework.Navigation;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -23,25 +25,41 @@ namespace Harbor.App.Avalonia.Views;
 ///         TitleBarView (44px), ActivityRail (56px), main content area,
 ///         RightDrawer overlay (360px), and StatusBarView (32px).
 ///     </para>
+///     <para>
+///         The window is also the <see cref="IShellLocatorHost" />: it is the one view
+///         the composition root builds itself (<c>ActivatorUtilities.CreateInstance</c>
+///         in <c>App.axaml.cs</c>), so it is the only place a real
+///         <see cref="IViewModelLocator" /> can be injected. Every shell view declared in
+///         XAML finds it by walking up the logical tree — see <see cref="ShellLocator" />.
+///         That is how the twelve <c>App.Services.GetRequiredService</c> reads in the view
+///         code-behinds were removed (#779) without adding a constructor parameter that
+///         XAML would not supply.
+///     </para>
 /// </remarks>
-public partial class MainWindow : Window
+public partial class MainWindow : Window, IShellLocatorHost
 {
     private readonly MainViewModel _vm;
     private readonly KeyboardShortcutService _keyboard;
     private readonly WindowChromeService _chrome;
     private readonly IShellChrome _shellChrome;
+    private readonly IViewModelLocator _locator;
+
+    /// <inheritdoc />
+    public IViewModelLocator Locator => _locator;
 
     [ActivatorUtilitiesConstructor]
     public MainWindow(
         MainViewModel vm,
         KeyboardShortcutService keyboard,
         WindowChromeService chrome,
-        IShellChrome shellChrome)
+        IShellChrome shellChrome,
+        IViewModelLocator locator)
     {
         _vm = vm;
         _keyboard = keyboard;
         _chrome = chrome;
         _shellChrome = shellChrome;
+        _locator = locator;
         InitializeComponent();
         DataContext = vm;
 

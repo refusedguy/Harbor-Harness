@@ -2,6 +2,7 @@ using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Agents;
 using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Sessions;
+using Harbor.App.Avalonia.Services;
 using Harbor.TestKit;
 using Harbor.Ui.Framework.Services;
 using Harbor.Ui.Framework.Sessions;
@@ -103,7 +104,7 @@ public class SessionManagerAtomicityTests
     {
         var agents = new FakeAgentRegistry(agentDef);
         var agent = new FakeAgent(AgentState.Idle("none", agentDef));
-        var factory = new SessionFactory(agents, agent, store, new NopLogger<SessionFactory>());
+        var factory = new SessionFactory(agents, agent, store, new SessionForkerAdapter(store), new NopLogger<SessionFactory>());
         var switcher = new SessionSwitcher(agent, store, factory, new NopLogger<SessionSwitcher>());
         var router = new SessionEventRouter();
         var status = new SessionStatusService(new SessionStatusTracker());
@@ -163,7 +164,7 @@ public class SessionManagerAtomicityTests
         (var store, var session) = SeededStore(agentDef, messageCount: 2);
         var agent = new FakeAgent(AgentState.Idle("none", agentDef));
         var switcher = new SessionSwitcher(
-            agent, store, new SessionFactory(new FakeAgentRegistry(agentDef), agent, store, new NopLogger<SessionFactory>()),
+            agent, store, new SessionFactory(new FakeAgentRegistry(agentDef), agent, store, new SessionForkerAdapter(store), new NopLogger<SessionFactory>()),
             new NopLogger<SessionSwitcher>());
         var target = new UiStore();
 

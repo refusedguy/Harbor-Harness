@@ -32,12 +32,65 @@
 //      `Harbor.Ui.Framework.Reducers` — a declared edge with no producer is the
 //      shape that let `Harbor.Ui.Framework.Services`, `Harbor.Benchmarks` and
 //      `Harbor.Architecture.Tests` keep compiling the dead assembly.
-//   3. None of the three dead types is DECLARED under `src/` or `apps/`:
-//      `AppReducer` in namespace `Harbor.Ui.Framework.Reducers`,
-//      `AppStore` in namespace `Harbor.Ui.Framework.State`, and
-//      `EventBusAppStoreDispatcher` anywhere.
+//   3. None of the dead types is DECLARED under `src/` or `apps/`:
+//      - the #594 trio: `AppReducer` in `Harbor.Ui.Framework.Reducers`,
+//        `AppStore` in `Harbor.Ui.Framework.State`, `EventBusAppStoreDispatcher`
+//        anywhere;
+//      - the #597 additions: the four flat state records, and the two
+//        `State`-namespace VIEW-MODEL SHADOWS `ChatLineViewModel` /
+//        `ToolCallViewModel` (see below).
 //   4. THE LIVE HALF IS STILL THERE: `State/ChatAppReducer.cs` and
 //      `State/UiStore.cs` must exist.
+//
+// THE TWO SHADOWS ARE THE PART #597 ADDS, AND THEY ARE NOT "ALSO DEAD RECORDS"
+//   They are a DUPLICATE-NAME collision, which is the failure this repo has
+//   already paid for twice (#558 hid a dead copy behind a live name; #920
+//   inverted a stripper and blanked 845 lines). `ChatViewState.cs` declared
+//   `Harbor.Ui.Framework.State.ChatLineViewModel` and
+//   `Harbor.Ui.Framework.State.ToolCallViewModel` — same simple names as the
+//   LIVE `Harbor.Ui.Framework.ViewModels` pair that every consumer actually
+//   binds to. Measured on this branch: 8 files use `ChatLineViewModel` and 12 use
+//   `ToolCallViewModel`, and every one of them reaches the ViewModels copy via
+//   an alias, a `using`-narrowing, or full qualification. Zero bind to the State
+//   copies. So the hazard is not "someone reads the wrong record" — it is that a
+//   new file that does `using Harbor.Ui.Framework.State;` and writes the bare
+//   name gets CS0104, or picks the shadow and silently projects the wrong shape.
+//   That is why they are matched by (name, namespace) like the reducers, and why
+//   the positive control carries the LIVE ViewModels pair as the decoy that must
+//   NOT be reported.
+//
+// WHY THE FOUR RECORDS ARE IN SCOPE NOW AND WERE NOT IN #594
+//   #594 deleted the branch that produced them and deliberately left the records,
+//   recording the decision in docs/ROADMAP.md as an open item. #597 is that item.
+//   Measured per kind of "zero", because a record can be zero in one sense and
+//   not another, and the difference is the whole decision:
+//     AppState            0 writers, 0 prod readers, 0 registrations, 0 impls —
+//                         but 2 BENCHMARK readers. Those benchmarks measure a
+//                         shape (`ImmutableArray` record tree + selectors) that is
+//                         real and still measured; they were pointed at the dead
+//                         record. They are REPOINTED at `UiState`, which carries
+//                         every field they touch, so the measurement survives and
+//                         the dead record does not.
+//     ChatViewState       0 writers, 0 readers anywhere (prod AND tests), 0 regs.
+//                         Plus the two shadows. Dead outright.
+//     ChromeViewState     0 writers, 0 readers — but ONE live `<see cref>` from
+//                         Harbor.Desktop.Abstractions. A doc reference is not a
+//                         reader; the cref is repointed at the live toast shape.
+//     SessionsViewState   0 writers, 0 readers — BUT ITS FILE ALSO DECLARES
+//                         `SessionInfo`, which is LIVE: 9 prod sites including a
+//                         `new SessionInfo(...)` in the CLI's SessionSwitchManager
+//                         and `ChatDomainState.Sessions`. The RECORD is dead; the
+//                         FILE is not. `SessionInfo` moves to its own file so the
+//                         record can go without taking a live type with it.
+//
+//   A file that holds both a dead record and a live type is the shape this rule
+//   has to be careful about: deleting the file by path would delete the live type
+//   with it, and every existing gate would be green. Hence the split.
+//
+// PERIMETER IS UNCHANGED AND STATED AGAIN BECAUSE IT NOW MATTERS TWICE
+//   `src/` + `apps/` for declarations, whole repo for project/solution references.
+//   `contrib/` holds its own `AppStore` and its own `ChatLineViewModel` and is
+//   unmaintained, outside CI, and out of scope by owner decision (AGENTS.md).
 //
 // RULE 4 IS THE POINT OF THE WHOLE FILE
 // -------------------------------------
@@ -63,9 +116,10 @@
 // ---------
 // `src/` + `apps/` for declarations, and the whole repo for project/solution
 // references. `contrib/` holds its own `AppStore`
-// (`contrib/tui/Harbor.Tui.SpectreTui/State/AppStore.cs`) and is unmaintained,
-// outside CI, and out of scope by owner decision (AGENTS.md) — it is neither
-// scanned nor expected to be clean, and that gap is deliberate.
+// (`contrib/tui/Harbor.Tui.SpectreTui/State/AppStore.cs`) and its own
+// `ChatLineViewModel`, and is unmaintained, outside CI, and out of scope by owner
+// decision (AGENTS.md) — it is neither scanned nor expected to be clean, and that
+// gap is deliberate rather than implicit.
 //
 // NON-VACUITY
 // -----------
@@ -73,13 +127,19 @@
 //      live `ChatAppReducer` it is about to assert on. A rule satisfied by
 //      looking at nothing is the failure this repo has already paid for twice.
 //   2. NonVacuity_Scan_DetectsTheLegacyBranchInSyntheticSources — THE POSITIVE
-//      CONTROL. The probe is handed the #594 shape item for item (a file at the
-//      deleted path, the dead `AppReducer` in the deleted namespace, the dead
-//      `AppStore` in the State namespace, the dead dispatcher in a surviving
+//      CONTROL. The probe is handed the #594 + #597 shape item for item (a file
+//      at the deleted path, the dead `AppReducer` in the deleted namespace, the
+//      dead `AppStore` in the State namespace, the dead dispatcher in a surviving
 //      project, a `<ProjectReference>` to the deleted project, a solution entry
-//      for it) and five decoys it must NOT report — including the LIVE
-//      `AppReducer` that shares its name with the dead one, and a
-//      commented-out reference.
+//      for it, the four flat records, the view-model shadow) and nine decoys it
+//      must NOT report — including the LIVE `AppReducer` that shares its name
+//      with the dead one, the LIVE `ChatLineViewModel` / `ToolCallViewModel`
+//      twins, the LIVE `SessionInfo` that shares a file with a dead record, a
+//      commented-out reference, and a near-miss name.
+//   3. NonVacuity_LiveViewModelTwinsAreNotReported — the twins are fed to the
+//      real matcher one per pair and asserted unreported, so "the rule
+//      distinguishes a shadow from its twin" has a witness rather than resting
+//      on the decoys happening to be scanned. #880's lesson, inverted.
 
 using System.Text;
 using System.Text.RegularExpressions;
@@ -233,10 +293,13 @@ internal static partial class LegacyFlatTeaBranchProbe
     }
 
     /// <summary>
-    ///     Scans one C# file for the three dead type declarations. Comments are
-    ///     stripped first, so the XML docs that name <c>AppStore</c> or
-    ///     <c>EventBusAppStoreDispatcher</c> cannot be mistaken for a
-    ///     declaration.
+    ///     Scans one C# file for the dead type declarations. Comments are
+    ///     stripped first, so the XML docs that name <c>AppStore</c>,
+    ///     <c>EventBusAppStoreDispatcher</c> or <c>ChatViewState</c> cannot be
+    ///     mistaken for a declaration — and the stripper is
+    ///     <see cref="SourceCommentStripper.StripAll" />, whose lexing was
+    ///     corrected in #919 after #920 found it inverted (#920 blanked 845 real
+    ///     code lines across 5 files while preserving <c>"src/*"</c>).
     /// </summary>
     internal static List<LegacyBranchViolation> FindDeadDeclarations(string relativeFile, string[] lines)
     {
@@ -271,18 +334,52 @@ internal static partial class LegacyFlatTeaBranchProbe
     }
 
     /// <summary>
-    ///     Whether a type name, in a namespace, is one of the three #594
-    ///     removed. <c>AppReducer</c> is deliberately qualified: the LIVE
-    ///     reducer of the same name lives in <c>Harbor.Ui.Framework.State</c>.
+    ///     Whether a type name, in a namespace, is one of the #594 / #597 removed
+    ///     types. Every entry is matched by (name, namespace), never by name alone:
+    ///     <c>AppReducer</c> and both <c>*ViewModel</c> names are ALSO the live
+    ///     names, in <c>Harbor.Ui.Framework.State</c> and
+    ///     <c>Harbor.Ui.Framework.ViewModels</c> respectively.
     /// </summary>
     internal static bool IsBannedDeclaration(string typeName, string declaringNamespace) =>
         (typeName, declaringNamespace) switch
         {
+            // ── #594: the deleted Reducers branch. ──
             ("AppReducer", "Harbor.Ui.Framework.Reducers") => true,
             ("AppStore", "Harbor.Ui.Framework.State") => true,
             ("EventBusAppStoreDispatcher", _) => true,
+
+            // ── #597: the four producer-less flat state records. They live in a
+            //    project that is very much alive, so the namespace is named
+            //    explicitly rather than by a path rule: the record is what's
+            //    banned, not the directory.
+            ("AppState", "Harbor.Ui.Framework.State") => true,
+            ("ChatViewState", "Harbor.Ui.Framework.State") => true,
+            ("ChromeViewState", "Harbor.Ui.Framework.State") => true,
+            ("SessionsViewState", "Harbor.Ui.Framework.State") => true,
+
+            // ── #597: the two State-namespace view-model SHADOWS. The LIVE copies
+            //    are in Harbor.Ui.Framework.ViewModels and are what every consumer
+            //    binds to; a name-keyed rule would condemn those and pass these.
+            ("ChatLineViewModel", "Harbor.Ui.Framework.State") => true,
+            ("ToolCallViewModel", "Harbor.Ui.Framework.State") => true,
+
             _ => false,
         };
+
+    /// <summary>
+    ///     The live twin of each banned shadow, named so the positive control can
+    ///     assert the rule does NOT report it.
+    /// </summary>
+    /// <remarks>
+    ///     Declared as (simpleName, namespace) rather than as a path because the
+    ///     rule matches on the pair — a control that asserted on a path while the
+    ///     rule matched on a namespace would be testing something else.
+    /// </remarks>
+    internal static readonly (string TypeName, string Namespace)[] LiveShadowTwins =
+    [
+        ("ChatLineViewModel", "Harbor.Ui.Framework.ViewModels"),
+        ("ToolCallViewModel", "Harbor.Ui.Framework.ViewModels"),
+    ];
 
     /// <summary>Whether a repo-relative path is one of the rule-4 live files.</summary>
     internal static bool IsRequiredLiveFile(string relative) =>
@@ -462,10 +559,13 @@ public sealed class LegacyFlatTeaBranchRule
 
     /// <summary>
     ///     Rules 1–3: no source file in the deleted project, no project or
-    ///     solution file naming it, and none of the three dead types declared.
+    ///     solution file naming it, and none of the dead types declared —
+    ///     neither the #594 trio nor the #597 records and view-model shadows.
     ///     #594 shipped a whole second TEA branch whose <c>AppReducer</c> doc
     ///     claimed every renderer funnelled through it; no composition root ever
-    ///     constructed it.
+    ///     constructed it. #597 removed what it left behind: four
+    ///     producer-less flat records and two same-named view-model shadows whose
+    ///     live twins are in <c>Harbor.Ui.Framework.ViewModels</c>.
     /// </summary>
     [Test]
     public async Task LegacyFlatProjectionBranch_IsNotInTheTree()
@@ -474,14 +574,18 @@ public sealed class LegacyFlatTeaBranchRule
 
         await Assert.That(violations).IsEmpty()
             .Because(
-                "the #594 legacy branch must not come back. It was a second home for the AgentEvent → "
-                + "UI-state fold that no composition root ever constructed: the renderers dispatch into "
-                + "UiStore and reduce through Harbor.Ui.Framework.State's ChatAppReducer, and the dead "
-                + "AppReducer/AppStore/EventBusAppStoreDispatcher were reachable only from each other and "
-                + "from two benchmark files. A ProjectReference to the deleted project also breaks the "
-                + "build on its own, but a bare directory of unbuilt .cs files does not — so the path and "
-                + "the declarations are both checked. Found: "
-                + Describe(violations));
+                "the #594 legacy branch must not come back, and neither must the #597 residue. #594 was a "
+                + "second home for the AgentEvent → UI-state fold that no composition root ever "
+                + "constructed: the renderers dispatch into UiStore and reduce through "
+                + "Harbor.Ui.Framework.State's ChatAppReducer, and the dead "
+                + "AppReducer/AppStore/EventBusAppStoreDispatcher were reachable only from each other. "
+                + "The four flat records (#597) had no writer at all in src/ or apps/ once that branch "
+                + "went, and the two State-namespace view-model shadows share their simple names with the "
+                + "LIVE ViewModels pair — the duplicate-name shape that hides a dead copy. A ProjectReference "
+                + "to the deleted project also breaks the build on its own, but a bare directory of unbuilt "
+                + ".cs files does not — so the path and the declarations are both checked, and every "
+                + "declaration is matched by (name, namespace) so the live twins are never condemned. "
+                + "Found: " + Describe(violations));
     }
 
     // =====================================================================
@@ -548,13 +652,15 @@ public sealed class LegacyFlatTeaBranchRule
     }
 
     /// <summary>
-    ///     THE POSITIVE CONTROL. The probe is handed the #594 shape — a file at
-    ///     the deleted path, the dead <c>AppReducer</c> in the deleted
+    ///     THE POSITIVE CONTROL. The probe is handed the #594 + #597 shape — a
+    ///     file at the deleted path, the dead <c>AppReducer</c> in the deleted
     ///     namespace, the dead <c>AppStore</c> in the State namespace, the dead
     ///     dispatcher in a surviving project, a <c>&lt;ProjectReference&gt;</c>
-    ///     to the deleted project and a solution entry for it — and five
-    ///     decoys it must NOT report, including the LIVE <c>AppReducer</c> that
-    ///     shares its name with the dead one.
+    ///     to the deleted project and a solution entry for it, plus the four
+    ///     producer-less flat records and the view-model shadow — and nine decoys
+    ///     it must NOT report, including the LIVE <c>AppReducer</c> and the LIVE
+    ///     <c>ChatLineViewModel</c> / <c>ToolCallViewModel</c> twins that share
+    ///     their simple names with dead ones.
     /// </summary>
     [Test]
     public async Task NonVacuity_Scan_DetectsTheLegacyBranchInSyntheticSources()
@@ -592,6 +698,39 @@ public sealed class LegacyFlatTeaBranchRule
                 "public sealed class EventBusAppStoreDispatcher : IAsyncDisposable",
                 "{",
                 "    public ValueTask DisposeAsync() => ValueTask.CompletedTask;",
+                "}",
+            ]),
+            // (3b) #597: one of the four producer-less flat records, back in the
+            // live State project. The record is what is banned, not the path.
+            ("src/Harbor.Ui.Framework.State/AppState.cs",
+            [
+                "namespace Harbor.Ui.Framework.State;",
+                string.Empty,
+                "public sealed record AppState",
+                "{",
+                "}",
+            ]),
+            // (3c) #597: the record that SHARES a file with a live type. If the
+            // rule were a path rule this file would be untouchable; matched by
+            // (name, namespace) the dead record is reportable and `SessionInfo`
+            // is not — which is what lets the record go without the live type.
+            ("src/Harbor.Ui.Framework.State/SessionsViewState.cs",
+            [
+                "namespace Harbor.Ui.Framework.State;",
+                string.Empty,
+                "public sealed record SessionsViewState",
+                "{",
+                "}",
+            ]),
+            // (3d) #597: a view-model SHADOW — same simple name as the live
+            // ViewModels copy, wrong namespace. This is the duplicate-name shape
+            // that makes a name-keyed rule wrong.
+            ("src/Harbor.Ui.Framework.State/ChatViewState.cs",
+            [
+                "namespace Harbor.Ui.Framework.State;",
+                string.Empty,
+                "public sealed record ToolCallViewModel(string Id)",
+                "{",
                 "}",
             ]),
         };
@@ -676,6 +815,51 @@ public sealed class LegacyFlatTeaBranchRule
                 "{",
                 "}",
             ]),
+            // THE LIVE VIEW-MODEL TWINS. Same simple names as the #597 shadows,
+            // different namespace, and these are the copies every consumer binds
+            // to. A rule keyed on the name alone condemns the working pair — the
+            // #558 mistake again, and the reason IsBannedDeclaration is keyed on
+            // (name, namespace).
+            ("src/Harbor.Ui.Framework.ViewModels/ViewModels/ChatLineViewModel.cs",
+            [
+                "namespace Harbor.Ui.Framework.ViewModels;",
+                string.Empty,
+                "public sealed record ChatLineViewModel(ChatRole Role, string Text)",
+                "{",
+                "}",
+            ]),
+            ("src/Harbor.Ui.Framework.ViewModels/ViewModels/ToolCallViewModel.cs",
+            [
+                "namespace Harbor.Ui.Framework.ViewModels;",
+                string.Empty,
+                "public sealed partial class ToolCallViewModel : ObservableObject",
+                "{",
+                "}",
+            ]),
+            // THE LIVE TYPE THAT SHARES A FILE WITH A DEAD RECORD. `SessionInfo`
+            // is constructed by the CLI's SessionSwitchManager and read by
+            // ChatDomainState.Sessions; it must survive the deletion of
+            // `SessionsViewState`. A rule that matched by path would either have
+            // to exempt this file — leaving the dead record ungoverned — or ban
+            // it and take a live type with it.
+            ("src/Harbor.Ui.Framework.State/SessionInfo.cs",
+            [
+                "namespace Harbor.Ui.Framework.State;",
+                string.Empty,
+                "public sealed record SessionInfo(string Id, string Title)",
+                "{",
+                "}",
+            ]),
+            // A state record whose name merely CONTAINS a banned name is a
+            // different type — the same near-miss the AppStore decoy covers.
+            ("src/Harbor.Ui.Framework.State/ChatViewStateCache.cs",
+            [
+                "namespace Harbor.Ui.Framework.State;",
+                string.Empty,
+                "public sealed record ChatViewStateCache",
+                "{",
+                "}",
+            ]),
         };
 
         // The decoys ride through the SAME probe, so a matcher that stopped
@@ -699,18 +883,65 @@ public sealed class LegacyFlatTeaBranchRule
                 + " | source-in-deleted-project@src/Harbor.Ui.Framework.Reducers/AppStore.cs"
                 + " | dead-type-declared@src/Harbor.Ui.Framework.Reducers/AppStore.cs"
                 + " | dead-type-declared@src/Harbor.Ui.Framework.Services/EventBusAppStoreDispatcher.cs"
-                + " | project-reference@src/Harbor.Ui.Framework.Services/Harbor.Ui.Framework.Services.csproj")
+                + " | project-reference@src/Harbor.Ui.Framework.Services/Harbor.Ui.Framework.Services.csproj"
+                + " | dead-type-declared@src/Harbor.Ui.Framework.State/AppState.cs"
+                + " | dead-type-declared@src/Harbor.Ui.Framework.State/ChatViewState.cs"
+                + " | dead-type-declared@src/Harbor.Ui.Framework.State/SessionsViewState.cs")
             .Because(
-                "this is the #594 shape, item for item: a .cs file at the deleted path, the dead "
+                "this is the #594 + #597 shape, item for item: a .cs file at the deleted path, the dead "
                 + "AppReducer in the deleted namespace, the dead AppStore in the State namespace, the dead "
                 + "dispatcher in a surviving project, a ProjectReference to the deleted project, and a "
-                + "solution entry for it — seven findings. The commented-out reference must NOT appear. "
-                + "A miss on any of them means the rule cannot see the branch it was written for. "
+                + "solution entry for it — plus the four producer-less flat records and the view-model "
+                + "SHADOW, which is the duplicate-name shape #597 adds. Ten findings. The commented-out "
+                + "reference, the live ViewModels twins, the live SessionInfo and the near-miss "
+                + "ChatViewStateCache must NOT appear. A miss on any of them means the rule cannot see the "
+                + "branch it was written for; a hit on one of them means it condemns the working code. The "
+                + "order is the probe's own ordinal sort by file then line — `Services` before `State`, "
+                + "because 'e' < 't' — so this string asserts the ordering, not just the set. "
                 + "Reported: " + Describe(report.Violations));
 
-        await Assert.That(report.FilesScanned).IsEqualTo(3)
-            .Because("the three synthetic sources must all be read; a discovery filter that dropped one "
+        await Assert.That(report.FilesScanned).IsEqualTo(6)
+            .Because("all six synthetic sources must be read; a discovery filter that dropped one "
                    + "would leave the corresponding rule unexercised");
+    }
+
+    /// <summary>
+    ///     The live view-model twins are named by <see cref="LiveShadowTwins" /> and
+    ///     the rule is keyed on (name, namespace), so the twins are non-findings BY
+    ///     CONSTRUCTION rather than by luck. Asserting it directly is what keeps a
+    ///     future edit to <see cref="LegacyFlatTeaBranchProbe.IsBannedDeclaration" />
+    ///     from quietly turning a namespace-keyed rule into a name-keyed one.
+    /// </summary>
+    /// <remarks>
+    ///     This is the #880 failure inverted: a guard that is green because the
+    ///     decoys happen not to be scanned is not a guard. Here the twins are fed to
+    ///     the real matcher and asserted unreported, one per pair, so "the rule
+    ///     distinguishes the shadow from its twin" is a claim with a witness.
+    /// </remarks>
+    [Test]
+    public async Task NonVacuity_LiveViewModelTwinsAreNotReported()
+    {
+        foreach ((string typeName, string twinNamespace) in LegacyFlatTeaBranchProbe.LiveShadowTwins)
+        {
+            LegacyBranchReport report = LegacyFlatTeaBranchProbe.ScanFiles(
+                [("src/Harbor.Ui.Framework.ViewModels/ViewModels/" + typeName + ".cs",
+                    [
+                        "namespace " + twinNamespace + ";",
+                        string.Empty,
+                        "public sealed record " + typeName,
+                        "{",
+                        "}",
+                    ])],
+                []);
+
+            await Assert.That(report.Violations).IsEmpty()
+                .Because(
+                    typeName + " in " + twinNamespace + " is the LIVE copy every consumer binds to: "
+                    + "8 sites use ChatLineViewModel and 12 use ToolCallViewModel, all of which reach the "
+                    + "ViewModels declaration. The State-namespace shadow of the same name is what #597 "
+                    + "bans, and a rule that cannot tell the two apart condemns the working one. "
+                    + "Reported: " + Describe(report.Violations));
+        }
     }
 
     private static string Describe(IReadOnlyList<LegacyBranchViolation> violations) =>

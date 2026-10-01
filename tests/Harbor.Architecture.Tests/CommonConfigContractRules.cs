@@ -115,6 +115,63 @@
 // otherwise indistinguishable from "the scan read nothing". So the same
 // predicates are driven with synthetic positive and negative controls, and the
 // file list is required to resolve.
+//
+// #767: RULE 4's PERIMETER IS DERIVED, AND THE LIST IT REPLACED WAS NOT A RULE
+// -----------------------------------------------------------------------------
+// Rule 4 used to walk `SeamFiles` — three typed paths. #729 seeded it from the
+// two consumer files it was already scanning, and #453 added the producer after
+// finding the derivation had moved there. That is a transcription of what each
+// round of findings happened to touch, and the measurement in this checkout says
+// it never was a statement of where the contract applies:
+//
+//   * every one of its three entries is selected by the derivation, so the list
+//     carried no information the derivation does not already produce. A list
+//     that is a strict SUBSET of a shape cannot be where the shape applies — if
+//     the contract were mandatory exactly there, the list would be complete.
+//   * two product files name the port and were on it in neither: SessionFactory
+//     (a constructor parameter) and ICommonConfigStore.cs (the cross-reference
+//     #744 added). SessionFactory is on `ProviderModelAbsenceRules.ConsumerFiles`,
+//     whose `HalfPairProbe` is BYTE-IDENTICAL to this file's — so the same
+//     forbidden construct was policed in one file and permitted in the next
+//     purely by list membership, and neither list can observe the other's
+//     omission. That is why both lists stayed green over a hole.
+//   * rule 5, in this same file, already derived its implementers structurally
+//     over `src/` and `apps/`. Rule 4 typing what rule 5 derived is the
+//     asymmetry #767 names, and it is why a new implementer would be CAUGHT by
+//     rule 5 and yet never SCANNED by rule 4.
+//
+// So the perimeter is now "every product file that names the port". A file that
+// reaches this seam necessarily spells the port's name, so it selects itself in;
+// becoming relevant is not an event a typed list can record. That is the whole
+// difference between the two, and `Perimeter_AcquiresANewFileThatNamesThePort_
+// WithNothingToEdit` is the control that tells them apart — a list cannot be
+// shown to acquire a file it was never given.
+//
+// The companion `SeamScanner_ReachesEverySeamFile` is deleted, not repaired. It
+// iterated the same constant the rule scanned, so it was green by construction:
+// it could only fail if a listed file was deleted, and was incapable of noticing
+// a file that had fallen OUT of the list — which is the only direction this
+// defect ever moved. Once the perimeter is derived from a directory walk it also
+// cannot report a missing entry, so it had become pure ceremony. A derived
+// perimeter needs the opposite check, and
+// `SeamPerimeter_CoversEveryProductFileThatNamesThePort` is it: it restates the
+// expectation as its own query and compares, so the two cannot agree by
+// construction.
+//
+// KNOWN BOUND, STATED NOT FIXED HERE
+// ---------------------------------
+// The anchor is the PORT, and the port is not the only way to answer "is this
+// pair whole?". Two sites outside this perimeter still re-derive it and do not
+// name the port, so neither this rule nor `ProviderModelAbsenceRules` sees them:
+//   * Desktop.Abstractions/ViewModels/OnboardingViewModel.cs:106-107 — decides
+//     each half of the default pair independently, per line, which is the
+//     forbidden question answered field by field; and it is invisible to the
+//     matcher because the two operands are on separate lines.
+//   * Hosting/Modules/ToolsCatalog.cs:34-45 `ResolveDefaultModelFromCommon` — a
+//     second producer that re-qualifies the pair by hand, and does not implement
+//     the port, so rule 5's implementer count cannot see it either.
+// Widening the anchor to the config's halves is a different rule with different
+// false positives, so it is filed separately rather than smuggled in here.
 
 using System.Text.RegularExpressions;
 using CSharpFunctionalExtensions;
@@ -150,24 +207,55 @@ public sealed class CommonConfigContractRules
     private const string NarrowSeamMethod = "ReadModelRefAsync";
 
     /// <summary>
-    ///     The whole seam — the port, the one adapter that implements it, and the
-    ///     registration that wires it. Rule 4 walks all three because the
-    ///     derivation can sit on either side of the port: the port's own doc
-    ///     comment, the producer, or the composition root's fallback.
+    ///     The files rule 4 scans: every product file that <b>names the port</b>.
+    ///     Derived, never typed — see the file header for the measurement that
+    ///     says the typed list it replaces was a transcription rather than a
+    ///     statement of where this contract applies.
     /// </summary>
     /// <remarks>
-    ///     The port is listed by its POST-rename path, so on the pre-fix tree this
-    ///     list reports a missing file. That is intended: it is one of the three
-    ///     independent reasons the guard is red before the fix (the name is
-    ///     absent, the carrier is a tuple, the producer still derives), and a file
-    ///     that is listed but absent must be loud rather than quietly skipped.
+    ///     Paths come back repo-relative and forward-slashed, which is what
+    ///     <see cref="FindProbes" /> combines with the repo root.
     /// </remarks>
-    private static readonly string[] SeamFiles =
-    [
-        "src/Harbor.Ui.Framework.Abstractions/Configuration/ICommonConfigModelRefReader.cs",
-        "apps/Harbor.App.Avalonia/Services/CommonConfigReaderAdapter.cs",
-        "apps/Harbor.App.Avalonia/Hosting/ConfigRegistration.cs",
-    ];
+    private static IReadOnlyList<string> SeamPerimeter()
+        => PortNamingFiles(
+            [.. SourceScan.EnumerateProductCsFiles().Select(SourceScan.Relative)],
+            relative => SourceScan.TryReadAllText(Path.Combine(RepoPaths.RepoRoot ?? ".", relative)));
+
+    /// <summary>
+    ///     Selects the files that name the port out of <paramref name="relativePaths" />.
+    /// </summary>
+    /// <remarks>
+    ///     Reading the whole text rather than stripping comments is deliberate and
+    ///     the width is harmless: the port's own file names itself, and so does
+    ///     the store's declaration through the cross-reference #744 added. Those
+    ///     two files hold no live probe and <see cref="Scan" /> skips comment
+    ///     lines, so a doc reference widens the perimeter without ever producing
+    ///     a finding. The alternative — matching only code positions — would need
+    ///     a parser to be correct and would silently drop a caller that spells the
+    ///     port inside an attribute or a <c>nameof</c>.
+    ///     <para>
+    ///         The reader is injected so the non-vacuity control can drive this
+    ///         with files the checkout does not contain. That control is the
+    ///         whole point: a list cannot be shown to acquire a file it was never
+    ///         given, so if the control passes, the perimeter is derived.
+    ///     </para>
+    /// </remarks>
+    private static IReadOnlyList<string> PortNamingFiles(
+        IReadOnlyList<string> relativePaths,
+        Func<string, string?> read)
+    {
+        var found = new List<string>();
+        foreach (string path in relativePaths)
+        {
+            if (read(path) is { } text && text.Contains(NarrowSeamName, StringComparison.Ordinal))
+            {
+                found.Add(path);
+            }
+        }
+
+        found.Sort(StringComparer.Ordinal);
+        return found;
+    }
 
     /// <summary>
     ///     #729's matcher, extended in one place and only one: the name of the
@@ -302,7 +390,7 @@ public sealed class CommonConfigContractRules
     public async Task Seam_DoesNotReDeriveHalfPairUsability()
     {
         string root = RequireRepoRoot();
-        List<ProbeSite> probes = [.. SeamFiles.SelectMany(f => FindProbes(root, f))];
+        List<ProbeSite> probes = [.. SeamPerimeter().SelectMany(f => FindProbes(root, f))];
 
         await Assert.That(probes.Count).IsEqualTo(0).Because(
             "nobody on this seam may decide \"is this pair whole?\" by testing a provider half "
@@ -555,26 +643,76 @@ public sealed class CommonConfigContractRules
             + "reference — so rule 5 counts implementers by source.");
     }
 
+    /// <summary>
+    ///     #767: the perimeter rule 4 scans is DERIVED — every product file that
+    ///     names the port — and not typed. The expectation is restated here as
+    ///     its own query over the checkout rather than obtained from the rule's
+    ///     helper, so a bug in the helper shows up as a disagreement instead of
+    ///     cancelling out.
+    /// </summary>
     [Test]
-    public async Task SeamScanner_ReachesEverySeamFile()
+    public async Task SeamPerimeter_CoversEveryProductFileThatNamesThePort()
     {
-        string root = RequireRepoRoot();
-        var missing = new List<string>();
+        var derived = SourceScan.EnumerateProductCsFiles()
+            .Where(p => SourceScan.TryReadAllText(p)?.Contains(NarrowSeamName, StringComparison.Ordinal) == true)
+            .Select(SourceScan.Relative)
+            .OrderBy(p => p, StringComparer.Ordinal)
+            .ToList();
+        IReadOnlyList<string> scanned = SeamPerimeter();
 
-        foreach (string file in SeamFiles)
-        {
-            if (!File.Exists(Path.Combine(root, file)))
+        await Assert.That(derived.Count).IsGreaterThan(2).Because(
+            "the derivation has to find more than the files the pre-#767 list happened to police, "
+            + "or it is not a perimeter but a transcription of that list. Found: " + Describe(derived) + ".");
+
+        var unpoliced = derived.Where(f => !scanned.Contains(f, StringComparer.Ordinal)).ToList();
+
+        await Assert.That(unpoliced).IsEmpty().Because(
+            "any product file that names " + NarrowSeamName + " is on this seam by construction — it "
+            + "knows the port, so the forbidden derivation can be written in it — and rule 4 must "
+            + "therefore scan it. A typed list cannot promise that, because becoming relevant is not "
+            + "an event a list records. Unpoliced: " + Describe(unpoliced) + ". Two of these were the "
+            + "concrete proof that the list was not a rule: SessionFactory names the port as a "
+            + "constructor parameter and is listed in ProviderModelAbsenceRules.ConsumerFiles, whose "
+            + "HalfPairProbe is byte-identical to this file's, so the same construct was forbidden in "
+            + "one file and permitted in the next purely by list membership; and ICommonConfigStore.cs "
+            + "names the port in the cross-reference #744 added and was on neither list. See #767.");
+
+        await Assert.That(scanned.Count).IsGreaterThanOrEqualTo(derived.Count).Because(
+            "the perimeter may be wider than the port-naming set — it is not a filter, it IS the set — "
+            + "but it must never be narrower, or files outside it are unpoliced. Derived "
+            + derived.Count + ", scanned " + scanned.Count + ".");
+    }
+
+    /// <summary>
+    ///     THE CONTROL THAT SEPARATES A DERIVATION FROM A LIST. A list cannot be
+    ///     shown to acquire a file it was never given, so this hands the selector
+    ///     three files the checkout does not contain and requires the two that
+    ///     name the port to arrive on their own. It is the acceptance criterion
+    ///     #767 states: a structural change must not be indistinguishable from a
+    ///     return to the enumeration.
+    /// </summary>
+    [Test]
+    public async Task Perimeter_AcquiresANewFileThatNamesThePort_WithNothingToEdit()
+    {
+        IReadOnlyList<string> selected = PortNamingFiles(
+            [
+                "src/Brand/NewCaller.cs",
+                "src/Brand/NewImplementer.cs",
+                "src/Brand/Unrelated.cs",
+            ],
+            path => Path.GetFileName(path) switch
             {
-                missing.Add(file);
-            }
-        }
+                "NewCaller.cs" => "public sealed class C(ICommonConfigModelRefReader reader) { }",
+                "NewImplementer.cs" => "public sealed class D : ICommonConfigModelRefReader { }",
+                _ => null,
+            });
 
-        await Assert.That(missing).IsEmpty().Because(
-            "rule 4 is rooted at named files; if one was renamed or moved it silently polices "
-            + "nothing and reports green. Point them at the new homes: " + string.Join(", ", missing)
-            + ". This is how #729's own guard ended up not seeing CommonConfigReaderAdapter:48 — the "
-            + "file list was written from the consumers, and the derivation had already moved to the "
-            + "producer.");
+        await Assert.That(selected).IsEquivalentTo(new[] { "src/Brand/NewCaller.cs", "src/Brand/NewImplementer.cs" })
+            .Because(
+                "a file that reaches this seam spells " + NarrowSeamName + ", whether it implements the "
+                + "port or merely receives it, so both must select themselves into the perimeter with "
+                + "no list to edit — and a file that never names the port must stay out, or the rule "
+                + "grades the whole product tree. Got: " + Describe(selected) + ".");
     }
 
     [Test]

@@ -36,8 +36,12 @@ Two halves of the layering contract, both mechanically enforced:
 
 ## Run
 
-> `dotnet test` discovers zero tests in this repo (broken MTP bridge). Run the
-> test project as a plain executable:
+> `dotnet test` is not used in this repo — every CI job runs each test project
+> as a plain executable, and no job runs `dotnet test`, so its behaviour here is
+> unverified (an earlier version of this line claimed it "discovers zero tests",
+> which was wrong; see
+> [CONTRIBUTING.md §Why not `dotnet test`](../../CONTRIBUTING.md#why-not-dotnet-test)).
+> Run the test project as a plain executable:
 
 ```bash
 dotnet build tests/Harbor.Architecture.Tests/Harbor.Architecture.Tests.csproj

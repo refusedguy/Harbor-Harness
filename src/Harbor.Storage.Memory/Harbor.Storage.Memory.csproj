@@ -13,4 +13,31 @@
     <ProjectReference Include="..\Harbor.Abstractions\Harbor.Abstractions.csproj"/>
   </ItemGroup>
 
+  <ItemGroup>
+    <!--
+      #887: the canonical failure texts, linked like Harbor.Providers.Shared and like
+      the same folder's two files in Jsonl/Sqlite (no ProjectReference - a storage-to-storage
+      reference is forbidden by the layer matrix, which is why this travels as source).
+
+      SessionStoreErrors.cs ONLY, and the other two files in this folder are excluded on
+      purpose rather than by oversight:
+
+        SessionLockStrip.cs      - a SemaphoreSlim stripe over a ConcurrentDictionary the
+                                   store owns as a field. This store takes lock (list) on
+                                   the per-session List<AgentMessage> instead: a different
+                                   primitive, the same exclusion guarantee, and its read
+                                   paths (GetAsync, DeleteAsync, GetStatsAsync) take no
+                                   lock at all - so there is no strip here to hand out.
+        SessionStatsAggregator.cs- folds SessionMetadata from message history. This store
+                                   persists the metadata record and returns session.Metadata
+                                   (GetStatsAsync), so it has no fold to share.
+
+      InvalidSessionId stays unused in this assembly, which is not a new condition:
+      Harbor.Storage.Sqlite links this same file and calls only two of the three
+      factories, because InvalidSessionId guards caller-supplied ids reaching File.*
+      (#83) and this store never touches the filesystem.
+    -->
+    <Compile Include="..\Harbor.Storage.Shared\SessionStoreErrors.cs" LinkBase="Shared" />
+  </ItemGroup>
+
 </Project>

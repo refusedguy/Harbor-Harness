@@ -646,7 +646,7 @@ public sealed class DialogOverlay
                 }
                 return false;
             case KeyCode.Char:
-                if ((key.Modifiers & (KeyModifiers.Ctrl | KeyModifiers.Meta | KeyModifiers.Alt)) != 0)
+                if (key.Modifiers.IsCommandModifier())
                 {
                     return false;
                 }
@@ -715,7 +715,7 @@ public sealed class DialogOverlay
     /// </para>
     /// </summary>
     private static bool AcceptsTypedChar(ConsoleKeyInfo key) =>
-        (key.Modifiers & (ConsoleModifiers.Control | ConsoleModifiers.Alt)) == 0
+        key.Modifiers.AcceptsTypedChar()
         && !char.IsControl(key.KeyChar);
 
     private bool HandleSelectKey(ConsoleKeyInfo key)

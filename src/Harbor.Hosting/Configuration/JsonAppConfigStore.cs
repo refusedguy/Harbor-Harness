@@ -1,12 +1,14 @@
 // JsonAppConfigStore.cs — JSON-backed implementation of IAppConfigStore<T>.
 //
 // #534: this type MOVED here from Harbor.Desktop.Abstractions, which is
-// IsPackable / `PackageId: Harbor.Desktop.Abstractions` and the only project the
-// layer matrix calls Domain (§2). A Domain-labelled package that writes the user's
-// config is a storage engine that also ships a schema. The generic port, AppConfigBase
-// and CompositeConfig<T> stayed in the leaf; only the persistence moved. See
-// JsonCommonConfigStore.cs for the full note and DesktopAbstractionsLeafTakesNoIoRules
-// for the guard.
+// IsPackable / `PackageId: Harbor.Desktop.Abstractions`.
+// The layer matrix calls it Presentation (§2), and has said so since the matrix
+// row was created (5d2df19f). A published Presentation package that writes the
+// user's config is a storage engine that also ships a schema, and
+// PresentationCapabilityRules forbids `System.IO.File*` in every Presentation
+// assembly anyway. The generic port, AppConfigBase and CompositeConfig<T> stayed
+// in the leaf; only the persistence moved. See JsonCommonConfigStore.cs for the
+// full note and DesktopAbstractionsLeafTakesNoIoRules for the guard.
 //
 // Persists per-app config to ~/.harbor/<ConfigFileName>.json using
 // System.Text.Json. Writes are atomic (temp file + File.Move) and serialized

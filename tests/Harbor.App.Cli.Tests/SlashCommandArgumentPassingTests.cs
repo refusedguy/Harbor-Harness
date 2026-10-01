@@ -79,13 +79,23 @@ public class SlashCommandArgumentPassingTests
     ///     The issue's headline case, verbatim. Before the fix this printed the
     ///     full config dump with <c>Model:</c> still showing the old value.
     /// </summary>
+    /// <remarks>
+    ///     #709 changed the input. This test asks whether the ARGUMENTS reached
+    ///     the command, and the argument-dropped bug made <c>gpt-4</c> a
+    ///     convenient witness — it took the <c>set</c> branch. It is now a
+    ///     REFUSED value (a bare id is not a <c>provider/model</c>), so it still
+    ///     proves argument delivery, but through the other branch. A well-formed
+    ///     reference keeps this test on the branch it describes; the refused
+    ///     half is
+    ///     <see cref="ConfigSetValueReportingTests.BareModelId_IsRefusedAndLeavesTheStoredModelAlone" />.
+    /// </remarks>
     [Test]
     public async Task ConfigSet_TakesTheSetBranch_NotTheConfigDump()
     {
         var config = new InMemoryConfigStore();
-        List<string> lines = await DispatchAsync("/config set model gpt-4", config);
+        List<string> lines = await DispatchAsync("/config set model openai/gpt-4", config);
 
-        await Assert.That(lines.Any(l => l.Contains("model = gpt-4"))).IsTrue()
+        await Assert.That(lines.Any(l => l.Contains("✓ model = openai/gpt-4"))).IsTrue()
             .Because(
                 "The arguments reached the command, so it took the `/config set` branch. With them dropped it "
                 + "took the no-args branch and dumped the configuration instead — showing `Model:` with the OLD "
@@ -119,34 +129,45 @@ public class SlashCommandArgumentPassingTests
     }
 
     /// <summary>
-    ///     Documents — does not bless — a neighbouring defect the argument drop
-    ///     was hiding. <see cref="HarborConfig.Model" />'s setter is
-    ///     <c>_ = TrySetModel(value)</c>, and <c>ModelRef.TryParse</c> requires a
-    ///     <c>provider/model</c> pair, so <c>/config set model gpt-4</c> clears the
-    ///     stored model and the getter falls back to the built-in default while
-    ///     the command reports success. This is issue #650's neighbourhood, not
-    ///     issue #650: the fix here delivers the argument, and the argument then
-    ///     hits a pre-existing silent parse failure in the setter. Pinned so the
-    ///     next person to look is looking at measured behaviour rather than a
-    ///     guess, and so fixing it turns this test red on purpose.
+    ///     Issue #650's neighbour, and the test #650 left here on purpose.
+    ///     <see cref="HarborConfig.Model" />'s setter is
+    ///     <c>_ = TrySetModel(value)</c>, so when <c>ModelRef.TryParse</c> rejects
+    ///     a value the field is NULLed and the getter falls back to the built-in
+    ///     default — while the command reported success. The comment here used to
+    ///     say the behaviour was pinned "so fixing it turns this test red on
+    ///     purpose", and #709 is that fix.
     /// </summary>
+    /// <remarks>
+    ///     The claim being pinned did not change; the outcome did. A bare model id
+    ///     is still not a value the setter keeps — that is the assertion — but it
+    ///     is now REFUSED in words and the previously configured model survives,
+    ///     instead of being reported as written and erased. Before the fix this
+    ///     was not a no-op: a nulled field is a DELETION, so the user's own model
+    ///     was replaced by the built-in default.
+    /// </remarks>
     [Test]
-    public async Task BareModelId_IsRejectedByTheSetter()
+    public async Task BareModelId_IsRefusedByTheSetter_AndTheStoredModelSurvives()
     {
         var config = new InMemoryConfigStore();
         config.Current.Model = "openai/gpt-4";
 
         List<string> lines = await DispatchAsync("/config set model gpt-4", config);
 
-        await Assert.That(lines.Any(l => l.Contains("model = gpt-4"))).IsTrue()
-            .Because("The command reports the assignment it attempted, with the arguments delivered (#650).");
-
-        await Assert.That(config.Current.Model).IsNotEqualTo("gpt-4")
+        await Assert.That(config.Current.Model).IsEqualTo("openai/gpt-4")
             .Because(
                 "Measured, not assumed: `ModelRef.TryParse(\"gpt-4\")` needs `provider/model`, so "
-                + "`TrySetModel` takes its failure branch and nulls `Identity.Model`; the getter then returns "
-                + "`IdentityConfig.FallbackModel`. The value is NOT stored and the command still reports "
-                + "success. Fixing the setter to report the parse failure is a separate change.");
+                + "`TrySetModel` takes its failure branch and nulls `Identity.Model`. That made the getter "
+                + "return `IdentityConfig.FallbackModel` and left the user reading `✓ model = gpt-4` — an "
+                + "ERASURE dressed as a write. #709 decides the key before touching the config and refuses "
+                + "the value, so the stored model is untouched.");
+
+        await Assert.That(lines.Any(l => l.Contains("✓"))).IsFalse()
+            .Because("Nothing was written, so the command must not report that something was.");
+
+        await Assert.That(lines.Any(l => l.Contains("provider/model"))).IsTrue()
+            .Because(
+                "The refusal names the form it wanted. Silent and refused look identical to a user, so the "
+                + "reason is the whole difference between them.");
     }
 
     [Test]

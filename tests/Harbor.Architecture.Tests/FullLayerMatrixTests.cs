@@ -97,18 +97,20 @@ public class FullLayerMatrixTests
             + "format Anthropic and Ollama do not share.",
 
         // #456: this folder was here before the issue was filed and was not on the list at
-        // all, so nothing in the enforcer read it. Harbor.Storage.Memory links NEITHER
-        // file and hand-writes the same literals nine times — stated here so the manifest
-        // records the gap instead of letting the declaration imply all three stores share
-        // these files. Unifying Memory is a separate change, tracked on its own issue.
+        // all, so nothing in the enforcer read it. It was declared with the gap spelled out:
+        // Harbor.Storage.Memory linked NEITHER file and hand-wrote the same literals ELEVEN
+        // times (nine SessionNotFound, two MessageNotFound). #887 closed that — Memory now
+        // links SessionStoreErrors.cs, so all three stores share the failure texts — so the
+        // reason below states which file reaches which store instead.
         ["Harbor.Storage.Shared"] =
-            "The Jsonl and Sqlite session stores must share one per-session lock strip and one "
-            + "set of canonical failure texts, and the layer matrix forbids "
-            + "Infrastructure→Infrastructure project references, so both are <Compile "
-            + "Include>-linked rather than referenced. SessionLockStrip and SessionStoreErrors "
-            + "reach both stores; SessionStatsAggregator reaches Jsonl alone, because Sqlite and "
-            + "Memory persist the metadata record instead of folding it from message history. "
-            + "Harbor.Storage.Memory links neither file and re-writes the failure texts inline.",
+            "The three session stores must share one set of canonical failure texts, and the "
+            + "layer matrix forbids Infrastructure→Infrastructure project references, so the "
+            + "code is <Compile Include>-linked rather than referenced. SessionStoreErrors "
+            + "reaches all three. SessionLockStrip reaches Jsonl and Sqlite; SessionStatsAggregator "
+            + "reaches Jsonl alone, because Sqlite and Memory persist the metadata record instead "
+            + "of folding it from message history. Memory links SessionStoreErrors and NEITHER of "
+            + "the other two: it takes lock (list) on its per-session List rather than a "
+            + "SemaphoreSlim stripe over a store-owned dictionary, so there is no strip to share.",
     };
 
     /// <summary>

@@ -68,8 +68,64 @@ public class SystemPromptBuilderTests
         await Assert.That(prompt).Contains("Working directory");
         await Assert.That(prompt).Contains("/custom/dir");
         await Assert.That(prompt).Contains("Platform");
-        await Assert.That(prompt).Contains("Today");
         await Assert.That(prompt).Contains("Model");
+    }
+
+    /// <summary>
+    ///     #814: the environment block used to carry <c>- Today: </c>, read
+    ///     from the wall clock inside <c>BuildAsync</c>. This asserts the line is
+    ///     GONE, and says why, because the deletion is a decision and the next
+    ///     reader of this file will otherwise read the missing assertion as an
+    ///     oversight and helpfully restore a "useful context detail".
+    /// </summary>
+    /// <remarks>
+    ///     The block is sliced rather than the whole prompt on purpose: a
+    ///     project-context file that happens to contain the word "Today" is the
+    ///     USER's content arriving through the context, which is exactly what
+    ///     this test must keep allowing. The invariant is about what the
+    ///     BUILDER injects, not about what the context carries.
+    /// </remarks>
+    [Test]
+    public async Task BuildAsync_EnvironmentBlock_InjectsNoClockRead()
+    {
+        var builder = new SystemPromptBuilder();
+        var ctx = Context(Agent(), Array.Empty<ToolDescriptor>(), "/custom/dir");
+
+        string environment = EnvironmentBlockOf(await builder.BuildAsync(ctx));
+
+        await Assert.That(environment).IsNotEmpty()
+            .Because("this test grades the environment block; an empty slice means the header moved "
+                   + "or the block stopped rendering, and the assertion below would pass on nothing");
+
+        await Assert.That(environment).DoesNotContain("Today")
+            .Because(
+                "the date was the one line of this block that came from neither the context nor a "
+                + "machine fact, so no cache key derived from the context could cover it: "
+                + "CachingSystemPromptBuilder keeps entries for the life of the process, and a session "
+                + "left open across 00:00 UTC told the model it was still yesterday — a stale answer "
+                + "the model can act on, not only a cache artefact. The value was not even the user's "
+                + "today: it was a UTC date with no zone on it. A date the model genuinely needs "
+                + "arrives as a SystemPromptContext member, where the key reaches it by construction. "
+                + "Block: " + environment);
+    }
+
+    /// <summary>
+    ///     The <c>## Environment</c> block, up to the blank line that ends it.
+    ///     Empty when the header is absent, so a caller asserting on the slice
+    ///     fails on the emptiness rather than on a substring it never looked at.
+    /// </summary>
+    private static string EnvironmentBlockOf(string prompt)
+    {
+        const string header = "## Environment";
+
+        int start = prompt.IndexOf(header, StringComparison.Ordinal);
+        if (start < 0)
+        {
+            return string.Empty;
+        }
+
+        int end = prompt.IndexOf("\n\n", start, StringComparison.Ordinal);
+        return end < 0 ? prompt[start..] : prompt[start..end];
     }
 
     [Test]

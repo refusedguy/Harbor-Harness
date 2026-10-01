@@ -326,10 +326,16 @@ public sealed class DefaultAgentSingleSourceTests
     ///     <c>null</c> because none of the create/resolve paths read it, and
     ///     <c>ICommonConfigModelRefReader</c> is <c>null</c> because it is an optional
     ///     dependency (#63) — so the provider/model override path is inert here and
-    ///     the agent pick is the only thing under test.
+    ///     the agent pick is the only thing under test. The fork port (#670) is a
+    ///     required constructor parameter and is wired to the real core fork over the
+    ///     same store, though nothing on the agent-resolution path calls it.
     /// </summary>
-    private static SessionFactory NewFactory(FixedOrderAgentRegistry registry) =>
-        new(registry, null!, new MemorySessionStore(), NullLogger<SessionFactory>.Instance, configReader: null);
+    private static SessionFactory NewFactory(FixedOrderAgentRegistry registry)
+    {
+        var store = new MemorySessionStore();
+        return new(registry, null!, store, new CoreSessionForker(store),
+            NullLogger<SessionFactory>.Instance, configReader: null);
+    }
 
     private static string RequireRepoRoot()
         => RepoPaths.RepoRoot ?? throw new InvalidOperationException(

@@ -143,11 +143,24 @@ public class GitServicePermissionGatingTests
             LastDirectory = directory;
             return result;
         }
+
+        // #666 added ListWorktrees for the jump palette. These tests are about
+        // GetStatus and the branch badge, so the worktree half answers nothing
+        // rather than pretending to be a git repo.
+        public IReadOnlyList<GitWorktreeInfo> ListWorktrees(
+            string directory,
+            CancellationToken cancellationToken = default)
+            => Array.Empty<GitWorktreeInfo>();
     }
 
     private sealed class ThrowingGitQuery : IGitQuery
     {
         public GitWorkspaceStatus GetStatus(string directory, CancellationToken cancellationToken = default)
+            => throw new InvalidOperationException("git is not on PATH");
+
+        public IReadOnlyList<GitWorktreeInfo> ListWorktrees(
+            string directory,
+            CancellationToken cancellationToken = default)
             => throw new InvalidOperationException("git is not on PATH");
     }
 }

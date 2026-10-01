@@ -1,11 +1,15 @@
 // JsonCommonConfigStore.cs — JSON-backed implementation of ICommonConfigStore.
 //
 // #534: this type MOVED here from Harbor.Desktop.Abstractions, which is
-// IsPackable / `PackageId: Harbor.Desktop.Abstractions` and the only project the
-// layer matrix calls Domain (§2). A Domain-labelled package that stats the file,
-// creates ~/.harbor and writes through a sibling `.tmp` is not a domain model; it
-// is a storage engine that also ships a schema. Persistence belongs to the
-// composition root, which already constructed both of these stores.
+// IsPackable / `PackageId: Harbor.Desktop.Abstractions`.
+// The layer matrix calls it Presentation (§2), and has said so since the matrix
+// row was created (5d2df19f). A published Presentation package that stats the
+// file, creates ~/.harbor and writes through a sibling `.tmp` is not a UI
+// contract; it
+// is a storage engine that also ships a schema, and PresentationCapabilityRules
+// forbids `System.IO.File*` in every Presentation assembly anyway. Persistence
+// belongs to the composition root, which already constructed both of these
+// stores.
 //
 // The PORT (ICommonConfigStore), the DTOs (CommonConfig / AppConfigBase) and
 // `CompositeConfig<T>` stayed in the leaf. The contract is the schema's; where the
@@ -112,7 +116,16 @@ public sealed class JsonCommonConfigStore : ICommonConfigStore
                 _logger.LogWarning("Common config at {Path} deserialized to null, using defaults", path);
                 return Result.Success(_default);
             }
-            return Result.Success(config);
+
+            // #913: pin the directory to the one this store was constructed
+            // with, so the record handed back and the path SaveAsync writes to
+            // can never disagree. `ConfigDirectory` round-trips through the
+            // file, and the merge above lets the FILE's copy win — so before
+            // this, a config.json carrying a stale absolute path (relocated
+            // ~/.harbor, a config copied off another machine, a pinned E2E
+            // sandbox) made LoadAsync return a record that pointed somewhere
+            // other than the file it had just read.
+            return Result.Success(config with { ConfigDirectory = _default.ConfigDirectory });
         }
         catch (JsonException ex)
         {
@@ -186,7 +199,20 @@ public sealed class JsonCommonConfigStore : ICommonConfigStore
         await _lock.WaitAsync(ct).ConfigureAwait(false);
         try
         {
-            string path = config.ConfigFilePath;
+            // #913: the target is the store's OWN file — the same
+            // _default.ConfigFilePath LoadAsync reads from — NOT one
+            // re-derived from the payload's ConfigDirectory. That property is
+            // init-only, round-trips through config.json, and is caller-
+            // controlled, so trusting it made the write destination a function
+            // of unvalidated input: a payload carrying a foreign
+            // configDirectory wrote the whole config to a different tree
+            // (creating it via Directory.CreateDirectory) and then re-persisted
+            // that foreign path, so the split reproduced itself on every
+            // subsequent save. The invariant belongs to the store, so the
+            // store decides where it writes.
+            string path = _default.ConfigFilePath;
+            config = config with { ConfigDirectory = _default.ConfigDirectory };
+
             string? dir = Path.GetDirectoryName(path);
             if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))
             {
