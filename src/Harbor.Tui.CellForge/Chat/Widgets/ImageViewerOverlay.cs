@@ -10,9 +10,13 @@ namespace Harbor.Tui.CellForge.Widgets;
 /// <see cref="ImageBlock" /> instead of a unified diff.
 ///
 /// <para><b>Contract.</b> Modal and opaque — it occludes the chat beneath it
-/// and forms an input barrier, so keys never reach the agent while it is open
-/// (the host routes through <see cref="ImageViewerOverlayLayer.OnKey" /> and
-/// swallows the rest). <see cref="Show" /> snapshots nothing but the block,
+/// and forms an input barrier, so keys never reach the agent while it is open:
+/// the host checks <see cref="Visible" /> and calls <see cref="HandleKey" />
+/// directly in <c>ReplInputLoop.HandleKeyAsync</c>, then swallows the rest. That
+/// is the same object <see cref="ImageViewerOverlayLayer" /> wraps — the layer's
+/// own <c>OnKey</c> forwards here too, but no product host reaches it, because
+/// <c>OverlayStack.RouteKey</c> has no product call site (#858).
+/// <see cref="Show" /> snapshots nothing but the block,
 /// the viewer owns no scroll, no selection and no <c>UiState</c> field, so
 /// closing it restores the feed by construction — the timeline never moved.</para>
 ///

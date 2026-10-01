@@ -25,12 +25,22 @@ namespace Harbor.Tui.CellForge.Panels;
 ///     </para>
 ///     <para>
 ///         <b>Input barrier.</b> <see cref="IsModal" /> is
-///         <see langword="true" />: while the palette is visible
-///         <see cref="OverlayStack.HasModalBarrier" /> reports an active barrier
-///         and keys route top-down through <see cref="OnKey" />, so panels and
-///         the composer beneath never see the typed query (the "no typing leak"
-///         half of #381). The provider consumes printable keys itself (see
+///         <see langword="true" />, so any host that routes through
+///         <see cref="OverlayStack.RouteKey" /> would stop at this layer and let
+///         panels and the composer beneath starve — the "no typing leak" half of
+///         #381. The provider consumes printable keys itself (see
 ///         <see cref="CellForgeJumpPalettePanel.OnKey" />).
+///     </para>
+///     <para>
+///         <b>Nothing in the product routes that way yet.</b> (#858)
+///         <see cref="OverlayStack.RouteKey" /> has no product call site, and no
+///         product code constructs this layer at all — <c>new</c>
+///         <see cref="CellForgeJumpPaletteOverlayLayer" /> appears only under
+///         <c>tests/</c>. The /jump frame the user actually sees is the command
+///         palette frame, keyed by the hand-written cascade in
+///         <c>ReplInputLoop.HandleKeyAsync</c> (#857). What this class documents
+///         is the barrier a host would get IF it routed through the stack, not a
+///         path the product takes today.
 ///     </para>
 ///     <para>
 ///         <b>Seeding.</b> Painting delegates to

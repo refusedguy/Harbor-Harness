@@ -46,14 +46,19 @@ namespace Harbor.Tui.CellForge.Tests;
 ///   * Without the push there is no report-event-types flag, so a conforming
 ///     terminal never sends the `;3` event-type sub-parameter, so
 ///     <c>KeyEventType.Release</c> is never produced by the input stream.
-///   * Independently, this overload has no product caller either.
-///     <c>DialogOverlay</c>'s only key ingress is <c>DialogOverlayLayer.OnKey</c>,
-///     whose only caller is <c>OverlayStack.RouteKey</c> — and RouteKey has NO
-///     call site outside tests. The two <c>DialogOverlay</c> instances are
-///     <c>ChatScreen.Dialog</c> (never shown: no product code calls any
-///     <c>Show*</c> on it) and <c>OnboardingFlow.Dialog</c> (a class with no
+///   * Independently, this overload has no product caller either. There is no
+///     route into <c>DialogOverlay</c>'s kitty overload at all:
+///     <c>DialogOverlayLayer</c> declares no <c>OnKey</c> member — it takes the
+///     <c>IOverlayLayer.OnKey</c> default (<c>=&gt; false</c>) — and
+///     <c>OverlayStack.RouteKey</c>, the only caller that would ever offer a key
+///     to a layer, has NO call site outside tests. The two <c>DialogOverlay</c>
+///     instances are <c>ChatScreen.Dialog</c> (never shown: no product code calls
+///     any <c>Show*</c> on it) and <c>OnboardingFlow.Dialog</c> (a class with no
 ///     product reference at all, and its only ingress is the legacy
 ///     <c>ConsoleKeyInfo</c> overload, which has no event type to lose).
+///     (#858 corrected this sentence: it used to name a
+///     <c>DialogOverlayLayer.OnKey</c> that has never existed, so it was wrong
+///     whichever way #812 resolves.)
 ///
 /// So this test is a CONTRACT, not a reproduction of a live crash: it pins the
 /// rule "a release applies nothing" on the one method that would break it the

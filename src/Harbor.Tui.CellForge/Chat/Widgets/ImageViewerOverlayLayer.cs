@@ -8,9 +8,12 @@ namespace Harbor.Tui.CellForge.Widgets;
 /// issue #387) on the PRIM2a z-stack (<see cref="LayoutTree.Overlays" />).
 /// Same contract as the other overlay layers: <see cref="Visible" /> gates the
 /// paint (a hidden layer never enters the stack, so quiet frames stay
-/// byte-identical), the box is opaque so it occludes the chat beneath, and
-/// <see cref="IsModal" /> forms the TGui input barrier that keeps keys from
-/// reaching the agent while the viewer is open.
+/// byte-identical) and the box is opaque so it occludes the chat beneath.
+/// <see cref="IsModal" /> declares the TGui input barrier that would keep keys
+/// from reaching the agent while the viewer is open — and the product gets that
+/// barrier anyway, but from the host's own hand-written cascade in
+/// <c>ReplInputLoop.HandleKeyAsync</c> rather than from <see cref="IsModal" />,
+/// since no product code calls <see cref="OverlayStack.RouteKey" /> (#858).
 /// </summary>
 public sealed class ImageViewerOverlayLayer : IOverlayLayer
 {
