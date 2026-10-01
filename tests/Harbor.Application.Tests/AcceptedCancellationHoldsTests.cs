@@ -1,9 +1,11 @@
 using System.Text.Json;
 using CSharpFunctionalExtensions;
+using Harbor.Abstractions.Events;
 using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Abstractions.Permissions;
 using Harbor.Abstractions.Sessions;
+using Harbor.Abstractions.Tools;
 using Harbor.Application.Agents;
 using Harbor.Application.Permissions;
 using Harbor.Application.Tests.Fakes;
@@ -267,7 +269,16 @@ public class AcceptedCancellationHoldsTests
         // a tool executed directly under this same token runs anyway, which is
         // exactly what the dispatch loop used to do.
         var tool = new TokenIgnoringTool();
-        await tool.ExecuteAsync(EmptyArgs, null!, cts.Token);
+        ToolContext context = new(
+            "s1",
+            "m1",
+            "c1",
+            "code",
+            cts.Token,
+            [],
+            static (_, _) => Task.CompletedTask,
+            static (_, _) => Task.FromResult(new PermissionResponse(PermissionAction.Allow, false)));
+        await tool.ExecuteAsync(EmptyArgs, context, cts.Token);
         await Assert.That(tool.Calls).IsEqualTo(1);
     }
 
