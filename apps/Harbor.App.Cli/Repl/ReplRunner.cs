@@ -374,7 +374,12 @@ internal sealed class ReplRunner
             // #674: the headless core owns diagnostic classification; the REPL is
             // only the pipe that carries its snapshot to the store. Null in a host
             // that registers no aggregator, which leaves the panel honestly empty.
-            _rendererHost.GetService<Harbor.Application.Diagnostics.DiagnosticsAggregator>());
+            _rendererHost.GetService<Harbor.Application.Diagnostics.DiagnosticsAggregator>(),
+            // #857: the /jump palette's worktree column. TuiModule registers
+            // IGitQuery for the CLI (same reason it registers the file-tree
+            // seam — the consumer is a TUI surface, and the CLI is the default
+            // CellForge backend), so this resolves on the normal path.
+            _rendererHost.GetService<Harbor.Abstractions.Git.IGitQuery>());
         int exitCode = await runner.RunAsync(ct).ConfigureAwait(false);
         return Result.Success(exitCode);
     }

@@ -1,4 +1,5 @@
 using Harbor.Abstractions.Agents;
+using Harbor.Abstractions.Git;
 using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Providers;
 using Harbor.Abstractions.Sessions;
@@ -64,6 +65,15 @@ internal interface IReplHost
     ///     onboarding wizard runs). Null skips the check silently.
     /// </summary>
     IProviderHealthCheck? HealthCheck { get; }
+
+    /// <summary>
+    ///     Read-only git facts for the <c>/jump</c> palette's worktree column
+    ///     (#857). Null in test doubles and in a host that registered no query
+    ///     — the command then lists sessions only, which is the same
+    ///     degradation the jump panel documents, and never forks <c>git</c>
+    ///     itself (#666).
+    /// </summary>
+    IGitQuery? Git { get; }
 
     void WakeUp();
     void OpenSlashPalette();

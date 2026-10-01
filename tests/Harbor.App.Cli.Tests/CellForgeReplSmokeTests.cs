@@ -109,6 +109,102 @@ public class CellForgeReplSmokeTests
         await Assert.That(art).IsEqualTo(expected);
     }
 
+    /// <summary>
+    /// #857: Ctrl+J through the real input path. The keystroke is fed as
+    /// bytes on a scripted stdin — kitty CSI-u <c>106;3u</c>, which is what a
+    /// terminal sends for Ctrl+J — and parsed by the production
+    /// <c>EscapeSequenceParser</c>, so the assertion is on the painted frame,
+    /// not on a hand-built <c>KeyEvent</c>.
+    /// </summary>
+    /// <remarks>
+    /// Before this, the same chord produced no visible frame at all: it
+    /// resolved to <c>ChatAction.JumpPalette</c>, which toggled a
+    /// <c>Center</c>-placed panel that no dock or overlay paints. The test is
+    /// therefore written to FAIL on the old behaviour — the breadcrumb the
+    /// command pushes did not exist before it — and it is not a guard over a
+    /// method it is the sole caller of: this is the product entry point.
+    /// </remarks>
+    [Test]
+    public async Task CtrlJ_PaintsTheJumpPalette()
+    {
+        var backend = new FrameCaptureBackend();
+        var writer = new AnsiWriter(backend, syncUpdates: true);
+        var session = new ScreenSession(writer, Cols, Rows, sizeSource: () => (Cols, Rows));
+        var composer = new ComposerController();
+        var status = new StatusViewModel { Model = "mock/mock-model" };
+        var screen = ChatScreen.Build(composer, status);
+        screen.Timeline.Timeline.DisableEntranceFx();
+
+        var bus = new InMemoryEventBus();
+        var agentDef = new AgentDefinition(
+            AgentName.Create("code"), "Code", "smoke agent",
+            "mock-model", "mock", PermissionRuleset.Default);
+        var sessionModel = new Session(
+            "ce4-jump", "proj", Directory.GetCurrentDirectory(), "jump smoke",
+            "code", "mock-model", "mock",
+            DateTimeOffset.UnixEpoch, DateTimeOffset.UnixEpoch, SessionMetadata.Empty);
+        using var agent = new ScriptedAgent(bus, sessionModel.Id);
+        agent.Initialize(sessionModel, agentDef);
+
+        using var bridge = new ChatScreenBridge(bus, screen.Timeline, status, autoSubscribe: false);
+
+        // One stored session, so the frame has a row to paint. No git query on
+        // this host, which is the documented degradation: sessions only.
+        var store = new FakeSessionStore(sessionModel);
+        var stdin = new MemoryStream(Encoding.UTF8.GetBytes("\x1b[106;3u"));
+        using var input = new TerminalInputSource(stdin, new TerminalInputSourceOptions
+        {
+            SizeProvider = () => (Cols, Rows),
+        });
+
+        var configStore = new StubConfigStore();
+        var agentRegistry = new FakeAgentRegistry(agentDef);
+        var authStore = new AuthStore(configStore);
+        var providerRegistry = new FakeProviderRegistry(new ScriptedLlmClient());
+        var legacySlash = new LegacySlashRunner(
+            new SlashCommandDispatcher(
+                NullLogger<SlashCommandDispatcher>.Instance,
+                new FakeToolRegistry(),
+                store,
+                new OnboardingWizard(configStore, authStore),
+                new PermissionService(agentRegistry, NullLogger<PermissionService>.Instance)),
+            agentRegistry,
+            configStore,
+            authStore,
+            providerRegistry);
+        var runner = new CellForgeReplRunner(
+            configStore,
+            providerRegistry,
+            agentRegistry,
+            authStore,
+            sessionStore: store,
+            rendererPipeline: null,
+            bus,
+            tokens: null,
+            legacySlash,
+            agent, sessionModel, session, screen, bridge, input,
+            new NullModeController(), backend, NullLogger<CellForgeReplRunner>.Instance,
+            new ApprovalCoordinator(NullLogger<ApprovalCoordinator>.Instance));
+
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(20));
+        int exitCode = await runner.RunAsync(cts.Token);
+
+        await Assert.That(exitCode).IsEqualTo(0);
+        string art = Art(session.Back);
+
+        // The frame's own breadcrumb and hint footer — both painted by the
+        // palette, neither reachable from any other surface in the tree.
+        await Assert.That(art).Contains("worktrees / jump").Because(
+            "Ctrl+J must push the /jump palette frame. On the pre-#857 path this "
+            + "chord toggled a Center-placed panel that no dock or overlay paints, "
+            + "so the press produced no visible change at all.");
+        await Assert.That(art).Contains("jump smoke").Because(
+            "the stored session must appear as a row, which is what makes the "
+            + "palette a list rather than an empty box");
+        await Assert.That(art).Contains("enter run").Because(
+            "the palette's own hint footer, painted only while a frame is open");
+    }
+
     // ── Local test infrastructure (CellForge.Tests helpers are internal to that assembly) ──
 
     private static string Art(ScreenBuffer buffer)

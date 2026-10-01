@@ -24,6 +24,21 @@ public class SlashPanelsCatalogTests
     }
 
     [Test]
+    public async Task Catalog_ResolvesJump_AsWorktreePalettePanel()
+    {
+        // #857: Ctrl+J dispatches this by id through the same catalog the
+        // palette commits and the slash submit use, so the resolution has to
+        // be a registration, not a switch somewhere in the input loop.
+        var catalog = ReplCommandCatalog.CreateDefault();
+
+        bool found = catalog.TryResolve("jump", out var command);
+
+        await Assert.That(found).IsTrue();
+        await Assert.That(command).IsNotNull();
+        await Assert.That(command!.Id).IsEqualTo("jump");
+    }
+
+    [Test]
     public async Task Catalog_ResolvesProviders_AsAuthStatusPanel()
     {
         var catalog = ReplCommandCatalog.CreateDefault();
