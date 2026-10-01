@@ -1154,12 +1154,42 @@ a row against an assembly the enforcer never scans — a lie in the one table wh
 to be checkable. The rule is therefore source-level, like #569's and #672's, in
 `tests/Harbor.Architecture.Tests/AvaloniaFileTreeWalkRules.cs`. It forbids the four
 spellings of a directory walk and nothing else: `Directory.CreateDirectory` (the app
-creating its own `~/.harbor`) and `File.*` (`CodeEditorViewModel` reading the file the user
-picked) are different capabilities in different types, tracked as #534/#535, and folding
-them in would make the rule permanently red and therefore deletable. Its second test pins
+creating its own `~/.harbor`) and `File.*` are different capabilities in different types, and
+folding a live defect into a rule whose subject is the walk would make it permanently red and
+therefore deletable. Its second test pins
 the same decision structurally — the app may consume `IFileTreePolicy` / `IDirectoryLister`
 but may not declare an implementer of either — because "policy is not in the view-model"
 is not greppable without pinning today's vocabulary.
+
+**The `File.*` capability, one step over (#934).** That walk rule's header used to excuse
+`File.*` by saying the sites were *tracked elsewhere (#534, #535)*. It was false: both are
+closed, both were about `JsonCommonConfigStore` / `JsonAppConfigStore` /
+`RecentItemsService` in `Harbor.Desktop.Abstractions` and `Harbor.Desktop.Shared` —
+different projects, different types — and neither ever named `CodeEditorViewModel`. A
+carve-out citing a closed issue that does not cover the code it excuses reads as *handled*
+to the next reader, which is the worse failure: an untracked defect that nobody owns. #941
+corrected the citation; #934 is the capability it now points at.
+
+`CodeEditorViewModel` read and wrote the file the user picked with no seam at all — the path
+came through `IFilePicker` (which returns paths and does no I/O) and the content did not —
+and the synchronous `File.Exists` was a blocking `stat` on the UI thread, reached from
+`ActivityRailView.FileTreeView_SelectionChanged` and from the toolbar button, in front of two
+calls that were already async. It now goes through the Domain `ITextFileStore`
+(Harbor.Abstractions, beside `IDirectoryLister`), implemented by `SystemTextFileStore` in
+Harbor.Application beside `SystemDirectoryLister` and registered in
+`ServiceRegistration.RegisterAppServices`, the method `AppHost.cs:78` calls.
+
+The guard is `tests/Harbor.Architecture.Tests/AvaloniaTextFileIoRules.cs` — a separate file,
+because two capabilities in one rule is a rule that will drift. **Its perimeter is the
+view-model TYPE, not the app.** `ThemeService.LoadJson` also calls `File.*` and is
+deliberately outside it, because
+`src/Harbor.DesignSystem/DesignSystem/IThemeStore.cs` already names that site in its own
+remarks as one that did not adopt that port; and `App.axaml.cs`'s first-launch `File.Exists`
+is the composition root, the same shape the walk rule grandfathers for
+`Directory.CreateDirectory`. Its seam half checks four separate facts — contract in Domain,
+app declares no implementer, **app registers one**, **a view-model consumes one** — because a
+port that exists and is registered nowhere compiles, passes every other gate and substitutes
+nothing, which is the state `IGitQuery` was in.
 
 ### Previously suspected (not a violation)
 

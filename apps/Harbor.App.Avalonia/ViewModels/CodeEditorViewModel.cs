@@ -2,7 +2,12 @@ using System.Collections.ObjectModel;
 using System.ComponentModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+// `Result` / `Result<T>` come from CSharpFunctionalExtensions, which the app does
+// not import globally — #934 made this the first file in the desktop shell to name
+// the type rather than only use an extension method on it.
+using CSharpFunctionalExtensions;
 using Harbor.App.Avalonia.Services;
+using Harbor.Abstractions.Filesystem;
 using Harbor.Abstractions.Lsp;
 using Harbor.Abstractions.Tools;
 using Harbor.Desktop.Abstractions.ViewModels;
@@ -24,6 +29,30 @@ public sealed partial class CodeEditorViewModel : ObservableObject
     private readonly AvaloniaFilePicker _picker;
     private readonly IToastService _toasts;
     private readonly ILspService? _lsp;
+
+    /// <summary>
+    ///     #934: the file I/O, behind a port. The PATH always came from
+    ///     <c>IFilePicker</c> — which returns paths and does no I/O — and the CONTENT
+    ///     came from <c>File.*</c> calls in this class, so "a view-model knows about
+    ///     the filesystem" was true with no seam behind it.
+    /// </summary>
+    /// <remarks>
+    ///     <para>
+    ///         The port is async for the reason the contract says it is:
+    ///         <c>File.Exists</c> was a SYNCHRONOUS <c>stat</c> on the UI thread,
+    ///         reached from <c>ActivityRailView.FileTreeView_SelectionChanged</c> and
+    ///         from the toolbar button, in front of two calls that were already
+    ///         properly async.
+    ///     </para>
+    ///     <para>
+    ///         What stays here is the PATH STRING: <c>Path.GetFileName</c> and
+    ///         <c>Path.GetExtension</c> are how a tab is labelled, they are pure
+    ///         string handling, and
+    ///         <c>tests/Harbor.Architecture.Tests/AvaloniaTextFileIoRules.cs</c>
+    ///         allows them on purpose — as it allows the port call itself.
+    ///     </para>
+    /// </remarks>
+    private readonly ITextFileStore _files;
 
     /// <summary>Files already announced to the language server (didOpen sent).</summary>
     private readonly HashSet<string> _lspOpened = new(StringComparer.OrdinalIgnoreCase);
@@ -56,12 +85,14 @@ public sealed partial class CodeEditorViewModel : ObservableObject
         ILogger<CodeEditorViewModel> logger,
         IToastService toasts,
         IDispatcherAdapter dispatcher,
+        ITextFileStore files,
         ILspService? lspService = null)
     {
         _picker = picker;
         _logger = logger;
         _toasts = toasts;
         _dispatcher = dispatcher;
+        _files = files;
         _lsp = lspService;
         if (_lsp is not null)
         {
@@ -106,12 +137,34 @@ public sealed partial class CodeEditorViewModel : ObservableObject
     {
         try
         {
-            if (!File.Exists(path))
+            // #934: two round trips through the port instead of `File.Exists` plus
+            // `File.ReadAllTextAsync`. The existence probe is async for the same
+            // reason the read was — it was the one blocking syscall on the UI
+            // thread — and an unreadable path is a FAILED result rather than a
+            // `false` that would read as "no such file".
+            Result<bool> present = await _files.ExistsAsync(path).ConfigureAwait(false);
+            if (present.IsFailure)
+            {
+                _logger.LogWarning("Cannot probe {Path}: {Error}", path, present.Error);
+                _toasts.Show($"Failed to open {path}: {present.Error}", ToastKind.Error);
+                return;
+            }
+
+            if (!present.Value)
             {
                 _toasts.Show($"File not found: {path}", ToastKind.Error);
                 return;
             }
-            string content = await File.ReadAllTextAsync(path).ConfigureAwait(false);
+
+            Result<string> read = await _files.ReadAsync(path).ConfigureAwait(false);
+            if (read.IsFailure)
+            {
+                _logger.LogWarning("Cannot read {Path}: {Error}", path, read.Error);
+                _toasts.Show($"Failed to open {path}: {read.Error}", ToastKind.Error);
+                return;
+            }
+
+            string content = read.Value;
             string name = Path.GetFileName(path);
             string ext = Path.GetExtension(path).TrimStart('.');
             _dispatcher.Post(() =>
@@ -133,17 +186,42 @@ public sealed partial class CodeEditorViewModel : ObservableObject
     private async Task SaveAsync()
     {
         if (ActiveTab is null) return;
+
+        // #934: the tab is captured before the await. `ConfigureAwait(false)` means
+        // the continuation below is NOT on the UI thread, so re-reading `ActiveTab`
+        // after the write would clear the dirty flag of whatever tab the user
+        // switched to while the file was being written.
+        EditorTabViewModel tab = ActiveTab;
         try
         {
-            await File.WriteAllTextAsync(ActiveTab.FilePath, ActiveTab.Content).ConfigureAwait(false);
-            ActiveTab.IsDirty = false;
-            _toasts.Show($"Saved: {ActiveTab.FileName}", ToastKind.Success);
-            _logger.LogInformation("Saved {Path}", ActiveTab.FilePath);
+            Result written = await _files.WriteAsync(tab.FilePath, tab.Content).ConfigureAwait(false);
+            if (written.IsFailure)
+            {
+                _logger.LogError("Save failed for {Path}: {Error}", tab.FilePath, written.Error);
+                _dispatcher.Post(() => _toasts.Show($"Save failed: {written.Error}", ToastKind.Error));
+                return;
+            }
+
+            // Everything below mutates BOUND state, so it goes through the
+            // dispatcher like every other mutation in this class. It did not before:
+            // `IsDirty = false` and the toast were assigned straight after a
+            // `ConfigureAwait(false)` await, raising INPC and firing ToastAdded from
+            // a pool thread.
+            _dispatcher.Post(() =>
+            {
+                if (ActiveTab == tab)
+                {
+                    tab.IsDirty = false;
+                }
+
+                _toasts.Show($"Saved: {tab.FileName}", ToastKind.Success);
+            });
+            _logger.LogInformation("Saved {Path}", tab.FilePath);
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Save failed");
-            _toasts.Show($"Save failed: {ex.Message}", ToastKind.Error);
+            _dispatcher.Post(() => _toasts.Show($"Save failed: {ex.Message}", ToastKind.Error));
         }
     }
 

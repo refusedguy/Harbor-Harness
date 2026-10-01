@@ -37,29 +37,31 @@
 //     composition root creating its own config directory, it is a single bounded
 //     call rather than an unbounded walk, and `PresentationCapabilityRules`
 //     grandfathers the equivalent shape for the two config stores (#534/#535).
-//   * `File.*` — `CodeEditorViewModel` reads and writes the file the user picked
-//     in the tree this rule is about, and `ThemeService` reads a theme. Those are
-//     two different defects, in two different types; a rule that swept them in
-//     would fail on a red the owner of #492 cannot fix inside this PR, and the
-//     cheap repair for a permanently-red rule is deletion.
+//   * `File.*` — a DIFFERENT capability, and not policed here. #934 converted
+//     the sites (`CodeEditorViewModel` goes through the Domain
+//     `ITextFileStore` now), and the rule that keeps them converted is
+//     `AvaloniaTextFileIoRules` beside this one, scoped to the view-model TYPE.
+//     Two capabilities in one rule is a rule that will drift, and folding a live
+//     defect into a rule whose subject is the walk is what made the sentence
+//     below cite two closed issues as its owner.
 //
-//     A CORRECTION to what this comment used to say, because the wrong version
-//     is worse than no version (#681). It claimed these two sites were owned by
-//     #534 and #535. They are not, and never were: #534 and #535 were
-//     about `JsonCommonConfigStore` / `JsonAppConfigStore` / `RecentItemsService`
-//     in `Harbor.Desktop.Abstractions` and `Harbor.Desktop.Shared` — different
-//     projects, different types — and both are CLOSED with their baseline rows
-//     deleted (`PresentationCapabilityRules.ResolvedViolations` names the
-//     resolved types; `git log -S CodeEditorViewModel -- .../PresentationCapabilityRules.cs`
-//     and the same for ThemeService are both empty, so neither type was ever in
-//     that table). So the carve-out was citing a tracking issue that does not
-//     cover the code it excuses, which is the shape that lets a real defect look
-//     owned: a reader checking the citation finds the issue closed and concludes
-//     the capability is handled. `CodeEditorViewModel` is a view-model reading and
-//     writing files directly with no seam — the SAME defect #681 is about, one
-//     capability over from the walk. It is tracked now, in the issue named in the
-//     assertion below, which is why the citation here points at a live issue
-//     rather than at two closed ones.
+// A CORRECTION TO WHAT THE BULLET ABOVE USED TO SAY, AND IT IS WORTH KEEPING
+// ---------------------------------------------------------------------------
+// It used to name `CodeEditorViewModel` and `ThemeService` as two unfixed sites
+// and cite two issue NUMBERS as their owner. Both are closed, and both were
+// about `JsonCommonConfigStore` / `JsonAppConfigStore` / `RecentItemsService` in
+// `Harbor.Desktop.Abstractions` and `Harbor.Desktop.Shared` — different
+// projects, different types. `git log -S CodeEditorViewModel --
+// .../PresentationCapabilityRules.cs`, and the same for `ThemeService`, are both
+// empty: neither type was ever in that table, and their rows are gone
+// (`ResolvedViolations` names the resolved types).
+//
+// So the carve-out leaned on a closed issue that never contained the code it
+// excuses. That is worse than no citation at all, because it converts an
+// untracked defect into one that READS as handled: a person checking the
+// reference finds a closed issue and concludes the capability is done. The false
+// citation was corrected in #941; #934 is the capability it now points at, and
+// the sites are fixed rather than merely re-cited.
 //
 // NON-VACUITY
 // -----------
@@ -306,9 +308,10 @@ public class AvaloniaFileTreeWalkRules
         await Assert.That(DetectIn("Unrelated.cs", unrelatedIo)).IsEmpty()
             .Because(
                 "creating the app's own config directory and reading the file the user picked are two other "
-                + "capabilities. Folding them in here would make the rule permanently red and therefore "
-                + "deletable. The file-I/O half of that carve-out is tracked in #934 — NOT in #534/#535, "
-                + "which this text used to cite: those two are closed and were about JsonCommonConfigStore / "
+                + "capabilities. Folding them into a rule whose subject is the walk would make it "
+                + "permanently red and therefore deletable. The file-I/O half has its own rule since #934 — "
+                + "`AvaloniaTextFileIoRules`, scoped to the view-model type — and NOT #534/#535, which this "
+                + "text used to cite: those two are closed and were about JsonCommonConfigStore / "
                 + "JsonAppConfigStore / RecentItemsService in different projects, and never covered "
                 + "CodeEditorViewModel or ThemeService. A carve-out citing a closed issue that does not "
                 + "cover the code it excuses reads as 'handled' to the next person who checks.");
@@ -338,6 +341,15 @@ public class AvaloniaFileTreeWalkRules
     ///     capability over from the walk, and it had no rule at all — the IL
     ///     probe never opens an app assembly, and this file does not forbid
     ///     <c>File.*</c>.
+    /// </para>
+    /// <para>
+    ///     As of #934 that gap is closed: the sites are converted
+    ///     (<c>ITextFileStore</c>) and <c>AvaloniaTextFileIoRules</c> keeps them
+    ///     that way. This test still runs, and its job has narrowed — it now stops
+    ///     the carve-out from going back to citing a CLOSED owner, which is the
+    ///     failure that actually happened. It would be wrong to delete it on the
+    ///     grounds that the sites are fixed: the defect was never the missing
+    ///     rule, it was the citation that made the missing rule look owned.
     /// </para>
     /// <para>
     ///     <b>Why a text rule.</b> The thing worth enforcing is a SHAPE: an
@@ -413,9 +425,12 @@ public class AvaloniaFileTreeWalkRules
         // (3) The capability actually has a live owner named next to the carve-out.
         await Assert.That(source).Contains("#934")
             .Because(
-                "the `File.*` carve-out must name a live tracking issue. #934 covers CodeEditorViewModel "
+                "the `File.*` carve-out must name a live tracking issue. #934 covered CodeEditorViewModel "
                 + "reading and writing files with no seam — the same defect #681 is about, one capability "
-                + "over from the walk. Delete that reference and the carve-out is unowned again.");
+                + "over from the walk — and it is now fixed: the view-model goes through the Domain "
+                + "`ITextFileStore` and `AvaloniaTextFileIoRules` keeps it that way. Delete that reference "
+                + "and the carve-out is unowned again, which is the state that let an untracked defect read "
+                + "as a closed one.");
     }
 
     [Test]

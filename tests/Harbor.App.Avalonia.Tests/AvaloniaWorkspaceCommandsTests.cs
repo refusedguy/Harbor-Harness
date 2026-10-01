@@ -3,6 +3,7 @@ using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Sessions;
 using CSharpFunctionalExtensions;
 using Harbor.App.Avalonia.Services;
+using Harbor.Application.Filesystem;
 using Harbor.App.Avalonia.ViewModels;
 using Harbor.Ui.Framework.Navigation;
 using Harbor.Ui.Framework.Projection;
@@ -168,14 +169,22 @@ public class AvaloniaWorkspaceCommandsTests
         return new SessionListViewModel(sessionStore, sessionManager, dialogs, logger, toasts, dispatcher);
     }
 
+    /// <summary>
+    ///     #934: the view-model takes an <c>ITextFileStore</c> instead of calling
+    ///     <c>File.*</c>. These tests never open or save a file — they assert that
+    ///     <c>AvaloniaWorkspaceCommands</c> delegates to the right command — so the
+    ///     real implementation is the honest choice here: a fake that never answers
+    ///     would make a broken wiring look identical to a working one.
+    /// </summary>
     private static CodeEditorViewModel CreateCodeEditorViewModel(IToastService? toasts = null, AvaloniaFilePicker? picker = null)
     {
         var filePicker = picker ?? new AvaloniaFilePicker(new FakeLogger<AvaloniaFilePicker>());
         var logger = new FakeLogger<CodeEditorViewModel>();
         var toastService = toasts ?? new FakeToastService();
         var dispatcher = new FakeDispatcherAdapter();
+        var files = new SystemTextFileStore(new FakeLogger<SystemTextFileStore>());
 
-        return new CodeEditorViewModel(filePicker, logger, toastService, dispatcher);
+        return new CodeEditorViewModel(filePicker, logger, toastService, dispatcher, files);
     }
 
     private static TuiEffectHost CreateTuiEffectHost(IAgentRunner? agentRunner = null)
