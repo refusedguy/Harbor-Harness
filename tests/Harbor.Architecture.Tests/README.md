@@ -33,6 +33,13 @@ Two halves of the layering contract, both mechanically enforced:
    `CostPricedInCoreRules` (#653, money is priced in the core). These are
    repository text scans over `src/` + `apps/`, each with a liveness check and a
    positive control.
+5. **Configuration rules** — a build setting that is a *permission* has to state
+   what it authorises: `DiSeverityDemotionRules` (#865, every path-scoped
+   `.editorconfig` severity demotion names the rule it demotes, and every
+   path-scoped section has a path that exists). Sits with `ExemptionReason.cs`,
+   which is the one place that answers "does this tolerated row state a reason?"
+   for the five C# exemption tables; a demotion's row is a config key rather
+   than a value, so it is checked here instead.
 
 ## Run
 

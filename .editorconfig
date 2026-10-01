@@ -576,9 +576,10 @@ dotnet_diagnostic.DI014.severity = suggestion
 # so there is no DI003 site to hide. It stays at the repo-wide `error` its
 # sibling composition root apps/Harbor.App.Cli is held to.
 
-# Renderer golden-frame tests (Phase 5): no diagnostics fire in this file
-# today; the section is reserved for the NickConsoleEx capture test, which
-# drives SharpConsoleUI window-system internals that may trip TUnit
-# analyzers as they evolve.
+# Renderer golden-frame tests (Phase 5): reserved for the NickConsoleEx
+# capture test, which drives SharpConsoleUI window-system internals.
+# TUnit0055 — "assertion not awaited" — fires on the fire-and-await shapes
+# the capture harness needs (a frame assertion raised from a callback the
+# test does not await), and there is no awaited form of that harness today.
 [tests/Harbor.Tui.RendererTests/NickConsoleExGoldenFrameTests.cs]
 dotnet_diagnostic.TUnit0055.severity = none
