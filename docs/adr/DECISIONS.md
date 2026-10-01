@@ -292,3 +292,50 @@ is unreachable from `docs.yml` or red on day one. The decisive measurements on
 ## References
 Full text, the per-candidate reasoning and the re-open conditions:
 [ADR-011](ADR-011-doc-example-compile-gate.md).
+
+# ADR-012: вендоренная пара `CollapseWhitespace` — правка в чужом репозитории, решение за владельцем
+
+## Status
+**Open — the owner decides.** The measurement in §2-§4 of the long-form document
+is normative; the choice in §6 is not taken and nothing is implemented. No product
+code changed in the commit that recorded this.
+
+## Context
+Issue #726 recorded three `CollapseWhitespace` behaviours under one name, the
+third of them vendored. #878 checked that third claim: there are **two** vendored
+copies, not one behaviour, and they diverge from **each other** — ASCII-six
+whitespace vs `char.IsWhiteSpace`, and leading/trailing edges trimmed on one side
+and kept on the other. Re-typed and compared on an exhaustive alphabet, the two
+disagree on 758 of 781 strings (97.1 %), and the boundary is described exactly by
+"has an edge whitespace or a non-ASCII-six whitespace inside".
+
+The frame-changing fact is ownership: `external/ConsoleEx` is a **git submodule**
+(160000) pointing at `github.com/nickprotop/ConsoleEx` — a third-party
+repository, with no Harbor remote to send a fix to. It is also, contrary to the
+claim in #726, **compiled**: `Harbor.Tui.NickConsoleEx` sits in `Harbor.slnx` with
+an unconditional `ProjectReference` and CI checks out `submodules: recursive`. And
+it is **unreachable**: no `.cs` under `src/` or `apps/` names `HtmlControl`,
+`HtmlBuilder` or any other type in the `Html/` surface.
+
+## Decision
+Deferred to the owner, with the price of each option stated. **A** change nothing.
+**B** fork the submodule and patch deliberately, accepting merge debt on every
+upstream release. **C** replace the surface. Reachability reorders the price: no
+Harbor user can see either output today, so A is the default and B/C buy
+consistency in code that no user path executes.
+
+## Consequences
+- The long-form document is a **dated record, not `Status: normative`**, and says
+  why: the `cites` job checks out without submodules, so a `file:line` fence on
+  `external/ConsoleEx/` would read as `DOC-CITE-MISSING` on a tree where the file
+  exists. A normative banner would claim a machine-checkability this file lacks.
+- **No guard is proposed for the two copies.** Both are `private static` inside a
+  submodule at a moving pin, so any test on them is reflection over a third party's
+  private API that can only ever go red on a change we cannot make. The live
+  perimeters are already guarded by #717 (`WhitespaceCollapseDivergenceTests`) on
+  our own files. What *is* guarded instead is the premise this ADR rests on —
+  that the HTML surface is unreachable — by `VendoredHtmlSurfaceRules`.
+- This is **not** the #915/#923/#924 shape: `external/ConsoleEx` is not `contrib/`
+  and does build. The two must not be conflated in either direction.
+- Full text, measurements and the per-option costs:
+  [ADR-012](ADR-012-vendored-html-collapse-whitespace-pair.md).
