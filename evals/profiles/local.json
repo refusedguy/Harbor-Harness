@@ -1,5 +1,5 @@
 {
-  "model": "kilocode/kilo-auto/efficient",
+  "model": "kilocode/kilo-auto/free",
   "provider": "kilocode",
   "harbor": {
     "dotnet": "dotnet",
