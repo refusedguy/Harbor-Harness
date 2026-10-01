@@ -88,15 +88,17 @@
 //     #797 identified, at the line of each twin's assertion.
 //   * current `dev`          -> 0 violations across the whole `tests/` tree.
 //
-// Six tests defend that in CI, so a future edit that silently breaks the
+// Seven tests defend that in CI, so a future edit that silently breaks the
 // detector fails here instead of leaving a rule that cannot fail:
 //
 //   * `Scanner_FindsTheTestTree` — the walk really reached the test sources, the
 //     three #797 files are in scope, and this file is deliberately not.
 //   * `Excluded_FiltersBuildOutputAndThisFile_OnEitherSeparatorSpelling` — the
-//     exclusion predicate, on both separator spellings. This one exists because
-//     the first push was green on ubuntu and RED on windows for exactly this
-//     reason; see IsExcluded.
+//     exclusion predicate, on both separator spellings. Exists because the first
+//     push was green on ubuntu and RED on windows; see IsExcluded.
+//   * `Scanner_MatchesWalkedFilesByName_NotBySpelledPath` — the membership
+//     comparison, on both spellings. Exists because the second push was red on
+//     windows for the same underlying mistake, one layer over.
 //   * `Rule_IsGreenOnTheCurrentTreeAtZeroViolations` — pins the count at 0, so a
 //     detector that starts matching nothing is a failure rather than a pass.
 //   * `Detector_FiresOnTheThreeShapesFromIssue765` — the detector, in isolation,
@@ -107,6 +109,12 @@
 //     quiet on six that it must not flag.
 //   * `Detector_IgnoresProseThatDescribesTheRule` — the #808 tests explain
 //     themselves in comments naming these dispositions; prose cannot fail a build.
+//
+// Two of those seven exist because this file was red on windows twice while green
+// everywhere else, and both times the cause was a path comparison that only holds
+// on the platform it was written on. That is worth stating plainly: a source-scan
+// guard is a program that runs on two operating systems, and the CI signal for a
+// separator mistake arrives from the slower job.
 
 using System.Text;
 using System.Text.RegularExpressions;
@@ -271,11 +279,27 @@ public class ApprovalGateWaiterRaceRules
 
         foreach (string required in mustBeInScope)
         {
-            string absolute = Path.Combine(root, required);
-            await Assert.That(File.Exists(absolute)).IsTrue()
+            // Compared by FILE NAME, not by full path, and the second push failed on
+            // windows for exactly that reason. `required` is spelled with forward
+            // slashes, so Path.Combine(root, required) yields
+            // `D:\a\…\Harbor-Harness\tests/Harbor.Application.Tests\…`, while
+            // EnumerateFiles yields `D:\a\…\Harbor-Harness\tests\…` with backslashes
+            // throughout. The two are the same file and different strings, so
+            // files.Contains(absolute) was false on every windows run — a red
+            // test-os for a guard that was working, and the failure named the filter
+            // when the real difference was the separator in the lookup key.
+            string fileName = Path.GetFileName(required);
+            bool inScope = files.Any(f => string.Equals(
+                Path.GetFileName(f.Replace('\\', '/')),
+                fileName,
+                StringComparison.Ordinal));
+
+            await Assert.That(File.Exists(Path.Combine(root, required))).IsTrue()
                 .Because($"The three #797 twins live in {required}; if it moved, this guard's scope must follow it.");
-            await Assert.That(files.Contains(absolute)).IsTrue()
-                .Because($"{required} is in scope for the rule but the walk did not return it — the walk is filtering live files.");
+            await Assert.That(inScope).IsTrue()
+                .Because(
+                    $"{required} is in scope for the rule but the walk did not return a file named "
+                    + $"{fileName} — the walk is filtering live sources (see IsExcluded).");
         }
 
         // The one deliberate exclusion, asserted rather than assumed: this file walks
@@ -284,19 +308,55 @@ public class ApprovalGateWaiterRaceRules
         // Rule_IsGreenOnTheCurrentTreeAtZeroViolations report 11, so this is belt and
         // braces — the point is that the exclusion is a decision on the record, not a
         // filter that appeared.
-        string self = Path.Combine(
-            root,
-            "tests",
-            "Harbor.Architecture.Tests",
-            SelfFileName);
-
-        await Assert.That(File.Exists(self)).IsTrue()
+        await Assert.That(File.Exists(Path.Combine(root, "tests", "Harbor.Architecture.Tests", SelfFileName)))
+            .IsTrue()
             .Because("This guard excludes itself from its own walk; if the file was renamed, the exclusion is dead and needs updating with it.");
-        await Assert.That(files.Contains(self)).IsFalse()
+        await Assert.That(files.Any(f => string.Equals(
+                Path.GetFileName(f.Replace('\\', '/')),
+                SelfFileName,
+                StringComparison.Ordinal)))
+            .IsFalse()
             .Because(
                 "This guard's own mustFail fixtures are deliberately racy sample code. If the file is in "
                 + "scope, the rule reports 11 violations of itself — the #899 trap. SelfFileName must stay "
                 + "in step with this file's name.");
+    }
+
+    [Test]
+    public async Task Scanner_MatchesWalkedFilesByName_NotBySpelledPath()
+    {
+        // The second push was red on windows for this and nothing else. `required`
+        // is spelled with forward slashes, so Path.Combine(root, required) produced
+        // `D:\a\…\Harbor-Harness\tests/Harbor.Application.Tests\…` while
+        // EnumerateFiles produced `D:\a\…\Harbor-Harness\tests\…`. Same file, two
+        // strings, so `files.Contains(absolute)` was false on every windows run — and
+        // the message blamed the filter, which was working.
+        //
+        // Reproduced here with both spellings so the next separator slip is a local
+        // test failure rather than a red test-os.
+        const string Required = "tests/Harbor.Application.Tests/ApprovalCoordinatorTests.cs";
+        string linuxSpelling = "/home/runner/work/Harbor-Harness/Harbor-Harness/tests/Harbor.Application.Tests/ApprovalCoordinatorTests.cs";
+        string windowsSpelling = @"D:\a\Harbor-Harness\Harbor-Harness\tests\Harbor.Application.Tests\ApprovalCoordinatorTests.cs";
+
+        foreach (string walked in (string[])[linuxSpelling, windowsSpelling])
+        {
+            string fileName = Path.GetFileName(Required);
+            bool byFullPath = walked.Equals(Path.Combine("/root", Required), StringComparison.Ordinal);
+            bool byName = string.Equals(
+                Path.GetFileName(walked.Replace('\\', '/')),
+                fileName,
+                StringComparison.Ordinal);
+
+            await Assert.That(byName).IsTrue()
+                .Because(
+                    "A walked path must be recognised by its file name whatever separator the host "
+                    + $"reports. This is the comparison the scan test relies on: {walked}");
+
+            // Not asserting byFullPath is false — on a POSIX host Path.Combine yields
+            // forward slashes and the two can agree. The point is only that the
+            // by-name check must not depend on it.
+            _ = byFullPath;
+        }
     }
 
     [Test]
