@@ -9,13 +9,14 @@ End-to-end plugin load: storage -> compilation -> instantiation -> registration 
 ## Run
 
 ```bash
-dotnet test tests/Harbor.Plugins.Runtime.Tests
+dotnet run --project tests/Harbor.Plugins.Runtime.Tests -c Release --no-build -- --minimum-expected-tests 1
 ```
 
 Or filter to a single test class:
 
 ```bash
-dotnet test tests/Harbor.Plugins.Runtime.Tests --filter "FullyQualifiedName~Plugin"
+dotnet run --project tests/Harbor.Plugins.Runtime.Tests -c Release --no-build -- \
+  --minimum-expected-tests 1 --treenode-filter "/*/*/Plugin/*"
 ```
 
 ## Layer

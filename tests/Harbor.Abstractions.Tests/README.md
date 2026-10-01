@@ -9,13 +9,14 @@ Domain contracts - Result<T>, Message, ToolCall, AgentEvent, Permission, Session
 ## Run
 
 ```bash
-dotnet test tests/Harbor.Abstractions.Tests
+dotnet run --project tests/Harbor.Abstractions.Tests -c Release --no-build -- --minimum-expected-tests 1
 ```
 
 Or filter to a single test class:
 
 ```bash
-dotnet test tests/Harbor.Abstractions.Tests --filter "FullyQualifiedName~Result"
+dotnet run --project tests/Harbor.Abstractions.Tests -c Release --no-build -- \
+  --minimum-expected-tests 1 --treenode-filter "/*/*/Result/*"
 ```
 
 ## Layer

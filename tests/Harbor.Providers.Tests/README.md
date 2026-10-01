@@ -9,13 +9,14 @@ HTTP request shape, message converter, streaming NDJSON / SSE parsing, error han
 ## Run
 
 ```bash
-dotnet test tests/Harbor.Providers.Tests
+dotnet run --project tests/Harbor.Providers.Tests -c Release --no-build -- --minimum-expected-tests 1
 ```
 
 Or filter to a single test class:
 
 ```bash
-dotnet test tests/Harbor.Providers.Tests --filter "FullyQualifiedName~Provider"
+dotnet run --project tests/Harbor.Providers.Tests -c Release --no-build -- \
+  --minimum-expected-tests 1 --treenode-filter "/*/*/Provider/*"
 ```
 
 ## Layer
