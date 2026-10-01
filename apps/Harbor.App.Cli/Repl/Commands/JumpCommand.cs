@@ -56,13 +56,19 @@ namespace Harbor.App.Cli.Repl.Commands;
 internal sealed class JumpCommand : IReplCommand
 {
     /// <summary>
+    ///     Catalog id. Also what the Ctrl+J chord dispatches by, so it is a
+    ///     constant rather than a literal repeated at each use.
+    /// </summary>
+    internal const string CommandId = "jump";
+
+    /// <summary>
     ///     Breadcrumb of the frame this command pushes. Also the identity the
     ///     Ctrl+J chord matches on to close the palette again, so it is a
     ///     constant rather than a literal at each use.
     /// </summary>
     internal const string Breadcrumb = "worktrees / jump";
 
-    public string Id => "jump";
+    public string Id => CommandId;
     public IReadOnlyList<string> Aliases => [];
     public string Title => "Jump";
     public string Description => "jump to a worktree or session";
@@ -80,7 +86,7 @@ internal sealed class JumpCommand : IReplCommand
             return;
         }
 
-        var listed = await store.ListAsync(cancellationToken: ct).ConfigureAwait(false);
+        var listed = await store.ListAsync(ct: ct).ConfigureAwait(false);
         if (listed.IsFailure)
         {
             host.Bridge.AppendSystemLine($"! {listed.Error}");
@@ -179,7 +185,7 @@ internal sealed class JumpCommand : IReplCommand
 
         try
         {
-            return git.ListWorktrees(Environment.CurrentDirectory);
+            return git.ListWorktrees(Environment.CurrentDirectory, CancellationToken.None);
         }
         catch
         {

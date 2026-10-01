@@ -22,6 +22,14 @@ namespace Harbor.App.Cli.Repl;
 /// </summary>
 internal sealed class ReplInputLoop(CellForgeReplRunner host)
 {
+    /// <summary>
+    ///     Title of the <c>/jump</c> palette frame (#857). A literal rather
+    ///     than <c>new JumpCommand().Title</c>: this loop is a singleton per
+    ///     runner, so building a command to read a display string would allocate
+    ///     per keystroke for no gain, and the catalog still owns the value.
+    /// </summary>
+    private const string JumpCommandTitle = "Jump";
+
     /// <summary>Idle-Ctrl+C window for the «press again to quit» gesture.</summary>
     private const long QuitGestureWindowMs = 2000;
 
@@ -236,7 +244,7 @@ internal sealed class ReplInputLoop(CellForgeReplRunner host)
             else
             {
                 await host.Commands.ExecutePaletteItemAsync(
-                    new CommandItem(JumpCommand.Id, JumpCommand.Title), ct).ConfigureAwait(false);
+                    new CommandItem(JumpCommand.CommandId, JumpCommandTitle), ct).ConfigureAwait(false);
             }
 
             host._wake.Writer.TryWrite(null);
