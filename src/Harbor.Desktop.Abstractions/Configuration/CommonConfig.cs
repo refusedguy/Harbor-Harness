@@ -136,6 +136,43 @@ public sealed record CommonConfig
     public string DefaultModel { get; init; } = "claude-sonnet-4";
 
     /// <summary>
+    ///     Whether this config names a WHOLE default pair — both halves present —
+    ///     as opposed to one without the other.
+    /// </summary>
+    /// <remarks>
+    ///     #894: <see cref="DefaultProvider" /> and <see cref="DefaultModel" /> are
+    ///     two properties because the persisted file has two keys, but they are one
+    ///     value: the domain's default is a provider/model reference or nothing, and
+    ///     "a provider with no model" is a state only a hand-edited file can reach.
+    ///     This property is where that question is answered, so a writer asks it
+    ///     instead of re-deriving it — which is what let the onboarding persister
+    ///     write a config with an overwritten provider beside an untouched model.
+    ///     <para>
+    ///         The read counterpart is
+    ///         <c>Harbor.Ui.Framework.Configuration.ICommonConfigModelRefReader</c>,
+    ///         which hands the pair out as a <c>Maybe&lt;ModelRef&gt;</c> — one
+    ///         absence for both halves. Spelled rather than <c>cref</c>-ed for the
+    ///         reason <c>ICommonConfigStore</c> spells its counterpart: naming the
+    ///         type must not be what makes this file depend on the layer that
+    ///         declares it. This property is the WRITE-side question and the two are
+    ///         deliberately separate — the store is a repository and the reader is a
+    ///         projection of one value out of it (#453).
+    ///     </para>
+    ///     <para>
+    ///         Spelled as two property patterns rather than as
+    ///         <c>string.IsNullOrEmpty(a) &amp;&amp; string.IsNullOrEmpty(b)</c> on
+    ///         purpose. The <c>IsNullOrEmpty</c> spelling is exactly what the two
+    ///         <c>HalfPairProbe</c> patterns forbid, and this file would join their
+    ///         perimeter the day anything widens it — so writing the question that
+    ///         way would plant the forbidden shape in the one place meant to own it.
+    ///         The patterns are also what the pre-fix code did, so blank-and-space
+    ///         behaves as it did before.
+    ///     </para>
+    /// </remarks>
+    public bool HasDefaultPair => DefaultProvider is { Length: > 0 }
+                                  && DefaultModel is { Length: > 0 };
+
+    /// <summary>
     ///     Default agent mode. Any name the agent registry holds, including one a
     ///     plugin contributed. Defaults to the core fallback agent.
     /// </summary>

@@ -90,6 +90,22 @@ public interface IOnboardingPersister
 public sealed class ConfigStoreOnboardingPersister(ICommonConfigStore configStore) : IOnboardingPersister
 {
     /// <inheritdoc />
+    /// <remarks>
+    ///     The default pair is written ONCE, not field by field (#894). This used to
+    ///     resolve each half independently —
+    ///     <c>overwriteDefaults || string.IsNullOrEmpty(cfg.DefaultProvider) ? … </c>
+    ///     beside the same expression for the model — which answers "is this pair
+    ///     whole?" in the only way the seam forbade: with two per-field decisions
+    ///     that can disagree. Skip (<c>overwriteDefaults: false</c>) on a config whose
+    ///     halves do not both hold would then keep the old provider beside a freshly
+    ///     chosen model, and the reader would resolve a reference whose halves came
+    ///     from different answers.
+    ///     <para>
+    ///         <see cref="CommonConfig.HasDefaultPair" /> is the single place that
+    ///         question is now asked, so this writer asks the value instead of
+    ///         re-deriving it — the same move #453 made on the read side.
+    ///     </para>
+    /// </remarks>
     public Task<Result> PersistAsync(string provider, string model, string? newKey, bool overwriteDefaults, CancellationToken ct) =>
         configStore.UpdateAsync(cfg =>
         {
@@ -99,12 +115,16 @@ public sealed class ConfigStoreOnboardingPersister(ICommonConfigStore configStor
                 mergedKeys[provider] = newKey;
             }
 
+            // Whole pair or nothing: keep the stored default only when it is whole,
+            // otherwise take the wizard's — both halves, from one answer.
+            bool keepStored = !overwriteDefaults && cfg.HasDefaultPair;
+
             return cfg with
             {
                 OnboardingCompleted = true,
                 ApiKeys = mergedKeys.ToImmutable(),
-                DefaultProvider = overwriteDefaults || string.IsNullOrEmpty(cfg.DefaultProvider) ? provider : cfg.DefaultProvider,
-                DefaultModel = overwriteDefaults || string.IsNullOrEmpty(cfg.DefaultModel) ? model : cfg.DefaultModel,
+                DefaultProvider = keepStored ? cfg.DefaultProvider : provider,
+                DefaultModel = keepStored ? cfg.DefaultModel : model,
             };
         }, ct);
 }

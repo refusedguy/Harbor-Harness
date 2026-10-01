@@ -158,20 +158,43 @@
 // expectation as its own query and compares, so the two cannot agree by
 // construction.
 //
-// KNOWN BOUND, STATED NOT FIXED HERE
-// ---------------------------------
-// The anchor is the PORT, and the port is not the only way to answer "is this
-// pair whole?". Two sites outside this perimeter still re-derive it and do not
-// name the port, so neither this rule nor `ProviderModelAbsenceRules` sees them:
-//   * Desktop.Abstractions/ViewModels/OnboardingViewModel.cs:106-107 — decides
-//     each half of the default pair independently, per line, which is the
-//     forbidden question answered field by field; and it is invisible to the
-//     matcher because the two operands are on separate lines.
-//   * Hosting/Modules/ToolsCatalog.cs:34-45 `ResolveDefaultModelFromCommon` — a
-//     second producer that re-qualifies the pair by hand, and does not implement
-//     the port, so rule 5's implementer count cannot see it either.
-// Widening the anchor to the config's halves is a different rule with different
-// false positives, so it is filed separately rather than smuggled in here.
+// KNOWN BOUND, STATED NOT FIXED HERE — RESOLVED BY #894, AND THE ANCHOR WAS
+// NEVER THE PLACE TO LOOK
+// ----------------------------------------------------------------------
+// This section used to record two sites outside the port perimeter as a known
+// bound. #894 measured both and the bound did not survive the measurement:
+//
+//   * `Hosting/Modules/ToolsCatalog.cs` — `ResolveDefaultModelFromCommon`
+//     re-qualifies the pair by hand. It was never uncovered: rule 5 counts
+//     IMPLEMENTERS, which is a different claim, and the ad-hoc cut it performs is
+//     inventoried with a stated reason by `ModelRefSingleParserTests` rule 3,
+//     which scans every product file. Describing it as unseen was reading one
+//     rule's count as if it were the seam's.
+//   * `Desktop.Abstractions/ViewModels/OnboardingViewModel.cs` — the onboarding
+//     persister decided each half independently. That one was real, and it is
+//     now `ConfigHalfPairWriteRules`, which grades the WRITE side against
+//     `CommonConfig.HasDefaultPair`.
+//
+// Two measurements from #894 are worth keeping here, because they are what
+// makes the remaining bound safe rather than merely stated:
+//
+//   * Widening THIS anchor is not the fix. "Names either contract" takes the
+//     perimeter from 6 files to 19 and still catches nothing — 0 hits — because
+//     the onboarding lines carry one emptiness test each with `overwriteDefaults`
+//     on the other side of the operator. `HalfPairProbe` cannot see them alone or
+//     joined; the construct is a different shape from the one the pattern encodes.
+//   * `CommonConfig.HasDefaultPair` is deliberately spelled as two property
+//     patterns, NOT as `string.IsNullOrEmpty(a) && string.IsNullOrEmpty(b)`. This
+//     file would join the perimeter the day anything widens it, so writing the
+//     question the `HalfPairProbe` way would plant the forbidden shape in the one
+//     place meant to own it.
+//
+// One bound genuinely remains, and it is upstream of every rule here:
+// `ProviderModelAbsenceRules.ConsumerFiles` is still a typed three-path list while
+// this file's perimeter is derived, and `SessionLifecycleService.cs` — one of its
+// three — does not name the port, so the two perimeters disagree over the same
+// seam with a byte-identical matcher. That is a #860-class defect (a rule carried
+// by a closed file list), not a #894 one, and it is filed as such.
 
 using System.Text.RegularExpressions;
 using CSharpFunctionalExtensions;
