@@ -541,6 +541,116 @@ ALLOW_STALE_COUNT = re.compile(
     r"(?:\s+[-—:]\s*(?P<reason>.+?))?\s*-->"
 )
 
+# THE RECORD, NOT THE ALLOWANCE (#947)
+#
+# `allow-unwired` and `allow-stale-count` above excuse a CLAIM that is true of
+# the tree (`LiveThing` really is unwired; 2861 really was the sweep's count).
+# This one is different in kind and the difference is the whole design: a
+# drifted citation is a claim that is FALSE. Writing it down does not make it
+# true — it makes the falsity attributable, which is the most a gate can do
+# about a known-wrong sentence.
+#
+# So the rule is a DISJUNCTION, exactly as #937 settled it:
+#
+#     either the two sides agree              -> no finding
+#     or the disagreement is RECORDED, with a reason -> no finding, but the
+#                                                     record must still be true
+#
+# and the second clause is what stops this being #847's rejected shape. #847's
+# table of known breakages was a global list with no reason: the guard was green
+# and the reason lived nowhere. Here a record is
+#
+#   * PER SITE, not per file and not global — it names the citing file and the
+#     line, so it cannot become a blanket over a file's other citations;
+#   * REASON-MANDATORY, with a quoted label, the same discipline as the two
+#     waivers above;
+#   * SELF-VERIFYING — a record whose site no longer drifts is a FINDING
+#     (`TEST-CITE-RECORD-STALE`). This is the clause that matters most, and it
+#     is what makes the form non-degenerate: the moment someone repairs the
+#     citation, the record that was excusing it goes red until it is deleted.
+#     A record that only ever silences can never be deleted, which means it can
+#     never be wrong about the present.
+#
+# The site key is (cited target, cited LINE) — the fact being excused — scoped to
+# the file the record sits in. NOT the citing line, and that is deliberate twice
+# over. Placement: a record is inserted NEXT TO the citation it qualifies, so
+# inserting it shifts the citing line, and a key that named the citing line
+# would invalidate itself the moment it was written. Scope: two sentences citing
+# the same `File.cs:91` are asserting the same fact about the same line, so one
+# record covering both is honest rather than a blanket.
+#
+# The record is therefore per-FILE, which is the anti-#847 property that
+# matters: it cannot excuse a citation in another file, and it cannot excuse a
+# different line number in this one.
+#
+# `now="…"` is the FINGERPRINT and it is what closes the last hole in the form.
+# Without it a record silences a SITE, so inserting a line above a recorded
+# citation changes the divergence without changing the site, and the record goes
+# on excusing a disagreement nobody has looked at since. Quoting what the cited
+# line reads today — as `truncate()` renders it, the SAME string the gate prints
+# in its finding, so the two can be diffed by eye — means the record describes
+# ONE divergence: touch either side of the pair, move the target's line or
+# repair the citation, and the fingerprint stops matching, the excuse lapses,
+# and the gate goes red on the record itself.
+#
+# For a site that does not resolve there is no line to quote, so the
+# fingerprint is the resolution verdict (`unresolved`, `ambiguous:2`). Same
+# rule, and it behaves correctly in the interesting direction: the record goes
+# stale the moment the file appears.
+RECORD_DRIFT = re.compile(
+    r"(?:<!--)?\s*check-doc-cites:\s*record-drift\s+"
+    r"(?P<target>[A-Za-z0-9_][A-Za-z0-9_./\-]*\.[A-Za-z]+):"
+    r"(?P<line>\d+)\s+"
+    r"now=\"(?P<now>[^\"]*)\"\s*"
+    r"(?:\[(?P<why>[^\]]+)\]\s*)?(?:-->)?"
+)
+
+SiteKey = tuple[str, int]  # (target, cited line), within the citing file
+
+
+def drift_records(text: str) -> tuple[dict[SiteKey, tuple[int, str, str]], list[tuple[int, int]]]:
+    """(SiteKey -> (where, `now` fingerprint, reason), spans to mask).
+
+    A record with no quoted reason is NOT honoured and is reported by the caller
+    as `TEST-CITE-RECORD-NOREASON`, for the reason the two waivers above are
+    reason-mandatory: an unlabelled one is a mute button for every future
+    finding on that line.
+
+    The spans matter as much as the keys. A record NAMES a `File.cs:91`, so
+    without masking it the record is itself a citation, the population grows by
+    one per record (235 -> 322 the first time this ran), and the rule ends up
+    checking whether its own bookkeeping is true about the tree. A gate that
+    counts its own annotations is a gate whose floor means nothing.
+    """
+    out: dict[SiteKey, tuple[int, str, str]] = {}
+    spans: list[tuple[int, int]] = []
+    for m in RECORD_DRIFT.finditer(text):
+        where = text.count("\n", 0, m.start()) + 1
+        out[(m.group("target"), int(m.group("line")))] = (
+            where,
+            m.group("now"),
+            (m.group("why") or "").strip(),
+        )
+        end = text.find("\n", m.end())
+        spans.append((m.start(), n if (n := (len(text) if end < 0 else end)) else m.end()))
+    return out, spans
+
+
+def mask_spans(text: str, spans: list[tuple[int, int]]) -> str:
+    """`text` with each span blanked to spaces, newlines preserved.
+
+    Same contract as `strip_comments_and_literals`: offsets survive, so a line
+    number computed on the result is the line number in the original.
+    """
+    if not spans:
+        return text
+    out = list(text)
+    for start, end in spans:
+        for i in range(start, min(end, len(out))):
+            if out[i] != "\n":
+                out[i] = " "
+    return "".join(out)
+
 # A stated total for a table the document itself contains — "Total members
 # audited: 2861", "audited 2861" — in prose or a bullet, never in a table cell.
 #
@@ -957,9 +1067,22 @@ def check_cite_drift(
 ) -> tuple[int, dict[str, list[tuple[str, str, int]]]]:
     """Return (citations seen, {citing file: [(code, message, line), ...]}).
 
-    Mechanical facts first (unresolved / past EOF / blank), because they are
-    free and they are what the rule would have been without the history anchor.
-    Then the anchored comparison, which is the part that finds the 62.
+    A DISJUNCTION, per citation site (#947, shaped as #937 settled it):
+
+        the two sides agree                              -> silent
+        the two sides disagree AND the site is RECORDED   -> silent
+        the two sides disagree and no record              -> TEST-CITE-DRIFT
+        a record exists but its site no longer drifts      -> TEST-CITE-RECORD-STALE
+        a record exists with no quoted reason              -> TEST-CITE-RECORD-NOREASON
+
+    The second clause is what makes the form non-degenerate. A record is not a
+    mute button: it names one citing line, it must say why in a quoted label,
+    and the moment the citation is repaired the record goes RED until it is
+    deleted. So a record can always be deleted and therefore can never be
+    silently wrong about the present.
+
+    Mechanical facts come first (unresolved / past EOF / blank), because they
+    are free and they are what the rule would have been without the anchor.
 
     Keyed by the CITING file, not the target: a red run has to point at the
     line someone has to edit, and the whole defect is that a reader following
@@ -968,8 +1091,7 @@ def check_cite_drift(
     seen = 0
     problems: dict[str, list[tuple[str, str, int]]] = defaultdict(list)
     # Reported once, against no citing file, because it is a statement about the
-    # REPOSITORY and not about any sentence in it. Keyed under the empty string
-    # so the existing "skip files with no hits" loop cannot drop it.
+    # REPOSITORY and not about any sentence in it.
     if repo_is_shallow(repo):
         problems["(repository)"].append(
             (
@@ -998,24 +1120,41 @@ def check_cite_drift(
         if ":" not in prose:
             continue
         blames = _blame_map(repo, rel, blame_cache)
+        records, record_spans = drift_records(prose)
+        # The record's own `File.cs:91` is not a claim about the tree — it is
+        # the bookkeeping that records one. Masked before CITATION runs, so the
+        # population is the citations a human wrote.
+        prose = mask_spans(prose, record_spans)
+        # Every record this file carries, so the stale check at the end can tell
+        # "excused a real finding" from "excusing nothing at all".
+        used: set[tuple[str, int]] = set()
 
         for m in CITATION.finditer(prose):
             target, spec = m.group(1), m.group(2)
             doc_line = prose.count("\n", 0, m.start()) + 1
             seen += 1
             full, kind = resolve_citation(target, repo, by_base, rel)
+            ranges = parse_ranges(spec)
+
             if full is None:
-                # Same two answers the prose fence already gives. Reported with
-                # a TEST-prefixed code so a reader can tell which population a
-                # line came from — the markdown and test populations have very
-                # different shapes and mixing them hides both.
                 code = "TEST-CITE-AMBIGUOUS" if kind == "ambiguous" else "TEST-CITE-MISSING"
                 detail = (
                     f"{len(by_base.get(target, []))} tracked files share this name"
                     if kind == "ambiguous"
                     else "no such file in the tree"
                 )
-                problems[rel].append((code, f"{target}:{spec} — {detail}", doc_line))
+                # An unresolvable site has no line to quote, so the fingerprint
+                # is the verdict itself. It goes stale the moment the file
+                # appears, which is the direction that matters.
+                verdict = f"ambiguous:{len(by_base.get(target, []))}" if kind == "ambiguous" else "unresolved"
+                excused = False
+                for start, _ in ranges:
+                    rec = records.get((target, start))
+                    if rec and rec[2] and rec[1] == verdict:
+                        used.add((target, start))
+                        excused = True
+                if not excused:
+                    problems[rel].append((code, f"{target}:{spec} — {detail}", doc_line))
                 continue
             rel_target = os.path.relpath(full, repo)
             if rel_target not in head_cache:
@@ -1025,7 +1164,6 @@ def check_cite_drift(
                 except OSError:
                     head_cache[rel_target] = []
             head = head_cache[rel_target]
-            ranges = parse_ranges(spec)
             for start, end in ranges:
                 if start > len(head):
                     problems[rel].append(
@@ -1033,34 +1171,92 @@ def check_cite_drift(
                     )
                     continue
                 if head[start - 1] == "":
-                    problems[rel].append(
-                        ("TEST-CITE-BLANK", f"{target}:{start} — the line is blank", doc_line)
-                    )
+                    key = (target, start, doc_line)
+                    rec = records.get((target, start))
+                    if rec and rec[2] and rec[1] == "":
+                        used.add((target, start))
+                    else:
+                        problems[rel].append(
+                            ("TEST-CITE-BLANK", f"{target}:{start} — the line is blank", doc_line)
+                        )
                     continue
 
-            # The anchored comparison. Only for a citation whose author is
-            # known and whose target existed when they wrote it.
+            # The anchored comparison — the two sides. Only for a citation whose
+            # author is known and whose target existed when they wrote it.
             sha = blames.get(doc_line)
-            if not sha:
+            # `git blame` attributes an uncommitted line to the null oid, all
+            # zeros. That is not an author, so there is no second side to read.
+            if not sha or set(sha) == {"0"}:
+                # One-sided: without an author there is no second side to read,
+                # so the file side is never compared against anything. Reported
+                # rather than skipped, because a silent `continue` here is a
+                # hole shaped exactly like the one this rule closes.
+                problems[rel].append(
+                    ("TEST-CITE-UNANCHORED",
+                     f"{target}:{spec} — no commit is attributed to this line, so "
+                     f"there is nothing to compare it against", doc_line)
+                )
                 continue
             was = _lines_at(repo, sha, rel_target, hist_cache)
             if was is None:
+                problems[rel].append(
+                    ("TEST-CITE-UNANCHORED",
+                     f"{target}:{spec} — the target did not exist when {sha[:8]} "
+                     f"wrote this citation, so there is no prior side", doc_line)
+                )
                 continue
             for start, _end in ranges:
                 if start > len(was):
+                    problems[rel].append(
+                        ("TEST-CITE-UNANCHORED",
+                         f"{target}:{start} — past the end of the file as {sha[:8]} "
+                         f"left it ({len(was)} lines); the citation named a line "
+                         f"that did not exist when it was written", doc_line)
+                    )
                     continue
                 before = was[start - 1]
                 after = head[start - 1]
                 if before == after:
                     continue
+                rec = records.get((target, start))
+                # Compared against `truncate(after)`, not the raw line: the
+                # record holds the same rendering the gate prints, so a reader
+                # can diff the two by eye instead of trusting that they match.
+                if rec and rec[2] and rec[1] == fingerprint(after):
+                    used.add((target, start))
+                    continue
                 problems[rel].append(
                     (
                         "TEST-CITE-DRIFT",
                         f"{target}:{start} — {sha[:8]} wrote it over "
-                        f"`{truncate(before)}`; that line now reads `{truncate(after)}`",
+                        f"`{truncate(before)}`; that line now reads "
+                        f"`{fingerprint(after)}`",
                         doc_line,
                     )
                 )
+
+        # A record that excused nothing. This is the clause that stops the form
+        # from decaying into #847's table: a record whose site agrees again has
+        # to be DELETED, and until it is, the gate is red on the record itself.
+        for (rtarget, rline), (rwhere, rnow, rwhy) in sorted(
+            records.items(), key=lambda kv: kv[1][0]
+        ):
+            if (rtarget, rline) in used:
+                continue
+            if not rwhy:
+                problems[rel].append(
+                    ("TEST-CITE-RECORD-NOREASON",
+                     f"{rtarget}:{rline} — this record carries no quoted reason, so "
+                     f"it cannot say which disagreement it is excusing", rwhere)
+                )
+                continue
+            problems[rel].append(
+                ("TEST-CITE-RECORD-STALE",
+                 f"{rtarget}:{rline} — recorded with now=\"{rnow}\" [{rwhy}], but "
+                 f"the citation and the file no longer disagree that way. Touching "
+                 f"either side of the pair retires the record; delete it and, if "
+                 f"the divergence is real, write a new one.", rwhere)
+            )
     return seen, problems
 
 
@@ -1068,6 +1264,24 @@ def truncate(s: str, width: int = 58) -> str:
     """One-line, width-capped rendering of a line of code for a message."""
     s = " ".join(s.split())
     return s if len(s) <= width else s[: width - 1] + "…"
+
+
+def fingerprint(s: str) -> str:
+    """The record's `now=` value for a cited line holding `s`.
+
+    `truncate`, then `"` folded to `'`. C# is full of double quotes — an
+    interpolated string on the very line a citation names is ordinary — and the
+    record quotes its fingerprint in double quotes, so an unfolded value would
+    end the field at the first inner quote and silently parse as a DIFFERENT,
+    shorter fingerprint. That is the worst possible failure for a field whose
+    whole job is to be exact: it would mismatch forever and the finding could
+    never be recorded.
+
+    Defined once and used by BOTH the comparison and the reported message, so
+    the string a reader copies into a record is the string the gate compares
+    against, by construction rather than by agreement.
+    """
+    return truncate(s).replace('"', "'")
 
 
 def repo_root() -> str:
@@ -2632,6 +2846,114 @@ def self_test() -> int:
     st.expect(
         "#947: a test citation whose line now names different code fails",
         code == 1 and "TEST-CITE-DRIFT" in out, out.strip()[-500:],
+    )
+
+    # -----------------------------------------------------------------------
+    # THE DISJUNCTION, AND PROOF THAT IT DOES NOT DEGENERATE (#937's shape)
+    #
+    #     the two sides agree                            -> silent
+    #     they disagree AND the site is RECORDED          -> silent
+    #     they disagree and nothing is recorded           -> DRIFT
+    #     a record exists but its site no longer drifts   -> RECORD-STALE
+    #     a record exists with no quoted reason           -> RECORD-NOREASON
+    #
+    # The last two are what separate this from #847's rejected table. Each of
+    # the four cases below is a ONE-SIDED change — touch one half of the pair
+    # and leave the other — and each must be red. A form that only ever silences
+    # would pass all four.
+    # -----------------------------------------------------------------------
+    RECORD = (
+        '// check-doc-cites: record-drift Target.cs:4 now="'
+        # Derived from the fixture, never hand-typed: a test that types its own
+        # fingerprint is a test that can pass for the wrong reason, and this one
+        # did exactly that on its first run.
+        + fingerprint(target_v2.splitlines()[3].strip())
+        + '" [#947: deferred to the owner] -->\n'
+    )
+    citing_with_record = (
+        "namespace Demo.Tests;\n"
+        "public sealed class Cites\n{\n"
+        "    // the field is assigned at Target.cs:4 and read nowhere\n"
+        + RECORD +
+        "    public void Check() { }\n"
+        "}\n"
+    )
+
+    def run_recorded(target_now: str, citing_text: str, *args: str) -> tuple[int, str]:
+        root = md_gate.make_fixture(
+            "check-doc-cites.py",
+            {**live, "docs/NORM.md": clean_norm, "src/Demo/Target.cs": target_v1,
+             "tests/Demo/Cites.cs": citing_text},
+        )
+        md_gate.commit_fixture(root, "fixture: baseline, with the record")
+        if target_now != target_v1:
+            with open(os.path.join(root, "src/Demo/Target.cs"), "w", encoding="utf-8") as fh:
+                fh.write(target_now)
+            subprocess.run(["git", "add", "-A"], cwd=root, check=True, env=md_gate.git_env())
+            md_gate.commit_fixture(root, "fixture: target moves")
+        return md_gate.run_gate(root, "check-doc-cites.py", *args)
+
+    code, out = run_recorded(target_v2, citing_with_record)
+    st.expect(
+        "#947: a recorded divergence is GREEN — this is the whole point of the "
+        "form, and it is what the previous shape could not be",
+        code == 0 and "TEST-CITE-DRIFT" not in out, out.strip()[-500:],
+    )
+
+    # ONE-SIDED CHANGE #1: repair the citation, leave the record. The record is
+    # now excusing nothing, so it must go red until it is deleted. Without this
+    # a record is permanent, and a permanent record is a mute button.
+    citing_repaired = citing_with_record.replace(
+        "assigned at Target.cs:4", f"assigned at Target.cs:{len(target_v1.splitlines())}"
+    )
+    code, out = run_recorded(target_v1, citing_repaired)
+    st.expect(
+        "#947: ONE-SIDED CHANGE (citation repaired, record kept) is red — the "
+        "record retires",
+        code == 1 and "TEST-CITE-RECORD-STALE" in out, out.strip()[-500:],
+    )
+
+    # ONE-SIDED CHANGE #2: leave the citation, move the target AGAIN so the
+    # line reads something else. The site is unchanged, so a record keyed on the
+    # site alone would go on excusing a divergence nobody has looked at since.
+    # The `now=` fingerprint is what catches this.
+    target_v3 = "// moved\n// moved\n// moved\n" + target_v2
+    code, out = run_recorded(target_v3, citing_with_record)
+    st.expect(
+        "#947: ONE-SIDED CHANGE (target moved again, record kept) is red — the "
+        "fingerprint pins one divergence, not one line number",
+        code == 1 and "TEST-CITE-DRIFT" in out, out.strip()[-500:],
+    )
+
+    # A record naming a DIFFERENT line than the prose cites is a record for a
+    # different fact, and must not silence this one.
+    wrong_line = citing_with_record.replace("Target.cs:4 now=", "Target.cs:5 now=")
+    code, out = run_recorded(target_v2, wrong_line)
+    st.expect(
+        "#947: a record naming a different LINE does not silence this one",
+        code == 1 and "TEST-CITE-DRIFT" in out, out.strip()[-500:],
+    )
+
+    # Reason-mandatory, like the two waivers above.
+    no_reason = citing_with_record.replace('" [#947: deferred to the owner] -->', '" -->')
+    code, out = run_recorded(target_v2, no_reason)
+    st.expect(
+        "#947: a record with no quoted reason is NOT honoured",
+        code == 1 and "TEST-CITE-DRIFT" in out, out.strip()[-500:],
+    )
+    st.expect(
+        "#947: ... and it says so, rather than passing quietly",
+        code == 1 and "TEST-CITE-RECORD-NOREASON" in out, out.strip()[-500:],
+    )
+
+    # The record must not become a citation of its own. A record NAMES
+    # `Target.cs:4`, so without masking the population grows by one per record
+    # and the rule ends up checking its own bookkeeping.
+    code, out = run_recorded(target_v2, citing_with_record)
+    st.expect(
+        "#947: a record does not count itself as a citation — otherwise the "
+        "population and the floor both drift",
+        "anchored 1 `file:line` citations" in out, out.strip()[-500:],
     )
 
     # The case the whole issue turns on. The cited line still EXISTS, still
