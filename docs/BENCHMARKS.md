@@ -924,6 +924,56 @@ Machine for this section: same as the two tables above (Linux x64, .NET 10 Relea
 no tty I/O). No new timer was run for it — every figure is copied from the rows it
 names, per the rule at the top of this file.
 
+### Virtualization honesty (#412, 2026-10-01, Release)
+
+`TimelineLayoutCache.PrepareLayout` over a 10 000-block transcript, each block 12
+logical lines × 100 chars, in a 40-row viewport. The block is a
+`WrappingBlock`: its height depends on its width and its `CheapEstimate`
+deliberately disagrees with its `Measure`, so a stale layout cannot pass for a
+correct one.
+
+These are **counters, not wall-clock** — the point of the slice. Before #412 a
+width change called `CheapEstimate` once per block, so a resize scanned the whole
+transcript to lay out ~40 visible rows.
+
+| Pass | Before | After | Bound |
+|---|--:|--:|---|
+| Cold layout, 10 000 blocks, width A — `Measure` | 4 | 4 | ≤ visible window (4 blocks) ✅ |
+| Cold layout — `CheapEstimate` | 10 000 | 10 000 | == Count: unavoidable at first layout, documented ✅ |
+| Characters scanned on that cold layout | 12 120 000 | 12 120 000 | O(transcript), once ✅ |
+| Scroll frame through measured heights (worst of 2 000) | 0 est / 2 meas | 0 est / 2 meas | est == 0, meas ≤ viewportH ✅ |
+| Flip to unseen width B — `CheapEstimate` | 10 000 | 10 000 | == Count, ring miss ✅ |
+| **Return to measured width A** — `CheapEstimate` | **10 000** | **0** | == 0 ✅ |
+| **Return to measured width A** — `Measure` | 4 | 0 | == 0 ✅ |
+| 50 width flips — `CheapEstimate` total | 500 000 | 20 000 | ring-bound ✅ |
+| 50 width flips — wall clock | 1 319–1 664 ms | 58–101 ms | ~16× ✅ |
+| Retained widths after 190 distinct widths | n/a (no cache) | 3 | ≤ 3 (active + 2) ✅ |
+
+The per-item ratio the issue asked for: **10 000 blocks, ~4 in the visible
+window, 2500× more items charged than the user sees** on a width change — now
+**0×** when the width has been laid out before.
+
+Two honest caveats, both in the XML docs on `PrepareLayout`:
+
+- An **unseen** width still costs `CheapEstimate == Count`. Sustained resize-drag
+  (a fresh width every frame) stays on that path, bounded by the 2-width ring.
+  Width-keying makes the round trip free; it does not make an arbitrary new
+  width cheap, and the doc says so.
+- A rejected alternative is recorded on `Slot`: seeding the new width by scaling
+  the outgoing row counts. Rows do **not** scale as `fromWidth/toWidth` — word
+  breaks, collapse budgets and height-invariant blocks (images) all break that
+  ratio. Against a cold-cache oracle a 200→50 flip reported `TotalHeight` 10 288
+  where the truth was 4 998, moving `EntryAtY` and the scrollbar extent with it.
+  Cheap was not worth wrong.
+
+Run:
+```bash
+dotnet exec tests/Harbor.Tui.CellForge.Tests/bin/Release/net10.0/Harbor.Tui.CellForge.Tests.dll \
+  --treenode-filter "/*/*/TimelineLayoutCacheTests/*"
+```
+
+Machine: Linux x64, .NET 10 Release JIT, in-process (no tty, no render loop).
+
 ## 6. Test suite
 
 ### 6.1 Per-project results (Debug, no-build) — local run, linux-x64 container, .NET 10.0.302, pre-#186 counts
