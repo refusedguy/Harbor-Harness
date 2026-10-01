@@ -68,6 +68,18 @@
 //     this rule describes, and a disposition asserted in a method that parks no
 //     waiter at all is the shape #808 introduced.
 //
+// "PARKED" IS DETECTED TWO WAYS, AND BOTH MATTER
+// ---------------------------------------------
+// A local initialiser (`var wait = …`, or an explicitly typed one) names the local,
+// so the window can be closed precisely at `await <that name>`. A waiter held some
+// other way — a tuple element, an object initialiser, a field — has no name to close
+// it with, and the honest reading is that nothing in the method can be shown to close
+// the window, so it runs to the end of the method.
+//
+// The first cut of this file had only the local form, and a fixture holding the
+// waiter in a named tuple came out clean. That is the same race, so it belongs in the
+// class rather than in a list of exceptions. `WaiterCall` is the second pass.
+//
 // NON-VACUITY
 // -----------
 // Measured on this tree, not asserted about it:
@@ -76,15 +88,22 @@
 //     #797 identified, at the line of each twin's assertion.
 //   * current `dev`          -> 0 violations across the whole `tests/` tree.
 //
-// Three tests defend that in CI, so a future edit that silently breaks the
+// Four tests defend that in CI, so a future edit that silently breaks the
 // detector fails here instead of leaving a rule that cannot fail:
 //
-//   * `Scanner_FindsTheTestTree` — the walk really reached the test sources.
-//   * `Detector_FiresOnTheThreeShapesFromIssue765` — the detector, in isolation,
-//     fires on the literal pre-#808 sources and stays quiet on the shapes it must
-//     not flag.
-//   * `Rule_IsGreenOnTheCurrentTreeAtZeroViolations` — pins the count, so a
+//   * `Scanner_FindsTheTestTree` — the walk really reached the test sources, the
+//     three #797 files are in scope, and this file is deliberately not.
+//   * `Rule_IsGreenOnTheCurrentTreeAtZeroViolations` — pins the count at 0, so a
 //     detector that starts matching nothing is a failure rather than a pass.
+//   * `Detector_FiresOnTheThreeShapesFromIssue765` — the detector, in isolation,
+//     fires on six racy shapes: the three from pre-#808, the AlreadyCancelled
+//     sibling no current test happens to write, an explicitly typed local, and a
+//     waiter held in a named tuple.
+//   * `Detector_StaysQuietOnTheDispositionsThatAreDeterministic` — and stays
+//     quiet on six that it must not flag.
+//
+//   * `Detector_IgnoresProseThatDescribesTheRule` — the #808 tests explain
+//     themselves in comments naming these dispositions; prose cannot fail a build.
 
 using System.Text;
 using System.Text.RegularExpressions;
@@ -117,6 +136,26 @@ public class ApprovalGateWaiterRaceRules
     /// </summary>
     private static readonly Regex ParkedWaiter = new(
         @"(?:var|[\w<>\[\]\.]+)\s+(?<waiter>\w+)\s*=\s*[^;]*?WaitForDecisionAsync\s*\(",
+        RegexOptions.Compiled);
+
+    /// <summary>
+    ///     The same call found anywhere, not only as a local initialiser.
+    /// </summary>
+    /// <remarks>
+    ///     A SECOND pass, not a widening of <see cref="ParkedWaiter" />, and the
+    ///     reason is worth recording: the local form carries the awaited name in its
+    ///     own declaration, so its window can be closed precisely. A call parked some
+    ///     other way — a tuple element, an object initialiser, a field — has no such
+    ///     name, and nothing in the method can be shown to close the window, so it runs
+    ///     to the end of the method.
+    ///     <para>
+    ///         The first cut of this guard had only the local pass, and a fixture
+    ///         holding the waiter in a named tuple came out clean. Same race, so it
+    ///         belongs in the class rather than in a list of exceptions.
+    ///     </para>
+    /// </remarks>
+    private static readonly Regex WaiterCall = new(
+        @"WaitForDecisionAsync\s*\(",
         RegexOptions.Compiled);
 
     /// <summary>The same local being awaited, which closes the race window.</summary>
@@ -276,10 +315,12 @@ public class ApprovalGateWaiterRaceRules
     [Test]
     public async Task Detector_FiresOnTheThreeShapesFromIssue765()
     {
-        // The literal pre-#808 sources (5d8a73d4). Each is one of the three twins
-        // #797 identified. If the detector is quiet on these it guards nothing, and
-        // the green on the current tree is the #948 failure mode: reporting 8/8
-        // while the bug was alive.
+        // The first three are the literal pre-#808 sources (5d8a73d4) — one per twin
+        // #797 identified. If the detector is quiet on those it guards nothing, and a
+        // green run on the current tree means nothing: that is the #948 failure mode,
+        // a guard reporting 8/8 while the bug was alive. The last three are siblings
+        // of the same class, so a detector that only knows the shapes that happened
+        // to exist in #797 is a #912-shaped rule wearing a fixture list.
         string[] mustFail =
         [
             // ApprovalGateRouterTupleTests.BoundMatch_Accepted_WaiterResolves, pre-#808.
@@ -355,6 +396,24 @@ public class ApprovalGateWaiterRaceRules
                 await Assert.That(coordinator.DecideApproval("g1", Deny()))
                     .IsEqualTo(ApprovalDecisionDisposition.AlreadyDecided);
                 var outcome = await wait;
+            }
+            """,
+            // A waiter held in a named tuple: the call is not a local initialiser, so
+            // only the anywhere-pass sees it, and nothing in the method can be shown
+            // to close the window before the twin. The first cut of this guard missed
+            // it entirely, which is the reason the second pass exists.
+            """
+            [Test]
+            public async Task TupleHeldWaiter()
+            {
+                var coordinator = NewCoordinator();
+                coordinator.RegisterGate("g1");
+                var parked = (Wait: coordinator.WaitForDecisionAsync("g1", CancellationToken.None));
+                await Assert.That(coordinator.DecideApproval("g1", Approve()))
+                    .IsEqualTo(ApprovalDecisionDisposition.Accepted);
+                await Assert.That(coordinator.DecideApproval("g1", Deny()))
+                    .IsEqualTo(ApprovalDecisionDisposition.AlreadyDecided);
+                var outcome = await parked.Wait;
             }
             """
         ];
@@ -442,6 +501,23 @@ public class ApprovalGateWaiterRaceRules
                 var outcome = await wait;
                 await Assert.That(coordinator.DecideApproval("g1", Approve()))
                     .IsEqualTo(ApprovalDecisionDisposition.StaleGate);
+            }
+            """,
+            // A waiter call that is immediately awaited and never held: nothing is
+            // parked, so no later assertion can land inside a window. This is the
+            // shape most current tests use, and the one the anywhere-pass must not
+            // mistake for a parked waiter.
+            """
+            [Test]
+            public async Task WaitedInline_NothingIsParked()
+            {
+                var coordinator = NewCoordinator();
+                coordinator.RegisterGate("g1");
+                coordinator.RequestCancel(new FakeRunner());
+                await Assert.That(coordinator.DecideApproval("g1", Approve()))
+                    .IsEqualTo(ApprovalDecisionDisposition.AlreadyCancelled);
+                var outcome = await coordinator.WaitForDecisionAsync("g1", CancellationToken.None);
+                await Assert.That(outcome).IsNull();
             }
             """
         ];
@@ -547,40 +623,113 @@ public class ApprovalGateWaiterRaceRules
         {
             string body = code[bodyStart..bodyEnd];
 
+            // Two passes over the same body, because "where the waiter is parked" and
+            // "where the window closes" are two different questions:
+            //
+            //   * ParkedWaiter — a local initialiser. It names the local, so the window
+            //     can be closed precisely at `await <that local>`.
+            //   * WaiterCall — the call appears with no name of its own (a tuple
+            //     element, an object initialiser, a field). Nothing in the method can
+            //     be shown to close the window, so it runs to the end of the method.
+            //
+            // The second pass deliberately does not exclude sites the first already
+            // reported: a tuple-held waiter that IS awaited by a name the first pass
+            // cannot see is still the same race, and reporting it once under the
+            // first rule and again under the second would be noise. So the local pass
+            // runs first and the anywhere-pass skips a site it already produced.
+            // The span each ParkedWaiter match already covers, so the anywhere-pass
+            // below can skip exactly those calls. Testing ParkedWaiter at the call's
+            // own index would not work: a local-initialiser match STARTS at
+            // `var <name> =`, which is BEFORE the call, so an anchored test at the
+            // call's index misses it and every parked waiter gets reported twice.
+            // Leaning on the line-level dedup in AddRaces to hide that would be
+            // worse — the rule would then be right by accident, and a genuine
+            // double-report would be indistinguishable from the benign one.
+            var covered = new List<(int Start, int End)>();
+
             foreach (Match parked in ParkedWaiter.Matches(body))
             {
                 string waiter = parked.Groups["waiter"].Value;
                 int afterPark = parked.Index + parked.Length;
+                covered.Add((parked.Index, afterPark));
 
                 // The window closes at the first `await <waiter>`. A local that is
                 // never awaited leaves the window open to the end of the method,
                 // which is correct: the continuation still runs ForgetGate.
                 string tail = body[afterPark..];
                 int? awaitedAt = AwaitWaiter.Matches(tail)
-                    .Cast<Match>()
                     .FirstOrDefault(m => m.Groups["waiter"].Value == waiter)
                     ?.Index;
                 int windowEnd = awaitedAt is null ? body.Length : afterPark + awaitedAt.Value;
 
-                foreach (Match disposition in TerminalDisposition.Matches(body, afterPark, windowEnd - afterPark))
-                {
-                    var race = new WaiterRace(
-                        Line: code[..bodyStart + disposition.Index].Count(c => c == '\n') + 1,
-                        Method: method,
-                        Waiter: waiter,
-                        Disposition: disposition.Groups["disposition"].Value);
+                AddRaces(races, code, bodyStart, body, method, waiter, afterPark, windowEnd);
+            }
 
-                    // A local function inside a test method is a method body of its
-                    // own AND part of the enclosing one; report the site once.
-                    if (!races.Contains(race))
-                    {
-                        races.Add(race);
-                    }
+            foreach (Match call in WaiterCall.Matches(body))
+            {
+                if (covered.Any(c => call.Index >= c.Start && call.Index < c.End))
+                {
+                    continue;
                 }
+
+                AddRaces(
+                    races,
+                    code,
+                    bodyStart,
+                    body,
+                    method,
+                    waiter: "<unnamed>",
+                    windowStart: call.Index + call.Length,
+                    windowEnd: body.Length);
             }
         }
 
         return races;
+    }
+
+    /// <summary>
+    ///     Records every terminal disposition in <c>body[windowStart..windowEnd]</c>,
+    ///     one report per assertion site.
+    /// </summary>
+    /// <remarks>
+    ///     Deduplicated on line + method + disposition, NOT on the waiter name. A waiter
+    ///     held in a named tuple is seen twice — once by each pass — and the two passes
+    ///     disagree about what it is called (<c>parked</c> vs <c>&lt;unnamed&gt;</c>), so
+    ///     keying on the name would report one defect twice. Two distinct assertions on
+    ///     one physical line would also collapse, which costs nothing: both would be the
+    ///     same shape and the line is what a reader has to go and look at.
+    /// </remarks>
+    private static void AddRaces(
+        List<WaiterRace> races,
+        string code,
+        int bodyStart,
+        string body,
+        string method,
+        string waiter,
+        int windowStart,
+        int windowEnd)
+    {
+        // Sliced rather than Regex.Matches(input, startat, length): the window reads
+        // as a range of the body, and a slice keeps the offset arithmetic below
+        // explicit instead of depending on which Matches overload binds.
+        foreach (Match disposition in TerminalDisposition.Matches(body[windowStart..windowEnd]))
+        {
+            int absolute = bodyStart + windowStart + disposition.Index;
+
+            int line = code[..absolute].Count(c => c == '\n') + 1;
+            string what = disposition.Groups["disposition"].Value;
+
+            // One report per assertion site. A local function inside a test method is a
+            // body of its own AND part of the enclosing one, and a tuple-held waiter is
+            // seen by both passes under two different names — either way the reader has
+            // exactly one line to go and look at.
+            if (races.Any(r => r.Line == line && r.Method == method && r.Disposition == what))
+            {
+                continue;
+            }
+
+            races.Add(new WaiterRace(line, method, waiter, what));
+        }
     }
 
     /// <summary>
@@ -654,38 +803,40 @@ public class ApprovalGateWaiterRaceRules
     private static string BlankOutLiterals(string source)
     {
         var blanked = new StringBuilder(source);
-        for (int i = 0; i < source.Length; i++)
+        int i = 0;
+        while (i < source.Length)
         {
-            char c = source[i];
-            if (c is not ('"' or '\''))
+            char quote = source[i];
+            if (quote is not ('"' or '\''))
             {
+                i++;
                 continue;
             }
 
-            int j = i + 1;
-            while (j < source.Length && source[j] != c)
+            i++;
+            while (i < source.Length && source[i] != quote)
             {
                 // An escaped quote does not end the literal.
-                if (source[j] == '\\' && j + 1 < source.Length)
+                if (source[i] == '\\' && i + 1 < source.Length)
                 {
-                    blanked[j] = ' ';
-                    blanked[j + 1] = ' ';
-                    j += 2;
+                    blanked[i] = ' ';
+                    blanked[i + 1] = ' ';
+                    i += 2;
                     continue;
                 }
 
                 // A newline inside a literal is a verbatim/raw-string boundary we
                 // do not model; stop rather than blank the rest of the file.
-                if (source[j] == '\n')
+                if (source[i] == '\n')
                 {
                     break;
                 }
 
-                blanked[j] = ' ';
-                j++;
+                blanked[i] = ' ';
+                i++;
             }
 
-            i = j;
+            i++;
         }
 
         return blanked.ToString();
