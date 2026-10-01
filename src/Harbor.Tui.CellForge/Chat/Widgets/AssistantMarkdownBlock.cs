@@ -1,5 +1,6 @@
 using Harbor.Tui.CellForge.Rendering;
 using Harbor.Ui.Framework.Rendering.Markdown;
+using Harbor.Ui.Framework.Rendering.PerformanceContracts;
 
 namespace Harbor.Tui.CellForge.Widgets;
 
@@ -218,6 +219,10 @@ public sealed class AssistantMarkdownBlock : ICollapsibleChatBlock
         if (_width != width || _lines.Count == 0 && _source.Length > 0)
         {
             _width = width;
+            // #409: counted here, INSIDE the memo, not at method entry. Measure
+            // and Paint both call this every frame; counting at entry would
+            // report the pair twice and inflate the stage that layout drives.
+            UiStageCounters.CountMaterialization();
             _lines = StreamingMarkdownRenderer.RenderRange(_source, 0, _source.Length, Math.Max(1, width));
             _code = CodeTokenizer.HighlightFenceBodies(_lines);
         }
