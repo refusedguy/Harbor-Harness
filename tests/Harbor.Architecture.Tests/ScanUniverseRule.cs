@@ -5,14 +5,12 @@
 // THE DEFECT
 // ----------
 // `ArchitectureTestHelpers.LoadHarborAssemblies()` (GlobalUsings.cs) builds its
-// dictionary three ways, and not one of them is a product filter:
-//
-//   1. seed from `AppDomain.CurrentDomain.GetAssemblies()`, keep anything whose
-//      name StartsWith("Harbor") — and this project is named
-//      `Harbor.Architecture.Tests`, so the rule's own instrument is in the
-//      result, always;
-//   2. `Assembly.Load` every `Harbor*` reference of this test assembly;
-//   3. sweep `Harbor*.dll` out of `AppContext.BaseDirectory`.
+// dictionary three ways, and not one of them is a product filter. It SEEDS from
+// AppDomain.CurrentDomain.GetAssemblies() and keeps anything whose name starts
+// with "Harbor" — and this project is named Harbor.Architecture.Tests, so the
+// rule's own instrument is in the result, always. It FORCE-LOADS every Harbor*
+// reference of this test assembly. And it SWEEPS Harbor*.dll out of
+// AppContext.BaseDirectory.
 //
 // Seventeen files consume it. The universe is "whatever this test bin directory
 // happens to hold", which is not a declared perimeter.
@@ -102,6 +100,24 @@
 // the logic error was `TreeOf` being asked about an ABSOLUTE path, whose first
 // segment is empty — which made every project non-product and the whole
 // measurement vacuous. `TreeOf` now takes the root and normalises.
+//
+// WHAT THE RED RUN MEASURED (run 36823428154, job 110243821618)
+//
+//     NonProductMembers  Live (1): Harbor.Architecture.Tests
+//     BlindProjects      Live (5 trees): apps=2 | contrib=14 | samples=5
+//                                      | tests=31 | tools=1        (53 total)
+//
+// Both baselines above are transcribed verbatim from that log rather than
+// recomputed. The three non-vacuity assertions and the positive control passed
+// on the same run, which is the only reason the numbers can be read at all:
+// without `TheProductSideIsPresent` an empty inventory would have satisfied an
+// empty non-product baseline, and without `ThePartitionIsNotTrivial` an empty
+// blind set would have satisfied an empty blind baseline.
+//
+// The 53 is the number that was never written down. Of the 31 under `tests/`,
+// every one is invisible to every reflection rule in this project, and the four
+// other referrers of `Harbor.Tui.CellForge.Engine` that `CellForgeGraphRules`
+// has never seen are among them.
 
 namespace Harbor.Architecture.Tests;
 
@@ -311,11 +327,29 @@ public sealed class ScanUniverseRule
 
     /// <summary>Assembly names in the inventory that no <c>src/</c> project produces.</summary>
     /// <remarks>
-    ///     Pinned as NAMES, never as a count — the same argument as
-    ///     <c>ScanVisibilityRule.MeasuredInvisibleTrees</c>: a count is satisfiable by one
-    ///     member leaving while another arrives, and the diff that did it reads as a wash.
+    ///     <para>
+    ///         Pinned as NAMES, never as a count — the same argument as
+    ///         <c>ScanVisibilityRule.MeasuredInvisibleTrees</c>: a count is satisfiable by one
+    ///         member leaving while another arrives, and the diff that did it reads as a wash.
+    ///     </para>
+    ///     <para>
+    ///         MEASURED, and the number is 1 — not the several the issue expected. The six
+    ///         <c>Harbor.Hosting -> contrib/tui/*</c> references do NOT put contrib assemblies
+    ///         in this bin directory, because they sit behind
+    ///         <c>Condition="'$(HarborWithSpectreTui)' == 'true'"</c> and no global default
+    ///         turns it on (only <c>apps/Harbor.App.Cli</c> sets it, for its own build). So the
+    ///         inventory's excess is exactly the instrument and nothing else.
+    ///     </para>
+    ///     <para>
+    ///         That is a much cleaner result than "several foreign members", and it sharpens
+    ///         the finding rather than softening it. There is nothing to filter out except
+    ///         this assembly, so a shared product-graph accessor would replace exactly one
+    ///         `ReferenceEquals` — and the six consumers that already carry a perimeter are
+    ///         filtering a single assembly each, in five different ways, for one reason: it is
+    ///         the rule's own instrument. The baseline is small; the DECLARATION is the point.
+    ///     </para>
     /// </remarks>
-    private static readonly string[] MeasuredNonProductMembers = [];
+    private static readonly string[] MeasuredNonProductMembers = ["Harbor.Architecture.Tests"];
 
     /// <summary>
     ///     Non-product projects that declare a <c>&lt;ProjectReference&gt;</c> into
@@ -329,7 +363,8 @@ public sealed class ScanUniverseRule
     ///     accused the instrument and, in the same breath, could not see five other real
     ///     referrers of the assembly it was grading.
     /// </remarks>
-    private static readonly string[] MeasuredBlindTrees = [];
+    private static readonly string[] MeasuredBlindTrees =
+        ["apps=2", "contrib=14", "samples=5", "tests=31", "tools=1"];
 
     /// <summary>What the two walks found, once.</summary>
     private sealed record UniverseReport(
