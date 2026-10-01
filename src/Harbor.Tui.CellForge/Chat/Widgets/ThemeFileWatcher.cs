@@ -21,6 +21,23 @@ namespace Harbor.Tui.CellForge.Widgets;
 ///     Presentation assembly, and neither named a shared owner. The store is a
 ///     required argument on purpose: a defaulted one would let this widget
 ///     quietly reconstruct its own reader, which is the defect.
+/// </para>
+/// <para>
+///     <b>It applies through <see cref="TerminalColorPalette.Apply" />
+///     unconditionally (#479-A6).</b> It used to apply only when no
+///     <c>onApplied</c> callback had been supplied — and the one product site
+///     that arms this watcher always supplies one, so
+///     <c>HARBOR_THEME_FILE</c> / <c>~/.harbor/theme.json</c> polled, announced
+///     "theme: live-reload → …", marked the screen dirty and changed no color,
+///     while its sibling <c>ThemeDirectoryWatcher</c> repainted on the very
+///     same input. The callback was being read as "the caller owns the apply",
+///     which no caller has ever meant: the callback here only appends a status
+///     line and wakes the render loop. The gate is gone and the sibling's
+///     unconditional apply is the shape; the two are compared directly in
+///     <c>ThemeWatcherApplyParityTests</c>. The asymmetry predates the port
+///     (da29698b, 2026-09-04) and #720 carried it through unchanged, because
+///     #720 fixed the duplicated READ and this is the APPLY.
+/// </para>
 /// </remarks>
 public sealed class ThemeFileWatcher : IDisposable
 {
@@ -78,10 +95,7 @@ public sealed class ThemeFileWatcher : IDisposable
             if (result.IsSuccess)
             {
                 LastApplied = Maybe.From(result.Theme);
-                if (_onApplied is null)
-                {
-                    TerminalColorPalette.Apply(result.Theme);
-                }
+                TerminalColorPalette.Apply(result.Theme);
                 _onApplied?.Invoke(result.Theme);
             }
             else
