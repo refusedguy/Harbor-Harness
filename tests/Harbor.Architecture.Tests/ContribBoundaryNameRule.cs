@@ -261,7 +261,9 @@ public sealed class ContribBoundaryNameRule
         "ChatHistoryView",
         "ChatMessageViewModel",
         "ChatScreen",
-        "ChatState",
+        // "ChatState" dropped by #597: its only product-side declaration was the
+        // nested AppState.ChatState in the producer-less flat record #597 deleted.
+        // The contrib/ side is untouched, so the crossing is gone rather than moved.
         "ChatView",
         "ChatViewModel",
         "CodeEditorView",
@@ -297,7 +299,10 @@ public sealed class ContribBoundaryNameRule
         "StatusTextToBrushConverter",
         "ThemeService",
         "TimeAgoConverter",
-        "Toast",
+        // "Toast" dropped by #597: the only product-side declarations were the
+        // nested AppState.Toast and ChromeViewState.Toast in the two producer-less
+        // flat records #597 deleted. ("ToastSeverity" was never a row — contrib/
+        // does not declare it, so it was never a crossing.)
         "ToastNotificationsView",
         "ToastService",
         "ToastViewModel",
