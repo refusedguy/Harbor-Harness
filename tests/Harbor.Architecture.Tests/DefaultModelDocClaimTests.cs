@@ -121,10 +121,12 @@
 // runner reads `evals/profiles/*.json` — `model` and `harbor.env.HARBOR_MODEL` —
 // and no gate in this repository compared either against anything. That is why
 // the #937 fork survived twenty days: the two paths disagreed, and every guard
-// in the tree read only one of them. `LiveEvalProfiles_AgreeWith_TheDeclaredDefault`
-// below closes that, and it is deliberately value-AGNOSTIC: it does not say
-// which model is correct, only that a shipped profile and the shipped provider
-// file must not name different ones. It therefore passes whoever wins.
+// in the tree read only one of them. `LiveEvalProfiles_EitherAgreeWith_TheProviderFile_OrCarryARecord`
+// below closes that. It does NOT assert the two sides agree — that would hold the queue
+// hostage to a product decision the owner has not made — it asserts that any disagreement
+// is RECORDED, and the record pins BOTH strings, so a one-sided edit (the edit that
+// created #937) stops being covered and goes red. See the remarks on that test for why
+// this cannot rot into a permanent mute button.
 
 using System.Text.Json;
 using System.Text.RegularExpressions;
@@ -239,34 +241,52 @@ public sealed class DefaultModelDocClaimTests
     }
 
     /// <summary>
-    ///     The live evals profile must name the same model as the provider file.
+    ///     A shipped evals profile must name the same model as the provider file — or the
+    ///     disagreement must be RECORDED, with both values pinned and a reason.
     /// </summary>
     /// <remarks>
-    ///     This is the check that was missing for #937, and it is the one that
-    ///     could have caught the fork. <see cref="DocumentedClaims_AgreeWith_TheProvidersDeclaredDefault" />
-    ///     reads the root markdown; this reads <c>evals/profiles/*.json</c>, which is what
+    ///     This is the check that was missing for #937, and it is the one that could have caught
+    ///     the fork. <see cref="DocumentedClaims_AgreeWith_TheProvidersDeclaredDefault" /> reads
+    ///     the root markdown; this reads <c>evals/profiles/*.json</c>, which is what
     ///     <c>tools/Harbor.Evals</c> actually launches a run with — <c>EvalProfile.Model</c> and
-    ///     <c>harbor.env.HARBOR_MODEL</c> both land in the child process's environment. A stale
-    ///     id there is not a doc problem: the weekly evals run measures a different model
-    ///     than the one every document promises, and reports green.
+    ///     <c>harbor.env.HARBOR_MODEL</c> both land in the child process's environment. A stale id
+    ///     there is not a doc problem: the weekly run measures a different model than every
+    ///     document promises, and reports green.
     ///     <para>
-    ///     VALUE-AGNOSTIC BY CONSTRUCTION. Nothing here knows that <c>kilo-auto/free</c> is
-    ///     right and <c>tencent/hy3:free</c> is wrong; it only knows they must not differ. So
-    ///     this test goes green the moment the owner picks a winner and moves every site
-    ///     together, and it stays green afterwards. A guard that encoded the current value
-    ///     would instead have to be edited by the same commit that resolves the fork — which
-    ///     is how the disputed value got pinned in the first place.
-    ///     </para>
+    ///     WHY THIS ASSERTS A RECORD AND NOT AN AGREEMENT. The fork is real and measured — the
+    ///     provider's own catalogue does not serve <c>tencent/hy3:free</c> (see
+    ///     <c>docs/notes/kilocode-default-model-probe.md</c>) — but WHICH model replaces it is the
+    ///     owner's decision, and <c>kilo-auto/free</c> is a rotating router whose own description
+    ///     warns that prompts may be logged upstream. A guard asserting plain agreement would have
+    ///     to stay red until a human decides, i.e. it would hold the whole queue hostage to a
+    ///     product choice, and a red gate nobody can clear stops being read. So the rule here is
+    ///     the weaker, still-real one: <em>the disagreement must be accounted for</em>.
+    ///     <para />
+    ///     The accounting is a <see cref="RecordedDivergences" /> entry that PINS BOTH SIDES — the
+    ///     exact string the profile carries AND the exact string the provider file declares. That
+    ///     pinning is what stops this decaying into a permanent mute button, and it is the whole
+    ///     design:
+    ///     <list type="bullet">
+    ///     <item>change ONE side → the pinned pair no longer matches, so the entry stops covering
+    ///     the claim and the rule goes RED. The asymmetric edit that created #937 cannot be
+    ///     repeated quietly.</item>
+    ///     <item>change BOTH sides to the same value → they agree, the rule is satisfied, AND the
+    ///     entry is now dead weight, which <see cref="EveryRecordedDivergence_StillMatchesARealDisagreement" />
+    ///     reports. Resolving the fork therefore still requires deleting the record — the decision
+    ///     is acknowledged in code, not just made.</item>
+    ///     </list>
+    ///     So the entry cannot rot into green: it is valid only while the exact divergence it
+    ///     describes is still on disk.
     ///     <para>
-    ///     The two fields are checked separately on purpose. <c>model</c> and
-    ///     <c>HARBOR_MODEL</c> are two independent copies of one claim in one file, and
-    ///     <c>WorkspacePreparer</c> writes <c>model</c> into the attempt manifest while the
-    ///     child process reads the env var. A profile where only one was updated would run one
-    ///     model and report another.
+    ///     Both fields are read separately on purpose. <c>model</c> and <c>HARBOR_MODEL</c> are two
+    ///     independent copies of one claim in one file, <c>WorkspacePreparer</c> writes the first
+    ///     into the attempt manifest while the child process reads the second, and a profile where
+    ///     only one was updated would run one model and report another. Each has its own entry, so
+    ///     a half-moved profile is caught as the un-recorded half.
     ///     </para>
     /// </remarks>
     [Test]
-    public async Task LiveEvalProfiles_AgreeWith_TheDeclaredDefault()
+    public async Task LiveEvalProfiles_EitherAgreeWith_TheProviderFile_OrCarryARecord()
     {
         string root = RequireRepoRoot();
         Dictionary<string, string> defaults = DeclaredDefaults(root);
@@ -282,25 +302,171 @@ public sealed class DefaultModelDocClaimTests
                 + "the rule below would then be satisfied by nothing. Found "
                 + claims.Count + " claim(s).");
 
-        List<string> violations =
+        List<string> unrecorded =
         [
-            .. claims.Where(c => !AgreesWithDeclared(c.Model, defaults))
+            .. claims.Where(c => !IsAccountedFor(c, defaults))
                     .Select(c => c.Profile + " ['" + c.Field + "'] names '" + c.Model
                                  + "' but providers/" + SplitProvider(c.Model)
                                  + ".json declares defaultModel '"
                                  + defaults.GetValueOrDefault(SplitProvider(c.Model), "<no such provider>")
-                                 + "'")
+                                 + "', and no RecordedDivergences entry pins exactly that pair")
         ];
 
-        await Assert.That(violations).IsEmpty()
+        await Assert.That(unrecorded).IsEmpty()
             .Because("a shipped evals profile and the provider file disagree about which model a "
-                + "run uses. That is not cosmetic: tools/Harbor.Evals passes this value to the CLI, "
-                + "so the weekly baseline measures one model while every document promises another, "
-                + "and the run stays green. " + string.Join(" | ", violations)
-                + " Fix by moving BOTH the profile and providers/<id>.json in the same commit — "
-                + "and re-read docs/notes/kilocode-default-model-probe.md first, which records why "
-                + "the fork existed. Never make one side agree by editing only the other.");
+                + "run uses, and nothing accounts for it. That is not cosmetic: tools/Harbor.Evals "
+                + "passes this value to the CLI, so the weekly baseline measures one model while "
+                + "every document promises another, and the run stays green. " + string.Join(" | ", unrecorded)
+                + " Either move BOTH the profile and providers/<id>.json to one value, or — if the "
+                + "disagreement is deliberate and not yet resolved — add a RecordedDivergences entry "
+                + "pinning BOTH strings with the reason. Re-read "
+                + "docs/notes/kilocode-default-model-probe.md before choosing which; it records that "
+                + "the provider's catalogue does not serve the declared default. Never silence this "
+                + "by editing one side only.");
     }
+
+    /// <summary>
+    ///     Whether a claim needs no record — either it agrees, or a record pins exactly this pair.
+    /// </summary>
+    /// <remarks>
+    ///     The entry is matched on BOTH strings, not on the profile path alone. Matching on the
+    ///     path would let the entry keep "covering" a claim whose value had since been edited —
+    ///     which is precisely the one-sided edit this rule exists to catch.
+    /// </remarks>
+    private static bool IsAccountedFor(
+        (string Profile, string Field, string Model) claim,
+        Dictionary<string, string> defaults)
+    {
+        if (AgreesWithDeclared(claim.Model, defaults))
+        {
+            return true;
+        }
+
+        return RecordedDivergences.Any(e =>
+            e.Profile == claim.Profile
+            && e.Field == claim.Field
+            && e.ProfileValue == claim.Model
+            && e.DeclaredValue == defaults.GetValueOrDefault(SplitProvider(claim.Model), ""));
+    }
+
+    /// <summary>
+    ///     The record list stays honest in BOTH directions: an entry with no reason is a decision
+    ///     log with the decision missing, and an entry whose exact divergence no longer exists is
+    ///     dead weight that would silently widen what this rule tolerates.
+    /// </summary>
+    /// <remarks>
+    ///     The second half is what makes the record non-rotting. When the fork is finally resolved
+    ///     the entry stops matching anything, and this test says so — so the resolution arrives with
+    ///     the acknowledgement attached, rather than leaving a mute button behind that a later edit
+    ///     could reuse.
+    /// </remarks>
+    [Test]
+    public async Task EveryRecordedDivergence_StillMatchesARealDisagreement()
+    {
+        string root = RequireRepoRoot();
+        Dictionary<string, string> defaults = DeclaredDefaults(root);
+        List<(string Profile, string Field, string Model)> claims = ReadLiveProfileClaims(root);
+
+        List<string> stale = [];
+        foreach (RecordedDivergence entry in RecordedDivergences)
+        {
+            await Assert.That(entry.Reason.Length).IsGreaterThan(0)
+                .Because("recorded divergence " + entry.Profile + " ['" + entry.Field
+                    + "'] must state why it is tolerated — the list is a decision log, not a mute button");
+
+            bool stillReal = claims.Any(c =>
+                c.Profile == entry.Profile
+                && c.Field == entry.Field
+                && c.Model == entry.ProfileValue
+                && !AgreesWithDeclared(c.Model, defaults)
+                && defaults.GetValueOrDefault(SplitProvider(c.Model), "") == entry.DeclaredValue);
+
+            if (!stillReal)
+            {
+                stale.Add(entry.Profile + " ['" + entry.Field + "'] pinned profile='"
+                          + entry.ProfileValue + "' declared='" + entry.DeclaredValue + "'");
+            }
+        }
+
+        await Assert.That(stale).IsEmpty()
+            .Because("a RecordedDivergences entry no longer describes a disagreement on disk. Either "
+                + "the two sides were reconciled — in which case DELETE the entry, because a default "
+                + "install's model and the evals runner's model now agree and the reason is spent — "
+                + "or one side was edited alone, which is the defect #937 reports. Stale: "
+                + string.Join(" | ", stale));
+    }
+
+    /// <summary>
+    ///     A model claim the live evals runner will act on, and the strings on each side of a
+    ///     disagreement nobody has resolved yet.
+    /// </summary>
+    /// <param name="Profile">Repo-relative profile path the claim lives in.</param>
+    /// <param name="Field">Which field of that profile carries it.</param>
+    /// <param name="ProfileValue">The exact qualified model id the profile states TODAY.</param>
+    /// <param name="DeclaredValue">The exact <c>defaultModel</c> the provider file states TODAY.</param>
+    /// <param name="Reason">Why this divergence is tolerated, and what would settle it.</param>
+    /// <remarks>
+    ///     Both values are part of the identity, not decoration. A record that pinned only the path
+    ///     would keep tolerating the claim after someone edited the value — so the rule would read as
+    ///     green while the very asymmetry it exists to catch had been reintroduced.
+    /// </remarks>
+    private sealed record RecordedDivergence(
+        string Profile,
+        string Field,
+        string ProfileValue,
+        string DeclaredValue,
+        string Reason);
+
+    /// <summary>
+    ///     Disagreements between the live evals profile and the provider file, each pinned to the
+    ///     exact pair of strings currently on disk.
+    /// </summary>
+    /// <remarks>
+    ///     ONE entry, because the two fields of <c>evals/profiles/local.json</c> carry the same pair —
+    ///     but they are listed separately because they are separate claims: <c>model</c> reaches the
+    ///     attempt manifest, <c>HARBOR_MODEL</c> reaches the child process, and a profile where only
+    ///     one moved runs one model and reports another. Collapsing them to a single row would let
+    ///     that half-moved state match the entry that describes the other field.
+    ///     <para>
+    ///     <b>#937.</b> <c>de9fb741</c> (2026-09-09, "hy3 dead") moved this profile AND
+    ///     <c>AGENTS.md</c> to <c>kilo-auto/free</c>; <c>15eef9da</c> (2026-09-29) reverted only
+    ///     <c>AGENTS.md</c>, so the provider file kept the value the profile abandoned. An
+    ///     unauthenticated <c>GET</c> on the provider's own <c>modelsUrl</c> confirms the declared
+    ///     default is not served — see <c>docs/notes/kilocode-default-model-probe.md</c>.
+    ///     </para>
+    ///     <para>
+    ///     NOT SETTLED, and that is why this entry exists. <c>kilo-auto/free</c> is a rotating router
+    ///     over four upstream models whose description warns that prompts may be logged by the
+    ///     provider, so whether the default should be a router at all is a product decision, not a
+    ///     mechanical one. Whoever resolves it: move both files in one commit and DELETE both entries
+    ///     — <see cref="EveryRecordedDivergence_StillMatchesARealDisagreement" /> goes red if you
+    ///     leave them.
+    ///     </para>
+    /// </remarks>
+    private static readonly RecordedDivergence[] RecordedDivergences =
+    [
+        new(
+            "evals/profiles/local.json",
+            "model",
+            "kilocode/kilo-auto/free",
+            "tencent/hy3:free",
+            "#937, unresolved. The provider's catalogue does not serve the declared default "
+            + "'tencent/hy3:free' (unauthenticated GET on its own modelsUrl, 2026-10-01), and this "
+            + "profile carries the id that commit de9fb741 chose when it recorded hy3 as dead. "
+            + "Replacing it is the owner's call: kilo-auto/free is a rotating router that warns "
+            + "prompts may be logged upstream. Settle by moving both files in one commit, then "
+            + "delete this entry."),
+        new(
+            "evals/profiles/local.json",
+            "harbor.env.HARBOR_MODEL",
+            "kilocode/kilo-auto/free",
+            "tencent/hy3:free",
+            "Same unresolved decision as the 'model' entry above, listed separately because this is "
+            + "the copy the child process actually reads: EvalProfile.Model goes to the attempt "
+            + "manifest, this goes to HARBOR_MODEL. A profile that moved only one of the two would "
+            + "run one model and report another, and a single combined entry would let that "
+            + "half-moved state match. Settle together with the entry above."),
+    ];
 
     /// <summary>
     ///     Every model claim the live evals runner will act on, from every shipped profile.
@@ -533,44 +699,77 @@ public sealed class DefaultModelDocClaimTests
     }
 
     /// <summary>
-    ///     Non-vacuity for the live-profile rule: the same comparison, run against a
-    ///     PLANTED fork, must flag it.
+    ///     Non-vacuity for the live-profile rule, and the proof that the record cannot become a
+    ///     permanent mute button.
     /// </summary>
     /// <remarks>
-    ///     <see cref="LiveEvalProfiles_AgreeWith_TheDeclaredDefault" /> reads a real file, so on a
-    ///     consistent tree it returns an empty violation list — which is also what a broken
-    ///     reader would return. This test is the difference between "found nothing" and "looked
-    ///     and agreed", and it is also what keeps the rule from being pinned to today's value: it
-    ///     plants a profile carrying a model the provider file does NOT declare, and requires the
-    ///     comparison to catch it. The two helper functions are exercised directly rather than
-    ///     through a temp directory, because writing a profile into the repository's own
-    ///     <c>evals/profiles/</c> to make a test fail is the one thing this file must never do.
+    ///     <see cref="LiveEvalProfiles_EitherAgreeWith_TheProviderFile_OrCarryARecord" /> reads
+    ///     real files, so on today's tree it returns an empty list — which is also what a broken
+    ///     reader returns. This test separates "found nothing" from "looked and agreed", and it is
+    ///     the one place the anti-decay property is proved rather than asserted: it drives
+    ///     <see cref="IsAccountedFor" /> with PLANTED claims and requires that a ONE-SIDED edit
+    ///     stops being covered by the record.
+    ///     <para>
+    ///     The claims are planted as values, never written into the repository's own
+    ///     <c>evals/profiles/</c> — making a test fail by mutating a real config file is the one
+    ///     thing this file must never do.
+    ///     </para>
     /// </remarks>
     [Test]
-    public async Task LiveProfileRule_FiresOnAPlantedFork()
+    public async Task LiveProfileRule_CoversAPlantedFork_ButNotAOneSidedEdit()
     {
         string root = RequireRepoRoot();
         Dictionary<string, string> defaults = DeclaredDefaults(root);
         string declaredForKilo = defaults["kilocode"];
-        string planted = "kilocode/definitely-not-the-declared-model";
+        string pinned = RecordedDivergences[0].ProfileValue;
 
-        // A model the provider file does not declare is a violation ...
-        await Assert.That(AgreesWithDeclared(planted, defaults)).IsFalse()
-            .Because("'" + planted + "' is not providers/kilocode.json's declared default '"
-                + declaredForKilo + "', so the live-profile rule must report it");
+        // (1) The real fork, exactly as pinned, IS accounted for. If this were false the rule
+        // would be red on a tree nobody changed, which is the failure this whole form exists to
+        // avoid — so it is asserted explicitly rather than left to the green run.
+        await Assert.That(IsAccountedFor(
+                (RecordedDivergences[0].Profile, RecordedDivergences[0].Field, pinned), defaults))
+            .IsTrue()
+            .Because("the recorded fork must actually match the pair on disk — otherwise the record "
+                + "is decorative and the rule is red for a reason nobody can fix");
 
-        // ... the declared value itself is not, which is the half that would break if this rule
-        // were written to pin today's value instead of comparing.
+        // (2) A model nothing declares is NOT accounted for: no record pins it.
+        await Assert.That(IsAccountedFor(
+                ("evals/profiles/local.json", "model", "kilocode/definitely-not-declared"), defaults))
+            .IsFalse()
+            .Because("an unrecorded model must be reported, or the rule catches nothing at all");
+
+        // (3) THE ANTI-DECAY PROPERTY. Same profile, same field, one character changed on ONE
+        // side. The record pins both strings, so it must stop covering the claim — this is the
+        // edit that created #937, and it must not be repeatable quietly.
+        string editedOnce = pinned.Replace("/free", "/efficient");
+        await Assert.That(editedOnce).IsNotEqualTo(pinned)
+            .Because("the planted edit must actually change the value, or this proves nothing");
+        await Assert.That(IsAccountedFor(
+                (RecordedDivergences[0].Profile, RecordedDivergences[0].Field, editedOnce), defaults))
+            .IsFalse()
+            .Because("a ONE-SIDED edit must stop being covered by the record. If this is true, the "
+                + "record has decayed into a permanent mute button and the rule reports green while "
+                + "the very asymmetry #937 reports has been reintroduced");
+
+        // (4) Agreement needs no record at all — the rule is a disjunction, not a registry check.
+        await Assert.That(IsAccountedFor(
+                (RecordedDivergences[0].Profile, RecordedDivergences[0].Field,
+                    "kilocode/" + declaredForKilo), defaults))
+            .IsTrue()
+            .Because("a profile that agrees with the provider file satisfies the rule outright, so "
+                + "resolving #937 turns it green without touching RecordedDivergences");
+
+        // And the declared value must satisfy the comparison, or the rule is a constant rather
+        // than a comparison.
         await Assert.That(AgreesWithDeclared("kilocode/" + declaredForKilo, defaults)).IsTrue()
-            .Because("the declared default must satisfy the rule, or the rule is a constant "
-                + "rather than a comparison");
+            .Because("the declared default must satisfy the comparison itself");
 
-        // And the multi-segment id that #599 is about splits correctly. A router-style
-        // model id must not be truncated to its first segment on either side of the
-        // comparison, or the two sides would agree for the wrong reason. The input is a
-        // QUALIFIED reference: ModelHalf splits on the FIRST slash, which is the provider
-        // boundary — handing it a bare model id would drop everything before that slash and
-        // is the caller's error, not a property of the helper.
+        // The multi-segment id that #599 is about splits correctly. A router-style model id must
+        // not be truncated to its first segment on either side of the comparison, or the two
+        // sides would agree for the wrong reason. The input is a QUALIFIED reference: ModelHalf
+        // splits on the FIRST slash, which is the provider boundary — handing it a bare model id
+        // would drop everything before that slash, which is the caller's error, not a property of
+        // the helper. (An earlier draft of this control got that wrong and CI caught it.)
         await Assert.That(SplitProvider("kilocode/kilo-auto/free")).IsEqualTo("kilocode")
             .Because("the provider half is everything before the first slash");
         await Assert.That(ModelHalf("kilocode/kilo-auto/free")).IsEqualTo("kilo-auto/free")
@@ -578,9 +777,9 @@ public sealed class DefaultModelDocClaimTests
                 + "truncation DefaultModelSingleSourceTests exists to prevent. A bare "
                 + "Split('/')[1] would have returned 'free' here and matched nothing.");
 
-        // The failure mode this guards is a WRONG-SIDE match: provider and model halves
-        // swapped still 'agree' if both sides are computed the same wrong way, so the two
-        // helpers must disagree on the boundary rather than agree by construction.
+        // The failure mode this guards is a WRONG-SIDE match: provider and model halves swapped
+        // still "agree" if both sides are computed the same wrong way, so splitting and rejoining
+        // must be the identity.
         foreach (string qualified in new[] { "kilocode/kilo-auto/free", "openrouter/anthropic/claude-3.5-sonnet" })
         {
             await Assert.That(SplitProvider(qualified) + "/" + ModelHalf(qualified)).IsEqualTo(qualified)
@@ -591,8 +790,8 @@ public sealed class DefaultModelDocClaimTests
     }
 
     /// <summary>
-    ///     The comparison <see cref="LiveEvalProfiles_AgreeWith_TheDeclaredDefault" /> makes,
-    ///     factored out so the planted control above exercises the SAME code path.
+    ///     The comparison the live-profile rule makes, factored out so the planted control above
+    ///     exercises the SAME code path.
     /// </summary>
     private static bool AgreesWithDeclared(string qualified, Dictionary<string, string> defaults)
     {
