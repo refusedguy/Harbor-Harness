@@ -1277,7 +1277,7 @@ CLAUDE.md заявляет: "Core can be published as NativeAOT". Это зна�
 | `JsonlSessionStore.GetMessagesAsync` (10k msgs) | ~500 KB | <50 KB | BenchmarkDotNet |
 | `UiStore.Dispatch` ops/sec (4 threads) | ~500k | >2M | BenchmarkDotNet |
 | `AgentLoop.RunAsync` max stack depth | ~15 frames | ~8 | dotMemory |
-| Tests pass | 334 | 334+ | `dotnet test` |
+| Tests pass | 334 | 334+ | `dotnet run --project tests/<X> -c Release --no-build` |
 | RSS idle | 28 MB | <25 MB | dotnet-counters monitor |
 
 ---
@@ -1350,10 +1350,19 @@ Harbor project so the test runner can load each assembly into the AppDomain.
 
 ### Verification
 
+The transcript below is a historical record from when this section was
+written. Its output shape (`Passed! - Failed: 0, …`) is VSTest's, and the
+command shown is not one this repository uses now — the architecture suite
+runs as a plain executable, and no CI job runs `dotnet test`:
+
+```bash
+dotnet run --project tests/Harbor.Architecture.Tests -c Release --no-build -- --minimum-expected-tests 1
 ```
+
+<!-- historical, VSTest-era output — kept as written at the time:
 $ dotnet test tests/Harbor.Architecture.Tests/Harbor.Architecture.Tests.csproj
 Passed! - Failed: 0, Passed: 21, Skipped: 0, Total: 21, Duration: 280ms
-```
+-->
 
 ### Future work
 

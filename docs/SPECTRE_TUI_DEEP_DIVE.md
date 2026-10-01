@@ -1284,7 +1284,7 @@ public override void Render(RenderContext context) {
 - `ChatScreen_HasNoSyncRegistryFromStateMethod` — bridge удалён.
 - `SpectreTuiRenderer_HasNoSyncPanelRegistryToState` — bridge переименован в `SeedPanelRegistryIntoState`.
 
-Запуск: `dotnet test tests/Harbor.Tui.Tests/Harbor.Tui.Tests.csproj`.
+Запуск: `dotnet run --project tests/Harbor.Tui.Tests -c Release --no-build -- --minimum-expected-tests 1`.
 
 ---
 
