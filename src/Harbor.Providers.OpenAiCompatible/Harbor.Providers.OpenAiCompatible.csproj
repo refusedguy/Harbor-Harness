@@ -42,6 +42,26 @@
       src/Harbor.Hosting and apps/Harbor.App.Cli each carry their own
       Microsoft.Extensions.Http, and Microsoft.Extensions.Http 10.0.10 ships
       IsAotCompatible metadata, so nothing here was ever an AOT blocker.
+
+      BLAST RADIUS, because this one is NOT cosmetic and the difference from
+      the Harbor.Tui.Tests half of #910 is exactly this. Three of the seven
+      projects that ProjectReference this one were resolving the package only
+      THROUGH it, and lose it from their compile closure with this line gone:
+      tests/Harbor.Benchmarks (3 packages), tests/Harbor.LoadTests (6), and
+      tests/Harbor.Providers.Tests (9 — including the FULL
+      Microsoft.Extensions.DependencyInjection, .Logging, .Options and
+      .Configuration). Checked: none of the three names IServiceCollection,
+      ServiceDescriptor, Add*, BuildServiceProvider, IOptions, IConfiguration,
+      ConfigurationBuilder, IHostedService, LoggerFactory, AddLogging,
+      DiagnosticListener, IHttpClientFactory or AddHttpClient, in any .cs file
+      or any using directive — so none of them was leaning on the leak. The
+      other four consumers (Harbor.Hosting, apps/Harbor.App.Cli,
+      apps/Harbor.App.Avalonia, tests/Harbor.Architecture.Tests) keep it by
+      their own references or other routes.
+
+      NOT VERIFIED BY COMPILE — `dotnet` was out of scope for this change. The
+      three-consumer check above is a static nuspec walk plus a text probe; CI
+      is what actually proves it.
     -->
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions"/>
   </ItemGroup>
