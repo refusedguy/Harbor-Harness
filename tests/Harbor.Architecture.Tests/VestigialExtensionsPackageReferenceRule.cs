@@ -2,6 +2,7 @@ using System.Reflection.Metadata;
 using System.Reflection.PortableExecutable;
 using System.Text;
 using System.Text.RegularExpressions;
+using System.Xml;
 using System.Xml.Linq;
 
 namespace Harbor.Architecture.Tests;
@@ -317,7 +318,7 @@ public sealed partial class VestigialExtensionsPackageReferenceRule
     {
         var set = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var project in AllProjects(root))
-        foreach (Match m in PackageReference().Matches(Read(project)))
+        foreach (Match m in PackageReference().Matches(Read(project.File)))
             if (m.Groups[1].Value.StartsWith(ExtPrefix, StringComparison.Ordinal))
                 set.Add(m.Groups[1].Value);
         return set;
@@ -355,9 +356,8 @@ public sealed partial class VestigialExtensionsPackageReferenceRule
                 if (!reader.HasMetadata)
                     return found;
                 var md = reader.GetMetadataReader();
-                foreach (var handle in md.TypeDefinitions)
+                foreach (var def in md.TypeDefinitions)
                 {
-                    var def = md.TypeDefinitions[handle];
                     if (!def.IsPublic)
                         continue;
                     var ns = md.GetString(def.Namespace);
@@ -479,7 +479,7 @@ public sealed partial class VestigialExtensionsPackageReferenceRule
                         if (!tfm.Contains("net10.0", StringComparison.Ordinal))
                             continue;
                         foreach (var dep in group.Elements("dependency"))
-                            if (dep.Attribute("id") is { } id)
+                            if (dep.Attribute("id")?.Value is { } id)
                                 result.Add(id.Value);
                         break;
                     }
@@ -525,7 +525,11 @@ public sealed partial class VestigialExtensionsPackageReferenceRule
 
     // ---------------------------------------------------------------- projects
 
-    private sealed record Project(string Path, string Directory, string Name, string Relative,
+    // Named File/Dir rather than Path/Directory on purpose: a member called
+    // `Directory` shadows System.IO.Directory for every expression inside the
+    // type, which silently retargets bare `Directory.Exists(...)` calls. The
+    // first CI run of this file failed exactly that way.
+    private sealed record Project(string File, string Dir, string Name, string Relative,
                                   IReadOnlyList<string> PackageReferences);
 
     private static IEnumerable<Project> AllProjects(string root)
@@ -567,7 +571,7 @@ public sealed partial class VestigialExtensionsPackageReferenceRule
     private static List<string> ProjectSources(Project project)
     {
         var files = new List<string>();
-        foreach (var f in Directory.EnumerateFiles(project.Directory, "*.cs", SearchOption.AllDirectories))
+        foreach (var f in Directory.EnumerateFiles(project.Dir, "*.cs", SearchOption.AllDirectories))
         {
             var parts = f.Split(Path.DirectorySeparatorChar);
             if (parts.Contains("bin") || parts.Contains("obj"))
@@ -576,14 +580,14 @@ public sealed partial class VestigialExtensionsPackageReferenceRule
         }
 
         XDocument doc;
-        try { doc = XDocument.Parse(Read(project.Path)); }
+        try { doc = XDocument.Parse(Read(project.File)); }
         catch (XmlException) { return files; }
 
         foreach (var c in doc.Descendants("Compile"))
         {
-            if (c.Attribute("Include") is not { } inc)
+            if (c.Attribute("Include")?.Value is not { } inc)
                 continue;
-            var full = Path.GetFullPath(Path.Combine(project.Directory,
+            var full = Path.GetFullPath(Path.Combine(project.Dir,
                                                     inc.Replace('\\', Path.DirectorySeparatorChar)));
             if (Directory.Exists(full))
                 files.AddRange(Directory.EnumerateFiles(full, "*.cs", SearchOption.AllDirectories));
@@ -598,7 +602,7 @@ public sealed partial class VestigialExtensionsPackageReferenceRule
     {
         var consumers = new List<Project>();
         foreach (var other in AllProjects(root))
-            if (other.Path != project.Path && References(other, project))
+            if (other.File != project.File && References(other, project))
                 consumers.Add(other);
         return consumers;
     }
@@ -606,18 +610,18 @@ public sealed partial class VestigialExtensionsPackageReferenceRule
     private static bool References(Project from, Project to)
     {
         XDocument doc;
-        try { doc = XDocument.Parse(Read(from.Path)); }
+        try { doc = XDocument.Parse(Read(from.File)); }
         catch (XmlException) { return false; }
 
         foreach (var r in doc.Descendants("ProjectReference"))
         {
-            if (r.Attribute("Include") is not { } inc)
+            if (r.Attribute("Include")?.Value is not { } inc)
                 continue;
-            var full = Path.GetFullPath(Path.Combine(from.Directory,
+            var full = Path.GetFullPath(Path.Combine(from.Dir,
                                                     inc.Replace('\\', Path.DirectorySeparatorChar)));
             if (!full.EndsWith(".csproj", StringComparison.Ordinal))
                 full += ".csproj";
-            if (string.Equals(Path.GetFullPath(full), Path.GetFullPath(to.Path),
+            if (string.Equals(Path.GetFullPath(full), Path.GetFullPath(to.File),
                               StringComparison.Ordinal))
                 return true;
         }
@@ -652,7 +656,7 @@ public sealed partial class VestigialExtensionsPackageReferenceRule
 
         foreach (var v in doc.Descendants("PackageVersion"))
             if (v.Attribute("Include")?.Value == package
-                && v.Attribute("Version") is { } version)
+                && v.Attribute("Version")?.Value is { } version)
                 return version.Value;
 
         return "0.0.0";
