@@ -297,6 +297,73 @@ public class ConfigDefaultsComeFromCoreTests
                 + "— the point of the assertion is that the removal did not over-correct into a wipe.");
     }
 
+    // ── #894: the default pair is written once, not field by field ─────────
+
+    /// <summary>
+    ///     The behavioural half of #894. <c>ConfigHalfPairWriteRules</c> grades the
+    ///     SHAPE — that a writer does not decide a half by testing it — and a shape
+    ///     guard alone cannot tell the fix from a deletion of the write, so this
+    ///     pins what the merge must actually do on the path that was split.
+    /// </summary>
+    [Test]
+    public async Task OnboardingSkip_OnAHalfConfig_WritesBothHalvesFromOneAnswer()
+    {
+        // A config whose halves do not both hold — reachable by hand-editing the
+        // file, and by the settings screen, which binds DefaultProvider and
+        // DefaultModel to two independent TextBoxes.
+        var store = new RecordingCommonStore(UnsetCommon() with
+        {
+            DefaultProvider = "anthropic",
+            DefaultModel = string.Empty,
+        });
+        var persister = new ConfigStoreOnboardingPersister(store);
+
+        await persister.PersistAsync("ollama", "llama3.2", newKey: null, overwriteDefaults: false, ct: CancellationToken.None);
+
+        CommonConfig saved = store.Saved
+            ?? throw new InvalidOperationException("The persister did not write the common config.");
+
+        await Assert.That(saved.DefaultProvider).IsEqualTo("ollama")
+            .Because(
+                "the old line decided each half on its own — `overwriteDefaults || "
+                + "string.IsNullOrEmpty(cfg.DefaultProvider)` beside the same expression for the model — so on "
+                + "this config it kept the stored provider and took the wizard's model. That is a pair whose halves "
+                + "came from two different answers: 'ollama' with 'llama3.2' is coherent, but only by accident, "
+                + "because nothing in the code had decided they should be.");
+        await Assert.That(saved.DefaultModel).IsEqualTo("llama3.2")
+            .Because(
+                "a stored pair that is not whole is not a pair, so there is nothing to keep: the merge takes the "
+                + "wizard's answer for BOTH halves or neither.");
+    }
+
+    /// <summary>
+    ///     The direction that must not regress: a whole stored pair is still kept
+    ///     when the caller did not ask to overwrite. "Never split" must not become
+    ///     "always overwrite" — that would be a wizard that cannot be re-run
+    ///     without silently replacing a default the user set elsewhere.
+    /// </summary>
+    [Test]
+    public async Task OnboardingSkip_OnAWholeConfig_KeepsTheStoredPair()
+    {
+        var store = new RecordingCommonStore(UnsetCommon() with
+        {
+            DefaultProvider = "openai",
+            DefaultModel = "gpt-4o",
+        });
+        var persister = new ConfigStoreOnboardingPersister(store);
+
+        await persister.PersistAsync("ollama", "llama3.2", newKey: null, overwriteDefaults: false, ct: CancellationToken.None);
+
+        CommonConfig saved = store.Saved
+            ?? throw new InvalidOperationException("The persister did not write the common config.");
+
+        await Assert.That(saved.HasDefaultPair).IsTrue();
+        await Assert.That(saved.DefaultProvider).IsEqualTo("openai")
+            .Because("the stored pair is whole, so `overwriteDefaults: false` keeps it — unchanged from before #894.");
+        await Assert.That(saved.DefaultModel).IsEqualTo("gpt-4o")
+            .Because("both halves or neither: the two are kept from the same stored answer, never one from each.");
+    }
+
     // ── harness ───────────────────────────────────────────────────────────
 
     /// <summary>

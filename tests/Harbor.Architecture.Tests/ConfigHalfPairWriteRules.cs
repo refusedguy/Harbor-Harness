@@ -118,7 +118,8 @@ public sealed class ConfigHalfPairWriteRules
     [Test]
     public async Task WritingAHalf_MustNotBeADecisionAboutThatHalf()
     {
-        IReadOnlyList<WriteSite> sites = FindSelfDecidedHalves(RepoRoot ?? ".");
+        string root = RequireRepoRoot();
+        IReadOnlyList<WriteSite> sites = FindSelfDecidedHalves(root);
 
         await Assert.That(sites.Count).IsEqualTo(0).Because(
             "the config names one provider/model or nothing, so a writer must not test a half in "
@@ -180,8 +181,9 @@ public sealed class ConfigHalfPairWriteRules
     /// <summary>
     ///     THE CONTROL THAT SEPARATES A DERIVATION FROM A LIST. A list cannot be
     ///     shown to acquire a file it was never given, so this hands the selector
-    ///     three files the checkout does not contain and requires the two that
-    ///     assign a half to arrive on their own.
+    ///     three files the checkout does not contain and requires the one that
+    ///     assigns a half to arrive on its own — while a file that only COMPARES
+    ///     the halves stays out, which a keyword-blind anchor would not manage.
     /// </summary>
     [Test]
     public async Task Perimeter_AcquiresANewWriter_WithNothingToEdit()
@@ -269,10 +271,9 @@ public sealed class ConfigHalfPairWriteRules
     [Test]
     public async Task TheOnboardingWriter_IsOnTheDerivedPerimeter()
     {
-        string root = RepoPaths.RepoRoot ?? ".";
         const string writer = "src/Harbor.Desktop.Abstractions/ViewModels/OnboardingViewModel.cs";
 
-        await Assert.That(Perimeter()).Contains(writer)
+        await Assert.That(Perimeter().Contains(writer, StringComparer.Ordinal)).IsTrue()
             .Because(
                 "the file that writes the pair must be selected by the derivation. If this fails, "
                 + "rule 1 is passing over the one file it was written for — the same failure mode "
@@ -283,11 +284,24 @@ public sealed class ConfigHalfPairWriteRules
     // ── Helpers ──────────────────────────────────────────────────────────────
 
     /// <summary>
+    ///     This guard walks the repository, so it cannot run from a published test
+    ///     host. Same convention and same message shape as the sibling guards.
+    /// </summary>
+    private static string RequireRepoRoot()
+        => RepoPaths.RepoRoot ?? throw new InvalidOperationException(
+            "Harbor.slnx not found above " + AppContext.BaseDirectory
+            + " — this guard walks the repository and cannot run from a published test host.");
+
+    /// <summary>
     ///     The derived perimeter: every product file that assigns one half.
     /// </summary>
-    private static IReadOnlyList<string> Perimeter() => Writers(
-        [.. SourceScan.EnumerateProductCsFiles().Select(SourceScan.Relative)],
-        relative => SourceScan.TryReadAllText(Path.Combine(RepoPaths.RepoRoot ?? ".", relative)));
+    private static IReadOnlyList<string> Perimeter()
+    {
+        string root = RequireRepoRoot();
+        return Writers(
+            [.. SourceScan.EnumerateProductCsFiles().Select(SourceScan.Relative)],
+            relative => SourceScan.TryReadAllText(Path.Combine(root, relative)));
+    }
 
     /// <summary>
     ///     Selects the files that assign a half. The reader is injected so the
