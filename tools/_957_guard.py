@@ -176,6 +176,27 @@ def bound(files, packages, extra):
                 hits.add(w)
     return hits
 
+# DIVERGENCE FROM THE RULE — READ BEFORE TRUSTING THE COUNT BELOW.
+#
+# This port reported 7 findings. CI (the authority, running
+# VestigialExtensionsPackageReferenceRule) reported 3:
+#
+#     src/Harbor.Plugins.Host         Microsoft.Extensions.DependencyInjection
+#     tests/Harbor.App.Cli.Tests      Microsoft.Extensions.DependencyInjection
+#     tests/Harbor.App.Avalonia.Tests Microsoft.Extensions.DependencyInjection
+#
+# The four it did NOT report — apps/Harbor.App.Avalonia/DI,
+# src/Harbor.Plugins.Host/Logging, tests/Harbor.Ipc.Tests/DI and
+# tests/Harbor.Plugins.Abstractions.Tests/Configuration.Abstractions — were
+# traced step by step through both implementations and every check agrees they
+# SHOULD be reported. The divergence is therefore unresolved, not explained.
+# The likeliest candidate is source enumeration (the rule reads Compile-Include
+# sources, this port does not), but that was NOT confirmed and is not claimed.
+#
+# So: the count below is NOT the finding count. Use CI. This file is kept
+# because the two agree on the 11 of the 15 references that are NOT vestigial,
+# which is the more consequential half of the measurement.
+
 findings = []
 for full, d in sorted(projs.items()):
     files = sources(d["dir"])
