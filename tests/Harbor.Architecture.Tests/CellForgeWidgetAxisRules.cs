@@ -814,7 +814,7 @@ public sealed class CellForgeWidgetAxisRules
         ];
 
         await Assert.That(
-                string.Join(" | ", mustMatch.Where(l => !SeamImplementorRegex().IsMatch(l))))
+                string.Join(" | ", mustMatch.Where(l => !CellForgeSeamProbe.SeamImplementorRegex().IsMatch(l))))
             .IsEmpty()
             .Because(
                 "this probe is the only thing standing between the seam and its first user, so it has to "
@@ -823,7 +823,7 @@ public sealed class CellForgeWidgetAxisRules
                 + "The wrapped base list is the case a per-line probe would miss.");
 
         await Assert.That(
-                string.Join(" | ", mustNotMatch.Where(l => SeamImplementorRegex().IsMatch(l))))
+                string.Join(" | ", mustNotMatch.Where(l => CellForgeSeamProbe.SeamImplementorRegex().IsMatch(l))))
             .IsEmpty()
             .Because(
                 "the other half of the discrimination: the marker appears in product source in four "
