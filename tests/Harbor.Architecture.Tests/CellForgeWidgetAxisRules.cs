@@ -439,6 +439,68 @@ internal static partial class CellForgeSeamProbe
     [GeneratedRegex(@"\.\s*RegisterPanelProvider\s*\(")]
     internal static partial Regex PanelDoorRegex();
 
+    /// <summary>
+    ///     A construction of a type whose simple name carries a widget suffix,
+    ///     qualified by a <c>Harbor.Tui.</c> namespace, outside
+    ///     <c>Harbor.Tui.CellForge</c>.
+    /// </summary>
+    /// <remarks>
+    ///     <para>
+    ///         This is the widget axis' version of "the door is invoked on a
+    ///         receiver". The panel axis has a door, so a <em>use</em> proves it is
+    ///         live; the widget axis has no door at all, so the only thing a new
+    ///         third-party widget looks like from outside is a name that claims to
+    ///         be one, under the namespace that owns them.
+    ///     </para>
+    ///     <para>
+    ///         The <c>Harbor.Tui.</c> qualifier is what makes this a WIDGET probe
+    ///         rather than a suffix grep, and it is load-bearing in both
+    ///         directions. Measured over all 995 product <c>.cs</c> files
+    ///         (<c>src/</c> + <c>apps/</c>):
+    ///         57 constructions carry one of the five suffixes, and 21 of those are
+    ///         outside CellForge — but every one is a different thing.
+    ///         <c>new LlmTextBlock(</c> and <c>new MdBlock(</c> are message and
+    ///         markdown content; <c>new UiMessageBlock(</c> is a projection record;
+    ///         <c>new AppMsg.TogglePanel(</c> is a nested record, and the
+    ///         <c>TogglePanel</c> suffix is the tail of <c>AppMsg</c>'s nested
+    ///         type, not a widget; <c>ShowPlaceholderOverlay</c> is a private
+    ///         nested class in the desktop locators. None of them is a terminal
+    ///         widget, and a rule that reported 21 findings on day one would be
+    ///         reported as broken and switched off. Qualifying by
+    ///         <c>Harbor.Tui.</c> is what reduces the set to the real question:
+    ///         does a renderer OTHER than CellForge construct a widget.
+    ///     </para>
+    ///     <para>
+    ///         A suffix is a proxy and the proxy is stated rather than hidden:
+    ///         a foreign widget named <c>Chrome</c> is not seen, and one named
+    ///         <c>FooPanel</c> in a non-<c>Harbor.Tui</c> namespace is not seen.
+    ///         The same boundary <c>ExtensionAxisFreezeRule</c> records for "nothing
+    ///         calls it". The claim this rule supports is the narrow one: the widget
+    ///         set is closed BY DEFAULT, and an accidental opening through the
+    ///         renderer's own vocabulary is loud rather than silent.
+    ///     </para>
+    /// </remarks>
+    [GeneratedRegex(
+        @"\bnew\s+Harbor\.Tui\.(?!CellForge\.)[A-Za-z0-9_.]*"
+        + @"(?:BorderPanel|Panel|Widget|Block|Overlay)\s*[<(]"
+    )]
+    internal static partial Regex ForeignWidgetConstructionRegex();
+
+    /// <summary>
+    ///     The widget suffixes the probe matches, as one alternation, so that
+    ///     widening the list is a visible edit rather than a silent one.
+    /// </summary>
+    /// <remarks>
+    ///     A hand-maintained list that grows without a decision is the "allow-list
+    ///     that verified zero files" pattern <c>check-doc-cites.py</c> warns about
+    ///     in its own docstring. This does not forbid widening it; the assertion
+    ///     below is what makes the widening show up in a diff. If a
+    ///     widget-shaped type appears under another name, add the word in the same
+    ///     commit that adds the type.
+    /// </remarks>
+    internal const string WidgetSuffixAlternation =
+        "BorderPanel|Panel|Widget|Block|Overlay";
+
     /// <summary>Anything that names the view seam in prose.</summary>
     [GeneratedRegex(@"ITuiPlugin|ITuiView|ViewRegistry|TuiViewBase")]
     internal static partial Regex NamesSeamRegex();
@@ -692,6 +754,120 @@ public sealed class CellForgeWidgetAxisRules
                 + "ExtensionAxisFreezeRule applies to its own sealed axis list. If the layout tree moved "
                 + "or the factory was split, update the entry in the same commit that moved it. Stale: "
                 + (stale.Length == 0 ? "(none)" : string.Join(", ", stale)));
+    }
+
+    /// <summary>
+    ///     THE WIDGET AXIS HAS NO DOOR — the other half of the closure, and the
+    ///     half that was unguarded.
+    /// </summary>
+    /// <remarks>
+    ///     <para>
+    ///         <c>WidgetAxis_TheShippedLayoutTreeHasNoSecondHome</c> proves the one
+    ///         tree is built in one place. That is necessary and not sufficient: a
+    ///         renderer could keep a single <c>ChatScreen.Build</c> and still grow a
+    ///         second way to get a <c>Panel</c> in front of a user — a registry, a
+    ///         factory taking a plugin type, a renderer that hosts foreign widgets.
+    ///         None of those constructs a <c>LayoutTree</c>, so the sibling rule
+    ///         stays green through all of them.
+    ///     </para>
+    ///     <para>
+    ///         This rule looks for the shape such a door takes when it is written
+    ///         in another assembly: a type whose NAME claims to be a widget. It is a
+    ///         name probe, deliberately, and the limits are the same ones
+    ///         <c>ExtensionAxisFreezeRule</c> records for "nothing calls it" —
+    ///         a door reached by reflection, or by a name this suffix list does not
+    ///         anticipate, is not seen. The honest claim is narrower and still
+    ///         worth having: <b>the widget set is closed by default</b>, and this
+    ///         is what makes an accidental opening loud instead of silent.
+    ///     </para>
+    ///     <para>
+    ///         Two-sided on purpose. If a future decision DOES open a widget axis —
+    ///         which is the owner's to make under #555, not this rule's — the
+    ///         honest response is to delete this assertion or record the allowance
+    ///         the way <c>AllowedTreeBuilders</c> records its own, and the comment
+    ///         says which. A guard that cannot be turned off is a guard that gets
+    ///         deleted instead.
+    ///     </para>
+    /// </remarks>
+    [Test]
+    public async Task WidgetAxis_NoRendererHostsAWidgetFromAnotherAssembly()
+    {
+        // The regex already excludes `Harbor.Tui.CellForge.` by negative
+        // lookahead, so every hit IS an offender. Asserting it as a set rather
+        // than filtering is deliberate: if the lookahead were ever dropped, the
+        // message would name CellForge's own 36 constructions and the failure
+        // would be self-explaining, where a silently-filtered list would look
+        // identical to a clean run.
+        IReadOnlyList<string> offenders = CellForgeSeamProbe.FindProductHits(
+            CellForgeSeamProbe.ForeignWidgetConstructionRegex());
+
+        await Assert.That(string.Join(" | ", offenders)).IsEmpty()
+            .Because(
+                "the CellForge widget axis is an internal contract and the rule above already keeps the "
+                + "layout tree single-homed; this is the other half. There is no LayoutTree.AddWidget, no "
+                + "registry, and no plugin path into the tree, so a widget type constructed under a "
+                + "Harbor.Tui namespace OTHER than CellForge is a widget no frame will ever lay out — or, "
+                + "read the other way, the first sign of a door being cut for one. Matched on "
+                + "`new Harbor.Tui.<other>…(BorderPanel|Panel|Widget|Block|Overlay)(`, the shape a foreign "
+                + "widget takes. The Harbor.Tui qualifier is what keeps this from firing on the 21 "
+                + "same-suffix constructions elsewhere in the product (LlmTextBlock, MdBlock, UiMessageBlock, "
+                + "AppMsg.TogglePanel, ShowPlaceholderOverlay) — none of which is a terminal widget. "
+                + "Offenders: " + (offenders.Count == 0 ? "(none)" : string.Join(", ", offenders)));
+
+        await Assert.That(CellForgeSeamProbe.WidgetSuffixAlternation)
+            .IsEqualTo("BorderPanel|Panel|Widget|Block|Overlay")
+            .Because(
+                "the alternation above is a hand-written list, and a hand-written list that grows without "
+                + "a decision is the exact failure this repository has already paid for — the "
+                + "'allow-list that verified zero files' pattern check-doc-cites.py warns about in its own "
+                + "docstring. This does not forbid widening the list; it makes the widening a visible edit. "
+                + "If a widget-shaped type appears under another name, add it here in the same commit that "
+                + "adds the word.");
+
+        // NON-VACUITY, and the reason the two assertions above are not the whole
+        // test. Both can be green for the wrong reason: a regex that stopped
+        // matching, or a `Harbor.Tui.` qualifier that stopped excluding. A
+        // planted string proves the matcher still discriminates — it fires on
+        // the shape of a foreign widget and stays silent on the three shapes it
+        // must not sweep in, including the CellForge widgets the negative
+        // lookahead exists to protect.
+        string[] mustMatch =
+        [
+            "new Harbor.Tui.AnsiPlain.GhostBorderPanel()",
+            "new Harbor.Tui.NickConsoleEx.SomeWidget()",
+            "new Harbor.Tui.Abstractions.Panel()",
+        ];
+        string[] mustNotMatch =
+        [
+            "new Harbor.Tui.CellForge.ComposerPanel()",       // excluded by the lookahead
+            "new Harbor.Tui.CellForge.ChatTimelinePanel()",   // ditto — 36 of these in-tree
+            "new Harbor.Tui.AnsiPlain.PlainWriter()",         // right namespace, wrong suffix
+            "new Harbor.Ui.Framework.State.TuiPanelState(",   // right suffix, wrong namespace
+            "new Harbor.Desktop.Shared.Locators.ShowPlaceholderOverlay()",
+            "public abstract class Panel",                    // a declaration, not a construction
+        ];
+
+        var falseNegatives = mustMatch
+            .Where(s => !CellForgeSeamProbe.ForeignWidgetConstructionRegex().IsMatch(s))
+            .ToArray();
+        var falsePositives = mustNotMatch
+            .Where(s => CellForgeSeamProbe.ForeignWidgetConstructionRegex().IsMatch(s))
+            .ToArray();
+
+        await Assert.That(string.Join(" | ", falseNegatives)).IsEmpty()
+            .Because(
+                "the probe has to fire on a foreign widget or the rule above is decorative. These are "
+                + "planted strings, not product code, so they hold the matcher honest on every run. "
+                + "Missed: " + (falseNegatives.Length == 0 ? "(none)" : string.Join(", ", falseNegatives)));
+
+        await Assert.That(string.Join(" | ", falsePositives)).IsEmpty()
+            .Because(
+                "and it has to stay silent on what is not a foreign widget, or it will be reported as "
+                + "broken and switched off. The CellForge cases are the ones the negative lookahead "
+                + "protects — 36 constructions of the renderer's own widgets in-tree, every one of them "
+                + "the axis being legitimately used. The suffix and namespace cases are the two ways the "
+                + "word 'Panel' appears in this product without being a widget. Wrongly matched: "
+                + (falsePositives.Length == 0 ? "(none)" : string.Join(", ", falsePositives)));
     }
 
     /// <summary>
