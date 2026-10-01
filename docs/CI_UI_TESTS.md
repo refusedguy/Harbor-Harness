@@ -20,49 +20,91 @@ UI tests use TUnit `[Category]` attributes for filtering:
 
 ## Local runs
 
+Test projects are **plain executables** here — run them with `dotnet run
+--project`, not `dotnet test` (see [Why not `dotnet test`](#why-not-dotnet-test)).
+
 ```bash
 # All Avalonia headless tests (fast, no display required)
-dotnet test tests/Harbor.App.Avalonia.Tests -c Release --no-build
+dotnet run --project tests/Harbor.App.Avalonia.Tests -c Release --no-build -- \
+  --minimum-expected-tests 1
 
 # View inflation only (headless)
-dotnet test tests/Harbor.App.Avalonia.Tests --treenode-filter "/*/*/ViewInflationTests/*"
+dotnet run --project tests/Harbor.App.Avalonia.Tests -c Release --no-build -- \
+  --minimum-expected-tests 1 --treenode-filter "/*/*/ViewInflationTests/*"
 
 # E2E Avalonia tests (require Avalonia.Headless)
-dotnet test tests/Harbor.E2E.App.Avalonia \
-  --treenode-filter "/*/*/*/*[Category=E2E]"
+dotnet run --project tests/Harbor.E2E.App.Avalonia -c Release --no-build -- \
+  --minimum-expected-tests 1 --treenode-filter "/*/*/*/*[Category=E2E]"
 
 # Component subset of E2E (AND of both categories)
-dotnet test tests/Harbor.E2E.App.Avalonia \
-  --treenode-filter "/*/*/*/*[Category=E2E][Category=Component]"
+dotnet run --project tests/Harbor.E2E.App.Avalonia -c Release --no-build -- \
+  --minimum-expected-tests 1 --treenode-filter "/*/*/*/*[Category=E2E][Category=Component]"
 ```
 
-> **Note:** TUnit filtering is `--treenode-filter`; VSTest-style
-> `--filter "Category=E2E"` is not supported under the MTP host. Category
-> filters use the property syntax `[Category=X]` inside a treenode expression.
+> **Note:** everything after `--` is forwarded to the test host, so the
+> `--minimum-expected-tests` guard belongs there. TUnit filtering is
+> `--treenode-filter`; the VSTest-style `--filter "Category=E2E"` is not
+> supported under the MTP host. Category filters use the property syntax
+> `[Category=X]` inside a treenode expression.
 
 ## CI pipeline (normalized)
 
-A typical CI job-step block for Avalonia UI tests:
+`ci.yml` does not shell out to `dotnet test`; it executes the built test
+assemblies. The equivalent block for the Avalonia UI suites:
 
 ```yaml
 - name: Build
-  run: dotnet build Harbor.slnx -nologo -clp:NoSummary
+  run: dotnet build Harbor.slnx -c Release -nologo -clp:NoSummary
 
 - name: UI Headless Tests
-  run: dotnet test tests/Harbor.App.Avalonia.Tests --nologo --no-build
+  run: dotnet run --project tests/Harbor.App.Avalonia.Tests -c Release --no-build -- \
+        --minimum-expected-tests 1
 
 - name: UI E2E Tests
-  run: dotnet test tests/Harbor.E2E.App.Avalonia --treenode-filter "/*/*/*/*[Category=E2E]"
+  run: dotnet run --project tests/Harbor.E2E.App.Avalonia -c Release --no-build -- \
+        --minimum-expected-tests 1 --treenode-filter "/*/*/*/*[Category=E2E]"
 ```
 
-## JUnit XML output
+## Test report output
 
-To produce JUnit XML for CI upload:
+The host emits **TRX**, which is what the CI jobs collect — there is no JUnit
+XML writer on this runner (see [Why not `dotnet test`](#why-not-dotnet-test)):
 
 ```bash
-dotnet test tests/Harbor.App.Avalonia.Tests \
-  --logger "junit;LogFilePath=artifacts/avalonia-tests.xml"
+dotnet run --project tests/Harbor.App.Avalonia.Tests -c Release --no-build -- \
+  --minimum-expected-tests 1 \
+  --report-trx --results-directory artifacts --report-trx-filename avalonia-tests.trx
 ```
+
+`ci.yml` feeds the TRX to `tools/test-measurements.py`, which renders a
+`Class.Method -> measurement` table into the job summary.
+
+## Why not `dotnet test`
+
+`global.json` selects `Microsoft.Testing.Platform` as the `dotnet test`
+runner, which changes what that command accepts. Two separate things break
+here, and the older "discovers zero tests, exit 5" wording conflated them:
+
+1. **VSTest-era options are rejected.** `--logger` and `--filter` are VSTest
+   options; under the MTP runner they are forwarded to the test host, which
+   rejects them. That is the platform's *invalid command-line arguments* exit
+   code **5** — whereas a run that genuinely discovers no tests exits **8**
+   (Microsoft Learn, *MTP troubleshooting* → Exit codes). The `Zero tests
+   ran` / exit 5 failures in `renderer-perf-gate.yml` were this, and
+   `CHANGELOG.md` (sprint *ci-cd-maturity*) records that deleting the single
+   `--logger` flag turned that job green.
+2. **11 of the 36 test projects still reference `Microsoft.NET.Test.Sdk`**
+   (pinned in `Directory.Packages.props:71`). TUnit's installation docs say
+   that package must not be used with TUnit because it stops test discovery.
+   `TUNIT_MTP_AUDIT.md` proposes removing it; that change has not landed.
+
+Because of (2) the older blanket claim that `dotnet test` "discovers zero
+tests repo-wide" cannot hold as written — 25 of the 36 test projects never
+reference the package named as the blocker. What *is* established is that no
+CI job has run `dotnet test` since it was abandoned, so its current
+per-project behaviour is **unverified**. Running each project as a plain
+executable is the form CI actually exercises, which is why it is the only
+form documented here.
 
 ## Pre-build hygiene gate
 
