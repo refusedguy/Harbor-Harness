@@ -713,11 +713,21 @@ public sealed class FatInterfaceShapeRatchet
         IReadOnlyDictionary<string, int> fanIn = MeasureApprovalFanIn();
         var singles = fanIn.Where(pair => pair.Value == 1).ToList();
 
-        await Assert.That(singles.Count).IsGreaterThanOrEqualTo(8)
-            .Because("8 of IApprovalCoordinator's 9 signatures are used by exactly one consumer, which is "
-                   + "what 'proven by consumers' is supposed to mean and what makes the three-interface "
-                   + "split well founded. If this has dropped, the split's justification has gone with it. "
-                   + "Measured: " + fanIn.Count + " signatures, " + singles.Count + " with a single consumer");
+        // Measured: 7 distinct NAMES, of which 6 have exactly one consumer, and
+        // the seventh (RequestCancel) has 5. The issue says "8 of the 9" — 8
+        // counts the two overload pairs separately, so it is counting signatures
+        // where this counts names. Both are true of different units; the
+        // name-level figure is the one that matters, because a consumer wanting
+        // both RegisterGate overloads is ONE consumer, and the consumer count is
+        // what has to justify a split.
+        await Assert.That(singles.Count).IsGreaterThanOrEqualTo(6)
+            .Because("6 of IApprovalCoordinator's 7 distinct member NAMES are used by exactly one "
+                   + "consumer, and only RequestCancel is shared (5 callers). That is what 'proven by "
+                   + "consumers' is supposed to mean, and it is what makes the three-interface split well "
+                   + "founded — the sharpest contrast in #471 with IReplHost, where 13 of 18 consumers "
+                   + "share a three-member base. If this has dropped, the split's justification has gone "
+                   + "with it. Measured: " + fanIn.Count + " names, " + singles.Count
+                   + " with a single consumer");
     }
 
     // =====================================================================
