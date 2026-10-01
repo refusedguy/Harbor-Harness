@@ -200,7 +200,7 @@
                                                     <TextBlock Text="{Binding DisplayName}" FontWeight="SemiBold"
                                                                TextTrimming="CharacterEllipsis" />
                                                     <TextBlock Text="{Binding Id}" FontSize="10"
-                                                               FontFamily="{StaticResource CodeFont}"
+                                                               FontFamily="{StaticResource FontMono}"
                                                                Foreground="{StaticResource TextMutedBrush}" />
                                                 </StackPanel>
                                                 <Border Grid.Row="0" Grid.Column="1"
