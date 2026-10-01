@@ -32,7 +32,7 @@ template check requires a contract entry.
 Reproduce locally:
 
 ```bash
-HARBOR_PERF_REPORT=report.txt dotnet test tests/Harbor.Tui.PerfTests -c Release
+HARBOR_PERF_REPORT=report.txt dotnet run --project tests/Harbor.Tui.PerfTests -c Release
 ```
 
 | Backend | Events | Throughput (ev/s) | p99 latency (ms) | Allocated (MB/1k ev) |
@@ -83,7 +83,7 @@ blocks, not on document size**. Frozen blocks are restored from
 canonical event stream, plus a strategy-parity contract: ANSI output with
 escape sequences stripped must equal the plain-mode output byte-for-byte.
 Regenerate after an intentional visual change with
-`HARBOR_UPDATE_GOLDEN=1 dotnet test tests/Harbor.Tui.RendererTests` and review
+`HARBOR_UPDATE_GOLDEN=1 dotnet run --project tests/Harbor.Tui.RendererTests` and review
 the golden diff in the PR.
 
 ## Backend inventory (Phase 3/4 state)

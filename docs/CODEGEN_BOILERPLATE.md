@@ -241,7 +241,7 @@ public async Task StyleFlagEscapeCodes_Bold_ReturnsCorrectSequence()
 Run generator tests:
 
 ```bash
-dotnet test tests/Harbor.Tui.Tests -c Release --no-build
+dotnet run --project tests/Harbor.Tui.Tests -c Release --no-build -- --minimum-expected-tests 1
 ```
 
 ---
@@ -251,7 +251,7 @@ dotnet test tests/Harbor.Tui.Tests -c Release --no-build
 Renderer output is pinned against committed golden frames in `tests/Harbor.Tui.RendererTests/GoldenFrames/`. Regenerate after intentional visual changes:
 
 ```bash
-HARBOR_UPDATE_GOLDEN=1 dotnet test tests/Harbor.Tui.RendererTests -c Release --no-build
+HARBOR_UPDATE_GOLDEN=1 dotnet run --project tests/Harbor.Tui.RendererTests -c Release --no-build
 ```
 
 Golden files:
