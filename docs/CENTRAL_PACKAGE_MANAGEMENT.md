@@ -382,8 +382,11 @@ That's it. Every project that references `ZLinq` now uses `1.6.0`. No need to to
 # Look at the release notes
 xdg-open https://github.com/Cysharp/ZLinq/releases
 
-# Or run all tests to catch runtime breaks
-dotnet test
+# Or run all tests to catch runtime breaks, one project at a time
+# (plain executables — `dotnet test` is not used here, see CONTRIBUTING.md)
+for t in tests/Harbor.*.Tests; do
+  dotnet run --project "$t" -c Release -- --minimum-expected-tests 1
+done
 ```
 
 ### 6.4 Upgrade a major version (e.g. 1.x → 2.x)
@@ -508,7 +511,11 @@ If the same package was declared with different versions across the repo, pick t
 ```bash
 dotnet restore
 dotnet build
-dotnet test
+# Tests are plain executables, one project at a time — `dotnet test` is not
+# used in this repo (see CONTRIBUTING.md §Why not `dotnet test`).
+for t in tests/Harbor.*.Tests; do
+  dotnet run --project "$t" -c Release -- --minimum-expected-tests 1
+done
 ```
 
 ### 8.7 Step 7 — Commit

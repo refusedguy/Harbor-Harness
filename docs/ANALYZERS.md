@@ -350,10 +350,19 @@ in the `test` job's shard matrix, one project at a time, as plain executables:
 dotnet run --project tests/Harbor.App.Cli.Tests -c Release --no-build
 ```
 
-**Not** `dotnet test` — the `dotnet test` → Microsoft.Testing.Platform bridge
-discovers ZERO tests in this repo (the MTP host exits 5 with one silent
-discovery error), which is documented at length in `ci.yml` and
-`docs/DEVELOPMENT.md`. The same assemblies run green via direct host execution.
+**Not** `dotnet test`, which no CI job runs — so its behaviour here is
+unverified rather than known. The reason recorded for a long time in `ci.yml`
+and `docs/DEVELOPMENT.md` ("discovers ZERO tests … the MTP host exits 5 with a
+silent discovery error") was **wrong**: exit 5 is the MTP *invalid command-line
+arguments* code, and a run that genuinely discovers no tests exits **8**, so
+exit 5 was never evidence of zero discovery. `global.json` selects the
+Microsoft.Testing.Platform runner, which rejects the VSTest-era options
+(`--logger`, `--filter`) the old commands passed; `CHANGELOG.md` (sprint
+*ci-cd-maturity*) records that deleting one `--logger` turned
+`renderer-perf-gate.yml` green. 11 of the 36 test projects also still reference
+`Microsoft.NET.Test.Sdk`, which TUnit documents as stopping discovery. See
+[CONTRIBUTING.md §Why not `dotnet test`](../CONTRIBUTING.md#why-not-dotnet-test).
+The same assemblies run green via direct host execution.
 `tests/Harbor.Architecture.Tests` additionally re-runs inside the Release build
 itself, via the `HarborArchitectureGate` target in `Directory.Build.props`.
 

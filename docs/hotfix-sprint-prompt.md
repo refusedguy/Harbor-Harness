@@ -34,7 +34,7 @@ Bug investigation of `Harbor-Harness` (C#/.NET 10, Avalonia + ConsoleEx TUI) fou
 - `apps/Harbor.App.Avalonia/Services/UiRenderEngine.cs` — incremental reconciliation, stale-block cleanup.
 - `src/Harbor.Tui.CellForge.Engine/Input/WindowsVtModeController.cs` — fail-loud Restore, Enter() guard, ANSI enable on startup.
 - `tests/Harbor.Tui.CellForge.Tests/ChatScreenBridgeTests.cs` — new `ConsecutiveApprovalGates_RouteInOrder` test.
-- Verification: `dotnet test tests/Harbor.Tui.CellForge.Tests` and `dotnet test apps/Harbor.App.Avalonia` green.
+- Verification: `dotnet run --project tests/Harbor.Tui.CellForge.Tests -c Release --no-build -- --minimum-expected-tests 1` and `dotnet run --project tests/Harbor.App.Avalonia.Tests -c Release --no-build -- --minimum-expected-tests 1` green.
 - Commit message format: `fix(consoleex|avalon ia|windows): <short description>` — one commit per T-area.
 ## Acceptance Criteria
 - **AC1:** Two back-to-back `RequestApprovalGate("bash", "cmd1")` then `RequestApprovalGate("bash", "cmd2")` both appear on the timeline, and pressing `y` on the first gate resolves only the first while the second remains pending.
@@ -46,11 +46,11 @@ Bug investigation of `Harbor-Harness` (C#/.NET 10, Avalonia + ConsoleEx TUI) fou
 - Add `ConsecutiveApprovalGates_RouteInOrder` to `ChatScreenBridgeTests.cs`.
 - Add `ReconcileLines_NoThrashOnUnchangedRows` to the Avalonia test project.
 - Add `WindowsVtModeController_Restore_ThrowsOnFailure` to the ConsoleEx test project.
-- Run full CI: `dotnet test tests/Harbor.Tui.CellForge.Tests` and `dotnet test apps/Harbor.App.Avalonia` must pass on Linux and Windows runners.
+- Run full CI: the `tests/Harbor.Tui.CellForge.Tests` and `tests/Harbor.App.Avalonia.Tests` suites must pass on Linux and Windows runners. Run each as a plain executable (`dotnet run --project <suite> -c Release --no-build -- --minimum-expected-tests 1`) — `dotnet test` is not used in this repo, see CONTRIBUTING.md.
 
 ## Verification Steps
-1. Run `dotnet test tests/Harbor.Tui.CellForge.Tests` — all existing tests must pass, new `ConsecutiveApprovalGates_RouteInOrder` must pass.
-2. Run `dotnet test apps/Harbor.App.Avalonia` — all existing headless specs must pass, no new layout-thrash warnings in test output.
+1. Run `dotnet run --project tests/Harbor.Tui.CellForge.Tests -c Release --no-build -- --minimum-expected-tests 1` — all existing tests must pass, new `ConsecutiveApprovalGates_RouteInOrder` must pass.
+2. Run `dotnet run --project tests/Harbor.App.Avalonia.Tests -c Release --no-build -- --minimum-expected-tests 1` — all existing headless specs must pass, no new layout-thrash warnings in test output. (`apps/Harbor.App.Avalonia` is the application, not a suite; the headless specs live in `tests/Harbor.App.Avalonia.Tests`.)
 3. On a Windows 10+ VM, run `HARBOR_TUI=consoleex dotnet run --project apps/Harbor.App.Cli` and verify that ANSI colors render correctly in Windows Terminal without manual VT enabling.
 4. Verify that killing the process mid-stream (Ctrl+F5 / taskkill) does not leave the host terminal in raw mode by checking `cmd /c echo test` afterward.
 

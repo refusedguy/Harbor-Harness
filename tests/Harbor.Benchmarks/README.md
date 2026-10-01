@@ -31,9 +31,14 @@ dotnet run -c Release --project tests/Harbor.Benchmarks -- --list flat
 ```
 
 This project is **not** a test project — it is a console app that BenchmarkDotNet
-drives, so `dotnet test` does nothing here (and discovers zero tests across the
-repo in general). Results land in `BenchmarkDotNet.Artifacts/` under the process
-working directory.
+drives, so `dotnet test` has nothing to discover here. (An earlier version of
+this line added "and discovers zero tests across the repo in general"; that
+generalisation was wrong — see
+[CONTRIBUTING.md §Why not `dotnet test`](../../CONTRIBUTING.md#why-not-dotnet-test).
+The supported way to run any suite here is a plain executable, e.g.
+`dotnet run --project tests/<Project> -c Release --no-build -- --minimum-expected-tests 1`.)
+Results land in `BenchmarkDotNet.Artifacts/` under the process working
+directory.
 
 Numbers are tracked in [../../docs/BENCHMARKS.md](../../docs/BENCHMARKS.md),
 which records machine + date (or `[CI-short]`) for every row it quotes.

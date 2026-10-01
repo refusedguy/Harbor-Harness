@@ -345,12 +345,15 @@ HARBOR_DEMO=1 dotnet run --project tests/Harbor.Tui.E2E.Tests -c Release
 
 > **Not verified here.** The `HARBOR_DEMO=1` invocation is transcribed from
 > [`TuiDemoRecorderTests.cs`](../tests/Harbor.Tui.E2E.Tests/TuiDemoRecorderTests.cs),
-> which documents it as `dotnet test`. This repository's own guidance says
-> `dotnet test` discovers zero tests under the Microsoft.Testing.Platform host and
-> that every suite runs as a plain executable via `dotnet run --project …`. The
-> `dotnet run` form is what that rule implies; the two are not reconciled here
-> because doing so means changing a test project, which is outside this document.
-> Use the `vhs` route above — it is what CI runs and what
+> whose doc comment still documents it as `dotnet test`. This repository's own
+> guidance is that every suite runs as a plain executable via
+> `dotnet run --project …`, and that `dotnet test` is not used because no CI job
+> runs it — see
+> [CONTRIBUTING.md §Why not `dotnet test`](../CONTRIBUTING.md#why-not-dotnet-test)
+> for what is actually known and what is not. The `dotnet run` form is what that
+> guidance implies; the two are not reconciled here because doing so means
+> changing a test project, which is outside this document. Use the `vhs` route
+> above — it is what CI runs and what
 > [`demo/hero.tape`](../demo/hero.tape) documents as the local equivalent.
 
 ## Known gaps

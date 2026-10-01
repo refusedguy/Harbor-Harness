@@ -2,7 +2,10 @@
 
 > **Framework:** TUnit 1.61 (`[Test]` attribute, `await Assert.That(...)` assertions).
 > **Run command:** `dotnet run --project tests/<Project> -c Release --no-build -- --minimum-expected-tests 1`
-> **Never** use `dotnet test` — the MTP bridge in this repo discovers zero tests.
+> **Never** use `dotnet test` — every CI job runs each test project as a plain
+> executable, and no job runs `dotnet test`, so its behaviour here is unverified.
+> (An earlier version of this line said it "discovers zero tests"; that was
+> wrong — see [CONTRIBUTING.md §Why not `dotnet test`](../CONTRIBUTING.md#why-not-dotnet-test).)
 > **Shared helpers** live in `tests/Harbor.TestKit/` and are referenced by test projects
 > via `<ProjectReference Include="../Harbor.TestKit/Harbor.TestKit.csproj" />`.
 

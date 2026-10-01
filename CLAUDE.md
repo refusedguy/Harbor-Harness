@@ -2,7 +2,7 @@
 
 > This file is read by Claude Code (and other AI agents) when working on this codebase. It encodes the project's conventions, patterns, and gotchas.
 >
-> **Project state (branch dev):** two `.slnx` solutions (`Harbor.slnx` main, `Harbor.Samples.slnx`); tests run per-project as plain executables (`dotnet run --project tests/<Project> -c Release --no-build`) because `dotnet test` discovers zero tests under the Microsoft.Testing.Platform bridge in this repo. Known/flaky failures (Avalonia-12 headless "Stack empty", Linux IPC pipe timing, occasional ChatView flake) are tracked in [docs/ROADMAP.md](./docs/ROADMAP.md). See [docs/PROJECT_STATUS.md](./docs/PROJECT_STATUS.md) for the quick-reference card.
+> **Project state (branch dev):** two `.slnx` solutions (`Harbor.slnx` main, `Harbor.Samples.slnx`); tests run per-project as plain executables (`dotnet run --project tests/<Project> -c Release --no-build`), the form every CI job executes. `dotnet test` is not used — `global.json` selects the Microsoft.Testing.Platform runner, 11 of 36 test projects still carry `Microsoft.NET.Test.Sdk`, and no CI job runs `dotnet test`, so its behaviour is unverified. The older "discovers zero tests, host exits 5" wording was wrong: exit 5 is the MTP *invalid command-line arguments* code, and a real zero-discovery run exits 8. Known/flaky failures (Avalonia-12 headless "Stack empty", Linux IPC pipe timing, occasional ChatView flake) are tracked in [docs/ROADMAP.md](./docs/ROADMAP.md). See [docs/PROJECT_STATUS.md](./docs/PROJECT_STATUS.md) for the quick-reference card.
 
 ## Companion documents
 
@@ -737,8 +737,9 @@ will delegate the REPL to it instead of running the default line-buffered loop.
 dotnet build
 
 # Run a specific test project — tests MUST be run per project, as plain
-# executables (`dotnet test` discovers zero tests in this repo — broken MTP
-# bridge). TUnit uses --treenode-filter (forwarded after --), NOT --filter.
+# executables; this is what CI executes. `dotnet test` is not used (see the
+# project-state note above for why, and for what stays unverified).
+# TUnit uses --treenode-filter (forwarded after --), NOT --filter.
 dotnet run --project tests/Harbor.Core.Tests -c Release --no-build -- --minimum-expected-tests 1
 
 # Run the CLI

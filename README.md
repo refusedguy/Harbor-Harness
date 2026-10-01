@@ -29,7 +29,7 @@ Reproduce locally:
 ```bash
 vhs demo/hero.tape          # requires vhs (charmbracelet) — one GIF per demo/*.tape
 # or drive the recorder directly:
-HARBOR_DEMO=1 dotnet test tests/Harbor.Tui.E2E.Tests
+HARBOR_DEMO=1 dotnet run --project tests/Harbor.Tui.E2E.Tests -c Release
 # or just watch the scripted playback:
 dotnet run --project apps/Harbor.App.Cli -- --demo
 ```
@@ -184,13 +184,14 @@ Full catalog with real code: [docs/PATTERNS.md](./docs/PATTERNS.md), forbidden p
 
 ```bash
 # Build first, then run tests per project (recommended):
-dotnet test tests/Harbor.Core.Tests -c Release --no-build
-
-# Warning: running dotnet test against the whole solution currently fails under
-# the Microsoft.Testing.Platform host — always target a single test project.
+dotnet run --project tests/Harbor.Core.Tests -c Release --no-build -- --minimum-expected-tests 1
 ```
 
 Framework: [TUnit](https://github.com/thomhurst/TUnit). Shared helpers: [tests/Harbor.TestKit](./tests/Harbor.TestKit). Known/flaky tests are listed in [docs/ROADMAP.md](./docs/ROADMAP.md); don't treat those as your regression.
+
+`dotnet test` is not used in this repository and no CI job runs it, so its
+behaviour here is unverified — see
+[CONTRIBUTING.md §Why not `dotnet test`](./CONTRIBUTING.md#why-not-dotnet-test).
 
 ## Documentation
 

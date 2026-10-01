@@ -4,17 +4,43 @@
 > Дата: 2026-09-05 · SDK: 10.0.302 · TUnit: 1.61.0 · `Microsoft.NET.Test.Sdk`: 18.8.1
 > Источники: https://tunit.dev/docs/intro, /getting-started/installation, /getting-started/running-your-tests, /troubleshooting
 
+> ## ⚠️ Статус: предложение, не применено
+>
+> Это **записанный, но не выполненный** план из worktree `chore/tunit-mtp-audit`.
+> Он лежит в `dev`, потому что был закоммичен туда как документ, а не потому
+> что что-то из него применено. Проверялось:
+>
+> - `scripts/verify-tunit-mtp.sh`, на который ссылается §5, **в `dev` отсутствует** —
+>   жил только в том worktree.
+> - `AGENT_PROMPT.md`, который ссылается §3, **в `dev` отсутствует** — то же.
+> - `Microsoft.NET.Test.Sdk` **по-прежнему** в тех же 11 `.csproj` и в
+>   `Directory.Packages.props:71` (проверено на `dev`).
+> - Шаг «Теперь `dotnet test` должен перестать падать с exit 5» (§4 Step 2,
+>   п. 4) — это **предсказание, которое никогда не выполнялось**. `dotnet test`
+>   не запускался в CI после 2026-09-04, поэтому и «перестал», и «не перестал» —
+>   на `dev` это **не проверено**.
+>
+> Диагноз про конфликт пакета остаётся верным (цитата TUnit ниже — дословная), но
+> он объясняет **11 проектов из 36**, а не репозиторий целиком. Утверждение, что
+> `dotnet test` «находит НОЛЬ тестов по всему репо», в этот документ попало из
+> `AGENTS.md` и **было неверным**: код 5 у MTP — это «неверные аргументы командной
+> строки», а реальное отсутствие тестов даёт код 8. `CHANGELOG.md` (спринт
+> *ci-cd-maturity*) прямо показывает исходную причину: `renderer-perf-gate.yml`
+> печатал `Zero tests ran` / exit 5, пока не удалили **один** флаг `--logger`.
+>
+> Актуальная версия этого объяснения — [CONTRIBUTING.md §Why not `dotnet test`](./CONTRIBUTING.md#why-not-dotnet-test).
+
 ## TL;DR — главный проёб
 
 **`Microsoft.NET.Test.Sdk` конфликтует с TUnit/MTP.** Док прямо пишет:
 
 > `danger If you're used to other testing frameworks, you're probably used to the package Microsoft.NET.Test.Sdk. This should NOT be used with TUnit. It'll stop test discovery from working properly.` — https://tunit.dev/docs/getting-started/installation
 
-В Harbor он **всё ещё зашит** в 11 `.csproj` + в `Directory.Packages.props:71`. Именно поэтому `AGENTS.md:10` честно признаётся:
-
-> `dotnet test` discovers ZERO tests under the Microsoft.Testing.Platform (MTP) bridge (host exits 5 with a silent discovery error)
-
-Это не «особенность репо» — это баг конфигурации. Лечится удалением пакета.
+В Harbor он **всё ещё зашит** в 11 `.csproj` + в `Directory.Packages.props:71`.
+Это репозиторийный проёб, и он лечится удалением пакета. (Заявление
+`AGENTS.md`, которое этот аудит цитировал как «честное признание» — что
+`dotnet test` «находит НОЛЬ тестов, хост выходит с кодом 5» — было неверным;
+см. врезку выше.)
 
 ---
 
