@@ -1,5 +1,6 @@
 using System.Buffers;
 using System.Text;
+using Harbor.Ui.Framework.Rendering;
 using Harbor.Ui.Framework.Rendering.Protocol;
 
 namespace Harbor.Tui.CellForge.Rendering;

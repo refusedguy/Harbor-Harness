@@ -1,7 +1,12 @@
+using Harbor.Ui.Framework.Rendering.Input;
+
 namespace Harbor.Tui.CellForge.Input;
 
 // IFocusTarget moved to Harbor.Ui.Framework.Rendering.Input (renderer-agnostic
-// shared vocabulary); FocusRouter keeps consuming it via GlobalUsings.
+// shared vocabulary). The engine used to reach it through a project-wide
+// `global using` block with no import line of its own; #795 deleted that block,
+// so this file now spells the borrow out. The vocabulary's eventual home is
+// #436's decision, not this file's.
 
 /// <summary>
 /// Flat Tab-order focus traversal (lazygit style): Tab/Shift+Tab wrap around,
