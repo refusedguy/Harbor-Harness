@@ -312,6 +312,85 @@ public sealed class ToolNameListRule
         await Assert.That(offenders).IsEmpty().Because(string.Join("\n", offenders));
     }
 
+    /// <summary>
+    ///     THE EXEMPTION STAYS HONEST. <see cref="PolicyExemptions" /> is a list of
+    ///     files whose tool tables are tolerated, so an entry that no longer
+    ///     tolerates anything grants a permission nothing reads — and the next
+    ///     person to add a real table to that file inherits it without re-reading
+    ///     the reason.
+    /// </summary>
+    /// <remarks>
+    ///     <para>
+    ///         This is the same check <c>ProviderIdDispatchRule</c> runs over
+    ///         <c>DispatchExemptions</c>, and the same liveness half
+    ///         <see cref="ExemptionReason" /> deliberately does NOT do: that helper
+    ///         checks that a row states an argument, and says outright that whether
+    ///         "the debt it describes still exists" is "a different question" which
+    ///         "the tables that can answer it already do it by liveness — every
+    ///         baseline row is re-probed against reality and fails when the violation
+    ///         it grandfathers is gone". This table is one of the ones that can answer
+    ///         it, because the rule it suppresses can be re-run on the one file.
+    ///     </para>
+    ///     <para>
+    ///         Liveness is measured against the finder, not against the reason prose.
+    ///         <c>RipGrepTool.cs</c>'s entry said "the tool's own JSON schema … a
+    ///         schema is data, not a table of tools", but the reason is not the test:
+    ///         the schema run there is twelve distinct names of which exactly one is a
+    ///         tool, so the density ratio rejects it before the count is consulted,
+    ///         and the file contributes no table at all. Probing the finder rather
+    ///         than the prose is what makes the row falsifiable — the prose can be
+    ///         true of a file the rule would never have flagged.
+    ///     </para>
+    /// </remarks>
+    [Test]
+    public async Task Every_Policy_Exemption_Names_A_File_That_Still_Carries_A_Tool_Table()
+    {
+        FrozenSet<string> known = ToolNameInventory.Names;
+
+        // Ordered so a failure message does not depend on dictionary iteration —
+        // the same reason `Sorted` exists.
+        var rows = PolicyExemptions
+            .OrderBy(kv => kv.Key, StringComparer.Ordinal)
+            .Select(kv => (Key: kv.Key, Row: new ExemptionReason.Row(kv.Value, null)));
+
+        IReadOnlyList<string> unreasoned = ExemptionReason.RowsWithoutAReason(
+            $"{nameof(ToolNameListRule)}.{nameof(PolicyExemptions)}",
+            rows);
+
+        await Assert.That(unreasoned).IsEmpty()
+            .Because("an entry here suppresses rule 1 for a whole file, and one that does not say why "
+                   + "is indistinguishable from an oversight: " + string.Join(" | ", unreasoned));
+
+        HashSet<string> scanned = SourceScan.EnumerateProductCsFiles()
+            .Select(SourceScan.Relative)
+            .ToHashSet(StringComparer.Ordinal);
+
+        HashSet<string> carrying = FindToolTables(ReadProductSources(), known)
+            .Select(table => table[0].RelativePath)
+            .ToHashSet(StringComparer.Ordinal);
+
+        var dead = new List<string>();
+        foreach (string path in PolicyExemptions.Keys.Order(StringComparer.Ordinal))
+        {
+            if (!scanned.Contains(path))
+            {
+                dead.Add($"{path} — names a file the scan does not see, so the entry was dead on arrival");
+            }
+            else if (!carrying.Contains(path))
+            {
+                dead.Add($"{path} — carries no tool table the finder recognises, so nothing is being "
+                       + "exempted and the entry only widens the rule");
+            }
+        }
+
+        await Assert.That(dead).IsEmpty()
+            .Because("a dead exemption is worse than no entry: the next person to add a table to that "
+                   + "file inherits a permission nobody re-reads, and the guard cannot tell a live "
+                   + "policy from a stale copy of a declaration. Delete the entry and let the rule "
+                   + "apply — if the file really does need one, the finder will say so and the reason "
+                   + "can be written against a table that exists. Dead entries: " + string.Join(" | ", dead));
+    }
+
     // =====================================================================
     // 2. Non-vacuity.
     // =====================================================================
