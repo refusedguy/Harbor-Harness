@@ -604,9 +604,10 @@ dotnet_diagnostic.DI014.severity = suggestion
 # a process-lifetime rule, so "process-lifetime singletons" never covered it.
 # Nothing about this root needs it relaxed: the app registers no scoped service
 # at all (0 AddScoped, and 0 repo-wide under src/ + apps/), and its single
-# transient is resolved from the root at App.axaml.cs:163 rather than captured,
-# so there is no DI003 site to hide. It stays at the repo-wide `error` its
-# sibling composition root apps/Harbor.App.Cli is held to.
+# transient (OnboardingViewModel) is resolved from the root inside
+# App.ShowOnboardingThenMain rather than captured by a constructor, so there is
+# no DI003 site to hide. It stays at the repo-wide `error` its sibling
+# composition root apps/Harbor.App.Cli is held to.
 
 # Renderer golden-frame tests (Phase 5): reserved for the NickConsoleEx
 # capture test, which drives SharpConsoleUI window-system internals.

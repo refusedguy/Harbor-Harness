@@ -135,12 +135,12 @@ because reading the source settles it: `AddScoped` occurs **0** times in
 `apps/Harbor.App.Avalonia`, and 0 times repo-wide under `src/` + `apps/`, so
 there is no scoped service for a singleton to retain. The single transient
 (`OnboardingViewModel`, the only `AddTransient` in the app) is resolved from the
-root provider at `App.axaml.cs` and captured by no constructor. DI003 therefore
-has no site to hide here, and it stays at the tree-wide `error` that
-`apps/Harbor.App.Cli` — the same class of composition root — is held to. The
-breadth is still the whole app tree rather than the app root's own files; that
-is unchanged and unremarkable now that the remaining three rows are each about
-the root's own handover.
+root provider inside `App.ShowOnboardingThenMain` and captured by no constructor.
+DI003 therefore has no site to hide here, and it stays at the tree-wide `error`
+that `apps/Harbor.App.Cli` — the same class of composition root — is held to.
+The breadth is still the whole app tree rather than the app root's own files;
+that is unchanged and unremarkable now that the remaining three rows are each
+about the root's own handover.
 
 Three sibling blocks used to sit here for `apps/Harbor.App.{Wpf,Maui,Blazor}`.
 They were removed in #838: none of those directories exists — those roots live
