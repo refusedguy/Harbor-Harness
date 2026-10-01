@@ -200,10 +200,27 @@
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
-    <!-- DI lifetime analyzer (DI001 captive dependency, DI002 lifetime mismatch,
-         DI003 circular dependency, DI004 transient disposed by singleton).
-         Solution-wide: every project that consumes Microsoft.Extensions.DependencyInjection
-         gets checked. Severity is configured in .editorconfig (default = warning). -->
+    <!--
+      DI lifetime analyzer — DependencyInjection.Lifetime.Analyzers, which ships
+      26 diagnostics (DI001–DI022, DI024–DI027; DI023 is unused). The four
+      promoted to `error` are DI003 captive dependency, DI015 unresolvable
+      dependency, DI017 circular dependency and DI019 scoped service resolved
+      from the root provider. The per-rule severity table is .editorconfig, the
+      only place the mapping is written down; this comment states the promoted
+      four and defers the rest to it rather than re-listing the numbering.
+
+      The numbering used to be mis-stated right here — "DI001 captive
+      dependency ... DI003 circular dependency" — and the mismatch was not
+      cosmetic. A reader told DI003 means a cycle audits the Avalonia DI graph
+      for a cycle, finds none (there are none), and concludes the rule is
+      satisfied; the rule that actually needed reading is the captive-dependency
+      one, whose demotion went unexamined for a year (#865). A wrong id in a
+      comment is worse than no comment, because it is checkable-looking.
+
+      Solution-wide: every project that consumes
+      Microsoft.Extensions.DependencyInjection gets checked. Default severity is
+      warning.
+    -->
     <PackageReference Include="DependencyInjection.Lifetime.Analyzers">
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
       <PrivateAssets>all</PrivateAssets>
