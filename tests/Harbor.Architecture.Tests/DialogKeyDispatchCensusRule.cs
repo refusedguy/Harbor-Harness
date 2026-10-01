@@ -15,10 +15,10 @@
 //
 //   * "41 BRANCH POINTS" IS ONE DISPATCH MATRIX. `_kind` appears 51 times in
 //     the file, and 23 of them are inside a single method,
-//     `HandleKey(in KeyEvent)`. Those 23 are the second axis of ONE
-//     `switch (key.Key)` — a key-by-dialog-kind table with 14 keys and 31
-//     populated cells. That is one property ("what does this key do in this
-//     dialog"), written out as a table, not 41 independent decisions.
+//     `HandleKey(in KeyEvent)`. Those 23 are the second axis of ONE switch
+//     over the key — a key-by-dialog-kind table with 14 keys and 31 populated
+//     cells. That is one property ("what does this key do in this dialog"),
+//     written out as a table, not 41 independent decisions.
 //
 //   * THE TWO HANDLERS ARE NOT DUPLICATES. `HandleKey(ConsoleKeyInfo)` carries
 //     4 case labels; `HandleKey(in KeyEvent)` carries 14. They share 4
@@ -83,6 +83,17 @@
 //
 // WHAT THIS GATE CANNOT SEE — measured, not assumed
 // -------------------------------------------------
+//   0. THE FIRST RUN OF THIS FILE READ NOTHING, AND WENT RED FOR IT. The
+//     overlay is read by absolute path off `RepoPaths.RepoRoot`, because
+//     `SourceScan.TryReadAllText` resolves whatever string it is handed and a
+//     repo-relative one resolves against the test host's working directory --
+//     the test bin folder. Three tests failed with "collection has 0 items".
+//     That is the non-vacuity section doing its job: an empty read produced a
+//     red run rather than a green one, which is the entire argument for pinning
+//     discovery separately instead of trusting the table comparisons.
+//     Stated because "the gate read nothing and passed" is the failure this
+//     design exists to make impossible, and the first attempt at it failed.
+//
 //   1. IT CANNOT COUNT CONTROL FLOW. Everything here is a name-presence scan:
 //     "does `DialogKind.Approval` occur in this method body", not "how many
 //     branches does this method take". So a rewrite that moves dispatch into a
@@ -395,7 +406,8 @@ internal static class DialogKeyDispatchProbe
 /// </summary>
 public sealed class DialogKeyDispatchCensusRule
 {
-    private const string OverlayPath = "src/Harbor.Tui.CellForge/Chat/Widgets/DialogOverlay.cs";
+    /// <summary>Repo-relative path of the overlay this census measures.</summary>
+    private const string OverlayRelativePath = "src/Harbor.Tui.CellForge/Chat/Widgets/DialogOverlay.cs";
 
     /// <summary>The seven kinds the overlay declares.</summary>
     private static readonly string[] AllKinds =
@@ -464,10 +476,22 @@ public sealed class DialogKeyDispatchCensusRule
         "Backspace", "Char", "Delete", "Down", "End", "Home", "PageDown", "PageUp", "Up",
     ];
 
-    private static readonly Lazy<string> OverlayText = new(() =>
-        SourceScan.TryReadAllText(OverlayPath) is { } source
+    private static readonly Lazy<string> OverlayText = new(ReadOverlay);
+
+    /// <summary>
+    ///     Reads the overlay by ABSOLUTE path. <c>SourceScan.TryReadAllText</c> takes
+    ///     whatever string it is given, and a repo-relative one resolves against the
+    ///     test host's working directory — which under Microsoft.Testing.Platform is
+    ///     the test bin folder, not the repo. That is not a hypothetical: the first CI
+    ///     run of this file read nothing, every row came back empty, and three tests
+    ///     went red for it. <c>EnumerateProductCsFiles</c> hands back absolute paths
+    ///     for the same reason, which is why the product sweep below was unaffected.
+    /// </summary>
+    private static string ReadOverlay() =>
+        RepoPaths.RepoRoot is { } root
+        && SourceScan.TryReadAllText(Path.Combine(root, OverlayRelativePath)) is { } source
             ? SourceScan.StripComments(source)
-            : string.Empty);
+            : string.Empty;
 
     private static readonly Lazy<IReadOnlyList<(string Path, string Text)>> ProductSources = new(Read);
 
