@@ -57,6 +57,19 @@ public class CellForgeEngineAbsenceAxisTests
     private const string EngineProject = "src/Harbor.Tui.CellForge.Engine";
 
     /// <summary>
+    ///     The two roots the repo-wide rule walks. <c>tests/</c> is excluded on
+    ///     purpose, and not as a convenience: a guard whose fixture is a planted
+    ///     <c>Maybe</c> declaration cannot also read itself, or it reports its
+    ///     own non-vacuity fixture as a violation. <c>SourceScan</c> already
+    ///     excludes <c>tests/</c> for exactly this reason — measured in #795 as
+    ///     "a rule cannot police its own fixtures", recorded there as deliberate
+    ///     and not a defect. The planted source in
+    ///     <see cref="StructUnawareReader_IsNotVacuous"/> is the fixture, and it
+    ///     is read directly by that test rather than through this walk.
+    /// </summary>
+    private static readonly string[] ScannedRoots = ["src", "apps"];
+
+    /// <summary>
     ///     Declares absence. §4.6's second branch: "genuinely optional,
     ///     absence is not an error".
     /// </summary>
@@ -231,7 +244,7 @@ public class CellForgeEngineAbsenceAxisTests
         int engineMaybeMembers = 0;
         bool sawAnyMaybeAtAll = false;
 
-        foreach (string file in EnumerateSourceFiles(root))
+        foreach (string file in EnumerateScannedFiles(root))
         {
             string[] lines = ReadLines(file);
             HashSet<string> declared = DeclaredMaybeNames(lines);
@@ -358,9 +371,11 @@ public class CellForgeEngineAbsenceAxisTests
                 + "resolve makes every rule in this file vacuously green, which is worse than having no rule: "
                 + "the next conversion would land believing it had been checked.");
 
-        int total = EnumerateSourceFiles(root).Count();
+        int total = EnumerateScannedFiles(root).Count();
         await Assert.That(total).IsGreaterThan(500)
-            .Because($"The repo-wide walk should see well over 500 source files; found {total}.");
+            .Because($"The walk over {string.Join(" + ", ScannedRoots)} should see well over 500 source files; "
+                + $"found {total}. A smaller number means a root stopped resolving and rule 2 shrank without "
+                + "any test noticing.");
     }
 
     // ── helpers ──────────────────────────────────────────────────────────
@@ -449,6 +464,14 @@ public class CellForgeEngineAbsenceAxisTests
     /// <summary>Repository-relative, forward slashes, for failure messages.</summary>
     private static string Relative(string root, string absolutePath) =>
         Path.GetRelativePath(root, absolutePath).Replace('\\', '/');
+
+    /// <summary>
+    ///     Product source under <see cref="ScannedRoots"/>. Build output is
+    ///     excluded — obj/ and bin/ hold generated copies, and the plant CI
+    ///     proves a generated copy would be reported as a violation.
+    /// </summary>
+    private static IEnumerable<string> EnumerateScannedFiles(string root) =>
+        ScannedRoots.SelectMany(relative => EnumerateSourceFiles(Path.Combine(root, relative)));
 
     /// <summary>Build output excluded — obj/ and bin/ hold generated copies.</summary>
     private static IEnumerable<string> EnumerateSourceFiles(string directory)
