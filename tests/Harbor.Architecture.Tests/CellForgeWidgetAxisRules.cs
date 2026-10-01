@@ -40,12 +40,14 @@
 // and `host.RegisterTuiPlugin(tuiPlugin)` really is invoked. What is missing is
 // a fourth thing, which #620's marker/door pair has no name for:
 //
-//   * `IPluginLoadHost.TuiPlugins`
-//     (`src/Harbor.Hosting/Modules/PluginLoadHostAdapter.cs:91`) has NO reader
-//     anywhere under `src/` or `apps/`. Confirmed by scan, and by the fact that
-//     the only other `TuiPlugins` hits in the repository are a test fake whose
-//     property is named `RegisteredTuiPlugins` and therefore is not even a
-//     compile coupling to the interface.
+//   * there is NO RECEIVER. This bullet originally read "`IPluginLoadHost.
+//     TuiPlugins` has NO reader" — but that member never existed on
+//     `IPluginLoadHost`: it was born on the concrete `internal sealed class
+//     PluginLoadHost` and had no reader anywhere under `src/` or `apps/`, so
+//     #916 deleted it and the host door `RegisterTuiPlugin` now stores nothing.
+//     Seven documents had named the non-existent interface member, three of
+//     them teaching documents this file polices and one of them the interface's
+//     own IntelliSense.
 //   * therefore `ITuiPlugin.RegisterTui(ViewRegistry, ViewModelRegistry)` has no
 //     call site in the product, and a plugin that implements it loads, logs
 //     success, and paints nothing.
@@ -167,10 +169,20 @@
 //   would not be seen. The same boundary `ExtensionAxisFreezeRule` records for
 //   "nothing calls it", and for the same reason: these are members on a host
 //   object no plugin is ever handed, so a property hand-off cannot fake a read.
-// * `TuiPlugins` is matched as `.TuiPlugins` — a read through a receiver. The
-//   declaration on `PluginLoadHostAdapter` has no leading dot, so re-writing
-//   the property cannot make a dead seam look wired. That asymmetry is the whole
-//   point, and it is the same one `ExtensionAxisFreezeRule.OpenedDoor` uses.
+// * A collected-plugins read is matched as `.TuiPlugins` — a read through a
+//   receiver, not the declaration, so re-writing a property cannot make a dead
+//   seam look wired. That asymmetry is the whole point, and it is the same one
+//   `ExtensionAxisFreezeRule.OpenedDoor` uses. Since #916 the member is deleted,
+//   so this probe is vacuous until someone reintroduces the collection *and* a
+//   reader of it; it is kept because the reintroduction is the event rule 3 is
+//   two-sided for.
+// * #916 added the guard this file did not have: rules 1-3 are two-sided on the
+//   CONSUMER, so a declaration was invisible to all of them and the first
+//   `class Foo : ITuiPlugin` in `src/`+`apps/` would have left all seven rules
+//   here and all six in `ExtensionAxisFreezeRule` green.
+//   `ViewSeam_HasNoFirstImplementorInProductSource` closes that, matching the
+//   marker in a BASE LIST rather than on a receiver — the one shape that is a
+//   declaration and not a use.
 //
 // STATUS: never compiled. Local dotnet builds are forbidden in this repository
 // (8 concurrent agents on a 7 GB box), so CI is the only thing that has ever run
@@ -835,8 +847,8 @@ public sealed class CellForgeWidgetAxisRules
     ///     </para>
     ///     <para>
     ///         This is the rule that makes the closure a decision rather than a
-    ///         freeze. If a future change wires a renderer to read
-    ///         <c>IPluginLoadHost.TuiPlugins</c> and calls <c>RegisterTui</c>,
+    ///         freeze. If a future change collects the registered plugins and
+    ///         wires a renderer to read them, calling <c>RegisterTui</c>,
     ///         the seam is genuinely open and this test goes RED and says so —
     ///         at which point <see cref="ViewSeamStatus" /> is flipped to
     ///         <c>Open</c> here, and rule 4 in turn goes red until the documents
@@ -859,7 +871,7 @@ public sealed class CellForgeWidgetAxisRules
                 "ITuiPlugin is the axis this file is about, and its status is written down exactly once, "
                 + "as ViewSeamStatus. It has to agree with the product in both directions, or the status "
                 + "is the thing that is wrong rather than the code. A reader of "
-                + "IPluginLoadHost.TuiPlugins, or a call of ITuiPlugin.RegisterTui on a receiver, is what "
+                + "a read of the collected plugins, or a call of ITuiPlugin.RegisterTui on a receiver, is what "
                 + "makes the seam real: PluginRegistrar dispatches the marker and invokes "
                 + "host.RegisterTuiPlugin(...), which is the whole reason this seam PASSES "
                 + "ExtensionAxisFreezeRule — a marker and a door are present and connected, and the "
@@ -905,7 +917,7 @@ public sealed class CellForgeWidgetAxisRules
                 "a documented contract that no shipped renderer honours is worse than no contract, "
                 + "because the next reader trusts it. ITuiPlugin is dispatched and its host door is "
                 + "invoked, so it passes #620's axis freeze, and nothing consumes the result: "
-                + "IPluginLoadHost.TuiPlugins has no reader and ITuiPlugin.RegisterTui has no call site, "
+                + "the host door stores nothing (#916) and ITuiPlugin.RegisterTui has no call site, "
                 + "so a plugin view is never painted by any renderer — and in the canonical CellForge "
                 + "screen it could not be, because that screen is drawn by the cell-diff layout tree "
                 + "rather than by the base renderer's four placements. Each document that teaches this "
