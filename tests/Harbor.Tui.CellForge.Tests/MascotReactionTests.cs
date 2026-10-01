@@ -83,14 +83,27 @@ public class MascotReactionTests
         var (screen, buffer) = BuildFooterScreen();
         var status = screen.Status.Vm;
 
-        _ = PaintLastFrame(screen, buffer, 1);
-        status.SignalMascot(MascotReaction.ErrorBlink);
-        _ = PaintLastFrame(screen, buffer, 1); // notify paint — settled tint
+        // #891: pin the catalog across the paint AND the read, so both sides of
+        // the equality below resolve against one projection. Unpinned, this
+        // compares a buffer cell painted under one catalog against a global
+        // that a concurrent TerminalColorPalette.Apply may already have
+        // replaced — the flake #703 recorded on four unrelated PRs.
+        ChatPalette.PinFrame();
+        try
+        {
+            _ = PaintLastFrame(screen, buffer, 1);
+            status.SignalMascot(MascotReaction.ErrorBlink);
+            _ = PaintLastFrame(screen, buffer, 1); // notify paint — settled tint
 
-        // The '(' of the blink face sits at the trailing edge of the status row.
-        int x = screen.Status.Rect.Right - AmbientMascot.Width(AmbientMascot.ErrorBlinkFrames[0]);
-        int y = screen.Status.Rect.Y;
-        await Assert.That(buffer.Get(x, y).Style == ChatPalette.ToolError).IsTrue();
+            // The '(' of the blink face sits at the trailing edge of the status row.
+            int x = screen.Status.Rect.Right - AmbientMascot.Width(AmbientMascot.ErrorBlinkFrames[0]);
+            int y = screen.Status.Rect.Y;
+            await Assert.That(buffer.Get(x, y).Style == ChatPalette.ToolError).IsTrue();
+        }
+        finally
+        {
+            ChatPalette.UnpinFrame();
+        }
     }
 
     [Test]
@@ -183,18 +196,29 @@ public class MascotReactionTests
         screen.Tree.Solve(120, 24);
         var mascot = screen.Mascot!;
 
-        mascot.Paint(buffer); // settle
+        // #891: same pin as Blink_TintsMascot_WithEventAccent — the style
+        // equality at the end compares a painted cell against the global
+        // catalog, so both sides must come from one projection.
+        ChatPalette.PinFrame();
+        try
+        {
+            mascot.Paint(buffer); // settle
 
-        status.SignalMascot(MascotReaction.ErrorBlink);
-        mascot.Paint(buffer); // notify paint — frame 0, settled tint
+            status.SignalMascot(MascotReaction.ErrorBlink);
+            mascot.Paint(buffer); // notify paint — frame 0, settled tint
 
-        string art = GridDump.Art(buffer);
-        await Assert.That(art).Contains(AmbientMascot.ErrorBlinkFrames[0]);
-        await Assert.That(art).Contains(AmbientMascot.ReactionEars(MascotReaction.ErrorBlink)[0]);
+            string art = GridDump.Art(buffer);
+            await Assert.That(art).Contains(AmbientMascot.ErrorBlinkFrames[0]);
+            await Assert.That(art).Contains(AmbientMascot.ReactionEars(MascotReaction.ErrorBlink)[0]);
 
-        int fx = mascot.Rect.X + 3;
-        int fy = mascot.Rect.Y + 1; // face row
-        await Assert.That(buffer.Get(fx, fy).Style == ChatPalette.ToolError).IsTrue();
+            int fx = mascot.Rect.X + 3;
+            int fy = mascot.Rect.Y + 1; // face row
+            await Assert.That(buffer.Get(fx, fy).Style == ChatPalette.ToolError).IsTrue();
+        }
+        finally
+        {
+            ChatPalette.UnpinFrame();
+        }
     }
 
     [Test]
