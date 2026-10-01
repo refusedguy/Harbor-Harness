@@ -2,6 +2,11 @@ using System.Collections.Concurrent;
 using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Sessions;
+// #887: the canonical failure texts. Linked source (this project has no
+// <Compile Include> for the other two files in that folder, and does not need
+// them — see the csproj for why). Before this, every not-found sentence below
+// was written out by hand: nine SessionNotFound and two MessageNotFound.
+using Harbor.Storage.Shared;
 namespace Harbor.Storage.Memory;
 /// <summary>
 ///     In-memory session storage — for tests and ephemeral sessions.
@@ -27,7 +32,8 @@ public sealed class MemorySessionStore : ISessionStore
     {
         if (_sessions.TryGetValue(sessionId, out var session))
             return Task.FromResult(Result.Success(session));
-        return Task.FromResult(Result.Failure<Session>($"Session '{sessionId}' not found."));
+        return Task.FromResult(
+            Result.Failure<Session>(SessionStoreErrors.SessionNotFound(sessionId)));
     }
 
     public Task<Result<IReadOnlyList<Session>>> ListAsync(string? projectId = null, CancellationToken ct = default)
@@ -42,7 +48,7 @@ public sealed class MemorySessionStore : ISessionStore
     public Task<Result> AppendMessageAsync(string sessionId, AgentMessage message, CancellationToken ct = default)
     {
         if (!_messages.TryGetValue(sessionId, out var list))
-            return Task.FromResult(Result.Failure($"Session '{sessionId}' not found."));
+            return Task.FromResult(Result.Failure(SessionStoreErrors.SessionNotFound(sessionId)));
 
         lock (list)
         {
@@ -60,13 +66,14 @@ public sealed class MemorySessionStore : ISessionStore
     public Task<Result> UpdateMessageAsync(string sessionId, AgentMessage message, CancellationToken ct = default)
     {
         if (!_messages.TryGetValue(sessionId, out var list))
-            return Task.FromResult(Result.Failure($"Session '{sessionId}' not found."));
+            return Task.FromResult(Result.Failure(SessionStoreErrors.SessionNotFound(sessionId)));
 
         lock (list)
         {
             int idx = list.FindIndex(m => m.Id == message.Id);
             if (idx < 0)
-                return Task.FromResult(Result.Failure($"Message '{message.Id}' not found in session '{sessionId}'."));
+                return Task.FromResult(
+                    Result.Failure(SessionStoreErrors.MessageNotFound(sessionId, message.Id)));
             list[idx] = message;
         }
         return Task.FromResult(Result.Success());
@@ -75,7 +82,8 @@ public sealed class MemorySessionStore : ISessionStore
     public Task<Result<IReadOnlyList<AgentMessage>>> GetMessagesAsync(string sessionId, CancellationToken ct = default)
     {
         if (!_messages.TryGetValue(sessionId, out var list))
-            return Task.FromResult(Result.Failure<IReadOnlyList<AgentMessage>>($"Session '{sessionId}' not found."));
+            return Task.FromResult(
+                Result.Failure<IReadOnlyList<AgentMessage>>(SessionStoreErrors.SessionNotFound(sessionId)));
 
         lock (list)
         {
@@ -87,7 +95,7 @@ public sealed class MemorySessionStore : ISessionStore
     public Task<Result> DeleteAsync(string sessionId, CancellationToken ct = default)
     {
         if (!_sessions.ContainsKey(sessionId))
-            return Task.FromResult(Result.Failure($"Session '{sessionId}' not found."));
+            return Task.FromResult(Result.Failure(SessionStoreErrors.SessionNotFound(sessionId)));
         _sessions.TryRemove(sessionId, out _);
         _messages.TryRemove(sessionId, out _);
         return Task.FromResult(Result.Success());
@@ -96,7 +104,7 @@ public sealed class MemorySessionStore : ISessionStore
     public Task<Result<int>> DeleteMessagesAfterAsync(string sessionId, string messageId, CancellationToken ct = default)
     {
         if (!_messages.TryGetValue(sessionId, out var list))
-            return Task.FromResult(Result.Failure<int>($"Session '{sessionId}' not found."));
+            return Task.FromResult(Result.Failure<int>(SessionStoreErrors.SessionNotFound(sessionId)));
 
         lock (list)
         {
@@ -104,7 +112,7 @@ public sealed class MemorySessionStore : ISessionStore
             int tailIndex = list.FindIndex(m => m.Id == messageId);
             if (tailIndex < 0)
                 return Task.FromResult(Result.Failure<int>(
-                    $"Message '{messageId}' not found in session '{sessionId}'."));
+                    SessionStoreErrors.MessageNotFound(sessionId, messageId)));
 
             int removed = list.Count - (tailIndex + 1);
             if (removed > 0)
@@ -123,7 +131,8 @@ public sealed class MemorySessionStore : ISessionStore
     {
         if (_sessions.TryGetValue(sessionId, out var session))
             return Task.FromResult(Result.Success(session.Metadata));
-        return Task.FromResult(Result.Failure<SessionMetadata>($"Session '{sessionId}' not found."));
+        return Task.FromResult(
+            Result.Failure<SessionMetadata>(SessionStoreErrors.SessionNotFound(sessionId)));
     }
 
     public Task<Result> UpdateStatsAsync(string sessionId, SessionMetadata metadata, CancellationToken ct = default)
@@ -133,7 +142,7 @@ public sealed class MemorySessionStore : ISessionStore
             _sessions[sessionId] = session with { Metadata = metadata };
             return Task.FromResult(Result.Success());
         }
-        return Task.FromResult(Result.Failure($"Session '{sessionId}' not found."));
+        return Task.FromResult(Result.Failure(SessionStoreErrors.SessionNotFound(sessionId)));
     }
 
     public Task<Result> UpdateAsync(Session session, CancellationToken ct = default)
@@ -143,7 +152,7 @@ public sealed class MemorySessionStore : ISessionStore
             _sessions[session.Id] = session;
             return Task.FromResult(Result.Success());
         }
-                return Task.FromResult(Result.Failure($"Session '{session.Id}' not found."));
+                return Task.FromResult(Result.Failure(SessionStoreErrors.SessionNotFound(session.Id)));
     }
 
     public void Clear()
