@@ -69,7 +69,27 @@ public sealed class SystemTextFileStore : ITextFileStore
         // The whole reason this member is async: `File.Exists` is a synchronous
         // `stat`, and the caller is a UI thread. A `Task.FromResult` here would be
         // the same blocking call wearing an async signature.
-        return Task.Run(() => Result.Success(File.Exists(target)), cancellationToken);
+        return Task.Run(
+            () =>
+            {
+                // `File.Exists` swallows EVERY exception and answers `false`. That
+                // collapses "not there" and "I could not look" into one answer, and
+                // the caller renders `false` as "file not found" — a claim about the
+                // user's disk that a malformed path cannot support. So the path is
+                // normalised first, which is where a NUL or a bad separator actually
+                // throws, and the throw becomes a failed result.
+                try
+                {
+                    _ = Path.GetFullPath(target);
+                    return Result.Success(File.Exists(target));
+                }
+                catch (Exception ex) when (ex is ArgumentException or NotSupportedException or PathTooLongException)
+                {
+                    _logger.LogDebug(ex, "Text file probe failed for {Path}", target);
+                    return Result.Failure<bool>($"Cannot probe '{target}': {ex.Message}");
+                }
+            },
+            cancellationToken);
     }
 
     /// <inheritdoc />

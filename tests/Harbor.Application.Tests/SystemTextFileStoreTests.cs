@@ -299,6 +299,26 @@ public sealed class SystemTextFileStoreTests
             await File.WriteAllTextAsync(path, "x");
             File.SetUnixFileMode(dir, UnixFileMode.UserRead | UnixFileMode.UserExecute);
 
+            // Self-validating: root ignores the directory mode, and some mounts
+            // ignore it too, so a plain "did it fail" assertion would be a false
+            // red in exactly the environment where the premise does not hold. The
+            // premise is checked with a direct BCL write first, and the test says
+            // nothing when there is no denial to observe.
+            bool denied = false;
+            try
+            {
+                await File.WriteAllTextAsync(path, "probe");
+            }
+            catch (UnauthorizedAccessException)
+            {
+                denied = true;
+            }
+
+            if (!denied)
+            {
+                return;
+            }
+
             Result written = await Store().WriteAsync(path, "y");
 
             await Assert.That(written.IsFailure).IsTrue();

@@ -2,6 +2,10 @@ using System.Collections.ObjectModel;
 using System.ComponentModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+// `Result` / `Result<T>` come from CSharpFunctionalExtensions, which the app does
+// not import globally — #934 made this the first file in the desktop shell to name
+// the type rather than only use an extension method on it.
+using CSharpFunctionalExtensions;
 using Harbor.App.Avalonia.Services;
 using Harbor.Abstractions.Filesystem;
 using Harbor.Abstractions.Lsp;
