@@ -88,11 +88,15 @@
 //     #797 identified, at the line of each twin's assertion.
 //   * current `dev`          -> 0 violations across the whole `tests/` tree.
 //
-// Four tests defend that in CI, so a future edit that silently breaks the
+// Six tests defend that in CI, so a future edit that silently breaks the
 // detector fails here instead of leaving a rule that cannot fail:
 //
 //   * `Scanner_FindsTheTestTree` — the walk really reached the test sources, the
 //     three #797 files are in scope, and this file is deliberately not.
+//   * `Excluded_FiltersBuildOutputAndThisFile_OnEitherSeparatorSpelling` — the
+//     exclusion predicate, on both separator spellings. This one exists because
+//     the first push was green on ubuntu and RED on windows for exactly this
+//     reason; see IsExcluded.
 //   * `Rule_IsGreenOnTheCurrentTreeAtZeroViolations` — pins the count at 0, so a
 //     detector that starts matching nothing is a failure rather than a pass.
 //   * `Detector_FiresOnTheThreeShapesFromIssue765` — the detector, in isolation,
@@ -101,7 +105,6 @@
 //     waiter held in a named tuple.
 //   * `Detector_StaysQuietOnTheDispositionsThatAreDeterministic` — and stays
 //     quiet on six that it must not flag.
-//
 //   * `Detector_IgnoresProseThatDescribesTheRule` — the #808 tests explain
 //     themselves in comments naming these dispositions; prose cannot fail a build.
 
@@ -210,8 +213,9 @@ public class ApprovalGateWaiterRaceRules
             {
                 violations.Add(
                     $"{SourceScan.Relative(file)}:{race.Line} — `{race.Method}` asserts "
-                    + $"ApprovalDecisionDisposition.{race.Disposition} while its local "
-                    + $"`{race.Waiter}` is still parked on the gate's TCS. The decision that "
+                    + $"ApprovalDecisionDisposition.{race.Disposition} while a "
+                    + $"`WaitForDecisionAsync` waiter ({race.Waiter}) is still parked on the gate's "
+                    + "TCS. The decision that "
                     + "completes that TCS queues the waiter (RunContinuationsAsynchronously), "
                     + "and on consume it calls ForgetGate, which drops the slot — so the same "
                     + "gate answers AlreadyDecided or StaleGate depending on pool timing. "
@@ -246,6 +250,10 @@ public class ApprovalGateWaiterRaceRules
 
         var files = EnumerateTestSources();
 
+        // 400 is a floor, not a target. It is set well below the measured 819 so a
+        // platform that silently narrows the walk still has somewhere to land before
+        // the per-file assertions below catch it — those are the assertions that name
+        // the regression, this one only says "the walk returned almost nothing".
         await Assert.That(files.Count).IsGreaterThan(400)
             .Because(
                 $"The test tree should hold hundreds of source files; found {files.Count}. A near-zero "
@@ -289,6 +297,37 @@ public class ApprovalGateWaiterRaceRules
                 "This guard's own mustFail fixtures are deliberately racy sample code. If the file is in "
                 + "scope, the rule reports 11 violations of itself — the #899 trap. SelfFileName must stay "
                 + "in step with this file's name.");
+    }
+
+    [Test]
+    public async Task Excluded_FiltersBuildOutputAndThisFile_OnEitherSeparatorSpelling()
+    {
+        // The windows run failed on the first push with "the walk is filtering live
+        // files", while ubuntu was green: IsExcluded tested "/obj/" only, so on a
+        // Windows host the obj/ bin/ .worktrees/ subtrees were never filtered and the
+        // real sources lost the walk. These are the exact shapes, spelled both ways.
+        (string Path, bool Excluded)[] cases =
+        [
+            ("tests/Harbor.Application.Tests/ApprovalCoordinatorTests.cs", false),
+            ("tests/Harbor.Architecture.Tests/ApprovalGateWaiterRaceRules.cs", true),
+            ("tests/Harbor.App.Cli.Tests/obj/Generated/TUnit/T.g.cs", true),
+            ("tests/Harbor.App.Cli.Tests/bin/Release/net10.0/Gen/g.cs", true),
+            ("tests/.worktrees/other/Harbor.Core.Tests/X.cs", true)
+        ];
+
+        foreach ((string relative, bool excluded) in cases)
+        {
+            await Assert.That(IsExcluded(relative)).IsEqualTo(excluded)
+                .Because($"A unix-spelled path must classify as excluded={excluded}: {relative}");
+
+            string windowsSpelling = relative.Replace('/', '\\');
+
+            await Assert.That(IsExcluded(windowsSpelling)).IsEqualTo(excluded)
+                .Because(
+                    "IsExcluded must not depend on the separator the host reports. A filter that only "
+                    + $"matches one spelling is green on the platform it was written on and wrong on the "
+                    + $"other: excluded={excluded} expected for {windowsSpelling}");
+        }
     }
 
     [Test]
@@ -588,14 +627,7 @@ public class ApprovalGateWaiterRaceRules
         var found = new List<string>();
         foreach (string file in Directory.EnumerateFiles(dir, "*.cs", SearchOption.AllDirectories))
         {
-            string normalised = file.Replace('\\', '/');
-            if (normalised.Contains("/obj/", StringComparison.Ordinal)
-                || normalised.Contains("/bin/", StringComparison.Ordinal)
-                || normalised.Contains("/.worktrees/", StringComparison.Ordinal)
-                || string.Equals(
-                    Path.GetFileName(file),
-                    SelfFileName,
-                    StringComparison.Ordinal))
+            if (IsExcluded(file))
             {
                 continue;
             }
@@ -605,6 +637,51 @@ public class ApprovalGateWaiterRaceRules
 
         found.Sort(StringComparer.Ordinal);
         return found;
+    }
+
+    /// <summary>
+    ///     Whether a walked file is build output, a sibling worktree, or this file.
+    /// </summary>
+    /// <remarks>
+    ///     Both separator spellings are checked, and the reason is a real CI failure
+    ///     rather than a precaution. <c>Directory.EnumerateFiles</c> returns whatever
+    ///     separator the host uses, so a <c>"/obj/"</c>-only test passes on
+    ///     <c>ubuntu-latest</c> — where the arch gate also runs and the build is green —
+    ///     and then filters live sources on <c>windows-latest</c>, where the same walk
+    ///     yields <c>D:\a\…\tests\X\obj\Generated\…</c> and no <c>/obj/</c> ever
+    ///     matches. That is how <c>Scanner_FindsTheTestTree</c> failed on windows with
+    ///     "the walk is filtering live files" while <c>dev</c> was green: the rule
+    ///     counted 819 files on Linux and far fewer there.
+    ///     <para>
+    ///         Checking only one spelling is the same class of bug as the
+    ///         <c>SourceScan.IsBuildOutput</c> trap above — a filter that looks right on
+    ///         the machine it was written on. So both are checked on both platforms, and
+    ///         <see cref="Scanner_FindsTheTestTree" /> asserts the three #797 files are
+    ///         actually present, which is what turns this from a silent narrow scope into
+    ///         a test failure.
+    ///     </para>
+    /// </remarks>
+    private static bool IsExcluded(string file)
+    {
+        string forward = file.Replace('\\', '/');
+        string native = file.Replace('/', '\\');
+
+        foreach (string path in (string[])[forward, native])
+        {
+            if (path.Contains("/obj/", StringComparison.Ordinal)
+                || path.Contains("/bin/", StringComparison.Ordinal)
+                || path.Contains("/.worktrees/", StringComparison.Ordinal))
+            {
+                return true;
+            }
+        }
+
+        // File name, not path: on a Windows host a caller may hold either separator
+        // spelling, and the self-exclusion must not depend on which one it is.
+        return string.Equals(
+            Path.GetFileName(file.Replace('\\', '/')),
+            SelfFileName,
+            StringComparison.Ordinal);
     }
 
     /// <summary>
