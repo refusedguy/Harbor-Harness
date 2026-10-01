@@ -67,7 +67,31 @@ public static class PanelRows
     }
 
     /// <summary>Token-breakdown rows: cumulative totals with █/░ bars.</summary>
-    public static List<string> TokenRows(long input, long output, decimal cost, int width)
+    /// <param name="input">Cumulative input tokens.</param>
+    /// <param name="output">Cumulative output tokens.</param>
+    /// <param name="width">Available columns.</param>
+    /// <param name="cost">
+    ///     Cumulative cost as the core priced it, or a lower bound when
+    ///     <paramref name="isCostUnpriced" /> is <see langword="true" />.
+    /// </param>
+    /// <param name="isCostUnpriced">
+    ///     <see langword="true" /> when the core could NOT price this session —
+    ///     the model publishes no rate table, so the number is a floor and not a
+    ///     bill. The money cell then reads <see cref="StatusBarText.UnknownCostCell" />
+    ///     instead of a fabricated "$0.0000" (#942).
+    ///     <para>
+    ///         A genuinely free model reports the same way, because
+    ///         <c>Pricing.IsUnknown</c> is true for it too — the core cannot tell
+    ///         "free" from "unpriced" and deliberately says "unknown" rather than
+    ///         risk the false claim. See <c>SessionMetadata.IsCostKnown</c>.
+    ///     </para>
+    /// </param>
+    public static List<string> TokenRows(
+        long input,
+        long output,
+        decimal cost,
+        int width,
+        bool isCostUnpriced = false)
     {
         long scale = Math.Max(input, Math.Max(output, 1));
         int barWidth = Math.Max(0, width - 24);
@@ -77,10 +101,26 @@ public static class PanelRows
         rows.Add($"in    {PanelText.FormatCount(input).PadLeft(12)}  {PanelText.Bar(input, barWidth, scale)}".TrimEnd());
         rows.Add($"out   {PanelText.FormatCount(output).PadLeft(12)}  {PanelText.Bar(output, barWidth, scale)}".TrimEnd());
         rows.Add(PanelText.Separator);
-        // #682: the money cell's shape is StatusBarText.CostToUsd, not a fifth
+        // #682: the money cell's SHAPE is StatusBarText.CostToUsd, not a fifth
         // hand-rolled "$" + …"F4" in a panel row. Byte-identical output; one
         // writer.
-        rows.Add($"total {PanelText.FormatCount(input + output).PadLeft(12)}  {StatusBarText.CostToUsd(cost)}");
+        //
+        // #942: and the core's own "I could not price this" bit has to REACH
+        // that writer. This row used to call CostToUsd(cost) unconditionally, so
+        // an unpriced session — 11 of the 13 shipped providers, every one of
+        // them served by a catalogue entry with no rates — printed "$0.0000"
+        // here while the status bar beside it printed "—". Same session, same
+        // frame, two different answers.
+        //
+        // The glyph is UnknownCostCell, NOT CostCell: CostCell hides the money
+        // cell at zero (the #457 "no data ⇒ no cell" placement rule for the
+        // projected bar), and this panel is positional — the total row is part
+        // of the table and cannot drop a column. That is the same
+        // placement-vs-shape split TuiViewModels.CostText documents.
+        string money = isCostUnpriced
+            ? StatusBarText.UnknownCostCell
+            : StatusBarText.CostToUsd(cost);
+        rows.Add($"total {PanelText.FormatCount(input + output).PadLeft(12)}  {money}");
         rows.Add("(cumulative session totals)");
         return rows;
     }

@@ -34,7 +34,11 @@
                         <StackPanel Spacing="2">
                             <TextBlock Text="Cumulative cost" Foreground="{StaticResource TextSubtleBrush}"
                                        FontSize="11" />
-                            <TextBlock Text="{Binding TotalCostUsd, StringFormat='{}${0:F4}'}"
+                            <!-- #942: TotalCostText, not TotalCostUsd + a
+                                 hand-rolled StringFormat. The core's unpriced bit
+                                 has to reach the glyph, and a StringFormat in
+                                 XAML is invisible to MoneyCellSingleHomeRules. -->
+                            <TextBlock Text="{Binding TotalCostText}"
                                        FontFamily="{DynamicResource FontMono}" FontSize="20"
                                        Foreground="{DynamicResource StateWarningBrush}" />
                         </StackPanel>

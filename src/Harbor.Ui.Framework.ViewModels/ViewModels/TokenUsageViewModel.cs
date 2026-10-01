@@ -33,7 +33,34 @@ public sealed partial class TokenUsageViewModel : ObservableObject
     private long _lastTokensOut;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(TotalCostText))]
     private decimal _totalCostUsd;
+
+    /// <summary>
+    ///     Whether the core could NOT price this session. Rides along with
+    ///     <see cref="TotalCostUsd" /> because a zero there is a floor, not a
+    ///     bill, and the view must not print it as an amount (#942).
+    /// </summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(TotalCostText))]
+    private bool _isCostUnpriced;
+
+    /// <summary>
+    ///     The cumulative-cost cell the overlay paints: the priced total, or
+    ///     <see cref="StatusBarText.UnknownCostCell" /> when the core said it
+    ///     could not price this model.
+    /// </summary>
+    /// <remarks>
+    ///     #942: this used to be the bare decimal with the glyph and the decimals
+    ///     supplied by the XAML <c>StringFormat='{}${0:F4}'</c>, so an unpriced
+    ///     session printed "$0.0000" — and a <c>StringFormat</c> is invisible to
+    ///     <c>MoneyCellSingleHomeRules</c>, which scans <c>*.cs</c> only. The cell
+    ///     is spelled here instead, next to the number it describes, which also
+    ///     drops the last hand-rolled money format out of the Avalonia tree.
+    /// </remarks>
+    public string TotalCostText => IsCostUnpriced
+        ? StatusBarText.UnknownCostCell
+        : StatusBarText.CostToUsd(TotalCostUsd);
 
     [ObservableProperty]
     private long _totalTokensIn;
@@ -69,6 +96,16 @@ public sealed partial class TokenUsageViewModel : ObservableObject
     /// </remarks>
     public void RecordUsage(UiState state)
     {
+        // #942: the money cell is synced BEFORE the token guard below, not after
+        // it. That guard exists to add one bar per turn, so it correctly skips a
+        // frame where no tokens moved — but the core's "could not price this"
+        // bit is not a per-turn quantity. It arrives on the same event as the
+        // tokens and flips when it flips, and a session whose first stats frame
+        // is already unpriced would otherwise keep the default (priced) bit and
+        // paint "$0.0000" for a model that has no rate table at all.
+        TotalCostUsd = state.Chat.Cost.CostUsd;
+        IsCostUnpriced = state.Chat.Cost.IsCostUnpriced;
+
         if (state.Chat.Cost.TokensIn == _lastTokensIn && state.Chat.Cost.TokensOut == _lastTokensOut) return;
         long deltaIn = state.Chat.Cost.TokensIn - _lastTokensIn;
         long deltaOut = state.Chat.Cost.TokensOut - _lastTokensOut;
@@ -97,7 +134,6 @@ public sealed partial class TokenUsageViewModel : ObservableObject
 
         TotalTokensIn = state.Chat.Cost.TokensIn;
         TotalTokensOut = state.Chat.Cost.TokensOut;
-        TotalCostUsd = state.Chat.Cost.CostUsd;
 
         _lastTokensIn = state.Chat.Cost.TokensIn;
         _lastTokensOut = state.Chat.Cost.TokensOut;
@@ -131,6 +167,7 @@ public sealed partial class TokenUsageViewModel : ObservableObject
         TotalTokensIn = 0;
         TotalTokensOut = 0;
         TotalCostUsd = 0;
+        IsCostUnpriced = false;
     }
 
     /// <summary>

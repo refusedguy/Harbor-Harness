@@ -104,6 +104,51 @@ internal static class SourceScan
     internal static IReadOnlyList<string> EnumerateProductCsFiles() => EnumerateCsFiles(ProductTrees);
 
     /// <summary>
+    ///     Every <c>*.axaml</c> file under the named repository-relative trees,
+    ///     under the same <see cref="IsBuildOutput" /> filter and the same sort.
+    /// </summary>
+    /// <remarks>
+    ///     Added for #942, and the reason is worth recording. The Avalonia half of
+    ///     that defect was a money cell written by a <c>StringFormat</c> INSIDE a
+    ///     <c>.axaml</c>, so every gate built on <see cref="EnumerateCsFiles" /> was
+    ///     blind to it by construction — not by oversight. A binding is a real place
+    ///     product behaviour is written, so the walk needs to be able to reach it;
+    ///     this is that reach, sharing the filter so the two cannot drift on what
+    ///     counts as product code.
+    /// </remarks>
+    /// <param name="trees">Repository-relative directories to walk.</param>
+    internal static IReadOnlyList<string> EnumerateXamlFiles(params string[] trees)
+    {
+        if (RepoPaths.RepoRoot is not { } root)
+        {
+            return [];
+        }
+
+        var found = new List<string>();
+        foreach (string tree in trees)
+        {
+            string dir = Path.Combine(root, tree);
+            if (!Directory.Exists(dir))
+            {
+                continue;
+            }
+
+            found.AddRange(Directory
+                .EnumerateFiles(dir, "*.axaml", SearchOption.AllDirectories)
+                .Where(p => !IsBuildOutput(p)));
+        }
+
+        found.Sort(StringComparer.Ordinal);
+        return found;
+    }
+
+    /// <summary>
+    ///     Every <c>*.axaml</c> file under <c>src/</c> and <c>apps/</c> — the same
+    ///     product trees <see cref="EnumerateProductCsFiles" /> walks.
+    /// </summary>
+    internal static IReadOnlyList<string> EnumerateProductXamlFiles() => EnumerateXamlFiles(ProductTrees);
+
+    /// <summary>
     ///     Reads a file, returning <see langword="null" /> when it cannot be read.
     ///     A file that vanished between enumeration and read is a discovery
     ///     problem, not a rule failure — every gate pairs its use with a
@@ -149,4 +194,23 @@ internal static class SourceScan
     /// </summary>
     internal static string StripComments(string source) =>
         LineComment.Replace(BlockComment.Replace(source, BlankOutComment), " ");
+
+    /// <summary>Matches an XML/markup comment, including the ones that span lines.</summary>
+    private static readonly Regex MarkupComment = new(@"<!--.*?-->", RegexOptions.Singleline | RegexOptions.Compiled);
+
+    /// <summary>
+    ///     Strips <c>&lt;!-- --&gt;</c> comments, preserving line count so a line
+    ///     number computed downstream still points at the real markup line.
+    /// </summary>
+    /// <remarks>
+    ///     <b>Not</b> <see cref="StripComments" />. That one is a C# stripper and is
+    ///     wrong for markup on both counts: its <c>//</c> rule eats the rest of any
+    ///     line containing a URL (<c>Source="http://…"</c>), and it does not
+    ///     recognise <c>&lt;!-- --&gt;</c> at all — so a rule that ran it over a
+    ///     <c>.axaml</c> would both truncate real markup and grade comment prose as
+    ///     live bindings, which is exactly the false positive every other gate here
+    ///     is written to avoid. Added with #942, the guard whose XAML rule needs it.
+    /// </remarks>
+    internal static string StripMarkupComments(string source) =>
+        MarkupComment.Replace(source, BlankOutComment);
 }
