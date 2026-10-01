@@ -471,8 +471,8 @@ public sealed class CostUnpricedBitRules
         var sites = new List<Site>();
         var homes = Homes.Select(h => h.RelativePath).ToHashSet(StringComparer.Ordinal);
 
-        // RULE A — the XAML half. Only bindings onto a RAW cost decimal count;
-        // a `*Text` binding is the fix this rule asks for.
+        // RULE A — the XAML half. Only bindings onto a RAW cost decimal count; a
+        // binding to an already-spelled cell is the fix this rule asks for.
         foreach (string path in SourceScan.EnumerateProductXamlFiles())
         {
             string relative = SourceScan.Relative(path);
@@ -558,13 +558,19 @@ public sealed class CostUnpricedBitRules
     }
 
     /// <summary>
-    ///     The XAML lines that trip RULE A, from in-memory text — same matcher,
-    ///     same binding test as the real scan.
+    ///     The XAML lines that trip RULE A, from in-memory text.
     /// </summary>
+    /// <remarks>
+    ///     Strips markup comments FIRST, exactly as the real scan does — and that
+    ///     ordering is the whole point of the control, not a detail. Without it this
+    ///     helper is a laxer matcher than the rule and the control that exists to
+    ///     prove the stripper ran fails on its own input instead: CI caught exactly
+    ///     that, reporting a planted markup comment as a live binding.
+    /// </remarks>
     private static IReadOnlyList<string> FindXamlIn(IReadOnlyList<string> lines)
     {
         var hits = new List<string>();
-        foreach (string line in lines)
+        foreach (string line in SourceScan.StripMarkupComments(string.Join("\n", lines)).Split('\n'))
         {
             if (Regex.IsMatch(line, Rules[0].Pattern, RegexOptions.CultureInvariant)
                 && RawMoneyBinding.IsMatch(line))

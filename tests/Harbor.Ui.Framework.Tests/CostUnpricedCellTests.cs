@@ -79,7 +79,10 @@ public class CostUnpricedCellTests
 
         // The whole point of the fix: the panel and the status bar are two views
         // of ONE session's money, so they must not answer differently.
-        string statusBarCell = StatusBarText.CostCell(costUsd: 0m, isCostUnpriced: true);
+        string? statusBarCell = StatusBarText.CostCell(costUsd: 0m, isCostUnpriced: true);
+        await Assert.That(statusBarCell).IsNotNull()
+            .Because("CostCell returns a CELL for the unpriced case — that is the rule the panel "
+                     + "mirrors; a null here would mean the two surfaces disagree about placement");
         await Assert.That(TotalRow(rows)).Contains(statusBarCell!)
             .Because("StatusBarText.CostCell is what the projected status bar paints for this "
                      + "exact state; a panel that says something else is the #457/#682 class of bug");
