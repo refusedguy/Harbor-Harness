@@ -362,7 +362,6 @@ public sealed class CostUnpricedBitRules
             .Because("the projection that feeds the status bar must exist; if it moved, update "
                      + "this guard rather than letting the exemption list quietly widen");
         await Assert.That(facts!).Contains("StatusBarText.CostCell(cost.CostUsd, cost.IsCostUnpriced)")
-            .IsTrue()
             .Because("this is the one call every surface is sent to for the unknown-price answer. "
                      + "If it is gone, the homes below have no alternative to defer to and this "
                      + "rule is protecting nothing. See issue #942.");
@@ -370,7 +369,6 @@ public sealed class CostUnpricedBitRules
         string? usdCell = SourceScan.TryReadAllText(
             Path.Combine(root, "src/Harbor.Abstractions.Contracts/Models/UsdCell.cs"));
         await Assert.That(usdCell).Contains("public const string Unpriced =")
-            .IsTrue()
             .Because("UsdCell.Unpriced is the glyph the bit-aware surfaces print; it must keep "
                      + "existing for the same reason CostCell must. See issue #942.");
     }
@@ -390,7 +388,6 @@ public sealed class CostUnpricedBitRules
         foreach (FileHome home in Homes)
         {
             await Assert.That(home.Reason.Length).IsGreaterThan(80)
-                .IsTrue()
                 .Because("home " + home.RelativePath + " must state, in a sentence a reader can "
                          + "check, why the core's unpriced bit is out of its reach");
 
