@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using System.Windows.Input;
+using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Headless;
 using Avalonia.VisualTree;
@@ -23,20 +24,18 @@ namespace Harbor.App.Avalonia.Tests;
 ///     against it.
 /// </summary>
 /// <remarks>
-///     Deliberately minimal: no <c>Window.Show</c>, no render timer, no layout
-///     pass — <c>ApplyTemplate()</c> is enough to realize the tree, which is the
-///     same step <c>ViewInflationTests</c> already uses for this suite. Keeps
-///     clear of the known Avalonia 12 headless flakes (see
-///     <c>ViewInflationTests</c> known-issue notes).
+///     Deliberately minimal: no <c>Window.Show</c> and no render timer — the view
+///     is applied, measured and arranged in place, which is enough to put the axaml
+///     content into the tree this test walks. Keeps clear of the known Avalonia 12
+///     headless flakes (see <c>ViewInflationTests</c> known-issue notes).
 ///     <para>
-///         This remark used to say realized containers were NOT needed. That was
-///         wrong, and it was wrong in the way that hides things: with no
-///         realization the <c>Compute</c> button is not in the visual tree,
-///         <c>.Single(b =&gt; b.Content == "Compute")</c> throws, and the throw
-///         was discarded because the assertions ran as a detached <c>async
-///         void</c> inside <c>Dispatch(Action)</c>. So the file had been green
-///         while checking none of its five claims. See the note at the
-///         <c>ApplyTemplate</c> call.
+///         This remark used to claim realized containers were NOT needed. That was
+///         wrong, and it was wrong in the way that hides things: with nothing
+///         realized, <c>GetVisualDescendants()</c> walks an empty tree,
+///         <c>.Single(b =&gt; b.Content == "Compute")</c> throws, and the throw was
+///         discarded because the assertions ran as a detached <c>async void</c>
+///         inside <c>Dispatch(Action)</c>. The file had been green while checking
+///         none of its five claims. See the note at the realization call.
 ///     </para>
 /// </remarks>
 [NotInParallel("avalonia-headless")]
@@ -76,21 +75,30 @@ public class DiffViewBindingTests
 
             var view = new DiffView { DataContext = vm };
 
-            // The tree MUST be realized before it can be walked, and this line is
-            // the reason the test is worth anything. It was missing, and the test
-            // was still reporting green: `view.GetVisualDescendants()` found no
+            // The tree MUST be realized before it can be walked, and this block is
+            // the reason the test is worth anything. It was missing entirely, and
+            // the test still reported green: `GetVisualDescendants()` found no
             // Compute button, `.Single(b => b.Content == "Compute")` threw
             // "Sequence contains no matching element", and — because the body was
-            // an `async void` inside `Dispatch(Action)` (#972, #766) — the
-            // exception was discarded with the detached continuation. So the
-            // bindings this file exists to pin (#160) have never once been
-            // checked. The file's own remark claimed "realized containers are not
-            // needed"; that claim was the bug, and it is corrected here.
+            // an `async void` inside `Dispatch(Action)` (#972, #766) — the throw was
+            // discarded with the detached continuation. So the bindings this file
+            // exists to pin (#160) have never once been checked.
             //
-            // `ApplyTemplate` is the same realization step `ViewInflationTests`
-            // already uses for this suite, which is why the shape is not invented
-            // for this file.
+            // The file's remark claimed "realized containers are not needed". That
+            // claim was the bug.
+            //
+            // MEASURED, not assumed, about how far realization has to go:
+            // `ApplyTemplate()` ALONE is not enough. With it, the first CI run
+            // still reported "Button contents found: (none)" — a `ContentControl`
+            // applies its own template, but the inner `ContentPresenter` only
+            // builds its child during MEASURE. The full
+            // apply/measure/arrange sequence is what puts the axaml content into
+            // the visual tree, and `GetVisualDescendants()` walks the visual tree.
+            // So this is a layout pass, which the old remark said it was avoiding;
+            // it cannot be avoided and have a tree to walk.
             view.ApplyTemplate();
+            view.Measure(new Size(900, 600));
+            view.Arrange(new Rect(0, 0, 900, 600));
 
             // LeftText/RightText → the two input boxes (empty on silent no-resolve).
             texts = view.GetVisualDescendants()
