@@ -12,10 +12,14 @@ namespace Harbor.Terminal.Abstractions.Plugins;
 ///         marker is dispatched and the host door is invoked
 ///         (<c>PluginRegistrar.Register</c> → <c>host.RegisterTuiPlugin</c>), so
 ///         this contract passes #620's axis freeze; what is missing is the
-///         consumer. <c>IPluginLoadHost.TuiPlugins</c> has no reader anywhere in
-///         the product, so <c>RegisterTui</c> is never called, and the items
-///         below and the sample above describe a route no shipped renderer takes:
-///         a plugin implementing this loads, logs success, and paints nothing. In
+///         consumer. Since #916 the host door stores nothing at all — the
+///         <c>TuiPlugins</c> list that used to sit on the <c>internal</c>
+///         <c>Harbor.Hosting.PluginLoadHost</c> had no reader anywhere in the
+///         repository and was never a member of <c>IPluginLoadHost</c>, so
+///         it is deleted rather than renamed. <c>RegisterTui</c> is therefore never
+///         called, and the items below and the sample above describe a route no
+///         shipped renderer takes: a plugin implementing this loads, logs success,
+///         and paints nothing. In
 ///         the canonical CellForge screen it could not paint even if it were
 ///         called, because that screen is drawn by the cell-diff layout tree and
 ///         not by the four placements <see cref="BaseTuiRenderer.ShouldRenderPlacement" />
@@ -103,15 +107,18 @@ public interface ITuiPlugin
     public string Description { get; }
 
     /// <summary>
-    ///     Register views and view models into the supplied registries. Called once during
-    ///     renderer initialization, before builtin views are registered.
+    ///     Register views and view models into the supplied registries. <b>This is
+    ///     not called</b> — it has no call site in the product (#564), and since
+    ///     #916 the host door that would supply the plugins stores nothing.
     /// </summary>
     /// <remarks>
-    ///     <b>Never called.</b> No renderer in the product enumerates
-    ///     <c>IPluginLoadHost.TuiPlugins</c>, so this method has no call site and
-    ///     a plugin that implements it renders nothing. Implement
-    ///     <c>ITuiPanelPlugin</c> and register through <c>IPanelRegistry</c> for a
-    ///     panel that is actually painted. See the type-level remarks and #564.
+    ///     What this would do if it were wired: the host would call it once during
+    ///     renderer initialization, before builtin views are registered, so a
+    ///     plugin could override a builtin by id. No renderer in the product
+    ///     reaches this method, so a plugin that implements it renders nothing.
+    ///     Implement <c>ITuiPanelPlugin</c> and register through
+    ///     <c>IPanelRegistry</c> for a panel that is actually painted. See the
+    ///     type-level remarks and #564.
     /// </remarks>
     /// <param name="views">
     ///     The view registry — register <see cref="ITuiView" /> instances
