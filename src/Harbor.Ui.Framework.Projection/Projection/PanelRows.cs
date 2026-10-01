@@ -67,6 +67,9 @@ public static class PanelRows
     }
 
     /// <summary>Token-breakdown rows: cumulative totals with █/░ bars.</summary>
+    /// <param name="input">Cumulative input tokens.</param>
+    /// <param name="output">Cumulative output tokens.</param>
+    /// <param name="width">Available columns.</param>
     /// <param name="cost">
     ///     Cumulative cost as the core priced it, or a lower bound when
     ///     <paramref name="isCostUnpriced" /> is <see langword="true" />.
