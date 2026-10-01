@@ -162,6 +162,21 @@ internal static class ServiceRegistration
         services.AddSingleton<IDirectoryLister, SystemDirectoryLister>();
         services.AddSingleton<IFileTreePolicy, DefaultFileTreePolicy>();
         services.AddSingleton<ProjectFileTreeScanner>();
+        // #934: the same shape one capability over. The desktop code editor read and
+        // wrote the file the user picked straight from `CodeEditorViewModel` —
+        // `File.Exists` / `File.ReadAllTextAsync` / `File.WriteAllTextAsync` — and the
+        // synchronous `File.Exists` was a blocking `stat` on the UI thread, reached
+        // from a TreeView selection change and from a toolbar button. The path
+        // already came through a port (`IFilePicker` returns paths and does no I/O);
+        // the content did not. `ITextFileStore` is the Domain contract
+        // (Harbor.Abstractions, beside `IDirectoryLister`), `SystemTextFileStore` is
+        // its `System.IO` implementation in Harbor.Application beside
+        // `SystemDirectoryLister`, and the app consumes it. Both facts are enforced:
+        // AvaloniaTextFileIoRules fails if this line goes missing, and
+        // AppHostDiTests.BuildAsync_Registers_MainViewModel resolves
+        // MainViewModel -> IContentHost -> AvaloniaContentHost -> CodeEditorViewModel,
+        // so an unregistered port fails there with a DI exception.
+        services.AddSingleton<ITextFileStore, SystemTextFileStore>();
         // #569: AvaloniaWorkspaceCommands takes an ILogger<AvaloniaWorkspaceCommands>
         // so its sync IWorkspaceCommands members can report a fault instead of
         // dropping the Task (a void member whose body is ExecuteAsync has no
