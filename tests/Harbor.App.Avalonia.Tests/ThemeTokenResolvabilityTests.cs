@@ -243,18 +243,25 @@ public class ThemeTokenResolvabilityTests
     ///         vacuous passes. Here that shows up as a failure instead.
     ///     </para>
     ///     <para>
-    ///         The floors are the numbers measured when #971 landed, not round
-    ///         numbers. The markup scan's floor is 115, not the 118 it read
-    ///         before the fix in this same PR: that commit pointed three
-    ///         consumers at three different tokens, so three distinct names
-    ///         left the set — <c>CodeFont</c> and <c>TextMonoBrush</c> went out
-    ///         without a replacement being new (both replacements were already
-    ///         asked for elsewhere), and <c>BorderDefaultBrush</c> became
-    ///         <c>BorderSubtleBrush</c>, which was already in the set. The floor
-    ///         is set from the post-fix run (115) so it can only go up from
-    ///         here; keeping 118 would have pinned a number that the fix
-    ///         legitimately lowered, and a floor that a correct change trips is
-    ///         a floor that gets deleted.
+    ///         The floors are read off the tree as it stands, not typed as round
+    ///         numbers, and both are one lower than the count the first red run
+    ///         reported — for the same reason in both cases. Each floor is set
+    ///         AFTER the fix in this PR, because the fix removed the very names
+    ///         the scans were counting:
+    ///     </para>
+    ///     <para>
+    ///         markup 118 -> 115: <c>CodeFont</c> and <c>TextMonoBrush</c> left
+    ///         the set without a new name entering it (both replacements were
+    ///         already asked for), and <c>BorderDefaultBrush</c> became
+    ///         <c>BorderSubtleBrush</c>, already in the set.
+    ///     </para>
+    ///     <para>
+    ///         C# 31 -> 28: the three <c>Lsp*Brush</c> literals were names the
+    ///         app asked for and nothing provided. Fixing them means they are no
+    ///         longer asked for, so the honest floor is 28. Keeping 31 would
+    ///         have pinned the pre-fix count, and a floor a correct change trips
+    ///         is a floor somebody eventually deletes — which is how an
+    ///         anti-vacuity guard becomes a guard that tolerates vacuity.
     ///     </para>
     /// </remarks>
     [Test]
@@ -284,8 +291,8 @@ public class ThemeTokenResolvabilityTests
             .Because("115 distinct theme keys were asked for in markup after #971; fewer means the regex stopped matching");
         await Assert
             .That(csharp.Count)
-            .IsGreaterThanOrEqualTo(31)
-            .Because("31 theme-token literals were named in app C# when #971 landed; fewer means the shape regex stopped matching");
+            .IsGreaterThanOrEqualTo(28)
+            .Because("28 theme-token literals were named in app C# after #971; fewer means the shape regex stopped matching");
     }
 
     // ---------------------------------------------------------------------
