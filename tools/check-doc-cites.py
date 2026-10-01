@@ -404,8 +404,23 @@ THE SIXTH SHAPE — A `file:line` IN A TEST'S PROSE (#947)
   The cost is stated rather than buried: this makes a gate that has to be re-run
   at every substantive edit, because a line inserted above a cited one changes
   what the number means. That is a standing tax, and it is only worth paying
-  because the alternative was measured at 4 of 64 rather than assumed.
+  because the alternative was measured at 4 of 66 rather than assumed.
   See `check_cite_drift`.
+
+  ONE THING THIS RULE GOT WRONG ON ITS FIRST CI RUN, recorded because it is the
+  failure mode the rest of this file is about
+
+  It reported 87 findings in a worktree and 21 in CI, with no diagnostic.
+  `actions/checkout` defaults to `fetch-depth: 1`; in a depth-1 clone `git blame`
+  attributes every line to the shallow boundary commit, so the comparison becomes
+  HEAD against HEAD and finds nothing. The mechanical classes never touch history
+  and kept working, so the gate stayed GREEN on the one rule that catches the
+  class while reporting a smaller, entirely plausible number.
+
+  Hence `repo_is_shallow()`: the gate refuses on a truncated clone
+  (TEST-CITE-NO-HISTORY) and says the anchored findings are absent, not zero.
+  `docs.yml` sets `fetch-depth: 0`. The first fix is a bug someone corrects; the
+  second is what stops the rule from lying while looking healthy.
 
 USAGE
 
@@ -419,6 +434,7 @@ from __future__ import annotations
 import argparse
 import os
 import re
+import shutil
 import subprocess
 import sys
 from collections import defaultdict
@@ -899,6 +915,29 @@ def _lines_at(repo: str, rev: str, rel: str, cache: dict[tuple[str, str], list[s
     return cache[key]
 
 
+def repo_is_shallow(repo: str) -> bool:
+    """True when the clone has truncated history.
+
+    This is not a hypothetical. The first CI run of TEST-CITE-DRIFT did exactly
+    this: `actions/checkout` defaults to `fetch-depth: 1`, `git blame` then
+    attributes every line to the shallow boundary commit, and the rule's
+    comparison becomes HEAD-versus-HEAD. Measured on that run: 21 findings
+    instead of 87, with no diagnostic — the mechanical classes still worked, so
+    the build stayed green while the only rule that catches the class went
+    blind.
+
+    A rule that cannot see is worse than no rule, because nothing turns red. So
+    the gate refuses to run the anchored comparison on a truncated clone and
+    says so, instead of reporting the smaller number as if it were the whole
+    truth. `docs.yml` sets `fetch-depth: 0` for the same reason.
+    """
+    proc = subprocess.run(
+        ["git", "rev-parse", "--is-shallow-repository"],
+        cwd=repo, capture_output=True, text=True, env=md_gate.git_env(),
+    )
+    return proc.returncode == 0 and proc.stdout.strip() == "true"
+
+
 def check_cite_drift(
     repo: str, by_base: dict[str, list[str]]
 ) -> tuple[int, dict[str, list[tuple[str, str, int]]]]:
@@ -914,6 +953,21 @@ def check_cite_drift(
     """
     seen = 0
     problems: dict[str, list[tuple[str, str, int]]] = defaultdict(list)
+    # Reported once, against no citing file, because it is a statement about the
+    # REPOSITORY and not about any sentence in it. Keyed under the empty string
+    # so the existing "skip files with no hits" loop cannot drop it.
+    if repo_is_shallow(repo):
+        problems["(repository)"].append(
+            (
+                "TEST-CITE-NO-HISTORY",
+                "the clone is shallow, so TEST-CITE-DRIFT cannot compare a "
+                "citation against the commit that wrote it and will report "
+                "nothing. Re-run with full history (actions/checkout: "
+                "fetch-depth: 0). The mechanical TEST-CITE-* results below are "
+                "still valid; the anchored ones are absent, not zero.",
+                0,
+            )
+        )
     blame_cache: dict[str, dict[int, str]] = {}
     hist_cache: dict[tuple[str, str], list[str] | None] = {}
     head_cache: dict[str, list[str]] = {}
@@ -2678,6 +2732,40 @@ def self_test() -> int:
         "#947: `--min-test-cites` fails when the tests/ citation count shrinks",
         code == 1 and "floor" in out, out[-400:],
     )
+
+    # The failure this rule actually made on its first CI run, reproduced on
+    # purpose. A shallow clone cannot answer "what did this line mean when the
+    # citation was written", and the first version of the rule reported the
+    # smaller number as if it were the whole truth: 21 findings instead of 87,
+    # build green, anchored rule silently blind. The gate must now REFUSE rather
+    # than under-report, which is what this case pins.
+    shallow = subprocess.run(
+        # `file://` is REQUIRED and not decorative: git ignores `--depth` on a
+        # plain local-path clone (it hardlinks the object store instead), so
+        # this would produce a FULL clone and the case would assert nothing.
+        ["git", "clone", "--depth", "1", "--quiet",
+         "file://" + os.path.abspath(root), root + "-shallow"],
+        capture_output=True, text=True, env=md_gate.git_env(),
+    )
+    if shallow.returncode != 0:
+        st.expect(
+            "#947: a shallow clone of the fixture is refused rather than "
+            "silently under-reported",
+            False, shallow.stderr.strip()[-300:],
+        )
+    else:
+        code, out = md_gate.run_gate(root + "-shallow", "check-doc-cites.py")
+        st.expect(
+            "#947: a shallow clone reports TEST-CITE-NO-HISTORY instead of "
+            "quietly dropping the anchored rule",
+            code == 1 and "TEST-CITE-NO-HISTORY" in out, out.strip()[-500:],
+        )
+        st.expect(
+            "#947: ... and says the anchored findings are ABSENT, not zero — a "
+            "smaller number and a different number are not the same claim",
+            "absent, not zero" in out, out.strip()[-500:],
+        )
+        shutil.rmtree(root + "-shallow", ignore_errors=True)
 
     return st.finish()
 

@@ -181,6 +181,53 @@ Three options, with what each costs:
 A and B are not exclusive. B is the thing that keeps A honest: a symbol
 citation can rot too, and B is what notices.
 
+## The rule went blind in CI on its first run, and said nothing
+
+This is the most important result on the page, and it came from CI rather than
+from the worktree.
+
+The guard passed locally on every run: **87 findings**. Its first CI run
+reported **21** — and no error, no warning, exit 1 for a smaller reason. The
+gap was not a flakiness and not a scope difference:
+
+```
+worktree (full history)    87 findings   66 TEST-CITE-DRIFT
+CI (actions/checkout)      21 findings    0 TEST-CITE-DRIFT
+```
+
+`actions/checkout` defaults to `fetch-depth: 1`. In a depth-1 clone `git blame`
+attributes every line to the shallow boundary commit, so "what did this citation
+mean when it was written" becomes HEAD compared with HEAD and is true by
+construction. The mechanical classes — unresolved, past EOF, blank — never touch
+history and kept working, which is exactly what made it dangerous: **the gate
+stayed green on the one rule that catches the class, and the smaller number
+looked like a legitimate result.**
+
+`4 of 66` was the measurement that justified building the rule. Had the anchored
+comparison been built on `git log` and measured only in a worktree, the shipped
+artefact would have been a rule that catches 4 of 66 in practice, wearing a
+docstring that says 66.
+
+Two fixes, because either alone is insufficient:
+
+- `docs.yml` sets `fetch-depth: 0` on the cites job — necessary, because
+  without history there is nothing to compare against;
+- `repo_is_shallow()` makes the gate **refuse** on a truncated clone
+  (`TEST-CITE-NO-HISTORY`), stating that the anchored findings are *absent,
+  not zero*.
+
+The second is the one that matters. A missing checkout option is a bug someone
+fixes; a rule that reports a smaller number with the same confidence as a larger
+one is a defect that survives review, because the output is always plausible.
+`#905`'s lesson — the rule both works and lies — applied one level up to the
+rule itself, and `fetch-depth` was the trigger.
+
+Both are self-tested: `--self-test` builds a `file://` shallow clone of its own
+fixture and asserts the gate goes red with `TEST-CITE-NO-HISTORY` and says
+"absent, not zero". The `file://` is load-bearing — git ignores `--depth` on a
+plain local-path clone, so the first version of the case asserted nothing and
+passed vacuously.
+
 ## Appendix: the red run, verbatim
 
 Captured with the guard in place and **nothing repaired** — exit code 1,
