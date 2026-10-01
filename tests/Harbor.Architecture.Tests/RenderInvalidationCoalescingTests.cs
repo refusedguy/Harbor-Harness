@@ -176,7 +176,7 @@ public sealed class RenderInvalidationCoalescingTests
         {
             scanned++;
 
-            foreach (ChannelWrite hit in FindWrites(text, WakeChannel))
+            foreach (WriteSite hit in FindWrites(text, WakeChannel))
             {
                 writes++;
                 if (!IsNullLiteral(hit.Argument))
@@ -225,7 +225,7 @@ public sealed class RenderInvalidationCoalescingTests
             scanned++;
 
             // B2 — no sentinel on the lossless channel.
-            foreach (ChannelWrite hit in FindWrites(text, EventChannel))
+            foreach (WriteSite hit in FindWrites(text, EventChannel))
             {
                 eventWrites++;
                 if (IsSentinel(hit.Argument))
@@ -500,7 +500,7 @@ public sealed class RenderInvalidationCoalescingTests
 
     // ── scanning ────────────────────────────────────────────────────────────
 
-    private readonly record struct ChannelWrite(int Line, string Argument);
+    private readonly record struct WriteSite(int Line, string Argument);
 
     private readonly record struct BlockOrder(int FirstEventLine, int FirstWakeLine);
 
@@ -534,10 +534,10 @@ public sealed class RenderInvalidationCoalescingTests
     ///     Every <c>&lt;name&gt;.Writer.TryWrite(…)</c> on the named channel,
     ///     counted on literal- and comment-stripped text.
     /// </summary>
-    private static IReadOnlyList<ChannelWrite> FindWrites(string raw, string channel)
+    private static IReadOnlyList<WriteSite> FindWrites(string raw, string channel)
     {
         string[] code = SplitLines(StripLiteralsAndComments(raw));
-        var hits = new List<ChannelWrite>();
+        var hits = new List<WriteSite>();
 
         for (int i = 0; i < code.Length; i++)
         {
@@ -548,7 +548,7 @@ public sealed class RenderInvalidationCoalescingTests
                     continue;
                 }
 
-                hits.Add(new ChannelWrite(i + 1, match.Groups["arg"].Value.Trim()));
+                hits.Add(new WriteSite(i + 1, match.Groups["arg"].Value.Trim()));
             }
         }
 
@@ -556,7 +556,7 @@ public sealed class RenderInvalidationCoalescingTests
     }
 
     /// <summary>Rule A's verdict: the wake writes whose argument is not <c>null</c>.</summary>
-    private static IReadOnlyList<ChannelWrite> FlaggedWakes(string raw) =>
+    private static IReadOnlyList<WriteSite> FlaggedWakes(string raw) =>
         [.. FindWrites(raw, WakeChannel).Where(w => !IsNullLiteral(w.Argument))];
 
     /// <summary>Channel factories that are NOT <c>CreateUnbounded</c> — rule B1's verdict.</summary>
