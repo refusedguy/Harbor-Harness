@@ -111,7 +111,20 @@
 //
 //   4. `ShownInProduct` SCANS `src/` + `apps/` only (`SourceScan`), so a
 //     dialog shown exclusively from `tests/` reads as unreachable, which is the
-//     intent, and a `Show*` reached through reflection would not be seen.
+//     intent, and a `Show*` reached through reflection would not be seen. The
+//     matcher captures the name AFTER `Show`, so the set it builds also holds
+//     non-dialog `Show*` methods elsewhere in the tree (Cursor, Dialog,
+//     SwitchListAsync); they are simply never looked up, because the census
+//     asks about seven known kinds.
+//
+//   5. AN EARLIER VERSION OF THAT MATCHER WAS `.Method(` -- EVERY CALL. CI
+//     caught it: it reported the product-reachable kinds as "Confirm, Select",
+//     because `.Confirm(` and `.Select(` are calls somewhere in the product
+//     tree. The baseline was right and the matcher was wrong, which is the
+//     only comfortable way for a mismatch to resolve. Worth recording because
+//     the mistake looks like a broken measurement -- "these kinds ARE shown in
+//     product" is a believable sentence -- and the believable reading is the
+//     wrong one.
 //
 // NON-VACUITY
 // -----------
@@ -204,9 +217,17 @@ internal static class DialogKeyDispatchProbe
     internal static readonly Regex DedicatedHandler =
         new(@"private\s+bool\s+Handle(?<kind>\w+)Key\s*\(", RegexOptions.Compiled);
 
-    /// <summary>A product-side factory call. The leading dot is what separates a call from a declaration.</summary>
-    internal static readonly Regex ShowCall =
-        new(@"\.(?<kind>\w+)\s*\(", RegexOptions.Compiled);
+    /// <summary>
+    ///     A product-side call of one of the overlay's own <c>Show*</c> factories. The
+    ///     leading dot is what separates a call from a declaration, and capturing the
+    ///     name AFTER <c>Show</c> is what makes the result a dialog kind rather than an
+    ///     arbitrary method name. An earlier version matched every <c>.Method(</c> and
+    ///     compared the set against kind names, which matched LINQ: CI reported
+    ///     "Confirm, Select" as the product-reachable kinds, because
+    ///     <c>.Confirm(</c> and <c>.Select(</c> are calls somewhere in the product tree.
+    /// </summary>
+    internal static readonly Regex ShowFactoryCall =
+        new(@"\.\s*Show(?<kind>\w+)\s*\(", RegexOptions.Compiled);
 
     /// <summary>A <c>switch</c> case label, capturing the bare enum member name.</summary>
     internal static readonly Regex CaseLabel =
@@ -340,7 +361,7 @@ internal static class DialogKeyDispatchProbe
         var shown = new HashSet<string>(StringComparer.Ordinal);
         foreach ((string _, string text) in productSources)
         {
-            foreach (Match match in ShowCall.Matches(text))
+            foreach (Match match in ShowFactoryCall.Matches(text))
             {
                 shown.Add(match.Groups["kind"].Value);
             }
@@ -473,7 +494,7 @@ public sealed class DialogKeyDispatchCensusRule
     /// </summary>
     private static readonly string[] KittyOnlyKeyCases =
     [
-        "Backspace", "Char", "Delete", "Down", "End", "Home", "PageDown", "PageUp", "Up",
+        "Backspace", "Char", "Delete", "Down", "End", "Enter", "Home", "PageDown", "PageUp", "Up",
     ];
 
     private static readonly Lazy<string> OverlayText = new(ReadOverlay);
