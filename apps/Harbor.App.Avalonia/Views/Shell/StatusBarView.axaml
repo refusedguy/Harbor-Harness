@@ -45,7 +45,7 @@
                             Margin="0">
                     <TextBlock Text="{Binding ModelLabel}"
                                FontFamily="{DynamicResource FontMono}" FontSize="11"
-                               Foreground="{DynamicResource TextMonoBrush}"
+                               Foreground="{DynamicResource TextSecondaryBrush}"
                                VerticalAlignment="Center"
                                TextTrimming="CharacterEllipsis" />
                     </Button>

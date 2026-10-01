@@ -44,6 +44,21 @@ Application.Styles:
 `ThemeService.ApplyHds` replaces slot `[1]` **in-place** (`merged[i] = new ResourceInclude(...)`)
 so `DynamicResource` bindings keep working without a full resource refresh.
 
+Two consequences follow from that cascade, and both are load-bearing:
+
+- **The top level is empty by construction.** `Application.Resources` holds only
+  the `MergedDictionaries` block and no direct entries, and swapping a palette
+  replaces an element inside it rather than writing to the dictionary. So
+  `Application.Current.Resources[key]` misses for *every* token, in every theme.
+  The lookup that works is `TryGetResource` — see the C# section below.
+- **Only these nine files are reachable.** `Themes/Dark.axaml`,
+  `Themes/Light.axaml`, `Themes/HarborDark.axaml` and `Themes/HarborLight.axaml`
+  are not in the cascade and are not merged by anything, so the 54 keys they
+  declare do not resolve at runtime. They are kept for reference; they are not
+  the source of truth for a live view. Ask `ThemeTokenResolvabilityTests`
+  before adding a token name to a consumer — it is the test that asks a running
+  application, where `ThemeParityTests` only compares files to each other.
+
 ## C# token classes — FORBIDDEN
 
 Any class named `*Tokens.cs`, `*Theme.cs`, `*Palette.cs` in the UI layer is
