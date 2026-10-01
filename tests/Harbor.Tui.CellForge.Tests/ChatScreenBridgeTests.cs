@@ -104,6 +104,123 @@ public class ChatScreenBridgeTests
         await Assert.That(panel.Timeline.TotalHeight).IsGreaterThanOrEqualTo(CommitTickPacer.EnterDepth + 1);
     }
 
+    // ── #396: what a coalescing window must NOT do ─────────────────────────
+
+    /// <summary>
+    /// #396, the half the pacer tests above do not reach. They pin how MUCH a
+    /// tick reveals; this pins WHICH revision the user ends up looking at.
+    /// Coalescing a burst is only correct if the frame it collapses to is the
+    /// CURRENT one — a coalescer that absorbs a fresh invalidation leaves the
+    /// user reading the previous answer, which is the one failure mode the
+    /// issue calls the main risk and which no counter would report.
+    /// <para>
+    /// The shape is deterministic because the pacer takes an injected clock: 64
+    /// queued lines are over <c>CommitTickPacer.EnterDepth</c>, so the first tick
+    /// enters CatchUp and still reveals ONE line, and the second drains the rest.
+    /// </para>
+    /// </summary>
+    [Test]
+    public async Task CoalescedBurst_RevealsTheLastDelta_AndNeverAPrefix()
+    {
+        var bus = new FakeEventBus();
+        var panel = new ChatTimelinePanel("chat", 60, 8);
+        using var bridge = new ChatScreenBridge(bus, panel, new StatusViewModel());
+
+        await bus.PublishAsync(new MessageStartEvent(AssistantMessage.Empty("s", "m")));
+
+        // Space-free 8-char lines: RawText joins rendered lines with '\n', so a
+        // token that could wrap would make a Contains() check fail on layout
+        // rather than on content. Width is 80 (EffectiveWidth's fallback), so
+        // these cannot wrap at all.
+        const int Deltas = 64;
+        var partial = AssistantMessage.Empty("s", "m");
+        for (int i = 0; i < Deltas; i++)
+        {
+            await bus.PublishAsync(new MessageUpdateEvent(
+                new TextDeltaEvent("i", $"burst-{i:D2}\n"), partial));
+        }
+
+        string Painted() => panel.Timeline.BlockAt(panel.Timeline.Count - 1).RawText();
+
+        await Assert.That(Painted()).IsEmpty()
+            .Because(
+                "64 deltas arrived and no tick has run, so nothing may be on screen yet. If this ever shows text, "
+                + "something is painting outside the paced reveal — which is the repaint-per-delta shape #396 asks "
+                + "about, and it would cost one frame per delta at 0.3-0.8 ms each (docs/BENCHMARKS.md).");
+
+        bridge.Tick(nowMs: 0);
+
+        await Assert.That(Painted()).Contains("burst-00")
+            .Because("the first tick reveals the head of the queue — one line, not 64.");
+
+        await Assert.That(Painted()).DoesNotContain("burst-63")
+            .Because(
+                "one tick, one line. This is the measurement half of the contract: 64 deltas between two frames "
+                + "must not become 64 invalidations. (It is also the positive control for the assertion above — a "
+                + "coalescer that revealed the whole burst here would satisfy 'contains burst-00' and fail this.)");
+
+        bridge.Tick(nowMs: 16);
+
+        await Assert.That(Painted()).Contains("burst-63")
+            .Because(
+                "The newest revision survives the coalescing. This is what #396's acceptance criteria actually turn "
+                + "on — 'repaint count == 1, revision consumed == LAST revision' — and it is the OPPOSITE failure "
+                + "from the line above: a drain that clears the queue before enqueueing, or an off-by-one that drops "
+                + "the tail, would pass every reveal-count test in this file and leave the user reading a stale "
+                + "answer forever.");
+    }
+
+    /// <summary>
+    /// #396 acceptance criterion three: an approval/cancel/permission request
+    /// must not sit behind a burst of visual invalidations. There is no priority
+    /// queue to add — <c>ChatScreenBridge.Tick</c> drains the control-plane
+    /// queue BEFORE the paced reveal, so a gate requested behind a full backlog
+    /// is on the timeline on the very next tick, while the visual queue is still
+    /// revealing its first line.
+    /// <para>
+    /// The ordering inside <c>Tick</c> IS the lane. Reordering those two lines,
+    /// or gating the drain on an empty pending queue, makes this red — which is
+    /// the point: it is the only thing that would notice.
+    /// </para>
+    /// </summary>
+    [Test]
+    public async Task ApprovalRequestedBehindABurst_LandsOnTheSameTick_NotAfterItDrains()
+    {
+        var bus = new FakeEventBus();
+        var panel = new ChatTimelinePanel("chat", 60, 8);
+        using var bridge = new ChatScreenBridge(bus, panel, new StatusViewModel());
+
+        await bus.PublishAsync(new MessageStartEvent(AssistantMessage.Empty("s", "m")));
+
+        // A backlog deep enough that the reveal is still going when the gate is
+        // requested — the "burst of visual invalidations" of the criterion.
+        var partial = AssistantMessage.Empty("s", "m");
+        for (int i = 0; i < CommitTickPacer.EnterDepth + 2; i++)
+        {
+            await bus.PublishAsync(new MessageUpdateEvent(
+                new TextDeltaEvent("i", $"burst-{i:D2}\n"), partial));
+        }
+
+        var gate = bridge.RequestApprovalGate("bash", "cargo build");
+        await Assert.That(panel.Timeline.Count).IsEqualTo(1)
+            .Because("off the render thread nothing is mutated — the gate is queued, the stream block is all there is.");
+
+        bridge.Tick(nowMs: 0);
+
+        await Assert.That(panel.Timeline.BlockAt(panel.Timeline.Count - 1)).IsSameReferenceAs(gate)
+            .Because(
+                "One tick, with a visual backlog still queued. The control-plane drain runs first inside `Tick`, so "
+                + "the approval is serviced within one frame budget instead of after the burst drains. This is the "
+                + "'invalidation that must not be coalescable' the issue asks about: an approval the user is blocked "
+                + "on, deferred behind cosmetic churn, reads as a hung tool call.");
+
+        await Assert.That(bridge.TryRouteApprovalKey(KeyEvent.Char(new Rune('y')))).IsTrue()
+            .Because("the gate landed armed and interactable on the same tick, not merely present — a drained-but-dead "
+                     + "gate would satisfy the reference check above and still block the user.");
+
+        await Assert.That(gate.Decision).IsEqualTo(ApprovalChoice.Approve);
+    }
+
     [Test]
     public async Task DiffExtraction_FromMetadata_AndFromOutput()
     {

@@ -35,6 +35,16 @@ namespace Harbor.Application.Agents;
 ///         </list>
 ///     </para>
 ///     <para>
+///         <b>Stop boundary (#401):</b> both dispatch loops test
+///         <c>ct.IsCancellationRequested</c> before starting each call, so once
+///         a stop is observed no further call in the batch is started. Calls
+///         already running are still awaited (the run token reaches them via
+///         <see cref="ITool.ExecuteAsync" />); calls not yet started become
+///         <c>NotStartedBecauseStopped</c> entries. This is the "accepted
+///         cancellation holds" boundary — it observes the existing token, it
+///         does not introduce a second stop state machine.
+///     </para>
+///     <para>
 ///         <b>Error handling:</b> validation errors, permission denies, and
 ///         exceptions are all converted into <see cref="ToolResultEntry" />
 ///         with <c>IsError=true</c> — the agent loop treats them as
@@ -63,6 +73,30 @@ public sealed class ToolDispatcher(
     private const string ToolNameTag = "gen_ai.tool.name";
 
     /// <summary>
+    ///     Publish token for the TERMINAL event of a tool call (#401).
+    /// </summary>
+    /// <remarks>
+    ///     <para>
+    ///         The end event is how a renderer learns a card stopped spinning.
+    ///         Publishing it with the run token means a call that ended
+    ///         <i>because</i> the run was cancelled publishes it with an
+    ///         already-cancelled token — and a cancelled token is exactly the
+    ///         case where the bus stops awaiting the subscriber (see
+    ///         <c>InMemoryEventBus.DispatchToOneAsync</c>: an already-fired
+    ///         <c>Task.Delay(Timeout.InfiniteTimeSpan, ct)</c> wins the
+    ///         <c>WhenAny</c>, so the handler is left running unobserved). The
+    ///         terminal record of a cancelled call is the one event that must
+    ///         not depend on the cancellation it is reporting.
+    ///     </para>
+    ///     <para>
+    ///         Matches what <c>AgentLoop</c> already does for
+    ///         <c>AgentEndEvent(Cancelled: true)</c> and
+    ///         <c>CompactionBehavior</c> for <c>CompactionFailedEvent</c>.
+    ///     </para>
+    /// </remarks>
+    private static readonly CancellationToken TerminalEventToken = CancellationToken.None;
+
+    /// <summary>
     ///     Execute a batch of tool calls either sequentially (if any tool
     ///     declares <see cref="ExecutionMode.Sequential" />) or in parallel.
     ///     Returns a <see cref="ToolResultMessage" /> ready to append to
@@ -84,6 +118,16 @@ public sealed class ToolDispatcher(
         {
             foreach (var tc in toolCalls)
             {
+                // #401: an accepted stop ends NEW work. A sequential batch is
+                // the shape where the gap is widest — call k finishing is the
+                // natural moment for the user to press Stop, and without this
+                // gate the very next iteration would start anyway.
+                if (ct.IsCancellationRequested)
+                {
+                    results.Add(NotStartedBecauseStopped(tc));
+                    continue;
+                }
+
                 var result = await ExecuteSingleAsync(tc, session, partial, agent, ct, toolExecutionTimeout).ConfigureAwait(false);
                 results.Add(result);
             }
@@ -100,7 +144,16 @@ public sealed class ToolDispatcher(
                 tasks = ArrayPool<Task<ToolResultEntry>>.Shared.Rent(toolCalls.Count);
                 for (int i = 0; i < toolCalls.Count; i++)
                 {
-                    tasks[i] = ExecuteSingleAsync(toolCalls[i], session, partial, agent, ct, toolExecutionTimeout);
+                    // #401: the dispatch loop is the acceptance boundary. Each
+                    // iteration is a fresh `ExecuteSingleAsync` invocation, so a
+                    // cancel landing between iterations would otherwise start
+                    // calls the user asked to stop. Dispatch is cheap and
+                    // synchronous up to the permission gate, so the window is
+                    // real (a permission-gate cancel from iteration k-1 lands
+                    // inside this loop) rather than theoretical.
+                    tasks[i] = ct.IsCancellationRequested
+                        ? Task.FromResult(NotStartedBecauseStopped(toolCalls[i]))
+                        : ExecuteSingleAsync(toolCalls[i], session, partial, agent, ct, toolExecutionTimeout);
                 }
 
                 var resolved = await Task.WhenAll(
@@ -178,6 +231,29 @@ public sealed class ToolDispatcher(
         }
 
         return $"Unknown tool: '{rawName}'. Available: {avail}";
+    }
+
+    /// <summary>
+    ///     Result entry for a call that was never dispatched because a stop was
+    ///     already observed (#401). Reports an error, exactly like every other
+    ///     refusal path in this class, so the provider still sees one
+    ///     <c>tool_result</c> per <c>tool_call</c> — a missing result breaks the
+    ///     wire contract for OpenAI-compatible providers.
+    /// </summary>
+    /// <remarks>
+    ///     Deliberately publishes <b>no</b> <see cref="ToolExecutionStartEvent" />:
+    ///     nothing started, so there is no start to report and no end to pair it
+    ///     with. The entry text is the honest record of the outcome.
+    /// </remarks>
+    private ToolResultEntry NotStartedBecauseStopped(ToolCallPart toolCall)
+    {
+        logger.LogInformation(
+            "Tool {ToolName} (call {CallId}) not started — a stop was accepted before dispatch",
+            toolCall.ToolName, toolCall.Id);
+        return ToolResultEntry.From(
+            toolCall.Id,
+            toolCall.ToolName,
+            ToolResult.Error("Tool execution was cancelled before start."));
     }
 
     /// <summary>
@@ -267,7 +343,7 @@ public sealed class ToolDispatcher(
         {
             var cancelled = ToolResult.Error("Tool execution was cancelled.");
             await eventBus.PublishAsync(new ToolExecutionEndEvent(
-                toolCall.Id, cancelled, true), ct).ConfigureAwait(false);
+                toolCall.Id, cancelled, true), TerminalEventToken).ConfigureAwait(false);
             return ToolResultEntry.From(toolCall.Id, toolCall.ToolName, cancelled);
         }
         catch (OperationCanceledException oce) when (!ct.IsCancellationRequested)
@@ -281,7 +357,7 @@ public sealed class ToolDispatcher(
             logger.LogWarning(oce, "Tool {ToolName} (call {CallId}) hit its execution deadline", toolCall.ToolName, toolCall.Id);
             var timeout = ToolResult.Error(message);
             await eventBus.PublishAsync(new ToolExecutionEndEvent(
-                toolCall.Id, timeout, true), ct).ConfigureAwait(false);
+                toolCall.Id, timeout, true), TerminalEventToken).ConfigureAwait(false);
             return ToolResultEntry.From(toolCall.Id, toolCall.ToolName, timeout);
         }
         catch (Exception ex)
@@ -296,7 +372,7 @@ public sealed class ToolDispatcher(
                 : $"Tool execution failed: {ex.Message}";
             var errored = ToolResult.Error(errorMessage);
             await eventBus.PublishAsync(new ToolExecutionEndEvent(
-                toolCall.Id, errored, true), effectiveCt).ConfigureAwait(false);
+                toolCall.Id, errored, true), TerminalEventToken).ConfigureAwait(false);
             return ToolResultEntry.From(toolCall.Id, toolCall.ToolName, errored);
         }
         }
@@ -327,7 +403,7 @@ public sealed class ToolDispatcher(
         activity?.SetStatus(ActivityStatusCode.Error, validation.Error);
         var invalid = ToolResult.Error(validation.Error);
         await eventBus.PublishAsync(new ToolExecutionEndEvent(
-            toolCall.Id, invalid, true), ct).ConfigureAwait(false);
+            toolCall.Id, invalid, true), TerminalEventToken).ConfigureAwait(false);
         return ToolResultEntry.From(toolCall.Id, toolCall.ToolName, invalid);
     }
 
@@ -373,7 +449,7 @@ public sealed class ToolDispatcher(
 
         var denied = ToolResult.Error(reason);
         await eventBus.PublishAsync(new ToolExecutionEndEvent(
-            toolCall.Id, denied, true), ct).ConfigureAwait(false);
+            toolCall.Id, denied, true), TerminalEventToken).ConfigureAwait(false);
         return ToolResultEntry.From(toolCall.Id, toolCall.ToolName, denied);
     }
 
@@ -478,7 +554,7 @@ public sealed class ToolDispatcher(
                     activity?.SetStatus(ActivityStatusCode.Error, "cancelled before start");
                     var cancelledBeforeStart = ToolResult.Error("Tool execution was cancelled before start.");
                     await eventBus.PublishAsync(new ToolExecutionEndEvent(
-                        toolCall.Id, cancelledBeforeStart, true), ct).ConfigureAwait(false);
+                        toolCall.Id, cancelledBeforeStart, true), TerminalEventToken).ConfigureAwait(false);
                     return ToolResultEntry.From(toolCall.Id, toolCall.ToolName, cancelledBeforeStart);
                 }
 
@@ -514,7 +590,7 @@ public sealed class ToolDispatcher(
 
             logger.LogDebug("Tool execution end: {ToolName} (call {CallId}) isError={IsError}", toolCall.ToolName, toolCall.Id, result.IsError);
             await eventBus.PublishAsync(new ToolExecutionEndEvent(
-                toolCall.Id, result, result.IsError), effectiveCt).ConfigureAwait(false);
+                toolCall.Id, result, result.IsError), TerminalEventToken).ConfigureAwait(false);
 
             return ToolResultEntry.From(toolCall.Id, toolCall.ToolName, result);
         }

@@ -47,7 +47,7 @@
 | P2 | `StreamingCoalescer` tool-call Materialize | 481 µs @1000 дельт (35–48× медленнее текста) | кэш разобранных аргументов |
 | P2 | `PatchTool` apply | 10.1 ms / **9.3 MB** @5000 hunks | стримить вместо List<string>+Join |
 | P2 | `DefaultUiProjector` | 20.8 ms @5000 строк за кадр (холодный полный проход; инкрементальный кэш уже влито — см. ниже) | инкрементальная проекция по revision |
-| OK | `DefaultUiProjector` инкремент | 1000 дельт → 1001 проекция: **962 no-op reuse, 38 tail (флаши), 1 history**; markdown-парсов на store-пути 0; итого 475 µs / 1.03 MB (2026-09-10, `StreamingDeltaFrequencyBenchmark`, регрессия — `StreamingFrequencyTests`) | пожара нет; следить за transcript-композицией при росте history |
+| OK | `DefaultUiProjector` инкремент | 1000 дельт → 1001 проекция: **962 no-op reuse, 38 tail (флаши), 1 history**; markdown-парсов на store-пути 0; итого 475 µs / 1.03 MB (2026-09-10, `StreamingDeltaFrequencyBenchmark`, регрессия — `StreamingFrequencyTests`) | пожара нет; следить за transcript-композицией при росте history. С 2026-10-01 абсолютная цифра перестала быть гейтом: **#410** закрыл путь `UiStore.Dispatch` + `DefaultUiProjector` относительными гейтами в `test (ui)` — см. §5 «Store-path scaling gates (#410)» |
 | P3 | `SessionId` Dictionary key | медленнее string (7.9 vs 6.3 µs), HashSet быстрее — проверить GetHashCode | override hash |
 | P3 | `OpenAiWire.TryParseChatChunkLine` | плоские ~10 µs floor на любой чанк | Utf8JsonReader поверх span без ToString() |
 | OK | `StatusBarLayout.Fit` (per painted frame) | ✅ resolved: O(n²) width lookups under a process-global monitor → **exactly one lookup per segment, per-thread cache, no lock** (#487, §5.6). Machine-independent count, stopwatch rows pending a BDN run | — |
@@ -699,6 +699,72 @@ The fourth row is the lock half of #487. It calibrates first: if the runner cann
 four threads on pure CPU work, the test prints `SKIPPED` instead of failing, because that outcome
 says nothing about the code.
 
+### Store-path scaling gates (#410) — **RELATIVE**, CI merge gate
+
+`Harbor.Ui.Framework.Tests.StorePathScalingGates`, in the `test (ui)` merge-gate shard.
+
+**These rows are relative claims, not measurements.** Every gate compares a
+quantity against the SAME quantity measured over twice the input *inside one
+run*, so the runner's speed appears in both operands and cancels. The absolute
+milliseconds a run happened to produce are printed to the job summary (#618)
+for information and are **not** what any gate reads — do not read the absolute
+columns as a target, and do not "fix" a red gate by editing a number here.
+This is the opposite convention to every other table in this file, and it is
+deliberate. The #60 finding these gates enforce (`UiStore dispatch +
+DefaultUiProjector` per delta: 1000 → 475 µs / 1.03 MB, 2000 → 1.09 ms /
+2.46 MB) was never portable to begin with. Across six green `test (platform)`
+runs of `dev` on one unchanged commit,
+`DebouncedPluginWatcherTests.QuickSaveBurst_CollapsesToSingleModified`
+measured 2.167 / 2.624 / 2.938 / 3.009 / 3.088 / 2.702 s — a **1.43× spread** —
+and the run that reddened (#980, run 36851514483) read 178 ms for five 8-byte
+file writes against a 125 ms budget. A millisecond threshold on shared CI
+hardware is a wrong METRIC, not a badly chosen number: no value fixes it,
+because a tighter one flakes more and a looser one stops testing what it was
+written for.
+
+| Test | Relative claim | Gate | Measured (run 36860503050) |
+|---|---|---|---|
+| `Cost_GrowsSubLinearly_InDeltas` | time over the store path, 1000 → 2000 deltas — warm-up discarded, best-of-3, linux-gated | ratio ≤ 3.0 (linear ≈ 2.0; O(N²) ≈ 4.0) | **1.99** (0.996 → 1.985 ms) |
+| `Cost_GrowsSubLinearly_InDeltas` | the same claim for allocations, which do not move with runner speed at all | ratio ≤ 3.0 | **1.99** (1157.8 → 2298.7 KiB) |
+| `Shape_IsBoundedBy_Folds_And_Flushes_NotBy_Deltas` | transcript recomposed per FOLD, never per delta | `FullProjections ≤ folds + 2` | 2 ≤ 4 (2 folds) |
+| `Shape_IsBoundedBy_Folds_And_Flushes_NotBy_Deltas` | the projector rebuilds the tail at most once per reducer flush **plus once per `IsStreaming` flip** (`IsStreaming` is part of the tail's identity in `ProjectTail`). Counted from the **projector's own signal** — a new transcript model — so a projector re-resolving the tail on unflushed deltas moves this counter and not the reducer's | `TailRebuilds ≤ PolicyFlushes + (2·Messages − 1)`, against `StreamingSync.ShouldFlush` replayed over the same chunks | 67 ≤ 69 (66 policy flushes) |
+| `Shape_IsBoundedBy_Folds_And_Flushes_NotBy_Deltas` | the reducer's string-copy work is sublinear in deltas — the O(N²) `+` that `ChunkedBuffer` exists to prevent | `Materializations ≤ deltas/10` | 64 ≤ 100 (fast-path share 0.932) |
+| `Shape_IsBoundedBy_Folds_And_Flushes_NotBy_Deltas` | `MarkdownParses == 0` on the store path, measured through a proxy: already-projected transcript lines returning as a **different instance**. The store path styles whole lines with no parser behind it (`DefaultUiProjector.ResolveSpans`), and any parse — markdown included — necessarily allocates a new line instance | exactly 0 | 0 |
+| `TheRatioRuleAnswersTheDeclaredQuestion` | the ratio rule itself, over a fixed table of synthetic shapes with the limit carried **per row**, so retuning the constant cannot silently rewrite the control. Five of the seven rows must be **rejected**, including a zero and a negative baseline | 0 mismatches | 0 |
+
+Two properties make these gates rather than decorations, and both were paid for
+in failures first:
+
+- **Every counter is shown non-zero before it is bounded.** A count of zero
+  satisfies every `≤`, so `Dispatches`, `Projects`, `FastPathHits`, `Folds` and
+  `PolicyFlushes` are each asserted to have counted something real *first*.
+  This is the #901 shape — checks passing on zero subjects.
+- **The gate shipped red.** The first commit carried a deliberately tightened
+  1.05× limit, which fails on a correct tree, and the follow-up relaxed it to
+  3.0× with the reasoning recorded in the constant's own doc comment. Run
+  36860503050 measured ratios of 1.99 against the 1.05 limit — the failure
+  message is the gate working. A gate never observed red is not a gate — and it
+  is also why the factor is 3 and not 2 (2 reddens a correct tree whenever one
+  leg took a collection the other did not: the #939 shape) nor 8 (8 sits above
+  the quadratic shape the gate exists to catch, which is what #465 rejected).
+- **That same red run caught a bound that was too TIGHT rather than too
+  loose.** `TailRebuilds ≤ flushes + 1` was my first cut, and the correct tree
+  measured exactly 67 against a bound of 67. A gate that passes by zero margin
+  fails on the next runner for a reason that has nothing to do with the code —
+  the same class of defect as an absolute millisecond, one step further from
+  visible. The bound is now derived rather than fitted: a tail rebuild is
+  caused by every `IsStreaming` transition as well as by every flush, and the
+  script produces `2 · Messages − 1` of those, so the correct tree sits at 67
+  against 69.
+
+The script is **two** streaming messages, not one, and that is a non-vacuity
+requirement rather than realism: with a single message the transcript is empty
+until the final fold, so no already-projected line ever exists to compare
+against and the restyle counter would read 0 on any tree whatsoever. The
+second fold is what gives `ProjectHistory`'s common-prefix scan something to
+reuse — drop that scan and line 0 comes back as a new instance and the counter
+fires.
+
 ### ConsoleEx cell-diff core (`DiffEngineBenchmark`, 2026-08-26, Release)
 
 Frame-budget targets from `specs/07-tui.md` (< 16 ms/frame) and celldiff §7 — all met with an order of magnitude of headroom. Flush = real DiffEngine scan + AnsiWriter SGR/cursor encoding into a discarding backend (no tty I/O).
@@ -735,6 +801,65 @@ dotnet exec tests/Harbor.Tui.CellForge.Tests/bin/Release/net10.0/Harbor.Tui.Cell
 ² Armed pipeline over an animated glow region measures within noise of the disarmed path — the armed-empty steady state stays byte-identical and allocation-free (test-enforced).
 
 Machine: Linux x64, .NET 10 Release JIT, no tty I/O (discarding backend).
+
+### One RENDER invalidation, and what a burst of them costs (#396)
+
+**The unit of currency for any coalescing decision on the frame loop is one repaint
+invalidation, and it was already measured above** — so nothing here needs a new
+timer. From the two tables above:
+
+| Cost of ONE repaint invalidation | Value | Source |
+|---|--:|---|
+| Hinted diff only, 120×500 live chat timeline | **0.317 ms** | `RendererMoatPerfTests` |
+| Full frame (solve + paint + hinted diff + encode), 120×500 | **0.805 ms** | `RendererMoatPerfTests` |
+| Token frame (~300 changed cells), 200×50 grid | **52.8 µs** | `DiffEngineBenchmark` |
+| Full repaint, 200×50 / 400×120 grid | 137 µs / 665 µs | `DiffEngineBenchmark` |
+
+Budget is `< 16 ms/frame` (`specs/07-tui.md`), so a repaint costs **0.3–0.8 % of the
+frame budget** on a real feed. Multiply by the burst depth and the fire is obvious:
+a token stream emitting 1000 deltas/s at one repaint each would ask for
+**~800 ms of frame time per second** — the UI stops being a UI. That multiplication is
+the entire justification for coalescing, and it is why the number above is the one to
+design against rather than intuition.
+
+**Measured verdict for #396: the coalescing is already in place, and the fire is
+already out.** The frame loop keeps two channels with deliberately different semantics
+(`ReplLifecycle.LoopAsync`):
+
+| Channel | Type | Semantics | Invalidation count for a burst of N deltas |
+|---|---|---|---|
+| `_events` | `Channel<AgentEvent>` | lossless, arrival order, drained to empty **before** the frame renders | N domain events, never coalesced |
+| `_wake` | `Channel<object?>` | level-triggered — every write is the literal `null`, and `DrainWake` discards the token contents | **1 repaint** |
+
+Four independent levels collapse a burst, which is why the answer is "already done"
+rather than "already partially done":
+
+1. `DrainWake()` — N wake writes collapse to one frame (`ReplLifecycle.cs`).
+2. `_events` is drained by `while (TryRead)` in one pass, then the frame renders once.
+3. `RenderFrameGatedAsync` — a wake whose model version is unchanged produces **zero**
+   terminal writes; `FrameTicker` paces to 60 fps and defers, never drops.
+4. `StreamCoalescer` — the paced reveal: N deltas mark damage once per tick, and
+   `CommitTickPacer` reveals at most one line per tick (Smooth) or drains the backlog
+   (CatchUp).
+
+So there is no queue of render invalidations to put a priority lane on, and adding one
+would be a new axis under the #555 freeze for no measured gain. An approval, a
+cancellation or a permission request is in `_events`; `_events` is drained in the same
+loop iteration that paints the burst, and `ChatScreenBridge.Tick` drains the gate queue
+before the paced reveal — the ordering inside `Tick` is the lane, and it is now pinned
+by `ApprovalRequestedBehindABurst_LandsOnTheSameTick_NotAfterItDrains`.
+
+**The one asymmetry, measured and left alone.** `StreamCoalescer.IncomingThinking`
+marks damage per thinking delta (`MarkDirty(_thinkStream)`), while the text path marks
+once per tick from `DrainPaced`. It is not a fire: `MarkDirty` folds into
+`_pendingDirtyFrom` with a `Math.Min` and `MarkHeightsDirty(lastIndex)` is O(1) for the
+tail block, so the marks are idempotent and the frame still paints once. It is recorded
+here rather than fixed because the fix would be cosmetic — the missing piece is a
+per-delta counter (epic #46/#409), not a code change.
+
+Machine for this section: same as the two tables above (Linux x64, .NET 10 Release JIT,
+no tty I/O). No new timer was run for it — every figure is copied from the rows it
+names, per the rule at the top of this file.
 
 ## 6. Test suite
 
