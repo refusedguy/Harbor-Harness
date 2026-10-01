@@ -216,7 +216,7 @@ public class AcceptedCancellationHoldsTests
             calls, session, AssistantMessage.Empty(session.Session.Id, "m"), TestAgents.AllowAll(), cts.Token);
 
         await Assert.That(result.Results.Count).IsEqualTo(2);
-        await Assert.That(sequential.Inner.Calls).IsEqualTo(1);
+        await Assert.That(inner.Calls).IsEqualTo(1);
 
         ToolResultEntry second = result.Results[1];
         await Assert.That(second.ToolCallId).IsEqualTo("s2");
