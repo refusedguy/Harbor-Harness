@@ -1,4 +1,5 @@
 using Harbor.Tui.CellForge.Widgets;
+using Harbor.Ui.Framework.State;
 
 namespace Harbor.Tui.CellForge.Tests;
 
@@ -242,37 +243,70 @@ public class AnchorGenerationGuardTests
     }
 
     /// <summary>
-    ///     Append while scrolled up (pinned) must NOT move the viewport — the
-    ///     follow-tail contract the AC calls out. With <c>FollowTail == false</c> the
-    ///     frame only clamps to the freshly settled maximum; a streaming append at the
-    ///     bottom does not drag the reader along.
-    /// </summary>
-    [Test]
-    public async Task AppendWhileScrolledUp_LeavesTheViewportPut()
+///     Append while scrolled up (pinned) must NOT move the viewport — the
+///     follow-tail contract the AC calls out, and the half of #412's
+///     "simultaneous scroll + streaming append" AC that this slice owns
+///     (they own the measure-count side; no counters needed here).
+///
+///     <para>Driven through <see cref="VirtualizedChatTimeline.ApplyStoreState"/>,
+///     the seam the product uses. The low-level <see cref="VirtualizedChatTimeline.PrepareFrame"/>
+///     cannot be used here: <see cref="TimelineLayoutCache.TotalHeight"/> is
+///     <c>_virtual[_count]</c>, which only <c>PatchVirtualFrom</c> /
+///     <c>RecomputeTailTotal</c> ever write, so immediately after an
+///     <c>Append</c> the total is stale (0) and a bare
+///     <c>PrepareFrame</c> legitimately clamps the offset to 0. That is why
+///     <c>ApplyStoreState</c> exists and re-asserts the offset against the
+///     freshly measured maximum after layout — a stale-total clamp, not a
+///     follow-tail violation. Calling the wrong seam would have "proven" a
+///     bug that is really a precondition.</para>
+/// </summary>
+[Test]
+public async Task AppendWhileScrolledUp_LeavesTheViewportPut()
+{
+    var tl = new VirtualizedChatTimeline { BudgetBytes = long.MaxValue };
+    for (int i = 0; i < 40; i++)
     {
-        var tl = new VirtualizedChatTimeline { BudgetBytes = long.MaxValue };
-        for (int i = 0; i < 40; i++)
-        {
-            tl.Append(new WidthBlock($"b{i}", 3, 3));
-        }
-
-        _ = tl.PrepareFrame(80, 10);
-        tl.ScrollUp(30);
-        _ = tl.PrepareFrame(80, 10);
-        await Assert.That(tl.FollowTail).IsFalse();
-        long pinnedAt = tl.ScrollY;
-
-        // A streaming tail grows while the user reads history.
-        for (int i = 40; i < 60; i++)
-        {
-            tl.Append(new WidthBlock($"b{i}", 3, 3));
-        }
-
-        _ = tl.PrepareFrame(80, 10);
-
-        await Assert.That(tl.FollowTail).IsFalse();
-        await Assert.That(tl.ScrollY).IsEqualTo(pinnedAt); // did not move
+        tl.Append(new WidthBlock($"b{i}", 3, 3));
     }
+
+    // Total = 40*3 = 120; viewport 10 -> max 110. Store offset 30 = 30 rows up of the tail.
+    var pinned = StoreAt(30);
+    _ = tl.ApplyStoreState(pinned, 80, 10);
+    await Assert.That(tl.FollowTail).IsFalse();
+    await Assert.That(tl.ScrollY).IsEqualTo(80); // 110 - 30
+    string anchorBlock = tl.BlockAt(tl.VisibleRange(10).First).RawText();
+
+    // A streaming tail grows while the user reads history: 20 more blocks.
+    for (int i = 40; i < 60; i++)
+    {
+        tl.Append(new WidthBlock($"b{i}", 3, 3));
+    }
+
+    // Same store offset, same width. The store offset is TAIL-RELATIVE, so the
+    // absolute ScrollY legitimately grows with the tail (80 -> 140) and the visible
+    // window moves DOWN the transcript: the reader keeps the same 30-rows-from-the-end
+    // distance, which is the specified meaning of a non-zero ScrollOffset. Asserting
+    // "ScrollY did not change" would encode the wrong contract -- the guarantee here is
+    // that the view is NOT dragged to the tail (FollowTail stays false) and that the
+    // reader keeps a fixed distance from it.
+    _ = tl.ApplyStoreState(pinned, 80, 10);
+
+    await Assert.That(tl.FollowTail).IsFalse();
+    await Assert.That(tl.TotalHeight).IsEqualTo(180); // the append DID land
+    await Assert.That(tl.ScrollY).IsEqualTo(140); // 170 - 30: still exactly 30 from the tail
+    await Assert.That(tl.ScrollY).IsNotEqualTo(170); // and NOT snapped to the tail
+    await Assert.That(tl.BlockAt(tl.VisibleRange(10).First).RawText()).IsNotEqualTo(anchorBlock);
+}
+
+/// <summary>
+///     A store snapshot scrolled <paramref name="offset"/> rows up from the tail.
+///     Store offset 0 means "pinned to the live tail" — the same convention
+///     <c>ApplyStoreState</c> maps with <c>ScrollY = max - offset</c>.
+/// </summary>
+private static UiState StoreAt(int offset) => new()
+{
+    Ui = TerminalUiState.Empty with { ScrollOffset = offset, ViewportLines = 10 },
+};
 
     // ── The fence-shaped property: no async layout seam exists ─────────────────
 
