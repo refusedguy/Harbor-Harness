@@ -565,20 +565,29 @@ public sealed class DefaultModelDocClaimTests
             .Because("the declared default must satisfy the rule, or the rule is a constant "
                 + "rather than a comparison");
 
-        // And the multi-segment id that #599 is about splits correctly on BOTH sides: a
-        // router-style id must not be truncated to its first segment on either side of the
-        // comparison, or the two sides would agree for the wrong reason.
-        foreach (string router in new[] { "kilo-auto/free", "kilo-auto/efficient" })
-        {
-            await Assert.That(ModelHalf(router)).IsEqualTo(router)
-                .Because("'" + router + "' is multi-segment and must survive the split whole");
-        }
-
+        // And the multi-segment id that #599 is about splits correctly. A router-style
+        // model id must not be truncated to its first segment on either side of the
+        // comparison, or the two sides would agree for the wrong reason. The input is a
+        // QUALIFIED reference: ModelHalf splits on the FIRST slash, which is the provider
+        // boundary — handing it a bare model id would drop everything before that slash and
+        // is the caller's error, not a property of the helper.
         await Assert.That(SplitProvider("kilocode/kilo-auto/free")).IsEqualTo("kilocode")
             .Because("the provider half is everything before the first slash");
         await Assert.That(ModelHalf("kilocode/kilo-auto/free")).IsEqualTo("kilo-auto/free")
-            .Because("the model half is everything after the first slash — the truncation "
-                + "DefaultModelSingleSourceTests exists to prevent");
+            .Because("the model half is everything after the FIRST slash, kept whole — the "
+                + "truncation DefaultModelSingleSourceTests exists to prevent. A bare "
+                + "Split('/')[1] would have returned 'free' here and matched nothing.");
+
+        // The failure mode this guards is a WRONG-SIDE match: provider and model halves
+        // swapped still 'agree' if both sides are computed the same wrong way, so the two
+        // helpers must disagree on the boundary rather than agree by construction.
+        foreach (string qualified in new[] { "kilocode/kilo-auto/free", "openrouter/anthropic/claude-3.5-sonnet" })
+        {
+            await Assert.That(SplitProvider(qualified) + "/" + ModelHalf(qualified)).IsEqualTo(qualified)
+                .Because("splitting '" + qualified + "' and rejoining must be the identity — "
+                    + "otherwise the two halves are computed inconsistently and a match between "
+                    + "them means nothing");
+        }
     }
 
     /// <summary>
