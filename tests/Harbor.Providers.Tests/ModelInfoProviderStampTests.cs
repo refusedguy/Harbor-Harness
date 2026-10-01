@@ -251,6 +251,64 @@ public sealed class ModelInfoProviderStampTests
         }
     }
 
+    /// <summary>
+    ///     The regression this file exists for, found by running the fix: a
+    ///     catalog that ALREADY agrees in places and diverges in the middle.
+    ///     An entry that agrees but FOLLOWS the first divergence must still
+    ///     reach the caller. A re-stamp written as "skip what agrees, append
+    ///     what doesn't" silently truncates the list at the first divergence
+    ///     and drops every agreeing entry after it — a worse defect than the
+    ///     one being fixed, because it loses models rather than mislabelling
+    ///     them, and it is invisible unless the order is mixed.
+    /// </summary>
+    [Test]
+    public async Task AgreeingEntries_AfterTheFirstDivergence_AreStillReturned()
+    {
+        var catalog = new DynamicModelCatalog(
+            new HttpClient(new StubHttpHandler(_ => new HttpResponseMessage(System.Net.HttpStatusCode.OK))),
+            NewCacheDir(),
+            NullLogger<DynamicModelCatalog>.Instance);
+
+        var config = new ProviderConfig
+        {
+            Id = "gateway",
+            DisplayName = "Gateway",
+            BaseUrl = "https://api.gateway.example",
+            Models =
+            [
+                Stamp("ok-before", "gateway"),
+                Stamp("diverges", "anthropic"),
+                Stamp("ok-after", "gateway"),
+            ],
+        };
+
+        Result<IReadOnlyList<ModelInfo>> result = await catalog.GetModelsAsync(config);
+
+        await Assert.That(result.IsSuccess).IsTrue();
+
+        // Count and ORDER, not just membership: truncation shows up as a short
+        // list, and a re-ordering would show up here too.
+        await Assert.That(result.Value.Count).IsEqualTo(3)
+            .Because(
+                "every entry of a hardcoded catalog must be returned. An entry that agrees with the config "
+                + "but FOLLOWS a diverging one is still lost if the re-stamp appends only the diverging "
+                + "entries — that truncates the catalog and drops models, which is worse than the mislabelling "
+                + "#848 reported. See issue #848.");
+
+        await Assert.That(result.Value[0].Id).IsEqualTo("ok-before")
+            .Because("entries before the first divergence must survive, in order");
+        await Assert.That(result.Value[1].Id).IsEqualTo("diverges")
+            .Because("entries keep their positions across the re-stamp");
+        await Assert.That(result.Value[2].Id).IsEqualTo("ok-after")
+            .Because("an agreeing entry AFTER the first divergence must not be dropped");
+
+        for (int i = 0; i < result.Value.Count; i++)
+        {
+            await Assert.That(result.Value[i].ProviderId).IsEqualTo("gateway")
+                .Because($"entry {i} ('{result.Value[i].Id}') must carry the registry key");
+        }
+    }
+
     private static ModelInfo Stamp(string id, string providerId) =>
         new(id, providerId, id, 8192, 4096, false, false, true, Pricing.Unknown, "openai");
 
