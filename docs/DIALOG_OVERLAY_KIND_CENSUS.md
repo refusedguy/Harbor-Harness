@@ -81,7 +81,7 @@ does **not** mention `_kind` and is therefore not in the 41 at all.
 
 ## 3. Reachability: this is where the finding is, and it is second-order
 
-#979 measured which `DialogKind` values product code can show, and found 5 of 7 have no
+PR #979 measured which `DialogKind` values product code can show, and found 5 of 7 have no
 product caller. Verified independently, and it holds — but it is an **undercount of the
 problem**, because it measures one level.
 
@@ -124,7 +124,7 @@ that the `.Show*` sites themselves are dead.
 
 ## 4. No behavioural bug: the Alert row is a correct answer, not a defect
 
-#979 flags Alert as "the sharp row" — shown by product code, appearing in neither key path,
+PR #979 flags Alert as "the sharp row" — shown by product code, appearing in neither key path,
 so every key either takes the unconditional `Escape`/`Tab` prefix or falls to `_ => false`.
 Verified: it is **correct**, and deliberately so.
 
