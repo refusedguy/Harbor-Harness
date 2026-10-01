@@ -12,7 +12,7 @@ Out-of-process MCP stdio server that exposes Harbor's C# (Roslyn) `ITool` plugin
 |------|---------|
 | `Program.cs` | Stdio MCP server entry point (`Main`). |
 | `McpStdioServer.cs` | JSON-RPC 2.0 NDJSON loop: `initialize`, `tools/list`, `tools/call`, `ping`, `notifications/initialized`. |
-| `McpPluginLoadHost.cs` | In-process plugin registry that collects `ITool`, `IProviderPlugin`, `IAgentPlugin`, `ITuiPlugin` registrations and exposes them to the stdio server. |
+| `McpPluginLoadHost.cs` | In-process plugin registry that collects `ITool` registrations and exposes them to the stdio server. `IProviderPlugin`, `IAgentPlugin`, `ITuiPlugin` and `ITuiPanelPlugin` registrations are accepted and logged as not exposed over MCP, then discarded. |
 | `NullEventBus.cs` | No-op event bus for plugin-host runs that don't need event streaming. |
 
 ## Public API summary

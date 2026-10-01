@@ -212,7 +212,8 @@ public interface IPlugin
     void Initialize(PluginContext context);
     Task ShutdownAsync(CancellationToken ct = default);
 }
-// ... + IToolPlugin / IProviderPlugin / IAgentPlugin / ITuiPlugin —
+// ... + IToolPlugin / IProviderPlugin / IAgentPlugin /
+// ITuiPlugin (closed seam #564 — collected, never rendered; use ITuiPanelPlugin) —
 // полный контракт: src/Harbor.Abstractions/Plugins/IPlugin.cs
 ```
 

@@ -56,7 +56,7 @@ Second render path for the interactive REPL (`src/Harbor.Tui.CellForge/`, opt-in
 
 ### ✅ Completed — Plugin System (R30 fix) + Plugin Host Decomposition (F-sprints)
 
-- `IPlugin`, `IToolPlugin`, `IProviderPlugin`, `IAgentPlugin`, `ITuiPlugin` contracts (`src/Harbor.Abstractions/Plugins/IPlugin.cs`, incl. `RequiredHarborVersion`)
+- `IPlugin`, `IToolPlugin`, `IProviderPlugin`, `IAgentPlugin` contracts (`src/Harbor.Abstractions/Plugins/IPlugin.cs`, incl. `RequiredHarborVersion`) + `ITuiPlugin` (закрытый шов, #564 — см. «TUI plugins» ниже)
 - Roslyn-based CS-source plugin compiler with disk-cache decorator (`Harbor.Plugins.Compilation/RoslynPluginCompiler.cs` + `CachingCompiler.cs`)
 - Dedicated plugin projects: `Harbor.Plugins.{Abstractions, Storage, Compilation, Instantiation, Registration, Hosting, Runtime}` (source → compile → instantiate → register → host pipeline) + `Harbor.Plugins.Host` (out-of-process MCP plugin server exe)
 - 4 sample CS-source plugins: `samples/plugins-cs/`; 4 legacy DLL samples: `samples/plugins/Harbor.Plugin.{WebSearch,TodoWrite,GitTools,FileTree}`
@@ -137,7 +137,8 @@ Moved platform-agnostic logic out of `Harbor.App.Avalonia` into `Harbor.Ui.Frame
 
 **TUI plugins**
 - [x] `ITuiPlugin` — контракт существует, но это **закрытый шов (#564)**: `RegisterTui`
-      не имеет ни одного call site в продукте, а у `IPluginLoadHost.TuiPlugins` нет читателя
+      не имеет ни одного call site в продукте, а дверь хоста `RegisterTuiPlugin` с #916
+      ничего не сохраняет (её нечитаемый список `TuiPlugins` удалён)
 - [x] Панельная ось (единственная живая) — `ITuiPanelPlugin` →
       `IPluginLoadHost.RegisterPanelProvider` → адаптер `Harbor.Plugins.Registration/PanelRegistryPluginAdapter.cs`
 - [ ] Sample TUI plugin (e.g. token usage chart)

@@ -461,18 +461,18 @@ CS plugins are compiled in-memory via Roslyn at startup. Cached by source SHA-25
 ### Add a TUI plugin (DLL-based, legacy path — the seam is CLOSED)
 
 **`ITuiPlugin` is a closed seam (#564).** `PluginRegistrar` dispatches the marker
-and calls `host.RegisterTuiPlugin(...)`, but `IPluginLoadHost.TuiPlugins` has no
-reader in the product, so `RegisterTui` is never called and a plugin view is
-never painted. The steps below are kept so the contract has a name and a future
-wiring has somewhere to land — **they do not add a panel today.** For a plugin
-panel that is actually painted, implement `ITuiPanelPlugin`.
+and calls `host.RegisterTuiPlugin(...)`, but since #916 that door stores nothing,
+so `RegisterTui` is never called and a plugin view is never painted. The steps
+below are kept so the contract has a name and a future wiring has somewhere to
+land — **they do not add a panel today.** For a plugin panel that is actually
+painted, implement `ITuiPanelPlugin`.
 
 1. Create a class library project referencing `Harbor.Terminal.Abstractions` (`Harbor.Tui.Abstractions` is a deprecated facade slated for removal in v0.6 — do not use for new code).
 2. Implement `ITuiPlugin` — set `Name`, `Version`, `Description`.
 3. In `RegisterTui(ViewRegistry, ViewModelRegistry)`, register any custom views / view models.
 4. Register *before* `BaseTuiRenderer.InitializeAsync` to override builtins.
 5. See `samples/plugins/` for examples.
-6. Note: TUI plugins can also be contributed via CS-source — declare a class implementing both `IPlugin` and `ITuiPlugin` in a `.cs` file under `~/.harbor/plugins/`.
+6. Note: a CS-source plugin may also declare `ITuiPlugin`, but it will render nothing for the same reason — the DLL and CS-source paths reach the same closed door. Use `ITuiPanelPlugin` instead.
 
 ### Add a SpectreTUI feature (diff-view, slash-popup, file-tree, etc.)
 

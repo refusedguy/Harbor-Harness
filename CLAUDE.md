@@ -306,7 +306,9 @@ which hold state; **views** read VM state at render time and emit characters thr
         │   └────────────────┘                                          │
         └────────────────────────────────────────────────────────────┘
                                        ▲
-                                       │ ITuiPlugin.RegisterTui(views, viewModels)
+                                       │ ╳ ITuiPlugin.RegisterTui(views, viewModels)
+                                       │   NEVER CALLED — closed seam (#564);
+                                       │   the host door stores nothing since #916
                                        │
                               ┌────────────────────┐
                               │   ITuiPlugin       │
@@ -317,9 +319,9 @@ which hold state; **views** read VM state at render time and emit characters thr
 Extension points:
 
 > **`ITuiPlugin` is a closed seam (#564).** The marker is dispatched and
-> `host.RegisterTuiPlugin(...)` is invoked, but `IPluginLoadHost.TuiPlugins` has
-> no reader in the product, so `RegisterTui` is never called: a plugin view is
-> collected and never rendered. The items below are how the *in-tree* views work
+> `host.RegisterTuiPlugin(...)` is invoked, but since #916 that door stores
+> nothing, so `RegisterTui` is never called: a plugin view is collected and
+> never rendered. The items below are how the *in-tree* views work
 > — they are not a plugin axis. For a panel a plugin contributes, implement
 > `ITuiPanelPlugin` and register through `IPanelRegistry`, which is live end to
 > end. Guarded by `tests/Harbor.Architecture.Tests/CellForgeWidgetAxisRules.cs`,
