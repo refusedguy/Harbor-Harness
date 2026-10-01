@@ -932,13 +932,15 @@ public sealed class CellForgeEngineAtomicityRules
             ("plain.cs", "global using Harbor.Ui.Framework.Rendering;"),
             ("static.cs", "global using static Harbor.Ui.Framework.Rendering.Widgets;"),
             ("indented.cs", "    global using Harbor.Abstractions.Models;"),
-            ("nested-in-class.cs", "public sealed class C { } // global using X;"),
+            ("second-in-file.cs", "namespace N;\nglobal using Harbor.Ui.Framework.Rendering;"),
+            ("no-trailing-semicolon-needed.cs", "global using System.Text"),
         ];
 
         (string Name, string Source)[] quiet =
         [
             ("per-file.cs", "using Harbor.Ui.Framework.Rendering;"),
             ("comment.cs", "// GlobalUsings.cs used to carry global using of the UI namespaces."),
+            ("trailing-comment.cs", "public sealed class C { } // global using X;"),
             ("doc.cs", "/// <c>global using</c> is what this project deleted."),
             ("string.cs", "var s = \"global using Harbor.Ui.Framework.Rendering;\";"),
             ("notusing.cs", "public sealed class GlobalUsing {}"),
