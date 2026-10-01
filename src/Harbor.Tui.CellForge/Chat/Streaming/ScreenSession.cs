@@ -1,3 +1,4 @@
+using CSharpFunctionalExtensions;
 using Harbor.Tui.CellForge.Rendering;
 
 namespace Harbor.Tui.CellForge.Streaming;
@@ -143,6 +144,19 @@ public sealed class ScreenSession
         if (offer is null)
         {
             return false;
+        }
+
+        // PLANTED FOR NON-VACUITY (#591) — reverted in the next commit.
+        // This is the shape BufferSwapChain.TryTake's #591 conversion to
+        // Maybe<BufferPair> leaves behind at this exact call site if the caller
+        // is not updated in the same commit: `is { }` on a Maybe<T> always
+        // matches and binds the WRAPPER, so `bound` is the Maybe and
+        // `bound.Back` would not compile — while `bound.Value.Back` would
+        // compile and be the bug. docs/ROP-API-INVENTORY.md line 8.
+        Maybe<BufferPair> planted = Maybe<BufferPair>.None;
+        if (planted is { } bound)
+        {
+            CurrentCols = bound.Value.Back.Cols;
         }
 
         bool horizontalShrink = offer.Back.Cols < CurrentCols;
