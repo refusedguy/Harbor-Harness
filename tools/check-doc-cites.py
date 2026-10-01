@@ -68,6 +68,21 @@ RULES
                      under src/, apps/ or samples/ declares. See "THE FOURTH
                      SHAPE" below: this rule is the one that would have caught
                      #794 the day the sample README was written.
+  DOC-PLUGIN-GUIDE-NS-UNDECLARED
+                     a fenced `using Harbor.*;` in a document that teaches
+                     writing a plugin (it fences `Harbor.Abstractions.Plugins`)
+                     naming a namespace no tracked `.cs` declares. Caught #564
+                     day one: 7 imports of the `Harbor.Tui.Abstractions` facade
+                     that the A2/R6 rename deleted, in 2 of the 3 guides — the
+                     reader's CS0246. See "THE FIFTH AND SIXTH SHAPES".
+  DOC-BASE-LIST-UNIMPLEMENTED
+                     a fenced block declaring `: ITuiPanelPlugin` whose body
+                     never mentions `RegisterPanels`. The same #564 sample opened
+                     with the LIVE panel seam and implemented the CLOSED
+                     `ITuiPlugin` view seam instead, and `IPlugin` has no
+                     default implementations — so it could not compile. Scoped
+                     to this one interface on purpose; the reasoning, and what
+                     ADR-011 rules out, are in the function's own docstring.
   TEST-CITE-MISSING / TEST-CITE-AMBIGUOUS
                      the `file:line` shape above, in a TEST's prose rather than
                      a document's. `Status: normative` cannot select a .cs file,
@@ -745,6 +760,44 @@ COUNT_TOTAL = re.compile(
 # new sample plugin is covered by existing, not by remembering to edit a list
 # here (the same self-selecting property NORMATIVE_RE has).
 SAMPLE_README = re.compile(r"^samples/plugins/[^/]+/README\.md$")
+
+# ---------------------------------------------------------------------------
+# THE FIFTH AND SIXTH SHAPES (#564). A `using` in a code fence, and a base list
+# in a code fence. Both are claims about the tree, and both are made by the
+# fenced block rather than by a section heading — which is why neither is
+# reachable from DOC-SAMPLE-API-UNDECLARED above: that rule is bounded to a
+# `## Public API` SECTION, on purpose, and a `using` line is not in one.
+#
+# Why a fence rule at all, given ADR-011 refused to compile them. ADR-011
+# measured arity and visibility — `NotInParallel` has no `params` overload,
+# `SkipWhenNotLinux` is internal — and correctly concluded those live in PE/CLI
+# metadata, out of reach for a stdlib script. These two rules ask a DIFFERENT
+# question, which needs no metadata: does a namespace exist, and does a class
+# that claims an interface implement it. ADR-011's own §6(3) re-open condition
+# is a provenance convention; this is not that, and does not claim to be.
+#
+# The namespace form is why these are not ADR-011's refused rule. A backticked
+# TYPE name is ambiguous — `Task`, `Version`, `Text` and `TextLine` are BCL,
+# TUnit or CommunityToolkit, and ADR-011 measured 34 of 62 attribute spellings
+# as real-but-foreign. A `Harbor.*` NAMESPACE is not: Harbor owns its own
+# root, so a `using Harbor.X;` naming an undeclared namespace is wrong with no
+# foreign-namespace class to hide behind. That is what makes G1 decidable here
+# and what made the type-name version of it undecidable.
+#
+# Perimeter for G1: documents that fence a `using Harbor.Abstractions.Plugins;`
+# — i.e. that teach writing a plugin. Self-selecting, for the reason
+# SAMPLE_README's glob is: a document is covered by what it teaches, not by
+# being added to a list here. Measured over all 285 tracked documents on
+# dev@7aff0c87: 3 documents qualify. The 7 real findings were in 2 of them; the
+# wider corpus holds 8 more that are NOT defects (a PLAN document describing
+# a desktop app that does not exist yet, and a feature-research note) and this
+# perimeter is the line between the two, not a shrinking of the rule to make it
+# green. G2 has no perimeter: a base list is a base list.
+PLUGIN_GUIDE_USING = "Harbor.Abstractions.Plugins"
+
+FENCE_LINE = re.compile(r"^[ \t]*(`{3,})(.*)$")
+CSHARP_USING = re.compile(r"^[ \t]*using\s+(?:static\s+)?([A-Za-z_][A-Za-z0-9_.]*)\s*;")
+PANEL_PLUGIN_BASE = re.compile(r":\s*ITuiPanelPlugin\b")
 
 # `## Public API`, optionally with a parenthetical suffix. `^##\s` cannot match
 # `### Public API`, and not requiring end-of-line means a section titled
@@ -1910,6 +1963,145 @@ def check_sample_api(
     return len(seen), problems
 
 
+def fence_blocks(text: str) -> list[tuple[int, str]]:
+    """Every ```csharp block as (line of the opening fence, body).
+
+    A run of three or more backticks toggles, and the info string names the
+    language; a closing fence carries no info string, which is how a block is
+    told from the fence that ends it. Unterminated trailing blocks are yielded
+    with what they have, because a document that opens a fence and never closes
+    it is exactly the kind of drift these rules exist to see, and dropping it
+    would make the scan quiet on the broken case.
+    """
+    out: list[tuple[int, str]] = []
+    open_at: int | None = None
+    buf: list[str] = []
+    for i, line in enumerate(text.splitlines(), 1):
+        m = FENCE_LINE.match(line)
+        if m is None:
+            if open_at is not None:
+                buf.append(line)
+            continue
+        if open_at is None:
+            if m.group(2).strip() == "csharp":
+                open_at, buf = i, []
+        else:
+            out.append((open_at, "\n".join(buf)))
+            open_at, buf = None, []
+    if open_at is not None:
+        out.append((open_at, "\n".join(buf)))
+    return out
+
+
+def check_plugin_guide_usings(
+    text: str, rel: str, declared_ns: set[str]
+) -> tuple[int, list[tuple[str, str, int]]]:
+    """The fifth shape (#564): does a plugin guide's `using` name a namespace?
+
+    Returns (harbor using count, [(code, message, doc line), ...]) — a count
+    even when passing, for the reason check_table_shape gives.
+
+    The `Harbor.` prefix is the whole rule. A fenced `using System.Text.Json;`
+    is a claim about the BCL and is none of this script's business; a fenced
+    `using Harbor.Ui.Framework.Panels;` is a claim about THIS repository, and
+    the repository is the thing being scanned. Prefixing on the root rather
+    than on a type name is what keeps ADR-011's 34-foreign-of-62 problem out
+    of it: there is no BCL namespace called `Harbor.*`.
+    """
+    blocks = fence_blocks(text)
+    # `harbor` is EVERY Harbor using in the document, not only the ones inside
+    # a block. Collecting first and deciding after is what lets the perimeter be
+    # the fence that names the plugin contract while the findings cover the
+    # whole document — a guide that selects itself on one line and then imports
+    # the dead facade on another is the exact case, and filtering to the
+    # selecting block first would have hidden all 7 of #564's findings.
+    # `start` is the OPENING FENCE's line, so the first body line is start+1.
+    # Enumerate from there and report `n` directly: adding `start` to a counter
+    # that already began at `start` is how the first red run reported the
+    # findings at L1511 for fences at L754.
+    harbor = [
+        (n, m.group(1))
+        for start, body in blocks
+        for n, line in enumerate(body.splitlines(), start + 1)
+        if (m := CSHARP_USING.match(line)) and m.group(1).startswith("Harbor.")
+    ]
+    # Documented, not enumerated: a guide is a document that writes a plugin.
+    if not any(ns == PLUGIN_GUIDE_USING for _, ns in harbor):
+        return 0, []
+
+    problems: list[tuple[str, str, int]] = []
+    for line_no, ns in harbor:
+        if ns in declared_ns:
+            continue
+        problems.append(
+            (
+                "DOC-PLUGIN-GUIDE-NS-UNDECLARED",
+                f"`using {ns};` names a namespace no tracked .cs file under "
+                f"src/ or apps/ declares, in a document that teaches writing a "
+                f"plugin. A reader who copies this line gets CS0246. Either the "
+                f"namespace was renamed — the TUI contracts moved from "
+                f"`Harbor.Tui.Abstractions` to `Harbor.Terminal.Abstractions`, "
+                f"and the panel contracts to `Harbor.Ui.Framework.Panels` — or "
+                f"the fence is quoting a type that was never in the tree",
+                line_no,
+            )
+        )
+    return len(harbor), problems
+
+
+def check_base_list_implements(
+    text: str, rel: str
+) -> tuple[int, list[tuple[str, str, int]]]:
+    """The sixth shape (#564): does a class claiming an interface implement it?
+
+    Returns (claim count, [(code, message, doc line), ...]).
+
+    Scoped to ONE interface, `ITuiPanelPlugin`, and that scope is the design.
+    The general form — "a block declaring `: IFoo` implements every member of
+    `IFoo`" — needs the interface's member list, i.e. a signature reader, and
+    ADR-011 measured that medium as unavailable (a `file:line` fence and a
+    name check both fail on arity and visibility). What IS decidable from the
+    fence alone is the narrow case #564 actually shipped: the interface has
+    exactly one member beyond `IPlugin`, the member is named in prose 600 lines
+    earlier in the same document, and its absence from a block that claims the
+    interface is visible without reading any other file.
+
+    So the rule is deliberately one interface wide and says so. Widening it
+    needs the medium ADR-011 says is not there; pretending otherwise would buy
+    coverage with a rule that cannot fail.
+    """
+    problems: list[tuple[str, str, int]] = []
+    claims = 0
+    for start, body in fence_blocks(text):
+        if not PANEL_PLUGIN_BASE.search(body):
+            continue
+        claims += 1
+        if "RegisterPanels" in body:
+            continue
+        # Reported at the BASE LIST's line, not the fence's: the finding is
+        # about the declaration, and a reader sent to the fence opener has to
+        # hunt for which of the block's types is meant.
+        base = next(
+            n
+            for n, line in enumerate(body.splitlines(), start + 1)
+            if PANEL_PLUGIN_BASE.search(line)
+        )
+        problems.append(
+            (
+                "DOC-BASE-LIST-UNIMPLEMENTED",
+                "a class declares `: ITuiPanelPlugin` but its body never "
+                "mentions `RegisterPanels` — the one member the interface adds "
+                "to `IPlugin`, and the member the same document quotes in prose "
+                "above the fence. `IPlugin` has no default implementations, so "
+                "the block does not compile. This is the panel axis declaring "
+                "itself and implementing the closed `ITuiPlugin` view seam "
+                "instead: #564, closed in #780/#966",
+                base,
+            )
+        )
+    return claims, problems
+
+
 class Scan:
     """One pass over the normative documents, plus the counts the floors need."""
 
@@ -1925,6 +2117,14 @@ class Scan:
         self.count_docs = 0
         self.api_names = 0
         self.api_docs = 0
+        # The fifth and sixth shapes (#564): a fenced `using Harbor.*` of an
+        # undeclared namespace, and a fenced base list that does not implement
+        # what it claims. Separate counters from `type_names` because they are
+        # a different population — a fence, not a backticked name — and
+        # combining them would let one mask the other's floor.
+        self.guide_usings = 0
+        self.guide_docs = 0
+        self.base_list_claims = 0
         # `file:line` citations inside tests/**/*.cs prose (#947). A separate
         # population from `citations`, which counts markdown only, because the
         # two have nothing in common but the regex: different files, different
@@ -1955,6 +2155,12 @@ def scan(repo: str, verbose: bool) -> Scan:
     # than `production` so a type declared in samples/ is findable at all —
     # which, before this rule, no code path could do.
     declared_anywhere: set[str] = set()
+    # Namespaces, for the fifth shape (#564). A different index from
+    # `declared_anywhere` on purpose: that one holds TYPE names and answers
+    # "does this class exist", this one holds fully-qualified namespaces and
+    # answers "can this `using` resolve". A type name is ambiguous across
+    # ecosystems; a namespace under Harbor's own root is not.
+    declared_ns: set[str] = set()
     production_text: dict[str, str] = {}
     for rel in files:
         if not rel.startswith(DECLARATION_SCOPE):
@@ -1974,6 +2180,17 @@ def scan(repo: str, verbose: bool) -> Scan:
         code = strip_comments_and_literals(body)
         names = {m.group(1) for m in DECLARATION.finditer(code)}
         declared_anywhere |= names
+        # Read the namespace off the RAW text, not the stripped copy: a
+        # namespace declaration is code, but the scan is a whole-line match and
+        # stripping would only cost a second pass to re-derive. `namespace X;`
+        # (file-scoped) and `namespace X {` (block) are both declarations, and
+        # a plugin compiles against the file-scoped form too.
+        for m in re.finditer(
+            r"^[ \t]*namespace[ \t]+([A-Za-z_][A-Za-z0-9_.]*)[ \t]*[;{]",
+            body,
+            re.M,
+        ):
+            declared_ns.add(m.group(1))
         if rel in production:
             production_text[rel] = code
             for m in DECLARATION.finditer(code):
@@ -2041,6 +2258,21 @@ def scan(repo: str, verbose: bool) -> Scan:
             result.api_docs += 1
             result.api_names += api_names
             shape_problems = shape_problems + api_problems
+
+        # ... and the fifth and sixth shapes (#564), for the same reason and on
+        # every tracked document: a fenced `using` and a fenced base list are
+        # claims about the tree whether or not the document writes a banner.
+        using_count, using_problems = check_plugin_guide_usings(
+            text, rel, declared_ns
+        )
+        if using_count:
+            result.guide_docs += 1
+            result.guide_usings += using_count
+        claims, claim_problems = check_base_list_implements(text, rel)
+        result.base_list_claims += claims
+        shape_problems = (
+            shape_problems + using_problems + claim_problems
+        )
 
         if not normative:
             if shape_problems:
@@ -3169,6 +3401,134 @@ def self_test() -> int:
         )
         shutil.rmtree(root + "-shallow", ignore_errors=True)
 
+    # ── #564: the fifth and sixth shapes, and their discrimination ──────────
+    #
+    # Four cases each, and the two that matter are the PAIR: a guide that is
+    # broken goes red, and the same guide with the namespace spelled correctly
+    # goes green. One without the other would be a tripwire, not a gate.
+    #
+    # `Harbor.Abstractions.Plugins` is the perimeter selector, so the fixture
+    # must fence it or the document is not a guide and the rule never engages —
+    # which is itself worth asserting (the last case below).
+    #
+    # The tree declares BOTH Harbor namespaces the fixtures use. That is the
+    # point of the green case: `Harbor.Ui.Framework.Panels` is only "correct"
+    # relative to a tree that declares it, and the first draft of this fixture
+    # spelled the guide correctly while the fixture tree had neither namespace
+    # — so the rule reported it, correctly, and the case failed. A rule that had
+    # hard-coded the namespace as good would have passed it.
+    harbor_ns = {
+        "src/Panels/Plugins.cs": (
+            "namespace Harbor.Abstractions.Plugins;\n"
+            "public interface IPlugin { }\n"
+        ),
+        "src/Panels/Contracts.cs": (
+            "namespace Harbor.Ui.Framework.Panels;\n"
+            "public interface IPanelRegistry { }\n"
+        ),
+    }
+    guide_broken = (
+        "# G\n\n```csharp\n"
+        "using Harbor.Abstractions.Plugins;\n"
+        "using Harbor.Tui.Abstractions.Panels;\n"
+        "```\n"
+    )
+    guide_fixed = (
+        "# G\n\n```csharp\n"
+        "using Harbor.Abstractions.Plugins;\n"
+        "using Harbor.Ui.Framework.Panels;\n"
+        "```\n"
+    )
+    base_list_broken = (
+        "# P\n\n```csharp\n"
+        "using Harbor.Abstractions.Plugins;\n"
+        "public sealed class P : ITuiPanelPlugin\n"
+        "{\n"
+        "    public string Name => \"p\";\n"
+        "}\n"
+        "```\n"
+    )
+    base_list_fixed = (
+        "# P\n\n```csharp\n"
+        "using Harbor.Abstractions.Plugins;\n"
+        "public sealed class P : ITuiPanelPlugin\n"
+        "{\n"
+        "    public void RegisterPanels(IPanelRegistry registry) { }\n"
+        "}\n"
+        "```\n"
+    )
+    # Neither a plugin guide nor a base list: the fence is bash, and the prose
+    # mentions the dead namespace outside any fence. Both rules must be silent,
+    # because a namespace named in prose is a sentence, not a compile unit.
+    out_of_perimeter = (
+        "# X\n\nUse `Harbor.Tui.Abstractions.Panels` where appropriate.\n\n"
+        "```bash\nusing Harbor.Tui.Abstractions.Panels;\n```\n"
+    )
+
+    code, out = run(
+        {**live, **harbor_ns, "docs/GUIDE.md": guide_broken,
+         "docs/PANEL.md": base_list_broken},
+        "--min-guide-usings", "1", "--min-base-lists", "1",
+    )
+    st.expect(
+        "#564: a plugin guide importing the renamed-away namespace is red",
+        code == 1 and "DOC-PLUGIN-GUIDE-NS-UNDECLARED" in out, out.strip()[-500:],
+    )
+    st.expect(
+        "#564: a class claiming ITuiPanelPlugin without RegisterPanels is red",
+        code == 1 and "DOC-BASE-LIST-UNIMPLEMENTED" in out, out.strip()[-500:],
+    )
+
+    code, out = run(
+        {**live, **harbor_ns, "docs/NORM.md": clean_norm,
+         "docs/GUIDE.md": guide_fixed, "docs/PANEL.md": base_list_fixed},
+        "--min-guide-usings", "1", "--min-base-lists", "1",
+    )
+    st.expect(
+        "#564: the same two documents are green once spelled against the tree — "
+        "the rules discriminate, they do not fail on everything shown to them",
+        code == 0, out.strip()[-500:],
+    )
+
+    # `docs/NORM.md` is here for the reason every other case in this self-test
+    # carries one: the `doc-cites` and `doc-cites/types` floors are UNCONDITIONAL
+    # and a fixture with no normative document exits 1 on them whatever it is
+    # testing — the trap #826 recorded when three of its own "must pass" cases
+    # were passing on the floors rather than on the rule. No `--min-*` flag is
+    # passed: a floor on either #564 rule would fail this run on its own zero
+    # count, which is the opposite of what the perimeter case is about.
+    code, out = run({**live, **harbor_ns, "docs/NORM.md": clean_norm,
+         "docs/OUTSIDE.md": out_of_perimeter})
+    st.expect(
+        "#564: a document that is not a plugin guide is not scanned by G1, and a "
+        "fenced `using` outside a csharp fence is not a finding",
+        code == 0, out.strip()[-500:],
+    )
+
+    # The floor, for the reason #947 gave its own: these two rules are the only
+    # ones here whose subject matter is EXPECTED to shrink. The view seam
+    # closed and the renamed facade is gone, so a future tree can legitimately
+    # reach zero guides — and a rule that goes quiet by succeeding must be
+    # distinguishable from one that went quiet by breaking. Pinned by demanding a
+    # floor the fixture cannot meet: the documents are present, the count is 0.
+    code, out = run(
+        {**live, "docs/PLAIN.md": "# P\n\nNo fences here.\n"},
+        "--min-guide-usings", "1",
+    )
+    st.expect(
+        "#564: `--min-guide-usings` fails when no guide is scanned — a rule that "
+        "examined nothing cannot report that everything is fine",
+        code == 1 and "ZERO" in out, out.strip()[-500:],
+    )
+    code, out = run(
+        {**live, "docs/PLAIN.md": "# P\n\nNo fences here.\n"},
+        "--min-base-lists", "1",
+    )
+    st.expect(
+        "#564: `--min-base-lists` fails for the same reason, independently",
+        code == 1 and "ZERO" in out, out.strip()[-500:],
+    )
+
     return st.finish()
 
 
@@ -3202,6 +3562,20 @@ def main() -> int:
         "in tests/**/*.cs prose (#947; 0 = off)",
     )
     ap.add_argument(
+        "--min-guide-usings",
+        type=int,
+        default=0,
+        help="fail unless at least this many fenced `using Harbor.*` lines were "
+        "examined in plugin guides (#564; 0 = off)",
+    )
+    ap.add_argument(
+        "--min-base-lists",
+        type=int,
+        default=0,
+        help="fail unless at least this many fenced `: ITuiPanelPlugin` base lists "
+        "were examined (#564; 0 = off)",
+    )
+    ap.add_argument(
         "--self-test",
         action="store_true",
         help="run the gate against known-broken fixtures instead of this repo",
@@ -3233,6 +3607,18 @@ def main() -> int:
         f"on the commit that wrote each one (#947: a number that still resolves "
         f"can still name the wrong line)"
     )
+    if result.guide_usings:
+        print(
+            f"and checked {result.guide_usings} fenced `using Harbor.*` lines in "
+            f"{result.guide_docs} plugin guide(s) against the namespaces the tree "
+            f"declares (#564: a guide that imports the renamed-away facade)"
+        )
+    if result.base_list_claims:
+        print(
+            f"and checked {result.base_list_claims} fenced `: ITuiPanelPlugin` base "
+            f"list(s) for the member the interface adds (#564: a panel that declares "
+            f"the live seam and implements the closed one)"
+        )
 
     # Two calls, one per unit, so a parser that silently stops matching is
     # caught separately from a file set that shrank.
@@ -3291,6 +3677,31 @@ def main() -> int:
             "tests/**/*.cs file:line citations",
             1,
             args.min_test_cites,
+        )
+    # And the same for the two #564 floors. Both are opt-in for the reason above,
+    # and both are worth a floor in CI for a specific reason beyond habit: these
+    # two rules are the only ones in this file whose subject matter is expected
+    # to SHRINK. The view seam closed, the renamed facade is gone, and the day
+    # the last plugin guide stops fencing a `using` there is nothing to check.
+    # A rule that goes quiet by succeeding looks exactly like a rule that went
+    # quiet by breaking, so CI says which of the two happened.
+    if args.min_guide_usings > 0:
+        problems += md_gate.require_non_vacuous(
+            "doc-cites/guide-usings",
+            result.guide_docs,
+            result.guide_usings,
+            "fenced `using Harbor.*` lines in plugin guides",
+            1,
+            args.min_guide_usings,
+        )
+    if args.min_base_lists > 0:
+        problems += md_gate.require_non_vacuous(
+            "doc-cites/base-lists",
+            result.base_list_claims,
+            result.base_list_claims,
+            "fenced `: ITuiPanelPlugin` base lists",
+            1,
+            args.min_base_lists,
         )
 
     if result.violations:

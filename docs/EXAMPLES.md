@@ -451,7 +451,7 @@ factory class plus one array entry; nothing else to keep in sync.
 ```csharp
 using CommunityToolkit.Mvvm.ComponentModel;
 using Harbor.Abstractions.Events;
-using Harbor.Tui.Abstractions.ViewModels;
+using Harbor.Terminal.Abstractions.ViewModels;
 
 public sealed partial class TokenUsageViewModel : ObservableObject, ITuiViewModel
 {
@@ -478,8 +478,8 @@ public sealed partial class TokenUsageViewModel : ObservableObject, ITuiViewMode
 ### 20. Add a TUI view (renders VM state)
 
 ```csharp
-using Harbor.Tui.Abstractions.Renderers;
-using Harbor.Tui.Abstractions.Views;
+using Harbor.Terminal.Abstractions.Renderers;
+using Harbor.Terminal.Abstractions.Views;
 
 public sealed class TokenUsageView : TuiViewBase<TokenUsageViewModel>
 {

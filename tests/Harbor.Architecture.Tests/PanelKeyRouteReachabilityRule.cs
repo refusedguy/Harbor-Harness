@@ -27,7 +27,7 @@
 // WHY THE USER-VISIBLE PART IS SMALLER THAN "7 BROKEN PANELS"
 // -----------------------------------------------------------
 // The blast radius reads as seven because `IPanelProvider.OnKey` is a REQUIRED
-// interface member (`IPanelProvider.cs:76`) and seven providers implement it.
+// interface member (`IPanelProvider.cs`, `OnKey`) and seven providers implement it.
 // Measured by what the key actually does, it is smaller and stranger:
 //
 //   * `CellForgeLogsPanel.OnKey` handles F12 by dispatching

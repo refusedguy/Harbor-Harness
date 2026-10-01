@@ -751,14 +751,15 @@ public sealed class AutoLintPlugin : IPlugin
 
 ### Example 5: `LspDiagnosticsPanel` — TUI panel showing LSP diagnostics
 
+A panel plugin is two types, and both are in the tree: the `ITuiPanelPlugin` that
+registers, and an `IPanelProvider` whose `Build` returns the rows. It is **not** a
+view — see the note under the fence.
+
 ```csharp
 // ~/.harbor/plugins/lsp_diag.cs
-using CommunityToolkit.Mvvm.ComponentModel;
-using Harbor.Abstractions.Events;
-using Harbor.Tui.Abstractions.Plugins;
-using Harbor.Tui.Abstractions.Renderers;
-using Harbor.Tui.Abstractions.ViewModels;
-using Harbor.Tui.Abstractions.Views;
+using Harbor.Abstractions.Plugins;
+using Harbor.Ui.Framework.Panels;
+using Harbor.Ui.Framework.State;
 
 public sealed class LspDiagnosticsPlugin : ITuiPanelPlugin
 {
@@ -766,56 +767,72 @@ public sealed class LspDiagnosticsPlugin : ITuiPanelPlugin
     public Version Version => new(1, 0, 0);
     public Version RequiredHarborVersion => new(0, 3, 0);
     public string Description => "LSP diagnostics panel";
+
     public void Initialize(PluginContext c) { }
 
-    public TuiPanelDescriptor CreatePanel() => new(
-        Id: "lsp-diag",
-        DisplayName: "Diagnostics",
-        Placement: TuiPanelPlacement.Bottom,
-        ViewModelFactory: () => new LspDiagnosticsViewModel(),
-        ViewFactory: () => new LspDiagnosticsView());
+    // The ONE member ITuiPanelPlugin adds to IPlugin. Called once the
+    // IPanelRegistry is available; may be called again on re-registration.
+    public void RegisterPanels(IPanelRegistry registry) =>
+        registry.Register(new LspDiagnosticsPanel());
 
     public Task ShutdownAsync(CancellationToken ct = default) => Task.CompletedTask;
 }
 
-public sealed partial class LspDiagnosticsViewModel : ObservableObject, ITuiViewModel
+public sealed class LspDiagnosticsPanel : IPanelProvider
 {
     public string Id => "lsp-diag";
+    public string Title => "Diagnostics";
+    public TuiPanelPlacement DefaultPlacement => TuiPanelPlacement.Bottom;
+    public int DefaultSize => 8;
 
-    [ObservableProperty] private int _errorCount;
-    [ObservableProperty] private int _warningCount;
-    [ObservableProperty] private string _latest = "";
-
-    public Task UpdateFromEventAsync(AgentEvent e, CancellationToken ct = default)
+    // Returns ROWS OF TEXT, not a widget object — see the note under the fence.
+    // Build is called every frame the panel is visible/pinned/focused, so it must
+    // be side-effect free and must return freshly allocated rows.
+    public object? Build(PanelContext ctx)
     {
-        // Hook into tool execution end (after edit) to refresh diagnostics
-        if (e is ToolExecutionEndEvent tee && tee.ToolName == "edit")
+        var rows = new List<string>(8)
         {
-            Latest = $"Last edit: {tee.Result.Output.Split('\n')[0]}";
-        }
-        return Task.CompletedTask;
-    }
-}
-
-public sealed class LspDiagnosticsView : TuiViewBase<LspDiagnosticsViewModel>
-{
-    public override string Id => "lsp-diag";
-    public override string DisplayName => "Diagnostics";
-    public override TuiViewPlacement Placement => TuiViewPlacement.Bottom;
-
-    public override Task RenderAsync(ITuiRenderContext ctx, CancellationToken ct = default)
-    {
-        if (ViewModel is null) return Task.CompletedTask;
-        ctx.WriteColored($"Errors: {ViewModel.ErrorCount}  Warnings: {ViewModel.WarningCount}", TuiColor.Yellow);
-        if (!string.IsNullOrEmpty(ViewModel.Latest))
+            "Diagnostics",
+            $"  errors   {Errors}",
+            $"  warnings {Warnings}",
+        };
+        if (LastEdit.Length > 0)
         {
-            ctx.WriteLine();
-            ctx.WriteColored(ViewModel.Latest, TuiColor.DarkGray);
+            rows.Add(string.Empty);
+            rows.Add($"  last edit: {LastEdit}");
         }
-        return Task.CompletedTask;
+        // Clip to the dock yourself: the builtins call
+        // PanelText.Clip(rows, ctx.Width, ctx.Height), which lives in
+        // Harbor.Ui.Framework.Projection.
+        return rows;
     }
+
+    // Non-interactive panel: consume nothing, let the host handle every key.
+    public bool OnKey(UiKey key, PanelContext ctx) => false;
+
+    // A real panel reads these from PanelContext.State and/or from services the
+    // plugin registered in Initialize; the values are pinned here so that the
+    // example is self-contained.
+    private static int Errors => 0;
+    private static int Warnings => 0;
+    private static string LastEdit => "";
 }
 ```
+
+> **Two things this example deliberately does not do.**
+>
+> **It returns text, not a widget.** `IPanelProvider.Build` is typed `object?` so
+> that `Harbor.Ui.Framework.State` need not reference a TUI framework — but the
+> only shipped renderer with a panel path is **CellForge**, and
+> `CellForgePanelAdapter.WidgetToRows` flattens a `string`, an
+> `IReadOnlyList<string>` or an `IEnumerable<string>` into rows. Anything else
+> falls through to `widget.ToString()`, so returning a widget object paints **its
+> type name**. The signature leaves room for a native widget; the decoder has no
+> case for one. (`AnsiPlain` and `NickConsoleEx` have no panel path at all.)
+>
+> **It does not register a view.** `ITuiPlugin` and `ITuiView` are a **closed seam
+> (#564)** — collected, never rendered. A panel is `ITuiPanelPlugin` +
+> `IPanelProvider`; the view seam is for in-tree work.
 
 ---
 
