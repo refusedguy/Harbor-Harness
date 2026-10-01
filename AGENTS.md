@@ -36,7 +36,7 @@ A modular .NET 10 AI coding harness. Modular = every concern behind an interface
    principle violations — don't introduce more of the same kind. Search the codebase
    for `TODO(principles)` to see existing markers. The §ARCH-001..§ARCH-NNN section
    covers layering violations found and fixed.
-4. Read [docs/specs/14-architecture-revised.md](./docs/specs/14-architecture-revised.md) for current architecture.
+4. Read [docs/specs/14-architecture-revised.md](./docs/specs/14-architecture-revised.md) for the **design rationale** behind the architecture. It is a dated record ([docs/specs/README.md](./docs/specs/README.md)), not a statement about the current tree — several of its decisions were never built as written. For what the architecture **is**, read item 5.
 5. Read [docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md) for high-level design + principles summary.
 6. Read [docs/DEVELOPMENT.md](./docs/DEVELOPMENT.md) for development workflow + **principles checklist** for PRs.
 7. Read [docs/ROADMAP.md](./docs/ROADMAP.md) for current state + planned next steps.
@@ -770,7 +770,7 @@ dotnet run --project apps/Harbor.App.Cli -- sessions
 
 ## When stuck
 
-- Read the spec — `docs/specs/14-architecture-revised.md`.
+- Read the spec — `docs/specs/14-architecture-revised.md` for **why** the architecture is shaped this way (a dated record; for *what it is*, see `docs/ARCHITECTURE.md`).
 - Read existing code — `src/Harbor.Tools.Builtin/Tools/Read/ReadTool.cs` is a good reference for tools.
 - Read the tool reference — `docs/TOOLS_CATALOG.md` has every builtin's args schema, 3+ examples, the "when to use X vs Y" matrix, and a full WebFetchTool walkthrough.
 - Read tests — `tests/Harbor.Abstractions.Tests/IdentifiersTests.cs` for assertion patterns.
