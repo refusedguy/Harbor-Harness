@@ -143,13 +143,25 @@ public sealed class RenderInvalidationCoalescingTests
     private const int WakeWriteFloor = 20;
 
     /// <summary>
-    ///     <c>&lt;channel&gt;.Writer.TryWrite(&lt;arg&gt;)</c> on a single
-    ///     line, argument captured. Every write in the tree is on one line; a
+    ///     <c>&lt;channel&gt;.Writer.TryWrite(&lt;arg&gt;)</c> on a single line,
+    ///     argument captured. Every write in the tree is on one line; a
     ///     multi-line <c>TryWrite(\n    evt)</c> is under-reported, which is the
     ///     right direction for a ratchet (it cannot invent a violation).
+    ///     <para>
+    ///     The argument is <c>[^\n]*?</c> and NOT <c>[^()]*?</c>: a constructed
+    ///     payload nests parentheses
+    ///     (<c>TryWrite(new RenderInvalidation(rect, revision))</c>), and a
+    ///     paren-free argument class cannot match it at all — which is not
+    ///     under-reporting a violation, it is being unable to SEE the exact
+    ///     shape rule A exists for. The lazy quantifier still stops at the first
+    ///     <c>)</c>, so the live spelling captures <c>null</c> and
+    ///     <c>evt</c> unchanged; a nested payload captures a truncated
+    ///     <c>new RenderInvalidation(rect, revision</c>, which is enough for both
+    ///     verdicts (not <c>null</c>, and starts with <c>new </c>).
+    ///     </para>
     /// </summary>
     private static readonly Regex ChannelWrite = new(
-        @"(?<channel>[A-Za-z_]\w*)\.Writer\.TryWrite\s*\(\s*(?<arg>[^()]*?)\s*\)",
+        @"(?<channel>[A-Za-z_]\w*)\.Writer\.TryWrite\s*\(\s*(?<arg>[^\n]*?)\s*\)",
         RegexOptions.Compiled);
 
     /// <summary>The declaration of the lossless channel.</summary>
