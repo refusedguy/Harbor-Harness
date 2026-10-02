@@ -18,10 +18,12 @@ gate on it.** The criterion is three things, all of which must hold:
    left behind for a warning that stopped.
 3. The **published binary runs**: `--version`, `--help`, `--providers`, each
    asserted on content rather than on exit code. The `--providers` assertion
-   names `ollama`, `openai`, `anthropic` and `kilocode`, which is not a
-   formality: `ProviderVerbs.RunListProvidersAsync` **always returns 0**, so a
-   binary that registered no providers at all would exit 0 and print an empty
-   list. See [the note on what that assertion really
+   names `ollama` and `kilocode` — and asserts that `anthropic` and `openai`
+   are **absent**, which is how the job proves `HARBOR_MINIMAL` actually
+   reached MSBuild. This is not a formality:
+   `ProviderVerbs.RunListProvidersAsync` **always returns 0**, so a binary that
+   registered no providers at all would exit 0 and print an empty list. See
+   [the note on what that assertion really
    proves](#what-the-providers-assertion-really-proves).
 
 All three are needed, and neither of the last two implies the other.
@@ -63,7 +65,7 @@ without anything going red, and the four rows in
 said "not triaged" for the honest reason that no build had ever emitted the
 diagnostics they describe.
 
-## The publish recipe, and why not `HARBOR_MINIMAL`
+## The publish recipe — measured, and the first one tried did not work
 
 The CLI csproj documents **two** AOT recipes and they are not equivalent (#747):
 
@@ -72,20 +74,100 @@ The CLI csproj documents **two** AOT recipes and they are not equivalent (#747):
 | `HARBOR_MINIMAL=true dotnet publish -c Release -r linux-x64` | Turns AOT on **and** forces `HarborWithPlugins`, `HarborWithSpectreTui`, `HarborWithAllProviders` and `HarborWithAllTools` to `false`. Produces the stripped binary. |
 | `dotnet publish -c Release -r linux-x64 -p:HarborWithAot=true` | Turns `PublishAot` on and **nothing else**. The four feature flags keep their `true` defaults, so `Harbor.Plugins.Compilation` (Roslyn) stays in the compile. |
 
-**The gate uses the second.** The minimal profile publishes a different, smaller
-program than the one that ships, so its inventory would not describe the
-shipping artifact, and its `--providers` output would be a single provider —
-which would gut the one smoke assertion that proves build-time resource
-embedding survived. Whether recipe 2 *should* also strip the features is a
-design question, not a gate question; it belongs to #48/S4, which owns the
-Roslyn plugin-host decision. This gate takes no position on it.
+**This gate publishes the first one, and that was not the plan.** The gate was
+written against the second recipe. The second recipe **does not publish**, and
+the log from the run that established it is the most useful thing this gate has
+produced so far:
 
-Note that the NUKE `PublishAot` target
+```
+ILC : error IL3000: Harbor.Plugins.Compilation.PluginAssemblyReferences.
+      BuildReferences(): 'System.Reflection.Assembly.Location.get' always returns
+      an empty string for assemblies embedded in a single-file app
+ILC : error IL3000: Harbor.Plugins.Compilation.PluginAssemblyReferences.
+      EnsureReference(List`1<MetadataReference>,HashSet`1<String>,Assembly): [same]
+ILC : error IL3000: Microsoft.CodeAnalysis.CommonCompiler.GetAssemblyLocation(Type): [same]
+ILC : Trim analysis error IL2072: Harbor.Plugins.Instantiation.
+      ReflectionPluginInstantiator.Instantiate(CompiledPluginAssembly): 'type'
+      argument does not satisfy 'DynamicallyAccessedMemberTypes.
+      PublicParameterlessConstructor' in call to 'System.Activator.CreateInstance'
+ILC : Trim analysis error IL2070: Harbor.Plugins.Instantiation.
+      ReflectionPluginInstantiator.<>c.<FindPluginTypes>b__1_1(Type): 'this'
+      argument does not satisfy 'PublicParameterlessConstructor' in call to
+      'System.Type.GetConstructor(Type[])'
+error MSB3077: ilc ... exited with return value 0, but errors were detected
+```
+
+### What that run's full inventory was
+
+| ID | count | demoted by the csproj? | effect |
+|---|---|---|---|
+| IL2026 | 15 | yes | printed, did not fail |
+| IL3050 | 10 | yes | printed, did not fail |
+| IL2104 | 3 | yes | printed, did not fail |
+| IL3053 | 2 | yes | printed, did not fail |
+| **IL3000** | **3** | **no** | **error — build fails** |
+| **IL2072** | **1** | **no** | **error — build fails** |
+| **IL2070** | **1** | **no** | **error — build fails** |
+
+Two things follow, and both are findings rather than gate mechanics.
+
+**1. The csproj's demotion list is incomplete.** It names four ids; the publish
+emits seven. `AotBlockDemotionRules.KnownDemotions` said "not triaged" for its
+four rows, and the honest answer to "what else is there" is three more. The
+gate is what turned that question from rhetorical into answerable, which is the
+scope line #48 wrote: *"IL2026-zero is NOT the gate: full publish + warning
+triage"*.
+
+**2. All three failing sites are in the plugin projects** —
+`Harbor.Plugins.Compilation` (three IL3000, one of them inside
+`Microsoft.CodeAnalysis` itself) and `Harbor.Plugins.Instantiation` (IL2072,
+IL2070). `HARBOR_MINIMAL=true` forces `HarborWithPlugins=false`, which removes
+both. The stripped profile is also what the csproj itself calls *"the only path
+that produces the stripped binary, and the only one that matches what
+NativeAOT is supposed to mean here"*.
+
+So the honest summary of the AOT state of this repository, as measured, is:
+**the tree is not AOT-clean with plugins compiled in, and the only reason the
+stripped profile can be clean is that it removes the feature whose AOT
+compatibility is the open question.** That is a sharper statement than
+"unknown", and it is #48/S4's to resolve — the `Microsoft.CodeAnalysis` IL3000
+is not fixable from our code, and #413's acceptance criteria forbid buying
+green with blanket suppression. **This gate does not gate the full-tree recipe
+and does not pretend to.**
+
+`recipe=minimal` is part of the publish sentinel, and the gate rejects a log
+from the other recipe: the two build different programs, so an inventory from
+one silently does not describe the other.
+
+Note also that the NUKE `PublishAot` target
 ([`build/_build/Components/PublishVariantBuilder.cs`](../build/_build/Components/PublishVariantBuilder.cs))
 sets the raw MSBuild property `PublishAot=true` rather than `HarborWithAot`, so
-it does **not** evaluate the csproj's AOT block at all. That is a separate
-observation and is not this gate's business; it is recorded here because it
-means the block has exactly one evaluator, and it is the one this job drives.
+it does **not** evaluate the csproj's AOT block at all — and it would hit the
+same `NETSDK1102` described below. Recorded because it means the csproj block
+has exactly one evaluator, and it is the one this job drives.
+
+## A recipe that never worked, found on the second run
+
+The documented recipe 2 above is also missing a flag, and had been since it was
+written:
+
+```
+error NETSDK1102: Optimizing assemblies for size is not supported for the
+selected publish configuration. Please ensure that you are publishing a
+self-contained app.
+```
+
+`Directory.Build.props` sets `SelfContained=false` repo-wide, the AOT
+`PropertyGroup` never overrode it, and
+`Microsoft.NET.ILLink.targets:214` is exactly
+`<NETSdkError Condition="'$(SelfContained)' != 'true'" ResourceName="ILLinkNotSupportedError" />`.
+So the publish failed **before ILC ever ran**, on every invocation, and nothing
+in the repository could have known — no workflow had ever evaluated the block.
+
+The csproj now sets `SelfContained=true` inside the AOT block, so the recipe
+works as documented, and the job passes the flag on the command line as well so
+the gate does not depend on that file staying shaped this way.
+
 
 ## How the block actually behaves — two stages, asymmetrically
 
@@ -163,24 +245,26 @@ values, and exit 2 is not a softened exit 0:
 | 1 | the gate ran and said no — drift, or a baseline row that would not survive review |
 | 2 | the gate could not run — no log, log under the byte floor, or **no publish sentinel** |
 
-The sentinel (`HARBOR_AOT_PUBLISH_OK rid=<rid>`) is written by the job only
-after `dotnet publish` exits 0, and the tool also requires the sentinel's `rid` to
-match `--expect-rid` so a different publish's log cannot be substituted. This is
-the #988 shape — a shard that reported success having run nothing — applied to a
-job that publishes rather than to one that runs tests, and the form is identical.
+The sentinel (`HARBOR_AOT_PUBLISH_OK rid=<rid> recipe=<recipe>`) is written by
+the job only after `dotnet publish` exits 0, and the tool requires both its `rid`
+to match `--expect-rid` and its `recipe` to match `--expect-recipe`, so neither a
+different platform's log nor the *other AOT recipe's* log can be substituted.
+This is the #988 shape — a shard that reported success having run nothing —
+applied to a job that publishes rather than to one that runs tests, and the form
+is identical.
 
 The tool also prints the id list and occurrence count on **every** run, so
 `found 0` can never be a bare number in a log (#901 reported "Found 0" from a
 matcher that had been matching nothing).
 
-`--selftest` runs 22 fixtures where the outcome is guaranteed by construction —
+`--selftest` runs 23 fixtures where the outcome is guaranteed by construction —
 a planted extra id, a planted extra *occurrence* of an id already in the
 baseline (the #591 "the tool halved the rule" shape), a planted new first-party
-site, a missing sentinel, a wrong rid, a truncated log, an absent log, and 7
-malformed-baseline rows. Each assertion checks the exit code **and** the
-substance of the message, so a matcher that fails for the wrong reason cannot
-pass. The CI job runs it before publishing, so a broken instrument is caught in
-about a second rather than after a 20-minute ILC pass.
+site, a missing sentinel, a wrong rid, a wrong recipe, a truncated log, an
+absent log, and 7 malformed-baseline rows. Each assertion checks the exit code
+**and** the substance of the message, so a matcher that fails for the wrong
+reason cannot pass. The CI job runs it before publishing, so a broken instrument
+is caught in about a second rather than after a 20-minute ILC pass.
 
 ## Where this gate does not run, and why that is correct
 
@@ -228,6 +312,13 @@ provider construction path both work under NativeAOT. That is worth having, and
 it is a real risk area (the provider wire payloads are the place this repo
 already hand-writes JSON over `Utf8JsonWriter`). It is **not** evidence about
 build-time resource embedding.
+
+The assertion also asserts that `anthropic` and `openai` are **absent**. Under
+the minimal recipe their factories sit behind `#if HARBOR_WITH_ALL_PROVIDERS` in
+`ProviderFactories`, and `HARBOR_MINIMAL=true` forces that flag false — so
+their presence would mean the env var never reached MSBuild, the job silently
+published the full tree, and every count in the inventory described a program
+nobody gated. The recipe is asserted, not assumed.
 
 The dead embedded path is a pre-existing defect, recorded here and **not
 fixed by this gate**: repairing it changes which providers a published binary

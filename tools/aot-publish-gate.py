@@ -121,7 +121,7 @@ class Inventory:
         self.counts = counts  # Counter[str]
         self.first_party = first_party  # dict[str, set[str]]
         self.error_ids = error_ids  # set[str]
-        self.sentinel_rids = sentinel_rids  # set[str]
+        self.sentinels = sentinel_rids  # set[tuple[str, str]] of (rid, recipe)
         self.log_bytes = log_bytes
         self.log_lines = log_lines
 
@@ -142,18 +142,20 @@ def read_text(path, what):
 
 
 def parse_sentinel(text, sentinel):
-    """Every `rid=` value on a sentinel line, so a stale log cannot be swapped in."""
-    rids = set()
+    """Every `rid=`/`recipe=` pair on a sentinel line, so a stale or wrong-configuration
+    log cannot be swapped in for the one this baseline describes."""
+    pairs = set()
     for line in text.splitlines():
         if sentinel not in line:
             continue
-        match = re.search(r"\brid=([A-Za-z0-9._-]+)", line)
-        if match:
-            rids.add(match.group(1))
-    return rids
+        rid = re.search(r"\brid=([A-Za-z0-9._-]+)", line)
+        recipe = re.search(r"\brecipe=([A-Za-z0-9._-]+)", line)
+        if rid and recipe:
+            pairs.add((rid.group(1), recipe.group(1)))
+    return pairs
 
 
-def parse_log(text, log_path, min_bytes, sentinel, expect_rid):
+def parse_log(text, log_path, min_bytes, sentinel, expect_rid, expect_recipe):
     """Read a publish log into an Inventory, or raise GateError."""
     log_bytes = len(text.encode("utf-8", errors="replace"))
     if log_bytes < min_bytes:
@@ -163,18 +165,27 @@ def parse_log(text, log_path, min_bytes, sentinel, expect_rid):
             "Raising the floor is a decision to make in review, not in the failing job."
         )
 
-    rids = parse_sentinel(text, sentinel)
-    if not rids:
+    pairs = parse_sentinel(text, sentinel)
+    if not pairs:
         raise GateError(
-            f"the publish log at {log_path} carries no '{sentinel}' line, so no publish "
-            "reported success into it. Treating this as success is how a gate goes green on "
-            "a process that died: the job writes the sentinel only after `dotnet publish` "
-            "exits 0, and its absence is the whole signal."
+            f"the publish log at {log_path} carries no '{sentinel}' line naming both rid= and "
+            "recipe=, so no publish reported success into it. Treating this as success is how a "
+            "gate goes green on a process that died: the job writes the sentinel only after "
+            "`dotnet publish` exits 0, and its absence is the whole signal."
         )
+    rids = {r for r, _ in pairs}
+    recipes = {c for _, c in pairs}
     if expect_rid and expect_rid not in rids:
         raise GateError(
             f"the publish log at {log_path} carries sentinel rid(s) {sorted(rids)}, not the "
             f"expected rid={expect_rid}. This is a different publish's log."
+        )
+    if expect_recipe and expect_recipe not in recipes:
+        raise GateError(
+            f"the publish log at {log_path} carries sentinel recipe(s) {sorted(recipes)}, not the "
+            f"expected recipe={expect_recipe}. The two AOT recipes in Harbor.App.Cli.csproj build "
+            "DIFFERENT programs (one strips plugins, providers and tools; the other does not), so "
+            "an inventory from one does not describe the other."
         )
 
     counts = Counter()
@@ -195,7 +206,7 @@ def parse_log(text, log_path, min_bytes, sentinel, expect_rid):
         if site is not None:
             first_party[ident].add(site.group("rel").replace("\\", "/"))
 
-    return Inventory(counts, dict(first_party), error_ids, rids, log_bytes,
+    return Inventory(counts, dict(first_party), error_ids, pairs, log_bytes,
                      len(text.splitlines()))
 
 
@@ -339,18 +350,19 @@ def compare(baseline, inventory):
     return problems
 
 
-def run(log_path, baseline_path, sentinel, min_bytes, expect_rid, out):
+def run(log_path, baseline_path, sentinel, min_bytes, expect_rid, expect_recipe, out):
     """Returns the process exit code."""
     try:
         log_text = read_text(log_path, "publish log")
-        inventory = parse_log(log_text, log_path, min_bytes, sentinel, expect_rid)
+        inventory = parse_log(log_text, log_path, min_bytes, sentinel, expect_rid, expect_recipe)
         baseline = parse_baseline(read_text(baseline_path, "baseline"), baseline_path)
     except GateError as exc:
         out(f"{TOOL}: CANNOT RUN (exit 2) — {exc}")
         return 2
 
-    out(f"{TOOL}: publish log {log_path} — {inventory.log_bytes} bytes, {inventory.log_lines} lines; "
-        f"sentinel rid={','.join(sorted(inventory.sentinel_rids))}")
+    published = ", ".join(f"rid={r} recipe={c}" for r, c in sorted(inventory.sentinels))
+    out(f"{TOOL}: publish log {log_path} — {inventory.log_bytes} bytes, "
+        f"{inventory.log_lines} lines; sentinel: {published}")
     out(f"{TOOL}: {describe(inventory.counts, inventory.first_party)}")
     out(f"{TOOL}: baseline {baseline_path} — {len(baseline)} row(s): "
         f"{', '.join(sorted(baseline)) if baseline else 'none'}")
@@ -378,23 +390,24 @@ def run(log_path, baseline_path, sentinel, min_bytes, expect_rid, out):
 # ----------------------------------------------------------------------------
 
 _SELFTEST_LOG = """\
-{rid} Using .NET SDK 10.0.302 [/home/runner/work/Harbor-Harness/Harbor-Harness/global.json]
+Using .NET SDK 10.0.302 [/home/runner/work/Harbor-Harness/Harbor-Harness/global.json]
   Determining projects to restore...
   Restored /home/runner/work/Harbor-Harness/Harbor-Harness/src/Harbor.Application/Harbor.Application.csproj (in 412 ms).
   Harbor.Application -> /home/runner/work/Harbor-Harness/Harbor-Harness/src/Harbor.Application/bin/Release/net10.0/Harbor.Application.dll
-{rid} /home/runner/work/Harbor-Harness/Harbor-Harness/src/Harbor.Application/Session.cs(88,13): warning IL2026: The 'PublishAot' analyzer warned: 'this call site will not be preserved because its containing type is not seen' [HARBOR_APP_CLI]
-{rid} /home/runner/work/Harbor-Harness/Harbor-Harness/src/Harbor.Application/Session.cs(91,9): warning IL2026: The 'PublishAot' analyzer warned: 'this call site will not be preserved' [HARBOR_APP_CLI]
-{rid} /home/runner/work/Harbor-Harness/Harbor-Harness/src/Harbor.Plugins.Compilation/RoslynPluginCompiler.cs(140,22): warning IL3050: The 'PublishAot' analyzer warned: 'call site can cause AOT analysis warnings' [HARBOR_APP_CLI]
+/home/runner/work/Harbor-Harness/Harbor-Harness/src/Harbor.Application/Session.cs(88,13): warning IL2026: The 'PublishAot' analyzer warned: 'this call site will not be preserved because its containing type is not seen' [HARBOR_APP_CLI]
+/home/runner/work/Harbor-Harness/Harbor-Harness/src/Harbor.Application/Session.cs(91,9): warning IL2026: The 'PublishAot' analyzer warned: 'this call site will not be preserved' [HARBOR_APP_CLI]
+/home/runner/work/Harbor-Harness/Harbor-Harness/src/Harbor.Plugins.Compilation/RoslynPluginCompiler.cs(140,22): warning IL3050: The 'PublishAot' analyzer warned: 'call site can cause AOT analysis warnings' [HARBOR_APP_CLI]
 Trimmer warnings summary:
   ILLink: 118 warning(s) from 6 assembly(s) — Microsoft.CodeAnalysis.dll, System.Text.RegularExpressions.dll, ...
   Total: 118
-  Sentinel: {sentinel} rid={rid}
+  Sentinel: {sentinel} rid={rid} recipe={recipe}
 """
 
 
-def fixture(rid="linux-x64", sentinel=DEFAULT_SENTINEL, extra_lines=(), body=None):
+def fixture(rid="linux-x64", recipe="minimal", sentinel=DEFAULT_SENTINEL, extra_lines=(), body=None):
     """A publish log whose bytes exceed the floor, so only the intended defect can fail it."""
-    text = body if body is not None else _SELFTEST_LOG.format(rid=rid, sentinel=sentinel)
+    text = body if body is not None else _SELFTEST_LOG.format(
+        rid=rid, recipe=recipe, sentinel=sentinel)
     padding = "\n".join(f"  linker: pass 0x{i:x} ilc: emit rodata" for i in range(200))
     return text + "\n" + padding + "\n" + "\n".join(extra_lines) + "\n"
 
@@ -439,7 +452,7 @@ def selftest(out):
         # 1. The green case, and the exact wording that makes "zero" legible.
         check("green_two_rows",
               (write("log1", fixture()), write("base1", two_rows),
-               DEFAULT_SENTINEL, 2000, "linux-x64"),
+               DEFAULT_SENTINEL, 2000, "linux-x64", "minimal"),
               0,
               must_contain=["found 2 distinct diagnostic id(s), 3 occurrence(s)",
                             "first-party sites: 2", "PASS (exit 0)"])
@@ -448,11 +461,12 @@ def selftest(out):
         #    is the state a broken matcher also produces, so it has to read as a
         #    claim about a publish that happened, not as an absence (#901).
         warning_free = "\n".join(
-            line for line in _SELFTEST_LOG.format(rid="linux-x64", sentinel=DEFAULT_SENTINEL).splitlines()
+            line for line in _SELFTEST_LOG.format(
+                rid="linux-x64", recipe="minimal", sentinel=DEFAULT_SENTINEL).splitlines()
             if not _DIAGNOSTIC.search(line)) + "\n"
         check("zero_is_described_not_bare",
               (write("log2", fixture(body=warning_free)), write("base2", empty_baseline),
-               DEFAULT_SENTINEL, 2000, "linux-x64"),
+               DEFAULT_SENTINEL, 2000, "linux-x64", "minimal"),
               0,
               must_contain=["found 0 distinct diagnostic id(s), 0 occurrence(s)",
                             "ids: none", "PASS (exit 0)"],
@@ -463,16 +477,25 @@ def selftest(out):
         #    log is large, well-formed and warning-free.
         check("no_sentinel_cannot_go_green",
               (write("log3", fixture(sentinel="SOMETHING_ELSE")), write("base3", empty_baseline),
-               DEFAULT_SENTINEL, 2000, None),
+               DEFAULT_SENTINEL, 2000, None, "minimal"),
               2,
               must_contain=["CANNOT RUN (exit 2)", "carries no 'HARBOR_AOT_PUBLISH_OK' line"])
 
         # 4. A log that is a different publish's (wrong rid) is not this gate's evidence.
         check("wrong_rid_is_rejected",
               (write("log4", fixture(rid="win-x64")), write("base4", empty_baseline),
-               DEFAULT_SENTINEL, 2000, "linux-x64"),
+               DEFAULT_SENTINEL, 2000, "linux-x64", "minimal"),
               2,
               must_contain=["not the expected rid=linux-x64"])
+
+        # 4b. A log from the OTHER AOT recipe is not this baseline's evidence either.
+        #     The two recipes build different programs, so an inventory taken from
+        #     one silently does not describe the other.
+        check("wrong_recipe_is_rejected",
+              (write("log4b", fixture(recipe="fulltree")), write("base4b", empty_baseline),
+               DEFAULT_SENTINEL, 2000, "linux-x64", "minimal"),
+              2,
+              must_contain=["not the expected recipe=minimal", "DIFFERENT programs"])
 
         # 5. THE PLANTED-HIT CASE (#591 form): one extra id in the log, in scope
         #    for this inventory, that the baseline knows nothing about. The
@@ -483,7 +506,7 @@ def selftest(out):
                   "  /home/runner/work/Harbor-Harness/Harbor-Harness/src/Harbor.Tui.CellForge/Screen.cs(40,5): "
                   "warning IL3001: analyzer warned: planted for the self-test [HARBOR_APP_CLI]"])),
                write("base5", two_rows),
-               DEFAULT_SENTINEL, 2000, None),
+               DEFAULT_SENTINEL, 2000, None, "minimal"),
               1,
               must_contain=["NEW  IL3001", "src/Harbor.Tui.CellForge/Screen.cs", "FAIL (exit 1)"])
 
@@ -495,7 +518,7 @@ def selftest(out):
                   "  /home/runner/.nuget/packages/microsoft.codeanalysis.csharp/5.6.0/lib/netstandard2.0/Microsoft.CodeAnalysis.dll(9,9): "
                   "warning IL2104: linker warning: planted for the self-test [HARBOR_APP_CLI]"])),
                write("base5b", two_rows),
-               DEFAULT_SENTINEL, 2000, None),
+               DEFAULT_SENTINEL, 2000, None, "minimal"),
               1,
               must_contain=["NEW  IL2104", "third-party only"])
 
@@ -508,7 +531,7 @@ def selftest(out):
                   "  /home/runner/work/Harbor-Harness/Harbor-Harness/src/Harbor.Hosting/HostBuilder.cs(9,1): "
                   "warning IL9999: not a trim or AOT id, out of scope [HARBOR_APP_CLI]"])),
                write("base5c", two_rows),
-               DEFAULT_SENTINEL, 2000, None),
+               DEFAULT_SENTINEL, 2000, None, "minimal"),
               0,
               must_contain=["found 2 distinct diagnostic id(s), 3 occurrence(s)"])
 
@@ -517,7 +540,7 @@ def selftest(out):
         #    would pass here. Baseline says 2, log has 2 → green; a third
         #    occurrence of an id already in the baseline must turn it red.
         check("occurrence_count_is_not_deduplicated",
-              (write("log6", fixture()), write("base6", two_rows), DEFAULT_SENTINEL, 2000, None),
+              (write("log6", fixture()), write("base6", two_rows), DEFAULT_SENTINEL, 2000, None, "minimal"),
               0,
               must_contain=["found 2 distinct diagnostic id(s), 3 occurrence(s)"])
         check("a_fourth_occurrence_turns_it_red",
@@ -525,7 +548,7 @@ def selftest(out):
                   "  /home/runner/work/Harbor-Harness/Harbor-Harness/src/Harbor.Application/Session.cs(120,5): "
                   "warning IL2026: analyzer warned: one more [HARBOR_APP_CLI]"])),
                write("base7", two_rows),
-               DEFAULT_SENTINEL, 2000, None),
+               DEFAULT_SENTINEL, 2000, None, "minimal"),
               1,
               must_contain=["COUNT IL2026: 3 occurrence(s) now, 2 in the baseline"])
 
@@ -536,7 +559,7 @@ def selftest(out):
                   "  /home/runner/work/Harbor-Harness/Harbor-Harness/src/Harbor.Tui.CellForge/Screen.cs(41,5): "
                   "warning IL3050: analyzer warned: our code now calls Roslyn [HARBOR_APP_CLI]"])),
                write("base8", two_rows),
-               DEFAULT_SENTINEL, 2000, None),
+               DEFAULT_SENTINEL, 2000, None, "minimal"),
               1,
               must_contain=["SITES IL3050", "src/Harbor.Tui.CellForge/Screen.cs"])
 
@@ -546,7 +569,7 @@ def selftest(out):
                   "IL2026 | 2 | ACCEPTED | src/Harbor.Application/Session.cs | first-party site, tracked in docs/AOT_PUBLISH.md\n"
                   "IL3050 | 1 | ACCEPTED | - | Roslyn needs the JIT; split point is #419, ADR is #418\n"
                   "IL2104 | 7 | ACCEPTED | - | per-assembly trim rollup inside a referenced package\n"),
-              DEFAULT_SENTINEL, 2000, None),
+              DEFAULT_SENTINEL, 2000, None, "minimal"),
               1,
               must_contain=["GONE  IL2104", "delete the row in this same diff"])
 
@@ -555,7 +578,7 @@ def selftest(out):
               (write("log10", fixture()), write("base10",
                   "IL2026 | 2 | REJECTED | src/Harbor.Application/Session.cs | a bug to fix, not a concession; owner is the PR that fixes it\n"
                   "IL3050 | 1 | ACCEPTED | src/Harbor.Plugins.Compilation/RoslynPluginCompiler.cs | Roslyn needs the JIT; split point is #419, ADR is #418\n"),
-              DEFAULT_SENTINEL, 2000, None),
+              DEFAULT_SENTINEL, 2000, None, "minimal"),
               1,
               must_contain=["VERDICT IL2026", "the fix has not landed"])
 
@@ -565,22 +588,22 @@ def selftest(out):
                   "  /home/runner/work/Harbor-Harness/Harbor-Harness/src/Harbor.Hosting/HostBuilder.cs(9,1): "
                   "error IL3070: 'System.Reflection.Emit' cannot be used in NativeAOT [HARBOR_APP_CLI]"])),
                write("base11", two_rows),
-               DEFAULT_SENTINEL, 2000, None),
+               DEFAULT_SENTINEL, 2000, None, "minimal"),
               1,
               must_contain=["ERRORS the log contains", "IL3070"])
 
         # 11. A short log is a truncated file, not a clean publish.
         check("truncated_log_cannot_run",
-              (write("log12", "Sentinel: " + DEFAULT_SENTINEL + " rid=linux-x64\n"),
+              (write("log12", "Sentinel: " + DEFAULT_SENTINEL + " rid=linux-x64 recipe=minimal\n"),
                write("base12", empty_baseline),
-               DEFAULT_SENTINEL, 2000, None),
+               DEFAULT_SENTINEL, 2000, None, "minimal"),
               2,
               must_contain=["under the 2000-byte floor"])
 
         # 12. No log at all.
         check("absent_log_cannot_run",
               (path("does-not-exist.log"), write("base13", empty_baseline),
-               DEFAULT_SENTINEL, 2000, None),
+               DEFAULT_SENTINEL, 2000, None, "minimal"),
               2,
               must_contain=["CANNOT RUN (exit 2)"])
 
@@ -603,7 +626,7 @@ def selftest(out):
         ]:
             check(f"baseline_{name}",
                   (write(f"log14{name}", fixture()), write(f"base14{name}", row),
-                   DEFAULT_SENTINEL, 2000, None),
+                   DEFAULT_SENTINEL, 2000, None, "minimal"),
                   2,
                   must_contain=[needle, "the baseline is not well formed"])
 
@@ -615,7 +638,8 @@ def selftest(out):
 
     out(f"{TOOL}: SELFTEST PASSED — {checks} cases, each on a fixture where the outcome is "
         "guaranteed (planted extra id, planted extra occurrence, planted first-party site, "
-        "missing sentinel, wrong rid, truncated log, absent log, 7 malformed baseline rows).")
+        "missing sentinel, wrong rid, wrong recipe, truncated log, absent log, "
+        "7 malformed baseline rows).")
     return 0
 
 
@@ -645,6 +669,8 @@ def main(argv):
                         help=f"floor on the log's size (default: {DEFAULT_MIN_BYTES})")
     parser.add_argument("--expect-rid", default=None,
                         help="require the sentinel to name this runtime identifier")
+    parser.add_argument("--expect-recipe", default=None,
+                        help="require the sentinel to name this AOT recipe (e.g. 'minimal')")
     parser.add_argument("--selftest", action="store_true",
                         help="run the self-test against guaranteed-hit fixtures and exit")
     args = parser.parse_args(argv)
@@ -655,7 +681,8 @@ def main(argv):
         return selftest(out)
     if not args.log or not args.baseline:
         parser.error("--log and --baseline are both required (or pass --selftest)")
-    return run(args.log, args.baseline, args.sentinel, args.min_bytes, args.expect_rid, out)
+    return run(args.log, args.baseline, args.sentinel, args.min_bytes,
+               args.expect_rid, args.expect_recipe, out)
 
 
 if __name__ == "__main__":
