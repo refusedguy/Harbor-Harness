@@ -17,7 +17,12 @@ gate on it.** The criterion is three things, all of which must hold:
    exactly — no new id, no changed count, no new first-party site, and no row
    left behind for a warning that stopped.
 3. The **published binary runs**: `--version`, `--help`, `--providers`, each
-   asserted on content rather than on exit code.
+   asserted on content rather than on exit code. The `--providers` assertion
+   names `ollama`, `openai`, `anthropic` and `kilocode`, which is not a
+   formality: `ProviderVerbs.RunListProvidersAsync` **always returns 0**, so a
+   binary that registered no providers at all would exit 0 and print an empty
+   list. See [the note on what that assertion really
+   proves](#what-the-providers-assertion-really-proves).
 
 All three are needed, and neither of the last two implies the other.
 
@@ -195,6 +200,39 @@ about a second rather than after a 20-minute ILC pass.
   #924). This gate rides `push` and `pull_request` on `dev`, the same mechanism
   every other job in `ci.yml` uses, so it has exactly the same reachability. A
   dispatch-only trigger would have reproduced #924.
+
+## What the `providers` assertion really proves
+
+Not what it looks like. The obvious explanation — "the provider catalogue is
+embedded, so this proves embedding survived the publish" — is **false**, and the
+code says so:
+
+- `EmbedProviders=true` is set on
+  [`Harbor.Application`](../src/Harbor.Application/Harbor.Application.csproj) and
+  [`App.Cli`](../apps/Harbor.App.Cli/Harbor.App.Cli.csproj), and
+  [`Directory.Build.targets`](../Directory.Build.targets) turns that into an
+  `EmbeddedResource` on whichever project carries the flag.
+- `JsonProviderDiscovery.LoadEmbeddedProviders()` enumerates
+  `typeof(JsonProviderDiscovery).Assembly` — which is **`Harbor.Hosting`** — and
+  `Harbor.Hosting` does not set `EmbedProviders`. That enumeration is therefore
+  empty, and the embedded-provider branch is dead as written.
+- The catalogue actually reaches the registry through
+  `ProviderPresetCatalog.FindProvidersDirectories()`, which yields
+  `~/.harbor/providers`, then `<exeDir>/providers`, then up to 8 ancestors of
+  `AppContext.BaseDirectory`. From `publish/aot/` that walk reaches the repo's
+  `providers/*.json`.
+
+So the assertion proves the AOT binary can locate, parse and register the
+bundled JSON catalogue — that the `System.Text.Json` reading path and the
+provider construction path both work under NativeAOT. That is worth having, and
+it is a real risk area (the provider wire payloads are the place this repo
+already hand-writes JSON over `Utf8JsonWriter`). It is **not** evidence about
+build-time resource embedding.
+
+The dead embedded path is a pre-existing defect, recorded here and **not
+fixed by this gate**: repairing it changes which providers a published binary
+sees, which is a behavioural change well outside "add a gate". It belongs to
+whoever owns provider discovery.
 
 ## Deliberately out of scope
 

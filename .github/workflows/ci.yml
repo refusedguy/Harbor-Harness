@@ -814,14 +814,27 @@ jobs:
 
           "$bin" --providers > publish/providers.txt 2>&1
           test -s publish/providers.txt || { echo "::error::--providers printed nothing"; exit 1; }
-          # The provider catalogue is EMBEDDED at build time
-          # (EmbedProviders=true in the CLI csproj). If embedding were broken
-          # by trimming, this list would be empty while still exiting 0 — so the
-          # assertion is that known providers are present, not that some output
-          # exists.
+          # Asserted on CONTENT, not on "some output exists", because
+          # ProviderVerbs.RunListProvidersAsync always returns 0: an AOT binary
+          # that registered nothing at all would exit 0 and print an empty list.
+          #
+          # What this actually proves (stated precisely, because the obvious
+          # explanation is wrong): the providers are NOT read from embedded
+          # resources. JsonProviderDiscovery.LoadEmbeddedProviders() enumerates
+          # typeof(JsonProviderDiscovery).Assembly — Harbor.Hosting — but
+          # EmbedProviders is set on Harbor.Application and App.Cli, so that
+          # enumeration is empty and the catalogue reaches the registry through
+          # ProviderPresetCatalog.FindProvidersDirectories(), which walks up to
+          # 8 ancestors of AppContext.BaseDirectory for a sibling providers/.
+          # From publish/aot/ that lands on the repo's providers/*.json. So this
+          # asserts that the AOT binary can read, parse and register the bundled
+          # JSON catalogue — the System.Text.Json path and the provider
+          # construction path both work under NativeAOT. The dead embedded
+          # path is a separate pre-existing finding, recorded in
+          # docs/AOT_PUBLISH.md, not fixed here.
           for p in ollama openai anthropic kilocode; do
             grep -q -i "$p" publish/providers.txt \
-              || { echo "::error::--providers is missing '$p' — embedded provider JSON did not survive the publish"; cat publish/providers.txt; exit 1; }
+              || { echo "::error::--providers is missing '$p' — the bundled provider catalogue did not survive the publish"; cat publish/providers.txt; exit 1; }
           done
           echo "smoke: version/help/providers all ran on the published AOT binary"
 
