@@ -791,16 +791,15 @@ jobs:
           fi
           exit "$status"
 
-      - name: Compare the published inventory against the committed baseline
-        run: |
-          python3 tools/aot-publish-gate.py \
-            --log publish/aot-publish.log \
-            --baseline .github/aot-warning-baseline.txt \
-            --expect-rid linux-x64
-
       # The half that proves executability. Each assertion is on CONTENT, and
       # each one fails loudly on an empty output — an exit code of 0 from a
       # binary that printed nothing is not evidence that it ran.
+      #
+      # ORDER MATTERS: this runs BEFORE the inventory comparison, not after.
+      # Both must pass, so the order changes no verdict — but a comparison that
+      # fails first would SKIP this step, and a run that reports only "the
+      # inventory drifted" leaves the reader unable to tell whether the binary
+      # booted. Running the artifact first means one red run yields both facts.
       - name: Smoke — the published AOT binary runs
         run: |
           set -euo pipefail
@@ -841,6 +840,13 @@ jobs:
               || { echo "::error::--providers is missing '$p' — the bundled provider catalogue did not survive the publish"; cat publish/providers.txt; exit 1; }
           done
           echo "smoke: version/help/providers all ran on the published AOT binary"
+
+      - name: Compare the published inventory against the committed baseline
+        run: |
+          python3 tools/aot-publish-gate.py \
+            --log publish/aot-publish.log \
+            --baseline .github/aot-warning-baseline.txt \
+            --expect-rid linux-x64
 
       - name: Upload AOT publish log and inventory report
         if: always()
