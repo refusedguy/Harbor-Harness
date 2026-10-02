@@ -271,8 +271,20 @@ public sealed class ModelRefSingleParserTests
     {
         string root = RequireRepoRoot();
 
-        await Assert.That(
-                () => CountDelegations(root, "src/Harbor.Architecture.Tests/NoSuchFile-439.cs"))
+        // The directory EXISTS on purpose. A path whose *directory* is missing raises
+        // DirectoryNotFoundException, which would prove only that a bad prefix throws —
+        // the case that matters is a file that moved out of a directory that did not,
+        // because that is exactly what relocating SessionFactory.cs looks like.
+        const string moved = "tests/Harbor.Architecture.Tests/NoSuchFile-439.cs";
+
+        await Assert.That(Directory.Exists(Path.Combine(root, Path.GetDirectoryName(moved)!)))
+            .IsTrue()
+            .Because(
+                "the synthetic is only meaningful if its directory is real. A missing directory "
+                + "raises DirectoryNotFoundException and would let this pass for the wrong reason — "
+                + "which is the same failure shape this test exists to catch, one level up.");
+
+        await Assert.That(() => CountDelegations(root, moved))
             .Throws<FileNotFoundException>()
             .Because(
                 "a count over a file that is not there is not a count of zero, it is an absent "
