@@ -60,7 +60,7 @@ on:
       - 'tests/**/*.cs'
       - 'src/**/*.cs'
       - 'apps/**/*.cs'
-      # #428. `check-abstractions-contract.py` reads the two frozen projects'
+      # #428. `check-abstractions-contract.py` reads four guarded projects'
       # .csproj files and the .cs they compile. A csproj is how a dependency
       # enters this repository, so a workflow that watched only .cs could not
       # trigger on the change the gate exists to catch — the #509 failure (a
@@ -87,7 +87,7 @@ on:
       - 'tests/**/*.cs'
       - 'src/**/*.cs'
       - 'apps/**/*.cs'
-      # #428. `check-abstractions-contract.py` reads the two frozen projects'
+      # #428. `check-abstractions-contract.py` reads four guarded projects'
       # .csproj files and the .cs they compile. A csproj is how a dependency
       # enters this repository, so a workflow that watched only .cs could not
       # trigger on the change the gate exists to catch — the #509 failure (a
@@ -145,11 +145,15 @@ jobs:
         run: python3 tools/check-doc-facts.py --self-test
       # #428. The fifth gate is the only one that reads a `.csproj`, and the only
       # one that asks about a package rather than about a document: is every
-      # PackageReference the two frozen contract projects declare load-bearing,
-      # and is every non-BCL namespace their sources use declared. Three of its
-      # ten fixtures pin bugs this tool had while being written, so its failure
-      # path is as much the point as its passing path.
-      - name: Frozen-contract dependency gate fails on a phantom package
+      # PackageReference a guarded project declares load-bearing, and is every
+      # non-BCL namespace its sources use declared. Its self-test carries fifteen
+      # fixtures and six of them pin bugs this tool had while being written, so
+      # its failure path is as much the point as its passing path. Every fixture
+      # added after the first version was checked by mutation: it fails when its
+      # own fix is reverted and the rest still pass. Two candidate mutations were
+      # tried and found NOT reachable by any fixture, and the tool's comments say
+      # so rather than implying coverage that is not there.
+      - name: Guarded-project dependency gate fails on a phantom package
         run: python3 tools/check-abstractions-contract.py --self-test
 
   links:
@@ -282,12 +286,18 @@ jobs:
   # floor that a re-added phantom still cleared. Lower them only in the same diff
   # that legitimately removes a dependency, where a reviewer can see it.
   contract:
-    name: frozen contract dependencies
+    name: guarded project dependencies
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
       contents: read
     steps:
       - uses: actions/checkout@v7
-      - name: Check the frozen contract projects' declared dependencies
-        run: python3 tools/check-abstractions-contract.py --min-packages 9 --min-namespaces 6 --min-files 75
+      # Floors are the ratchet, and they are set AT the measured counts rather
+      # than below them — a floor with slack cannot tell "the tree got smaller"
+      # from "the matcher stopped matching", and only the first of those is a
+      # change a reviewer should have to look at. A PR that legitimately removes
+      # a dependency lowers them in the same diff. Recomputed when the perimeter
+      # widened to four projects (was 9 / 6 / 75 over two).
+      - name: Check the guarded projects' declared dependencies
+        run: python3 tools/check-abstractions-contract.py --min-packages 14 --min-namespaces 7 --min-files 152
