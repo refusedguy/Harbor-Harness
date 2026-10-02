@@ -71,6 +71,14 @@ internal static class SessionSupervision
     ///     Aborted → stopped, Error → failed, otherwise succeeded.
     ///     Empty history (or no assistant message yet) → unknown.
     /// </summary>
+    /// <remarks>
+    ///     #993: this mapping and <see cref="RunOutcome.Reconstruct" /> used to
+    ///     disagree on exactly the case they are both written to describe — no
+    ///     assistant message. This one answered "unknown"; Reconstruct's catch-all
+    ///     answered "succeeded", while its doc claimed they were the same mapping.
+    ///     Reconstruct now agrees: no terminal assistant message is never a success.
+    ///     If you change one, change both.
+    /// </remarks>
     public static string InferOutcome(IReadOnlyList<AgentMessage> messages)
     {
         AssistantMessage? last = null;
