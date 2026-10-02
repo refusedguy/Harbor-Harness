@@ -422,11 +422,23 @@ public class FullLayerMatrixTests
         ["Harbor.Tui.AnsiPlain"] = new(Layer.Presentation,
             ["Harbor.Abstractions", "Harbor.Terminal.Abstractions", "Harbor.Ui.Framework.State"]),
         // CellForge engine (issue #33 split): input/parsing/capabilities/cell
-        // primitives. No Chat vocabulary: wheel ticks surface as AppMsg via
-        // the State KeyEventAdapter over the shared UiKeyDto vocabulary, cell
-        // styles via DesignSystem tokens, shared blocks via Ui.Framework.Rendering.
+        // primitives. No Chat vocabulary: a wheel tick surfaces as the BCL-only
+        // UiKeyDto (#162) and the Enter decision as the BCL-only EnterDecision
+        // (#435), both of which the host converts through the State
+        // KeyEventAdapter; cell styles via DesignSystem tokens; shared blocks via
+        // Ui.Framework.Rendering.
+        //
+        // #435 removed two edges from this row's assembly:
+        //   Harbor.Ui.Framework.State — was permitted because MouseRouter returned
+        //     AppMsg.KeyInput and ComposerController asked EnterKeyPolicy for the
+        //     Enter decision. Both now speak the #162/#435 BCL-only vocabulary
+        //     instead, so the engine names no store type at all. This is also the
+        //     edge whose presence is why "Harbor.Abstractions" was legal-by-
+        //     expansion here without ever appearing in the row: State's own
+        //     expansion carried it. Both went together — the #980 shape, a declared
+        //     reference over a dependency that measured as zero.
         ["Harbor.Tui.CellForge.Engine"] = new(Layer.Presentation,
-            [ "Harbor.Ui.Framework.State",
+            [
                 "Harbor.Ui.Framework.Rendering",
                 "Harbor.DesignSystem",
             ]),
