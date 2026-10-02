@@ -108,10 +108,21 @@ public sealed class ContractsArtifactCapabilityRule
     ///     deletes, moves, copies, opens for writing, or enumerates the tree.
     ///     Zero tolerance and no baseline row — see the file header.
     /// </summary>
+    /// <remarks>
+    ///     <c>new FileInfo(…)</c> and <c>new DirectoryInfo(…)</c> are in here as
+    ///     well as in <see cref="DiskCall" />. The CI run that proved this rule
+    ///     red (#1019, commit <c>91e426a4</c>) caught the omission: the positive
+    ///     control planted six mutators and the matcher reported five, because
+    ///     <c>new FileInfo("p").Delete()</c> matched the READ pattern and not
+    ///     this one. The armed half must not depend on the read half being
+    ///     total in order to catch a deletion — the day the permitted site moves,
+    ///     the read pattern's coverage is exactly what stops being obvious.
+    /// </remarks>
     private static readonly Regex DiskWrite = new(
-        @"\b(?:File|Directory)\s*\.\s*"
+        @"(?:\b(?:File|Directory)\s*\.\s*"
         + @"(?:Write\w*|Create\w*|Delete\w*|Move\w*|Copy\w*|Append\w*|Open\w*|Replace\w*|Enumerate\w*"
-        + @"|SetLastWriteTime\w*|Encrypt|Decrypt)\b",
+        + @"|SetLastWriteTime\w*|Encrypt|Decrypt)\b)"
+        + @"|\bnew\s+(?:FileInfo|DirectoryInfo)\s*\(",
         RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
     [Test]
@@ -169,7 +180,7 @@ public sealed class ContractsArtifactCapabilityRule
                 + "WorkspaceInspector and delete the row here in the same commit. Found: "
                 + (hits.Count == 0 ? "(none)" : string.Join(" | ", hits)));
 
-        await Assert.That(hits).HasCount(1).Because(
+        await Assert.That(hits.Count()).IsEqualTo(1).Because(
             "one probe, one site. A Domain leaf that reaches the filesystem in two places is two "
             + "decisions pretending to be one, and only one of them was taken.");
     }
@@ -184,7 +195,7 @@ public sealed class ContractsArtifactCapabilityRule
             public static bool Probe(string path) => File.Exists(path);
             """);
 
-        await Assert.That(read).HasCount(1).Because(
+        await Assert.That(read.Count()).IsEqualTo(1).Because(
             "The read matcher must be able to fail, or \"one allowed site\" and \"no sites\" are the same "
             + "observation. If this ever goes red the fix is the REGEX, not RunArtifact.");
 
@@ -204,7 +215,7 @@ public sealed class ContractsArtifactCapabilityRule
             }
             """);
 
-        await Assert.That(writes).HasCount(6).Because(
+        await Assert.That(writes.Count()).IsEqualTo(6).Because(
             "The write matcher is the armed half and has no baseline row, so it has to be right about the "
             + "whole family rather than about the two spellings this issue happened to use. A matcher "
             + "that caught only File.Write* would leave File.Delete and Directory.CreateDirectory open in "

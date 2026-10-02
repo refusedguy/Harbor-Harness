@@ -126,7 +126,7 @@ public class RunVerificationRecordTests
 
         await Assert.That(skipped.ExitCode).IsNull();
         await Assert.That(skipped.Reason).IsEqualTo("dotnet is not on PATH in the isolated copy");
-        await Assert.That(record.Checks).HasCount(2);
+        await Assert.That(record.Checks.Count()).IsEqualTo(2);
     }
 
     [Test]
@@ -156,7 +156,7 @@ public class RunVerificationRecordTests
         RunVerificationRecord record = RunVerificationRecord.Pin(Contract(), Sealed)
             .WithNotVerified("the integration suite", "it needs a database, and the run has no docker");
 
-        await Assert.That(record.NotVerified).HasCount(1);
+        await Assert.That(record.NotVerified.Count()).IsEqualTo(1);
         await Assert.That(record.NotVerified[0].Describe()).IsEqualTo(
             "the integration suite: it needs a database, and the run has no docker");
         await Assert.That(record.Summary.Contains("not verified - the integration suite", StringComparison.Ordinal))
@@ -179,10 +179,10 @@ public class RunVerificationRecordTests
             + "counting it would make the record describe a commit nobody tested.");
 
         await Assert.That(record.Verification.IsVerified).IsFalse();
-        await Assert.That(record.Checks).HasCount(1).Because(
+        await Assert.That(record.Checks.Count()).IsEqualTo(1).Because(
             "the check is kept, not dropped. Dropping it is how a record becomes a summary of the checks "
             + "that flattered it.");
-        await Assert.That(record.NotVerified).HasCount(1);
+        await Assert.That(record.NotVerified.Count()).IsEqualTo(1);
         await Assert.That(record.NotVerified[0].What).IsEqualTo("dotnet run --project tests/X");
         await Assert.That(record.NotVerified[0].Reason.Contains(Other, StringComparison.Ordinal)).IsTrue();
         await Assert.That(record.NotVerified[0].Reason.Contains(Pinned, StringComparison.Ordinal)).IsTrue();
@@ -199,7 +199,7 @@ public class RunVerificationRecordTests
             .WithCheck(Fail(Other));
 
         await Assert.That(record.Verification.Verdict).IsEqualTo(RunVerificationVerdict.Verified);
-        await Assert.That(record.NotVerified).HasCount(1);
+        await Assert.That(record.NotVerified.Count()).IsEqualTo(1);
     }
 
     // ---- Unknown is an epistemic marker, and it does not collapse ----
@@ -223,7 +223,7 @@ public class RunVerificationRecordTests
         await Assert.That(unreadable.Summary).IsNotEqualTo(readable.Summary);
         await Assert.That(unreadable.Summary.Contains("unknown", StringComparison.OrdinalIgnoreCase)).IsTrue();
         await Assert.That(readable.Summary.Contains("unknown", StringComparison.OrdinalIgnoreCase)).IsFalse();
-        await Assert.That(unreadable.NotVerified).HasCount(1);
+        await Assert.That(unreadable.NotVerified.Count()).IsEqualTo(1);
         await Assert.That(readable.NotVerified).IsEmpty();
     }
 
@@ -319,7 +319,9 @@ public class RunVerificationRecordTests
             + "trace.");
 
         System.Reflection.ConstructorInfo[] publicCtors = typeof(RunVerificationRecord)
-            .GetConstructors(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance);
+            .GetConstructors(System.Reflection.BindingFlags.Public
+                | System.Reflection.BindingFlags.Instance
+                | System.Reflection.BindingFlags.DeclaredOnly);
 
         await Assert.That(publicCtors).IsEmpty().Because(
             "every instance has to go through Pin and the With* methods, which is what validates. A public "
@@ -357,7 +359,9 @@ public class RunVerificationRecordTests
         // would then be a suggestion that WithArtifact happened to decline to
         // use, which is not a rule.
         System.Reflection.ConstructorInfo[] publicCtors = typeof(RunArtifact)
-            .GetConstructors(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance);
+            .GetConstructors(System.Reflection.BindingFlags.Public
+                | System.Reflection.BindingFlags.Instance
+                | System.Reflection.BindingFlags.DeclaredOnly);
 
         await Assert.That(publicCtors).IsEmpty().Because(
             "Create is the only way to obtain a RunArtifact, and Create is the only place the existence "
@@ -385,7 +389,7 @@ public class RunVerificationRecordTests
                 .WithArtifact(created.Value);
 
             await Assert.That(record.IsSuccess).IsTrue();
-            await Assert.That(record.Value.Artifacts).HasCount(1);
+            await Assert.That(record.Value.Artifacts.Count()).IsEqualTo(1);
             await Assert.That(record.Value.Artifacts[0].Kind).IsEqualTo(RunArtifactKind.Log);
             await Assert.That(record.Value.Verification.Verdict).IsEqualTo(RunVerificationVerdict.Verified);
         }
