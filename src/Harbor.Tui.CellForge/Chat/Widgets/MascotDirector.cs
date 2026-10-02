@@ -73,7 +73,7 @@ public sealed class MascotDirector
             return MascotMood.Idle;
         }
 
-        long now = NowMs();
+        long now = Environment.TickCount64; // MUTATION-M1 (#1007): latch ignores the injected clock
         byte phase = (byte)vm.Phase;
         if (phase == (byte)AgentPhase.Auto)
         {
