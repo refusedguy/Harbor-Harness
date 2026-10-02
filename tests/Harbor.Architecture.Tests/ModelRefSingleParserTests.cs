@@ -255,11 +255,11 @@ public sealed class ModelRefSingleParserTests
 
     /// <summary>
     ///     The <c>== 0</c> above is only a verdict if the file was READ. It was not:
-    ///     <see cref="CountDelegations" /> catches <see cref="IOException" />, and
-    ///     <c>FileNotFoundException</c> derives from it, so a renamed or moved file
-    ///     reports "this file does no hand-rolled qualification" — the <b>true</b>
-    ///     answer — and the rule passes having never looked at the file. This is the
-    ///     #591 shape (a plausible 0) reached through a swallowed exception rather
+    ///     <see cref="CountDelegations" /> <b>used to</b> catch
+    ///     <see cref="IOException" />, and <c>FileNotFoundException</c> derives from it, so a
+    ///     renamed or moved file reported "this file does no hand-rolled qualification" — the
+    ///     <b>true</b> answer — and the rule passed having never looked at the file. This is
+    ///     the #591 shape (a plausible 0) reached through a swallowed exception rather
     ///     than a bad matcher, and it is load-bearing here because the consumer this
     ///     rule names is a path constant: <c>src/Harbor.Ui.Framework.Sessions/…</c>
     ///     is exactly the kind of path a refactor moves, and #439 measured that move
@@ -536,17 +536,21 @@ public sealed class ModelRefSingleParserTests
         return hits;
     }
 
+    /// <summary>
+    ///     Counts the delegations to <c>ModelRef</c> in one file.
+    /// </summary>
+    /// <remarks>
+    ///     #439: this used to swallow <see cref="IOException" /> and answer 0. That is
+    ///     unsound in a guard, because <c>FileNotFoundException</c> and
+    ///     <c>DirectoryNotFoundException</c> both derive from it — so a file that had been
+    ///     renamed or moved reported <b>"no hand-rolled qualification here"</b>, which is the
+    ///     claim the caller wanted to prove, and proved it without reading anything. Every
+    ///     caller then passed for the wrong reason, and the two <c>== 0</c>-shaped callers
+    ///     passed permanently. Genuine IO faults are surfaced too: a guard that cannot read
+    ///     its input has no verdict, and the honest report of no verdict is a failure.
+    /// </remarks>
     private static int CountDelegations(string root, string relativePath)
-    {
-        try
-        {
-            return CountDelegationsIn(File.ReadAllLines(Path.Combine(root, relativePath))).Count;
-        }
-        catch (IOException)
-        {
-            return 0;
-        }
-    }
+        => CountDelegationsIn(File.ReadAllLines(Path.Combine(root, relativePath))).Count;
 
     private static IReadOnlyList<int> CountDelegationsIn(IReadOnlyList<string> lines)
     {
