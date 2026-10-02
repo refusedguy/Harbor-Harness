@@ -8,19 +8,46 @@ using Microsoft.CodeAnalysis;
 using Microsoft.Extensions.Logging;
 namespace Harbor.Plugins.Compilation;
 /// <summary>
-///     Collects <see cref="MetadataReference" />s for the Roslyn compilation by snapshotting
-///     the assemblies already loaded into the current <see cref="AppDomain" /> plus a small
-///     set of well-known Harbor contracts that must always be available to plugin authors.
+///     Collects <see cref="MetadataReference" />s for the Roslyn compilation.
 /// </summary>
 /// <remarks>
 ///     <para>
-///         The snapshot is taken once at construction and cached for the lifetime of the
-///         loader. A second loader instance (e.g. for a test) builds a fresh snapshot.
+///         The set has two tiers and the order of precedence is the contract:
+///         <list type="number">
+///             <item>
+///                 <see cref="PluginContractAssemblies" /> — the declared plugin contract
+///                 surface, resolved BY NAME against the deployment directory. Present in
+///                 every process, whatever it has loaded.
+///             </item>
+///             <item>
+///                 An <see cref="AppDomain" /> snapshot plus the BCL contract assemblies.
+///                 This tier may only WIDEN the set. It is what makes the common case
+///                 (a CLI that has already initialised most of itself) work smoothly, and
+///                 it is not allowed to be the reason anything on the first tier resolves.
+///             </item>
+///         </list>
 ///     </para>
 ///     <para>
-///         This approach works for JIT-compiled Harbor (the CLI default). For NativeAOT
-///         scenarios, plugins cannot be compiled in-process — use the DLL-based or
-///         out-of-process plugin path instead.
+///         Before #1004 there was no first tier: the Harbor contracts were pinned with
+///         <c>typeof(...).Assembly</c> calls, which sound for the assemblies this project
+///         compile-time references and unsound for the ones it does not. A CS plugin's
+///         ability to name a namespace therefore depended on what the host had happened to
+///         load, which is the same undecidability as "AOT-clean" (#828) and "dev is green"
+///         (#951) — nothing in the product could contradict it.
+///     </para>
+///     <para>
+///         Step 3b is the pin for the assembly that owns the
+///         <c>Harbor.Abstractions.Models</c> types — Session, ContentPart, ToolResult and
+///         the rest. A plugin source imports that namespace and gets CS0234 when the
+///         assembly is missing; that was the user-visible failure that broke all 3
+///         CompilationLayer tests when the Domain/Abstractions split landed. The comment
+///         that used to sit there named a "Harbor.Domain" assembly. There is no such
+///         assembly in this tree — the namespace lives in
+///         <c>Harbor.Abstractions.Contracts</c>. (#1004.)
+///     </para>
+/// <para>
+///         For NativeAOT scenarios plugins cannot be compiled in-process at all — use the
+///         DLL-based or out-of-process plugin path instead.
 ///     </para>
 /// </remarks>
 public sealed class PluginAssemblyReferences
@@ -50,6 +77,61 @@ public sealed class PluginAssemblyReferences
         "System.Console.dll",
         "System.Net.Http.dll"
     };
+
+    /// <summary>
+    ///     The <b>declared</b> plugin contract surface: the Harbor assemblies a CS
+    ///     plugin author is documented to be able to name, as assembly SIMPLE NAMES.
+    ///     Each is resolved against the deployment directory by name, so membership in
+    ///     the reference set is a property of the deployed tree and not of which
+    ///     assemblies the host happened to have loaded.
+    /// </summary>
+    /// <remarks>
+    ///     <para>
+    ///         #1004. The AppDomain sweep below may WIDEN the set; nothing on this list
+    ///         may depend on it. An earlier shape of this file pinned its contracts with
+    ///         <c>typeof(...).Assembly</c> calls only, and that is sound for exactly the
+    ///         assemblies this project has a COMPILE-TIME reference to — the JIT must
+    ///         have loaded them to resolve the token, so the pin can never miss. A
+    ///         transitive runtime dependency has no such guarantee: it is absent from a
+    ///         process that has not touched it, and present in one that has.
+    ///     </para>
+    ///     <para>
+    ///         <c>Harbor.Ui.Framework.State</c> is on this list because
+    ///         <c>Harbor.Ui.Framework.Panels</c> lives in it, and the panel seam is the one
+    ///         plugin axis still alive after #564 closed <c>ITuiPlugin</c>. That namespace
+    ///         holds <c>ITuiPanelPlugin</c>, <c>IPanelRegistry</c>, <c>IPanelProvider</c>,
+    ///         <c>PanelContext</c>, <c>UiKey</c> and <c>TuiPanelPlacement</c> — every type
+    ///         <c>docs/PLUGIN_DEVELOPMENT.md</c> Example 5 names.
+    ///     </para>
+    ///     <para>
+    ///         It is the one entry that could not be a type-token pin. This project reaches
+    ///         the assembly TRANSITIVELY (Plugins.Abstractions -&gt; Terminal.Abstractions
+    ///         -&gt; Ui.Framework -&gt; State), and a transitive runtime dependency is absent
+    ///         from any process that has not touched it. The CLI has not touched it by
+    ///         construction either: it happens to have the assembly loaded before the
+    ///         collector runs, because <c>RegistriesModule</c> constructs a PanelRegistry
+    ///         (line 85) before it calls <c>PluginRuntimeComposer.Compose</c> (line 178),
+    ///         which constructs the collector. That is load order, not a declaration. The
+    ///         out-of-process host at <c>src/Harbor.Plugins.Host/Program.cs</c> constructs
+    ///         the collector with nothing panel-shaped in scope and does not have that luck.
+    ///     </para>
+    ///     <para>
+    ///         Named rather than pinned because the only thing the collector needs from it is
+    ///         the FILE. <c>Harbor.Plugins.Registration</c> already carries a documented
+    ///         Infrastructure -&gt; Presentation exception for the same assembly, but it earns
+    ///         it by binding the type, since PanelRegistryPluginAdapter implements the
+    ///         interface. Binding it here would buy a type this method never uses and cost a
+    ///         compile-time dependency plus a second architecture-test exemption.
+    ///     </para>
+    /// </remarks>
+    internal static readonly string[] PluginContractAssemblies =
+    [
+        "Harbor.Abstractions",
+        "Harbor.Abstractions.Contracts",
+        "Harbor.Terminal.Abstractions",
+        "Harbor.Ui.Framework.State",
+    ];
+
     private readonly ILogger<PluginAssemblyReferences> _logger;
 
     /// <summary>
@@ -70,12 +152,16 @@ public sealed class PluginAssemblyReferences
     }
 
     /// <summary>
-    ///     Build the metadata-reference list. Includes:
+    ///     Build the metadata-reference list, declared core first. Includes:
     ///     <list type="bullet">
+    ///         <item>
+    ///             <see cref="PluginContractAssemblies" />, resolved by name from the
+    ///             deployment directory — the part that does not depend on ambient state.
+    ///         </item>
     ///         <item>All non-dynamic, on-disk assemblies in <see cref="AppDomain.CurrentDomain" />.</item>
     ///         <item>
-    ///             Explicit fallbacks for Harbor.Abstractions and System.Runtime in case
-    ///             they were trimmed from the AppDomain snapshot.
+    ///             <c>typeof</c> fallbacks for the contracts this project references at
+    ///             compile time, and the BCL contract assemblies from the runtime directory.
     ///         </item>
     ///     </list>
     /// </summary>
@@ -84,8 +170,23 @@ public sealed class PluginAssemblyReferences
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var refs = new List<MetadataReference>(capacity: 96);
 
-        // 1. Snapshot the AppDomain — covers Harbor.Abstractions, System.Runtime, etc.
-        //    Plus any assemblies already loaded via DI (logging, configuration, …).
+        // 1. The DECLARED contract core — resolved by name against the deployment
+        //    directory, so it is present in every process regardless of load order.
+        //    Everything after this point may only widen the set, never narrow it.
+        string? deployDir = ResolveDeploymentDirectory();
+        if (deployDir is not null)
+        {
+            foreach (string name in PluginContractAssemblies)
+            {
+                EnsureDeclaredReference(refs, seen, name, deployDir);
+            }
+        }
+
+        // 2. Snapshot the AppDomain — covers System.Runtime, the BCL contracts the
+        //    pin list below cannot name, plus any assemblies already loaded via DI
+        //    (logging, configuration, …). #1004: this is an amplifier. It used to be
+        //    the ONLY source of the Harbor contracts, which made a CS plugin's
+        //    compilability depend on what the host had happened to initialize.
         var assemblies = AppDomain.CurrentDomain.GetAssemblies();
         foreach (var asm in assemblies)
         {
@@ -111,9 +212,10 @@ public sealed class PluginAssemblyReferences
             }
         }
 
-        // 2. Explicit fallbacks — guarantees Harbor.Abstractions is referenced even if
-        //    (somehow) the AppDomain snapshot doesn't include it yet. typeof() forces the
-        //    assembly to load.
+        // 3. Type-token fallbacks for the contracts this project references at compile
+        //    time. Taking the Assembly property off a type forces that assembly to
+        //    load, so these can never miss. The declared list above is what covers
+        //    the assemblies this project does NOT reference at compile time.
         EnsureReference(refs, seen, typeof(IPlugin).Assembly);
         EnsureReference(refs, seen, typeof(object).Assembly);
         EnsureReference(refs, seen, typeof(JsonDocument).Assembly);
@@ -125,20 +227,10 @@ public sealed class PluginAssemblyReferences
         EnsureReference(refs, seen, typeof(Task).Assembly);
         EnsureReference(refs, seen, typeof(CancellationToken).Assembly);
 
-        // 2b. Harbor.Domain — holds the Harbor.Abstractions.Models.* types
-        //     (Session, ContentPart, ToolResult, etc.). They declare
-        //     `namespace Harbor.Abstractions.Models` but live in Harbor.Domain.dll,
-        //     NOT Harbor.Abstractions.dll. Without this explicit reference, plugin
-        //     sources with `using Harbor.Abstractions.Models;` fail with CS0234
-        //     "The type or namespace name 'Models' does not exist in the namespace
-        //     'Harbor.Abstractions'" — which was the user-visible failure that
-        //     broke all 3 CompilationLayer tests after the Domain/Abstractions
-        //     split landed. typeof() forces Harbor.Domain to load if it wasn't
-        //     already (it usually is, via the Abstractions reference, but the
-        //     AppDomain snapshot may have been taken before that).
+        // 3b. The Models-namespace owner. Class remarks carry the story.
         EnsureReference(refs, seen, typeof(Session).Assembly);
 
-        // 3. Scan the .NET runtime directory for System.Runtime / System.Collections /
+        // 4. Scan the .NET runtime directory for System.Runtime / System.Collections /
         //    etc. — these contract assemblies are needed by the compiler to resolve
         //    type-forwarded BCL types (Version, Task, IReadOnlyList<>, …) even when
         //    System.Private.CoreLib is referenced. In some host environments (e.g. test
@@ -166,6 +258,64 @@ public sealed class PluginAssemblyReferences
         }
 
         return refs;
+    }
+
+    /// <summary>
+    ///     The directory the Harbor assemblies are deployed next to. Prefers the
+    ///     located <see cref="IPlugin" /> assembly (the authoritative answer for a
+    ///     normal deployment) and falls back to <see cref="AppContext.BaseDirectory" />,
+    ///     which is what a single-file publish reports instead.
+    /// </summary>
+    private static string? ResolveDeploymentDirectory()
+    {
+#pragma warning disable IL3000 // Assembly.Location is intentional here — JIT-only path, not AOT.
+        string? located = Path.GetDirectoryName(typeof(IPlugin).Assembly.Location);
+#pragma warning restore IL3000
+        if (!string.IsNullOrEmpty(located))
+        {
+            return located;
+        }
+
+        string baseDir = AppContext.BaseDirectory;
+        return string.IsNullOrEmpty(baseDir) ? null : baseDir;
+    }
+
+    /// <summary>
+    ///     Add <paramref name="simpleName" /> from <paramref name="directory" /> without
+    ///     loading it. A miss is logged, not swallowed: a declared contract assembly that
+    ///     is not deployed is a CS0246 in a plugin author's build, and the only place the
+    ///     host can see it is here.
+    /// </summary>
+    private void EnsureDeclaredReference(
+        List<MetadataReference> refs,
+        HashSet<string> seen,
+        string simpleName,
+        string directory)
+    {
+        string path = Path.Combine(directory, simpleName + ".dll");
+        if (!File.Exists(path))
+        {
+            _logger.LogWarning(
+                "Declared plugin contract assembly {Assembly} is not deployed in {Directory}. "
+                + "A CS plugin that imports a namespace it owns will fail to compile with CS0234.",
+                simpleName,
+                directory);
+            return;
+        }
+
+        if (!seen.Add(path))
+        {
+            return;
+        }
+
+        try
+        {
+            refs.Add(MetadataReference.CreateFromFile(path));
+        }
+        catch (IOException ex)
+        {
+            _logger.LogDebug(ex, "Skipped metadata reference for {Assembly}", path);
+        }
     }
 
     private static void EnsureReference(
