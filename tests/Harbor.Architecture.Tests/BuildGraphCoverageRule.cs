@@ -11,29 +11,44 @@
 //   src/Harbor.Transport.Remote/Harbor.Transport.Remote.csproj
 //
 // THREE of those four greps came back empty, and the emptiness WAS the finding:
-// "not in a solution, and nothing references it". It was a separator artefact.
-// The real edges are declared with BACKSLASHES — `..\..\apps\Harbor.App.Avalonia\
-// Harbor.App.Avalonia.csproj` — and the search used forward slashes. So
-// unconditional `ProjectReference`s from three projects that ARE rows of
-// `Harbor.slnx` (`tests/Harbor.App.Avalonia.Tests`,
-// `tests/Harbor.E2E.App.Avalonia`, `tests/Harbor.Transport.Remote.Tests`) and
-// from four more (`Harbor.CodeGen`, consumed by Terminal.Abstractions,
-// Tui.CellForge, Tui.AnsiPlain, Tui.NickConsoleEx and Harbor.Tui.CellForge.Tests)
-// were invisible to a search that could not spell the path the way MSBuild stores
-// it.
+// "not in a solution, and nothing references it". Two of the three have a
+// mechanical explanation and the third does not, so they are separated here
+// rather than merged into one tidy story.
 //
-// Three of the four were therefore never orphans, and ONE was. Measured by
-// walking `Harbor.slnx`'s rows and closing over `ProjectReference`:
+//   * A SEPARATOR ARTEFACT explains two. Their ProjectReferences are declared
+//     with BACKSLASHES — `..\..\apps\Harbor.App.Avalonia\Harbor.App.Avalonia.csproj`
+//     — and a search for the forward-slashed path cannot match that text. So
+//     `apps/Harbor.App.Avalonia` (from `tests/Harbor.App.Avalonia.Tests` and
+//     `tests/Harbor.E2E.App.Avalonia`, both rows of `Harbor.slnx`) and
+//     `src/Harbor.CodeGen` (from five rows — `Terminal.Abstractions`,
+//     `Tui.CellForge`, `Tui.AnsiPlain`, `Tui.NickConsoleEx`,
+//     `Tui.CellForge.Tests`) were both invisible to it.
 //
-//   92 solution rows, 92/92 present on disk, closure 101
-//   src/  52 on disk, 1 not built  ->  src/Harbor.Plugins.Host
-//   apps/ 2 on disk,  0 not built
+//   * IT DOES NOT EXPLAIN `src/Harbor.Transport.Remote`. That project IS
+//     referenced forward-slashed, from `tests/Harbor.Transport.Remote.Tests`
+//     (`../../src/Harbor.Transport.Remote/Harbor.Transport.Remote.csproj`), and
+//     that test project is a row of `Harbor.slnx`. A search for the
+//     forward-slashed path matches that line. So whatever produced the empty
+//     result, a bare separator story is not the whole of it — and this file
+//     records that rather than picking the explanation that reads best.
+//     `tests/Harbor.Architecture.Tests` references the same project with
+//     backslashes, so that layer matrix row is enforced twice over.
+//
+// Either way the conclusion is the same and it is the one this file acts on: all
+// three are compiled, through rows' ProjectReferences rather than by rows of
+// their own.
+//
+// Three of the four were therefore never orphans, and ONE was. What the red run
+// below measured, on the tree this file landed on, is one line long:
+//
+//   Unbuilt (1): src/Harbor.Plugins.Host/Harbor.Plugins.Host.csproj
+//   | walked 162 csproj, 92 solution rows.
 //
 // `Harbor.Samples.slnx` is not a counter-example to read comfort from either: it
 // names 11 projects that do not exist on disk, which is why no workflow builds
 // it. `App.Avalonia` and `CodeGen` sit in it, and that is a coincidence of
-// history rather than coverage — what compiles them is the closure above. This
-// file therefore judges the CLOSURE and not membership in a row, because row
+// history rather than coverage — what compiles them is the closure this file
+// computes. So it judges the CLOSURE and not membership in a row, because row
 // membership is neither necessary (three of the four) nor sufficient
 // (`Harbor.Samples.slnx`).
 //
@@ -138,6 +153,37 @@
 // Point 3 is the answer to #591, where a tool halved its own rule and returned a
 // plausible `0`. A guard that can only be falsified by the tree it grades has no
 // such answer.
+//
+// WHAT THE RED RUN MEASURED (run 36958263754, job 110686047655)
+//
+// This file shipped guard-only, on purpose: the red run is the measurement, and
+// #1005's own numbers had a separator bug in them, so nothing here was taken on
+// trust from the issue. The red came out of the `HarborArchGate` step inside
+// `dotnet build Harbor.slnx` — the gate runs this test project during the build,
+// so this is a `build`-gate failure and not merely a `test`-job one:
+//
+//     failed EveryProductProject_IsCompiledByTheSolution (120ms)
+//     Unbuilt (1): src/Harbor.Plugins.Host/Harbor.Plugins.Host.csproj
+//     | walked 162 csproj, 92 solution rows.
+//     | OUTSIDE the src/+apps/ perimeter this rule does not claim, unbuilt: ...
+//       (by tree: analyzers=1, contrib=20, external=36, samples=1, tools=1)
+//
+//     Test run summary: Failed! - failed: 1
+//
+// `failed: 1` is the load-bearing part of that line, and it is load-bearing in
+// both directions. Only the one claim failed, so the two non-vacuity checks and
+// the positive control all passed on the same unrepaired tree: the red is the
+// defect, not the instrument. And the out-of-perimeter report is what
+// `analyzers/CfeControl` was named for — a second unbuilt project, printed
+// rather than hidden, that this guard deliberately does not claim.
+//
+// Adding `src/Harbor.Plugins.Host` to `Harbor.slnx` — and nothing else — turned
+// the run green (run 36958787734: `build`, all four `test` jobs and `coverage`
+// success). The project was never broken, only never built: 561 lines, a first
+// compile, zero warnings under `TreatWarningsAsErrors`. That is the finding, and
+// it is why the fix is one line of solution rather than a repair. A project held
+// to a standard it was never asked to meet would have given a rule nothing to
+// fix; it had only ever given one a project nobody was building.
 //
 // RELATION TO WHAT IS ALREADY HERE
 // --------------------------------
@@ -268,10 +314,10 @@ internal static class BuildGraphProbe
     /// <remarks>
     ///     <para>
     ///         Row paths are solution-relative and therefore always forward-slashed,
-    ///         which is the asymmetry that hid three of #1005's four projects from a
+    ///         which is the asymmetry that hid two of #1005's four projects from a
     ///         grep: <c>&lt;ProjectReference Include&gt;</c> values in this tree are
-    ///         backslashed, and a search that could not spell those paths found
-    ///         nothing.
+    ///         mostly backslashed, and a search that could not spell those paths
+    ///         found nothing.
     ///     </para>
     ///     <para>
     ///         Both spellings are accepted, because MSBuild accepts both on every
@@ -531,11 +577,11 @@ public sealed class BuildGraphCoverageRule
                 + "src/Harbor.Plugins.Host could be deleted and CI could not answer, because the "
                 + "project is in no solution. Row membership is not the test and cannot be: "
                 + "apps/Harbor.App.Avalonia, src/Harbor.CodeGen and src/Harbor.Transport.Remote have "
-                + "no row yet are compiled through ProjectReferences from rows (the first two spell "
-                + "those edges with BACKSLASHES, which is why #1005's forward-slash grep reported them "
-                + "as unreferenced), and Harbor.Samples.slnx holds two projects that are compiled and "
-                + "eleven that do not exist. The answer this rule accepts is the transitive closure, "
-                + "which gets both right. Unbuilt (" + unbuilt.Count + "): " + Describe(unbuilt)
+                + "no row yet are compiled through ProjectReferences from rows, two of them through "
+                + "edges spelled with BACKSLASHES that a forward-slash grep cannot match, and "
+                + "Harbor.Samples.slnx holds two projects that are compiled and eleven that do not "
+                + "exist. The answer this rule accepts is the transitive closure, which gets both "
+                + "right. Unbuilt (" + unbuilt.Count + "): " + Describe(unbuilt)
                 + " | walked " + report.DiskCsprojCount + " csproj, " + report.SolutionRowCount
                 + " solution rows." + OutsidePerimeterNote(report));
     }
