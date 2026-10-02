@@ -96,13 +96,23 @@ public sealed class CellForgeEngineEnterPolicyParityRules
         /// <summary>How the cell is named in a failure message.</summary>
         public override string ToString()
         {
+            // Copied out of `this` first, because a local function inside a STRUCT
+            // cannot touch instance members (CS1673) — the struct here is a record
+            // struct, and `Ctrl` is a property on it. Reading the four bools once
+            // into locals is what makes the nested function legal, and it also
+            // makes the ordering of the names below explicit.
+            bool ctrl = Ctrl;
+            bool shift = Shift;
+            bool alt = Alt;
+            bool meta = Meta;
+
             string Flags()
             {
                 List<string> on = [];
-                if (Ctrl) on.Add("Ctrl");
-                if (Shift) on.Add("Shift");
-                if (Alt) on.Add("Alt");
-                if (Meta) on.Add("Meta");
+                if (ctrl) on.Add("Ctrl");
+                if (shift) on.Add("Shift");
+                if (alt) on.Add("Alt");
+                if (meta) on.Add("Meta");
                 return on.Count == 0 ? "none" : string.Join('+', on);
             }
 
