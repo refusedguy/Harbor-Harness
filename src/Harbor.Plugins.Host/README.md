@@ -44,7 +44,26 @@ Out-of-process MCP stdio server that exposes Harbor's C# (Roslyn) `ITool` plugin
 
 ## Tests
 
-No dedicated test project. Validated by `Harbor.Plugins.Runtime.Tests` and E2E tests that exercise the MCP boundary.
+**No test project covers this host, and the build is what stands behind it.**
+
+`Harbor.slnx` compiles this project, so a change that does not compile fails
+`build` — but nothing here has an assertion of its own. Two things that look
+like coverage are not:
+
+- `Harbor.Plugins.Runtime.Tests` does **not** reference this project. It
+  references `Harbor.Plugins.Hosting`, a different assembly; the name
+  similarity is the whole of the resemblance. It exercises the in-process
+  `PluginHost` pipeline, never this stdio server.
+- No E2E project references it either. Grepping `McpStdioServer` finds this
+  project, and comments in other files using the same words about a different
+  subject.
+
+So the JSON-RPC surface below — `initialize` / `tools/list` / `tools/call` /
+`ping`, the protocol version, the NDJSON framing — is unverified. Until a
+subprocess test drives the binary over a pipe, treat that list as a description
+of the code, not as a contract anything holds it to. Wiring one is a new axis:
+it needs a process fixture, and the architecture gate deliberately does not
+reference this project, so it would not be a rule addition.
 
 ## Build
 
