@@ -41,16 +41,18 @@
 // context is the right answer for a class that genuinely depends on twenty-one
 // things. This class depends on seventeen.
 //
-// FACT 2 — the slash layer is wired by hand in TWO places, and one of them is
-// dead. `ReplRunner.cs:91` builds a `SlashCommandDispatcher` from nine
-// collaborators. `LegacySlashRunner.cs:52` builds a SECOND one, from the same
-// nine, through `services.GetRequiredService<…>`. Nothing calls
-// `LegacySlashRunner.FromServices` — it is unreachable product code whose
-// body is a service locator, which is #470's shape in a third file. So the
-// slash layer has two wirings, one of them unreached, and neither substitutable:
-// a test that wants a different dispatcher must build nine real collaborators
-// first, which is why all three ReplRunner test call sites pass
-// `new FakeToolRegistry()` and `new PermissionService(…)` positionally today.
+// FACT 2 — AS FILED, the slash layer was wired by hand in TWO places, and one
+// of them was dead: `ReplRunner` built a `SlashCommandDispatcher` from nine
+// collaborators inside its own constructor, and `LegacySlashRunner.FromServices`
+// built a SECOND one, from the same nine, through
+// `services.GetRequiredService<…>`. Nothing called `FromServices` — it was
+// unreachable product code whose body was a service locator, which is #470's
+// shape in a third file. #776 deleted both, leaving exactly one construction
+// site, at the root (`CliInfrastructure.cs:73`), still fed by those same nine
+// registered services. So neither wiring was substitutable: a test that wants a
+// different dispatcher must build nine real collaborators first, which is why
+// all three ReplRunner test call sites pass `new FakeToolRegistry()` and
+// `new PermissionService(…)` positionally today.
 //
 // WHY THE RULES ARE DERIVED, NOT REMEMBERED
 // -----------------------------------------
@@ -87,7 +89,7 @@
 //       IEventBus, ITokenTracker, IAgent, ILogger<>, PluginReloadService,
 //       IProviderHealthCheck)
 //    6  MEMBERS OF ONE AGGREGATE THE ROOT ALREADY BUILDS — `CellForgeScreens`
-//       (ReplRunner.cs:542), which the composition root constructs as a single
+//       (ReplRunner.cs:556), which the composition root constructs as a single
 //       value and then hands over PIECE BY PIECE: ScreenSession, ChatScreen,
 //       ChatScreenBridge, TerminalInputSource, ITerminalBackend,
 //       IApprovalCoordinator. Six of the twenty-four parameters are one
@@ -99,9 +101,11 @@
 //    2  per-run values, not services at all: the `Session` that
 //       `RunCellForgeAsync` just created, and the `ITerminalModeController`
 //       `CreateModeController()` picked for this OS
-//    1  container-owned adapter the CONSUMER builds by hand, from five
-//       registered services: `new LegacySlashRunner(_slashes, _agentRegistry,
-//       _configStore, _authStore, _providers)` at ReplRunner.cs:355
+//    1  container-owned adapter, built by the ROOT from five registered
+//       services (`CliInfrastructure.cs:92`) and handed in — it used to be
+//       `new LegacySlashRunner(_slashes, _agentRegistry, _configStore,
+//       _authStore, _providers)` written out by hand inside the consumer that
+//       serves it, which is finding 2's shape one level down
 //
 // So the god-object reading is false, and the "bundle them in a ReplContext"
 // prescription is not affordable either: the six loose aggregate members are
@@ -109,17 +113,17 @@
 // bundle beside the first rather than remove one. #776 reached the same verdict
 // for the other runner and this guard is where that verdict is kept.
 //
-// WHAT IS STILL LIVE — and it is exactly what rule 2 is for
-// ----------------------------------------------------------
+// WHAT THE SECOND HALF OF RULE 2 IS FOR
+// ------------------------------------
 // #776 moved `SlashCommandDispatcher` to the composition root and deleted the
 // dead second wiring. It did not touch the adapter that dispatcher arrived in:
-// `LegacySlashRunner` is built BY HAND inside the consumer that serves it,
-// from five collaborators the container already owns — the identical shape, one
-// level down, in the same method. Rule 2 was written against one hard-coded
-// type name, so it cannot see this: it asks "where is `SlashCommandDispatcher`
-// constructed?" and the answer is a clean single site at the root. The rule is
-// now stated over the slash LAYER — both adapters, named once — which is what
-// makes it red on the tree this commit lands on.
+// `LegacySlashRunner` was still built BY HAND inside the consumer that serves
+// it, from five collaborators the container already owns — the identical shape,
+// one level down, in the same method. Rule 2 was written against one hard-coded
+// type name, so it could not see this: it asked "where is `SlashCommandDispatcher`
+// constructed?" and the answer was a clean single site at the root. The rule is
+// now stated over the slash LAYER — both types, named once — which is what made
+// it red on the tree, and the adapter's half is what this branch then removed.
 //
 // WHY A SOURCE SCAN
 // -----------------
