@@ -81,6 +81,21 @@ internal static class CliInfrastructure
             SkillFreshnessStartup.RefreshCommand(services),
             SkillFreshnessStartup.UpdateCommand(services));
 
+        // #486: the ADAPTER the dispatcher arrives in, built here beside the
+        // dispatcher and from the same services for the same reason — every one of
+        // its five collaborators is a registered service, and this is the method
+        // that has the container in scope. `ReplRunner.RunCellForgeAsync` used to
+        // `new LegacySlashRunner(_slashes, _agentRegistry, _configStore,
+        // _authStore, _providers)` inline: #486 finding 2's shape, one level down,
+        // re-wiring by hand the very dependencies the root already has in hand —
+        // and the reason the dispatcher's own move did not finish the finding.
+        var legacySlash = new LegacySlashRunner(
+            slashes,
+            services.GetRequiredService<IAgentRegistry>(),
+            services.GetRequiredService<IConfigStore>(),
+            services.GetRequiredService<AuthStore>(),
+            services.GetRequiredService<IProviderRegistry>());
+
         return new ReplRunner(
             services.GetRequiredService<ILogger<ReplRunner>>(),
             services.GetRequiredService<IConfigStore>(),
@@ -93,6 +108,7 @@ internal static class CliInfrastructure
             services.GetRequiredService<IAgentRegistry>(),
             services.GetRequiredService<IProviderRegistry>(),
             slashes,
+            legacySlash,
             services.GetRequiredService<ILoggerFactory>(),
             services.GetService<Harbor.Hosting.PluginReloadService>(),
             services.GetService<Harbor.Hosting.Rendering.IRendererPipeline>(),

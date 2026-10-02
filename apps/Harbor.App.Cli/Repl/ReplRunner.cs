@@ -52,6 +52,17 @@ namespace Harbor.App.Cli.Repl;
 ///         been supplied. Guarded by
 ///         <c>tests/Harbor.Architecture.Tests/ReplConstructorCompositionTests.cs</c>.
 ///     </para>
+///     <para>
+///         <b>And the wiring the dispatcher's move left behind is now gone too.</b>
+///         <c>RunCellForgeAsync</c> used to <c>new LegacySlashRunner(_slashes, _agentRegistry,
+///         _configStore, _authStore, _providers)</c> — five registered services re-wired by hand
+///         inside the consumer that serves them, which is finding 2's shape one level below the
+///         place finding 2 was fixed. It is built at the composition root beside the dispatcher and
+///         arrives as <c>legacySlash</c>, so <c>legacySlash</c> is a nineteenth parameter and the
+///         count of wirings inside a consumer is zero. The count is the symptom, not the finding:
+///         one fewer <c>new</c> of a container-owned type is worth one more name in a signature that
+///         already says what this class depends on.
+///     </para>
 /// </remarks>
 internal sealed class ReplRunner
 {
@@ -67,6 +78,7 @@ internal sealed class ReplRunner
     private readonly IProviderRegistry _providers;
     private readonly ILogger<CellForgeReplRunner> _cellForgeLogger;
     private readonly SlashCommandDispatcher _slashes;
+    private readonly LegacySlashRunner _legacySlash;
     private readonly Harbor.Hosting.Rendering.IRendererPipeline? _rendererPipeline;
     private readonly Harbor.Hosting.PluginReloadService? _pluginReload;
     private readonly IProviderHealthCheck? _healthCheck;
@@ -93,6 +105,7 @@ internal sealed class ReplRunner
         IAgentRegistry agentRegistry,
         IProviderRegistry providers,
         SlashCommandDispatcher slashes,
+        LegacySlashRunner legacySlash,
         ILoggerFactory loggerFactory,
         Harbor.Hosting.PluginReloadService? pluginReload,
         Harbor.Hosting.Rendering.IRendererPipeline? rendererPipeline,
@@ -112,6 +125,7 @@ internal sealed class ReplRunner
         _agentRegistry = agentRegistry;
         _providers = providers;
         _slashes = slashes;
+        _legacySlash = legacySlash;
         _cellForgeLogger = loggerFactory.CreateLogger<CellForgeReplRunner>();
         _rendererPipeline = rendererPipeline;
         _pluginReload = pluginReload;
@@ -352,12 +366,12 @@ internal sealed class ReplRunner
             _rendererPipeline,
             _eventBus,
             _tokens,
-            new LegacySlashRunner(
-                _slashes,
-                _agentRegistry,
-                _configStore,
-                _authStore,
-                _providers),
+            // #486: the adapter the root built beside the dispatcher. It used to be
+            // `new LegacySlashRunner(_slashes, _agentRegistry, _configStore,
+            // _authStore, _providers)` written out right here — composition in a
+            // consumer, of a type whose five collaborators this class already
+            // holds. Built once, where the container is.
+            _legacySlash,
             _agent,
             sessionResult.Value,
             screens.Session,
