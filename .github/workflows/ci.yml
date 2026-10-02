@@ -801,15 +801,19 @@ jobs:
           RID: linux-x64
           RECIPE: fulltree
         run: |
-          # `set -e` is deliberately NOT used on this step, and the reason is
-          # load-bearing: with errexit, a failing `dotnet publish | tee` aborts
-          # the script AT the pipeline, so the lines after it — PIPESTATUS, the
-          # outcome marker — never run. That is exactly what happened: the first
-          # version of this step reported "no publish marker in
-          # publish/aot-publish.log" on a run where the publish had in fact run
-          # and failed as recorded. A gate whose evidence line is unreachable on
-          # failure is a gate that only ever has evidence when things are fine.
-          # Every non-zero condition below is checked explicitly instead.
+          # `set +e` is load-bearing, and it has to be EXPLICIT. GitHub runs
+          # `run:` blocks as `bash -e {0}`, so errexit is already on when this
+          # script starts, and `set -uo pipefail` only ADDS -u and pipefail — it
+          # does not turn -e off. With errexit on, a failing
+          # `dotnet publish | tee` aborts the script AT the pipeline, so
+          # PIPESTATUS is never read and the outcome marker is never written.
+          # That is exactly what happened twice: the smoke step reported "no
+          # publish marker in publish/aot-publish.log" on runs where the publish
+          # had in fact executed and failed as recorded. A gate whose evidence
+          # line is unreachable on failure is a gate that only ever has evidence
+          # when things are fine. Every non-zero condition below is therefore
+          # checked explicitly.
+          set +e
           set -uo pipefail
           # AOT needs the native toolchain. ubuntu-latest already ships most of
           # it, but naming it explicitly is what makes this step portable to a
