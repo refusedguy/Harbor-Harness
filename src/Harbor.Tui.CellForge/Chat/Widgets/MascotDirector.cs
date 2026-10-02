@@ -84,9 +84,9 @@ public sealed class MascotDirector
         else if (phase is (byte)AgentPhase.Errored or (byte)AgentPhase.Succeeded && _lastPhase != phase)
         {
             _latched = phase == (byte)AgentPhase.Errored ? (byte)MascotMood.Error : (byte)MascotMood.Success;
-            _latchEndMs = tick + MoodLatchFrames; // MUTATION-M2 (#1007): a 150-FRAME latch, the #170 bug
+            _latchEndMs = now + _moodLatchMs;
         }
-        else if (_latched != NoMood && tick >= _latchEndMs)
+        else if (_latched != NoMood && now >= _latchEndMs)
         {
             _latched = NoMood;
         }
