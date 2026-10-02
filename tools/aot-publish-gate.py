@@ -657,11 +657,14 @@ def selftest(out):
         #     `[.../apps/Harbor.App.Cli/Harbor.App.Cli.csproj]`, which contains the
         #     string `Harbor.App.Cli`, so without stripping it every
         #     per-assembly rollup (IL2104, IL3053) records the CLI as a
-        #     first-party site.
+        #     first-party site. The line carries a real IL2104 diagnostic, since
+        #     a fixture without a diagnostic id proves nothing.
         check("msbuild_project_tag_is_not_a_site",
               args(write("log5d", fixture(extra_lines=[
-                  "  ILLink: 7 warning(s) from 3 assembly(s) "
-                  "[/home/runner/work/Harbor-Harness/Harbor-Harness/apps/Harbor.App.Cli/Harbor.App.Cli.csproj]"])),
+                      "/home/runner/.nuget/packages/messagepack/3.1.4/lib/net8.0/MessagePack.dll: "
+                      "warning IL2104: Assembly 'MessagePack' produced trim warnings. For more "
+                      "information see https://aka.ms/il2104 "
+                      "[/home/runner/work/Harbor-Harness/Harbor-Harness/apps/Harbor.App.Cli/Harbor.App.Cli.csproj]"])),
                   write("base5d", rows)),
               1,
               must_contain=["NEW  IL2104 warning", "third-party only"],
