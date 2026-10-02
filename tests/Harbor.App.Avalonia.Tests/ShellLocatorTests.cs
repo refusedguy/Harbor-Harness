@@ -42,6 +42,17 @@ public sealed class ShellLocatorTests
     ///     make the suite the thing that flakes.
     /// </summary>
     [Test]
+    public async Task SyntheticNonVacuityProbe_AsyncLambdaToDispatch()
+    {
+        // TEMPORARY non-vacuity probe for #972 - must be reverted before merge.
+        await using var session = HeadlessUnitTestSession.StartNew(typeof(App));
+        await session.Dispatch(async () =>
+        {
+            await Task.Yield();
+        }, CancellationToken.None);
+    }
+
+    [Test]
     [Retry(3)]
     public async Task Of_ResolvesThroughTheAncestorHost()
     {
