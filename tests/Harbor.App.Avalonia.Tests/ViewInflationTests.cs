@@ -203,9 +203,10 @@ public class ViewInflationTests
         // So boot an actual headless application first. Same pattern as
         // ChatView_Inflates / SettingsView_Inflates above — and deliberately NOT
         // the `Dispatch(async () => …)` spelling those two use, which binds to
-        // Dispatch(Action), runs the body as async void, and drops everything
-        // after the first await (#972). The work here is synchronous, so the
-        // Action overload is spelled explicitly.
+        // `Dispatch<Task>(Func<Task>)` and returns a `Task<Task>` whose payload
+        // the call site drops, losing everything after the first await (#972).
+        // The work here is synchronous, so the Action overload is spelled
+        // explicitly.
         await using var session = HeadlessUnitTestSession.StartNew(typeof(App));
 
         Exception? thrown = null;

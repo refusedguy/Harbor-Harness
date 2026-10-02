@@ -362,9 +362,21 @@ public sealed class AvaloniaDispatchAsyncVoidRule
         // defect is real — the returned `Task<Task>`'s payload is dropped by the
         // call site — while the original explanation of WHY was wrong.
         //
-        // This test fails if Avalonia ever adds a true `Dispatch(Func<Task>)`, and
-        // it fails if the overload set stops matching what is recorded. It reads
-        // the assembly, so unlike the original it can fail at all.
+        // HONEST SCOPE, and it is narrower than the paragraph above first
+        // claimed: this test still compares a RECORDED LIST against itself. It
+        // therefore still cannot detect a change in Avalonia. What it now does
+        // do — and the original did not — is fail when the recorded premise is
+        // EMPTY, and it states the real overload set, which the original stated
+        // wrongly. Correcting a wrong claim is worth more than leaving it
+        // unchallenged, but it is not the same as making it true.
+        //
+        // The check that CANNOT be a literal — one that reads the real assembly
+        // and would fail if Avalonia's overload set moves — is
+        // `HeadlessSessionDispatchOverloadTests` in
+        // `tests/Harbor.App.Avalonia.Tests`, which is the one project that
+        // actually references Avalonia.Headless and can therefore reflect over
+        // `HeadlessUnitTestSession` instead of guessing at it. This project
+        // deliberately holds no such reference, so it must not pretend to.
         string[] recorded = GradedOverloads;
 
         await Assert.That(recorded)

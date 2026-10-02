@@ -50,10 +50,11 @@ public class DiffViewBindingTests
     {
         // Everything the view needs is read INSIDE the dispatch (the visual tree
         // only exists on the UI thread); every assertion is made OUTSIDE it.
-        // `Dispatch(async () => …)` binds to `Dispatch(Action)` — there is no
-        // `Func<Task>` overload — so the body detached at its first `await Assert`
-        // and none of the six checks below could fail the test (#972, #766; see
-        // AvaloniaDispatchAsyncVoidRule).
+        // `Dispatch(async () => …)` binds to `Dispatch<TResult>(Func<TResult>)` at
+        // `TResult = Task` — a `Dispatch(Func<Task>)` returning `Task<Task>` — whose
+        // payload this call site dropped, so the body detached at its first
+        // `await Assert` and none of the six checks below could fail the test
+        // (#972, #766; see AvaloniaDispatchAsyncVoidRule).
         List<string> texts = [];
         List<string> buttonContents = [];
         string? leftText = null;

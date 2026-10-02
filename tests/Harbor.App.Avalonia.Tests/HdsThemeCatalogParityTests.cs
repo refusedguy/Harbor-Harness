@@ -127,12 +127,13 @@ public class HdsThemeCatalogParityTests
     {
         // The catalog walk needs Avalonia's asset loader, so it runs inside the
         // dispatch; every assertion is made OUTSIDE it. `Dispatch(async () => …)`
-        // binds to `Dispatch(Action)` — there is no `Func<Task>` overload — so the
-        // body ran as `async void` and detached at its first `await Assert`, which
-        // meant a palette whose brushes disagreed with the .axaml could not fail
-        // this test at all (#972, #766; see AvaloniaDispatchAsyncVoidRule). Each
-        // disagreement is now RECORDED inside the loop and reported by name below,
-        // so one bad palette no longer hides the state of the rest.
+        // binds to `Dispatch<Task>(Func<Task>)` — which returns `Task<Task>` — and
+        // the call site dropped that payload, so the body detached at its first
+        // `await Assert`, which meant a palette whose brushes disagreed with the
+        // .axaml could not fail this test at all (#972, #766; see
+        // AvaloniaDispatchAsyncVoidRule). Each disagreement is now RECORDED
+        // inside the loop and reported by name below, so one bad palette no
+        // longer hides the state of the rest.
         var mismatches = new List<string>();
 
         await using var session = HeadlessUnitTestSession.StartNew(typeof(global::Harbor.App.Avalonia.App));

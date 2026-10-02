@@ -47,11 +47,11 @@ public sealed class ShellLocatorTests
     {
         // The tree is built on the UI thread (Avalonia controls), and every
         // ASSERTION is made outside the dispatch. `Dispatch(async () => …)` binds to
-        // `Dispatch(Action)` — HeadlessUnitTestSession declares no `Func<Task>`
-        // overload — so the body ran as `async void`: it detached at its first
-        // `await Assert`, and none of the three assertions below could fail the
-        // test (#972, #766; see AvaloniaDispatchAsyncVoidRule). Each one captured a
-        // value instead, and the value is checked here where a failure lands.
+        // `Dispatch<Task>(Func<Task>)` — which returns `Task<Task>` — whose payload
+        // this call site dropped: the body detached at its first `await Assert`,
+        // and none of the three assertions below could fail the test (#972, #766;
+        // see AvaloniaDispatchAsyncVoidRule). Each one captured a value instead,
+        // and the value is checked here where a failure lands.
         IViewModelLocator? foundOnView = null;
         IViewModelLocator? composedLocator = null;
         SharedShellVm? resolvedFromView = null;

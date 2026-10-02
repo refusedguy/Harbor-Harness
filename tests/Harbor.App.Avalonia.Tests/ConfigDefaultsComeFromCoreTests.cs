@@ -375,23 +375,29 @@ public class ConfigDefaultsComeFromCoreTests
     /// </summary>
     /// <remarks>
     ///     The <c>System.Action</c> cast is the whole point of this helper, and it
-    ///     is not stylistic. <c>HeadlessUnitTestSession</c> declares four
-    ///     <c>Dispatch</c> overloads and none of them takes a
-    ///     <c>Func&lt;Task&gt;</c>:
+    ///     is not stylistic. <c>HeadlessUnitTestSession</c> declares three
+    ///     <c>Dispatch</c> overloads:
     ///     <code>
     ///     Task                 Dispatch(Action,        CancellationToken)
     ///     Task&lt;TResult&gt;      Dispatch&lt;TResult&gt;(Func&lt;TResult&gt;,     CancellationToken)
     ///     Task&lt;TResult&gt;      Dispatch&lt;TResult&gt;(Func&lt;Task&lt;TResult&gt;&gt;, CancellationToken)
     ///     </code>
-    ///     An <c>async () =&gt; { … }</c> lambda with no return value is convertible
-    ///     only to the void-returning delegate, so <c>Dispatch(async () =&gt; …)</c>
-    ///     binds to <c>Dispatch(Action)</c> and the body runs as <c>async void</c>:
-    ///     it yields at its first genuine suspension, <c>Dispatch</c>'s task
-    ///     completes, and everything after that point is DETACHED — its failure is
-    ///     discarded and the test reports green without having checked anything
-    ///     (#972; measured, not inferred: eight headless tests passed against a live
-    ///     bug in #952, and the only assertion that failed was the one outside the
-    ///     dispatch).
+    ///     An <c>async () =&gt; { … }</c> lambda with no return value has natural
+    ///     type <c>Func&lt;Task&gt;</c>, so it does NOT fall through to
+    ///     <c>Dispatch(Action)</c>: it binds to the middle overload at
+    ///     <c>TResult = Task</c> — a <c>Dispatch(Func&lt;Task&gt;)</c> that returns
+    ///     <c>Task&lt;Task&gt;</c> — for the same reason <c>Task.Run(async …)</c>
+    ///     binds to <c>Func&lt;Task&gt;</c> rather than <c>Action</c>. That overload
+    ///     wraps the body in <c>Task.FromResult(…)</c>, so it is already complete
+    ///     when the body yields at its first genuine suspension; <c>Dispatch</c>'s
+    ///     task completes there, the caller resumes, and the returned
+    ///     <c>Task&lt;Task&gt;</c>'s payload — the real body task — is DISCARDED.
+    ///     Everything after that point is DETACHED: its failure is discarded and
+    ///     the test reports green without having checked anything (#972; measured,
+    ///     not inferred: eight headless tests passed against a live bug in #952, and
+    ///     the only assertion that failed was the one outside the dispatch). The
+    ///     overload set is pinned by reflection in
+    ///     <c>HeadlessSessionDispatchOverloadTests</c>.
     ///     <para>
     ///         That defect and the flake this file was reported for (#766) are the
     ///         same one. The reported stack —

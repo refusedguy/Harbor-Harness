@@ -42,8 +42,8 @@ public class HdsPaletteReachabilityTests
     public async Task Picking_A_Palette_Is_What_Settings_Persists()
     {
         // Assertions OUTSIDE the dispatch: `Dispatch(async () => …)` binds to
-        // `Dispatch(Action)` (no `Func<Task>` overload exists), so the body ran as
-        // `async void` and detached at its first `await Assert` — these three
+        // `Dispatch<Task>(Func<Task>)`, whose `Task<Task>` payload this call site
+        // dropped, so the body detached at its first `await Assert` — these three
         // checks could not fail the test (#972, #766; see
         // AvaloniaDispatchAsyncVoidRule). The view-model work is synchronous, so
         // it belongs in a synchronous dispatch and the checks outside it.
