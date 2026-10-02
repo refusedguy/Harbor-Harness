@@ -60,11 +60,20 @@ on:
       - 'tests/**/*.cs'
       - 'src/**/*.cs'
       - 'apps/**/*.cs'
+      # #428. `check-abstractions-contract.py` reads the two frozen projects'
+      # .csproj files and the .cs they compile. A csproj is how a dependency
+      # enters this repository, so a workflow that watched only .cs could not
+      # trigger on the change the gate exists to catch — the #509 failure (a
+      # gate made green by never running) wearing a different hat. Same for
+      # Directory.Packages.props, which is where a version is pinned.
+      - 'src/**/*.csproj'
+      - 'Directory.Packages.props'
       - 'tools/check-md-links.py'
       - 'tools/md-lint.py'
       - 'tools/check-doc-cites.py'
       - 'tools/check-doc-facts.py'
       - 'tools/md_gate.py'
+      - 'tools/check-abstractions-contract.py'
       - '.github/workflows/docs.yml'
   pull_request:
     paths:
@@ -78,11 +87,20 @@ on:
       - 'tests/**/*.cs'
       - 'src/**/*.cs'
       - 'apps/**/*.cs'
+      # #428. `check-abstractions-contract.py` reads the two frozen projects'
+      # .csproj files and the .cs they compile. A csproj is how a dependency
+      # enters this repository, so a workflow that watched only .cs could not
+      # trigger on the change the gate exists to catch — the #509 failure (a
+      # gate made green by never running) wearing a different hat. Same for
+      # Directory.Packages.props, which is where a version is pinned.
+      - 'src/**/*.csproj'
+      - 'Directory.Packages.props'
       - 'tools/check-md-links.py'
       - 'tools/md-lint.py'
       - 'tools/check-doc-cites.py'
       - 'tools/check-doc-facts.py'
       - 'tools/md_gate.py'
+      - 'tools/check-abstractions-contract.py'
       - '.github/workflows/docs.yml'
   workflow_dispatch:
 
@@ -125,6 +143,14 @@ jobs:
       # group was edited away (reported BLIND, the one verdict CI passes).
       - name: Repo-map counter fails on a stale count and detects its own blindness
         run: python3 tools/check-doc-facts.py --self-test
+      # #428. The fifth gate is the only one that reads a `.csproj`, and the only
+      # one that asks about a package rather than about a document: is every
+      # PackageReference the two frozen contract projects declare load-bearing,
+      # and is every non-BCL namespace their sources use declared. Three of its
+      # ten fixtures pin bugs this tool had while being written, so its failure
+      # path is as much the point as its passing path.
+      - name: Frozen-contract dependency gate fails on a phantom package
+        run: python3 tools/check-abstractions-contract.py --self-test
 
   links:
     name: internal links
@@ -229,3 +255,39 @@ jobs:
       - uses: actions/checkout@v7
       - name: Check every repo-map count against the tree
         run: python3 tools/check-doc-facts.py --min-facts 5
+
+  # #428. Fifth question, and the only one about a package rather than a
+  # document: not "do the links resolve", not "is the file shaped right", not
+  # "does the file:line exist", not "does the count match", but "is every
+  # dependency the two frozen contract projects declare actually reached".
+  #
+  # #428 asks for v1.0 to freeze the public API of Harbor.Abstractions +
+  # Harbor.Abstractions.Contracts, and those two projects are the ones every
+  # other assembly points inward at — so a dependency that lands in either is one
+  # every consumer inherits. Measured on the tree this landed on: `AGENTS.md`
+  # described the facade as "zero-dep (only CSharpFunctionalExtensions)", which is
+  # 6 packages wrong, and `CommunityToolkit.HighPerformance` was declared and
+  # reached by nothing at all.
+  #
+  # Both sides of every comparison are files: the PackageReference elements of the
+  # two .csproj against the using directives of the .cs they compile. No document
+  # is read, which is the #939 lesson applied rather than restated — a gate that
+  # cross-checks copies of a prose fact is red on copies that are allowed to be
+  # wrong and green on the live defect. This one measures the contract.
+  #
+  # The floors are a ratchet, like the ones above. Measured after this change:
+  # 9 packages declared, 6 distinct external namespaces, 75 .cs files. The floors
+  # are set AT those values, not below: this gate was introduced by a fix that
+  # removed a declaration, so a floor below the post-fix count would have been a
+  # floor that a re-added phantom still cleared. Lower them only in the same diff
+  # that legitimately removes a dependency, where a reviewer can see it.
+  contract:
+    name: frozen contract dependencies
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+      - name: Check the frozen contract projects' declared dependencies
+        run: python3 tools/check-abstractions-contract.py --min-packages 9 --min-namespaces 6 --min-files 75
