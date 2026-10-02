@@ -12,8 +12,8 @@ The **pure contract/data layer** of Harbor — value objects, domain events, mes
 
 | Subfolder | Contents |
 |-----------|----------|
-| `Models/` | `Session`, `SessionMetadata`, `Usage`, `Pricing`, `AgentMessage` hierarchy (`UserMessage`, `AssistantMessage`, `ContentPart`, `TextPart`, `ToolResultMessage`), `MemoryPackFormatters` |
-| `Models/Identifiers/` | `SessionId`, `MessageId`, `AgentId`, `ProviderId`, `ToolName` — `ValueObject`-based identifiers with validation |
+| `Models/` | `Session`, `SessionMetadata`, `Usage`, `Pricing`, `AgentMessage` hierarchy (`UserMessage`, `AssistantMessage`, `ContentPart`, `TextPart`, `ToolResultMessage`), `JsonElementMemoryPackFormatter` (in `Models/MemoryPackFormatters.cs`) |
+| `Models/Identifiers/` | `SessionId`, `MessageId`, `ToolCallId`, `ProviderId`, `ModelRef`, `ToolName`, `AgentName` — `ValueObject`-based identifiers with validation |
 | `Models/Visitors/` | `AgentMessageVisitor<TResult>`, `ContentPartVisitor<TResult>` — the single GoF traversal over the two message sum types (#461) |
 | `Events/` | `AgentEvent` discriminated union (`AgentStartEvent`, `TurnStartEvent`, `MessageStartEvent`, `ToolExecutionStartEvent`, etc.), `LlmStreamErrorException`, `ProviderErrorKind`, `ProviderErrors` |
 | `Permissions/` | `PermissionRuleset`, `PermissionRule`, `PermissionAction`, `BashArgMatcher`, `ToolCategory` |
@@ -26,7 +26,7 @@ The **pure contract/data layer** of Harbor — value objects, domain events, mes
 - **Message walks**: `AgentMessageVisitor<TResult>` / `ContentPartVisitor<TResult>` — one `Accept`/`Walk` dispatch for the message and part unions. Arms are `abstract` (a walker must decide what every kind does) and an unrecognised kind throws instead of being dropped, so extending either union cannot silently regress a consumer.
 - **Events**: `AgentEvent` base record with `Timestamp`; sealed subtypes for every agent/tool lifecycle event.
 - **Permissions**: `PermissionRuleset.Default/Empty`, `Merge`, `Evaluate`; `BashArgMatcher.IsDestructiveCommand/HasShellMetacharacters`.
-- **Serialization**: `MemoryPackFormatters` for `JsonElement` and message types.
+- **Serialization**: `JsonElementMemoryPackFormatter` for `JsonElement` and message types. (This entry previously named `MemoryPackFormatters`, which is the *file* `Models/MemoryPackFormatters.cs`, not a type in it — the #966 shape, where a document promises a name no declaration owns.)
 
 ## Dependencies
 
@@ -38,6 +38,12 @@ The **pure contract/data layer** of Harbor — value objects, domain events, mes
 ## Tests
 
 Referenced transitively by `tests/Harbor.Abstractions.Tests/` and `tests/Harbor.Domain.Tests/`. No dedicated test project for Contracts alone.
+
+Both projects' declared NuGet dependencies — this one's and the facade's — are
+checked against their sources by
+[`tools/check-abstractions-contract.py`](../../tools/check-abstractions-contract.py),
+which fails on a `<PackageReference>` nothing has a `using` under and on a non-BCL
+`using` no `<PackageReference>` covers. `--report` prints the derived census.
 
 ## Build
 

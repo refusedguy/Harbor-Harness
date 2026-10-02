@@ -1,7 +1,6 @@
 using System.Text;
 using Harbor.Tui.CellForge.Input;
 using Harbor.Ui.Framework.Rendering.Input;
-using Harbor.Ui.Framework.State;
 
 namespace Harbor.Tui.CellForge.Rendering;
 
@@ -30,19 +29,37 @@ public enum ComposerAction : byte
 /// kill/yank chords (Ctrl+K/U/W + Ctrl+Y), Ctrl+C semantics, everything else
 /// ignored.
 ///
-/// CF-B-005 history-through-store contract: Up/Down recall is a store
-/// transition — the keys map to <see cref="InputMsg.HistoryUp"/> /
-/// <see cref="InputMsg.HistoryDown"/> (see <c>InputModel.cs</c>) and are
-/// applied to the <see cref="PromptHistory"/> walk, so the in-flight draft is
-/// saved on the first Up and restored exactly once by the final Down
-/// (readline semantics owned by <see cref="PromptHistory"/>). Text and cursor
-/// stay store-owned: the sync mirrors
+/// CF-B-005 history contract: Up/Down recall walks the
+/// <see cref="PromptHistory"/> rail, so the in-flight draft is saved on the
+/// first Up and restored exactly once by the final Down (readline semantics
+/// owned by <see cref="PromptHistory"/>). The store applies the same walk on
+/// its own <c>InputMsg.HistoryUp/HistoryDown</c> (see <c>InputModel.cs</c>) —
+/// this engine names the direction as <see cref="HistoryStep"/> rather than the
+/// store's marker records, which is what let #435 delete the State edge.
+/// Text and cursor stay store-owned: the sync mirrors
 /// <c>CellForgeTuiRenderer.SyncInputFromState</c> read-only (text change pins
 /// the caret to the end of the text); the renderer itself is untouched.
 /// </summary>
 public sealed class ComposerController
 {
     public PromptBuffer Buffer { get; } = new();
+
+    /// <summary>
+    ///     Which way a history-recall walk steps (epic #33 T2). A local tag, not a
+    ///     port of a port: it replaces <c>InputMsg.HistoryUp</c> /
+    ///     <c>InputMsg.HistoryDown</c>, which are empty marker records whose whole
+    ///     content is the direction they name. They carried no payload and no policy,
+    ///     so naming the direction directly loses nothing — and the walk they drove
+    ///     (<see cref="PromptHistory" />) has always been engine-local.
+    /// </summary>
+    private enum HistoryStep : byte
+    {
+        /// <summary>Walk back towards the oldest entry.</summary>
+        Previous = 0,
+
+        /// <summary>Walk forward towards the newest entry.</summary>
+        Next = 1,
+    }
 
     /// <summary>Readline-style submitted-prompt history owned by the composer.</summary>
     public PromptHistory History { get; } = new();
@@ -128,24 +145,28 @@ public sealed class ComposerController
         Func<ComposerController, KeyEvent, ComposerAction> Run);
 
     /// <summary>
-    ///     Enter split, executed from the store-owned decision (#359):
-    ///     <see cref="EnterKeyPolicy"/> maps the modifiers to
-    ///     <see cref="ChatAction"/> (Ctrl+Enter → ignore, Shift/Alt+Enter →
+    ///     Enter split, executed from the shared decision (#359, #33/T2):
+    ///     <see cref="EnterPolicy"/> maps the modifiers to an
+    ///     <see cref="EnterDecision" /> (Ctrl+Enter → ignore, Shift/Alt+Enter →
     ///     newline, plain Enter → submit) and the composer only applies the
-    ///     buffer effect — the same transition <see cref="ChatAppReducer.Update"/>
-    ///     performs for <see cref="AppMsg.KeyInput"/> so key behavior cannot
-    ///     diverge per renderer.
+    ///     buffer effect — so key behaviour cannot diverge per renderer. The
+    ///     policy lives in <c>Harbor.Ui.Framework.Rendering.Input</c> rather than
+    ///     State because this engine cannot reference State: asking the store for
+    ///     the decision was the last thing holding that edge open (#435). The
+    ///     store-side <c>EnterKeyPolicy</c> delegates to the same
+    ///     <see cref="EnterPolicy" />, so there is still exactly one decision and
+    ///     this is a pure executor of it.
     /// </summary>
     private ComposerAction HandleEnter(KeyModifiers mods)
     {
-        return EnterKeyPolicy.Resolve(
+        return EnterPolicy.Resolve(
             (mods & KeyModifiers.Ctrl) != 0,
             (mods & KeyModifiers.Shift) != 0,
             (mods & KeyModifiers.Alt) != 0,
             (mods & KeyModifiers.Meta) != 0) switch
         {
-            ChatAction.InsertNewline => InsertNewline(),
-            ChatAction.Submit => SubmitDraft(),
+            EnterDecision.InsertNewline => InsertNewline(),
+            EnterDecision.Submit => SubmitDraft(),
             _ => ComposerAction.Ignored,
         };
     }
@@ -303,11 +324,11 @@ public sealed class ComposerController
 
         if (key.Key == KeyCode.Up)
         {
-            // CF-B-005: history recall is a store transition — Up arrives as
-            // InputMsg.HistoryUp (UiStore → InputMsg.Update). The in-flight
-            // draft is saved on this first Up; PromptHistory owns the walk.
+            // CF-B-005: history recall is a store transition — the store applies
+            // the same walk on its own InputMsg.Update. The in-flight draft is
+            // saved on this first Up; PromptHistory owns the walk.
             // First logical line + available history ⇒ recall instead of caret movement.
-            if (Buffer.LineIndexOf(Buffer.Cursor) == 0 && TryRecallViaStore(new InputMsg.HistoryUp(), Buffer.SnapshotText(), out var previous))
+            if (Buffer.LineIndexOf(Buffer.Cursor) == 0 && TryRecall(HistoryStep.Previous, Buffer.SnapshotText(), out var previous))
             {
                 Recall(previous);
                 return ComposerAction.Edited;
@@ -319,10 +340,9 @@ public sealed class ComposerController
 
         if (key.Key == KeyCode.Down)
         {
-            // CF-B-005: Down arrives as InputMsg.HistoryDown; the final step
-            // restores the saved draft exactly once (readline), then the
-            // walk ends and Down is plain caret movement again.
-            if (Buffer.LineIndexOf(Buffer.Cursor) == Buffer.LineCount - 1 && TryRecallViaStore(new InputMsg.HistoryDown(), Buffer.SnapshotText(), out var next))
+            // CF-B-005: the final step restores the saved draft exactly once
+            // (readline), then the walk ends and Down is plain caret movement again.
+            if (Buffer.LineIndexOf(Buffer.Cursor) == Buffer.LineCount - 1 && TryRecall(HistoryStep.Next, Buffer.SnapshotText(), out var next))
             {
                 Recall(next);
                 return ComposerAction.Edited;
@@ -355,20 +375,26 @@ public sealed class ComposerController
     }
 
     /// <summary>
-    /// Store-message entry point for history recall (CF-B-005): maps
-    /// <see cref="InputMsg.HistoryUp"/> / <see cref="InputMsg.HistoryDown"/>
-    /// onto the <see cref="PromptHistory"/> walk. HistoryUp captures
-    /// <paramref name="draft"/> on the first step; the final HistoryDown
-    /// restores it exactly once. Returns false at the walk boundaries (caller
-    /// falls back to caret movement) and for any other message.
+    /// History-recall entry point (CF-B-005, #33/T2): maps a walk
+    /// <see cref="HistoryStep" /> onto the <see cref="PromptHistory"/> walk.
+    /// Previous captures <paramref name="draft"/> on the first step; the final
+    /// Next restores it exactly once. Returns false at the walk boundaries
+    /// (caller falls back to caret movement).
+    /// <para>
+    /// This was <c>TryRecallViaStore</c> and took an <c>InputMsg</c>; it now takes
+    /// the direction itself. The old name had already become a lie — the store is
+    /// not in this call path — and the rename makes the boundary visible: what the
+    /// engine owns is the walk, and the store runs its own walk over the same
+    /// <see cref="PromptHistory"/> semantics on its own messages.
+    /// </para>
     /// </summary>
-    private bool TryRecallViaStore(InputMsg message, string draft, out string entry)
+    private bool TryRecall(HistoryStep step, string draft, out string entry)
     {
-        switch (message)
+        switch (step)
         {
-            case InputMsg.HistoryUp:
+            case HistoryStep.Previous:
                 return History.TryRecallPrevious(draft, out entry);
-            case InputMsg.HistoryDown:
+            case HistoryStep.Next:
                 return History.TryRecallNext(out entry);
             default:
                 entry = string.Empty;

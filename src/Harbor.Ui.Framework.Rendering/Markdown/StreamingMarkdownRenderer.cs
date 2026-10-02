@@ -77,6 +77,13 @@ public sealed class StreamingMarkdownRenderer
     private int _width = -1;
     private bool _complete;
 
+    /// <summary>
+    /// Trailing high surrogate withheld from <c>_source</c> until its low half
+    /// arrives (#421). <c>default</c> means "nothing held" — U+0000 is not a
+    /// surrogate half, so the sentinel is unambiguous.
+    /// </summary>
+    private char _heldHighSurrogate;
+
     public int LineCount => _frozenLines.Count + _tailLines.Count;
 
     public int FrozenLineCount => _frozenLines.Count;
@@ -87,6 +94,20 @@ public sealed class StreamingMarkdownRenderer
 
     public bool IsComplete => _complete;
 
+    /// <summary>
+    /// Appends one streaming chunk. A chunk may end between the halves of a
+    /// surrogate pair; that half is <b>held</b>, not stored (#421).
+    /// </summary>
+    /// <remarks>
+    /// #421: <c>Rune.DecodeFromUtf16</c> on a trailing lone high surrogate
+    /// returns <c>NeedMoreData</c> with <c>Rune.ReplacementChar</c> and
+    /// <c>consumed == 1</c>. Both downstream decoders in this pipeline —
+    /// <c>TextWrap.MeasureFit</c> and <c>ScreenBuffer.SetText</c> — already
+    /// map that to U+FFFD, so a stored half becomes a visible replacement glyph
+    /// mid-stream, and the low half becomes a second one. Holding the unit
+    /// costs one UTF-16 unit of source and removes the defect: the pair is
+    /// whole by the time any renderer sees it.
+    /// </remarks>
     public void Push(ReadOnlySpan<char> chunk)
     {
         if (_complete || chunk.IsEmpty)
@@ -94,24 +115,70 @@ public sealed class StreamingMarkdownRenderer
             return;
         }
 
-        int required = _sourceLen + chunk.Length;
-        if (required > _source.Length)
-        {
-            int capacity = _source.Length;
-            while (capacity < required)
-            {
-                capacity *= 2;
-            }
+        char prepend = _heldHighSurrogate;
+        _heldHighSurrogate = default;
 
-            Array.Resize(ref _source, capacity);
+        int required = _sourceLen + chunk.Length + (prepend != default ? 1 : 0);
+        EnsureCapacity(required);
+
+        if (prepend != default)
+        {
+            _source[_sourceLen] = prepend;
+            _sourceLen++;
         }
 
         chunk.CopyTo(_source.AsSpan(_sourceLen));
-        _sourceLen = required;
+        _sourceLen += chunk.Length;
+
+        // A pair can also be *split by this chunk's own last unit*. Hold it
+        // back rather than store a half the decoders will render as U+FFFD.
+        if (char.IsHighSurrogate(_source[_sourceLen - 1]))
+        {
+            _heldHighSurrogate = _source[_sourceLen - 1];
+            _sourceLen--;
+        }
     }
 
-    /// <summary>No more deltas will arrive; trailing partial content becomes final.</summary>
-    public void Complete() => _complete = true;
+    private void EnsureCapacity(int required)
+    {
+        if (required <= _source.Length)
+        {
+            return;
+        }
+
+        int capacity = _source.Length;
+        while (capacity < required)
+        {
+            capacity *= 2;
+        }
+
+        Array.Resize(ref _source, capacity);
+    }
+
+    /// <summary>
+    /// No more deltas will arrive; trailing partial content becomes final.
+    /// A still-held high surrogate can never be completed now, so it is
+    /// released into the source and renders as the single U+FFFD it is
+    /// (#421) — the same verdict <c>TextWrap.MeasureFit</c> reaches for an
+    /// unpaired unit, rather than being silently dropped.
+    /// </summary>
+    public void Complete()
+    {
+        if (_complete)
+        {
+            return;
+        }
+
+        if (_heldHighSurrogate != default)
+        {
+            EnsureCapacity(_sourceLen + 1);
+            _source[_sourceLen] = _heldHighSurrogate;
+            _sourceLen++;
+            _heldHighSurrogate = default;
+        }
+
+        _complete = true;
+    }
 
     /// <summary>Combined view for callers that want a plain list (tests/paint).</summary>
     public IReadOnlyList<MdLine> GetLines()

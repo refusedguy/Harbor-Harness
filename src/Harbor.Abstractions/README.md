@@ -31,7 +31,7 @@ Domain models (`Session`, `AgentMessage`, identifiers like `SessionId`/`ModelRef
 
 ## What's NOT in it (post-split)
 
-- **No domain models.** `Session`, `AgentMessage`, `ModelInfo`, `Usage`, `Pricing`, `ToolResult`, `ToolResultEntry`, `FileAttachment`, all 16 `AgentEvent` record variants and all 13 derived `LlmEvent` streaming-event types, `PermissionRuleset` / `PermissionRule` / `PermissionAction`, and the identifiers (`SessionId`, `MessageId`, `ToolCallId`, `ProviderId`, `ModelRef`, `ToolName`, `AgentName`) — all live in `Harbor.Abstractions.Contracts`.
+- **No domain models.** `Session`, `AgentMessage`, `ModelInfo`, `Usage`, `Pricing`, `ToolResult`, `ToolResultEntry`, `FileAttachment`, every `AgentEvent` record variant and every derived `LlmEvent` streaming-event type, `PermissionRuleset` / `PermissionRule` / `PermissionAction`, and the identifiers (`SessionId`, `MessageId`, `ToolCallId`, `ProviderId`, `ModelRef`, `ToolName`, `AgentName`) — all live in `Harbor.Abstractions.Contracts`. (This sentence previously said "all 16 … and all 13". The second number was right and the first was stale — 17 direct `AgentEvent` subtypes at the time of writing. Count them in [`Events/AgentEvent.cs`](../Harbor.Abstractions.Contracts/Events/AgentEvent.cs); do not trust a number restated here.)
 - **No infrastructure helpers.** `ArrayPoolExtensions.RentScoped<T>`, `StringBuilderPool`, `RentedArray<T>`, `CollectionExtensions.ToFrozenSet<T>` / `ToFrozenDictionary<...>`, `MemoryPackExtensions.ToMemoryPackBytes<T>` / `FromMemoryPackBytes<T>` — all live in `Harbor.Extensions`. The facade does **not** re-export them; add a direct project reference when you need them.
 - **No HTTP, no HttpClient, no JSON serialization beyond `JsonElement`/`JsonDocument`.** Provider implementations live in `Harbor.Providers.*` (Infrastructure).
 - **No DI registration.** `IServiceCollection` extensions live in `Harbor.Hosting` or composition roots.
@@ -53,12 +53,25 @@ If you find yourself adding any of the above to `Harbor.Abstractions`, **stop** 
 ### Package references (the interface-only contracts)
 
 - `CSharpFunctionalExtensions` — `Result<T>`, `ValueObject` (Railway Oriented Programming)
-- `CommunityToolkit.HighPerformance` — `Span<T>` helpers, `HashData`
 - `MemoryPack` — `[MemoryPackable]` types referenced by interface signatures (`ToolResult`, `AgentMessage`)
 - `ZLinq` + `ZLinq.DropInGenerator` — zero-allocation LINQ (replaces `System.Linq` via `<Using Remove="System.Linq"/>`)
 - `Microsoft.Extensions.DependencyInjection.Abstractions` — `IServiceCollection` (`PluginContext.Services`)
 - `Microsoft.Extensions.Logging.Abstractions` — `ILogger` (`PluginContext.CreateLogger<T>`)
 - `Microsoft.Extensions.Configuration.Abstractions` — `IConfiguration` (`PluginContext.Configuration`)
+
+> **`CommunityToolkit.HighPerformance` was removed from this list by #428.** It
+> was declared here and reached by nothing — not this project, not
+> `Harbor.Abstractions.Contracts`, not one file in `src/`. The `Frozen*` usage it
+> appeared to serve is `System.Collections.Frozen`, BCL since .NET 8, and the
+> `Span<T>` / `HashData` this list used to justify it with are `System` and
+> `System.Security.Cryptography`.
+>
+> The list above is **checked against the files, not against prose** by
+> [`tools/check-abstractions-contract.py`](../../tools/check-abstractions-contract.py),
+> which fails when a `<PackageReference>` has no `using` under it or when a
+> non-BCL `using` has no `<PackageReference>` over it. Run it with `--report` to
+> print the derived census rather than reading this table for it — this list is a
+> copy, and a copy of an answer is what goes stale (#933).
 
 > `AllowUnsafeBlocks` is `false`. The facade is 100% safe code.
 

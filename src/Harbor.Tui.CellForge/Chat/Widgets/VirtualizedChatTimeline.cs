@@ -1,5 +1,7 @@
 using System.Text;
+using Harbor.Tui.CellForge.Input;
 using Harbor.Tui.CellForge.Rendering;
+using Harbor.Ui.Framework.Rendering.Input;
 using Harbor.Ui.Framework.State;
 using Harbor.Abstractions.Models;
 
@@ -430,8 +432,31 @@ public sealed class VirtualizedChatTimeline
     /// <see cref="PageUpMsg"/> / <see cref="PageDownMsg"/> (possibly several line
     /// messages per tick for acceleration).
     /// </summary>
-    public static AppMsg WheelMsg(int delta) =>
-        delta > 0 ? LineUpMsg() : delta < 0 ? LineDownMsg() : new AppMsg.KeyInput(ChatAction.None, UiKey.Unknown);
+    /// <remarks>
+    /// #33/T2: the tick→direction step is <c>MouseRouter.WheelToKey</c>'s, not
+    /// this file's. It used to be spelled here as well, and the engine's copy
+    /// carried a comment admitting the duplication ("Same mapping as
+    /// VirtualizedChatTimeline.WheelMsg") — two edits to keep in step for one
+    /// decision. Delegating makes the direction single-sourced and leaves this
+    /// method owning only what is genuinely the host's: which action a
+    /// direction resolves to.
+    /// </remarks>
+    public static AppMsg WheelMsg(int delta) => WheelMsg(MouseRouter.WheelToKey(delta));
+
+    /// <summary>
+    /// The other half of <see cref="WheelMsg(int)" />: a wheel tick the engine has
+    /// already reduced to a direction becomes the store message. Hosts that bind
+    /// <c>TimelineWheelTarget</c> (whose callback is <c>Action&lt;UiKeyDto&gt;</c>,
+    /// because the engine cannot name <c>AppMsg</c> since #435) call this
+    /// overload.
+    /// </summary>
+    public static AppMsg WheelMsg(UiKeyDto key) =>
+        key.Kind switch
+        {
+            UiKeyKind.Up => LineUpMsg(),
+            UiKeyKind.Down => LineDownMsg(),
+            _ => new AppMsg.KeyInput(ChatAction.None, UiKey.Unknown),
+        };
 
     /// <summary>
     /// Mirrors a store snapshot into <see cref="ScrollY"/> / <see cref="FollowTail"/>

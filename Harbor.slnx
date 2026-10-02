@@ -71,6 +71,14 @@
         <Project Path="src/Harbor.Plugins.Registration/Harbor.Plugins.Registration.csproj"/>
         <Project Path="src/Harbor.Plugins.Hosting/Harbor.Plugins.Hosting.csproj"/>
         <Project Path="src/Harbor.Plugins.Runtime/Harbor.Plugins.Runtime.csproj"/>
+        <!-- #1005: absent from every solution and from every ProjectReference, so
+             no build had ever compiled it. It is the out-of-process MCP plugin
+             host (OutputType=Exe, assembly 'harbor-plugins-host') — the JIT half
+             of the AOT-core split, which is why it must build. The rule that
+             keeps it in the graph is tests/Harbor.Architecture.Tests/
+             BuildGraphCoverageRule.cs: it asserts the transitive closure of these
+             rows covers every src/ and apps/ project on disk. -->
+        <Project Path="src/Harbor.Plugins.Host/Harbor.Plugins.Host.csproj"/>
     </Folder>
 
     <Folder Name="/src/IPC/">

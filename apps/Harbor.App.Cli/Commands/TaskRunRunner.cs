@@ -1,5 +1,6 @@
 using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Agents;
+using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Sessions;
 using Harbor.Application.Sessions;
 using Microsoft.Extensions.DependencyInjection;
@@ -100,6 +101,21 @@ public static class TaskRunRunner
             definition.Value,
             new SubAgentRunRequest(prompt, ParentSessionId: null),
             CancellationToken.None).ConfigureAwait(false);
+
+        // B3.1 (#405): the line that answers "did the tests pass?", which nothing
+        // printed before. It is sealed HERE, after the run, because the evidence
+        // of a run does not exist before the run — and a record printed earlier
+        // would be claiming a verdict about a future that has not happened.
+        //
+        // It reads "not verified" today: zero checks ran, because the executor is
+        // #42's, and that is the honest value. The previous behaviour was to
+        // print nothing and let the sub-agent's own final text stand in for a
+        // verification that never happened, which is the same defect as #859's
+        // stuck cell and #782's plausible $0.00 — a missing fact wearing the
+        // clothes of a present one. `Summary` is the same string the tests
+        // assert on, so this display and the record cannot drift apart.
+        var verification = RunVerificationRecord.Pin(contract, DateTimeOffset.UtcNow);
+        await stdout.WriteLineAsync(verification.Summary).ConfigureAwait(false);
 
         return await result.Match(
             async run =>

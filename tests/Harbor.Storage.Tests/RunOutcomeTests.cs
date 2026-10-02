@@ -87,6 +87,10 @@ public class RunOutcomeTests
         await Assert.That(outcome.ToolCalls[0].ToolCallId).IsEqualTo(toolCallId);
         await Assert.That(outcome.ToolCalls[0].ToolName).IsEqualTo("read");
         await Assert.That(outcome.ToolCalls[0].IsError).IsFalse();
+        // #993: both timestamps are known here — a run that actually happened is
+        // dated by its own messages, and the fix must not have made them unknown.
+        await Assert.That(outcome.StartedAt).IsNotNull();
+        await Assert.That(outcome.FinishedAt).IsNotNull();
         await Assert.That(outcome.FinishedAt >= outcome.StartedAt).IsTrue();
     }
 
@@ -144,5 +148,198 @@ public class RunOutcomeTests
         await Assert.That(outcome.ErrorMessage).IsNull();
         await Assert.That(outcome.ToolCalls.Count).IsEqualTo(0);
         await Assert.That(outcome.MessageIds.Count).IsEqualTo(2);
+    }
+
+    /// <summary>
+    ///     Identity-boxing view of a timestamp, used by the #993 boundary tests so
+    ///     that one assertion compiles against <em>both</em> the pre-fix
+    ///     non-nullable <see cref="DateTimeOffset" /> and the fixed
+    ///     <see cref="DateTimeOffset" />?.
+    /// </summary>
+    /// <remarks>
+    ///     Generic on purpose: an overload pair would be dead code (and an
+    ///     unused-private-member diagnostic) on whichever side of the fix the file
+    ///     is compiled against, whereas this compiles on both. Because the test
+    ///     file is byte-identical before and after the fix, any red→green
+    ///     difference is attributable to the product source and nothing else.
+    /// </remarks>
+    private static object? Boxed<T>(T value) => value;
+
+    [Test]
+    public async Task Reconstruct_EmptyHistory_ReportsNoEvidenceNotSuccess()
+    {
+        var store = CreateStore();
+        var session = await store.CreateAsync("/proj", "code", "kilocode", "kilo-auto");
+        await Assert.That(session.IsSuccess).IsTrue();
+
+        string sessionId = session.Value.Id;
+        var runId = RunId.New();
+
+        // A session that has never run: no message was ever persisted for it.
+        var stored = await store.GetMessagesAsync(sessionId);
+        await Assert.That(stored.IsSuccess).IsTrue();
+        await Assert.That(stored.Value.Count).IsEqualTo(0);
+
+        var outcome = RunOutcome.Reconstruct(
+            runId, sessionId, stored.Value, new AgentEndEvent(stored.Value));
+
+        // #993: the old mapping ended in a catch-all, so this reached
+        // `Succeeded` — "the loop exited cleanly" for a loop that never ran.
+        await Assert.That(outcome.StopReason).IsNotEqualTo(RunStopReason.Succeeded)
+            .Because("an empty history is not evidence of a clean exit");
+        await Assert.That(outcome.StopReason).IsNotEqualTo(RunStopReason.Failed)
+            .Because("no evidence of work is not a verdict that the work broke");
+        await Assert.That(outcome.StopReason).IsEqualTo(RunStopReason.Stopped);
+
+        await Assert.That(outcome.ErrorMessage).IsNull();
+        await Assert.That(outcome.MessageIds.Count).IsEqualTo(0);
+        await Assert.That(outcome.ToolCalls.Count).IsEqualTo(0);
+    }
+
+    [Test]
+    public async Task Reconstruct_EmptyHistory_DoesNotInventRunTimestamps()
+    {
+        var store = CreateStore();
+        var session = await store.CreateAsync("/proj", "code", "kilocode", "kilo-auto");
+        await Assert.That(session.IsSuccess).IsTrue();
+
+        string sessionId = session.Value.Id;
+        var runId = RunId.New();
+
+        var stored = await store.GetMessagesAsync(sessionId);
+        await Assert.That(stored.IsSuccess).IsTrue();
+
+        var outcome = RunOutcome.Reconstruct(
+            runId, sessionId, stored.Value, new AgentEndEvent(stored.Value));
+
+        // #993: `startedAt = finishedAt = UtcNow` gave a run that never happened a
+        // duration of exactly zero, measured at reconstruction time. A plausible
+        // fact standing in for a missing one — the #782/#653 class, which this repo
+        // has already fixed twice in SessionReadTool ("unknown (model publishes no
+        // price)", "(empty transcript)"). Answering "unknown" beats answering wrongly.
+        await Assert.That(Boxed(outcome.StartedAt)).IsNull()
+            .Because("no message exists to date the start of a run that never ran");
+        await Assert.That(Boxed(outcome.FinishedAt)).IsNull()
+            .Because("no message exists to date the finish of a run that never ran");
+    }
+
+    [Test]
+    public async Task Reconstruct_EmptyHistory_KeepsACancellationVerdictButStillUnknownTime()
+    {
+        var store = CreateStore();
+        var session = await store.CreateAsync("/proj", "code", "kilocode", "kilo-auto");
+        await Assert.That(session.IsSuccess).IsTrue();
+
+        string sessionId = session.Value.Id;
+        var runId = RunId.New();
+
+        var stored = await store.GetMessagesAsync(sessionId);
+        await Assert.That(stored.IsSuccess).IsTrue();
+
+        var outcome = RunOutcome.Reconstruct(
+            runId, sessionId, stored.Value, new AgentEndEvent(stored.Value, Cancelled: true));
+
+        // Direction check #1: a known terminal signal must still win. Cancelled
+        // before the first message was persisted is a real, reportable stop — the
+        // fix must not swallow it into "unknown".
+        await Assert.That(outcome.StopReason).IsEqualTo(RunStopReason.Stopped);
+        await Assert.That(outcome.MessageIds.Count).IsEqualTo(0);
+
+        // …and the timestamps are still unknown, because cancellation is not a
+        // clock reading. Pre-fix this pair was a fabricated UtcNow.
+        await Assert.That(Boxed(outcome.StartedAt)).IsNull();
+        await Assert.That(Boxed(outcome.FinishedAt)).IsNull();
+    }
+
+    [Test]
+    public async Task Reconstruct_EmptyHistory_StillReportsAKnownErrorAsFailed()
+    {
+        var store = CreateStore();
+        var session = await store.CreateAsync("/proj", "code", "kilocode", "kilo-auto");
+        await Assert.That(session.IsSuccess).IsTrue();
+
+        string sessionId = session.Value.Id;
+        var runId = RunId.New();
+
+        var stored = await store.GetMessagesAsync(sessionId);
+        await Assert.That(stored.IsSuccess).IsTrue();
+
+        var outcome = RunOutcome.Reconstruct(
+            runId, sessionId, stored.Value,
+            new AgentEndEvent(stored.Value),
+            new AgentErrorEvent("provider exploded before anything was persisted"));
+
+        // Direction check #2 — the decisive one. If "empty history" had been
+        // mapped to a blanket "no evidence, stop asserting anything", the known
+        // failure would have been lost. An error the caller told us about is
+        // evidence; the fix must be scoped to evidence *we* lack.
+        await Assert.That(outcome.StopReason).IsEqualTo(RunStopReason.Failed);
+        await Assert.That(outcome.ErrorMessage).IsEqualTo("provider exploded before anything was persisted");
+    }
+
+    [Test]
+    public async Task Reconstruct_HistoryWithNoAssistantMessage_ReportsNoEvidenceAndKeepsRealTime()
+    {
+        var store = CreateStore();
+        var session = await store.CreateAsync("/proj", "code", "kilocode", "kilo-auto");
+        await Assert.That(session.IsSuccess).IsTrue();
+
+        string sessionId = session.Value.Id;
+        var runId = RunId.New();
+
+        // A prompt was persisted, but the loop never produced a reply: the same
+        // "no assistant evidence" state as an empty history, reached the way a
+        // live run reaches it. This is the case the live sibling
+        // SessionSupervision.InferOutcome already answers "unknown".
+        await store.AppendMessageAsync(sessionId, NewUser(sessionId, 1));
+
+        var stored = await store.GetMessagesAsync(sessionId);
+        await Assert.That(stored.IsSuccess).IsTrue();
+
+        var outcome = RunOutcome.Reconstruct(
+            runId, sessionId, stored.Value, new AgentEndEvent(stored.Value));
+
+        await Assert.That(outcome.StopReason).IsNotEqualTo(RunStopReason.Succeeded)
+            .Because("no assistant message means no evidence the loop exited cleanly");
+        await Assert.That(outcome.MessageIds.Count).IsEqualTo(1);
+
+        // The timestamp is NOT unknown here — a message exists to date it, and the
+        // fix must keep it exact rather than generalising "unknown" to every run.
+        // Boxed so the assertion binds identically on either side of the fix.
+        await Assert.That(Boxed(outcome.StartedAt)).IsEqualTo(BaseTime.AddSeconds(1));
+        await Assert.That(Boxed(outcome.FinishedAt)).IsEqualTo(BaseTime.AddSeconds(1));
+    }
+
+    [Test]
+    public async Task Reconstruct_SuccessAndNoEvidence_DisagreeOnTheSameCodePath()
+    {
+        // Non-vacuity, in the form that matters here: the two outcomes come from the
+        // SAME mapping and differ only in whether a run left evidence behind. If the
+        // empty-history test could not tell them apart, it would be asserting a
+        // constant rather than a boundary — the #591 "half a rule, plausible zero"
+        // failure mode. A completed run and a run that never happened must land on
+        // opposite verdicts here, and both must be reachable.
+        var store = CreateStore();
+        var session = await store.CreateAsync("/proj", "code", "kilocode", "kilo-auto");
+        await Assert.That(session.IsSuccess).IsTrue();
+
+        string sessionId = session.Value.Id;
+
+        var empty = await store.GetMessagesAsync(sessionId);
+        await Assert.That(empty.IsSuccess).IsTrue();
+        var noEvidence = RunOutcome.Reconstruct(
+            RunId.New(), sessionId, empty.Value, new AgentEndEvent(empty.Value));
+
+        await store.AppendMessageAsync(sessionId, NewUser(sessionId, 1));
+        await store.AppendMessageAsync(sessionId, NewFinalAssistant(sessionId, 2, StopReason.Stop));
+
+        var ran = await store.GetMessagesAsync(sessionId);
+        await Assert.That(ran.IsSuccess).IsTrue();
+        var succeeded = RunOutcome.Reconstruct(
+            RunId.New(), sessionId, ran.Value, new AgentEndEvent(ran.Value));
+
+        await Assert.That(succeeded.StopReason).IsEqualTo(RunStopReason.Succeeded);
+        await Assert.That(noEvidence.StopReason).IsNotEqualTo(RunStopReason.Succeeded);
+        await Assert.That(noEvidence.StopReason).IsNotEqualTo(succeeded.StopReason);
     }
 }

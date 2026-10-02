@@ -146,12 +146,15 @@ public class MaybeAbsenceTests
             + "make (#591). `TryTake` is a pure absence — one state, 'nothing pending' — so "
             + "Maybe<BufferPair> is the correct target and there is no Result axis here at all. "
             + "But the engine reaches `Maybe<T>` only TRANSITIVELY: its csproj declares zero "
-            + "PackageReference entries, and CSharpFunctionalExtensions arrives through THREE "
+            + "PackageReference entries, and CSharpFunctionalExtensions arrived through THREE "
             + "projects — Harbor.Abstractions and Harbor.Ui.Framework.State by direct edge, plus "
-            + "Harbor.Abstractions.Contracts via Harbor.Ui.Framework.Rendering, which #435 keeps "
-            + "and only #436 removes. #789 and #591 recorded two carriers: true of the two direct "
-            + "edges, wrong about the closure, which #809 measured. The ladder is 3 today -> 1 "
-            + "after #435 -> 0 after #436, so #435 alone does NOT make the engine CSE-free, and "
+            + "Harbor.Abstractions.Contracts via Harbor.Ui.Framework.Rendering. #789 and #591 "
+            + "recorded two carriers: true of the two direct edges, wrong about the closure, which "
+            + "#809 measured. #435 then removed the two direct edges, so ONE carrier is left and the "
+            + "ladder this text used to predict (3 -> 1 after #435 -> 0 after #436) is two-thirds "
+            + "taken. The survivor is Harbor.Abstractions.Contracts, reached via "
+            + "Harbor.Ui.Framework.Rendering, which #435 keeps and only #436 removes — so #435 alone "
+            + "does NOT make the engine CSE-free, and "
             + "a PackageReference added on the day it lands would be an answer to that open "
             + "question nobody made deliberately. Converting today picks a dependency owner "
             + "without answering 'direct PackageReference on CSE, or a vendored Maybe<T>?'. "
@@ -415,19 +418,23 @@ public class MaybeAbsenceTests
                 + "about which projects hand CSharpFunctionalExtensions to the engine, and the reason is "
                 + "the copy printed into the failure message. #809 measured the closure as THREE and "
                 + "pinned it; this text was left saying \"the exact two references #435 deletes\", which "
-                + "omits "
+                + "omitted "
                 + nameof(HarborAbstractionsContractsCarrierNote)
                 + " — the carrier reached via Harbor.Ui.Framework.Rendering, which #435 keeps and only "
-                + "#436 removes. The ladder is 3 today -> 1 after #435 -> 0 after #436, so an author "
-                + "landing #435 who trusts this sentence sees the package still resolve, concludes it is "
-                + "needed, and adds a direct PackageReference — answering #789's open owner question as a "
+                + "#436 removes. #435 has now landed and removed the two direct edges, so this reason's "
+                + "carrier count matches the pin again by subtraction rather than by re-measurement. The "
+                + "ladder was 3 -> 1 after #435 -> 0 after #436 and is two-thirds taken; an author "
+                + "landing #435 who trusted the old sentence sees the package still resolve, concludes it "
+                + "is needed, and adds a direct PackageReference — answering #789's open owner question as a "
                 + "side effect of a slice meant to drop two references. Name every carrier here, or fix "
                 + "the pin, but the two must not disagree.");
     }
 
     /// <summary>
-    ///     Anchors the third carrier in a compile-checked symbol so the sentence above
-    ///     cannot drift into naming a project that does not exist.
+    ///     Anchors the remaining carrier in a compile-checked symbol so the sentence
+    ///     above cannot drift into naming a project that does not exist. Since #435
+    ///     it is the LAST carrier: the two direct edges it used to accompany are
+    ///     gone, and only #436 can close this one.
     /// </summary>
     private const string HarborAbstractionsContractsCarrierNote = "Harbor.Abstractions.Contracts";
 
@@ -453,7 +460,7 @@ public class MaybeAbsenceTests
             .Because(
                 "ProjectNameInProse matched no Harbor.* name in the BufferSwapChain reason, so "
                 + "BufferSwapChainExemptionReason_NamesEveryMeasuredCseCarrier compared an empty "
-                + "named-set against three carriers and would have failed for the wrong reason — or, if "
+                + "named-set against the pinned carriers and would have failed for the wrong reason — or, if "
                 + "the carrier list ever emptied, passed for none.");
 
         // It must not fire on the non-project tokens the reason also contains.
@@ -465,11 +472,13 @@ public class MaybeAbsenceTests
         }
 
         // And the pin it grades is the one the CSE guard actually enforces.
-        await Assert.That(CellForgeEngineCseOwnershipTests.PinnedCseCarriers.Length).IsEqualTo(3)
+        await Assert.That(CellForgeEngineCseOwnershipTests.PinnedCseCarriers.Length).IsEqualTo(1)
             .Because(
-                "The ladder this rule documents is 3 carriers today -> 1 after #435 -> 0 after #436. If "
-                + "#435 or #436 landed, the count moves and both the pin and the reason are due an edit — "
-                + "a count of 2 here means #435 landed, a count of 0 means both did.");
+                "The ladder this rule documents was 3 carriers -> 1 after #435 -> 0 after #436. #435 has "
+                + "landed, so one is correct and the survivor is Harbor.Abstractions.Contracts via "
+                + "Harbor.Ui.Framework.Rendering. If #436 lands the count goes to 0 and both the pin and "
+                + "the reason are due an edit — and at 0 this assertion has to change shape, because a "
+                + "zero-length carrier list makes the missing-set comparison above vacuously true.");
     }
 
     [Test]

@@ -45,12 +45,23 @@
     <ProjectReference Include="..\Harbor.Abstractions.Contracts\Harbor.Abstractions.Contracts.csproj"/>
   </ItemGroup>
 
+  <!--
+    #428: every entry here is checked by tools/check-abstractions-contract.py,
+    which fails on a package nothing in this project (or in the contract project
+    it references) has a `using` under. Do not add one "just in case" — the gate
+    will go red, and a red gate is the correct answer for a project v1.0 freezes.
+
+    CommunityToolkit.HighPerformance was removed by that gate. It had zero
+    reachability: no `using` in this project, none in Harbor.Abstractions.Contracts,
+    none in src/ at all. The Frozen* usage it looks like it was added for is
+    System.Collections.Frozen, BCL since .NET 8, and the Span<T>/HashData its
+    README bullet cited are System and System.Security.Cryptography.
+  -->
   <ItemGroup>
     <PackageReference Include="CSharpFunctionalExtensions"/>
     <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions"/>
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions"/>
     <PackageReference Include="Microsoft.Extensions.Configuration.Abstractions"/>
-    <PackageReference Include="CommunityToolkit.HighPerformance"/>
     <PackageReference Include="MemoryPack"/>
     <PackageReference Include="ZLinq"/>
     <!--

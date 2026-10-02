@@ -125,6 +125,11 @@ for path in (TURN, LOOP):
     lines = open(path, encoding="utf-8").read().splitlines()
     for i, ln in enumerate(lines, 1):
         s = ln.strip()
+        # A doc comment that NAMES the shape is not a site that uses it. Before
+        # this filter the TurnStepResult remark counted as a termination site,
+        # which would overstate the total by one on every tree carrying the doc.
+        if s.startswith("//"):
+            continue
         if "EndRun: true" in s or "EndRun: false" in s or "AgentEndEvent(" in s \
                 or "AgentErrorEvent(" in s or "IsCancellationRequested" in s:
             window = " ".join(lines[i - 1:i + 3])
@@ -136,11 +141,18 @@ for path in (TURN, LOOP):
             if "AgentEndEvent(" in s and "Cancelled: true" in window:
                 verdict = "Stopped (cancel)"
             elif "AgentEndEvent(" in s:
-                verdict = "Succeeded (no limit known)"
+                # The terminal event's own LIMIT, not the loop's: a run that
+                # ended for a reason is distinguishable from a finished one only
+                # if the reason rides the event.
+                has_limit = "Limit:" in window or "limit" in window.lower()
+                verdict = "limit carried" if has_limit else "Succeeded (no limit known)"
             elif "AgentErrorEvent(" in s:
                 verdict = "Failed"
             elif "EndRun: true" in s:
-                verdict = "run ends — reason not carried"
+                # A limit the turn itself stamped, versus a bare `true` that the
+                # caller cannot tell apart from a finished run.
+                verdict = ("run ends — reason not carried"
+                           if "Limit:" not in s else "run ends — limit carried")
             else:
                 verdict = "loop continues"
             sites.append((path.split("/")[-1], i, verdict, tok, s[:64]))
@@ -150,6 +162,8 @@ print("-" * 130)
 for f, i, v, t, s in sites:
     print(f"{f:<16}{i:>5}  {v:<28}{t:<20}{s}")
 print(f"\nTOTAL termination sites: {len(sites)}")
+reasonless = [s for s in sites if s[2] == "run ends — reason not carried"]
+print(f"of which carry NO reason: {len(reasonless)}")
 print("\nThe 'run ends — reason not carried' rows are the finding: a run that ends")
 print("for a reason the caller must be told about is indistinguishable from a run")
 print("that finished its work, because EndRun is a bool.")
