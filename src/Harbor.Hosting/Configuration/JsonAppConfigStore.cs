@@ -18,10 +18,19 @@
 //
 // AOT note: because the concrete T (CliConfig, AvaloniaConfig, …) is defined
 // in each app's own assembly, this store cannot source-generate metadata for
-// it. Under NativeAOT, pass a source-generated JsonTypeInfo<T> (from a
-// JsonSerializerContext declared next to the app's config record) via the
-// optional constructor parameter; without it the store falls back to the
-// reflection-based resolver, which logs a warning and only works on JIT.
+// it. Pass a source-generated JsonTypeInfo<T> — from a JsonSerializerContext
+// declared next to the app's config record, as CliJsonContext and
+// AvaloniaJsonContext now do — via the constructor.
+//
+// #414: there used to be a third option. Omit the argument and the store called
+// JsonSerializer.Deserialize<T>(json, JsonOptions), resolving the contract by
+// reflection, warning once at startup, and carrying on. That is the exact shape
+// this audit is about: a path that allocates nothing, measures clean, and throws
+// InvalidOperationException the moment the publish is trimmed, because
+// JsonSerializer.IsReflectionEnabledByDefault is off whenever the trimmer runs.
+// Both product call sites omitted the argument, so it was the live path, not a
+// fallback nobody reached. It is gone; omitting the argument is now an immediate
+// named exception instead of a deferred one.
 
 using System.Collections.Immutable;
 using System.Text.Json;
@@ -60,18 +69,12 @@ namespace Harbor.Hosting.Configuration;
 /// </remarks>
 public sealed class JsonAppConfigStore<T> : IAppConfigStore<T> where T : AppConfigBase
 {
-    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
-    {
-        WriteIndented = true,
-        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
-        Converters =
-        {
-            // ImmutableList<T> has no built-in converter; this one round-trips
-            // via List<T>. Without it, System.Text.Json throws
-            // NotSupportedException on the RecentSessions property.
-            ImmutableListConverter<string>.Instance
-        }
-    };
+    // #414: JsonOptions is gone. It existed only to feed the reflection
+    // overloads, and the whole point of the JsonTypeInfo constructor argument is
+    // that the options object is not how the contract is chosen. Its
+    // ImmutableList<string> converter was redundant anyway — System.Text.Json has
+    // supported IImmutableList<T> for both directions since .NET 8, and the
+    // comment claiming otherwise predates that.
 
     private readonly T _default;
     private readonly SemaphoreSlim _lock = new(1, 1);
@@ -87,17 +90,16 @@ public sealed class JsonAppConfigStore<T> : IAppConfigStore<T> where T : AppConf
     /// </param>
     /// <param name="logger">Logger for diagnostics.</param>
     /// <param name="jsonTypeInfo">
-    ///     Optional source-generated metadata for <typeparamref name="T" />,
-    ///     e.g. from an app-local <c>JsonSerializerContext</c>
-    ///     (<c>MyAppJsonContext.Default.CliConfig</c>). When supplied, all
-    ///     (de)serialization goes through it and works under NativeAOT. When
-    ///     omitted (the default, keeping existing 2-argument call sites
-    ///     compiling), the store falls back to the reflection-based resolver —
-    ///     fine on JIT, but it logs a warning and will fail under strict AOT
-    ///     publishing where reflection serialization is unavailable.
-    ///     If <typeparamref name="T" /> has immutable-collection properties,
-    ///     build the type info from options that register the converters in
-    ///     this assembly (see <c>ConfigJson.Options</c>) or equivalent ones.
+    ///     Source-generated metadata for <typeparamref name="T" />, from a
+    ///     <see cref="JsonSerializerContext" /> declared next to the app's config
+    ///     record (<c>MyAppJsonContext.Default.CliConfig</c>). This parameter is
+    ///     optional in the signature only so that callers outside CI keep
+    ///     compiling; omitting it THROWS, because there is no reflection fallback
+    ///     left to take (#414). If <typeparamref name="T" /> has immutable-collection
+    ///     properties, build the type info from options that register converters
+    ///     (see <c>ConfigJson.Options</c>) or rely on the built-in
+    ///     <c>IImmutableList&lt;T&gt;</c> support, which has covered both
+    ///     directions since .NET 8.
     /// </param>
     public JsonAppConfigStore(
         T defaultConfig,
@@ -108,14 +110,33 @@ public sealed class JsonAppConfigStore<T> : IAppConfigStore<T> where T : AppConf
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _jsonTypeInfo = jsonTypeInfo;
 
+        // #414: there is no reflection fallback any more. It used to be
+        // `_jsonTypeInfo is not null ? <generated> : JsonSerializer.Deserialize<T>(
+        // json, JsonOptions)` — a branch that allocates nothing, works on JIT, and
+        // throws InvalidOperationException under PublishTrimmed because
+        // JsonSerializer.IsReflectionEnabledByDefault is off whenever the trimmer
+        // runs. BOTH product call sites (HostBuilder.AddCliConfiguration and
+        // ConfigRegistration, twice) omitted the argument, so that was the path
+        // every launch took and the warning below fired every launch.
+        //
+        // The parameter stays optional so the signature is unchanged for callers
+        // that are not compiled by CI (contrib/apps/*), but omitting it is now an
+        // immediate, named failure here rather than a crash discovered at the first
+        // trimmed publish. Declaring a JsonSerializerContext next to the config
+        // record is the fix, and the message says so.
         if (_jsonTypeInfo is null)
         {
-            _logger.LogWarning(
-                "JsonAppConfigStore has no source-generated JsonTypeInfo for config type " +
-                "{ConfigType}; falling back to reflection-based System.Text.Json, which is " +
-                "unsupported under NativeAOT. Declare a JsonSerializerContext for that type " +
-                "and pass its JsonTypeInfo to the constructor.",
-                typeof(T).Name);
+            throw new InvalidOperationException(
+                $"JsonAppConfigStore<{typeof(T).Name}> was constructed without a source-generated "
+                + "JsonTypeInfo, and this store no longer falls back to reflection-based "
+                + "System.Text.Json. That fallback works on an untrimmed JIT build and throws "
+                + "InvalidOperationException under PublishTrimmed, where "
+                + "JsonSerializer.IsReflectionEnabledByDefault is false — so a working config "
+                + "path today is a broken one at publish. Declare a JsonSerializerContext next to "
+                + $"{typeof(T).Name} ([JsonSerializable(typeof({typeof(T).Name}))], with "
+                + "JsonSourceGenerationOptions replicating JsonSerializerDefaults.Web: camelCase "
+                + "and case-insensitive, so existing config files keep round-tripping) and pass "
+                + "YourContext.Default." + typeof(T).Name + " as the third constructor argument.");
         }
     }
 
@@ -134,9 +155,9 @@ public sealed class JsonAppConfigStore<T> : IAppConfigStore<T> where T : AppConf
             }
 
             string json = await File.ReadAllTextAsync(path, ct).ConfigureAwait(false);
-            var config = _jsonTypeInfo is not null
-                ? JsonSerializer.Deserialize(json, _jsonTypeInfo)
-                : JsonSerializer.Deserialize<T>(json, JsonOptions);
+            // #414: no reflection branch. The JsonTypeInfo overload is the only call, so the
+            // contract comes from generated metadata or not at all — see the constructor.
+            var config = JsonSerializer.Deserialize(json, _jsonTypeInfo);
             if (config is null)
             {
                 _logger.LogWarning("App config at {Path} deserialized to null, using defaults", path);
@@ -175,9 +196,9 @@ public sealed class JsonAppConfigStore<T> : IAppConfigStore<T> where T : AppConf
                 Directory.CreateDirectory(dir);
             }
 
-            string json = _jsonTypeInfo is not null
-                ? JsonSerializer.Serialize(config, _jsonTypeInfo)
-                : JsonSerializer.Serialize(config, JsonOptions);
+            // #414: as in LoadAsync, the only (de)serialization call is the
+            // JsonTypeInfo one.
+            string json = JsonSerializer.Serialize(config, _jsonTypeInfo);
             string tempPath = path + ".tmp";
 
             // Write to temp file first, then atomically move into place. This
