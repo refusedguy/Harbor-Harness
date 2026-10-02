@@ -185,27 +185,31 @@ public class HeadlessSessionDispatchOverloadTests
                 "the row #972's guard calls `Dispatch<TResult>(Func<TResult>)`. Anything else here means "
                 + "the recorded premise no longer describes the method it names.");
 
-        // Close the generic over Task — this is the substitution the original
+        // Close the generic over Task - this is the substitution the original
         // premise insisted was impossible.
         //
-        // `parameter` is `Func<TResult>`, an ALREADY-CONSTRUCTED type whose single
-        // generic argument is the METHOD's own TResult. So substitute through that
-        // argument rather than calling MakeGenericType on the Func itself: Func<>
-        // is the definition, Func<TResult> is not, and MakeGenericType rejects it
-        // ("MakeGenericType may only be called on a type for which
-        // Type.IsGenericTypeDefinition is true").
-        Type taskOverload = parameter.GetGenericArguments()[0] == typeof(Task)
-            ? parameter
-            : parameter.GetGenericArguments()[0].MakeGenericType(typeof(Task));
+        // Close it on the METHOD, not on the type. `parameter` is `Func<TResult>`,
+        // already constructed over the method's own type parameter, and BOTH
+        // `Func<TResult>` and the bare `TResult` are non-generic-type-definitions,
+        // so MakeGenericType rejects either one:
+        //
+        //     InvalidOperationException: System.Func`1[TResult] is not a
+        //       GenericTypeDefinition. MakeGenericType may only be called on a type
+        //       for which Type.IsGenericTypeDefinition is true.
+        //     InvalidOperationException: TResult is not a GenericTypeDefinition.
+        //
+        // MakeGenericMethod is the operation that matches what overload resolution
+        // actually does: it substitutes the method's type argument, and the
+        // parameter type comes out substituted with it.
+        MethodInfo closed = generic.MakeGenericMethod(typeof(Task));
+        Type taskOverload = closed.GetParameters()[0].ParameterType;
 
-        // Sanity: the substitution must actually have happened, so a future edit
-        // that reaches this line with the wrong shape fails here rather than
-        // quietly asserting a tautology.
-        await Assert.That(taskOverload.GetGenericArguments())
-            .IsNotEmpty()
+        await Assert.That(taskOverload.IsGenericType)
+            .IsTrue()
             .Because(
-                "the substituted parameter type must still be generic. Reaching a non-generic type here "
-                + "means the overload's shape changed and this substitution is no longer the one #972 rests on.");
+                "closing Dispatch<TResult>(Func<TResult>) over Task must leave a constructed Func<Task> in "
+                + "the first parameter. If it does not, the overload's shape is not the one #972's premise "
+                + "describes and this account needs re-deriving.");
 
         await Assert.That(Pretty(taskOverload))
             .IsEqualTo("Func<Task>")
