@@ -665,64 +665,68 @@ jobs:
   #
   # WHAT PASSES, AND WHY IT IS NOT "ZERO IL2xxx"
   # -------------------------------------------
-  # Three things, all of which have to hold:
+  # Two things, both of which have to hold:
   #
-  #   1. `dotnet publish -p:HarborWithAot=true` completes. A publish that fails
-  #      is a publish that did not happen.
-  #   2. Its trim/AOT diagnostics match `.github/aot-warning-baseline.txt`
-  #      exactly — no new id, no changed count, no new first-party site, and no
-  #      row left behind for a warning that stopped. tools/aot-publish-gate.py
-  #      owns that comparison and prints the id list and occurrence count on
-  #      every run, so "found 0" can never be a bare, unreadable number.
-  #   3. The published artifact RUNS: --version, --help, --providers, each
-  #      asserted on content, not just on exit code. A green publish does not
-  #      prove the binary boots; this is the only step that does.
+  #   1. The publish's OUTCOME and its trim/AOT diagnostics match
+  #      `.github/aot-warning-baseline.txt` exactly — same recorded outcome, no
+  #      new id, no changed count, no new first-party site, and no row left
+  #      behind for a warning that stopped. tools/aot-publish-gate.py owns that
+  #      comparison and prints the id list, the occurrence count and the
+  #      error-severity total on every run, so "found 0" can never be a bare,
+  #      unreadable number.
+  #   2. The published artifact RUNS: --version, --help, --providers, each
+  #      asserted on content, not just on exit code.
   #
-  # WHY THE BINARY RUNS AND THE INVENTORY IS NOT THE WHOLE GATE
-  # ----------------------------------------------------------
-  # A NativeAOT artifact is a different program from the JIT one: statically
-  # linked, no JIT, no runtime assembly loading. Trimming can remove a method
-  # that only a reflective call site reaches, and the linker reports nothing if
-  # the call site is itself removed. So publish-green is necessary and not
-  # sufficient, and the reverse also holds — a binary that boots can still have
-  # shipped a warning nobody read. Both are required.
+  # WHY THIS IS A RATCHET AND NOT "THE PUBLISH IS GREEN"
+  # ---------------------------------------------------
+  # MEASURED, and the measurement is the whole reason the gate looks like this.
+  # No AOT publish configuration in this repository works today:
   #
-  # WHY `HARBOR_MINIMAL=true` AND NOT `-p:HarborWithAot=true`
-  # --------------------------------------------------------
-  # MEASURED, not chosen for convenience. The full-tree recipe was tried first
-  # and it does not publish. Its third CI run reached ILC (4 min) and failed:
+  #   recipe 2, `-p:HarborWithAot=true` (full tree) — reaches ILC and fails on
+  #     IL3000 x3, IL2072 x1, IL2070 x1, none of them demoted by
+  #     Harbor.App.Cli.csproj, and ILC runs warnings-as-errors because
+  #     IlcTreatWarningsAsErrors defaults to the repo's TreatWarningsAsErrors.
+  #     One of the three IL3000 is inside `Microsoft.CodeAnalysis` itself and is
+  #     not fixable from our code. Full inventory from that run, in
+  #     docs/AOT_PUBLISH.md.
   #
-  #   ILC : error IL3000: Harbor.Plugins.Compilation.PluginAssemblyReferences.
-  #         BuildReferences(): 'System.Reflection.Assembly.Location.get' always
-  #         returns an empty string for assemblies embedded in a single-file app
-  #   ILC : error IL3000: ...PluginAssemblyReferences.EnsureReference(...)
-  #   ILC : Trim analysis error IL2072: Harbor.Plugins.Instantiation.
-  #         ReflectionPluginInstantiator.Instantiate(...): 'type' argument does
-  #         not satisfy 'PublicParameterlessConstructor' in call to
-  #         System.Activator.CreateInstance(Type)
-  #   ILC : Trim analysis error IL2070: ...<FindPluginTypes>b__1_1(Type):
-  #         'this' argument does not satisfy 'PublicParameterlessConstructor'
-  #   ##[error] .../Microsoft.NETCore.Native.targets(330,5): error MSB3077: ilc
-  #         ... exited with return value 0, but errors were detected
+  #   recipe 1, `HARBOR_MINIMAL=true` (the stripped profile the csproj calls the
+  #     real AOT path) — does not compile. PluginReloadService.cs is entirely
+  #     inside `#if HARBOR_WITH_PLUGINS` and 11 call sites in apps/Harbor.App.Cli
+  #     reference it unguarded, so CS0234 x11.
   #
-  # Full inventory from that run: IL2026 x15, IL3050 x10, IL2104 x3, IL3053 x2
-  # (all four demoted by the csproj, so they printed and did not fail), plus
-  # IL3000 x3, IL2072 x1, IL2070 x1 — none demoted, and ILC runs with
-  # warnings-as-errors because IlcTreatWarningsAsErrors defaults to
-  # $(TreatWarningsAsErrors), which is true repo-wide. So the csproj's demotion
-  # list is INCOMPLETE: it names four ids and the publish emits seven.
+  # A gate that can only be red is not a gate, and one that ignores the publish
+  # is worse than none. So the publish step is `continue-on-error` and the gate
+  # step immediately after decides: the committed record says "this publish
+  # fails, like this", and the gate passes ONLY on that. If the build starts
+#   succeeding the gate goes RED and says the AOT state improved and the record
+  #   must be updated — the transition is acknowledged by a human instead of
+  #   being absorbed. If it starts failing differently, it also goes red.
   #
-  # Every one of the three failing sites is in Harbor.Plugins.Compilation or
-  # Harbor.Plugins.Instantiation, which HARBOR_MINIMAL=true removes (it forces
-  # HarborWithPlugins=false). That is also the recipe Harbor.App.Cli.csproj
-  # itself calls "the only one that produces the stripped binary, and the only
-  # one that matches what NativeAOT is supposed to mean here".
+  # `continue-on-error` is safe here precisely because the next step is a real
+  # check against a committed expectation; it is not a way to make a failure
+  # quiet. If the publish step dies before writing its marker at all, the gate
+  # reports exit 2 and the upload step fails on if-no-files-found.
   #
-  # So this gate publishes the stripped profile, and the full-tree result is
-  # recorded as a FINDING in docs/AOT_PUBLISH.md rather than gated. Whether the
-  # plugin path can be made AOT-clean is #48/S4's decision, not this gate's:
-  # the Roslyn IL3000 in particular is not fixable from our code, and the issue
-  # forbids buying green with blanket suppression.
+  # Why the artifact still has to run: a NativeAOT binary is a different program
+  # from the JIT one, and "the publish failed" says nothing about whether the
+  # steps around it are honest. Step 2 is what would catch a regression in the
+  # publish recipe itself — e.g. a dropped env var silently producing a
+  # different program than the one the record describes.
+  #
+  # WHY `-p:HarborWithAot=true` AND NOT `HARBOR_MINIMAL=true`
+  # -------------------------------------------------------
+  # The full tree, for two reasons that only became clear by running both.
+  # First, the stripped profile does not compile, so gating it would mean gating
+  # a configuration that cannot be evaluated at all. Second, the full tree is
+  # the one whose failures are informative: every id that fails the publish
+  # sits in Harbor.Plugins.Compilation or Harbor.Plugins.Instantiation, which is
+  # exactly the surface #48/S4 has to decide about. The stripped profile would
+  # have hidden all of it behind an absence.
+  #
+  # Whether the plugin path can be made AOT-clean is #48/S4's decision, not this
+  # gate's: the Roslyn IL3000 in particular is not fixable from our code, and
+  # #413's own criteria forbid buying green with blanket suppression.
   #
   # WHERE THE INVENTORY LIVES, AND WHY NOT IN THE LOG
   # --------------------------------------------------
@@ -784,15 +788,18 @@ jobs:
       - name: Self-test the gate tool (synthetic, guaranteed-hit fixtures)
         run: python3 tools/aot-publish-gate.py --selftest
 
-      - name: Publish Harbor.App.Cli (NativeAOT, linux-x64, minimal recipe)
+      - name: Publish Harbor.App.Cli (NativeAOT, linux-x64, full tree)
         id: publish
+        # continue-on-error IS the design, not a fudge: the publish is expected
+        # to fail today (see the job header), and the gate step below decides
+        # whether it failed the way the committed record says it does. What this
+        # must never become is a quiet failure — the marker written at the end of
+        # this step is what the gate reads, and a step that dies before writing
+        # it leaves the gate with no evidence and exit 2.
+        continue-on-error: true
         env:
           RID: linux-x64
-          # The stripped recipe. See the recipe note in the job header: the
-          # full-tree recipe is measurably NOT AOT-clean today, and the three
-          # diagnostics that fail it all live in the plugin projects this
-          # flag removes.
-          HARBOR_MINIMAL: 'true'
+          RECIPE: fulltree
         run: |
           set -o pipefail
           # AOT needs the native toolchain. ubuntu-latest already ships most of
@@ -814,30 +821,31 @@ jobs:
           dotnet publish apps/Harbor.App.Cli \
             -c Release -r "$RID" \
             --self-contained true \
+            -p:HarborWithAot=true \
             -p:ContinuousIntegrationBuild=true \
             -o publish/aot 2>&1 | tee publish/aot-publish.log
           status=${PIPESTATUS[0]}
-          # The sentinel is written ONLY on success, and the gate refuses a log
-          # without it. This is what distinguishes "the publish is clean" from
-          # "there is no publish here" — the #988 shape, in a job that is about
-          # publishing rather than about tests. `recipe=` is part of it because
-          # the two AOT recipes build different programs, so an inventory from
-          # one must not be accepted as evidence about the other.
+          # The marker names the OUTCOME, not just success. It is written
+          # whatever the publish did, because "the publish failed" is a fact this
+          # gate has to be able to read; what it must never do is read nothing.
+          # `recipe=` is in it because the two AOT recipes build different
+          # programs, so an inventory from one must not be accepted as evidence
+          # about the other.
           if [ "$status" -eq 0 ]; then
-            echo "HARBOR_AOT_PUBLISH_OK rid=$RID recipe=minimal" >> publish/aot-publish.log
+            outcome=published
+          else
+            outcome=failed
           fi
+          echo "HARBOR_AOT_PUBLISH_DONE rid=$RID recipe=$RECIPE status=$outcome exit=$status" \
+            >> publish/aot-publish.log
           exit "$status"
 
-      # The half that proves executability. Each assertion is on CONTENT, and
-      # each one fails loudly on an empty output — an exit code of 0 from a
-      # binary that printed nothing is not evidence that it ran.
-      #
-      # ORDER MATTERS: this runs BEFORE the inventory comparison, not after.
-      # Both must pass, so the order changes no verdict — but a comparison that
-      # fails first would SKIP this step, and a run that reports only "the
-      # inventory drifted" leaves the reader unable to tell whether the binary
-      # booted. Running the artifact first means one red run yields both facts.
-      - name: Smoke — the published AOT binary runs
+      # ORDER MATTERS: the artifact runs BEFORE the comparison. Both must pass,
+      # so the order changes no verdict — but the publish is expected to fail
+      # today, which means the artifact DOES exist for the full tree (ILC got far
+      # enough to emit a binary) and this step has something real to check. If
+      # the publish ever stops producing an artifact, this is what says so.
+      - name: Smoke — the published AOT artifact runs
         run: |
           set -euo pipefail
           bin=publish/aot/Harbor.App.Cli
@@ -858,12 +866,12 @@ jobs:
           # ProviderVerbs.RunListProvidersAsync always returns 0: an AOT binary
           # that registered nothing at all would exit 0 and print an empty list.
           #
-          # The two ids are `ollama` and `kilocode` and that set is derived, not
-          # guessed. Under the minimal recipe `anthropic` and `openai` are NOT
-          # registered: their factories sit behind `#if HARBOR_WITH_ALL_PROVIDERS`
-          # in ProviderFactories, and HARBOR_MINIMAL=true forces that flag false.
-          # Asserting them would make the job permanently red for a reason that
-          # is the recipe working correctly.
+          # All three ids, and the set is derived: the full-tree recipe keeps
+          # HarborWithAllProviders=true, so ProviderFactories registers the
+          # native Anthropic and OpenAI factories on top of the Ollama one, and
+          # the JSON catalogue supplies kilocode. If this job is ever pointed at
+          # the stripped recipe these would legitimately disappear — the recipe
+          # note in the job header says so.
           #
           # What `kilocode` actually proves (stated precisely, because the
           # obvious explanation is wrong): the providers are NOT read from
@@ -878,29 +886,20 @@ jobs:
           # catalogue — the System.Text.Json and provider-construction paths both
           # work under NativeAOT. The dead embedded path is a separate
           # pre-existing finding, recorded in docs/AOT_PUBLISH.md, not fixed here.
-          for p in ollama kilocode; do
+          for p in ollama anthropic openai kilocode; do
             grep -q -i "$p" publish/providers.txt \
-              || { echo "::error::--providers is missing '$p' — the bundled provider catalogue did not survive the publish"; cat publish/providers.txt; exit 1; }
+              || { echo "::error::--providers is missing '$p' — the provider catalogue did not survive the publish"; cat publish/providers.txt; exit 1; }
           done
-          # And the recipe is visible in the output: under HARBOR_MINIMAL the
-          # stripped profile must not be carrying the native Anthropic/OpenAI
-          # factories. This is the assertion that would catch the env var
-          # silently failing to reach MSBuild, which would otherwise make the
-          # job publish the full tree and call it minimal.
-          if grep -q -E '^\s+\[(OK|FAIL)\]\s+(anthropic|openai)\s*$' publish/providers.txt; then
-            echo "::error::--providers lists anthropic/openai, so HARBOR_MINIMAL did not reach MSBuild and this was NOT the minimal recipe"
-            cat publish/providers.txt
-            exit 1
-          fi
           echo "smoke: version/help/providers all ran on the published AOT binary"
 
-      - name: Compare the published inventory against the committed baseline
+      - name: Compare the publish against the committed record
         run: |
           python3 tools/aot-publish-gate.py \
             --log publish/aot-publish.log \
             --baseline .github/aot-warning-baseline.txt \
             --expect-rid linux-x64 \
-            --expect-recipe minimal
+            --expect-recipe fulltree \
+            --expect-status failed
 
       - name: Upload AOT publish log and inventory report
         if: always()
