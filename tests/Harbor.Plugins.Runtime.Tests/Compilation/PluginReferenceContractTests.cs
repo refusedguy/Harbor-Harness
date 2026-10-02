@@ -1,3 +1,4 @@
+using System.Runtime.InteropServices;
 using System.Text.Json;
 using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Plugins;
@@ -87,6 +88,25 @@ public sealed class PluginReferenceContractTests
         typeof(JsonDocument).Assembly,
         typeof(ILogger).Assembly,
         typeof(Result).Assembly,
+    ];
+
+    /// <summary>
+    ///     The BCL contract facades a cold process still gets. The product adds these from the
+    ///     runtime directory by a fixed name list, and so does this test — a cold process is
+    ///     "nothing loaded yet", not "no framework at all", and leaving them out turns the
+    ///     compile into a CS0012 about <c>Task</c> and hides the claim under test.
+    /// </summary>
+    private static readonly string[] ColdProcessBclContracts =
+    [
+        "System.Runtime.dll",
+        "System.Collections.dll",
+        "System.Collections.Concurrent.dll",
+        "System.Linq.dll",
+        "System.Threading.Tasks.dll",
+        "System.Threading.dll",
+        "System.Text.Json.dll",
+        "System.Console.dll",
+        "System.Net.Http.dll",
     ];
 
     /// <summary>
@@ -206,6 +226,16 @@ public sealed class PluginReferenceContractTests
             if (!string.IsNullOrEmpty(location) && seen.Add(location))
             {
                 refs.Add(MetadataReference.CreateFromFile(location));
+            }
+        }
+
+        string runtimeDir = RuntimeEnvironment.GetRuntimeDirectory();
+        foreach (string name in ColdProcessBclContracts)
+        {
+            string path = Path.Combine(runtimeDir, name);
+            if (File.Exists(path) && seen.Add(path))
+            {
+                refs.Add(MetadataReference.CreateFromFile(path));
             }
         }
 
