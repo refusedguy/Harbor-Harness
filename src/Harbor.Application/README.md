@@ -69,9 +69,11 @@ re-exported them was deleted in #451.
 
 ## Performance intent
 
-* `AgentLoop` coalesces streaming deltas in a pooled `StringBuilder` from
-  `CommunityToolkit.HighPerformance` to keep per-delta allocations O(n)
-  instead of O(n²).
+* `AgentLoop` coalesces streaming deltas in a pooled `StringBuilder` rented from
+  `Harbor.Extensions.StringBuilderPool` (a `ConcurrentBag` pool in this solution)
+  to keep per-delta allocations O(n) instead of O(n²). This bullet used to credit
+  `CommunityToolkit.HighPerformance` for the pooling; it never provided it, and
+  the phantom dependency has been removed from this `.csproj`.
 * `CompactionService` uses index-based cut-points (no `List<T>` slices)
   and pooled buffers for the summarization prompt.
 * `SystemPromptBuilder` rents a pooled `StringBuilder` per call.
