@@ -185,12 +185,221 @@ public sealed class TokenCellSingleHomeRules
     private sealed record LineHome(string RelativePath, string Marker, int ExpectedMatches, string Reason);
 
     /// <summary>
-    ///     Every writer that survives today. Nineteen entries over twenty sites
-    ///     (StatusViewModel spells its cell on two lines). Populated by the
-    ///     follow-up commit so the first CI run of this file is RED and names
-    ///     all twenty sites — see the commit log.
+    ///     Every writer that survives today: nineteen entries over twenty sites,
+    ///     because <c>StatusViewModel</c> spells its cell on two lines. Each names
+    ///     the magnitude it renders and the reader it renders it for, because the
+    ///     only reason seven copies of one number are defensible is that they have
+    ///     different readers — and that is the fact the owner needs when ADR-010
+    ///     §6 is decided.
     /// </summary>
-    private static readonly LineHome[] Homes = [];
+    /// <remarks>
+    ///     Deliberately NOT sorted by file: this table is a reader-facing argument
+    ///     about which renderings are structural (a different reader, a hot path, a
+    ///     tool contract) and which are drift (a fifth notation nobody chose). The
+    ///     order below is that argument.
+    /// </remarks>
+    private static readonly LineHome[] Homes =
+    [
+        // ── magnitude A: the session's ACCUMULATED token spend ────────────────
+
+        new LineHome(
+            "src/Harbor.Ui.Framework.State/State/StatusBarText.cs",
+            @"(tokens / 1000.0).ToString(""F1"", CultureInfo.InvariantCulture)}K",
+            1,
+            "CONVENTION 'F1 + K/M' (the K branch), magnitude A, reader: a human watching the "
+            + "projected status bar every turn. Reached through StatusBarFacts.Tokens "
+            + "(StatusBarFacts.cs:100). It is one of the three precisions ADR-010 §6 leaves "
+            + "open between 'F1' (120.0K), 'F2' and '0.#' (120K) — frozen here, not chosen."),
+
+        new LineHome(
+            "src/Harbor.Ui.Framework.State/State/StatusBarText.cs",
+            @"return $""{(tokens / 1_000_000.0).ToString(""F1"", CultureInfo.InvariantCulture)}M"";",
+            1,
+            "The M branch of the same writer, and the reason the precision question is two "
+            + "questions rather than one: F1 is right for the K branch here, while "
+            + "PanelRows.FormatCount prints F2 for its M branch in the same product. Both "
+            + "survive; deciding between them is ADR-010 §6."),
+
+        new LineHome(
+            "src/Harbor.Ui.Framework.State/State/StatusBarText.cs",
+            @"? TokensToCompact(tokensIn) + ""↑ "" + TokensToCompact(tokensOut) + ""↓""",
+            1,
+            "The cell shape itself, magnitude A. It is the only place the arrow pair is "
+            + "written ONCE for the whole tree — every other surface re-spells it, which is "
+            + "why rule C exists at all. Anyone changing the arrows changes the tree's "
+            + "reference here first."),
+
+        new LineHome(
+            "src/Harbor.Ui.Framework.Rendering/Widgets/StatusViewModel.cs",
+            @">= 1_000_000 => (v / 1_000_000.0).ToString(""0.#"", CultureInfo.InvariantCulture) + ""M"",",
+            1,
+            "CONVENTION '0.# + k/M', magnitude A, reader: a human at the CellForge status "
+            + "widget. Trailing zeros are trimmed here and not in the status bar, which is the "
+            + "second axis of ADR-010 §1. This is the ONLY token notation a golden frame pins "
+            + "(tests/fixtures/celldiff/ce3-status-widths.golden.txt:3), so it is also the "
+            + "surface whose change costs the most baselines — the asymmetry §6 prices."),
+
+        new LineHome(
+            "src/Harbor.Ui.Framework.Rendering/Widgets/StatusViewModel.cs",
+            @">= 1_000 => (v / 1_000.0).ToString(""0.#"", CultureInfo.InvariantCulture) + ""k"",",
+            1,
+            "The K branch of the same writer. Note the case: 'k' here against 'K' in "
+            + "StatusBarText — the only axis on which the two conventions actually disagree, "
+            + "because 'M' is upper-case everywhere (ADR-010 §2.1)."),
+
+        new LineHome(
+            "src/Harbor.Ui.Framework.Rendering/Widgets/StatusViewModel.cs",
+            @"Tokens = FormatCount(inputTokens) + ""↑ "" + FormatCount(outputTokens) + ""↓"";",
+            2,
+            "The cell composed from the home above, magnitude A — twice, in SetUsage and its "
+            + "sibling. Two lines rather than one is the reason ExpectedMatches is a field "
+            + "and not a constant: a home that must stay line-precise still has to be able to "
+            + "say 'these two lines'."),
+
+        new LineHome(
+            "src/Harbor.Ui.Framework.Projection/Projection/PanelRows.cs",
+            @"? (n / 1_000.0).ToString(""F1"", CultureInfo.InvariantCulture) + ""K""",
+            1,
+            "CONVENTION 'F1 + K' (the K branch), magnitude A, reader: a human who opened the "
+            + "Alt+5 token-breakdown panel. Opt-in and column-aligned, which is why its width "
+            + "matters more than a status cell's."),
+
+        new LineHome(
+            "src/Harbor.Ui.Framework.Projection/Projection/PanelRows.cs",
+            @"? (n / 1_000_000.0).ToString(""F2"", CultureInfo.InvariantCulture) + ""M""",
+            1,
+            "The M branch of the same writer, and the one place the tree contradicts ITSELF "
+            + "inside a single expression: F1 for 'K' and F2 for 'M', one line apart "
+            + "(PanelRows.cs:642 against :644). ADR-010 §2.2 records this as confirmed rather "
+            + "than assumed. It is drift, not a convention, and it is the cheapest thing here "
+            + "for the owner to overrule."),
+
+        new LineHome(
+            "src/Harbor.Tui.CellForge/Chat/Widgets/SideBarView.cs",
+            @"< 1_000_000 => (tokens / 1000.0).ToString(""0.#"", System.Globalization.CultureInfo.InvariantCulture) + ""k"",",
+            1,
+            "MAGNITUDE A' — the PER-MESSAGE token spend, not the session total. Reached only "
+            + "from StreamCoalescer.cs:312, which feeds it _msgTokensIn/_msgTokensOut, "
+            + "accumulated per message at StreamCoalescer.cs:361-362. This is the one rendering "
+            + "in the table that is a DIFFERENT quantity sharing a notation with a session "
+            + "cell, and it is why the count of 'copies' cannot be settled by reading shapes."),
+
+        new LineHome(
+            "src/Harbor.Tui.CellForge/Chat/Widgets/SideBarView.cs",
+            @"_ => (tokens / 1_000_000.0).ToString(""0.#"", System.Globalization.CultureInfo.InvariantCulture) + ""M"",",
+            1,
+            "The M branch of the same per-message writer."),
+
+        new LineHome(
+            "src/Harbor.Tui.CellForge/Chat/Widgets/SideBarView.cs",
+            "private static int FormatTokensLine(long tokensIn, long tokensOut, Span<char> into)",
+            1,
+            "MAGNITUDE A, the sidebar's allocation-free span path, reader: a human with the "
+            + "CellForge sidebar open, EVERY FRAME. It exists because a string per frame is a "
+            + "cost this guard would otherwise introduce — the same argument "
+            + "MoneyCellSingleHomeRules makes for FormatCostUsd. Not a notation choice: a "
+            + "string twin is cheaper in allocations and wider in columns."),
+
+        new LineHome(
+            "src/Harbor.Tui.CellForge/Chat/Widgets/SideBarView.cs",
+            "private static int FormatTokensTo(long tokens, Span<char> into)",
+            1,
+            "The span helper above delegates to, so these two entries are ONE writer seen from "
+            + "two angles — the site's docstring calls the public FormatTokens its 'twin', but "
+            + "ADR-010 §2.3 measured that the public string is reached from the message header "
+            + "while the span one is reached from the sidebar: two surfaces, two readers, so "
+            + "the docstring's claim of kinship no longer holds where it matters."),
+
+        new LineHome(
+            "src/Harbor.Terminal.Abstractions/ViewModels/TuiViewModels.cs",
+            @"| {TokensIn}↑ {TokensOut}↓{queue} |",
+            1,
+            "CONVENTION 'RAW, no suffix', magnitude A, reader: a human on the plain or ANSI "
+            + "renderer — every renderer except CellForge (StatusBarView.cs:54,58 paints it). "
+            + "A session on 12 499 tokens therefore reads '12499↑ 87↓' here, '12.5K↑ 87↓' in "
+            + "the CellForge footer and '12.5k↑ 87↓' in the status widget: the divergence does "
+            + "not even line up along renderer families. This line carries no scale, which is "
+            + "why rule C exists — a scale rule is blind to it by construction."),
+
+        // ── magnitude A as written in XAML: the convention no C# scan can see ──
+
+        new LineHome(
+            "apps/Harbor.App.Avalonia/Views/Shell/StatusBarView.axaml",
+            @"{Binding TokensIn, StringFormat='↓ {0:N0}'}",
+            1,
+            "CONVENTION 'N0 + thousands separator' — a FIFTH notation, and the reason this "
+            + "guard exists: ADR-010 scopes its inventory to src/ (§2, 'все шести — в продукте "
+            + "(src/)'), so these four Avalonia renderings were in no inventory. Magnitude A, "
+            + "reader: a human at the desktop GUI. THE ARROWS ARE INVERTED here — TokensIn is "
+            + "bound to ↓ and TokensOut to ↑, against in↑ out↓ at every one of the five C# "
+            + "sites. That is recorded, not fixed: which direction is right is a rendering "
+            + "decision for the owner, exactly like the notation."),
+
+        new LineHome(
+            "apps/Harbor.App.Avalonia/Views/Shell/StatusBarView.axaml",
+            @"{Binding TokensOut, StringFormat='↑ {0:N0}'}",
+            1,
+            "The paired binding, inverted arrow as above."),
+
+        new LineHome(
+            "apps/Harbor.App.Avalonia/Views/TokenUsageView.axaml",
+            @"{Binding TotalTokensIn, StringFormat='{}{0:N0}'}",
+            1,
+            "CONVENTION 'N0', magnitude A, reader: a human who opened the desktop token-usage "
+            + "overlay. Same magnitude as the status bar beside it — TokenUsageViewModel.cs:135 "
+            + "assigns state.Chat.Cost.TokensIn, the identical field — rendered a different "
+            + "way on the same screen. In the very same view, #942 already moved the MONEY cell "
+            + "out of markup for exactly this reason; the token cells were left behind."),
+
+        new LineHome(
+            "apps/Harbor.App.Avalonia/Views/TokenUsageView.axaml",
+            @"{Binding TotalTokensOut, StringFormat='{}{0:N0}'}",
+            1,
+            "The paired binding."),
+
+        // ── model-facing reports: raw by contract, and the reader is the model ─
+
+        new LineHome(
+            "src/Harbor.Tools.Builtin/Tools/Session/SessionReadTool.cs",
+            @".Append(""↑ "").Append(session.Metadata.TokensOutput)",
+            1,
+            "MAGNITUDE A, but the reader is the MODEL, not a human: the plain-text report "
+            + "session_read hands back. Raw by contract — 'raw for the model, compact for the "
+            + "person' is the split MoneyCellSingleHomeRules already names for money — so this "
+            + "is a different output with a different reader, and neither reads the other. "
+            + "DECISIONS.md requires a token ratchet to declare these two reports as homes "
+            + "from the start rather than discovering them red on day one; this is that."),
+
+        new LineHome(
+            "src/Harbor.Tools.Builtin/Tools/Task/TaskTool.cs",
+            @"$"", +{run.ChildUsage!.InputTokens}↑ {run.ChildUsage.OutputTokens}↓""",
+            1,
+            "A THIRD quantity again — the child run's usage DELTA, not the session total — "
+            + "reported to the model in the sub-agent envelope header, raw by contract for the "
+            + "same reason as the entry above. Declared because rule C sees it, and named as "
+            + "what it is so nobody later 'unifies' a per-child delta into a session cell."),
+
+        // ── magnitudes this file deliberately does NOT police ───────────────
+        //
+        // Two more token-shaped renderings exist in the tree and NO rule above
+        // catches either. Naming them here is the point: a guard that implied it
+        // policed them would be the #591 failure mode — half a rule, reporting a
+        // plausible 0.
+        //
+        //   TuiViewModels.cs:105        `ctx: {RequestTokens / 1000}k/{ContextPct}%`
+        //     CONTEXT OCCUPANCY, a different magnitude, and one the repo separates
+        //     on purpose (#623/#630): ContextUsage.DisplayedInputTokens itself splits
+        //     "paid" from "occupied". Uniting it with the spend above would be a
+        //     regression. Rule B misses it because it is scaled by interpolation,
+        //     with no format specifier — which is rule B's stated limitation.
+        //
+        //   SharedDataModels.cs:120     `{ContextWindow / 1000}K ctx · …`
+        //     A model CAPABILITY — a catalogue fact, not a measurement. Dead in
+        //     production use (ADR-010 §4.5), and a separate decision about that.
+        //
+        // Rule C's token-name lookahead also cannot reach the two model-facing
+        // reports' own callers, because those delegate rather than spell.
+    ];
 
     /// <summary>A file, a 1-based line number, the rule it tripped, and the line.</summary>
     private sealed record Site(string RelativePath, int Line, string RuleId, string Text);
