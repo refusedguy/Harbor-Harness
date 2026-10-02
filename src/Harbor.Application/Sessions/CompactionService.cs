@@ -177,7 +177,7 @@ public sealed class CompactionService(
 
     // #472: the history-shaping policy is NOT here any more. TruncateToFit,
     // TruncateToFitStrict and MaterializeCompactedView moved to CompactionPolicy
-    // because the two callers that use them — TurnRunner.cs:122 and
+    // because the two callers that use them — TurnRunner.cs:136 and
     // CompactionBehavior.cs:78 — are not ICompactionService consumers: they reached
     // into this DI-registered implementation for its statics. CompactionBehavior
     // even holds an ICompactionService and still called the static. What remains in
