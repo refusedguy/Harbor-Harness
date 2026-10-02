@@ -341,3 +341,27 @@ consistency in code that no user path executes.
   and does build. The two must not be conflated in either direction.
 - Full text, measurements and the per-option costs:
   [ADR-012](ADR-012-vendored-html-collapse-whitespace-pair.md).
+
+---
+
+## ADR-013: the CellForge widget axis is an internal contract — both plugin seams, and the one that is not
+
+Issue #564 asked whether the CellForge widget set is closed at compile time and
+whether a plugin can add one. Measured on `dev` = `7aff0c87`, the widget axis is an
+INTERNAL CONTRACT and the freeze is correct (#555), the view seam
+(`ITuiPlugin`/`ITuiView`) is CLOSED and has been since #780/#966, and the panel
+seam (`ITuiPanelPlugin`/`IPanelProvider`) is LIVE — with a real door and four
+product readers — but was documented as returning a renderer-native widget that
+no shipped renderer can accept.
+
+So the residual finding was neither an open axis nor a closed one. It was three
+plugin-facing documents teaching an API that does not compile or does not render,
+which is the same defect #916 measured in prose and one document further out.
+
+Decided: the widget axis stays closed (an owner decision under #555, not this
+issue's), the panel axis stays text-only, and the documents now say so — fenced
+by two new rules in `tools/check-doc-cites.py` that are red on the pre-fix tree.
+
+- Full text, the three axes with their implementation and reader counts, the
+  measured cost, and the four known limits:
+  [ADR-013](ADR-013-cellforge-widget-axis-internal-contract.md).

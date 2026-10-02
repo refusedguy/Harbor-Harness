@@ -62,7 +62,7 @@
                          TextWrapping="Wrap"
                          MinHeight="36" MaxHeight="120"
                          Background="{DynamicResource BgInputBrush}"
-                         BorderBrush="{DynamicResource BorderDefaultBrush}"
+                         BorderBrush="{DynamicResource BorderSubtleBrush}"
                          BorderThickness="1"
                          CornerRadius="6"
                          Foreground="{DynamicResource TextPrimaryBrush}"

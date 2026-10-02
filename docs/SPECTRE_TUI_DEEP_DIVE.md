@@ -2,9 +2,12 @@
 
 > ⚠️ **CONTRIB RENDERER, NOT THE DEFAULT SHELL.** `Harbor.Tui.SpectreTui` с sprint-2
 > живёт в contrib ([`contrib/tui/Harbor.Tui.SpectreTui/`](../contrib/tui/Harbor.Tui.SpectreTui/),
-> собирается через `contrib/Contrib.slnx`), но при этом дефолтная CLI-сборка всё ещё
-> компилирует его в via флага `HarborWithSpectreTui` (включён по умолчанию;
-> `HARBOR_MINIMAL=true` исключает). Вторая интерактивная оболочка — **`src/Harbor.Tui.CellForge/`**
+> собирается через `contrib/Contrib.slnx`) и **не собирается ни одной сборкой,
+> которую собирает CI**. Флаг `HarborWithSpectreTui` по-прежнему определён и
+> по-прежнему включён по умолчанию (`Harbor.App.Cli.csproj:84`), но `<ItemGroup>`, который
+> ссылался бы на contrib-рендереры, там **закомментирован** (`Harbor.App.Cli.csproj:299-309`),
+> поэтому значение `true` не добавляет ни одного `ProjectReference`. `SpectreTuiRenderer`
+> в дереве нет (0 файлов). Вторая интерактивная оболочка — **`src/Harbor.Tui.CellForge/`**
 > (raw-mode вход, cell-diff вывод, виртуализированный таймлайн; включение —
 > `HARBOR_TUI=cellforge`, см. README проекта). Этот документ полезен и как источник
 > рецептов (diff-view, slash-completion, file-tree) для переноса в ConsoleEx.
@@ -741,13 +744,14 @@ Panels.Register(new Builtin.MyPanel());
 
 ```csharp
 using Harbor.Abstractions.Plugins;
-using Harbor.Tui.Abstractions.Panels;
-using Harbor.Tui.Abstractions.State;
+using Harbor.Ui.Framework.Panels;
+using Harbor.Ui.Framework.State;
 
 public sealed class ClockPanelPlugin : ITuiPanelPlugin
 {
     public string Name => "clock";
     public Version Version => new(1, 0, 0);
+    public Version RequiredHarborVersion => new(0, 3, 0);
     public string Description => "Adds a live clock panel";
 
     public void Initialize(PluginContext context) { }
@@ -756,6 +760,8 @@ public sealed class ClockPanelPlugin : ITuiPanelPlugin
     {
         registry.Register(new ClockPanel());
     }
+
+    public Task ShutdownAsync(CancellationToken ct = default) => Task.CompletedTask;
 }
 
 public sealed class ClockPanel : IPanelProvider
@@ -767,17 +773,26 @@ public sealed class ClockPanel : IPanelProvider
 
     public object? Build(PanelContext ctx)
     {
-        var p = new Spectre.Tui.Paragraph().Alignment(Spectre.Console.Justify.Left);
-        p.Lines.Add(Spectre.Tui.TextLine.FromMarkup(
-            $"[cyan]{DateTime.Now:HH:mm:ss}[/]"));
-        return p;
+        return [$"[cyan]{DateTime.Now:HH:mm:ss}[/]"];
     }
 
     public bool OnKey(UiKey key, PanelContext ctx) => false;
 }
 ```
 
-`CsPluginLoader` автоматически обнаруживает `ITuiPanelPlugin` и вызывает `RegisterPanels(adapter)`. Адаптер (`PanelRegistryPluginAdapter`) маршрутизирует вызовы `Register` в `IPluginLoadHost.RegisterPanelProvider`, который складывает их в host-owned `PanelRegistry`. SpectreTuiRenderer при старте читает тот же `PanelRegistry` через DI.
+> **Что этот образец изменил и почему.** `Build` возвращал `Spectre.Tui.Paragraph`.
+> Для contrib-рендерера это верно, но ни одна собираемая сборка его не содержит, а
+> единственный рендерер с панельным путём — CellForge — не имеет случая для
+> `Paragraph` в `CellForgePanelAdapter.WidgetToRows`: всё, что не `string` /
+> `IReadOnlyList<string>` / `IEnumerable<string>`, печатается как `widget.ToString()`,
+> то есть док рисует **имя класса**. Поэтому `Build` возвращает строки — это контракт,
+> который действительно читает продукт. Реальный объект `Paragraph` в
+> `src/Harbor.Tui.CellForge` не используется ни разу.
+>
+> Также добавлены `RequiredHarborVersion` и `ShutdownAsync`: у `IPlugin` нет
+> реализаций по умолчанию, и без них образец не компилируется.
+
+`CsPluginLoader` автоматически обнаруживает `ITuiPanelPlugin` и вызывает `RegisterPanels(adapter)`. Адаптер (`PanelRegistryPluginAdapter`) маршрутизирует вызовы `Register` в `IPluginLoadHost.RegisterPanelProvider`, который складывает их в host-owned `PanelRegistry`. Панели читает `CellForge` (единственный собираемый рендерер с панельным путём): `CellForgePanelRegistry` → `ChatScreenLayout` → `CellForgePanelAdapter`. `SpectreTuiRenderer`, который читал бы тот же реестр, в дереве отсутствует — см. баннер в начале документа.
 
 #### (c) Runtime — из другого кода host'а
 

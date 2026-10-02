@@ -1,4 +1,5 @@
 using System.Text;
+using Harbor.Ui.Framework.Rendering;
 
 namespace Harbor.Tui.CellForge.Rendering;
 

@@ -50,6 +50,22 @@
 // taken against the bare re-type form, every member of which changes `T`, so none of
 // them is a `MapError` candidate. The row is corrected in the same PR.
 //
+// #976 — THE SAME NESTED-GENERIC BLIND SPOT, ON THIS SIDE
+// ------------------------------------------------------
+// #976 re-counted row 11's hand-BUILT family and reported seven sites, all convertible.
+// They are not: every one changes its success type (`Result<Session>` → `Result`,
+// `Result<Maybe<string>>` → `Result<string>`, …), so `MapError` — which preserves `T`
+// in every 3.7.0 overload — cannot express any of them, and the four exemptions below
+// already say so with concrete type pairs. Nothing here needed converting.
+//
+// What the re-count did find is that THIS file's regex could not see one site the
+// family contains: the generic argument was `[^<>()]*`, a character class that cannot
+// hold a bracket, so `Failure<Nested<T>>(…)` never matched. That is the identical defect
+// #593 recorded on the sibling guard, whose own copy of this pattern is already written
+// `(?:[^<>]|<[^<>]*>)*`; the fix was never carried across. One live site was hiding
+// behind it (`McpOAuthHandler.RefreshAsync`, `Result<Maybe<string>>`), which is how that
+// file's exemption came to cite two line numbers that had both drifted.
+//
 // NON-VACUITY
 // -----------
 // A source scan that matches nothing is indistinguishable from a source scan that is
@@ -96,6 +112,15 @@ public sealed class MapErrorFailureShapeTests
     ///             and the pattern requires <c>(</c>.
     ///         </item>
     ///         <item>
+    ///             <c>Result.Failure&lt;Maybe&lt;string&gt;&gt;($"…: {r.Error}")</c> — also
+    ///             matches, because the generic argument tolerates one level of nesting. It did
+    ///             not before #976: that argument was <c>[^&lt;&gt;()]*</c>, a character class that
+    ///             cannot hold a bracket, so every <c>Failure&lt;Nested&lt;T&gt;&gt;(…)</c> was
+    ///             invisible to this rule — the same blind spot #593 paid for on the sibling
+    ///             guard, which had already widened its own copy of this pattern. See
+    ///             <see cref="Scanner_SeesANestedGenericArgument" /> for the control pinning it.
+    ///         </item>
+    ///         <item>
     ///             <c>Result.Failure&lt;Session&gt;(resolved.Error)</c> — no match: no string is
     ///             built, so this is a plain re-type — a different wave.
     ///         </item>
@@ -108,54 +133,79 @@ public sealed class MapErrorFailureShapeTests
     // Raw string literal, deliberately: a verbatim @"…" cannot hold the regex's own double
     // quote without doubling it, and this pattern leans on `"` as a delimiter. The pattern
     // IS the specification here, so it has to be readable as written.
+    //
+    // The generic argument is spelled the way ResultFailureConversionTests.Rule 1 spells its
+    // own — `(?:[^<>]|<[^<>]*>)*` there, `(?:[^<>()]|<[^<>()]*>)*` here. Two guards over two
+    // halves of one family must not disagree about what a generic argument looks like: while
+    // they did, this one could not see a site its sibling could.
     private static readonly Regex HandBuiltFailureError = new(
         """
-        Failure\s*(?:<[^<>()]*>)?\s*\((?:[^;]){0,400}?(?:\$"[^"\n]*\{\s*[A-Za-z_][A-Za-z0-9_]*(?:\(\))?\.Error\s*\}|\+\s*[A-Za-z_][A-Za-z0-9_]*(?:\(\))?\.Error\b)
+        Failure\s*(?:<(?:[^<>()]|<[^<>()]*>)*>)?\s*\((?:[^;]){0,400}?(?:\$"[^"\n]*\{\s*[A-Za-z_][A-Za-z0-9_]*(?:\(\))?\.Error\s*\}|\+\s*[A-Za-z_][A-Za-z0-9_]*(?:\(\))?\.Error\b)
         """,
         RegexOptions.Compiled);
 
     /// <summary>
     ///     Files allowed to keep a hand-built failure message, each with the reason it is not
-    ///     part of this wave. Every reason is the same fact stated against concrete type
-    ///     pairs, because the fact is mechanical: <c>MapError</c> returns <c>Result&lt;T&gt;</c>
-    ///     for a <c>Result&lt;T&gt;</c> and no other overload exists. These sites own a
-    ///     DIFFERENT <c>T</c> on the way out, so they are re-types, not error-mappings —
-    ///     filed for the re-type wave.
+    ///     part of this wave and the NUMBER of sites that reason covers. Every reason is the
+    ///     same fact stated against concrete type pairs, because the fact is mechanical:
+    ///     <c>MapError</c> returns <c>Result&lt;T&gt;</c> for a <c>Result&lt;T&gt;</c> and no other
+    ///     overload exists. These sites own a DIFFERENT <c>T</c> on the way out, so they are
+    ///     re-types, not error-mappings — filed for the re-type wave.
     ///     <para>
-    ///         An exemption is granted per file, not per site, so a NEW hand-built site inside
-    ///         an exempt file would slip past. That is the same trade-off
-    ///         <c>MaybeAbsenceTests</c> makes, and it is the right one here: five narrow files
-    ///         versus a per-site allow-list that rots the moment a line moves.
+    ///         An exemption is granted per file, not per site, and that stays: four narrow files
+    ///         beat a per-site allow-list that rots the moment a line moves. What <c>Sites</c> adds
+    ///         is the COUNT, which does not move when a line does — so a hand-built site ADDED
+    ///         inside an already-exempt file becomes a failure instead of silence, and a reason
+    ///         that quietly under-counts is caught the moment it is written. Before #976 these
+    ///         reasons were prose no test could check, because
+    ///         <see cref="AllowList_EveryEntryStillMatchesSomething" /> only asks whether an entry
+    ///         matches SOMETHING, never how much.
     ///     </para>
     /// </summary>
-    private static readonly Dictionary<string, string> HandBuiltMessageExemptions = new(StringComparer.Ordinal)
-    {
-        ["src/Harbor.Storage.Jsonl/SessionPorter.cs"] =
-            "Four sites, all re-types: `store.GetAsync` is Result<Session> → Result (line 50), "
-            + "`GetMessagesAsync` is Result<IReadOnlyList<AgentMessage>> → Result (63), "
-            + "`TryReadNonEmptyLineAsync` is Result<Maybe<string>> → Result<string> (95), and "
-            + "`store.CreateAsync` is Result<Session> → Result<string> (124). MapError would hand "
-            + "back the store's own Result<T>; the porter's Result / Result<string> is a different "
-            + "contract. A message that keeps both the session id and the store's reason is right "
-            + "here — the hand-built string is the honest shape until the signature moves.",
-        ["src/Harbor.Tools.Builtin/Tools/Mcp/McpOAuthHandler.cs"] =
-            "Two re-types: `McpOAuthFlow.RefreshAsync` is Result<TokenResponse> → Result<string> "
-            + "(138) and `ExchangeCodeAsync` is Result<TokenResponse> → Result<string> (204). The "
-            + "public surface is a token STRING; the OAuth flow returns a token RESPONSE. MapError "
-            + "cannot cross that boundary, and flattening to `ex => ex` would throw the server name "
-            + "away — the very loss this wave exists to prevent.",
-        ["src/Harbor.Tools.Builtin/Tools/Mcp/McpRegistry.cs"] =
-            "One re-type: `entry.GetTransport` is Result<IMcpRemoteTransport> → Result<string> "
-            + "(409). The registry's contract is a JSON-RPC string; the transport factory returns a "
-            + "transport. The hand-built prefix keeps `server.method`, which is the only thing that "
-            + "identifies WHICH call failed.",
-        ["src/Harbor.Application/Agents/SubAgentRunner.cs"] =
-            "Four re-types: Result<Session> → Result<SubAgentRunResult> (109), "
-            + "Result<IReadOnlyList<AgentMessage>> → Result<SubAgentRunResult> (132), "
-            + "Result<AgentRunResult> → Result<SubAgentRunResult> (178) and the same at 189. The "
-            + "sub-run rail has its own payload type; the three trailer sites also wrap the text in "
-            + "SubAgentFailureFormat.WithResumeTrailer, which is still a function of `e` and would "
-            + "compose with MapError the moment the types line up.",
+    private static readonly Dictionary<string, HandBuiltExemption> HandBuiltMessageExemptions =
+        new(StringComparer.Ordinal)
+        {
+            ["src/Harbor.Storage.Jsonl/SessionPorter.cs"] = new(
+                4,
+                "Four sites, all re-types: `store.GetAsync` is Result<Session> → Result (line 50), "
+                + "`GetMessagesAsync` is Result<IReadOnlyList<AgentMessage>> → Result (63), "
+                + "`TryReadNonEmptyLineAsync` is Result<Maybe<string>> → Result<string> (95), and "
+                + "`store.CreateAsync` is Result<Session> → Result<string> (124). MapError would hand "
+                + "back the store's own Result<T>; the porter's Result / Result<string> is a different "
+                + "contract. A message that keeps both the session id and the store's reason is right "
+                + "here — the hand-built string is the honest shape until the signature moves."),
+            ["src/Harbor.Tools.Builtin/Tools/Mcp/McpOAuthHandler.cs"] = new(
+                2,
+                "Two re-types: `McpOAuthFlow.RefreshAsync` is Result<McpOAuthTokens> → "
+                + "Result<Maybe<string>> (131) and `ExchangeCodeAsync` is Result<McpOAuthTokens> → "
+                + "Result<string> (209). The public surface is a token STRING (Maybe<string> on the "
+                + "cached-token path); the OAuth flow returns a token RESPONSE. MapError cannot cross "
+                + "that boundary, and flattening to `ex => ex` would throw the server name away — the "
+                + "very loss this wave exists to prevent. Site 131 is the one this guard could not see "
+                + "before #976: its generic argument is the nested `<Maybe<string>>`, which the "
+                + "pattern's old `[^<>()]*` treated as unmatchable, so this reason was written against "
+                + "line numbers that had since drifted and nothing could report it."),
+            ["src/Harbor.Tools.Builtin/Tools/Mcp/McpRegistry.cs"] = new(
+                2,
+                "Two re-types: `entry.GetTransport` is Result<IMcpRemoteTransport> → Result<string> "
+                + "(409) and `TryRoundTripAsync` is Result<Maybe<JsonDocument>> → Result<string> "
+                + "(428). The registry's contract is a JSON-RPC string; the transport factory returns a "
+                + "transport and the round trip returns a document. The hand-built prefix keeps "
+                + "`server.method`, which is the only thing identifying WHICH call failed. Site 428 is "
+                + "an owner decision rather than an oversight — #587 weighed MapError there and "
+                + "rejected it in a comment at the call site: the transport's own diagnostic (endpoint, "
+                + "HTTP status, attempt count, latency) must arrive untouched, and only the registered "
+                + "server name is prepended. The reason counted ONE site until #976, because "
+                + "AllowList_EveryEntryStillMatchesSomething could not see a second one hiding behind "
+                + "the file-level exemption."),
+            ["src/Harbor.Application/Agents/SubAgentRunner.cs"] = new(
+                4,
+                "Four re-types: Result<Session> → Result<SubAgentRunResult> (109), "
+                + "Result<IReadOnlyList<AgentMessage>> → Result<SubAgentRunResult> (132), "
+                + "Result<AgentRunResult> → Result<SubAgentRunResult> (185) and the same at 196. The "
+                + "sub-run rail has its own payload type; the three trailer sites also wrap the text in "
+                + "SubAgentFailureFormat.WithResumeTrailer, which is still a function of `e` and would "
+                + "compose with MapError the moment the types line up."),
         // src/Harbor.Ui.Framework.Sessions/Sessions/SessionFactory.cs is deliberately
         // NOT here any more (#600). Its two re-type sites are now
         // `ConvertFailure<Session>().MapError(…)` — a re-type the library CAN express,
@@ -340,6 +390,50 @@ public sealed class MapErrorFailureShapeTests
                 + "borrowed by an earlier Failure call — this is the assertion that proves it.");
     }
 
+    // ── Self-check 1b: a nested generic argument must stay visible (#976) ─────
+
+    /// <summary>
+    ///     <b>#976.</b> The generic argument used to be <c>[^&lt;&gt;()]*</c> — a character class
+    ///     that cannot contain a bracket — so <c>Failure&lt;Nested&lt;T&gt;&gt;(…)</c> did not match
+    ///     and the rule was blind to it. This is the second time a regex in this area has lost a
+    ///     site to that same mistake: #593 recorded it on the sibling guard's side, and the fix
+    ///     was never carried across to this copy. Two controls, because the failure mode is
+    ///     silent: a matcher that cannot see a shape still reports green.
+    ///     <para>
+    ///         The positive control is the exact live spelling (<c>McpOAuthHandler</c>'s
+    ///         <c>RefreshAsync</c>, <c>Result&lt;Maybe&lt;string&gt;&gt;</c>). The negative control is
+    ///         what must NOT come with it: the converted spelling, reached through a
+    ///         <c>ConvertFailure&lt;Maybe&lt;string&gt;&gt;().MapError(…)</c> chain, so the widened
+    ///         argument must not flag the shape this wave converts TO.
+    ///     </para>
+    /// </summary>
+    [Test]
+    public async Task Scanner_SeesANestedGenericArgument()
+    {
+        const string Nested = """
+            if (refresh.IsFailure)
+                return Result.Failure<Maybe<string>>($"MCP OAuth refresh failed for '{server}': {refresh.Error}");
+            """;
+
+        const string Converted = """
+            if (refresh.IsFailure)
+                return refresh.ConvertFailure<Maybe<string>>().MapError(static e => $"MCP OAuth refresh failed: {e}");
+            """;
+
+        await Assert.That(AllHandBuiltLines(Nested)).IsNotEmpty()
+            .Because(
+                "Positive control, and the exact spelling this guard used to be blind to: the "
+                + "success type is the NESTED `Maybe<string>`, which the old `[^<>()]*` argument "
+                + "could not consume, so the rule saw nothing there — and the file's exemption was "
+                + "written against line numbers that had already drifted, with nothing to report it.");
+
+        await Assert.That(AllHandBuiltLines(Converted)).IsEmpty()
+            .Because(
+                "The widened argument must not turn the CONVERTED spelling into a hit. A guard that "
+                + "flags its own replacement is worse than a blind one: the first author to write "
+                + "the right thing is told to undo it.");
+    }
+
     // ── Self-check 2: no allow-list entry may go stale ───────────────────────
 
     [Test]
@@ -372,6 +466,70 @@ public sealed class MapErrorFailureShapeTests
                 + "come back with nobody watching. Delete the entry, or update its reason to describe "
                 + "the new shape. Stale entries:"
                 + Environment.NewLine + string.Join(Environment.NewLine, stale));
+    }
+
+    // ── Self-check 3: an exemption may not UNDER-count what it excuses ────────
+
+    /// <summary>
+    ///     <b>#976.</b> The close to <see cref="AllowList_EveryEntryStillMatchesSomething" />,
+    ///     which asks a yes/no question and therefore cannot see an exemption that matches MORE
+    ///     than its reason claims. That is not hypothetical: on arrival
+    ///     <c>McpRegistry</c>'s reason said "one re-type" and the file held two, and
+    ///     <c>McpOAuthHandler</c>'s named two lines that had both drifted — one of them only
+    ///     because the nested generic made it invisible.
+    ///     <para>
+    ///         Counting is asserted, not line identity, on purpose. A per-line allow-list rots the
+    ///         moment a line moves, which is why this rule stays per file; but a COUNT does not
+    ///         move when a line does, so it costs nothing in maintenance and closes the direction
+    ///         that actually leaks — a new hand-built site inside an already-exempt file.
+    ///     </para>
+    /// </summary>
+    [Test]
+    public async Task ExemptionSiteCounts_MatchTheLiveTree()
+    {
+        string? root = RepoPaths.RepoRoot;
+        await Assert.That(root).IsNotNull()
+            .Because("This walks the working tree; without a repository root it would prove nothing.");
+
+        if (root is null)
+        {
+            return;
+        }
+
+        var wrong = new List<string>();
+
+        foreach ((string relative, HandBuiltExemption exemption) in HandBuiltMessageExemptions)
+        {
+            string absolute = Path.Combine(root, relative);
+            if (!File.Exists(absolute))
+            {
+                // The sibling test already reports a missing file; do not report it twice.
+                continue;
+            }
+
+            List<int> live = AllHandBuiltLines(File.ReadAllText(absolute));
+            if (live.Count != exemption.Sites)
+            {
+                // The reason is echoed back because the count is only half the claim: the
+                // question to answer is whether that many sites is what the reason covers,
+                // and a bare integer does not let anyone judge it.
+                wrong.Add(
+                    $"{relative} — reason claims {exemption.Sites} site(s), the file holds "
+                    + $"{live.Count} at line(s) {string.Join(", ", live)}. Stated reason: "
+                    + $"{exemption.Reason}. Update the count and the reason together, or convert "
+                    + "the extra site: ResultFailureMessage_IsMapped_NotHandBuilt cannot see inside "
+                    + "an exempt file.");
+            }
+        }
+
+        await Assert.That(wrong).IsEmpty()
+            .Because(
+                "An exemption that under-counts is an unreviewed exemption. It says \"this file has "
+                + "one site and here is why\" while a second site sits behind it unexamined — and "
+                + "because the rule skips exempt files wholesale, the extra site is invisible to "
+                + "every other rule in this class. The count is the cheap part of the reason: it "
+                + "does not drift when lines move, so keeping it honest costs one integer. Offenders:"
+                + Environment.NewLine + string.Join(Environment.NewLine, wrong));
     }
 
     // ── Behaviour: the converted sites still name their cause ────────────────
@@ -527,6 +685,14 @@ public sealed class MapErrorFailureShapeTests
     private readonly record struct HandBuiltHit(bool Found, int Line, string Snippet);
 
     /// <summary>
+    ///     Why a file is exempt from the hand-built-message rule, and how many sites that reason
+    ///     has to account for. <see cref="Sites" /> is asserted against the live tree by
+    ///     <see cref="ExemptionSiteCounts_MatchTheLiveTree" />, so a reason cannot claim fewer
+    ///     sites than the file actually holds.
+    /// </summary>
+    private readonly record struct HandBuiltExemption(int Sites, string Reason);
+
+    /// <summary>
     ///     The first hand-built failure message in <paramref name="source" />.
     ///     <para>
     ///         A match that starts after a <c>//</c> on its own line is skipped: a doc comment
@@ -558,6 +724,33 @@ public sealed class MapErrorFailureShapeTests
         }
 
         return new HandBuiltHit(false, -1, string.Empty);
+    }
+
+    /// <summary>
+    ///     Every hand-built failure message in <paramref name="source" />, as 1-based line
+    ///     numbers — the counting twin of <see cref="FindHandBuilt" />, which stops at the first.
+    ///     <para>
+    ///         The comment-skip is deliberately the SAME expression <see cref="FindHandBuilt" />
+    ///         uses, so the two can never disagree about which lines count: a doc comment that
+    ///         mentions the old shape is prose, not a site.
+    ///     </para>
+    /// </summary>
+    private static List<int> AllHandBuiltLines(string source)
+    {
+        var lines = new List<int>();
+
+        foreach (Match match in HandBuiltFailureError.Matches(source))
+        {
+            int lineStart = Math.Min(source.LastIndexOf('\n', match.Index) + 1, match.Index);
+            if (source.AsSpan(lineStart, match.Index - lineStart).IndexOf("//", StringComparison.Ordinal) >= 0)
+            {
+                continue;
+            }
+
+            lines.Add(CountNewLines(source, match.Index) + 1);
+        }
+
+        return lines;
     }
 
     private static int CountNewLines(string source, int upTo)

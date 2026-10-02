@@ -2,7 +2,6 @@ using System;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Metadata;
-using Avalonia.Markup.Xaml;
 using Avalonia.Media;
 using Harbor.Desktop.Abstractions.Models;
 
@@ -49,6 +48,11 @@ public sealed partial class StatusDot : UserControl
     {
         if (global::Avalonia.Application.Current is not null)
         {
+            // `Dot` is wired by the generated InitializeComponent overload, which
+            // also takes the optional loadXaml flag. It used to be shadowed by a
+            // hand-written copy that only called AvaloniaXamlLoader.Load: different
+            // signature, so the tree compiled, but the parameterless call bound to
+            // the copy and `Dot` stayed null. #973.
             InitializeComponent();
             UpdateState();
         }
@@ -59,15 +63,17 @@ public sealed partial class StatusDot : UserControl
         for (int i = 0; i < _states.Length; i++)
             PseudoClasses.Set(_states[i].pseudoClass, i == (int)State);
 
+        // Null until `InitializeComponent` has run, which it has not when the
+        // control is built without an Avalonia Application — the branch above
+        // skips it — and the `State` setter calls this from a binding. The same
+        // guard TypewriterStreamingText uses for `BlinkCursor`.
+        if (Dot is not { } dot)
+            return;
+
         var state = _states[(int)State];
-        Dot.Classes.Set("running", state.pulse);
+        dot.Classes.Set("running", state.pulse);
 
         if (ThemeBrushResolver.Resolve(state.brushKey) is SolidColorBrush brush)
-            Dot.Fill = brush;
-    }
-
-    private void InitializeComponent()
-    {
-        AvaloniaXamlLoader.Load(this);
+            dot.Fill = brush;
     }
 }

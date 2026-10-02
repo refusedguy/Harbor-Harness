@@ -49,8 +49,40 @@
 # The dispatch that relaxes or re-records the gate is itself the audit trail:
 # every run logs its mode into the step summary.
 #
-# PRs: NOT run (saves 8-14 min per PR; GIF review artifacts were never
-# inspected — regeneration happens on merge to dev/master instead).
+# WHAT IS AND IS NOT REPRODUCIBLE (issue #26, measured, not assumed)
+# ----------------------------------------------------------------
+# Over the 25 `demo-gifs` runs on dev from 2026-09-30 to 2026-10-01, one
+# unchanged tape recorded 25 times produced:
+#
+#   frames / durationMs   1 distinct value per GIF — markdown 204/17000 in 25/25,
+#                         approval 264/22000 in 25/25, plain 132/11000 in 25/25;
+#                         hero bimodal, 204/17000 in 23/25 and 216/18000 in 2/25.
+#   bytes                 22 distinct sizes for hero (287 428-303 650, a 5.64 %
+#                         spread), 19 for markdown, 24 for approval, 3 for plain.
+#   framesSha256          23 / 19 / 24 / 3 distinct values respectively.
+#
+# So the shape fields are constants of the toolchain and `bytes` + `framesSha256`
+# are not reproducible at all: the encoder differs run to run on identical input.
+# That is why the gate *enforces* frames and duration and only *reports* the
+# hashes — a byte threshold over that distribution measures the encoder, not the
+# renderer. It is also why "size/quality drift" cannot be gated the way the issue
+# title suggests: there is no reproducible quantity to put a threshold on, and
+# `framesSha256` in the manifest is an identity for one accepted render, never an
+# expectation for the next one.
+#
+# The manifest currently records hero at 216/18000 — the 2-in-25 minority sample.
+# Because the gate fails on any *negative* frame delta and on duration outside
+# +/-500 ms, that single stale entry turns ~92 % of runs red, and a red run skips
+# the commit step below, so the README GIFs cannot refresh either. This workflow
+# has been red on every run since 2026-09-29. The fix is the documented one —
+# `gh workflow run demo.yml -f record_baseline=true` — and it is an owner action,
+# not a code change; see docs/DEMO_GIFS.md.
+#
+# PRs: the recording does NOT run (saves 8-14 min per PR; GIF review artifacts were
+# never inspected — regeneration happens on merge to dev/master instead). One
+# cheap job does run on a PR that touches `assets/demo/**`: `pr-no-gifs` below,
+# which fails the PR outright, because that path is otherwise invisible — `ci.yml`
+# lists it in BOTH `paths-ignore` blocks.
 #
 # MAINTAINER GUIDE: docs/DEMO_GIFS.md — what counts as an intentional update, how
 # to tell it from a foreign re-record, what the drift gate compares, and why a PR
@@ -77,6 +109,23 @@ on:
       - "demo/**"
       - "tools/demo_repro.py"
       - ".github/workflows/demo.yml"
+  # PR-time coverage for the one rule that had none. AGENTS.md, CONTRIBUTING.md and
+  # docs/DEMO_GIFS.md all say a PR must not carry regenerated or hand-edited GIFs —
+  # and `ci.yml` lists `assets/demo/**` in BOTH `paths-ignore` blocks, so a PR that
+  # touches nothing but a GIF triggers no `ci` run at all, while this workflow's
+  # push filter does not cover the path either. Until this trigger existed, the rule
+  # was prose with nothing behind it: a GIF-only PR merged having been checked by
+  # nothing at all.
+  #
+  # Deliberately `pull_request` and not another push path. The recorder commits
+  # `assets/demo/` on every successful re-record, so adding the path to `push` would
+  # make each run retrigger the next one; `[skip ci]` in its commit subject is what
+  # prevents that, and that is a suppression rule to depend on only when there is no
+  # alternative. A pull_request trigger cannot loop — the recorder pushes to dev and
+  # never opens a PR — so the guarantee does not rest on a marker in a commit message.
+  pull_request:
+    paths:
+      - "assets/demo/**"
   workflow_dispatch:
     inputs:
       enforce:
@@ -560,6 +609,30 @@ jobs:
           raise SystemExit(exit_code)
           PY
 
+      # Is the baseline well-formed enough for the gate above to mean anything?
+      #
+      # The step above asks whether a fresh recording matches the manifest. This
+      # asks the prior question: whether each comparison it is about to make is
+      # *defined*. Those are different, and the gap between them is where this gate
+      # can pass without having looked at anything — an empty or entry-less
+      # `gifs` map turns every GIF into a "no baseline" warning and the run reads
+      # clean; a missing `frames` is a KeyError that kills the step instead of
+      # reporting; a missing `framesSha256` reports "content changed" forever.
+      #
+      # It deliberately does NOT assert that the manifest equals the committed
+      # GIFs. `record_baseline` defaults to false, so a green run commits the GIFs
+      # and leaves the manifest behind: the manifest lagging the artifacts is the
+      # documented normal state (docs/DEMO_GIFS.md), and a gate demanding
+      # agreement would fire on the happy path.
+      #
+      # `if: always()`: the subject is the checked-out manifest, not the
+      # recording, so the answer is available even when the build or the tapes
+      # failed — and a malformed manifest is exactly what would turn those runs
+      # into unexplained reds.
+      - name: Baseline manifest is well-formed
+        if: always()
+        run: python3 tools/demo_repro.py check-manifest
+
       - name: Upload demo GIFs artifact
         if: always()
         uses: actions/upload-artifact@v7
@@ -636,6 +709,61 @@ jobs:
 
           echo "::error::could not push regenerated GIFs after 5 attempts; the drift gate above passed, so the recording is newer than assets/demo/ on $DEMO_BRANCH" >&2
           exit 1
+
+  # A PR must not carry demo GIFs (issue #26). ~20 seconds, no .NET, no encoder —
+  # it reads the PR's own file list and fails if the recorded set is in it.
+  #
+  # The rule it enforces is stated in three places (AGENTS.md, CONTRIBUTING.md,
+  # docs/DEMO_GIFS.md) and was enforced by none. Nothing here decides whether a GIF
+  # is *good*; that is the drift gate's job on the merge. This only stops the
+  # committed artifacts and the manifest from being edited by hand in a PR, which is
+  # the one change no later step can reconstruct or undo.
+  #
+  # Fail-loud on an unreadable diff. If the comparison cannot be made, passing would
+  # be indistinguishable from "the PR is clean", and a green that means "I did not
+  # look" is the failure this repo keeps paying for.
+  pr-no-gifs:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # Depth 1 has no base commit, so the file list this job exists to compute
+          # would be unobtainable — which is the same reason
+          # tests/Harbor.Architecture.Tests/DemoGifTriggerSurfaceTests.cs declines to
+          # answer the question in-process.
+          fetch-depth: 0
+
+      - name: No demo GIFs in a PR
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "$BASE_SHA" ]; then
+            echo "::error::no base sha on this event — refusing to report a clean PR"
+            exit 1
+          fi
+          if ! git cat-file -e "$BASE_SHA^{commit}" 2>/dev/null; then
+            echo "::error::base $BASE_SHA is not in the checkout; raise fetch-depth"
+            exit 1
+          fi
+
+          changed=$(git diff --name-only "$BASE_SHA" HEAD -- assets/demo/)
+          if [ -n "$changed" ]; then
+            echo "::error::this PR changes the recorded demo assets:"
+            echo "$changed" | while read -r f; do echo "::error::  $f"; done
+            echo "::error::assets/demo/*.gif and baseline.json are written by the"
+            echo "::error::demo-gifs workflow on merge to dev, never by a PR. Regenerate"
+            echo "::error::with: gh workflow run demo.yml -f record_baseline=true"
+            echo "See docs/DEMO_GIFS.md for what counts as an intentional re-record."
+            exit 1
+          fi
+
+          echo "no demo GIFs in this PR — the recorded assets are untouched"
 
   # Record-twice reproducibility check (issue #426). Records every tape twice in
   # the same job — same runner, same toolchain, same build — and fails unless the

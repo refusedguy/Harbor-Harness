@@ -255,7 +255,15 @@ jobs:
               Harbor.Terminal.Abstractions.Tests
               Harbor.App.Avalonia.Tests
           - shard: e2e
-            guard: false
+            # Same guard as the three above, and it was OFF here with nothing
+            # recorded next to it (#977). The counts made this free: e2e's five
+            # projects measured 36 / 104 / 39 / 272 / 28 tests on run
+            # 36849021180, so none is near the zero the flag exists to catch.
+            # Without it a suite that discovered nothing exits 0 and this shard
+            # reports green — and e2e is the ONLY home of those 479 tests:
+            # neither test-os's 9-project list nor coverage's 18 contains any of
+            # them, and fail-on-empty: false never notices an empty TRX.
+            guard: true
             projects: >-
               Harbor.E2E.Cli
               Harbor.E2E.App.Avalonia

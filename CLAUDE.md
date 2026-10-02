@@ -1223,14 +1223,14 @@ See `specs/` for the full design rationale. Key decisions:
 - [ ] Singleton services with mutable instance state — thread-safe (`lock` / `Interlocked` / per-call local state).
 - [ ] `ILlmClient` and `ITool` impls — explicitly thread-safe for concurrent calls.
 - [ ] NativeAOT: 0 IL2026 warnings in `dotnet build -c Release` — **for the four projects that opt in.** IL2026 comes from the trim/AOT analyzer, which runs only where a project sets `IsAotCompatible=true` (`Harbor.DesignSystem`, `Harbor.Ui.Framework.Rendering`, `Harbor.Tui.CellForge`, `Harbor.Tui.CellForge.Engine`) or where a publish sets `PublishAot`, and no workflow in `.github/workflows/` does the latter. So this box covers 4 projects of ~50 and says nothing about `Harbor.App.Cli` — the only project ever published as AOT. Dynamic code is a separate box, and it *is* enforced (#626, `ReflectionConventionRule`); the publish gate is [#413](https://github.com/refusedguy/Harbor-Harness/issues/413).
-- [ ] **Layering:** every new `<ProjectReference>` is allowed per [ARCHITECTURE_LAYERS.md §2](./docs/ARCHITECTURE_LAYERS.md). Run `dotnet test tests/Harbor.Architecture.Tests/` — it must stay green.
+- [ ] **Layering:** every new `<ProjectReference>` is allowed per [ARCHITECTURE_LAYERS.md §2](./docs/ARCHITECTURE_LAYERS.md). Run `dotnet run --project tests/Harbor.Architecture.Tests/ -c Release --no-build` — it must stay green. (`dotnet test` is not the form here; see the project-state note at the top of this file for why.)
 - [ ] **Layering:** no concrete impl type (`AnthropicLlmClient`, `JsonlSessionStore`, `AgentLoop`, `DefaultAgent`, `InMemoryEventBus`, `SharpTsScriptEngine`, `JintScriptEngine`, `RoslynPluginCompiler`, …) is `new`'d outside `apps/Harbor.App.Cli/Hosting/HostBuilder.cs` and `src/Harbor.Hosting/Modules/`. `Program.cs` resolves services by interface from DI.
 - [ ] **Layering:** new interfaces go in `Harbor.Abstractions` (or `Harbor.Terminal.Abstractions` for UI-only contracts), never in `Harbor.Application` / `Harbor.Registries`.
 - [ ] **Layering:** new value objects / records go in `Harbor.Abstractions/Models`, never in `Harbor.Application` / `Harbor.Registries`.
 
 ## When in doubt
 
-- Read the spec — `docs/specs/14-architecture-revised.md` for current architecture.
+- Read the spec — `docs/specs/14-architecture-revised.md` for **why** the architecture is shaped this way. It is a dated record ([docs/specs/README.md](./docs/specs/README.md)), not the current state; for that, read `docs/ARCHITECTURE.md`.
 - Check existing patterns — `Harbor.Tools.Builtin/Read/ReadTool.cs` is a good reference.
 - Look at tests — `tests/Harbor.Abstractions.Tests/` for assertion patterns.
 - Check `.editorconfig` for analyzer suppressions.

@@ -98,6 +98,15 @@ committed, and the manifest is left alone because `record_baseline` defaults to
 `false`. So "the manifest is behind the GIFs" is the normal state, and it is not
 by itself evidence of a regression.
 
+This is worth stating twice because it is the single easiest thing to get wrong,
+and it was nearly got wrong in the other direction while writing
+`tools/demo_repro.py check-manifest`. A check that requires the manifest to match
+the committed GIFs sounds like the obvious missing gate. It is not: it would fail on
+the documented happy path, on every green run that commits GIFs without
+re-recording the manifest. What *can* be required is that the manifest is
+well-formed — that every comparison the gate is about to make is defined at all.
+See [What the drift gate compares](#what-the-drift-gate-compares).
+
 ## The procedure
 
 Prerequisite for case A: your change must be a **recording input**. If it is not
@@ -150,6 +159,25 @@ and the demo command *and* carried the regenerated GIFs in the same commit. That
 works when the change set and its recording move together, which is exactly the
 case-A shape — but it is a bulk migration, not a routine. For an ordinary
 renderer change, push to `dev` and let the workflow do it.
+
+**This rule is now a gate, not prose.** `ci.yml` lists `assets/demo/**` in *both*
+of its `paths-ignore` blocks, so a PR that touches nothing but a GIF used to
+trigger no `ci` run at all, and the push filter below does not cover the path
+either — the rule was stated in three documents and enforced by none. The
+`pr-no-gifs` job in [`demo.yml`](../.github/workflows/demo.yml) now runs on any
+`pull_request` touching `assets/demo/**` and fails it outright. It reads the PR's
+own file list (`git diff --name-only "$BASE_SHA" HEAD -- assets/demo/`, at
+`fetch-depth: 0`) and fails loudly if the diff cannot be computed, rather than
+reporting a PR it did not look at.
+
+It is a `pull_request` trigger rather than another push path on purpose. The
+recorder commits `assets/demo/` on every successful re-record, so adding the path
+to `push` would make each run retrigger the next one; `[skip ci]` in its commit
+subject is what prevents that today, and a suppression marker is a poor thing to
+build a loop-prevention guarantee on when a trigger exists that cannot loop.
+
+It checks **that** the recorded assets are untouched, not whether they are *good*.
+Judging the pixels is the drift gate's job, on the merge.
 
 ### Trigger surface
 
@@ -207,6 +235,69 @@ computes, so their divergence from `baseline.json` (the three-of-four drift
 described under *What an "intentional update" actually is*) is outside every
 verdict in the table. Treating it as a verdict is what turns a manifest that is
 merely behind into a manifest that looks corrupt.
+
+### What is reproducible, and what is not
+
+The table above reads as though every field in the manifest were a number to
+threshold. Measured over the **25 `demo-gifs` runs on `dev` from 2026-09-30 to
+2026-10-01**, with one unchanged tape recorded 25 times, they split cleanly:
+
+| Field | Distinct values in 25 runs | Verdict |
+|---|---|---|
+| `frames`, `durationMs` | `markdown` 204/17000 in 25/25, `approval` 264/22000 in 25/25, `plain` 132/11000 in 25/25, `hero` **bimodal**: 204/17000 in 23/25, 216/18000 in 2/25 | a constant of the toolchain — the only reproducible group |
+| `bytes` | `hero` **22** distinct (287 428–303 650, a 5.64 % spread), `markdown` 19, `approval` 24, `plain` 3 | **not reproducible** |
+| `framesSha256` | `hero` **23** distinct, `markdown` 19, `approval` 24, `plain` 3 | **not reproducible** |
+
+Same input, same runner, same pinned toolchain, different bytes every time: the
+encoder is not deterministic even though the pixels are. Two consequences, and they
+are the reason this issue could not be closed by adding a threshold:
+
+- **A size/quality drift gate on `bytes` would measure the encoder.** The +20 %
+  limit happens to sit above the 5.64 % observed spread, so it does not fire on
+  noise today — but the number it is comparing is not a property of the renderer,
+  and widening it to catch a real regression would first have to swallow the noise.
+- **`framesSha256` in the manifest is an identity for one accepted render, never an
+  expectation for the next.** That is why the gate *enforces* frames and duration
+  and only *reports* the hashes, and why "record-twice" exists as a separate opt-in
+  (`reproducibility=true`) rather than as the gate's premise.
+
+### The manifest is currently stale, and that is why every run is red
+
+The manifest records `hero` at 216/18000 — the **2-in-25 minority** sample — and
+`approval` at 312/26000 against a consistent 264/22000. The gate fails on any
+negative frame delta and on a duration change outside ±500 ms, so those two entries
+alone turn roughly 92 % of runs red. A red run skips the commit step, so the
+README GIFs cannot refresh either: one stale manifest freezes both the gate and
+the artifacts. Every `demo-gifs` run on `dev` has been red since 2026-09-29.
+
+The repair is the documented one and it is **an owner action, not a code change** —
+re-record from a real run so every field comes from one render rather than being
+hand-assembled:
+
+```bash
+gh workflow run demo.yml -f record_baseline=true
+```
+
+Do not "fix" it by widening `duration_tolerance_ms` or re-ordering `frames` to
+make the red go away. A red drift gate on a stale manifest is the gate telling the
+truth about a reference that has not been re-declared since the recorder's output
+moved.
+
+### What *is* gated about the manifest
+
+`python3 tools/demo_repro.py check-manifest` runs as its own step in the workflow
+(`if: always()`), and it is deliberately **not** an equality check against the
+committed GIFs — see above. It asserts that each comparison the drift gate is about
+to make is *defined*:
+
+| Manifest defect | What the drift gate does without this check |
+|---|---|
+| `gifs` map empty, or an entry dropped | every GIF becomes "no baseline" — a warning, and the run reads clean |
+| `frames` / `bytes` / `durationMs` absent | `KeyError` — the step dies on a traceback, not a finding |
+| `framesSha256` absent | reports "content changed" on **every** run, always |
+| a digest that is not 64 lowercase hex chars | never matches anything, silently |
+| `path` not in the tree | nothing to open |
+| a non-positive or non-integer count | arithmetic or a percentage on a string |
 
 Content-hash equality is reported in the table, not gated. Two dispatch inputs
 change the posture, and both are logged into the step summary, so the run's mode
@@ -338,6 +429,11 @@ python3 tools/demo_repro.py normalize \
   --output assets/demo/hero-compressed.gif
 python3 tools/demo_repro.py report --dir assets/demo
 
+# Local — is baseline.json well-formed enough for the drift gate to mean
+# anything? Does NOT assert it matches the committed GIFs: record_baseline
+# defaults to false, so the manifest is expected to lag the artifacts.
+python3 tools/demo_repro.py check-manifest
+
 # Local — the in-process recorder behind HARBOR_DEMO=1. Needs a PTY plus
 # ffmpeg; writes assets/demo/frames/<scene>/, which is gitignored scratch.
 HARBOR_DEMO=1 dotnet run --project tests/Harbor.Tui.E2E.Tests -c Release
@@ -361,14 +457,38 @@ HARBOR_DEMO=1 dotnet run --project tests/Harbor.Tui.E2E.Tests -c Release
 Stated rather than hidden, because a guide that claims more than it can deliver
 is worse than a short one.
 
-- **There is no PR-time A/B verdict, and building one honestly would be a lie.**
-  The natural guard — "a PR that changes a GIF without changing a recording
-  input is case B" — needs the changed-file list relative to the base ref, and CI
-  checks out at depth 1, so a TUnit process cannot compute it. A check that
-  claimed to answer it would be passing on an empty comparison. What is built
-  instead is the half that *is* statically knowable: the trigger surface, which is
-  what makes case A detectable at all. The review-time half stays a human
-  judgement, and it is the first step of the procedure above for that reason.
+- **There is no PR-time A/B *verdict*, and building one is not obviously worth
+  it.** The discriminating guard — "a PR that changes a GIF without changing a
+  recording input is case B" — needs the changed-file list relative to the base
+  ref. That list *is* now obtainable: `pr-no-gifs` checks out at `fetch-depth: 0`
+  and runs `git diff --name-only "$BASE_SHA" HEAD` in a shell job. What is not
+  built is the A/B distinction itself, because the repository's rule is the
+  blanket one — no recorded asset in a PR, no exceptions to classify — and the
+  only commit that ever needed the exception is #639. A discriminator would
+  therefore permit a shape (GIF + recording input in one PR) that the prose does
+  not permit, and would have to be maintained against a bulk-migration exception
+  that has not recurred in 29 recorder commits. The static half — the trigger
+  surface — is what makes case A detectable at all, and
+  [`DemoGifTriggerSurfaceTests`](../tests/Harbor.Architecture.Tests/DemoGifTriggerSurfaceTests.cs)
+  pins it. Note the asymmetry: `DemoGifTriggerSurfaceTests` still declines to
+  compute the changed-file list *in-process*, because a TUnit job checks out at
+  depth 1; the shell job above is where depth can be chosen.
+- **The manifest is stale, and has been since the recorder's output moved.** It
+  records `hero` at 216/18000 and `approval` at 312/26000 against consistent
+  recordings of 204/17000 and 264/22000, so the drift gate fails on roughly 92 %
+  of runs and the commit step never runs — the README GIFs have been frozen since
+  2026-09-29 for the same reason. Nothing in the repository detects *that*: the
+  gate cannot tell "this render regressed" from "this reference was never
+  re-declared", and there is no run-history signal to compare against. The repair
+  is `gh workflow run demo.yml -f record_baseline=true`, and it needs an owner
+  because it pushes regenerated binaries to `dev` without review. Recorded here
+  because a permanent red that is documented is at least not mistaken for a
+  passing gate — see
+  [The manifest is currently stale](#the-manifest-is-currently-stale-and-that-is-why-every-run-is-red).
+- **`bytes` and `framesSha256` cannot be gated at all.** They are not
+  reproducible: 22 distinct byte sizes and 23 distinct content hashes for one
+  unchanged `hero` across 25 runs. Any threshold over them measures the encoder.
+  See [What is reproducible, and what is not](#what-is-reproducible-and-what-is-not).
 - **The manifest tracks only numbers, not pixels.** A re-record that changes the
   image while preserving size, frame count and duration is not detected. That is
   inherent to a stdlib block-structure walker; visual regression would need a

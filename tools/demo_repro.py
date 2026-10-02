@@ -511,6 +511,153 @@ def report(gif_dir: Path) -> tuple[int, str]:
     return (1 if errors else 0), text
 
 
+# ------------------------------------------------------------- manifest integrity
+
+# The fields the drift gate reads out of one baseline entry. `bytes`, `frames` and
+# `durationMs` are indexed directly (`b["frames"]`), so a missing one is a KeyError
+# that kills the gate step; `framesSha256` is read with .get(), so a missing one is
+# quieter and worse — every run then reports the content as changed, always.
+REQUIRED_FIELDS = ("bytes", "width", "height", "frames", "durationMs",
+                   "uniqueFrames", "fileSha256", "framesSha256")
+DIRECT_INDEXED = ("bytes", "frames", "durationMs")
+HEX_FIELDS = ("fileSha256", "framesSha256")
+COUNT_FIELDS = ("bytes", "width", "height", "frames", "durationMs", "uniqueFrames")
+
+
+def check_manifest(manifest_path: Path) -> tuple[int, str]:
+    """Is `assets/demo/baseline.json` well-formed enough for the drift gate to trust?
+
+    WHAT THIS DELIBERATELY DOES NOT ASSERT
+    --------------------------------------
+    It does **not** require the manifest to equal the committed GIFs, and that is
+    not an oversight. `docs/DEMO_GIFS.md` records the opposite as the design:
+    `record_baseline` defaults to `false`, so a green push run commits the GIFs and
+    leaves the manifest alone, and "the manifest is behind the GIFs" is the normal
+    state. Three of the four committed GIFs currently disagree with their `bytes` /
+    `fileSha256`, and the document says so. A gate demanding agreement would fire on
+    the documented happy path.
+
+    Nor does it assert a size or hash tolerance across recordings, because that
+    number is not reproducible. Measured over the 25 `demo-gifs` runs on dev from
+    2026-09-30 to 2026-10-01, one unchanged tape produced 22 distinct byte sizes and
+    23 distinct `framesSha256` values (hero: 287 428 to 303 650 bytes, a 5.64 %
+    spread), while frame count and duration were constant. A byte threshold over
+    that distribution measures the encoder, not the renderer.
+
+    WHAT IT DOES ASSERT
+    -------------------
+    That every comparison the gate is about to make is well-defined. Each of these
+    is a silent failure of the *existing* gate, not a hypothetical one:
+
+      * a dropped or renamed entry — the gate falls back to "no baseline" and
+        downgrades that GIF from a comparison to a warning;
+      * an empty `gifs` map — every GIF is then "new", the gate passes on four
+        warnings, and the summary reads like a clean run;
+      * a missing `bytes`/`frames`/`durationMs` — KeyError, the step dies with a
+        traceback instead of a finding;
+      * a missing `framesSha256` — permanent "content changed", which trains the
+        reader to ignore the one column that looks like it means something;
+      * an entry whose `path` is not in the tree — nothing to compare against.
+    """
+    errors: list[str] = []
+
+    if not manifest_path.is_file():
+        return 1, (f"::error::missing baseline manifest: {manifest_path}\n"
+                   "The drift gate fails on this too, but only on a run that got as "
+                   "far as recording something.\n")
+
+    try:
+        doc = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as ex:
+        return 1, f"::error::unreadable baseline manifest {manifest_path}: {ex}\n"
+
+    gifs = doc.get("gifs") if isinstance(doc, dict) else None
+    if not isinstance(gifs, dict):
+        return 1, (f"::error::{manifest_path} has no `gifs` object — every comparison "
+                   "the drift gate makes is driven from it, so this file currently "
+                   "authorises nothing and nothing says so\n")
+
+    for name in sorted(set(gifs) - set(TAPES)):
+        errors.append(f"describes an unknown GIF `{name}`; the recorded set is "
+                      f"{', '.join(TAPES)}. An entry the gate never reads is a claim "
+                      "nothing checks.")
+
+    # Compared, not merely iterated: an empty map has to be an error in its own
+    # right, because "nothing disagrees" is what a vacuous pass looks like.
+    compared = 0
+    for name in TAPES:
+        entry = gifs.get(name)
+        if entry is None:
+            errors.append(f"has no entry for `{name}` (assets/demo/{name}-compressed.gif) "
+                          "— the drift gate falls back to 'no baseline' and downgrades "
+                          "that GIF from a comparison to a warning, so one dropped key "
+                          "silently removes that GIF from drift detection")
+            continue
+        if not isinstance(entry, dict):
+            errors.append(f"entry `{name}` is {type(entry).__name__}, not an object")
+            continue
+
+        compared += 1
+        absent = [f for f in REQUIRED_FIELDS if f not in entry]
+        for field in absent:
+            how = (f"crashes the drift gate step on b[{field!r}]" if field in DIRECT_INDEXED
+                   else "makes the drift gate report the content as changed on every run, "
+                        "because it reads that key with .get()")
+            errors.append(f"`{name}` has no `{field}` — {how}")
+
+        for field in COUNT_FIELDS:
+            value = entry.get(field)
+            if field in entry and (not isinstance(value, int) or isinstance(value, bool)
+                                   or value <= 0):
+                errors.append(f"`{name}.{field}` is {value!r}; the gate does arithmetic and "
+                              "a percentage on it, so it has to be a positive integer")
+
+        for field in HEX_FIELDS:
+            value = entry.get(field)
+            if field in entry and not (isinstance(value, str) and len(value) == 64
+                                       and all(c in "0123456789abcdef" for c in value)):
+                errors.append(f"`{name}.{field}` is not a 64-character lowercase sha256 "
+                              f"({value!r}); it is read and compared verbatim, so a "
+                              "truncated digest would never match anything")
+
+        rel = entry.get("path") or f"assets/demo/{name}-compressed.gif"
+        if not (REPO_ROOT / rel).is_file():
+            errors.append(f"describes `{rel}`, which is not in the tree — the gate's "
+                          "`path` has nothing to open")
+
+    if compared == 0:
+        errors.append("no entry could be examined at all; agreement was not reached, "
+                      "it was unavailable")
+
+    try:
+        shown = manifest_path.resolve().relative_to(REPO_ROOT)
+    except ValueError:
+        shown = manifest_path
+
+    text = "\n".join([
+        "## Baseline manifest integrity",
+        "",
+        f"Manifest: `{shown}` — {compared}/{len(TAPES)} entries well-formed. This is a "
+        "check that the drift gate's comparisons are *defined*, not that the manifest "
+        "matches the committed GIFs: `record_baseline` defaults to `false`, so the "
+        "manifest is expected to lag the artifacts.",
+        "",
+    ])
+    if errors:
+        text += ("\n"
+                 f"**{len(errors)} finding(s) — the drift gate's comparisons are not all "
+                 "well-defined.** Each one is a way this gate can pass, crash, or report "
+                 "something meaningless without saying so.\n\n")
+        text += "\n".join(f"- {e}" for e in errors) + "\n"
+        for error in errors:
+            print(f"::error::{error}", flush=True)
+    else:
+        text += ("\n**Every entry is well-formed.** The drift gate's comparisons are all "
+                 "defined, and a finding it reports will be about a rendering change "
+                 "rather than about the manifest.\n")
+    return (1 if errors else 0), text
+
+
 # ----------------------------------------------------------------------------- cli
 
 
@@ -536,6 +683,11 @@ def main(argv: list[str] | None = None) -> int:
 
     p_meas = sub.add_parser("measure", help="print the shape of a single GIF")
     p_meas.add_argument("--input", required=True, type=Path)
+
+    p_base = sub.add_parser("check-manifest",
+                            help="is baseline.json well-formed enough for the drift gate to trust?")
+    p_base.add_argument("--manifest", type=Path,
+                        default=REPO_ROOT / "assets" / "demo" / "baseline.json")
 
     args = parser.parse_args(argv)
 
@@ -576,6 +728,18 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "report":
         code, text = report(args.dir)
+        print(text)
+        summary = os.environ.get("GITHUB_STEP_SUMMARY")
+        if summary:
+            with open(summary, "a", encoding="utf-8") as fh:
+                fh.write(text)
+        return code
+
+    if args.command == "check-manifest":
+        code, text = check_manifest(args.manifest)
+        for line in text.splitlines():
+            if line.startswith("::"):
+                print(line, flush=True)
         print(text)
         summary = os.environ.get("GITHUB_STEP_SUMMARY")
         if summary:

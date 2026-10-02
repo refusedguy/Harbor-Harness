@@ -106,6 +106,57 @@
 //     renamed can be re-declared under its old name later with nothing to stop
 //     it.
 //
+// THIRD PERIMETER — THE PRODUCERS (#570's pair, one level down)
+// ----------------------------------------------------------
+// Rules 1 and 2 are both blind to the pair that is still standing on `dev`, and
+// they are blind for the same reason rule 1 was blind to #803: the perimeter is
+// "this file CALLS the engine", and the two `DiffPreview` classes do not.
+//
+//   src/Harbor.Ui.Framework.State/Diff/DiffPreview.cs            HARBOR.Ui.Framework.State
+//   src/Harbor.Tui.CellForge.Engine/Rendering/DiffPreview.cs    Harbor.Tui.CellForge.Rendering
+//
+// Two classes, one simple name, two assemblies, and a third copy of the same
+// index-alignment walk — byte-for-byte the same `GenerateContextDiff`, the same
+// prefix/suffix scan, the same six constants, verified by normalising both
+// bodies and comparing. That is #570 verbatim: the reader who greps
+// `DiffPreview` gets two hits and has to know which one the question was about.
+//
+// It is #570 a second time because #570's own fix did not close this perimeter.
+// #679 gave the diff engine ONE home and both `DiffViewModel`s a projection of
+// it — but these two were never projections of anything. They each carry their
+// OWN `SplitLines` and their OWN alignment, so "everything that shows a diff is
+// a projection of LineDiff", the premise both existing rules rest on, is false
+// for them. A perimeter keyed on calling the engine cannot see a file that
+// re-implements the engine, and a re-implementation is exactly what a duplicate
+// is.
+//
+// What is new here is that the pair does NOT diverge (measured, below), which is
+// what makes it deletable rather than a visible bug — but it is dead weight
+// either way, and it is inside the surface whose invariant is one name per
+// concept.
+//
+// THE DERIVATION — BY SHAPE, AND THE SHAPE IS THE FORMAT
+// ------------------------------------------------------
+// A producer is a file that WRITES the context-diff block: the `"  "`/`"- "`/
+// `"+ "` row prefixes `LineDiff.ToUnifiedText` speaks and `TryParseContextBlock`
+// reads. Both `DiffPreview` copies and `EditTool.GenerateContextDiff` match on
+// exactly those three literals, and nothing else in `src/`+`apps/` does —
+// `QuestionFormView` emits `"  "` alone (an indented prompt, not a row), and the
+// CellForge renderers split lines without emitting row prefixes at all. So the
+// perimeter is derived, never named, and a producer that is renamed or moved
+// stays inside it.
+//
+// It cannot be satisfied by the same edit that re-creates the hazard: the three
+// literals ARE the format, so deleting the format deletes the perimeter, and a
+// copy that still writes the format is still in it.
+//
+// EditTool is inside this perimeter and MUST be tolerated there. It cannot call
+// `LineDiff` — `Harbor.Tools.Builtin` references only Abstractions and
+// Extensions, so the layering matrix forbids the dependency and its local walk
+// is forced, not chosen. What the rule asks of a producer is a unique NAME, not
+// a call into the engine, so a forced producer with a unique name is legal and
+// stays. Only a name declared by two producers is a finding.
+//
 // WHY THE ANCHOR IS THE ENGINE'S PROJECT AND NOT THE WHOLE TREE
 // -------------------------------------------------------------
 // "No project may declare a kind-and-carrier pair twice" is a rule about the
@@ -136,6 +187,11 @@
 //      POSITIVE CONTROL for rule 2, and the #803 pair: a kind+carrier pair in
 //      the engine's project, the same kind name re-declared in a second
 //      project, and four decoys it must NOT report.
+//   5. NonVacuity_Scan_DetectsTheProducerCollisionInSyntheticSources — THE
+//      POSITIVE CONTROL for rule 4, and the #570 pair that is still standing:
+//      two producers of the context-diff block in two projects behind one name,
+//      neither calling the engine, plus decoys — including a forced producer
+//      that cannot call the engine by layering, which must NOT be reported.
 
 using System.Text;
 using System.Text.RegularExpressions;
@@ -279,12 +335,21 @@ internal static partial class DiffSurfaceNameCollisionProbe
                 }
             }
 
-            // The perimeter predicate: this file PROJECTS the engine. It must call
-            // it, not merely name it in prose — a doc comment saying
-            // `<see cref="LineDiff" />` is not a projection, and the XML docs on
-            // both #570 copies are full of exactly that. `using` alone is not
-            // enough either: both projects import the namespace for other widgets,
-            // so the engine's static class is matched on a real member access.
+            // The perimeter predicate: this file is part of the diff surface if it EITHER
+            // projects the engine OR produces the context-diff block by hand.
+            //
+            // It must call the engine to project it, not merely name it in prose — a doc comment
+            // saying `<see cref="LineDiff" />` is not a projection, and the XML docs on both
+            // #570 copies are full of exactly that. `using` alone is not enough either: both
+            // projects import the namespace for other widgets, so the engine's static class is
+            // matched on a real member access.
+            //
+            // Producing the block is the second door, and it exists because the two
+            // `DiffPreview` classes take it: they re-implement the alignment instead of
+            // calling the engine, so the first predicate alone cannot see them, and a duplicate
+            // that re-implements is exactly what a duplicate is. The shape is the FORMAT —
+            // the three row prefixes — so a producer is recognised by what it writes, and
+            // renaming or moving it does not take it out of the perimeter.
             bool projectsEngine = false;
             foreach (string line in clean)
             {
@@ -295,7 +360,9 @@ internal static partial class DiffSurfaceNameCollisionProbe
                 }
             }
 
-            if (!projectsEngine)
+            bool producesBlock = EmitsContextDiffBlock(clean);
+
+            if (!projectsEngine && !producesBlock)
             {
                 continue;
             }
@@ -725,6 +792,64 @@ internal static partial class DiffSurfaceNameCollisionProbe
     private static partial Regex EngineReference();
 
     /// <summary>
+    ///     One row prefix of the context-diff block, matched on its own so a file can be
+    ///     checked for ALL THREE rather than any one.
+    /// </summary>
+    /// <remarks>
+    ///     The three prefixes are the format itself, which is why this is a shape and not a
+    ///     name: <c>Append("  ")</c>, <c>Append("- ")</c> and <c>Append("+ ")</c> are what
+    ///     <c>LineDiff.ToUnifiedText</c> writes and <c>TryParseContextBlock</c> reads, and a
+    ///     producer is a file that writes them. Matching any ONE of them would sweep in every
+    ///     widget that indents a line, so <see cref="EmitsContextDiffBlock" /> requires all
+    ///     three before it believes a file.
+    /// </remarks>
+    [GeneratedRegex(@"Append\(\s*""(?:  |- |\+ )""\s*\)")]
+    private static partial Regex ContextRowPrefix();
+
+    /// <summary>
+    ///     Whether a file writes the whole context-diff block — all three row prefixes, in any
+    ///     order and on any lines.
+    /// </summary>
+    /// <remarks>
+    ///     Deliberately not "at least one prefix". <c>QuestionFormView</c> emits <c>"  "</c> for
+    ///     an indented prompt and the CellForge renderers split diff text without writing row
+    ///     prefixes at all; neither is a producer, and a predicate loose enough to include them
+    ///     would be a perimeter wide enough to condemn unrelated widgets — the failure this
+    ///     file's own header already records for rule 3.
+    /// </remarks>
+    private static bool EmitsContextDiffBlock(string[] clean)
+    {
+        bool context = false;
+        bool removed = false;
+        bool added = false;
+
+        foreach (string line in clean)
+        {
+            if (!context)
+            {
+                context = ContextRowPrefix().IsMatch(line) && line.Contains("\"  \"", StringComparison.Ordinal);
+            }
+
+            if (!removed)
+            {
+                removed = line.Contains("\"- \"", StringComparison.Ordinal);
+            }
+
+            if (!added)
+            {
+                added = line.Contains("\"+ \"", StringComparison.Ordinal);
+            }
+
+            if (context && removed && added)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>
     ///     A type declaration's keyword and name, at any modifier depth. Records,
     ///     structs and enums count: the rule is about a name, not about a keyword.
     /// </summary>
@@ -790,6 +915,13 @@ public sealed class DiffSurfaceNameCollisionRule
     ///     name is what lets the next divergence hide: a fix lands in one copy,
     ///     the guard keeps passing because it drives both, and the user sees the
     ///     other one.
+    ///     <para>
+    ///         The perimeter has two doors — a file that CALLS the engine, and a file that
+    ///         WRITES the diff block by hand — because the pair that was still standing when
+    ///         this rule was written did not call the engine. See the header: the second door
+    ///         is <c>#570</c> one level down, and it is the door the first two rules could not see
+    ///         through.
+    ///     </para>
     /// </remarks>
     [Test]
     public async Task DiffSurface_HasNoNameDeclaredByTwoProjects()
@@ -802,7 +934,9 @@ public sealed class DiffSurfaceNameCollisionRule
                 + "it is a projection. Inside that surface, two types behind one name is what made #570 "
                 + "possible: the reader assumed \"the DiffViewModel\" was singular, so the CRLF fix could "
                 + "land in one copy while the other kept diverging, and the end-to-end test still passed "
-                + "because it exercised both. Found: " + Describe(collisions));
+                + "because it exercised both. A producer that re-implements the alignment instead of "
+                + "calling the engine is the same hazard one level down. Found: "
+                + Describe(collisions));
     }
 
     // =====================================================================
@@ -1313,6 +1447,162 @@ public sealed class DiffSurfaceNameCollisionRule
                     + "implementation, a project may hold a vocabulary nobody else claims, and prose "
                     + "naming the vocabulary is not a declaration. Reported: "
                     + Describe(decoyReport.ForeignVocabulary));
+        }
+    }
+
+    /// <summary>
+    ///     THE POSITIVE CONTROL FOR RULE 4. The probe is handed the #570 pair that is still
+    ///     standing — two producers of the context-diff block, in two projects, behind one name,
+    ///     NEITHER calling the engine — plus four decoys it must NOT report.
+    /// </summary>
+    /// <remarks>
+    ///     A control written against the names this rule forbids would pass against a matcher
+    ///     that had learned those names instead of the shape. So every source below is
+    ///     synthetic and the name is <c>SyntheticPreview</c>, which appears nowhere in the tree.
+    /// </remarks>
+    [Test]
+    public async Task NonVacuity_Scan_DetectsTheProducerCollisionInSyntheticSources()
+    {
+        List<(string Relative, string[] Lines)> pair = new()
+        {
+            // (1) A producer: it writes the three row prefixes by hand, in its own project, and
+            // it calls NOTHING. This is the shape the engine-call predicate misses by
+            // construction — which is why it is the whole point of the control.
+            ("src/Harbor.Ui.Framework.State/Diff/SyntheticPreview.cs",
+            [
+                "namespace Harbor.Ui.Framework.State;",
+                string.Empty,
+                "public static class SyntheticPreview",
+                "{",
+                "    public static string Build(string[] oldLines, string[] newLines)",
+                "    {",
+                "        var sb = new System.Text.StringBuilder();",
+                "        sb.Append(\"  \").AppendLine(oldLines[0]);",
+                "        sb.Append(\"- \").AppendLine(oldLines[1]);",
+                "        sb.Append(\"+ \").AppendLine(newLines[1]);",
+                "        return sb.ToString();",
+                "    }",
+                "}",
+            ]),
+            // (2) The same name, a DIFFERENT project, producing the block the same way. Two
+            // assemblies, one simple name, no engine call anywhere: exactly the pair that
+            // survives on dev and that rules 1-3 cannot see.
+            ("src/Harbor.Tui.CellForge.Engine/Rendering/SyntheticPreview.cs",
+            [
+                "namespace Harbor.Tui.CellForge.Rendering;",
+                string.Empty,
+                "public static class SyntheticPreview",
+                "{",
+                "    public static string Build(string[] oldLines, string[] newLines)",
+                "    {",
+                "        var sb = new System.Text.StringBuilder();",
+                "        sb.Append(\"  \").AppendLine(oldLines[0]);",
+                "        sb.Append(\"- \").AppendLine(oldLines[1]);",
+                "        sb.Append(\"+ \").AppendLine(newLines[1]);",
+                "        return sb.ToString();",
+                "    }",
+                "}",
+            ]),
+        };
+
+        DiffSurfaceReport report = DiffSurfaceNameCollisionProbe.ScanFiles(pair, engineFilePresent: true);
+
+        await Assert.That(string.Join(" | ", report.Collisions.Select(c => c.Name)))
+            .IsEqualTo("SyntheticPreview")
+            .Because(
+                "this is the #570 pair one level down: two producers of the context-diff block, in two "
+                + "projects, behind one name, and NEITHER projects LineDiff — so a perimeter keyed on "
+                + "calling the engine returns an empty set here and the duplication is invisible. "
+                + "Exactly one collision is expected. Reported: " + Describe(report.Collisions));
+
+        await Assert.That(report.Collisions[0].DeclaringFiles.Count).IsEqualTo(2)
+            .Because("the finding must name BOTH producers, or a reader cannot tell which pair collided");
+
+        await Assert.That(report.PerimeterFiles.Count).IsEqualTo(2)
+            .Because("both synthetic files write the block, so both are inside the surface; a perimeter "
+                   + "that admitted one and not the other would be satisfied by deleting half a pair");
+
+        // --- The decoys, each through the SAME probe, so a matcher that stopped matching shows
+        // --- up as an extra finding rather than as a silent pass.
+        List<(string Relative, string[] Lines)> decoys = new()
+        {
+            // (3) THE FORCED PRODUCER, verbatim in shape. This is EditTool: it writes the block,
+            // it calls nothing, and it CANNOT call the engine because Harbor.Tools.Builtin
+            // references only Abstractions and Extensions. It has a unique name, so it is legal
+            // and must not be reported — the rule asks a producer for a unique NAME, not for a
+            // call into the engine. A perimeter that condemned this would make the rule
+            // unfixable without a layering change, which is a different decision entirely.
+            ("src/Harbor.Tools.Builtin/Tools/Synthetic/SyntheticEdit.cs",
+            [
+                "namespace Harbor.Tools.Builtin.Tools.Synthetic;",
+                string.Empty,
+                "public sealed class SyntheticEdit",
+                "{",
+                "    private static string GenerateContextDiff(string a, string b, int max)",
+                "    {",
+                "        var sb = new System.Text.StringBuilder();",
+                "        sb.Append(\"  \").AppendLine(a);",
+                "        sb.Append(\"- \").AppendLine(a);",
+                "        sb.Append(\"+ \").AppendLine(b);",
+                "        return sb.ToString();",
+                "    }",
+                "}",
+            ]),
+            // (4) A file that emits ONE prefix. This is QuestionFormView's shape: an indented
+            // prompt is written as `"  "` and is not a diff row. Half the widgets in this repo
+            // indent something.
+            ("src/Harbor.Ui.Framework.Rendering/Widgets/SyntheticIndented.cs",
+            [
+                "namespace Harbor.Ui.Framework.Rendering.Widgets;",
+                string.Empty,
+                "public sealed class SyntheticIndented",
+                "{",
+                "    public string Prompt => sb.Append(\"  \").AppendLine(text).ToString();",
+                "}",
+            ]),
+            // (5) A same-named type in a file that is NEITHER a projection NOR a producer. A
+            // duplicate name outside the diff surface is a different question and this rule must
+            // not answer it.
+            ("src/Harbor.Desktop.Shared/ViewModels/SyntheticPreview.cs",
+            [
+                "namespace Harbor.Desktop.Shared.ViewModels;",
+                string.Empty,
+                "public sealed class SyntheticPreview",
+                "{",
+                "}",
+            ]),
+            // (6) A producer whose name merely CONTAINS the duplicated one. A different type, and
+            // holding it to the other name would make the rule unfixable without inventing names.
+            ("src/Harbor.Ui.Framework.State/Diff/SyntheticPreviewCache.cs",
+            [
+                "namespace Harbor.Ui.Framework.State;",
+                string.Empty,
+                "public static class SyntheticPreviewCache",
+                "{",
+                "    public static string Build(string[] a, string[] b)",
+                "    {",
+                "        var sb = new System.Text.StringBuilder();",
+                "        sb.Append(\"  \").AppendLine(a[0]);",
+                "        sb.Append(\"- \").AppendLine(a[1]);",
+                "        sb.Append(\"+ \").AppendLine(b[1]);",
+                "        return sb.ToString();",
+                "    }",
+                "}",
+            ]),
+        };
+
+        foreach (var decoy in decoys)
+        {
+            DiffSurfaceReport decoyReport = DiffSurfaceNameCollisionProbe.ScanFiles(
+                [pair[0], decoy],
+                engineFilePresent: true);
+            await Assert.That(decoyReport.Collisions).IsEmpty()
+                .Because(
+                    decoy.Relative + " must not be reported. A producer with a unique name is legal "
+                    + "however it computes its rows — including one that cannot reach the engine by "
+                    + "layering — one row prefix is an indent, a duplicate name outside the diff "
+                    + "surface is another question, and a longer name is a different type. Reported: "
+                    + Describe(decoyReport.Collisions));
         }
     }
 

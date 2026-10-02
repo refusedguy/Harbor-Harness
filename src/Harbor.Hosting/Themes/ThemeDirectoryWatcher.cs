@@ -52,6 +52,19 @@ namespace Harbor.Hosting.Themes;
 ///     that genuinely was duplicated. <c>ThemeFileWatcher</c> says the same thing
 ///     about this pair; see <c>ThemeStoreSeamRules</c> for the full argument.
 /// </para>
+/// <para>
+///     <b>The APPLY was the part that argument missed, and it did not converge
+///     (#479-A6).</b> The "not merged" case above is about the poll skeleton and
+///     it holds. But it was read as covering the whole pair, so when
+///     <c>ThemeFileWatcher</c> kept a callback-gated apply — apply only when the
+///     caller passed no <c>onApplied</c> — nothing contradicted it: this type
+///     applies unconditionally, and the one product caller of each supplies a
+///     callback, so the single-file arm reloaded without repainting. Measured,
+///     not assumed: <c>ThemeWatcherApplyParityTests</c> drives both watchers over
+///     one document and compares the resulting ambient palette. The unconditional
+///     apply below is the shape the sibling now matches, so if either side is
+///     edited again, that test is the thing that notices.
+/// </para>
 /// </remarks>
 public sealed class ThemeDirectoryWatcher : IDisposable
 {

@@ -2,7 +2,6 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
-using Avalonia.Markup.Xaml;
 using Harbor.App.Avalonia.Hosting;
 using Harbor.Ui.Framework.Navigation;
 using Microsoft.Extensions.DependencyInjection;
@@ -15,11 +14,6 @@ public partial class ModalHostView : UserControl
     {
         if (global::Avalonia.Application.Current is not null)
             InitializeComponent();
-    }
-
-    private void InitializeComponent()
-    {
-        AvaloniaXamlLoader.Load(this);
     }
 
     private void OnScrim_Click(object? sender, PointerPressedEventArgs e)

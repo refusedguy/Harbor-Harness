@@ -63,7 +63,9 @@ public class ThemeFileWatcherTests
 
         await Assert.That(watcher.LastApplied.HasValue).IsTrue();
         await Assert.That(watcher.LastApplied.Value.Name).IsEqualTo("v2");
-        // Global ambient intentionally not asserted (see below).
+        // Global ambient intentionally not asserted here — see the note in
+        // Poll_BrokenJson_KeepsLastTheme_ReportsError, and the parity test that
+        // owns the ambient assertion.
     }
 
     [Test]
@@ -88,11 +90,12 @@ public class ThemeFileWatcherTests
 
         await File.WriteAllTextAsync(_path, """{ "name": "good", "accent": "#666666" }""");
         watcher.Poll();
-        // Deterministic core: this watcher's own application record. The
-        // global Current is NOT asserted here — it was reachable only because
-        // this class is [NotInParallel] (one at a time globally, #648), so
-        // no other theme test can hold the palette between our Poll and a read
-        // of the shared static.
+        // This file deliberately asserts only the watcher's OWN record and not
+        // the process-global palette, and that division is on purpose: the
+        // ambient apply is process-global state shared with every other theme
+        // test, so it is asserted once, in ONE place, where both watchers are
+        // compared against each other (ThemeWatcherApplyParityTests). Repeating
+        // it here would assert the same static N more times and buy no coverage.
         await Assert.That(watcher.LastApplied.Value.Name).IsEqualTo("good");
 
         await File.WriteAllTextAsync(_path, "totally not json");

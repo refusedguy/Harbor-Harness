@@ -14,8 +14,9 @@ namespace Harbor.App.Avalonia.Views.Controls;
 ///     AvaloniaEdit background renderer that draws colored underlines for the
 ///     published LSP diagnostics of the active editor tab (error red, warning
 ///     amber, info/hint blue). Colors resolve from the app ResourceDictionary
-///     first (<c>LspErrorBrush</c>, <c>LspWarningBrush</c>, <c>LspInfoBrush</c>)
-///     with fixed fallbacks — no C# token ownership (§What-not-to-do #9).
+///     first (<c>StateErrorBrush</c>, <c>StateWarningBrush</c>,
+///     <c>StateInfoBrush</c> — #971) with fixed fallbacks — no C# token
+///     ownership (§What-not-to-do #9).
 /// </summary>
 public sealed class DiagnosticsSquiggleRenderer : IBackgroundRenderer
 {
@@ -110,11 +111,18 @@ public sealed class DiagnosticsSquiggleRenderer : IBackgroundRenderer
 
     private IBrush BrushFor(LspSeverity severity)
     {
+        // #971: these three names were declared NOWHERE. `LspErrorBrush` and
+        // friends read like theme tokens but no dictionary has ever provided
+        // them, so every lookup missed and every squiggle was painted from the
+        // fixed fallback below — which means the editor's diagnostics ignored
+        // the palette entirely, in every theme. The state brushes are the same
+        // three roles (error / warning / info) and all six palettes declare
+        // them, so the lookup now has something to find.
         string key = severity switch
         {
-            LspSeverity.Error => "LspErrorBrush",
-            LspSeverity.Warning => "LspWarningBrush",
-            _ => "LspInfoBrush",
+            LspSeverity.Error => "StateErrorBrush",
+            LspSeverity.Warning => "StateWarningBrush",
+            _ => "StateInfoBrush",
         };
 
         if (_textView.TryGetResource(key, ThemeVariant.Default, out object? resource) && resource is IBrush brush)

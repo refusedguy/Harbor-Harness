@@ -8,7 +8,7 @@
 // it: `IPanelProvider.OnKey` and `IOverlayLayer.OnKey`. The whole product tree
 // contains exactly THREE such hand-offs, and none of them can be entered:
 //
-//   src/Harbor.Tui.CellForge.Engine/Rendering/OverlayStack.cs:177
+//   src/Harbor.Tui.CellForge.Engine/Rendering/OverlayStack.cs:180
 //       `if (layer.OnKey(in key))` — inside `OverlayStack.RouteKey`, which no
 //       product method calls. (#812)
 //   src/Harbor.Tui.CellForge/Chat/Panels/CellForgePanelAdapter.cs:63
@@ -27,7 +27,7 @@
 // WHY THE USER-VISIBLE PART IS SMALLER THAN "7 BROKEN PANELS"
 // -----------------------------------------------------------
 // The blast radius reads as seven because `IPanelProvider.OnKey` is a REQUIRED
-// interface member (`IPanelProvider.cs:76`) and seven providers implement it.
+// interface member (`IPanelProvider.cs`, `OnKey`) and seven providers implement it.
 // Measured by what the key actually does, it is smaller and stranger:
 //
 //   * `CellForgeLogsPanel.OnKey` handles F12 by dispatching

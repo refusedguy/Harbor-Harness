@@ -25,10 +25,16 @@ namespace Harbor.Ui.Framework.Panels;
 ///     </para>
 ///     <para>
 ///         <b>Widget type:</b> the <see cref="IPanelProvider.Build" /> return type is
-///         <see cref="object" /> precisely so a panel plugin can target a specific
-///         renderer (e.g. SpectreTUI) without forcing <c>Harbor.Terminal.Abstractions</c>
-///         to take a dependency on that renderer's widget framework. A plugin that
-///         wants to support multiple renderers ships one assembly per renderer.
+///         <see cref="object" /> precisely so a panel plugin can target a renderer
+///         without forcing this project to take a dependency on that renderer's widget
+///         framework. In practice that means <b>return text rows</b>, and ship
+///         <b>one</b> provider: CellForge is the only shipped renderer with a panel
+///         path, and its decoder has no case for a native widget — anything that is
+///         not a string collection is flattened by <c>ToString()</c> and the dock
+///         paints the type name. <c>AnsiPlain</c> and <c>NickConsoleEx</c> read no
+///         panels at all, so a per-renderer assembly for either of them would be
+///         collected and never read. See <see cref="IPanelProvider" /> for the
+///         measured contract.
 ///     </para>
 /// </remarks>
 public interface ITuiPanelPlugin : IPlugin
