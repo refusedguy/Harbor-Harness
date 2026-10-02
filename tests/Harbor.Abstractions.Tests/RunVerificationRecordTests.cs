@@ -416,6 +416,40 @@ public class RunVerificationRecordTests
     }
 
     [Test]
+    public async Task AnUnnamedVerdictValue_ReadsAsUnknown_RatherThanAsOneOfTheThree()
+    {
+        // CS8524 made this arm mandatory at compile time, and the arm's SEMANTICS
+        // are the point: a verdict value nobody can name — reachable through a
+        // cast, a deserialiser, or a member added by a different change — is not
+        // evidence of anything. Defaulting it to `NotVerified` would invent a
+        // completed inspection; defaulting it to `Verified` would invent a pass.
+        var unnamed = new RunVerification((RunVerificationVerdict)99, RunEvidenceState.Complete);
+
+        await Assert.That(unnamed.IsVerified).IsFalse();
+        await Assert.That(unnamed.Describe().Contains("unknown", StringComparison.OrdinalIgnoreCase)).IsTrue();
+
+        string[] rendered =
+        [
+            .. new RunVerification?[]
+            {
+                new(RunVerificationVerdict.Verified, RunEvidenceState.Complete),
+                new(RunVerificationVerdict.VerificationFailed, RunEvidenceState.Complete),
+                new(RunVerificationVerdict.NotVerified, RunEvidenceState.Complete),
+                null,
+                unnamed,
+            }.Select(v => v?.Describe() ?? new RunVerification(null, RunEvidenceState.Complete).Describe()),
+        ];
+
+        int distinct = rendered.Distinct(StringComparer.Ordinal).Count();
+
+        await Assert.That(distinct).IsEqualTo(4).Because(
+            "the five inputs are three verdicts, an absent verdict and an unnamed one — and they render "
+            + "to four sentences, because the two forms of 'no verdict we can name' are the SAME fact and "
+            + "must read the same. If the unnamed value got a sentence of its own, the record would be "
+            + "inventing a fifth state that means nothing. Rendered: " + string.Join(" || ", rendered));
+    }
+
+    [Test]
     public async Task ACoverAllVerdict_DoesNotExist()
     {
         // #993's catch-all, one level up. A fourth member reachable by default

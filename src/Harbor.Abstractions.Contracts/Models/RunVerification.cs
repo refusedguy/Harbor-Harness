@@ -473,6 +473,14 @@ public readonly record struct RunVerification(RunVerificationVerdict? Verdict, R
     ///     three verdicts and "unknown" are four different sentences, because
     ///     the point of the record is that the reader can tell them apart.
     /// </summary>
+    /// <remarks>
+    ///     The final arm is an enum value this type does not name — reachable
+    ///     through a cast, a deserialiser or a future member added by a
+    ///     different change. It reads as unknown rather than being given one of
+    ///     the three sentences, because a verdict nobody can name is not
+    ///     evidence of anything, and the compiler refusing to build without this
+    ///     arm is the same point made structurally (CS8524).
+    /// </remarks>
     public string Describe()
     {
         if (Evidence == RunEvidenceState.Unreadable)
@@ -485,7 +493,7 @@ public readonly record struct RunVerification(RunVerificationVerdict? Verdict, R
             RunVerificationVerdict.Verified => "verified - at least one check passed at the pinned revision, none failed",
             RunVerificationVerdict.VerificationFailed => "verification failed - at least one check failed at the pinned revision",
             RunVerificationVerdict.NotVerified => "not verified - no check passed at the pinned revision",
-            null => "unknown - the evidence for this run could not be read back, so no verdict is asserted",
+            _ => "unknown - the evidence for this run could not be read back, so no verdict is asserted",
         };
     }
 }
