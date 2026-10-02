@@ -108,6 +108,12 @@ public class RunLimitStampingTests
 
         var result = await loop.RunAsync(NewSession(), agent);
 
+        // `Result` here means "the loop reached a terminal event without a
+        // provider/stream failure", NOT "the work was finished" — see the
+        // remarks. A limit reported as a FAILURE would be worse than the bug
+        // this fixes: `SubAgentRunner` (:168-188) turns that into
+        // `SessionStatus.Error` and a "Sub-agent failed" note for the parent
+        // model, i.e. a ceiling would be reported as a malfunction.
         await Assert.That(result.IsSuccess).IsTrue();
 
         // The budget is a comparison, so the run ends at exactly MaxSteps turns

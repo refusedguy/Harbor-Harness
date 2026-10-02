@@ -295,7 +295,12 @@ internal sealed class TurnRunner(
         if (MaxStepsBehavior.IsExhausted(turn, agent))
         {
             logger.LogInformation("Agent reached max steps ({MaxSteps})", agent.MaxSteps);
-            return new TurnStepResult(truncationFallback, EndRun: true);
+            // #403: EndRun alone cannot say WHY. Without this the loop published
+            // the same terminal event as a run that finished its work, and
+            // `SessionStatus.Done` was the user's answer for a run that was cut
+            // off with steps left to take. The limit is the fact; the bool is
+            // only the shape the loop iterates on.
+            return new TurnStepResult(truncationFallback, EndRun: true, Limit: RunLimitKind.MaxSteps);
         }
 
         if (runEndsAfterExecution)

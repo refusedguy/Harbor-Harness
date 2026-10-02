@@ -143,24 +143,92 @@ public sealed record RunOutcome(
         IReadOnlyList<AgentMessage> messages,
         AgentEndEvent end,
         AgentErrorEvent? error = null) =>
-        Reconstruct(runId, sessionId, messages, cancelled: end.Cancelled, errorMessage: error?.Message);
+        Reconstruct(
+            runId, sessionId, messages,
+            cancelled: end.Cancelled,
+            errorMessage: error?.Message,
+            limit: end.Limit);
 
     /// <summary>
     ///     Reconstruct a finished run's outcome from stored messages and terminal
     ///     stop signals. Pure function — no I/O.
     /// </summary>
+    /// <remarks>
+    ///     <para>
+    ///         <b>Terminal-fact mapping (zero new event types, #41 B2.2).</b> The
+    ///         first three arms are the pre-existing lifecycle mapping and are
+    ///         unchanged. The <c>limit</c> arm is new, and it sits BELOW
+    ///         <c>cancelled</c> and <c>errorMessage</c> on purpose:
+    ///     </para>
+    ///     <list type="table">
+    ///         <item>
+    ///             <term><c>cancelled == true</c></term>
+    ///             <description><see cref="RunStopReason.Stopped" /> — the user stopped it.</description>
+    ///         </item>
+    ///         <item>
+    ///             <term>error text present</term>
+    ///             <description><see cref="RunStopReason.Failed" /> — the most specific cause wins.</description>
+    ///         </item>
+    ///         <item>
+    ///             <term><c>limit != null</c></term>
+    ///             <description>
+    ///                 <see cref="RunStopReason.LimitExceeded" /> with <see cref="RunOutcome.Limit" />
+    ///                 set to that kind. The run reached its terminal event and we
+    ///                 know exactly why it ended: a bound the user set was reached,
+    ///                 nothing malfunctioned, nobody pressed stop.
+    ///             </description>
+    ///         </item>
+    ///         <item>
+    ///             <term>last assistant stopped <c>Aborted</c></term>
+    ///             <description><see cref="RunStopReason.Stopped" />.</description>
+    ///         </item>
+    ///         <item>
+    ///             <term>last assistant stopped <c>Error</c></term>
+    ///             <description><see cref="RunStopReason.Failed" />.</description>
+    ///         </item>
+    ///         <item>
+    ///             <term>otherwise</term>
+    ///             <description><see cref="RunStopReason.Succeeded" />.</description>
+    ///         </item>
+    ///     </list>
+    ///     <para>
+    ///         <b>Why the limit arm cannot be folded into <c>Stopped</c>.</b> A
+    ///         cancelled run and a run cut short by the user's own ceiling are
+    ///         different facts: one is a decision, the other is a boundary, and a
+    ///         user who sees "aborted" learns they pressed something they did not
+    ///         press. Collapsing them is #711 — two meanings in one field.
+    ///     </para>
+    ///     <para>
+    ///         <b>Why it is not #406's <c>Interrupted</c>.</b> That axis asks
+    ///         whether the process reached a terminal event at all. A limit stop
+    ///         reaches one, so the two are independent: a run stopped by the
+    ///         clock is fully known and still <c>LimitExceeded</c>.
+    ///     </para>
+    ///     <para>
+    ///         <b>Ordering, honestly.</b> <c>cancelled</c> and <c>limit</c> are
+    ///         mutually exclusive by construction — <c>AgentLoop</c> sets one or
+    ///         the other — so the relative order of those two arms records nothing.
+    ///         <c>errorMessage</c> is the one that can genuinely co-occur (a
+    ///         provider dies on the turn the budget expires), and a real failure
+    ///         outranks a ceiling because it is the more specific cause. #401's
+    ///         "the winner is whichever was accepted first" is therefore a
+    ///         property of the loop, not of this function.
+    ///     </para>
+    /// </remarks>
     /// <param name="runId">The run id minted at run start.</param>
     /// <param name="sessionId">The owning session id.</param>
     /// <param name="messages">The run's messages in chronological order (e.g. from <c>ISessionStore.GetMessagesAsync</c>).</param>
     /// <param name="cancelled">True when the run ended via cancellation (<c>AgentEndEvent.Cancelled</c>).</param>
     /// <param name="errorMessage">Error text when the run errored (<c>AgentErrorEvent.Message</c>); otherwise null.</param>
+    /// <param name="limit">Which limit ended the run (<c>AgentEndEvent.Limit</c>); null when none did.</param>
     /// <returns>The reconstructed <see cref="RunOutcome" />.</returns>
     public static RunOutcome Reconstruct(
         RunId runId,
         string sessionId,
         IReadOnlyList<AgentMessage> messages,
         bool cancelled = false,
-        string? errorMessage = null)
+        string? errorMessage = null,
+        RunLimitKind? limit = null)
     {
         var resultByCallId = new Dictionary<string, ToolResultEntry>(StringComparer.Ordinal);
         for (int i = 0; i < messages.Count; i++)
@@ -207,6 +275,13 @@ public sealed record RunOutcome(
             stopReason = RunStopReason.Stopped;
         else if (errorMessage is not null)
             stopReason = RunStopReason.Failed;
+        else if (limit is not null)
+            // #403: the run reached a bound the user set. Without this arm the
+            // catch-all below answered Succeeded to a run that was cut off
+            // mid-work — a plausible value for a fact nobody recorded, and the
+            // transcript cannot supply it: a capped run's history is
+            // structurally identical to a finished run's.
+            stopReason = RunStopReason.LimitExceeded;
         else if (lastAssistant is not null && lastAssistant.StopReason == global::Harbor.Abstractions.Models.StopReason.Aborted)
             stopReason = RunStopReason.Stopped;
         else if (lastAssistant is not null && lastAssistant.StopReason == global::Harbor.Abstractions.Models.StopReason.Error)
@@ -222,6 +297,10 @@ public sealed record RunOutcome(
             finishedAt,
             messageIds,
             toolCalls,
-            stopReason == RunStopReason.Failed ? errorMessage : null);
+            stopReason == RunStopReason.Failed ? errorMessage : null,
+            // Carried only on a limit stop. `Limit` is null on every other path
+            // by construction, not by convention — the tests pin it, because a
+            // field that reads a constant is a plausible value, not a fact.
+            stopReason == RunStopReason.LimitExceeded ? limit : null);
     }
 }
