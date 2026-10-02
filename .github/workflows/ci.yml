@@ -801,15 +801,25 @@ jobs:
           RID: linux-x64
           RECIPE: fulltree
         run: |
-          set -o pipefail
+          # `set -e` is deliberately NOT used on this step, and the reason is
+          # load-bearing: with errexit, a failing `dotnet publish | tee` aborts
+          # the script AT the pipeline, so the lines after it — PIPESTATUS, the
+          # outcome marker — never run. That is exactly what happened: the first
+          # version of this step reported "no publish marker in
+          # publish/aot-publish.log" on a run where the publish had in fact run
+          # and failed as recorded. A gate whose evidence line is unreachable on
+          # failure is a gate that only ever has evidence when things are fine.
+          # Every non-zero condition below is checked explicitly instead.
+          set -uo pipefail
           # AOT needs the native toolchain. ubuntu-latest already ships most of
           # it, but naming it explicitly is what makes this step portable to a
           # runner image that does not. `objcopy` is NOT a package: it lives in
           # binutils, and the first version of this step asked apt for
           # `objcopy` and died with "E: Unable to locate package objcopy"
           # before `dotnet publish` ever ran.
-          sudo apt-get update -qq
-          sudo apt-get install -y -qq clang lld binutils zlib1g-dev
+          sudo apt-get update -qq || { echo "::error::apt-get update failed"; exit 1; }
+          sudo apt-get install -y -qq clang lld binutils zlib1g-dev \
+            || { echo "::error::installing the AOT toolchain failed"; exit 1; }
           mkdir -p publish
           # --self-contained true is passed EXPLICITLY even though
           # Harbor.App.Cli.csproj now sets it in the AOT block, so this job does
