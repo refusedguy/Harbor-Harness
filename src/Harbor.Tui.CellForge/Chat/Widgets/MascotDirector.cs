@@ -23,7 +23,9 @@ public sealed class MascotDirector
     private const byte NoMood = 0xFF;
 
     private readonly int _moodLatchMs;
-    private long _lastActiveMs = Environment.TickCount64;
+    private readonly TimeProvider _time;
+    private readonly double _msPerTimestampTick;
+    private long _lastActiveMs;
     private byte _mood = NoMood;
     private long _moodFlipTick = long.MinValue;
     private byte _latched = NoMood;
@@ -33,10 +35,36 @@ public sealed class MascotDirector
 
     /// <summary>Creates a director with an optional latch-lifetime override.</summary>
     /// <param name="moodLatchMs">Latch lifetime override (tests inject milliseconds).</param>
-    public MascotDirector(int moodLatchMs = MoodLatchMs)
+    /// <param name="timeProvider">
+    /// Clock override (#1007). Production reads <see cref="TimeProvider.System"/>;
+    /// tests inject a manual clock, so a latch assertion is a function of the
+    /// elapsed time the test declares and not of how fast the runner is. The
+    /// shape <c>RetryPolicy</c> already uses for its backoff (#54) — the latch
+    /// is wall-clock by design (#170), so the clock has to be a seam, not a
+    /// constant the test shrinks until the machine can hit it.
+    /// </param>
+    public MascotDirector(int moodLatchMs = MoodLatchMs, TimeProvider? timeProvider = null)
     {
         _moodLatchMs = moodLatchMs;
+        _time = timeProvider ?? TimeProvider.System;
+
+        // Scale through double, never `GetTimestamp() * 1000`: a
+        // nanosecond-resolution TimeProvider (Stopwatch.Frequency is 1e9 on
+        // Linux) overflows long after ~106 days of uptime. Dividing first
+        // keeps the headroom at ~292 years, and the sub-millisecond precision
+        // that gets dropped falls below the double's 53-bit mantissa rather
+        // than below the 12 s latch.
+        _msPerTimestampTick = 1_000.0 / _time.TimestampFrequency;
+        _lastActiveMs = NowMs();
     }
+
+    /// <summary>
+    /// Milliseconds on the injected clock, measured from this director's own
+    /// construction so the value stays small whatever the clock's epoch is.
+    /// The only clock read in this class — every ms field below is derived
+    /// from it (#1007).
+    /// </summary>
+    private long NowMs() => (long)(_time.GetTimestamp() * _msPerTimestampTick);
 
     public MascotMood Advance(StatusViewModel vm, long tick)
     {
@@ -45,7 +73,7 @@ public sealed class MascotDirector
             return MascotMood.Idle;
         }
 
-        long now = Environment.TickCount64;
+        long now = NowMs();
         byte phase = (byte)vm.Phase;
         if (phase == (byte)AgentPhase.Auto)
         {
@@ -81,7 +109,9 @@ public sealed class MascotDirector
 
         if (vm.Mode != StatusBarMode.Idle)
         {
-            _lastActiveMs = Environment.TickCount64;
+            // The same read as `now` above: two reads inside one Advance could
+            // straddle a latch boundary and disagree about this frame (#1007).
+            _lastActiveMs = now;
         }
 
         return mood;
@@ -108,7 +138,7 @@ public sealed class MascotDirector
                 return true;
             }
 
-            return _latched != NoMood && Environment.TickCount64 < _latchEndMs;
+            return _latched != NoMood && NowMs() < _latchEndMs;
         }
     }
 
@@ -210,7 +240,7 @@ public sealed class MascotDirector
         },
         StatusBarMode.Compacting => MascotMood.Working,
         StatusBarMode.AwaitingApproval => MascotMood.Awaiting,
-        _ => Environment.TickCount64 - _lastActiveMs > StatusPanel.MascotSleepAfterMs
+        _ => NowMs() - _lastActiveMs > StatusPanel.MascotSleepAfterMs
             ? MascotMood.Sleeping
             : MascotMood.Idle,
     };
