@@ -79,7 +79,17 @@ public sealed class JsonAppConfigStore<T> : IAppConfigStore<T> where T : AppConf
     private readonly T _default;
     private readonly SemaphoreSlim _lock = new(1, 1);
     private readonly ILogger<JsonAppConfigStore<T>> _logger;
-    private readonly JsonTypeInfo<T>? _jsonTypeInfo;
+
+    /// <summary>
+    ///     Non-null by construction. The parameter is nullable so the "no contract
+    ///     supplied" case has something to receive, but the constructor throws
+    ///     before it gets here, so the field is declared non-nullable and every
+    ///     call site gets CS8604 if that ever stops being true. (CI caught exactly
+    ///     that: leaving the field nullable made the two call sites below fail to
+    ///     compile with CS8604, because a constructor's null check does not narrow
+    ///     a field in a different method.)
+    /// </summary>
+    private readonly JsonTypeInfo<T> _jsonTypeInfo;
 
     /// <summary>
     ///     Construct a JSON-backed store.
@@ -108,7 +118,6 @@ public sealed class JsonAppConfigStore<T> : IAppConfigStore<T> where T : AppConf
     {
         _default = defaultConfig ?? throw new ArgumentNullException(nameof(defaultConfig));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
-        _jsonTypeInfo = jsonTypeInfo;
 
         // #414: there is no reflection fallback any more. It used to be
         // `_jsonTypeInfo is not null ? <generated> : JsonSerializer.Deserialize<T>(
@@ -124,7 +133,7 @@ public sealed class JsonAppConfigStore<T> : IAppConfigStore<T> where T : AppConf
         // immediate, named failure here rather than a crash discovered at the first
         // trimmed publish. Declaring a JsonSerializerContext next to the config
         // record is the fix, and the message says so.
-        if (_jsonTypeInfo is null)
+        if (jsonTypeInfo is null)
         {
             throw new InvalidOperationException(
                 $"JsonAppConfigStore<{typeof(T).Name}> was constructed without a source-generated "
@@ -138,6 +147,8 @@ public sealed class JsonAppConfigStore<T> : IAppConfigStore<T> where T : AppConf
                 + "and case-insensitive, so existing config files keep round-tripping) and pass "
                 + "YourContext.Default." + typeof(T).Name + " as the third constructor argument.");
         }
+
+        _jsonTypeInfo = jsonTypeInfo;
     }
 
     /// <inheritdoc />
