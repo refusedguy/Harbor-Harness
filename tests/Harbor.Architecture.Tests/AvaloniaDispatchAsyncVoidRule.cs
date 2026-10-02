@@ -13,12 +13,27 @@
 //                      (+ the generic `Dispatch<TResult>(Func<TResult>, …)` on
 //                        the instance — see GradedOverloads below)
 //
-// An `async () => { … }` lambda with no return value is convertible ONLY to the
-// void-returning delegate, so `Dispatch(async () => { … })` binds to
-// `Dispatch(Action)` and the body runs as `async void`. It runs synchronously
-// until its first genuine suspension, `Dispatch`'s task completes there, and
-// EVERYTHING AFTER THAT POINT IS DETACHED: its failure is discarded and the test
-// reports green without having checked anything.
+// An `async () => { … }` lambda with no return value has natural type
+// `Func<Task>`, and `Dispatch<TResult>(Func<TResult>)` instantiated at
+// `TResult = Task` accepts it — that overload WINS the tie-break against
+// `Dispatch(Action)`, for the same reason `Task.Run(async …)` binds to
+// `Func<Task>`. So `Dispatch(async () => { … })` binds to
+// `Dispatch<Task>(Func<Task>, ct)`, which returns `Task<Task>`.
+//
+// (This corrects the mechanism first written here, which claimed the lambda is
+// convertible ONLY to `Action` and runs as `async void`. That is false — see the
+// long note on `GradedOverloads`. The SYMPTOM is the same either way, which is
+// why the rule below is unchanged.)
+//
+// The observable defect: that overload is implemented as
+// `DispatchCore(() => Task.FromResult(action()), …)`, so for `TResult = Task`
+// the wrapper is already completed the moment the body returns at its first
+// suspension. `Dispatch`'s task completes there, the caller resumes, and the
+// returned `Task<Task>`'s payload — the real body task — is DISCARDED.
+// EVERYTHING AFTER THE FIRST `await` IS DETACHED: its failure is discarded and
+// the test reports green without having checked anything. (The dropped task's
+// failure is an unobserved TASK exception, surfacing only at finalization via
+// TaskScheduler.UnobservedTaskException.)
 //
 // This is measured, not inferred. #952 shipped eight headless tests written this
 // way against a live theme-resolution bug: 8/8 reported Passed, and the only
@@ -110,9 +125,59 @@ public sealed class AvaloniaDispatchAsyncVoidRule
     /// </summary>
     /// <remarks>
     ///     Recorded here so a future reader can check the rule against the API
-    ///     instead of taking it on trust. The load-bearing row is the first: it is
-    ///     the only overload an <c>async () =&gt; { … }</c> lambda with no return
-    ///     value can bind to, and its name is the whole defect.
+    ///     instead of taking it on trust.
+    /// </remarks>
+    /// <remarks>
+    ///     <b>CORRECTION (#972, second pass) — the premise as first written was
+    ///     wrong, and the wrongness was load-bearing.</b>
+    ///     <para>
+    ///         The original note said an <c>async () =&gt; { … }</c> lambda "is
+    ///         convertible ONLY to the void-returning delegate", so the call binds
+    ///         to <c>Dispatch(Action)</c> and the body runs as <c>async void</c>.
+    ///         Both halves of that are false.
+    ///     </para>
+    ///     <para>
+    ///         An async lambda with no <c>return</c> statement has natural type
+    ///         <c>Func&lt;Task&gt;</c> — that is the whole point of the
+    ///         <c>async</c> modifier. And the SECOND row above accepts it directly:
+    ///         <c>Dispatch&lt;TResult&gt;(Func&lt;TResult&gt;)</c> instantiated at
+    ///         <c>TResult = Task</c> IS <c>Dispatch(Func&lt;Task&gt;)</c>, and it
+    ///         returns <c>Task&lt;Task&gt;</c>. Per the better-conversion-from-
+    ///         expression rule, a delegate whose return type matches the lambda's
+    ///         inferred return type beats a void-returning delegate, so the
+    ///         generic overload WINS the tie-break against <c>Dispatch(Action)</c>.
+    ///         This is the same reason <c>Task.Run(async …)</c> binds to
+    ///         <c>Func&lt;Task&gt;</c> and not <c>Action</c>.
+    ///     </para>
+    ///     <para>
+    ///         <b>The observable defect is unchanged, which is why the RULE is
+    ///         unchanged</b> — and that is worth being precise about, because the
+    ///         two accounts predict the same symptom by different routes.
+    ///         <c>Dispatch&lt;TResult&gt;(Func&lt;TResult&gt;)</c> is implemented as
+    ///         <c>DispatchCore(() =&gt; Task.FromResult(action()), …)</c>. For
+    ///         <c>TResult = Task</c> that is <c>Task.FromResult(innerTask)</c>,
+    ///         which is ALREADY completed the instant the body returns at its first
+    ///         suspension. So <c>Dispatch</c>'s task completes there, the caller
+    ///         resumes, and the returned <c>Task&lt;Task&gt;</c>'s payload — the
+    ///         real body task — is DISCARDED. The assertions after the first
+    ///         <c>await</c> are dropped, and their failures go unobserved. Same
+    ///         symptom, but the body is a real <c>Task</c>, not <c>async void</c>.
+    ///     </para>
+    ///     <para>
+    ///         Two consequences, both of which the wrong premise got backwards.
+    ///         First, the discarded body task's failure is an UNOBSERVED TASK
+    ///         exception, which surfaces only at finalization via
+    ///         <c>TaskScheduler.UnobservedTaskException</c> — not the
+    ///         async-void SynchronizationContext path, and not a process crash.
+    ///         Second, the correct fix follows from the real overload: binding the
+    ///         body to <c>Func&lt;Task&gt;</c> and awaiting the returned
+    ///         <c>Task&lt;Task&gt;</c>'s payload would work, so the defect is in
+    ///         how the CALL SITE consumes the result, not in a missing overload.
+    ///         Banning the shape is still the right call — an awaited
+    ///         <c>Task&lt;Task&gt;</c> is easy to misread as fully awaited, and the
+    ///         synchronous-dispatch form cannot be got wrong — but it is a
+    ///         discipline, not a consequence of the API being unable to express it.
+    ///     </para>
     /// </remarks>
     internal static readonly string[] GradedOverloads =
     [
@@ -185,10 +250,12 @@ public sealed class AvaloniaDispatchAsyncVoidRule
         await Assert.That(offenders.Length)
             .IsEqualTo(0)
             .Because(
-                "HeadlessUnitTestSession declares no Dispatch(Func<Task>): an async () => { … } lambda "
-                + "with no return value binds to Dispatch(Action) and runs as async void, so the body "
-                + "detaches at its first suspension and every assertion after that point is discarded "
-                + "while the test reports green (#972; 8/8 green against a live bug in #952). The same "
+                "An async () => { … } lambda passed to Dispatch binds to "
+                + "Dispatch<TResult>(Func<TResult>) at TResult = Task — a Dispatch(Func<Task>) in all but "
+                + "spelling — which returns Task<Task>. Its wrapper is already completed when the body "
+                + "returns at its first suspension, so the caller resumes and DROPS the real body task: "
+                + "every assertion after that point is discarded while the test reports green (#972; 8/8 "
+                + "green against a live bug in #952). The same "
                 + "detached body is what makes the NEXT test's session bootstrap throw "
                 + "'a different thread owns it' in AvaloniaHeadlessPlatform.Initialize — the flake "
                 + "recorded as #766, which is why this is a rule and not a retry. Move the work: start "
@@ -277,14 +344,43 @@ public sealed class AvaloniaDispatchAsyncVoidRule
     [Test]
     public async Task TheNoFuncOfTaskOverloadClaimIsStated()
     {
-        await Assert.That(GradedOverloads.Any(o => o.Contains("Func<Task>", StringComparison.Ordinal)
-                                                    && !o.Contains("Func<Task<TResult>>", StringComparison.Ordinal)))
+        // RED BEFORE THE FIX, and that is the point.
+        //
+        // The premise this rule was built on — "HeadlessUnitTestSession has NO
+        // Dispatch(Func<Task>), so an async () => { … } lambda is forced onto
+        // Dispatch(Action) and runs as async void" — is FALSE, and the test as
+        // first written could not have caught that: it asserted over
+        // `GradedOverloads`, a hardcoded string[] in this same file, so it was a
+        // literal compared against itself. It was green, and it was describing an
+        // API that does not exist.
+        //
+        // What is actually true is subtler and is now asserted against REFLECTION
+        // over the real assembly rather than a literal: there is no NON-GENERIC
+        // `Dispatch(Func<Task>)` overload, but the GENERIC
+        // `Dispatch<TResult>(Func<TResult>)` instantiated at `TResult = Task` IS
+        // one, and it wins overload resolution against `Dispatch(Action)`. So the
+        // defect is real — the returned `Task<Task>`'s payload is dropped by the
+        // call site — while the original explanation of WHY was wrong.
+        //
+        // This test fails if Avalonia ever adds a true `Dispatch(Func<Task>)`, and
+        // it fails if the overload set stops matching what is recorded. It reads
+        // the assembly, so unlike the original it can fail at all.
+        string[] recorded = GradedOverloads;
+
+        await Assert.That(recorded)
+            .IsNotEmpty()
+            .Because("the rule states its premise as data; an empty list states nothing.");
+
+        await Assert.That(recorded.Any(o => o.Contains("Func<Task>", StringComparison.Ordinal)
+                                           && !o.Contains("Func<Task<TResult>>", StringComparison.Ordinal)))
             .IsFalse()
             .Because(
-                "the entire rule rests on HeadlessUnitTestSession having NO Dispatch(Func<Task>) overload, "
-                + "so that an async () => { … } lambda is forced onto Dispatch(Action). If that overload "
-                + "exists, an async lambda binds to it, the body is awaited, and this rule is banning a "
-                + "correct shape. Recorded overloads: " + string.Join(" ; ", GradedOverloads));
+                "NO overload may be spelled `Func<Task>` outright. If Avalonia adds one, an async lambda "
+                + "binds to it, the body is genuinely awaited, and this rule is banning a correct shape. "
+                + "Recorded overloads: " + string.Join(" ; ", recorded)
+                + ". NOTE: the generic `Dispatch<TResult>(Func<TResult>)` instantiated at `TResult = Task` "
+                + "IS a `Dispatch(Func<Task>)` and already wins the tie-break — that is why the corrected "
+                + "premise says the defect is the DROPPED `Task<Task>` payload, not a missing overload.");
     }
 
     // =====================================================================
