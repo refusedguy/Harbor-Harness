@@ -281,7 +281,7 @@ public sealed class ContractsArtifactCapabilityRule
                 Match match = pattern.Match(lines[i]);
                 if (match.Success)
                 {
-                    hits.Add($"{SourceScan.Relative(path)}:{i + 1}  {match.Value.Trim()}");
+                    hits.Add($"{SourceScan.Relative(file)}:{i + 1}  {match.Value.Trim()}");
                 }
             }
         }
