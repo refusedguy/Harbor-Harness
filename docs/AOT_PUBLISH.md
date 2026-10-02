@@ -15,13 +15,16 @@ gate on it.** The criterion is two things, both of which must hold:
    [`.github/aot-warning-baseline.txt`](../.github/aot-warning-baseline.txt)
    exactly — the same recorded outcome, no new id, no changed count, no new
    first-party site, and no row left behind for a warning that stopped.
-2. The **published artifact runs**: `--version`, `--help`, `--providers`, each
-   asserted on content rather than on exit code. The `--providers` assertion
-   names `ollama`, `anthropic`, `openai` and `kilocode`, which is not a
-   formality: `ProviderVerbs.RunListProvidersAsync` **always returns 0**, so a
-   binary that registered no providers at all would exit 0 and print an empty
-   list. See [what that assertion really
-   proves](#what-the-providers-assertion-really-proves).
+2. The **published artifact** is checked. **Today this half is inactive, and
+   saying so is part of the criterion rather than a footnote**: a failing ILC
+   publish emits no binary (measured — an earlier run of this job reached
+   `no executable at publish/aot/Harbor.App.Cli`), so while the record says the
+   publish fails there is nothing to run. The step checks the record's claim in
+   both directions — a `failed` publish must have produced *no* artifact, a
+   `published` one must have produced one that runs `--version` / `--help` /
+   `--providers` on content — so it stays a real assertion instead of a skip.
+   The transition is forced by the outcome check below; see [the ratchet
+   section](#this-gate-is-a-ratchet-not-a-green-light--and-that-is-the-whole-design).
 
 Neither implies the other. A publish that completes does not prove the artifact
 boots — NativeAOT is a different program from the JIT one, statically linked,
@@ -51,6 +54,24 @@ gate passes **only** on that:
 | a new id, changed count, or new first-party site | **red** |
 | a recorded id stops appearing | **red** — delete or promote the row |
 | no marker in the log at all | **red**, exit **2** — there was no publish |
+
+### Two things about this gate are weaker than they look, stated here rather
+### than left for the next reader to discover
+
+**The "run the published binary" half is currently inactive.** A failing ILC
+publish emits no binary, so there is nothing to execute. The step still runs and
+still asserts — that a `failed` publish left no artifact behind — but it does not
+demonstrate executability, and no amount of reading the job's green tick will
+change that. It activates on its own the moment the publish starts succeeding:
+the outcome check goes red first, the record is updated, and the branch flips.
+What is missing from the current state is the thing #413 asked for, and the
+honest description of this PR is "the gate that will hold the AOT state still",
+not "the AOT state is good".
+
+**The three published-binary assertions have never executed against a real
+artifact.** They are the part of this gate that has not been shown to work. The
+first run in which the publish succeeds is the first real test of them, and if
+they are wrong the fix will land in the same PR that fixes the AOT build.
 
 That last row is the one that matters most. A publish that produced no log, a
 truncated log, or a log from the other recipe is not "the recorded state"; it is
@@ -284,7 +305,6 @@ If a duration trend is ever wanted, the right shape is a recorded measurement in
 in a job.
 
 ## What the gate cannot go green on
-
 `tools/aot-publish-gate.py` returns **exit 0** and **exit 2** as different
 values, and exit 2 is not a softened exit 0:
 

@@ -25,6 +25,15 @@
 #   informative and the stripped one cannot be evaluated at all. The rows below
 #   are what it emits. Resolving them is #48/S4's decision, not this gate's.
 #
+#   CONSEQUENCE FOR THE ARTIFACT CHECK: a failing ILC publish emits no binary —
+#   measured, not assumed. So while the recorded state is "the publish fails",
+#   there is nothing to run and the gate's "run the published binary" half is
+#   INACTIVE. It is not skipped silently: the smoke step asserts that a failed
+#   publish left no artifact, and the day this file is updated to
+#   status=published that step starts executing --version/--help/--providers
+#   with no other edit. Until then, do not read a green job as evidence that the
+#   published binary runs.
+#
 # ── WHY A FAILING PUBLISH IS RECORDED RATHER THAN FIXED HERE ────────────────
 #
 # #413's acceptance criteria forbid buying green with blanket suppression, and

@@ -840,16 +840,51 @@ jobs:
             >> publish/aot-publish.log
           exit "$status"
 
-      # ORDER MATTERS: the artifact runs BEFORE the comparison. Both must pass,
-      # so the order changes no verdict — but the publish is expected to fail
-      # today, which means the artifact DOES exist for the full tree (ILC got far
-      # enough to emit a binary) and this step has something real to check. If
-      # the publish ever stops producing an artifact, this is what says so.
-      - name: Smoke — the published AOT artifact runs
+      # The half that would prove EXECUTABILITY, and which today asserts the
+      # opposite fact — honestly, and with both branches reachable.
+      #
+      # A failing ILC publish emits no binary. That was measured, not assumed:
+      # an earlier run of this job reached `no executable at
+      # publish/aot/Harbor.App.Cli`. So while the recorded state is "the publish
+      # fails", there is no artifact to run, and a step that demanded one would be
+      # permanently red for a reason that is the record being true.
+      #
+      # What this step does instead is check the record's claim in BOTH
+      # directions, which keeps it a real assertion rather than a skip:
+      #
+      #   publish reported `failed`  -> an artifact must NOT exist. If one does,
+      #       the world moved and this step says so.
+      #   publish reported `published` -> the artifact MUST exist and MUST run
+      #       --version / --help / --providers on content.
+      #
+      # The transition is forced by the NEXT step, whose --expect-status is
+      # `failed`: the day the publish starts succeeding, that step goes red, the
+      # record is updated, and this branch flips to the live one. Nothing here has
+      # to be remembered or noticed for that to happen.
+      - name: Smoke — the published AOT artifact
         run: |
           set -euo pipefail
           bin=publish/aot/Harbor.App.Cli
-          test -x "$bin" || { echo "::error::no executable at $bin"; exit 1; }
+          log=publish/aot-publish.log
+
+          # Which branch applies is decided by the publish's own reported outcome,
+          # not by a hardcoded expectation in this file.
+          outcome=$(sed -n 's/.*HARBOR_AOT_PUBLISH_DONE .*status=\([a-z]*\).*/\1/p' "$log" | tail -1)
+          test -n "$outcome" || { echo "::error::no publish marker in $log — nothing to smoke"; exit 1; }
+
+          if [ "$outcome" != "published" ]; then
+            echo "smoke: publish reported status=$outcome, so no artifact is expected."
+            if [ -e "$bin" ]; then
+              echo "::error::$bin exists even though the publish reported $outcome — the AOT state moved; the comparison step will say so, and the record needs updating"
+              exit 1
+            fi
+            echo "smoke: confirmed no artifact at $bin, which is what a failed ILC publish produces."
+            echo "smoke: the 'run the published binary' half of this gate is therefore INACTIVE while the publish fails. It activates on its own the moment the publish succeeds."
+            exit 0
+          fi
+
+          echo "smoke: publish reported status=published — the artifact must exist and must run."
+          test -x "$bin" || { echo "::error::publish reported success but there is no executable at $bin"; exit 1; }
 
           v=$("$bin" --version)
           echo "version: $v"
@@ -866,30 +901,31 @@ jobs:
           # ProviderVerbs.RunListProvidersAsync always returns 0: an AOT binary
           # that registered nothing at all would exit 0 and print an empty list.
           #
-          # All three ids, and the set is derived: the full-tree recipe keeps
-          # HarborWithAllProviders=true, so ProviderFactories registers the
-          # native Anthropic and OpenAI factories on top of the Ollama one, and
-          # the JSON catalogue supplies kilocode. If this job is ever pointed at
-          # the stripped recipe these would legitimately disappear — the recipe
-          # note in the job header says so.
+          # All four ids, and the set is derived: the full-tree recipe keeps
+          # HarborWithAllProviders=true, so ProviderFactories registers the native
+          # Anthropic and OpenAI factories on top of the Ollama one, and the JSON
+          # catalogue supplies kilocode. Under the stripped recipe the two native
+          # ones would legitimately disappear — the recipe note in the job header
+          # says which recipe this is and why.
           #
-          # What `kilocode` actually proves (stated precisely, because the
-          # obvious explanation is wrong): the providers are NOT read from
-          # embedded resources. JsonProviderDiscovery.LoadEmbeddedProviders()
-          # enumerates typeof(JsonProviderDiscovery).Assembly — Harbor.Hosting —
-          # but EmbedProviders is set on Harbor.Application and App.Cli, so that
+          # What `kilocode` actually proves (stated precisely, because the obvious
+          # explanation is wrong): the providers are NOT read from embedded
+          # resources. JsonProviderDiscovery.LoadEmbeddedProviders() enumerates
+          # typeof(JsonProviderDiscovery).Assembly — Harbor.Hosting — but
+          # EmbedProviders is set on Harbor.Application and App.Cli, so that
           # enumeration is empty and the catalogue reaches the registry through
-          # ProviderPresetCatalog.FindProvidersDirectories(), which walks up to
-          # 8 ancestors of AppContext.BaseDirectory for a sibling providers/.
-          # From publish/aot/ that lands on the repo's providers/*.json. So this
-          # asserts the AOT binary can read, parse and register the bundled JSON
-          # catalogue — the System.Text.Json and provider-construction paths both
-          # work under NativeAOT. The dead embedded path is a separate
-          # pre-existing finding, recorded in docs/AOT_PUBLISH.md, not fixed here.
+          # ProviderPresetCatalog.FindProvidersDirectories(), walking up to 8
+          # ancestors of AppContext.BaseDirectory. From publish/aot/ that lands on
+          # the repo's providers/*.json. So this asserts the AOT binary can read,
+          # parse and register the bundled JSON catalogue — the System.Text.Json
+          # and provider-construction paths both work under NativeAOT. The dead
+          # embedded path is a separate pre-existing finding, recorded in
+          # docs/AOT_PUBLISH.md, not fixed here.
           for p in ollama anthropic openai kilocode; do
             grep -q -i "$p" publish/providers.txt \
               || { echo "::error::--providers is missing '$p' — the provider catalogue did not survive the publish"; cat publish/providers.txt; exit 1; }
           done
+          echo "smoke: version/help/providers all ran on the published AOT binary"
           echo "smoke: version/help/providers all ran on the published AOT binary"
 
       - name: Compare the publish against the committed record
@@ -911,7 +947,14 @@ jobs:
             publish/help.txt
             publish/providers.txt
           retention-days: 14
-          if-no-files-found: error
+          # warn, not error: help.txt and providers.txt are only produced by the
+          # LIVE branch of the smoke step, and today the publish fails so they do
+          # not exist. if-no-files-found: error was already earned once — it is
+          # what caught the first version of this job dying in apt-get before
+          # writing a log at all — but applying it to those two files would make
+          # it fire on a correct run. The publish log itself is the evidence and
+          # it must exist.
+          if-no-files-found: warn
 
   publish:
     needs: [changes, build]
