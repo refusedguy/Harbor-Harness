@@ -1,6 +1,6 @@
 using Harbor.Tui.CellForge.Rendering;
 using Harbor.Ui.Framework.Rendering;
-using Harbor.Ui.Framework.State;
+using Harbor.Ui.Framework.Rendering.Input;
 
 namespace Harbor.Tui.CellForge.Input;
 
@@ -88,32 +88,40 @@ public sealed class MouseRouter
         return null;
     }
 
-    // ── Store-driven wheel scroll (CF-B-006 + CF-C-002) ────────────────────
-    // Wheel ticks become AppMsg.KeyInput line-scrolls for UiStore.Dispatch; the
-    // existing Press/Release/Wheel routing above is untouched (targets keep
-    // working). Positive delta = wheel up per the IPointerTarget contract.
+    // ── Wheel → framework-neutral key (CF-B-006 + CF-C-002, epic #33/T2) ─────
+    // A wheel tick becomes a BCL-only UiKeyDto — the vocabulary #162 put in
+    // Rendering.Input — and the HOST decides what a scroll key means. #435
+    // deleted the Harbor.Ui.Framework.State edge this method used to ride, and
+    // the deletion is the design: this method used to return AppMsg.KeyInput,
+    // which made "a wheel scrolled up by one line" a fact about the chat store.
+    // It is not. A wheel tick carries a DIRECTION; that the direction scrolls a
+    // transcript by a line is the host's policy, and it lives next to the other
+    // scroll bindings in VirtualizedChatTimeline. Nothing is lost by splitting
+    // the two — UiKeyKind.Up / .Down / Unknown preserve the sign exactly.
 
     /// <summary>
-    /// Maps a wheel tick to the store scroll message: positive
-    /// <paramref name="delta"/> (wheel up) → <c>ScrollUpLine</c>, negative →
-    /// <c>ScrollDownLine</c>, zero → a <c>ChatAction.None</c> no-op the reducer
-    /// drops. Same mapping as <c>VirtualizedChatTimeline.WheelMsg</c>, kept local
-    /// so Input never depends on Widgets. The host dispatches the result
-    /// (once per tick, or in a loop for acceleration).
+    /// Maps a wheel tick to the framework-neutral key it stands for: positive
+    /// <paramref name="delta"/> (wheel up) → <see cref="UiKeyKind.Up" />, negative →
+    /// <see cref="UiKeyKind.Down" />, zero → <see cref="UiKeyDto.Unknown" />, which
+    /// the reducer drops. Sign only — the magnitude stays host-side, because a
+    /// host may accelerate by dispatching several keys per tick. The host turns
+    /// the result into a store message through
+    /// <c>Harbor.Ui.Framework.State.KeyEventAdapter</c>, the single
+    /// Rendering→State crossing point (#33/T1).
     /// </summary>
-    public static AppMsg WheelToMessage(int delta)
+    public static UiKeyDto WheelToKey(int delta)
     {
         if (delta > 0)
         {
-            return new AppMsg.KeyInput(ChatAction.ScrollUpLine, new UiKey(UiKeyCode.Up));
+            return new UiKeyDto(UiKeyKind.Up);
         }
 
         if (delta < 0)
         {
-            return new AppMsg.KeyInput(ChatAction.ScrollDownLine, new UiKey(UiKeyCode.Down));
+            return new UiKeyDto(UiKeyKind.Down);
         }
 
-        return new AppMsg.KeyInput(ChatAction.None, UiKey.Unknown);
+        return UiKeyDto.Unknown;
     }
 
     private void Clamp(ref int col, ref int row) =>
@@ -123,20 +131,25 @@ public sealed class MouseRouter
 }
 
 /// <summary>
-/// Wheel-only pointer target that forwards ticks to a store-dispatch callback
-/// (CF-C-002): bind it to the timeline rect and wheel events flow into the store
-/// as <c>KeyInput</c> line-scrolls via <see cref="MouseRouter.WheelToMessage"/>.
-/// Press/release are intentional no-ops (selection lives elsewhere). AOT-clean:
-/// no reflection, no allocations beyond the message itself.
+/// Wheel-only pointer target that forwards ticks to a host callback (CF-C-002):
+/// bind it to the timeline rect and wheel events flow out as framework-neutral
+/// <see cref="UiKeyDto" /> values via <see cref="MouseRouter.WheelToKey" />.
+/// Press/release are intentional no-ops (selection lives elsewhere). The callback
+/// is <c>Action&lt;UiKeyDto&gt;</c> rather than a store dispatch because the engine
+/// does not know what a scroll key means — the host does, and converts through
+/// <c>KeyEventAdapter</c>, the single Rendering→State crossing point (#33/T2).
+/// AOT-clean: no reflection, no allocations beyond the DTO itself.
 /// </summary>
 public sealed class TimelineWheelTarget : IPointerTarget
 {
-    private readonly Action<AppMsg> _dispatch;
+    private readonly Action<UiKeyDto> _dispatch;
 
     /// <summary>Create a wheel-forwarding target bound to a timeline rect.</summary>
     /// <param name="id">Target id for hit-test diagnostics; falls back to "timeline-wheel".</param>
-    /// <param name="dispatch">Store dispatch, e.g. <c>msg => { _ = store.Dispatch(msg); }</c>.</param>
-    public TimelineWheelTarget(string id, Action<AppMsg> dispatch)
+    /// <param name="dispatch">
+    /// Host sink for the mapped key, e.g. <c>key =&gt; { _ = store.Dispatch(WheelMsg(key)); }</c>.
+    /// </param>
+    public TimelineWheelTarget(string id, Action<UiKeyDto> dispatch)
     {
         Id = string.IsNullOrWhiteSpace(id) ? "timeline-wheel" : id;
         _dispatch = dispatch ?? throw new ArgumentNullException(nameof(dispatch));
@@ -152,5 +165,5 @@ public sealed class TimelineWheelTarget : IPointerTarget
     {
     }
 
-    public void OnWheel(int col, int row, int delta) => _dispatch(MouseRouter.WheelToMessage(delta));
+    public void OnWheel(int col, int row, int delta) => _dispatch(MouseRouter.WheelToKey(delta));
 }
