@@ -254,6 +254,35 @@ public sealed class ModelRefSingleParserTests
     }
 
     /// <summary>
+    ///     The <c>== 0</c> above is only a verdict if the file was READ. It was not:
+    ///     <see cref="CountDelegations" /> catches <see cref="IOException" />, and
+    ///     <c>FileNotFoundException</c> derives from it, so a renamed or moved file
+    ///     reports "this file does no hand-rolled qualification" — the <b>true</b>
+    ///     answer — and the rule passes having never looked at the file. This is the
+    ///     #591 shape (a plausible 0) reached through a swallowed exception rather
+    ///     than a bad matcher, and it is load-bearing here because the consumer this
+    ///     rule names is a path constant: <c>src/Harbor.Ui.Framework.Sessions/…</c>
+    ///     is exactly the kind of path a refactor moves, and #439 measured that move
+    ///     as live. Two of the three call sites cannot notice (a missing file makes
+    ///     them red); only the <c>== 0</c> one can, so it is the one checked here.
+    /// </summary>
+    [Test]
+    public async Task ADelegationCount_NeverReportsZeroForAFileItCouldNotRead()
+    {
+        string root = RequireRepoRoot();
+
+        await Assert.That(
+                () => CountDelegations(root, "src/Harbor.Architecture.Tests/NoSuchFile-439.cs"))
+            .Throws<FileNotFoundException>()
+            .Because(
+                "a count over a file that is not there is not a count of zero, it is an absent "
+                + "measurement. Letting it read as zero turns the consumer assertion above into a "
+                + "permanent green light the moment SessionFactory.cs is moved or renamed — which is "
+                + "the exact event #439's Sessions/ relocation would cause, and the reason the "
+                + "sibling guards in ProviderModelAbsenceRules already assert file existence.");
+    }
+
+    /// <summary>
     ///     Rule 2: the sanctioned function still cuts. Without this, rules 1 could
     ///     be satisfied by deleting <c>TryParse</c> and the UI would go back to
     ///     string surgery with nothing to delegate to.
