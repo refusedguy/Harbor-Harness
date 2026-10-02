@@ -1,0 +1,44 @@
+# aot-warning-baseline — the committed trim/AOT diagnostic inventory for
+# `apps/Harbor.App.Cli` published with `-p:HarborWithAot=true` on linux-x64.
+#
+# OWNER: issue #413. Read by tools/aot-publish-gate.py; every row is a
+# permission, and every row is re-probed against a real publish on every PR, so
+# a row for a diagnostic nothing emits fails (delete it in the same diff).
+#
+# FORMAT (one row, 5 '|'-separated fields):
+#
+#   ID | count | verdict | first-party files | reason
+#
+#   ID              an IL2xxx (trim) or IL3xxx (AOT) diagnostic id. IL0xxx
+#                   compiler diagnostics are out of scope: they are errors
+#                   already, via TreatWarningsAsErrors in Directory.Build.props,
+#                   and a publish that emitted one never reached the gate.
+#   count           exact number of occurrences in the publish log. A change in
+#                   either direction fails. This is NOT a threshold.
+#   verdict         ACCEPTED = tolerated, with the reason in the last field.
+#                   REJECTED = a bug to fix, not a concession to carry; a
+#                   REJECTED row that is still emitted FAILS the gate, because
+#                   it means the fix has not landed.
+#   files           '-' when every site is third-party; otherwise the
+#                   comma-separated first-party files (src/…, apps/…) that
+#                   warn. A new first-party file fails even at an unchanged
+#                   count. Line numbers are deliberately absent: a baseline
+#                   keyed on lines churns on every unrelated edit and would be
+#                   deleted. The log artifact carries the exact sites.
+#   reason          >= 40 characters, not a bare URL. The floor and the URL
+#                   rule are the same ones tests/Harbor.Architecture.Tests/
+#                   ExemptionReason.cs applies to every other table in this
+#                   repo, so there is one definition of "states a reason".
+#
+# STATE ON dev: EMPTY. #413 lands this file with no rows and the first CI run
+# is expected to be RED with a NEW-row report per diagnostic id; the rows are
+# then transcribed from that log, with a real count and a real reason each.
+# An empty inventory is a claim that the publish emits nothing in scope, and
+# the gate is what decides whether that claim survives. Do not pre-fill this
+# file with guessed counts.
+#
+# A note on what the four IDs in apps/Harbor.App.Cli's AOT block mean here:
+# that block DEMOTES them (WarningsNotAsErrors), so they do not fail the
+# publish — but they are still printed, and this inventory is the record of
+# them. The block's AotBlockDemotionRules table in tests/Harbor.Architecture.
+# Tests/ is what keeps the csproj and this file describing the same set.

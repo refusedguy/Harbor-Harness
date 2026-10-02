@@ -14,6 +14,13 @@
 #              suites under the MTP CodeCoverage extension, per-project line
 #              rates in the job summary + raw cobertura.xml artifacts.
 #              NEVER gates (no thresholds, exit 0 by design).
+#   aot-publish — NativeAOT publish of Harbor.App.Cli (issue #413): the tree is
+#              published with HarborWithAot=true, the trim/AOT diagnostics are
+#              compared against .github/aot-warning-baseline.txt, and the
+#              PUBLISHED BINARY is executed (--version/--help/--providers). The
+#              pass criterion is NOT "zero IL2026 warnings" — it is publish
+#              green + inventory matches the committed rows + the artifact runs.
+#              See docs/AOT_PUBLISH.md.
 #   publish  — self-contained single-file Harbor.App.Cli (linux-x64) upload.
 #
 # NOTE on running tests: do NOT use `dotnet test` in this repo. The
@@ -88,6 +95,15 @@ jobs:
               # edit to the script alone would set dotnet=false, skip the very
               # job that executes it, and land unvalidated (issue #618).
               - 'tools/test-measurements.py'
+              # The AOT gate's instrument and its committed inventory (#413).
+              # The same argument as the line above, one step further: editing
+              # the BASELINE is the ordinary way to answer a red AOT job, and
+              # if the baseline were not in the filter then the edit that
+              # silences the gate would also be the edit that stops the gate
+              # from running — unvalidated, which is the #618 defect again with
+              # a different payload. Editing the tool has the same problem.
+              - 'tools/aot-publish-gate.py'
+              - '.github/aot-warning-baseline.txt'
             ui:
               - 'src/Harbor.Tui.**'
               - 'src/Harbor.Ui.Framework.**'
@@ -632,6 +648,195 @@ jobs:
             --summary "$GITHUB_STEP_SUMMARY"
 
   # Task: artifact publishing — self-contained single-file CLI.
+  # ── aot-publish (issue #413) ───────────────────────────────────────────────
+  #
+  # THE HOLE THIS CLOSES
+  # --------------------
+  # The repo's AOT story is a DECLARATION and nothing has ever evaluated it.
+  # `IsAotCompatible=true` sits on four projects (Harbor.DesignSystem,
+  # Harbor.Ui.Framework.Rendering, Harbor.Tui.CellForge,
+  # Harbor.Tui.CellForge.Engine), and `apps/Harbor.App.Cli` — the one project
+  # with a real NativeAOT block — is not among them. Until this job, no workflow
+  # anywhere in the repo set `HarborWithAot` or `HARBOR_MINIMAL`, so that block
+  # was never evaluated by any build and "AOT analysis passes cleanly" was not
+  # merely unverified, it was UNFALSIFIABLE: there was no process whose output
+  # could contradict it. Issue #48 scoped the fix and named "zero IL2026" as the
+  # wrong gate; this job is that fix.
+  #
+  # WHAT PASSES, AND WHY IT IS NOT "ZERO IL2xxx"
+  # -------------------------------------------
+  # Three things, all of which have to hold:
+  #
+  #   1. `dotnet publish -p:HarborWithAot=true` completes. A publish that fails
+  #      is a publish that did not happen.
+  #   2. Its trim/AOT diagnostics match `.github/aot-warning-baseline.txt`
+  #      exactly — no new id, no changed count, no new first-party site, and no
+  #      row left behind for a warning that stopped. tools/aot-publish-gate.py
+  #      owns that comparison and prints the id list and occurrence count on
+  #      every run, so "found 0" can never be a bare, unreadable number.
+  #   3. The published artifact RUNS: --version, --help, --providers, each
+  #      asserted on content, not just on exit code. A green publish does not
+  #      prove the binary boots; this is the only step that does.
+  #
+  # WHY THE BINARY RUNS AND THE INVENTORY IS NOT THE WHOLE GATE
+  # ----------------------------------------------------------
+  # A NativeAOT artifact is a different program from the JIT one: statically
+  # linked, no JIT, no runtime assembly loading. Trimming can remove a method
+  # that only a reflective call site reaches, and the linker reports nothing if
+  # the call site is itself removed. So publish-green is necessary and not
+  # sufficient, and the reverse also holds — a binary that boots can still have
+  # shipped a warning nobody read. Both are required.
+  #
+  # WHY `-p:HarborWithAot=true` AND NOT `HARBOR_MINIMAL=true`
+  # -------------------------------------------------------
+  # The two AOT recipes in the CLI csproj are NOT equivalent (#747). The
+  # minimal one also strips plugins/providers/tools, so it would publish a
+  # DIFFERENT, smaller program than the one that ships, and its warning
+  # inventory would not describe the shipping artifact. This gate publishes the
+  # full tree with AOT on, which is the artifact whose warnings are worth
+  # triaging. What the minimal profile would emit is a separate question and
+  # belongs to #48/S4, which owns the Roslyn/plugin-host decision; this gate
+  # does not take a position on it.
+  #
+  # WHERE THE INVENTORY LIVES, AND WHY NOT IN THE LOG
+  # --------------------------------------------------
+  # In `.github/aot-warning-baseline.txt`, committed and diffed in review, and
+  # validated by the tool. A gate that only counted warnings in a log nobody
+  # reads is a gate whose threshold nobody chose. The csproj's own demotion list
+  # and this file are cross-checked against each other by
+  # tests/Harbor.Architecture.Tests/AotBlockDemotionRules.cs.
+  #
+  # WHY THIS IS A SEPARATE JOB AND NOT A STEP IN `build`
+  # ---------------------------------------------------
+  # #555 freezes new extension axes, so this is a gate added to an existing
+  # workflow rather than a new workflow file. It is a separate job because it
+  # needs its own `PublishAot` build of the whole tree (~10-20 min, its own
+  # ILC pass) and must not consume the `build` job's 15-minute budget; the
+  # `build` job would go red on timeout and take the whole solution build with
+  # it. It `needs: build` so it starts from a tree already known to compile,
+  # and it is NOT in the required-gate list on day one — see the PR body for
+  # the measured duration and the sharding decision.
+  #
+  # ON WALL-CLOCK TIME
+  # -----------------
+  # There is deliberately NO time threshold on this publish. #998 measured a
+  # 1.43x spread on a single-commit job (2.167s..3.088s over six green runs),
+  # and a NativeAOT publish is far longer and far more variable than that. An
+  # absolute wall-clock threshold on this step would fire on a slow runner and
+  # be ignored on a fast one. `timeout-minutes` is the only time bound here and
+  # it is a hang detector, not a performance gate; ILC time is reported to the
+  # log so the trend is visible without being a pass criterion.
+  aot-publish:
+    needs: [changes, build]
+    if: (needs.changes.outputs.dotnet == 'true' || github.event_name == 'workflow_dispatch') && github.actor != 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    # Generous, because it must not be the thing that goes red: see "ON
+    # WALL-CLOCK TIME" above. This is a hang detector.
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: recursive
+
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: "10.0.x"
+          cache: true
+          cache-dependency-path: "Directory.Packages.props"
+
+      # The gate tool's own failure path, run FIRST and separately from any
+      # publish. A checker that has quietly stopped finding anything is still
+      # green on every PR, and the only defence is testing the failure path on
+      # every run — the same argument as docs.yml's `selftest` job (#509). These
+      # are synthetic fixtures where a hit is guaranteed (planted extra id,
+      # planted extra occurrence, planted first-party site, missing sentinel,
+      # truncated log, absent log), so a matcher that matches nothing cannot
+      # pass them. No publish, no network, ~1s.
+      - name: Self-test the gate tool (synthetic, guaranteed-hit fixtures)
+        run: python3 tools/aot-publish-gate.py --selftest
+
+      - name: Publish Harbor.App.Cli (NativeAOT, linux-x64)
+        id: publish
+        env:
+          RID: linux-x64
+        run: |
+          set -o pipefail
+          # AOT needs the native toolchain (clang/objcopy) that the runner
+          # image ships but a plain ubuntu container does not.
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq clang lld objcopy zlib1g-dev
+          mkdir -p publish
+          # The whole tree, AOT on, nothing stripped: see the recipe note above.
+          # The log is the gate's evidence, so it is captured in full rather
+          # than relying on the step's own console scrollback.
+          dotnet publish apps/Harbor.App.Cli \
+            -c Release -r "$RID" \
+            -p:HarborWithAot=true \
+            -p:ContinuousIntegrationBuild=true \
+            -o publish/aot 2>&1 | tee publish/aot-publish.log
+          status=${PIPESTATUS[0]}
+          # The sentinel is written ONLY on success, and the gate refuses a log
+          # without it. This is what distinguishes "the publish is clean" from
+          # "there is no publish here" — the #988 shape, in a job that is about
+          # publishing rather than about tests.
+          if [ "$status" -eq 0 ]; then
+            echo "HARBOR_AOT_PUBLISH_OK rid=$RID" >> publish/aot-publish.log
+          fi
+          exit "$status"
+
+      - name: Compare the published inventory against the committed baseline
+        run: |
+          python3 tools/aot-publish-gate.py \
+            --log publish/aot-publish.log \
+            --baseline .github/aot-warning-baseline.txt \
+            --expect-rid linux-x64
+
+      # The half that proves executability. Each assertion is on CONTENT, and
+      # each one fails loudly on an empty output — an exit code of 0 from a
+      # binary that printed nothing is not evidence that it ran.
+      - name: Smoke — the published AOT binary runs
+        run: |
+          set -euo pipefail
+          bin=publish/aot/Harbor.App.Cli
+          test -x "$bin" || { echo "::error::no executable at $bin"; exit 1; }
+
+          v=$("$bin" --version)
+          echo "version: $v"
+          test -n "$v" || { echo "::error::--version printed nothing"; exit 1; }
+
+          "$bin" --help > publish/help.txt 2>&1
+          test -s publish/help.txt || { echo "::error::--help printed nothing"; exit 1; }
+          grep -q -i -e 'ask' -e 'usage' publish/help.txt \
+            || { echo "::error::--help output has no usage section"; cat publish/help.txt; exit 1; }
+
+          "$bin" --providers > publish/providers.txt 2>&1
+          test -s publish/providers.txt || { echo "::error::--providers printed nothing"; exit 1; }
+          # The provider catalogue is EMBEDDED at build time
+          # (EmbedProviders=true in the CLI csproj). If embedding were broken
+          # by trimming, this list would be empty while still exiting 0 — so the
+          # assertion is that known providers are present, not that some output
+          # exists.
+          for p in ollama openai anthropic kilocode; do
+            grep -q -i "$p" publish/providers.txt \
+              || { echo "::error::--providers is missing '$p' — embedded provider JSON did not survive the publish"; cat publish/providers.txt; exit 1; }
+          done
+          echo "smoke: version/help/providers all ran on the published AOT binary"
+
+      - name: Upload AOT publish log and inventory report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: aot-publish-log
+          path: |
+            publish/aot-publish.log
+            publish/help.txt
+            publish/providers.txt
+          retention-days: 14
+          if-no-files-found: error
+
   publish:
     needs: [changes, build]
     if: (github.ref == 'refs/heads/master' || startsWith(github.ref, 'refs/tags/')) && needs.changes.outputs.dotnet == 'true'
