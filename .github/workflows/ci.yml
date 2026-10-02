@@ -764,10 +764,14 @@ jobs:
           RID: linux-x64
         run: |
           set -o pipefail
-          # AOT needs the native toolchain (clang/objcopy) that the runner
-          # image ships but a plain ubuntu container does not.
+          # AOT needs the native toolchain. ubuntu-latest already ships most of
+          # it, but naming it explicitly is what makes this step portable to a
+          # runner image that does not. `objcopy` is NOT a package: it lives in
+          # binutils, and the first version of this step asked apt for
+          # `objcopy` and died with "E: Unable to locate package objcopy"
+          # before `dotnet publish` ever ran.
           sudo apt-get update -qq
-          sudo apt-get install -y -qq clang lld objcopy zlib1g-dev
+          sudo apt-get install -y -qq clang lld binutils zlib1g-dev
           mkdir -p publish
           # The whole tree, AOT on, nothing stripped: see the recipe note above.
           # The log is the gate's evidence, so it is captured in full rather
