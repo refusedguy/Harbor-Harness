@@ -187,7 +187,25 @@ public class HeadlessSessionDispatchOverloadTests
 
         // Close the generic over Task — this is the substitution the original
         // premise insisted was impossible.
-        Type taskOverload = parameter.MakeGenericType(typeof(Task));
+        //
+        // `parameter` is `Func<TResult>`, an ALREADY-CONSTRUCTED type whose single
+        // generic argument is the METHOD's own TResult. So substitute through that
+        // argument rather than calling MakeGenericType on the Func itself: Func<>
+        // is the definition, Func<TResult> is not, and MakeGenericType rejects it
+        // ("MakeGenericType may only be called on a type for which
+        // Type.IsGenericTypeDefinition is true").
+        Type taskOverload = parameter.GetGenericArguments()[0] == typeof(Task)
+            ? parameter
+            : parameter.GetGenericArguments()[0].MakeGenericType(typeof(Task));
+
+        // Sanity: the substitution must actually have happened, so a future edit
+        // that reaches this line with the wrong shape fails here rather than
+        // quietly asserting a tautology.
+        await Assert.That(taskOverload.GetGenericArguments())
+            .IsNotEmpty()
+            .Because(
+                "the substituted parameter type must still be generic. Reaching a non-generic type here "
+                + "means the overload's shape changed and this substitution is no longer the one #972 rests on.");
 
         await Assert.That(Pretty(taskOverload))
             .IsEqualTo("Func<Task>")
