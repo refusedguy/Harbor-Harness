@@ -142,7 +142,17 @@ public sealed record TurnEndEvent(
 /// </summary>
 /// <param name="NewMessages">Messages produced by the run.</param>
 /// <param name="Cancelled">True when the run ended because it was cancelled, not because the agent finished.</param>
-public sealed record AgentEndEvent(IReadOnlyList<AgentMessage> NewMessages, bool Cancelled = false) : AgentEvent;
+/// <param name="Limit">
+///     Which limit ended the run, when a limit did (<c>AgentEndEvent</c> is the
+///     terminal fact every reader gets, so it is where "why" belongs). Null when
+///     the run was not ended by a limit — which includes a cancelled run: a
+///     timeout the user set and a cancel the user pressed are different facts and
+///     merging them is how a limit ends up reported as an abort.
+/// </param>
+public sealed record AgentEndEvent(
+    IReadOnlyList<AgentMessage> NewMessages,
+    bool Cancelled = false,
+    RunLimitKind? Limit = null) : AgentEvent;
 
 /// <summary>
 ///     Emitted on an unrecoverable agent error.

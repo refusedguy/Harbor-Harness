@@ -8,11 +8,25 @@ namespace Harbor.Application.Agents;
 
 /// <summary>
 ///     Outcome of one executed turn: the (possibly engaged) truncation fallback
-///     to carry into the next turn, whether the run ends after this turn, and
-///     an optional terminal run failure (provider terminal error — the run
-///     fails without turn/agent end events, exactly as before the extraction).
+///     to carry into the next turn, whether the run ends after this turn, an
+///     optional terminal run failure (provider terminal error — the run
+///     fails without turn/agent end events, exactly as before the extraction),
+///     and which limit ended the turn when one did.
 /// </summary>
-internal sealed record TurnStepResult(bool TruncationFallback, bool EndRun, string? RunFailure = null);
+/// <remarks>
+///     <b>Why <c>Limit</c> exists beside the <c>bool</c>.</b> <c>EndRun</c> is a
+///     bool, and a turn that ran out of budget returns <c>EndRun: true</c>
+///     identically to a turn that finished the agent's work. The caller then
+///     publishes one terminal fact for both, and a run cut off mid-work is
+///     reported as a run that did its work. <c>Limit</c> is the reason, and it
+///     is null on every non-limit exit — a bool plus a null-by-default reason is
+///     cheaper than a stop-state enum and cannot drift into a second truth.
+/// </remarks>
+internal sealed record TurnStepResult(
+    bool TruncationFallback,
+    bool EndRun,
+    string? RunFailure = null,
+    RunLimitKind? Limit = null);
 
 /// <summary>
 ///     Per-turn execution extracted from <see cref="AgentLoop" /> ([G4]):

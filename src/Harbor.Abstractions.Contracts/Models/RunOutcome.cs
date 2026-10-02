@@ -23,6 +23,47 @@ public enum RunStopReason
 
     /// <summary>The run was cancelled or aborted (<c>AgentEndEvent.Cancelled</c>, or terminal <c>StopReason.Aborted</c>). Not a failure.</summary>
     Stopped,
+
+    /// <summary>
+    ///     The run was ended by a limit the user set — the step budget or the
+    ///     wall-clock budget (<see cref="RunLimitKind" />). Not a failure and not a
+    ///     cancellation: nothing malfunctioned, and nobody pressed stop. The work
+    ///     is INCOMPLETE, which is what distinguishes this from
+    ///     <see cref="Succeeded" /> and why it cannot be folded into
+    ///     <see cref="Stopped" /> either.
+    /// </summary>
+    LimitExceeded,
+}
+
+/// <summary>
+///     Which limit ended a run (epic #41, slice B2.2).
+/// </summary>
+/// <remarks>
+///     <para>
+///         A member of the execution axis's own second dimension, not a new axis:
+///         "why did the run stop" is <see cref="RunStopReason" />, and "which of
+///         the bounds did it hit" is this. They are asked together and answered
+///         together, so a single <c>LimitExceeded</c> plus one of these says
+///         everything the record needs, and a third limit later needs a member
+///         here rather than a new enum.
+///     </para>
+///     <para>
+///         This is deliberately NOT the same question as epic #406's
+///         <c>Interrupted</c>. That one is "did the process reach a terminal event
+///         at all" — an epistemic question about whether the fact is knowable. A
+///         limit stop is a causal question about a run whose terminal event is
+///         known exactly. A run stopped by the clock is fully
+///         <c>Interrupted == false</c> and still <c>LimitExceeded</c>; answering
+///         the two with one member is the #711 shape (two meanings in one field).
+///     </para>
+/// </remarks>
+public enum RunLimitKind
+{
+    /// <summary>The wall-clock budget (<c>WorkspaceLimits.TimeoutSeconds</c>) elapsed.</summary>
+    Timeout,
+
+    /// <summary>The step budget (<c>AgentDefinition.MaxSteps</c>) was consumed.</summary>
+    MaxSteps,
 }
 
 /// <summary>
@@ -69,6 +110,12 @@ public sealed record ToolCallLink(
 /// <param name="MessageIds">Ids of the run's messages in chronological order.</param>
 /// <param name="ToolCalls">Tool calls issued by the run, each linked to its result.</param>
 /// <param name="ErrorMessage">User-facing error text when <see cref="StopReason" /> is <see cref="RunStopReason.Failed" />; otherwise null.</param>
+/// <param name="Limit">
+///     Which limit ended the run, when <see cref="StopReason" /> is
+///     <see cref="RunStopReason.LimitExceeded" />; otherwise null. Null is the
+///     honest value for every other stop reason — a plausible constant here would
+///     put a limit on runs that never hit one.
+/// </param>
 public sealed record RunOutcome(
     RunId RunId,
     string SessionId,
@@ -77,7 +124,8 @@ public sealed record RunOutcome(
     DateTimeOffset FinishedAt,
     IReadOnlyList<string> MessageIds,
     IReadOnlyList<ToolCallLink> ToolCalls,
-    string? ErrorMessage = null)
+    string? ErrorMessage = null,
+    RunLimitKind? Limit = null)
 {
     /// <summary>
     ///     Reconstruct a finished run's outcome from the session store's message
