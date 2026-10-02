@@ -14,8 +14,7 @@ namespace Harbor.Tui.CellForge.Tests;
 /// rather than the predicates splits them:
 ///
 ///   TEXT BUFFER — a rune can be appended to something the user is filling in.
-///     - <c>ComposerController.cs:173</c>   composer body          (Ctrl|Meta|Alt)
-// check-doc-cites: record-drift ComposerController.cs:173 now="if (mods.AcceptsTypedChar())" [#947: written over `if ((mods & (KeyModifiers.Ctrl | KeyModi`; repair deferred to the owner's symbol-rename decision] -->
+///     - <c>ComposerController.cs:194</c>   composer body          (Ctrl|Meta|Alt)
 ///     - <c>DialogOverlay.cs:632</c>       reject reason, prompt, multiline (Ctrl|Meta|Alt)
 ///     - <c>FilePickerView.cs:153</c>, <c>CommandPaletteView.cs:254</c>  (None or Shift)
 // check-doc-cites: record-drift CommandPaletteView.cs:254 now="case KeyCode.Char when key.Modifiers.AcceptsTypedChar():" [#947: written over `case KeyCode.Char when key.Modifiers is `; repair deferred to the owner's symbol-rename decision] -->
