@@ -59,13 +59,19 @@ internal static class ConfigRegistration
         // shared ~/.harbor/config.json. JsonAppConfigStore handles atomic
         // write (temp + rename) + SemaphoreSlim thread safety.
         var bootstrapConfigLogger = bootstrapLoggerFactory.CreateLogger<JsonAppConfigStore<AvaloniaConfig>>();
+        // #414: the third argument is the whole point — without a source-generated
+        // JsonTypeInfo the store resolves the contract reflectively, which
+        // JsonSerializer.IsReflectionEnabledByDefault disables under
+        // PublishTrimmed. Both construction sites here shared that fallback.
         var configStore = new JsonAppConfigStore<AvaloniaConfig>(
             new AvaloniaConfig(),
-            bootstrapConfigLogger);
+            bootstrapConfigLogger,
+            AvaloniaJsonContext.Default.AvaloniaConfig);
         services.AddSingleton<IAppConfigStore<AvaloniaConfig>>(sp =>
             new JsonAppConfigStore<AvaloniaConfig>(
                 new AvaloniaConfig(),
-                sp.GetRequiredService<ILogger<JsonAppConfigStore<AvaloniaConfig>>>()));
+                sp.GetRequiredService<ILogger<JsonAppConfigStore<AvaloniaConfig>>>(),
+                AvaloniaJsonContext.Default.AvaloniaConfig));
         var avaloniaConfigResult = await configStore.LoadAsync().ConfigureAwait(false);
         var avaloniaConfig = avaloniaConfigResult.IsSuccess
             ? avaloniaConfigResult.Value

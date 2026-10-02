@@ -925,11 +925,14 @@ Three facts the survey did establish, recorded because they are the non-obvious 
   `src/Harbor.Plugins.Compilation/`, which derives from `AssemblyLoadContext`. Every other
   occurrence of these names in `src/` is inside a `///` comment.
 * `apps/` has **zero**.
-* One real Type-level reflection outside the plugins is **not** covered by this rule:
-  `src/Harbor.Desktop.Shared/Locators/ViewModelLocator.cs` calls
-  `typeof(ServiceProviderServiceExtensions).GetMethods()` and `MakeGenericMethod` to build
-  a service call. That is member-by-reflection, not assembly loading, so banning it here
-  would widen the rule on a guess about intent. Recorded as **out of scope**, not approved.
+* One real Type-level reflection outside the plugins was **not** covered by this rule:
+  `src/Harbor.Desktop.Shared/Locators/ViewModelLocator.cs` called
+  `typeof(ServiceProviderServiceExtensions).GetMethods()` and `MakeGenericMethod`, then
+  `Expression.Lambda(...).Compile()`, to build a service call. That is member-by-reflection
+  and IL emitted at run time, not assembly loading, so banning it here would have widened
+  the rule on a guess about intent. Recorded as **out of scope**, not approved — and then
+  **fixed** by [#414](#58a-the-trim-safety-convention--zero-allocations-is-not-aot-safety),
+  which is the shape the out-of-scope note was pointing at.
 
 **Why the plugin exception is the product, not debt.** CS-source plugins are compiled
 in-memory with Roslyn and run with full trust; DLL plugins are loaded at run time so a swap
@@ -957,6 +960,94 @@ NetArchTest trap in a new coat:
 excluded tree to really contain what the rule bans: `tests/Harbor.Architecture.Tests/GlobalUsings.cs`
 calls `Assembly.Load` in `ArchitectureTestHelpers.LoadHarborAssemblies`. If that stops being
 true, the exclusion has become an accident and the scope statement above is a lie.
+
+### 5.8a The trim-safety convention — zero allocations is not AOT-safety
+
+> **A hot path may not depend on the trimmer having proven a type.**
+
+Added by [#414](https://github.com/refusedguy/Harbor-Harness/issues/414) ("48/S3"), enforced by
+`TrimUnsafeReflectionRules`. It is a **separate** rule from §5.8, not an extension of it: §5.8's
+banned family is dynamic *code*, and this one is dynamic *metadata*. `ReflectionConventionRule`'s
+plugin allowance is `internal` and **shared** rather than copied — two tables describing one
+architectural fact is the drift `SourceScan` exists to end.
+
+**Why it is a separate question from performance.** Every number in
+[BENCHMARKS.md](./BENCHMARKS.md) is a BenchmarkDotNet measurement of running code, and is sound
+*for what it measures*. Allocations can be counted. Trimming cuts something else: it is a property
+of what the trimmer could **prove** at publish time, and it removes reflection-based serialization,
+`dynamic`, string-named types, `MethodInfo` / `Type.GetType`, `Activator.CreateInstance`, generic
+virtual methods, and run-time-compiled expression trees. **A path allocating zero bytes can depend
+on all seven.** "No allocations" was therefore never evidence of AOT-safety, and nothing tested the
+second claim.
+
+**First, is there anything to trim?** Asked before anything was written, because the answer sizes
+the rule. Measured over the whole repository:
+
+* `PublishTrimmed` — **0** occurrences. `TrimMode=full` appears once, inside
+  `Condition="'$(HarborWithAot)' == 'true'"` in `Harbor.App.Cli.csproj`, and `HarborWithAot`
+  **defaults to false** — `Directory.Build.props` sets `PublishAot=false` repo-wide ("NativeAOT
+  opt-in per project; default off"). **No trimmer runs.**
+* `TrimmerRootAssembly` — **0**. `ILLink.Descriptors.xml` / `link.xml` / `rd.xml` — **0 files**.
+  There is no root set to feed a trimmer, so any root-list audit bottoms out in "not specified".
+* `IsAotCompatible=true` — **4** projects: `Harbor.Tui.CellForge`, `Harbor.Tui.CellForge.Engine`,
+  `Harbor.Ui.Framework.Rendering`, `Harbor.DesignSystem`. (Two further textual hits are prose in
+  comments.) That flag defaults `IsTrimmable`, `EnableTrimAnalyzer`, `EnableSingleFileAnalyzer` and
+  `EnableAotAnalyzer` to true, so IL2xxx **is** machine-checked — **inside those four projects
+  only**, and only for code written in them. Three of the four contain no `JsonSerializer` call at
+  all; `Harbor.DesignSystem` has one file and it already routes through `ThemeJsonContext`.
+
+So the honest subject is small, and the guard is sized to the measured count rather than to the size
+of the fear. Turning the publish on, and triaging what it emits, is #413's job; nothing here touches
+`.github/workflows/`.
+
+**The three rules, and what each actually found.**
+
+| rule | construct | naive count | real |
+|---|---|---|---|
+| `TRIM-SERIALIZATION-MAY-NOT-DEPEND-ON-AN-UNPROVEN-TYPE` | a `JsonSerializer` call handed only a `JsonSerializerOptions` | 56 | **3** |
+| `TRIM-MAY-NOT-RESOLVE-A-CLR-MEMBER-BY-A-STRING-NAME` | `typeof(T).GetXxx`, `Type.GetType`, `Activator.CreateInstance`, `MakeGenericMethod/Type` | 36 | **2** |
+| `TRIM-MAY-NOT-COMPILE-AN-EXPRESSION-TREE-AT-RUN-TIME` | `System.Linq.Expressions` | 1 | **1** |
+
+Also swept and measured **zero**: `Type.GetType("name")`, `MethodInfo.Invoke` (76 of 77 raw hits are
+`?.Invoke()` on a delegate), `dynamic` (the single hit is the word inside a log message), and
+`XAttribute` / `XElement` / `XName.Get`.
+
+**Why the counts collapse, since it is the whole difficulty.** Seven of the 56 pass an options
+object that *does* install a `TypeInfoResolver`; five more are `JsonConverter<T>` internals passing
+the ambient `options` parameter and inheriting the caller's resolver; and **all 34** string-literal
+`GetProperty` calls are `JsonElement` — the JSON-key carve-out §5.8 declines to match. Reporting
+the raw numbers would have been red on correct code, and a guard that cries wolf gets deleted rather
+than fixed. Both skew directions are honoured here: the classified count is *above* what a
+one-shape scan suggests, and #970's 245 → 87 is the same lesson — a naive scan over-matches.
+
+For the same reason the string-named-member rule matches `typeof(…).GetXxx` and **not** bare
+`x.GetProperty("key")`. The two are one token apart and only the receiver distinguishes them; §5.8
+says the classification is not done, and this rule does not guess it.
+
+**No allowance table, on purpose.** There is no `KnownViolations` here. #847 closed the declarative
+known-unsafe list and #921 deleted an allowance with no reader, and a rule *with* an escape hatch
+cannot distinguish "this debt is accepted" from "this rule matches nothing". The three real sites
+were **fixed** instead: `ViewModelLocator` resolves through the container (the compiled delegate was
+reaching `sp.GetService(typeof(T))`, which needs no reflection — `T` is statically known), and
+`JsonAppConfigStore<T>`'s reflective fallback was removed in favour of per-app
+`CliJsonContext` / `AvaloniaJsonContext`.
+
+**The fallback was not a fallback.** `JsonAppConfigStore<T>` took an *optional* `JsonTypeInfo<T>` and
+otherwise called `JsonSerializer.Deserialize<T>(json, JsonOptions)` — a reflective contract, warned
+about once per launch. Both product call sites omitted the argument, so the reflective path was the
+path every CLI and desktop run took. Reading only the signature would have called it an optional
+convenience; that is the failure mode this section exists to prevent.
+
+**Non-vacuity, and a bug it caught before push.** The planted-offender control reported a plausible
+3 of 4 on its first run: the call matcher used `[A-Za-z]*`, and `SerializeToUtf88**8**Bytes`
+contains a **digit**, so the matcher stopped one character short of the `(` and was blind to the
+single most common write form in the repository. That is [#591](https://github.com/refusedguy/Harbor-Harness/issues/591)'s
+failure mode — an instrument that quietly under-matches and returns zeros — caught on synthetic
+source, which is the only reason that control exists. The digit case is now planted explicitly.
+Alongside it: a control asserting a JSON key is silent while `typeof(T).GetMethod("M")` is not; one
+asserting `RegexOptions.Compiled` is not an expression tree; a comment-stripping control that first
+asserts the raw prose **does** match, so it proves the stripper and not a blind matcher; and a
+discovery control over the scoped trees.
 
 ### 5.9 An exemption row must state a reason
 
