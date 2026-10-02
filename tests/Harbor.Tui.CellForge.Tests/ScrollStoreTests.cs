@@ -1,6 +1,7 @@
 using Harbor.Tui.CellForge.Input;
 using Harbor.Tui.CellForge.Rendering;
 using Harbor.Tui.CellForge.Widgets;
+using Harbor.Ui.Framework.Rendering.Input;
 using Harbor.Ui.Framework.State;
 using Harbor.Abstractions.Models;
 
@@ -94,7 +95,11 @@ public class ScrollStoreTests
     public async Task Wheel_ViaRouter_DispatchesLineScroll()
     {
         var store = SeededStore(viewportLines: 10, totalLines: 30);
-        var target = new TimelineWheelTarget("timeline", msg => { _ = store.Dispatch(msg); });
+
+        // #33/T2: the engine's target callback is Action<UiKeyDto>, not a store
+        // dispatch — the engine does not know what a scroll key means. The host
+        // resolves it, here through the timeline's own binding table.
+        var target = new TimelineWheelTarget("timeline", key => { _ = store.Dispatch(VirtualizedChatTimeline.WheelMsg(key)); });
         var router = new MouseRouter();
         router.Bind(target, new Rect(0, 0, 80, 24));
 
@@ -107,13 +112,20 @@ public class ScrollStoreTests
         router.Wheel(5, 5, -1);
         await Assert.That(store.State.Ui.ScrollOffset).IsEqualTo(0); // clamped at the tail
 
-        var up = (AppMsg.KeyInput)MouseRouter.WheelToMessage(2);
+        // The engine half: sign → framework-neutral direction, nothing else.
+        await Assert.That(MouseRouter.WheelToKey(2).Kind).IsEqualTo(UiKeyKind.Up);
+        await Assert.That(MouseRouter.WheelToKey(-1).Kind).IsEqualTo(UiKeyKind.Down);
+        await Assert.That(MouseRouter.WheelToKey(0)).IsEqualTo(UiKeyDto.Unknown);
+
+        // The host half: direction → store action. Together they are exactly what
+        // the pre-#435 single method returned.
+        var up = (AppMsg.KeyInput)VirtualizedChatTimeline.WheelMsg(MouseRouter.WheelToKey(2));
         await Assert.That(up.Action).IsEqualTo(ChatAction.ScrollUpLine);
 
-        var down = (AppMsg.KeyInput)MouseRouter.WheelToMessage(-1);
+        var down = (AppMsg.KeyInput)VirtualizedChatTimeline.WheelMsg(MouseRouter.WheelToKey(-1));
         await Assert.That(down.Action).IsEqualTo(ChatAction.ScrollDownLine);
 
-        var none = (AppMsg.KeyInput)MouseRouter.WheelToMessage(0);
+        var none = (AppMsg.KeyInput)VirtualizedChatTimeline.WheelMsg(MouseRouter.WheelToKey(0));
         await Assert.That(none.Action).IsEqualTo(ChatAction.None);
     }
 
