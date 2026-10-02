@@ -1,16 +1,13 @@
-using System.Collections.Concurrent;
-using System.Linq.Expressions;
-using System.Reflection;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Harbor.Desktop.Shared.Locators;
 
 /// <summary>
 ///     Convention-based <see cref="IViewModelLocator" /> backed by an
-///     <see cref="IServiceProvider" />. Type lookups are compiled once
-///     into <c>sp.GetRequiredService(typeof(T))</c> delegates and cached,
-///     so the hot path after first resolve is a dictionary hit — no
-///     per-call reflection.
+///     <see cref="IServiceProvider" />. Resolution is
+///     <c>sp.GetService(typeof(T))</c> — a plain interface call on the
+///     container, so the hot path is the container's own call-site cache
+///     and no per-call reflection.
 /// </summary>
 /// <remarks>
 ///     Constructed once by the DI container (factory binds the root
@@ -21,11 +18,28 @@ namespace Harbor.Desktop.Shared.Locators;
 ///     #63 legitimate: this type IS the locator (XAML creates view-models by
 ///     convention outside DI) — the contained provider is the pattern, not
 ///     a violation of it.
+///     <para>
+///         #414: this used to reflect over
+///         <c>ServiceProviderServiceExtensions.GetMethods()</c>, close the open
+///         generic with <c>MakeGenericMethod</c>, and cache a
+///         <c>Expression.Lambda(...).Compile()</c> delegate per type. That is
+///         three trim-unsafe mechanisms — member-by-string-name, a closed
+///         generic the trimmer cannot see, and IL emitted at run time — to
+///         produce <c>sp.GetService(typeof(T))</c>, which needs none of them.
+///         <c>T</c> is statically known in <c>Get&lt;T&gt;</c>, so the
+///         <c>typeof(T)</c> it wanted was always available without a cache.
+///     </para>
+///     <para>
+///         The observable contract is unchanged: same container calls, same
+///         null-returns-null and null-throws messages, same
+///         <c>GetRequiredService</c>-not-<c>GetService</c> distinction on the two
+///         paths (both are the non-keyed overloads, which the reflection lookup
+///         selected by parameter shape). <see cref="GetFromSingleton{T}" />'s
+///         duplicate-instance check is likewise unchanged.
+///     </para>
 /// </remarks>
 public sealed class ViewModelLocator : IViewModelLocator
 {
-    private static readonly ConcurrentDictionary<Type, Func<IServiceProvider, object?>> Cache = new();
-
     private readonly IServiceProvider _services;
 
     /// <summary>Construct a <see cref="ViewModelLocator" /> over the given provider.</summary>
@@ -37,12 +51,12 @@ public sealed class ViewModelLocator : IViewModelLocator
 
     /// <inheritdoc />
     public T Get<T>() where T : class =>
-        Cache.GetOrAdd(typeof(T), ResolveRequired)(_services) as T
+        _services.GetService(typeof(T)) as T
         ?? throw new InvalidOperationException($"Service '{typeof(T).FullName}' resolved to null.");
 
     /// <inheritdoc />
     public T? TryGet<T>() where T : class =>
-        Cache.GetOrAdd(typeof(T), ResolveQuery)(_services) as T;
+        _services.GetService(typeof(T)) as T;
 
     /// <inheritdoc />
     public T GetFromSingleton<T>() where T : class
@@ -58,38 +72,5 @@ public sealed class ViewModelLocator : IViewModelLocator
         }
 
         return first;
-    }
-
-    private static Func<IServiceProvider, object?> ResolveRequired(Type type) =>
-        BuildCall(FindServiceMethod(isRequired: true), type);
-
-    private static Func<IServiceProvider, object?> ResolveQuery(Type type) =>
-        BuildCall(FindServiceMethod(isRequired: false), type);
-
-    private static MethodInfo FindServiceMethod(bool isRequired)
-    {
-        string name = isRequired ? "GetRequiredService" : "GetService";
-        foreach (MethodInfo method in typeof(ServiceProviderServiceExtensions).GetMethods())
-        {
-            ParameterInfo[] parameters = method.GetParameters();
-            if (method.Name == name
-                && method.IsGenericMethodDefinition
-                && parameters.Length == 1
-                && parameters[0].ParameterType == typeof(IServiceProvider))
-            {
-                return method;
-            }
-        }
-
-        throw new InvalidOperationException($"Microsoft.Extensions.DependencyInjection: method '{name}' not found.");
-    }
-
-    private static Func<IServiceProvider, object?> BuildCall(MethodInfo openGeneric, Type type)
-    {
-        ParameterExpression sp = Expression.Parameter(typeof(IServiceProvider), "sp");
-        MethodInfo closed = openGeneric.MakeGenericMethod(type);
-        MethodCallExpression call = Expression.Call(null, closed, sp);
-        UnaryExpression cast = Expression.Convert(call, typeof(object));
-        return Expression.Lambda<Func<IServiceProvider, object?>>(cast, sp).Compile();
     }
 }
