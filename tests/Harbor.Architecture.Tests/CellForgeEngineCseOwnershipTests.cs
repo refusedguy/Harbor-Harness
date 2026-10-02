@@ -36,11 +36,13 @@
 //
 // Which makes the ladder 3 -> 1 -> 0, not 2 -> 0:
 //
-//   today        3 carriers
-//   after #435   1  (Abstractions.Contracts survives on the Rendering edge)
+//   on dev       3 carriers
+//   after #435   1  (LANDED — Abstractions.Contracts survives on the Rendering edge)
 //   after #436   0  (Rendering goes too, and the reference list is empty)
 //
-// #435 alone therefore does NOT make the engine CSE-free. An author landing #435
+// #435 alone therefore does NOT make the engine CSE-free, and the csproj now
+// looking nearly empty is not evidence that it did: the surviving carrier is
+// transitive, so nothing in the engine's own file lists it. An author landing #435
 // can see the engine still resolving CSE, conclude the package is somehow needed,
 // and add a direct `PackageReference` — picking a dependency owner (#789's open
 // question) as a side effect of a slice that was only supposed to drop two
@@ -88,13 +90,13 @@ public class CellForgeEngineCseOwnershipTests
     ///     into a failure message — so
     ///     <c>MaybeAbsenceTests.BufferSwapChainExemptionReason_NamesEveryMeasuredCseCarrier</c>
     ///     reads this array to check the two agree. They already drifted once: #809 measured
-    ///     three carriers and corrected this file, leaving the reason still saying two.
+    ///     three carriers and corrected this file, leaving the reason still saying two;
+    ///     #435 then dropped two of the three from both sides in the same commit, which
+    ///     is the only reason they agree now.
     /// </remarks>
     internal static readonly string[] PinnedCseCarriers =
     [
-        "Harbor.Abstractions",
         "Harbor.Abstractions.Contracts",
-        "Harbor.Ui.Framework.State"
     ];
 
     /// <summary>
@@ -105,10 +107,8 @@ public class CellForgeEngineCseOwnershipTests
     /// </summary>
     private static readonly string[] PinnedEngineReferences =
     [
-        "Harbor.Abstractions",
         "Harbor.DesignSystem",
-        "Harbor.Ui.Framework.Rendering",
-        "Harbor.Ui.Framework.State"
+        "Harbor.Ui.Framework.Rendering"
     ];
 
     /// <summary>
@@ -226,14 +226,15 @@ public class CellForgeEngineCseOwnershipTests
 
         await Assert.That(string.Join(", ", carriers)).IsEqualTo(string.Join(", ", PinnedCseCarriers))
             .Because(
-                "The engine reaches CSharpFunctionalExtensions through exactly three projects in its "
-                + "reference closure, and only #435/#436 can close them. #789 records TWO "
-                + "(Harbor.Abstractions + Harbor.Ui.Framework.State, the two #435 deletes); the third is "
-                + "Harbor.Abstractions.Contracts, reached via Harbor.Ui.Framework.Rendering, which only "
-                + "#436 removes. The ladder is 3 today -> 1 after #435 -> 0 after #436, so #435 alone does "
-                + "NOT make the engine CSE-free. If this fired because a carrier was ADDED, a new path to "
-                + "the package opened that neither slice accounts for. If it fired because one was "
-                + "REMOVED, the slice that removed it landed: update the pin and record which one.");
+                "The engine's reference closure reaches CSharpFunctionalExtensions through exactly one "
+                + "project. #789 recorded three; #435 removed two of them — Harbor.Abstractions and "
+                + "Harbor.Ui.Framework.State — so the ladder the file predicted (3 -> 1 after #435 -> 0 "
+                + "after #436) is now two-thirds taken. What remains is Harbor.Abstractions.Contracts, "
+                + "reached via Harbor.Ui.Framework.Rendering, which only #436 removes. So #435 alone does "
+                + "NOT make the engine CSE-free, and a reader must not conclude that it did from the "
+                + "engine's csproj now looking nearly empty. If this fired because a carrier was ADDED, a "
+                + "new path to the package opened that neither slice accounts for. If it fired because one "
+                + "was REMOVED, the slice that removed it landed: update the pin and record which one.");
     }
 
     [Test]
