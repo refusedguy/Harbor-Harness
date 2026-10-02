@@ -160,10 +160,18 @@ syntax highlighting, `DiffEngine`, the `PostFxPipeline` /
 
 | Reference | Why |
 |-----------|-----|
-| `Harbor.Abstractions` | agent/UI event contracts |
-| `Harbor.Ui.Framework.Rendering` | `Cell`, `ScreenBuffer`, key vocabulary, `RowHashDiffEncoder` |
-| `Harbor.Ui.Framework.State` | `UiMsg.KeyInput` target for `MouseRouter` |
+| `Harbor.Ui.Framework.Rendering` | `Cell`, `ScreenBuffer`, key vocabulary (`UiKeyDto`), Enter decision (`EnterPolicy`), `RowHashDiffEncoder` |
 | `Harbor.DesignSystem` | colour tokens |
+
+`Harbor.Abstractions` and `Harbor.Ui.Framework.State` were removed in #435.
+The first measured as a zero real dependency — zero imports and zero bound
+types, the #980 shape — and the second because the two files that spoke it now
+name the BCL-only `UiKeyDto` (#162) and `EnterDecision` vocabularies instead.
+`MouseRouter` returns a direction rather than `AppMsg.KeyInput`, and
+`ComposerController` asks `EnterPolicy` rather than `EnterKeyPolicy`; the host
+converts through `KeyEventAdapter`, which stays the single
+Rendering→State crossing point. `MouseRouter.WheelToKey` + a
+`TimelineWheelTarget` callback is now half a round trip that a host completes.
 
 Referenced by `Harbor.Tui.CellForge` (its only production consumer),
 `src/Harbor.Hosting`, `apps/Harbor.App.Cli`, and the CellForge test/benchmark
