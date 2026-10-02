@@ -87,6 +87,10 @@ public class RunOutcomeTests
         await Assert.That(outcome.ToolCalls[0].ToolCallId).IsEqualTo(toolCallId);
         await Assert.That(outcome.ToolCalls[0].ToolName).IsEqualTo("read");
         await Assert.That(outcome.ToolCalls[0].IsError).IsFalse();
+        // #993: both timestamps are known here — a run that actually happened is
+        // dated by its own messages, and the fix must not have made them unknown.
+        await Assert.That(outcome.StartedAt).IsNotNull();
+        await Assert.That(outcome.FinishedAt).IsNotNull();
         await Assert.That(outcome.FinishedAt >= outcome.StartedAt).IsTrue();
     }
 
