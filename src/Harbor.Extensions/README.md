@@ -20,10 +20,19 @@
 
 | Dependency                         | Why                                                                                                                                                                                                                                                                                   |
 |------------------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `CommunityToolkit.HighPerformance` | FrozenDictionary/FrozenSet helpers and incidental performance types used across the pooling code.                                                                                                                                                                                      |
 | `MemoryPack`                       | `MemoryPackSerializer.Serialize<T>` / `Deserialize<T>` — the `IMemoryPackable<T>` constraint and the serializer entry-point. `MemoryPackExtensions` is generic over `IMemoryPackable<T>`, so **no** concrete Harbor assembly is required.                                              |
 
 `System.Buffers` (`ArrayPool<T>`) is in-box for `net10.0` — no package ref needed.
+
+`System.Collections.Frozen` (`FrozenSet<T>` / `FrozenDictionary<K,V>`, used by
+`CollectionExtensions`) is in-box too, since .NET 8 — no package ref needed.
+`CommunityToolkit.HighPerformance` used to be listed here for exactly those
+materializers and was removed: `tools/check-abstractions-contract.py` measured
+that no `.cs` file in this project had a `using` under any of its namespace
+prefixes, so the dependency was declared on the strength of a need the framework
+already met. The same reasoning removes it from `Harbor.Application`. The
+`StringBuilderPool` in `ArrayPoolExtensions.cs` is likewise this solution's own
+`ConcurrentBag` pool, not CommunityToolkit's namesake type.
 
 **Zero Harbor project references** (F1 decoupling): no ref to `Harbor.Abstractions.Contracts`, no ref to the `Harbor.Abstractions` facade, no refs to `Harbor.Core` / `Harbor.Application` / `Harbor.Registries`, no refs to Infrastructure siblings (`Harbor.Providers.*`, `Harbor.Storage.*`, `Harbor.Tools.*`), no refs to Presentation (`Harbor.Tui.*`, `Harbor.Desktop.*`). This invariant is enforced by the test `Extensions_HasZeroHarborProjectReferences` in [`tests/Harbor.Architecture.Tests/AbstractionsSplitLayerRules.cs`](../../tests/Harbor.Architecture.Tests/AbstractionsSplitLayerRules.cs). Consumers that use these helpers reference `Harbor.Extensions` directly — it is **not** transitively re-exported by the facade.
 

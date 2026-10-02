@@ -7,9 +7,14 @@
     (FrozenSet / FrozenDictionary materializers), MemoryPackExtensions
     (ToMemoryPackBytes / FromMemoryPackBytes round-trip helpers).
 
-    References:
-      - CommunityToolkit.HighPerformance (FrozenDictionary / FrozenSet helpers
-                                        and incidental performance types)
+    Dependencies:
+      - MemoryPack. CommunityToolkit.HighPerformance used to be declared here
+        and was removed by tools/check-abstractions-contract.py: not one `.cs`
+        file in this project had a `using` under any of its namespace prefixes.
+        The FrozenSet/FrozenDictionary materializers it looks like it was added
+        for are `System.Collections.Frozen` — in-box since .NET 8 — so the real
+        dependency is on the framework and no PackageReference declares it. See
+        CollectionExtensions.cs.
 
     Zero Harbor project references — the helpers are pure BCL/NuGet wrappers
     (MemoryPackExtensions is generic over MemoryPack's IMemoryPackable<T>, so
@@ -33,7 +38,6 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="CommunityToolkit.HighPerformance"/>
     <PackageReference Include="MemoryPack"/>
   </ItemGroup>
 
