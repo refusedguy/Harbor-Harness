@@ -96,16 +96,32 @@ public sealed class PluginAssemblyReferences
     ///         process that has not touched it, and present in one that has.
     ///     </para>
     ///     <para>
-    ///         The list is a name list rather than a set of <c>typeof</c> pins because the
-    ///         only thing this collector needs from the panel assembly is its FILE. Pinning
-    ///         <c>typeof(IPanelRegistry).Assembly</c> would work too, and
-    ///         <c>Harbor.Plugins.Registration</c> already carries a documented
-    ///         Infrastructure -> Presentation exception for exactly this assembly — but that
-    ///         project binds the type because <c>PanelRegistryPluginAdapter</c> implements it.
-    ///         Here the collector would be binding a UI-framework type at the one place that
-    ///         decides what a plugin is allowed to reference, for no gain: the edge would buy
-    ///         a type the method does not use, and cost a compile-time dependency plus a
-    ///         second architecture-test exemption. A name adds neither.
+    ///         <c>Harbor.Ui.Framework.State</c> is on this list because
+    ///         <c>Harbor.Ui.Framework.Panels</c> lives in it, and the panel seam is the one
+    ///         plugin axis still alive after #564 closed <c>ITuiPlugin</c>. That namespace
+    ///         holds <c>ITuiPanelPlugin</c>, <c>IPanelRegistry</c>, <c>IPanelProvider</c>,
+    ///         <c>PanelContext</c>, <c>UiKey</c> and <c>TuiPanelPlacement</c> — every type
+    ///         <c>docs/PLUGIN_DEVELOPMENT.md</c> Example 5 names.
+    ///     </para>
+    ///     <para>
+    ///         It is the one entry that could not be a type-token pin. This project reaches
+    ///         the assembly TRANSITIVELY (Plugins.Abstractions -&gt; Terminal.Abstractions
+    ///         -&gt; Ui.Framework -&gt; State), and a transitive runtime dependency is absent
+    ///         from any process that has not touched it. The CLI has not touched it by
+    ///         construction either: it happens to have the assembly loaded before the
+    ///         collector runs, because <c>RegistriesModule</c> constructs a PanelRegistry
+    ///         (line 85) before it calls <c>PluginRuntimeComposer.Compose</c> (line 178),
+    ///         which constructs the collector. That is load order, not a declaration. The
+    ///         out-of-process host at <c>src/Harbor.Plugins.Host/Program.cs</c> constructs
+    ///         the collector with nothing panel-shaped in scope and does not have that luck.
+    ///     </para>
+    ///     <para>
+    ///         Named rather than pinned because the only thing the collector needs from it is
+    ///         the FILE. <c>Harbor.Plugins.Registration</c> already carries a documented
+    ///         Infrastructure -&gt; Presentation exception for the same assembly, but it earns
+    ///         it by binding the type, since PanelRegistryPluginAdapter implements the
+    ///         interface. Binding it here would buy a type this method never uses and cost a
+    ///         compile-time dependency plus a second architecture-test exemption.
     ///     </para>
     /// </remarks>
     internal static readonly string[] PluginContractAssemblies =
@@ -113,6 +129,7 @@ public sealed class PluginAssemblyReferences
         "Harbor.Abstractions",
         "Harbor.Abstractions.Contracts",
         "Harbor.Terminal.Abstractions",
+        "Harbor.Ui.Framework.State",
     ];
 
     private readonly ILogger<PluginAssemblyReferences> _logger;
