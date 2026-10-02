@@ -170,15 +170,25 @@ records row by row:
 
 | ID | count | demoted by the csproj? | effect |
 |---|---|---|---|
-| IL2026 | 15 | yes | printed, did not fail |
-| IL3050 | 10 | yes | printed, did not fail |
+| IL2026 | 14 | yes | printed, did not fail |
+| IL3050 | 9 | yes | printed, did not fail |
 | IL2104 | 3 | yes | printed, did not fail |
 | IL3053 | 2 | yes | printed, did not fail |
-| **IL3000** | **3** | **no** | **error — fails the publish** |
+| **IL3000** | **4** | **no** | **error — fails the publish** |
 | **IL2072** | **1** | **no** | **error — fails the publish** |
 | **IL2070** | **1** | **no** | **error — fails the publish** |
 
-Two findings fall out of that table.
+Three findings fall out of that table.
+
+**The counts are a property of the tree, not of the diagnostic family.** Setting
+`SelfContained=true` in the AOT block (fix 1 above) moved IL2026 from 15 to 14,
+IL3050 from 10 to 9, and IL3000 from 3 to 4 — it added a site
+(`PluginAssemblyReferences.ResolveDeploymentDirectory`) and dropped
+`JsonAppConfigStore` entirely. Nothing about the AOT analysis "changed
+character"; the trim graph did, because the publish is now self-contained. This
+is the reason the record is re-derived from a log produced by the *current* tree
+rather than from an earlier one, and the reason an SDK bump may require
+re-triage.
 
 **The csproj's demotion list is incomplete: it names four ids and the publish
 emits seven.** `AotBlockDemotionRules.KnownDemotions` said "not triaged" for its
