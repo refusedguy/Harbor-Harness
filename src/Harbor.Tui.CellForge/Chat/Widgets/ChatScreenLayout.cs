@@ -419,6 +419,11 @@ public sealed class StatusPanel : Panel
     private long _modeFlipTick = long.MinValue;
 
     /// <summary>Creates a status footer bound to <paramref name="status"/>.</summary>
+    /// <param name="id">Panel id.</param>
+    /// <param name="status">Status payload this footer renders.</param>
+    /// <param name="minWidth">Solver minimum width.</param>
+    /// <param name="minHeight">Solver minimum height.</param>
+    /// <param name="priority">Collapse priority.</param>
     /// <param name="timeProvider">
     /// Clock for the mood latch (#1026). Production leaves the default
     /// (<see cref="TimeProvider.System"/>); tests inject a manual clock so a

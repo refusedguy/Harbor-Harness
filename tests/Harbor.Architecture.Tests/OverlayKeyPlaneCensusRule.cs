@@ -16,9 +16,9 @@
 //
 //       REGISTERED + READS KEYS + CAN BE SHOWN (2)
 //         ImageViewerOverlayLayer     field _imageLayer, pushed at
-//                                    ChatScreenLayout.cs:858; opened at
+//                                    ChatScreenLayout.cs:863; opened at
 //                                    ReplInputLoop.cs:289; IsModal = true.
-//         SetupChecklistOverlayLayer  field _setupLayer, pushed at :838;
+//         SetupChecklistOverlayLayer  field _setupLayer, pushed at :851;
 //                                    opened at SetupCommand.cs:27;
 // check-doc-cites: record-drift SetupCommand.cs:27 now="ambiguous:2" [2 tracked files share this basename, so the citation does not identify one] -->
 //                                    IsModal = false.

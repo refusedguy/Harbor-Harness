@@ -15,6 +15,11 @@ public sealed class MascotPanel : Panel
     private bool _entranceArmed;
 
     /// <summary>Creates a panel-mode mascot bound to <paramref name="status"/>.</summary>
+    /// <param name="id">Panel id.</param>
+    /// <param name="status">Status payload this mascot reads the phase from.</param>
+    /// <param name="minWidth">Solver minimum width.</param>
+    /// <param name="minHeight">Solver minimum height.</param>
+    /// <param name="priority">Collapse priority.</param>
     /// <param name="timeProvider">
     /// Clock for the mood latch (#1026). Production leaves the default
     /// (<see cref="TimeProvider.System"/>); tests inject a manual clock so a
