@@ -143,12 +143,14 @@ public class RendererMoatPerfTests
             $"renderer-moat diff: full={fullAvg:F3} ms hinted={hintedAvg:F3} ms " +
             $"(120×500 grid, {frames} frames each, steady spinner tick)");
 
-        // #996, commit 1 of 2 — RED DEMO ON PURPOSE: inverted (full < hinted). The
-        // hinted path damages only the animated rows, so this cannot hold on a
-        // correct tree. Next commit restores the true direction with the reasoning.
-        // A gate never observed red is not a gate (repo convention; #998 did the
-        // same with GrowthLimit = 1.05).
-        await Assert.That(fullAvg).IsLessThan(hintedAvg);
+        // #996 (paired A/B over identical scripted traffic, the #465 shape in-tree):
+        // the SAME 500-row timeline, the SAME 500 frames, two flush paths in one
+        // process — the runner's speed is in both operands and cancels. The hinted
+        // path damages only the animated rows, so it must beat the full scan on any
+        // machine; byte counts would say the same thing, but the ordering says it
+        // without naming milliseconds. No absolute ceiling: the 1.43x spread on one
+        // unchanged commit proves no threshold separates code from host pre-emption.
+        await Assert.That(hintedAvg).IsLessThan(fullAvg);
     }
 
     [Test]
