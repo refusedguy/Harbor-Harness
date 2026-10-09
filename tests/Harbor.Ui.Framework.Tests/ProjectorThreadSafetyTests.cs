@@ -1,8 +1,7 @@
 // ProjectorThreadSafetyTests.cs — #605 (GoF-A19).
 //
 // DefaultUiProjector is registered AddSingleton by the desktop host
-// (apps/Harbor.App.Avalonia/Hosting/ServiceRegistration.cs:130) and its only
-// check-doc-cites: record-drift apps/Harbor.App.Avalonia/Hosting/ServiceRegistration.cs:130 now="//" [#947: written over `services.AddSingleton<DefaultUiProjector`; repair deferred to the owner's symbol-rename decision] -->
+// (apps/Harbor.App.Avalonia/Hosting/ServiceRegistration.cs:185) and its only
 // consumer, UiRenderEngine, is a singleton too. Before the fix the type's doc
 // said it was not thread-safe while the container shared it process-wide, and
 // the one mutable field was published without a fence:

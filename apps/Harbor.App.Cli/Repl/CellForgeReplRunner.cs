@@ -60,36 +60,14 @@ namespace Harbor.App.Cli.Repl;
 ///         нажатие выходит из REPL (первое печатает подсказку).
 ///     </para>
 /// </remarks>
+// #49: the coordinator still arrives injected (via screens), not service-located.
+// #857: the git query still arrives nullable (via optional) — sessions-only degradation.
 internal sealed class CellForgeReplRunner(
-    IConfigStore configStore,
-    IProviderRegistry providerRegistry,
-    IAgentRegistry agentRegistry,
-    AuthStore authStore,
-    ISessionStore? sessionStore,
-    IRendererPipeline? rendererPipeline,
-    IEventBus eventBus,
-    ITokenTracker? tokens,
-    LegacySlashRunner legacySlash,
-    IAgent agent,
+    CellForgeCoreServices core,
+    CellForgeOptionalServices optional,
+    CellForgeScreens screens,
     Session sessionModel,
-    ScreenSession screenSession,
-    ChatScreen screen,
-    ChatScreenBridge bridge,
-    TerminalInputSource inputSource,
-    ITerminalModeController modeController,
-    ITerminalBackend backend,
-    ILogger<CellForgeReplRunner> logger,
-    // #49: injected, not service-located — the class already takes its deps
-    // via ctor; resolving per abort gesture was a step back.
-    IApprovalCoordinator coordinator,
-    Harbor.Hosting.PluginReloadService? pluginReload = null,
-    IProviderHealthCheck? healthCheck = null,
-    Harbor.Ui.Framework.Panels.IPanelRegistry? panelRegistry = null,
-    Harbor.Application.Diagnostics.DiagnosticsAggregator? diagnosticsAggregator = null,
-    // #857: the worktree column of the /jump palette. Null in test doubles and
-    // in a host that registered no query — the command then lists sessions
-    // only, the degradation the jump panel already documents.
-    IGitQuery? gitQuery = null)
+    ITerminalModeController modeController)
     : IReplHost
 {
     /// <summary>
@@ -126,9 +104,9 @@ internal sealed class CellForgeReplRunner(
     /// </summary>
     internal DiagnosticsSync? _diagnosticsSync;
 
-    internal readonly StatusViewModel _status = screen.Status.Vm;
-    internal readonly ComposerController _composer = screen.Composer.Composer;
-    internal readonly VirtualizedChatTimeline _timeline = screen.Timeline.Timeline;
+    internal readonly StatusViewModel _status = screens.Screen.Status.Vm;
+    internal readonly ComposerController _composer = screens.Screen.Composer.Composer;
+    internal readonly VirtualizedChatTimeline _timeline = screens.Screen.Timeline.Timeline;
     internal readonly CommandPaletteView _palette = new();
     internal readonly LeaderKeyRouter _leader = new();
     internal readonly ChatKeyMap _keyMap = new();
@@ -149,10 +127,10 @@ internal sealed class CellForgeReplRunner(
         // keyboard switch and a palette switch cannot drift apart.
         id => Sessions.SwitchToSessionAsync(id, CancellationToken.None),
         () => Sessions.OpenSessionsPalette(),
-        ex => logger.LogError(ex, "Tab-strip effect failed"));
+        ex => core.Logger.LogError(ex, "Tab-strip effect failed"));
 
     // ── IReplHost (Command pattern seam; transitional, see IReplHost.cs) ──
-    IAgent IReplHost.Agent => agent;
+    IAgent IReplHost.Agent => core.Agent;
 
     Session IReplHost.SessionModel
     {
@@ -160,11 +138,11 @@ internal sealed class CellForgeReplRunner(
         set => sessionModel = value;
     }
 
-    ChatScreenBridge IReplHost.Bridge => bridge;
+    ChatScreenBridge IReplHost.Bridge => screens.Bridge;
     UiStore IReplHost.Store => _replStore;
     CommandPaletteView IReplHost.Palette => _palette;
     StatusViewModel IReplHost.Status => _status;
-    ChatScreen IReplHost.Screen => screen;
+    ChatScreen IReplHost.Screen => screens.Screen;
     SelectionEngine IReplHost.Selection => _selection;
     VirtualizedChatTimeline IReplHost.Timeline => _timeline;
     ComposerController IReplHost.Composer => _composer;
@@ -183,35 +161,35 @@ internal sealed class CellForgeReplRunner(
     Task IReplHost.SyncSessionsToStoreAsync(CancellationToken ct) => Sessions.SyncSessionsToStoreAsync(ct);
     Task<int> IReplHost.ResolveContextWindowAsync(string providerId, string modelId, CancellationToken ct)
         => Lifecycle.ResolveContextWindowAsync(providerId, modelId, ct);
-    IConfigStore IReplHost.ConfigStore => configStore;
-    IProviderRegistry IReplHost.ProviderRegistry => providerRegistry;
-    IAgentRegistry IReplHost.AgentRegistry => agentRegistry;
-    AuthStore IReplHost.AuthStore => authStore;
-    ISessionStore? IReplHost.SessionStore => sessionStore;
-    IRendererPipeline? IReplHost.RendererPipeline => rendererPipeline;
-    Harbor.Hosting.PluginReloadService? IReplHost.PluginReload => pluginReload;
-    IProviderHealthCheck? IReplHost.HealthCheck => healthCheck;
-    Harbor.Ui.Framework.Panels.IPanelRegistry? IReplHost.PanelRegistry => panelRegistry;
-    IGitQuery? IReplHost.Git => gitQuery;
+    IConfigStore IReplHost.ConfigStore => core.ConfigStore;
+    IProviderRegistry IReplHost.ProviderRegistry => core.ProviderRegistry;
+    IAgentRegistry IReplHost.AgentRegistry => core.AgentRegistry;
+    AuthStore IReplHost.AuthStore => core.AuthStore;
+    ISessionStore? IReplHost.SessionStore => optional.SessionStore;
+    IRendererPipeline? IReplHost.RendererPipeline => optional.RendererPipeline;
+    Harbor.Hosting.PluginReloadService? IReplHost.PluginReload => optional.PluginReload;
+    IProviderHealthCheck? IReplHost.HealthCheck => optional.HealthCheck;
+    Harbor.Ui.Framework.Panels.IPanelRegistry? IReplHost.PanelRegistry => optional.PanelRegistry;
+    IGitQuery? IReplHost.Git => optional.GitQuery;
 
     /// <summary>Images staged by <c>/attach</c> for the next user turn (#386).</summary>
     internal readonly ImageAttachmentStash _attachments = new();
 
     internal readonly ReplCommandCatalog _catalog =
-        ReplCommandCatalog.CreateDefault(new ImageAttachmentReader(providerRegistry, logger));
+        ReplCommandCatalog.CreateDefault(new ImageAttachmentReader(core.ProviderRegistry, core.Logger));
 
     // ── Extracted collaborators (SRP: the runner owns the shared state and
     // the IReplHost surface; sessions/titles/prompts/input/commands/lifecycle
     // live in focused classes that collaborate through it).
-    internal LegacySlashRunner LegacySlash => legacySlash;
+    internal LegacySlashRunner LegacySlash => core.LegacySlash;
     private PromptPipeline? _pipeline;
     internal PromptPipeline Pipeline => _pipeline ??= new PromptPipeline(
-        this, _catalog, logger, Tokens, new Lazy<LegacySlashRunner>(() => LegacySlash), Setup);
+        this, _catalog, core.Logger, Tokens, new Lazy<LegacySlashRunner>(() => LegacySlash), Setup);
     internal void DisposePipeline() => _pipeline?.Dispose();
     private SessionSwitchManager? _sessions;
     internal SessionSwitchManager Sessions => _sessions ??= new SessionSwitchManager(this, Pipeline.ClearQueue);
     private SessionTitleService? _titles;
-    internal SessionTitleService Titles => _titles ??= new SessionTitleService(this, logger);
+    internal SessionTitleService Titles => _titles ??= new SessionTitleService(this, core.Logger);
     internal ThemeFileWatcher? _themeWatcher;
 
     /// <summary>Themes-directory live-reload (#622) — the additive half of the
@@ -234,26 +212,26 @@ internal sealed class CellForgeReplRunner(
     /// </summary>
     internal SetupChecklistController Setup => _setup ??= new SetupChecklistController(
         this,
-        new SetupChecklistDetector(configStore, authStore, healthCheck));
+        new SetupChecklistDetector(core.ConfigStore, core.AuthStore, optional.HealthCheck));
 
     // ── Internal accessors for the collaborators (G2 split seam): captured
     // ctor parameters are invisible outside this class, so the input loop,
     // command host and lifecycle reach them through these. IReplHost stays
     // frozen — test FakeHost/StubHost implementations keep compiling.
-    internal IEventBus EventBus => eventBus;
-    internal TerminalInputSource InputSource => inputSource;
+    internal IEventBus EventBus => core.EventBus;
+    internal TerminalInputSource InputSource => screens.Input;
     internal ITerminalModeController ModeController => modeController;
-    internal ITerminalBackend Backend => backend;
-    internal ILogger<CellForgeReplRunner> Log => logger;
-    internal IApprovalCoordinator Coordinator => coordinator;
-    internal ScreenSession ScreenSession => screenSession;
-    internal ChatScreen Screen => screen;
-    internal ChatScreenBridge Bridge => bridge;
-    internal IAgent Agent => agent;
+    internal ITerminalBackend Backend => screens.Backend;
+    internal ILogger Log => core.Logger;
+    internal IApprovalCoordinator Coordinator => screens.Coordinator;
+    internal ScreenSession ScreenSession => screens.Session;
+    internal ChatScreen Screen => screens.Screen;
+    internal ChatScreenBridge Bridge => screens.Bridge;
+    internal IAgent Agent => core.Agent;
     internal Session SessionModel => sessionModel;
-    internal IConfigStore ConfigStore => configStore;
-    internal IProviderRegistry ProviderRegistry => providerRegistry;
-    internal ITokenTracker? Tokens => tokens;
+    internal IConfigStore ConfigStore => core.ConfigStore;
+    internal IProviderRegistry ProviderRegistry => core.ProviderRegistry;
+    internal ITokenTracker? Tokens => optional.Tokens;
     ImageAttachmentStash? IReplHost.Attachments => _attachments;
 
     /// <summary>Leader chord hand-off for async slash commands: the chord resolves
@@ -368,9 +346,9 @@ internal sealed class CellForgeReplRunner(
         // that this class owns. RunAsync is the first point where the object is
         // fully constructed, and it runs before the first frame, so the panel
         // never shows a gap it will not immediately fill.
-        _diagnosticsSync ??= diagnosticsAggregator is null
+        _diagnosticsSync ??= optional.DiagnosticsAggregator is null
             ? null
-            : new DiagnosticsSync(_replStore, diagnosticsAggregator, logger);
+            : new DiagnosticsSync(_replStore, optional.DiagnosticsAggregator, core.Logger);
 
         return Lifecycle.RunAsync(ct);
     }

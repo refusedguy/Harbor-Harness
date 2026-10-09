@@ -358,42 +358,39 @@ internal sealed class ReplRunner
         _agent.Initialize(sessionResult.Value, defaultAgent);
 
         var runner = new CellForgeReplRunner(
-            _configStore,
-            _providers,
-            _agentRegistry,
-            _authStore,
-            _sessionStore,
-            _rendererPipeline,
-            _eventBus,
-            _tokens,
-            // #486: the adapter the root built beside the dispatcher. It used to be
-            // `new LegacySlashRunner(_slashes, _agentRegistry, _configStore,
-            // _authStore, _providers)` written out right here — composition in a
-            // consumer, of a type whose five collaborators this class already
-            // holds. Built once, where the container is.
-            _legacySlash,
-            _agent,
+            new CellForgeCoreServices(
+                _configStore,
+                _providers,
+                _agentRegistry,
+                _authStore,
+                _eventBus,
+                _agent,
+                // #486: the adapter the root built beside the dispatcher. It used to be
+                // `new LegacySlashRunner(_slashes, _agentRegistry, _configStore,
+                // _authStore, _providers)` written out right here — composition in a
+                // consumer, of a type whose five collaborators this class already
+                // holds. Built once, where the container is.
+                _legacySlash,
+                _cellForgeLogger),
+            new CellForgeOptionalServices(
+                _sessionStore,
+                _rendererPipeline,
+                _tokens,
+                _pluginReload,
+                _healthCheck,
+                _rendererHost.GetService<Harbor.Ui.Framework.Panels.IPanelRegistry>(),
+                // #674: the headless core owns diagnostic classification; the REPL is
+                // only the pipe that carries its snapshot to the store. Null in a host
+                // that registers no aggregator, which leaves the panel honestly empty.
+                _rendererHost.GetService<Harbor.Application.Diagnostics.DiagnosticsAggregator>(),
+                // #857: the /jump palette's worktree column. TuiModule registers
+                // IGitQuery for the CLI (same reason it registers the file-tree
+                // seam — the consumer is a TUI surface, and the CLI is the default
+                // CellForge backend), so this resolves on the normal path.
+                _rendererHost.GetService<Harbor.Abstractions.Git.IGitQuery>()),
+            screens,
             sessionResult.Value,
-            screens.Session,
-            screens.Screen,
-            screens.Bridge,
-            screens.Input,
-            modeController,
-            screens.Backend,
-            _cellForgeLogger,
-            screens.Coordinator,
-            _pluginReload,
-            _healthCheck,
-            _rendererHost.GetService<Harbor.Ui.Framework.Panels.IPanelRegistry>(),
-            // #674: the headless core owns diagnostic classification; the REPL is
-            // only the pipe that carries its snapshot to the store. Null in a host
-            // that registers no aggregator, which leaves the panel honestly empty.
-            _rendererHost.GetService<Harbor.Application.Diagnostics.DiagnosticsAggregator>(),
-            // #857: the /jump palette's worktree column. TuiModule registers
-            // IGitQuery for the CLI (same reason it registers the file-tree
-            // seam — the consumer is a TUI surface, and the CLI is the default
-            // CellForge backend), so this resolves on the normal path.
-            _rendererHost.GetService<Harbor.Abstractions.Git.IGitQuery>());
+            modeController);
         int exitCode = await runner.RunAsync(ct).ConfigureAwait(false);
         return Result.Success(exitCode);
     }

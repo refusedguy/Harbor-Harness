@@ -89,7 +89,7 @@
 //       IEventBus, ITokenTracker, IAgent, ILogger<>, PluginReloadService,
 //       IProviderHealthCheck)
 //    6  MEMBERS OF ONE AGGREGATE THE ROOT ALREADY BUILDS — `CellForgeScreens`
-//       (ReplRunner.cs:556), which the composition root constructs as a single
+//       (ReplRunner.cs:553), which the composition root constructs as a single
 //       value and then hands over PIECE BY PIECE: ScreenSession, ChatScreen,
 //       ChatScreenBridge, TerminalInputSource, ITerminalBackend,
 //       IApprovalCoordinator. Six of the twenty-four parameters are one
@@ -108,10 +108,18 @@
 //       serves it, which is finding 2's shape one level down
 //
 // So the god-object reading is false, and the "bundle them in a ReplContext"
-// prescription is not affordable either: the six loose aggregate members are
-// already bundled (in `CellForgeScreens`), so a context would add a SECOND
+// prescription is not affordable either: the six loose aggregate members were
+// already bundled (in `CellForgeScreens`), so a context would have added a SECOND
 // bundle beside the first rather than remove one. #776 reached the same verdict
 // for the other runner and this guard is where that verdict is kept.
+//
+// THE SPLIT HAS LANDED (this branch): the runner now takes five parameters —
+// `CellForgeCoreServices` (the twelve plain container services),
+// `CellForgeOptionalServices` (the three self-resolved ports plus the rest of
+// the nullable integrations), `CellForgeScreens` (the aggregate above, as
+// itself), and the two per-run values (`Session`, `ITerminalModeController`).
+// The table above is the pre-split derivation the five were measured from, kept
+// so the classification stays checkable.
 //
 // WHAT THE SECOND HALF OF RULE 2 IS FOR
 // ------------------------------------
@@ -163,11 +171,11 @@
 // that was created one statement earlier.
 //
 // `CellForgeRunnerParameters_AreMeasured` re-derives the table in the header
-// and asserts its two load-bearing numbers: that the primary-constructor walk
-// recovers the whole signature, and that every member of the root-built
-// aggregate reaches the runner — either as loose parameters (today) or as the
-// aggregate itself (the split this issue still owes). It is the measurement
-// half of the finding, and it is written to stay green through that split.
+// and asserts its load-bearing shape: that the primary-constructor walk
+// recovers the signature, and that every member of the root-built
+// aggregate reaches the runner — as loose parameters (before the split) or as
+// the aggregate itself (after it). It is the measurement
+// half of the finding, and it stayed green through the split.
 //
 // `Perimeter_Files_StillExist` keeps both rules from passing over a tree they
 // no longer describe.
@@ -356,7 +364,7 @@ public sealed class ReplConstructorCompositionTests
         }
     }
 
-    // ── The measurement half: what the other 24 parameters actually are ────
+    // ── The measurement half: what the runner's parameters were, and are ────
 
     [Test]
     public async Task CellForgeRunnerParameters_AreMeasured()
@@ -373,14 +381,14 @@ public sealed class ReplConstructorCompositionTests
         IReadOnlyList<string> parameterTypes = ReadPrimaryConstructorParameterTypes(runnerText, "CellForgeReplRunner");
         IReadOnlyList<string> aggregate = ReadRecordMemberTypes(aggregateText, AggregateType);
 
-        await Assert.That(parameters.Count).IsGreaterThan(8)
+        await Assert.That(parameters.Count).IsGreaterThan(0)
             .Because(
-                "Non-vacuity, and the premise of the measurement: this is the constructor issue #486's "
-                + "finding 3 calls \"22 parameters\". The walk below recovered " + parameters.Count
-                + " — if a primary-constructor rewrite, a moved file or a stop matching mid-list silently "
-                + "shortened the signature, the arithmetic in the header of this file would be wrong and "
-                + "the composition conclusion drawn from it would be an artefact of the matcher, not of "
-                + "the code.");
+                "Non-vacuity: the walk must recover the primary constructor of "
+                + "CellForgeReplRunner. The split this issue owed has landed (three "
+                + "bundles plus two per-run values), so the recovered count is small — "
+                + "a count of zero means the declaration moved or was respelled and "
+                + "the composition conclusion drawn from it would be an artefact of "
+                + "the matcher, not of the code. Recovered: " + parameters.Count + ".");
 
         await Assert.That(parameterTypes.Count).IsEqualTo(parameters.Count)
             .Because(
@@ -391,8 +399,8 @@ public sealed class ReplConstructorCompositionTests
                 + string.Join(", ", parameterTypes));
 
         // Every member of the one aggregate the root already builds must reach the
-        // runner — today as six loose parameters, after the split this issue still
-        // owes as the aggregate itself. Either shape is the finding; a third one
+        // runner — before the split as six loose parameters, after it as the
+        // aggregate itself. Either shape is the finding; a third one
         // (a member quietly dropped, or the aggregate invented locally) is not, and
         // is what this catches.
         var unreached = aggregate.Where(t => !parameterTypes.Contains(t) && !parameterTypes.Contains(AggregateType)).ToList();
