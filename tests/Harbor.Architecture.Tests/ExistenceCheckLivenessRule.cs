@@ -38,7 +38,7 @@
 // `src/` project that does not exist. All six are `Harbor.Hosting` ->
 // a Spectre/Termina/TerminalGui/RazorConsole renderer, and all six were moved
 // out of `src/` into `contrib/tui/` (they are the renderers AGENTS.md calls
-// unmaintained and out of CI). `Harbor.Hosting.csproj:139-146` still declares
+// unmaintained and out of CI). `Harbor.Hosting.csproj:140-147` still declares
 // all six, inside
 //
 //     <ItemGroup Condition="'$(HarborWithSpectreTui)' == 'true'">
@@ -244,7 +244,7 @@ public sealed class ExistenceCheckLivenessRule
     ///         Six of forty-two rows, all of them
     ///         <c>Harbor.Hosting -&gt; a renderer</c>, and all six name a project
     ///         that moved from <c>src/</c> to <c>contrib/tui/</c> on 2026-08-23.
-    ///         <c>Harbor.Hosting.csproj:139-146</c> still declares the reference,
+    ///         <c>Harbor.Hosting.csproj:140-147</c> still declares the reference,
     ///         inside an <c>ItemGroup</c> conditioned on
     ///         <c>$(HarborWithSpectreTui)</c> — a property defined nowhere, so the
     ///         group never opens and the edge really is dead, which is what the
