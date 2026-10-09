@@ -3,9 +3,9 @@ using Harbor.Tui.CellForge.Input;
 using Harbor.Tui.CellForge.Rendering;
 // #436: GlowRegion is engine-typed; its accent/rect convert exactly below.
 using EngineCells = Harbor.Tui.CellForge.Rendering;
-// #436: the wheel dto lives in the engine's Input namespace (not Rendering);
-// the global UiKeyDto alias pins the Rendering twin, so the engine side is
-// named through EngineInput.
+// #436: the wheel payload comes from the engine input vocabulary rather
+// than its grid vocabulary. The shared alias below pins the other twin,
+// so this file names the engine side through a dedicated alias.
 using EngineInput = Harbor.Tui.CellForge.Input;
 using Harbor.Ui.Framework.Rendering.Input;
 using Harbor.Ui.Framework.State;

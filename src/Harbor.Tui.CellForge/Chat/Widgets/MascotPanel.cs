@@ -129,10 +129,22 @@ public sealed class MascotPanel : Panel
                     continue;
                 }
 
-                var transformed = _postFx.Transform(x, y, in cell);
+                // #436: the post pipeline is engine-typed while the painted
+                // grid is Rendering-typed. Both cell structs share the 16-byte
+                // layout, so the crossing is an exact field round-trip — and it
+                // only runs on reaction frames (Count == 0 returns above).
+                var echo = EngineCells.Cell.FromRaw(cell.Rune, cell.Fg, cell.Bg, cell.Flags, cell.Width);
+                var transformed = _postFx.Transform(x, y, in echo);
                 if (transformed.Fg != cell.Fg || transformed.Bg != cell.Bg)
                 {
-                    buffer.SetStyleAt(x, y, transformed.Style);
+                    var style = transformed.Style;
+                    buffer.SetStyleAt(
+                        x,
+                        y,
+                        new CellStyle(
+                            PackedColor.FromRaw(style.Fg.Value),
+                            PackedColor.FromRaw(style.Bg.Value),
+                            (StyleAttr)style.Attrs));
                 }
             }
         }
