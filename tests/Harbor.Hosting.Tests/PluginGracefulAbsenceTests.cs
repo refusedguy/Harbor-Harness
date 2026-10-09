@@ -202,6 +202,12 @@ public class PluginGracefulAbsenceTests
         using var _cwd = WithTempCwd(); // empty project scope
         using ServiceProvider sp = Compose(harborDir, capture);
 
+        // Slice 2 loads plugins in the background: await the startup load
+        // (bounded) before asserting — the warning is logged before it
+        // completes, so both pins below observe the finished run.
+        await sp.GetRequiredService<StartupPluginLoad>().Completion
+            .WaitAsync(TimeSpan.FromMinutes(2)).ConfigureAwait(false);
+
         var toolNames = sp.GetRequiredService<IToolRegistry>()
             .GetAllTools()
             .Select(t => t.Name.Value)

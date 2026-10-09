@@ -183,8 +183,8 @@ internal static class RegistriesModule
         // binary to compile them later — skip the whole pipeline (including the
         // Roslyn side of Compose) and say so in exactly one line. Startup stays
         // fast, the registries stay full, the exit stays normal.
-        if (TryReportPluginAbsence(ctx, globalPluginsDir, projectPluginsDir, onLoaded))
-            return;
+        if (!HasPluginScripts(globalPluginsDir) && !HasPluginScripts(projectPluginsDir))
+            return ReportPluginAbsence(ctx);
 
         var (pluginHost, pluginRuntime) = PluginRuntimeComposer.Compose(
             services,
@@ -221,24 +221,16 @@ internal static class RegistriesModule
     /// <summary>
     ///     #1055 slice 1: when neither plugin scope holds a <c>.cs</c> script there
     ///     is nothing to compose. Reports the absence in exactly one line — the
-    ///     host-binary probe decides which one — and skips the pipeline.
+    ///     host-binary probe decides which one — and returns an already-completed
+    ///     empty load so late consumers observe zero plugins.
     /// </summary>
-    /// <returns>True when the caller must skip the plugin pipeline.</returns>
-    private static bool TryReportPluginAbsence(
-        HarborCompositionContext ctx,
-        string globalPluginsDir,
-        string projectPluginsDir,
-        Action<IReadOnlyList<LoadedPlugin>>? onLoaded)
+    private static StartupPluginLoad ReportPluginAbsence(HarborCompositionContext ctx)
     {
-        if (HasPluginScripts(globalPluginsDir) || HasPluginScripts(projectPluginsDir))
-            return false;
-
         // The binary ships next to the CLI; when it is missing too, "no host" is
         // the honest reason. When it is present, the host is simply idle.
         ctx.Logger.LogInformation(
             PluginHostLocator.IsHostAvailable() ? "plugins: off (no scripts)" : "plugins: off (no host)");
-        onLoaded?.Invoke(Array.Empty<LoadedPlugin>());
-        return true;
+        return StartupPluginLoad.Empty();
     }
 
     private static bool HasPluginScripts(string dir)
