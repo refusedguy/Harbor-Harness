@@ -229,6 +229,8 @@ See [docs/ROADMAP.md](./docs/ROADMAP.md) for the authoritative plan. Recent high
 
 MIT — see [LICENSE](./LICENSE).
 
+Report a vulnerability privately — see [SECURITY.md](./SECURITY.md).
+
 ## Acknowledgments
 
 Architectural inspiration: [pi-agent](https://github.com/earendil-works/pi) (JSONL sessions, event protocol), [kilocode](https://github.com/kilo-org/kilocode) (permission patterns, compaction), [opencode](https://github.com/anomalyco/opencode), [crush](https://github.com/charmbracelet/crush).
