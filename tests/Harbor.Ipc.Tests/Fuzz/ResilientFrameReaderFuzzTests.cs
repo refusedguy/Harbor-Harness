@@ -190,8 +190,14 @@ public class ResilientFrameReaderFuzzTests
     ///     classify as OversizedFrame quickly, consume nothing but the 4-byte header,
     ///     and never allocate the declared size (an OOM/overflow would fail the test).
     /// </summary>
+    /// <remarks>
+    ///     #996: the 5 s ceiling below is a LIVENESS bound (deadlock tripwire), not a
+    ///     perf gate — in-memory reads cost microseconds, so the margin is ~100x. Do
+    ///     not tune it as if it measured speed; it exists to catch a reader that
+    ///     blocks on a payload it was told to reject.
+    /// </remarks>
     [Test]
-    public async Task TenConsecutiveOversizedHeaders_RejectedByPolicy_WithoutAllocatingDeclaredSize()
+    public async Task TenConsecutiveOversizedHeaders_RejectedByPolicy_WithinLivenessBound()
     {
         AssertReaderAvailable();
         object? reader = ResilientFrameReaderProbe.CreateReader();

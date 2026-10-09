@@ -32,8 +32,17 @@ public class EventBusBackpressureTests
         await Assert.That(received.Count).IsEqualTo(1);
     }
 
+    /// <summary>
+    ///     A slow subscriber cannot stall the publisher beyond its per-handler budget;
+    ///     consecutive strikes evict it; fast subscribers keep the publish-then-observe contract.
+    /// </summary>
+    /// <remarks>
+    ///     #996: the 2 s / 500 ms ceilings below are LIVENESS bounds (deadlock tripwires),
+    ///     not perf gates — the property is "does not wait out the 30 s handler", and the
+    ///     ceilings say that with wide margin. Do not tighten them as if they measured speed.
+    /// </remarks>
     [Test]
-    public async Task SlowSubscriber_DoesNotStallPublisher_AndIsEvictedAfterStrikes()
+    public async Task SlowSubscriber_DoesNotStallPublisher_AndIsEvictedAfterStrikes_LivenessBound()
     {
         var bus = BusWithBudget(TimeSpan.FromMilliseconds(50));
         int deliveries = 0;
@@ -46,7 +55,7 @@ public class EventBusBackpressureTests
         IDisposable sub = bus.Subscribe(SlowHandler);
 
         // Three strikes → eviction. Each publish must return promptly
-        // instead of waiting out the 30-second handler.
+        // instead of waiting out the 30-second handler (liveness bound — see summary).
         for (int i = 0; i < 3; i++)
         {
             var sw = System.Diagnostics.Stopwatch.StartNew();

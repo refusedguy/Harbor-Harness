@@ -198,20 +198,14 @@ public sealed class DebouncedPluginWatcherTests : IDisposable
             File.WriteAllText(path, $"// v{i + 2}");
         burst.Stop();
 
-        // The writes have to fit well inside one window, or they can straddle a
-        // boundary and split into two windows legitimately — and then the count
-        // assertion below is measuring host pre-emption instead of the debounce.
-        // Timing the burst names that where it happens; the old fixed settle let the
-        // same fact arrive later as an unexplained count mismatch (#757).
-        await Assert.That(burst.Elapsed)
-            .IsLessThan(Debounce / 4)
-            .Because(
-                "the five writes of this burst took " + burst.ElapsedMilliseconds + "ms against a budget of "
-                + (int)Debounce.TotalMilliseconds / 4 + "ms (a quarter of the "
-                + (int)Debounce.TotalMilliseconds + "ms debounce). Writes that cannot finish inside a "
-                + "quarter of the window can straddle a window boundary, so the burst would split into two "
-                + "windows for a reason that has nothing to do with debouncing, and the count assertion below "
-                + "would be reading host pre-emption as a debounce failure.");
+        // #996: the burst duration is REPORTED, not gated. Five 8-byte writes read
+        // 178 ms on shared CI against the old 125 ms (Debounce/4) budget — 35 ms per
+        // write is host pre-emption, and six green runs of one unchanged commit spread
+        // 1.43x, so no threshold separates code from runner. The count below stays the
+        // gate: splitting it now needs ~one full debounce of pre-emption (#757 raised
+        // the window 120 ms → 500 ms), not a quarter of it.
+        Console.WriteLine(
+            $"[burst] five writes took {burst.ElapsedMilliseconds} ms inside a {(int)Debounce.TotalMilliseconds} ms debounce window.");
 
         var change = await NextAsync(watcher, received, baseline + 1, TimeSpan.FromSeconds(10));
         await Assert.That(change.Kind).IsEqualTo(PluginSourceChangeKind.Modified);

@@ -9,8 +9,9 @@ namespace Harbor.Tui.CellForge.Tests;
 /// CE-3 final budgets (sprint goal: frame &lt; 16 ms with the feed, 0
 /// steady-state allocations). Allocation numbers are hard assertions
 /// (thread-scoped counter, immune to parallel traffic); frame times are
-/// reported and guarded by a generous ceiling to catch pathological
-/// regressions without flaking on slow CI.
+/// reported for the benchmark doc and never gated (#996 — a suite-total or
+/// per-frame wall-clock ceiling on shared runners is a wrong metric, not a bad
+/// number; the #463 relative alloc pairing below is the shape that holds).
 /// </summary>
 public class PerfBudgetTests
 {
@@ -251,7 +252,7 @@ public class PerfBudgetTests
         double avgMs = sw.Elapsed.TotalMilliseconds / frames;
         Console.WriteLine($"ce3-frame-avg: {avgMs:F3} ms over {frames} frames (budget 16 ms)");
 
-        // Report the actual measurement; guard against pathological regressions only.
-        await Assert.That(avgMs).IsLessThan(16.0 * 4);
+        // #996: reported only — the gates for this path are the allocation-free
+        // counts above and the #463 relative push-cost pairing beside them.
     }
 }
