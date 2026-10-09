@@ -11,9 +11,17 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <!-- CF-A-001: прямые референсы вместо транзитивных. -->
-    <ProjectReference Include="..\Harbor.Ui.Framework.Rendering\Harbor.Ui.Framework.Rendering.csproj"/>
-    <ProjectReference Include="..\Harbor.DesignSystem\Harbor.DesignSystem.csproj"/>
+    <!-- #436 RED: both edges dropped, nothing else fixed on purpose. This commit
+         exists to be red — the compiler's own error list is the instrument.
+         Harbor.Ui.Framework.Rendering carried the cell/screen/input/Markdown/
+         widget vocabulary (Cell, Rect, ScreenBuffer, CellStyle, KeyEvent family,
+         MdLine/MdStyle, ChatPalette, PanelFx, CellDiffHints, UiStageCounters);
+         Harbor.DesignSystem carried the OSC-11 probe (TerminalBackgroundProbe)
+         EscapeSequenceParser binds. Per the #1009 measurement the DesignSystem
+         edge is redundant-by-transit (its five bound types resolve through the
+         Rendering edge) — deleting BOTH at once verifies that, and verifies no
+         third carrier (Contracts via Rendering→Contracts, State is already gone
+         per #435) hides behind them. Ports land in the next commits. -->
   </ItemGroup>
 
   <ItemGroup>
