@@ -287,6 +287,11 @@ public sealed class AgentLoop : IAgentLoop
                 // completion. The AgentEndEvent carries Cancelled=true so renderers
                 // can reflect the aborted state instead of a clean finish.
                 _logger.LogInformation("Agent run cancelled: session={SessionId} agent={Agent}", session.Session.Id, agent.Name.Value);
+                // #407: a cancelled parent takes its detached children with it.
+                // The registry owns a linked CTS per background run, so this
+                // reaches children even when the launching turn's token is gone.
+                // Turn boundaries and normal completion do NOT come here.
+                _backgroundTasks?.CancelSession(session.Session.Id);
                 await _eventBus.PublishAsync(
                     new AgentEndEvent(SnapshotMessages(session.Messages), Cancelled: true), CancellationToken.None).ConfigureAwait(false);
 

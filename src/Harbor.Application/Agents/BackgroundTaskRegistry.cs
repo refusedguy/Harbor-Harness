@@ -10,11 +10,19 @@ namespace Harbor.Application.Agents;
 ///     on the thread pool, keyed to the launching session, capped so one
 ///     chatty orchestrator cannot fork-bomb the provider bill.
 /// </summary>
+/// <remarks>
+///     Each run owns a <see cref="CancellationTokenSource" /> linked to the
+///     launching token (#407): the link preserves the old "abort the parent,
+///     abort the run" behaviour, while <see cref="CancelSession" /> fires the
+///     owned sources directly — so a parent cancel stops children whose launch
+///     token is already gone. Sources are dropped when their run drains.
+/// </remarks>
 public sealed class BackgroundTaskRegistry : IBackgroundTaskRegistry
 {
     private readonly ConcurrentDictionary<string, Task<Result<SubAgentRunResult>>> _runs = new();
     private readonly ConcurrentDictionary<string, (string AgentName, string SessionId)> _meta =
         new();
+    private readonly ConcurrentDictionary<string, CancellationTokenSource> _sources = new();
     private readonly ILogger<BackgroundTaskRegistry> _logger;
     private int _seq;
 
@@ -48,10 +56,14 @@ public sealed class BackgroundTaskRegistry : IBackgroundTaskRegistry
 
         string id = "task_" + Interlocked.Increment(ref _seq);
         // Detached scheduling (own token None): the RUN is still bound to the
-        // launcher's token, so aborting the parent run cancels the background
-        // run while normal turn boundaries leave it alive.
-        var task = Task.Run(() => run(ct), CancellationToken.None);
+        // launcher's token via a linked source the registry owns (#407), so
+        // aborting the parent run cancels the background run while normal
+        // turn boundaries leave it alive — and CancelSession can fire the
+        // owned source even after the launcher's token is gone.
+        var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        var task = Task.Run(() => run(cts.Token), CancellationToken.None);
         _runs[id] = task;
+        _sources[id] = cts;
         _meta[id] = (agentName, sessionId);
         _logger.LogInformation(
             "Background task started: id={Id} agent={Agent} session={Session}",
@@ -60,6 +72,38 @@ public sealed class BackgroundTaskRegistry : IBackgroundTaskRegistry
             sessionId
         );
         return Result.Success(id);
+    }
+
+    /// <inheritdoc />
+    public int CancelSession(string sessionId)
+    {
+        int cancelled = 0;
+        foreach (var (id, cts) in _sources)
+        {
+            if (!_meta.TryGetValue(id, out var meta) || meta.SessionId != sessionId)
+                continue;
+            try
+            {
+                cts.Cancel();
+                cancelled++;
+            }
+            catch (ObjectDisposedException ex)
+            {
+                // Raced with DrainCompleted dropping this run's source —
+                // the run is already observed, nothing left to stop.
+                _logger.LogDebug(ex, "Background task source already drained: id={Id}", id);
+            }
+        }
+
+        if (cancelled > 0)
+        {
+            _logger.LogInformation(
+                "Background tasks cancelled: session={Session} count={Count}",
+                sessionId,
+                cancelled);
+        }
+
+        return cancelled;
     }
 
     /// <inheritdoc />
@@ -79,6 +123,8 @@ public sealed class BackgroundTaskRegistry : IBackgroundTaskRegistry
 
             if (_runs.TryRemove(id, out _) && _meta.TryRemove(id, out _))
             {
+                if (_sources.TryRemove(id, out var cts))
+                    cts.Dispose();
                 done.Add(new BackgroundTaskCompletion(id, meta.AgentName, Observe(task)));
             }
         }
