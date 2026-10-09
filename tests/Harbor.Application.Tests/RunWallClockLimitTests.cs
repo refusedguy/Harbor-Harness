@@ -29,7 +29,7 @@ namespace Harbor.Application.Tests;
 ///     <para>
 ///         <b>What was wrong.</b> The only ready-made way to put a deadline on
 ///         the loop was the per-tool-call shape — a linked CTS plus
-///         <c>CancelAfter</c> (<c>ToolDispatcher.cs:302-303</c>, driven by
+///         <c>CancelAfter</c> (<c>ToolDispatcher.cs:473-474</c>, driven by
 ///         <c>AgentDefinition.ToolTimeoutSeconds</c>). That shape FIRES the run
 ///         token, so <c>AgentLoop</c>'s <c>ct.IsCancellationRequested</c> branch
 ///         reports the run as <c>Result.Failure("Agent run was cancelled.")</c>
