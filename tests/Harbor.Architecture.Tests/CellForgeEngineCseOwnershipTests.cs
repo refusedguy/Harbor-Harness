@@ -11,11 +11,12 @@
 // `BufferPair?`, a plain `Nullable<T>`, and its single caller
 // (src/Harbor.Tui.CellForge/Chat/Streaming/ScreenSession.cs) reads it as one.
 //
-// So the dependency is PURELY STRUCTURAL: the engine's csproj declares zero
-// `PackageReference` entries, and CSE reaches the compiler only because two
-// referenced projects hand it down. That makes "who owns the engine's CSE
-// dependency?" a question with no answer yet — and it is #435's and #436's to
-// answer, not this wave's. #591 hit exactly that wall and stopped; its
+// So the dependency was PURELY STRUCTURAL: the engine's csproj declared zero
+// `PackageReference` entries, and CSE reached the compiler only because
+// referenced projects handed it down. #435 dropped two of the three carriers
+// and #436 the last one, so the closure is now empty and the engine is a
+// standalone leaf — and "who owns the engine's CSE dependency?" is answered:
+// nobody, there is none. #591 hit exactly that wall and stopped; its
 // `MaybeAbsenceTests.NullableTryReturnExemptions` entry for BufferSwapChain.cs
 // records the block in prose. Prose rots. This file is the same claim in a form
 // that fails the build when it stops being true.
@@ -96,7 +97,10 @@ public class CellForgeEngineCseOwnershipTests
     /// </remarks>
     internal static readonly string[] PinnedCseCarriers =
     [
-        "Harbor.Abstractions.Contracts",
+        // #436 LANDED — the engine is a standalone leaf (zero ProjectReference
+        // entries to Harbor assemblies), so no project hands it
+        // CSharpFunctionalExtensions anymore. Empty on purpose; a new carrier
+        // appearing here means a new reference re-opened the path.
     ];
 
     /// <summary>
@@ -107,8 +111,10 @@ public class CellForgeEngineCseOwnershipTests
     /// </summary>
     private static readonly string[] PinnedEngineReferences =
     [
-        "Harbor.DesignSystem",
-        "Harbor.Ui.Framework.Rendering"
+        // #436 LANDED — the Rendering + DesignSystem edges are dropped and the
+        // list is empty (standalone leaf). A new entry re-opens the CSE path
+        // the carrier set above measures, so it still has to be re-derived
+        // deliberately.
     ];
 
     /// <summary>
@@ -226,15 +232,15 @@ public class CellForgeEngineCseOwnershipTests
 
         await Assert.That(string.Join(", ", carriers)).IsEqualTo(string.Join(", ", PinnedCseCarriers))
             .Because(
-                "The engine's reference closure reaches CSharpFunctionalExtensions through exactly one "
-                + "project. #789 recorded three; #435 removed two of them — Harbor.Abstractions and "
-                + "Harbor.Ui.Framework.State — so the ladder the file predicted (3 -> 1 after #435 -> 0 "
-                + "after #436) is now two-thirds taken. What remains is Harbor.Abstractions.Contracts, "
-                + "reached via Harbor.Ui.Framework.Rendering, which only #436 removes. So #435 alone does "
-                + "NOT make the engine CSE-free, and a reader must not conclude that it did from the "
-                + "engine's csproj now looking nearly empty. If this fired because a carrier was ADDED, a "
-                + "new path to the package opened that neither slice accounts for. If it fired because one "
-                + "was REMOVED, the slice that removed it landed: update the pin and record which one.");
+                "The engine's reference closure reaches CSharpFunctionalExtensions through zero "
+                + "projects. #789 recorded three; #435 removed two of them — Harbor.Abstractions and "
+                + "Harbor.Ui.Framework.State — and #436 removed the last one "
+                + "(Harbor.Abstractions.Contracts, reached via Harbor.Ui.Framework.Rendering), so the "
+                + "ladder the file predicted (3 -> 1 after #435 -> 0 after #436) is fully taken and the "
+                + "engine is a standalone leaf. If this fired because a carrier was ADDED, a new path to "
+                + "the package opened that no slice accounts for. If it fired because the pin still "
+                + "names a carrier, the pin was not updated when #436 landed: update it and record "
+                + "which slice removed the path.");
     }
 
     [Test]
@@ -276,15 +282,24 @@ public class CellForgeEngineCseOwnershipTests
                 $"src/{EngineProject} holds ~60 source files; found {files}. A path that does not resolve "
                 + "makes EngineSources_UseNoCseSurface pass on an empty scan.");
 
-        // And the closure walk has to reach past the direct edges, or the third carrier
-        // (Abstractions.Contracts, two hops away) is only ever "correct" by accident.
+        // The closure walk has to be a real walk, not a stub returning empty: the
+        // engine is now a standalone leaf (zero references, zero reachable), so the
+        // old "reachable exceeds direct refs" tripwire cannot fire here. The control
+        // below proves the walk still traverses — the host still references the
+        // engine, so its closure is non-empty.
         string[] reachable = ReachableProjects(EngineProject);
-        await Assert.That(reachable.Length).IsGreaterThan(PinnedEngineReferences.Length)
+        await Assert.That(reachable).IsEmpty()
             .Because(
-                "The carrier set includes Harbor.Abstractions.Contracts, which the engine reaches only "
-                + "through Harbor.Ui.Framework.Rendering. If the walk stopped at the direct references, "
-                + "that carrier would silently vanish from the closure and the pin would stop measuring "
-                + "the third path it exists to catch.");
+                "#436 landed: the engine declares zero ProjectReference entries, so its "
+                + "reference closure is empty and no carrier can hide two hops away. A "
+                + "non-empty closure here means a reference was re-added without updating "
+                + "PinnedEngineReferences above.");
+        string[] hostReachable = ReachableProjects("Harbor.Tui.CellForge");
+        await Assert.That(hostReachable.Length).IsGreaterThan(0)
+            .Because(
+                "The control: the host still references the engine, so a walk that returns "
+                + "nothing for the host is broken and the empty engine closure above would be "
+                + "vacuous. Found: " + string.Join(", ", hostReachable));
     }
 
     // ── helpers ──────────────────────────────────────────────────────────
