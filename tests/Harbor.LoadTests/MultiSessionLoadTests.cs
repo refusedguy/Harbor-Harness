@@ -188,12 +188,14 @@ public sealed class MultiSessionLoadTests
     ///     the same run. The GATE is machine-independent counts — doubling the
     ///     sessions exactly doubles admissions/starts/ends with transcripts
     ///     intact (a dropped run or a starved admission fails here on any
-    ///     runner). Both stopwatches are printed report-only: a wall-clock
-    ///     ratio over async HTTP drives at ~10 ms leg scale measures the
-    ///     shared runner, not the code (CI run 37956923400 read ratio 5.16 —
-    ///     see #1059). Allocation is deliberately NOT gated either — the drive
-    ///     crosses async/HTTP boundaries, so per-thread allocated bytes are
-    ///     unsound.
+    ///     runner). Stopwatches are printed report-only with every round, not
+    ///     just the best: at ~10 ms leg scale a best-of-3 ratio hides variance,
+    ///     and variance is the noise diagnostic (CI run 37956923400 read
+    ///     ratio 5.16 — see #1059). Per-round peaks are printed alongside so
+    ///     limiter queueing (8 runs vs capacity 6) reads separately from
+    ///     runner jitter. Allocation is deliberately NOT gated either — the
+    ///     drive crosses async/HTTP boundaries, so per-thread allocated
+    ///     bytes are unsound.
     /// </summary>
     [Test]
     [Timeout(600_000)]
@@ -213,26 +215,36 @@ public sealed class MultiSessionLoadTests
         GC.Collect();
 
         (int smallAdmissions, double smallMs) = (0, double.MaxValue);
+        var smallRounds = new List<double>(ScalingRounds);
+        int smallPeak = 0;
         for (int r = 0; r < ScalingRounds; r++)
         {
-            (int admissions, double ms) = await MeasureDriveAsync(smallSessions, agents, capacity);
+            (int admissions, double ms, int peak) = await MeasureDriveAsync(smallSessions, agents, capacity);
             await Assert.That(admissions).IsEqualTo(smallSessions * agents);
             smallAdmissions = admissions;
             smallMs = Math.Min(smallMs, ms);
+            smallRounds.Add(ms);
+            smallPeak = Math.Max(smallPeak, peak);
         }
 
         (int largeAdmissions, double largeMs) = (0, double.MaxValue);
+        var largeRounds = new List<double>(ScalingRounds);
+        int largePeak = 0;
         for (int r = 0; r < ScalingRounds; r++)
         {
-            (int admissions, double ms) = await MeasureDriveAsync(largeSessions, agents, capacity);
+            (int admissions, double ms, int peak) = await MeasureDriveAsync(largeSessions, agents, capacity);
             await Assert.That(admissions).IsEqualTo(largeSessions * agents);
             largeAdmissions = admissions;
             largeMs = Math.Min(largeMs, ms);
+            largeRounds.Add(ms);
+            largePeak = Math.Max(largePeak, peak);
         }
 
         Console.WriteLine(
-            $"[scaling] {smallSessions}x{agents}: {smallMs:F1} ms best of {ScalingRounds}; " +
+            $"[scaling] {smallSessions}x{agents}: {smallMs:F1} ms best of {ScalingRounds} " +
+            $"(rounds {string.Join(", ", smallRounds.Select(v => v.ToString("F1")))}; peak {smallPeak}); " +
             $"{largeSessions}x{agents}: {largeMs:F1} ms best of {ScalingRounds} " +
+            $"(rounds {string.Join(", ", largeRounds.Select(v => v.ToString("F1")))}; peak {largePeak}) " +
             $"(report-only; counts gated, see #1059)");
 
         // Non-vacuity first: zero admissions satisfy every equality below.
@@ -291,9 +303,10 @@ public sealed class MultiSessionLoadTests
     /// <summary>
     ///     One timed drive; also verifies completion so a slow leg cannot be
     ///     a leg that silently dropped runs. Returns admitted-run count plus
-    ///     wall-clock milliseconds (timing is report-only, never gated).
+    ///     wall-clock milliseconds plus limiter peak (timing and peak are
+    ///     report-only, never gated).
     /// </summary>
-    private static async Task<(int Admissions, double ElapsedMs)> MeasureDriveAsync(int sessions, int agents, int capacity)
+    private static async Task<(int Admissions, double ElapsedMs, int PeakInFlight)> MeasureDriveAsync(int sessions, int agents, int capacity)
     {
         using var cts = new CancellationTokenSource(TimeSpan.FromMinutes(4));
         await using MultiSessionLoadHarness harness = await MultiSessionLoadHarness.StartAsync(
@@ -314,7 +327,7 @@ public sealed class MultiSessionLoadTests
         await Assert.That(harness.Signals.AgentStarts).IsEqualTo(total);
         await Assert.That(harness.Signals.AgentEnds).IsEqualTo(total);
 
-        return (harness.Limiter.TotalAdmissions, stopwatch.Elapsed.TotalMilliseconds);
+        return (harness.Limiter.TotalAdmissions, stopwatch.Elapsed.TotalMilliseconds, harness.Limiter.PeakInFlight);
     }
 
     /// <summary>
