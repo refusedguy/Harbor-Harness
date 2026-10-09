@@ -173,6 +173,12 @@ public class LineReplEofTests
             wizard,
             new PermissionService(agentRegistry, NullLogger<PermissionService>.Instance));
 
+        // #486: the adapter too, and for the same reason — the root builds both, and
+        // the line REPL dispatches no slash command through either. `providers` is
+        // hoisted out of the ReplRunner call because the adapter needs it as well.
+        var providers = new FakeProviderRegistry(new ScriptedLlmClient());
+        var legacySlash = new LegacySlashRunner(slashes, agentRegistry, configStore, authStore, providers);
+
         return new ReplRunner(
             NullLogger<ReplRunner>.Instance,
             configStore,
@@ -183,8 +189,9 @@ public class LineReplEofTests
             agent,
             new FakeSessionStore(),
             agentRegistry,
-            new FakeProviderRegistry(new ScriptedLlmClient()),
+            providers,
             slashes,
+            legacySlash,
             NullLoggerFactory.Instance,
             pluginReload: null,
             rendererPipeline: null,

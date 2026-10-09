@@ -252,8 +252,9 @@ public class SlashCommandFailureSurfacesTests
         // Three empty answers is exactly how OnboardingWizard gives up
         // ("Non-interactive input or setup aborted."), so the wizard fails for
         // real without a fake. Its Result is consumed on the boot path
-        // (ReplRunner.cs:150); on the slash path it used to be returned into the
-        // check-doc-cites: record-drift ReplRunner.cs:150 now="await _renderer.WriteLineAsync($'Failed: {configResult.Er…" [#947: written over `{`; repair deferred to the owner's symbol-rename decision] -->
+        // (ReplRunner.cs:217 — the `Setup failed: {wizardResult.Error}` write, and
+        // not the config-load report that sits 53 lines above it); on the slash
+        // path it used to be returned into the
         // dispatcher and dropped, leaving the prompts with no ending.
         var lines = await DispatchAsync("/setup", new EmptyStore());
 

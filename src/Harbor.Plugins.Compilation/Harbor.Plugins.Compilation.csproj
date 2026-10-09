@@ -38,4 +38,11 @@
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions"/>
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- #1004: PluginReferenceContractTests reads PluginContractAssemblies to assert the
+         declared plugin contract surface is resolved BY NAME rather than inherited from
+         ambient load state. Internal, so the published API of this package is unchanged. -->
+    <InternalsVisibleTo Include="Harbor.Plugins.Runtime.Tests"/>
+  </ItemGroup>
+
 </Project>

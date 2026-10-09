@@ -57,7 +57,7 @@ Do not re-read whole files when a `graft` crux or `serena` symbol body already a
 ## Project structure quick reference
 
 ```
-src/Harbor.Abstractions/              — base contracts (zero deps)
+src/Harbor.Abstractions/              — base contracts (no Harbor deps except Abstractions.Contracts; 7 NuGet, gated)
 src/Harbor.Abstractions.Contracts/    — models, events, ValueObjects, PermissionRuleset
 
 src/Harbor.Registries/                — Agent/Tool/Provider registries; builtin agents are declared in
@@ -467,7 +467,7 @@ below are kept so the contract has a name and a future wiring has somewhere to
 land — **they do not add a panel today.** For a plugin panel that is actually
 painted, implement `ITuiPanelPlugin`.
 
-1. Create a class library project referencing `Harbor.Terminal.Abstractions` (`Harbor.Tui.Abstractions` is a deprecated facade slated for removal in v0.6 — do not use for new code).
+1. Create a class library project referencing `Harbor.Terminal.Abstractions`. (This step used to add "`Harbor.Tui.Abstractions` is a deprecated facade slated for removal in v0.6". **That project does not exist** — there is no `src/Harbor.Tui.Abstractions`, no `.csproj` by that name anywhere outside `contrib/`, and no matrix row for it. It was a rename to `Harbor.Terminal.Abstractions`; see `docs/ARCHITECTURE_LAYERS.md:377` and `CLAUDE.md:99`. Do not add a reference to it, and do not describe it as pending removal.)
 2. Implement `ITuiPlugin` — set `Name`, `Version`, `Description`.
 3. In `RegisterTui(ViewRegistry, ViewModelRegistry)`, register any custom views / view models.
 4. Register *before* `BaseTuiRenderer.InitializeAsync` to override builtins.
@@ -704,7 +704,7 @@ Harbor следует принципам OOP/SOLID/GoF/FP/ROP/perf. Полный
 
 ## What NOT to do
 
-1. **Don't add dependencies to `Harbor.Abstractions`** — it must stay zero-dep (only CSharpFunctionalExtensions).
+1. **Don't add dependencies to `Harbor.Abstractions`** — it must stay as small as it is today. It is not zero-dep: the measured set is 7 `PackageReference` (`CSharpFunctionalExtensions`, `MemoryPack`, `ZLinq` + `ZLinq.DropInGenerator`, and the three `Microsoft.Extensions.*.Abstractions`), plus one `ProjectReference` to `Harbor.Abstractions.Contracts`. This list used to say "only CSharpFunctionalExtensions" and was wrong by six. It is now enforced by [`tools/check-abstractions-contract.py`](./tools/check-abstractions-contract.py), which fails when a declared package has no `using` under it or a non-BCL `using` has no package over it — run `--report` to print the census rather than trusting this sentence. The gate covers four projects, not just this one: `Harbor.Abstractions.Contracts`, plus `Harbor.Extensions` and `Harbor.Application`, which carried the same phantom `CommunityToolkit.HighPerformance` edge until #1016's follow-up measured that nothing in `src/` used it. `Harbor.Extensions` and `Harbor.Application` are not frozen contracts — they are on the gate because their dependency sets are the ones every other assembly inherits through them.
 2. **Don't use `Newtonsoft.Json`** — use `System.Text.Json` only.
 3. **Don't use EF Core** — not AOT-compatible. Use Dapper or raw ADO.NET.
 4. **Don't throw exceptions for expected failures** — use `Result<T>`.

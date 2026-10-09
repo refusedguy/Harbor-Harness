@@ -36,12 +36,12 @@
 // two vocabularies. #833's own table lists four spellings; measured on dev it is
 // eight sites across THREE modifier vocabularies, and the polarity flips
 // without the type changing (`!= 0` means "refuse" at DialogOverlay:649 and
-// QuestionFormView:571; the same expression inverted IS ComposerController:173).
+// QuestionFormView:571; the same expression inverted IS ComposerController:194).
 //
 // The full measured inventory — this is the deliverable of the issue:
 //
 //   BUFFER (a rune can reach a buffer; Shift types, Ctrl/Meta/Alt refuse)
-//     ComposerController.cs:173              == 0            (kitty)
+//     ComposerController.cs:194              == 0            (kitty)
 //     DialogOverlay.cs:649                    != 0            (kitty)
 //     DialogOverlay.cs:718                    == 0 && !IsControl   (legacy ConsoleKeyInfo)
 //     QuestionFormView.cs:571                 != 0            (custom row only)

@@ -25,9 +25,15 @@ internal static partial class HostBuilder
         ILoggerFactory loggerFactory,
         out CliConfig cliConfig)
     {
+        // #414: the third argument is the whole point. Without a source-generated
+        // JsonTypeInfo the store falls back to JsonSerializer.Deserialize<T>(json,
+        // JsonOptions), which resolves the contract reflectively and throws under
+        // PublishTrimmed — and the CLI composition root was the reason that branch
+        // was live rather than theoretical.
         var store = new JsonAppConfigStore<CliConfig>(
             new CliConfig(),
-            loggerFactory.CreateLogger<JsonAppConfigStore<CliConfig>>());
+            loggerFactory.CreateLogger<JsonAppConfigStore<CliConfig>>(),
+            CliJsonContext.Default.CliConfig);
         services.AddSingleton<IAppConfigStore<CliConfig>>(store);
 
         var result = store.LoadAsync().GetAwaiter().GetResult();

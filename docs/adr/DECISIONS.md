@@ -365,3 +365,37 @@ by two new rules in `tools/check-doc-cites.py` that are red on the pre-fix tree.
 - Full text, the three axes with their implementation and reader counts, the
   measured cost, and the four known limits:
   [ADR-013](ADR-013-cellforge-widget-axis-internal-contract.md).
+
+---
+
+## ADR-014: `Harbor.Ui.Framework.Sessions` stays — the interface already exists, and the matrix forbids the move
+
+Issue #439 (slice `33/T6`) asked for `Sessions/` → `Harbor.Application`, for
+`IChatViewState`/`IToolCallViewModel`/`IDiffRenderer` to be extracted into
+`Harbor.Ui.Framework.Abstractions`, and for #33's three discussion questions to be
+answered. Measured on `dev` = `4a55260b`, two of the three ask for something the tree
+does not permit and the third is already done.
+
+The interface exists: `IPanelSessionGateway` is the extracted lower-layer session port,
+added by #470 with a doc-comment stating the rule the issue re-derives, and
+`CellForgeTuiRenderer` binds it that way. The three named interfaces have **0**
+occurrences each in `src/`, `apps/` and `tests/` — writing them is an introduction,
+which is a new axis under #555, not an extraction.
+
+The move is blocked twice by the same authority: `docs/ARCHITECTURE_LAYERS.md` §2 says
+the Application layer "must not know about UI vocabulary", and
+`FullLayerMatrixTests` fails the new edges from the IL *and* refuses to pre-declare
+them. It is not cosmetic either — **11 of 14 files** use a `Layer.Presentation` type.
+There is no cycle to justify it: `Ui.Framework.{State,Services,ViewModels}` never
+reference `Harbor.Application`. `Sessions/` is not dead — 0 of 14 types, 204 external
+code references — and the three `Sessions/` folders declare disjoint type names, so
+there is nothing to merge and nothing to delete.
+
+Decided: the move is declined on the measurement, no interface is introduced, and the
+one real defect found in the blast radius is fixed — `CountDelegations` swallowed
+`IOException`, so `FileNotFoundException` made a path-pinned `== 0` assertion report
+"clean" for a file that was not there, the #591 shape.
+
+- Full text, the per-type consumer counts, the per-file binding table, the
+  eight path-pinned guards split by how each would react to a move, and why no new
+  layer guard is proposed: [ADR-014](ADR-014-sessions-stays-in-ui-framework.md).

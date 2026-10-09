@@ -162,7 +162,22 @@ public sealed class AgentLoop : IAgentLoop
     /// <param name="session">The session context for this run.</param>
     /// <param name="agent">The agent definition driving the loop.</param>
     /// <param name="ct">Cancellation token used to abort the run at the next safe boundary.</param>
-    /// <returns>Success on normal completion, or failure with an error message.</returns>
+    /// <returns>
+    ///     Success when the loop reached a terminal event WITHOUT a provider or stream failure
+    ///     — which includes a run ended by a limit, and does NOT mean the agent's work was
+    ///     finished. Failure carries a provider/stream error, or marks a user cancellation.
+    ///     <para>
+    ///         #403: the WHY lives on <see cref="AgentEndEvent.Limit" />, not here, and that
+    ///         split is deliberate rather than a gap left for later. This channel has exactly
+    ///         two states and one of them is an error string, so a limit reported through it
+    ///         would arrive as <c>Failure</c> — and every consumer reads that as a malfunction:
+    ///         <c>SubAgentRunner</c> (:168-188) turns it into
+    ///         <c>SessionStatus.Error</c> and a "Sub-agent 'x' failed" note fed to the parent
+    ///         model. Reporting "the step budget was reached" as a failure is the same error in
+    ///         the opposite direction, so the reason is carried on the event and this
+    ///         <see cref="Result" /> keeps meaning "the loop did not die".
+    ///     </para>
+    /// </returns>
     public Task<Result> RunAsync(ISessionContext session, AgentDefinition agent, CancellationToken ct = default)
     {
         // §3.5: the run enters the behavior pipeline; the original turn loop is the
@@ -208,6 +223,11 @@ public sealed class AgentLoop : IAgentLoop
             // reduced tail of the history instead of continuing with a
             // known-overfull context. Owned by the loop; fed back into each turn.
             bool truncationFallback = false;
+            // #403: which limit ended the run, when one did. Null on every
+            // other exit — including the cancel path below, because a ceiling
+            // the user set and a stop the user pressed are different facts and
+            // the terminal event is where they must stay distinguishable.
+            RunLimitKind? limit = null;
             while (!ct.IsCancellationRequested)
             {
                 turn++;
@@ -225,6 +245,7 @@ public sealed class AgentLoop : IAgentLoop
 
                 if (step.EndRun)
                 {
+                    limit = step.Limit;
                     break;
                 }
             }
@@ -243,8 +264,11 @@ public sealed class AgentLoop : IAgentLoop
             }
 
             _logger.LogInformation("Agent loop completed: session={SessionId} agent={Agent}", session.Session.Id, agent.Name.Value);
+            // #403: `Limit` rides the terminal event so every reader gets the
+            // reason, not only `RunOutcome`. Renderers read this event and NOT
+            // the read-model, so without it the fact stops here.
             await _eventBus.PublishAsync(
-                new AgentEndEvent(SnapshotMessages(session.Messages)), ct).ConfigureAwait(false);
+                new AgentEndEvent(SnapshotMessages(session.Messages), Limit: limit), ct).ConfigureAwait(false);
 
             return Result.Success();
         }

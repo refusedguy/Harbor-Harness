@@ -96,12 +96,17 @@ public class ViewInflationTests
         // throws KeyNotFoundException. Same headless pattern as
         // SettingsView_Inflates below: boot a HeadlessUnitTestSession and
         // inflate on its UI thread.
+        // The assertion is OUTSIDE the dispatch on purpose: `Dispatch(async () => …)`
+        // binds to `Dispatch(Action)` (HeadlessUnitTestSession declares no
+        // `Func<Task>` overload), so the body would run as `async void`, detach at
+        // its first suspension, and report green without having checked anything
+        // (#972, #766). Inflation is synchronous, so the work belongs inside a
+        // synchronous dispatch and the assertion outside it.
+        Views.ChatView? view = null;
         await using var session = HeadlessUnitTestSession.StartNew(typeof(App));
-        await session.Dispatch(async () =>
-        {
-            var view = new Views.ChatView();
-            await Assert.That(view).IsNotNull();
-        }, CancellationToken.None);
+        await session.Dispatch((System.Action)(() => view = new Views.ChatView()), CancellationToken.None);
+
+        await Assert.That(view).IsNotNull();
     }
 
     [Test]
@@ -145,12 +150,13 @@ public class ViewInflationTests
         // naively dispatched, deadlocks because no loop is running.
         // The correct headless pattern is to spin up a real
         // HeadlessUnitTestSession AND run inflation on its UI thread.
+        // Assertion outside the dispatch: see ChatView_Inflates above, and
+        // AvaloniaDispatchAsyncVoidRule for why the shape is banned (#972, #766).
+        Views.SettingsView? view = null;
         await using var session = HeadlessUnitTestSession.StartNew(typeof(App));
-        await session.Dispatch(async () =>
-        {
-            var view = new Views.SettingsView();
-            await Assert.That(view).IsNotNull();
-        }, CancellationToken.None);
+        await session.Dispatch((System.Action)(() => view = new Views.SettingsView()), CancellationToken.None);
+
+        await Assert.That(view).IsNotNull();
     }
 
     [Test]
@@ -197,9 +203,10 @@ public class ViewInflationTests
         // So boot an actual headless application first. Same pattern as
         // ChatView_Inflates / SettingsView_Inflates above — and deliberately NOT
         // the `Dispatch(async () => …)` spelling those two use, which binds to
-        // Dispatch(Action), runs the body as async void, and drops everything
-        // after the first await (#972). The work here is synchronous, so the
-        // Action overload is spelled explicitly.
+        // `Dispatch<Task>(Func<Task>)` and returns a `Task<Task>` whose payload
+        // the call site drops, losing everything after the first await (#972).
+        // The work here is synchronous, so the Action overload is spelled
+        // explicitly.
         await using var session = HeadlessUnitTestSession.StartNew(typeof(App));
 
         Exception? thrown = null;
@@ -260,7 +267,11 @@ public class ViewInflationTests
 
             await using var session = HeadlessUnitTestSession.StartNew(typeof(App));
             Window? window = null;
-            await session.Dispatch(async () =>
+            // Synchronous dispatch, assertion outside: the body below never awaits,
+            // so `async` bought nothing except the async-void binding that
+            // `Dispatch(Action)` forces (#972, #766 — see
+            // AvaloniaDispatchAsyncVoidRule).
+            await session.Dispatch((System.Action)(() =>
             {
                 App.Services = host.Services;
                 App.Host = host;
@@ -276,7 +287,7 @@ public class ViewInflationTests
                 window.Show();
                 window.UpdateLayout();
                 AvaloniaHeadlessPlatform.ForceRenderTimerTick();
-            }, CancellationToken.None);
+            }), CancellationToken.None);
 
             await Assert.That(window.IsVisible).IsTrue();
             await Assert.That(FindDescendantOfType(window, typeof(Views.Shell.ActivityRailView))).IsNotNull();

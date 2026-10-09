@@ -41,11 +41,14 @@
 // the general shape of the defect, and it is why these shipped.
 //
 // SHAPE OF EVERY HEADLESS TEST HERE, and the reason it is this shape:
-// `session.Dispatch(async () => { ... })` binds to `Dispatch(Action)`, not
-// `Dispatch(Func<Task>)` — an async lambda with no return value is only
-// convertible to the void-returning delegate, so the body runs as async void.
-// The lambda then yields at its first `await`, `Dispatch`'s task completes, and
-// every assertion after that point is detached: its failure is discarded and
+// `session.Dispatch(async () => { ... })` binds to
+// `Dispatch<TResult>(Func<TResult>)` at `TResult = Task` — a
+// `Dispatch(Func<Task>)` returning `Task<Task>`, for the same reason
+// `Task.Run(async …)` binds to `Func<Task>` and not `Action`. That overload
+// wraps the body in `Task.FromResult(...)`, already complete when the lambda
+// yields at its first `await`; so `Dispatch`'s task completes there, the caller
+// resumes, and the `Task<Task>`'s payload — the real body task — is DISCARDED.
+// Every assertion after that point is detached: its failure is discarded and
 // the test passes. So this file does all its WORK inside a deliberately
 // synchronous `Dispatch` and every `await Assert` OUTSIDE it, where a failure
 // cannot be lost. The cast to System.Action below is there to make that

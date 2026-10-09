@@ -90,7 +90,12 @@ public sealed class ReflectionConventionRule
     ///     has to be justified in review (see
     ///     <see cref="The_Plugin_Allowance_Is_NonEmpty_Scoped_And_Explained" />).
     /// </summary>
-    private static readonly (string Prefix, ExemptionReason.Row Allowance)[] AllowedProjectPrefixes =
+    // internal, not private, since #414: `TrimUnsafeReflectionRules` enforces a
+    // different capability (string-named member lookup, reflection serialization)
+    // over the same product trees and must be exempt for the same architectural
+    // reason. A second copy of this table is a second thing to keep in step, and the
+    // drift `SourceScan` exists to end does not get to start again here.
+    internal static readonly (string Prefix, ExemptionReason.Row Allowance)[] AllowedProjectPrefixes =
     [
         (
             "src/Harbor.Plugins.",
@@ -131,7 +136,12 @@ public sealed class ReflectionConventionRule
         Path.GetDirectoryName(repoRelativeFile)?.Replace('\\', '/') ?? string.Empty;
 
     /// <summary>Whether <paramref name="projectDir" /> sits under one of the allowed prefixes.</summary>
-    private static bool IsAllowed(string projectDir) =>
+    /// <remarks>
+    ///     internal since #414 — see <see cref="AllowedProjectPrefixes" />. The RULE
+    ///     is unchanged and no construct was added; only the reader set grew, so
+    ///     #626's own tests and its first-finding behaviour are untouched.
+    /// </remarks>
+    internal static bool IsAllowed(string projectDir) =>
         AllowedProjectPrefixes.Any(a => projectDir.StartsWith(a.Prefix, StringComparison.Ordinal));
 
     /// <summary>

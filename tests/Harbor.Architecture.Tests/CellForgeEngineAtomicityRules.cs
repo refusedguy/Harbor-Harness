@@ -21,6 +21,15 @@
 // are green, and they are right to be: the edges are declared, they are legal,
 // and the gates answer the question they were built to answer.
 //
+// THE LIST ABOVE IS HISTORY, NOT INVENTORY. #435 has since removed two of the
+// four — `Harbor.Abstractions` (dead by fact: zero imports, zero bound types,
+// the #980 shape) and `Harbor.Ui.Framework.State` (live, and deleted by
+// porting the two translators onto the #162 BCL-only vocabulary). Two remain,
+// both #436's: `Harbor.Ui.Framework.Rendering` and `Harbor.DesignSystem`. The
+// paragraphs above are left as written because they are what the guard was
+// built to catch, and rewriting them would make the file describe a state that
+// never existed. Read `ReviewedReferences` for what is actually declared.
+//
 // The hole was that NOBODY READS THE IMPORTS. `GlobalUsings.cs` pre-imported
 //
 //     global using Harbor.Ui.Framework.Rendering;
@@ -64,32 +73,40 @@
 //
 // WHAT IS BASELINED, AND WHY IT IS NOT A PERMISSION
 // -------------------------------------------------
-// The 34 borrowing import pairs and the four references exist, and this PR does
-// not remove them: moving `Input/` out is step 3 of #795 (deliberately a
-// separate change so it cannot collide with #435/#436), and the references are
-// #435's and #436's to delete. A permanently-red test is a comment with extra
-// steps, so both tables below list today's violations with a reason and the
-// issue that will delete them.
+// #435 paid down part of this debt. It removed two edges (Harbor.Abstractions,
+// Harbor.Ui.Framework.State) and the two State import rows that were their only
+// justification, so both tables below are two rows and one row smaller than the
+// merged text described. What remains is #436's: the cell vocabulary in
+// Harbor.Ui.Framework.Rendering and the palette constants in
+// Harbor.DesignSystem. A permanently-red test is a comment with extra steps, so
+// the tables list today's violations with a reason and the issue that will
+// delete them.
 //
-// The 34 pairs are 3 rows in `ReviewedImports` (the State translator pair and
-// the Protocol constant) plus 5 groups in `ReviewedVocabulary` expanded to one
-// row per file. Grouping is by namespace because the debt is per namespace;
-// the file list is spelled out because the old shape — one row for
-// `GlobalUsings.cs` serving 24 files — could not name a 25th borrower and so
-// could not fail when one appeared.
+// The remaining 32 forbidden pairs are 1 row in `ReviewedImports` (the Protocol
+// constant) plus 31 files across the 5 groups in `ReviewedVocabulary`, expanded
+// to one row per file. (Counted, not estimated: 32 = the guard's own
+// ForbiddenImportPrefixes hit count over the project, of which 31 are vocabulary
+// and 1 is the Protocol constant. A 33rd import exists — `Harbor.DesignSystem`
+// in Parsing/EscapeSequenceParser.cs — and is deliberately not counted here
+// because DesignSystem is not an import-rule target; see SCOPE.) Grouping is by
+// namespace because the debt is per namespace; the file list is spelled out
+// because the old shape — one row for `GlobalUsings.cs` serving 24 files — could
+// not name a 25th borrower and so could not fail when one appeared.
 //
 // They are a TO-DO LIST, not an amnesty, and three things keep them that way:
 //
 //   * `ReviewedRowsStateWhyTheyAreTolerated` runs every row through the shared
-//     `ExemptionReason` check, so a row cannot be added blank, and cannot be a
+//     ExemptionReason check, so a row cannot be added blank, and cannot be a
 //     bare URL — a URL says where the debt is tracked, not why it is tolerated
 //     here. Same contract as `PresentationCapabilityRules` and
 //     `EnforcerIntegrityTests`.
 //   * `ReviewedImportRowsAreStillReal` and `ReviewedReferenceRowsAreStill
 //     Declared` fail when a row OUTLIVES its violation. That is the half that
-//     stops a baseline decaying into a standing permission: when #435 drops
-//     `Harbor.Abstractions`, the row must go in the same commit, and the leak
-//     cannot come back silently.
+//     stops a baseline decaying into a standing permission, and it is the half
+//     #435 was written against: deleting `Harbor.Abstractions` and
+//     `Harbor.Ui.Framework.State` from the csproj made both tables red until
+//     their rows went in the same commit. That is the liveness working, not a
+//     nuisance — a baseline that cannot go red is a permission.
 //   * `ANonAtomicEngineNamesItsTrackingIssueInItsOwnDescription` closes the
 //     cheapest way to silence all of this — deleting the words `BCL-only` from
 //     the csproj. The promise is NOT withdrawn here; it stays in the
@@ -235,30 +252,6 @@ public sealed class CellForgeEngineAtomicityRules
     private static readonly (string FileName, string Namespace, ExemptionReason.Row Allowance)[] ReviewedImports =
     [
         (
-            "Input/MouseRouter.cs",
-            "Harbor.Ui.Framework.State",
-            new ExemptionReason.Row(
-                "WheelToMessage turns a wheel tick into AppMsg.KeyInput(ChatAction, UiKey) — a "
-                + "state-layer message — and TimelineWheelTarget dispatches it. That is the "
-                + "translator half of Input/, which #795 step 3 relocates to "
-                + "Harbor.Tui.CellForge/Chat; a translator between the terminal protocol and the UI "
-                + "vocabulary has two languages by definition and cannot be BCL. All six names it "
-                + "binds are declared in Harbor.Ui.Framework.State, not in .ViewModels — measured "
-                + "by reading the declaration file of each, because 'which State project' was the "
-                + "open question this row had to answer.",
-                TrackedBy: "https://github.com/refusedguy/Harbor-Harness/issues/795")
-        ),
-        (
-            "Rendering/ComposerController.cs",
-            "Harbor.Ui.Framework.State",
-            new ExemptionReason.Row(
-                "EnterKeyPolicy and InputMsg are the store-owned key decisions the composer applies "
-                + "its buffer effects to — deliberately, since #359, so key behaviour cannot diverge "
-                + "per renderer. The composer is a translator over the store's vocabulary; #795 step 3 "
-                + "moves that translation out of the engine.",
-                TrackedBy: "https://github.com/refusedguy/Harbor-Harness/issues/795")
-        ),
-        (
             "Rendering/DiffEngine.cs",
             "Harbor.Ui.Framework.Rendering.Protocol",
             new ExemptionReason.Row(
@@ -345,16 +338,25 @@ public sealed class CellForgeEngineAtomicityRules
                 "Input/FocusRouter.cs",
                 "Input/InputEvent.cs",
                 "Input/MouseEvent.cs",
+                // #435: MouseRouter joined this list when it stopped returning
+                // AppMsg and started returning UiKeyDto (WheelToKey), which lives
+                // here rather than in State. Same namespace, same reachability —
+                // it was already a borrower of the Rendering namespace in the
+                // group above — so this row grew by one file and lost nothing.
+                "Input/MouseRouter.cs",
                 "Parsing/EscapeSequenceParser.cs",
                 "Rendering/ComposerController.cs",
                 "Rendering/OverlayStack.cs",
                 "Rendering/VimComposerMode.cs",
             ],
             new ExemptionReason.Row(
-                "KeyEvent, KeyCode, KeyModifiers, KeyEventType and IFocusTarget are the shared "
-                + "input vocabulary the byte state-machine parser, FocusRouter, OverlayStack and "
-                + "ComposerController all speak. Parsing/ is the engine proper and needs it, so this "
-                + "is NOT the #795 step 3 translator move — that is the State row above.",
+                "KeyEvent, KeyCode, KeyModifiers, KeyEventType, IFocusTarget and — since #435 — "
+                + "UiKeyDto/UiKeyKind are the shared input vocabulary the byte state-machine parser, "
+                + "FocusRouter, OverlayStack, MouseRouter and ComposerController all speak. Parsing/ is "
+                + "the engine proper and needs it, so this is NOT the #795 step 3 translator move — "
+                + "that was the State edge, and #435 deleted it. What this row now holds is the "
+                + "BCL-only vocabulary #33/T1 and #435 moved the translators onto; where it "
+                + "eventually lives is #436's decision.",
                 TrackedBy: "https://github.com/refusedguy/Harbor-Harness/issues/436")
         ),
         (
@@ -399,43 +401,27 @@ public sealed class CellForgeEngineAtomicityRules
             .ToArray();
 
     /// <summary>
-    ///     The four `<ProjectReference>` edges the csproj declares while calling
-    ///     itself BCL-only. Permitted by the layer matrix, and therefore invisible
-    ///     to every gate that reads references — which is why the Description claim
-    ///     is checked against them here.
+    ///     The `<ProjectReference>` edges the csproj declares while calling itself
+    ///     BCL-only. Permitted by the layer matrix, and therefore invisible to
+    ///     every gate that reads references — which is why the Description claim is
+    ///     checked against them here. Two rows after #435 (Harbor.Abstractions and
+    ///     Harbor.Ui.Framework.State were removed with the code that justified
+    ///     them); both survivors are #436's.
     /// </summary>
     /// <param name="Project">The referenced project directory name.</param>
     /// <param name="Allowance">Why this edge may stay, and what removes it.</param>
     private static readonly (string Project, ExemptionReason.Row Allowance)[] ReviewedReferences =
     [
         (
-            "Harbor.Abstractions",
-            new ExemptionReason.Row(
-                "ALREADY KNOWN DEAD: EnforcerIntegrityTests.DeclaredButUnboundProjectReferences "
-                + "carries this exact edge with the note that the IL gate proved the assembly emits no "
-                + "AssemblyRef for it. Measured cause: the namespace the two importing files name, "
-                + "Harbor.Abstractions.Models, is declared in Harbor.Abstractions.Contracts, which "
-                + "this project already reaches through Harbor.Ui.Framework.Rendering — and neither "
-                + "file binds a type from it. The edge is #435's to delete.",
-                TrackedBy: "https://github.com/refusedguy/Harbor-Harness/issues/435")
-        ),
-        (
             "Harbor.Ui.Framework.Rendering",
             new ExemptionReason.Row(
                 "Carries the cell primitives 20 engine files name — ScreenBuffer, Cell, Rect, "
                 + "UnicodeWidth, TextWrap, the Key* family and IFocusTarget — plus CellDiffHints. "
-                + "Most reach it with no using line of their own, through GlobalUsings.cs. Removing "
-                + "it is not a deletion but a re-homing decision, and #436 owns that decision.",
+                + "Removing it is not a deletion but a re-homing decision, and #436 owns that "
+                + "decision. Since #435 it also carries the two BCL-only vocabularies the engine "
+                + "replaced State's types with (UiKeyDto via #162, EnterDecision via #435), which "
+                + "is why those two edges could go while this one could not.",
                 TrackedBy: "https://github.com/refusedguy/Harbor-Harness/issues/436")
-        ),
-        (
-            "Harbor.Ui.Framework.State",
-            new ExemptionReason.Row(
-                "Carries AppMsg, InputMsg, EnterKeyPolicy and ChatAction — the store vocabulary that "
-                + "MouseRouter.WheelToMessage and ComposerController translate into. Once step 3 "
-                + "moves the translators, nothing in the engine binds it and the edge becomes "
-                + "deletable.",
-                TrackedBy: "https://github.com/refusedguy/Harbor-Harness/issues/435")
         ),
         (
             "Harbor.DesignSystem",
@@ -444,7 +430,19 @@ public sealed class CellForgeEngineAtomicityRules
                 + "parser emits. It is a cell/palette concern rather than a UI-view concern, so the "
                 + "import rule deliberately does not name it; the edge is listed here because a "
                 + "DesignSystem reference is still not-BCL and contradicts the same promise. #436 "
-                + "decides whether the constants move or the edge is grandfathered for good.",
+                + "decides whether the constants move or the edge is grandfathered for good. "
+                + "MEASURED FOR #435, NOT YET ACTED ON: the five types this project binds from the "
+                + "assembly (CellStyle, PackedColor, StyleAttr, ChatPalette, TerminalBackgroundProbe) "
+                + "are all reachable TRANSITIVELY through the Harbor.Ui.Framework.Rendering edge, "
+                + "which references DesignSystem — proof being Harbor.Ui.Framework.ViewModels, which "
+                + "binds ChatPalette with no direct DesignSystem reference and compiles on dev. Four "
+                + "of the five are declared in Harbor.DesignSystem while NAMED Harbor.Ui.Framework.*, "
+                + "which is why a guard keyed on either prefix alone is blind here. So this edge is "
+                + "probably redundant rather than load-bearing — but 'probably' is not a measurement "
+                + "of the compiler, and only one of the five (TerminalBackgroundProbe, one call site "
+                + "in EscapeSequenceParser.cs) is reached through the DesignSystem namespace at all. "
+                + "Left declared for #436 to verify by deleting it; do not infer removability from "
+                + "this paragraph.",
                 TrackedBy: "https://github.com/refusedguy/Harbor-Harness/issues/436")
         ),
     ];
@@ -853,11 +851,11 @@ public sealed class CellForgeEngineAtomicityRules
 
         await Assert.That(stale).IsEmpty()
             .Because(
-                "these four edges are listed so the 'BCL-only' claim can be checked against them, "
-                + "not so they may live forever. #435 and #436 remove them, and when one goes its "
-                + "row must go with it — otherwise the table becomes a menu for re-adding an edge "
-                + "the layer matrix already permits. Rows naming edges no longer declared: "
-                + Offenders(stale));
+                "these edges are listed so the 'BCL-only' claim can be checked against them, not so "
+                + "they may live forever. #435 already removed two of them (Harbor.Abstractions and "
+                + "Harbor.Ui.Framework.State) and #436 removes the rest; when one goes its row must "
+                + "go with it — otherwise the table becomes a menu for re-adding an edge the layer "
+                + "matrix already permits. Rows naming edges no longer declared: " + Offenders(stale));
     }
 
     /// <summary>

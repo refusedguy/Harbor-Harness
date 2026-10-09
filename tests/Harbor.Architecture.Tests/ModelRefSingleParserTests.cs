@@ -254,6 +254,47 @@ public sealed class ModelRefSingleParserTests
     }
 
     /// <summary>
+    ///     The <c>== 0</c> above is only a verdict if the file was READ. It was not:
+    ///     <see cref="CountDelegations" /> <b>used to</b> catch
+    ///     <see cref="IOException" />, and <c>FileNotFoundException</c> derives from it, so a
+    ///     renamed or moved file reported "this file does no hand-rolled qualification" — the
+    ///     <b>true</b> answer — and the rule passed having never looked at the file. This is
+    ///     the #591 shape (a plausible 0) reached through a swallowed exception rather
+    ///     than a bad matcher, and it is load-bearing here because the consumer this
+    ///     rule names is a path constant: <c>src/Harbor.Ui.Framework.Sessions/…</c>
+    ///     is exactly the kind of path a refactor moves, and #439 measured that move
+    ///     as live. Two of the three call sites cannot notice (a missing file makes
+    ///     them red); only the <c>== 0</c> one can, so it is the one checked here.
+    /// </summary>
+    [Test]
+    public async Task ADelegationCount_NeverReportsZeroForAFileItCouldNotRead()
+    {
+        string root = RequireRepoRoot();
+
+        // The directory EXISTS on purpose. A path whose *directory* is missing raises
+        // DirectoryNotFoundException, which would prove only that a bad prefix throws —
+        // the case that matters is a file that moved out of a directory that did not,
+        // because that is exactly what relocating SessionFactory.cs looks like.
+        const string moved = "tests/Harbor.Architecture.Tests/NoSuchFile-439.cs";
+
+        await Assert.That(Directory.Exists(Path.Combine(root, Path.GetDirectoryName(moved)!)))
+            .IsTrue()
+            .Because(
+                "the synthetic is only meaningful if its directory is real. A missing directory "
+                + "raises DirectoryNotFoundException and would let this pass for the wrong reason — "
+                + "which is the same failure shape this test exists to catch, one level up.");
+
+        await Assert.That(() => CountDelegations(root, moved))
+            .Throws<FileNotFoundException>()
+            .Because(
+                "a count over a file that is not there is not a count of zero, it is an absent "
+                + "measurement. Letting it read as zero turns the consumer assertion above into a "
+                + "permanent green light the moment SessionFactory.cs is moved or renamed — which is "
+                + "the exact event #439's Sessions/ relocation would cause, and the reason the "
+                + "sibling guards in ProviderModelAbsenceRules already assert file existence.");
+    }
+
+    /// <summary>
     ///     Rule 2: the sanctioned function still cuts. Without this, rules 1 could
     ///     be satisfied by deleting <c>TryParse</c> and the UI would go back to
     ///     string surgery with nothing to delegate to.
@@ -507,17 +548,21 @@ public sealed class ModelRefSingleParserTests
         return hits;
     }
 
+    /// <summary>
+    ///     Counts the delegations to <c>ModelRef</c> in one file.
+    /// </summary>
+    /// <remarks>
+    ///     #439: this used to swallow <see cref="IOException" /> and answer 0. That is
+    ///     unsound in a guard, because <c>FileNotFoundException</c> and
+    ///     <c>DirectoryNotFoundException</c> both derive from it — so a file that had been
+    ///     renamed or moved reported <b>"no hand-rolled qualification here"</b>, which is the
+    ///     claim the caller wanted to prove, and proved it without reading anything. Every
+    ///     caller then passed for the wrong reason, and the two <c>== 0</c>-shaped callers
+    ///     passed permanently. Genuine IO faults are surfaced too: a guard that cannot read
+    ///     its input has no verdict, and the honest report of no verdict is a failure.
+    /// </remarks>
     private static int CountDelegations(string root, string relativePath)
-    {
-        try
-        {
-            return CountDelegationsIn(File.ReadAllLines(Path.Combine(root, relativePath))).Count;
-        }
-        catch (IOException)
-        {
-            return 0;
-        }
-    }
+        => CountDelegationsIn(File.ReadAllLines(Path.Combine(root, relativePath))).Count;
 
     private static IReadOnlyList<int> CountDelegationsIn(IReadOnlyList<string> lines)
     {

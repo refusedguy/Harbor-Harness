@@ -34,7 +34,30 @@
   <ItemGroup>
     <PackageReference Include="Microsoft.Extensions.Logging"/>
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions"/>
-    <PackageReference Include="CommunityToolkit.HighPerformance"/>
+    <!--
+      CommunityToolkit.HighPerformance used to be declared here and was removed
+      by tools/check-abstractions-contract.py: not one `.cs` file in this project
+      had a `using` under any of its namespace prefixes. Two things that look
+      like reasons to keep it are not, and both were checked rather than assumed:
+
+        - The System.Collections.Frozen usage in DefaultFileTreePolicy,
+          PathArgExtractionPolicy and FileClaimRegistry is the BCL type, in-box
+          since .NET 8. It needs no PackageReference, which is why no phantom
+          finder ever objected to this project using it.
+        - The streaming-delta coalescing in StreamingCoalescer rents from
+          Harbor.Extensions.StringBuilderPool, a ConcurrentBag pool in this
+          solution - not from CommunityToolkit's namesake type. The README
+          credited the package for it until this removal.
+
+      Nothing else in the repository used the package either, and in particular
+      apps/Harbor.App.Avalonia did NOT depend on this edge to get it: that app
+      builds only transitively (via Harbor.App.Avalonia.Tests, #1008) and is not
+      in Harbor.slnx, so this was the one place a wrong removal would have broken
+      a build outside the local feedback loop. Its `using CommunityToolkit...`
+      directives are all CommunityToolkit.Mvvm, which it declares itself, and
+      CommunityToolkit.Mvvm 8.4.2's nuspec does not depend on
+      CommunityToolkit.HighPerformance. See tools/check-abstractions-contract.py.
+    -->
     <PackageReference Include="ZLinq"/>
     <!--
       ZLinq.DropInGenerator emits source-generated extension methods that take
