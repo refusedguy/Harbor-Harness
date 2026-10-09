@@ -17,8 +17,8 @@
 //     promise to anyone outside it.
 //   * There is NO DOOR. The one shipped `LayoutTree` is constructed in exactly
 //     one place — `new LayoutTree()` at
-//     `src/Harbor.Tui.CellForge/Chat/Widgets/ChatScreenLayout.cs:876`, inside the
-//     static factory `ChatScreen.Build(...)`, whose seven parameters are all
+//     `src/Harbor.Tui.CellForge/Chat/Widgets/ChatScreenLayout.cs:890`, inside the
+//     static factory `ChatScreen.Build(...)`, whose eight parameters are all
 //     in-tree. No plugin is ever handed a tree, a `ChatScreen`, or a `Panel`.
 //     `LayoutTree` itself is public with a public `AddRoot`/`Split`, so a
 //     third party CAN build a tree — it is a library surface for tests and

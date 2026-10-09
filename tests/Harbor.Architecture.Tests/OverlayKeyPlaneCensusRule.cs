@@ -16,7 +16,7 @@
 //
 //       REGISTERED + READS KEYS + CAN BE SHOWN (2)
 //         ImageViewerOverlayLayer     field _imageLayer, pushed at
-//                                    ChatScreenLayout.cs:850; opened at
+//                                    ChatScreenLayout.cs:858; opened at
 //                                    ReplInputLoop.cs:289; IsModal = true.
 //         SetupChecklistOverlayLayer  field _setupLayer, pushed at :838;
 //                                    opened at SetupCommand.cs:27;
