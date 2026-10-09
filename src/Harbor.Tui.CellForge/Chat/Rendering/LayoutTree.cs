@@ -1,6 +1,17 @@
 using System.Text;
 using Harbor.Ui.Framework.Rendering;
 
+// #436: this file declares the host-owned panel vocabulary in the engine's
+// namespace (Harbor.Tui.CellForge.Rendering), so the engine's verbatim ports
+// (Cell, Rect, ScreenBuffer, CellStyle, PackedColor, StyleAttr) capture every
+// bare name — namespace members beat using-aliases, global or not. The panel
+// contract paints the Rendering grid consumed by every widget in this
+// assembly, so the colliding names below are pinned to the Rendering
+// vocabulary through UIR. Size/SplitDir/SpringFx stay engine-typed: the
+// layout solver binds the engine's single home for them (#436, LayoutTree
+// commit) and they never cross into Rendering-typed APIs.
+using UIR = Harbor.Ui.Framework.Rendering;
+
 namespace Harbor.Tui.CellForge.Rendering;
 
 /// <summary>
@@ -22,11 +33,11 @@ public abstract class Panel
     public int Priority { get; }
 
     /// <summary>Set by the layout solver each frame; read by painters/routing.</summary>
-    public Rect Rect { get; internal set; }
+    public UIR.Rect Rect { get; internal set; }
 
     public bool Focused { get; internal set; }
 
-    public abstract void Paint(ScreenBuffer buffer);
+    public abstract void Paint(UIR.ScreenBuffer buffer);
 
     /// <summary>Minimum extent along a split direction.</summary>
     internal int MinAlong(SplitDir dir) => dir == SplitDir.Horizontal ? Min.Width : Min.Height;
@@ -127,7 +138,7 @@ public sealed class LayoutTree
     /// box an enumerator (the <see cref="Panels" /> interface foreach does).
     /// Overlays paint last (no-op when the stack is empty).
     /// </summary>
-    public void PaintAll(ScreenBuffer buffer)
+    public void PaintAll(UIR.ScreenBuffer buffer)
     {
         foreach (var panel in _panels.Values)
         {
@@ -304,7 +315,7 @@ public sealed class LayoutTree
 
         if (_root is not null && width > 0 && height > 0)
         {
-            SolveNode(_root, new Rect(0, 0, width, height));
+            SolveNode(_root, new UIR.Rect(0, 0, width, height));
         }
 
         // Snapshot rects in stable panel order for cache replay.
@@ -346,10 +357,10 @@ public sealed class LayoutTree
         }
     }
 
-    private sealed record LayoutCacheEntry((int W, int H, uint Ver) Key, Rect[] Rects, string? FocusedId);
+    private sealed record LayoutCacheEntry((int W, int H, uint Ver) Key, UIR.Rect[] Rects, string? FocusedId);
 
     private readonly List<Panel> _orderedBuffer = [];
-    private readonly List<Rect> _solvedOrder = [];
+    private readonly List<UIR.Rect> _solvedOrder = [];
     private string? _focusedId;
 
     private IEnumerable<Panel> Ordered()
@@ -481,7 +492,7 @@ public sealed class LayoutTree
         return node.MinAlong(dir);
     }
 
-    private Rect SolveNode(SplitNode node, Rect avail)
+    private UIR.Rect SolveNode(SplitNode node, UIR.Rect avail)
     {
         if (node.Leaf is not null)
         {
@@ -512,16 +523,16 @@ public sealed class LayoutTree
         int clampedA = Math.Clamp(rawA, minA, usable - minB);
         int clampedB = usable - clampedA;
 
-        Rect rectA, rectB;
+        UIR.Rect rectA, rectB;
         if (horizontal)
         {
-            rectA = new Rect(avail.X, avail.Y, clampedA, avail.Height);
-            rectB = new Rect(avail.X + clampedA + gap, avail.Y, clampedB, avail.Height);
+            rectA = new UIR.Rect(avail.X, avail.Y, clampedA, avail.Height);
+            rectB = new UIR.Rect(avail.X + clampedA + gap, avail.Y, clampedB, avail.Height);
         }
         else
         {
-            rectA = new Rect(avail.X, avail.Y, avail.Width, clampedA);
-            rectB = new Rect(avail.X, avail.Y + clampedA + gap, avail.Width, clampedB);
+            rectA = new UIR.Rect(avail.X, avail.Y, avail.Width, clampedA);
+            rectB = new UIR.Rect(avail.X, avail.Y + clampedA + gap, avail.Width, clampedB);
         }
 
         _ = SolveNode(node.A!, rectA);
@@ -631,9 +642,9 @@ public enum BorderKind : byte
 /// </summary>
 public class BorderPanel : Panel
 {
-    private static readonly CellStyle FrameStyle = new(PackedColor.Indexed(8));
-    private static readonly CellStyle FocusedStyle = new(attrs: StyleAttr.Bold);
-    private static readonly CellStyle ShadowStyle = new(bg: PackedColor.Indexed(8));
+    private static readonly UIR.CellStyle FrameStyle = new(UIR.PackedColor.Indexed(8));
+    private static readonly UIR.CellStyle FocusedStyle = new(attrs: UIR.StyleAttr.Bold);
+    private static readonly UIR.CellStyle ShadowStyle = new(bg: UIR.PackedColor.Indexed(8));
 
     public BorderPanel(string id, int minWidth, int minHeight, int priority = 0, string title = "")
         : base(id, new Size(minWidth, minHeight), priority)
@@ -649,7 +660,7 @@ public class BorderPanel : Panel
     /// <summary>One-cell drop shadow (right + bottom), clipped to the buffer.</summary>
     public bool Shadow { get; set; }
 
-    public override void Paint(ScreenBuffer buffer)
+    public override void Paint(UIR.ScreenBuffer buffer)
     {
         var r = Rect;
         if (r.Width < 2 || r.Height < 2)
@@ -686,12 +697,12 @@ public class BorderPanel : Panel
                 break;
         }
 
-        var topLeft = Cell.From(new Rune(topLeftCh), style);
-        var topRight = Cell.From(new Rune(topRightCh), style);
-        var bottomLeft = Cell.From(new Rune(bottomLeftCh), style);
-        var bottomRight = Cell.From(new Rune(bottomRightCh), style);
-        var horiz = Cell.From(new Rune(horizCh), style);
-        var vert = Cell.From(new Rune(vertCh), style);
+        var topLeft = UIR.Cell.From(new Rune(topLeftCh), style);
+        var topRight = UIR.Cell.From(new Rune(topRightCh), style);
+        var bottomLeft = UIR.Cell.From(new Rune(bottomLeftCh), style);
+        var bottomRight = UIR.Cell.From(new Rune(bottomRightCh), style);
+        var horiz = UIR.Cell.From(new Rune(horizCh), style);
+        var vert = UIR.Cell.From(new Rune(vertCh), style);
 
         int x1 = r.X, y1 = r.Y, x2 = r.Right - 1, y2 = r.Bottom - 1;
 
@@ -716,9 +727,9 @@ public class BorderPanel : Panel
         {
             // One-cell drop shadow (right + bottom). Fill clips to the
             // buffer, so a flush-edge frame cannot index out of range.
-            var shade = Cell.From(new Rune(' '), ShadowStyle);
-            buffer.Fill(new Rect(x2 + 1, y1 + 1, 1, y2 - y1 + 1), shade);
-            buffer.Fill(new Rect(x1 + 1, y2 + 1, x2 - x1 + 1, 1), shade);
+            var shade = UIR.Cell.From(new Rune(' '), ShadowStyle);
+            buffer.Fill(new UIR.Rect(x2 + 1, y1 + 1, 1, y2 - y1 + 1), shade);
+            buffer.Fill(new UIR.Rect(x1 + 1, y2 + 1, x2 - x1 + 1, 1), shade);
         }
 
         if (Title.Length > 0 && x2 - x1 > Title.Length + 1)

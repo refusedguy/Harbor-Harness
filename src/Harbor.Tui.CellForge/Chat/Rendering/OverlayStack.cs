@@ -1,6 +1,14 @@
 using Harbor.Ui.Framework.Rendering;
 using Harbor.Ui.Framework.Rendering.Input;
 
+// #436: same-namespace capture as LayoutTree — this file declares the
+// host-owned overlay plane in Harbor.Tui.CellForge.Rendering, where the
+// engine's verbatim ports (Rect, ScreenBuffer, Cell) shadow the Rendering
+// vocabulary. Layers across Chat/Widgets implement this interface with the
+// Rendering types, so the contract is pinned through UIR. KeyEvent has no
+// engine twin in this namespace and stays bare.
+using UIR = Harbor.Ui.Framework.Rendering;
+
 namespace Harbor.Tui.CellForge.Rendering;
 
 /// <summary>
@@ -16,7 +24,7 @@ public interface IOverlayLayer
     string Id { get; }
 
     /// <summary>Screen-space bounds the layer may paint within. Clipped to the viewport on paint.</summary>
-    Rect Bounds { get; }
+    UIR.Rect Bounds { get; }
 
     /// <summary>Hidden layers are skipped by both paint and hit-test.</summary>
     bool Visible { get; }
@@ -53,7 +61,7 @@ public interface IOverlayLayer
     /// intersected with the viewport and occlusion-subtracted against opaque layers
     /// above; the layer must not paint outside it.
     /// </summary>
-    void Paint(ScreenBuffer buffer, Rect clip);
+    void Paint(UIR.ScreenBuffer buffer, UIR.Rect clip);
 }
 
 /// <summary>
@@ -196,7 +204,7 @@ public sealed class OverlayStack
     /// clipped to the viewport minus the opaque layers above it (overlap
     /// clipping); fully occluded layers are skipped. No-op when empty.
     /// </summary>
-    public void PaintOver(ScreenBuffer buffer)
+    public void PaintOver(UIR.ScreenBuffer buffer)
     {
         ArgumentNullException.ThrowIfNull(buffer);
         if (_layers.Count == 0)
@@ -204,11 +212,11 @@ public sealed class OverlayStack
             return;
         }
 
-        var screen = new Rect(0, 0, buffer.Cols, buffer.Rows);
+        var screen = new UIR.Rect(0, 0, buffer.Cols, buffer.Rows);
         // Lists are per-call locals (overlays are off the steady-state hot path:
         // empty-stack paint returns before any allocation).
-        var frags = new List<Rect>(4);
-        var occluders = new List<Rect>(4);
+        var frags = new List<UIR.Rect>(4);
+        var occluders = new List<UIR.Rect>(4);
         for (int i = 0; i < _layers.Count; i++)
         {
             var layer = _layers[i];
@@ -285,7 +293,7 @@ public sealed class OverlayStack
         return null;
     }
 
-    private static void SubtractAll(List<Rect> frags, Rect occluder)
+    private static void SubtractAll(List<UIR.Rect> frags, UIR.Rect occluder)
     {
         for (int i = frags.Count - 1; i >= 0; i--)
         {
@@ -300,25 +308,25 @@ public sealed class OverlayStack
             // Left strip (full height).
             if (cut.X > frag.X)
             {
-                frags.Add(new Rect(frag.X, frag.Y, cut.X - frag.X, frag.Height));
+                frags.Add(new UIR.Rect(frag.X, frag.Y, cut.X - frag.X, frag.Height));
             }
 
             // Right strip (full height).
             if (cut.Right < frag.Right)
             {
-                frags.Add(new Rect(cut.Right, frag.Y, frag.Right - cut.Right, frag.Height));
+                frags.Add(new UIR.Rect(cut.Right, frag.Y, frag.Right - cut.Right, frag.Height));
             }
 
             // Top strip (between the cut's horizontal edges).
             if (cut.Y > frag.Y)
             {
-                frags.Add(new Rect(cut.X, frag.Y, cut.Width, cut.Y - frag.Y));
+                frags.Add(new UIR.Rect(cut.X, frag.Y, cut.Width, cut.Y - frag.Y));
             }
 
             // Bottom strip (between the cut's horizontal edges).
             if (cut.Bottom < frag.Bottom)
             {
-                frags.Add(new Rect(cut.X, cut.Bottom, cut.Width, frag.Bottom - cut.Bottom));
+                frags.Add(new UIR.Rect(cut.X, cut.Bottom, cut.Width, frag.Bottom - cut.Bottom));
             }
         }
     }
@@ -339,7 +347,7 @@ public static class OverlayPopup
     /// Oversized requests clamp to the screen; non-positive sizes yield an
     /// empty rect.
     /// </summary>
-    public static Rect CenteredRect(Rect screen, int width, int height)
+    public static UIR.Rect CenteredRect(UIR.Rect screen, int width, int height)
     {
         int w = Math.Min(width, screen.Width);
         int h = Math.Min(height, screen.Height);
@@ -348,7 +356,7 @@ public static class OverlayPopup
             return default;
         }
 
-        return new Rect(
+        return new UIR.Rect(
             screen.X + ((screen.Width - w) / 2),
             screen.Y + ((screen.Height - h) / 2),
             w,
@@ -359,9 +367,9 @@ public static class OverlayPopup
     /// Blanks <paramref name="rect"/> to empty cells (Ratatui <c>Clear</c>).
     /// Clipped to the viewport by <see cref="ScreenBuffer.Fill"/>.
     /// </summary>
-    public static void Clear(ScreenBuffer buffer, Rect rect)
+    public static void Clear(UIR.ScreenBuffer buffer, UIR.Rect rect)
     {
         ArgumentNullException.ThrowIfNull(buffer);
-        buffer.Fill(rect, Cell.Blank);
+        buffer.Fill(rect, UIR.Cell.Blank);
     }
 }
