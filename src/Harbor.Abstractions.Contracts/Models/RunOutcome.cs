@@ -84,6 +84,28 @@ public enum RunLimitKind
 }
 
 /// <summary>
+///     Per-tool-call completion state within a run (epic #41, slice B2.1).
+/// </summary>
+/// <remarks>
+///     Additive by design: <see cref="ToolCallLink.Completion" /> defaults to
+///     <see cref="Completed" />, so every existing B1 reader keeps compiling.
+///     <see cref="Abandoned" /> is the #401 remainder — a call that outlived the
+///     accepted stop (the tool ignored the run token). Its outcome is recorded,
+///     never reported as success, never dropped silently.
+/// </remarks>
+public enum ToolCallCompletion
+{
+    /// <summary>The call finished and its result stands.</summary>
+    Completed,
+
+    /// <summary>The call finished with an error (validation, deny, exception, timeout, cooperative cancel).</summary>
+    Failed,
+
+    /// <summary>The call outlived the accepted stop and was abandoned at the dispatch boundary.</summary>
+    Abandoned,
+}
+
+/// <summary>
 ///     One tool call linked to its execution result within a run.
 /// </summary>
 /// <remarks>
@@ -94,10 +116,20 @@ public enum RunLimitKind
 /// <param name="ToolCallId">The tool call id (matches <see cref="ToolResultEntry.ToolCallId" />).</param>
 /// <param name="ToolName">The name of the tool that was invoked.</param>
 /// <param name="IsError">Whether the linked result represents an error (false when no result was recorded yet).</param>
+/// <param name="Completion">How the call finished (additive: defaults to <see cref="ToolCallCompletion.Completed" />).</param>
 public sealed record ToolCallLink(
     string ToolCallId,
     string ToolName,
-    bool IsError);
+    bool IsError,
+    ToolCallCompletion Completion = ToolCallCompletion.Completed)
+{
+    /// <summary>
+    ///     Marker substring the dispatcher writes into an abandoned call's result
+    ///     output (<see cref="Reconstruct" /> keys <see cref="ToolCallCompletion.Abandoned" />
+    ///     off it). One literal, owned here, so the writer and the reader cannot drift.
+    /// </summary>
+    public const string AbandonedOutputMarker = "abandoned after accepted-stop";
+}
 
 /// <summary>
 ///     Stored outcome of one observable run (epic #41, slice B1).
@@ -325,8 +357,16 @@ public sealed record RunOutcome(
                 {
                     if (assistant.Parts[p] is ToolCallPart call)
                     {
-                        bool isError = resultByCallId.TryGetValue(call.Id, out ToolResultEntry? entry) && entry.IsError;
-                        toolCalls.Add(new ToolCallLink(call.Id, call.ToolName, isError));
+                        resultByCallId.TryGetValue(call.Id, out ToolResultEntry? entry);
+                        bool isError = entry is not null && entry.IsError;
+                        // #401 B2: an abandoned call still carries IsError, but
+                        // "failed" would read as malfunction — the marker says
+                        // the stop outlived the call, not the call the stop.
+                        ToolCallCompletion completion = entry?.Output is { } output
+                            && output.Contains(ToolCallLink.AbandonedOutputMarker, StringComparison.Ordinal)
+                            ? ToolCallCompletion.Abandoned
+                            : isError ? ToolCallCompletion.Failed : ToolCallCompletion.Completed;
+                        toolCalls.Add(new ToolCallLink(call.Id, call.ToolName, isError, completion));
                     }
                 }
             }
