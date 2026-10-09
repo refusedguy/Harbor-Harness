@@ -129,11 +129,16 @@ public static class WorkspaceMaterializer
             await CleanupAsync(contract.RepoRoot, worktreePath, runDir).ConfigureAwait(false);
             return added.ConvertFailure<IsolatedWorkspace>();
         }
-        if (added.Value.ExitCode != 0)
+        // Hoisted to the guard level: CFE0001 tracks the IsFailure early
+        // return only at this nesting — a second .Value read inside the
+        // branch below is reported.
+        int addExitCode = added.Value.ExitCode;
+        string addStderr = added.Value.Stderr;
+        if (addExitCode != 0)
         {
             await CleanupAsync(contract.RepoRoot, worktreePath, runDir).ConfigureAwait(false);
             return Result.Failure<IsolatedWorkspace>(
-                $"git worktree add failed for run '{runId.Value}': {Clip(added.Value.Stderr)}");
+                $"git worktree add failed for run '{runId.Value}': {Clip(addStderr)}");
         }
 
         Result<GitOutput> verified;
@@ -152,7 +157,8 @@ public static class WorkspaceMaterializer
             return verified.ConvertFailure<IsolatedWorkspace>();
         }
         string actual = verified.Value.Stdout.Trim();
-        if (verified.Value.ExitCode != 0 || !actual.Equals(contract.BaseRevision, StringComparison.Ordinal))
+        int verifyExitCode = verified.Value.ExitCode;
+        if (verifyExitCode != 0 || !actual.Equals(contract.BaseRevision, StringComparison.Ordinal))
         {
             await CleanupAsync(contract.RepoRoot, worktreePath, runDir).ConfigureAwait(false);
             return Result.Failure<IsolatedWorkspace>(
@@ -191,7 +197,10 @@ public static class WorkspaceMaterializer
         if (id.IsFailure)
             return id.ConvertFailure<RunManifest>();
 
-        string manifestPath = Path.Combine(RunDir(id.Value), "manifest.json");
+        // Hoisted to the guard level: CFE0001 does not carry the guard into
+        // the catch/using blocks below.
+        string checkedRunId = id.Value;
+        string manifestPath = Path.Combine(RunDir(checkedRunId), "manifest.json");
         byte[] bytes;
         try
         {
@@ -199,7 +208,7 @@ public static class WorkspaceMaterializer
         }
         catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException || ex is DirectoryNotFoundException || ex is FileNotFoundException)
         {
-            return Result.Failure<RunManifest>($"Unknown run '{id.Value}': no manifest at '{manifestPath}'.");
+            return Result.Failure<RunManifest>($"Unknown run '{checkedRunId}': no manifest at '{manifestPath}'.");
         }
 
         JsonDocument doc;
@@ -209,11 +218,11 @@ public static class WorkspaceMaterializer
         }
         catch (JsonException ex)
         {
-            return Result.Failure<RunManifest>($"Manifest for run '{id.Value}' is not valid JSON: {ex.Message}");
+            return Result.Failure<RunManifest>($"Manifest for run '{checkedRunId}' is not valid JSON: {ex.Message}");
         }
         using (doc)
         {
-            return ReadManifest(id.Value, doc.RootElement);
+            return ReadManifest(checkedRunId, doc.RootElement);
         }
     }
 
@@ -254,9 +263,12 @@ public static class WorkspaceMaterializer
             }
             if (removed.IsFailure)
                 return removed.ConvertFailure<RunManifest>();
-            if (removed.Value.ExitCode != 0)
+            // Hoisted to the guard level (see the git-add site above).
+            int removeExitCode = removed.Value.ExitCode;
+            string removeStderr = removed.Value.Stderr;
+            if (removeExitCode != 0)
                 return Result.Failure<RunManifest>(
-                    $"Failed to release worktree at '{manifest.WorktreePath}': {Clip(removed.Value.Stderr)}");
+                    $"Failed to release worktree at '{manifest.WorktreePath}': {Clip(removeStderr)}");
         }
 
         var released = manifest with { State = RunState.Released };
