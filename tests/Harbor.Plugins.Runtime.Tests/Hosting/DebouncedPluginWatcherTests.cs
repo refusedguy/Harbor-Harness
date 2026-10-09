@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
 using Harbor.Plugins.Hosting;
+using Harbor.Plugins.Storage;
 using Microsoft.Extensions.Logging.Abstractions;
 namespace Harbor.Plugins.Runtime.Tests.Hosting;
 
@@ -138,6 +139,30 @@ public sealed class DebouncedPluginWatcherTests : IDisposable
         // Removed would be wrong for an existing file.
         await Assert.That(change.Kind).IsNotEqualTo(PluginSourceChangeKind.Removed);
         await Assert.That(received.Count).IsEqualTo(1); // nothing extra fired during the same quiet period
+    }
+
+    /// <summary>
+    ///     A <c>.cs</c> file created in a subdirectory raises a change: the watcher
+    ///     is recursive to match <see cref="FileSystemPluginSource" /> discovery
+    ///     (issue #1046). Only a missing change would be wrong here, so
+    ///     the kind assertion mirrors the top-level test (anything but Removed).
+    /// </summary>
+    [Test]
+    public async Task Created_FileInSubdirectory_RaisesChange()
+    {
+        var received = new ConcurrentQueue<PluginSourceChangeEventArgs>();
+        using var watcher = new DebouncedPluginWatcher(
+            [_dir], Debounce, NullLogger<DebouncedPluginWatcher>.Instance);
+        watcher.ChangesReady += (_, c) => received.Enqueue(c);
+
+        string sub = Path.Combine(_dir, "nested");
+        Directory.CreateDirectory(sub);
+        string path = Path.Combine(sub, "nested-plugin.cs");
+        File.WriteAllText(path, "// v1");
+
+        var change = await NextAsync(watcher, received, 1, TimeSpan.FromSeconds(10));
+        await Assert.That(change.Path).IsEqualTo(path);
+        await Assert.That(change.Kind).IsNotEqualTo(PluginSourceChangeKind.Removed);
     }
 
     [Test]
