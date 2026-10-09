@@ -81,8 +81,6 @@ internal static class PluginRuntimeComposer
             panelRegistry);
 
         string pluginsCacheDir = Path.Combine(globalPluginsDir, "cache");
-        var references = new PluginAssemblyReferences(
-            loggerFactory.CreateLogger<PluginAssemblyReferences>());
 
         // Append-only capability audit trail: ~/.harbor/logs/plugin-audit.jsonl.
         var audit = new PluginAuditLog(
@@ -92,7 +90,15 @@ internal static class PluginRuntimeComposer
         var runtime = new PluginHostBuilder()
             .WithSource(BuildTrustedSource(globalPluginsDir, projectPluginsDir, loggerFactory, trustPrompt, capabilityPrompt, audit))
             .WithCompiler(new CachingCompiler(
-                new RoslynPluginCompiler(references),
+                // #1055 slice 1: the Roslyn compiler (and its AppDomain-wide
+                // assembly-reference snapshot) builds lazily behind a descriptor.
+                // Composing the pipeline must not pull Microsoft.CodeAnalysis into
+                // processes that never compile a plugin (`harbor providers` with
+                // no plugin dirs). Cache hits never touch the inner compiler, so
+                // the healthy path is unchanged.
+                new DeferredPluginCompiler(() => new RoslynPluginCompiler(
+                    new PluginAssemblyReferences(
+                        loggerFactory.CreateLogger<PluginAssemblyReferences>()))),
                 pluginsCacheDir,
                 loggerFactory.CreateLogger<CachingCompiler>()))
             .WithInstantiator(new ReflectionPluginInstantiator())
@@ -103,7 +109,15 @@ internal static class PluginRuntimeComposer
                     loggerFactory,
                     audit),
                 loggerFactory.CreateLogger<SafePluginRegistrar>()))
-            .WithOptions(o => o.PluginRoot = globalPluginsDir)
+            // #1055 slice 1: a failing plugin never blocks startup — skip and
+            // continue is the default, not the exception. PluginHostOptions
+            // already defaults to true; pinned here so the composition root
+            // says so out loud.
+            .WithOptions(o =>
+            {
+                o.PluginRoot = globalPluginsDir;
+                o.ContinueOnError = true;
+            })
             .Build(loggerFactory.CreateLogger<PluginHost>());
 
         return (loadHost, runtime);
