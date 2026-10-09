@@ -144,7 +144,8 @@ public class SessionNullRailwayTests
         var git = new SessionGitTracker();
         var factories = new SessionOptionalFactories(() => null, () => null, () => { });
         var lifecycle = new SessionLifecycleService(
-            router, factory, switcher, sessionStore, agent, status, git,
+            new SessionLifecycleScope(router, factory, switcher, git, status),
+            sessionStore, agent,
             new FakeChatViewBinder(), factories, new FakeLogger<SessionLifecycleService>());
         var manager = new SessionManager(router, lifecycle, status, git);
         return (manager, factory, sessionStore);
