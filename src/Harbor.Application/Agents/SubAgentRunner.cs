@@ -167,19 +167,38 @@ public sealed class SubAgentRunner(
             var run = await loop.RunAsync(context, agent, ct).ConfigureAwait(false);
             if (run.IsFailure)
             {
+                // #407: everything below is post-run bookkeeping and rides
+                // CancellationToken.None, not the run token — a cancel that
+                // landed mid-run must not take the child's terminal status or
+                // its spend debit down with it. A cancelled child is Stopped
+                // (Aborted), never Error: nothing malfunctioned.
+                bool wasCancelled = ct.IsCancellationRequested;
                 logger.LogWarning(
                     "Sub-agent run ended abnormally: agent={Agent} session={SessionId} error={Error}",
                     agent.Name.Value, session.Id, run.Error);
-                await MarkStatusAsync(session, SessionStatus.Error, ct).ConfigureAwait(false);
+                await MarkStatusAsync(
+                    session,
+                    wasCancelled ? SessionStatus.Aborted : SessionStatus.Error,
+                    CancellationToken.None).ConfigureAwait(false);
                 // [UX6] #266: tokens burned before the failure still count —
                 // propagate the partial delta so the parent totals stay honest.
-                Usage failedUsage = await TryAggregateChildUsageAsync(session.Id, ct).ConfigureAwait(false);
+                Usage failedUsage = await TryAggregateChildUsageAsync(session.Id, CancellationToken.None).ConfigureAwait(false);
                 await PropagateChildCostAsync(
-                    request.ParentSessionId, request.ParentMessageId, failedUsage, ct).ConfigureAwait(false);
+                    request.ParentSessionId, request.ParentMessageId, failedUsage, CancellationToken.None).ConfigureAwait(false);
                 // #270: degrade — surface whatever the sub-run produced before
                 // failing, so the parent receives partial output, not just a
                 // session id to go look at.
-                string partialNote = await TryExtractPartialNoteAsync(store, session.Id, ct).ConfigureAwait(false);
+                string partialNote = await TryExtractPartialNoteAsync(store, session.Id, CancellationToken.None).ConfigureAwait(false);
+                if (wasCancelled)
+                {
+                    // [UX6] #266: the trailer is the resumable id — kept here
+                    // too, the sub-session survived the cancel.
+                    return Result.Failure<SubAgentRunResult>(
+                        SubAgentFailureFormat.WithResumeTrailer(
+                            $"Sub-agent '{agent.Name.Value}' was cancelled (session {session.Id}).{partialNote}",
+                            session.Id));
+                }
+
                 // [UX6] #266: the trailer is the resumable id — the parent can
                 // continue the same sub-chat instead of dying with the run.
                 return Result.Failure<SubAgentRunResult>(
@@ -188,7 +207,9 @@ public sealed class SubAgentRunner(
                         session.Id));
             }
 
-            var history = await store.GetMessagesAsync(session.Id, ct).ConfigureAwait(false);
+            // #407: post-run reads ride CancellationToken.None — a cancel
+            // landing exactly on the finish line must not lose the report.
+            var history = await store.GetMessagesAsync(session.Id, CancellationToken.None).ConfigureAwait(false);
             // Storage failure vs empty history are distinct diagnoses: the
             // store's own error travels verbatim, emptiness gets its own text.
             // Both carry the resume trailer — the sub-session exists either way.
@@ -213,14 +234,14 @@ public sealed class SubAgentRunner(
             logger.LogInformation(
                 "Sub-agent finished: agent={Agent} session={SessionId} messages={Count} outputChars={Length}",
                 agent.Name.Value, session.Id, history.Value.Count, finalOutput.Length);
-            await MarkStatusAsync(session, SessionStatus.Done, ct).ConfigureAwait(false);
+            await MarkStatusAsync(session, SessionStatus.Done, CancellationToken.None).ConfigureAwait(false);
 
             // [UX6] #266: fold the child's token delta into the parent message
             // + stats (under the per-parent gate) and hand it back in the
             // envelope so the parent side can render the cost.
             Usage childUsage = AggregateUsage(history.Value);
             await PropagateChildCostAsync(
-                request.ParentSessionId, request.ParentMessageId, childUsage, ct).ConfigureAwait(false);
+                request.ParentSessionId, request.ParentMessageId, childUsage, CancellationToken.None).ConfigureAwait(false);
 
             return new SubAgentRunResult(session.Id, agent.Name.Value, Truncate(finalOutput), history.Value.Count, childUsage);
         }
