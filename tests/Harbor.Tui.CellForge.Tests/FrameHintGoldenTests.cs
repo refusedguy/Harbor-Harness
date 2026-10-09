@@ -56,7 +56,7 @@ public class FrameHintGoldenTests
             _ = chat.Timeline.Timeline.PrepareFrame(tlRect.Width > 0 ? tlRect.Width : cols, Math.Max(0, tlRect.Height));
 
             screen.BeginFrame();
-            chat.Tree.PaintAll(screen.Back);
+            chat.Tree.PaintAll(screen.PaintBuffer);
 
             bool fullScan = broad;
             int fxCount = 0;

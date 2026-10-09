@@ -13,6 +13,9 @@ using Harbor.Application.Permissions;
 using Harbor.TestKit;
 using Harbor.Tui.CellForge.Input;
 using Harbor.Tui.CellForge.Rendering;
+// #436: the art dump reads engine staging grids here (session.Back mirrors
+// the flushed frame); painters elsewhere in this file stay Rendering-typed.
+using EngineCells = Harbor.Tui.CellForge.Rendering;
 using Harbor.Tui.CellForge.Streaming;
 using Harbor.Ui.Framework.Rendering;
 using Harbor.Ui.Framework.Rendering.Input;
@@ -201,7 +204,7 @@ public class CellForgeReplSmokeTests
 
     // ── Local test infrastructure (CellForge.Tests helpers are internal to that assembly) ──
 
-    private static string Art(ScreenBuffer buffer)
+    private static string Art(EngineCells.ScreenBuffer buffer)
     {
         var sb = new StringBuilder();
         for (int y = 0; y < buffer.Rows; y++)
@@ -209,7 +212,7 @@ public class CellForgeReplSmokeTests
             for (int x = 0; x < buffer.Cols; x++)
             {
                 var cell = buffer.Get(x, y);
-                if (cell.Width == Cell.WSkip)
+                if (cell.Width == EngineCells.Cell.WSkip)
                 {
                     continue;
                 }

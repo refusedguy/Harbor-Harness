@@ -64,7 +64,7 @@ public class DiffEngineFuzzTests
             if (!engine.FrontMatches(back))
             {
                 throw new InvalidOperationException(
-                    $"fuzz seed {seed} step {step}: FRONT != BACK after flush\n{GoldenDoc.Build($"fuzz-{seed}", back, backend)}");
+                    $"fuzz seed {seed} step {step}: FRONT != BACK after flush\n{GoldenDoc.Build($"fuzz-{seed}", GridDump.ToUi(back), backend)}");
             }
         }
     }

@@ -21,7 +21,7 @@ namespace Harbor.Tui.CellForge.Tests;
 /// </summary>
 public class PostFxTests
 {
-    private static (byte R, byte G, byte B) Channels(UIR.PackedColor c) =>
+    private static (byte R, byte G, byte B) Channels(EngineCells.PackedColor c) =>
         c.IsRgb ? c.RgbChannels : ((byte)0, (byte)0, (byte)0);
 
     private static EngineCells.PackedColor HotTone(EngineCells.PackedColor accent)
@@ -38,7 +38,7 @@ public class PostFxTests
 
     private static string HotSgr(EngineCells.PackedColor accent)
     {
-        var (r, g, b) = Channels(PanelFx.Lerp(ToUi(accent), ToUi(HotTone(accent)), GlowEffect.PeakStrength));
+        var (r, g, b) = Channels(EngineCells.PackedColor.FromRaw(PanelFx.Lerp(ToUi(accent), ToUi(HotTone(accent)), GlowEffect.PeakStrength).Value));
         return $"\x1B[38;2;{r};{g};{b}m";
     }
 
@@ -346,7 +346,7 @@ public class PostFxTests
         session.FlushFrame();
         backend.ResetForTests();
 
-        session.Back.SetText(1, 0, "plain", EngineCells.CellStyle.Plain);
+        session.PaintBuffer.SetText(1, 0, "plain", CellStyle.Plain);
         session.BeginFrame();
         session.FlushFrame(); // Effects empty → classic path
 
@@ -367,7 +367,7 @@ public class PostFxTests
         glow.Update(new GlowRegion(new EngineCells.Rect(0, 1, 20, 1), accent, intensity: 1.0));
         session.Effects.Set(0, glow);
 
-        session.Back.SetText(2, 1, "HOT", new EngineCells.CellStyle(accent, attrs: EngineCells.StyleAttr.Bold));
+        session.PaintBuffer.SetText(2, 1, "HOT", new CellStyle(UIR.PackedColor.FromRaw(accent.Value), attrs: StyleAttr.Bold));
         session.BeginFrame();
         session.FlushFrame();
 

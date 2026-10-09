@@ -174,7 +174,7 @@ public class HotSwapTests
 
         TerminalColorPalette.Apply(HarborTheme.HarborLight); // publish mid-frame
 
-        session.Back.SetText(0, 1, "warn", new EngineCells.CellStyle(EngineCells.PackedColor.FromRaw(ChatPalette.Warning.Value), attrs: EngineCells.StyleAttr.Bold));
+        session.PaintBuffer.SetText(0, 1, "warn", new CellStyle(ChatPalette.Warning, attrs: StyleAttr.Bold));
         var midFrameWarning = ChatPalette.Warning;
         session.FlushFrame();
         ChatPalette.UnpinFrame();
@@ -248,7 +248,7 @@ public class HotSwapTests
         var session = MakeSession(20, 4, out var backend);
 
         var scope = session.BeginFrameScope();
-        session.Back.SetText(0, 0, "scopedflushrow", EngineCells.CellStyle.Plain);
+        session.PaintBuffer.SetText(0, 0, "scopedflushrow", CellStyle.Plain);
         scope.Flush();
         scope.Dispose();
 
@@ -262,7 +262,7 @@ public class HotSwapTests
     {
         var session = MakeSession(20, 4, out var backend);
         var scope = session.BeginFrameScope();
-        session.Back.SetText(0, 0, "asyncscopedflush", EngineCells.CellStyle.Plain);
+        session.PaintBuffer.SetText(0, 0, "asyncscopedflush", CellStyle.Plain);
 
         await scope.FlushAsync();
         bool pinnedAfterFlush = ChatPalette.IsFramePinned;
@@ -320,19 +320,19 @@ public class HotSwapTests
     {
         var session = MakeSession(20, 4, out var backend);
         session.BeginFrame();
-        session.Back.SetText(0, 0, "baseline", EngineCells.CellStyle.Plain);
+        session.PaintBuffer.SetText(0, 0, "baseline", CellStyle.Plain);
         session.FlushFrame();
 
         // Abort mid-frame: BACK carries a row the terminal never received,
         // FRONT still mirrors the shipped frame.
         using (session.BeginFrameScope())
         {
-            session.Back.SetText(0, 2, "abortedrow", EngineCells.CellStyle.Plain);
+            session.PaintBuffer.SetText(0, 2, "abortedrow", CellStyle.Plain);
         }
 
         backend.ResetForTests();
         var next = session.BeginFrameScope();
-        session.Back.SetText(0, 1, "secondframe", EngineCells.CellStyle.Plain);
+        session.PaintBuffer.SetText(0, 1, "secondframe", CellStyle.Plain);
         next.Flush();
         next.Dispose();
 
@@ -348,7 +348,7 @@ public class HotSwapTests
     {
         var session = MakeSession(40, 10, out var backend);
         session.BeginFrame();
-        session.Back.SetText(0, 0, "baseline", EngineCells.CellStyle.Plain);
+        session.PaintBuffer.SetText(0, 0, "baseline", CellStyle.Plain);
         session.FlushFrame();
 
         // A frame that registers a narrow damage hint and then aborts: the
@@ -357,12 +357,12 @@ public class HotSwapTests
         using (session.BeginFrameScope())
         {
             session.Damage(new Rect(0, 0, 4, 1));
-            session.Back.SetText(0, 0, "hinted", EngineCells.CellStyle.Plain);
+            session.PaintBuffer.SetText(0, 0, "hinted", CellStyle.Plain);
         }
 
         backend.ResetForTests();
         var next = session.BeginFrameScope();
-        session.Back.SetText(20, 8, "unhinted", EngineCells.CellStyle.Plain);
+        session.PaintBuffer.SetText(20, 8, "unhinted", CellStyle.Plain);
         next.Flush();
         next.Dispose();
 

@@ -28,13 +28,13 @@ public class ScreenSessionResizeTests
     {
         var (session, backend, writer) = Make();
         session.BeginFrame();
-        session.Back.SetText(0, 0, "content", EngineCells.CellStyle.Plain);
+        session.PaintBuffer.SetText(0, 0, "content", CellStyle.Plain);
         await session.FlushFrameAsync();
         backend.ResetForTests();
 
         session.Resize(20, 10);
         session.BeginFrame(); // ED2 goes here, inside sync wrapper
-        session.Back.SetText(0, 0, "content", EngineCells.CellStyle.Plain);
+        session.PaintBuffer.SetText(0, 0, "content", CellStyle.Plain);
         await session.FlushFrameAsync();
 
         string frame = backend.Escaped;
@@ -59,12 +59,12 @@ public class ScreenSessionResizeTests
     public async Task Shrink_RepaintsFully_FrontMatchesBack()
     {
         var (session, _, writer) = Make(40, 8);
-        session.Back.FillAll(EngineCells.Cell.From(new Rune('#'), EngineCells.CellStyle.Plain));
+        session.PaintBuffer.FillAll(Cell.From(new Rune('#'), CellStyle.Plain));
         session.BeginFrame();
         await session.FlushFrameAsync();
 
         session.Resize(15, 8);
-        session.Back.Fill(new EngineCells.Rect(0, 0, 15, 8), EngineCells.Cell.From(new Rune('+'), EngineCells.CellStyle.Plain));
+        session.PaintBuffer.Fill(new Rect(0, 0, 15, 8), Cell.From(new Rune('+'), CellStyle.Plain));
         session.BeginFrame();
         await session.FlushFrameAsync();
 

@@ -35,6 +35,27 @@ internal static class GridDump
         return eng;
     }
 
+    /// <summary>
+    /// The reverse crossing, for diagnostics over terminal state (the
+    /// engine FRONT mirror): exact field-for-field copy into a Rendering
+    /// grid. Never asserted in goldens — message context only.
+    /// </summary>
+    internal static ScreenBuffer ToUi(EngineCells.ScreenBuffer front)
+    {
+        var ui = new ScreenBuffer(front.Cols, front.Rows);
+        for (int y = 0; y < front.Rows; y++)
+        {
+            for (int x = 0; x < front.Cols; x++)
+            {
+                var c = front.Get(x, y);
+                ui.At(x, y) = Cell.FromRaw(c.Rune, c.Fg, c.Bg, c.Flags, c.Width);
+            }
+        }
+
+        ui.InvalidateAll();
+        return ui;
+    }
+
     /// <summary>Cosmetic rendering: one line per row; wide tails collapse.</summary>
     public static string Art(ScreenBuffer buffer)
     {

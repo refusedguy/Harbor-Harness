@@ -182,7 +182,7 @@ public class SyncBackendCapabilityTests
     public async Task FlushFrame_AsyncOnlyBackend_ThrowsInvalidOperation()
     {
         var session = new ScreenSession(new AnsiWriter(new AsyncOnlyBackend()), 20, 5);
-        session.Back.SetText(0, 0, "painted", EngineCells.CellStyle.Plain);
+        session.PaintBuffer.SetText(0, 0, "painted", CellStyle.Plain);
         session.BeginFrame();
 
         Assert.Throws<InvalidOperationException>(session.FlushFrame);
@@ -196,7 +196,7 @@ public class SyncBackendCapabilityTests
         // frame diffed against terminal state that never reached the tty and
         // the cell was never repainted. The guard must fire before the diff.
         var session = new ScreenSession(new AnsiWriter(new AsyncOnlyBackend()), 20, 5);
-        session.Back.SetText(0, 0, "painted", EngineCells.CellStyle.Plain);
+        session.PaintBuffer.SetText(0, 0, "painted", CellStyle.Plain);
         session.BeginFrame();
 
         try
@@ -248,13 +248,13 @@ public class SyncBackendCapabilityTests
         // is a clean full repaint rather than a diff against terminal state
         // that never existed.
         var session = new ScreenSession(new AnsiWriter(new AsyncOnlyBackend()), 20, 5);
-        session.Back.SetText(0, 0, "painted", EngineCells.CellStyle.Plain);
+        session.PaintBuffer.SetText(0, 0, "painted", CellStyle.Plain);
         session.BeginFrame();
 
         Assert.Throws<InvalidOperationException>(session.FlushFrame);
         session.AbortFrame(); // must be a no-op — the frame already closed
 
-        session.Back.SetText(0, 0, "painted", EngineCells.CellStyle.Plain);
+        session.PaintBuffer.SetText(0, 0, "painted", CellStyle.Plain);
         session.BeginFrame();
         await session.FlushFrameAsync();
 
@@ -266,7 +266,7 @@ public class SyncBackendCapabilityTests
     {
         var backend = new AsyncOnlyBackend();
         var session = new ScreenSession(new AnsiWriter(backend), 20, 5);
-        session.Back.SetText(0, 0, "painted", EngineCells.CellStyle.Plain);
+        session.PaintBuffer.SetText(0, 0, "painted", CellStyle.Plain);
         session.BeginFrame();
         await session.FlushFrameAsync();
 
