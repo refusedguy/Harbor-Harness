@@ -75,6 +75,6 @@ public sealed class GlowEffect : IPostEffect
             Harbor.Ui.Framework.Rendering.PackedColor.FromRaw(style.Fg.Value),
             Harbor.Ui.Framework.Rendering.PackedColor.FromRaw(_hot.Value),
             _intensity * PeakStrength);
-        return EngineCells.Cell.FromRaw(cell.Rune, glow.Value, cell.Bg.Value, (ushort)cell.Flags, cell.Width);
+        return EngineCells.Cell.FromRaw(cell.Rune, glow.Value, cell.Bg, (ushort)cell.Flags, cell.Width);
     }
 }

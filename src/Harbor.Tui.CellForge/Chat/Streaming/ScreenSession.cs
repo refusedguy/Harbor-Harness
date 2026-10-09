@@ -402,7 +402,7 @@ public sealed class ScreenSession
             for (int x = 0; x < cols; x++)
             {
                 var c = src.Get(x, y);
-                dst.At(x, y) = EngineCells.Cell.FromRaw(c.Rune, c.Fg.Value, c.Bg.Value, (ushort)c.Flags, c.Width);
+                dst.At(x, y) = EngineCells.Cell.FromRaw(c.Rune, c.Fg, c.Bg, c.Flags, c.Width);
             }
         }
 
