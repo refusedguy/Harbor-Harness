@@ -4,17 +4,20 @@ namespace Harbor.Tui.CellForge.PtyTests;
 
 /// <summary>
 ///     Issue #423 Track 1 — tool-call streaming into the timeline: the mock answers
-///     with a <c>read</c> tool call (the one file tool allowed everywhere, so no
-///     permission prompt can interleave), the call card streams into the PTY grid
-///     with its name and args preview, the tool executes for real, and the turn
-///     keeps going until the seeded <c>maxSteps</c> cap ends it back at idle.
-///     Marker asserts only (streaming cadence is nondeterministic — celldiff §8).
+///     with a <c>read</c> tool call on an isolated-<c>$HOME</c> probe file. Paths
+///     outside the workspace resolve to an approval prompt (workspace
+///     confinement), so the test approves via the prompt's own
+///     <c>[y]/[n]/[a]</c> keys — <c>a</c> (always allow) persists for the run —
+///     then the call card, its file argument and the executed result stream
+///     into the grid, and the turn settles at idle after the seeded
+///     <c>maxSteps</c> cap. Marker asserts only (streaming cadence is
+///     nondeterministic — celldiff §8).
 /// </summary>
 [NotInParallel("pty")]
 public sealed class ToolCallStreamingScenarioTests : CellForgePtyScenarioBase
 {
     [Test]
-    [Timeout(60_000)]
+    [Timeout(90_000)]
     public async Task ToolCall_ReadCardStreamsArgsResult_AndTurnSettles()
     {
         // Probe file inside the isolated $HOME; content lines are unique markers.
@@ -39,21 +42,37 @@ public sealed class ToolCallStreamingScenarioTests : CellForgePtyScenarioBase
 
         SubmitLine("read the probe file");
 
-        // The tool card streams into the grid: name + args preview row.
+        // The out-of-workspace path raises the approval prompt; approve with
+        // "a" (always allow, remembered for the run). Re-prompt tolerant: if a
+        // later iteration prompts again, approve again until content flows.
+        var approvalDeadline = TimeSpan.FromSeconds(40);
+        var approvalSw = System.Diagnostics.Stopwatch.StartNew();
+        while (approvalSw.Elapsed < approvalDeadline)
+        {
+            string[] snap = NormalizedLines();
+            if (snap.Any(x => x.Contains("pty-probe-line-alpha-423", StringComparison.Ordinal)))
+            {
+                break;
+            }
+
+            if (snap.Any(x => x.Contains("permission required", StringComparison.Ordinal)))
+            {
+                Session.SendKey("a");
+            }
+
+            await Task.Delay(500).ConfigureAwait(false);
+        }
+
+        // The tool card streamed with the call name and the probe path...
         _ = await WaitForScreenAsync(
             l => l.Any(x => x.Contains("read", StringComparison.Ordinal))
-                && l.Any(x => x.Contains("args:", StringComparison.Ordinal)),
-            TimeSpan.FromSeconds(15)).ConfigureAwait(false);
-
-        // The args preview carries the probe path, so the card is bound to THIS call.
-        _ = await WaitForScreenAsync(
-            l => l.Any(x => x.Contains("pty-tool-probe-423", StringComparison.Ordinal)),
+                && l.Any(x => x.Contains("pty-tool-probe-423", StringComparison.Ordinal)),
             TimeSpan.FromSeconds(10)).ConfigureAwait(false);
 
-        // The tool executed for real: the file content reaches the timeline.
+        // ...the tool executed for real: the file content reaches the timeline.
         _ = await WaitForScreenAsync(
             l => l.Any(x => x.Contains("pty-probe-line-alpha-423", StringComparison.Ordinal)),
-            TimeSpan.FromSeconds(15)).ConfigureAwait(false);
+            TimeSpan.FromSeconds(10)).ConfigureAwait(false);
 
         // Turn settles back at idle after the maxSteps cap ends the loop.
         _ = await WaitForScreenAsync(
