@@ -24,7 +24,7 @@ public class MarkupReducerTests
         await Assert.That(markup.IsOpen).IsTrue();
         await Assert.That(markup.SourceName).IsEqualTo("broken.png");
         await Assert.That(markup.SavedScrollOffset).IsEqualTo(12);
-        await Assert.That(markup.Items.Length).IsEqualTo(0);
+        await Assert.That(markup.Model.Items.Length).IsEqualTo(0);
         await Assert.That(markup.Cursor).IsEqualTo(NormalizedPoint.Create(0.5, 0.5));
     }
 
@@ -42,9 +42,9 @@ public class MarkupReducerTests
     {
         var state = ChatAppReducer.Update(Open(), new ChatAppMsg.MarkupPlace()).State;
 
-        await Assert.That(state.Chat.Markup.Items.Length).IsEqualTo(1);
-        await Assert.That(state.Chat.Markup.Items[0].Kind).IsEqualTo(MarkupKind.Arrow);
-        await Assert.That(state.Chat.Markup.SelectedId).IsEqualTo(1);
+        await Assert.That(state.Chat.Markup.Model.Items.Length).IsEqualTo(1);
+        await Assert.That(state.Chat.Markup.Model.Items[0].Kind).IsEqualTo(MarkupKind.Arrow);
+        await Assert.That(state.Chat.Markup.Model.SelectedId).IsEqualTo(1);
     }
 
     [Test]
@@ -52,12 +52,12 @@ public class MarkupReducerTests
     {
         var tooEarly = ChatAppReducer.Update(Open(), new ChatAppMsg.MarkupSelectTool(MarkupKind.Text)).State;
         tooEarly = ChatAppReducer.Update(tooEarly, new ChatAppMsg.MarkupPlace()).State;
-        await Assert.That(tooEarly.Chat.Markup.Items.Length).IsEqualTo(0);
+        await Assert.That(tooEarly.Chat.Markup.Model.Items.Length).IsEqualTo(0);
 
         var typed = ChatAppReducer.Update(tooEarly, new ChatAppMsg.MarkupSetPendingText("here")).State;
         var placed = ChatAppReducer.Update(typed, new ChatAppMsg.MarkupPlace()).State;
-        await Assert.That(placed.Chat.Markup.Items.Length).IsEqualTo(1);
-        await Assert.That(placed.Chat.Markup.Items[0].Text).IsEqualTo("here");
+        await Assert.That(placed.Chat.Markup.Model.Items.Length).IsEqualTo(1);
+        await Assert.That(placed.Chat.Markup.Model.Items[0].Text).IsEqualTo("here");
         await Assert.That(placed.Chat.Markup.PendingText).IsEmpty();
     }
 
@@ -66,16 +66,16 @@ public class MarkupReducerTests
     {
         var state = Open();
         state = ChatAppReducer.Update(state, new ChatAppMsg.MarkupPlace()).State;
-        double before = state.Chat.Markup.Items[0].From.X;
+        double before = state.Chat.Markup.Model.Items[0].From.X;
 
         state = ChatAppReducer.Update(state, new ChatAppMsg.MarkupNudge(0.1, 0)).State;
-        await Assert.That(state.Chat.Markup.Items[0].From.X).IsEqualTo(before + 0.1);
+        await Assert.That(state.Chat.Markup.Model.Items[0].From.X).IsEqualTo(before + 0.1);
 
         state = ChatAppReducer.Update(state, new ChatAppMsg.MarkupUndo()).State;
-        await Assert.That(state.Chat.Markup.Items[0].From.X).IsEqualTo(before);
+        await Assert.That(state.Chat.Markup.Model.Items[0].From.X).IsEqualTo(before);
 
         state = ChatAppReducer.Update(state, new ChatAppMsg.MarkupRedo()).State;
-        await Assert.That(state.Chat.Markup.Items[0].From.X).IsEqualTo(before + 0.1);
+        await Assert.That(state.Chat.Markup.Model.Items[0].From.X).IsEqualTo(before + 0.1);
     }
 
     [Test]
@@ -91,9 +91,9 @@ public class MarkupReducerTests
 
         var markup = state.Chat.Markup;
         await Assert.That(markup.Draft is null).IsTrue();
-        await Assert.That(markup.Items.Length).IsEqualTo(1);
-        await Assert.That(markup.Items[0].From).IsEqualTo(NormalizedPoint.Create(0.2, 0.2));
-        await Assert.That(markup.Items[0].To).IsEqualTo(NormalizedPoint.Create(0.4, 0.5));
+        await Assert.That(markup.Model.Items.Length).IsEqualTo(1);
+        await Assert.That(markup.Model.Items[0].From).IsEqualTo(NormalizedPoint.Create(0.2, 0.2));
+        await Assert.That(markup.Model.Items[0].To).IsEqualTo(NormalizedPoint.Create(0.4, 0.5));
     }
 
     [Test]
@@ -101,19 +101,19 @@ public class MarkupReducerTests
     {
         var state = Open();
         state = ChatAppReducer.Update(state, new ChatAppMsg.MarkupPlace()).State;
-        var first = state.Chat.Markup.Items[0];
+        var first = state.Chat.Markup.Model.Items[0];
         state = ChatAppReducer.Update(state, new ChatAppMsg.MarkupSelectTool(MarkupKind.Rectangle)).State;
         state = ChatAppReducer.Update(state, new ChatAppMsg.MarkupPlace()).State;
-        await Assert.That(state.Chat.Markup.SelectedId).IsEqualTo(2);
+        await Assert.That(state.Chat.Markup.Model.SelectedId).IsEqualTo(2);
 
         // Click on the first arrow selects it…
         state = ChatAppReducer.Update(state, new ChatAppMsg.MarkupSelectAt(first.From.X, first.From.Y)).State;
-        await Assert.That(state.Chat.Markup.SelectedId).IsEqualTo(first.Id);
+        await Assert.That(state.Chat.Markup.Model.SelectedId).IsEqualTo(first.Id);
 
         // …click on empty space moves the cursor instead.
         state = ChatAppReducer.Update(state, new ChatAppMsg.MarkupSelectAt(0.95, 0.95)).State;
         await Assert.That(state.Chat.Markup.Cursor).IsEqualTo(NormalizedPoint.Create(0.95, 0.95));
-        await Assert.That(state.Chat.Markup.SelectedId).IsEqualTo(first.Id);
+        await Assert.That(state.Chat.Markup.Model.SelectedId).IsEqualTo(first.Id);
     }
 
     [Test]

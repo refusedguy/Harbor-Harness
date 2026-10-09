@@ -16,7 +16,7 @@ namespace Harbor.Tui.CellForge.Widgets;
 /// exception. The text primitive uses a built-in 3×5 bitmap font (ASCII
 /// letters/digits + basic punctuation, uppercased), scaled by the
 /// annotation weight — honest pixels at any size, no font file needed.</para>
-/// <para>All failures surface as <paramref name="error" /> text (unreadable
+/// <para>All failures surface as <c>error</c> text (unreadable
 /// source, unwritable target is the host's concern, non-PNG input); this
 /// class never throws out of <see cref="TryBake" />.</para>
 /// </summary>
@@ -467,8 +467,8 @@ public static class MarkupPngBaker
         int half = item.Weight / 2;
         Line(image, x0, y0, x1, y0, half, Red);
         Line(image, x1, y0, x1, y1, half, Red);
-        Line(image, x1, y1, x0, y1, half, Red);
-        Line(image, x0, y1, x0, y0, half, Red);
+        Line(image, x0: x1, y0: y1, x1: x0, y1: y1, half: half, rgba: Red);
+        Line(image, x0: x0, y0: y1, x1: x0, y1: y0, half: half, rgba: Red);
     }
 
     private static void DrawArrow(RgbaImage image, MarkupAnnotation item)
