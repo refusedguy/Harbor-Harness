@@ -75,7 +75,7 @@ public sealed class ToolDispatcher(
     // #401 B2: bounded grace for in-flight calls after the Accepted boundary.
     // Null keeps the default below; tests inject milliseconds.
     TimeSpan? abandonGrace = null,
-    // #401 B2: clock for the grace wait. Null keeps TimeProvider.System;
+    // #401 B2: clock for the grace wait. Null means the system clock, while
     // tests inject a fake when they need the boundary without wall-clock.
     TimeProvider? clock = null) : IToolDispatcher
 {
@@ -400,7 +400,7 @@ public sealed class ToolDispatcher(
     /// </summary>
     private async Task<ToolResultEntry> AbandonLeftoverAsync(Task pending, ToolCallPart toolCall)
     {
-        pending.ContinueWith(
+        _ = pending.ContinueWith(
             t => logger.LogWarning(
                 t.Exception,
                 "Abandoned tool {ToolName} (call {CallId}) faulted after abandonment",
