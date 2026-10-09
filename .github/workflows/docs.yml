@@ -346,7 +346,7 @@ jobs:
               for pattern in group:
                   # include_hidden: docs/.kilo-docs/ holds 48 tracked md files
                   # and a glob that silently skips a dot-directory is the #509
-                  # shape (green by never scanning). Measured with it: 205 pages.
+                  # shape (green by never scanning). Measured with it: 210 pages.
                   hits = [p for p in glob.glob(pattern, recursive=True,
                                                include_hidden=True)
                           if os.path.isfile(p)]
