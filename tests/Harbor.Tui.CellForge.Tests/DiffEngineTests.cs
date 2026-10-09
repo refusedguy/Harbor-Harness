@@ -16,8 +16,8 @@ public class DiffEngineTests
     public async Task FirstFlush_EmitsEveryVisibleCell()
     {
         var (engine, backend, writer) = Make(4, 1);
-        var back = new ScreenBuffer(4, 1);
-        back.SetText(0, 0, "ab", CellStyle.Plain);
+        var back = new EngineCells.ScreenBuffer(4, 1);
+        back.SetText(0, 0, "ab", EngineCells.CellStyle.Plain);
 
         writer.BeginFrame();
         engine.Flush(back, writer);
@@ -32,7 +32,7 @@ public class DiffEngineTests
     public async Task IdleFrame_EmitsNothing()
     {
         var (engine, backend, writer) = Make();
-        var back = new ScreenBuffer(20, 6);
+        var back = new EngineCells.ScreenBuffer(20, 6);
         writer.BeginFrame();
         engine.Flush(back, writer);   // first: blanks sync
         await writer.EndFrameAsync();
@@ -51,13 +51,13 @@ public class DiffEngineTests
     public async Task SmallChange_EmitsOnlyDelta()
     {
         var (engine, backend, writer) = Make(10, 2);
-        var back = new ScreenBuffer(10, 2);
+        var back = new EngineCells.ScreenBuffer(10, 2);
         writer.BeginFrame();
         engine.Flush(back, writer);
         await writer.EndFrameAsync();
         backend.ResetForTests();
 
-        back.SetText(3, 1, "x", CellStyle.Plain);
+        back.SetText(3, 1, "x", EngineCells.CellStyle.Plain);
         writer.BeginFrame();
         engine.Flush(back, writer);
         await writer.EndFrameAsync();
@@ -70,14 +70,14 @@ public class DiffEngineTests
     public async Task StyleOnlyChange_RecolorsWithoutMovingText()
     {
         var (engine, backend, writer) = Make(10, 1);
-        var back = new ScreenBuffer(10, 1);
-        back.SetText(0, 0, "hi", CellStyle.Plain);
+        var back = new EngineCells.ScreenBuffer(10, 1);
+        back.SetText(0, 0, "hi", EngineCells.CellStyle.Plain);
         writer.BeginFrame();
         engine.Flush(back, writer);
         await writer.EndFrameAsync();
         backend.ResetForTests();
 
-        back.SetStyleAt(1, 0, new CellStyle(attrs: StyleAttr.Underline));
+        back.SetStyleAt(1, 0, new EngineCells.CellStyle(attrs: EngineCells.StyleAttr.Underline));
         writer.BeginFrame();
         engine.Flush(back, writer);
         await writer.EndFrameAsync();
@@ -91,7 +91,7 @@ public class DiffEngineTests
     public async Task WideRuneChange_RepaintsLead_SkipsTailEmit()
     {
         var (engine, backend, writer) = Make(8, 1);
-        var back = new ScreenBuffer(8, 1);
+        var back = new EngineCells.ScreenBuffer(8, 1);
         var cjk = new Rune(0x4E2D);
 
         writer.BeginFrame();
@@ -99,7 +99,7 @@ public class DiffEngineTests
         await writer.EndFrameAsync();
         backend.ResetForTests();
 
-        back.SetRune(0, 0, cjk, CellStyle.Plain);
+        back.SetRune(0, 0, cjk, EngineCells.CellStyle.Plain);
         writer.BeginFrame();
         engine.Flush(back, writer);
         await writer.EndFrameAsync();
@@ -114,16 +114,16 @@ public class DiffEngineTests
     public async Task NarrowOverWide_ForceRepaintsBothHalves()
     {
         var (engine, backend, writer) = Make(10, 1);
-        var back = new ScreenBuffer(10, 1);
+        var back = new EngineCells.ScreenBuffer(10, 1);
         var cjk = new Rune(0x4E2D);
-        back.SetRune(0, 0, cjk, CellStyle.Plain);
+        back.SetRune(0, 0, cjk, EngineCells.CellStyle.Plain);
         writer.BeginFrame();
         engine.Flush(back, writer);
         await writer.EndFrameAsync();
         backend.ResetForTests();
 
         // Replace the wide pair with two narrow chars.
-        back.SetText(0, 0, "XY", CellStyle.Plain);
+        back.SetText(0, 0, "XY", EngineCells.CellStyle.Plain);
         writer.BeginFrame();
         engine.Flush(back, writer);
         await writer.EndFrameAsync();
@@ -138,11 +138,11 @@ public class DiffEngineTests
     public async Task RowHashSkip_SilentRowsCostNothing()
     {
         var (engine, backend, writer) = Make(200, 50);
-        var back = new ScreenBuffer(200, 50);
+        var back = new EngineCells.ScreenBuffer(200, 50);
         // Realistic content so the baseline frame carries real payload.
         for (int y = 0; y < 50; y++)
         {
-            back.SetText(0, y, $"row {y} ".PadRight(199, '.'), CellStyle.Plain);
+            back.SetText(0, y, $"row {y} ".PadRight(199, '.'), EngineCells.CellStyle.Plain);
         }
 
         writer.BeginFrame();
@@ -152,7 +152,7 @@ public class DiffEngineTests
         await Assert.That(first > 10_000).IsTrue();
 
         // Mutate a single row out of 50.
-        back.Fill(new Rect(0, 25, 200, 1), Cell.From(new Rune('#'), CellStyle.Plain));
+        back.Fill(new EngineCells.Rect(0, 25, 200, 1), EngineCells.Cell.From(new Rune('#'), EngineCells.CellStyle.Plain));
         backend.ResetForTests();
         writer.BeginFrame();
         engine.Flush(back, writer);
@@ -167,14 +167,14 @@ public class DiffEngineTests
     public async Task FrameHint_SmallDamage_ScansOnlyHintedArea()
     {
         var (engine, backend, writer) = Make(40, 20);
-        var back = new ScreenBuffer(40, 20);
+        var back = new EngineCells.ScreenBuffer(40, 20);
         writer.BeginFrame();
         engine.Flush(back, writer);
         await writer.EndFrameAsync();
         backend.ResetForTests();
 
-        back.SetText(5, 5, "tick", CellStyle.Plain);
-        engine.FrameHint(new Rect(0, 5, 40, 1));
+        back.SetText(5, 5, "tick", EngineCells.CellStyle.Plain);
+        engine.FrameHint(new EngineCells.Rect(0, 5, 40, 1));
         writer.BeginFrame();
         engine.Flush(back, writer);
         await writer.EndFrameAsync();
@@ -187,14 +187,14 @@ public class DiffEngineTests
     public async Task FrameHint_MutationOutsideHint_IsMissedByHintPath_ButCaughtByFull()
     {
         var (engine, backend, writer) = Make(20, 10);
-        var back = new ScreenBuffer(20, 10);
+        var back = new EngineCells.ScreenBuffer(20, 10);
         writer.BeginFrame();
         engine.Flush(back, writer);
         await writer.EndFrameAsync();
 
         // Mutation far outside the hint.
-        back.SetText(15, 8, "miss", CellStyle.Plain);
-        engine.FrameHint(new Rect(0, 0, 20, 1));
+        back.SetText(15, 8, "miss", EngineCells.CellStyle.Plain);
+        engine.FrameHint(new EngineCells.Rect(0, 0, 20, 1));
         writer.BeginFrame();
         engine.Flush(back, writer);
         await writer.EndFrameAsync();
@@ -215,14 +215,14 @@ public class DiffEngineTests
     public async Task HintAreaAboveThreshold_FallsBackToFullScan()
     {
         var (engine, backend, writer) = Make(10, 4);
-        var back = new ScreenBuffer(10, 4);
+        var back = new EngineCells.ScreenBuffer(10, 4);
         writer.BeginFrame();
         engine.Flush(back, writer);
         await writer.EndFrameAsync();
         backend.ResetForTests();
 
-        back.Fill(new Rect(0, 0, 10, 4), Cell.From(new Rune('*'), CellStyle.Plain));
-        engine.FrameHint(new Rect(0, 0, 10, 4)); // 100 % of screen
+        back.Fill(new EngineCells.Rect(0, 0, 10, 4), EngineCells.Cell.From(new Rune('*'), EngineCells.CellStyle.Plain));
+        engine.FrameHint(new EngineCells.Rect(0, 0, 10, 4)); // 100 % of screen
         writer.BeginFrame();
         engine.Flush(back, writer);
         await writer.EndFrameAsync();
@@ -236,15 +236,15 @@ public class DiffEngineTests
     public async Task FrameHint_OverlappingRects_MergeIntoOne()
     {
         var (engine, backend, writer) = Make(20, 10);
-        var back = new ScreenBuffer(20, 10);
+        var back = new EngineCells.ScreenBuffer(20, 10);
         writer.BeginFrame();
         engine.Flush(back, writer);
         await writer.EndFrameAsync();
 
-        back.SetText(2, 2, "abcdefgh", CellStyle.Plain);
-        engine.FrameHint(new Rect(0, 2, 4, 1)); // x ∈ [0..4)
-        engine.FrameHint(new Rect(3, 2, 4, 1)); // overlaps → merged into x ∈ [0..7)
-        engine.FrameHint(new Rect(100, 100, 5, 5)); // fully off-screen → dropped
+        back.SetText(2, 2, "abcdefgh", EngineCells.CellStyle.Plain);
+        engine.FrameHint(new EngineCells.Rect(0, 2, 4, 1)); // x ∈ [0..4)
+        engine.FrameHint(new EngineCells.Rect(3, 2, 4, 1)); // overlaps → merged into x ∈ [0..7)
+        engine.FrameHint(new EngineCells.Rect(100, 100, 5, 5)); // fully off-screen → dropped
         await Assert.That(engine.HintArea()).IsEqualTo(7); // union width 7, not 4+4
 
         writer.BeginFrame();
@@ -259,13 +259,13 @@ public class DiffEngineTests
     public async Task FrameHint_ClipsToScreen()
     {
         var (engine, backend, writer) = Make(10, 5);
-        var back = new ScreenBuffer(10, 5);
+        var back = new EngineCells.ScreenBuffer(10, 5);
         writer.BeginFrame();
         engine.Flush(back, writer);
         await writer.EndFrameAsync();
 
-        back.SetText(8, 4, "tail", CellStyle.Plain);
-        engine.FrameHint(new Rect(5, 3, 50, 50)); // extends past the bottom-right corner
+        back.SetText(8, 4, "tail", EngineCells.CellStyle.Plain);
+        engine.FrameHint(new EngineCells.Rect(5, 3, 50, 50)); // extends past the bottom-right corner
         await Assert.That(engine.HintArea()).IsEqualTo(10); // 5×2 clipped window, not 2500
         writer.BeginFrame();
         engine.Flush(back, writer);
@@ -278,12 +278,12 @@ public class DiffEngineTests
     public async Task HintedFullWidthRow_AdoptsHash_PartialRow_Invalidates()
     {
         var engine = new DiffEngine(10, 2);
-        var back = new ScreenBuffer(10, 2);
+        var back = new EngineCells.ScreenBuffer(10, 2);
         var writer = new AnsiWriter(new RecordingBackend(), syncUpdates: true);
 
         // Full-width hint → FRONT row hash cache must be adopted (authoritative).
-        back.SetText(0, 0, "full", CellStyle.Plain);
-        engine.FrameHint(new Rect(0, 0, 10, 1));
+        back.SetText(0, 0, "full", EngineCells.CellStyle.Plain);
+        engine.FrameHint(new EngineCells.Rect(0, 0, 10, 1));
         writer.BeginFrame();
         engine.Flush(back, writer);
         await writer.EndFrameAsync();
@@ -292,8 +292,8 @@ public class DiffEngineTests
         // Partial-width hint → cells outside the span are unscanned; FRONT's
         // cache must be invalidated instead of adopted, or a later flush could
         // skip the row on a stale hash.
-        back.SetText(6, 1, "part", CellStyle.Plain);
-        engine.FrameHint(new Rect(4, 1, 4, 1));
+        back.SetText(6, 1, "part", EngineCells.CellStyle.Plain);
+        engine.FrameHint(new EngineCells.Rect(4, 1, 4, 1));
         writer.BeginFrame();
         engine.Flush(back, writer);
         await writer.EndFrameAsync();
@@ -307,7 +307,7 @@ public class DiffEngineTests
     public async Task HintBoundary_SplittingWidePair_RepairsLeadHalf()
     {
         var (engine, backend, writer) = Make(10, 1);
-        var back = new ScreenBuffer(10, 1);
+        var back = new EngineCells.ScreenBuffer(10, 1);
         var cjk = new Rune(0x4E2D); // wide: lead + tail pair
 
         writer.BeginFrame();
@@ -316,8 +316,8 @@ public class DiffEngineTests
         backend.ResetForTests();
 
         // Paint the pair at columns 2..3 but hint ONLY the tail half.
-        back.SetRune(2, 0, cjk, CellStyle.Plain);
-        engine.FrameHint(new Rect(3, 0, 7, 1));
+        back.SetRune(2, 0, cjk, EngineCells.CellStyle.Plain);
+        engine.FrameHint(new EngineCells.Rect(3, 0, 7, 1));
         writer.BeginFrame();
         engine.Flush(back, writer);
         await writer.EndFrameAsync();

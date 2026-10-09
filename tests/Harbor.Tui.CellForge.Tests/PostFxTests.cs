@@ -4,6 +4,11 @@ using Harbor.Tui.CellForge.Streaming;
 using Harbor.Tui.CellForge.Widgets;
 using Harbor.Ui.Framework.Rendering;
 using Harbor.Ui.Framework.Rendering.Widgets;
+// #436: the pipeline, effects and diff engine under test are engine-typed;
+// expectations computed through the host PanelFx stay Rendering-typed and
+// cross through packed-uint round-trips (exact — both structs share the
+// layout), compared as uint Values.
+using UIR = Harbor.Ui.Framework.Rendering;
 
 namespace Harbor.Tui.CellForge.Tests;
 
@@ -16,22 +21,24 @@ namespace Harbor.Tui.CellForge.Tests;
 /// </summary>
 public class PostFxTests
 {
-    private static (byte R, byte G, byte B) Channels(PackedColor c) =>
+    private static (byte R, byte G, byte B) Channels(EngineCells.PackedColor c) =>
         c.IsRgb ? c.RgbChannels : ((byte)0, (byte)0, (byte)0);
 
-    private static PackedColor HotTone(PackedColor accent)
+    private static EngineCells.PackedColor HotTone(EngineCells.PackedColor accent)
     {
         var (r, g, b) = Channels(accent);
         const double burn = 0.65; // GlowEffect.HotBurn
-        return PackedColor.Rgb(
+        return EngineCells.PackedColor.Rgb(
             (byte)(r + ((255 - r) * burn)),
             (byte)(g + ((255 - g) * burn)),
             (byte)(b + ((255 - b) * burn)));
     }
 
-    private static string HotSgr(PackedColor accent)
+    private static UIR.PackedColor ToUi(EngineCells.PackedColor c) => UIR.PackedColor.FromRaw(c.Value);
+
+    private static string HotSgr(EngineCells.PackedColor accent)
     {
-        var (r, g, b) = Channels(PanelFx.Lerp(accent, HotTone(accent), GlowEffect.PeakStrength));
+        var (r, g, b) = Channels(ToUi(PanelFx.Lerp(ToUi(accent), ToUi(HotTone(accent)), GlowEffect.PeakStrength)));
         return $"\x1B[38;2;{r};{g};{b}m";
     }
 
@@ -41,7 +48,7 @@ public class PostFxTests
     public async Task EmptyPipeline_TransformIsIdentity()
     {
         var pipeline = new PostFxPipeline();
-        var cell = Cell.From(new Rune('x'), new CellStyle(ChatPalette.Warning, attrs: StyleAttr.Bold));
+        var cell = EngineCells.Cell.From(new Rune('x'), new EngineCells.CellStyle(EngineCells.PackedColor.FromRaw(ChatPalette.Warning.Value), attrs: EngineCells.StyleAttr.Bold));
 
         await Assert.That(pipeline.Count).IsEqualTo(0);
         await Assert.That(pipeline.Transform(3, 2, in cell)).IsEqualTo(cell);
@@ -70,18 +77,18 @@ public class PostFxTests
     [Test]
     public async Task Glow_BrightensAccentCells_OthersPassThrough()
     {
-        var accent = ChatPalette.Warning;
+        var accent = EngineCells.PackedColor.FromRaw(ChatPalette.Warning.Value);
         var effect = new GlowEffect();
-        effect.Update(new GlowRegion(new Rect(0, 0, 20, 3), accent, intensity: 1.0));
+        effect.Update(new GlowRegion(new EngineCells.Rect(0, 0, 20, 3), accent, intensity: 1.0));
 
-        var accentCell = Cell.From(new Rune('!'), new CellStyle(accent, attrs: StyleAttr.Bold));
-        var textCell = Cell.From(new Rune('a'), new CellStyle(ChatPalette.Text));
-        var dimCell = Cell.From(new Rune('-'), new CellStyle(attrs: StyleAttr.Dim));
+        var accentCell = EngineCells.Cell.From(new Rune('!'), new EngineCells.CellStyle(accent, attrs: EngineCells.StyleAttr.Bold));
+        var textCell = EngineCells.Cell.From(new Rune('a'), new EngineCells.CellStyle(EngineCells.PackedColor.FromRaw(ChatPalette.Text.Value)));
+        var dimCell = EngineCells.Cell.From(new Rune('-'), new EngineCells.CellStyle(attrs: EngineCells.StyleAttr.Dim));
 
         var glowed = effect.Transform(5, 1, in accentCell);
-        await Assert.That(glowed.Style.Fg).IsEqualTo(PanelFx.Lerp(accent, HotTone(accent), GlowEffect.PeakStrength));
+        await Assert.That(glowed.Style.Fg.Value).IsEqualTo(PanelFx.Lerp(ToUi(accent), ToUi(HotTone(accent)), GlowEffect.PeakStrength).Value);
         await Assert.That(glowed.Rune).IsEqualTo(accentCell.Rune); // rune untouched
-        await Assert.That(glowed.Style.Attrs).IsEqualTo(StyleAttr.Bold); // attrs untouched
+        await Assert.That((int)glowed.Style.Attrs).IsEqualTo((int)EngineCells.StyleAttr.Bold); // attrs untouched
 
         await Assert.That(effect.Transform(6, 1, in textCell)).IsEqualTo(textCell); // plain text — no wash
         await Assert.That(effect.Transform(7, 1, in dimCell)).IsEqualTo(dimCell);   // hints — no wash
@@ -92,9 +99,9 @@ public class PostFxTests
     public async Task Glow_ZeroIntensity_IsIdentity()
     {
         var effect = new GlowEffect();
-        effect.Update(new GlowRegion(new Rect(0, 0, 10, 2), ChatPalette.Error, intensity: 0.0));
+        effect.Update(new GlowRegion(new EngineCells.Rect(0, 0, 10, 2), EngineCells.PackedColor.FromRaw(ChatPalette.Error.Value), intensity: 0.0));
 
-        var cell = Cell.From(new Rune('!'), new CellStyle(ChatPalette.Error, attrs: StyleAttr.Bold));
+        var cell = EngineCells.Cell.From(new Rune('!'), new EngineCells.CellStyle(EngineCells.PackedColor.FromRaw(ChatPalette.Error.Value), attrs: EngineCells.StyleAttr.Bold));
         await Assert.That(effect.Transform(1, 0, in cell)).IsEqualTo(cell);
     }
 
@@ -102,18 +109,18 @@ public class PostFxTests
     public async Task Glow_PaletteIndexAccent_DoesNotGlow()
     {
         var effect = new GlowEffect();
-        effect.Update(new GlowRegion(new Rect(0, 0, 10, 2), PackedColor.Indexed(3), intensity: 1.0));
+        effect.Update(new GlowRegion(new EngineCells.Rect(0, 0, 10, 2), EngineCells.PackedColor.Indexed(3), intensity: 1.0));
 
-        var cell = Cell.From(new Rune('!'), new CellStyle(PackedColor.Indexed(3)));
+        var cell = EngineCells.Cell.From(new Rune('!'), new EngineCells.CellStyle(EngineCells.PackedColor.Indexed(3)));
         await Assert.That(effect.Transform(1, 0, in cell)).IsEqualTo(cell);
     }
 
     // ── Diff engine hook: bytes + mirror semantics ──────────────────────────
 
-    private static DiffEngine SeededEngine(int cols, int rows, out ScreenBuffer back, out AnsiWriter writer, out RecordingBackend backend)
+    private static DiffEngine SeededEngine(int cols, int rows, out EngineCells.ScreenBuffer back, out AnsiWriter writer, out RecordingBackend backend)
     {
         var engine = new DiffEngine(cols, rows);
-        back = new ScreenBuffer(cols, rows);
+        back = new EngineCells.ScreenBuffer(cols, rows);
         backend = new RecordingBackend();
         writer = new AnsiWriter(backend);
         writer.BeginFrame();
@@ -132,8 +139,8 @@ public class PostFxTests
         var engineB = SeededEngine(cols, rows, out var backB, out var writerB, out var backendB);
         engineB.Effects = new PostFxPipeline(); // armed but empty
 
-        backA.SetText(2, 1, "delta", new CellStyle(ChatPalette.Warning, attrs: StyleAttr.Bold));
-        backB.SetText(2, 1, "delta", new CellStyle(ChatPalette.Warning, attrs: StyleAttr.Bold));
+        backA.SetText(2, 1, "delta", new EngineCells.CellStyle(EngineCells.PackedColor.FromRaw(ChatPalette.Warning.Value), attrs: EngineCells.StyleAttr.Bold));
+        backB.SetText(2, 1, "delta", new EngineCells.CellStyle(EngineCells.PackedColor.FromRaw(ChatPalette.Warning.Value), attrs: EngineCells.StyleAttr.Bold));
 
         writerA.BeginFrame();
         engineA.Flush(backA, writerA);
@@ -150,14 +157,14 @@ public class PostFxTests
     public async Task ArmedGlow_TransformsEmittedStyle_AndMirrorsTerminalView()
     {
         var engine = SeededEngine(30, 4, out var back, out var writer, out var backend);
-        var accent = ChatPalette.Warning;
+        var accent = EngineCells.PackedColor.FromRaw(ChatPalette.Warning.Value);
         var glow = new GlowEffect();
-        glow.Update(new GlowRegion(new Rect(0, 1, 30, 1), accent, intensity: 1.0));
+        glow.Update(new GlowRegion(new EngineCells.Rect(0, 1, 30, 1), accent, intensity: 1.0));
         var pipeline = new PostFxPipeline();
         pipeline.Set(0, glow);
         engine.Effects = pipeline;
 
-        back.SetText(4, 1, "WARN", new CellStyle(accent, attrs: StyleAttr.Bold));
+        back.SetText(4, 1, "WARN", new EngineCells.CellStyle(accent, attrs: EngineCells.StyleAttr.Bold));
         writer.BeginFrame();
         engine.Flush(back, writer);
         await writer.EndFrameAsync();
@@ -167,13 +174,13 @@ public class PostFxTests
 
         // FRONT mirrors the TERMINAL: the emitted cell is stored transformed —
         // that is what makes disarm convergence a one-frame plain repaint.
-        await Assert.That(engine.Front.Get(4, 1).Style.Fg)
-            .IsEqualTo(PanelFx.Lerp(accent, HotTone(accent), GlowEffect.PeakStrength));
+        await Assert.That(engine.Front.Get(4, 1).Style.Fg.Value)
+            .IsEqualTo(PanelFx.Lerp(ToUi(accent), ToUi(HotTone(accent)), GlowEffect.PeakStrength).Value);
 
         // Disarm: the plain cell now differs from the mirrored glow and is
         // repainted once — no glow sticks to the terminal.
         backend.ResetForTests();
-        glow.Update(new GlowRegion(new Rect(0, 1, 30, 1), accent, intensity: 0.0));
+        glow.Update(new GlowRegion(new EngineCells.Rect(0, 1, 30, 1), accent, intensity: 0.0));
         writer.BeginFrame();
         engine.Flush(back, writer);
         await writer.EndFrameAsync();
@@ -189,15 +196,15 @@ public class PostFxTests
         // The pulse's whole point: identical raw BACK content across frames,
         // different glow intensity → the transformed look differs → re-emit.
         var engine = SeededEngine(20, 2, out var back, out var writer, out var backend);
-        var accent = ChatPalette.Warning;
+        var accent = EngineCells.PackedColor.FromRaw(ChatPalette.Warning.Value);
         var glow = new GlowEffect();
         var pipeline = new PostFxPipeline();
         pipeline.Set(0, glow);
         engine.Effects = pipeline;
 
-        back.SetText(0, 0, "PULSE", new CellStyle(accent, attrs: StyleAttr.Bold));
+        back.SetText(0, 0, "PULSE", new EngineCells.CellStyle(accent, attrs: EngineCells.StyleAttr.Bold));
 
-        glow.Update(new GlowRegion(new Rect(0, 0, 20, 1), accent, intensity: 1.0));
+        glow.Update(new GlowRegion(new EngineCells.Rect(0, 0, 20, 1), accent, intensity: 1.0));
         writer.BeginFrame();
         engine.Flush(back, writer);
         await writer.EndFrameAsync();
@@ -206,7 +213,7 @@ public class PostFxTests
 
         backend.ResetForTests();
         writer.BeginFrame();
-        glow.Update(new GlowRegion(new Rect(0, 0, 20, 1), accent, intensity: 0.4));
+        glow.Update(new GlowRegion(new EngineCells.Rect(0, 0, 20, 1), accent, intensity: 0.4));
         engine.Flush(back, writer); // raw BACK unchanged — glow drives the repaint
         await writer.EndFrameAsync();
 
@@ -255,14 +262,14 @@ public class PostFxTests
             // Resolved under the pin, before any await: the ledger captures
             // WarnTone(PulseBirthTick, CurrentTick) during the paint below, so
             // this must be derived from the same catalog, not a later one.
-            PackedColor expectedAccent = PanelFx.WarnTone(100, peakTick).Fg;
+            EngineCells.PackedColor expectedAccent = EngineCells.PackedColor.FromRaw(PanelFx.WarnTone(100, peakTick).Fg.Value);
 
             timeline.Paint(new ScreenBuffer(60, 10), new Rect(0, 0, 60, 10));
             int count = timeline.ConsumeGlowRegions(regions);
             await Assert.That(count).IsEqualTo(1);
             await Assert.That(regions[0].Intensity).IsGreaterThan(0.0);
             await Assert.That(regions[0].Bounds.Height).IsGreaterThan(0);
-            await Assert.That(regions[0].Accent).IsEqualTo(expectedAccent);
+            await Assert.That(regions[0].Accent.Value).IsEqualTo(expectedAccent.Value);
 
             // Pulse trough (¾ cycle — sine negative → clamped 0): the region is
             // STILL published at zero so the glow can be cleared on the terminal.
@@ -339,7 +346,7 @@ public class PostFxTests
         session.FlushFrame();
         backend.ResetForTests();
 
-        session.Back.SetText(1, 0, "plain", CellStyle.Plain);
+        session.Back.SetText(1, 0, "plain", EngineCells.CellStyle.Plain);
         session.BeginFrame();
         session.FlushFrame(); // Effects empty → classic path
 
@@ -355,17 +362,17 @@ public class PostFxTests
         session.BeginFrame();
         session.FlushFrame();
 
-        var accent = ChatPalette.Warning;
+        var accent = EngineCells.PackedColor.FromRaw(ChatPalette.Warning.Value);
         var glow = new GlowEffect();
-        glow.Update(new GlowRegion(new Rect(0, 1, 20, 1), accent, intensity: 1.0));
+        glow.Update(new GlowRegion(new EngineCells.Rect(0, 1, 20, 1), accent, intensity: 1.0));
         session.Effects.Set(0, glow);
 
-        session.Back.SetText(2, 1, "HOT", new CellStyle(accent, attrs: StyleAttr.Bold));
+        session.Back.SetText(2, 1, "HOT", new EngineCells.CellStyle(accent, attrs: EngineCells.StyleAttr.Bold));
         session.BeginFrame();
         session.FlushFrame();
 
         await Assert.That(backend.Text.Contains(HotSgr(accent))).IsTrue();
-        await Assert.That(session.Front.Get(2, 1).Style.Fg)
-            .IsEqualTo(PanelFx.Lerp(accent, HotTone(accent), GlowEffect.PeakStrength));
+        await Assert.That(session.Front.Get(2, 1).Style.Fg.Value)
+            .IsEqualTo(PanelFx.Lerp(ToUi(accent), ToUi(HotTone(accent)), GlowEffect.PeakStrength).Value);
     }
 }

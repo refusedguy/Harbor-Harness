@@ -22,11 +22,11 @@ namespace Harbor.Tui.CellForge.Tests;
 /// </summary>
 public class CellForgeDiffEncoderFactoryTests
 {
-    private static ScreenBuffer MakeEngineBuffer(int cols, int rows, char fill)
+    private static EngineCells.ScreenBuffer MakeEngineBuffer(int cols, int rows, char fill)
     {
-        var buffer = new ScreenBuffer(cols, rows);
+        var buffer = new EngineCells.ScreenBuffer(cols, rows);
         for (int y = 0; y < rows; y++)
-            buffer.SetText(0, y, new string(fill, cols), CellStyle.Plain);
+            buffer.SetText(0, y, new string(fill, cols), EngineCells.CellStyle.Plain);
         return buffer;
     }
 
