@@ -276,6 +276,7 @@ public sealed class RateLimitedLlmClient : ILlmClient
 public sealed class LoadSignals
 {
     private readonly ConcurrentDictionary<string, byte> _dispatchErrors = new();
+    private readonly ConcurrentQueue<AgentEvent> _recorded = new();
     private int _agentStarts;
     private int _agentEnds;
 
@@ -283,10 +284,18 @@ public sealed class LoadSignals
     public int AgentEnds => Volatile.Read(ref _agentEnds);
     public IReadOnlyCollection<string> DispatchErrors => [.. _dispatchErrors.Keys];
 
+    /// <summary>
+    ///     Every bus event in arrival order (snapshot). Ordering and
+    ///     cross-session-bleed assertions read this, not live state, so
+    ///     they observe the interleaving the run actually produced.
+    /// </summary>
+    public IReadOnlyList<AgentEvent> RecordedEvents => _recorded.ToArray();
+
     public IDisposable SubscribeBus(IEventBus bus)
     {
         return bus.Subscribe((AgentEvent evt, CancellationToken _) =>
         {
+            _recorded.Enqueue(evt);
             switch (evt)
             {
                 case AgentStartEvent:
