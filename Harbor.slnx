@@ -86,6 +86,7 @@
         <Project Path="src/Harbor.Ipc.Client/Harbor.Ipc.Client.csproj"/>
         <Project Path="src/Harbor.Ipc.InProcess/Harbor.Ipc.InProcess.csproj"/>
         <Project Path="src/Harbor.Ipc.Server/Harbor.Ipc.Server.csproj"/>
+        <Project Path="src/Harbor.Transport.Remote/Harbor.Transport.Remote.csproj"/>
     </Folder>
 
     <Folder Name="/src/TUI/">
