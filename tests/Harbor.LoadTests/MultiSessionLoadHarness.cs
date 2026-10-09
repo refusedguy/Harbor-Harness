@@ -8,7 +8,9 @@ using Harbor.Application.Resilience;
 using Harbor.Application.Sessions;
 using Harbor.E2E.Framework;
 using Harbor.Providers.OpenAiCompatible;
+using Harbor.Storage.Jsonl;
 using Harbor.Storage.Memory;
+using Harbor.Storage.Sqlite;
 using Harbor.Ui.Framework.State;
 using Harbor.Abstractions.Models;
 using CSharpFunctionalExtensions;
@@ -16,14 +18,28 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Harbor.Registries.Agents;
 using Harbor.Registries.Tools;
 using Harbor.Registries.Events;
+using Microsoft.Data.Sqlite;
 
 namespace Harbor.LoadTests;
+
+/// <summary>
+///     Which <see cref="ISessionStore" /> implementation backs a load run.
+///     Memory is the default (fast, no I/O); Jsonl and Sqlite add write
+///     contention and file-handle pressure to the matrix (#420).
+/// </summary>
+public enum StoreBackend
+{
+    Memory,
+    Jsonl,
+    Sqlite,
+}
 
 /// <summary>
 ///     In-process multi-session load harness: composes the REAL agent stack
     ///     (shared <see cref="AgentLoop" /> singleton + shared
 ///     <see cref="InMemoryEventBus" /> + real <see cref="OpenAiCompatibleLlmClient" />
-///     over HTTP/SSE + <see cref="MemorySessionStore" />) and drives
+///     over HTTP/SSE + one <see cref="ISessionStore" /> (memory, JSONL or
+///     SQLite per <see cref="StoreBackend" />) and drives
 ///     <c>sessionCount × agentsPerSession</c> agent runs against one
     ///     <see cref="MockLlmServer" /> in echo mode.
 /// </summary>
@@ -48,7 +64,9 @@ public sealed class MultiSessionLoadHarness : IAsyncDisposable
 
     private readonly MockLlmServer _server;
     private readonly InMemoryEventBus _bus;
-    private readonly MemorySessionStore _store;
+    private readonly ISessionStore _store;
+    private readonly StoreBackend _backend;
+    private readonly string? _backendTempPath;
     private readonly AgentLoop _loop;
     private readonly TokenBucketRateLimiter _limiter;
     private readonly LoadSignals _signals;
@@ -61,7 +79,9 @@ public sealed class MultiSessionLoadHarness : IAsyncDisposable
     private MultiSessionLoadHarness(
         MockLlmServer server,
         InMemoryEventBus bus,
-        MemorySessionStore store,
+        ISessionStore store,
+        StoreBackend backend,
+        string? backendTempPath,
         AgentLoop loop,
         TokenBucketRateLimiter limiter,
         LoadSignals signals,
@@ -70,6 +90,8 @@ public sealed class MultiSessionLoadHarness : IAsyncDisposable
         _server = server;
         _bus = bus;
         _store = store;
+        _backend = backend;
+        _backendTempPath = backendTempPath;
         _loop = loop;
         _limiter = limiter;
         _signals = signals;
@@ -79,6 +101,9 @@ public sealed class MultiSessionLoadHarness : IAsyncDisposable
     public LoadSignals Signals => _signals;
 
     public TokenBucketRateLimiter Limiter => _limiter;
+
+    /// <summary>Which store implementation backs this run (for failure messages).</summary>
+    public StoreBackend Backend => _backend;
 
     public IReadOnlyList<LoadSessionContext> Contexts => _contexts;
 
@@ -94,7 +119,8 @@ public sealed class MultiSessionLoadHarness : IAsyncDisposable
         int sessionCount,
         int agentsPerSession,
         int bucketCapacity = 6,
-        TimeSpan? chunkDelay = null)
+        TimeSpan? chunkDelay = null,
+        StoreBackend backend = StoreBackend.Memory)
     {
         var server = new MockLlmServer();
         await server.StartAsync().ConfigureAwait(false);
@@ -102,7 +128,7 @@ public sealed class MultiSessionLoadHarness : IAsyncDisposable
         server.SetEchoResponse(Model);
 
         var bus = new InMemoryEventBus();
-        var store = new MemorySessionStore();
+        (ISessionStore store, string? backendTempPath) = CreateStore(backend);
         var limiter = new TokenBucketRateLimiter(bucketCapacity);
 
         // Real OpenAI-compatible HTTP client → bucket → mock server.
@@ -139,7 +165,7 @@ public sealed class MultiSessionLoadHarness : IAsyncDisposable
             NullLogger<AgentLoop>.Instance);
 
         var signals = new LoadSignals();
-        var harness = new MultiSessionLoadHarness(server, bus, store, loop, limiter, signals, agentsPerSession);
+        var harness = new MultiSessionLoadHarness(server, bus, store, backend, backendTempPath, loop, limiter, signals, agentsPerSession);
         harness._subscriptions.Add(signals.SubscribeBus(bus));
         harness._agentDefs.AddRange(agentDefs);
         for (int s = 0; s < sessionCount; s++)
@@ -152,6 +178,28 @@ public sealed class MultiSessionLoadHarness : IAsyncDisposable
         }
 
         return harness;
+    }
+
+    /// <summary>
+    ///     Build the backing store for a run. File-backed backends get an
+    ///     isolated temp path per harness (deleted best-effort on dispose),
+    ///     so concurrent matrix rows never share files.
+    /// </summary>
+    private static (ISessionStore Store, string? TempPath) CreateStore(StoreBackend backend)
+    {
+        switch (backend)
+        {
+            case StoreBackend.Memory:
+                return (new MemorySessionStore(), null);
+            case StoreBackend.Jsonl:
+                string dir = Path.Combine(Path.GetTempPath(), $"harbor-load-{Guid.NewGuid():N}");
+                return (new JsonlSessionStore(dir, NullLogger<JsonlSessionStore>.Instance), dir);
+            case StoreBackend.Sqlite:
+                string db = Path.Combine(Path.GetTempPath(), $"harbor-load-{Guid.NewGuid():N}.db");
+                return (new SqliteSessionStore(db, NullLogger<SqliteSessionStore>.Instance), db);
+            default:
+                throw new ArgumentOutOfRangeException(nameof(backend));
+        }
     }
 
     /// <summary>
@@ -249,6 +297,27 @@ public sealed class MultiSessionLoadHarness : IAsyncDisposable
 
         _limiter.Dispose();
         await _server.StopAsync().ConfigureAwait(false);
+
+        if (_backendTempPath is not null)
+        {
+            // Best-effort: a store that failed mid-run must not fail disposal.
+            try
+            {
+                SqliteConnection.ClearAllPools();
+                if (Directory.Exists(_backendTempPath))
+                {
+                    Directory.Delete(_backendTempPath, recursive: true);
+                }
+                else if (File.Exists(_backendTempPath))
+                {
+                    File.Delete(_backendTempPath);
+                }
+            }
+            catch (Exception)
+            {
+                // Temp residue on a shared CI runner is harmless; swallow.
+            }
+        }
     }
 }
 

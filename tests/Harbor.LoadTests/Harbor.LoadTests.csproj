@@ -10,6 +10,8 @@
     <ProjectReference Include="../../src/Harbor.Providers.OpenAiCompatible/Harbor.Providers.OpenAiCompatible.csproj"/>
     <ProjectReference Include="../../src/Harbor.Registries/Harbor.Registries.csproj"/>
     <ProjectReference Include="../../src/Harbor.Storage.Memory/Harbor.Storage.Memory.csproj"/>
+    <ProjectReference Include="../../src/Harbor.Storage.Jsonl/Harbor.Storage.Jsonl.csproj"/>
+    <ProjectReference Include="../../src/Harbor.Storage.Sqlite/Harbor.Storage.Sqlite.csproj"/>
     <ProjectReference Include="../../src/Harbor.Ui.Framework.State/Harbor.Ui.Framework.State.csproj"/>
     <ProjectReference Include="../Harbor.E2E.Framework/Harbor.E2E.Framework.csproj"/>
   </ItemGroup>
