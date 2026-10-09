@@ -111,6 +111,44 @@ public class UiStageCounterTests
     }
 
     /// <summary>
+    ///     Engine twin of <see cref="Counted" /> (#436: the write stage moved
+    ///     into the standalone leaf with its writer, so its instrument moved
+    ///     with it — <c>EngineStageCounters</c> over the same switch discipline).
+    /// </summary>
+    private static EngineCells.EngineStageSnapshot CountedEngine(Action work)
+    {
+        EngineCells.EngineStageCounters.Reset();
+        EngineCells.EngineStageCounters.Enabled = true;
+        try
+        {
+            work();
+            return EngineCells.EngineStageCounters.Snapshot();
+        }
+        finally
+        {
+            EngineCells.EngineStageCounters.Enabled = false;
+            EngineCells.EngineStageCounters.Reset();
+        }
+    }
+
+    /// <summary>Async twin of <see cref="CountedEngine" />.</summary>
+    private static async ValueTask<EngineCells.EngineStageSnapshot> CountedEngineAsync(Func<ValueTask> work)
+    {
+        EngineCells.EngineStageCounters.Reset();
+        EngineCells.EngineStageCounters.Enabled = true;
+        try
+        {
+            await work();
+            return EngineCells.EngineStageCounters.Snapshot();
+        }
+        finally
+        {
+            EngineCells.EngineStageCounters.Enabled = false;
+            EngineCells.EngineStageCounters.Reset();
+        }
+    }
+
+    /// <summary>
     ///     Parse fires exactly once per fresh push. This is the positive
     ///     control the store-path suite depends on:
     ///     <c>StorePathSkipsMarkdownParseTests</c> asserts
@@ -233,7 +271,9 @@ public class UiStageCounterTests
         var backend = new RecordingBackend();
         var writer = new AnsiWriter(backend, true);
 
-        var snap = Counted(() =>
+        // #436: the write stage lives in the engine now — this reads the
+        // engine counter, which the backend's own tally keeps honest.
+        var snap = CountedEngine(() =>
         {
             writer.BeginFrame();
             writer.WriteText("x");
@@ -264,7 +304,7 @@ public class UiStageCounterTests
         var backend = new RecordingBackend();
         var writer = new AnsiWriter(backend);
 
-        var snap = await CountedAsync(async () =>
+        var snap = await CountedEngineAsync(async () =>
         {
             writer.BeginFrame();
             writer.WriteText("x");
@@ -328,6 +368,9 @@ public class UiStageCounterTests
             .Because("Enabled == false — an unconditional counter passes the other tests and fails here");
         await Assert.That(snap.BlocksLaidOut).IsEqualTo(0).Because("Enabled == false");
         await Assert.That(snap.TerminalWrites).IsEqualTo(0).Because("Enabled == false");
+        await Assert.That(EngineCells.EngineStageCounters.TerminalWrites)
+            .IsEqualTo(0)
+            .Because("the engine counter obeys the same switch discipline — off here, so the writer above must not move it");
 
         await Assert.That(backend.Writes.Count)
             .IsEqualTo(1)
