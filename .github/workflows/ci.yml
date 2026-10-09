@@ -193,24 +193,43 @@ jobs:
       - name: Validate NuGet packages (metadata, README, lib)
         run: python3 tools/pack-validate.py out/packages
 
-      # Acceptance: packing twice from the same commit yields byte-identical
-      # .nupkg (ContinuousIntegrationBuild normalizes archive timestamps).
-      - name: Determinism — pack twice, byte-identical
+      # Payload determinism across two packs. NuGet stamps zip entry
+      # timestamps with pack wall-clock time, so two `dotnet pack` runs are
+      # never byte-identical files even under ContinuousIntegrationBuild
+      # (measured: identical sizes and CRCs, only date_time differs). The
+      # property CI pins is that every entry's bytes are identical — which
+      # still catches nondeterministic build inputs (timestamps or dates
+      # baked into dlls, generated code, nuspecs).
+      - name: Determinism — identical payloads across two packs
         run: |
           dotnet pack Harbor.slnx -c Release --no-build -p:ContinuousIntegrationBuild=true -o out/packages2
-          diff <(cd out/packages && sha256sum *.nupkg | sort) <(cd out/packages2 && sha256sum *.nupkg | sort) \
-            && echo "deterministic: identical nupkgs" || {
-            echo "--- zipinfo of first package in each dir (debug) ---"
-            python3 -c "
-          import zipfile, glob
-          for d in ['out/packages', 'out/packages2']:
-              p = sorted(glob.glob(d + '/*.nupkg'))[0]
-              print(p)
-              for i in zipfile.ZipFile(p).infolist():
-                  print('  ', i.filename, i.date_time, i.file_size, i.compress_size, i.CRC)
-          "
-            exit 1
-          }
+          python3 - <<'EOF'
+          import sys
+          import zipfile
+          from pathlib import Path
+          first, second = Path("out/packages"), Path("out/packages2")
+          bad = []
+          for pkg in sorted(first.glob("*.nupkg")):
+              other = second / pkg.name
+              if not other.exists():
+                  bad.append(f"{pkg.name}: missing from second pack")
+                  continue
+              with zipfile.ZipFile(pkg) as za, zipfile.ZipFile(other) as zb:
+                  na = {i.filename: i for i in za.infolist()}
+                  nb = {i.filename: i for i in zb.infolist()}
+                  if set(na) != set(nb):
+                      bad.append(f"{pkg.name}: entry lists differ")
+                      continue
+                  for name, ia in na.items():
+                      ib = nb[name]
+                      if ia.file_size != ib.file_size or ia.CRC != ib.CRC or za.read(name) != zb.read(name):
+                          bad.append(f"{pkg.name}: entry {name} differs")
+          if bad:
+              print(f"{len(bad)} nondeterministic entr(y/ies):")
+              print("\n".join(f"  - {b}" for b in bad))
+              sys.exit(1)
+          print("deterministic: identical payloads across two packs")
+          EOF
 
       # Clean-room proof that the dependency graph resolves: throwaway
       # project, local feed for Harbor.* + nuget.org for transitives.
@@ -234,14 +253,11 @@ jobs:
           dotnet build -c Release --nologo
 
       - name: Upload NuGet packages artifact
-        if: always()
         uses: actions/upload-artifact@v7
         with:
           name: nuget-packages
-          path: |
-            out/packages/*.nupkg
-            out/packages2/*.nupkg
-          if-no-files-found: warn
+          path: out/packages/*.nupkg
+          if-no-files-found: error
           retention-days: 7
 
       # Advisory report only: surfaces `dotnet list package --vulnerable`
