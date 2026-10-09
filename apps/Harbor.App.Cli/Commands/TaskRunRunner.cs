@@ -82,8 +82,10 @@ public static class TaskRunRunner
 
         // S1 (#42): pin and print the workspace contract before any agent work.
         // Dirty tracked state or any git failure rejects the run — never pinned
-        // silently. S1 stamps the Copy intent; worktree materialization lands in S2.
-        var contractResult = await WorkspaceInspector.InspectAsync(Directory.GetCurrentDirectory()).ConfigureAwait(false);
+        // silently. S2 (#376) pins the Worktree intent: the agent runs in an
+        // isolated worktree, never in the caller's tree.
+        var contractResult = await WorkspaceInspector.InspectAsync(
+            Directory.GetCurrentDirectory(), WorkspaceIsolation.Worktree).ConfigureAwait(false);
         if (contractResult.IsFailure)
         {
             await stderr.WriteLineAsync($"workspace contract rejected: {contractResult.Error}").ConfigureAwait(false);
@@ -97,9 +99,27 @@ public static class TaskRunRunner
             $"untracked={(contract.UntrackedPresent ? "yes" : "no")} " +
             $"limits={contract.Limits.TimeoutSeconds}s/{contract.Limits.MaxSteps}steps").ConfigureAwait(false);
 
+        // S2 (#376): materialize the isolated worktree and run the agent in
+        // it. Fail-closed: a materialization failure rejects the run, it never
+        // falls back to the caller's tree. No automatic restore/build runs in
+        // the isolated copy — the operator does that (see the printed line).
+        var isolated = await WorkspaceMaterializer.MaterializeAsync(contract).ConfigureAwait(false);
+        if (isolated.IsFailure)
+        {
+            await stderr.WriteLineAsync($"workspace materialization failed: {isolated.Error}").ConfigureAwait(false);
+            return 1;
+        }
+
+        var workspace = isolated.Value;
+        await stdout.WriteLineAsync($"path={workspace.Path}").ConfigureAwait(false);
+        await stdout.WriteLineAsync(
+            "Isolated worktree is checked out at the pinned revision; " +
+            "a restore/build inside the isolated copy is required before building or testing there " +
+            "(no automatic 'dotnet restore' was run).").ConfigureAwait(false);
+
         var result = await runner.RunAsync(
             definition.Value,
-            new SubAgentRunRequest(prompt, ParentSessionId: null),
+            new SubAgentRunRequest(prompt, ParentSessionId: null, WorkingDirectory: workspace.Path),
             CancellationToken.None).ConfigureAwait(false);
 
         // B3.1 (#405): the line that answers "did the tests pass?", which nothing
