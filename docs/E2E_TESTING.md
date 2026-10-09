@@ -187,6 +187,22 @@ dotnet run --project tests/Harbor.E2E.Cli -c Release --no-build -- \
   --minimum-expected-tests 1 --output Detailed
 ```
 
+### 4.6 Load matrix (concurrent multi-session)
+
+`tests/Harbor.LoadTests/` drives `sessions × agents` runs through the real
+agent stack against one `MockLlmServer` in echo mode, on every storage
+backend (see `tests/Harbor.LoadTests/README.md`). The default run executes
+only the fast matrix; the heavy shapes (`50×1` per backend, `100×1`) need
+`HARBOR_LOAD=1`:
+
+```bash
+dotnet run --project tests/Harbor.LoadTests -c Release --no-build -- --minimum-expected-tests 1
+HARBOR_LOAD=1 dotnet run --project tests/Harbor.LoadTests -c Release --no-build -- --minimum-expected-tests 1
+```
+
+Budgets are relative (same-run paired ratio) or counts, never absolute
+wall-clock thresholds (#996, #998).
+
 ---
 
 ## 5. How it works — wiring the mock into the CLI
