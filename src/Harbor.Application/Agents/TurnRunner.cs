@@ -591,6 +591,14 @@ internal sealed class TurnRunner(
     ///     each gets an <c>IsError=true</c> result carrying the raw args tail so
     ///     the model can retry with well-formed JSON next turn.
     /// </summary>
+    /// <remarks>
+    ///     #401 B2 (Abandoned visibility): calls that outlived the accepted
+    ///     stop arrive here already marked Abandoned by the dispatcher and are
+    ///     persisted like any other result — that is what makes the abandonment
+    ///     observable from <c>RunOutcome.Reconstruct</c> per-call state instead
+    ///     of a silent success. This method adds no second marking; it counts
+    ///     them for the log so the boundary is visible at runtime too.
+    /// </remarks>
     private async Task<ToolResultMessage> ExecuteTurnToolCallsAsync(
         List<ToolCallPart> toolCalls,
         List<MalformedToolCall> malformedCalls,
@@ -619,6 +627,24 @@ internal sealed class TurnRunner(
                 malformed.ToolName,
                 $"Malformed JSON arguments for tool '{malformed.ToolName}' — tool was NOT executed. Raw arguments tail: {malformed.RawArgsTail}",
                 true));
+        }
+
+        // #401 B2: make the Accepted boundary visible at runtime — Abandoned
+        // entries persist above like any other result; the count lands in the
+        // log next to the dispatcher's own accepted-stop record.
+        int abandoned = 0;
+        for (int i = 0; i < results.Count; i++)
+        {
+            if (results[i].Output.Contains(
+                    ToolCallLink.AbandonedOutputMarker, StringComparison.Ordinal))
+            {
+                abandoned++;
+            }
+        }
+
+        if (abandoned > 0)
+        {
+            logger.LogDebug("Turn carried {Abandoned} abandoned tool call(s) after the accepted stop", abandoned);
         }
 
         return new ToolResultMessage(
