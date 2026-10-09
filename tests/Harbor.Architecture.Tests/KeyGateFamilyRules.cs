@@ -949,6 +949,12 @@ public class KeyGateFamilyRules
     ///   KeyEventAdapter.cs  — DTO → State translation. Same shape.
     ///   UiKey.cs            — the State-side type, same as KeyEvent.cs.
     ///
+    ///   The five Harbor.Tui.CellForge.Engine/Input rows below are #436's
+    ///   engine-owned ports of the same vocabulary (verbatim copies so the
+    ///   engine stands without the Rendering reference). They match the
+    ///   routed-site grep the way the Rendering originals do — a key arrives,
+    ///   a rune is judged inside the factories — and they gate nothing.
+    ///
     /// ChatKeyMap.cs is deliberately NOT here: :156 is a real gate (an
     /// unmatched printable rune becomes <c>ChatAction.Char</c>, i.e. text), so
     /// it is a site and is in the table.
@@ -959,6 +965,11 @@ public class KeyGateFamilyRules
         "src/Harbor.Ui.Framework.Rendering/Input/KeyEventMapper.cs",
         "src/Harbor.Ui.Framework.State/State/KeyEventAdapter.cs",
         "src/Harbor.Ui.Framework.State/State/UiKey.cs",
+        "src/Harbor.Tui.CellForge.Engine/Input/KeyEvent.cs",
+        "src/Harbor.Tui.CellForge.Engine/Input/KeyCode.cs",
+        "src/Harbor.Tui.CellForge.Engine/Input/KeyEventType.cs",
+        "src/Harbor.Tui.CellForge.Engine/Input/KeyModifiers.cs",
+        "src/Harbor.Tui.CellForge.Engine/Input/UiKeyDto.cs",
     };
 
     /// <summary>
