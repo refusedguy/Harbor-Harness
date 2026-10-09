@@ -15,8 +15,8 @@ namespace Harbor.Plugins.Runtime.Tests.Security;
 
 /// <summary>
 ///     Execution sandbox contract (<see cref="SandboxedPluginTool" />): every
-///     plugin-contributed tool call is bounded by a wall-clock timeout and an
-///     allocation budget; blocks surface as error <see cref="ToolResult" />s plus
+///     plugin-contributed tool call is bounded by a wall-clock timeout and a
+///     result-payload budget; blocks surface as error <see cref="ToolResult" />s plus
 ///     <see cref="PluginBlockedEvent" /> and a deny audit line, while ordinary
 ///     capability use is audited as allow.
 /// </summary>
@@ -135,8 +135,8 @@ public sealed class SandboxedPluginToolTests
     {
         var bus = new RecordingEventBus();
         var audit = new RecordingAuditLog();
-        var inner = new FakeTool(Args("{}"), ToolResult.Success("ok"), allocateBytes: 64 * 1024);
-        var tool = Wrap(inner, bus, audit, memoryBudget: 1);
+        var inner = new FakeTool(Args("{}"), ToolResult.Success(new string('x', 1024)));
+        var tool = Wrap(inner, bus, audit, memoryBudget: 16);
 
         var result = await tool.ExecuteAsync(Args("{}"), Ctx);
 
@@ -144,6 +144,55 @@ public sealed class SandboxedPluginToolTests
         await Assert.That(result.Output).Contains("[sandbox:memory]");
         await Assert.That(bus.Of<PluginBlockedEvent>()).Count().IsEqualTo(1);
         await Assert.That(bus.Of<PluginBlockedEvent>()[0].Reason).IsEqualTo("memory");
+    }
+
+    /// <summary>
+    ///     Regression for issue #1050: ambient allocations on other threads while the
+    ///     tool awaits must not convert a healthy small-payload result into a
+    ///     <c>[sandbox:memory]</c> error. RED on the process-wide
+    ///     <c>GC.GetTotalAllocatedBytes</c> guard (background ~20+ MB inside the
+    ///     await window exceeds the 10 MB budget); GREEN once the guard measures
+    ///     only the call's own result payload.
+    /// </summary>
+    [Test]
+    public async Task Execute_AmbientAllocationsOnOtherThreads_DoNotBlockSmallPayload()
+    {
+        var bus = new RecordingEventBus();
+        var audit = new RecordingAuditLog();
+        var inner = new FakeTool(
+            Args("{}"),
+            ToolResult.Success("ok"),
+            delay: TimeSpan.FromMilliseconds(200));
+        var tool = Wrap(inner, bus, audit);
+
+        using var bgCts = new CancellationTokenSource();
+        var bg = Task.Run(async () =>
+        {
+            for (int i = 0; i < 40 && !bgCts.Token.IsCancellationRequested; i++)
+            {
+                _ = new byte[1024 * 1024];
+                await Task.Delay(5, bgCts.Token).ConfigureAwait(false);
+            }
+        }, bgCts.Token);
+
+        try
+        {
+            var result = await tool.ExecuteAsync(Args("{}"), Ctx);
+
+            await Assert.That(result.IsError).IsFalse();
+            await Assert.That(bus.Of<PluginBlockedEvent>()).IsEmpty();
+        }
+        finally
+        {
+            await bgCts.CancelAsync().ConfigureAwait(false);
+            try
+            {
+                await bg.ConfigureAwait(false);
+            }
+            catch (OperationCanceledException)
+            {
+            }
+        }
     }
 
     [Test]
@@ -194,21 +243,16 @@ public sealed class SandboxedPluginToolTests
         private readonly ToolResult _result;
         private readonly TimeSpan? _delay;
         private readonly bool _ignoresToken;
-        private readonly long _allocateBytes;
 
         public FakeTool(
             JsonElement schemaArgs,
             ToolResult result,
             TimeSpan? delay = null,
-            bool ignoresToken = false,
-            long allocateBytes = 0)
+            bool ignoresToken = false)
         {
             _result = result;
             _delay = delay;
             _ignoresToken = ignoresToken;
-            _allocateBytes = allocateBytes;
-            if (allocateBytes > 0)
-                _ = new byte[allocateBytes];
         }
 
         public ToolName Name => ToolName.Create("google_search");

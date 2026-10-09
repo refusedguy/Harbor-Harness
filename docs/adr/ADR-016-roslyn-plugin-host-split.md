@@ -1,4 +1,4 @@
-# ADR-015: Roslyn plugin-host fate — AOT main plus JIT split host (option 2)
+# ADR-016: Roslyn plugin-host fate — AOT main plus JIT split host (option 2)
 
 > **Status (2026-10-09):** dated record, not normative. Every cited fact below was
 > read at `dev` = `0da7f2ba` (branch `dev`, HEAD `0da7f2ba`). This document records
@@ -211,5 +211,4 @@ recipe notes), `src/Harbor.Plugins.Host/README.md` (parity plus failure paths),
 `src/Harbor.Plugins.Host/McpStdioServer.cs` (protocol version),
 `src/Harbor.Plugins.Host/Harbor.Plugins.Host.csproj` (`PublishAot=false`),
 `Harbor.slnx` (Host row), `docs/specs/17-agentic-product-direction.md`
-sections 7 and 8, issues #48, #411, #413, #414, #419 and PRs #1008, #1014,
-#1041, #1043.
+sections 7 and 8, issues #48, #411, #413, #414, #419 and PRs #1008, #1014, #1041, #1043.

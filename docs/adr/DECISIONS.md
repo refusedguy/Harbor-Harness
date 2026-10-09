@@ -402,7 +402,28 @@ one real defect found in the blast radius is fixed — `CountDelegations` swallo
 
 ---
 
-## ADR-015: Roslyn plugin-host fate — AOT main plus JIT split host (option 2)
+## ADR-015: i18n shared string catalogue lives in `Harbor.Ui.Framework.Abstractions`
+
+Issue #434, slice 1 (inventory + catalogue home only). The shared catalogue is
+`UiStrings.resx` (`en` = source of truth) with per-locale satellites plus a
+missing-key → `en` accessor, placed in `Harbor.Ui.Framework.Abstractions`
+because that project is already `Layer.Domain` in `FullLayerMatrixTests` (cf.
+ADR-009) — reachable from TUI renderers, both apps and `contrib`-Blazor with
+zero new matrix edges, while `Harbor.Abstractions` stays frozen. Avalonia
+projects the same keys into per-locale `ResourceDictionary` XAML (rule 9),
+Blazor adapts via `IStringLocalizer`, TUI/CLI look up directly with a
+width/unicode fallback. Inventory (~1 370 occurrences pre-dedupe), the
+`InvariantCulture` user-facing hit list, and the high-traffic group table:
+
+- [inventory](../I18N_STRING_INVENTORY.md), full text:
+  [ADR-015](ADR-015-i18n-string-catalogue-home.md).
+
+Locales, fallback tests, extraction, and the culture-format fixes are later
+slices.
+
+---
+
+## ADR-016: Roslyn plugin-host fate — AOT main plus JIT split host (option 2)
 
 Issue #418 (slice S4 of epic #48) asked for the decision the S1–S3 evidence slices
 support. Measured at `dev` = `0da7f2ba`: S1 JIT half landed (PR #1043, about
@@ -422,4 +443,4 @@ half over UDS) and spec 17 sections 7 vs 8 are spelled out there too. Owner
 sign-off lands as the closing comment on #418 before any gated perf work merges.
 
 - Full text, evidence table, per-option verdicts, unblock/still-blocked lists:
-  [ADR-015](ADR-015-roslyn-plugin-host-split.md).
+  [ADR-016](ADR-016-roslyn-plugin-host-split.md).
