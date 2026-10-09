@@ -104,6 +104,14 @@ public sealed record ChatDomainState
     public SessionId? ActiveSessionId { get; init; }
 
     /// <summary>
+    ///     Screenshot-markup overlay session (#400 slice 1/2). Closed until the
+    ///     host dispatches <see cref="ChatAppMsg.OpenMarkup" /> over an image
+    ///     row; transitions live in <see cref="ChatAppReducer" />. The CellForge
+    ///     overlay paints this snapshot — it keeps no session of its own.
+    /// </summary>
+    public MarkupOverlayState Markup { get; init; } = MarkupOverlayState.Closed;
+
+    /// <summary>
     ///     Open tabs in tab order plus the focused tab (#388). Distinct from
     ///     <see cref="Sessions" />: that is every session the store knows about,
     ///     this is the subset that is open right now. Transitions live in

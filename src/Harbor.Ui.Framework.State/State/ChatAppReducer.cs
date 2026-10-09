@@ -91,6 +91,35 @@ public static class ChatAppReducer
         ChatAppMsg.CycleNextTab => CycleNextTab(state),
         ChatAppMsg.CyclePreviousTab => CyclePreviousTab(state),
         ChatAppMsg.HydrateTabStrip ht => HydrateTabStrip(state, ht),
+        ChatAppMsg.OpenMarkup om => ReduceResult.NoOp(state with
+        {
+            Chat = state.Chat with { Markup = MarkupOverlayState.Open(om.SourcePath, om.SourceName, om.SourceWidth, om.SourceHeight, om.ScrollOffset) }
+        }),
+        ChatAppMsg.CloseMarkup => ReduceResult.NoOp(state with
+        {
+            Chat = state.Chat with { Markup = MarkupOverlayState.Closed }
+        }),
+        ChatAppMsg.MarkupSelectTool st => WithMarkup(state, m => m with { ActiveTool = st.Tool, Error = string.Empty }),
+        ChatAppMsg.MarkupMoveCursor mc => WithMarkup(state, m => m with { Cursor = m.Cursor.Shift(mc.Dx, mc.Dy) }),
+        ChatAppMsg.MarkupPlace => WithMarkup(state, PlaceAtCursor),
+        ChatAppMsg.MarkupSetPendingText pt => WithMarkup(state, m => m with
+        {
+            PendingText = pt.Text.Length <= MarkupOverlayState.MaxPendingTextLength
+                ? pt.Text
+                : pt.Text[..MarkupOverlayState.MaxPendingTextLength]
+        }),
+        ChatAppMsg.MarkupNudge mn => WithMarkup(state, m => m with { Model = m.Model.MoveSelected(mn.Dx, mn.Dy), Error = string.Empty }),
+        ChatAppMsg.MarkupResize mr => WithMarkup(state, m => m with { Model = m.Model.ResizeSelected(mr.Dx, mr.Dy), Error = string.Empty }),
+        ChatAppMsg.MarkupSelectNext => WithMarkup(state, m => m with { Model = m.Model.SelectNext() }),
+        ChatAppMsg.MarkupSelectAt sa => WithMarkup(state, m => SelectAtPoint(m, NormalizedPoint.Create(sa.X, sa.Y))),
+        ChatAppMsg.MarkupPressAt pa => WithMarkup(state, m => PressAtPoint(m, NormalizedPoint.Create(pa.X, pa.Y))),
+        ChatAppMsg.MarkupDragTo dt => WithMarkup(state, m => DragToPoint(m, NormalizedPoint.Create(dt.X, dt.Y))),
+        ChatAppMsg.MarkupReleaseAt ra => WithMarkup(state, m => ReleaseAtPoint(m, NormalizedPoint.Create(ra.X, ra.Y))),
+        ChatAppMsg.MarkupDeleteSelected => WithMarkup(state, m => m with { Model = m.Model.Delete(), Error = string.Empty }),
+        ChatAppMsg.MarkupUndo => WithMarkup(state, m => m with { Model = m.Model.UndoFrame() }),
+        ChatAppMsg.MarkupRedo => WithMarkup(state, m => m with { Model = m.Model.RedoFrame() }),
+        ChatAppMsg.MarkupSaved ms => WithMarkup(state, m => m with { SavedPath = ms.Path ?? string.Empty, Error = string.Empty }),
+        ChatAppMsg.MarkupFailed mf => WithMarkup(state, m => m with { Error = string.IsNullOrWhiteSpace(mf.Error) ? "Save failed." : mf.Error }),
 
         // A clear-screen must not close the user's tabs — the strip is workspace
         // chrome, not transcript (#388), and UiState.ClearTranscript already
@@ -1221,6 +1250,124 @@ public static class ChatAppReducer
         }
 
         return ReduceResult.NoOp(next);
+    }
+
+    // ── screenshot-markup overlay (#400 slice 1/2) ──────────────────────────
+    //
+    // Every arm below is a pure fold over Chat.Markup and no-ops (returns the
+    // input state) when the overlay is closed — keys never reach the agent
+    // while it is open because the host stops at the markup barrier first
+    // (ReplInputLoop checks Markup.IsOpen before the palette), not because
+    // the reducer double-guesses the host.
+
+    private static ReduceResult WithMarkup(UiState state, Func<MarkupOverlayState, MarkupOverlayState> fold)
+    {
+        var markup = state.Chat.Markup;
+        if (!markup.IsOpen)
+        {
+            return ReduceResult.NoOp(state);
+        }
+
+        var next = fold(markup);
+        return ReferenceEquals(next, markup)
+            ? ReduceResult.NoOp(state)
+            : ReduceResult.NoOp(state with { Chat = state.Chat with { Markup = next } });
+    }
+
+    private static MarkupOverlayState PlaceAtCursor(MarkupOverlayState markup)
+    {
+        MarkupAnnotationModel model = markup.ActiveTool switch
+        {
+            MarkupKind.Arrow => markup.Model.Add(
+                MarkupKind.Arrow, markup.Cursor, markup.Cursor.Shift(0.15, 0.1)),
+            MarkupKind.Rectangle => markup.Model.Add(
+                MarkupKind.Rectangle, markup.Cursor.Shift(-0.075, -0.05), markup.Cursor.Shift(0.075, 0.05)),
+            _ => string.IsNullOrEmpty(markup.PendingText)
+                ? markup.Model
+                : markup.Model.Add(MarkupKind.Text, markup.Cursor, markup.Cursor, text: markup.PendingText),
+        };
+
+        if (ReferenceEquals(model, markup.Model))
+        {
+            return markup;
+        }
+
+        var next = markup with { Model = model, Error = string.Empty };
+        return markup.ActiveTool == MarkupKind.Text ? next with { PendingText = string.Empty } : next;
+    }
+
+    private static MarkupOverlayState SelectAtPoint(MarkupOverlayState markup, NormalizedPoint point)
+    {
+        int? hit = MarkupOverlayState.HitTest(markup.Model, point);
+        return hit is { } id
+            ? markup with { Model = markup.Model.Select(id) }
+            : markup with { Cursor = point };
+    }
+
+    private static MarkupOverlayState PressAtPoint(MarkupOverlayState markup, NormalizedPoint point)
+    {
+        int? hit = MarkupOverlayState.HitTest(markup.Model, point);
+        if (hit is { } id)
+        {
+            return markup with
+            {
+                Model = markup.Model.Select(id).Checkpoint(),
+                Draft = new MarkupDraft(point, point, Moving: true),
+            };
+        }
+
+        return markup with { Draft = new MarkupDraft(point, point, Moving: false), Cursor = point };
+    }
+
+    private static MarkupOverlayState DragToPoint(MarkupOverlayState markup, NormalizedPoint point)
+    {
+        if (markup.Draft is not { } draft)
+        {
+            return markup;
+        }
+
+        if (draft.Moving)
+        {
+            var moved = markup.Model.NudgeSelected(point.X - draft.Current.X, point.Y - draft.Current.Y);
+            return markup with { Model = moved, Draft = draft with { Current = point } };
+        }
+
+        return markup with { Draft = draft with { Current = point } };
+    }
+
+    private static MarkupOverlayState ReleaseAtPoint(MarkupOverlayState markup, NormalizedPoint point)
+    {
+        if (markup.Draft is not { } draft)
+        {
+            return markup;
+        }
+
+        if (draft.Moving)
+        {
+            // The press recorded the checkpoint; the drags were transient, so
+            // the whole gesture undoes in one step. A press+release without
+            // motion still spent a frame — collapse it so empty drags leave
+            // no undo trace.
+            var model = draft.Current.Equals(draft.Anchor)
+                ? markup.Model.UndoFrame()
+                : markup.Model.NudgeSelected(point.X - draft.Current.X, point.Y - draft.Current.Y);
+            return markup with { Model = model, Draft = null };
+        }
+
+        MarkupAnnotationModel model2 = markup.ActiveTool switch
+        {
+            MarkupKind.Text when string.IsNullOrEmpty(markup.PendingText) => markup.Model,
+            MarkupKind.Text => markup.Model.Add(MarkupKind.Text, draft.Anchor, draft.Anchor, text: markup.PendingText),
+            _ => markup.Model.Add(markup.ActiveTool, draft.Anchor, point),
+        };
+
+        if (ReferenceEquals(model2, markup.Model))
+        {
+            return markup with { Draft = null };
+        }
+
+        var next = markup with { Model = model2, Draft = null, Cursor = point, Error = string.Empty };
+        return markup.ActiveTool == MarkupKind.Text ? next with { PendingText = string.Empty } : next;
     }
 
     /// <summary>
