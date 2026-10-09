@@ -368,10 +368,11 @@ public sealed class GateGlowAgingTests
         runner.Screen.Tree.PaintAll(screen.Back);
 
     /// <summary>
-    /// A runner with nothing switched on. The composition root takes twenty-two dependencies and
-    /// this test exercises four of them, but the constructor is not a seam, so the rest are the
-    /// same cheap doubles <c>CellForgeReplSmokeTests</c> uses — copied rather than re-invented, so
-    /// a change to the runner's shape breaks in one place.
+    /// A runner with nothing switched on. The runner takes its dependencies as
+    /// three bundles plus two run values, and this test exercises four of them,
+    /// but the constructor is not a seam, so the rest are the same cheap
+    /// doubles <c>CellForgeReplSmokeTests</c> uses — copied rather than
+    /// re-invented, so a change to the runner's shape breaks in one place.
     /// </summary>
     private static (CellForgeReplRunner Runner, ApprovalGateView Gate) BuildRunner(
         CapturingBackend backend,
@@ -411,18 +412,15 @@ public sealed class GateGlowAgingTests
             providerRegistry);
 
         var runner = new CellForgeReplRunner(
-            configStore,
-            providerRegistry,
-            agentRegistry,
-            authStore,
-            sessionStore: null,
-            rendererPipeline: null,
-            bus,
-            tokens: null,
-            legacySlash,
-            agent, sessionModel, screen, chatScreen, bridge, input,
-            new NullModeController(), backend, NullLogger<CellForgeReplRunner>.Instance,
-            new ApprovalCoordinator(NullLogger<ApprovalCoordinator>.Instance));
+            new CellForgeCoreServices(
+                configStore, providerRegistry, agentRegistry, authStore, bus, agent,
+                legacySlash, NullLogger<CellForgeReplRunner>.Instance),
+            new CellForgeOptionalServices(null, null, null, null, null, null, null, null),
+            new CellForgeScreens(
+                screen, chatScreen, bridge, input, backend,
+                new ApprovalCoordinator(NullLogger<ApprovalCoordinator>.Instance)),
+            sessionModel,
+            new NullModeController());
 
         return (runner, new ApprovalGateView("bash", "ls -la /tmp"));
     }

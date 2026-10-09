@@ -111,7 +111,8 @@ public class SessionManagerAtomicityTests
         var git = new SessionGitTracker();
         var factories = new SessionOptionalFactories(() => null, () => null, () => { });
         var lifecycle = new SessionLifecycleService(
-            router, factory, switcher, store, agent, status, git,
+            new SessionLifecycleScope(router, factory, switcher, git, status),
+            store, agent,
             new NopBinder(), factories, new NopLogger<SessionLifecycleService>());
         return new SessionManager(router, lifecycle, status, git);
     }
