@@ -43,8 +43,8 @@
 //   Harbor.App.Cli.Tests      total 272   skipped 0
 //   Harbor.LoadTests          total 28    skipped 0
 //
-// `test-os` runs a fixed list of 9 projects (ci.yml:604) and `coverage` a
-// fixed list of 18 (ci.yml:463); neither includes any of the five, and no
+// `test-os` runs a fixed list of 9 projects (ci.yml:608) and `coverage` a
+// fixed list of 18 (ci.yml:467); neither includes any of the five, and no
 // other workflow names them either (`Harbor.Tui.E2E.Tests` also appears in
 // demo.yml, which does not run it). So `test (e2e)` is the single place 479 tests
 // execute, and it was the single place where zero of them executing would have
