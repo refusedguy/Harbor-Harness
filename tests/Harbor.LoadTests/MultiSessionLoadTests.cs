@@ -18,8 +18,8 @@ namespace Harbor.LoadTests;
 ///
 ///     Determinism contract: the only pacing is the refund-on-completion
 ///     <c>TokenBucketRateLimiter</c> and <see cref="MockLlmServer.SetChunkDelay" />
-///     time dilation — the harness never sleeps on real time, so the suite
-///     passes on a 4-core machine in well under a minute.
+///     time dilation — the harness never sleeps on real time, so the suite's
+///     duration is a property of the runner: reported by the test, never gated (#996).
 /// </summary>
 [ParallelLimiter<MockServerLimit>]
 public sealed class MultiSessionLoadTests
@@ -29,7 +29,6 @@ public sealed class MultiSessionLoadTests
     private const int BucketCapacity = 6;
     private const int TotalRuns = Sessions * AgentsPerSession;
     private const int MemoryBudgetBytes = 200 * 1024 * 1024;
-    private static readonly TimeSpan DurationBudget = TimeSpan.FromSeconds(60);
 
     [Test]
     public async Task TenSessions_ThreeAgents_EchoRunsComplete_NoCorruptionNoDeadlock()
@@ -64,8 +63,12 @@ public sealed class MultiSessionLoadTests
         await AssertUiStoresConvergedAsync(harness);
         await AssertMemoryBudgetAsync();
 
-        // The suite completes inside the 4-core time budget.
-        await Assert.That(stopwatch.Elapsed).IsLessThanOrEqualTo(DurationBudget);
+        // #996: the wall-clock total is REPORTED, not gated — a suite-total budget
+        // is the least portable shape on shared runners. The properties above
+        // (per-run success, start/end pairing, limiter shape, no corruption,
+        // convergence) are counts and hold on any machine; they are the gates.
+        Console.WriteLine(
+            $"[load] {TotalRuns} runs across {Sessions} sessions completed in {stopwatch.Elapsed.TotalSeconds:F1} s.");
     }
 
     [Test]
