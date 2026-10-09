@@ -95,6 +95,10 @@ jobs:
               # edit to the script alone would set dotnet=false, skip the very
               # job that executes it, and land unvalidated (issue #618).
               - 'tools/test-measurements.py'
+              # The pack-validation gate's instrument (#429). Same #618
+              # argument: editing the validator must run the build job that
+              # executes it, or the edit lands unvalidated.
+              - 'tools/pack-validate.py'
               # The AOT gate's instrument and its committed inventory (#413).
               # The same argument as the line above, one step further: editing
               # the BASELINE is the ordinary way to answer a red AOT job, and
@@ -181,6 +185,84 @@ jobs:
 
       - name: Smoke — CLI binary runs
         run: dotnet exec apps/Harbor.App.Cli/bin/Release/net10.0/Harbor.App.Cli.dll --version
+
+      # NuGet pack + validation (issue #429). Steps, not a new job: no new
+      # matrix axis, same Release outputs built above. Pack warnings fail
+      # the job because Directory.Build.props sets TreatWarningsAsErrors.
+      # Publishing to nuget.org is deliberately NOT here — pack must stay
+      # green on every PR long before any release feed is configured.
+      - name: Pack NuGet libraries (Release, deterministic)
+        run: dotnet pack Harbor.slnx -c Release --no-build -p:ContinuousIntegrationBuild=true -o out/packages
+
+      - name: Validate NuGet packages (metadata, README, lib)
+        run: python3 tools/pack-validate.py out/packages
+
+      # Payload determinism across two packs. NuGet stamps zip entry
+      # timestamps with pack wall-clock time, so two `dotnet pack` runs are
+      # never byte-identical files even under ContinuousIntegrationBuild
+      # (measured: identical sizes and CRCs, only date_time differs). The
+      # property CI pins is that every entry's bytes are identical — which
+      # still catches nondeterministic build inputs (timestamps or dates
+      # baked into dlls, generated code, nuspecs).
+      - name: Determinism — identical payloads across two packs
+        run: |
+          dotnet pack Harbor.slnx -c Release --no-build -p:ContinuousIntegrationBuild=true -o out/packages2
+          python3 - <<'EOF'
+          import sys
+          import zipfile
+          from pathlib import Path
+          first, second = Path("out/packages"), Path("out/packages2")
+          bad = []
+          for pkg in sorted(first.glob("*.nupkg")):
+              other = second / pkg.name
+              if not other.exists():
+                  bad.append(f"{pkg.name}: missing from second pack")
+                  continue
+              with zipfile.ZipFile(pkg) as za, zipfile.ZipFile(other) as zb:
+                  na = {i.filename: i for i in za.infolist()}
+                  nb = {i.filename: i for i in zb.infolist()}
+                  if set(na) != set(nb):
+                      bad.append(f"{pkg.name}: entry lists differ")
+                      continue
+                  for name, ia in na.items():
+                      ib = nb[name]
+                      if ia.file_size != ib.file_size or ia.CRC != ib.CRC or za.read(name) != zb.read(name):
+                          bad.append(f"{pkg.name}: entry {name} differs")
+          if bad:
+              print(f"{len(bad)} nondeterministic entr(y/ies):")
+              print("\n".join(f"  - {b}" for b in bad))
+              sys.exit(1)
+          print("deterministic: identical payloads across two packs")
+          EOF
+
+      # Clean-room proof that the dependency graph resolves: throwaway
+      # project, local feed for Harbor.* + nuget.org for transitives.
+      - name: Smoke-install Harbor.Abstractions + one provider
+        run: |
+          VER=$(grep -o '<Version>[^<]*' Directory.Build.props | head -1 | cut -d'>' -f2)
+          rm -rf /tmp/packsmoke && dotnet new console -n packsmoke -o /tmp/packsmoke --no-restore
+          cd /tmp/packsmoke
+          cat > nuget.config <<EOF
+          <?xml version="1.0" encoding="utf-8"?>
+          <configuration>
+            <packageSources>
+              <clear />
+              <add key="local" value="$GITHUB_WORKSPACE/out/packages" />
+              <add key="nuget.org" value="https://api.nuget.org/v3/index.json" />
+            </packageSources>
+          </configuration>
+          EOF
+          dotnet add package Harbor.Abstractions --version "$VER"
+          dotnet add package Harbor.Providers.OpenAiCompatible --version "$VER"
+          dotnet build -c Release --nologo
+
+      - name: Upload NuGet packages artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: nuget-packages
+          path: out/packages/*.nupkg
+          if-no-files-found: error
+          retention-days: 7
 
       # Advisory report only: surfaces `dotnet list package --vulnerable`
       # output (NU190x advisories) on every PR without failing the build.

@@ -5,6 +5,11 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <OutputType>Library</OutputType>
+    <!-- Packable library: remote UI transport (PSK gateway + client over HTTP/SSE). (#429) -->
+    <IsPackable>true</IsPackable>
+    <PackageId>Harbor.Transport.Remote</PackageId>
+    <Description>Harbor remote UI transport — PSK-authenticated gateway and client that stream AgentEvents over HTTP/SSE so a desktop GUI can control a headless session.</Description>
+    <PackageTags>harbor;transport;remote;http;sse;gateway</PackageTags>
   </PropertyGroup>
 
   <ItemGroup>

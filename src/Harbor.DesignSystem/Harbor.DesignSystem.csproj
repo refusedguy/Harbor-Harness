@@ -19,14 +19,10 @@
     <PackageId>Harbor.DesignSystem</PackageId>
     <Description>Harbor design system — standalone HDS v1 design tokens, terminal color palettes, theme catalog, and cell styles for terminal/desktop/web. Zero dependencies.</Description>
     <PackageTags>harbor;design-system;tokens;colors;themes;animations</PackageTags>
-    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <!-- PackageReadmeFile + README embed now come from src/Directory.Build.targets (#429). -->
     <AllowUnsafeBlocks>false</AllowUnsafeBlocks>
     <!-- Public package: must stay trim/AOT-clean (zero IL2xxx warnings). -->
     <IsAotCompatible>true</IsAotCompatible>
   </PropertyGroup>
-
-  <ItemGroup>
-    <None Include="README.md" Pack="true" PackagePath="\"/>
-  </ItemGroup>
 
 </Project>
