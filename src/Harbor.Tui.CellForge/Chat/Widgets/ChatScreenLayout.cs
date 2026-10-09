@@ -413,15 +413,23 @@ public sealed class StatusPanel : Panel
     public bool FooterMascotEnabled { get; set; } = true;
 
     private readonly StatusSeg[] _compose = new StatusSeg[12];
-    private readonly MascotDirector _director = new();
+    private readonly MascotDirector _director;
     private byte _lastMode;
     private bool _modeSeen;
     private long _modeFlipTick = long.MinValue;
 
-    public StatusPanel(string id, StatusViewModel status, int minWidth, int minHeight, int priority = int.MaxValue)
+    /// <summary>Creates a status footer bound to <paramref name="status"/>.</summary>
+    /// <param name="timeProvider">
+    /// Clock for the mood latch (#1026). Production leaves the default
+    /// (<see cref="TimeProvider.System"/>); tests inject a manual clock so a
+    /// latch assertion is a function of declared time, not runner speed —
+    /// the same seam <see cref="MascotDirector"/> exposes (#1007).
+    /// </param>
+    public StatusPanel(string id, StatusViewModel status, int minWidth, int minHeight, int priority = int.MaxValue, TimeProvider? timeProvider = null)
         : base(id, new Size(minWidth, minHeight), priority)
     {
         Vm = status;
+        _director = new MascotDirector(timeProvider: timeProvider);
     }
 
     public StatusViewModel Vm { get; }
@@ -864,6 +872,11 @@ public sealed record ChatScreen(
         }
     }
 
+    /// <summary>
+    /// Assembles the chat screen. <paramref name="timeProvider"/> threads the
+    /// mascot mood-latch clock (#1026) into the footer and panel directors;
+    /// production leaves the default (<see cref="TimeProvider.System"/>).
+    /// </summary>
     public static ChatScreen Build(
         Rendering.ComposerController composer,
         StatusViewModel status,
@@ -871,7 +884,8 @@ public sealed record ChatScreen(
         int minComposerRows = 3,
         bool includeSidebar = true,
         MascotMode? mascotMode = null,
-        bool includeTabStrip = true)
+        bool includeTabStrip = true,
+        TimeProvider? timeProvider = null)
     {
         var tree = new LayoutTree();
         // Pin the auto-show policy (SideBarLayout.AutoShowMinWidth = 120):
@@ -884,7 +898,7 @@ public sealed record ChatScreen(
             : 20;
         var timeline = new ChatTimelinePanel(TimelineId, minWidth: timelineMinWidth, minHeight: 4, priority: 10);
         var composerPanel = new ComposerPanel(ComposerId, composer, minWidth: 10, minHeight: minComposerRows, priority: 50);
-        var statusRow = new StatusPanel(StatusId, status, minWidth: 10, minHeight: 1, priority: int.MaxValue);
+        var statusRow = new StatusPanel(StatusId, status, minWidth: 10, minHeight: 1, priority: int.MaxValue, timeProvider: timeProvider);
         timeline.Timeline.EnableEntranceFx();
 
         SideBarPanel? sidebar = includeSidebar
@@ -929,7 +943,7 @@ public sealed record ChatScreen(
         MascotMode resolved = mascotMode ?? MascotModeEnv.Value;
         if (resolved is MascotMode.Panel && MascotModeEnv.Value is not MascotMode.Off)
         {
-            mascotPanel = new MascotPanel(MascotId, status, priority: 4);
+            mascotPanel = new MascotPanel(MascotId, status, priority: 4, timeProvider: timeProvider);
             statusRow.FooterMascotEnabled = false;
             tree.Split(ComposerId, SplitDir.Horizontal, 0.88f, mascotPanel, gap: 1);
         }
