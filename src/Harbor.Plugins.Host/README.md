@@ -12,8 +12,53 @@ Out-of-process MCP stdio server that exposes Harbor's C# (Roslyn) `ITool` plugin
 |------|---------|
 | `Program.cs` | Stdio MCP server entry point (`Main`). |
 | `McpStdioServer.cs` | JSON-RPC 2.0 NDJSON loop: `initialize`, `tools/list`, `tools/call`, `ping`, `notifications/initialized`. |
-| `McpPluginLoadHost.cs` | In-process plugin registry that collects `ITool` registrations and exposes them to the stdio server. `IProviderPlugin`, `IAgentPlugin`, `ITuiPlugin` and `ITuiPanelPlugin` registrations are accepted and logged as not exposed over MCP, then discarded. |
+| `McpPluginLoadHost.cs` | In-process plugin registry that collects `ITool` registrations and exposes them to the stdio server. Every other `IPluginLoadHost` door (`RegisterProvider`, `RegisterAgent`, `RegisterTuiPlugin`, `RegisterPanelProvider`, `RegisterSessionStore`, `RegisterTuiBackend`) is accepted so plugin `Initialize` never throws, then logged as not exposed over MCP and discarded — see the parity table below. |
 | `NullEventBus.cs` | No-op event bus for plugin-host runs that don't need event streaming. |
+
+## Capability parity: in-process JIT vs split host
+
+The split host speaks MCP stdio, which carries tools only. Everything else a
+CS-source plugin can contribute in-process is accepted (so `Initialize` never
+throws) but logged and discarded here. Each row names the reason, not just the
+verdict (#419).
+
+| Capability | In-process JIT (`CsPluginLoader`) | Split host (this exe) | Reason |
+|------------|-----------------------------------|-----------------------|--------|
+| Tool (`IToolPlugin`) | supported | supported | MCP `tools/list` + `tools/call` carry name, description, JSON schema and result — the full tool contract fits the wire. |
+| Provider (`IProviderPlugin`) | supported | unsupported (logged, discarded) | An `ILlmClient` factory cannot cross stdio: token streaming is per-turn and latency-sensitive, and auth material must not leave the core process. |
+| Agent (`IAgentPlugin`) | supported | unsupported (logged, discarded) | `AgentDefinition` carries a `PermissionRuleset` the core evaluates per call; rehydrating agents from a description string would silently drop the policy. |
+| TUI view (`ITuiPlugin`) | closed seam (#564 — collected, never rendered) | unsupported (logged, discarded) | Views must live in the renderer process; #555 freezes new TUI axes, so the split does not reopen this one. |
+| TUI panel (`ITuiPanelPlugin`) | supported | unsupported (logged, discarded) | The panel registry lives in the TUI renderer process; panels are UI-process state, not serializable registrations. |
+| Session store (`ISessionStorePlugin`, #581) | supported | unsupported (logged, discarded) | The store is resolved in-core at startup via `HARBOR_STORAGE`; a store behind a pipe would put every session read on IPC. |
+| TUI backend (`ITuiBackendPlugin`, #581/#584) | supported | unsupported (logged, discarded) | The renderer is constructed in the UI process; a backend factory cannot be expressed as an MCP tool. |
+| Skill / MCP server | n/a — not plugin axes | n/a | Skills ship as the builtin `skill` tool and MCP servers as `IMcpRegistry` entries; there is no plugin interface to implement. |
+
+## Process boundary is not a sandbox
+
+This host runs CS-source plugins with **full trust**, exactly like the
+in-process loader — only reviewed source files belong in the plugin
+directories (see [docs/PLUGIN_SYSTEM.md](../../docs/PLUGIN_SYSTEM.md)). The
+split exists so Roslyn stays out of the AOT binary, not to isolate untrusted
+code: a separate stdio process gives crash containment (below), not a security
+boundary. No sandbox claim without an actual sandbox; the untrusted-plugin
+policy is a separate statement and does not live here.
+
+## Failure paths
+
+- **Tool throws** → `tools/call` returns an `isError` result with the message;
+  the server keeps serving (`McpStdioServer.HandleToolCallAsync` catches per
+  call — one bad tool cannot wedge the loop).
+- **Unknown tool / method** → JSON-RPC `-32602` / `-32601`, never a silent
+  empty result.
+- **Host process dies** → the parent sees stdio EOF on the pipe. That is a
+  transport failure the core surfaces, not a silent no-plugins state: the
+  `mcp.json` entry is opt-in, so absence of the entry means no tools listed
+  (explicit config), while death of a configured entry must error loudly
+  parent-side.
+- **Protocol mismatch** → the server announces `protocolVersion 2024-11-05`
+  on `initialize` and negotiates nothing further. A client requiring a newer
+  version must fail with an actionable error on its side; the server will not
+  guess.
 
 ## Public API summary
 
