@@ -15,6 +15,8 @@ on:
         description: "Iterations per verb (odd; median is a measured run)"
         required: false
         default: "7"
+  push:
+    branches: [meas/411-jit-aot-workload]
 
 permissions:
   contents: read
