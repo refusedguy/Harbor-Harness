@@ -371,7 +371,7 @@ public sealed class GateGlowAgingTests
     /// timeline computed, not one this test made up.
     /// </summary>
     private static void PaintFrame(CellForgeReplRunner runner, ScreenSession screen) =>
-        runner.Screen.Tree.PaintAll(screen.Back);
+        runner.Screen.Tree.PaintAll(screen.PaintBuffer);
 
     /// <summary>
     /// A runner with nothing switched on. The runner takes its dependencies as
