@@ -105,12 +105,16 @@ jobs:
               - 'tools/aot-publish-gate.py'
               - '.github/aot-warning-baseline.txt'
             ui:
-              - 'src/Harbor.Tui.**'
-              - 'src/Harbor.Ui.Framework.**'
-              - 'src/Harbor.Terminal.Abstractions/**'
+              - 'src/Harbor.Tui*/**'
+              - 'src/Harbor.Ui.Framework*/**'
+              - 'src/Harbor.Terminal.*/**'
+              - 'src/Harbor.DesignSystem/**'
               - 'src/Harbor.App.Avalonia/**'
               - 'apps/Harbor.App.Avalonia/**'
-              - 'tests/Harbor.Tui.**'
+              - 'tests/Harbor.Tui*/**'
+              - 'tests/Harbor.Ui.Framework*/**'
+              - 'tests/Harbor.Terminal.*/**'
+              - 'tests/Harbor.DesignSystem.Tests/**'
               - 'tests/Harbor.App.Avalonia.Tests/**'
 
   build:
