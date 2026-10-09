@@ -181,7 +181,7 @@ Rendering→State crossing point. `MouseRouter.WheelToKey` + a
 `TimelineWheelTarget` callback is now half a round trip that a host completes.
 
 `Harbor.Ui.Framework.Rendering` and `Harbor.DesignSystem` were removed in #436:
-the 15 remaining cell/input/probe types were ported into the engine
+the remaining cell/input/probe/layout vocabulary (SplitDir/Size included) was ported into the engine
 verbatim (same shape, engine-owned namespaces), and the chat-owned rendering
 (prompt/composer/markdown/overlay/layout/image-layer, 17 files) moved to
 `Harbor.Tui.CellForge/Chat/Rendering`. The #1009 caveat is cleared with them:
