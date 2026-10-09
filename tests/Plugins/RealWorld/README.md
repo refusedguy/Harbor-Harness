@@ -52,5 +52,5 @@ dotnet run --project tests/Harbor.Plugins.Runtime.Tests -c Release --no-build --
 
 ## See also
 
-- [Plugin development guide](../../docs/PLUGIN_DEVELOPMENT.md)
-- [Plugin tests README](../Harbor.Plugins.Runtime.Tests/README.md)
+- [Plugin development guide](../../../docs/PLUGIN_DEVELOPMENT.md)
+- [Plugin tests README](../../Harbor.Plugins.Runtime.Tests/README.md)
