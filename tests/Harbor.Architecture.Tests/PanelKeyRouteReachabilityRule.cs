@@ -14,8 +14,7 @@
 //   src/Harbor.Tui.CellForge/Chat/Panels/CellForgePanelAdapter.cs:63
 //       `return provider.OnKey(key, ctx);` — inside
 //       `CellForgePanelAdapter.RouteKey`, whose only caller in the whole tree is
-//       `ChatScreenLayout.cs:1449`.
-// check-doc-cites: record-drift ChatScreenLayout.cs:1449 now="if (view.GetState(id) != TuiPanelState.Focused)" [#947: written over `return CellForgePanelAdapter.RouteKey(pr`; repair deferred to the owner's symbol-rename decision] -->
+//       `ChatScreenLayout.cs:1494`.
 //   src/Harbor.Tui.CellForge/Chat/Panels/CellForgeJumpPaletteOverlayLayer.cs:170
 // check-doc-cites: record-drift src/Harbor.Tui.CellForge/Chat/Panels/CellForgeJumpPaletteOverlayLayer.cs:170 now="/// sees it." [#947: written over `return _panel.OnKey(`; repair deferred to the owner's symbol-rename decision] -->
 //       `return _panel.OnKey(` — inside that layer's own `OnKey`, and the layer
@@ -45,7 +44,7 @@
 //     capability the global keymap does not already have — plus
 //     `CellForgeJumpPalettePanel`, which is keyed AND unpainted, because
 //     `DefaultPlacement => Center` sends the dock home early
-//     (`ChatScreenLayout.cs:1265-1271`) and the `IOverlayLayer` meant to paint it
+//     (`ChatScreenLayout.cs:1297-1303`) and the `IOverlayLayer` meant to paint it
 //     is constructed by nothing but a test.
 //
 // So the honest count is "three panels with unreachable input, one hotkey that
@@ -61,8 +60,7 @@
 //     in the chain above is skipped by construction;
 //   * it dispatches `AppMsg.FocusPanel("logs")` by hand first, because
 //     `RoutePanelKey` returns early unless the panel is `Focused`
-//     (`ChatScreenLayout.cs:1434-1437`) and the product's F12 path only ever
-// check-doc-cites: record-drift ChatScreenLayout.cs:1434 now="if (provider is null)" [#947: written over ``; repair deferred to the owner's symbol-rename decision] -->
+//     (`ChatScreenLayout.cs:1466-1469`) and the product's F12 path only ever
 //     reaches `Visible` — `AppReducer.TogglePanel` (`:172-187`) toggles
 //     Hidden↔Visible and never sets `FocusedPanelId`. NO product host dispatches
 //     `AppMsg.FocusPanel` with a non-null id; the one non-test dispatch is

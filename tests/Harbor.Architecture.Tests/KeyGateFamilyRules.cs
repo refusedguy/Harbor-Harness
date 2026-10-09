@@ -49,8 +49,7 @@
 //     CommandPaletteView.cs:254               is None or Shift
 //     CellForgeJumpPalettePanel.cs:216        is None or Shift && !IsControl
 // check-doc-cites: record-drift CellForgeJumpPalettePanel.cs:216 now="ReseedLocked(ctx);" [#947: written over `}`; repair deferred to the owner's symbol-rename decision] -->
-//     ReplInputLoop.cs:261                    is None or Shift
-// check-doc-cites: record-drift ReplInputLoop.cs:261 now="}" [#947: written over `&& key.Modifiers.AcceptsTypedChar()`; repair deferred to the owner's symbol-rename decision] -->
+//     ReplInputLoop.cs:403                    is None or Shift
 //
 //   COMMAND (no buffer; runes are h/j/k/l or a y/n/a vote; Shift refused)
 //     QuestionFormView.cs:512 + :576          != None / == None  (option rows)
@@ -76,8 +75,7 @@
 //   UNGATED — a third state the issue's two-family taxonomy cannot name, and the
 //   reason a guard that counts only the two families is not enough. Six sites
 //   matched a rune with NO modifier test at all, so a chord modifier rode
-//   straight through. ONE WAS A LIVE DEFECT: ReplInputLoop.cs:237 calls
-// check-doc-cites: record-drift ReplInputLoop.cs:237 now="// Only the jump frame itself toggles closed. Any other v…" [#947: written over `if (host.Setup.HandleKey(key))`; repair deferred to the owner's symbol-rename decision] -->
+//   straight through. ONE WAS A LIVE DEFECT: ReplInputLoop.cs:379 calls
 //   SetupChecklistController.HandleKey, so Ctrl+q closed the setup guide AND was
 //   consumed — the chord never reached the composer behind it.
 //     SetupChecklistOverlay.cs:95     product input loop — LIVE
@@ -319,8 +317,7 @@ public class KeyGateFamilyRules
 
         // ---- UNGATED: no modifier test at all (#833's real finding) ------------
         // SetupChecklistOverlay is REACHED from the product input loop
-        // (ReplInputLoop.cs:237 → SetupChecklistController), so its missing
-        // check-doc-cites: record-drift ReplInputLoop.cs:237 now="// Only the jump frame itself toggles closed. Any other v…" [#947: written over `if (host.Setup.HandleKey(key))`; repair deferred to the owner's symbol-rename decision] -->
+        // (ReplInputLoop.cs:379 → SetupChecklistController), so its missing
         // gate is a live chord-swallowing defect. The rest are reachable only
         // from tests today; they are listed because the gate is absent in code
         // regardless of who calls it, and because a wiring change is exactly
@@ -539,8 +536,7 @@ public class KeyGateFamilyRules
     /// <summary>
     /// The six sites that had NO modifier gate at all, which is the finding
     /// #833's two-family taxonomy could not name. One of them was a LIVE defect:
-    /// <c>ReplInputLoop.cs:237</c> calls <c>SetupChecklistController.HandleKey</c>,
-    // check-doc-cites: record-drift ReplInputLoop.cs:237 now="// Only the jump frame itself toggles closed. Any other v…" [#947: written over `if (host.Setup.HandleKey(key))`; repair deferred to the owner's symbol-rename decision] -->
+    /// <c>ReplInputLoop.cs:379</c> calls <c>SetupChecklistController.HandleKey</c>,
     /// so <c>Ctrl+q</c> closed the setup guide AND was consumed — the chord never
     /// reached the composer behind it.
     /// <para>

@@ -39,10 +39,10 @@
 //        is the default backend) -> RunCellForgeAsync (:174) -> :383 RunAsync
 //     -> CellForgeReplRunner.RunAsync:369 -> ReplLifecycle.RunAsync
 //     -> ReplLifecycle.cs:191 host.Input.HandleInputAsync
-//     -> ReplInputLoop.cs:65 HandleKeyAsync
+//     -> ReplInputLoop.cs:66 HandleKeyAsync
 //
 // and `HandleKeyAsync` is a working router — it just routes AROUND the stack.
-// `ReplInputLoop.cs:199 host.Images.HandleKey(key)` and `:274 host.Setup.HandleKey(key)`
+// `ReplInputLoop.cs:304 host.Images.HandleKey(key)` and `:379 host.Setup.HandleKey(key)`
 // call the two live overlays directly. The same objects, a different hop: not
 // `ImageViewerOverlayLayer.OnKey`. That asymmetry is why #857's `JumpCommand`
 // could correctly say the panel `OnKey` has "no product host [that can] reach" it.
