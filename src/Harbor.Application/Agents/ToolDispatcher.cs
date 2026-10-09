@@ -684,7 +684,11 @@ public sealed class ToolDispatcher(
                 }
 
                 return asked.Value;
-            });
+            },
+            // S2 (#376): tools resolve their cwd from the session directory,
+            // which SubAgentRunner binds to the isolated worktree. Main-session
+            // directories are the user's cwd, so behaviour there is unchanged.
+            session.Session.Directory);
     }
 
     /// <summary>

@@ -151,6 +151,11 @@ public enum ExecutionMode
 /// <param name="Messages">A snapshot of the current conversation messages.</param>
 /// <param name="ReportProgress">Callback to report progress updates.</param>
 /// <param name="Ask">Callback to ask the user for a permission decision.</param>
+/// <param name="WorkingDirectory">
+///     Working directory tools resolve relative paths and process cwd against
+///     (epic #42, stage S2: the isolated worktree). Null falls back to the
+///     process directory — trailing optional, existing call sites unchanged.
+/// </param>
 /// <remarks>
 ///     #470 — this record deliberately carries <b>no</b> <c>IServiceProvider</c>.
 ///     It used to declare one that both production call sites
@@ -169,7 +174,8 @@ public sealed record ToolContext(
     CancellationToken Abort,
     IReadOnlyList<AgentMessage> Messages,
     Func<ToolProgressUpdate, CancellationToken, Task> ReportProgress,
-    Func<PermissionRequest, CancellationToken, Task<PermissionResponse>> Ask);
+    Func<PermissionRequest, CancellationToken, Task<PermissionResponse>> Ask,
+    string? WorkingDirectory = null);
 
 /// <summary>
 ///     Progress update from a tool execution.

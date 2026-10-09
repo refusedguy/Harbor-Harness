@@ -67,8 +67,16 @@ public sealed class BashTool : ITool
 
         if (timeout is < 1 or > 600) timeout = 30;
 
+        // S2 (#376): an explicit `cwd` wins; otherwise the context working
+        // directory (the isolated worktree for sub-agent runs), else the
+        // process directory. A missing effective directory fails closed.
+        string baseDir = !string.IsNullOrWhiteSpace(context.WorkingDirectory)
+            ? context.WorkingDirectory!
+            : Environment.CurrentDirectory;
         if (cwd is not null && !Directory.Exists(cwd))
             return ToolResult.Error($"Working directory does not exist: '{cwd}'.");
+        if (cwd is null && !Directory.Exists(baseDir))
+            return ToolResult.Error($"Working directory does not exist: '{baseDir}'.");
 
         var psi = new ProcessStartInfo
         {
@@ -78,7 +86,7 @@ public sealed class BashTool : ITool
             RedirectStandardError = true,
             RedirectStandardInput = false,
             CreateNoWindow = true,
-            WorkingDirectory = cwd ?? Environment.CurrentDirectory
+            WorkingDirectory = cwd ?? baseDir
         };
 
         if (OperatingSystem.IsWindows())

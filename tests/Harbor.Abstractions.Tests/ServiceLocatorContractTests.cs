@@ -51,17 +51,20 @@ public class ServiceLocatorContractTests
     }
 
     /// <summary>
-    ///     A <see cref="ToolContext" /> is constructible with exactly the eight
+    ///     A <see cref="ToolContext" /> is constructible with exactly the nine
     ///     honest members — no hidden trailing provider that callers must pad with
-    ///     a placeholder argument.
+    ///     a placeholder argument. The ninth member is the S2 (#376) opt-in
+    ///     <c>WorkingDirectory</c> (isolated worktree); it is a plain string,
+    ///     not a locator, so <see cref="ToolContext_ExposesNoServiceProvider" />
+    ///     still holds.
     /// </summary>
     [Test]
-    public async Task ToolContext_HasExactlyEightDeclaredMembers()
+    public async Task ToolContext_HasExactlyNineDeclaredMembers()
     {
         ParameterInfo[] parameters = typeof(ToolContext)
             .GetConstructors().Single().GetParameters();
 
-        await Assert.That(parameters.Length).IsEqualTo(8);
+        await Assert.That(parameters.Length).IsEqualTo(9);
 
         // #876: `ParameterInfo.Name` is `string?` in the BCL, so this projects to
         // `string?[]` and cannot satisfy TUnit's `IEnumerable<string>` constraint
@@ -74,6 +77,7 @@ public class ServiceLocatorContractTests
         await Assert.That(names).IsEquivalentTo(new[]
         {
             "SessionId", "MessageId", "CallId", "Agent", "Abort", "Messages", "ReportProgress", "Ask",
+            "WorkingDirectory",
         });
     }
 

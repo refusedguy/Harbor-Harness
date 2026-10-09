@@ -34,7 +34,7 @@ internal static class HelpVerbs
     {
         Console.WriteLine("""
                           Harbor — modular AI coding agent.
-                          Usage: harbor [ask <prompt>|run task agent=<name> <prompt>|demo|setup|auth|config|providers|models|sessions|mcp|serve|tui|events|storage|logs|help|version] [--script <path>]
+                          Usage: harbor [ask <prompt>|run (task agent=<name> <prompt>|list)|demo|setup|auth|config|providers|models|sessions|mcp|serve|tui|events|storage|logs|help|version] [--script <path>]
 
                           demo [--scene hero|markdown|approval|all] [--tui ansi|plain|cellforge]
                                             Scripted demo with an in-process mock LLM — no API keys.

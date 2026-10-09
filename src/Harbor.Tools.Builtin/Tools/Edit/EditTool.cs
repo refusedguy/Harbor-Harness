@@ -131,9 +131,14 @@ public sealed class EditTool : ITool
         string path;
         try
         {
+            // S2 (#376): relative paths resolve against the context working
+            // directory (the isolated worktree for sub-agent runs).
+            string baseDir = !string.IsNullOrWhiteSpace(context.WorkingDirectory)
+                ? context.WorkingDirectory!
+                : Environment.CurrentDirectory;
             path = Path.IsPathRooted(rawPath)
                 ? Path.GetFullPath(rawPath)
-                : Path.GetFullPath(Path.Combine(Environment.CurrentDirectory, rawPath));
+                : Path.GetFullPath(Path.Combine(baseDir, rawPath));
         }
         catch (Exception ex)
         {

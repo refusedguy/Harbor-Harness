@@ -85,8 +85,13 @@ public sealed class WriteTool : ITool
             return ToolResult.Error(
                 $"content too large ({content.Length} chars; max {MaxContentChars}).");
 
-        var resolvedPath = ToolPaths.Resolve(rawPath)
-            .Bind(p => SymlinkGuard.Check(p).Map(() => p));
+        // S2 (#376): relative paths resolve against the context working
+        // directory (the isolated worktree for sub-agent runs).
+        string baseDir = !string.IsNullOrWhiteSpace(context.WorkingDirectory)
+            ? context.WorkingDirectory!
+            : Environment.CurrentDirectory;
+        var resolvedPath = ToolPaths.ResolveAgainst(baseDir, rawPath)
+            .Bind(p => SymlinkGuard.Check(p, baseDir).Map(() => p));
         if (resolvedPath.IsFailure)
             return ToolResult.Error(resolvedPath.Error);
         string path = resolvedPath.Value;
