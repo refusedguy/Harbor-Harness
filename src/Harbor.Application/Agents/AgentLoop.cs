@@ -228,13 +228,19 @@ public sealed class AgentLoop : IAgentLoop
             // the user set and a stop the user pressed are different facts and
             // the terminal event is where they must stay distinguishable.
             RunLimitKind? limit = null;
+            // #404: the run's budget ledger. Null when the agent sets no
+            // caps — the loop then pays one null-branch per turn (no table,
+            // no lookup), which is the zero-added-cost claim for uncapped
+            // runs. One instance per run, never shared: the counters are run
+            // totals, and sharing would attribute one run's spend to the next.
+            RunBudgetTracker? budget = agent.Budget is { } caps ? new RunBudgetTracker(caps) : null;
             while (!ct.IsCancellationRequested)
             {
                 turn++;
                 // [G4]: the whole turn (compaction → prompt → stream → tools →
                 // drains → turn-end event → end-of-run decision) runs inside TurnRunner.
                 TurnStepResult step = await _turnRunner.RunTurnAsync(
-                    session, agent, client, model, turn, truncationFallback, ct).ConfigureAwait(false);
+                    session, agent, client, model, turn, truncationFallback, ct, budget).ConfigureAwait(false);
                 truncationFallback = step.TruncationFallback;
                 if (step.RunFailure is { } runFailure)
                 {
