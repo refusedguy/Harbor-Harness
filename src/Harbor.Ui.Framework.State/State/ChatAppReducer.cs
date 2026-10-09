@@ -192,26 +192,7 @@ public static class ChatAppReducer
             .AddLine(ChatRole.Error, err.Message)
             .WithStatus("error")
             .WithSessionStatus(SessionStatus.Error),
-        AgentEndEvent end => state with
-        {
-            Chat = state.Chat with
-            {
-                // Mirror OnAgentEnded: a preceding AgentErrorEvent leaves
-                // "error" behind; a blind reset to idle would repaint a
-                // failed run as a clean finish.
-                Status = state.Chat.Status == "error" ? "error" : "idle",
-                IsAgentRunning = false,
-                WasRunning = state.Chat.IsAgentRunning,
-                IsStreaming = false,
-                Active = ActiveMessage.Empty,
-                PendingStreamText = ChunkedBuffer.Empty,
-                PendingStreamThink = ChunkedBuffer.Empty,
-                // The core's own terminal fact, read once here (#687). The
-                // projection reads this field; it does not re-ask which role
-                // the transcript's last line had.
-                SessionStatus = CoreEndedRun(state.Chat, end.Cancelled)
-            }
-        },
+        AgentEndEvent end => OnAgentEnd(state, end),
         _ => state
     };
 
@@ -571,6 +552,54 @@ public static class ChatAppReducer
         state with { Chat = state.Chat with { Status = status } };
 
     /// <summary>
+    ///     Fold the core's terminal fact into state (#687, #1024): the status
+    ///     the core decided, plus — when a limit ended the run — the transcript
+    ///     line that says so. Without the line a capped run would read as a
+    ///     silent <see cref="SessionStatus.Done" />.
+    /// </summary>
+    private static UiState OnAgentEnd(UiState state, AgentEndEvent end)
+    {
+        var next = state with
+        {
+            Chat = state.Chat with
+            {
+                // Mirror OnAgentEnded: a preceding AgentErrorEvent leaves
+                // "error" behind; a blind reset to idle would repaint a
+                // failed run as a clean finish.
+                Status = state.Chat.Status == "error" ? "error" : "idle",
+                IsAgentRunning = false,
+                WasRunning = state.Chat.IsAgentRunning,
+                IsStreaming = false,
+                Active = ActiveMessage.Empty,
+                PendingStreamText = ChunkedBuffer.Empty,
+                PendingStreamThink = ChunkedBuffer.Empty,
+                // The core's own terminal fact, read once here (#687). The
+                // projection reads this field; it does not re-ask which role
+                // the transcript's last line had.
+                SessionStatus = CoreEndedRun(state.Chat, end)
+            }
+        };
+        // #1024: a limit stop is announced, never silent. The verdict stays
+        // Done — the loop reached its terminal event without failing, and
+        // SessionStatus has no limit member to reach for — but the transcript
+        // names the kind, so a ceiling never reads as finished work.
+        return end.Limit is { } limit
+            ? next.AddLine(ChatRole.System, LimitNotice(limit))
+            : next;
+    }
+
+    /// <summary>
+    ///     The transcript line a limit stop leaves behind (#1024). Kind
+    ///     specific: a clock stop that told the user to raise MaxSteps would
+    ///     send them tuning the wrong ceiling.
+    /// </summary>
+    private static string LimitNotice(RunLimitKind limit) => limit switch
+    {
+        RunLimitKind.Timeout => "limit reached: wall-clock budget elapsed — work is incomplete.",
+        _ => "limit reached: step budget exhausted — work is incomplete.",
+    };
+
+    /// <summary>
     ///     The status a run the CORE closed out carries (#687). This is the one
     ///     place that answer is produced, and everything it reads is the core's
     ///     own statement about the run:
@@ -585,15 +614,19 @@ public static class ChatAppReducer
     ///             role its last transcript line had.
     ///         </item>
     ///         <item>
-    ///             otherwise the run finished cleanly. "Finished" is the core's
-    ///             claim, not a count of assistant lines.
+    ///             otherwise the run finished cleanly — which INCLUDES a run cut
+    ///             short by a limit (#1024): the loop reached its terminal event
+    ///             without failing, and a limit is neither a cancel nor an
+    ///             error, so it must read as neither <c>Aborted</c> nor
+    ///             <c>Error</c>. The limit itself is announced in the transcript
+    ///             by <see cref="OnAgentEnd" />, not by this verdict.
     ///         </item>
     ///     </list>
     /// </summary>
     /// <param name="chat">The chat state as of the terminal event.</param>
-    /// <param name="cancelled">Whether the terminal event reported a cancellation.</param>
-    private static SessionStatus CoreEndedRun(ChatDomainState chat, bool cancelled) =>
-        cancelled ? SessionStatus.Aborted
+    /// <param name="end">The core's terminal event (cancel and limit read off it).</param>
+    private static SessionStatus CoreEndedRun(ChatDomainState chat, AgentEndEvent end) =>
+        end.Cancelled ? SessionStatus.Aborted
         : chat.Status == "error" ? SessionStatus.Error
         : SessionStatus.Done;
 

@@ -52,6 +52,20 @@ public interface IBackgroundTaskRegistry
         CancellationToken ct);
 
     /// <summary>
+    ///     Cancel every tracked run launched from <paramref name="sessionId" />
+    ///     (#407: shared cancellation for the execution tree). The registry owns
+    ///     a linked <see cref="CancellationTokenSource" /> per run, so this
+    ///     reaches detached children even when the launching turn's token is
+    ///     gone (disposed timeout CTS, finished run). Turn boundaries do NOT
+    ///     call this — only a parent cancel does, via the agent loop's cancel
+    ///     path. Cancelled runs stay tracked until
+    ///     <see cref="DrainCompleted" /> observes them as cancellations.
+    /// </summary>
+    /// <param name="sessionId">Launching session whose runs must stop.</param>
+    /// <returns>How many tracked runs were signalled (0 when none).</returns>
+    public int CancelSession(string sessionId);
+
+    /// <summary>
     ///     Take all finished runs for <paramref name="sessionId" /> and forget
     ///     them (success, failure, crash and cancellation all surface as
     ///     completions — a stuck run never blocks the registry).
