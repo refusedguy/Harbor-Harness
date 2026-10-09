@@ -14,6 +14,25 @@ using Harbor.Ui.Framework.Rendering.Widgets;
 using Harbor.Tui.CellForge.Widgets;
 using Microsoft.Extensions.Logging;
 using Harbor.Registries.Providers;
+// #436: same shared-name pins as Harbor.Tui.CellForge/GlobalUsings.cs — the
+// Rendering vocabulary keeps its historical meaning in this file; engine-typed
+// sites qualify through EngineCells.
+using Cell = Harbor.Ui.Framework.Rendering.Cell;
+using Rect = Harbor.Ui.Framework.Rendering.Rect;
+using ScreenBuffer = Harbor.Ui.Framework.Rendering.ScreenBuffer;
+using CellStyle = Harbor.Ui.Framework.Rendering.CellStyle;
+using PackedColor = Harbor.Ui.Framework.Rendering.PackedColor;
+using StyleAttr = Harbor.Ui.Framework.Rendering.StyleAttr;
+using UnicodeWidth = Harbor.Ui.Framework.Rendering.UnicodeWidth;
+using KeyEvent = Harbor.Ui.Framework.Rendering.Input.KeyEvent;
+using KeyCode = Harbor.Ui.Framework.Rendering.Input.KeyCode;
+using KeyModifiers = Harbor.Ui.Framework.Rendering.Input.KeyModifiers;
+using KeyEventType = Harbor.Ui.Framework.Rendering.Input.KeyEventType;
+using IFocusTarget = Harbor.Ui.Framework.Rendering.Input.IFocusTarget;
+using UiKeyDto = Harbor.Ui.Framework.Rendering.Input.UiKeyDto;
+using UiKeyKind = Harbor.Ui.Framework.Rendering.Input.UiKeyKind;
+using UiKeyMods = Harbor.Ui.Framework.Rendering.Input.UiKeyMods;
+using EngineCells = Harbor.Tui.CellForge.Rendering;
 
 namespace Harbor.App.Cli.Repl;
 
@@ -614,7 +633,7 @@ internal sealed class ReplLifecycle(CellForgeReplRunner host)
         // PRIM2c: dialog/toast paint through LayoutTree.Overlays (hidden layers
         // stay off the stack, so quiet frames are byte-identical to panels-only).
         host.Screen.SyncOverlays(new Rect(0, 0, cols, rows));
-        host.Screen.Tree.PaintAll(host.ScreenSession.Back);
+        host.Screen.Tree.PaintAll(host.ScreenSession.PaintBuffer);
 
         // Copy-on-select highlight (P6.4): transient Reverse overlay — the
         // next repaint without an active selection clears it for free.
@@ -629,7 +648,7 @@ internal sealed class ReplLifecycle(CellForgeReplRunner host)
             int h = Math.Min(host._palette.Results.Count + 5, Math.Max(5, rows - 4));
             int x = Math.Max(0, (cols - w) / 2);
             int y = Math.Max(0, (rows - h) / 3);
-            host._palette.Paint(host.ScreenSession.Back, new Rect(x, y, w, h));
+            host._palette.Paint(host.ScreenSession.PaintBuffer, new Rect(x, y, w, h));
         }
 
         // Partial-scan damage (renderer-moat): quiet animation frames narrow
