@@ -19,6 +19,18 @@
   -->
   <ItemGroup Condition="'$(MSBuildProjectName)' == 'SharpConsoleUI'">
     <PackageReference Update="Spectre.Console" Version="0.54.0" />
+    <!--
+      Advisory retarget (same mechanism as Spectre.Console above):
+      SharpConsoleUI declares SixLabors.ImageSharp 3.1.12 (NU1902/NU1903)
+      and Microsoft.SourceLink.GitHub 10.0.300 (pulls Microsoft.Build.Tasks.Git
+      10.0.300, NU1902). Minimal clean versions: ImageSharp 4.1.2
+      (3.2.0–4.1.1 still flagged) and SourceLink 10.0.303 (pulls
+      Build.Tasks.Git >= 10.0.303; 10.0.301 still flagged). Kept in sync
+      with the root Directory.Packages.props ImageSharp pin so the submodule
+      compiles against what Harbor graphs resolve.
+    -->
+    <PackageReference Update="SixLabors.ImageSharp" Version="4.1.2" />
+    <PackageReference Update="Microsoft.SourceLink.GitHub" Version="10.0.303" />
   </ItemGroup>
 
 </Project>

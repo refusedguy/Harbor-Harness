@@ -122,6 +122,12 @@
     <PackageVersion Include="AvalonEdit" Version="6.3.1.120" />
     <PackageVersion Include="Dirkster.AvalonDock" Version="4.74.1" />
     <PackageVersion Include="LiveChartsCore.SkiaSharpView.WPF" Version="2.1.0-dev-798" />
+    <!-- ── SixLabors.ImageSharp (transitive-only: vendored SharpConsoleUI
+         declares 3.1.12, which carries NU1902/NU1903 advisories. No Harbor
+         project references it directly; this pin overrides the transitive
+         edge via CentralPackageTransitivePinningEnabled. Minimal clean
+         version: 4.1.2 (3.2.0–4.1.1 still flagged). ─────────────────── -->
+    <PackageVersion Include="SixLabors.ImageSharp" Version="4.1.2" />
     <!-- ── .NET MAUI (workload-supplied; version matches the maui-windows
          workload pack installed on the build machine) ──────────────────── -->
     <PackageVersion Include="Microsoft.Maui.Controls" Version="10.0.20" />
