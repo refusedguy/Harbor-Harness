@@ -1,0 +1,108 @@
+# aot-warning-baseline — the committed record of what the NativeAOT publish of
+# apps/Harbor.App.Cli actually does, as measured by the `aot-publish` job.
+#
+# OWNER: issue #413. Read by tools/aot-publish-gate.py on every PR. This is a
+# RATCHET, not a target: the gate passes only when the publish's outcome and its
+# diagnostics are exactly what is written here, and a change in EITHER direction
+# is red.
+#
+# ── THE HEADLINE, SO NOBODY HAS TO RUN THE GATE TO LEARN IT ────────────────
+#
+#   THE AOT PUBLISH FAILS. Both recipes. This is measured, not predicted.
+#
+#     recipe `fulltree` (-p:HarborWithAot=true) — reaches ILC and fails on three
+#       ids that Harbor.App.Cli.csproj does not demote: IL3000, IL2070, IL2072.
+#       ILC runs warnings-as-errors, so they are errors, not warnings. One of the
+#       three IL3000 sites is inside `Microsoft.CodeAnalysis` itself
+#       (CommonCompiler.GetAssemblyLocation) and is not fixable from our code.
+#
+#     recipe `minimal` (HARBOR_MINIMAL=true, the stripped profile the csproj
+#       calls the real AOT path) — does not compile at all: 11 x CS0234, because
+#       PluginReloadService.cs is entirely inside `#if HARBOR_WITH_PLUGINS` and
+#       11 call sites in apps/Harbor.App.Cli reference it unguarded.
+#
+#   The gate publishes `fulltree`, because that is the recipe whose failures are
+#   informative and the stripped one cannot be evaluated at all. The rows below
+#   are what it emits. Resolving them is #48/S4's decision, not this gate's.
+#
+#   CONSEQUENCE FOR THE ARTIFACT CHECK: a failing ILC publish emits no binary —
+#   measured, not assumed. So while the recorded state is "the publish fails",
+#   there is nothing to run and the gate's "run the published binary" half is
+#   INACTIVE. It is not skipped silently: the smoke step asserts that a failed
+#   publish left no artifact, and the day this file is updated to
+#   status=published that step starts executing --version/--help/--providers
+#   with no other edit. Until then, do not read a green job as evidence that the
+#   published binary runs.
+#
+# ── WHY A FAILING PUBLISH IS RECORDED RATHER THAN FIXED HERE ────────────────
+#
+# #413's acceptance criteria forbid buying green with blanket suppression, and
+# the Roslyn IL3000 would need exactly that. The other two ids are ours and are
+# fixable in principle, but they sit in the plugin instantiation path whose
+# future is precisely what #48/S4 decides; fixing them here would be taking that
+# decision. So the honest gate is the one that PINS the state and shouts when it
+# moves. A gate that can only be red is not a gate, and one that ignores the
+# publish is worse than none.
+#
+# ── FORMAT ──────────────────────────────────────────────────────────────────
+#
+#   ID | severity | count | verdict | first-party sites | reason
+#
+#   ID        IL2xxx (trim), IL3xxx (AOT), or CS (in scope only because the
+#             stripped recipe currently fails to compile). One row per
+#             (id, severity): the same id as a warning and as an error are two
+#             different rows, or an error could hide behind a warning's count.
+#   severity  warning | error. A demoted warning still has to be accounted for;
+#             an error is the reason the publish fails.
+#   count     exact occurrences. A change in EITHER direction fails.
+#   verdict   ACCEPTED = a concession this repository carries, with the reason in
+#                       the last field. Expected to keep appearing.
+#             REJECTED = a defect that ought to be fixed. ALSO expected to keep
+#                       appearing — that is the point: when one stops appearing
+#                       the gate goes red and the row has to be promoted or
+#                       deleted, so a fix cannot land unrecorded.
+#   sites     '-' when every site is third-party; else the comma-separated
+#             first-party SITES. A "site" is the Harbor TYPE the diagnostic
+#             names, not a file path: ILC and ILLink print a symbol and no
+#             source file, and the only real path in an ILC log is Roslyn's own
+#             src/Compilers/... which is third-party. A new site fails even at an
+#             unchanged count. A site MAY include a method name where the tool
+#             named one; it is not trimmed off, because the two line shapes are
+#             indistinguishable (ILC writes `Type.Method(args):` where a
+#             compiler line writes `Type(line,col):`) and trimming wrong records
+#             a site that does not exist. Line numbers are absent on purpose —
+#             they move on every unrelated edit.
+#   reason    >= 40 characters, not a bare URL — the same floor and URL rule
+#             tests/Harbor.Architecture.Tests/ExemptionReason.cs applies to
+#             every other table in this repo, so there is one definition of
+#             "states a reason".
+#
+# ── COUNTS ARE PINNED AGAINST A FLOATING SDK ───────────────────────────────
+#
+# `actions/setup-dotnet` is given `10.0.x`, so a new 10.0 patch can change the
+# analyzer set and therefore these counts. That is intentional: a new trim
+# warning is real information and the gate must be able to go red about it. The
+# cost is that an SDK bump may need this file re-triaged in the same diff.
+#
+# ── CROSS-CHECK, AND AN ASYMMETRY THAT IS ITSELF THE FINDING ───────────────
+#
+# tests/Harbor.Architecture.Tests/AotBlockDemotionRules.cs asserts that the ids
+# here and the ids Harbor.App.Cli.csproj's WarningsNotAsErrors demotes name the
+# same set. They do NOT: the csproj demotes four (IL2026, IL3050, IL2104,
+# IL3053) and the publish emits seven, so the three REJECTED rows below are ids
+# the csproj does not cover at all. That asymmetry is the finding, and the guard
+# reports it rather than hiding it.
+
+IL2026 | warning | 14 | ACCEPTED | Harbor.Hosting.Configuration.ImmutableDictionaryConverter, Harbor.Hosting.Configuration.ImmutableListConverter, Harbor.Ipc.Protocol.HarborRequestTypes.BuildCensus, Harbor.Plugins.Compilation.CollectiblePluginLoadContext.LoadFromImage, Harbor.Plugins.Compilation.CollectiblePluginLoadContext.LoadFromPluginPath, Harbor.Plugins.Instantiation.ReflectionPluginInstantiator.FindPluginTypes, Harbor.Plugins.Storage.FileTrustPolicy, Harbor.Plugins.Storage.FileTrustPolicy.PersistAccept, Harbor.Providers.OpenAiCompatible.ProviderConfig, Harbor.Storage.Jsonl.JsonlMessageCodec.DeserializePart | Demoted by the csproj through WarningsNotAsErrors, so these print and do not fail the publish. The sites are reflection-based JSON plus runtime assembly loading; the JsonSerializerContext work is real but is convention rather than a rule, per the block's own comment.
+
+IL3050 | warning | 9 | ACCEPTED | Harbor.Hosting.Configuration.ImmutableDictionaryConverter, Harbor.Hosting.Configuration.ImmutableListConverter, Harbor.Plugins.Storage.FileTrustPolicy, Harbor.Plugins.Storage.FileTrustPolicy.PersistAccept, Harbor.Providers.OpenAiCompatible.ProviderConfig, Harbor.Storage.Jsonl.JsonlMessageCodec.DeserializePart | Demoted by the csproj. JsonSerializer.Deserialize and Serialize of T without a source-generated context, on the same six types. The Roslyn path is the known live source of RequiresDynamicCode here; owner is #48/S4 with the skeleton in #48/S5.
+
+IL2104 | warning | 3 | ACCEPTED | - | Per-assembly trim rollup inside referenced packages: Microsoft.CodeAnalysis, MessagePack and MemoryPack.Core. Demoted by the csproj. Third-party internals, so there is no first-party site to triage; see the IL2026 row for our half.
+
+IL3053 | warning | 2 | ACCEPTED | - | Per-assembly AOT rollup for MessagePack and MemoryPack.Core. The csproj records this id as UNIDENTIFIED, carried since before #747 and not matched to a documented diagnostic from this checkout. This publish is the first evidence that it is a real per-assembly AOT rollup, but the identification is not confirmed, so the row stays ACCEPTED rather than being promoted on a guess.
+
+IL3000 | error | 4 | REJECTED | Harbor.Plugins.Compilation.PluginAssemblyReferences.BuildReferences, Harbor.Plugins.Compilation.PluginAssemblyReferences.EnsureReference, Harbor.Plugins.Compilation.PluginAssemblyReferences.ResolveDeploymentDirectory | Assembly.Location always returns an empty string in a single-file app. Three of the four occurrences are in one of our types and are fixable via AppContext.BaseDirectory; the fourth is inside Microsoft.CodeAnalysis.CommonCompiler.GetAssemblyLocation, which is not fixable from our code, which is why this row cannot simply be closed here. Tracked by #48/S4. The count is a property of the tree: adding SelfContained=true to the AOT block added ResolveDeploymentDirectory to the list.
+
+IL2072 | error | 1 | REJECTED | Harbor.Plugins.Instantiation.ReflectionPluginInstantiator.Instantiate | Activator.CreateInstance(Type) needs a DynamicallyAccessedMemberTypes.PublicParameterlessConstructor annotation that ReflectionPluginInstantiator.Instantiate does not declare. Fixable in principle, but it is the plugin instantiation path whose future #48/S4 decides, so it is recorded rather than fixed here.
+
+IL2070 | error | 1 | REJECTED | Harbor.Plugins.Instantiation.ReflectionPluginInstantiator | Type.GetConstructor(Type[]) needs the same PublicParameterlessConstructor annotation, on the FindPluginTypes lambda. Same owner and same reason as the IL2072 row.

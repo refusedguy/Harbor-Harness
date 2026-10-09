@@ -73,19 +73,34 @@
 // stronger requirement than any sentence could be. When #413 empties the list
 // these rules go quiet and the claim becomes true, with nothing deleted.
 //
-// WHAT IS DELIBERATELY NOT CLAIMED
-// --------------------------------
-// This file does NOT decide whether the code is AOT-clean, and is not allowed
-// to pretend to. That needs an actual `dotnet publish -p:PublishAot=true`, and
-// no workflow in .github/workflows/ sets HarborWithAot or HARBOR_MINIMAL — so
-// the block is never evaluated by any build in the repo and "analysis passes
-// cleanly" is currently unfalsifiable. Making it falsifiable is #413 (full
-// publish + warning triage + run the published binary). It is out of scope here
-// twice over: a different issue owns it, and a guard that needs a publish is a
-// new CI gate, which the feature freeze (#555) does not want arriving inside a
-// text fix. No_Workflow_Enables_The_Aot_Block below is the cheap half of that
-// gap and is checked rather than assumed — it is what keeps this file's own
-// "not triaged, nothing has ever emitted it" rows honest.
+// WHAT IS NOT CLAIMED HERE, AND WHERE IT WENT
+// ------------------------------------------
+// This file does NOT decide whether the code is AOT-clean, and is not allowed to
+// pretend to. That needs an actual `dotnet publish -p:HarborWithAot=true` plus a
+// run of the artifact it produces.
+//
+// UNTIL #413 that publish did not exist. No workflow in .github/workflows/ set
+// HarborWithAot or HARBOR_MINIMAL, so the block was never evaluated by any build
+// in the repo and "analysis passes cleanly" was not merely unverified — it was
+// UNFALSIFIABLE, because no process existed whose output could contradict it.
+// The guard below used to enforce that absence (`No_Workflow_Enables_The_Aot_Block`),
+// which is why it had to change rather than merely be deleted: a guard that
+// asserts a hole exists goes RED on the day the hole is filled, so it made
+// fixing the problem a regression. `A_Workflow_Enables_The_Aot_Block` asserts
+// the opposite now — the publish happens, and the demotion list is reconciled
+// against what the publish actually emitted.
+//
+// The publish gate itself is the `aot-publish` job in .github/workflows/ci.yml,
+// and the inventory it compares against is .github/aot-warning-baseline.txt.
+// Neither is reachable from this project (it would have to shell out to a
+// 10-20 minute ILC pass, and this file runs on every build), so what this file
+// CAN do is close the cheap half honestly: prove a workflow turns the block on,
+// and prove the two tables that describe the concessions — the csproj's demotion
+// list and the committed inventory — name the same set of diagnostics.
+//
+// What remains unproven by construction, and is stated rather than papered over:
+// whether that inventory still matches a real publish. Only the job can say, and
+// it says it on every PR.
 //
 // THE TABLE IS IN THE HOUSE SHAPE
 // -------------------------------
@@ -111,9 +126,10 @@
 //   * The_Real_Block_Is_Found_And_Parses — the reader is pointed at the real
 //     file, and the premise that makes the demotion load-bearing
 //     (TreatWarningsAsErrors=true repo-wide) is read, not assumed.
-//   * No_Workflow_Enables_The_Aot_Block — the premise behind every
-//     "not triaged" row is read from .github/workflows, so landing an AOT
-//     publish job turns this file red on purpose.
+//   * A_Workflow_Enables_The_Aot_Block — the publish the "not triaged" rows
+//     were waiting for is READ from .github/workflows rather than assumed, in
+//     the positive direction: it now fails when no workflow turns the block on,
+//     which is the state the rows' premise describes.
 //   * NonVacuity_The_Reader_Catches_An_Unlisted_Diagnostic_And_Ignores_A
 //     _Property_Reference — synthetic csproj text. The `$(…)` case matters
 //     most: a reader that does not filter it out demands a table row for a
@@ -156,10 +172,9 @@ public sealed class AotBlockDemotionRules
     internal const string DemotionProperty = "WarningsNotAsErrors";
 
     /// <summary>
-    ///     The tokens that switch the AOT block on. Either one reaching a workflow
-    ///     means some build finally evaluates the block, which falsifies the
-    ///     "not triaged, nothing has ever emitted it" premise every row below rests
-    ///     on.
+    ///     The tokens that switch the AOT block on. A workflow that names either
+    ///     one evaluates the block, which is what makes the trim/AOT diagnostics
+    ///     it demotes observable at all.
     /// </summary>
     internal static readonly string[] AotEnableTokens = ["HarborWithAot", "HARBOR_MINIMAL"];
 
@@ -168,12 +183,11 @@ public sealed class AotBlockDemotionRules
     ///     for tolerating that one specifically.
     /// </summary>
     /// <remarks>
-    ///     Three rows say "not triaged", and that is the honest state rather than a
-    ///     shrug: there is no build in this repo that has emitted any of them, so
-    ///     there is nothing to triage against.
-    ///     <see cref="No_Workflow_Enables_The_Aot_Block" /> is what stops that from
-    ///     being a permanent excuse — the day a publish job appears, this file is red
-    ///     and the rows have to become arguments.
+    ///     The "not triaged" wording is STALE as of #413 and is kept only until the
+    ///     first <c>aot-publish</c> run reports what the publish actually emits. It
+    ///     was true when written (no workflow evaluated the block) and became false
+    ///     when the publish landed, which is exactly what
+    ///     <see cref="A_Workflow_Enables_The_Aot_Block" /> now detects.
     ///     The fourth is <c>IL3053</c>, which could not be matched to any documented
     ///     diagnostic from this checkout; its row records an unexplained entry
     ///     honestly instead of dressing it up. Removing a row is the correct response
@@ -326,16 +340,27 @@ public sealed class AotBlockDemotionRules
     }
 
     /// <summary>
-    ///     No workflow enables the AOT block — read, not assumed. Every "not triaged"
-    ///     row above rests on this, and this is the cheap half of the gate #413 will
-    ///     build. Landing an AOT publish job is the right thing to do; it must also
-    ///     turn this file red, because at that point the rows stop being honest and
-    ///     start being stale.
+    ///     Some workflow enables the AOT block — read, not assumed, and in the
+    ///     POSITIVE direction.
     /// </summary>
+    /// <remarks>
+    ///     This rule used to assert the opposite: <c>No_Workflow_Enables_The_Aot_Block</c>
+    ///     required that NO workflow turn the block on, and its own comment said that
+    ///     landing an AOT publish job "must also turn this file red, because at that
+    ///     point the rows stop being honest and start being stale". That is a guard on
+    ///     a hole. It made the correct fix a red build, and it would have kept
+    ///     failing for as long as the fix existed — the failure mode this repo's own
+    ///     #747 header describes as "a check that a truthful sentence fails and a false
+    ///     one can be made to pass by rewording is not enforcing a state".
+    ///
+    ///     The demotion list is load-bearing either way, so what this now enforces is
+    ///     that the list is OBSERVABLE: something has to evaluate it, or the four
+    ///     concessions in the csproj are assertions about a configuration no build
+    ///     ever reads.
+    /// </remarks>
     [Test]
-    public async Task No_Workflow_Enables_The_Aot_Block()
+    public async Task A_Workflow_Enables_The_Aot_Block()
     {
-        var offenders = new List<string>();
         IReadOnlyList<string> workflows = EnumerateWorkflows();
 
         await Assert.That(workflows).IsNotEmpty()
@@ -343,6 +368,7 @@ public sealed class AotBlockDemotionRules
                    + "wrong reason — the same vacuous pass every other rule in this project guards "
                    + "against");
 
+        var enablers = new List<string>();
         foreach (string workflow in workflows)
         {
             string text = SourceScan.TryReadAllText(workflow) ?? string.Empty;
@@ -350,16 +376,19 @@ public sealed class AotBlockDemotionRules
             {
                 if (text.Contains(token, StringComparison.OrdinalIgnoreCase))
                 {
-                    offenders.Add($"{Path.GetFileName(workflow)} mentions {token}");
+                    enablers.Add($"{Path.GetFileName(workflow)}:{token}");
                 }
             }
         }
 
-        await Assert.That(offenders).IsEmpty()
-            .Because("a workflow now enables the AOT block, so the AOT configuration is finally "
-                   + "evaluated by a build and every \"not triaged\" row in KnownDemotions is out of "
-                   + "date: " + string.Join("; ", offenders) + ". Re-triage them against the real "
-                   + "output, or drop the IDs that turn out to be clean.");
+        await Assert.That(enablers).IsNotEmpty()
+            .Because("no workflow enables the AOT block, so this PropertyGroup is never evaluated by "
+                   + "any build in the repo and every id in "
+                   + $"{DemotionProperty} is an assertion about a configuration nothing reads. "
+                   + "The aot-publish job in .github/workflows/ci.yml publishes with "
+                   + "-p:HarborWithAot=true; if it was removed, say so here and re-triage "
+                   + "KnownDemotions against a manual publish — do not leave this file green on a "
+                   + "block that is never built.");
     }
 
     // =====================================================================
