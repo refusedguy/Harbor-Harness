@@ -2,8 +2,10 @@
 
 Corpus of deliberately awkward, self-contained CS-source plugins for
 [issue #422](https://github.com/refusedguy/Harbor-Harness/issues/422)
-(slice 1: DI, async, multi-facet). Each file is loaded through the production
-`CsPluginLoader` pipeline by `RealWorldPluginsTests` — none of them is part of
+(slice 1: DI, async, multi-facet via `CsPluginLoader`; slice 2: the same
+fixtures as prebuilt DLL files from disk via `DllRealWorldPluginsTests`).
+Each file is loaded through the production pipeline by `RealWorldPluginsTests`
+(CS-source) and `DllRealWorldPluginsTests` (DLL) — none of them is part of
 any `.csproj`, so `dotnet build` never compiles them directly.
 
 ## Fixtures
@@ -27,10 +29,11 @@ any `.csproj`, so `dotnet build` never compiles them directly.
 2. Keep every type the file needs inside the file; import only namespaces from
    the declared contract surface plus `System.*` and
    `Microsoft.Extensions.Logging`.
-3. Load it in `RealWorldPluginsTests` via `LoadAsync`, following the
-   `SessionBroadcastPluginTests` pattern (fresh temp `HOME` per load, assert an
-   observable effect: registered tool name, executed tool result, registered
-   panel id or agent name).
+3. Load it in `RealWorldPluginsTests` (CS-source via `LoadAsync`) and, when the
+   fixture must also prove the prebuilt-DLL path, in `DllRealWorldPluginsTests`
+   (via `LoadDllAsync`), following the `SessionBroadcastPluginTests` pattern
+   (fresh temp `HOME` per load, assert an observable effect: registered tool
+   name, executed tool result, registered panel id or agent name).
 4. Run the suite before pushing:
 
 ```bash
