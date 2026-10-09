@@ -26,45 +26,54 @@ internal static class RunChangeVerb
         bool dryRun = false;
         string repoRoot = Environment.CurrentDirectory;
         var promptTokens = new List<string>();
-        for (int i = 0; i < args.Length; i++)
+        int i = 0;
+        while (i < args.Length)
         {
             string a = args[i];
             if (a.StartsWith("agent=", StringComparison.Ordinal))
             {
                 agentName = a["agent=".Length..];
+                i++;
+                continue;
             }
-            else if (a is "--dry-run")
+            if (a is "--dry-run")
             {
                 dryRun = true;
+                i++;
+                continue;
             }
-            else if (a is "--checks" && i + 1 < args.Length)
+            if (a is "--checks" && i + 1 < args.Length)
             {
                 checksFile = args[i + 1];
-                i++;
+                i += 2;
+                continue;
             }
-            else if (a.StartsWith("--checks=", StringComparison.Ordinal))
+            if (a.StartsWith("--checks=", StringComparison.Ordinal))
             {
                 checksFile = a["--checks=".Length..];
+                i++;
+                continue;
             }
-            else if (a is "--repo" && i + 1 < args.Length)
+            if (a is "--repo" && i + 1 < args.Length)
             {
                 repoRoot = args[i + 1];
-                i++;
+                i += 2;
+                continue;
             }
-            else if (a.StartsWith("--repo=", StringComparison.Ordinal))
+            if (a.StartsWith("--repo=", StringComparison.Ordinal))
             {
                 repoRoot = a["--repo=".Length..];
+                i++;
+                continue;
             }
-            else if (a.StartsWith("--", StringComparison.Ordinal))
+            if (a.StartsWith("--", StringComparison.Ordinal))
             {
                 Console.Error.WriteLine($"Unknown option '{a}'.");
                 PrintUsage();
                 return 2;
             }
-            else
-            {
-                promptTokens.Add(a);
-            }
+            promptTokens.Add(a);
+            i++;
         }
 
         string task = string.Join(' ', promptTokens).Trim();
