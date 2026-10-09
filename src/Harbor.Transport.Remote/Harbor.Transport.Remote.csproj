@@ -1,11 +1,27 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
+  <!--
+    Harbor.Transport.Remote — PSK-authenticated HTTP/SSE gateway + client
+    that serializes AgentEvents so a desktop GUI can control a headless
+    CLI/TUI session. The only packable project that was missing explicit
+    packaging metadata (issue #429): IsPackable now stated, not defaulted.
+  -->
+
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <OutputType>Library</OutputType>
+    <IsPackable>true</IsPackable>
+    <PackageId>Harbor.Transport.Remote</PackageId>
+    <Description>Harbor remote transport — PSK-authenticated HTTP/SSE gateway and client that serializes AgentEvents so a desktop GUI can control a headless session.</Description>
+    <PackageTags>harbor;transport;remote;http;sse;gateway</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
   </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="\"/>
+  </ItemGroup>
 
   <ItemGroup>
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
