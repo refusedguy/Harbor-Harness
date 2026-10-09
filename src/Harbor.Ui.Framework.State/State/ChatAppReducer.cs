@@ -90,6 +90,7 @@ public static class ChatAppReducer
         ChatAppMsg.ReorderTab ro => ReduceResult.NoOp(ReorderTab(state, ro.SessionId, ro.ToIndex)),
         ChatAppMsg.CycleNextTab => CycleNextTab(state),
         ChatAppMsg.CyclePreviousTab => CyclePreviousTab(state),
+        ChatAppMsg.HydrateTabStrip ht => HydrateTabStrip(state, ht),
 
         // A clear-screen must not close the user's tabs — the strip is workspace
         // chrome, not transcript (#388), and UiState.ClearTranscript already
@@ -596,7 +597,14 @@ public static class ChatAppReducer
     private static string LimitNotice(RunLimitKind limit) => limit switch
     {
         RunLimitKind.Timeout => "limit reached: wall-clock budget elapsed — work is incomplete.",
-        _ => "limit reached: step budget exhausted — work is incomplete.",
+        RunLimitKind.MaxSteps => "limit reached: step budget exhausted — work is incomplete.",
+        // #404: the budget members must name their own ceiling — the `_`
+        // fallback below used to read "step budget", which would send a
+        // spend-capped user tuning MaxSteps (the #1024 wrong-ceiling trap).
+        RunLimitKind.MaxTokens => "limit reached: token budget exhausted — work is incomplete.",
+        RunLimitKind.MaxCost => "limit reached: spend budget exhausted — work is incomplete.",
+        RunLimitKind.MaxOutputBytes => "limit reached: output-size budget exhausted — work is incomplete.",
+        _ => "limit reached: run budget exhausted — work is incomplete.",
     };
 
     /// <summary>
@@ -766,6 +774,10 @@ public static class ChatAppReducer
                 return CloseFocusedTab(state);
             case ChatAction.OpenTab:
                 return RequestOpenTab(state);
+            case ChatAction.MoveTabLeft:
+                return MoveFocusedTab(state, -1);
+            case ChatAction.MoveTabRight:
+                return MoveFocusedTab(state, +1);
 
             default:
                 return null;
@@ -897,6 +909,12 @@ public static class ChatAppReducer
     ///     tab that no longer exists. The effect fires only when the active tab
     ///     actually changed.
     /// </summary>
+    /// <remarks>
+    ///     Pinned tabs survive this gesture (#390): the survivor set is the
+    ///     keep target plus every pinned tab, in tab order. An explicit
+    ///     <see cref="CloseTab" /> still closes a pinned tab — pin guards bulk
+    ///     gestures, not intent.
+    /// </remarks>
     public static ReduceResult CloseOtherTabs(UiState state, SessionId keep)
     {
         var strip = state.Chat.TabStrip;
@@ -905,11 +923,31 @@ public static class ChatAppReducer
         if (keepIndex < 0 || tabs.Length == 1)
             return ReduceResult.NoOp(state);
 
-        var remaining = ImmutableArray.Create(tabs[keepIndex]);
+        var survivors = ImmutableArray.CreateBuilder<SessionTab>(tabs.Length);
+        for (int i = 0; i < tabs.Length; i++)
+        {
+            if (i == keepIndex || tabs[i].IsPinned)
+                survivors.Add(tabs[i]);
+        }
+
+        var remaining = survivors.ToImmutable();
+        if (remaining.Length == tabs.Length)
+        {
+            // Nothing would close — still honour the focus rule when the keep
+            // target is not active, without touching order or panels.
+            if (SameSession(strip.ActiveTabId, keep))
+                return ReduceResult.NoOp(state);
+            var focusOnly = state with
+            {
+                Chat = state.Chat with { TabStrip = strip with { ActiveTabId = keep } }
+            };
+            return new ReduceResult(focusOnly, new TuiEffect.ActivateSession(keep));
+        }
+
         var released = state;
         for (int i = 0; i < tabs.Length; i++)
         {
-            if (i != keepIndex)
+            if (i != keepIndex && !tabs[i].IsPinned)
                 released = ReleaseOwnedPanels(released, tabs[i], remaining);
         }
 
@@ -929,6 +967,11 @@ public static class ChatAppReducer
     ///     <see cref="CloseOtherTabs" />'s focus and effect rules. Closing the
     ///     last tab to the right is a no-op.
     /// </summary>
+    /// <remarks>
+    ///     Pinned tabs to the right survive (#390) — same rule as
+    ///     <see cref="CloseOtherTabs" />. When every tab on the right is
+    ///     pinned, nothing closes and the state is returned untouched.
+    /// </remarks>
     public static ReduceResult CloseTabsToRight(UiState state, SessionId from)
     {
         var strip = state.Chat.TabStrip;
@@ -937,10 +980,35 @@ public static class ChatAppReducer
         if (index < 0 || index == tabs.Length - 1)
             return ReduceResult.NoOp(state);
 
-        var remaining = tabs.RemoveRange(index + 1, tabs.Length - index - 1);
+        bool closesAnything = false;
+        for (int i = index + 1; i < tabs.Length; i++)
+        {
+            if (!tabs[i].IsPinned)
+            {
+                closesAnything = true;
+                break;
+            }
+        }
+
+        if (!closesAnything)
+            return ReduceResult.NoOp(state);
+
+        var survivors = ImmutableArray.CreateBuilder<SessionTab>(tabs.Length);
+        for (int i = 0; i <= index; i++)
+            survivors.Add(tabs[i]);
+        for (int i = index + 1; i < tabs.Length; i++)
+        {
+            if (tabs[i].IsPinned)
+                survivors.Add(tabs[i]);
+        }
+
+        var remaining = survivors.ToImmutable();
         var released = state;
         for (int i = index + 1; i < tabs.Length; i++)
-            released = ReleaseOwnedPanels(released, tabs[i], remaining);
+        {
+            if (!tabs[i].IsPinned)
+                released = ReleaseOwnedPanels(released, tabs[i], remaining);
+        }
 
         var next = released with
         {
@@ -1050,6 +1118,110 @@ public static class ChatAppReducer
     /// </summary>
     public static ReduceResult RequestOpenTab(UiState state) =>
         new(state, new TuiEffect.RequestOpenSession());
+
+    /// <summary>
+    ///     <see cref="ChatAction.MoveTabLeft" /> / <see cref="ChatAction.MoveTabRight" /> —
+    ///     move the <i>focused</i> tab one step (<paramref name="delta" /> of -1/+1)
+    ///     through the existing <see cref="ReorderTab" /> transition (#390).
+    ///     Focus follows the tab (reorder never changes the active id), the
+    ///     effect is always <see cref="TuiEffect.None" /> — moving is
+    ///     presentation, not a session switch — and the edges are no-ops.
+    /// </summary>
+    public static ReduceResult MoveFocusedTab(UiState state, int delta)
+    {
+        if (state.Chat.TabStrip.ActiveTabId is not { } active)
+            return ReduceResult.NoOp(state);
+
+        var strip = state.Chat.TabStrip;
+        int from = strip.IndexOf(active);
+        if (from < 0)
+            return ReduceResult.NoOp(state);
+
+        int to = from + delta;
+        if (to < 0 || to >= strip.Tabs.Length)
+            return ReduceResult.NoOp(state);
+
+        return ReduceResult.NoOp(ReorderTab(state, active, to));
+    }
+
+    /// <summary>
+    ///     Restore the open-tab order + active tab from a persisted
+    ///     <see cref="TabStripSnapshot" /> (#390, slice 3/3 — pure; the host
+    ///     persists debounced and dispatches after first paint).
+    /// </summary>
+    /// <remarks>
+    ///     Snapshot ids with no descriptor (sessions deleted since the persist)
+    ///     are dropped with a single system note — one line no matter how many
+    ///     vanished. A repeated id restores once (first occurrence wins).
+    ///     Descriptors the snapshot does not order are appended at the end, so
+    ///     a session the store knows is never lost to a stale payload. An
+    ///     unknown active id falls back to the first restored tab; nothing
+    ///     restored at all means an empty strip, no focus, no crash — the host
+    ///     then opens the default tab through the existing open path.
+    /// </remarks>
+    public static ReduceResult HydrateTabStrip(UiState state, ChatAppMsg.HydrateTabStrip h)
+    {
+        var byId = new Dictionary<string, SessionTab>(StringComparer.Ordinal);
+        foreach (var tab in h.Tabs)
+        {
+            if (!byId.ContainsKey(tab.SessionId.Value))
+                byId[tab.SessionId.Value] = tab;
+        }
+
+        var restored = ImmutableArray.CreateBuilder<SessionTab>(byId.Count);
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var id in h.Snapshot.Order)
+        {
+            if (!seen.Add(id))
+                continue;
+            if (byId.TryGetValue(id, out var tab))
+                restored.Add(tab);
+        }
+
+        foreach (var tab in h.Tabs)
+        {
+            if (seen.Add(tab.SessionId.Value))
+                restored.Add(tab);
+        }
+
+        var tabs = restored.ToImmutable();
+        int dropped = seen.Count - tabs.Length;
+
+        SessionId? active = null;
+        if (tabs.Length > 0)
+        {
+            active = tabs[0].SessionId;
+            var want = h.Snapshot.ActiveSessionId;
+            if (want is not null)
+            {
+                foreach (var tab in tabs)
+                {
+                    if (string.Equals(tab.SessionId.Value, want, StringComparison.Ordinal))
+                    {
+                        active = tab.SessionId;
+                        break;
+                    }
+                }
+            }
+        }
+
+        var next = state with
+        {
+            Chat = state.Chat with
+            {
+                TabStrip = state.Chat.TabStrip with { Tabs = tabs, ActiveTabId = active }
+            }
+        };
+
+        if (dropped > 0)
+        {
+            next = next.AddLine(
+                ChatRole.System,
+                $"Restored {tabs.Length} tab(s); dropped {dropped} missing session(s).");
+        }
+
+        return ReduceResult.NoOp(next);
+    }
 
     /// <summary>
     ///     Neighbour rule for a closed tab — documented once, pinned by

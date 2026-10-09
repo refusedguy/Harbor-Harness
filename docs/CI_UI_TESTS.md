@@ -136,3 +136,26 @@ bash ./tools/code-inspect.sh
 
 This builds the solution, runs architecture tests, and runs the full
 `Harbor.App.Avalonia.Tests` suite.
+
+## Accepting an intended golden change
+
+The frames lane (`ComponentGoldenFramesTests`, eight scenarios) and the
+legacy lane (`GoldenFrameTests`, four scenarios) compare settled headless
+frames against committed baselines. A mismatch fails with the test name,
+the expected hash, the actual hash, and the path of the written
+`.verified.png` next to the reference — eyeball that diff before accepting.
+
+```bash
+# Option A: regenerate locally (writes PNGs + sha256.json manifest together)
+HARBOR_UPDATE_GOLDENS=1 dotnet run --project tests/Harbor.E2E.App.Avalonia -c Release -- \
+  --treenode-filter "/*/*/*Golden*/*"
+
+# Option B: regenerate on CI without a local .NET setup (PR branch, not dev)
+gh workflow run goldens.yml --ref <branch> -f suites="tests/Harbor.E2E.App.Avalonia"
+```
+
+Review the `.verified.png` diff, then commit the baseline PNGs and the
+`ComponentTests/baselines/sha256.json` manifest in one commit. Pixel goldens
+are skipped on shared CI runners (`SkipGoldenOnCi`) because the Skia and font
+stack differs per host; enforce them on a pinned machine with
+`HARBOR_GOLDENS_STRICT=1`.

@@ -101,7 +101,7 @@
 //   #824's guard enumerates three sites by hand and therefore cannot see any
 //   of these.
 //
-//   ChatKeyMap.cs:156 is a site the issue does not list at all: an unmatched
+//   ChatKeyMap.cs:172 is a site the issue does not list at all: an unmatched
 //   printable rune becomes ChatAction.Char, which is the tree deciding "this
 //   is text" in a sixth vocabulary position.
 //
@@ -279,7 +279,7 @@ public class KeyGateFamilyRules
         new("ReplInputLoop(slash)", KeyGateFamily.Buffer, "apps/Harbor.App.Cli/Repl/ReplInputLoop.cs"),
 
         // The host key map, found by the coverage grep and NOT on the issue's
-        // list: ChatKeyMap.cs:156 turns an unmatched printable rune into
+        // list: ChatKeyMap.cs:172 turns an unmatched printable rune into
         // ChatAction.Char, i.e. it is the place the tree decides "this is
         // text". It is a buffer site by the same test as the composer.
         new("ChatKeyMap", KeyGateFamily.Buffer, "src/Harbor.Ui.Framework.State/State/ChatKeyMap.cs"),
