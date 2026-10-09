@@ -182,10 +182,11 @@ public static class ChangeApplier
                 : new AcceptResult(AcceptOutcome.Conflict, 3, $"Run '{manifest.RunId}': {reason}");
         }
 
-        if (dirt.Value.Count > 0)
+        IReadOnlyList<string> dirtList = dirt.Value;
+        if (dirtList.Count > 0)
         {
             string reason =
-                $"operator tree is dirty ({dirt.Value.Count} tracked file(s): {JoinPaths(dirt.Value)}) — " +
+                $"operator tree is dirty ({dirtList.Count} tracked file(s): {JoinPaths(dirtList)}) — " +
                 "commit, stash, or discard before accepting. Nothing written.";
             return dryRun
                 ? Cancelled($"Run '{manifest.RunId}': dry-run only — accept would refuse: {reason}")
@@ -195,32 +196,35 @@ public static class ChangeApplier
         if (dryRun)
             return await DryRunAsync(manifest, patchPath, actualHead, ct).ConfigureAwait(false);
 
-        Result<string> check = await RunGitAsync(
+        Result<GitOutput> check = await RunGitAsync(
             manifest.RepoRoot, ["apply", "--check", patchPath], ApplyTimeout, ct).ConfigureAwait(false);
         if (check.IsFailure)
             return Fail($"Cannot run git apply --check for run '{manifest.RunId}': {check.Error} Nothing written.");
-        if (check.Value.ExitCode != 0)
+        GitOutput checkOut = check.Value;
+        if (checkOut.ExitCode != 0)
             return Fail($"Run '{manifest.RunId}': git apply --check failed: " +
-                $"{Clip(check.Value.Stderr)} Nothing written, tree unchanged.");
+                $"{Clip(checkOut.Stderr)} Nothing written, tree unchanged.");
 
         Result<string> recheck = await RevParseHeadAsync(manifest.RepoRoot, ct).ConfigureAwait(false);
         if (recheck.IsFailure)
             return Fail($"Run '{manifest.RunId}': cannot re-verify base after --check: " +
                 $"{recheck.Error} Nothing written.");
-        if (!recheck.Value.Equals(manifest.BaseRevision, StringComparison.Ordinal))
+        string recheckedHead = recheck.Value;
+        if (!recheckedHead.Equals(manifest.BaseRevision, StringComparison.Ordinal))
             return new AcceptResult(
                 AcceptOutcome.Conflict, 3,
-                $"Run '{manifest.RunId}': base moved {manifest.BaseRevision}->{recheck.Value} " +
+                $"Run '{manifest.RunId}': base moved {manifest.BaseRevision}->{recheckedHead} " +
                 "between --check and apply — refusing a racy apply. Nothing written.");
 
-        Result<string> apply = await RunGitAsync(
+        Result<GitOutput> apply = await RunGitAsync(
             manifest.RepoRoot, ["apply", "--index", patchPath], ApplyTimeout, ct).ConfigureAwait(false);
         if (apply.IsFailure)
             return Fail($"Cannot run git apply for run '{manifest.RunId}': {apply.Error} " +
                 "The check passed but the apply did not run — verify with: " +
                 $"git -C \"{manifest.RepoRoot}\" status --porcelain");
-        if (apply.Value.ExitCode != 0)
-            return await RollbackAsync(manifest, patchPath, apply.Value.Stderr, ct).ConfigureAwait(false);
+        GitOutput applyOut = apply.Value;
+        if (applyOut.ExitCode != 0)
+            return await RollbackAsync(manifest, patchPath, applyOut.Stderr, ct).ConfigureAwait(false);
 
         Result<RunManifest> advanced = WorkspaceMaterializer.TryAdvanceState(manifest.RunId, RunState.Accepted);
         if (advanced.IsFailure)
@@ -253,23 +257,31 @@ public static class ChangeApplier
         sb.Append($" git -C \"{manifest.RepoRoot}\" apply --check \"{patchPath}\";");
         sb.Append($" git -C \"{manifest.RepoRoot}\" apply --index \"{patchPath}\".");
 
-        Result<string> check = await RunGitAsync(
+        Result<GitOutput> check = await RunGitAsync(
             manifest.RepoRoot, ["apply", "--check", patchPath], ApplyTimeout, ct).ConfigureAwait(false);
         if (check.IsFailure)
             sb.Append($" Pre-check did not run: {check.Error}");
-        else if (check.Value.ExitCode != 0)
-            sb.Append($" Pre-check FAILS: {Clip(check.Value.Stderr)}");
         else
-            sb.Append(" Pre-check passes.");
+        {
+            GitOutput checkOut = check.Value;
+            if (checkOut.ExitCode != 0)
+                sb.Append($" Pre-check FAILS: {Clip(checkOut.Stderr)}");
+            else
+                sb.Append(" Pre-check passes.");
+        }
 
-        Result<string> stat = await RunGitAsync(
+        Result<GitOutput> stat = await RunGitAsync(
             manifest.RepoRoot, ["diff", "--stat"], ProbeTimeout, ct).ConfigureAwait(false);
         if (stat.IsFailure)
             sb.Append(" git diff --stat did not run.");
-        else if (stat.Value.Stdout.Trim().Length == 0)
-            sb.Append(" git diff --stat: clean (no uncommitted changes).");
         else
-            sb.Append($" git diff --stat: {OneLine(stat.Value.Stdout, 300)}");
+        {
+            string statOut = stat.Value.Stdout;
+            if (statOut.Trim().Length == 0)
+                sb.Append(" git diff --stat: clean (no uncommitted changes).");
+            else
+                sb.Append($" git diff --stat: {OneLine(statOut, 300)}");
+        }
 
         sb.Append(" Nothing written.");
         return new AcceptResult(AcceptOutcome.Cancelled, 0, sb.ToString());
@@ -281,13 +293,16 @@ public static class ChangeApplier
         // The pre-flight verified a clean tree, so --reverse can only undo what
         // this attempt staged — it is safe to attempt. If it fails, or the tree
         // is still dirty afterwards, the operator gets exact recovery commands.
-        Result<string> reverse = await RunGitAsync(
+        Result<GitOutput> reverse = await RunGitAsync(
             manifest.RepoRoot, ["apply", "--reverse", "--index", patchPath], ApplyTimeout, ct).ConfigureAwait(false);
         Result<IReadOnlyList<string>> dirt = await TrackedDirtAsync(manifest.RepoRoot, ct).ConfigureAwait(false);
-        bool clean = reverse.IsSuccess
-            && reverse.Value.ExitCode == 0
-            && dirt.IsSuccess
-            && dirt.Value.Count == 0;
+        bool reverseOk = false;
+        bool treeClean = false;
+        if (reverse.IsSuccess)
+            reverseOk = reverse.Value.ExitCode == 0;
+        if (dirt.IsSuccess)
+            treeClean = dirt.Value.Count == 0;
+        bool clean = reverseOk && treeClean;
         if (clean)
             return new AcceptResult(
                 AcceptOutcome.Refused, 4,
@@ -310,10 +325,11 @@ public static class ChangeApplier
             repoRoot, ["rev-parse", "HEAD"], ProbeTimeout, ct).ConfigureAwait(false);
         if (head.IsFailure)
             return head.ConvertFailure<string>();
-        if (head.Value.ExitCode != 0)
+        GitOutput headOut = head.Value;
+        if (headOut.ExitCode != 0)
             return Result.Failure<string>(
-                $"git rev-parse HEAD failed in '{repoRoot}': {Clip(head.Value.Stderr)}");
-        string sha = head.Value.Stdout.Trim();
+                $"git rev-parse HEAD failed in '{repoRoot}': {Clip(headOut.Stderr)}");
+        string sha = headOut.Stdout.Trim();
         if (sha.Length == 0)
             return Result.Failure<string>(
                 $"git rev-parse HEAD returned empty output in '{repoRoot}'.");
@@ -326,11 +342,12 @@ public static class ChangeApplier
             repoRoot, ["status", "--porcelain=v1"], ProbeTimeout, ct).ConfigureAwait(false);
         if (status.IsFailure)
             return status.ConvertFailure<IReadOnlyList<string>>();
-        if (status.Value.ExitCode != 0)
+        GitOutput statusOut = status.Value;
+        if (statusOut.ExitCode != 0)
             return Result.Failure<IReadOnlyList<string>>(
-                $"git status failed in '{repoRoot}': {Clip(status.Value.Stderr)}");
+                $"git status failed in '{repoRoot}': {Clip(statusOut.Stderr)}");
         var tracked = new List<string>();
-        foreach (string rawLine in status.Value.Stdout.Split('\n'))
+        foreach (string rawLine in statusOut.Stdout.Split('\n'))
         {
             string line = rawLine.EndsWith('\r') ? rawLine[..^1] : rawLine;
             if (line.Length == 0)
