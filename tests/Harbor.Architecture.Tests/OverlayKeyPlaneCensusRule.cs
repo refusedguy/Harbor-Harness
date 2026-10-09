@@ -6,13 +6,14 @@
 // `IOverlayLayer` in product builds" behind it and no product call site. Both
 // halves were re-measured against the tree, and neither survives as written:
 //
-//   * There are SEVEN `IOverlayLayer` implementations under `src/` + `apps/`,
-//     not five. The two the issue missed are `ToastOverlayLayer` (which IS
-//     registered and pushed every frame) and `WhichKeyHelpOverlayLayer`.
+//   * There are EIGHT `IOverlayLayer` implementations under `src/` + `apps/`
+//     (#400 seated `MarkupOverlayLayer` as the sixth registered layer; the two
+//     the issue missed are `ToastOverlayLayer` (which IS registered and pushed
+//     every frame) and `WhichKeyHelpOverlayLayer`.
 //
 //   * "Five layers behind it" conflates three different states that this
 //     project keeps apart, and the difference decides what any fix costs.
-//     Measured, the seven fall into three buckets:
+//     Measured, the eight fall into three buckets:
 //
 //       REGISTERED + READS KEYS + CAN BE SHOWN (2)
 //         ImageViewerOverlayLayer     field _imageLayer, pushed at
@@ -43,7 +44,7 @@
 //
 // WHY THIS FILE IS NOT A FIX
 // --------------------------
-// The stack is ALIVE — `ChatScreenLayout.SyncOverlays` pushes five layers and
+// The stack is ALIVE — `ChatScreenLayout.SyncOverlays` pushes six layers and
 // `LayoutTree.PaintAll` calls `Overlays.PaintOver` on every frame. The half
 // that is dead is the key half: `RouteKey`, `HasModalBarrier`, `TopModal` and
 // `HitTest` have no product reader at all, and `PanelKeyRouteProbe.Ledger`
@@ -55,7 +56,7 @@
 // the decision cannot be taken against stale prose, and it pins the fact that
 // the PAINT half is live — because the single most likely wrong move here is
 // to read "RouteKey has no caller" as "the overlay stack is dead" and delete a
-// z-order that five layers are painted through every frame.
+// z-order that six layers are painted through every frame.
 //
 // WHERE THE DOOR IS, AND WHY IT IS NOT FREE
 // ----------------------------------------
@@ -241,6 +242,7 @@ public sealed class OverlayKeyPlaneCensusRule
         "DialogOverlayLayer",
         "DiffViewerOverlayLayer",
         "ImageViewerOverlayLayer",
+        "MarkupOverlayLayer",
         "SetupChecklistOverlayLayer",
         "ToastOverlayLayer",
     ];
@@ -249,6 +251,7 @@ public sealed class OverlayKeyPlaneCensusRule
     internal static readonly string[] RegisteredButCannotReadKeys =
     [
         "DialogOverlayLayer",
+        "MarkupOverlayLayer",
         "ToastOverlayLayer",
     ];
 
@@ -398,13 +401,13 @@ public sealed class OverlayKeyPlaneCensusRule
             .Select(static r => r.Name).ToArray();
 
         await Assert.That(registered).IsEquivalentTo(RegisteredLayers).Because(
-            "these five are pushed onto the stack by SyncOverlays. A sixth appearing means a "
+            "these six are pushed onto the stack by SyncOverlays. A seventh appearing means a "
             + "new overlay was seated, which changes what 'wiring RouteKey' would cost; one "
             + "disappearing means it was removed and this table is stale. Measured: "
             + Describe(registered));
 
         await Assert.That(cannotRead).IsEquivalentTo(RegisteredButCannotReadKeys).Because(
-            "DialogOverlayLayer and ToastOverlayLayer take the IOverlayLayer.OnKey default, so "
+            "DialogOverlayLayer, MarkupOverlayLayer and ToastOverlayLayer take the IOverlayLayer.OnKey default, so "
             + "they cannot read a key even once something shows them. DiffViewerOverlayLayer is "
             + "deliberately NOT in this table: it overrides OnKey and declares IsModal = true, "
             + "which is what makes it the parked layer that looks armed. Measured: "
