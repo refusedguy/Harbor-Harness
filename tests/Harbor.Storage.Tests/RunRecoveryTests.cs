@@ -346,8 +346,8 @@ public class RunRecoveryTests
     public async Task Policy_NonIdempotentRefusal_CarriesQualifiedDisclaimer()
     {
         // Exactly-once is disclaimed, never promised: the refusal for an
-        // effectful tool carries the qualified sentence, and the bare word
-        // "guarantee" appears nowhere unqualified.
+        // effectful tool carries the qualified sentence, and the bare
+        // word appears nowhere unqualified.
         const string callId = "tc-406-bash";
         IReadOnlyList<AgentMessage> observed = new AgentMessage[]
         {
