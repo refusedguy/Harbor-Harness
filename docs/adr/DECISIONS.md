@@ -399,3 +399,24 @@ one real defect found in the blast radius is fixed — `CountDelegations` swallo
 - Full text, the per-type consumer counts, the per-file binding table, the
   eight path-pinned guards split by how each would react to a move, and why no new
   layer guard is proposed: [ADR-014](ADR-014-sessions-stays-in-ui-framework.md).
+
+---
+
+## ADR-015: i18n shared string catalogue lives in `Harbor.Ui.Framework.Abstractions`
+
+Issue #434, slice 1 (inventory + catalogue home only). The shared catalogue is
+`UiStrings.resx` (`en` = source of truth) with per-locale satellites plus a
+missing-key → `en` accessor, placed in `Harbor.Ui.Framework.Abstractions`
+because that project is already `Layer.Domain` in `FullLayerMatrixTests` (cf.
+ADR-009) — reachable from TUI renderers, both apps and `contrib`-Blazor with
+zero new matrix edges, while `Harbor.Abstractions` stays frozen. Avalonia
+projects the same keys into per-locale `ResourceDictionary` XAML (rule 9),
+Blazor adapts via `IStringLocalizer`, TUI/CLI look up directly with a
+width/unicode fallback. Inventory (~1 370 occurrences pre-dedupe), the
+`InvariantCulture` user-facing hit list, and the high-traffic group table:
+
+- [inventory](../I18N_STRING_INVENTORY.md), full text:
+  [ADR-015](ADR-015-i18n-string-catalogue-home.md).
+
+Locales, fallback tests, extraction, and the culture-format fixes are later
+slices.
