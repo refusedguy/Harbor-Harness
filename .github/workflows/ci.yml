@@ -178,6 +178,173 @@ jobs:
       - name: Smoke — CLI binary runs
         run: dotnet exec apps/Harbor.App.Cli/bin/Release/net10.0/Harbor.App.Cli.dll --version
 
+      # Issue #429, slice 1: pack + validate Harbor.* libraries in CI.
+      # No new job — these steps live in the existing build job, which has
+      # just produced the Release binaries they pack with --no-build.
+      # Publishing to nuget.org / GitHub Packages is deliberately NOT here:
+      # it needs an API secret and is tracked as the follow-up slice.
+      - name: Pack Harbor.* libraries (Release, deterministic)
+        run: |
+          set -euo pipefail
+          rm -rf packages
+          mkdir -p packages
+          for csproj in src/*/*.csproj; do
+            if grep -q '<IsPackable>false' "$csproj"; then
+              echo "skip (IsPackable=false): $csproj"
+              continue
+            fi
+            dotnet pack "$csproj" -c Release --no-build \
+              -p:ContinuousIntegrationBuild=true -o "$GITHUB_WORKSPACE/packages"
+          done
+          ls packages/*.nupkg | tee pack-list.txt
+
+      # Validates the packed artifacts with stdlib python only (no signatures
+      # involved: `dotnet nuget verify` is for signed packages and unsigned
+      # Harbor.* builds would fail it — the metadata/README/determinism
+      # checks below are the #429 acceptance slice):
+      #   1. every IsPackable=true src/ project produced exactly one .nupkg,
+      #   2. each nuspec carries MIT license, the real RepositoryUrl,
+      #      a project URL, a non-empty description and >= 3 tags,
+      #   3. each .nupkg embeds its per-project README.md,
+      #   4. packing twice from the same checkout is byte-identical.
+      - name: Validate packages (metadata + README + determinism)
+        run: |
+          set -euo pipefail
+          rm -rf packages2
+          mkdir -p packages2
+          for csproj in src/*/*.csproj; do
+            if grep -q '<IsPackable>false' "$csproj"; then
+              continue
+            fi
+            dotnet pack "$csproj" -c Release --no-build \
+              -p:ContinuousIntegrationBuild=true -o "$GITHUB_WORKSPACE/packages2"
+          done
+          python3 - <<'PY'
+          import glob, hashlib, os, re, sys, zipfile
+          import xml.etree.ElementTree as ET
+
+          REPO = "https://github.com/refusedguy/Harbor-Harness"
+          failures = []
+
+          def fail(msg):
+              failures.append(msg)
+              print(f"FAIL: {msg}")
+
+          # 1. packable set <-> produced packages.
+          expected_ids = set()
+          for csproj in sorted(glob.glob("src/*/*.csproj")):
+              text = open(csproj, encoding="utf-8").read()
+              if "<IsPackable>false" in text:
+                  continue
+              m = re.search(r"<PackageId>([^<]+)</PackageId>", text)
+              if not m:
+                  fail(f"{csproj}: packable but no explicit <PackageId>")
+                  continue
+              expected_ids.add(m.group(1))
+
+          produced = {}
+          for nupkg in sorted(glob.glob("packages/*.nupkg")):
+              with zipfile.ZipFile(nupkg) as z:
+                  names = z.namelist()
+                  spec_name = next((n for n in names if n.endswith(".nuspec")), None)
+                  if spec_name is None:
+                      fail(f"{nupkg}: no .nuspec inside")
+                      continue
+                  spec = ET.fromstring(z.read(spec_name))
+                  md = spec.find("metadata")
+                  pid = md.findtext("id")
+                  produced[pid] = (nupkg, names, md)
+
+          if set(produced) != expected_ids:
+              fail(f"package set mismatch: missing={sorted(expected_ids - set(produced))} "
+                   f"extra={sorted(set(produced) - expected_ids)}")
+
+          # 2+3. per-package metadata + embedded README.
+          for pid, (nupkg, names, md) in sorted(produced.items()):
+              base = os.path.basename(nupkg)
+              lic = md.find("license")
+              if lic is None or lic.get("type") != "expression" or (lic.text or "").strip() != "MIT":
+                  fail(f"{base}: license is not MIT expression")
+              repo = md.find("repository")
+              if repo is None or repo.get("url") != REPO or repo.get("type") != "git":
+                  fail(f"{base}: repository url/type is not {REPO} (git)")
+              if not (md.findtext("projectUrl") or "").strip():
+                  fail(f"{base}: missing projectUrl")
+              if not (md.findtext("description") or "").strip():
+                  fail(f"{base}: missing description")
+              tags = re.split(r"[\s;]+", (md.findtext("tags") or "").strip())
+              tags = [t for t in tags if t]
+              if len(tags) < 3:
+                  fail(f"{base}: fewer than 3 tags: {tags}")
+              if (md.findtext("readme") or "").strip() != "README.md":
+                  fail(f"{base}: nuspec <readme> is not README.md")
+              if "README.md" not in names:
+                  fail(f"{base}: README.md not embedded in package")
+              if not any(n.startswith("lib/") for n in names):
+                  fail(f"{base}: no lib/ payload in package")
+
+          # 4. determinism: same commit packed twice -> identical bytes.
+          def sha256(path):
+              h = hashlib.sha256()
+              with open(path, "rb") as fh:
+                  for chunk in iter(lambda: fh.read(1 << 20), b""):
+                      h.update(chunk)
+              return h.hexdigest()
+
+          for nupkg in sorted(glob.glob("packages/*.nupkg")):
+              twin = os.path.join("packages2", os.path.basename(nupkg))
+              if not os.path.isfile(twin):
+                  fail(f"{os.path.basename(nupkg)}: missing from second pack")
+              elif sha256(nupkg) != sha256(twin):
+                  fail(f"{os.path.basename(nupkg)}: second pack differs (not deterministic)")
+
+          print(f"checked {len(produced)} packages against {len(expected_ids)} packable projects")
+          sys.exit(1 if failures else 0)
+          PY
+
+      # Clean-room proof that the dependency graph resolves: throwaway console
+      # project installs Harbor.Abstractions + one provider package from the
+      # just-packed local feed (transitive third-party deps still come from
+      # nuget.org via the throwaway nuget.config below).
+      - name: Smoke — clean-room install of Harbor.Abstractions + provider
+        run: |
+          set -euo pipefail
+          VERSION="$(python3 -c "
+          import glob, os, re
+          for n in sorted(glob.glob('packages/*.nupkg')):
+              m = re.match(r'^Harbor\.Abstractions\.(\d.*)\.nupkg$', os.path.basename(n))
+              if m:
+                  print(m.group(1))
+                  break
+          ")"
+          test -n "$VERSION"
+          echo "smoke-installing Harbor.* $VERSION"
+          rm -rf /tmp/pack-smoke
+          mkdir -p /tmp/pack-smoke/smoke
+          cd /tmp/pack-smoke/smoke
+          dotnet new console --no-restore
+          cat > nuget.config <<EOF
+          <configuration>
+            <packageSources>
+              <add key="local" value="$GITHUB_WORKSPACE/packages" />
+              <add key="nuget.org" value="https://api.nuget.org/v3/index.json" />
+            </packageSources>
+          </configuration>
+          EOF
+          dotnet add package Harbor.Abstractions --version "$VERSION"
+          dotnet add package Harbor.Providers.Ollama --version "$VERSION"
+          dotnet build -c Release
+
+      - name: Upload NuGet packages
+        uses: actions/upload-artifact@v7
+        with:
+          name: harbor-nuget-packages
+          path: |
+            packages/*.nupkg
+            pack-list.txt
+          if-no-files-found: error
+          retention-days: 7
+
       # Advisory report only: surfaces `dotnet list package --vulnerable`
       # output (NU190x advisories) on every PR without failing the build.
       # continue-on-error is intentional — see "Dependency & advisory policy"
