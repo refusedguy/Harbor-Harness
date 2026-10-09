@@ -73,15 +73,19 @@ double-buffer pool (`Rent`/`Publish`/`TryTake`/`Return`), and
 `FrameDiff`/`FrameDiffMode`/`FrameDiffEnumerator` compute the changed cells
 between frames — `FrameDiff` is a `readonly ref struct` built inside the render
 loop and enumerated without allocating. `DirtyRect` narrows the diff region to
-hint rectangles. Also here: `OverlayStack` (modal/overlay compositing),
-`FlexLayout`/`LayoutTree`/`Graphics` (layout),
-`PromptBuffer`/`PromptHistory`/`PromptRenderer`/`PromptViewport` and
-`ComposerController`/`VimComposerMode` (input editing),
-`CodeSyntaxTokenizer` with `LanguageSupportRegistry` and per-language
-`ILanguageSupport` implementations (`CSharpLanguageSupport` and friends) for
-syntax highlighting, `DiffEngine`, the `PostFxPipeline` /
-`SpringFx` post-effect chain, and the OSC helpers `Osc52Clipboard`,
-`Osc777Notify`, `Osc99Notify`, `Osc1337Image`.
+hint rectangles. Also here: the engine-owned vocabulary ports (`Cell`,
+`Rect`, `ScreenBuffer`, `CellStyle`, `UnicodeWidth`, the `KeyEvent` family,
+`UiKeyDto`, `RgbColor`, `TerminalBackgroundProbe`, plus the
+`EngineStageCounters` instrument), `FlexLayout`/`Graphics` (layout),
+`DiffEngine`, the `PostFxPipeline` / `SpringFx` post-effect chain,
+`InlineImageEncoder`, and the OSC helpers `Osc52Clipboard`,
+`Osc777Notify`, `Osc99Notify`, `Osc1337Image`. The chat-owned rendering —
+`OverlayStack`, `LayoutTree`, `PromptBuffer` / `PromptHistory` /
+`PromptRenderer` / `PromptViewport`, `ComposerController` / `VimComposerMode`,
+the markdown tokenizers (`CodeTokenizer`, `CodeSyntaxTokenizer`,
+`CodeHighlightPalette`, `LanguageSupportRegistry`), `InlineSession` /
+`InlineImageLayer`, `MarkdownEditOps` and `GlowEffect` — moved to
+`Harbor.Tui.CellForge` under `Chat/Rendering` (#436).
 
 ## Wiring
 
@@ -146,22 +150,25 @@ await writer.EndFrameAsync(ct);
 `FrameDiff`/`FrameDiffMode`/`FrameDiffEnumerator` compute the changed cells
 between frames — `FrameDiff` is a `readonly ref struct` built inside the render
 loop and enumerated without allocating. `DirtyRect` narrows the diff region to
-hint rectangles. Also here: `OverlayStack` (modal/overlay compositing),
-`FlexLayout`/`LayoutTree`/`Graphics` (layout),
-`PromptBuffer`/`PromptHistory`/`PromptRenderer`/`PromptViewport` and
-`ComposerController`/`VimComposerMode` (input editing),
-`CodeSyntaxTokenizer` with `LanguageSupportRegistry` and per-language
-`ILanguageSupport` implementations (`CSharpLanguageSupport` and friends) for
-syntax highlighting, `DiffEngine`, the `PostFxPipeline` /
-`SpringFx` post-effect chain, and the OSC helpers `Osc52Clipboard`,
-`Osc777Notify`, `Osc99Notify`, `Osc1337Image`.
+hint rectangles. Also here: the engine-owned vocabulary ports (`Cell`,
+`Rect`, `ScreenBuffer`, `CellStyle`, `UnicodeWidth`, the `KeyEvent` family,
+`UiKeyDto`, `RgbColor`, `TerminalBackgroundProbe`, plus the
+`EngineStageCounters` instrument), `FlexLayout`/`Graphics` (layout),
+`DiffEngine`, the `PostFxPipeline` / `SpringFx` post-effect chain,
+`InlineImageEncoder`, and the OSC helpers `Osc52Clipboard`,
+`Osc777Notify`, `Osc99Notify`, `Osc1337Image`. The chat-owned rendering —
+`OverlayStack`, `LayoutTree`, `PromptBuffer` / `PromptHistory` /
+`PromptRenderer` / `PromptViewport`, `ComposerController` / `VimComposerMode`,
+the markdown tokenizers (`CodeTokenizer`, `CodeSyntaxTokenizer`,
+`CodeHighlightPalette`, `LanguageSupportRegistry`), `InlineSession` /
+`InlineImageLayer`, `MarkdownEditOps` and `GlowEffect` — moved to
+`Harbor.Tui.CellForge` under `Chat/Rendering` (#436).
 
 ## Dependencies
 
 | Reference | Why |
 |-----------|-----|
-| `Harbor.Ui.Framework.Rendering` | `Cell`, `ScreenBuffer`, key vocabulary (`UiKeyDto`), Enter decision (`EnterPolicy`), `RowHashDiffEncoder` |
-| `Harbor.DesignSystem` | colour tokens |
+| _(none — standalone leaf since #436)_ | The cell/input/probe vocabulary lives here now as engine-owned ports (verbatim copies under `Harbor.Tui.CellForge.*`); the chat-owned rendering moved to `Harbor.Tui.CellForge/Chat/Rendering`, which references both sides |
 
 `Harbor.Abstractions` and `Harbor.Ui.Framework.State` were removed in #435.
 The first measured as a zero real dependency — zero imports and zero bound
@@ -172,6 +179,14 @@ name the BCL-only `UiKeyDto` (#162) and `EnterDecision` vocabularies instead.
 converts through `KeyEventAdapter`, which stays the single
 Rendering→State crossing point. `MouseRouter.WheelToKey` + a
 `TimelineWheelTarget` callback is now half a round trip that a host completes.
+
+`Harbor.Ui.Framework.Rendering` and `Harbor.DesignSystem` were removed in #436:
+the 15 remaining cell/input/probe types were ported into the engine
+verbatim (same shape, engine-owned namespaces), and the chat-owned rendering
+(prompt/composer/markdown/overlay/layout/image-layer, 17 files) moved to
+`Harbor.Tui.CellForge/Chat/Rendering`. The #1009 caveat is cleared with them:
+`Contracts` reached the engine only transitively (`Rendering→Contracts`), so
+with both edges gone no Harbor assembly is reachable at all.
 
 Referenced by `Harbor.Tui.CellForge` (its only production consumer),
 `src/Harbor.Hosting`, `apps/Harbor.App.Cli`, and the CellForge test/benchmark
