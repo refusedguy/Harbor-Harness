@@ -107,9 +107,9 @@ docs/                                 — 65 top-level docs (architecture, tools
                                         + adr/, specs/, standards/, ui/, themes/, notes/, .kilo-docs/ (archived sprint notes)
 tests/                                — 36 test/bench projects, one directory each
                                         incl. shared Harbor.TestKit and Harbor.Benchmarks
-                                        (`tests/` holds 37 directories: the 36 projects plus
-                                        `fixtures/`, which is data and has no .csproj — so a
-                                        plain `ls -d tests/*/ | wc -l` reads 37 and is the
+                                        (`tests/` holds 38 directories: the 36 projects plus
+                                        `fixtures/` and `Plugins/`, which are data and have no .csproj — so a
+                                        plain `ls -d tests/*/ | wc -l` reads 38 and is the
                                         wrong number to quote)
 ```
 
