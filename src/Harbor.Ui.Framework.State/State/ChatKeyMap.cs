@@ -67,6 +67,15 @@ public sealed class ChatKeyMap
         // Ctrl+T — open / switch tab. Rebindable through this table like every
         // other entry (the slice-3 gesture layer reuses the same action).
         new(ChatAction.OpenTab, "open tab", new Binding(UiKeyCode.Char, KeyModifierSet.Ctrl, 't')),
+        // Alt+Left / Alt+Right — move the focused tab (#390, slice 3/3). The
+        // Left/Right codes are unclaimed (resize owns Ctrl+Up/Down/Left/Right,
+        // panel slots own Alt+char), so no ordering hazard. Guarded on a live
+        // multi-tab strip like Next/PreviousTab: with fewer than two tabs the
+        // chord falls through to None instead of no-op dispatching.
+        new(ChatAction.MoveTabLeft, "move tab left",
+            new Binding(UiKeyCode.Left, KeyModifierSet.Alt)) { Guard = TabStripGuard },
+        new(ChatAction.MoveTabRight, "move tab right",
+            new Binding(UiKeyCode.Right, KeyModifierSet.Alt)) { Guard = TabStripGuard },
 
         // ── panel hotkeys ────────────────────────────────────────────────
         // Alt+1..Alt+9 — toggle the Nth registered panel. Slot comes from the key's Character.
@@ -121,6 +130,13 @@ public sealed class ChatKeyMap
     /// </summary>
     private static bool TabStripOpen(UiState? state) =>
         state is not null && state.Chat.TabStrip.Tabs.Length >= 2;
+
+    /// <summary>
+    ///     Context guard for the move-tab pair (#390): same strip rule as the
+    ///     cycle pair, but the key is irrelevant — Alt+Left/Right are unclaimed,
+    ///     so there is no chord to disambiguate, only a strip to require.
+    /// </summary>
+    private static bool TabStripGuard(UiKey _, UiState? state) => TabStripOpen(state);
 
     /// <summary>
     ///     Resolve a key press to an action (first matching entry wins), without

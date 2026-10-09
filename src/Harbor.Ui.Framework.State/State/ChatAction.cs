@@ -80,7 +80,18 @@ public enum ChatAction
     ///     <see cref="ChatKeyMap" /> like every other entry; the reducer turns it
     ///     into <see cref="TuiEffect.RequestOpenSession" /> for the host.
     /// </summary>
-    OpenTab
+    OpenTab,
+
+    /// <summary>
+    ///     Alt+Left — move the focused tab one step left (#390, slice 3/3).
+    ///     The keyboard equivalent of drag-reorder: a mouse-only reorder is not
+    ///     acceptable on this surface (SSH, multiplexers), so the chord folds
+    ///     through the existing <c>ReorderTab</c> transition and keeps focus.
+    /// </summary>
+    MoveTabLeft,
+
+    /// <summary>Alt+Right — move the focused tab one step right (mirrors <see cref="MoveTabLeft" />).</summary>
+    MoveTabRight
 }
 
 /// <summary>

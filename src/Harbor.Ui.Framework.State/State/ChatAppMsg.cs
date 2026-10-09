@@ -166,4 +166,31 @@ public abstract record ChatAppMsg : AppMsg
 
     /// <summary>Focus the previous tab in tab order (wraps; no-op with fewer than two tabs).</summary>
     public sealed record CyclePreviousTab : ChatAppMsg;
+
+    /// <summary>
+    ///     Restore the open-tab order + active tab from a persisted
+    ///     <see cref="TabStripSnapshot" /> (#390, slice 3/3).
+    /// </summary>
+    /// <remarks>
+    ///     <para>
+    ///         The host resolved <paramref name="Tabs" /> against the session
+    ///         store before dispatching: only sessions that still exist are
+    ///         listed. Snapshot ids with no descriptor are dropped with a single
+    ///         system note in the transcript; known descriptors the snapshot
+    ///         does not order are appended at the end in the given order, so a
+    ///         session the store knows is never lost to a stale payload.
+    ///     </para>
+    ///     <para>
+    ///         Degenerate input restores to an empty strip without crashing —
+    ///         never to a invented tab: the reducer cannot create sessions, so
+    ///         the host opens the default tab through the existing open path
+    ///         when the strip comes back empty. Like
+    ///         <see cref="HydrateSession" /> this emits no switch effect; the
+    ///         host owns session switching (and schedules the dispatch after
+    ///         first paint, so a slow store never blocks startup).
+    ///     </para>
+    /// </remarks>
+    /// <param name="Snapshot">Persisted order + focus, as session-id strings.</param>
+    /// <param name="Tabs">Descriptors for the sessions that still exist.</param>
+    public sealed record HydrateTabStrip(TabStripSnapshot Snapshot, ImmutableArray<SessionTab> Tabs) : ChatAppMsg;
 }
