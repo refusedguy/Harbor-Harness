@@ -15,8 +15,8 @@ namespace Harbor.Plugins.Runtime.Tests.Security;
 
 /// <summary>
 ///     Execution sandbox contract (<see cref="SandboxedPluginTool" />): every
-///     plugin-contributed tool call is bounded by a wall-clock timeout and an
-///     allocation budget; blocks surface as error <see cref="ToolResult" />s plus
+///     plugin-contributed tool call is bounded by a wall-clock timeout and a
+///     result-payload budget; blocks surface as error <see cref="ToolResult" />s plus
 ///     <see cref="PluginBlockedEvent" /> and a deny audit line, while ordinary
 ///     capability use is audited as allow.
 /// </summary>
@@ -135,8 +135,8 @@ public sealed class SandboxedPluginToolTests
     {
         var bus = new RecordingEventBus();
         var audit = new RecordingAuditLog();
-        var inner = new FakeTool(Args("{}"), ToolResult.Success("ok"), allocateBytes: 64 * 1024);
-        var tool = Wrap(inner, bus, audit, memoryBudget: 1);
+        var inner = new FakeTool(Args("{}"), ToolResult.Success(new string('x', 1024)));
+        var tool = Wrap(inner, bus, audit, memoryBudget: 16);
 
         var result = await tool.ExecuteAsync(Args("{}"), Ctx);
 
@@ -243,21 +243,16 @@ public sealed class SandboxedPluginToolTests
         private readonly ToolResult _result;
         private readonly TimeSpan? _delay;
         private readonly bool _ignoresToken;
-        private readonly long _allocateBytes;
 
         public FakeTool(
             JsonElement schemaArgs,
             ToolResult result,
             TimeSpan? delay = null,
-            bool ignoresToken = false,
-            long allocateBytes = 0)
+            bool ignoresToken = false)
         {
             _result = result;
             _delay = delay;
             _ignoresToken = ignoresToken;
-            _allocateBytes = allocateBytes;
-            if (allocateBytes > 0)
-                _ = new byte[allocateBytes];
         }
 
         public ToolName Name => ToolName.Create("google_search");
