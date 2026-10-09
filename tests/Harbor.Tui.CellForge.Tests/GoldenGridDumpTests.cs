@@ -25,7 +25,8 @@ public class GoldenGridDumpTests
         var back = new ScreenBuffer(20, 6);
 
         writer.BeginFrame();
-        engine.Flush(back, writer);
+        var eng = GridDump.ToEngine(back);
+        engine.Flush(eng, writer);
         await writer.EndFrameAsync();
 
         string doc = GoldenDoc.Build("empty-screen", back, backend);
@@ -53,13 +54,13 @@ public class GoldenGridDumpTests
         session.BeginFrame();
         foreach (var panel in tree.Panels)
         {
-            panel.Paint(session.Back);
+            panel.Paint(session.PaintBuffer);
         }
 
         await session.FlushFrameAsync();
 
-        string doc = GoldenDoc.Build("border-panel", session.Back, backend);
-        string expected = Golden.Verify("border-panel", doc, GridDump.ToSvg(session.Back));
+        string doc = GoldenDoc.Build("border-panel", session.PaintBuffer, backend);
+        string expected = Golden.Verify("border-panel", doc, GridDump.ToSvg(session.PaintBuffer));
         await Assert.That(doc).IsEqualTo(expected);
         await Assert.That(session.Engine.FrontMatches(session.Back)).IsTrue();
     }
@@ -82,7 +83,8 @@ public class GoldenGridDumpTests
         back.SetText(2, 2, "ok中!", CellStyle.Plain);                    // mixed run on row 2
 
         writer.BeginFrame();
-        engine.Flush(back, writer);
+        var eng1 = GridDump.ToEngine(back);
+        engine.Flush(eng1, writer);
         await writer.EndFrameAsync();
 
         // Frame 2 (delta): clobber the LEFT half of 中 with a styled narrow
@@ -92,17 +94,18 @@ public class GoldenGridDumpTests
         back.SetRune(8, 0, new Rune(0x3042), CellStyle.Plain);
 
         writer.BeginFrame();
-        engine.Flush(back, writer);
+        var eng2 = GridDump.ToEngine(back);
+        engine.Flush(eng2, writer);
         await writer.EndFrameAsync();
 
         string doc = GoldenDoc.Build("wide-char-boundary", back, backend);
         string expected = Golden.Verify("wide-char-boundary", doc, GridDump.ToSvg(back));
         await Assert.That(doc).IsEqualTo(expected);
-        await Assert.That(engine.FrontMatches(back)).IsTrue();
+        await Assert.That(engine.FrontMatches(eng2)).IsTrue();
 
         // Ghost check: the surviving half of the clobbered pair was repainted
         // as part of the forced redraw — FRONT mirrors it exactly.
-        await Assert.That(engine.Front.Get(1, 0)).IsEqualTo(back.Get(1, 0));
+        await Assert.That(engine.Front.Get(1, 0)).IsEqualTo(eng2.Get(1, 0));
     }
 
     [Test]
@@ -112,19 +115,19 @@ public class GoldenGridDumpTests
         var writer = new AnsiWriter(backend, syncUpdates: true);
         var session = new ScreenSession(writer, 40, 8);
 
-        session.Back.FillAll(Cell.From(new Rune('#'), CellStyle.Plain));
-        session.Back.SetText(1, 0, "harbor", CellStyle.Plain);
+        session.PaintBuffer.FillAll(Cell.From(new Rune('#'), CellStyle.Plain));
+        session.PaintBuffer.SetText(1, 0, "harbor", CellStyle.Plain);
         session.BeginFrame();
         await session.FlushFrameAsync();
 
         session.Resize(15, 8); // horizontal shrink ⇒ erase-in-display first
         session.BeginFrame();
-        session.Back.Fill(new Rect(0, 0, 15, 8), Cell.From(new Rune('+'), CellStyle.Plain));
-        session.Back.SetText(1, 0, "harbor15", CellStyle.Plain);
+        session.PaintBuffer.Fill(new Rect(0, 0, 15, 8), Cell.From(new Rune('+'), CellStyle.Plain));
+        session.PaintBuffer.SetText(1, 0, "harbor15", CellStyle.Plain);
         await session.FlushFrameAsync();
 
-        string doc = GoldenDoc.Build("resize-shrink", session.Back, backend);
-        string expected = Golden.Verify("resize-shrink", doc, GridDump.ToSvg(session.Back));
+        string doc = GoldenDoc.Build("resize-shrink", session.PaintBuffer, backend);
+        string expected = Golden.Verify("resize-shrink", doc, GridDump.ToSvg(session.PaintBuffer));
         await Assert.That(doc).IsEqualTo(expected);
         await Assert.That(session.Engine.FrontMatches(session.Back)).IsTrue();
 
@@ -157,7 +160,7 @@ public class GoldenGridDumpTests
         var back = new ScreenBuffer(6, 1);
         back.SetRune(1, 0, new Rune('X'), new CellStyle(PackedColor.Indexed(4)));
         writer.BeginFrame();
-        engine.Flush(back, writer);
+        engine.Flush(GridDump.ToEngine(back), writer);
         await writer.EndFrameAsync();
     }
 
@@ -173,21 +176,23 @@ public class GoldenGridDumpTests
         back.SetText(4, 1, "WARN", new CellStyle(attrs: StyleAttr.Bold));
         back.SetText(9, 1, "ok", CellStyle.Plain);
         writer.BeginFrame();
-        engine.Flush(back, writer);
+        var eng1 = GridDump.ToEngine(back);
+        engine.Flush(eng1, writer);
         await writer.EndFrameAsync();
         long firstBytes = backend.TotalBytes;
 
         back.SetStyleAt(5, 1, new CellStyle(attrs: StyleAttr.Underline)); // bold→underline, one cell
         back.SetRune(9, 1, new Rune('!'), CellStyle.Plain);               // one glyph swap
         writer.BeginFrame();
-        engine.Flush(back, writer);
+        var eng2 = GridDump.ToEngine(back);
+        engine.Flush(eng2, writer);
         await writer.EndFrameAsync();
         long secondBytes = backend.TotalBytes - firstBytes;
 
         string doc = GoldenDoc.Build("sgr-minimization", back, backend);
         string expected = Golden.Verify("sgr-minimization", doc, GridDump.ToSvg(back));
         await Assert.That(doc).IsEqualTo(expected);
-        await Assert.That(engine.FrontMatches(back)).IsTrue();
+        await Assert.That(engine.FrontMatches(eng2)).IsTrue();
 
         string delta = Encoding.UTF8.GetString(backend.Writes[^1]);
         await Assert.That(delta.Contains('E')).IsFalse();         // ERR untouched

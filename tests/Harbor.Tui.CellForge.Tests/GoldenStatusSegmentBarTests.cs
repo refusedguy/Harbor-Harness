@@ -41,12 +41,13 @@ public class GoldenStatusSegmentBarTests
         StatusBarWidget.Paint(back, new Rect(0, 1, 24, 1), ws2.AsSpan()[..kept24]);
 
         writer.BeginFrame();
-        engine.Flush(back, writer);
+        var eng = GridDump.ToEngine(back);
+        engine.Flush(eng, writer);
         await writer.EndFrameAsync();
 
         string doc = GoldenDoc.Build("ce3-status-widths", back, backend);
         string expected = Golden.Verify("ce3-status-widths", doc, GridDump.ToSvg(back));
         await Assert.That(doc).IsEqualTo(expected);
-        await Assert.That(engine.FrontMatches(back)).IsTrue();
+        await Assert.That(engine.FrontMatches(eng)).IsTrue();
     }
 }

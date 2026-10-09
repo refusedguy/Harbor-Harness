@@ -407,7 +407,7 @@ public class GoldenDiffBlockTests
         block.Paint(new BlockPaintContext(back, new Rect(0, 0, 56, m.MinLines), 0));
 
         writer.BeginFrame();
-        var eng = ToEngine(back);
+        var eng = GridDump.ToEngine(back);
         engine.Flush(eng, writer);
         await writer.EndFrameAsync();
 
@@ -415,24 +415,5 @@ public class GoldenDiffBlockTests
         string expected = Golden.Verify("ce3-diff-block", doc, GridDump.ToSvg(back));
         await Assert.That(doc).IsEqualTo(expected);
         await Assert.That(engine.FrontMatches(eng)).IsTrue();
-    }
-
-    // #436: the painted grid is Rendering-typed (DiffBlock paints Ui buffers)
-    // while the differ is engine-typed — the flush crosses through an exact
-    // field-for-field snapshot so the golden still pins the real bytes.
-    private static EngineCells.ScreenBuffer ToEngine(ScreenBuffer back)
-    {
-        var eng = new EngineCells.ScreenBuffer(back.Cols, back.Rows);
-        for (int y = 0; y < back.Rows; y++)
-        {
-            for (int x = 0; x < back.Cols; x++)
-            {
-                var c = back.Get(x, y);
-                eng.At(x, y) = EngineCells.Cell.FromRaw(c.Rune, c.Fg, c.Bg, c.Flags, c.Width);
-            }
-        }
-
-        eng.InvalidateAll();
-        return eng;
     }
 }

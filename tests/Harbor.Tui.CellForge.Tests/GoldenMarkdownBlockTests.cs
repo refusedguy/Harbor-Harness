@@ -38,13 +38,14 @@ public class GoldenMarkdownBlockTests
         block.Paint(new BlockPaintContext(back, new Rect(0, 0, 64, measure.MinLines), tick: 0));
 
         writer.BeginFrame();
-        engine.Flush(back, writer);
+        var eng = GridDump.ToEngine(back);
+        engine.Flush(eng, writer);
         await writer.EndFrameAsync();
 
         string doc2 = GoldenDoc.Build("ce3-markdown-block", back, backend);
         string expected = Golden.Verify("ce3-markdown-block", doc2, GridDump.ToSvg(back));
         await Assert.That(doc2).IsEqualTo(expected);
-        await Assert.That(engine.FrontMatches(back)).IsTrue();
+        await Assert.That(engine.FrontMatches(eng)).IsTrue();
 
         // Style spot checks on the live buffer.
         bool sawBold = false, sawCode = false, sawFence = false, sawHeading = false;
