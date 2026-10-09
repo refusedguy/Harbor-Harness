@@ -22,6 +22,15 @@ Remote UI transport layer for Harbor — PSK-authenticated gateway and client th
 - **`UiTransportPacket`**: `Type`, `Event`, `Timestamp`; `FromEvent` factory.
 - **`PsAuthHandler`**: `GeneratePsk()`, `Validate(provided, expected)`.
 
+## Wiring
+
+No DI module and no `HARBOR_*` env var — construct directly with a pre-shared key:
+
+```csharp
+var gateway = new RemoteGateway(psk);
+await gateway.StartAsync(port, ct);
+```
+
 ## Dependencies
 
 | Package | Purpose |
