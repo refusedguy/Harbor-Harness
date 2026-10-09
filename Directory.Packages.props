@@ -94,6 +94,17 @@
     <PackageVersion Include="OpenTelemetry" Version="1.18.0" />
     <PackageVersion Include="OpenTelemetry.Exporter.OpenTelemetryProtocol" Version="1.18.0" />
     <PackageVersion Include="Spectre.Console" Version="0.54.0" />
+    <!--
+      SixLabors.ImageSharp is a transitive-only pin (no direct PackageReference
+      anywhere): Spectre.Console 0.54.0 pulls 3.1.12, which carries the
+      Oct-2026 TIFF/HistogramEqualization advisories (GHSA-j3p4-wp97-rph4 et
+      al., NU1902/NU1903 as errors via TreatWarningsAsErrors). First patched
+      release is 4.1.2; pinned to 4.1.3. CentralPackageTransitivePinningEnabled
+      (header) applies this to the transitive without a direct reference.
+      No src/ code calls ImageSharp APIs (only Spectre.Console's CanvasImage
+      path does), so the 3.x→4.x major is a resolve-level change here.
+    -->
+    <PackageVersion Include="SixLabors.ImageSharp" Version="4.1.3" />
     <PackageVersion Include="Spectre.Tui" Version="0.14.0" />
     <PackageVersion Include="Spectre.Tui.App" Version="0.14.0" />
     <!-- ── Alternative UI stacks ─────────────────────────────────────────── -->
