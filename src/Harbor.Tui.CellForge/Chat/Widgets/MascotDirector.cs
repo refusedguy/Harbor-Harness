@@ -30,7 +30,6 @@ public sealed class MascotDirector
     private long _moodFlipTick = long.MinValue;
     private byte _latched = NoMood;
     private long _latchEndMs;
-    private long _latchEndTick;
     private byte _lastPhase;
     private readonly SpringFx _crossfadeSpring = new(1.0);
 
@@ -76,14 +75,18 @@ public sealed class MascotDirector
 
         long now = NowMs();
         byte phase = (byte)vm.Phase;
-        bool eventPhase = phase is (byte)AgentPhase.Errored or (byte)AgentPhase.Succeeded;
-        if (eventPhase && _lastPhase != phase)
+        if (phase == (byte)AgentPhase.Auto)
+        {
+            // Run boundary (AgentStart): a stale Error/Success latch from the
+            // previous run must not leak into the new one (#170).
+            _latched = NoMood;
+        }
+        else if (phase is (byte)AgentPhase.Errored or (byte)AgentPhase.Succeeded && _lastPhase != phase)
         {
             _latched = phase == (byte)AgentPhase.Errored ? (byte)MascotMood.Error : (byte)MascotMood.Success;
             _latchEndMs = now + _moodLatchMs;
-            _latchEndTick = tick + MoodLatchFrames;
         }
-        else if (eventPhase && _latched != NoMood && tick >= _latchEndTick)
+        else if (_latched != NoMood && now >= _latchEndMs)
         {
             _latched = NoMood;
         }
