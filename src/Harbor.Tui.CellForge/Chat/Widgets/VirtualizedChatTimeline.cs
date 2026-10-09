@@ -3,6 +3,10 @@ using Harbor.Tui.CellForge.Input;
 using Harbor.Tui.CellForge.Rendering;
 // #436: GlowRegion is engine-typed; its accent/rect convert exactly below.
 using EngineCells = Harbor.Tui.CellForge.Rendering;
+// #436: the wheel dto lives in the engine's Input namespace (not Rendering);
+// the global UiKeyDto alias pins the Rendering twin, so the engine side is
+// named through EngineInput.
+using EngineInput = Harbor.Tui.CellForge.Input;
 using Harbor.Ui.Framework.Rendering.Input;
 using Harbor.Ui.Framework.State;
 using Harbor.Abstractions.Models;
@@ -453,11 +457,11 @@ public sealed class VirtualizedChatTimeline
     /// overload. The parameter is the ENGINE dto (#436: the wheel mapping lives
     /// in the standalone leaf); the kinds compared below are its twins.
     /// </summary>
-    public static AppMsg WheelMsg(EngineCells.UiKeyDto key) =>
+    public static AppMsg WheelMsg(EngineInput.UiKeyDto key) =>
         key.Kind switch
         {
-            EngineCells.UiKeyKind.Up => LineUpMsg(),
-            EngineCells.UiKeyKind.Down => LineDownMsg(),
+            EngineInput.UiKeyKind.Up => LineUpMsg(),
+            EngineInput.UiKeyKind.Down => LineDownMsg(),
             _ => new AppMsg.KeyInput(ChatAction.None, UiKey.Unknown),
         };
 

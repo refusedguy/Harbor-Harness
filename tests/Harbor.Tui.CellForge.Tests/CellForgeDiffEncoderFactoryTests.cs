@@ -5,6 +5,13 @@ using TUnit.Assertions;
 using TUnit.Assertions.Extensions;
 using TUnit.Core;
 
+// #436: buffers come in two vocabularies here — the engine pair feeds the
+// DiffEngine handle, the Rendering pair feeds the portable encoder and the
+// adapter under test. Both fill helpers stay verbatim twins on purpose: the
+// adapter's snapshot must reproduce the engine front exactly, and the
+// single-change assertions below are what proves it.
+using UIR = Harbor.Ui.Framework.Rendering;
+
 namespace Harbor.Tui.CellForge.Tests;
 
 /// <summary>
@@ -15,11 +22,19 @@ namespace Harbor.Tui.CellForge.Tests;
 /// </summary>
 public class CellForgeDiffEncoderFactoryTests
 {
-    private static ScreenBuffer MakeBuffer(int cols, int rows, char fill)
+    private static ScreenBuffer MakeEngineBuffer(int cols, int rows, char fill)
     {
         var buffer = new ScreenBuffer(cols, rows);
         for (int y = 0; y < rows; y++)
             buffer.SetText(0, y, new string(fill, cols), CellStyle.Plain);
+        return buffer;
+    }
+
+    private static UIR.ScreenBuffer MakeRenderingBuffer(int cols, int rows, char fill)
+    {
+        var buffer = new UIR.ScreenBuffer(cols, rows);
+        for (int y = 0; y < rows; y++)
+            buffer.SetText(0, y, new string(fill, cols), UIR.CellStyle.Plain);
         return buffer;
     }
 
@@ -34,10 +49,10 @@ public class CellForgeDiffEncoderFactoryTests
     [Test]
     public async Task EngineLinked_Encodes_Front_To_Next()
     {
-        var front = MakeBuffer(10, 4, 'a');
+        var front = MakeEngineBuffer(10, 4, 'a');
         var engine = new DiffEngine(front);
-        var next = MakeBuffer(10, 4, 'a');
-        next.SetRune(2, 1, new Rune('X'), CellStyle.Plain);
+        var next = MakeRenderingBuffer(10, 4, 'a');
+        next.SetRune(2, 1, new Rune('X'), UIR.CellStyle.Plain);
 
         var linked = CellForgeDiffEncoder.CreateEngineLinked(engine);
         CellDiffBatch batch = linked.EncodeCellForge(next, hints: null, sequence: 3);
@@ -48,7 +63,8 @@ public class CellForgeDiffEncoderFactoryTests
 
         // Parity with the portable encoder on the same frame pair.
         ICellDiffEncoder portable = CellForgeDiffEncoder.Create();
-        CellDiffBatch expected = portable.Encode(engine.Front, next, hints: null, sequence: 3);
+        var renderingFront = MakeRenderingBuffer(10, 4, 'a');
+        CellDiffBatch expected = portable.Encode(renderingFront, next, hints: null, sequence: 3);
         await Assert.That(batch.Changes.Length).IsEqualTo(expected.Changes.Length);
         await Assert.That(batch.Changes[0]).IsEqualTo(expected.Changes[0]);
     }
@@ -56,13 +72,14 @@ public class CellForgeDiffEncoderFactoryTests
     [Test]
     public async Task EncodeFromEngineFront_Matches_Portable()
     {
-        var front = MakeBuffer(8, 3, 'b');
+        var front = MakeEngineBuffer(8, 3, 'b');
         var engine = new DiffEngine(front);
-        var next = MakeBuffer(8, 3, 'b');
-        next.SetRune(0, 0, new Rune('Z'), CellStyle.Plain);
+        var next = MakeRenderingBuffer(8, 3, 'b');
+        next.SetRune(0, 0, new Rune('Z'), UIR.CellStyle.Plain);
 
         CellDiffBatch viaHelper = CellForgeDiffEncoder.EncodeFromEngineFront(engine, next, hints: null, sequence: 1);
-        CellDiffBatch viaPortable = new RowHashDiffEncoder().Encode(engine.Front, next, hints: null, sequence: 1);
+        var renderingFront = MakeRenderingBuffer(8, 3, 'b');
+        CellDiffBatch viaPortable = new RowHashDiffEncoder().Encode(renderingFront, next, hints: null, sequence: 1);
 
         await Assert.That(viaHelper.Changes.Length).IsEqualTo(viaPortable.Changes.Length);
         await Assert.That(viaHelper.Changes[0]).IsEqualTo(viaPortable.Changes[0]);
