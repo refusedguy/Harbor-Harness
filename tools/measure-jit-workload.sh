@@ -3,7 +3,9 @@
 #
 # WHAT: builds apps/Harbor.App.Cli as plain JIT (framework-dependent Release,
 # the configuration developers run) and drives the same offline workload N
-# times against it: --version / --help / --providers. These three are the only
+# times against it: --version / --help / providers (bare `providers`: Program.cs
+# matches the verb without dashes — `--providers` falls through to interactive
+# mode and exits 1 with no TTY). These three are the only
 # CLI verbs that need no provider key and no network, so runs are free and
 # reproducible — the same set the aot-publish smoke step (#413) uses.
 #
@@ -54,7 +56,7 @@ else
 fi
 
 {
-  echo "== workload: --version / --help / --providers x$N =="
+  echo "== workload: --version / --help / providers x$N =="
   DOTNET_BIN="$(pwd)/$OUT/Harbor.App.Cli.dll"
   APPHOST="$(pwd)/$OUT/Harbor.App.Cli"
   export DOTNET_BIN APPHOST RUNNER HARBOR_TUI=plain
@@ -64,7 +66,7 @@ n = int(sys.argv[1])
 dll = os.environ["DOTNET_BIN"]
 apphost = os.environ["APPHOST"]
 runner = os.environ["RUNNER"]
-wl = [["--version"], ["--help"], ["--providers"]]
+wl = [["--version"], ["--help"], ["providers"]]
 print(f"runner: {'apphost-direct' if runner == 'app' else 'dotnet-muxer'}")
 print(f"{'cmd':<12}{'median_ms':>10}{'min_ms':>10}{'max_ms':>10}{'spread':>8}{'rss_med_kb':>12}{'rss_max_kb':>12}")
 for args in wl:
