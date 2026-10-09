@@ -77,7 +77,7 @@ public sealed record RunBudgetCaps(
 ///         blend: <see cref="ReportedUsage" /> is provider-reported usage or
 ///         null, <see cref="EstimatedTokens" /> is the heuristic figure,
 ///         <see cref="TariffCostUsd" /> is the price table applied to reported
-///         usage (null when usage is missing), and <see cref="EstimatedCostUsd" />
+///         usage (null when usage is missing), and <see cref="EstimatedCost" />
 ///         is estimate-side money under its own name — it must never be
 ///         presented as billed cost (see <see cref="RunBudgetLabels" />).
 ///     </para>
@@ -90,13 +90,13 @@ public sealed record RunBudgetCaps(
 /// <param name="ReportedUsage">Usage the provider reported, summed over the run; null when nothing was reported.</param>
 /// <param name="EstimatedTokens">Heuristic token estimate, summed over the run.</param>
 /// <param name="TariffCostUsd">Price table × reported usage; null when usage is missing (Unknown, not zero).</param>
-/// <param name="EstimatedCostUsd">Estimate-side money under its own name; never the billed figure.</param>
+/// <param name="EstimatedCost">Estimate-side money under its own name; never the billed figure.</param>
 /// <param name="OutputBytes">Streamed output bytes recorded on the delta path.</param>
 public sealed record RunBudget(
     Usage? ReportedUsage,
     int EstimatedTokens,
     decimal? TariffCostUsd,
-    decimal? EstimatedCostUsd,
+    decimal? EstimatedCost,
     long OutputBytes)
 {
     /// <summary>
@@ -129,7 +129,7 @@ public sealed record RunBudget(
         {
             if (TariffCostUsd is not null)
                 return BudgetSource.TariffCost;
-            if (EstimatedCostUsd is not null)
+            if (EstimatedCost is not null)
                 return BudgetSource.LocalEstimate;
             return BudgetSource.Unknown;
         }
@@ -141,7 +141,7 @@ public sealed record RunBudget(
 /// </summary>
 /// <remarks>
 ///     The two constants exist so no UI or tool output can present
-///     <c>EstimatedCostUsd</c> under the billed name by accident: the labels
+///     <c>EstimatedCost</c> under the billed name by accident: the labels
 ///     are spelled differently on purpose, and the billed one contains no
 ///     form of "estimate". Presentation adoption is follow-up; the pin that
 ///     the names cannot be merged lives in the #404 guard tests.
@@ -151,6 +151,6 @@ public static class RunBudgetLabels
     /// <summary>Label for the billed figure (<c>TariffCostUsd</c>).</summary>
     public const string BilledCost = "billed cost";
 
-    /// <summary>Label for estimate-side money (<c>EstimatedCostUsd</c>). Never used for the billed figure.</summary>
+    /// <summary>Label for estimate-side money (<c>EstimatedCost</c>). Never used for the billed figure.</summary>
     public const string EstimatedCost = "estimated cost (not billed)";
 }

@@ -12,6 +12,7 @@ using Harbor.Application.Resilience;
 using Harbor.Application.Sessions;
 using Harbor.Application.Tests.Fakes;
 using Harbor.TestKit;
+using System.Reflection;
 using Microsoft.Extensions.Logging.Abstractions;
 using TestSessionContext = Harbor.Application.Tests.Fakes.TestSessionContext;
 using TUnit.Assertions;
@@ -140,11 +141,15 @@ public class RunBudgetTests
         RunBudget budget = tracker.Snapshot();
         await Assert.That(budget.TariffCostUsd).IsEqualTo((decimal?)0.007m);
         // 400 estimate tokens priced at the output rate: 400/1e6*10. Never the billed figure.
-        await Assert.That(budget.EstimatedCostUsd).IsEqualTo((decimal?)0.004m);
-        await Assert.That(ReferenceEquals(budget.TariffCostUsd, budget.EstimatedCostUsd)).IsFalse();
-        await Assert.That(typeof(RunBudget).GetProperty("TariffCostUsd") != typeof(RunBudget).GetProperty("EstimatedCostUsd")).IsTrue();
+        await Assert.That(budget.EstimatedCost).IsEqualTo((decimal?)0.004m);
+        // Two distinct members, not one field read twice: the name pins it,
+        // the labels pin the presentation. (No ReferenceEquals here: boxing a
+        // decimal? always allocates, so that assertion could never fail.)
+        const BindingFlags DeclaredInstance = BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly;
+        await Assert.That(typeof(RunBudget).GetProperty(nameof(RunBudget.TariffCostUsd), DeclaredInstance)
+            != typeof(RunBudget).GetProperty(nameof(RunBudget.EstimatedCost), DeclaredInstance)).IsTrue();
         await Assert.That(RunBudgetLabels.BilledCost).IsNotEqualTo(RunBudgetLabels.EstimatedCost);
-        await Assert.That(RunBudgetLabels.BilledCost.ToLowerInvariant().Contains("estimat")).IsFalse();
+        await Assert.That(RunBudgetLabels.BilledCost.Contains("estimat", StringComparison.OrdinalIgnoreCase)).IsFalse();
     }
 
     [Test]
