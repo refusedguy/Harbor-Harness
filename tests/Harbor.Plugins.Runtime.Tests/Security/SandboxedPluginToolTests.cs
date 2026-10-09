@@ -146,6 +146,55 @@ public sealed class SandboxedPluginToolTests
         await Assert.That(bus.Of<PluginBlockedEvent>()[0].Reason).IsEqualTo("memory");
     }
 
+    /// <summary>
+    ///     Regression for issue #1050: ambient allocations on other threads while the
+    ///     tool awaits must not convert a healthy small-payload result into a
+    ///     <c>[sandbox:memory]</c> error. RED on the process-wide
+    ///     <c>GC.GetTotalAllocatedBytes</c> guard (background ~20+ MB inside the
+    ///     await window exceeds the 10 MB budget); GREEN once the guard measures
+    ///     only the call's own result payload.
+    /// </summary>
+    [Test]
+    public async Task Execute_AmbientAllocationsOnOtherThreads_DoNotBlockSmallPayload()
+    {
+        var bus = new RecordingEventBus();
+        var audit = new RecordingAuditLog();
+        var inner = new FakeTool(
+            Args("{}"),
+            ToolResult.Success("ok"),
+            delay: TimeSpan.FromMilliseconds(200));
+        var tool = Wrap(inner, bus, audit);
+
+        using var bgCts = new CancellationTokenSource();
+        var bg = Task.Run(async () =>
+        {
+            for (int i = 0; i < 40 && !bgCts.Token.IsCancellationRequested; i++)
+            {
+                _ = new byte[1024 * 1024];
+                await Task.Delay(5, bgCts.Token).ConfigureAwait(false);
+            }
+        }, bgCts.Token);
+
+        try
+        {
+            var result = await tool.ExecuteAsync(Args("{}"), Ctx);
+
+            await Assert.That(result.IsError).IsFalse();
+            await Assert.That(bus.Of<PluginBlockedEvent>()).IsEmpty();
+        }
+        finally
+        {
+            await bgCts.CancelAsync().ConfigureAwait(false);
+            try
+            {
+                await bg.ConfigureAwait(false);
+            }
+            catch (OperationCanceledException)
+            {
+            }
+        }
+    }
+
     [Test]
     public async Task Execute_AgentLoopCancelled_PropagatesWithoutBlockEvent()
     {
