@@ -39,15 +39,14 @@ public sealed class RealWorldPluginsTests
         await Assert.That(ReferenceEquals(host.LoggerFactory, captured)).IsTrue();
 
         using var doc = JsonDocument.Parse("{}");
-        ToolResult result = await ExecuteThroughSandboxAsync(tool, doc.RootElement).ConfigureAwait(false);
+        ToolResult result = await tool.ExecuteAsync(doc.RootElement, MakeContext()).ConfigureAwait(false);
         await Assert.That(result.IsError).IsFalse();
         await Assert.That(result.Output).Contains("di-ok");
     }
 
     /// <summary>
     ///     The async fixture's tool awaits real async work and returns an ~8KB payload.
-    ///     Execution goes through the registered sandbox wrapper; a transient
-    ///     <c>[sandbox:memory]</c> block is retried (see <see cref="ExecuteThroughSandboxAsync" />).
+    ///     Execution goes through the registered sandbox wrapper.
     /// </summary>
     [Test]
     public async Task AsyncTool_AwaitsWork_ReturnsLongPayload()
@@ -56,7 +55,7 @@ public sealed class RealWorldPluginsTests
 
         ITool tool = host.RegisteredTools.Single(t => t.Name.Value == "rw_async");
         using var doc = JsonDocument.Parse("{}");
-        ToolResult result = await ExecuteThroughSandboxAsync(tool, doc.RootElement).ConfigureAwait(false);
+        ToolResult result = await tool.ExecuteAsync(doc.RootElement, MakeContext()).ConfigureAwait(false);
         await Assert.That(result.IsError).IsFalse();
         await Assert.That(result.Output.Length).IsGreaterThanOrEqualTo(8000);
     }
@@ -71,7 +70,7 @@ public sealed class RealWorldPluginsTests
 
         ITool tool = host.RegisteredTools.Single(t => t.Name.Value == "rw_failing");
         using var doc = JsonDocument.Parse("{}");
-        ToolResult result = await ExecuteThroughSandboxAsync(tool, doc.RootElement).ConfigureAwait(false);
+        ToolResult result = await tool.ExecuteAsync(doc.RootElement, MakeContext()).ConfigureAwait(false);
         await Assert.That(result.IsError).IsTrue();
         await Assert.That(result.Output).Contains("rw-boom");
     }
@@ -90,7 +89,7 @@ public sealed class RealWorldPluginsTests
 
         ITool tool = host.RegisteredTools.Single(t => t.Name.Value == "rw_panel_tool");
         using var doc = JsonDocument.Parse("{}");
-        ToolResult result = await ExecuteThroughSandboxAsync(tool, doc.RootElement).ConfigureAwait(false);
+        ToolResult result = await tool.ExecuteAsync(doc.RootElement, MakeContext()).ConfigureAwait(false);
         await Assert.That(result.IsError).IsFalse();
         await Assert.That(result.Output).Contains("panel-tool-ok");
 
@@ -161,34 +160,6 @@ public sealed class RealWorldPluginsTests
         if (!result.IsSuccess)
             throw new InvalidOperationException($"Fixture {fileName} failed to load: {result.Error}");
         return (host, result.Value);
-    }
-
-    /// <summary>
-    ///     Execute a registered tool through its sandbox wrapper, tolerating a transient
-    ///     <c>[sandbox:memory]</c> block with a bounded retry. The sandbox samples the
-    ///     <b>process-wide</b> allocation counter, so an unrelated burst on another thread
-    ///     (a sibling test's Roslyn compile under TUnit parallelism) can exceed the 10 MB
-    ///     budget inside the await window and convert a healthy result into an error
-    ///     (issue #1050, observed once in CI on the async payload test). Only that
-    ///     signature retries: any other error — including the fixture's own failing path —
-    ///     returns immediately, and a persistent memory block still fails the test after
-    ///     the last attempt. A fixture tool's own ~KB allocations can never trip a 10 MB
-    ///     budget on their own, so a persistent block stays a real, failing signal.
-    /// </summary>
-    private static async Task<ToolResult> ExecuteThroughSandboxAsync(ITool tool, JsonElement args)
-    {
-        ToolResult result = await tool.ExecuteAsync(args, MakeContext()).ConfigureAwait(false);
-        for (int attempt = 1;
-            result.IsError
-                && result.Output.Contains("[sandbox:memory]", StringComparison.Ordinal)
-                && attempt < 5;
-            attempt++)
-        {
-            await Task.Delay(100).ConfigureAwait(false);
-            result = await tool.ExecuteAsync(args, MakeContext()).ConfigureAwait(false);
-        }
-
-        return result;
     }
 
     /// <summary>
