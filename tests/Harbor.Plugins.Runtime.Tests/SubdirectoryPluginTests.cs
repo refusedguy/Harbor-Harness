@@ -14,77 +14,43 @@ using Microsoft.Extensions.Logging.Abstractions;
 namespace Harbor.Plugins.Runtime.Tests;
 
 /// <summary>
-///     Measurement probe for issue #1046: a plugin split across two
-///     cross-referencing <c>.cs</c> files in a plugins subdirectory. Three tests
-///     isolate the three layers — discovery, compilation, end-to-end — so a CI run
-///     shows exactly which layer drops multi-file plugins instead of guessing.
+///     Subdirectory plugins (issue #1046): <see cref="FileSystemPluginSource" />
+///     discovers <c>.cs</c> files at any depth, and a self-contained plugin filed
+///     into a subdirectory loads end-to-end. The single-file contract still holds —
+///     files that reference each other's types fail compilation loudly (CS0246)
+///     instead of vanishing silently at discovery; joint per-directory
+///     compilation stays a <c>#422</c> follow-up decision.
 /// </summary>
-public sealed class MultiFilePluginProbeTests
+public sealed class SubdirectoryPluginTests
 {
     /// <summary>
-    ///     Layer 1 (discovery): <see cref="FileSystemPluginSource" /> finds both files
-    ///     of a plugin that lives in a subdirectory of the plugins directory.
+    ///     Discovery finds both files of a plugin that lives in a subdirectory of
+    ///     the plugins directory (was: silently skipped, 0 of 2).
     /// </summary>
     [Test]
     public async Task Discovery_FindsPluginFilesInSubdirectories()
     {
-        using var fixture = await PluginTestFixture.CreateAsync("mfprobe-disc").ConfigureAwait(false);
+        using var fixture = await PluginTestFixture.CreateAsync("subdir-disc").ConfigureAwait(false);
         await WriteDuoAsync(fixture.PluginsDir).ConfigureAwait(false);
 
-        var source = new FileSystemPluginSource(
-            new[] { fixture.PluginsDir },
-            NullLogger<FileSystemPluginSource>.Instance);
-
-        var collected = new List<PluginScript>();
-        await foreach (var s in source.GetScriptsAsync().ConfigureAwait(false))
-            collected.Add(s);
+        var collected = await CollectAsync(fixture.PluginsDir).ConfigureAwait(false);
 
         await Assert.That(collected.Count).IsEqualTo(2);
     }
 
     /// <summary>
-    ///     Layer 2 (compilation): two cross-referencing scripts fed straight into the
-    ///     production host pipeline (bypassing discovery) compile jointly and the
-    ///     plugin's tool executes with the helper's output.
+    ///     A self-contained single-file plugin in a subdirectory loads through the
+    ///     production <see cref="CsPluginLoader" /> and its tool executes.
     /// </summary>
     [Test]
-    public async Task Compilation_JointCrossFilePlugin_LoadsThroughHost()
+    public async Task SingleFilePluginInSubdirectory_LoadsAndExecutes()
     {
-        using var fixture = await PluginTestFixture.CreateAsync("mfprobe-comp").ConfigureAwait(false);
-        Directory.CreateDirectory(fixture.CacheDir);
-
-        (string helperPath, string helperSource, string toolPath, string toolSource) = DuoSources(fixture.PluginsDir);
-        var source = new InMemoryPluginSource(new[]
-        {
-            new PluginScript(helperPath, helperSource),
-            new PluginScript(toolPath, toolSource),
-        });
-
-        var host = new FakePluginLoadHost();
-        var pluginHost = BuildHost(source, fixture);
-
-        var result = await pluginHost.LoadAllAsync(host).ConfigureAwait(false);
-
-        await Assert.That(result.IsSuccess).IsTrue();
-        await Assert.That(result.Value.Count).IsEqualTo(1);
-        await Assert.That(result.Value[0].Name).IsEqualTo("duo-mfprobe");
-
-        ITool tool = host.RegisteredTools.Single(t => t.Name.Value == "duo_mfprobe");
-        ToolResult exec = await ExecuteWithMemoryRetryAsync(tool).ConfigureAwait(false);
-        await Assert.That(exec.IsError).IsFalse();
-        await Assert.That(exec.Output).Contains("duo-ok");
-        await Assert.That(exec.Output).Contains("helper-ok");
-    }
-
-    /// <summary>
-    ///     Layer 3 (end-to-end): the subdirectory duo loads through the production
-    ///     <see cref="CsPluginLoader" /> and its tool executes.
-    /// </summary>
-    [Test]
-    public async Task EndToEnd_SubdirectoryMultiFilePlugin_LoadsAndExecutes()
-    {
-        using var fixture = await PluginTestFixture.CreateAsync("mfprobe-e2e").ConfigureAwait(false);
-        await WriteDuoAsync(fixture.PluginsDir).ConfigureAwait(false);
+        using var fixture = await PluginTestFixture.CreateAsync("subdir-single").ConfigureAwait(false);
+        string sub = Path.Combine(fixture.PluginsDir, "organized");
+        Directory.CreateDirectory(sub);
+        await File.WriteAllTextAsync(
+            Path.Combine(sub, "HelloSubdir.cs"),
+            SamplePluginSource.HelloWorld("Subdir")).ConfigureAwait(false);
 
         var host = new FakePluginLoadHost();
         var loader = new CsPluginLoader(
@@ -96,14 +62,54 @@ public sealed class MultiFilePluginProbeTests
 
         await Assert.That(result.IsSuccess).IsTrue();
         await Assert.That(result.Value.Count).IsEqualTo(1);
+        await Assert.That(result.Value[0].Name).IsEqualTo("hello-world-subdir");
 
-        ITool tool = host.RegisteredTools.Single(t => t.Name.Value == "duo_mfprobe");
+        ITool tool = host.RegisteredTools.Single(t => t.Name.Value == "hello_subdir");
         ToolResult exec = await ExecuteWithMemoryRetryAsync(tool).ConfigureAwait(false);
         await Assert.That(exec.IsError).IsFalse();
-        await Assert.That(exec.Output).Contains("duo-ok");
+        await Assert.That(exec.Output).Contains("Hello from Subdir!");
     }
 
-    private static PluginHost BuildHost(InMemoryPluginSource source, PluginTestFixture fixture)
+    /// <summary>
+    ///     Two cross-referencing files in a subdirectory are discovered (2 scripts)
+    ///     but still compile in isolation, so the run fails loudly with the Roslyn
+    ///     CS0246 diagnostic instead of loading nothing with no explanation.
+    ///     Guards both directions: a regression to silent skipping breaks the
+    ///     count assertion, an unreviewed joint-compilation change breaks the
+    ///     failure assertion (its cache-key and capability-union semantics need
+    ///     their own design, see #1046).
+    /// </summary>
+    [Test]
+    public async Task CrossFileReferences_FailLoudlyWithCs0246()
+    {
+        using var fixture = await PluginTestFixture.CreateAsync("subdir-loud").ConfigureAwait(false);
+        await WriteDuoAsync(fixture.PluginsDir).ConfigureAwait(false);
+
+        var collected = await CollectAsync(fixture.PluginsDir).ConfigureAwait(false);
+        await Assert.That(collected.Count).IsEqualTo(2);
+
+        var source = new InMemoryPluginSource(collected);
+        var pluginHost = BuildHost(source, fixture, continueOnError: false);
+
+        var result = await pluginHost.LoadAllAsync(new FakePluginLoadHost()).ConfigureAwait(false);
+
+        await Assert.That(result.IsFailure).IsTrue();
+        await Assert.That(result.Error).Contains("CS0246");
+    }
+
+    private static async Task<List<PluginScript>> CollectAsync(string pluginsDir)
+    {
+        var source = new FileSystemPluginSource(
+            new[] { pluginsDir },
+            NullLogger<FileSystemPluginSource>.Instance);
+
+        var collected = new List<PluginScript>();
+        await foreach (var s in source.GetScriptsAsync().ConfigureAwait(false))
+            collected.Add(s);
+        return collected;
+    }
+
+    private static PluginHost BuildHost(InMemoryPluginSource source, PluginTestFixture fixture, bool continueOnError)
     {
         var references = new PluginAssemblyReferences(
             NullLogger<PluginAssemblyReferences>.Instance);
@@ -117,17 +123,20 @@ public sealed class MultiFilePluginProbeTests
             .WithRegistrar(new SafePluginRegistrar(
                 new PluginRegistrar(fixture.PluginsDir, NullLogger<PluginRegistrar>.Instance, NullLoggerFactory.Instance),
                 NullLogger.Instance))
-            .WithOptions(o => o.PluginRoot = fixture.PluginsDir)
+            .WithOptions(o =>
+            {
+                o.PluginRoot = fixture.PluginsDir;
+                o.ContinueOnError = continueOnError;
+            })
             .Build(NullLogger<PluginHost>.Instance);
     }
 
-    private static async Task<(string HelperPath, string HelperSource, string ToolPath, string ToolSource)> WriteDuoAsync(string pluginsDir)
+    private static async Task WriteDuoAsync(string pluginsDir)
     {
         (string helperPath, string helperSource, string toolPath, string toolSource) = DuoSources(pluginsDir);
         Directory.CreateDirectory(Path.GetDirectoryName(helperPath)!);
         await File.WriteAllTextAsync(helperPath, helperSource).ConfigureAwait(false);
         await File.WriteAllTextAsync(toolPath, toolSource).ConfigureAwait(false);
-        return (helperPath, helperSource, toolPath, toolSource);
     }
 
     private static (string HelperPath, string HelperSource, string ToolPath, string ToolSource) DuoSources(string pluginsDir)
@@ -215,7 +224,7 @@ public sealed class MultiFilePluginProbeTests
     }
 
     private static ToolContext MakeContext() => new(
-        "sess-mfprobe",
+        "sess-subdir",
         Guid.NewGuid().ToString("N"),
         Guid.NewGuid().ToString("N"),
         "code",
