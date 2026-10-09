@@ -460,14 +460,14 @@ public static class OwnerReportFormat
 
     private static string Slice(string text, int from, int to) => text.Substring(from, to - from);
 
-    private static string? FindLineValue(string body, string prefix)
+    private static string? FindLineValue(string body, string label)
     {
         string[] lines = body.Split('\n');
         for (int i = 0; i < lines.Length; i++)
         {
             string line = lines[i].Trim();
-            if (line.StartsWith(prefix, StringComparison.Ordinal))
-                return line.Substring(prefix.Length);
+            if (line.StartsWith(label, StringComparison.Ordinal))
+                return line.Substring(label.Length);
         }
 
         return null;
