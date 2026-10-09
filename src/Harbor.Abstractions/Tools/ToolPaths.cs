@@ -16,9 +16,24 @@ public static class ToolPaths
     ///     the canonical "Invalid path" message.
     /// </summary>
     public static Result<string> Resolve(string rawPath) =>
+        ResolveAgainst(Environment.CurrentDirectory, rawPath);
+
+    /// <summary>
+    ///     Resolve <paramref name="rawPath" /> against <paramref name="baseDirectory" />
+    ///     (relative or dot-prefixed paths) and normalize it. A blank
+    ///     <paramref name="baseDirectory" /> falls back to the current directory.
+    ///     Failure carries the canonical "Invalid path" message.
+    /// </summary>
+    public static Result<string> ResolveAgainst(string? baseDirectory, string rawPath) =>
         Result.Success(rawPath)
-            .MapTry(static p => p.StartsWith('.') || !Path.IsPathRooted(p)
-                    ? Path.GetFullPath(Path.Combine(Environment.CurrentDirectory, p))
-                    : Path.GetFullPath(p),
+            .MapTry(p =>
+                {
+                    string anchor = string.IsNullOrWhiteSpace(baseDirectory)
+                        ? Environment.CurrentDirectory
+                        : baseDirectory!;
+                    return p.StartsWith('.') || !Path.IsPathRooted(p)
+                        ? Path.GetFullPath(Path.Combine(anchor, p))
+                        : Path.GetFullPath(p);
+                },
                 ex => $"Invalid path: {ex.Message}");
 }
