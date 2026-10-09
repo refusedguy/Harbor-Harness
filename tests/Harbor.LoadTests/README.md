@@ -32,10 +32,13 @@ results do not depend on core count or runner neighbours.
 ## Budgets are relative, never absolute
 
 An absolute wall-clock threshold on a shared CI runner measures the runner,
-not the code. The scaling gate therefore pairs 8 sessions against 4 inside one
-run (`t(8) <= 3 · t(4)`, best-of-3 per leg, warm-up discarded), so the runner's
-speed cancels. The `[Timeout]` values are liveness tripwires — a deadlock must
-fail, not hang — not budgets. See also
+not the code. The scaling leg therefore gates only machine-independent counts
+(doubling sessions from 4 to 8 inside one run must exactly double admitted
+runs, with every start matched by an end) and prints both stopwatches
+report-only — at a ~10 ms leg scale the time ratio itself measures the runner
+(CI run 37956923400 read 9.6 ms vs 49.3 ms, ratio 5.16; tracked as #1059).
+The `[Timeout]` values are liveness tripwires — a deadlock must fail, not
+hang — not budgets. See also
 [docs/E2E_TESTING.md](../../docs/E2E_TESTING.md).
 
 ## Run commands
