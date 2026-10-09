@@ -21,6 +21,12 @@ namespace Harbor.Hosting;
 ///     (<see cref="PluginReloadService" />) so both observe identical trust and cache
 ///     semantics.
 /// </summary>
+/// <remarks>
+///     #1055, slice 2: composing is cheap. The Roslyn stack (reference snapshot +
+///     compiler) hides behind <see cref="Harbor.Plugins.Hosting.LazyPluginCompiler" />,
+///     so <c>Compose</c> never JITs <c>Microsoft.CodeAnalysis</c> — first compile
+///     pays that cost, not every CLI start.
+/// </remarks>
 internal static class PluginRuntimeComposer
 {
     /// <summary>
@@ -81,8 +87,6 @@ internal static class PluginRuntimeComposer
             panelRegistry);
 
         string pluginsCacheDir = Path.Combine(globalPluginsDir, "cache");
-        var references = new PluginAssemblyReferences(
-            loggerFactory.CreateLogger<PluginAssemblyReferences>());
 
         // Append-only capability audit trail: ~/.harbor/logs/plugin-audit.jsonl.
         var audit = new PluginAuditLog(
@@ -91,10 +95,8 @@ internal static class PluginRuntimeComposer
 
         var runtime = new PluginHostBuilder()
             .WithSource(BuildTrustedSource(globalPluginsDir, projectPluginsDir, loggerFactory, trustPrompt, capabilityPrompt, audit))
-            .WithCompiler(new CachingCompiler(
-                new RoslynPluginCompiler(references),
-                pluginsCacheDir,
-                loggerFactory.CreateLogger<CachingCompiler>()))
+            .WithCompiler(new LazyPluginCompiler(
+                () => CreateCompiler(pluginsCacheDir, loggerFactory)))
             .WithInstantiator(new ReflectionPluginInstantiator())
             .WithRegistrar(new SafePluginRegistrar(
                 new PluginRegistrar(
@@ -103,10 +105,33 @@ internal static class PluginRuntimeComposer
                     loggerFactory,
                     audit),
                 loggerFactory.CreateLogger<SafePluginRegistrar>()))
-            .WithOptions(o => o.PluginRoot = globalPluginsDir)
+            .WithOptions(o =>
+            {
+                o.PluginRoot = globalPluginsDir;
+                // #1055: a failing/slow plugin never aborts the run — the
+                // failure is logged per plugin and skipped. Pinned explicitly
+                // so a future default flip cannot silently re-arm fail-fast.
+                o.ContinueOnError = true;
+            })
             .Build(loggerFactory.CreateLogger<PluginHost>());
 
         return (loadHost, runtime);
+    }
+
+    /// <summary>
+    ///     Build the inner compile stack (reference snapshot → Roslyn → disk cache).
+    ///     Runs ONLY on first <c>CompileAsync</c> (via <c>LazyPluginCompiler</c>):
+    ///     this is the frame that JITs <c>Microsoft.CodeAnalysis</c> — never the
+    ///     startup path.
+    /// </summary>
+    private static IPluginCompiler CreateCompiler(string pluginsCacheDir, ILoggerFactory loggerFactory)
+    {
+        var references = new PluginAssemblyReferences(
+            loggerFactory.CreateLogger<PluginAssemblyReferences>());
+        return new CachingCompiler(
+            new RoslynPluginCompiler(references),
+            pluginsCacheDir,
+            loggerFactory.CreateLogger<CachingCompiler>());
     }
 
     /// <summary>
