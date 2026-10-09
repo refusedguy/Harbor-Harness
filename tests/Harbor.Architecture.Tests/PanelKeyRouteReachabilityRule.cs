@@ -8,7 +8,7 @@
 // it: `IPanelProvider.OnKey` and `IOverlayLayer.OnKey`. The whole product tree
 // contains exactly THREE such hand-offs, and none of them can be entered:
 //
-//   src/Harbor.Tui.CellForge/Chat/Rendering/OverlayStack.cs:180
+//   src/Harbor.Tui.CellForge/Chat/Rendering/OverlayStack.cs:188
 //       `if (layer.OnKey(in key))` — inside `OverlayStack.RouteKey`, which no
 //       product method calls. (#812)
 //   src/Harbor.Tui.CellForge/Chat/Panels/CellForgePanelAdapter.cs:63

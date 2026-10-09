@@ -22,7 +22,7 @@
 //     and three live overrides;
 //   * `OverlayStack.RouteKey` is a real public method, correctly implemented and
 //     covered by `OverlayModalTests`;
-//   * `src/Harbor.Tui.CellForge/Chat/Rendering/OverlayStack.cs:155` prints the host pattern in a `<code>` block.
+//   * `src/Harbor.Tui.CellForge/Chat/Rendering/OverlayStack.cs:163` prints the host pattern in a `<code>` block.
 //
 // A contributor greps "keys route top-down through OnKey", finds all of that,
 // writes a layer with an `OnKey` — and it is never called. The adapter test
@@ -76,7 +76,7 @@
 //   * `SetupChecklistOverlayLayer.cs:12-13` — already carries the conditional
 //     phrasing #858 wants ("for hosts that route through ..."). It is the model,
 //     not a violation.
-//   * `docs/PATTERNS.md:373` — cites `src/Harbor.Tui.CellForge/Chat/Rendering/OverlayStack.cs:43,49` for the DEFAULTS
+//   * `docs/PATTERNS.md:373` — cites `src/Harbor.Tui.CellForge/Chat/Rendering/OverlayStack.cs:51,57` for the DEFAULTS
 //     (`IsModal => false`, `OnKey => false`). True, and about the interface's
 //     shape rather than the product's routing.
 //
