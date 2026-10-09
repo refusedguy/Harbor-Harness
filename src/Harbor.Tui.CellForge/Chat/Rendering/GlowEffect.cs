@@ -1,7 +1,8 @@
-// #436: moved from Harbor.Tui.CellForge.Engine/Rendering/PostFx.cs — the chat-owned glow effect.
-// The pipeline (PostFxPipeline), its contract (IPostEffect) and GlowRegion stay engine-side;
-// only the PanelFx-coupled effect moves. It implements the engine contract,
-// so its grid types are engine-qualified; only PanelFx stays Rendering-bound.
+// #436: chat-owned glow effect, moved out of the engine grid sources.
+// The effect pipeline with its contract and the glow region stay
+// engine-side. Only the panel-coupled effect moves here. It implements
+// the engine contract, so its grid types are engine-qualified below.
+// Only PanelFx stays Rendering-bound.
 using Harbor.Ui.Framework.Rendering.Widgets;
 // #436: this effect implements the ENGINE post-effect contract, so its grid
 // types are engine-qualified explicitly (the assembly-wide aliases pin them
@@ -10,6 +11,7 @@ using EngineCells = Harbor.Tui.CellForge.Rendering;
 
 namespace Harbor.Tui.CellForge.Rendering;
 
+/// <summary>
 /// TachyonFX-style bloom/glow for warning/error states only: cells whose
 /// foreground matches the published accent (the warning/error tone the
 /// surface actually painted) blend toward a fixed "hot" tone — the accent
@@ -75,6 +77,6 @@ public sealed class GlowEffect : IPostEffect
             Harbor.Ui.Framework.Rendering.PackedColor.FromRaw(style.Fg.Value),
             Harbor.Ui.Framework.Rendering.PackedColor.FromRaw(_hot.Value),
             _intensity * PeakStrength);
-        return EngineCells.Cell.FromRaw(cell.Rune, glow.Value, cell.Bg, (ushort)cell.Flags, cell.Width);
+        return EngineCells.Cell.FromRaw(cell.Rune, glow.Value, cell.Bg, cell.Flags, cell.Width);
     }
 }
