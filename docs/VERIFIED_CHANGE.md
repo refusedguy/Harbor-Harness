@@ -35,7 +35,7 @@ completed transition. Nothing is faked past `Isolated`.
 | S4 | checks | open (#378) |
 | S5 | verification report | open (#379) |
 | S6 | accept | open (#382) |
-| S7 | reject | open (#385) |
+| S7 | reject | slice 1 (#385): verb + `--all-effects` (exit 5); `--patch`/`--worktree`/`--undo-apply` pending |
 | S8 | owner report | open (#392) |
 | S9 | end-to-end driver | in progress (#397, this slice) |
 
@@ -84,21 +84,34 @@ names the stage:
 | 2 | bad usage (missing agent, missing task, missing checks file, unknown option) |
 | 3 | pre-flight conflict: dirty workspace, moved base, or not a repository |
 | 4 | internal failure at a named stage (today: `isolate`, or the missing `freeze`) |
+| 5 | out-of-reach inventory (`--all-effects`): read-only, nothing written |
 
 `--dry-run` performs the pin pre-flight and prints the plan, then stops
 without creating a worktree. A failed pre-flight never leaves a worktree
 registered.
 
-## Reject modes (reserved for S7)
+## Reject modes (S7)
 
 Rejection is three separately invocable operations, never one blurred action:
 
+```bash
+harbor run reject <RunId> (--patch | --worktree | --all-effects | --undo-apply) [--force]
+```
+
 - `--patch`: drop the run's frozen artifacts; the worktree is untouched.
+  Pending: the frozen set (S3, #377) has not landed, so slice 1 refuses
+  with the stage named and deletes nothing.
 - `--worktree`: remove the isolated working copy; pinned state becomes `Released`.
-- `--all-effects`: not implementable locally; prints the out-of-reach
-  inventory and exits distinctly.
+  Pending: slice 1 refuses with the stage named and removes nothing.
+- `--all-effects`: implemented in slice 1. Prints the out-of-reach
+  inventory below and exits 5. Read-only: no artifact is deleted, no
+  working copy is removed, the manifest is unchanged.
 - `--undo-apply`: reverses exactly the paths the frozen set touched, and only
-  after accept.
+  after accept. Pending: slice 1 refuses with the stage named and reverses
+  nothing.
+
+A mode flag is required: a bare `harbor run reject <RunId>` prints the
+three modes and exits 2. There is no default.
 
 Reject never touches the operator tree by default.
 
@@ -109,7 +122,10 @@ pushed, PRs or issues created, network calls, external API writes, database
 migrations, files written outside the repository, `~/.harbor` session and log
 records, and anything already consumed by downstream tooling. Anything outside
 the frozen change set is, by construction, not observable by the report and
-not reversible by reject.
+not reversible by reject. The runnable copy of this list lives in exactly
+one place, `RunRejectEffects.OutOfReach` in
+`src/Harbor.Application/Sessions/RunReject.cs`: the S5 report (#379)
+renders from that constant instead of restating it.
 
 ## Agent discipline
 
