@@ -61,8 +61,8 @@ public class HotSwapTests
     public async Task Publish_Take_ReturnsSamePair_Once()
     {
         var chain = new BufferSwapChain();
-        var back = new ScreenBuffer(20, 6);
-        var front = new ScreenBuffer(20, 6);
+        var back = new EngineCells.ScreenBuffer(20, 6);
+        var front = new EngineCells.ScreenBuffer(20, 6);
         var offer = new BufferPair(back, front);
 
         chain.Publish(offer);
@@ -78,8 +78,8 @@ public class HotSwapTests
     public async Task Publish_LastWriterWins()
     {
         var chain = new BufferSwapChain();
-        var first = new BufferPair(new ScreenBuffer(10, 4), new ScreenBuffer(10, 4));
-        var second = new BufferPair(new ScreenBuffer(12, 5), new ScreenBuffer(12, 5));
+        var first = new BufferPair(new EngineCells.ScreenBuffer(10, 4), new EngineCells.ScreenBuffer(10, 4));
+        var second = new BufferPair(new EngineCells.ScreenBuffer(12, 5), new EngineCells.ScreenBuffer(12, 5));
 
         chain.Publish(first);
         chain.Publish(second); // displaces the pending first offer
@@ -140,7 +140,7 @@ public class HotSwapTests
         var session = MakeSession(40, 12, out _);
         var chain = session.SwapChain;
 
-        await Assert.That(() => session.OfferSwap(new ScreenBuffer(30, 10), new ScreenBuffer(32, 10)))
+        await Assert.That(() => session.OfferSwap(new EngineCells.ScreenBuffer(30, 10), new EngineCells.ScreenBuffer(32, 10)))
             .Throws<ArgumentOutOfRangeException>();
         await Assert.That(chain.TryTake()).IsNull(); // nothing published
     }
@@ -149,13 +149,13 @@ public class HotSwapTests
     public async Task Engine_SwapFront_TerminalMirrorFollows()
     {
         var engine = new DiffEngine(10, 2);
-        var replacement = new ScreenBuffer(10, 2);
-        replacement.SetText(0, 0, "swapped", CellStyle.Plain);
+        var replacement = new EngineCells.ScreenBuffer(10, 2);
+        replacement.SetText(0, 0, "swapped", EngineCells.CellStyle.Plain);
 
         engine.SwapFront(replacement);
         var writer = new AnsiWriter(new RecordingBackend());
         writer.BeginFrame();
-        engine.Flush(new ScreenBuffer(10, 2), writer); // blank BACK vs new FRONT — pure mirror swap, no emission
+        engine.Flush(new EngineCells.ScreenBuffer(10, 2), writer); // blank BACK vs new FRONT — pure mirror swap, no emission
 
         await Assert.That(engine.Front).IsSameReferenceAs(replacement);
         await Assert.That(engine.FrontMatches(replacement)).IsTrue();
@@ -174,7 +174,7 @@ public class HotSwapTests
 
         TerminalColorPalette.Apply(HarborTheme.HarborLight); // publish mid-frame
 
-        session.Back.SetText(0, 1, "warn", new CellStyle(ChatPalette.Warning, attrs: StyleAttr.Bold));
+        session.Back.SetText(0, 1, "warn", new EngineCells.CellStyle(EngineCells.PackedColor.FromRaw(ChatPalette.Warning.Value), attrs: EngineCells.StyleAttr.Bold));
         var midFrameWarning = ChatPalette.Warning;
         session.FlushFrame();
         ChatPalette.UnpinFrame();
@@ -248,7 +248,7 @@ public class HotSwapTests
         var session = MakeSession(20, 4, out var backend);
 
         var scope = session.BeginFrameScope();
-        session.Back.SetText(0, 0, "scopedflushrow", CellStyle.Plain);
+        session.Back.SetText(0, 0, "scopedflushrow", EngineCells.CellStyle.Plain);
         scope.Flush();
         scope.Dispose();
 
@@ -262,7 +262,7 @@ public class HotSwapTests
     {
         var session = MakeSession(20, 4, out var backend);
         var scope = session.BeginFrameScope();
-        session.Back.SetText(0, 0, "asyncscopedflush", CellStyle.Plain);
+        session.Back.SetText(0, 0, "asyncscopedflush", EngineCells.CellStyle.Plain);
 
         await scope.FlushAsync();
         bool pinnedAfterFlush = ChatPalette.IsFramePinned;
@@ -320,19 +320,19 @@ public class HotSwapTests
     {
         var session = MakeSession(20, 4, out var backend);
         session.BeginFrame();
-        session.Back.SetText(0, 0, "baseline", CellStyle.Plain);
+        session.Back.SetText(0, 0, "baseline", EngineCells.CellStyle.Plain);
         session.FlushFrame();
 
         // Abort mid-frame: BACK carries a row the terminal never received,
         // FRONT still mirrors the shipped frame.
         using (session.BeginFrameScope())
         {
-            session.Back.SetText(0, 2, "abortedrow", CellStyle.Plain);
+            session.Back.SetText(0, 2, "abortedrow", EngineCells.CellStyle.Plain);
         }
 
         backend.ResetForTests();
         var next = session.BeginFrameScope();
-        session.Back.SetText(0, 1, "secondframe", CellStyle.Plain);
+        session.Back.SetText(0, 1, "secondframe", EngineCells.CellStyle.Plain);
         next.Flush();
         next.Dispose();
 
@@ -348,7 +348,7 @@ public class HotSwapTests
     {
         var session = MakeSession(40, 10, out var backend);
         session.BeginFrame();
-        session.Back.SetText(0, 0, "baseline", CellStyle.Plain);
+        session.Back.SetText(0, 0, "baseline", EngineCells.CellStyle.Plain);
         session.FlushFrame();
 
         // A frame that registers a narrow damage hint and then aborts: the
@@ -357,12 +357,12 @@ public class HotSwapTests
         using (session.BeginFrameScope())
         {
             session.Damage(new Rect(0, 0, 4, 1));
-            session.Back.SetText(0, 0, "hinted", CellStyle.Plain);
+            session.Back.SetText(0, 0, "hinted", EngineCells.CellStyle.Plain);
         }
 
         backend.ResetForTests();
         var next = session.BeginFrameScope();
-        session.Back.SetText(20, 8, "unhinted", CellStyle.Plain);
+        session.Back.SetText(20, 8, "unhinted", EngineCells.CellStyle.Plain);
         next.Flush();
         next.Dispose();
 
@@ -427,7 +427,7 @@ public class HotSwapTests
                     for (int i = 0; i < offersPerProducer; i++)
                     {
                         int cols = 40 + p; // per-producer geometry tag
-                        chain.Publish(new BufferPair(new ScreenBuffer(cols, 20), new ScreenBuffer(cols, 20)));
+                        chain.Publish(new BufferPair(new EngineCells.ScreenBuffer(cols, 20), new EngineCells.ScreenBuffer(cols, 20)));
                         Interlocked.Increment(ref published);
                     }
                 }
