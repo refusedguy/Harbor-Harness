@@ -1183,7 +1183,22 @@ Each entry: **Feature / Source path / Description / Why it matters / Implementat
   `tests/Harbor.Tui.CellForge.Tests/SessionTabStripPanelTests.cs`,
   `tests/Harbor.Ui.Framework.Tests/TabStripKeyBindingTests.cs` (including the
   `SessionEventRouter` cross-session leak regression for the tab-switch path).
-  Pending: slice 3/3 (#390) — drag-reorder, close gestures, context menu.
+- **Status:** Slice 3/3 state core landed (`feat/tabgestures-390`, issue #390) —
+  keyboard reorder (`ChatAction.MoveTabLeft` / `MoveTabRight` on `Alt+Left` /
+  `Alt+Right`, guarded on a live strip, folded through `ReorderTab` with focus
+  following the tab), the pinned-tab bulk-close guard (`CloseOtherTabs` /
+  `CloseTabsToRight` skip pinned tabs; explicit `CloseTab` still closes), and
+  the restore contract (`TabStripSnapshot` order + focus as id strings,
+  `ChatAppMsg.HydrateTabStrip` drops unknown ids with a single system note and
+  restores degenerate input to an empty strip without crashing). TUnit coverage:
+  `tests/Harbor.Ui.Framework.Tests/TabStripGesturesTests.cs` (14 tests,
+  RED-first). The host still owns persist-on-change (debounced), dispatch
+  after first paint, and opening the default tab when the strip comes back
+  empty.
+- **Status:** Pending follow-up — mouse drag + insertion marker, middle-click
+  close, context popover. The strip has no mouse route yet
+  (`SessionTabStripPanel.ActivateAt` / `CloseAt` have no callers), so those
+  need a routing slice of their own; nothing in this slice assumes them.
 
 ---
 
