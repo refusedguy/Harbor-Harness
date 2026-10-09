@@ -597,7 +597,14 @@ public static class ChatAppReducer
     private static string LimitNotice(RunLimitKind limit) => limit switch
     {
         RunLimitKind.Timeout => "limit reached: wall-clock budget elapsed — work is incomplete.",
-        _ => "limit reached: step budget exhausted — work is incomplete.",
+        RunLimitKind.MaxSteps => "limit reached: step budget exhausted — work is incomplete.",
+        // #404: the budget members must name their own ceiling — the `_`
+        // fallback below used to read "step budget", which would send a
+        // spend-capped user tuning MaxSteps (the #1024 wrong-ceiling trap).
+        RunLimitKind.MaxTokens => "limit reached: token budget exhausted — work is incomplete.",
+        RunLimitKind.MaxCost => "limit reached: spend budget exhausted — work is incomplete.",
+        RunLimitKind.MaxOutputBytes => "limit reached: output-size budget exhausted — work is incomplete.",
+        _ => "limit reached: run budget exhausted — work is incomplete.",
     };
 
     /// <summary>
