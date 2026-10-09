@@ -199,7 +199,18 @@ jobs:
         run: |
           dotnet pack Harbor.slnx -c Release --no-build -p:ContinuousIntegrationBuild=true -o out/packages2
           diff <(cd out/packages && sha256sum *.nupkg | sort) <(cd out/packages2 && sha256sum *.nupkg | sort) \
-            && echo "deterministic: identical nupkgs"
+            && echo "deterministic: identical nupkgs" || {
+            echo "--- zipinfo of first package in each dir (debug) ---"
+            python3 -c "
+          import zipfile, glob
+          for d in ['out/packages', 'out/packages2']:
+              p = sorted(glob.glob(d + '/*.nupkg'))[0]
+              print(p)
+              for i in zipfile.ZipFile(p).infolist():
+                  print('  ', i.filename, i.date_time, i.file_size, i.compress_size, i.CRC)
+          "
+            exit 1
+          }
 
       # Clean-room proof that the dependency graph resolves: throwaway
       # project, local feed for Harbor.* + nuget.org for transitives.
@@ -223,11 +234,14 @@ jobs:
           dotnet build -c Release --nologo
 
       - name: Upload NuGet packages artifact
+        if: always()
         uses: actions/upload-artifact@v7
         with:
           name: nuget-packages
-          path: out/packages/*.nupkg
-          if-no-files-found: error
+          path: |
+            out/packages/*.nupkg
+            out/packages2/*.nupkg
+          if-no-files-found: warn
           retention-days: 7
 
       # Advisory report only: surfaces `dotnet list package --vulnerable`
