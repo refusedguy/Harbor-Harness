@@ -3,16 +3,6 @@ using Harbor.Ui.Framework.Rendering;
 
 namespace Harbor.Tui.CellForge.Rendering;
 
-/// <summary>Splits a node's usable extent along its main axis.</summary>
-public enum SplitDir : byte
-{
-    /// <summary>Children share the width (side-by-side columns).</summary>
-    Horizontal = 0,
-
-    /// <summary>Children share the height (stacked rows).</summary>
-    Vertical = 1,
-}
-
 /// <summary>
 /// Leaf panel of the layout tree (celldiff §5): owns a resolved
 /// <see cref="Rect"/>, minimum sizes, collapse priority and focus flag.
@@ -41,9 +31,6 @@ public abstract class Panel
     /// <summary>Minimum extent along a split direction.</summary>
     internal int MinAlong(SplitDir dir) => dir == SplitDir.Horizontal ? Min.Width : Min.Height;
 }
-
-/// <summary>Immutable size pair for panel minimums.</summary>
-public readonly record struct Size(int Width, int Height);
 
 internal sealed class SplitNode
 {
