@@ -240,6 +240,24 @@ Estimates based on .NET 10 baseline + Harbor deps:
 
 Not yet measured with `dotnet-counters`. The `InMemoryEventBus`, `UiStore` (now lock-free CAS), and `AgentLoop` (uses `StringBuilderPool`, `ArrayPool`) are designed for low allocation. BenchmarkDotNet microbenchmarks below quantify the hot paths.
 
+### 4.4 JIT vs NativeAOT scripted workload (#411) — JIT half measured, AOT half blocked
+
+Harness: `tools/measure-jit-workload.sh` (offline CLI verbs `--version` / `--help` / `providers`, N=7, median + spread — never a single number); CI runner `.github/workflows/meas-jit-aot.yml` (measurement only, not a gate). Full log is the `jit-workload-log` artifact of the run linked below.
+
+Measured — run [37935894413](https://github.com/refusedguy/Harbor-Harness/actions/runs/37935894413), 2026-10-09, commit `eebc9be3`, AMD EPYC 7763 (4 vCPU, x86_64), Ubuntu 24.04.5 LTS, .NET SDK 10.0.401, framework-dependent Release, apphost-driven (no `dotnet` muxer in path).
+
+| Verb | Median | Min | Max | Spread | RSS peak (median) | RSS peak (max) |
+|---|---:|---:|---:|---:|---:|---:|
+| `--version` | 138 ms | 133 ms | 194 ms | 1.46x | 43 124 KB | 43 248 KB |
+| `--help` | 134 ms | 131 ms | 143 ms | 1.09x | 43 336 KB | 43 336 KB |
+| `providers` | 459 ms | 454 ms | 533 ms | 1.17x | 96 440 KB | 96 448 KB |
+
+Wall = process spawn-to-exit per verb; RSS = `ru_maxrss` peak (KB). Publish dir: 51 MB (53 159 039 bytes); apphost binary: 40 MB (framework-dependent). The `providers` verb is the DI-heavy one (full `HostBuilder` + provider registry) and the closest proxy here to real startup: ~459 ms JIT, ~94 MB RSS peak.
+
+AOT side: **not measurable.** The NativeAOT publish of this tree fails (`HARBOR_AOT_PUBLISH_DONE … status=failed` on the same week's dev CI; record: `.github/aot-warning-baseline.txt`, gate: #413 — IL3000 x3 incl. one inside `Microsoft.CodeAnalysis` itself, IL2072, IL2070 as errors under ILC warnings-as-errors). A failing ILC publish emits no binary, so there is no AOT artifact to drive; the day #413's record flips to `published`, the same workload runs unchanged against both binaries.
+
+Answer to the #411 decision question, quantified as far as the evidence goes: the JIT baseline to beat is **~459 ms / ~94 MB** on the DI-heavy verb and **~135 ms / ~43 MB** on the light verbs (shared-runner spread up to 1.46x — medians above are the honest numbers). The §4.1 AOT target (<100 ms cold start, 10x) stays a prediction, not a measurement. Whether AOT buys enough to justify dropping in-process Roslyn plugins cannot be answered until the AOT column exists — this table is the JIT half of it.
+
 ## 5. Microbenchmarks (BenchmarkDotNet)
 
 Located in `tests/Harbor.Benchmarks/`. Run with:
