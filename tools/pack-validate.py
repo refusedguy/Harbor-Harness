@@ -30,7 +30,19 @@ import xml.etree.ElementTree as ET
 REPO_URL = "https://github.com/refusedguy/Harbor-Harness"
 LICENSE = "MIT"
 MIN_TAGS = 3
-NS = {"n": "http://schemas.microsoft.com/packaging/2013/05/nuspec.xsd"}
+
+
+def _child(el: ET.Element, name: str) -> ET.Element | None:
+    # Namespace-agnostic: SDK-packed manifests have used more than one
+    # nuspec xmlns over the years, and the checks below do not care which.
+    for c in el:
+        if c.tag == name or c.tag.endswith("}" + name):
+            return c
+    return None
+
+
+def _text(el: ET.Element | None) -> str:
+    return (el.text or "").strip() if el is not None else ""
 
 
 def repo_version(root: Path) -> str:
@@ -58,20 +70,20 @@ def expected_ids(src: Path) -> list[str]:
 
 def check_nuspec(nuspec: ET.Element, pkg_id: str, version: str) -> list[str]:
     errs: list[str] = []
-    md = nuspec.find("n:metadata", NS)
+    md = _child(nuspec, "metadata")
     if md is None:
         return [f"{pkg_id}: no metadata element in nuspec"]
-    txt = lambda tag: (md.findtext(f"n:{tag}", default="", namespaces=NS) or "").strip()
+    txt = lambda tag: _text(_child(md, tag))
     if txt("id") != pkg_id:
         errs.append(f"{pkg_id}: nuspec id is {txt('id')!r}")
     if txt("version") != version:
         errs.append(f"{pkg_id}: nuspec version is {txt('version')!r}, want {version!r}")
     if not txt("description"):
         errs.append(f"{pkg_id}: empty description")
-    lic = md.find("n:license", NS)
-    if lic is None or (lic.text or "").strip() != LICENSE or lic.get("type") != "expression":
+    lic = _child(md, "license")
+    if lic is None or _text(lic) != LICENSE or lic.get("type") != "expression":
         errs.append(f"{pkg_id}: license is not expression:{LICENSE}")
-    repo = md.find("n:repository", NS)
+    repo = _child(md, "repository")
     if repo is None or repo.get("url") != REPO_URL or repo.get("type") != "git":
         errs.append(f"{pkg_id}: repository must be type=git url={REPO_URL}")
     if "refusedguy/Harbor-Harness" not in txt("projectUrl"):
@@ -105,7 +117,12 @@ def validate(packages: Path, src: Path) -> list[str]:
             errs.append(f"{pkg_id}: missing {fname}")
             continue
         with zipfile.ZipFile(packages / fname) as zf:
-            nuspec_name = next((n for n in zf.namelist() if n.endswith(".nuspec")), None)
+            names = zf.namelist()
+            # Prefer the manifest itself: a package may carry other
+            # .nuspec-suffixed content files.
+            nuspec_name = f"{pkg_id}.nuspec" if f"{pkg_id}.nuspec" in names else next(
+                (n for n in names if n.endswith(".nuspec")), None
+            )
             if nuspec_name is None:
                 errs.append(f"{pkg_id}: no .nuspec inside {fname}")
                 continue
@@ -136,9 +153,11 @@ def selftest() -> int:
         out = td / "out"
         out.mkdir()
 
-        def make_nupkg(tags: str, readme: bool) -> None:
+        def make_nupkg(tags: str, readme: bool, xmlns: str = (
+            ' xmlns="http://schemas.microsoft.com/packaging/2013/05/nuspec.xsd"'
+        )) -> None:
             nuspec = (
-                '<package xmlns="http://schemas.microsoft.com/packaging/2013/05/nuspec.xsd">'
+                f"<package{xmlns}>"
                 "<metadata><id>Harbor.Demo</id><version>0.4.0-alpha</version>"
                 "<description>demo</description>"
                 '<license type="expression">MIT</license>'
@@ -156,6 +175,13 @@ def selftest() -> int:
         errs = validate(out, td / "src")
         if errs:
             print("selftest FAIL: good package rejected:", errs)
+            return 1
+        # Manifests have shipped under more than one nuspec xmlns (and the
+        # checks do not care which): a namespace-less manifest must pass too.
+        make_nupkg("harbor;demo;test", True, xmlns="")
+        errs = validate(out, td / "src")
+        if errs:
+            print("selftest FAIL: xmlns-less package rejected:", errs)
             return 1
         make_nupkg("lonely", False)
         errs = validate(out, td / "src")
