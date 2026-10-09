@@ -33,6 +33,10 @@ using UiKeyDto = Harbor.Ui.Framework.Rendering.Input.UiKeyDto;
 using UiKeyKind = Harbor.Ui.Framework.Rendering.Input.UiKeyKind;
 using UiKeyMods = Harbor.Ui.Framework.Rendering.Input.UiKeyMods;
 using EngineCells = Harbor.Tui.CellForge.Rendering;
+// #436: the OSC-11 probe and its color were ALSO ported into the engine
+// (Capabilities), so the host-side theme path pins the DesignSystem home.
+using DsProbe = Harbor.DesignSystem.TerminalBackgroundProbe;
+using DsRgb = Harbor.Ui.Framework.Projection.RgbColor;
 
 namespace Harbor.App.Cli.Repl;
 
@@ -76,7 +80,7 @@ internal sealed class ReplLifecycle(CellForgeReplRunner host)
         // background; the answer surfaces as a Capability event and flips the
         // palette before the first frame. A custom JSON theme (ArmThemeWatcher)
         // applied later always wins over the auto pick.
-        await host.Backend.WriteAsync(Utf8(TerminalBackgroundProbe.Query), ct).ConfigureAwait(false);
+        await host.Backend.WriteAsync(Utf8(DsProbe.Query), ct).ConfigureAwait(false);
 
         // OSC 99 notification capability probe (osc-sprint §777): terminals
         // without the protocol ignore the query silently — answers flip the
@@ -639,7 +643,7 @@ internal sealed class ReplLifecycle(CellForgeReplRunner host)
         // next repaint without an active selection clears it for free.
         if (host._selection.IsActive)
         {
-            host._selection.Paint(host.ScreenSession.Back);
+            host._selection.Paint(host.ScreenSession.PaintBuffer);
         }
 
         if (host._palette.Visible)
@@ -759,12 +763,12 @@ internal sealed class ReplLifecycle(CellForgeReplRunner host)
             return; // custom JSON owns the palette — auto-detect stands down
         }
 
-        var background = new RgbColor(
+        var background = new DsRgb(
             (byte)Math.Clamp(report.Red, 0, 255),
             (byte)Math.Clamp(report.Green, 0, 255),
             (byte)Math.Clamp(report.Blue, 0, 255));
-        var theme = TerminalBackgroundProbe.RelativeLuminance(background)
-                    >= TerminalBackgroundProbe.LightLuminanceThreshold
+        var theme = DsProbe.RelativeLuminance(background)
+                    >= DsProbe.LightLuminanceThreshold
             ? HarborTheme.HarborLight
             : HarborTheme.HarborDark;
         TerminalColorPalette.Apply(theme);

@@ -474,7 +474,7 @@ internal sealed class ReplInputLoop(CellForgeReplRunner host)
         int rows = Math.Max(1, host.ScreenSession.CurrentRows);
         string? text = host._selection.OnRelease(
             releaseX, releaseY, cols, rows,
-            (x, y) => x >= 0 && x < cols && y >= 0 && y < rows ? host.ScreenSession.Back.Get(x, y) : EngineCells.Cell.Blank);
+            (x, y) => x >= 0 && x < cols && y >= 0 && y < rows ? host.ScreenSession.PaintBuffer.Get(x, y) : Cell.Blank);
         if (string.IsNullOrEmpty(text))
         {
             host._wake.Writer.TryWrite(null);
