@@ -102,9 +102,8 @@ internal static class RegistriesModule
         ctx.SetRegistries(new HarborRegistries(agentRegistry, toolRegistry, providerRegistry, panelRegistry));
 
 #if HARBOR_WITH_PLUGINS
-        IReadOnlyList<LoadedPlugin>? startupLoaded = null;
-        LoadPlugins(services, ctx, eventBus, toolRegistry, providerRegistry, agentRegistry, panelRegistry,
-            loaded => startupLoaded = loaded);
+        StartupPluginLoad startupLoad = LoadPlugins(
+            services, ctx, eventBus, toolRegistry, providerRegistry, agentRegistry, panelRegistry);
 #else
         ctx.Logger.LogInformation("Plugin runtime disabled (HarborWithPlugins=false)");
 #endif
@@ -125,6 +124,7 @@ internal static class RegistriesModule
         services.AddSingleton<IPanelRegistry>(panelRegistry);
 
 #if HARBOR_WITH_PLUGINS
+        services.AddSingleton(startupLoad);
         services.AddSingleton(sp =>
         {
             var reload = new PluginReloadService(
@@ -138,11 +138,9 @@ internal static class RegistriesModule
                 ctx.Options.Configuration ?? new ConfigurationBuilder().Build(),
                 sp.GetRequiredService<ILoggerFactory>().CreateLogger<PluginReloadService>());
             // Startup-bound plugins report as loaded in the /plugins panel.
-            if (startupLoaded is not null)
-            {
-                reload.NoteLoaded(startupLoaded);
-            }
-
+            // Late attach: runs immediately when the background load already
+            // finished, otherwise when it completes.
+            startupLoad.Attach(reload.NoteLoaded);
             return reload;
         });
         services.AddSingleton(sp => new PluginAutoReloader(
@@ -156,15 +154,22 @@ internal static class RegistriesModule
     }
 
 #if HARBOR_WITH_PLUGINS
-    private static void LoadPlugins(
+    /// <summary>
+    ///     Startup plugin pipeline (#1055, slice 2): compose (cheap — the Roslyn
+    ///     stack hides behind <c>LazyPluginCompiler</c>), publish the live backend
+    ///     maps, and compile + register the plugins on a background task. Returns
+    ///     immediately: startup never waits for plugins. Failures stay isolated
+    ///     per plugin (ContinueOnError, pinned by the composer) and surface as
+    ///     warnings, never exceptions.
+    /// </summary>
+    private static StartupPluginLoad LoadPlugins(
         IServiceCollection services,
         HarborCompositionContext ctx,
         IEventBus eventBus,
         IToolRegistry toolRegistry,
         IProviderRegistry providerRegistry,
         IAgentRegistry agentRegistry,
-        PanelRegistry panelRegistry,
-        Action<IReadOnlyList<LoadedPlugin>>? onLoaded = null)
+        PanelRegistry panelRegistry)
     {
         string harborDir = ctx.Options.HarborDir;
         string globalPluginsDir = Path.Combine(harborDir, "plugins");
@@ -191,44 +196,20 @@ internal static class RegistriesModule
                 ? (script, declared) => PromptForPluginCapabilitiesAsync(script, declared, ctx.Logger)
                 : null);
 
-#pragma warning disable RS0030 // Sync-over-async at startup — same pattern as config load.
-        var pluginResult = pluginRuntime.LoadAllAsync(pluginHost).GetAwaiter().GetResult();
-#pragma warning restore RS0030
-
-        // #581: publish the two backend axes the plugin host accepted. StorageModule and
-        // TuiModule run AFTER AddHarborRegistries in the fixed composition order
-        // (Registration.cs), so the maps are fully populated by the time they build
-        // their registries. Startup-only, by the same contract as every other
-        // registration: a reload pass composes its own load host over a throwaway
-        // service collection, so a backend it registers cannot reach the already-built
+        // #581: publish the two backend axes the plugin host accepts. These are
+        // the LIVE dictionaries the background load registers into; StorageModule
+        // and TuiModule run AFTER AddHarborRegistries in the fixed composition
+        // order (Registration.cs), so they snapshot whatever arrived before they
+        // run — a plugin backend that finishes compiling later needs a restart
+        // (or a reload pass), the same documented limitation hot-reload already
+        // has: a reload pass composes its own load host over a throwaway service
+        // collection, so a backend it registers cannot reach the already-built
         // storage singleton or the swap table.
         ctx.Registries.SessionStores = pluginHost.SessionStores;
         ctx.Registries.TuiBackends = pluginHost.TuiBackends;
-        if (!pluginHost.SessionStores.IsEmpty)
-        {
-            ctx.Logger.LogInformation(
-                "Plugin session-store backends: {Ids}", string.Join(", ", pluginHost.SessionStores.Keys));
-        }
+        ctx.Logger.LogDebug("Plugin load running in background; startup continues");
 
-        if (!pluginHost.TuiBackends.IsEmpty)
-        {
-            ctx.Logger.LogInformation(
-                "Plugin TUI backends: {Ids}", string.Join(", ", pluginHost.TuiBackends.Keys));
-        }
-        if (pluginResult.IsSuccess) // §4.6-ok: ветка логирования успеха/провала, не конверсия.
-        {
-            ctx.Logger.LogInformation("Loaded {Count} CS plugin(s)", pluginResult.Value.Count);
-            foreach (var p in pluginResult.Value)
-            {
-                ctx.Logger.LogInformation("  - {DisplayName} (from cache: {FromCache})", p.DisplayName, p.LoadedFromCache);
-            }
-
-            onLoaded?.Invoke(pluginResult.Value);
-        }
-        else
-        {
-            ctx.Logger.LogWarning("CS plugin loading failed: {Error}", pluginResult.Error);
-        }
+        return StartupPluginLoad.Start(pluginRuntime, pluginHost, ctx.Logger);
     }
 
     /// <summary>
