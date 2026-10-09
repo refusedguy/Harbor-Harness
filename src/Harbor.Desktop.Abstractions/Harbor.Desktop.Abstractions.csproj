@@ -27,6 +27,7 @@
     <PackageId>Harbor.Desktop.Abstractions</PackageId>
     <Description>Harbor desktop abstractions — shared interfaces, base view-models, design-system primitives for Avalonia/WPF/MAUI/Blazor apps.</Description>
     <PackageTags>harbor;desktop;abstractions;mvvm;cross-platform</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
     <AllowUnsafeBlocks>false</AllowUnsafeBlocks>
 
     <!-- Meziantou MA0046 insists on EventArgs-derived payload types; we use
@@ -65,6 +66,10 @@
       the reference stays.
     -->
     <PackageReference Include="CSharpFunctionalExtensions"/>
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="\"/>
   </ItemGroup>
 
 </Project>

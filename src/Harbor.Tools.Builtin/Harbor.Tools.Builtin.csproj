@@ -6,6 +6,7 @@
     <PackageId>Harbor.Tools.Builtin</PackageId>
     <Description>Harbor builtin tools — 14 tools (Read, Write, Edit, Bash, Grep, Glob, Ls, Task, WebFetch, Patch, Notebook, RipGrep, Tree, MCP) consolidated from the former 14 leaf projects into a single assembly.</Description>
     <PackageTags>harbor;tools;builtin;ai-agent</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
   </PropertyGroup>
 
   <ItemGroup>
@@ -19,6 +20,10 @@
 
   <ItemGroup>
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions"/>
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="\"/>
   </ItemGroup>
 
 </Project>

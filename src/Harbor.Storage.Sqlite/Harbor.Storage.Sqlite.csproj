@@ -6,6 +6,7 @@
     <PackageId>Harbor.Storage.Sqlite</PackageId>
     <Description>Harbor SQLite session storage backend — efficient queries, indexed.</Description>
     <PackageTags>harbor;storage;sqlite</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
   </PropertyGroup>
 
   <ItemGroup>
@@ -27,6 +28,10 @@
     <PackageReference Include="Microsoft.Data.Sqlite"/>
     <PackageReference Include="SQLitePCLRaw.lib.e_sqlite3"/>
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions"/>
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="\"/>
   </ItemGroup>
 
 </Project>

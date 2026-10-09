@@ -6,6 +6,7 @@
     <PackageId>Harbor.Providers.OpenAiCompatible</PackageId>
     <Description>Harbor generic OpenAI-compatible LLM provider.</Description>
     <PackageTags>harbor;provider;openai;compatible</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
   </PropertyGroup>
 
   <ItemGroup>
@@ -70,6 +71,10 @@
     <InternalsVisibleTo Include="Harbor.App.Cli"/>
     <InternalsVisibleTo Include="Harbor.Benchmarks"/>
     <InternalsVisibleTo Include="Harbor.Providers.Tests"/>
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="\"/>
   </ItemGroup>
 
 </Project>

@@ -21,6 +21,7 @@
     <PackageId>Harbor.Ipc.Client</PackageId>
     <Description>Harbor IPC client — out-of-process IHarborClient implementation that talks to a remote HarborIpcServer via MessagePack-over-pipe / Unix-domain-socket. Used when HARBOR_MODE=ipc-client.</Description>
     <PackageTags>harbor;ipc;client;messagepack;rpc;remote</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
     <AllowUnsafeBlocks>false</AllowUnsafeBlocks>
     <NoWarn>$(NoWarn);MPK0002;MPK0003;MPK0004;NU1902;NU1903</NoWarn>
   </PropertyGroup>
@@ -32,6 +33,10 @@
   <ItemGroup>
     <PackageReference Include="MessagePack"/>
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions"/>
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="\"/>
   </ItemGroup>
 
 </Project>

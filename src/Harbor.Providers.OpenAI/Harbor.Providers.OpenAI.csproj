@@ -6,6 +6,7 @@
     <PackageId>Harbor.Providers.OpenAI</PackageId>
     <Description>Harbor native OpenAI provider — Chat Completions + Responses API (for o1/o3/GPT-5+).</Description>
     <PackageTags>harbor;provider;openai;gpt</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
   </PropertyGroup>
 
   <ItemGroup>
@@ -25,6 +26,10 @@
 
   <ItemGroup>
     <InternalsVisibleTo Include="Harbor.Providers.Tests"/>
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="\"/>
   </ItemGroup>
 
 </Project>

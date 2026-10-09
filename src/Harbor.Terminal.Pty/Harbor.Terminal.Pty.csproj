@@ -8,6 +8,7 @@
     <PackageId>Harbor.Terminal.Pty</PackageId>
     <Description>Harbor pseudo-terminal (PTY) host — posix_openpt/posix_spawn based out-of-process terminal sessions for the desktop floating panes. Unix (Linux + macOS); Windows ConPTY is a documented follow-up.</Description>
     <PackageTags>harbor;pty;terminal;console</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
     <RootNamespace>Harbor.Terminal.Pty</RootNamespace>
   </PropertyGroup>
 
@@ -26,6 +27,10 @@
       fails the architecture gate.
     -->
     <ProjectReference Include="..\Harbor.Abstractions\Harbor.Abstractions.csproj"/>
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="\"/>
   </ItemGroup>
 
 </Project>

@@ -20,6 +20,7 @@
     <PackageId>Harbor.Hosting</PackageId>
     <Description>Harbor composition root — Registration.AddHarbor builds the whole DI graph; apps pass HarborComposeOptions.</Description>
     <PackageTags>harbor;ai;agent;hosting;di</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
     <AllowUnsafeBlocks>false</AllowUnsafeBlocks>
   </PropertyGroup>
 
@@ -154,6 +155,10 @@
   -->
   <ItemGroup Condition="Exists('..\..\external\ConsoleEx\SharpConsoleUI\SharpConsoleUI.csproj')">
     <ProjectReference Include="..\Harbor.Tui.NickConsoleEx\Harbor.Tui.NickConsoleEx.csproj"/>
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="\"/>
   </ItemGroup>
 
 </Project>

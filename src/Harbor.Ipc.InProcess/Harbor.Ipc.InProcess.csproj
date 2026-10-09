@@ -19,6 +19,7 @@
     <PackageId>Harbor.Ipc.InProcess</PackageId>
     <Description>Harbor IPC in-process client — default IHarborClient implementation that calls IAgent/ISessionStore/IProviderRegistry/IToolRegistry directly. Zero serialization overhead.</Description>
     <PackageTags>harbor;ipc;inprocess;client;default</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
     <AllowUnsafeBlocks>false</AllowUnsafeBlocks>
     <NoWarn>$(NoWarn);MPK0002;MPK0003;MPK0004</NoWarn>
   </PropertyGroup>
@@ -30,6 +31,10 @@
 
   <ItemGroup>
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions"/>
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="\"/>
   </ItemGroup>
 
 </Project>

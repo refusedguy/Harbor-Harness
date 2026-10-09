@@ -17,6 +17,7 @@
     <PackageId>Harbor.Desktop.Shared</PackageId>
     <Description>Harbor desktop shared — cross-platform services and command catalogs for Avalonia/WPF/MAUI/Blazor apps.</Description>
     <PackageTags>harbor;desktop;shared;cross-platform</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
     <AllowUnsafeBlocks>false</AllowUnsafeBlocks>
   </PropertyGroup>
 
@@ -40,6 +41,10 @@
          and nothing needed it at run time either — the package was already
          transitive via Harbor.Desktop.Abstractions and Harbor.Ui.Framework.Abstractions,
          both ProjectReferences below. -->
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="\"/>
   </ItemGroup>
 
 </Project>

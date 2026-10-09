@@ -18,6 +18,7 @@
     <PackageId>Harbor.Plugins.Compilation</PackageId>
     <Description>Harbor plugin compilation — Roslyn-based IPluginCompiler and disk-caching decorator.</Description>
     <PackageTags>harbor;ai;agent;plugins;roslyn;compilation</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
   </PropertyGroup>
 
   <ItemGroup>
@@ -43,6 +44,10 @@
          declared plugin contract surface is resolved BY NAME rather than inherited from
          ambient load state. Internal, so the published API of this package is unchanged. -->
     <InternalsVisibleTo Include="Harbor.Plugins.Runtime.Tests"/>
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="\"/>
   </ItemGroup>
 
 </Project>

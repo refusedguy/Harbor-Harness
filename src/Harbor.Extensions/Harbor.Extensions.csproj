@@ -33,12 +33,17 @@
     <PackageId>Harbor.Extensions</PackageId>
     <Description>Harbor infrastructure helpers — ArrayPool, StringBuilder pool, FrozenSet materializers, MemoryPack round-trip helpers.</Description>
     <PackageTags>harbor;ai;agent;extensions;infrastructure;pooling</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
     <AllowUnsafeBlocks>false</AllowUnsafeBlocks>
     <RootNamespace>Harbor.Abstractions</RootNamespace>
   </PropertyGroup>
 
   <ItemGroup>
     <PackageReference Include="MemoryPack"/>
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="\"/>
   </ItemGroup>
 
 </Project>

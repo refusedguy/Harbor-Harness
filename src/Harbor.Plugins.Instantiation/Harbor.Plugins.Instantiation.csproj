@@ -17,10 +17,15 @@
     <PackageId>Harbor.Plugins.Instantiation</PackageId>
     <Description>Harbor plugin instantiation — reflection-based IPluginInstantiator and lifecycle helpers.</Description>
     <PackageTags>harbor;ai;agent;plugins;instantiation;reflection</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
   </PropertyGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\Harbor.Plugins.Abstractions\Harbor.Plugins.Abstractions.csproj"/>
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="\"/>
   </ItemGroup>
 
 </Project>

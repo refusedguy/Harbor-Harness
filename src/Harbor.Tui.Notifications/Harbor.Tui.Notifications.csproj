@@ -6,6 +6,7 @@
     <PackageId>Harbor.Tui.Notifications</PackageId>
     <Description>Harbor TUI renderer — non-interactive renderer that fires desktop notifications on key agent events (errors, completions, compactions).</Description>
     <PackageTags>harbor;tui;notifications;background;ci</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
   </PropertyGroup>
 
   <ItemGroup>
@@ -26,6 +27,10 @@
   -->
   <ItemGroup>
     <InternalsVisibleTo Include="Harbor.Tui.RendererTests"/>
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="\"/>
   </ItemGroup>
 
 </Project>

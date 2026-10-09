@@ -18,11 +18,16 @@
     <PackageId>Harbor.Desktop.Animations</PackageId>
     <Description>Harbor desktop animations — cross-platform easing functions, durations, and transition records.</Description>
     <PackageTags>harbor;desktop;animations;cross-platform</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
     <AllowUnsafeBlocks>false</AllowUnsafeBlocks>
   </PropertyGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\Harbor.DesignSystem\Harbor.DesignSystem.csproj"/>
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="\"/>
   </ItemGroup>
 
 </Project>

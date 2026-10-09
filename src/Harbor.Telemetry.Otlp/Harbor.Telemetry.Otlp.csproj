@@ -6,6 +6,7 @@
     <PackageId>Harbor.Telemetry.Otlp</PackageId>
     <Description>Harbor OTLP telemetry exporter — daemon/server publish profiles ONLY. Must never be referenced by the CLI/TUI binaries (sprint3-C rule).</Description>
     <PackageTags>harbor;telemetry;otlp;opentelemetry;exporter</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
   </PropertyGroup>
 
   <ItemGroup>
@@ -16,6 +17,10 @@
     <!-- OTEL SDK lives physically outside the CLI/TUI dependency graph. -->
     <PackageReference Include="OpenTelemetry"/>
     <PackageReference Include="OpenTelemetry.Exporter.OpenTelemetryProtocol"/>
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="\"/>
   </ItemGroup>
 
 </Project>

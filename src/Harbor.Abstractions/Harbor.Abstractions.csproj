@@ -33,6 +33,7 @@
     <PackageId>Harbor.Abstractions</PackageId>
     <Description>Harbor abstractions — interface contracts (tools, providers, sessions, agents, events, plugins). References Harbor.Abstractions.Contracts (models) transitively.</Description>
     <PackageTags>harbor;ai;agent;abstractions;interfaces</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
     <AllowUnsafeBlocks>false</AllowUnsafeBlocks>
   </PropertyGroup>
 
@@ -84,6 +85,10 @@
   -->
   <ItemGroup>
     <Using Remove="System.Linq"/>
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="\"/>
   </ItemGroup>
 
 </Project>

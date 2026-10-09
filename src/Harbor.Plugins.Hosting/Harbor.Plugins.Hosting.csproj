@@ -19,6 +19,7 @@
     <PackageId>Harbor.Plugins.Hosting</PackageId>
     <Description>Harbor plugin host — orchestrates storage → compilation → instantiation → registration pipeline.</Description>
     <PackageTags>harbor;ai;agent;plugins;hosting;orchestrator</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
   </PropertyGroup>
 
   <ItemGroup>
@@ -31,6 +32,10 @@
 
   <ItemGroup>
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions"/>
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="\"/>
   </ItemGroup>
 
 </Project>

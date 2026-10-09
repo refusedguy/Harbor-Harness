@@ -29,6 +29,7 @@
     <PackageId>Harbor.Abstractions.Contracts</PackageId>
     <Description>Harbor contracts layer — pure models, value objects, events, permission rules referenced by abstraction interfaces. Zero Harbor project dependencies.</Description>
     <PackageTags>harbor;ai;agent;contracts;models</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
     <AllowUnsafeBlocks>false</AllowUnsafeBlocks>
     <RootNamespace>Harbor.Abstractions</RootNamespace>
   </PropertyGroup>
@@ -36,6 +37,10 @@
   <ItemGroup>
     <PackageReference Include="CSharpFunctionalExtensions"/>
     <PackageReference Include="MemoryPack"/>
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="\"/>
   </ItemGroup>
 
 </Project>

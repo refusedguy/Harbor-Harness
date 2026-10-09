@@ -6,6 +6,7 @@
     <PackageId>Harbor.Providers.Anthropic</PackageId>
     <Description>Harbor native Anthropic Messages API provider — cache_control, extended thinking, fine-grained tool streaming.</Description>
     <PackageTags>harbor;provider;anthropic;claude</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
   </PropertyGroup>
 
   <ItemGroup>
@@ -23,6 +24,10 @@
 
   <ItemGroup>
     <InternalsVisibleTo Include="Harbor.Providers.Tests"/>
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="\"/>
   </ItemGroup>
 
 </Project>

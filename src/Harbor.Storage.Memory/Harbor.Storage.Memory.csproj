@@ -6,6 +6,7 @@
     <PackageId>Harbor.Storage.Memory</PackageId>
     <Description>Harbor in-memory session storage — for testing and ephemeral sessions.</Description>
     <PackageTags>harbor;storage;memory;test</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
   </PropertyGroup>
 
   <ItemGroup>
@@ -38,6 +39,10 @@
       (#83) and this store never touches the filesystem.
     -->
     <Compile Include="..\Harbor.Storage.Shared\SessionStoreErrors.cs" LinkBase="Shared" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="\"/>
   </ItemGroup>
 
 </Project>

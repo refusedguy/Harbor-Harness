@@ -6,6 +6,7 @@
     <PackageId>Harbor.Ui.Framework.Rendering</PackageId>
     <Description>Harbor UI framework — renderer-agnostic shared layer: cell/screen primitives (Cell, CellStyle, ScreenBuffer, Rect), input vocabulary (KeyEvent/KeyCode) and reusable chat widgets (StatusViewModel, DiffBlock + UnifiedDiffParser, ApprovalGateView, streaming markdown). BCL-only, AOT-compatible.</Description>
     <PackageTags>harbor;ui;tui;rendering;cell-diff;markdown</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
     <!-- Shared primitives must stay trim/AOT-clean: zero IL2xxx warnings at build time. -->
     <IsAotCompatible>true</IsAotCompatible>
   </PropertyGroup>
@@ -31,6 +32,10 @@
     <InternalsVisibleTo Include="Harbor.Tui.CellForge"/>
     <InternalsVisibleTo Include="Harbor.Tui.CellForge.Engine"/>
     <InternalsVisibleTo Include="Harbor.Tui.CellForge.Tests"/>
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="\"/>
   </ItemGroup>
 
 </Project>

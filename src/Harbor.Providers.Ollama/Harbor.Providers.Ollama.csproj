@@ -6,6 +6,7 @@
     <PackageId>Harbor.Providers.Ollama</PackageId>
     <Description>Harbor native Ollama provider — local LLM inference via NDJSON.</Description>
     <PackageTags>harbor;provider;ollama;local</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
   </PropertyGroup>
 
   <ItemGroup>
@@ -23,6 +24,10 @@
 
   <ItemGroup>
     <InternalsVisibleTo Include="Harbor.Providers.Tests"/>
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="\"/>
   </ItemGroup>
 
 </Project>

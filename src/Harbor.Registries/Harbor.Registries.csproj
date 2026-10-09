@@ -6,6 +6,7 @@
     <PackageId>Harbor.Registries</PackageId>
     <Description>Harbor registry implementations — AgentRegistry, ToolRegistry, InMemoryMcpRegistry, ProviderRegistry, InMemoryEventBus.</Description>
     <PackageTags>harbor;ai;agent;registries;infrastructure</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
   </PropertyGroup>
 
   <!--
@@ -42,6 +43,10 @@
   -->
   <ItemGroup>
     <Using Remove="System.Linq"/>
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="\"/>
   </ItemGroup>
 
 </Project>

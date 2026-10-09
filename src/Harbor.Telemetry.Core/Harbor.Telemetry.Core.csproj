@@ -6,6 +6,7 @@
     <PackageId>Harbor.Telemetry.Core</PackageId>
     <Description>Harbor telemetry — System.Diagnostics ActivitySource/Meter implementations and boundary decorators (tool/LLM/agent). AOT-safe: no reflection emit, no OTEL SDK.</Description>
     <PackageTags>harbor;telemetry;tracing;metrics;activity-sources</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
   </PropertyGroup>
 
   <ItemGroup>
@@ -13,6 +14,10 @@
          OTEL SDK stays physically out of this graph (Harbor.Telemetry.Otlp). -->
     <ProjectReference Include="..\Harbor.Diagnostics.Abstractions\Harbor.Diagnostics.Abstractions.csproj"/>
     <ProjectReference Include="..\Harbor.Abstractions\Harbor.Abstractions.csproj"/>
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="\"/>
   </ItemGroup>
 
 </Project>

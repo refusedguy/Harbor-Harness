@@ -49,6 +49,7 @@
     <PackageId>Harbor.Terminal.Abstractions</PackageId>
     <Description>Harbor Terminal UI abstractions — terminal-specific renderer / view / view-model / plugin contracts and GFM table rendering.</Description>
     <PackageTags>harbor;terminal;tui;abstractions;renderers;views;mvvm</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
   </PropertyGroup>
 
   <ItemGroup>
@@ -62,6 +63,10 @@
   <ItemGroup>
     <PackageReference Include="CommunityToolkit.Mvvm"/>
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions"/>
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="\"/>
   </ItemGroup>
 
 </Project>

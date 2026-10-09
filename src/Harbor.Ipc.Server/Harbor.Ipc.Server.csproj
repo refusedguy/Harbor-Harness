@@ -21,6 +21,7 @@
     <PackageId>Harbor.Ipc.Server</PackageId>
     <Description>Harbor IPC server — hosts AgentLoop + registries and exposes them via MessagePack RPC over Named Pipe / Unix Domain Socket. Used when HARBOR_MODE=ipc-server.</Description>
     <PackageTags>harbor;ipc;server;messagepack;rpc;named-pipe;unix-socket</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
     <AllowUnsafeBlocks>false</AllowUnsafeBlocks>
     <NoWarn>$(NoWarn);MPK0002;MPK0003;MPK0004;NU1902;NU1903</NoWarn>
   </PropertyGroup>
@@ -34,6 +35,10 @@
     <PackageReference Include="MessagePack"/>
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions"/>
     <PackageReference Include="Microsoft.Extensions.Logging.Console"/>
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="\"/>
   </ItemGroup>
 
 </Project>
