@@ -70,16 +70,18 @@ public sealed class SessionSwitchMidTurnScenarioTests : CellForgePtyScenarioBase
     }
 
     /// <summary>Submit a slash line through the palette overlay: type (opens it),
-    /// Esc (closes it, composer text kept), Enter (dispatches via ClassifySubmit).</summary>
+    /// Esc (closes it, composer text kept), Enter (dispatches via ClassifySubmit).
+    /// The palette has no "[slash]" caption — its stable open marker is the
+    /// footer hint <c>enter run · esc close</c> (see CommandPaletteView).</summary>
     private async Task SubmitSlashAsync(string line)
     {
         Session.SendKey(line);
         _ = await WaitForScreenAsync(
-            l => l.Any(x => x.Contains("[slash]", StringComparison.Ordinal)),
+            l => l.Any(x => x.Contains("enter run", StringComparison.Ordinal)),
             TimeSpan.FromSeconds(10)).ConfigureAwait(false);
         Session.SendKey("\x1b");
         _ = await WaitForScreenAsync(
-            l => !l.Any(x => x.Contains("[slash]", StringComparison.Ordinal)),
+            l => !l.Any(x => x.Contains("enter run", StringComparison.Ordinal)),
             TimeSpan.FromSeconds(10)).ConfigureAwait(false);
         Session.SendKey("\r");
     }
