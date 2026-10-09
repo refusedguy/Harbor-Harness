@@ -205,15 +205,32 @@ public sealed class NdjsonUdsReplaySpikeTests
                 {
                     conn = await _listener.AcceptAsync(ct).ConfigureAwait(false);
                 }
-                catch (OperationCanceledException)
+                catch (Exception ex) when (ex is OperationCanceledException
+                    || ex is ObjectDisposedException
+                    || ex is SocketException)
                 {
-                    break;
+                    break; // shutdown or listener teardown — expected.
                 }
                 _ = HandleClientAsync(conn, ct);
             }
         }
 
         private async Task HandleClientAsync(Socket conn, CancellationToken ct)
+        {
+            try
+            {
+                await HandleClientCoreAsync(conn, ct).ConfigureAwait(false);
+            }
+            catch (Exception ex) when (ex is IOException
+                || ex is SocketException
+                || ex is OperationCanceledException
+                || ex is ObjectDisposedException)
+            {
+                // Client cut the wire mid-replay or server is tearing down — expected.
+            }
+        }
+
+        private async Task HandleClientCoreAsync(Socket conn, CancellationToken ct)
         {
             await using var stream = new NetworkStream(conn, ownsSocket: true);
             using var reader = new StreamReader(stream, leaveOpen: true);
@@ -312,7 +329,9 @@ public sealed class NdjsonUdsReplaySpikeTests
             if (_acceptLoop is not null)
             {
                 try { await _acceptLoop.ConfigureAwait(false); }
-                catch (OperationCanceledException) { }
+                catch (Exception ex) when (ex is OperationCanceledException
+                    || ex is ObjectDisposedException
+                    || ex is SocketException) { }
             }
             _cts.Dispose();
             try { File.Delete(SocketPath); }
