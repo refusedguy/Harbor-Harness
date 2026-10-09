@@ -10,6 +10,8 @@ namespace Harbor.App.Cli.Commands;
 ///     <c>harbor run list</c> (S2, #376) prints the persisted run manifests.
 ///     <c>harbor run change</c> (S9 slice 1, #397) pins and isolates one
 ///     verified-change run, then stops fail-closed past <c>Isolated</c>.
+///     <c>harbor run accept</c> (S6 slice 1, #382) applies the frozen patch
+///     behind the base-unchanged gate.
 ///     <c>harbor run reject</c> (S7 slice 1, #385) routes the three reject
 ///     modes; only <c>--all-effects</c> is implemented yet.
 /// </summary>
@@ -20,6 +22,8 @@ internal static class RunTaskVerb
         string sub = args.Length > 0 ? args[0].ToLowerInvariant() : string.Empty;
         if (sub == "list")
             return RunList();
+        if (sub == "accept")
+            return await RunAcceptVerb.RunAsync(args.Skip(1).ToArray()).ConfigureAwait(false);
         if (sub == "reject")
             return RunRejectVerb.Run(args.Skip(1).ToArray());
         if (sub == "change")
@@ -30,6 +34,7 @@ internal static class RunTaskVerb
                                     Usage: harbor run task agent=<name> <prompt>
                                       run task agent=explore "find all .cs files"
                                       harbor run change agent=<name> "<task>" [--checks <file>] [--dry-run] [--repo <path>]
+                                      harbor run accept <RunId> [--dry-run] [--reverify]
                                       harbor run reject <RunId> (--patch | --worktree | --all-effects) [--force]
                                       harbor run list
                                     """);
