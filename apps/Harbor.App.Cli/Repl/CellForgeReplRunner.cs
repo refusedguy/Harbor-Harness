@@ -222,7 +222,7 @@ internal sealed class CellForgeReplRunner(
     internal TerminalInputSource InputSource => screens.Input;
     internal ITerminalModeController ModeController => modeController;
     internal ITerminalBackend Backend => screens.Backend;
-    internal ILogger<CellForgeReplRunner> Log => core.Logger;
+    internal ILogger Log => core.Logger;
     internal IApprovalCoordinator Coordinator => screens.Coordinator;
     internal ScreenSession ScreenSession => screens.Session;
     internal ChatScreen Screen => screens.Screen;

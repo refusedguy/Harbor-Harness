@@ -13,7 +13,7 @@ namespace Harbor.App.Cli.Repl;
 /// <summary>
 ///     The always-present container services a CellForge run needs (issue #486
 ///     finding 3): configuration, registries, bus, agent, the slash adapter the
-///     composition root built, and the typed logger. Eight members — the most a
+///     composition root built, and a logger. Eight members — the most a
 ///     bundle carries under the issue's own done-state — so inserting one more
 ///     service here rebinds only this bundle's call sites, never the runner's.
 /// </summary>
@@ -25,7 +25,7 @@ internal sealed record CellForgeCoreServices(
     IEventBus EventBus,
     IAgent Agent,
     LegacySlashRunner LegacySlash,
-    ILogger<CellForgeReplRunner> Logger);
+    ILogger Logger);
 
 /// <summary>
 ///     The nullable host-provided integrations (issue #486 finding 3): every
