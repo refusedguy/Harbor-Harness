@@ -4,6 +4,10 @@ using Harbor.Tui.CellForge.Rendering;
 using Harbor.Tui.CellForge.Widgets;
 using Harbor.Ui.Framework.Rendering;
 using Harbor.Ui.Framework.Rendering.Widgets;
+// #436: flush buffers are engine-typed (DiffEngine.Flush); the panel stub
+// overrides the host Panel contract, pinned through UIR.
+using EngineCells = Harbor.Tui.CellForge.Rendering;
+using UIR = Harbor.Ui.Framework.Rendering;
 
 namespace Harbor.Benchmarks;
 
@@ -85,25 +89,25 @@ public class DiffEngineBenchmark
         {
         }
 
-        public override void Paint(ScreenBuffer buffer)
+        public override void Paint(UIR.ScreenBuffer buffer)
         {
         }
     }
 
     private AnsiWriter _writer = null!;
     private DiffEngine _engineIdle = null!;
-    private ScreenBuffer _backIdle = null!;
+    private EngineCells.ScreenBuffer _backIdle = null!;
 
     private DiffEngine _engineToken = null!;
-    private ScreenBuffer _backToken = null!;
+    private EngineCells.ScreenBuffer _backToken = null!;
     private string[] _bandA = null!;
     private string[] _bandB = null!;
     private int _bandIndex;
 
     private DiffEngine _engineFull200 = null!;
-    private ScreenBuffer _backFull200 = null!;
+    private EngineCells.ScreenBuffer _backFull200 = null!;
     private DiffEngine _engineFull400 = null!;
-    private ScreenBuffer _backFull400 = null!;
+    private EngineCells.ScreenBuffer _backFull400 = null!;
 
     private long _minStreamBytes = long.MaxValue;
     private long _maxStreamBytes;
@@ -133,14 +137,14 @@ public class DiffEngineBenchmark
         _tree = BuildTree20Panels();
     }
 
-    private static (DiffEngine Engine, ScreenBuffer Back) MakeSyncedScreen(int cols, int rows)
+    private static (DiffEngine Engine, EngineCells.ScreenBuffer Back) MakeSyncedScreen(int cols, int rows)
     {
         var writer = new AnsiWriter(new NullBackend(), syncUpdates: true);
         var engine = new DiffEngine(cols, rows);
-        var back = new ScreenBuffer(cols, rows);
+        var back = new EngineCells.ScreenBuffer(cols, rows);
         for (int y = 0; y < rows; y++)
         {
-            back.SetText(0, y, $"row {y} " + new string('.', Math.Max(0, cols - 8)), CellStyle.Plain);
+            back.SetText(0, y, $"row {y} " + new string('.', Math.Max(0, cols - 8)), EngineCells.CellStyle.Plain);
         }
 
         writer.BeginFrame();
@@ -160,16 +164,16 @@ public class DiffEngineBenchmark
         return sb.ToString();
     }
 
-    private static (DiffEngine Engine, ScreenBuffer Back, AnsiWriter Writer, CountingBackend Backend)
+    private static (DiffEngine Engine, EngineCells.ScreenBuffer Back, AnsiWriter Writer, CountingBackend Backend)
         MakeCountedScreen(int cols, int rows)
     {
         var backend = new CountingBackend();
         var writer = new AnsiWriter(backend, syncUpdates: true);
         var engine = new DiffEngine(cols, rows);
-        var back = new ScreenBuffer(cols, rows);
+        var back = new EngineCells.ScreenBuffer(cols, rows);
         for (int y = 0; y < rows; y++)
         {
-            back.SetText(0, y, $"row {y} " + new string('.', Math.Max(0, cols - 8)), CellStyle.Plain);
+            back.SetText(0, y, $"row {y} " + new string('.', Math.Max(0, cols - 8)), EngineCells.CellStyle.Plain);
         }
 
         writer.BeginFrame();
@@ -191,7 +195,7 @@ public class DiffEngineBenchmark
     ///     advancing to the next row when the line is full — mirroring how a
     ///     streaming chat tail actually grows (no synthetic clear+rewrite).
     /// </summary>
-    private static void TypeDelta(ScreenBuffer back, char[] delta, ref int col, ref int row, int step)
+    private static void TypeDelta(EngineCells.ScreenBuffer back, char[] delta, ref int col, ref int row, int step)
     {
         if (col + delta.Length >= 190)
         {
@@ -200,7 +204,7 @@ public class DiffEngineBenchmark
         }
 
         Vary(delta, step);
-        back.SetText(col, row, delta, CellStyle.Plain);
+        back.SetText(col, row, delta, EngineCells.CellStyle.Plain);
         col += delta.Length;
     }
 
@@ -283,8 +287,8 @@ public class DiffEngineBenchmark
     public async Task TokenFrame300Cells200x50()
     {
         int i = ++_bandIndex & 15;
-        _backToken.SetText(0, 24, _bandA[i], CellStyle.Plain);
-        _backToken.SetText(0, 25, _bandB[i], CellStyle.Plain);
+        _backToken.SetText(0, 24, _bandA[i], EngineCells.CellStyle.Plain);
+        _backToken.SetText(0, 25, _bandB[i], EngineCells.CellStyle.Plain);
         _writer.BeginFrame();
         _engineToken.Flush(_backToken, _writer);
         await _writer.EndFrameAsync();

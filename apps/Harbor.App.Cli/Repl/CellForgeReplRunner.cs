@@ -25,6 +25,10 @@ using Harbor.Ui.Framework.Projection;
 using Harbor.Ui.Framework.State;
 using Harbor.Tui.CellForge.Rendering;
 using Harbor.Tui.CellForge.Streaming;
+// #436: both the engine grid namespace and the Rendering vocabulary are
+// imported here; the checklist/fx rects feed Rendering-side damage APIs,
+// so they are pinned through UIR.
+using UIR = Harbor.Ui.Framework.Rendering;
 using Harbor.Ui.Framework.Rendering;
 using Harbor.Ui.Framework.Rendering.Input;
 using Harbor.Ui.Framework.Rendering.Widgets;
@@ -257,7 +261,7 @@ internal sealed class CellForgeReplRunner(
     internal volatile bool _setupChecklistDamagePending;
 
     /// <summary>Staged checklist box rect (read only after the pending flag).</summary>
-    internal Rect _setupChecklistDamage;
+    internal UIR.Rect _setupChecklistDamage;
 
     /// <summary>Inline-image protocol for this session (osc-sprint §1337):
     /// detected once at startup — kitty → APC, iTerm2/WezTerm/Konsole/mintty
@@ -309,7 +313,7 @@ internal sealed class CellForgeReplRunner(
     /// plain full scan; only quiet animation frames (spinner, gate pulse,
     /// entrance fades) narrow the diff to hinted rects.</summary>
     internal bool _broadDamageNextFrame = true;
-    internal readonly Rect[] _fxDamageScratch = new Rect[VirtualizedChatTimeline.MaxFxDamage];
+    internal readonly UIR.Rect[] _fxDamageScratch = new UIR.Rect[VirtualizedChatTimeline.MaxFxDamage];
 
     /// <summary>Post-render glow slots (renderer-moat T3): preallocated effect
     /// instances + the frame's glow-region scratch — the pipeline itself lives

@@ -436,18 +436,18 @@ public class ChatScreenBridgeTests
 
         // Outside any hint zone → no consumption.
         await Assert.That(bridge.TryRouteApprovalClick(
-            new Input.MouseEvent(MouseEventType.Press, MouseButton.Left, 1, 0, KeyModifiers.None))).IsFalse();
+            new Input.MouseEvent(MouseEventType.Press, MouseButton.Left, 1, 0, EngineInput.KeyModifiers.None))).IsFalse();
 
         // Left press on "[y]" approves; a right press never decides anything.
         await Assert.That(bridge.TryRouteApprovalClick(
-            new Input.MouseEvent(MouseEventType.Press, MouseButton.Right, 1, 2, KeyModifiers.None))).IsFalse();
+            new Input.MouseEvent(MouseEventType.Press, MouseButton.Right, 1, 2, EngineInput.KeyModifiers.None))).IsFalse();
         await Assert.That(bridge.TryRouteApprovalClick(
-            new Input.MouseEvent(MouseEventType.Press, MouseButton.Left, 15, 2, KeyModifiers.None))).IsTrue();
+            new Input.MouseEvent(MouseEventType.Press, MouseButton.Left, 15, 2, EngineInput.KeyModifiers.None))).IsTrue();
         await Assert.That(tl.Count).IsEqualTo(1);
 
         // After resolution, further clicks fall through (routing disarmed).
         await Assert.That(bridge.TryRouteApprovalClick(
-            new Input.MouseEvent(MouseEventType.Press, MouseButton.Left, 27, 2, KeyModifiers.None))).IsFalse();
+            new Input.MouseEvent(MouseEventType.Press, MouseButton.Left, 27, 2, EngineInput.KeyModifiers.None))).IsFalse();
     }
 
     [Test]

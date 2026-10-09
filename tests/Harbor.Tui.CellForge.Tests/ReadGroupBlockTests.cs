@@ -230,11 +230,11 @@ public class ReadGroupBlockTests
             var group = (ReadGroupBlock)tl.BlockAt(tl.Count - 1);
 
             await Assert.That(bridge.TryRouteToolCardClick(
-                new Input.MouseEvent(Input.MouseEventType.Press, Input.MouseButton.Left, 5, 0, KeyModifiers.None))).IsTrue();
+                new Input.MouseEvent(Input.MouseEventType.Press, Input.MouseButton.Left, 5, 0, EngineInput.KeyModifiers.None))).IsTrue();
             await Assert.That(group.IsExpanded).IsTrue();
 
             await Assert.That(bridge.TryRouteToolCardClick(
-                new Input.MouseEvent(Input.MouseEventType.Press, Input.MouseButton.Right, 5, 0, KeyModifiers.None))).IsFalse();
+                new Input.MouseEvent(Input.MouseEventType.Press, Input.MouseButton.Right, 5, 0, EngineInput.KeyModifiers.None))).IsFalse();
             await Assert.That(group.IsExpanded).IsTrue();
         }
     }
