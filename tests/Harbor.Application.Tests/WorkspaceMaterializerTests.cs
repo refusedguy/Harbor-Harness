@@ -247,7 +247,10 @@ public class WorkspaceMaterializerTests
                     using var pwdDoc = JsonDocument.Parse("""{"command":"pwd"}""");
                     var pwd = await bash.ExecuteAsync(pwdDoc.RootElement, Ctx(worktree));
                     await Assert.That(pwd.IsError).IsFalse();
-                    await Assert.That(pwd.Output).Contains(worktree);
+                    // Windows CI shells (git-bash) print MSYS paths
+                    // (`/c/Users/...`) for a `C:\Users\...` cwd — normalize
+                    // both sides before comparing.
+                    await Assert.That(NormaliseTestPath(pwd.Output)).Contains(NormaliseTestPath(worktree));
 
                     var write = new Harbor.Tools.Builtin.WriteTool(NullLogger<Harbor.Tools.Builtin.WriteTool>.Instance);
                     using var writeDoc = JsonDocument.Parse("""{"path":"from-tool.txt","content":"tool-wrote\n"}""");
@@ -267,6 +270,22 @@ public class WorkspaceMaterializerTests
                 DeleteDir(dir);
             }
         });
+    }
+
+    /// <summary>
+    ///     Compare shell-printed paths across platforms: backslashes become
+    ///     forward slashes and a leading MSYS drive prefix (`/c/...`) becomes
+    ///     `c:/...`, so git-bash `pwd` output matches a Windows worktree path.
+    /// </summary>
+    private static string NormaliseTestPath(string path)
+    {
+        string n = path.Replace('\\', '/').Trim().TrimEnd('/');
+        if (n.Length >= 3 && n[0] == '/' && char.IsLetter(n[1]) && n[2] == '/')
+            n = $"{n[1]}:/{n.Substring(3)}";
+        // Drive letters compare case-insensitively (`C:` vs MSYS `c:`).
+        if (n.Length >= 2 && n[1] == ':')
+            n = char.ToLowerInvariant(n[0]) + n.Substring(1);
+        return n;
     }
 
     private static ToolContext Ctx(string workingDirectory) => new(
