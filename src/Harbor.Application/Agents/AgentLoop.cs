@@ -55,6 +55,10 @@ public sealed class AgentLoop : IAgentLoop
     private readonly IMcpRegistry? _mcpRegistry;
     private readonly IMetrics _metrics;
     private readonly ITracer _tracer;
+    // #1024: wall-clock budget enforcement reads these — an elapsed check at
+    // the turn boundary, deliberately NOT a CancelAfter on the run token.
+    private readonly TimeProvider _clock;
+    private readonly TimeSpan? _runTimeout;
 
     /// <summary>
     ///     Construct an <see cref="AgentLoop" /> wired to the supplied services.
@@ -86,7 +90,15 @@ public sealed class AgentLoop : IAgentLoop
         // DefaultRunBehaviors below, which is the same two concerns in the same
         // order. The product half of that claim is gated:
         // tests/Harbor.Hosting.Tests/PipelineBehaviorCompositionTests.cs.
-        IEnumerable<IPipelineBehavior>? pipelineBehaviors = null)
+        IEnumerable<IPipelineBehavior>? pipelineBehaviors = null,
+        // #1024: wall-clock budget + clock. Both optional so every
+        // direct-construction caller (tests, benchmarks, load harnesses) keeps
+        // compiling unchanged and keeps the legacy unbounded behaviour.
+        // Null budget (default) preserves it. A set budget is enforced by an
+        // elapsed check at the turn boundary — NOT by CancelAfter on the run
+        // token, which would read as a user cancel.
+        TimeProvider? timeProvider = null,
+        TimeSpan? runTimeout = null)
     {
         _providers = providers;
         _tools = tools;
@@ -104,6 +116,8 @@ public sealed class AgentLoop : IAgentLoop
         _logger = logger;
         _metrics = metrics ?? NullMetrics.Instance;
         _tracer = tracer ?? NullTracer.Instance;
+        _clock = timeProvider ?? TimeProvider.System;
+        _runTimeout = runTimeout;
         // ROP-C П.5: the dispatcher is injected via DI when composed by the host,
         // while tests and benchmarks fall back to a locally built one. That
         // fallback uses a NullLogger because the loop's own typed logger must
