@@ -1,0 +1,54 @@
+# JIT vs AOT scripted-workload measurement (issue #411) — manual only.
+#
+# WHY DISPATCH-ONLY: this is a measurement, not a gate (#413 owns the AOT
+# gate; #998 forbids absolute wall-clock thresholds on shared runners). It
+# runs only when a human asks for numbers, costs nothing on PRs, and uploads
+# the log so the table in docs/BENCHMARKS.md §4.4 is traceable to a CI run.
+# The workload itself lives in tools/measure-jit-workload.sh — this file only
+# provides the runner + SDK. Not in any required-checks list.
+name: meas-jit-aot
+
+on:
+  workflow_dispatch:
+    inputs:
+      runs:
+        description: "Iterations per verb (odd; median is a measured run)"
+        required: false
+        default: "7"
+  push:
+    branches: [meas/411-jit-aot-workload]
+
+permissions:
+  contents: read
+
+jobs:
+  measure:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: recursive
+
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: "10.0.x"
+          cache: true
+          cache-dependency-path: "Directory.Packages.props"
+
+      - name: Drive the scripted workload (JIT)
+        env:
+          DOTNET_NOLOGO: true
+          DOTNET_CLI_TELEMETRY_OPTOUT: true
+          DOTNET_SKIP_FIRST_TIME_EXPERIENCE: true
+        run: bash tools/measure-jit-workload.sh "${{ inputs.runs }}"
+
+      - name: Upload measurement log
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: jit-workload-log
+          path: meas/jit-workload.log
+          retention-days: 30
+          if-no-files-found: error
