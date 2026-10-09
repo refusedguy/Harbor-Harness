@@ -63,11 +63,13 @@ public sealed class ToolCallStreamingScenarioTests : CellForgePtyScenarioBase
             await Task.Delay(500).ConfigureAwait(false);
         }
 
-        // The tool card streamed with the call name and the probe path...
+        // The tool card streamed with the call name and the executed result.
+        // Filename matching is viewport-fragile (the 30-row grid scrolls past
+        // it under the maxSteps loop) — content lines are the stable marker.
         _ = await WaitForScreenAsync(
             l => l.Any(x => x.Contains("read", StringComparison.Ordinal))
-                && l.Any(x => x.Contains("pty-tool-probe-423", StringComparison.Ordinal)),
-            TimeSpan.FromSeconds(10)).ConfigureAwait(false);
+                && l.Any(x => x.Contains("pty-probe-line-alpha-423", StringComparison.Ordinal)),
+            TimeSpan.FromSeconds(15)).ConfigureAwait(false);
 
         // ...the tool executed for real: the file content reaches the timeline.
         _ = await WaitForScreenAsync(
@@ -80,7 +82,8 @@ public sealed class ToolCallStreamingScenarioTests : CellForgePtyScenarioBase
             TimeSpan.FromSeconds(20)).ConfigureAwait(false);
 
         string[] settled = NormalizedLines();
-        await Assert.That(settled.Any(x => x.Contains("pty-tool-probe-423", StringComparison.Ordinal))).IsTrue().Because($"screen:\n{ScreenText}");
+        await Assert.That(settled.Any(x => x.Contains("pty-probe-line-alpha-423", StringComparison.Ordinal))).IsTrue().Because($"screen:\n{ScreenText}");
+        await Assert.That(Session.RawText.Contains("pty-tool-probe-423", StringComparison.Ordinal)).IsTrue().Because("tool card args must reference the probe file");
         await Assert.That(Server.ReceivedRequests.Count).IsGreaterThanOrEqualTo(2).Because("tool loop must issue follow-up requests");
     }
 }

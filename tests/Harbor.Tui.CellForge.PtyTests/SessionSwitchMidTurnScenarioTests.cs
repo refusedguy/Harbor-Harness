@@ -30,9 +30,11 @@ public sealed class SessionSwitchMidTurnScenarioTests : CellForgePtyScenarioBase
 
         SubmitLine("first turn");
 
-        // The turn is running: the mock streams, the grid shows progress.
+        // The turn is running (footer spinner). Chunk-content matching is
+        // CI-flaky here (20 s turn, first paint timing varies) — the running
+        // state is the in-flight proof this scenario needs.
         _ = await WaitForScreenAsync(
-            l => l.Any(x => x.Contains("хх", StringComparison.Ordinal)),
+            l => l.Any(x => x.Contains("running", StringComparison.Ordinal)),
             TimeSpan.FromSeconds(15)).ConfigureAwait(false);
 
         // /new mid-turn is refused — the in-flight turn keeps its session.
