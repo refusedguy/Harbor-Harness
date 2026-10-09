@@ -42,24 +42,20 @@ public sealed class SessionLifecycleService : ISessionLifecycle
 
     /// <summary>Construct a <see cref="SessionLifecycleService" />.</summary>
     public SessionLifecycleService(
-        SessionEventRouter router,
-        SessionFactory factory,
-        SessionSwitcher switcher,
+        SessionLifecycleScope scope,
         ISessionStore sessionStore,
         IAgent agent,
-        SessionStatusService status,
-        SessionGitTracker gitTracker,
         IChatViewBinder chatViewBinder,
         SessionOptionalFactories factories,
         ILogger<SessionLifecycleService> logger)
     {
-        _router = router;
-        _factory = factory;
-        _switcher = switcher;
+        _router = scope.Router;
+        _factory = scope.Factory;
+        _switcher = scope.Switcher;
         _sessionStore = sessionStore;
         _agent = agent;
-        _status = status;
-        _gitTracker = gitTracker;
+        _status = scope.Status;
+        _gitTracker = scope.GitTracker;
         _chatViewBinder = chatViewBinder;
         _factories = factories;
         _logger = logger;

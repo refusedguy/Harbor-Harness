@@ -14,7 +14,7 @@
 // the shape gets WORSE:
 //
 //   * an eighth member on the aggregate,
-//   * a seventeenth file that holds the aggregate,
+//   * an eighteenth file that holds the aggregate,
 //   * a consumer that starts calling a member it did not call before.
 //
 // Every one of those is an ADDITION, and an addition is the only direction that
@@ -226,7 +226,7 @@ public sealed class TokenTrackingRatchet
     private const int MeasuredMemberCount = 7;
 
     /// <summary>How many product files held it when this table was measured.</summary>
-    private const int MeasuredHolderCount = 16;
+    private const int MeasuredHolderCount = 17;
 
     /// <summary>
     ///     How many holders call at least one member: the seven leaf consumers, plus the
@@ -261,7 +261,7 @@ public sealed class TokenTrackingRatchet
 
     /// <summary>
     ///     Every product file that holds the aggregate, with the members it calls.
-    ///     Nine composition roots, seven leaf consumers.
+    ///     Ten composition roots, seven leaf consumers.
     /// </summary>
     private static readonly TokenHolderBaseline[] BaselineHolders =
     [
@@ -273,6 +273,10 @@ public sealed class TokenTrackingRatchet
             true),
         new("apps/Harbor.App.Cli/Repl/CellForgeReplRunner.cs", [],
             "holds it so the REPL surface can offer it; calls nothing itself",
+            true),
+        new("apps/Harbor.App.Cli/Repl/CellForgeServiceBundles.cs", [],
+            "carries it inside the core bundle the split introduced (#486 finding 3); "
+            + "calls nothing itself",
             true),
         new("apps/Harbor.App.Cli/Repl/PromptPipeline.cs", ["GetStats"],
             "CLI status line: reads the totals and nothing else", false),
@@ -414,7 +418,7 @@ public sealed class TokenTrackingRatchet
     }
 
     /// <summary>
-    ///     No seventeenth file holds the aggregate. Every row in the table above is a
+    ///     No eighteenth file holds the aggregate. Every row in the table above is a
     ///     composition root that legitimately needs the wide type, or one of the seven leaf
     ///     consumers the split exists for; a new one is coupling being added, not moved.
     /// </summary>
