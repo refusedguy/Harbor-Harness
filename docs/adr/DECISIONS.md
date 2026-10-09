@@ -399,3 +399,27 @@ one real defect found in the blast radius is fixed — `CountDelegations` swallo
 - Full text, the per-type consumer counts, the per-file binding table, the
   eight path-pinned guards split by how each would react to a move, and why no new
   layer guard is proposed: [ADR-014](ADR-014-sessions-stays-in-ui-framework.md).
+
+---
+
+## ADR-015: Roslyn plugin-host fate — AOT main plus JIT split host (option 2)
+
+Issue #418 (slice S4 of epic #48) asked for the decision the S1–S3 evidence slices
+support. Measured at `dev` = `0da7f2ba`: S1 JIT half landed (PR #1043, about
+459 ms / 94 MB on the DI-heavy verb, AOT column blocked), S2 gate landed
+(PR #1014) with the committed record that the AOT publish fails (IL3000, IL2070,
+IL2072 as errors, one IL3000 site inside Roslyn itself), S3 audit closed, S5
+skeleton plus parity table landed (PRs #1008, #1041).
+
+Decided 2026-10-09: option 2 of the three in #48 — AOT main plus JIT plugin host
+over IPC/MCP with `src/Harbor.Plugins.Host` as the split point. The AOT binary
+must never load Roslyn in-process; the escape hatch is the opt-in MCP stdio host
+(JIT, tools only — provider, agent, panel, store and backend unsupported with
+reason, TUI view a closed seam in every option, boundary not a sandbox).
+Per-option unsupported lists for config reflection, serializers, globalization,
+error paths and plugin availability are in the full text. Delta against #21 (UI
+half over UDS) and spec 17 sections 7 vs 8 are spelled out there too. Owner
+sign-off lands as the closing comment on #418 before any gated perf work merges.
+
+- Full text, evidence table, per-option verdicts, unblock/still-blocked lists:
+  [ADR-015](ADR-015-roslyn-plugin-host-split.md).
