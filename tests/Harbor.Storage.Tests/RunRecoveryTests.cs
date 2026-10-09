@@ -85,6 +85,17 @@ public class RunRecoveryTests
     }
 
     [Test]
+    public async Task Classify_TerminalEventWinsAndLivenessDecidesTheRest()
+    {
+        // The marker is orthogonal to the stop reason: the terminal event
+        // alone decides Terminal; otherwise liveness decides.
+        await Assert.That(UnfinishedRunDetector.Classify(hasTerminalEvent: true, isLive: true)).IsEqualTo(RunTermination.Terminal);
+        await Assert.That(UnfinishedRunDetector.Classify(hasTerminalEvent: true, isLive: false)).IsEqualTo(RunTermination.Terminal);
+        await Assert.That(UnfinishedRunDetector.Classify(hasTerminalEvent: false, isLive: true)).IsEqualTo(RunTermination.InProgress);
+        await Assert.That(UnfinishedRunDetector.Classify(hasTerminalEvent: false, isLive: false)).IsEqualTo(RunTermination.Interrupted);
+    }
+
+    [Test]
     public async Task MessagesWithoutTerminalEvent_DetectAsInterruptedNotFailed()
     {
         IReadOnlyList<AgentMessage> observed = new AgentMessage[]
@@ -227,6 +238,28 @@ public class RunRecoveryTests
 
         await Assert.That(state.IsUnknown).IsTrue();
         await Assert.That(state.ConfirmedMessageId is null).IsTrue();
+    }
+
+    [Test]
+    public async Task Policy_UnknownReadBack_IsNotResumable()
+    {
+        // No verified boundary means no safe place to continue from:
+        // "could not read" refuses, it does not guess resumable.
+        IReadOnlyList<AgentMessage> observed = new AgentMessage[]
+        {
+            NewUser("s-406", 1),
+            NewTextAssistant("s-406", 2),
+        };
+        var report = UnfinishedRunDetector.Detect(
+            RunId.New(), "s-406", observed,
+            hasTerminalEvent: false, isLive: false, hasRunMarker: true,
+            isConfirmedByReadBack: null);
+
+        await Assert.That(report is null).IsFalse();
+        await Assert.That(report!.LastConfirmed.IsUnknown).IsTrue();
+        var decision = RunRecoveryPolicy.Evaluate(report);
+        await Assert.That(decision.IsResumable).IsFalse();
+        await Assert.That(string.IsNullOrEmpty(decision.Reason)).IsFalse();
     }
 
     [Test]

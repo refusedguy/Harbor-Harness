@@ -167,17 +167,53 @@ public static class UnfinishedRunDetector
     /// <param name="hasTerminalEvent">True when the run's terminal event was recorded.</param>
     /// <param name="isLive">True when the hosting process is believed live (false on a startup scan).</param>
     /// <returns><see cref="RunTermination.Terminal" /> when the event exists; otherwise <see cref="RunTermination.InProgress" /> when live, <see cref="RunTermination.Interrupted" /> when not.</returns>
-    public static RunTermination Classify(bool hasTerminalEvent, bool isLive) =>
-        RunTermination.Terminal;
+    public static RunTermination Classify(bool hasTerminalEvent, bool isLive) => (hasTerminalEvent, isLive) switch
+    {
+        (true, _) => RunTermination.Terminal,
+        (false, true) => RunTermination.InProgress,
+        (false, false) => RunTermination.Interrupted,
+    };
 
     /// <summary>
     ///     Content fingerprint of one message for read-back comparison: two
     ///     reads of the same persisted message fingerprint equal; a truncated
-    ///     or garbled tail does not.
+    ///     or garbled tail does not. Presence alone is not confirmation — the
+    ///     id must come back with equal content.
     /// </summary>
     /// <param name="message">The message to fingerprint.</param>
     /// <returns>An opaque per-content string; equal inputs give equal outputs, nothing more is promised.</returns>
-    public static string Fingerprint(AgentMessage message) => string.Empty;
+    public static string Fingerprint(AgentMessage message)
+    {
+        var parts = new List<string>(capacity: 4) { message.Role, message.CreatedAt.UtcTicks.ToString() };
+        switch (message)
+        {
+            case UserMessage user:
+                parts.Add(user.Content);
+                break;
+            case AssistantMessage assistant:
+                parts.Add(((int)assistant.StopReason).ToString());
+                for (int i = 0; i < assistant.Parts.Count; i++)
+                {
+                    parts.Add(assistant.Parts[i] switch
+                    {
+                        TextPart text => "T:" + text.Text,
+                        ThinkingPart thinking => "H:" + thinking.Text,
+                        ToolCallPart call => "C:" + call.Id + ":" + call.ToolName + ":" + call.Args.ToString(),
+                        FilePart file => "F:" + file.Path + ":" + file.SizeBytes.ToString(),
+                        _ => "?:unknown-part",
+                    });
+                }
+                break;
+            case ToolResultMessage results:
+                for (int i = 0; i < results.Results.Count; i++)
+                {
+                    var entry = results.Results[i];
+                    parts.Add("R:" + entry.ToolCallId + ":" + entry.ToolName + ":" + (entry.IsError ? "1" : "0") + ":" + entry.Output);
+                }
+                break;
+        }
+        return string.Join("|", parts);
+    }
 
     /// <summary>
     ///     Build a read-back predicate from two histories: the observed
@@ -190,20 +226,65 @@ public static class UnfinishedRunDetector
     /// <returns>A predicate over message ids: true only for verified messages.</returns>
     public static Func<string, bool> ConfirmByReadBack(
         IReadOnlyList<AgentMessage> observed,
-        IReadOnlyList<AgentMessage> reread) => _ => true;
+        IReadOnlyList<AgentMessage> reread)
+    {
+        var reprints = new Dictionary<string, string>(reread.Count, StringComparer.Ordinal);
+        for (int i = 0; i < reread.Count; i++)
+        {
+            if (!reprints.ContainsKey(reread[i].Id))
+                reprints[reread[i].Id] = Fingerprint(reread[i]);
+        }
+        var observedPrints = new Dictionary<string, string>(observed.Count, StringComparer.Ordinal);
+        for (int i = 0; i < observed.Count; i++)
+        {
+            if (!observedPrints.ContainsKey(observed[i].Id))
+                observedPrints[observed[i].Id] = Fingerprint(observed[i]);
+        }
+        return id =>
+            observedPrints.TryGetValue(id, out string? want)
+            && reprints.TryGetValue(id, out string? got)
+            && string.Equals(want, got, StringComparison.Ordinal);
+    }
 
     /// <summary>
-    ///     Compute the last confirmed state: the longest verified run of the
-    ///     observed history. Everything after the last verified message is the
-    ///     suspect tail, reported but never trusted.
+    ///     Compute the last confirmed state: the leading verified run of the
+    ///     observed history. Verification stops at the first unverified
+    ///     message — a hole poisons the tail, because a later id cannot prove
+    ///     an earlier write landed. Everything from the hole on is the suspect
+    ///     tail, reported but never trusted.
     /// </summary>
     /// <param name="observed">The transcript as seen before the interruption, in order.</param>
     /// <param name="isConfirmedByReadBack">Per-id verification from store read-back; null when the backend cannot verify (yields <c>IsUnknown</c>).</param>
     /// <returns>The last confirmed state.</returns>
     public static LastConfirmedState ConfirmLastState(
         IReadOnlyList<AgentMessage> observed,
-        Func<string, bool>? isConfirmedByReadBack) =>
-        new(null, 0, Array.Empty<string>(), null, true);
+        Func<string, bool>? isConfirmedByReadBack)
+    {
+        var tail = new List<string>(capacity: 2);
+        if (isConfirmedByReadBack is null)
+        {
+            for (int i = 0; i < observed.Count; i++)
+                tail.Add(observed[i].Id);
+            return new LastConfirmedState(null, 0, tail, null, IsUnknown: true);
+        }
+
+        int confirmed = 0;
+        while (confirmed < observed.Count && isConfirmedByReadBack(observed[confirmed].Id))
+            confirmed++;
+
+        string? lastId = null;
+        string? boundaryId = null;
+        for (int i = 0; i < confirmed; i++)
+        {
+            lastId = observed[i].Id;
+            if (ClosesTurn(observed[i]))
+                boundaryId = observed[i].Id;
+        }
+        for (int i = confirmed; i < observed.Count; i++)
+            tail.Add(observed[i].Id);
+
+        return new LastConfirmedState(lastId, confirmed, tail, boundaryId, IsUnknown: false);
+    }
 
     /// <summary>
     ///     Detect an unfinished run. Returns null when there is no unfinished
@@ -226,7 +307,78 @@ public static class UnfinishedRunDetector
         bool hasTerminalEvent,
         bool isLive,
         bool hasRunMarker,
-        Func<string, bool>? isConfirmedByReadBack) => null;
+        Func<string, bool>? isConfirmedByReadBack)
+    {
+        if (hasTerminalEvent)
+            return null;
+        if (observed.Count == 0 && !hasRunMarker)
+            return null;
+
+        var termination = Classify(hasTerminalEvent: false, isLive);
+        var state = ConfirmLastState(observed, isConfirmedByReadBack);
+
+        var boundary = RecoveryBoundary.BeforeAnyToolCall;
+        string? toolName = null;
+        string? toolCallId = null;
+        string? pendingModel = null;
+        int completedCalls = 0;
+
+        if (state.ConfirmedCount > 0)
+        {
+            var confirmed = new List<AgentMessage>(state.ConfirmedCount);
+            for (int i = 0; i < state.ConfirmedCount; i++)
+                confirmed.Add(observed[i]);
+
+            if (confirmed[confirmed.Count - 1] is UserMessage lastUser)
+            {
+                // The turn is open: a model call is outstanding and nothing
+                // about it is knowable from the store.
+                boundary = RecoveryBoundary.MidModelCall;
+                pendingModel = lastUser.Model;
+            }
+            else
+            {
+                var results = new HashSet<string>(StringComparer.Ordinal);
+                for (int i = 0; i < confirmed.Count; i++)
+                {
+                    if (confirmed[i] is ToolResultMessage toolResults)
+                    {
+                        for (int j = 0; j < toolResults.Results.Count; j++)
+                            results.Add(toolResults.Results[j].ToolCallId);
+                    }
+                }
+
+                bool anyCall = false;
+                for (int i = 0; i < confirmed.Count && toolCallId is null; i++)
+                {
+                    if (confirmed[i] is not AssistantMessage assistant)
+                        continue;
+                    for (int p = 0; p < assistant.Parts.Count; p++)
+                    {
+                        if (assistant.Parts[p] is not ToolCallPart call)
+                            continue;
+                        anyCall = true;
+                        if (results.Contains(call.Id))
+                            completedCalls++;
+                        else
+                        {
+                            toolName = call.ToolName;
+                            toolCallId = call.Id;
+                        }
+                    }
+                }
+
+                if (toolCallId is not null)
+                    boundary = RecoveryBoundary.InFlightToolCall;
+                else if (anyCall)
+                    boundary = RecoveryBoundary.AtToolResultBoundary;
+            }
+        }
+
+        return new UnfinishedRunReport(
+            runId, sessionId, termination, state, boundary,
+            toolName, toolCallId, pendingModel, completedCalls);
+    }
 
     /// <summary>
     ///     Keep only the runs whose messages need reading: those without a
@@ -235,8 +387,16 @@ public static class UnfinishedRunDetector
     /// </summary>
     /// <param name="runs">All candidate runs (one entry per run, not per message).</param>
     /// <returns>Only candidates with no terminal marker, in input order.</returns>
-    public static IReadOnlyList<RunCandidate> SelectCandidates(IEnumerable<RunCandidate> runs) =>
-        Array.Empty<RunCandidate>();
+    public static IReadOnlyList<RunCandidate> SelectCandidates(IEnumerable<RunCandidate> runs)
+    {
+        List<RunCandidate>? kept = null;
+        foreach (var candidate in runs)
+        {
+            if (!candidate.HasTerminalMarker)
+                (kept ??= new List<RunCandidate>()).Add(candidate);
+        }
+        return kept ?? (IReadOnlyList<RunCandidate>)Array.Empty<RunCandidate>();
+    }
 
     /// <summary>
     ///     Record a retry as a new run linked to the interrupted parent. The
@@ -246,7 +406,20 @@ public static class UnfinishedRunDetector
     /// <param name="parent">The interrupted run's report.</param>
     /// <returns>A link with a fresh run id pointing at the parent.</returns>
     public static RunRetryLink CreateRetry(UnfinishedRunReport parent) =>
-        new(RunId.New(), parent.RunId, null);
+        new(RunId.New(), parent.RunId, parent.LastConfirmed.ConfirmedMessageId);
+
+    private static bool ClosesTurn(AgentMessage message) =>
+        message is ToolResultMessage || (message is AssistantMessage assistant && !HasToolCall(assistant));
+
+    private static bool HasToolCall(AssistantMessage assistant)
+    {
+        for (int i = 0; i < assistant.Parts.Count; i++)
+        {
+            if (assistant.Parts[i] is ToolCallPart)
+                return true;
+        }
+        return false;
+    }
 }
 
 /// <summary>
@@ -272,6 +445,14 @@ public static class UnfinishedRunDetector
 ///             <item>
 ///                 <term><c>MidModelCall</c></term>
 ///                 <description>Not resumable. The outstanding model call may have completed and may have issued tools whose results never persisted; none of it is knowable from the store. The reason names the targeted model and the message id.</description>
+///             </item>
+///             <item>
+///                 <term>unknown read-back</term>
+///                 <description>Not resumable. When the store could not verify anything, no confirmed boundary exists to continue from — refusing is the only honest answer.</description>
+///             </item>
+///             <item>
+///                 <term>live run</term>
+///                 <description>Not resumable. Resume does not apply to a running run; a second concurrent resume is the blind retry by another name.</description>
 ///             </item>
 ///         </list>
 ///     </para>
@@ -305,6 +486,58 @@ public static class RunRecoveryPolicy
     /// </summary>
     /// <param name="report">The detected unfinished run.</param>
     /// <returns>Resumable only from a safe confirmed boundary, always with a non-empty user-facing reason.</returns>
-    public static RecoveryDecision Evaluate(UnfinishedRunReport report) =>
-        new(true, string.Empty);
+    public static RecoveryDecision Evaluate(UnfinishedRunReport report)
+    {
+        if (report.Termination == RunTermination.InProgress)
+            return new RecoveryDecision(false,
+                $"Run {report.RunId.Value} is still live; resume does not apply to a running run — " +
+                "wait for its terminal event or stop it first.");
+
+        if (report.LastConfirmed.IsUnknown)
+            return new RecoveryDecision(false,
+                $"Run {report.RunId.Value} cannot be resumed: the store could not verify what was persisted, " +
+                "so no confirmed boundary exists to continue from. Start a new run explicitly if you accept repeating unknown work.");
+
+        return report.Boundary switch
+        {
+            RecoveryBoundary.BeforeAnyToolCall => report.LastConfirmed.ConfirmedCount == 0
+                ? new RecoveryDecision(true,
+                    $"Run {report.RunId.Value} has no confirmed message; nothing is known to have executed, " +
+                    "so a new run may start cleanly from the original prompt.")
+                : new RecoveryDecision(true,
+                    $"Run {report.RunId.Value} issued no tool call before the interruption; " +
+                    $"the last confirmed message {report.LastConfirmed.ConfirmedMessageId} closes the turn, " +
+                    "so a new run can continue from it without repeating any side effect."),
+            RecoveryBoundary.AtToolResultBoundary => new RecoveryDecision(true,
+                $"Run {report.RunId.Value}: all {report.ConfirmedToolCallCount} confirmed tool call(s) have confirmed results; " +
+                $"a new run continues after {report.LastConfirmed.ConfirmedMessageId} and never re-executes them."),
+            RecoveryBoundary.InFlightToolCall => new RecoveryDecision(false, InFlightReason(report)),
+            RecoveryBoundary.MidModelCall => new RecoveryDecision(false,
+                $"Run {report.RunId.Value}: the '{report.PendingModel ?? "unknown model"}' call issued after message " +
+                $"{report.LastConfirmed.ConfirmedMessageId} produced no persisted response — whether it completed, " +
+                "and what tools it may have issued, is unknown, so resume is refused rather than retried blindly."),
+            _ => new RecoveryDecision(false,
+                $"Run {report.RunId.Value} left an unrecognized boundary; resume is refused rather than guessed."),
+        };
+    }
+
+    private static string InFlightReason(UnfinishedRunReport report)
+    {
+        string preface =
+            $"Run {report.RunId.Value}: tool '{report.InFlightToolName ?? "unknown tool"}' " +
+            $"(call {report.InFlightToolCallId ?? "unknown call"}) has no confirmed result — what it did is unknown, " +
+            "so an automatic resume would risk executing it twice.";
+        if (report.InFlightToolName is string name && IsKnownReadOnly(name))
+            return preface +
+                " This tool is read-only, so re-issuing it would be side-effect-free; even so, the result the " +
+                "interrupted run may already have acted on is unknown, so resume is refused — start a new run explicitly.";
+        return preface + " " + NoExactlyOnceDisclaimer;
+    }
+
+    private static bool IsKnownReadOnly(string toolName) => toolName switch
+    {
+        "read" or "glob" or "grep" or "ls" or "tree" or "ripgrep"
+            or "session_read" or "read_mcp_resource" or "mcp_prompt" => true,
+        _ => false,
+    };
 }
