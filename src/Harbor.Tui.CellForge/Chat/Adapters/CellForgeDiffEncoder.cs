@@ -3,6 +3,17 @@ namespace Harbor.Tui.CellForge.Rendering;
 using Harbor.Ui.Framework.Rendering;
 using Harbor.Ui.Framework.Rendering.Protocol;
 
+// #436: this adapter straddles the engine/host boundary inside the engine's
+// namespace, so bare cell/screen names resolve to the engine's verbatim
+// ports. The portable protocol (ICellDiffEncoder/RowHashDiffEncoder) speaks
+// the Rendering vocabulary, while DiffEngine.Front is engine-typed — both
+// sides are pinned explicitly (EngineCells vs UIR) and the front crosses
+// the boundary through a field-for-field snapshot (the reverse of
+// ScreenSession.CopyPaintToBack; both cell structs share the 16-byte
+// layout, so every field round-trips).
+using EngineCells = Harbor.Tui.CellForge.Rendering;
+using UIR = Harbor.Ui.Framework.Rendering;
+
 /// <summary>
 ///     CellForge-side factory for the portable cell-diff protocol
 ///     (renderer-unification sprint Phase 6.2). The single
@@ -40,15 +51,47 @@ public static class CellForgeDiffEncoder
     /// <summary>
     ///     Encodes the delta from <paramref name="engine"/>'s front buffer
     ///     (the last frame the ANSI path flushed) to <paramref name="next"/>.
+    ///     The front crosses into the Rendering vocabulary through a snapshot
+    ///     copy; the portable encoder then diffs two Rendering buffers.
     /// </summary>
     public static CellDiffBatch EncodeFromEngineFront(
-        DiffEngine engine,
-        ScreenBuffer next,
-        IReadOnlyList<Rect>? hints,
+        EngineCells.DiffEngine engine,
+        UIR.ScreenBuffer next,
+        IReadOnlyList<UIR.Rect>? hints,
         long sequence)
     {
         ArgumentNullException.ThrowIfNull(engine);
-        return new RowHashDiffEncoder().Encode(engine.Front, next, hints, sequence);
+        ArgumentNullException.ThrowIfNull(next);
+        var prev = SnapshotFront(engine.Front);
+        return new RowHashDiffEncoder().Encode(prev, next, hints, sequence);
+    }
+
+    /// <summary>
+    ///     Snapshots an engine front buffer into the Rendering vocabulary:
+    ///     exact cell-for-cell copy, then row-hash invalidation so the
+    ///     portable encoder rehashes what the copy touched (At() writes do
+    ///     not invalidate, same discipline as
+    ///     <see cref="Harbor.Tui.CellForge.Streaming.ScreenSession"/>).
+    /// </summary>
+    private static UIR.ScreenBuffer SnapshotFront(EngineCells.ScreenBuffer front)
+    {
+        var snap = new UIR.ScreenBuffer(front.Cols, front.Rows);
+        CopyEngineToRendering(front, snap);
+        return snap;
+    }
+
+    private static void CopyEngineToRendering(EngineCells.ScreenBuffer src, UIR.ScreenBuffer dst)
+    {
+        for (int y = 0; y < src.Rows; y++)
+        {
+            for (int x = 0; x < src.Cols; x++)
+            {
+                var c = src.Get(x, y);
+                dst.At(x, y) = UIR.Cell.FromRaw(c.Rune, c.Fg, c.Bg, c.Flags, c.Width);
+            }
+        }
+
+        dst.InvalidateAll();
     }
 
     /// <summary>
@@ -60,17 +103,18 @@ public static class CellForgeDiffEncoder
     /// </summary>
     public sealed class EngineLinkedEncoder : ICellDiffEncoder
     {
-        private readonly DiffEngine _engine;
+        private readonly EngineCells.DiffEngine _engine;
         private readonly RowHashDiffEncoder _portable = new();
+        private UIR.ScreenBuffer _snapshot = new(0, 0);
 
-        public EngineLinkedEncoder(DiffEngine engine) =>
+        public EngineLinkedEncoder(EngineCells.DiffEngine engine) =>
             _engine = engine ?? throw new ArgumentNullException(nameof(engine));
 
         /// <inheritdoc />
         public CellDiffBatch Encode(
-            ScreenBuffer prev,
-            ScreenBuffer next,
-            IReadOnlyList<Rect>? hints,
+            UIR.ScreenBuffer prev,
+            UIR.ScreenBuffer next,
+            IReadOnlyList<UIR.Rect>? hints,
             long sequence)
         {
             return _portable.Encode(prev, next, hints, sequence);
@@ -78,14 +122,29 @@ public static class CellForgeDiffEncoder
 
         /// <summary>
         ///     Encodes the delta from the linked engine's front buffer (the last
-        ///     frame the ANSI path flushed) to <paramref name="next"/>.
+        ///     frame the ANSI path flushed) to <paramref name="next"/>. The
+        ///     snapshot buffer is retained across calls and only regrown, so
+        ///     the steady-state cost is the copy itself, never an allocation.
         /// </summary>
         public CellDiffBatch EncodeCellForge(
-            ScreenBuffer next,
-            IReadOnlyList<Rect>? hints,
+            UIR.ScreenBuffer next,
+            IReadOnlyList<UIR.Rect>? hints,
             long sequence)
         {
-            return _portable.Encode(_engine.Front, next, hints, sequence);
+            ArgumentNullException.ThrowIfNull(next);
+            SyncSnapshot();
+            return _portable.Encode(_snapshot, next, hints, sequence);
+        }
+
+        private void SyncSnapshot()
+        {
+            var front = _engine.Front;
+            if (_snapshot.Cols != front.Cols || _snapshot.Rows != front.Rows)
+            {
+                _snapshot = new UIR.ScreenBuffer(front.Cols, front.Rows);
+            }
+
+            CopyEngineToRendering(front, _snapshot);
         }
     }
 }
