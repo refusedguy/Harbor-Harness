@@ -21,7 +21,7 @@ namespace Harbor.Tui.CellForge.Tests;
 /// </summary>
 public class PostFxTests
 {
-    private static (byte R, byte G, byte B) Channels(EngineCells.PackedColor c) =>
+    private static (byte R, byte G, byte B) Channels(UIR.PackedColor c) =>
         c.IsRgb ? c.RgbChannels : ((byte)0, (byte)0, (byte)0);
 
     private static EngineCells.PackedColor HotTone(EngineCells.PackedColor accent)
@@ -38,7 +38,7 @@ public class PostFxTests
 
     private static string HotSgr(EngineCells.PackedColor accent)
     {
-        var (r, g, b) = Channels(ToUi(PanelFx.Lerp(ToUi(accent), ToUi(HotTone(accent)), GlowEffect.PeakStrength)));
+        var (r, g, b) = Channels(PanelFx.Lerp(ToUi(accent), ToUi(HotTone(accent)), GlowEffect.PeakStrength));
         return $"\x1B[38;2;{r};{g};{b}m";
     }
 

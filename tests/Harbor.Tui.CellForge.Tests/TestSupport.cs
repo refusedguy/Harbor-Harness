@@ -41,14 +41,16 @@ internal static class T
     public static InputEvent Single(InputEvent[] events, int index = 0) => events[index];
 }
 
-/// <summary>Assertion helpers for typed input events.</summary>
+/// <summary>Assertion helpers for typed input events (engine vocabulary —
+/// the parser under test produces engine keys, so expectations name them
+/// through EngineInput).</summary>
 internal static class A
 {
     public static async Task IsKey(
         InputEvent evt,
-        KeyCode key,
-        KeyModifiers mods = KeyModifiers.None,
-        KeyEventType type = KeyEventType.Press,
+        EngineInput.KeyCode key,
+        EngineInput.KeyModifiers mods = EngineInput.KeyModifiers.None,
+        EngineInput.KeyEventType type = EngineInput.KeyEventType.Press,
         bool kitty = false)
     {
         await Assert.That(evt.Kind).IsEqualTo(InputEventKind.Key);
@@ -61,12 +63,12 @@ internal static class A
     public static async Task IsChar(
         InputEvent evt,
         Rune character,
-        KeyModifiers mods = KeyModifiers.None,
+        EngineInput.KeyModifiers mods = EngineInput.KeyModifiers.None,
         bool kitty = false,
-        KeyEventType eventType = KeyEventType.Press)
+        EngineInput.KeyEventType eventType = EngineInput.KeyEventType.Press)
     {
         await Assert.That(evt.Kind).IsEqualTo(InputEventKind.Key);
-        await Assert.That(evt.Key.Key).IsEqualTo(KeyCode.Char);
+        await Assert.That(evt.Key.Key).IsEqualTo(EngineInput.KeyCode.Char);
         await Assert.That(evt.Key.Character).IsEqualTo(character);
         await Assert.That(evt.Key.Modifiers).IsEqualTo(mods);
         await Assert.That(evt.Key.IsKittyEncoded).IsEqualTo(kitty);
