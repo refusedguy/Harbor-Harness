@@ -22,7 +22,7 @@
 //     and three live overrides;
 //   * `OverlayStack.RouteKey` is a real public method, correctly implemented and
 //     covered by `OverlayModalTests`;
-//   * `OverlayStack.cs:155` prints the host pattern in a `<code>` block.
+//   * `src/Harbor.Tui.CellForge/Chat/Rendering/OverlayStack.cs:155` prints the host pattern in a `<code>` block.
 //
 // A contributor greps "keys route top-down through OnKey", finds all of that,
 // writes a layer with an `OnKey` — and it is never called. The adapter test
@@ -38,11 +38,11 @@
 //     -> ReplRunner.RunInteractiveAsync (:124; :162 TuiMode.IsCellForgeSelected
 //        is the default backend) -> RunCellForgeAsync (:174) -> :383 RunAsync
 //     -> CellForgeReplRunner.RunAsync:369 -> ReplLifecycle.RunAsync
-//     -> ReplLifecycle.cs:191 host.Input.HandleInputAsync
-//     -> ReplInputLoop.cs:65 HandleKeyAsync
+//     -> ReplLifecycle.cs:210 host.Input.HandleInputAsync
+//     -> ReplInputLoop.cs:84 HandleKeyAsync
 //
 // and `HandleKeyAsync` is a working router — it just routes AROUND the stack.
-// `ReplInputLoop.cs:199 host.Images.HandleKey(key)` and `:274 host.Setup.HandleKey(key)`
+// `ReplInputLoop.cs:234 host.Images.HandleKey(key)` and `:309 host.Setup.HandleKey(key)`
 // call the two live overlays directly. The same objects, a different hop: not
 // `ImageViewerOverlayLayer.OnKey`. That asymmetry is why #857's `JumpCommand`
 // could correctly say the panel `OnKey` has "no product host [that can] reach" it.
@@ -76,7 +76,7 @@
 //   * `SetupChecklistOverlayLayer.cs:12-13` — already carries the conditional
 //     phrasing #858 wants ("for hosts that route through ..."). It is the model,
 //     not a violation.
-//   * `docs/PATTERNS.md:373` — cites `OverlayStack.cs:43,49` for the DEFAULTS
+//   * `docs/PATTERNS.md:373` — cites `src/Harbor.Tui.CellForge/Chat/Rendering/OverlayStack.cs:43,49` for the DEFAULTS
 //     (`IsModal => false`, `OnKey => false`). True, and about the interface's
 //     shape rather than the product's routing.
 //

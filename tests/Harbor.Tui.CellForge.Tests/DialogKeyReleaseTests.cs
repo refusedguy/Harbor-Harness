@@ -19,7 +19,7 @@ namespace Harbor.Tui.CellForge.Tests;
 ///
 ///   * <c>KeyEvent.EventType</c> exists (<c>KeyEventType.Press/Repeat/
 ///     Release</c>), <c>EscapeSequenceParser.DecodeKittyKey</c> decodes the
-///     kitty event-type sub-parameter into it (EscapeSequenceParser.cs:690),
+///     kitty event-type sub-parameter into it (EscapeSequenceParser.cs:689),
 ///     and <c>KeyEventMapper.ToDto</c> DROPS releases by returning null
 ///     (KeyEventMapper.cs:26). So the vocabulary is present and one consumer
 ///     already uses it — <c>ApprovalGateView.HandleKey</c> gates on

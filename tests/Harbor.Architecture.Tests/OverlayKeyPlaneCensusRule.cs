@@ -17,7 +17,7 @@
 //       REGISTERED + READS KEYS + CAN BE SHOWN (2)
 //         ImageViewerOverlayLayer     field _imageLayer, pushed at
 //                                    ChatScreenLayout.cs:850; opened at
-//                                    ReplInputLoop.cs:289; IsModal = true.
+//                                    ReplInputLoop.cs:324; IsModal = true.
 //         SetupChecklistOverlayLayer  field _setupLayer, pushed at :838;
 //                                    opened at SetupCommand.cs:27;
 // check-doc-cites: record-drift SetupCommand.cs:27 now="ambiguous:2" [2 tracked files share this basename, so the citation does not identify one] -->
@@ -60,7 +60,7 @@
 // WHERE THE DOOR IS, AND WHY IT IS NOT FREE
 // ----------------------------------------
 // The door is `ReplInputLoop.HandleKeyAsync`
-// (`apps/Harbor.App.Cli/Repl/ReplInputLoop.cs:185`) — the one product key
+// (`apps/Harbor.App.Cli/Repl/ReplInputLoop.cs:220`) — the one product key
 // ingress in the CLI. #857's agent stood at it and declined to open it, and
 // the reason is structural rather than cautious: the stack cannot express the
 // live precedence order, because one of the modals the host routes is not a
@@ -261,8 +261,8 @@ public sealed class OverlayKeyPlaneCensusRule
 
     /// <summary>
     ///     The two registered layers whose keys <c>ReplInputLoop</c> reaches directly, at
-    ///     <c>ReplInputLoop.cs:199</c> (<c>host.Images.HandleKey</c>) and
-    ///     <c>ReplInputLoop.cs:274</c> (<c>host.Setup.HandleKey</c>) — to the same overlay
+    ///     <c>ReplInputLoop.cs:234</c> (<c>host.Images.HandleKey</c>) and
+    ///     <c>ReplInputLoop.cs:309</c> (<c>host.Setup.HandleKey</c>) — to the same overlay
     ///     instances their layers wrap, so nothing about today's behaviour depends on the
     ///     stack being the router. Declared rather than derived because detecting the
     ///     hand-off needs the same receiver-to-type resolution limit 1 in the header names.
