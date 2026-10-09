@@ -1,5 +1,6 @@
 using System.Linq;
 using Harbor.Abstractions.Agents;
+using Harbor.Abstractions.Models;
 using Harbor.App.Cli.Repl.Commands;
 using Harbor.Tui.CellForge.Capabilities;
 using Harbor.Tui.CellForge.Input;
@@ -120,6 +121,19 @@ internal sealed class ReplInputLoop(CellForgeReplRunner host)
                 break;
 
             case InputEventKind.Mouse when evt.Mouse.Type is MouseEventType.Press or MouseEventType.Click:
+                // Markup barrier (issue #400): clicks place/select through the
+                // store; nothing reaches gates, cards, selection or the sidebar.
+                if (host.Screen.Markup.Visible)
+                {
+                    if (host.Screen.Markup.HandleMouse(evt.Mouse, FullViewport()) is { } pressMsg)
+                    {
+                        _ = host._replStore.Dispatch(pressMsg);
+                        host._wake.Writer.TryWrite(null);
+                    }
+
+                    break;
+                }
+
                 // Click-to-decide: pending approval gates get first claim on a
                 // left press; otherwise a press anchors a copy-on-select
                 // selection (P6.4) — a plain click selects nothing on release.
@@ -151,16 +165,49 @@ internal sealed class ReplInputLoop(CellForgeReplRunner host)
 
             case InputEventKind.Mouse when evt.Mouse.Type == MouseEventType.Drag
                                            && evt.Mouse.Button == MouseButton.Left:
+                // Markup drag (issue #400): stretches the draft or moves the
+                // pressed annotation; the copy-on-select path starves.
+                if (host.Screen.Markup.Visible)
+                {
+                    if (host.Screen.Markup.HandleMouse(evt.Mouse, FullViewport()) is { } dragMsg)
+                    {
+                        _ = host._replStore.Dispatch(dragMsg);
+                        host._wake.Writer.TryWrite(null);
+                    }
+
+                    break;
+                }
+
                 host._selection.OnDrag(evt.Mouse.Column, evt.Mouse.Row);
                 host._wake.Writer.TryWrite(null); // repaint the growing highlight
                 break;
 
             case InputEventKind.Mouse when evt.Mouse.Type == MouseEventType.Release
                                            && evt.Mouse.Button == MouseButton.Left:
+                // Markup release (issue #400): commits the draft as a new
+                // primitive. No selection, no clipboard.
+                if (host.Screen.Markup.Visible)
+                {
+                    if (host.Screen.Markup.HandleMouse(evt.Mouse, FullViewport()) is { } releaseMsg)
+                    {
+                        _ = host._replStore.Dispatch(releaseMsg);
+                        host._wake.Writer.TryWrite(null);
+                    }
+
+                    break;
+                }
+
                 await FinishSelectionAsync(evt.Mouse.Column, evt.Mouse.Row, ct).ConfigureAwait(false);
                 break;
 
             case InputEventKind.Mouse when evt.Mouse.Type == MouseEventType.WheelUp:
+                // Swallowed while the markup overlay is up: the feed beneath
+                // must not scroll out from under the wireframe.
+                if (host.Screen.Markup.Visible)
+                {
+                    break;
+                }
+
                 // Store-first scroll (epic C): one line-msg per row so the TEA
                 // store tracks the same offset the timeline paints locally.
                 for (int i = 0; i < WheelScrollLines; i++)
@@ -172,6 +219,11 @@ internal sealed class ReplInputLoop(CellForgeReplRunner host)
                 break;
 
             case InputEventKind.Mouse when evt.Mouse.Type == MouseEventType.WheelDown:
+                if (host.Screen.Markup.Visible)
+                {
+                    break;
+                }
+
                 for (int i = 0; i < WheelScrollLines; i++)
                 {
                     _ = host._replStore.Dispatch(VirtualizedChatTimeline.LineDownMsg());
@@ -194,8 +246,61 @@ internal sealed class ReplInputLoop(CellForgeReplRunner host)
         // screenshot must never be typed into, and no key may reach the agent
         // while it is up. Esc/q/Enter close; +/-/arrows zoom. An unconsumed
         // key is still swallowed (the barrier contract: panels beneath starve).
+        //
+        // The markup overlay (issue #400) sits one step further out: it opens
+        // FROM the viewer (which hides underneath) and carries the same
+        // barrier contract — consumed gestures dispatch store messages
+        // (the session lives in UiState, transitions in the reducer),
+        // everything else is swallowed. Ctrl+S bakes the annotated copy; that
+        // is a host effect, so it never reaches the overlay router: the
+        // reducer stays pure and file I/O lives here.
+        if (host.Screen.Markup.Visible)
+        {
+            if (IsMarkupSave(key))
+            {
+                await SaveMarkupAsync(ct).ConfigureAwait(false);
+            }
+            else if (host.Screen.Markup.HandleKey(key) is { } markupMsg)
+            {
+                // Close restores the scroll the open snapshotted: the overlay
+                // owns no scroll of its own, so the feed is already where it
+                // was — this only corrects drift from rows the agent streamed
+                // while the wireframe was up.
+                int savedScroll = host._replStore.State.Chat.Markup.SavedScrollOffset;
+                bool closing = markupMsg is ChatAppMsg.CloseMarkup;
+                _ = host._replStore.Dispatch(markupMsg);
+                if (closing)
+                {
+                    host._timeline.ScrollBy(savedScroll - (int)host._timeline.ScrollY);
+                    host.Screen.SyncMarkup(host._replStore.State.Chat.Markup);
+                }
+
+                host._wake.Writer.TryWrite(null);
+            }
+
+            return;
+        }
+
         if (host.Images.Visible)
         {
+            // Markup open (issue #400): `m` over the zoomed image swaps the
+            // viewer for the markup overlay on the same block. The viewer
+            // hides, the store opens the session (snapshotting the scroll for
+            // restore-on-close), and the snapshot is pushed immediately so no
+            // key slips through before the next frame sync.
+            if (IsMarkupAnnotateKey(key) && host.Images.Source.HasValue)
+            {
+                var block = host.Images.Source.Value;
+                host.Images.Hide();
+                _ = host._replStore.Dispatch(new ChatAppMsg.OpenMarkup(
+                    block.FullPath, block.Name, block.PixelWidth, block.PixelHeight,
+                    host._replStore.State.Ui.ScrollOffset));
+                host.Screen.SyncMarkup(host._replStore.State.Chat.Markup);
+                host._broadDamageNextFrame = true;
+                host._wake.Writer.TryWrite(null);
+                return;
+            }
+
             if (host.Images.HandleKey(key))
             {
                 host._wake.Writer.TryWrite(null);
@@ -399,6 +504,125 @@ internal sealed class ReplInputLoop(CellForgeReplRunner host)
                 host._timeline.PageDown(Math.Max(1, host._timelineViewportH));
                 break;
         }
+    }
+
+    /// <summary>Fullscreen viewport the markup overlay maps mouse cells through.</summary>
+    private Rect FullViewport() => new(0, 0, host.ScreenSession.CurrentCols, host.ScreenSession.CurrentRows);
+
+    /// <summary>Ctrl+S over the markup overlay: bake the annotated copy (a host effect).</summary>
+    private static bool IsMarkupSave(KeyEvent key) =>
+        key.Key == KeyCode.Char
+        && key.EventType is KeyEventType.Press or KeyEventType.Repeat
+        && (key.Modifiers & KeyModifiers.Ctrl) != 0
+        && (key.Character.ToString() == "s" || key.Character.ToString() == "S");
+
+    /// <summary>`m` over the image viewer: swap it for the markup overlay on the same block.</summary>
+    private static bool IsMarkupAnnotateKey(KeyEvent key) =>
+        key.Key == KeyCode.Char
+        && key.EventType is KeyEventType.Press or KeyEventType.Repeat
+        && key.Modifiers.IsUnmodified()
+        && key.Character.ToString() == "m";
+
+    /// <summary>
+    ///     Bakes the store session onto the source pixels and writes the
+    ///     annotated copy into the workspace (issue #400 slice 1/2): read
+    ///     source → <see cref="MarkupPngBaker.TryBake" /> → write sibling file
+    ///     → timeline <c>ImageBlock</c> with real dimensions + store note.
+    ///     Every failure lands in <c>MarkupFailed</c> as inline text — this
+    ///     method never throws out of the input loop.
+    /// </summary>
+    private async Task SaveMarkupAsync(CancellationToken ct)
+    {
+        var markup = host._replStore.State.Chat.Markup;
+        if (!markup.IsOpen)
+        {
+            return;
+        }
+
+        if (markup.Model.Items.Length == 0)
+        {
+            Fail("Nothing to save yet — place an arrow, box or text first.");
+            return;
+        }
+
+        byte[] source;
+        try
+        {
+            source = await File.ReadAllBytesAsync(markup.SourcePath, ct).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            Fail($"Cannot read {markup.SourceName}: {ex.Message}");
+            return;
+        }
+
+        if (!MarkupPngBaker.TryBake(source, markup.Model, out byte[]? baked, out string bakeError) || baked is null)
+        {
+            Fail(bakeError);
+            return;
+        }
+
+        string target = UniqueAnnotatedPath(markup.SourcePath, markup.SourceName);
+        try
+        {
+            await File.WriteAllBytesAsync(target, baked, ct).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            Fail($"Cannot write {target}: {ex.Message}");
+            return;
+        }
+
+        host.Bridge.AppendImageCard(target, "image/png", baked.Length, baked);
+        _ = host._replStore.Dispatch(new ChatAppMsg.MarkupSaved(target));
+        _ = host._replStore.Dispatch(new ChatAppMsg.AppendLine(ChatRole.System, $"Saved annotated image: {target}"));
+        host._wake.Writer.TryWrite(null);
+        return;
+
+        void Fail(string error)
+        {
+            _ = host._replStore.Dispatch(new ChatAppMsg.MarkupFailed(error));
+            host._wake.Writer.TryWrite(null);
+        }
+    }
+
+    /// <summary>
+    ///     Sibling path for the annotated copy: <c>&lt;stem&gt;.annotated.png</c>
+    ///     next to the source (the workspace), numeric suffix while taken.
+    ///     Falls back to the process working directory when the source dir is
+    ///     missing or unusable.
+    /// </summary>
+    private static string UniqueAnnotatedPath(string sourcePath, string sourceName)
+    {
+        string dir = string.Empty;
+        try
+        {
+            dir = Path.GetDirectoryName(sourcePath) ?? string.Empty;
+        }
+        catch (Exception ex) when (ex is ArgumentException or PathTooLongException)
+        {
+            dir = string.Empty;
+        }
+
+        if (dir.Length == 0 || !Directory.Exists(dir))
+        {
+            dir = Environment.CurrentDirectory;
+        }
+
+        string stem = Path.GetFileNameWithoutExtension(
+            string.IsNullOrWhiteSpace(sourceName) ? "annotated" : sourceName);
+        if (stem.Length == 0 || stem == "?")
+        {
+            stem = "annotated";
+        }
+
+        string candidate = Path.Combine(dir, stem + ".annotated.png");
+        for (int i = 2; i < 100 && File.Exists(candidate); i++)
+        {
+            candidate = Path.Combine(dir, stem + ".annotated-" + i + ".png");
+        }
+
+        return candidate;
     }
 
     /// <summary>First idle Ctrl+C hints, second one within the window quits.

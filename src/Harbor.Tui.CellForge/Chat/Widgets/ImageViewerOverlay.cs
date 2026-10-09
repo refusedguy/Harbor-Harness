@@ -217,7 +217,7 @@ public sealed class ImageViewerOverlay
             PaintTextFallback(buffer, block, box, innerW);
         }
 
-        const string Hints = "+/- zoom | esc close";
+        const string Hints = "+/- zoom | m markup | esc close";
         buffer.SetText(box.X + 1, box.Bottom - 2, Truncate(Hints, innerW), ChatPalette.Dim);
     }
 

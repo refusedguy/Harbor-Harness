@@ -127,6 +127,7 @@ public sealed class ImageBlock : IChatBlock
     public ImageBlock(string path, string mimeType, long sizeBytes, byte[]? data, bool graphicsAvailable = false)
     {
         Name = Path.GetFileName(string.IsNullOrWhiteSpace(path) ? "?" : path);
+        FullPath = path ?? string.Empty;
         MimeType = string.IsNullOrWhiteSpace(mimeType) ? "?" : mimeType;
         SizeBytes = Math.Max(0, sizeBytes);
         GraphicsAvailable = graphicsAvailable;
@@ -167,6 +168,13 @@ public sealed class ImageBlock : IChatBlock
 
     /// <summary>Имя файла без директорий.</summary>
     public string Name { get; }
+
+    /// <summary>
+    /// Full source path as attached (issue #400: the markup overlay reads the
+    /// bytes back at bake time). Empty when the card was built from bytes
+    /// alone. Content, not widget state.
+    /// </summary>
+    public string FullPath { get; }
 
     public string MimeType { get; }
 
