@@ -27,9 +27,9 @@ agent runs through the REAL stack — shared `AgentLoop` singleton, shared
 
 The only pacing is the refund-on-completion `TokenBucketRateLimiter` and
 `MockLlmServer` chunk-delay time dilation — the harness never sleeps on
-real time. Budgets are relative (same-run paired ratio) or
-machine-independent counts, never absolute wall-clock thresholds (#996,
-#998). The `CancellationTokenSource` bounds in the tests are liveness
+real time. Budgets are relative (same-run paired ratio) or counts that
+are machine-independent, never absolute wall-clock thresholds
+(see #996 and the merged #998). The `CancellationTokenSource` bounds in the tests are liveness
 tripwires (a deadlock must fail, not hang the lane), deliberately
 generous, not perf gates.
 
