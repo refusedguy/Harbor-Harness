@@ -95,6 +95,10 @@ jobs:
               # edit to the script alone would set dotnet=false, skip the very
               # job that executes it, and land unvalidated (issue #618).
               - 'tools/test-measurements.py'
+              # The pack-validation gate's instrument (#429). Same #618
+              # argument: editing the validator must run the build job that
+              # executes it, or the edit lands unvalidated.
+              - 'tools/pack-validate.py'
               # The AOT gate's instrument and its committed inventory (#413).
               # The same argument as the line above, one step further: editing
               # the BASELINE is the ordinary way to answer a red AOT job, and
@@ -177,6 +181,54 @@ jobs:
 
       - name: Smoke — CLI binary runs
         run: dotnet exec apps/Harbor.App.Cli/bin/Release/net10.0/Harbor.App.Cli.dll --version
+
+      # NuGet pack + validation (issue #429). Steps, not a new job: no new
+      # matrix axis, same Release outputs built above. Pack warnings fail
+      # the job because Directory.Build.props sets TreatWarningsAsErrors.
+      # Publishing to nuget.org is deliberately NOT here — pack must stay
+      # green on every PR long before any release feed is configured.
+      - name: Pack NuGet libraries (Release, deterministic)
+        run: dotnet pack Harbor.slnx -c Release --no-build -p:ContinuousIntegrationBuild=true -o out/packages
+
+      - name: Validate NuGet packages (metadata, README, lib)
+        run: python3 tools/pack-validate.py out/packages
+
+      # Acceptance: packing twice from the same commit yields byte-identical
+      # .nupkg (ContinuousIntegrationBuild normalizes archive timestamps).
+      - name: Determinism — pack twice, byte-identical
+        run: |
+          dotnet pack Harbor.slnx -c Release --no-build -p:ContinuousIntegrationBuild=true -o out/packages2
+          diff <(cd out/packages && sha256sum *.nupkg | sort) <(cd out/packages2 && sha256sum *.nupkg | sort) \
+            && echo "deterministic: identical nupkgs"
+
+      # Clean-room proof that the dependency graph resolves: throwaway
+      # project, local feed for Harbor.* + nuget.org for transitives.
+      - name: Smoke-install Harbor.Abstractions + one provider
+        run: |
+          VER=$(grep -o '<Version>[^<]*' Directory.Build.props | head -1 | cut -d'>' -f2)
+          rm -rf /tmp/packsmoke && dotnet new console -n packsmoke -o /tmp/packsmoke --no-restore
+          cd /tmp/packsmoke
+          cat > nuget.config <<EOF
+          <?xml version="1.0" encoding="utf-8"?>
+          <configuration>
+            <packageSources>
+              <clear />
+              <add key="local" value="$GITHUB_WORKSPACE/out/packages" />
+              <add key="nuget.org" value="https://api.nuget.org/v3/index.json" />
+            </packageSources>
+          </configuration>
+          EOF
+          dotnet add package Harbor.Abstractions --version "$VER"
+          dotnet add package Harbor.Providers.OpenAiCompatible --version "$VER"
+          dotnet build -c Release --nologo
+
+      - name: Upload NuGet packages artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: nuget-packages
+          path: out/packages/*.nupkg
+          if-no-files-found: error
+          retention-days: 7
 
       # Advisory report only: surfaces `dotnet list package --vulnerable`
       # output (NU190x advisories) on every PR without failing the build.
