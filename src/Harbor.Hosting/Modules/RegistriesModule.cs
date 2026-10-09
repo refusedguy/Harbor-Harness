@@ -5,7 +5,6 @@ using Harbor.Abstractions.Tools;
 using Harbor.Telemetry;
 #if HARBOR_WITH_PLUGINS
 using Harbor.Plugins.Abstractions;
-using Harbor.Plugins.Compilation;
 using Harbor.Plugins.Hosting;
 using Harbor.Plugins.Instantiation;
 using Harbor.Plugins.Registration;
@@ -175,6 +174,13 @@ internal static class RegistriesModule
         // then fails closed and unreviewed project-local plugins are skipped.
         bool interactive = !Console.IsInputRedirected && !Console.IsOutputRedirected;
 
+        // #1055 slice 1 (graceful absence): no scripts anywhere and no host
+        // binary to compile them later — skip the whole pipeline (including the
+        // Roslyn side of Compose) and say so in exactly one line. Startup stays
+        // fast, the registries stay full, the exit stays normal.
+        if (TryReportPluginAbsence(ctx, globalPluginsDir, projectPluginsDir, onLoaded))
+            return;
+
         var (pluginHost, pluginRuntime) = PluginRuntimeComposer.Compose(
             services,
             ctx.Options.Configuration ?? new ConfigurationBuilder().Build(),
@@ -228,6 +234,42 @@ internal static class RegistriesModule
         else
         {
             ctx.Logger.LogWarning("CS plugin loading failed: {Error}", pluginResult.Error);
+        }
+    }
+
+    /// <summary>
+    ///     #1055 slice 1: when neither plugin scope holds a <c>.cs</c> script there
+    ///     is nothing to compose. Reports the absence in exactly one line — the
+    ///     host-binary probe decides which one — and skips the pipeline.
+    /// </summary>
+    /// <returns>True when the caller must skip the plugin pipeline.</returns>
+    private static bool TryReportPluginAbsence(
+        HarborCompositionContext ctx,
+        string globalPluginsDir,
+        string projectPluginsDir,
+        Action<IReadOnlyList<LoadedPlugin>>? onLoaded)
+    {
+        if (HasPluginScripts(globalPluginsDir) || HasPluginScripts(projectPluginsDir))
+            return false;
+
+        // The binary ships next to the CLI; when it is missing too, "no host" is
+        // the honest reason. When it is present, the host is simply idle.
+        ctx.Logger.LogInformation(
+            PluginHostLocator.IsHostAvailable() ? "plugins: off (no scripts)" : "plugins: off (no host)");
+        onLoaded?.Invoke(Array.Empty<LoadedPlugin>());
+        return true;
+    }
+
+    private static bool HasPluginScripts(string dir)
+    {
+        try
+        {
+            return Directory.Exists(dir) && Directory.GetFiles(dir, "*.cs").Length > 0;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            // Unreadable directory reads as absent — the loader would skip it too.
+            return false;
         }
     }
 
