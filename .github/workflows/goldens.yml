@@ -1,15 +1,17 @@
-# Regenerate TUI golden baselines on demand and commit them back.
+# Regenerate golden baselines on demand and commit them back.
 #
-# Golden tests (ScreenshotHashTests, GoldenGridDumpTests, ce3-*) fail when
-# painted output intentionally changes. Regeneration requires a full test run
-# with HARBOR_UPDATE_GOLDENS=1 — agents and reviewers without a local .NET
-# setup use this workflow instead:
+# Golden tests (ScreenshotHashTests, GoldenGridDumpTests, ce3-*, Avalonia
+# *GoldenFrame/*Frames_*) fail when painted output intentionally changes.
+# Regeneration requires a full test run with HARBOR_UPDATE_GOLDENS=1 —
+# agents and reviewers without a local .NET setup use this workflow instead:
 #
 #   gh workflow run goldens.yml --ref <branch>   (-PR branch, not dev)
+#   gh workflow run goldens.yml --ref <branch> -f suites="tests/Harbor.E2E.App.Avalonia"
 #
-# The job runs the CellForge golden suites with the flag set and commits any
+# The job runs the selected golden suites with the flag set and commits any
 # changed baselines straight back to the same branch, so the PR's CI re-runs
-# green. Only baseline files (*.golden.txt, *.verified.*, hashes manifest)
+# green. Only baseline files (*.golden.txt, *.golden.png, *.golden.sha256,
+# *.verified.*, hashes manifest, Avalonia frames + sha256.json)
 # are committed — never source changes. Manual dispatch only, never a gate.
 name: goldens
 
@@ -44,6 +46,7 @@ jobs:
       - name: Regenerate goldens
         env:
           HARBOR_UPDATE_GOLDENS: 1
+          HARBOR_GOLDENS_STRICT: 1
           DOTNET_NOLOGO: true
           DOTNET_CLI_TELEMETRY_OPTOUT: true
         run: |
@@ -72,9 +75,14 @@ jobs:
           # nothing, so a repo with no *.verified.* files staged nothing at
           # all and every dispatch reported "No baseline changes". Add each
           # pattern on its own so a missing family cannot swallow the rest.
-          for pattern in '*.golden.txt' '*.verified.*' '*hashes*.json' '*Hashes*.json'; do
+          # The Avalonia frames lane keeps reference PNGs under
+          # tests/fixtures/avalonia/frames/ plus the sha256.json manifest —
+          # those two paths are added as literal directories so the *.png
+          # glob below cannot sweep up unrelated screenshots.
+          for pattern in '*.golden.txt' '*.golden.png' '*.golden.sha256' '*.verified.*' '*hashes*.json' '*Hashes*.json' 'sha256.json'; do
             git add -A -- "$pattern" || true
           done
+          git add -A -- tests/fixtures/avalonia/frames tests/Harbor.E2E.App.Avalonia/ComponentTests/baselines || true
           if git diff --cached --quiet; then
             echo "No baseline changes."
           else
