@@ -242,8 +242,24 @@ public sealed class AgentLoop : IAgentLoop
             // the user set and a stop the user pressed are different facts and
             // the terminal event is where they must stay distinguishable.
             RunLimitKind? limit = null;
+            // #1024: the wall-clock stamp. Read once per run so the elapsed
+            // check below is a comparison, not a second clock to skew.
+            DateTimeOffset startedAt = _clock.GetUtcNow();
             while (!ct.IsCancellationRequested)
             {
+                // #1024: boundary enforcement for the wall-clock budget. This
+                // MUST stay a read of the clock, never a CancelAfter on `ct`:
+                // firing the run token would route the run into the cancel
+                // branch below and report a user-set ceiling as a user-pressed
+                // stop. An in-flight turn is never interrupted — it completes,
+                // and the run ends before the next one starts (#997 leaves
+                // in-flight calls alone the same way).
+                if (_runTimeout is { } budget && _clock.GetUtcNow() - startedAt >= budget)
+                {
+                    _logger.LogInformation("Agent run hit wall-clock budget ({Budget}): session={SessionId} agent={Agent}", budget, session.Session.Id, agent.Name.Value);
+                    limit = RunLimitKind.Timeout;
+                    break;
+                }
                 turn++;
                 // [G4]: the whole turn (compaction → prompt → stream → tools →
                 // drains → turn-end event → end-of-run decision) runs inside TurnRunner.
