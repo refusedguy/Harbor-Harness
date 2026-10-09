@@ -1,4 +1,9 @@
 using Harbor.Tui.CellForge.Rendering;
+// #436: the diff side of this session speaks the ENGINE grid (DiffEngine,
+// BufferSwapChain and the swap offers are engine APIs), qualified explicitly
+// through EngineCells. Painters speak the Rendering vocabulary (assembly-wide
+// aliases), so BACK-for-painters is a separate Rendering buffer below.
+using EngineCells = Harbor.Tui.CellForge.Rendering;
 
 namespace Harbor.Tui.CellForge.Streaming;
 
@@ -13,12 +18,26 @@ namespace Harbor.Tui.CellForge.Streaming;
 /// </summary>
 public sealed class ScreenSession
 {
-    private ScreenBuffer _back;
+    private EngineCells.ScreenBuffer _back;
     private readonly DiffEngine _engine;
     private readonly AnsiWriter _writer;
     private readonly BufferSwapChain _swapChain = new();
     private readonly Func<(int Cols, int Rows)>? _sizeSource;
     private bool _eraseBeforeNextFrame;
+
+    /// <summary>
+    /// Painter-side BACK buffer (#436: the engine is a standalone leaf, so the
+    /// painters and the differ no longer share a grid type). Panels, overlays
+    /// and the layout tree paint HERE in the Rendering vocabulary; the flush
+    /// copies it into the engine <see cref="Back" /> staging buffer (exact
+    /// cell-for-cell copy, zero allocations on the steady path) and diffs
+    /// from there. Persists across frames like the old shared BACK, so partial
+    /// painters keep working; resized/invalidated alongside it.
+    /// </summary>
+    private ScreenBuffer _paint;
+
+    /// <summary>Painter-side BACK grid: the buffer panels and overlays paint into.</summary>
+    public ScreenBuffer PaintBuffer => _paint;
 
     /// <summary>A frame is open between <see cref="BeginFrame"/> and its
     /// flush — gates <see cref="AbortFrame"/> so the scope stays idempotent
@@ -28,16 +47,17 @@ public sealed class ScreenSession
     public ScreenSession(AnsiWriter writer, int cols, int rows, Func<(int Cols, int Rows)>? sizeSource = null)
     {
         _writer = writer;
-        _back = new ScreenBuffer(cols, rows);
+        _back = new EngineCells.ScreenBuffer(cols, rows);
+        _paint = new ScreenBuffer(cols, rows);
         _engine = new DiffEngine(cols, rows);
         _sizeSource = sizeSource;
         CurrentCols = cols;
         CurrentRows = rows;
     }
 
-    public ScreenBuffer Back => _back;
+    public EngineCells.ScreenBuffer Back => _back;
 
-    public ScreenBuffer Front => _engine.Front;
+    public EngineCells.ScreenBuffer Front => _engine.Front;
 
     public DiffEngine Engine => _engine;
 
@@ -103,7 +123,8 @@ public sealed class ScreenSession
     /// have touched must be hinted, or callers fall back to
     /// <see cref="DamageAll"/> / no hints (plain full scan).
     /// </summary>
-    public void Damage(in Rect rect) => _engine.FrameHint(in rect);
+    public void Damage(in Rect rect) =>
+        _engine.FrameHint(new EngineCells.Rect(rect.X, rect.Y, rect.Width, rect.Height));
 
     /// <summary>
     /// Forces the next flush to a full scan (the no-hints path) — used when
@@ -122,7 +143,7 @@ public sealed class ScreenSession
     /// invalidated → one clean full repaint, never a torn frame). Last
     /// writer wins; a displaced offer is dropped.
     /// </summary>
-    public void OfferSwap(ScreenBuffer back, ScreenBuffer front)
+    public void OfferSwap(EngineCells.ScreenBuffer back, EngineCells.ScreenBuffer front)
     {
         ArgumentOutOfRangeException.ThrowIfNotEqual(front.Cols, back.Cols);
         ArgumentOutOfRangeException.ThrowIfNotEqual(front.Rows, back.Rows);
@@ -155,6 +176,8 @@ public sealed class ScreenSession
         CurrentRows = _back.Rows;
 
         _back.InvalidateAll();
+        _paint.Resize(CurrentCols, CurrentRows);
+        _paint.InvalidateAll();
         _engine.Front.InvalidateAll();
         _engine.ClearHints();
         // A different grid means the terminal may no longer hold our bitmaps.
@@ -181,8 +204,10 @@ public sealed class ScreenSession
         CurrentCols = cols;
         CurrentRows = rows;
         _back.Resize(cols, rows);
+        _paint.Resize(cols, rows);
         _engine.Front.Resize(cols, rows);
         _back.InvalidateAll();
+        _paint.InvalidateAll();
         _engine.Front.InvalidateAll();
         _engine.ClearHints();
         // A resize reflows the terminal's own cell grid, so the bitmaps we
@@ -297,6 +322,7 @@ public sealed class ScreenSession
         try
         {
             ArmEffects();
+            CopyPaintToBack();
             _engine.Flush(_back, _writer);
             // Inline images (issue #387) ride this same write: the escape
             // payloads are appended to the frame buffer AFTER the cell diff, so
@@ -340,6 +366,7 @@ public sealed class ScreenSession
             }
 
             ArmEffects();
+            CopyPaintToBack();
             _engine.Flush(_back, _writer);
             Images.Emit(_writer);
             _writer.EndFrame();
@@ -356,4 +383,29 @@ public sealed class ScreenSession
     /// (zero perf regression on non-effect frames).</summary>
     private void ArmEffects() =>
         _engine.Effects = Effects.Count > 0 ? Effects : null;
+
+    /// <summary>
+    /// Copies the painter-side grid into the engine staging buffer (#436:
+    /// exact cell-for-cell copy — both cell structs are the same 16-byte
+    /// layout, so every field round-trips and goldens stay byte-identical).
+    /// Zero allocations on the steady path (writes land in the reused staging
+    /// grid); rows are invalidated so the diff rehashes what the copy touched.
+    /// </summary>
+    private void CopyPaintToBack()
+    {
+        var src = _paint;
+        var dst = _back;
+        int cols = Math.Min(src.Cols, dst.Cols);
+        int rows = Math.Min(src.Rows, dst.Rows);
+        for (int y = 0; y < rows; y++)
+        {
+            for (int x = 0; x < cols; x++)
+            {
+                var c = src.Get(x, y);
+                dst.At(x, y) = EngineCells.Cell.FromRaw(c.Rune, c.Fg.Value, c.Bg.Value, (ushort)c.Flags, c.Width);
+            }
+        }
+
+        dst.InvalidateAll();
+    }
 }

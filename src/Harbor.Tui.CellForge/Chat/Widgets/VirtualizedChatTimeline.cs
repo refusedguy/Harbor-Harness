@@ -1,6 +1,8 @@
 using System.Text;
 using Harbor.Tui.CellForge.Input;
 using Harbor.Tui.CellForge.Rendering;
+// #436: GlowRegion is engine-typed; its accent/rect convert exactly below.
+using EngineCells = Harbor.Tui.CellForge.Rendering;
 using Harbor.Ui.Framework.Rendering.Input;
 using Harbor.Ui.Framework.State;
 using Harbor.Abstractions.Models;
@@ -448,13 +450,14 @@ public sealed class VirtualizedChatTimeline
     /// already reduced to a direction becomes the store message. Hosts that bind
     /// <c>TimelineWheelTarget</c> (whose callback is <c>Action&lt;UiKeyDto&gt;</c>,
     /// because the engine cannot name <c>AppMsg</c> since #435) call this
-    /// overload.
+    /// overload. The parameter is the ENGINE dto (#436: the wheel mapping lives
+    /// in the standalone leaf); the kinds compared below are its twins.
     /// </summary>
-    public static AppMsg WheelMsg(UiKeyDto key) =>
+    public static AppMsg WheelMsg(EngineCells.UiKeyDto key) =>
         key.Kind switch
         {
-            UiKeyKind.Up => LineUpMsg(),
-            UiKeyKind.Down => LineDownMsg(),
+            EngineCells.UiKeyKind.Up => LineUpMsg(),
+            EngineCells.UiKeyKind.Down => LineDownMsg(),
             _ => new AppMsg.KeyInput(ChatAction.None, UiKey.Unknown),
         };
 
@@ -791,9 +794,11 @@ public sealed class VirtualizedChatTimeline
                 {
                     // Accent = the exact header tone painted this frame —
                     // captured from the shared WarnTone source, never guessed.
+                    // #436: GlowRegion is engine-typed; both convert exactly
+                    // (rect field-for-field, color through the packed uint).
                     _glowRegions[_glowCount++] = new GlowRegion(
-                        paintedRect,
-                        PanelFx.WarnTone(gate.PulseBirthTick, CurrentTick).Fg,
+                        new EngineCells.Rect(paintedRect.X, paintedRect.Y, paintedRect.Width, paintedRect.Height),
+                        EngineCells.PackedColor.FromRaw(PanelFx.WarnTone(gate.PulseBirthTick, CurrentTick).Fg.Value),
                         pulse);
                 }
             }

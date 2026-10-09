@@ -1,6 +1,8 @@
 using Harbor.Tui.CellForge.Rendering;
 using Harbor.Ui.Framework.Rendering;
 using Harbor.Ui.Framework.Rendering.Widgets;
+// #436: GlowRegion is engine-typed; the accent/rect convert exactly below.
+using EngineCells = Harbor.Tui.CellForge.Rendering;
 
 namespace Harbor.Tui.CellForge.Widgets;
 
@@ -105,7 +107,10 @@ public sealed class MascotPanel : Panel
                 MascotReaction.SuccessBounce => ChatPalette.Success,
                 _ => ChatPalette.Warning,
             };
-            _glow.Update(new GlowRegion(Rect, accent, GlowEffect.PeakStrength));
+            _glow.Update(new GlowRegion(
+                new EngineCells.Rect(Rect.X, Rect.Y, Rect.Width, Rect.Height),
+                EngineCells.PackedColor.FromRaw(accent.Value),
+                GlowEffect.PeakStrength));
             _postFx.Set(0, _glow);
         }
 
