@@ -1,29 +1,23 @@
-// AcceptedStopCensusRule.cs — ratchet for #401 remainder (B2 core).
+// AcceptedStopCensusRule — ratchet for the number 401 remainder, the B2 core.
 //
-// #997 closed the start of NEW calls (both ToolDispatcher loops consult the run
-// token; the 7 terminal ToolExecutionEndEvent publishes ride TerminalEventToken)
-// and left in-flight calls alone deliberately. This rule pins that merged
-// boundary AND the remainder: after the Accepted boundary no new action may
-// start, and an in-flight call that outlives the boundary must read Abandoned,
-// never success.
+// Number 997 closed the start of NEW calls. Both ToolDispatcher loops consult
+// the run token and the seven terminal ToolExecutionEndEvent publishes ride
+// TerminalEventToken. In-flight calls were left alone deliberately. This rule
+// pins that merged boundary and the remainder. After the Accepted boundary no
+// new action may start, and an in-flight call that outlives the boundary must
+// read Abandoned, never success.
 //
-// The full 53-site audit is census401.py at the repo root (shipped in #997);
-// this rule does not re-list it. It pins the two load-bearing properties of
-// that list plus the missing one:
-//   1. both dispatch loops still consult ct before starting a call;
-//   2. every terminal ToolExecutionEndEvent publish still rides
-//      TerminalEventToken (a fired run token drops terminal records on the bus);
-//   3. RED: the in-flight remainder is visible — ToolDispatcher names
-//      Abandoned. Today it does not (0 hits), so a post-Stop success still
-//      reads as work done.
+// The full 53-site audit lives in census401.py at the repo root, shipped in
+// number 997. This rule does not re-list it. It pins the two load-bearing
+// properties of that list plus the missing one, namely the dispatch gates,
+// the terminal token, and the Abandoned visibility.
 
 namespace Harbor.Architecture.Tests;
 
 using TUnit.Assertions;
 
 /// <summary>
-///     Pins the #997 Accepted boundary and fails until the in-flight remainder
-///     (#401 B2 core) is visible.
+///     Pins the #997 Accepted boundary and the #401 in-flight remainder.
 /// </summary>
 public sealed class AcceptedStopCensusRule
 {
@@ -115,8 +109,8 @@ public sealed class AcceptedStopCensusRule
     }
 
     /// <summary>
-    ///     RED (#401 remainder): the in-flight side of the Accepted boundary is
-    ///     named in the dispatcher. A post-Stop completion must read Abandoned.
+    ///     #401 remainder, pinned: the in-flight side of the Accepted boundary
+    ///     is named in the dispatcher. A post-Stop completion reads Abandoned.
     /// </summary>
     [Test]
     public async Task InFlightRemainder_IsNamedAbandoned()

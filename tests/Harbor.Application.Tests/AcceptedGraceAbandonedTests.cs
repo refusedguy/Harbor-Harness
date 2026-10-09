@@ -16,7 +16,7 @@ using TUnit.Assertions;
 namespace Harbor.Application.Tests;
 
 /// <summary>
-///     #401 remainder (B2 core), RED: the Accepted boundary must also hold for
+///     #401 remainder (B2 core), pinned: the Accepted boundary also holds for
 ///     calls already in flight. #997 closed the start of NEW calls (both dispatch
 ///     loops consult the run token); a call that is already running keeps its
 ///     token via <c>ITool.ExecuteAsync</c>, and a tool that ignores it still
@@ -106,5 +106,128 @@ public class AcceptedGraceAbandonedTests
         await Assert.That(result.Results.Count).IsEqualTo(1);
         await Assert.That(result.Results[0].IsError).IsTrue();
         await Assert.That(result.Results[0].Output).Contains("abandoned");
+        await Assert.That(result.Results[0].Output).Contains(ToolDispatcher.AcceptedStopReason);
+    }
+
+    /// <summary>
+    ///     Calls that ignore the token AND never finish: after the grace period
+    ///     the run still terminates with every straggler reported Abandoned.
+    ///     The 50ms grace is the injected mechanism parameter, not a sleep in
+    ///     an assertion; entry is sequenced by TCS, so the cancel provably
+    ///     lands while both calls are in flight.
+    /// </summary>
+    private sealed class StuckTool(TaskCompletionSource bothStarted) : ITool
+    {
+        private int _calls;
+
+        public int Calls => Volatile.Read(ref _calls);
+
+        public ToolName Name => ToolName.Create("writer");
+
+        public ToolSafetyProfile SafetyProfile => ToolSafetyProfile.Opaque;
+
+        public string DisplayName => "Writer";
+
+        public string Description => "Never finishes, ignores cancellation.";
+
+        public JsonDocument ParameterSchema { get; } = JsonDocument.Parse("""{"type":"object"}""");
+
+        public ExecutionMode ExecutionMode => ExecutionMode.Parallel;
+
+        public string? PromptSnippet => null;
+
+        public IReadOnlyList<string> PromptGuidelines => [];
+
+        public Result ValidateArguments(JsonElement args) => Result.Success();
+
+        public async Task<ToolResult> ExecuteAsync(
+            JsonElement args,
+            ToolContext context,
+            CancellationToken cancellationToken = default)
+        {
+            if (Interlocked.Increment(ref _calls) == 2)
+            {
+                bothStarted.TrySetResult();
+            }
+
+            await Task.Delay(Timeout.InfiniteTimeSpan).ConfigureAwait(false);
+            return ToolResult.Success("never");
+        }
+    }
+
+    [Test]
+    public async Task StuckCalls_GraceExpires_ReportsAbandonedAndTerminates()
+    {
+        using var cts = new CancellationTokenSource();
+        var bothStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var tool = new StuckTool(bothStarted);
+        var bus = new FakeEventBus();
+        var agents = new FakeAgentRegistry(TestAgents.AllowAll());
+        var dispatcher = new ToolDispatcher(
+            new FakeToolRegistry(tool),
+            new PermissionService(agents, NullLogger<PermissionService>.Instance),
+            bus,
+            NullLogger<ToolDispatcher>.Instance,
+            coordinator: null,
+            abandonGrace: TimeSpan.FromMilliseconds(50));
+        var session = NewSession();
+
+        Task<ToolResultMessage> run = dispatcher.ExecuteAsync(
+            [Call("g1"), Call("g2")], session, AssistantMessage.Empty(session.Session.Id, "m"),
+            TestAgents.AllowAll(), cts.Token);
+
+        await bothStarted.Task; // both calls provably in flight
+        await cts.CancelAsync(); // the Accepted boundary
+
+        // Terminating here IS the assertion that the grace holds: without it
+        // this await never returns.
+        ToolResultMessage result = await run.WaitAsync(TimeSpan.FromSeconds(10));
+
+        await Assert.That(result.Results.Count).IsEqualTo(2);
+        await Assert.That(tool.Calls).IsEqualTo(2);
+        foreach (ToolResultEntry entry in result.Results)
+        {
+            await Assert.That(entry.IsError).IsTrue();
+            await Assert.That(entry.Output).Contains("abandoned");
+            await Assert.That(entry.Output).Contains(ToolDispatcher.AcceptedStopReason);
+        }
+    }
+
+    /// <summary>
+    ///     The Abandoned mark survives into the read-model: per-call completion
+    ///     state distinguishes a call the stop outlived from a malfunction.
+    /// </summary>
+    [Test]
+    public async Task Reconstruct_AbandonedEntry_ReportsAbandonedCompletion()
+    {
+        const string sessionId = "s-401b";
+        var t0 = new DateTimeOffset(2026, 10, 9, 12, 0, 0, TimeSpan.Zero);
+        AgentMessage assistant = new AssistantMessage(
+            "a1", sessionId, t0,
+            new ContentPart[]
+            {
+                new ToolCallPart("tc-ab", "write", EmptyArgs),
+                new ToolCallPart("tc-ok", "write", EmptyArgs),
+            },
+            StopReason.ToolUse, new Usage(10, 5), "m");
+        AgentMessage results = new ToolResultMessage(
+            "t1", sessionId, t0.AddSeconds(1),
+            new[]
+            {
+                new ToolResultEntry("tc-ab", "write",
+                    "Tool 'write' did not finish within 50ms of grace after the accepted stop "
+                    + "(accepted-stop); call abandoned after accepted-stop.", true),
+                new ToolResultEntry("tc-ok", "write", "file contents", false),
+            });
+
+        var outcome = RunOutcome.Reconstruct(
+            RunId.New(), sessionId, new[] { assistant, results }, cancelled: true);
+
+        await Assert.That(outcome.StopReason).IsEqualTo(RunStopReason.Stopped);
+        await Assert.That(outcome.ToolCalls.Count).IsEqualTo(2);
+        await Assert.That(outcome.ToolCalls[0].ToolCallId).IsEqualTo("tc-ab");
+        await Assert.That(outcome.ToolCalls[0].IsError).IsTrue();
+        await Assert.That(outcome.ToolCalls[0].Completion).IsEqualTo(ToolCallCompletion.Abandoned);
+        await Assert.That(outcome.ToolCalls[1].Completion).IsEqualTo(ToolCallCompletion.Completed);
     }
 }
