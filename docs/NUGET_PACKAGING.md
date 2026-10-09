@@ -16,8 +16,11 @@ inside the existing job, no new job or matrix axis:
    MIT license expression, `RepositoryUrl`/`RepositoryType` pointing at
    `refusedguy/Harbor-Harness`, a project URL, at least 3 tags, `README.md` at
    the package root, and `lib/net10.0/*.dll`.
-3. Double-pack byte-identical check — packing twice from the same commit must
-   yield identical `.nupkg` files.
+3. Double-pack payload check — packing twice must yield byte-identical
+   entry payloads (sizes, CRCs, bytes). Whole-file hashes are *not*
+   compared: NuGet stamps zip entry timestamps with pack wall-clock time,
+   so two packs are never byte-identical files even under
+   `ContinuousIntegrationBuild` (measured in CI).
 4. Clean-room smoke install — a throwaway console project installs
    `Harbor.Abstractions` + `Harbor.Providers.OpenAiCompatible` from the local
    feed (transitives from nuget.org) and builds, proving the graph resolves.
