@@ -8,7 +8,9 @@ using Harbor.Application.Resilience;
 using Harbor.Application.Sessions;
 using Harbor.E2E.Framework;
 using Harbor.Providers.OpenAiCompatible;
+using Harbor.Storage.Jsonl;
 using Harbor.Storage.Memory;
+using Harbor.Storage.Sqlite;
 using Harbor.Ui.Framework.State;
 using Harbor.Abstractions.Models;
 using CSharpFunctionalExtensions;
@@ -41,6 +43,14 @@ namespace Harbor.LoadTests;
 ///         agents per session the suite keeps 10 runs in flight, shaped down
 ///         to the bucket capacity so streams interleave on the shared bus.
 ///     </para>
+///     <para>
+///         <b>Store backends (#420):</b> the durable store is selected via
+///         <see cref="LoadStoreBackend" /> — memory (default, no I/O),
+///         JSONL (one file per session under a temp dir) or SQLite (one temp
+///         .db file). File-backed stores are created under
+///         <c>Path.GetTempPath()</c> and deleted on dispose. Product code is
+///         untouched: this switch lives entirely in the test harness.
+///     </para>
 /// </remarks>
 public sealed class MultiSessionLoadHarness : IAsyncDisposable
 {
@@ -48,7 +58,8 @@ public sealed class MultiSessionLoadHarness : IAsyncDisposable
 
     private readonly MockLlmServer _server;
     private readonly InMemoryEventBus _bus;
-    private readonly MemorySessionStore _store;
+    private readonly ISessionStore _store;
+    private readonly string? _ownedRoot;
     private readonly AgentLoop _loop;
     private readonly TokenBucketRateLimiter _limiter;
     private readonly LoadSignals _signals;
@@ -61,7 +72,8 @@ public sealed class MultiSessionLoadHarness : IAsyncDisposable
     private MultiSessionLoadHarness(
         MockLlmServer server,
         InMemoryEventBus bus,
-        MemorySessionStore store,
+        ISessionStore store,
+        string? ownedRoot,
         AgentLoop loop,
         TokenBucketRateLimiter limiter,
         LoadSignals signals,
@@ -70,6 +82,7 @@ public sealed class MultiSessionLoadHarness : IAsyncDisposable
         _server = server;
         _bus = bus;
         _store = store;
+        _ownedRoot = ownedRoot;
         _loop = loop;
         _limiter = limiter;
         _signals = signals;
@@ -79,6 +92,12 @@ public sealed class MultiSessionLoadHarness : IAsyncDisposable
     public LoadSignals Signals => _signals;
 
     public TokenBucketRateLimiter Limiter => _limiter;
+
+    /// <summary>Backend selected for this harness instance (test matrix axis, #420).</summary>
+    public LoadStoreBackend Backend { get; private set; } = LoadStoreBackend.Memory;
+
+    /// <summary>Shared bus, exposed so ordering tests can record turn events (test-only seam).</summary>
+    public IEventBus Bus => _bus;
 
     public IReadOnlyList<LoadSessionContext> Contexts => _contexts;
 
@@ -94,7 +113,8 @@ public sealed class MultiSessionLoadHarness : IAsyncDisposable
         int sessionCount,
         int agentsPerSession,
         int bucketCapacity = 6,
-        TimeSpan? chunkDelay = null)
+        TimeSpan? chunkDelay = null,
+        LoadStoreBackend backend = LoadStoreBackend.Memory)
     {
         var server = new MockLlmServer();
         await server.StartAsync().ConfigureAwait(false);
@@ -102,7 +122,7 @@ public sealed class MultiSessionLoadHarness : IAsyncDisposable
         server.SetEchoResponse(Model);
 
         var bus = new InMemoryEventBus();
-        var store = new MemorySessionStore();
+        (ISessionStore store, string? ownedRoot) = CreateStore(backend);
         var limiter = new TokenBucketRateLimiter(bucketCapacity);
 
         // Real OpenAI-compatible HTTP client → bucket → mock server.
@@ -139,7 +159,8 @@ public sealed class MultiSessionLoadHarness : IAsyncDisposable
             NullLogger<AgentLoop>.Instance);
 
         var signals = new LoadSignals();
-        var harness = new MultiSessionLoadHarness(server, bus, store, loop, limiter, signals, agentsPerSession);
+        var harness = new MultiSessionLoadHarness(server, bus, store, ownedRoot, loop, limiter, signals, agentsPerSession);
+        harness.Backend = backend;
         harness._subscriptions.Add(signals.SubscribeBus(bus));
         harness._agentDefs.AddRange(agentDefs);
         for (int s = 0; s < sessionCount; s++)
@@ -240,6 +261,48 @@ public sealed class MultiSessionLoadHarness : IAsyncDisposable
 
     private AgentDefinition AgentFor(int index) => _agentDefs[index];
 
+    /// <summary>
+    ///     Backend switch for the #420 matrix. Memory is allocation-free;
+    ///     file-backed backends each get an isolated temp root so parallel
+    ///     test legs never share files or handles.
+    /// </summary>
+    private static (ISessionStore Store, string? OwnedRoot) CreateStore(LoadStoreBackend backend)
+    {
+        switch (backend)
+        {
+            case LoadStoreBackend.Memory:
+                return (new MemorySessionStore(), null);
+            case LoadStoreBackend.Jsonl:
+            {
+                string root = Path.Combine(Path.GetTempPath(), "harbor-load-" + Guid.NewGuid().ToString("N"));
+                return (
+                    new JsonlSessionStore(root, NullLogger<JsonlSessionStore>.Instance),
+                    root);
+            }
+            case LoadStoreBackend.Sqlite:
+            {
+                string root = Path.Combine(Path.GetTempPath(), "harbor-load-" + Guid.NewGuid().ToString("N"));
+                Directory.CreateDirectory(root);
+                return (
+                    new SqliteSessionStore(
+                        Path.Combine(root, "load.db"),
+                        NullLogger<SqliteSessionStore>.Instance),
+                    root);
+            }
+            default:
+                throw new ArgumentOutOfRangeException(nameof(backend), backend, "Unknown load store backend.");
+        }
+    }
+
+    public static LoadStoreBackend ParseBackend(string name) =>
+        name.ToLowerInvariant() switch
+        {
+            "memory" => LoadStoreBackend.Memory,
+            "jsonl" => LoadStoreBackend.Jsonl,
+            "sqlite" => LoadStoreBackend.Sqlite,
+            _ => throw new ArgumentOutOfRangeException(nameof(name), name, "Expected memory|jsonl|sqlite."),
+        };
+
     public async ValueTask DisposeAsync()
     {
         foreach (IDisposable sub in _subscriptions)
@@ -249,7 +312,31 @@ public sealed class MultiSessionLoadHarness : IAsyncDisposable
 
         _limiter.Dispose();
         await _server.StopAsync().ConfigureAwait(false);
+
+        if (_ownedRoot is not null)
+        {
+            try
+            {
+                Directory.Delete(_ownedRoot, recursive: true);
+            }
+            catch (IOException)
+            {
+                // Best-effort temp cleanup: a lingering handle must not fail the test.
+            }
+            catch (UnauthorizedAccessException)
+            {
+                // Same — report-only cleanup, never a test failure.
+            }
+        }
     }
+}
+
+/// <summary>Durable-store axis of the #420 matrix (test-only; product code untouched).</summary>
+public enum LoadStoreBackend
+{
+    Memory,
+    Jsonl,
+    Sqlite,
 }
 
 /// <summary>Per-session outcome of <see cref="MultiSessionLoadHarness.RunAllAsync" />.</summary>
