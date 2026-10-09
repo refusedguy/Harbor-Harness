@@ -1,4 +1,4 @@
-// CellForgeEngineAtomicityRules.cs — issue #795, step 1.
+// CellForgeEngineAtomicityRules.cs — issue #795, step 1; CLOSED by #436.
 //
 // THE HOLE THIS FILE EXISTS TO CLOSE
 // ----------------------------------
@@ -6,7 +6,7 @@
 //
 //     <Description>… BCL-only, AOT-compatible. …</Description>
 //
-// and declares FOUR ProjectReferences while saying that:
+// and used to declare FOUR ProjectReferences while saying that:
 //
 //     Harbor.Abstractions
 //     Harbor.Ui.Framework.Rendering
@@ -15,20 +15,19 @@
 //
 // Every layering gate in this project reads `<ProjectReference>` —
 // `LayerDependencyTests`, `NetArchLayerRules`, `FullLayerMatrixTests`,
-// `DeclaredButUnboundProjectReferences`. They find four edges that were
-// declared on purpose (the csproj says so: "CF-A-001: прямые референсы вместо
-// транзитивных"), and all four are PERMITTED by the matrix. So the layer gates
-// are green, and they are right to be: the edges are declared, they are legal,
-// and the gates answer the question they were built to answer.
+// `DeclaredButUnboundProjectReferences`. They found four edges that were
+// declared on purpose, and all four were PERMITTED by the matrix. So the layer
+// gates were green, and they were right to be: the edges were declared, legal,
+// and the gates answered the question they were built to answer.
 //
-// THE LIST ABOVE IS HISTORY, NOT INVENTORY. #435 has since removed two of the
-// four — `Harbor.Abstractions` (dead by fact: zero imports, zero bound types,
-// the #980 shape) and `Harbor.Ui.Framework.State` (live, and deleted by
-// porting the two translators onto the #162 BCL-only vocabulary). Two remain,
-// both #436's: `Harbor.Ui.Framework.Rendering` and `Harbor.DesignSystem`. The
-// paragraphs above are left as written because they are what the guard was
-// built to catch, and rewriting them would make the file describe a state that
-// never existed. Read `ReviewedReferences` for what is actually declared.
+// THE LIST ABOVE IS HISTORY, NOT INVENTORY. #435 removed two of the four —
+// `Harbor.Abstractions` (dead by fact) and `Harbor.Ui.Framework.State`
+// (ported onto the #162 BCL-only vocabulary) — and #436 removed the last two
+// (`Harbor.Ui.Framework.Rendering`, `Harbor.DesignSystem`) by porting the
+// cell/input/probe vocabulary into the engine and moving the chat-owned
+// rendering to Harbor.Tui.CellForge/Chat/Rendering. The paragraphs above are
+// left as written because they are what the guard was built to catch.
+// Read `ReviewedReferences` (now empty) for what is actually declared.
 //
 // The hole was that NOBODY READS THE IMPORTS. `GlobalUsings.cs` pre-imported
 //
@@ -78,41 +77,10 @@
 // justification, so both tables below are two rows and one row smaller than the
 // merged text described. What remains is #436's: the cell vocabulary in
 // Harbor.Ui.Framework.Rendering and the palette constants in
-// Harbor.DesignSystem. A permanently-red test is a comment with extra steps, so
-// the tables list today's violations with a reason and the issue that will
-// delete them.
-//
-// The remaining 32 forbidden pairs are 1 row in `ReviewedImports` (the Protocol
-// constant) plus 31 files across the 5 groups in `ReviewedVocabulary`, expanded
-// to one row per file. (Counted, not estimated: 32 = the guard's own
-// ForbiddenImportPrefixes hit count over the project, of which 31 are vocabulary
-// and 1 is the Protocol constant. A 33rd import exists — `Harbor.DesignSystem`
-// in Parsing/EscapeSequenceParser.cs — and is deliberately not counted here
-// because DesignSystem is not an import-rule target; see SCOPE.) Grouping is by
-// namespace because the debt is per namespace; the file list is spelled out
-// because the old shape — one row for `GlobalUsings.cs` serving 24 files — could
-// not name a 25th borrower and so could not fail when one appeared.
-//
-// They are a TO-DO LIST, not an amnesty, and three things keep them that way:
-//
-//   * `ReviewedRowsStateWhyTheyAreTolerated` runs every row through the shared
-//     ExemptionReason check, so a row cannot be added blank, and cannot be a
-//     bare URL — a URL says where the debt is tracked, not why it is tolerated
-//     here. Same contract as `PresentationCapabilityRules` and
-//     `EnforcerIntegrityTests`.
-//   * `ReviewedImportRowsAreStillReal` and `ReviewedReferenceRowsAreStill
-//     Declared` fail when a row OUTLIVES its violation. That is the half that
-//     stops a baseline decaying into a standing permission, and it is the half
-//     #435 was written against: deleting `Harbor.Abstractions` and
-//     `Harbor.Ui.Framework.State` from the csproj made both tables red until
-//     their rows went in the same commit. That is the liveness working, not a
-//     nuisance — a baseline that cannot go red is a permission.
-//   * `ANonAtomicEngineNamesItsTrackingIssueInItsOwnDescription` closes the
-//     cheapest way to silence all of this — deleting the words `BCL-only` from
-//     the csproj. The promise is NOT withdrawn here; it stays in the
-//     Description and this file keeps checking it. The rule is that an engine
-//     which is not yet atomic must SAY which issue it owes, so the aspiration
-//     stays greppable and the promise cannot die quietly with the project.
+// Harbor.DesignSystem. #436 paid the rest: the tables below are EMPTY, and the
+// tests that read them are now zero-tolerance guards rather than a baseline.
+// A row appearing here again is a new borrow — red until it carries an
+// allowance and a tracking issue, exactly as before.
 //
 // THE SECOND HALF: THE DESCRIPTION IS A PROMISE, AND A PROMISE IS CHECKABLE
 // -------------------------------------------------------------------------
@@ -251,16 +219,8 @@ public sealed class CellForgeEngineAtomicityRules
     /// </param>
     private static readonly (string FileName, string Namespace, ExemptionReason.Row Allowance)[] ReviewedImports =
     [
-        (
-            "Rendering/DiffEngine.cs",
-            "Harbor.Ui.Framework.Rendering.Protocol",
-            new ExemptionReason.Row(
-                "CellDiffHints.HintAreaThreshold is the single canonical 25% damage-area threshold, "
-                + "re-exposed as HintAreaThreshold so the engine's cell differ and the portable "
-                + "encoder cannot drift apart. It is a cell-level constant rather than a UI concept, "
-                + "and its eventual home is #436's decision.",
-                TrackedBy: "https://github.com/refusedguy/Harbor-Harness/issues/795")
-        ),
+        // #436: empty — the engine imports no Harbor namespace anymore. A row
+        // appearing here again is a new borrow and must carry its allowance.
     ];
 
     /// <summary>
@@ -281,112 +241,9 @@ public sealed class CellForgeEngineAtomicityRules
     /// <param name="Allowance">Why this vocabulary may stay, and what removes it.</param>
     private static readonly (string Namespace, string[] Files, ExemptionReason.Row Allowance)[] ReviewedVocabulary =
     [
-        (
-            // #409. Placed first because it is the newest borrow and the one a
-            // reader is most likely to mistake for a stray: AnsiWriter spells it
-            // on its own line, which is exactly what #795's deletion of the
-            // global block was for.
-            "Harbor.Ui.Framework.Rendering.PerformanceContracts",
-            ["Rendering/AnsiWriter.cs"],
-            new ExemptionReason.Row(
-                "#409's per-stage counters name four pipeline stages. Three sit in "
-                + "Harbor.Ui.Framework.Rendering and one sits here, because AnsiWriter is the only type "
-                + "in the engine that reaches a terminal backend — so the write stage is counted at this "
-                + "site or not at all. The row exists rather than an engine-local counter because a "
-                + "second tally is the failure mode: four stage numbers read off two types can drift "
-                + "apart silently, which is the #970 shape (an instrument matching more than reality). "
-                + "UiStageCounters is a counter and nothing else — nothing is constructed here, no "
-                + "engine logic reads a value, and the call sits behind a guard that is off by default, "
-                + "so the engine is no less BCL in behaviour than before, only one file longer in its "
-                + "list of spelled borrows. Same shape as the ReviewedImports Protocol row below, where "
-                + "a shared constant exists precisely so two differs cannot disagree.",
-                TrackedBy: "https://github.com/refusedguy/Harbor-Harness/issues/795")
-        ),
-        (
-            "Harbor.Ui.Framework.Rendering",
-            [
-                "Input/MouseRouter.cs",
-                "Rendering/AnsiWriter.cs",
-                "Rendering/BufferSwapChain.cs",
-                "Rendering/CodeHighlightPalette.cs",
-                "Rendering/CodeSyntaxTokenizer.cs",
-                "Rendering/CodeTokenizer.cs",
-                "Rendering/DiffEngine.cs",
-                "Rendering/DirtyRect.cs",
-                "Rendering/FlexLayout.cs",
-                "Rendering/FrameDiff.cs",
-                "Rendering/InlineImageLayer.cs",
-                "Rendering/InlineSession.cs",
-                "Rendering/LayoutTree.cs",
-                "Rendering/OverlayStack.cs",
-                "Rendering/PostFx.cs",
-                "Rendering/PromptBuffer.cs",
-                "Rendering/PromptRenderer.cs",
-                "Rendering/PromptViewport.cs",
-            ],
-            new ExemptionReason.Row(
-                "The renderer-agnostic cell vocabulary — Cell, Rect, ScreenBuffer, CellStyle, "
-                + "PackedColor, StyleAttr, UnicodeWidth, TextWrap, IInlineImageSink — has no BCL "
-                + "equivalent. All 18 files now spell the import themselves; what they must not do "
-                + "is borrow it invisibly, which is what the deleted global block did. Where the "
-                + "vocabulary eventually lives is #436's decision.",
-                TrackedBy: "https://github.com/refusedguy/Harbor-Harness/issues/436")
-        ),
-        (
-            "Harbor.Ui.Framework.Rendering.Input",
-            [
-                "Input/FocusRouter.cs",
-                "Input/InputEvent.cs",
-                "Input/MouseEvent.cs",
-                // #435: MouseRouter joined this list when it stopped returning
-                // AppMsg and started returning UiKeyDto (WheelToKey), which lives
-                // here rather than in State. Same namespace, same reachability —
-                // it was already a borrower of the Rendering namespace in the
-                // group above — so this row grew by one file and lost nothing.
-                "Input/MouseRouter.cs",
-                "Parsing/EscapeSequenceParser.cs",
-                "Rendering/ComposerController.cs",
-                "Rendering/OverlayStack.cs",
-                "Rendering/VimComposerMode.cs",
-            ],
-            new ExemptionReason.Row(
-                "KeyEvent, KeyCode, KeyModifiers, KeyEventType, IFocusTarget and — since #435 — "
-                + "UiKeyDto/UiKeyKind are the shared input vocabulary the byte state-machine parser, "
-                + "FocusRouter, OverlayStack, MouseRouter and ComposerController all speak. Parsing/ is "
-                + "the engine proper and needs it, so this is NOT the #795 step 3 translator move — "
-                + "that was the State edge, and #435 deleted it. What this row now holds is the "
-                + "BCL-only vocabulary #33/T1 and #435 moved the translators onto; where it "
-                + "eventually lives is #436's decision.",
-                TrackedBy: "https://github.com/refusedguy/Harbor-Harness/issues/436")
-        ),
-        (
-            "Harbor.Ui.Framework.Rendering.Markdown",
-            [
-                "Rendering/CodeSyntaxTokenizer.cs",
-                "Rendering/CodeTokenizer.cs",
-            ],
-            new ExemptionReason.Row(
-                "MdLine and MdStyle are read by the two code tokenizers to classify spans. NOTE: the "
-                + "merged version of this row claimed no engine file names anything in this namespace "
-                + "and that the import 'buys nothing today' — false, and the build found it when the "
-                + "ambient block was deleted and these two files stopped compiling. Corrected here "
-                + "because a baseline row that misstates its own debt cannot be reviewed.",
-                TrackedBy: "https://github.com/refusedguy/Harbor-Harness/issues/436")
-        ),
-        (
-            "Harbor.Ui.Framework.Rendering.Widgets",
-            [
-                "Rendering/CodeHighlightPalette.cs",
-                "Rendering/PostFx.cs",
-            ],
-            new ExemptionReason.Row(
-                "ChatPalette (CodeHighlightPalette, four call sites) and PanelFx.Lerp (PostFx) are "
-                + "read here. The merged version of this row called the line 'unused vocabulary "
-                + "parked in a global block' on the grounds that LineDiff and WordDiff are "
-                + "referenced by neither — true of those two types and beside the point, since the "
-                + "namespace is imported for these. Corrected for the same reason as the row above.",
-                TrackedBy: "https://github.com/refusedguy/Harbor-Harness/issues/436")
-        ),
+        // #436: empty — the vocabulary lives in the engine now (ports) or moved
+        // to Chat with the chat-owned files. Same rule as above: a new row is a
+        // new borrow, red until it carries an allowance and a tracking issue.
     ];
 
     /// <summary>
@@ -412,39 +269,8 @@ public sealed class CellForgeEngineAtomicityRules
     /// <param name="Allowance">Why this edge may stay, and what removes it.</param>
     private static readonly (string Project, ExemptionReason.Row Allowance)[] ReviewedReferences =
     [
-        (
-            "Harbor.Ui.Framework.Rendering",
-            new ExemptionReason.Row(
-                "Carries the cell primitives 20 engine files name — ScreenBuffer, Cell, Rect, "
-                + "UnicodeWidth, TextWrap, the Key* family and IFocusTarget — plus CellDiffHints. "
-                + "Removing it is not a deletion but a re-homing decision, and #436 owns that "
-                + "decision. Since #435 it also carries the two BCL-only vocabularies the engine "
-                + "replaced State's types with (UiKeyDto via #162, EnterDecision via #435), which "
-                + "is why those two edges could go while this one could not.",
-                TrackedBy: "https://github.com/refusedguy/Harbor-Harness/issues/436")
-        ),
-        (
-            "Harbor.DesignSystem",
-            new ExemptionReason.Row(
-                "Imported by Parsing/EscapeSequenceParser.cs for the palette constants the escape "
-                + "parser emits. It is a cell/palette concern rather than a UI-view concern, so the "
-                + "import rule deliberately does not name it; the edge is listed here because a "
-                + "DesignSystem reference is still not-BCL and contradicts the same promise. #436 "
-                + "decides whether the constants move or the edge is grandfathered for good. "
-                + "MEASURED FOR #435, NOT YET ACTED ON: the five types this project binds from the "
-                + "assembly (CellStyle, PackedColor, StyleAttr, ChatPalette, TerminalBackgroundProbe) "
-                + "are all reachable TRANSITIVELY through the Harbor.Ui.Framework.Rendering edge, "
-                + "which references DesignSystem — proof being Harbor.Ui.Framework.ViewModels, which "
-                + "binds ChatPalette with no direct DesignSystem reference and compiles on dev. Four "
-                + "of the five are declared in Harbor.DesignSystem while NAMED Harbor.Ui.Framework.*, "
-                + "which is why a guard keyed on either prefix alone is blind here. So this edge is "
-                + "probably redundant rather than load-bearing — but 'probably' is not a measurement "
-                + "of the compiler, and only one of the five (TerminalBackgroundProbe, one call site "
-                + "in EscapeSequenceParser.cs) is reached through the DesignSystem namespace at all. "
-                + "Left declared for #436 to verify by deleting it; do not infer removability from "
-                + "this paragraph.",
-                TrackedBy: "https://github.com/refusedguy/Harbor-Harness/issues/436")
-        ),
+        // #436: empty — the engine declares zero Harbor references (standalone
+        // leaf). A re-added edge is red here AND in the layer matrix.
     ];
 
     /// <summary>
