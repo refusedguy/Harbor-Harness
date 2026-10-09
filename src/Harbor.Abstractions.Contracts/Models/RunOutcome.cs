@@ -133,6 +133,18 @@ public sealed record ToolCallLink(
 /// <param name="MessageIds">Ids of the run's messages in chronological order.</param>
 /// <param name="ToolCalls">Tool calls issued by the run, each linked to its result.</param>
 /// <param name="ErrorMessage">User-facing error text when <see cref="StopReason" /> is <see cref="RunStopReason.Failed" />; otherwise null.</param>
+/// <param name="Verification">
+///     What was verified about the run (#1018, sealed at run end and supplied
+///     as an input — never derived from <paramref name="MessageIds" />: the
+///     store holds exactly three message kinds and none of them carries a
+///     command line, an exit code or a revision). <c>null</c> means the caller
+///     had no evidence to supply — the inspection never happened — which is
+///     NOT <see cref="RunVerificationVerdict.NotVerified" /> (a completed
+///     inspection that found nothing). Acceptance is deliberately NOT here: it
+///     arrives after the run and may never arrive, so it cannot be a field a
+///     seal-time constructor must supply — it is a separate record keyed by
+///     <paramref name="RunId" /> (#42 owns the accept/reject kind).
+/// </param>
 /// <param name="Limit">
 ///     Which limit ended the run, when <see cref="StopReason" /> is
 ///     <see cref="RunStopReason.LimitExceeded" />; otherwise null. Null is the
@@ -148,6 +160,7 @@ public sealed record RunOutcome(
     IReadOnlyList<string> MessageIds,
     IReadOnlyList<ToolCallLink> ToolCalls,
     string? ErrorMessage = null,
+    RunVerificationRecord? Verification = null,
     RunLimitKind? Limit = null)
 {
     /// <summary>
@@ -159,18 +172,21 @@ public sealed record RunOutcome(
     /// <param name="messages">The run's messages in chronological order (e.g. from <c>ISessionStore.GetMessagesAsync</c>).</param>
     /// <param name="end">The terminal <c>AgentEndEvent</c> of the run.</param>
     /// <param name="error">The terminal <c>AgentErrorEvent</c>, when the run errored; otherwise null.</param>
+    /// <param name="verification">The sealed verification evidence for the run (#1018); null when the caller has none to supply.</param>
     /// <returns>The reconstructed <see cref="RunOutcome" />.</returns>
     public static RunOutcome Reconstruct(
         RunId runId,
         string sessionId,
         IReadOnlyList<AgentMessage> messages,
         AgentEndEvent end,
-        AgentErrorEvent? error = null) =>
+        AgentErrorEvent? error = null,
+        RunVerificationRecord? verification = null) =>
         Reconstruct(
             runId, sessionId, messages,
             cancelled: end.Cancelled,
             errorMessage: error?.Message,
-            limit: end.Limit);
+            limit: end.Limit,
+            verification: verification);
 
     /// <summary>
     ///     Reconstruct a finished run's outcome from stored messages and terminal
@@ -254,6 +270,12 @@ public sealed record RunOutcome(
     /// <param name="cancelled">True when the run ended via cancellation (<c>AgentEndEvent.Cancelled</c>).</param>
     /// <param name="errorMessage">Error text when the run errored (<c>AgentErrorEvent.Message</c>); otherwise null.</param>
     /// <param name="limit">Which limit ended the run (<c>AgentEndEvent.Limit</c>); null when none did.</param>
+    /// <param name="verification">
+    ///     The sealed verification evidence (#1018). Supplied as an input —
+    ///     never derived from <paramref name="messages" />, which cannot carry
+    ///     it. <c>null</c> reads as "nothing is known about verification", not
+    ///     as <see cref="RunVerificationVerdict.NotVerified" />.
+    /// </param>
     /// <returns>The reconstructed <see cref="RunOutcome" />.</returns>
     public static RunOutcome Reconstruct(
         RunId runId,
@@ -261,7 +283,8 @@ public sealed record RunOutcome(
         IReadOnlyList<AgentMessage> messages,
         bool cancelled = false,
         string? errorMessage = null,
-        RunLimitKind? limit = null)
+        RunLimitKind? limit = null,
+        RunVerificationRecord? verification = null)
     {
         var resultByCallId = new Dictionary<string, ToolResultEntry>(StringComparer.Ordinal);
         for (int i = 0; i < messages.Count; i++)
@@ -353,6 +376,7 @@ public sealed record RunOutcome(
             messageIds,
             toolCalls,
             stopReason == RunStopReason.Failed ? errorMessage : null,
+            verification,
             // Carried only on a limit stop. `Limit` is null on every other path
             // by construction, not by convention — the tests pin it, because a
             // field that reads a constant is a plausible value, not a fact.
