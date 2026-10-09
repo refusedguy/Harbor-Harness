@@ -362,7 +362,7 @@ All use `[MemoryDiagnoser]` and `[SimpleJob(warmupCount: 3, iterationCount: 5)]`
 | `src/Harbor.Tui.CellForge.Engine/Rendering/AnsiWriter.cs` | Frame-based ANSI writer, SGR automaton, cursor elision, palette interning |
 | `src/Harbor.Tui.CellForge.Engine/Rendering/DiffEngine.cs` | Cell-diff core, row-hash fast-path, damage-rect hints |
 | `src/Harbor.Ui.Framework.Rendering/ScreenBuffer.cs` | Double-buffered cell grid, geometric growth, wide-char pair handling |
-| `src/Harbor.Tui.CellForge.Engine/Rendering/LayoutTree.cs` | Binary split tree, water-filling solver, cached rect resolution |
+| `src/Harbor.Tui.CellForge/Chat/Rendering/LayoutTree.cs` | Binary split tree, water-filling solver, cached rect resolution |
 | `src/Harbor.Ui.Framework.State/State/UiState.cs` | Immutable UI snapshot, `record struct`, `ImmutableArray<ChatLine>` |
 | `src/Harbor.Ui.Framework.State/ChunkedBuffer.cs` | O(1) append buffer, avoids O(N²) streaming concatenation |
 | `src/Harbor.Ui.Framework.State/State/ChatAppReducer.cs` | Pure reducer, pattern-matched event → state transitions |
