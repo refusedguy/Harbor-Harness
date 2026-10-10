@@ -98,6 +98,8 @@
   href: ROP-API-INVENTORY.md
 - name: Scripting
   href: SCRIPTING.md
+- name: Security Audit
+  href: SECURITY_AUDIT.md
 - name: Spectre Tui Deep Dive
   href: SPECTRE_TUI_DEEP_DIVE.md
 - name: State Ownership
