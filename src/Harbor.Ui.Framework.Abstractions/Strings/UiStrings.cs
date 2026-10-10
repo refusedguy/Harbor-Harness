@@ -128,10 +128,12 @@ public static class UiStrings
     /// <summary>
     ///     Enumerates the neutral (<c>en</c>) entries. Audit seam for the
     ///     <c>Keys</c> drift guard; production lookups go through <see cref="Get(string)" />.
+    ///     Reads the <see cref="CultureInfo.InvariantCulture" /> set: the neutral
+    ///     resources are the invariant set, not an <c>en</c> satellite (none ships).
     /// </summary>
     public static IReadOnlyDictionary<string, string> GetEnglishEntries()
     {
-        ResourceSet? set = Manager.GetResourceSet(English, createIfNotExists: true, tryParents: false);
+        ResourceSet? set = Manager.GetResourceSet(CultureInfo.InvariantCulture, createIfNotExists: true, tryParents: false);
         var entries = new Dictionary<string, string>(StringComparer.Ordinal);
         if (set is null)
         {
