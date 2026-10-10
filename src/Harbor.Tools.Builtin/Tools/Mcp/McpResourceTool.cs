@@ -1,6 +1,6 @@
+using Harbor.Abstractions.Extensions;
 using Harbor.Tools.Mcp;
 using Microsoft.Extensions.Logging;
-using System.Text;
 using Result = CSharpFunctionalExtensions.Result;
 
 namespace Harbor.Tools.Builtin;
@@ -144,16 +144,19 @@ public sealed class McpResourceTool : ITool
                 || contents.GetArrayLength() == 0)
                 return Result.Failure<string>($"MCP server returned no contents for '{uri}'.");
 
-            var sb = new StringBuilder();
+            // §PERF-006: per-call concat buffer rented. Synchronous, no
+            // callback can touch it; early returns dispose via `using`.
+            using var sb = StringBuilderPool.Rent(512);
+            var b = sb.Builder;
             foreach (var item in contents.EnumerateArray())
             {
                 if (item.ValueKind != JsonValueKind.Object)
                     continue;
                 if (item.TryGetProperty("text", out var text) && text.ValueKind == JsonValueKind.String)
                 {
-                    if (sb.Length > 0)
-                        sb.Append('\n');
-                    sb.Append(text.GetString());
+                    if (b.Length > 0)
+                        b.Append('\n');
+                    b.Append(text.GetString());
                 }
                 else if (item.TryGetProperty("blob", out _))
                 {
@@ -162,9 +165,9 @@ public sealed class McpResourceTool : ITool
                 }
             }
 
-            if (sb.Length == 0)
+            if (b.Length == 0)
                 return Result.Failure<string>($"MCP server returned no text contents for '{uri}'.");
-            return Result.Success(sb.ToString());
+            return Result.Success(b.ToString());
         }
         catch (JsonException ex)
         {
