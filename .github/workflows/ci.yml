@@ -296,6 +296,14 @@ jobs:
             tests/**/bin/Release/net10.0/*.dll
             tests/**/bin/Release/net10.0/*.json
             tests/**/bin/Release/net10.0/runtimes/linux-x64/native/*
+            # Satellite resource assemblies (#434: UiStrings.<locale>.resx builds
+            # into <culture>/*.resources.dll). The top-level *.dll globs above do
+            # not cross the culture directory, so without these lines localized
+            # lookups silently fall back to en in every job that reuses this
+            # artifact while passing locally.
+            apps/**/bin/Release/net10.0/*/*.resources.dll
+            src/**/bin/Release/net10.0/*/*.resources.dll
+            tests/**/bin/Release/net10.0/*/*.resources.dll
             **/obj/project.assets.json
             **/obj/project.nuget.cache
             !**/*.pdb
