@@ -11,6 +11,33 @@ namespace Harbor.Tui.CellForge.Tests;
 /// </summary>
 public class StatusPanelMascotTests
 {
+    /// <summary>
+    /// Frames the rewritten latch tests paint with the clock held still
+    /// (#1026): 100 past the legacy 150-frame budget, so a frame-keyed latch
+    /// (the #170 bug) has expired while zero milliseconds have elapsed on
+    /// the injected clock and a time latch must still hold. Same 250 the
+    /// <c>Latch_Expires_ByTime_NotByTicks</c> test asserts at.
+    /// </summary>
+    private const int FramesPastBudget = 250;
+
+    /// <summary>
+    /// Manual clock (#1026): the same shape <c>MascotReviveTests</c> owns for
+    /// <c>MascotDirector</c> (#1007) — one timestamp tick is one millisecond,
+    /// so every deadline is exact integer arithmetic. Threaded through
+    /// <c>ChatScreen.Build</c> into both mascot directors and never advanced
+    /// here, so a latch assertion is a function of declared (zero) time and
+    /// not of how fast 250 paints finish on the runner.
+    /// </summary>
+    private sealed class ManualTimeProvider : TimeProvider
+    {
+        public override long TimestampFrequency => 1_000;
+
+        public override long GetTimestamp() => ElapsedMs;
+
+        /// <summary>Milliseconds this clock has been advanced by the test.</summary>
+        public long ElapsedMs { get; private set; }
+    }
+
     private static string PaintStatusRow(int cols, StatusBarMode mode)
     {
         var composer = new ComposerController();
@@ -98,36 +125,44 @@ public class StatusPanelMascotTests
     [Test]
     public async Task ErroredPhase_Latch_IsTimeBased_HoldsAcrossFastFrames()
     {
+        var clock = new ManualTimeProvider();
         var composer = new ComposerController();
         var status = new StatusViewModel { Model = "m", Mode = StatusBarMode.Idle, Phase = AgentPhase.Errored };
-        var screen = ChatScreen.Build(composer, status, includeSidebar: false);
+        var screen = ChatScreen.Build(composer, status, includeSidebar: false, timeProvider: clock);
         var buffer = new ScreenBuffer(120, 8);
         screen.Tree.Solve(120, 8);
 
         string first = PaintLastFrame(screen, buffer, 1);
         await Assert.That(first).Contains(AmbientMascot.ErrorFrames[1]);
 
-        // Wall-clock latch (#170): 150 rapid paints take milliseconds, far
-        // below the ~12 s latch — the dead face holds. Time expiry itself is
-        // covered by MascotReviveTests with an injected millisecond latch.
-        string fast = PaintLastFrame(screen, buffer, MascotDirector.MoodLatchFrames);
-        await Assert.That(fast).Contains(AmbientMascot.ErrorFrames[(1 + MascotDirector.MoodLatchFrames) % AmbientMascot.ErrorFrames.Length]);
+        // Frozen clock (#1026): 250 paints run 100 frames past the old
+        // 150-frame budget with zero milliseconds elapsed, so a time latch
+        // (#170) must still hold. The old comment's race — "150 rapid paints
+        // take milliseconds, far below the ~12 s latch" — assumed the runner
+        // wins; now there is nothing to win, and a frame-keyed latch fails
+        // exactly here.
+        string fast = PaintLastFrame(screen, buffer, FramesPastBudget);
+        await Assert.That(fast).Contains(AmbientMascot.ErrorFrames[(1 + FramesPastBudget) % AmbientMascot.ErrorFrames.Length]);
     }
 
     [Test]
     public async Task SucceededPhase_Latch_IsTimeBased_HoldsAcrossFastFrames()
     {
+        var clock = new ManualTimeProvider();
         var composer = new ComposerController();
         var status = new StatusViewModel { Model = "m", Mode = StatusBarMode.Idle, Phase = AgentPhase.Succeeded };
-        var screen = ChatScreen.Build(composer, status, includeSidebar: false);
+        var screen = ChatScreen.Build(composer, status, includeSidebar: false, timeProvider: clock);
         var buffer = new ScreenBuffer(120, 8);
         screen.Tree.Solve(120, 8);
 
         string first = PaintLastFrame(screen, buffer, 1);
         await Assert.That(first).Contains(AmbientMascot.SuccessFrames[1]);
 
-        string fast = PaintLastFrame(screen, buffer, MascotDirector.MoodLatchFrames);
-        await Assert.That(fast).Contains(AmbientMascot.SuccessFrames[(1 + MascotDirector.MoodLatchFrames) % AmbientMascot.SuccessFrames.Length]);
+        // Frozen clock (#1026): same 250-frames-past-budget hold as the
+        // errored phase above — the success latch is the same wall-clock
+        // mechanism, and a frame-keyed latch fails exactly here.
+        string fast = PaintLastFrame(screen, buffer, FramesPastBudget);
+        await Assert.That(fast).Contains(AmbientMascot.SuccessFrames[(1 + FramesPastBudget) % AmbientMascot.SuccessFrames.Length]);
     }
 
     /// <summary>Paints all panels <paramref name="frames" /> times, returning the concatenated art.</summary>
