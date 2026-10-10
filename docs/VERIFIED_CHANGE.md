@@ -33,7 +33,7 @@ completed transition. Nothing is faked past `Isolated`.
 | S2 | worktree + manifest | landed |
 | S3 | frozen change set | open (#377) |
 | S4 | checks | open (#378) |
-| S5 | verification report | open (#379) |
+| S5 | verification report | in progress (#379, slice 1: pure renderer, no verb yet) |
 | S6 | accept | open (#382) |
 | S7 | reject | slice 1 (#385): verb + `--all-effects` (exit 5); `--patch`/`--worktree`/`--undo-apply` pending |
 | S8 | owner report | open (#392) |
@@ -53,7 +53,9 @@ Later slices add their artifacts beside the manifest (`change.patch`,
 `changeset.json`, `checks.json`, `report.json`, `owner-report.md`,
 `accept.log`). The manifest is written atomically (temp + rename), so a
 killed process leaves either the previous state or the new one, never a
-half-written file.
+half-written file. `report.json` is rendered by slice S5-1
+(`src/Harbor.Application/Sessions/ChangeReport.cs`) from the frozen set
+and the recorded checks; see Report format below.
 
 ## State machine
 
@@ -90,8 +92,48 @@ names the stage:
 without creating a worktree. A failed pre-flight never leaves a worktree
 registered.
 
-## Reject modes (S7)
+## Report format (S5 slice 1)
 
+Slice 1 is the pure renderer: `ChangeReport.Create` takes the frozen set
+(S3) and the recorded checks (S4) as hand-built inputs and derives the
+rest. No disk reads, no git, no new lifecycle state.
+
+Six blocks, always in this order, never omitted — an empty block prints
+`(none)`:
+
+```text
+== Run (3) ==
+== Changed (N) ==
+== Verified (N) ==
+== NotVerified (N) ==
+== Limits (2) ==
+== KnownRisks (N) ==
+```
+
+- `Verified` cites, per check: name, full command line, exit code, the
+  revision it ran on, and the effective env keys. A check with no recorded
+  revision never appears here.
+- `NotVerified` is derived, never authored: non-zero / timed-out /
+  spawn-failed / cancelled checks, revision mismatches, the explicit
+  `no checks declared` case, ignored-path exclusions, and the constant
+  `external side effects: not observable`.
+- `KnownRisks` is non-empty whenever ignored paths were dropped, the change
+  set is empty, the worktree holds state not in the frozen set, or a check
+  timed out — otherwise explicitly `[]`.
+- Deterministic: sorted entries, fixed JSON key order, no clock reads — the
+  same artifacts produce byte-identical `report.json`.
+- Plain text fits 80 columns and contains no ANSI escapes.
+- Exit codes: `0` all declared checks passed (zero declared checks is legal
+  and exits `0` with the explicit entry), `1` at least one check failed,
+  timed out, or never ran, `2` the report cannot be produced (reserved for
+  the future `harbor run report` verb: missing or corrupt artifact).
+
+Deferred to later slices: the `harbor run report <RunId>` verb reading
+`changeset.json` / `checks.json` from the run directory (needs S3/S4
+formats to land first), and the release-then-reread byte-identity test
+(needs the S3 release path).
+
+## Reject modes (S7)
 Rejection is three separately invocable operations, never one blurred action:
 
 ```bash
