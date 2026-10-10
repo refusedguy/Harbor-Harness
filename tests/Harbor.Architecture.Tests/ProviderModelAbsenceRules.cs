@@ -59,6 +59,22 @@
 // believed. `Matcher_...` below runs the SAME matcher against synthetic
 // positive and negative controls, and `CallerRule_ReachesBothConsumerFiles`
 // requires discovery to locate both files it is supposed to police.
+//
+// MECHANISM (#1086, step 2, conveyor)
+// -----------------------------------
+// Rule 2 below is a ScanRule: one banned shape over the three named consumer
+// files, twelve planted controls, a discovery floor of three with all three
+// files named. Enumeration, stripping, matching and the control/discovery
+// verdicts are ScanRunner's; this file keeps the issue prose and the test
+// names. Rule 1 is reflection over the compiled type — not a source scan — and
+// stays exactly as it was.
+//
+// The predicate moves as-is (the same HalfPairProbe over comment-stripped
+// lines). The old scanner skipped comment-only lines without full stripping;
+// the engine strips comments first, which can only remove hits, never add
+// them — and every control below grades identically under both, including the
+// trailing-comment line that must still fire and the comment lines that must
+// stay silent.
 
 using System.Text.RegularExpressions;
 using CSharpFunctionalExtensions;
@@ -75,6 +91,8 @@ namespace Harbor.Architecture.Tests;
 /// </summary>
 public sealed class ProviderModelAbsenceRules
 {
+    private const string SubId = "HALF-PAIR-PROBE";
+
     /// <summary>
     ///     The files that consume the resolved pair. A half-populated pair used to
     ///     mean "discard everything" in both of them, spelled once with
@@ -97,6 +115,9 @@ public sealed class ProviderModelAbsenceRules
         "apps/Harbor.App.Avalonia/Services/CommonConfigReaderAdapter.cs", // #453: the producer
     ];
 
+    /// <summary>#453: the producer, named so the scan-liveness test can point at it.</summary>
+    private const string ProducerFile = "apps/Harbor.App.Avalonia/Services/CommonConfigReaderAdapter.cs";
+
     /// <summary>
     ///     "Is this pair usable?" spelled as a two-element emptiness probe: an
     ///     emptiness test on a provider-or-model-named value, joined by
@@ -116,16 +137,49 @@ public sealed class ProviderModelAbsenceRules
     // forbid reads `IsNullOrEmpty(cfg.DefaultProvider)` — dotted — so the pattern
     // was blind to it, and the file that carried it was not on the scan list
     // either. Two independent reasons the pre-fix seam passed; the scan list is
-    // fixed above and the pattern here. `Matcher_...` below now plants the real
-    // dotted spelling so neither gap can reopen silently.
+    // fixed above and the pattern here.
     private static readonly Regex HalfPairProbe = new(
         """
         string\.IsNullOr(?:Empty|WhiteSpace)\s*\(\s*[\w.]*\w*(?:[Pp]rovider|[Mm]odel)\w*\s*\)\s*(?:&&|\|\|)\s*(?:!\s*)?string\.IsNullOr(?:Empty|WhiteSpace)\s*\(\s*[\w.]*\w*(?:[Pp]rovider|[Mm]odel)\w*\s*\)
         """,
         RegexOptions.Compiled);
 
-    /// <summary>A file, a 1-based line number, and the offending line.</summary>
-    private sealed record ProbeSite(string RelativePath, int Line, string Text);
+    /// <summary>The caller rule as data: one banned shape, three named files, twelve controls.</summary>
+    private static readonly ScanRule CallerRule = new()
+    {
+        Id = "ProviderModelAbsence.Callers",
+        Trees = ["src", "apps"],
+        InScope = static p => ConsumerFiles.Contains(p, StringComparer.Ordinal),
+        Forbidden =
+        [
+            new ScanForbidden(
+                SubId,
+                HalfPairProbe,
+                "ask the value instead (`is { } reference` / `HasNoValue`); the halves of a "
+                + "ModelRef cannot come apart."),
+        ],
+        Controls =
+        [
+            // The two real pre-fix spellings, in both operand orders, plus the
+            // emptiness-predicate and dotted variants.
+            new ScanControl("Spelling/And.cs", "if (!string.IsNullOrEmpty(providerId) && !string.IsNullOrEmpty(modelId))", SubId),
+            new ScanControl("Spelling/Or.cs", "if (string.IsNullOrEmpty(providerId) || string.IsNullOrEmpty(modelId))", SubId),
+            new ScanControl("Spelling/Order.cs", "if (string.IsNullOrEmpty(model) || string.IsNullOrEmpty(provider))", SubId),
+            new ScanControl("Spelling/WhiteSpace.cs", "if (string.IsNullOrWhiteSpace(modelId) && string.IsNullOrWhiteSpace(providerId))", SubId),
+            new ScanControl("Spelling/Dotted.cs", "if (string.IsNullOrEmpty(cfg.DefaultProvider) || string.IsNullOrEmpty(cfg.DefaultModel))", SubId),
+            new ScanControl("Spelling/Negated.cs", "if (string.IsNullOrEmpty(providerId) && !string.IsNullOrEmpty(modelId))", SubId),
+            // A code line with a trailing comment is still a code line.
+            new ScanControl("Spelling/Trailing.cs", "if (!string.IsNullOrEmpty(providerId) && !string.IsNullOrEmpty(modelId)) // trailing", SubId),
+            // The post-fix spelling, and near-misses that are somebody else's problem.
+            new ScanControl("Legal/Whole.cs", "if (configured is { } fromConfig)", null),
+            new ScanControl("Legal/Lone.cs", "if (string.IsNullOrEmpty(providerId)) return;", null),
+            new ScanControl("Legal/Unrelated.cs", "if (string.IsNullOrEmpty(name) || string.IsNullOrEmpty(title))", null),
+            new ScanControl("Legal/Comment.cs", "// if (!string.IsNullOrEmpty(providerId) && !string.IsNullOrEmpty(modelId))", null),
+            new ScanControl("Legal/Doc.cs", "/// <c>string.IsNullOrEmpty(p) || string.IsNullOrEmpty(m)</c> in the docs.", null),
+        ],
+        MinHits = 3,
+        MustContain = [.. ConsumerFiles],
+    };
 
     // ── Rule 1: shape ────────────────────────────────────────────────────────
 
@@ -171,14 +225,13 @@ public sealed class ProviderModelAbsenceRules
     [Test]
     public async Task Callers_DoNotReDerivePairUsability()
     {
-        string root = RequireRepoRoot();
-        List<ProbeSite> probes = [.. ConsumerFiles.SelectMany(f => FindProbes(root, f))];
+        List<string> probes = ScanRunner.Evaluate(CallerRule);
 
-        await Assert.That(probes.Count).IsEqualTo(0)
+        await Assert.That(probes).IsEmpty()
             .Because(
                 "a caller must not decide 'is this pair usable?' by testing the two halves "
                 + "against each other — that is the rule #598 removed, and the two spellings "
-                + "already disagreed with each other: " + Describe(probes)
+                + "already disagreed with each other: " + string.Join(", ", probes)
                 + ". Ask the value instead (`is { } reference` / `HasNoValue`); the halves of a "
                 + "ModelRef cannot come apart. See issue #598.");
     }
@@ -188,171 +241,95 @@ public sealed class ProviderModelAbsenceRules
     [Test]
     public async Task CallerRule_ReachesEveryFileItClaimsToPolice()
     {
-        string root = RequireRepoRoot();
-        var missing = new List<string>();
+        List<string> discovery = ScanRunner.CheckDiscovery(CallerRule);
 
-        foreach (string file in ConsumerFiles)
-        {
-            if (!File.Exists(Path.Combine(root, file)))
-            {
-                missing.Add(file);
-            }
-        }
-
-        await Assert.That(missing).IsEmpty()
+        await Assert.That(discovery).IsEmpty()
             .Because(
                 "the scan is rooted at named files; if one was renamed or moved the rule above "
-                + "silently polices nothing. Point these at the new homes: " + string.Join(", ", missing)
-                + ". #453 is the proof that this check earns its place: the producer was missing from "
-                + "the list, so the rule passed over a file that still held the derivation.");
+                + "silently polices nothing. Point the scope at the new homes. "
+                + "#453 is the proof that this check earns its place: the producer was missing from "
+                + "the list, so the rule passed over a file that still held the derivation. "
+                + string.Join("; ", discovery));
     }
 
     /// <summary>
     ///     #453: the producer is genuinely scanned, which is the fact the fix
     ///     depends on. A "the file is listed" assertion would be satisfied by a
-    ///     path that is listed and then excluded, so this plants the exact line
-    ///     the pre-fix adapter carried and requires the SAME scanner to catch it.
+    ///     path that is listed and then excluded, so the planted dotted spelling —
+    ///     the exact line the pre-fix adapter carried — is required to fire through
+    ///     the SAME rule.
     /// </summary>
     [Test]
     public async Task CallerRule_ScansTheProducer_AndTheProbeWouldFireThere()
     {
-        string root = RequireRepoRoot();
-        const string producer = "apps/Harbor.App.Avalonia/Services/CommonConfigReaderAdapter.cs";
-
         // The real file, today: no probe, because the qualification moved to
         // ModelRef.Qualify. This is the assertion that the fix landed.
-        await Assert.That(FindProbes(root, producer).Count).IsEqualTo(0)
+        List<string> live = ScanRunner.EvaluateOver(
+            ScanRunner.ReadSources([ProducerFile]), CallerRule);
+
+        await Assert.That(live).IsEmpty()
             .Because(
                 "the adapter is where the half-pair test used to live; it must no longer decide "
-                + "whether a provider/model pair is whole. ModelRef.Qualify is the single answer.");
+                + "whether a provider/model pair is whole. ModelRef.Qualify is the single answer. "
+                + string.Join(", ", live));
 
-        // And the scanner is live on that file, proven by planting the exact
-        // pre-fix spelling. If the path were silently skipped this would read 0
-        // and the assertion above would be free.
-        List<ProbeSite> planted = FindProbes(root, producer)
-            .Concat(Scan(["if (string.IsNullOrEmpty(cfg.DefaultProvider) || string.IsNullOrEmpty(cfg.DefaultModel))"])
-                .Select(i => new ProbeSite(producer, i + 1, "(planted control)")))
-            .ToList();
+        // And the rule is live on that file, proven by the planted dotted control:
+        // if the path were silently skipped this would read 0 and the assertion
+        // above would be free.
+        List<string> failures = ScanRunner.CheckControls(CallerRule);
 
-        await Assert.That(planted.Count).IsGreaterThan(0)
+        await Assert.That(failures).IsEmpty()
             .Because(
                 "the matcher must still fire on the pre-fix adapter line, or the assertion above "
-                + "cannot distinguish 'the derivation is gone' from 'the producer is not scanned'.");
+                + "cannot distinguish 'the derivation is gone' from 'the producer is not scanned'. "
+                + string.Join("; ", failures));
     }
 
     [Test]
     public async Task Matcher_FiresOnTheKnownSpellings_AndStaysSilentOtherwise()
     {
-        // The two real pre-fix spellings, in both operand orders.
-        await Assert.That(Scan(["if (!string.IsNullOrEmpty(providerId) && !string.IsNullOrEmpty(modelId))"]).Count)
-            .IsGreaterThan(0)
-            .Because("the && spelling is CreateDefaultAsync's; the matcher must see it");
-        await Assert.That(Scan(["if (string.IsNullOrEmpty(providerId) || string.IsNullOrEmpty(modelId))"]).Count)
-            .IsGreaterThan(0)
-            .Because("the || spelling is RebindFromCommonConfigAsync's; the matcher must see it");
-        await Assert.That(Scan(["if (string.IsNullOrEmpty(model) || string.IsNullOrEmpty(provider))"]).Count)
-            .IsGreaterThan(0)
-            .Because("operand order is an implementation detail, not a distinction the rule draws");
-        await Assert.That(Scan(["if (string.IsNullOrWhiteSpace(modelId) && string.IsNullOrWhiteSpace(providerId))"]).Count)
-            .IsGreaterThan(0)
-            .Because("the same rule with the other emptiness predicate is still this rule");
+        // The real pre-fix spellings must fire and the legal neighbours must stay
+        // silent. The snippets live on CallerRule.Controls, so the control drives
+        // the REAL matcher rather than a second implementation of it — including
+        // the QUALIFIED spelling, verbatim as the adapter wrote it, which the
+        // pre-#453 pattern could not match across a dot.
+        List<string> failures = ScanRunner.CheckControls(CallerRule);
 
-        // #453: the QUALIFIED spelling, verbatim as the adapter wrote it. The
-        // pre-#453 pattern was `\w*[Pp]rovider\w*`, which cannot match across a
-        // dot — so this line, the very one the rule exists to forbid, was
-        // invisible to it. If the pattern is ever narrowed back, this fails.
-        await Assert.That(Scan(["if (string.IsNullOrEmpty(cfg.DefaultProvider) || string.IsNullOrEmpty(cfg.DefaultModel))"]).Count)
-            .IsGreaterThan(0)
+        await Assert.That(failures).IsEmpty()
             .Because(
-                "this is CommonConfigReaderAdapter:48 as it stood — dotted member access, which the "
-                + "original pattern could not match. A guard that cannot see the spelling that "
-                + "actually exists is not a guard; the pattern now accepts a qualified name, and "
-                + "this control is what holds it to that");
-
-        // The post-fix spelling, and near-misses that are somebody else's problem.
-        await Assert.That(Scan(["if (configured is { } fromConfig)"]).Count).IsEqualTo(0)
-            .Because("a test on the whole value is the fix, not a violation");
-        await Assert.That(Scan(["if (string.IsNullOrEmpty(providerId) && !string.IsNullOrEmpty(modelId))"]).Count)
-            .IsGreaterThan(0)
-            .Because("a provider half tested against a model half is this rule whichever way it is negated");
-        await Assert.That(Scan(["if (string.IsNullOrEmpty(providerId)) return;"]).Count).IsEqualTo(0)
-            .Because("a lone per-field guard is a different question and stays legal; the rule needs the operator");
-        await Assert.That(Scan(["if (string.IsNullOrEmpty(name) || string.IsNullOrEmpty(title))"]).Count)
-            .IsEqualTo(0)
-            .Because("two unrelated optional strings are not a provider/model pair");
-        await Assert.That(Scan(["// if (!string.IsNullOrEmpty(providerId) && !string.IsNullOrEmpty(modelId))"]).Count)
-            .IsEqualTo(0)
-            .Because("comment lines are prose about the old code, not a live probe");
-        await Assert.That(Scan(["/// <c>string.IsNullOrEmpty(p) || string.IsNullOrEmpty(m)</c> in the docs."]).Count)
-            .IsEqualTo(0)
-            .Because("doc-comment lines are prose too");
-        await Assert.That(Scan(["    if (!string.IsNullOrEmpty(providerId) && !string.IsNullOrEmpty(modelId)) // trailing"]).Count)
-            .IsGreaterThan(0)
-            .Because("a code line with a trailing comment is still a code line");
-    }
-
-    // ── Helpers ──────────────────────────────────────────────────────────────
-
-    private static string RequireRepoRoot()
-    {
-        string? root = RepoPaths.RepoRoot;
-        return root ?? throw new InvalidOperationException(
-            "Harbor.slnx not found above " + AppContext.BaseDirectory
-            + " — this guard walks the repository and cannot run from a published test host.");
-    }
-
-    private static string Describe(IReadOnlyList<ProbeSite> sites)
-        => sites.Count == 0 ? "(none)" : string.Join(", ", sites.Select(s => s.RelativePath + ":" + s.Line));
-
-    private static List<ProbeSite> FindProbes(string root, string relativePath)
-    {
-        string[] lines;
-        try
-        {
-            lines = File.ReadAllLines(Path.Combine(root, relativePath));
-        }
-        catch (IOException)
-        {
-            return [];
-        }
-
-        return
-        [
-            .. Scan(lines)
-                .Select(index => new ProbeSite(relativePath, index + 1, lines[index].Trim()))
-        ];
+                "the && and || spellings, both operand orders, the WhiteSpace variant, the dotted "
+                + "member access and the trailing-comment line must all fire; the whole-value test, "
+                + "the lone per-field guard, the unrelated strings and the comment lines must stay "
+                + "silent. A guard that cannot see the spelling that actually exists is not a guard. "
+                + string.Join("; ", failures));
     }
 
     /// <summary>
-    ///     0-based line numbers holding a half-pair probe. Comment-only lines are
-    ///     skipped — the same line-level heuristic the sibling #678 guard uses, and
-    ///     with the same bound: a probe split across a line break is missed, which
-    ///     is why rule 1 (reflection) carries the load and rule 2 only narrows it.
+    ///     Every baseline row states why it is tolerated, in the row itself. Vacuous
+    ///     while the table is empty, and deliberately so: it is wired from the first
+    ///     row so the first row cannot skip the argument.
     /// </summary>
-    private static IReadOnlyList<int> Scan(IReadOnlyList<string> lines)
+    [Test]
+    public async Task Baseline_Rows_AllHaveReasons()
     {
-        var hits = new List<int>();
-        for (int i = 0; i < lines.Count; i++)
-        {
-            if (IsCommentLine(lines[i]))
-            {
-                continue;
-            }
+        List<string> failures = ScanRunner.CheckReasons(CallerRule);
 
-            if (HalfPairProbe.IsMatch(lines[i]))
-            {
-                hits.Add(i);
-            }
-        }
-
-        return hits;
+        await Assert.That(failures).IsEmpty().Because(string.Join("\n", failures));
     }
 
-    private static bool IsCommentLine(string line)
+    /// <summary>
+    ///     Every baseline row must still correspond to a real hit, so the table
+    ///     cannot rot into a blanket permission: fix the code without deleting the
+    ///     row and this fails.
+    /// </summary>
+    [Test]
+    public async Task Baseline_Rows_Are_Not_Stale()
     {
-        string trimmed = line.TrimStart();
-        return trimmed.StartsWith("//", StringComparison.Ordinal)
-               || trimmed.StartsWith("/*", StringComparison.Ordinal)
-               || trimmed.StartsWith('*');
+        List<string> stale = ScanRunner.StaleBaselineKeys(
+            CallerRule, ScanRunner.ReadSources(ScanRunner.ScopeFiles(CallerRule)));
+
+        await Assert.That(stale).IsEmpty()
+            .Because("a baseline row with no violation behind it is a permission for a "
+                + "problem that no longer exists: " + string.Join(", ", stale));
     }
 }
