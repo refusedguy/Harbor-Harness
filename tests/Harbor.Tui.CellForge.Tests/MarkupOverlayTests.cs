@@ -15,7 +15,7 @@ namespace Harbor.Tui.CellForge.Tests;
 public class MarkupOverlayTests
 {
     private static MarkupOverlayState OpenState() =>
-        MarkupOverlayState.Open("/shots/broken.png", "broken.png", 800, 600, ScrollOffset: 0);
+        MarkupOverlayState.Open("/shots/broken.png", "broken.png", 800, 600, scrollOffset: 0);
 
     private static MarkupOverlay Shown(MarkupOverlayState snapshot)
     {
