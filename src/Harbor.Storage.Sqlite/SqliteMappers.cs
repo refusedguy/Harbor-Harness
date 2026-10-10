@@ -159,6 +159,14 @@ internal static class SqliteMappers
         var updatedAt = DateTimeOffset.Parse(reader.GetString(reader.GetOrdinal("updated_at")));
         string metaJson = reader.GetString(reader.GetOrdinal("metadata"));
         var meta = JsonSerializer.Deserialize<SessionMetadata>(metaJson, JsonOptions) ?? SessionMetadata.Empty;
+        // #1107: header parity with JsonlSessionStore — Status/Kind/
+        // ParentSessionId round-trip through UpdateAsync. Every read funnels
+        // through EnsureInitialized (which runs MigrateSessionsIfNeeded), so
+        // the columns exist; the Ordinal probes below only guard a reader
+        // over a table this build did not create (e.g. a hand-built fixture).
+        int statusOrd = TryOrdinal(reader, "status");
+        int kindOrd = TryOrdinal(reader, "kind");
+        int parentOrd = TryOrdinal(reader, "parent_session_id");
 
         return new Session(
             id,
@@ -170,7 +178,26 @@ internal static class SqliteMappers
             providerId,
             createdAt,
             updatedAt,
-            meta);
+            meta,
+            ParentSessionId: parentOrd < 0 || reader.IsDBNull(parentOrd) ? null : reader.GetString(parentOrd),
+            Status: statusOrd < 0 || reader.IsDBNull(statusOrd) ? SessionStatus.Idle : (SessionStatus)reader.GetInt64(statusOrd),
+            Kind: kindOrd < 0 || reader.IsDBNull(kindOrd) ? SessionKind.User : (SessionKind)reader.GetInt64(kindOrd));
+    }
+
+    /// <summary>
+    ///     Ordinal probe that answers -1 instead of throwing when the column
+    ///     is absent (#1107: pre-migration tables have no status/kind/
+    ///     parent_session_id).
+    /// </summary>
+    private static int TryOrdinal(DbDataReader reader, string column)
+    {
+        for (int i = 0; i < reader.FieldCount; i++)
+        {
+            if (string.Equals(reader.GetName(i), column, StringComparison.OrdinalIgnoreCase))
+                return i;
+        }
+
+        return -1;
     }
 
     internal sealed class ContentPartJsonConverter : JsonConverter<ContentPart>

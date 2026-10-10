@@ -65,8 +65,8 @@ public sealed class SqliteSessionStore : ISessionStore
                 using var conn = OpenConnection();
                 using var cmd = conn.CreateCommand();
                 cmd.CommandText = """
-                                  INSERT INTO sessions (id, project_id, directory, title, agent, model, provider_id, version, created_at, updated_at, metadata)
-                                  VALUES (@id, @pid, @dir, @title, @agent, @model, @provider, @ver, @created, @updated, @meta)
+                                  INSERT INTO sessions (id, project_id, directory, title, agent, model, provider_id, version, created_at, updated_at, metadata, status, kind, parent_session_id)
+                                  VALUES (@id, @pid, @dir, @title, @agent, @model, @provider, @ver, @created, @updated, @meta, @status, @kind, @parent)
                                   """;
                 cmd.Parameters.AddWithValue("@id", session.Id);
                 cmd.Parameters.AddWithValue("@pid", session.ProjectId);
@@ -79,6 +79,9 @@ public sealed class SqliteSessionStore : ISessionStore
                 cmd.Parameters.AddWithValue("@created", session.CreatedAt.ToString("O"));
                 cmd.Parameters.AddWithValue("@updated", session.UpdatedAt.ToString("O"));
                 cmd.Parameters.AddWithValue("@meta", JsonSerializer.Serialize(session.Metadata, SqliteMappers.SessionMetadataInfo));
+                cmd.Parameters.AddWithValue("@status", (int)session.Status);
+                cmd.Parameters.AddWithValue("@kind", (int)session.Kind);
+                cmd.Parameters.AddWithValue("@parent", (object?)session.ParentSessionId ?? DBNull.Value);
                 cmd.ExecuteNonQuery();
 
                 return session;
@@ -457,11 +460,17 @@ public sealed class SqliteSessionStore : ISessionStore
                     cmd.CommandText = """
                                       UPDATE sessions SET 
                                           title = @title, 
+                                          status = @status,
+                                          kind = @kind,
+                                          parent_session_id = @parent,
                                           updated_at = @updated 
                                       WHERE id = @id
                                       """;
                     cmd.Parameters.AddWithValue("@id", session.Id);
                     cmd.Parameters.AddWithValue("@title", session.Title);
+                    cmd.Parameters.AddWithValue("@status", (int)session.Status);
+                    cmd.Parameters.AddWithValue("@kind", (int)session.Kind);
+                    cmd.Parameters.AddWithValue("@parent", (object?)session.ParentSessionId ?? DBNull.Value);
                     cmd.Parameters.AddWithValue("@updated", DateTimeOffset.UtcNow.ToString("O"));
                     return cmd.ExecuteNonQuery();
                 }, ResultErrors.Message)
@@ -478,8 +487,9 @@ public sealed class SqliteSessionStore : ISessionStore
 
     /// <summary>
     ///     One-time lazy initialization: create the directory, apply the schema,
-    ///     and migrate pre-#85 databases (global message PK, missing integer
-    ///     ordering stamp). The constructor performs no I/O; every public
+    ///     migrate pre-#85 databases (global message PK, missing integer
+    ///     ordering stamp) and pre-#1107 databases (missing status/kind/
+    ///     parent_session_id columns). The constructor performs no I/O; every public
     ///     method funnels through here first, so init failures travel the
     ///     Result channel instead of throwing from the ctor.
     /// </summary>
@@ -499,6 +509,7 @@ public sealed class SqliteSessionStore : ISessionStore
             cmd.CommandText = SqliteSchema.Schema;
             cmd.ExecuteNonQuery();
 
+            SqliteSchema.MigrateSessionsIfNeeded(conn);
             SqliteSchema.MigrateMessagesIfNeeded(conn);
 
             _initialized = true;
