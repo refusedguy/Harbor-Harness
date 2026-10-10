@@ -94,11 +94,16 @@ public sealed class TreeTool : ITool
     public Task<ToolResult> ExecuteAsync(
         JsonElement args,
         ToolContext context,
-        CancellationToken cancellationToken = default) => Task.Run(() => ExecuteCore(args, cancellationToken), cancellationToken);
+        CancellationToken cancellationToken = default) => Task.Run(() => ExecuteCore(args, context, cancellationToken), cancellationToken);
 
-    private ToolResult ExecuteCore(JsonElement args, CancellationToken ct)
+    private ToolResult ExecuteCore(JsonElement args, ToolContext context, CancellationToken ct)
     {
-        string path = JsonArgs.GetString(args, "path") ?? Environment.CurrentDirectory;
+        // S2 (#376): the default root and relative resolution anchor at the
+        // context working directory (the isolated worktree for sub-agent runs).
+        string baseDir = !string.IsNullOrWhiteSpace(context.WorkingDirectory)
+            ? context.WorkingDirectory!
+            : Environment.CurrentDirectory;
+        string path = JsonArgs.GetString(args, "path") ?? baseDir;
         int maxDepth = JsonArgs.GetInt(args, "maxDepth") is { } depth
             ? Math.Clamp(depth, 1, HardMaxDepth)
             : DefaultMaxDepth;
@@ -108,7 +113,7 @@ public sealed class TreeTool : ITool
             ? Math.Clamp(entries, 1, HardMaxEntries)
             : DefaultMaxEntries;
 
-        var resolvedPath = ToolPaths.Resolve(path);
+        var resolvedPath = ToolPaths.ResolveAgainst(baseDir, path);
         if (resolvedPath.IsFailure)
             return ToolResult.Error(resolvedPath.Error);
         path = resolvedPath.Value;

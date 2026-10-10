@@ -1,3 +1,4 @@
+using System.Text;
 using Harbor.Application.Agents.Pipeline;
 using Harbor.Application.Resilience;
 using Harbor.Application.Sessions;
@@ -108,7 +109,8 @@ internal sealed class TurnRunner(
         ModelInfo model,
         int turn,
         bool truncationFallback,
-        CancellationToken ct)
+        CancellationToken ct,
+        RunBudgetTracker? budget = null)
     {
         logger.LogDebug("Turn {Turn} start: agent={Agent} model={Model}", turn, agent.Name.Value, agent.Model);
         await eventBus.PublishAsync(new TurnStartEvent(turn, session.Session.Id), ct).ConfigureAwait(false);
@@ -186,7 +188,7 @@ internal sealed class TurnRunner(
         try
         {
             streamed = await retryPolicy.ExecuteAsync(
-                attemptCt => ConsumeTurnStreamAsync(client, request, session, model, turn, attemptCt, reportPartial: m => lastPartial = m),
+                attemptCt => ConsumeTurnStreamAsync(client, request, session, model, turn, attemptCt, reportPartial: m => lastPartial = m, budget: budget),
                 StreamRetryOptions,
                 (ex, attempt) => logger.LogWarning(
                     ex, "Transient LLM stream failure on attempt {Attempt}; retrying", attempt),
@@ -242,6 +244,18 @@ internal sealed class TurnRunner(
             await session.UpdateStatsAsync(finalUsage, model.Pricing, ct).ConfigureAwait(false);
         }
 
+        if (budget is not null)
+        {
+            // #404: fold the turn into the run's budget ledger. Reported
+            // usage prices into the tariff; a turn the provider did not
+            // meter falls back to the heuristic — recorded under
+            // LocalEstimate, never into the billed figure, and computed
+            // only when usage is absent, so a metered turn pays no
+            // estimate cost on top of the usage it already reported.
+            int estimate = finalUsage is null ? tokenTracker.EstimateMessage(partial) : 0;
+            budget.CompleteRequest(finalUsage, model.Pricing, estimate);
+        }
+
         // 7. Turn-end decision. A run ends when the turn produced no
         // tool activity, or the stream was aborted mid-flight (never
         // execute tools for a cancelled run).
@@ -251,6 +265,11 @@ internal sealed class TurnRunner(
             logger.LogDebug("Turn {Turn} end (no tool calls)", turn);
             await eventBus.PublishAsync(
                 new TurnEndEvent(partial, Array.Empty<ToolResultMessage>(), session.Session.Id), ct).ConfigureAwait(false);
+            // #404: a capped text-only turn is a limit stop, not a finish
+            // (the #403 shape on the budget axis). Cancel still wins: an
+            // aborted stream ends as a cancel, never as a cap.
+            if (budget is not null && stopReason != StopReason.Aborted && budget.CheckCap() is { } earlyHit)
+                return new TurnStepResult(truncationFallback, EndRun: true, Limit: earlyHit);
             return new TurnStepResult(truncationFallback, EndRun: true);
         }
 
@@ -291,7 +310,19 @@ internal sealed class TurnRunner(
         // the normal path it is a no-op (B2 drained above).
         await steering.DrainAsync(session, ct).ConfigureAwait(false);
 
-        // 10. Max steps — also honoured after a terminal stop reason.
+        // 10. Budget cap — the spend ceiling at the same safe boundary as
+        // the step ceiling below. Usage arrives AFTER the request that spent
+        // it, so the tripping turn's tools have already run and been
+        // persisted above: that is the modeled overshoot (LateUsage), not a
+        // leak. A spend ceiling outranks a step ceiling — money is the more
+        // specific bound — so this check comes first.
+        if (budget is not null && budget.CheckCap() is { } budgetHit)
+        {
+            logger.LogInformation("Agent hit budget cap ({Limit})", budgetHit);
+            return new TurnStepResult(truncationFallback, EndRun: true, Limit: budgetHit);
+        }
+
+        // 11. Max steps — also honoured after a terminal stop reason.
         if (MaxStepsBehavior.IsExhausted(turn, agent))
         {
             logger.LogInformation("Agent reached max steps ({MaxSteps})", agent.MaxSteps);
@@ -336,7 +367,8 @@ internal sealed class TurnRunner(
         ModelInfo model,
         int turn,
         CancellationToken ct,
-        Action<AssistantMessage>? reportPartial = null)
+        Action<AssistantMessage>? reportPartial = null,
+        RunBudgetTracker? budget = null)
     {
         var partial = AssistantMessage.Empty(session.Session.Id, model.Id);
         logger.LogDebug("Message start: turn={Turn}", turn);
@@ -372,6 +404,7 @@ internal sealed class TurnRunner(
                         partial = FlushThinking(coalescer, partial);
                         coalescer.AppendTextDelta(td.Delta);
                         await PublishUpdateAsync(evt, partial, ct).ConfigureAwait(false);
+                        budget?.RecordOutputBytes(Encoding.UTF8.GetByteCount(td.Delta));
                         break;
 
                     case ThinkingDeltaEvent thd:
@@ -379,6 +412,7 @@ internal sealed class TurnRunner(
                         partial = FlushText(coalescer, partial);
                         coalescer.AppendThinkingDelta(thd.Delta);
                         await PublishUpdateAsync(evt, partial, ct).ConfigureAwait(false);
+                        budget?.RecordOutputBytes(Encoding.UTF8.GetByteCount(thd.Delta));
                         break;
 
                     case ToolCallStartEvent tcs:
@@ -394,6 +428,7 @@ internal sealed class TurnRunner(
                         }
                         coalescer.AppendToolCallDelta(tcd.Id, tcd.ArgsDelta);
                         await PublishUpdateAsync(evt, partial, ct).ConfigureAwait(false);
+                        budget?.RecordOutputBytes(Encoding.UTF8.GetByteCount(tcd.ArgsDelta));
                         break;
 
                     case StepFinishEvent sf:
@@ -427,6 +462,14 @@ internal sealed class TurnRunner(
 
                         throw new LlmStreamErrorException(err);
                 }
+
+                // #404: the output-size cap is enforced on the delta path —
+                // stop pulling the stream instead of buffering the rest of
+                // the response. Token/spend fold in after the stream, so only
+                // the output axis can newly trip here; the post-stream check
+                // reports the limit kind.
+                if (budget is not null && budget.CheckCap() == RunLimitKind.MaxOutputBytes)
+                    break;
             }
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
@@ -548,6 +591,14 @@ internal sealed class TurnRunner(
     ///     each gets an <c>IsError=true</c> result carrying the raw args tail so
     ///     the model can retry with well-formed JSON next turn.
     /// </summary>
+    /// <remarks>
+    ///     #401 B2 (Abandoned visibility): calls that outlived the accepted
+    ///     stop arrive here already marked Abandoned by the dispatcher and are
+    ///     persisted like any other result — that is what makes the abandonment
+    ///     observable from <c>RunOutcome.Reconstruct</c> per-call state instead
+    ///     of a silent success. This method adds no second marking; it counts
+    ///     them for the log so the boundary is visible at runtime too.
+    /// </remarks>
     private async Task<ToolResultMessage> ExecuteTurnToolCallsAsync(
         List<ToolCallPart> toolCalls,
         List<MalformedToolCall> malformedCalls,
@@ -576,6 +627,24 @@ internal sealed class TurnRunner(
                 malformed.ToolName,
                 $"Malformed JSON arguments for tool '{malformed.ToolName}' — tool was NOT executed. Raw arguments tail: {malformed.RawArgsTail}",
                 true));
+        }
+
+        // #401 B2: make the Accepted boundary visible at runtime — Abandoned
+        // entries persist above like any other result; the count lands in the
+        // log next to the dispatcher's own accepted-stop record.
+        int abandoned = 0;
+        for (int i = 0; i < results.Count; i++)
+        {
+            if (results[i].Output.Contains(
+                    ToolCallLink.AbandonedOutputMarker, StringComparison.Ordinal))
+            {
+                abandoned++;
+            }
+        }
+
+        if (abandoned > 0)
+        {
+            logger.LogDebug("Turn carried {Abandoned} abandoned tool call(s) after the accepted stop", abandoned);
         }
 
         return new ToolResultMessage(

@@ -1,0 +1,29 @@
+<Project>
+
+  <!--
+    src/-wide NuGet pack mechanics (#429). A .targets file is imported AFTER
+    the project body, so the Condition on the per-project IsPackable below
+    sees the value the csproj itself declares. (Directory.Build.props is
+    imported BEFORE the project body and cannot condition on it.)
+
+    Per-project csproj files own the reviewable metadata (IsPackable,
+    PackageId, Description, PackageTags). This file owns only mechanics:
+
+    - PackageReadmeFile + the None/Pack item embedding the per-project
+      README.md (every src/ project directory has one;
+      tools/pack-validate.py asserts the README lands in each packable
+      .nupkg). The relative Include matches the SDK default-glob None
+      item, so this only adds Pack metadata — never a duplicate entry.
+
+    Scope is src/ on purpose: samples/* plugin packages and the PackAsTool
+    CLI package keep their own per-project pack shape.
+  -->
+  <PropertyGroup Condition="'$(IsPackable)' == 'true'">
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+  </PropertyGroup>
+
+  <ItemGroup Condition="'$(IsPackable)' == 'true'">
+    <None Include="README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
+
+</Project>

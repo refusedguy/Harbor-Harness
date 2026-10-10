@@ -6,8 +6,7 @@
 // parameter of `SessionFactory`'s constructor, so a host that wires nothing
 // gets an error instead of a second, silent fork. #882 is the follow-up
 // question, and it is a good one: the port is bound in exactly ONE place —
-// `apps/Harbor.App.Avalonia/Hosting/ServiceRegistration.cs:176` — and nothing
-// check-doc-cites: record-drift apps/Harbor.App.Avalonia/Hosting/ServiceRegistration.cs:176 now="// AppHostDiTests.BuildAsync_Registers_MainViewModel reso…" [#947: written over `services.AddSingleton<ISessionForker, Se`; repair deferred to the owner's symbol-rename decision] -->
+// `apps/Harbor.App.Avalonia/Hosting/ServiceRegistration.cs:192` — and nothing
 // says the next host has to bind it too. Only the compiler stands there, and
 // the compiler is standing in the wrong place (see "WHAT THE REQUIRED
 // PARAMETER DOES AND DOES NOT BUY" below).
@@ -508,8 +507,7 @@ public sealed class SessionForkPortSeamRules
                 continue;
             }
 
-            // Comments stripped: ServiceRegistration.cs:173-175 is a four-line comment
-            // check-doc-cites: record-drift ServiceRegistration.cs:173 now="// its `System.IO` implementation in Harbor.Application b…" [#947: written over `// #670: SessionFactory forks through th`; repair deferred to the owner's symbol-rename decision] -->
+            // Comments stripped: ServiceRegistration.cs:189-191 is a three-line comment
             // explaining WHY the adapter exists, and it names both types. A registration scan
             // that reads prose grades the explanation as the registration.
             string clean = string.Join('\n', StrippedLines(text));

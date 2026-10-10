@@ -31,7 +31,7 @@
 //
 //   * `CellForgeLogsPanel.OnKey` handles F12 by dispatching
 //     `AppMsg.TogglePanel("logs")` — and F12 is ALREADY bound globally to
-//     `ChatAction.ToggleLogsPanel` (`ChatKeyMap.cs:81`), which the reducer
+//     `ChatAction.ToggleLogsPanel` (`ChatKeyMap.cs:90`), which the reducer
 //     applies as the same `TogglePanel(state, "logs")` (`AppReducer.cs:445`).
 //     The dead override is a byte-for-byte duplicate of a live hotkey.
 //   * `CellForgeHelpPanel.OnKey` handles '?' the same way, and '?' is already

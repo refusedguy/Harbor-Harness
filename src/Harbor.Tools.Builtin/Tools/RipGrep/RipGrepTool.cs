@@ -90,7 +90,12 @@ public sealed class RipGrepTool : ITool
         }
 
         string pattern = args.GetProperty("pattern").GetString()!;
-        string path = JsonArgs.GetString(args, "path") ?? Environment.CurrentDirectory;
+        // S2 (#376): the default root and relative resolution anchor at the
+        // context working directory (the isolated worktree for sub-agent runs).
+        string baseDir = !string.IsNullOrWhiteSpace(context.WorkingDirectory)
+            ? context.WorkingDirectory!
+            : Environment.CurrentDirectory;
+        string path = JsonArgs.GetString(args, "path") ?? baseDir;
         string? glob = JsonArgs.GetString(args, "glob");
         bool ignoreCase = JsonArgs.GetBool(args, "ignoreCase");
         // §ARCH-007: absent or weird type → default true (regex mode on).
@@ -99,7 +104,7 @@ public sealed class RipGrepTool : ITool
             ? Math.Clamp(results, 1, HardMaxResults)
             : DefaultMaxResults;
 
-        var resolvedPath = ToolPaths.Resolve(path);
+        var resolvedPath = ToolPaths.ResolveAgainst(baseDir, path);
         if (resolvedPath.IsFailure)
             return ToolResult.Error(resolvedPath.Error);
         path = resolvedPath.Value;
@@ -115,7 +120,7 @@ public sealed class RipGrepTool : ITool
             RedirectStandardError = true,
             RedirectStandardInput = false,
             CreateNoWindow = true,
-            WorkingDirectory = Directory.Exists(path) ? path : Environment.CurrentDirectory
+            WorkingDirectory = Directory.Exists(path) ? path : baseDir
         };
 
         // Output format: file:line:content, no colors, no headings.

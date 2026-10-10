@@ -34,7 +34,10 @@ internal static class HelpVerbs
     {
         Console.WriteLine("""
                           Harbor — modular AI coding agent.
-                          Usage: harbor [ask <prompt>|run task agent=<name> <prompt>|demo|setup|auth|config|providers|models|sessions|mcp|serve|tui|events|storage|logs|help|version] [--script <path>]
+                          Usage: harbor [ask <prompt>|run (task agent=<name> <prompt>|change agent=<name> "<task>" [--dry-run]|list)|demo|setup|auth|config|providers|models|sessions|mcp|serve|tui|events|storage|logs|help|version] [--script <path>]
+
+                          run change      Verified-change chain (S9, #397): pin, isolate, then fail-closed.
+                                            Exits: 0 dry-run plan; 2 bad usage; 3 pre-flight conflict; 4 named-stage failure.
 
                           demo [--scene hero|markdown|approval|all] [--tui ansi|plain|cellforge]
                                             Scripted demo with an in-process mock LLM — no API keys.

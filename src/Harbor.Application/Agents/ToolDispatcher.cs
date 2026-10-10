@@ -35,14 +35,18 @@ namespace Harbor.Application.Agents;
 ///         </list>
 ///     </para>
 ///     <para>
-///         <b>Stop boundary (#401):</b> both dispatch loops test
+///         <b>Stop boundary (#401, B2 core):</b> both dispatch loops test
 ///         <c>ct.IsCancellationRequested</c> before starting each call, so once
 ///         a stop is observed no further call in the batch is started. Calls
-///         already running are still awaited (the run token reaches them via
-///         <see cref="ITool.ExecuteAsync" />); calls not yet started become
-///         <c>NotStartedBecauseStopped</c> entries. This is the "accepted
-///         cancellation holds" boundary — it observes the existing token, it
-///         does not introduce a second stop state machine.
+///         not yet started become <c>NotStartedBecauseStopped</c> entries.
+///         Calls already running are awaited up to a bounded grace period
+///         (<see cref="AbandonGraceDefault" />): a call that finishes after
+///         the boundary is marked <b>Abandoned</b> rather than reported as
+///         success, and a call still running when the grace expires is
+///         abandoned the same way — its late fault is observed and logged,
+///         never unobserved. This is the "accepted cancellation holds"
+///         boundary — it observes the existing token, it does not introduce
+///         a second stop state machine.
 ///     </para>
 ///     <para>
 ///         <b>Error handling:</b> validation errors, permission denies, and
@@ -67,10 +71,35 @@ public sealed class ToolDispatcher(
     IApprovalCoordinator? coordinator = null,
     // #43: retry decider (decision only; backoff via RetryPolicy.ComputeDelay).
     // Null keeps legacy no-retry behavior for direct constructions.
-    IToolRetryDecider? retryDecider = null) : IToolDispatcher
+    IToolRetryDecider? retryDecider = null,
+    // #401 B2: bounded grace for in-flight calls after the Accepted boundary.
+    // Null keeps the default below; tests inject milliseconds.
+    TimeSpan? abandonGrace = null,
+    // #401 B2: clock for the grace wait. Null means the system clock, while
+    // tests inject a fake when they need the boundary without wall-clock.
+    TimeProvider? clock = null) : IToolDispatcher
 {
     private static readonly ActivitySource Source = new("Harbor");
     private const string ToolNameTag = "gen_ai.tool.name";
+
+    /// <summary>
+    ///     Named reason for the Accepted boundary (#401 B2): the run token
+    ///     fired, so the stop is accepted and no new work may start. Rides
+    ///     every Abandoned entry's text, so the cause is readable from the
+    ///     persisted result without joining another table.
+    /// </summary>
+    public const string AcceptedStopReason = "accepted-stop";
+
+    /// <summary>
+    ///     Default grace period an in-flight call gets after the Accepted
+    ///     boundary before it is reported Abandoned (#401 B2). Long enough for
+    ///     a cooperative tool to unwind, short enough that a stuck call cannot
+    ///     hold the run hostage.
+    /// </summary>
+    public static readonly TimeSpan AbandonGraceDefault = TimeSpan.FromMilliseconds(250);
+
+    private readonly TimeSpan _abandonGrace = abandonGrace ?? AbandonGraceDefault;
+    private readonly TimeProvider _clock = clock ?? TimeProvider.System;
 
     /// <summary>
     ///     Publish token for the TERMINAL event of a tool call (#401).
@@ -128,8 +157,11 @@ public sealed class ToolDispatcher(
                     continue;
                 }
 
-                var result = await ExecuteSingleAsync(tc, session, partial, agent, ct, toolExecutionTimeout).ConfigureAwait(false);
-                results.Add(result);
+                // #401 B2: the in-flight side of the same boundary — a
+                // sequential call that outlives the stop gets the grace, then
+                // Abandoned, instead of holding the run open indefinitely.
+                Task<ToolResultEntry> pending = ExecuteSingleAsync(tc, session, partial, agent, ct, toolExecutionTimeout);
+                results.Add(await AwaitOneWithAbandonAsync(pending, tc, ct).ConfigureAwait(false));
             }
         }
         else
@@ -156,8 +188,8 @@ public sealed class ToolDispatcher(
                         : ExecuteSingleAsync(toolCalls[i], session, partial, agent, ct, toolExecutionTimeout);
                 }
 
-                var resolved = await Task.WhenAll(
-                    new ArraySegment<Task<ToolResultEntry>>(tasks, 0, toolCalls.Count)).ConfigureAwait(false);
+                var resolved = await AwaitAllWithAbandonAsync(
+                    tasks, toolCalls, toolCalls.Count, ct).ConfigureAwait(false);
                 results.AddRange(resolved);
             }
             finally
@@ -255,6 +287,145 @@ public sealed class ToolDispatcher(
             toolCall.ToolName,
             ToolResult.Error("Tool execution was cancelled before start."));
     }
+
+    /// <summary>
+    ///     Wait for a dispatch to finish, but stop waiting when the run token
+    ///     fires (#401 B2). A completed task returns immediately; otherwise the
+    ///     wait ends at the Accepted boundary and the caller bounds the rest by
+    ///     the grace period. Never throws for cancellation — the boundary is a
+    ///     fact to handle, not an error to propagate.
+    /// </summary>
+    private static async Task WaitForCompletionOrAcceptAsync(Task completed, CancellationToken ct)
+    {
+        if (completed.IsCompleted)
+        {
+            return;
+        }
+
+        try
+        {
+            await completed.WaitAsync(Timeout.InfiniteTimeSpan, ct).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            // The stop was accepted while awaiting: the caller applies grace.
+        }
+    }
+
+    /// <summary>
+    ///     Accepted-boundary wait for one in-flight call (#401 B2). Without a
+    ///     stop this is today's plain await; after the boundary the call gets
+    ///     the grace period, then Abandoned.
+    /// </summary>
+    private async Task<ToolResultEntry> AwaitOneWithAbandonAsync(
+        Task<ToolResultEntry> pending,
+        ToolCallPart toolCall,
+        CancellationToken ct)
+    {
+        await WaitForCompletionOrAcceptAsync(pending, ct).ConfigureAwait(false);
+
+        if (!ct.IsCancellationRequested)
+        {
+            return await pending.ConfigureAwait(false);
+        }
+
+        if (pending.IsCompletedSuccessfully)
+        {
+            // Finished around the boundary: any post-Accepted success was
+            // already converted to Abandoned inside ExecuteWithRetryAsync.
+            return pending.Result;
+        }
+
+        logger.LogInformation(
+            "Stop accepted ({Reason}); awaiting in-flight tool call {CallId} for {GraceMs:0}ms before abandoning",
+            AcceptedStopReason, toolCall.Id, _abandonGrace.TotalMilliseconds);
+        await Task.WhenAny(pending, Task.Delay(_abandonGrace, _clock)).ConfigureAwait(false);
+
+        return pending.IsCompletedSuccessfully
+            ? pending.Result
+            : await AbandonLeftoverAsync(pending, toolCall).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    ///     Accepted-boundary wait for a parallel batch (#401 B2). Without a
+    ///     stop this is today's <c>Task.WhenAll</c>; after the boundary each
+    ///     straggler gets the grace period, then Abandoned — every call is
+    ///     still answered, so the provider wire contract holds.
+    /// </summary>
+    private async Task<ToolResultEntry[]> AwaitAllWithAbandonAsync(
+        Task<ToolResultEntry>[] tasks,
+        IReadOnlyList<ToolCallPart> toolCalls,
+        int count,
+        CancellationToken ct)
+    {
+        Task<ToolResultEntry[]> all = Task.WhenAll(new ArraySegment<Task<ToolResultEntry>>(tasks, 0, count));
+        await WaitForCompletionOrAcceptAsync(all, ct).ConfigureAwait(false);
+
+        if (!ct.IsCancellationRequested)
+        {
+            // No stop: today's behavior — the batch result, or the original
+            // fault when a dispatch truly broke (never Abandoned: no boundary
+            // was crossed).
+            return await all.ConfigureAwait(false);
+        }
+
+        if (all.IsCompletedSuccessfully)
+        {
+            // The stop landed after the last result: per-call Abandoned marking
+            // already happened inside ExecuteWithRetryAsync; carry the batch.
+            return all.Result;
+        }
+
+        logger.LogInformation(
+            "Stop accepted ({Reason}); awaiting {Count} in-flight tool call(s) for {GraceMs:0}ms before abandoning",
+            AcceptedStopReason, count, _abandonGrace.TotalMilliseconds);
+        await Task.WhenAny(all, Task.Delay(_abandonGrace, _clock)).ConfigureAwait(false);
+
+        var resolved = new ToolResultEntry[count];
+        for (int i = 0; i < count; i++)
+        {
+            resolved[i] = tasks[i].IsCompletedSuccessfully
+                ? tasks[i].Result
+                : await AbandonLeftoverAsync(tasks[i], toolCalls[i]).ConfigureAwait(false);
+        }
+
+        return resolved;
+    }
+
+    /// <summary>
+    ///     Report one call still running after the Accepted boundary plus grace
+    ///     (#401 B2): an Abandoned error entry plus its terminal end event (the
+    ///     card must stop spinning). The late task gets a fault observer, so its
+    ///     exception is logged, never unobserved (§FP-003).
+    /// </summary>
+    private async Task<ToolResultEntry> AbandonLeftoverAsync(Task pending, ToolCallPart toolCall)
+    {
+        _ = pending.ContinueWith(
+            t => logger.LogWarning(
+                t.Exception,
+                "Abandoned tool {ToolName} (call {CallId}) faulted after abandonment",
+                toolCall.ToolName, toolCall.Id),
+            CancellationToken.None,
+            TaskContinuationOptions.OnlyOnFaulted,
+            TaskScheduler.Default);
+
+        string output =
+            $"Tool '{toolCall.ToolName}' did not finish within {_abandonGrace.TotalMilliseconds:0}ms of grace " +
+            $"after the accepted stop ({AcceptedStopReason}); call {ToolCallLink.AbandonedOutputMarker}.";
+        var abandoned = ToolResult.Error(output);
+        await eventBus.PublishAsync(new ToolExecutionEndEvent(
+            toolCall.Id, abandoned, true), TerminalEventToken).ConfigureAwait(false);
+        return ToolResultEntry.From(toolCall.Id, toolCall.ToolName, abandoned);
+    }
+
+    /// <summary>
+    ///     Text for a call that finished (against its token) after the stop was
+    ///     accepted (#401 B2). Carries the named reason and the shared marker
+    ///     <see cref="RunOutcome" /> keys <c>Abandoned</c> off.
+    /// </summary>
+    private static string AbandonedAfterFinishMessage(ToolCallPart toolCall) =>
+        $"Tool '{toolCall.ToolName}' finished after the stop was accepted ({AcceptedStopReason}); " +
+        $"call {ToolCallLink.AbandonedOutputMarker}.";
 
     /// <summary>
     ///     Execute a single tool call: validate name → validate args → check
@@ -513,7 +684,11 @@ public sealed class ToolDispatcher(
                 }
 
                 return asked.Value;
-            });
+            },
+            // S2 (#376): tools resolve their cwd from the session directory,
+            // which SubAgentRunner binds to the isolated worktree. Main-session
+            // directories are the user's cwd, so behaviour there is unchanged.
+            session.Session.Directory);
     }
 
     /// <summary>
@@ -562,6 +737,21 @@ public sealed class ToolDispatcher(
                 try
                 {
                     result = await tool.ExecuteAsync(toolCall.Args, ctx, effectiveCt).ConfigureAwait(false);
+                    if (ct.IsCancellationRequested)
+                    {
+                        // #401 B2: the stop was accepted while this call ran and
+                        // the tool ignored its token. Reporting its success would
+                        // read as work done after Stop — mark it Abandoned, with
+                        // the terminal event to match. Reads the RUN token, not
+                        // the per-call deadline: a timeout (A9) is a different
+                        // fact and keeps its own text.
+                        activity?.SetStatus(ActivityStatusCode.Error, ToolCallLink.AbandonedOutputMarker);
+                        var abandonedAfterFinish = ToolResult.Error(AbandonedAfterFinishMessage(toolCall));
+                        await eventBus.PublishAsync(new ToolExecutionEndEvent(
+                            toolCall.Id, abandonedAfterFinish, true), TerminalEventToken).ConfigureAwait(false);
+                        return ToolResultEntry.From(toolCall.Id, toolCall.ToolName, abandonedAfterFinish);
+                    }
+
                     break;
                 }
                 catch (Exception ex) when (retryDecider is not null

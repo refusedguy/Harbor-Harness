@@ -5,6 +5,7 @@
     <OutputType>Exe</OutputType>
     <AssemblyName>harbor-plugins-host</AssemblyName>
     <RootNamespace>Harbor.Plugins.Host</RootNamespace>
+    <!-- Non-packable: OutputType=Exe out-of-process plugin host, deployed as a binary, not a library. (#429) -->
     <IsPackable>false</IsPackable>
     <!--
       This host MUST run as a normal JIT process: it compiles CS-source plugins

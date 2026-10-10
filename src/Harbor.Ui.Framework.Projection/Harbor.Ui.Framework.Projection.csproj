@@ -2,6 +2,7 @@
 
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
+    <!-- Non-packable: intermediate module, ships to NuGet via the Harbor.Ui.Framework meta-package. (#429) -->
     <IsPackable>false</IsPackable>
     <PackageId>Harbor.Ui.Framework.Projection</PackageId>
     <Description>Harbor UI Framework — renderer-agnostic projection of UiState into UiScreenModel.</Description>

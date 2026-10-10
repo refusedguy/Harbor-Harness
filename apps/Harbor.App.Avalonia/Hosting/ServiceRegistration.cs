@@ -99,6 +99,7 @@ internal static class ServiceRegistration
             () => sp.GetService<GitService>(),
             () => sp.GetService<IApprovalCoordinator>(),
             () => sp.GetService<TokenUsageViewModel>()?.Clear()));
+        services.AddSingleton<SessionLifecycleScope>();
         services.AddSingleton<SessionLifecycleService>();
         services.AddSingleton<SessionManager>();
         services.AddSingleton<ISessionManager>(sp => sp.GetRequiredService<SessionManager>());

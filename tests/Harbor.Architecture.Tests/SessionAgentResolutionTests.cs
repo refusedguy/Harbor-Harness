@@ -26,8 +26,7 @@
 //          SessionFactory.ResolveAgentDefinitionAsync ?? the default    ← #683
 //
 // Q2 is the one that was still duplicated, and the remaining copy is not a taste question.
-// #683's own comment, at SessionLifecycleService.cs:189-194, names the straggler:
-// check-doc-cites: record-drift SessionLifecycleService.cs:189 now="}" [#947: written over `// back to "whichever entry the registry`; repair deferred to the owner's symbol-rename decision] -->
+// #683's own comment, at SessionLifecycleService.cs:188-193, names the straggler:
 //
 //   "Falling back to 'whichever entry the registry enumerates first' is what #683 removed
 //    from the sibling path; leaving it here would reopen the same hole one method away."

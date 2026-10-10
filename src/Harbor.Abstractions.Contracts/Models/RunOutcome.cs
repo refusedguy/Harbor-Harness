@@ -42,8 +42,9 @@ public enum RunStopReason
     Stopped,
 
     /// <summary>
-    ///     The run was ended by a limit the user set — the step budget or the
-    ///     wall-clock budget (<see cref="RunLimitKind" />). Not a failure and not a
+    ///     The run was ended by a limit the user set — a bound from
+    ///     <see cref="RunLimitKind" /> (step, wall-clock, token, spend or
+    ///     output-size). Not a failure and not a
     ///     cancellation: nothing malfunctioned, and nobody pressed stop. The work
     ///     is INCOMPLETE, which is what distinguishes this from
     ///     <see cref="Succeeded" /> and why it cannot be folded into
@@ -53,7 +54,7 @@ public enum RunStopReason
 }
 
 /// <summary>
-///     Which limit ended a run (epic #41, slice B2.2).
+///     Which limit ended a run (epic #41, slice B2.2; budget members B2.3).
 /// </summary>
 /// <remarks>
 ///     <para>
@@ -81,6 +82,37 @@ public enum RunLimitKind
 
     /// <summary>The step budget (<c>AgentDefinition.MaxSteps</c>) was consumed.</summary>
     MaxSteps,
+
+    /// <summary>The token budget (<c>RunBudgetCaps.MaxTokens</c>) was consumed (#404).</summary>
+    MaxTokens,
+
+    /// <summary>The spend budget (<c>RunBudgetCaps.MaxCostUsd</c>) was consumed (#404).</summary>
+    MaxCost,
+
+    /// <summary>The output-size budget (<c>RunBudgetCaps.MaxOutputBytes</c>) was consumed (#404).</summary>
+    MaxOutputBytes,
+}
+
+/// <summary>
+///     Per-tool-call completion state within a run (epic #41, slice B2.1).
+/// </summary>
+/// <remarks>
+///     Additive by design: <see cref="ToolCallLink.Completion" /> defaults to
+///     <see cref="Completed" />, so every existing B1 reader keeps compiling.
+///     <see cref="Abandoned" /> is the #401 remainder — a call that outlived the
+///     accepted stop (the tool ignored the run token). Its outcome is recorded,
+///     never reported as success, never dropped silently.
+/// </remarks>
+public enum ToolCallCompletion
+{
+    /// <summary>The call finished and its result stands.</summary>
+    Completed,
+
+    /// <summary>The call finished with an error (validation, deny, exception, timeout, cooperative cancel).</summary>
+    Failed,
+
+    /// <summary>The call outlived the accepted stop and was abandoned at the dispatch boundary.</summary>
+    Abandoned,
 }
 
 /// <summary>
@@ -94,10 +126,20 @@ public enum RunLimitKind
 /// <param name="ToolCallId">The tool call id (matches <see cref="ToolResultEntry.ToolCallId" />).</param>
 /// <param name="ToolName">The name of the tool that was invoked.</param>
 /// <param name="IsError">Whether the linked result represents an error (false when no result was recorded yet).</param>
+/// <param name="Completion">How the call finished (additive: defaults to <see cref="ToolCallCompletion.Completed" />).</param>
 public sealed record ToolCallLink(
     string ToolCallId,
     string ToolName,
-    bool IsError);
+    bool IsError,
+    ToolCallCompletion Completion = ToolCallCompletion.Completed)
+{
+    /// <summary>
+    ///     Marker substring the dispatcher writes into an abandoned call's result
+    ///     output (<see cref="Reconstruct" /> keys <see cref="ToolCallCompletion.Abandoned" />
+    ///     off it). One literal, owned here, so the writer and the reader cannot drift.
+    /// </summary>
+    public const string AbandonedOutputMarker = "abandoned after accepted-stop";
+}
 
 /// <summary>
 ///     Stored outcome of one observable run (epic #41, slice B1).
@@ -133,6 +175,18 @@ public sealed record ToolCallLink(
 /// <param name="MessageIds">Ids of the run's messages in chronological order.</param>
 /// <param name="ToolCalls">Tool calls issued by the run, each linked to its result.</param>
 /// <param name="ErrorMessage">User-facing error text when <see cref="StopReason" /> is <see cref="RunStopReason.Failed" />; otherwise null.</param>
+/// <param name="Verification">
+///     What was verified about the run (#1018, sealed at run end and supplied
+///     as an input — never derived from <paramref name="MessageIds" />: the
+///     store holds exactly three message kinds and none of them carries a
+///     command line, an exit code or a revision). <c>null</c> means the caller
+///     had no evidence to supply — the inspection never happened — which is
+///     NOT <see cref="RunVerificationVerdict.NotVerified" /> (a completed
+///     inspection that found nothing). Acceptance is deliberately NOT here: it
+///     arrives after the run and may never arrive, so it cannot be a field a
+///     seal-time constructor must supply — it is a separate record keyed by
+///     <paramref name="RunId" /> (#42 owns the accept/reject kind).
+/// </param>
 /// <param name="Limit">
 ///     Which limit ended the run, when <see cref="StopReason" /> is
 ///     <see cref="RunStopReason.LimitExceeded" />; otherwise null. Null is the
@@ -148,6 +202,7 @@ public sealed record RunOutcome(
     IReadOnlyList<string> MessageIds,
     IReadOnlyList<ToolCallLink> ToolCalls,
     string? ErrorMessage = null,
+    RunVerificationRecord? Verification = null,
     RunLimitKind? Limit = null)
 {
     /// <summary>
@@ -159,18 +214,21 @@ public sealed record RunOutcome(
     /// <param name="messages">The run's messages in chronological order (e.g. from <c>ISessionStore.GetMessagesAsync</c>).</param>
     /// <param name="end">The terminal <c>AgentEndEvent</c> of the run.</param>
     /// <param name="error">The terminal <c>AgentErrorEvent</c>, when the run errored; otherwise null.</param>
+    /// <param name="verification">The sealed verification evidence for the run (#1018); null when the caller has none to supply.</param>
     /// <returns>The reconstructed <see cref="RunOutcome" />.</returns>
     public static RunOutcome Reconstruct(
         RunId runId,
         string sessionId,
         IReadOnlyList<AgentMessage> messages,
         AgentEndEvent end,
-        AgentErrorEvent? error = null) =>
+        AgentErrorEvent? error = null,
+        RunVerificationRecord? verification = null) =>
         Reconstruct(
             runId, sessionId, messages,
             cancelled: end.Cancelled,
             errorMessage: error?.Message,
-            limit: end.Limit);
+            limit: end.Limit,
+            verification: verification);
 
     /// <summary>
     ///     Reconstruct a finished run's outcome from stored messages and terminal
@@ -254,6 +312,12 @@ public sealed record RunOutcome(
     /// <param name="cancelled">True when the run ended via cancellation (<c>AgentEndEvent.Cancelled</c>).</param>
     /// <param name="errorMessage">Error text when the run errored (<c>AgentErrorEvent.Message</c>); otherwise null.</param>
     /// <param name="limit">Which limit ended the run (<c>AgentEndEvent.Limit</c>); null when none did.</param>
+    /// <param name="verification">
+    ///     The sealed verification evidence (#1018). Supplied as an input —
+    ///     never derived from <paramref name="messages" />, which cannot carry
+    ///     it. <c>null</c> reads as "nothing is known about verification", not
+    ///     as <see cref="RunVerificationVerdict.NotVerified" />.
+    /// </param>
     /// <returns>The reconstructed <see cref="RunOutcome" />.</returns>
     public static RunOutcome Reconstruct(
         RunId runId,
@@ -261,7 +325,8 @@ public sealed record RunOutcome(
         IReadOnlyList<AgentMessage> messages,
         bool cancelled = false,
         string? errorMessage = null,
-        RunLimitKind? limit = null)
+        RunLimitKind? limit = null,
+        RunVerificationRecord? verification = null)
     {
         var resultByCallId = new Dictionary<string, ToolResultEntry>(StringComparer.Ordinal);
         for (int i = 0; i < messages.Count; i++)
@@ -302,8 +367,16 @@ public sealed record RunOutcome(
                 {
                     if (assistant.Parts[p] is ToolCallPart call)
                     {
-                        bool isError = resultByCallId.TryGetValue(call.Id, out ToolResultEntry? entry) && entry.IsError;
-                        toolCalls.Add(new ToolCallLink(call.Id, call.ToolName, isError));
+                        resultByCallId.TryGetValue(call.Id, out ToolResultEntry? entry);
+                        bool isError = entry is not null && entry.IsError;
+                        // #401 B2: an abandoned call still carries IsError, but
+                        // "failed" would read as malfunction — the marker says
+                        // the stop outlived the call, not the call the stop.
+                        ToolCallCompletion completion = entry?.Output is { } output
+                            && output.Contains(ToolCallLink.AbandonedOutputMarker, StringComparison.Ordinal)
+                            ? ToolCallCompletion.Abandoned
+                            : isError ? ToolCallCompletion.Failed : ToolCallCompletion.Completed;
+                        toolCalls.Add(new ToolCallLink(call.Id, call.ToolName, isError, completion));
                     }
                 }
             }
@@ -353,6 +426,7 @@ public sealed record RunOutcome(
             messageIds,
             toolCalls,
             stopReason == RunStopReason.Failed ? errorMessage : null,
+            verification,
             // Carried only on a limit stop. `Limit` is null on every other path
             // by construction, not by convention — the tests pin it, because a
             // field that reads a constant is a plausible value, not a fact.

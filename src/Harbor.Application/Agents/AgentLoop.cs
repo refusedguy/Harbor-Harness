@@ -55,6 +55,10 @@ public sealed class AgentLoop : IAgentLoop
     private readonly IMcpRegistry? _mcpRegistry;
     private readonly IMetrics _metrics;
     private readonly ITracer _tracer;
+    // #1024: wall-clock budget enforcement reads these — an elapsed check at
+    // the turn boundary, deliberately NOT a CancelAfter on the run token.
+    private readonly TimeProvider _clock;
+    private readonly TimeSpan? _runTimeout;
 
     /// <summary>
     ///     Construct an <see cref="AgentLoop" /> wired to the supplied services.
@@ -86,7 +90,15 @@ public sealed class AgentLoop : IAgentLoop
         // DefaultRunBehaviors below, which is the same two concerns in the same
         // order. The product half of that claim is gated:
         // tests/Harbor.Hosting.Tests/PipelineBehaviorCompositionTests.cs.
-        IEnumerable<IPipelineBehavior>? pipelineBehaviors = null)
+        IEnumerable<IPipelineBehavior>? pipelineBehaviors = null,
+        // #1024: wall-clock budget + clock. Both optional so every
+        // direct-construction caller (tests, benchmarks, load harnesses) keeps
+        // compiling unchanged and keeps the legacy unbounded behaviour.
+        // Null budget (default) preserves it. A set budget is enforced by an
+        // elapsed check at the turn boundary — NOT by CancelAfter on the run
+        // token, which would read as a user cancel.
+        TimeProvider? timeProvider = null,
+        TimeSpan? runTimeout = null)
     {
         _providers = providers;
         _tools = tools;
@@ -104,6 +116,8 @@ public sealed class AgentLoop : IAgentLoop
         _logger = logger;
         _metrics = metrics ?? NullMetrics.Instance;
         _tracer = tracer ?? NullTracer.Instance;
+        _clock = timeProvider ?? TimeProvider.System;
+        _runTimeout = runTimeout;
         // ROP-C П.5: the dispatcher is injected via DI when composed by the host,
         // while tests and benchmarks fall back to a locally built one. That
         // fallback uses a NullLogger because the loop's own typed logger must
@@ -228,13 +242,37 @@ public sealed class AgentLoop : IAgentLoop
             // the user set and a stop the user pressed are different facts and
             // the terminal event is where they must stay distinguishable.
             RunLimitKind? limit = null;
+            // #1024: the wall-clock stamp. Read once per run so the elapsed
+            // check below is a comparison, not a second clock to skew.
+            DateTimeOffset startedAt = _clock.GetUtcNow();
+            // #404: the run's budget ledger. Null when the agent sets no
+            // caps — the loop then pays one null-branch per turn (no table,
+            // no lookup), which is the zero-added-cost claim for uncapped
+            // runs. One instance per run, never shared: the counters are run
+            // totals, and sharing would attribute one run's spend to the next.
+            // Named runBudget: the wall-clock check below already binds the
+            // name budget to its TimeSpan.
+            RunBudgetTracker? runBudget = agent.Budget is { } caps ? new RunBudgetTracker(caps) : null;
             while (!ct.IsCancellationRequested)
             {
+                // #1024: boundary enforcement for the wall-clock budget. This
+                // MUST stay a read of the clock, never a CancelAfter on `ct`:
+                // firing the run token would route the run into the cancel
+                // branch below and report a user-set ceiling as a user-pressed
+                // stop. An in-flight turn is never interrupted — it completes,
+                // and the run ends before the next one starts (#997 leaves
+                // in-flight calls alone the same way).
+                if (_runTimeout is { } budget && _clock.GetUtcNow() - startedAt >= budget)
+                {
+                    _logger.LogInformation("Agent run hit wall-clock budget ({Budget}): session={SessionId} agent={Agent}", budget, session.Session.Id, agent.Name.Value);
+                    limit = RunLimitKind.Timeout;
+                    break;
+                }
                 turn++;
                 // [G4]: the whole turn (compaction → prompt → stream → tools →
                 // drains → turn-end event → end-of-run decision) runs inside TurnRunner.
                 TurnStepResult step = await _turnRunner.RunTurnAsync(
-                    session, agent, client, model, turn, truncationFallback, ct).ConfigureAwait(false);
+                    session, agent, client, model, turn, truncationFallback, ct, runBudget).ConfigureAwait(false);
                 truncationFallback = step.TruncationFallback;
                 if (step.RunFailure is { } runFailure)
                 {
@@ -257,6 +295,11 @@ public sealed class AgentLoop : IAgentLoop
                 // completion. The AgentEndEvent carries Cancelled=true so renderers
                 // can reflect the aborted state instead of a clean finish.
                 _logger.LogInformation("Agent run cancelled: session={SessionId} agent={Agent}", session.Session.Id, agent.Name.Value);
+                // #407: a cancelled parent takes its detached children with it.
+                // The registry owns a linked CTS per background run, so this
+                // reaches children even when the launching turn's token is gone.
+                // Turn boundaries and normal completion do NOT come here.
+                _backgroundTasks?.CancelSession(session.Session.Id);
                 await _eventBus.PublishAsync(
                     new AgentEndEvent(SnapshotMessages(session.Messages), Cancelled: true), CancellationToken.None).ConfigureAwait(false);
 

@@ -40,6 +40,11 @@ namespace Harbor.Abstractions.Agents;
 ///     instead of blocking the loop forever. <see langword="null"/> (default)
 ///     preserves the legacy unbounded behaviour.
 /// </param>
+/// <param name="Budget">
+///     B2.3 (#404): token/spend/output-size ceilings for runs of this agent.
+///     <see langword="null"/> (default) means uncapped — the loop then pays a
+///     single null-branch per turn and no budget bookkeeping runs at all.
+/// </param>
 public sealed record AgentDefinition(
     AgentName Name,
     string DisplayName,
@@ -53,7 +58,8 @@ public sealed record AgentDefinition(
     string? SystemPromptAppend = null,
     bool IsSubAgent = false,
     bool Hidden = false,
-    int? ToolTimeoutSeconds = null)
+    int? ToolTimeoutSeconds = null,
+    RunBudgetCaps? Budget = null)
 {
     /// <summary>
     ///     Returns the default <c>code</c> agent — full read/write/edit/bash permissions, 50 steps.

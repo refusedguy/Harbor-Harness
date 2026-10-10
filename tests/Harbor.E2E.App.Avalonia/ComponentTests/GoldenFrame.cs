@@ -1,4 +1,5 @@
 using System.Security.Cryptography;
+using System.Text.Json;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Headless;
@@ -27,9 +28,17 @@ namespace Harbor.E2E.App.Avalonia.ComponentTests;
 internal static class GoldenFrame
 {
     private static readonly Lazy<string> FixtureDirLazy = new(ResolveFixtureDir);
+    private static readonly Lazy<string> FramesRootLazy = new(ResolveFramesRoot);
+    private static readonly Lazy<string> ManifestPathLazy = new(ResolveManifestPath);
 
     /// <summary>Absolute path of <c>tests/fixtures/golden</c>.</summary>
     public static string FixtureDir => FixtureDirLazy.Value;
+
+    /// <summary>Absolute path of <c>tests/fixtures/avalonia/frames</c>.</summary>
+    public static string FramesRoot => FramesRootLazy.Value;
+
+    /// <summary>Absolute path of the frames hash manifest.</summary>
+    public static string ManifestPath => ManifestPathLazy.Value;
 
     private static bool UpdateMode =>
         string.Equals(Environment.GetEnvironmentVariable("HARBOR_UPDATE_GOLDENS"), "1", StringComparison.Ordinal);
@@ -150,10 +159,13 @@ internal static class GoldenFrame
         string expected = File.ReadAllText(shaPath).Trim();
         if (!string.Equals(expected, sha256, StringComparison.OrdinalIgnoreCase))
         {
+            string verifiedPath = Path.Combine(FixtureDir, testName + ".verified.png");
+            File.WriteAllBytes(verifiedPath, png);
             throw new InvalidOperationException(
                 $"golden frame MISMATCH for {testName}: pixels differ from the baseline.\n" +
                 $"  expected sha256: {expected}\n" +
                 $"  actual   sha256: {sha256}\n" +
+                $"  actual PNG written to: {verifiedPath}\n" +
                 $"  If the visual change is INTENDED, regenerate with HARBOR_UPDATE_GOLDENS=1.");
         }
 
@@ -170,6 +182,23 @@ internal static class GoldenFrame
 
     private static string ResolveFixtureDir()
     {
+        return Path.Combine(ResolveRepoRoot(), "tests", "fixtures", "golden");
+    }
+
+    private static string ResolveFramesRoot()
+    {
+        return Path.Combine(ResolveRepoRoot(), "tests", "fixtures", "avalonia", "frames");
+    }
+
+    private static string ResolveManifestPath()
+    {
+        return Path.Combine(
+            ResolveRepoRoot(),
+            "tests", "Harbor.E2E.App.Avalonia", "ComponentTests", "baselines", "sha256.json");
+    }
+
+    private static string ResolveRepoRoot()
+    {
         var dir = new DirectoryInfo(AppContext.BaseDirectory);
         while (dir is not null && !File.Exists(Path.Combine(dir.FullName, "Harbor.slnx")))
         {
@@ -181,6 +210,116 @@ internal static class GoldenFrame
             throw new InvalidOperationException("repo root (Harbor.slnx) not found from " + AppContext.BaseDirectory);
         }
 
-        return Path.Combine(dir.FullName, "tests", "fixtures", "golden");
+        return dir.FullName;
+    }
+
+    /// <summary>
+    ///     Compare <paramref name="png" />/<paramref name="sha256" /> against
+    ///     the frames-lane baseline for <c>&lt;surface&gt;/&lt;scenario&gt;</c>.
+    ///     The reference PNG lives under
+    ///     <c>tests/fixtures/avalonia/frames/&lt;surface&gt;/&lt;scenario&gt;.png</c>
+    ///     and every hash is mirrored in the
+    ///     <c>ComponentTests/baselines/sha256.json</c> manifest, so one file
+    ///     shows the whole lane at a glance. Update mode writes the PNG and
+    ///     the manifest entry together — a baseline and its hash can never
+    ///     drift apart.
+    /// </summary>
+    public static void VerifyFrame(string surface, string scenario, byte[] png, string sha256)
+    {
+        CheckName(surface, nameof(surface));
+        CheckName(scenario, nameof(scenario));
+        string key = surface + "/" + scenario;
+        string pngPath = Path.Combine(FramesRoot, surface, scenario + ".png");
+
+        if (UpdateMode)
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(pngPath)!);
+            File.WriteAllBytes(pngPath, png);
+            var entries = ReadManifest();
+            entries[key] = sha256;
+            WriteManifest(entries);
+            return;
+        }
+
+        var manifest = ReadManifest();
+        if (!manifest.TryGetValue(key, out string? expected) || !File.Exists(pngPath))
+        {
+            throw new InvalidOperationException(
+                $"golden fixture missing: {pngPath} (manifest key '{key}'). " +
+                "Run once with HARBOR_UPDATE_GOLDENS=1 to seed it.");
+        }
+
+        if (!string.Equals(expected, sha256, StringComparison.OrdinalIgnoreCase))
+        {
+            string verifiedPath = Path.Combine(
+                Path.GetDirectoryName(pngPath)!, scenario + ".verified.png");
+            File.WriteAllBytes(verifiedPath, png);
+            throw new InvalidOperationException(
+                $"golden frame MISMATCH for {key}: pixels differ from the baseline.\n" +
+                $"  expected sha256: {expected}\n" +
+                $"  actual   sha256: {sha256}\n" +
+                $"  actual PNG written to: {verifiedPath}\n" +
+                $"  If the visual change is INTENDED, regenerate with HARBOR_UPDATE_GOLDENS=1.");
+        }
+
+        byte[] storedPng = File.ReadAllBytes(pngPath);
+        string storedHash = Convert.ToHexString(SHA256.HashData(storedPng));
+        if (!string.Equals(storedHash, expected, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException(
+                $"golden fixture is inconsistent: {pngPath} does not hash to the manifest entry for '{key}'.");
+        }
+    }
+
+    private static void CheckName(string value, string paramName)
+    {
+        if (string.IsNullOrWhiteSpace(value)
+            || value.Contains('/') || value.Contains('\\') || value.Contains(".."))
+        {
+            throw new ArgumentException($"invalid golden name '{value}'", paramName);
+        }
+
+        foreach (char c in value)
+        {
+            if (!char.IsLetterOrDigit(c) && c != '-' && c != '_')
+            {
+                throw new ArgumentException($"invalid golden name '{value}'", paramName);
+            }
+        }
+    }
+
+    private static SortedDictionary<string, string> ReadManifest()
+    {
+        var map = new SortedDictionary<string, string>(StringComparer.Ordinal);
+        if (!File.Exists(ManifestPath))
+        {
+            return map;
+        }
+
+        string json = File.ReadAllText(ManifestPath);
+        if (string.IsNullOrWhiteSpace(json))
+        {
+            return map;
+        }
+
+        var parsed = JsonSerializer.Deserialize<SortedDictionary<string, string>>(json);
+        if (parsed is null)
+        {
+            return map;
+        }
+
+        foreach (var kv in parsed)
+        {
+            map[kv.Key] = kv.Value;
+        }
+
+        return map;
+    }
+
+    private static void WriteManifest(SortedDictionary<string, string> entries)
+    {
+        Directory.CreateDirectory(Path.GetDirectoryName(ManifestPath)!);
+        string json = JsonSerializer.Serialize(entries, new JsonSerializerOptions { WriteIndented = true });
+        File.WriteAllText(ManifestPath, json + "\n");
     }
 }

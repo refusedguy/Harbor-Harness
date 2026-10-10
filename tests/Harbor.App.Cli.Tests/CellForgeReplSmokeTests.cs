@@ -81,18 +81,15 @@ public class CellForgeReplSmokeTests
             authStore,
             providerRegistry);
         var runner = new CellForgeReplRunner(
-            configStore,
-            providerRegistry,
-            agentRegistry,
-            authStore,
-            sessionStore: null,
-            rendererPipeline: null,
-            bus,
-            tokens: null,
-            legacySlash,
-            agent, sessionModel, session, screen, bridge, input,
-            new NullModeController(), backend, NullLogger<CellForgeReplRunner>.Instance,
-            new ApprovalCoordinator(NullLogger<ApprovalCoordinator>.Instance));
+            new CellForgeCoreServices(
+                configStore, providerRegistry, agentRegistry, authStore, bus, agent,
+                legacySlash, NullLogger<CellForgeReplRunner>.Instance),
+            new CellForgeOptionalServices(null, null, null, null, null, null, null, null),
+            new CellForgeScreens(
+                session, screen, bridge, input, backend,
+                new ApprovalCoordinator(NullLogger<ApprovalCoordinator>.Instance)),
+            sessionModel,
+            new NullModeController());
 
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(20));
         int exitCode = await runner.RunAsync(cts.Token);
@@ -173,18 +170,15 @@ public class CellForgeReplSmokeTests
             authStore,
             providerRegistry);
         var runner = new CellForgeReplRunner(
-            configStore,
-            providerRegistry,
-            agentRegistry,
-            authStore,
-            sessionStore: store,
-            rendererPipeline: null,
-            bus,
-            tokens: null,
-            legacySlash,
-            agent, sessionModel, session, screen, bridge, input,
-            new NullModeController(), backend, NullLogger<CellForgeReplRunner>.Instance,
-            new ApprovalCoordinator(NullLogger<ApprovalCoordinator>.Instance));
+            new CellForgeCoreServices(
+                configStore, providerRegistry, agentRegistry, authStore, bus, agent,
+                legacySlash, NullLogger<CellForgeReplRunner>.Instance),
+            new CellForgeOptionalServices(store, null, null, null, null, null, null, null),
+            new CellForgeScreens(
+                session, screen, bridge, input, backend,
+                new ApprovalCoordinator(NullLogger<ApprovalCoordinator>.Instance)),
+            sessionModel,
+            new NullModeController());
 
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(20));
         int exitCode = await runner.RunAsync(cts.Token);

@@ -342,4 +342,85 @@ public class RunOutcomeTests
         await Assert.That(noEvidence.StopReason).IsNotEqualTo(RunStopReason.Succeeded);
         await Assert.That(noEvidence.StopReason).IsNotEqualTo(succeeded.StopReason);
     }
+
+    private const string VerificationPinnedRevision = "1111111111111111111111111111111111111111";
+
+    private static WorkspaceContract VerificationContract() => new(
+        RepoRoot: "/proj",
+        BaseRevision: VerificationPinnedRevision,
+        BaseBranch: "dev",
+        TrackedDirt: [],
+        UntrackedPresent: false,
+        Isolation: WorkspaceIsolation.Copy,
+        Limits: new WorkspaceLimits());
+
+    private static RunVerificationRecord PassedVerification() =>
+        RunVerificationRecord.Pin(VerificationContract(), BaseTime).WithCheck(
+            RunCheck.Passed(
+                "dotnet run --project tests/X",
+                0,
+                VerificationPinnedRevision,
+                "linux-10.0/net10.0",
+                TimeSpan.FromSeconds(12)));
+
+    [Test]
+    public async Task Reconstruct_WithVerificationRecord_CarriesItThroughWithTheSameSummary()
+    {
+        // #1018: the evidence is an INPUT, not a derivation. The store holds
+        // exactly three message kinds (user / assistant / tool-result) and none
+        // of them carries a command line, an exit code or a revision — so the
+        // record cannot be rebuilt from `messages` and must be handed over.
+        var store = CreateStore();
+        var session = await store.CreateAsync("/proj", "code", "kilocode", "kilo-auto");
+        await Assert.That(session.IsSuccess).IsTrue();
+
+        string sessionId = session.Value.Id;
+        var runId = RunId.New();
+
+        await store.AppendMessageAsync(sessionId, NewUser(sessionId, 1));
+        await store.AppendMessageAsync(sessionId, NewFinalAssistant(sessionId, 2, StopReason.Stop));
+
+        var stored = await store.GetMessagesAsync(sessionId);
+        await Assert.That(stored.IsSuccess).IsTrue();
+
+        var verification = PassedVerification();
+        var outcome = RunOutcome.Reconstruct(
+            runId, sessionId, stored.Value, new AgentEndEvent(stored.Value),
+            verification: verification);
+
+        await Assert.That(outcome.Verification).IsNotNull();
+        // The reader in TaskRunRunner and the record on the outcome cannot
+        // drift into describing different states: both print `Summary`, and
+        // this pins the outcome's copy to byte-identical text.
+        await Assert.That(outcome.Verification!.Summary).IsEqualTo(verification.Summary);
+        await Assert.That(outcome.Verification!.Verification.IsVerified).IsTrue();
+    }
+
+    [Test]
+    public async Task Reconstruct_WithoutVerificationRecord_IsUnknownNotNotVerified()
+    {
+        // #1018: a null record means the caller had no evidence to supply —
+        // the inspection never happened. `NotVerified` is a completed
+        // inspection that found nothing. Collapsing them would let "we never
+        // looked" print the same verdict as "we looked and found no proof",
+        // the same Unknown-vs-NotVerified collapse one level up.
+        var store = CreateStore();
+        var session = await store.CreateAsync("/proj", "code", "kilocode", "kilo-auto");
+        await Assert.That(session.IsSuccess).IsTrue();
+
+        string sessionId = session.Value.Id;
+        var runId = RunId.New();
+
+        await store.AppendMessageAsync(sessionId, NewUser(sessionId, 1));
+        await store.AppendMessageAsync(sessionId, NewFinalAssistant(sessionId, 2, StopReason.Stop));
+
+        var stored = await store.GetMessagesAsync(sessionId);
+        await Assert.That(stored.IsSuccess).IsTrue();
+
+        var outcome = RunOutcome.Reconstruct(
+            runId, sessionId, stored.Value, new AgentEndEvent(stored.Value));
+
+        await Assert.That(outcome.Verification).IsNull()
+            .Because("no evidence was supplied: the inspection never happened, which is not a verdict");
+    }
 }
