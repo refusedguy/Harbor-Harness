@@ -776,28 +776,31 @@ jobs:
   # WHY THIS IS A RATCHET AND NOT "THE PUBLISH IS GREEN"
   # ---------------------------------------------------
   # MEASURED, and the measurement is the whole reason the gate looks like this.
-  # No AOT publish configuration in this repository works today:
+  # Since #1055s3 the full-tree publish completes (the Roslyn/plugin-pipeline
+  # errors left with the in-process compile path); the stripped profile below
+  # still does not compile, and the four remaining warning ids are concessions
+  # the baseline argues for one by one:
   #
-  #   recipe 2, `-p:HarborWithAot=true` (full tree) — reaches ILC and fails on
-  #     IL3000 x3, IL2072 x1, IL2070 x1, none of them demoted by
-  #     Harbor.App.Cli.csproj, and ILC runs warnings-as-errors because
-  #     IlcTreatWarningsAsErrors defaults to the repo's TreatWarningsAsErrors.
-  #     One of the three IL3000 is inside `Microsoft.CodeAnalysis` itself and is
-  #     not fixable from our code. Full inventory from that run, in
+  #   recipe 2, `-p:HarborWithAot=true` (full tree) — reaches ILC and publishes.
+  #     ILC runs warnings-as-errors because IlcTreatWarningsAsErrors defaults
+  #     to the repo's TreatWarningsAsErrors; the four demoted ids
+  #     (IL2026/IL3050/IL2104/IL3053) print as warnings and do not fail it.
+  #     Full inventory in `.github/aot-warning-baseline.txt`, longer account in
   #     docs/AOT_PUBLISH.md.
   #
   #   recipe 1, `HARBOR_MINIMAL=true` (the stripped profile the csproj calls the
   #     real AOT path) — does not compile. PluginReloadService.cs is entirely
   #     inside `#if HARBOR_WITH_PLUGINS` and 11 call sites in apps/Harbor.App.Cli
-  #     reference it unguarded, so CS0234 x11.
+  #     reference it unguarded, so CS0234 x11. Unevaluated by this gate,
+  #     unchanged by the publish flipping to green.
   #
   # A gate that can only be red is not a gate, and one that ignores the publish
   # is worse than none. So the publish step is `continue-on-error` and the gate
   # step immediately after decides: the committed record says "this publish
-  # fails, like this", and the gate passes ONLY on that. If the build starts
-#   succeeding the gate goes RED and says the AOT state improved and the record
-  #   must be updated — the transition is acknowledged by a human instead of
-  #   being absorbed. If it starts failing differently, it also goes red.
+  # publishes, like this", and the gate passes ONLY on that. If the build
+  # starts failing the gate goes RED and says the AOT state moved and the
+  # record must be updated — the transition is acknowledged by a human instead
+  # of being absorbed. If it starts failing differently, it also goes red.
   #
   # `continue-on-error` is safe here precisely because the next step is a real
   # check against a committed expectation; it is not a way to make a failure
@@ -967,10 +970,12 @@ jobs:
       #   publish reported `published` -> the artifact MUST exist and MUST run
       #       --version / --help / --providers on content.
       #
-      # The transition is forced by the NEXT step, whose --expect-status is
-      # `failed`: the day the publish starts succeeding, that step goes red, the
-      # record is updated, and this branch flips to the live one. Nothing here has
-      # to be remembered or noticed for that to happen.
+      # The transition is recorded by the NEXT step, whose --expect-status is
+      # `published` since #1055s3 moved the plugin compile pipeline out of the
+      # CLI process: the publish completes, the record says so, and this branch
+      # is the live one. If the publish starts failing again, that step goes
+      # red and the record is updated. Nothing here has to be remembered or
+      # noticed for that to happen.
       - name: Smoke — the published AOT artifact
         run: |
           set -euo pipefail
@@ -1045,7 +1050,7 @@ jobs:
             --baseline .github/aot-warning-baseline.txt \
             --expect-rid linux-x64 \
             --expect-recipe fulltree \
-            --expect-status failed
+            --expect-status published
 
       - name: Upload AOT publish log and inventory report
         if: always()
