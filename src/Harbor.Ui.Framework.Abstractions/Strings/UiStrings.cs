@@ -68,9 +68,10 @@ public static class UiStrings
         "Cli_NoSessions",
     ];
 
-    private static readonly ResourceManager Manager = new(
-        "Harbor.Ui.Framework.Abstractions.Strings.UiStrings",
-        typeof(UiStrings).Assembly);
+    // The base name derives from this type (namespace + name), which is what the
+    // SDK embeds the .resx pair under. A string literal drifted once
+    // (MissingManifestResourceException in CI); typeof() cannot.
+    private static readonly ResourceManager Manager = new(typeof(UiStrings));
 
     private static readonly CultureInfo English = CultureInfo.GetCultureInfo("en");
     private static readonly CultureInfo Russian = CultureInfo.GetCultureInfo("ru");
