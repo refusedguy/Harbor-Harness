@@ -87,7 +87,7 @@ public class McpLoginRunnerTests : IDisposable
     // "No remote MCP server" instead of "no auth block"). Retry documents it;
     // proper fix = isolate config HOME per test, tracked separately.
     [Test]
-    [Retry(3)]
+    [Retry(3)] // Retention(#1087): reason in the comment above (cross-class env race).
     public async Task Login_WithoutAuthBlock_FailsWithHint()
     {
         (int exit, _, string err) = RunWithConfig(
