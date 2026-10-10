@@ -1016,12 +1016,19 @@ jobs:
           # ProviderVerbs.RunListProvidersAsync always returns 0: an AOT binary
           # that registered nothing at all would exit 0 and print an empty list.
           #
-          # All four ids, and the set is derived: the full-tree recipe keeps
-          # HarborWithAllProviders=true, so ProviderFactories registers the native
-          # Anthropic and OpenAI factories on top of the Ollama one, and the JSON
-          # catalogue supplies kilocode. Under the stripped recipe the two native
-          # ones would legitimately disappear — the recipe note in the job header
-          # says which recipe this is and why.
+          # Three ids: the native baseline plus two JSON-catalogue entries. The
+          # native Anthropic/OpenAI factories are deliberately NOT in this set:
+          # they sit behind HARBOR_WITH_ALL_PROVIDERS, whose `true` default
+          # lives in Harbor.App.Cli.csproj as a project-level property and
+          # therefore never reaches Harbor.Hosting (only global -p properties
+          # flow to ProjectReferences), so no `dotnet`-built CLI — JIT or AOT —
+          # registers them. JsonProviderDiscovery skips their JSON files for
+          # the same reason (they are served by the factories). Only a NUKE
+          # build, which sets the flag globally, carries them. First measured
+          # on the #1055 slice-3 branch (11 ids, no anthropic/openai); asserting
+          # them here would gate on a build this recipe cannot produce.
+          # Under the stripped recipe even ollama would legitimately disappear —
+          # the recipe note in the job header says which recipe this is and why.
           #
           # What `kilocode` actually proves (stated precisely, because the obvious
           # explanation is wrong): the providers are NOT read from embedded
@@ -1036,7 +1043,7 @@ jobs:
           # and provider-construction paths both work under NativeAOT. The dead
           # embedded path is a separate pre-existing finding, recorded in
           # docs/AOT_PUBLISH.md, not fixed here.
-          for p in ollama anthropic openai kilocode; do
+          for p in ollama kilocode openrouter; do
             grep -q -i "$p" publish/providers.txt \
               || { echo "::error::--providers is missing '$p' — the provider catalogue did not survive the publish"; cat publish/providers.txt; exit 1; }
           done

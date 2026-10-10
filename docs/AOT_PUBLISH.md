@@ -429,12 +429,18 @@ it is a real risk area (the provider wire payloads are the place this repo
 already hand-writes JSON over `Utf8JsonWriter`). It is **not** evidence about
 build-time resource embedding.
 
-The assertion also asserts that all four ids are present, which is derived from
-the recipe: under `fulltree`, `HarborWithAllProviders` stays `true`, so
-`ProviderFactories` registers the native Anthropic and OpenAI factories on top
-of the Ollama one, and the JSON catalogue supplies `kilocode`. Under the
-stripped recipe `anthropic` and `openai` would legitimately disappear — the
-recipe section above says which recipe this job uses and why.
+The assertion also asserts that three ids are present — `ollama` (the native
+baseline factory, always compiled in) plus `kilocode` and `openrouter` from
+JSON. It deliberately does not assert `anthropic`/`openai`: the native
+factories sit behind `HARBOR_WITH_ALL_PROVIDERS`, whose `true` default lives
+in `Harbor.App.Cli.csproj` as a project-level property that never reaches
+`Harbor.Hosting` (only global `-p` properties flow to `ProjectReference`s),
+and `JsonProviderDiscovery` skips their JSON files because the factories own
+those ids. First measured on the #1055 slice-3 branch: a `dotnet`-built CLI
+lists 11 ids, no `anthropic`/`openai`. Only a NUKE build, which sets the flag
+globally, carries them. Under the stripped recipe even `ollama` would
+legitimately disappear — the recipe section above says which recipe this job
+uses and why.
 
 The dead embedded path is a pre-existing defect, recorded here and **not
 fixed by this gate**: repairing it changes which providers a published binary
