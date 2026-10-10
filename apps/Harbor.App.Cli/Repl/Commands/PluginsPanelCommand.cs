@@ -40,15 +40,13 @@ internal sealed class PluginsPanelCommand : IReplCommand
         var summary = await reload.ReloadAsync(ct).ConfigureAwait(false);
         for (int i = 0; i < summary.Notes.Count; i++)
         {
-            // Success notes read "loaded …"; anything else is a reload error.
-            if (!summary.Notes[i].StartsWith("loaded ", StringComparison.Ordinal))
-            {
-                host.Bridge.AppendSystemLine($"! Plugin reload: {summary.Notes[i]}");
-            }
+            // #1055s3: reload registers nothing in-process — plugins run in
+            // harbor-plugins-host — so the note is informational, not an error.
+            host.Bridge.AppendSystemLine($"Plugin reload: {summary.Notes[i]}");
         }
 
         PushPanel(host, reload);
-        host.Bridge.AppendSystemLine("Hint: edited/removed plugins need a restart to fully rebind.");
+        host.Bridge.AppendSystemLine("Hint: plugins run in harbor-plugins-host — restart it to pick up changed scripts.");
         host.WakeUp();
     }
 

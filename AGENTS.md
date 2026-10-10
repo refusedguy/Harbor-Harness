@@ -4,7 +4,7 @@
 >
 > **Quick state (branch dev):**
 > - Solutions are `.slnx` files: `Harbor.slnx` (main) and `Harbor.Samples.slnx`; no plain `.sln`.
-> - Tests must be run **per project as plain executables** (`dotnet run --project tests/<Project> -c Release --no-build -- --minimum-expected-tests 1`); that is the form every CI job executes. Do not use `dotnet test` — not per-project, not solution-wide. The old wording for this ("discovers ZERO tests … host exits 5 with a silent discovery error") was **wrong and has been corrected**: exit 5 is the MTP *invalid command-line arguments* code, while a run that genuinely discovers no tests exits 8, so exit 5 was never evidence of zero discovery. What is actually true: `global.json` selects the Microsoft.Testing.Platform runner, which rejects the VSTest-era options (`--logger`, `--filter`) our old commands passed (`CHANGELOG.md`, sprint *ci-cd-maturity*, records that deleting one `--logger` turned a job green); and 11 of the 36 test projects still reference `Microsoft.NET.Test.Sdk`, which TUnit documents as stopping discovery (`TUNIT_MTP_AUDIT.md` proposes the removal; unlanded). No CI job has run `dotnet test` since, so its current behaviour is **unverified**, not known — which is why only the plain-executable form is documented.
+> - Tests must be run **per project as plain executables** (`dotnet run --project tests/<Project> -c Release --no-build -- --minimum-expected-tests 1`); that is the form every CI job executes. Do not use `dotnet test` — not per-project, not solution-wide. The old wording for this ("discovers ZERO tests … host exits 5 with a silent discovery error") was **wrong and has been corrected**: exit 5 is the MTP *invalid command-line arguments* code, while a run that genuinely discovers no tests exits 8, so exit 5 was never evidence of zero discovery. What is actually true: `global.json` selects the Microsoft.Testing.Platform runner, which rejects the VSTest-era options (`--logger`, `--filter`) our old commands passed (`CHANGELOG.md`, sprint *ci-cd-maturity*, records that deleting one `--logger` turned a job green); and 11 of the 37 test projects still reference `Microsoft.NET.Test.Sdk`, which TUnit documents as stopping discovery (`TUNIT_MTP_AUDIT.md` proposes the removal; unlanded). No CI job has run `dotnet test` since, so its current behaviour is **unverified**, not known — which is why only the plain-executable form is documented.
 > - Known/flaky tests historically cited (verify against `docs/ROADMAP.md` before counting on current numbers): Avalonia-12 headless `MarkdownRenderer`/`CodeBlock`/`TypewriterStreamingText` ("Stack empty" in `SetInheritanceParent`), the IPC named-pipe event-stream class on Linux (self-skips unless `HARBOR_IPC_EVENTSTREAM=1`), and an occasional `ChatView_Inflates` ListBoxItem `StaticResource` flake.
 > - CellForge (+ Engine — fullscreen cell-diff terminal renderer) is the canonical interactive backend (`HARBOR_TUI=cellforge`, `consoleex` kept as legacy alias); AnsiPlain covers ANSI-streaming + plain pipes/CI; MCP tools ship out-of-process; plugin hosting is split across the `Harbor.Plugins.*` projects.
 > - **Markdown is gated.** `ci.yml` ignores `**.md` and `docs/**` on purpose, so a docs-only PR gets its own fast workflow: `.github/workflows/docs.yml` runs `tools/check-md-links.py` (links + anchors) and `tools/md-lint.py` (encoding/headings/fences), each with a scan-size floor, plus a self-test that proves both still fail on broken input (#509). Run both locally before pushing a doc change — see [docs/DEVELOPMENT.md §Documentation checks](./docs/DEVELOPMENT.md#documentation-checks). Do not "fix" this by deleting `paths-ignore` from `ci.yml`.
@@ -105,11 +105,11 @@ providers/                            — 13 JSON LLM provider configs (embedded
 docs/specs/                           — 19 design specification documents (top-level specs/ no longer exists)
 docs/                                 — 70 top-level docs (architecture, tools catalog, roadmap, patterns, …)
                                         + adr/, specs/, standards/, ui/, themes/, notes/, .kilo-docs/ (archived sprint notes)
-tests/                                — 36 test/bench projects, one directory each
+tests/                                — 37 test/bench projects, one directory each
                                         incl. shared Harbor.TestKit and Harbor.Benchmarks
-                                        (`tests/` holds 38 directories: the 36 projects plus
+                                        (`tests/` holds 39 directories: the 37 projects plus
                                         `fixtures/` and `Plugins/`, which are data and have no .csproj — so a
-                                        plain `ls -d tests/*/ | wc -l` reads 38 and is the
+                                        plain `ls -d tests/*/ | wc -l` reads 39 and is the
                                         wrong number to quote)
 ```
 
@@ -726,7 +726,7 @@ dotnet build
 # Run a specific test project (recommended way to test).
 # Tests run as plain executables — this is the form CI executes. `dotnet test`
 # is not used: global.json selects the MTP runner, which rejects the VSTest-era
-# options our old commands passed, and 11 of 36 test projects still carry
+# options our old commands passed, and 11 of 37 test projects still carry
 # Microsoft.NET.Test.Sdk. No CI job runs `dotnet test`, so it is unverified.
 # TUnit uses --treenode-filter for filtering (forwarded after --), NOT --filter.
 dotnet run --project tests/Harbor.Core.Tests -c Release --no-build -- --minimum-expected-tests 1

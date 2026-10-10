@@ -8,6 +8,9 @@ using Harbor.Ui.Framework.Panels;
 using Microsoft.Extensions.Logging;
 using Harbor.Registries.Agents;
 using Harbor.Registries.Tools;
+#if HARBOR_WITH_PLUGINS
+using Harbor.Plugins.Hosting;
+#endif
 
 namespace Harbor.Hosting;
 
@@ -89,8 +92,47 @@ internal static class ToolsCatalog
                 mcpRegistry.Register(entry.Name, entry.StartInfo);
             }
         }
+
+#if HARBOR_WITH_PLUGINS
+        RegisterOutOfProcPluginRoute(ctx, mcpRegistry);
+#endif
         return mcpRegistry;
     }
+
+#if HARBOR_WITH_PLUGINS
+    /// <summary>
+    ///     MCP server name for the out-of-process CS-plugin host. Matches
+    ///     <c>Harbor.Plugins.Host.McpStdioServer</c>'s
+    ///     <c>ServerName</c> — the wire contract both sides spell literally.
+    /// </summary>
+    private const string PluginMcpServerName = "harbor-csharp-plugins";
+
+    /// <summary>
+    ///     #1055 slice 3: the out-of-process CS-plugin host is the default
+    ///     route. When the binary ships next to the CLI and the user did not
+    ///     already name this server, register it as a stdio MCP server — no
+    ///     <c>mcp.json</c> entry needed. An explicit user entry wins because it
+    ///     is already registered above, so this never overrides deliberate
+    ///     config. Nothing is spawned here: MCP servers connect lazily on
+    ///     first call.
+    /// </summary>
+    private static void RegisterOutOfProcPluginRoute(HarborCompositionContext ctx, McpRegistry mcpRegistry)
+    {
+        string? hostPath = PluginHostLocator.LocateHost();
+        if (hostPath is null)
+            return;
+        if (mcpRegistry.GetServerNames().Contains(PluginMcpServerName, StringComparer.Ordinal))
+            return;
+
+        var registered = mcpRegistry.Register(
+            PluginMcpServerName,
+            new McpServerStartInfo { Command = hostPath });
+        if (registered.IsFailure)
+            ctx.Logger.LogWarning("Skipping out-of-proc plugin route '{Name}': {Error}", PluginMcpServerName, registered.Error);
+        else
+            ctx.Logger.LogInformation("MCP server '{Name}' registered from {Path} (out-of-proc plugin route)", PluginMcpServerName, hostPath);
+    }
+#endif
 
     internal static ToolRegistry CreateToolRegistry(
         HarborCompositionContext ctx, IMcpRegistry mcpRegistry, IAgentRegistry agentRegistry,

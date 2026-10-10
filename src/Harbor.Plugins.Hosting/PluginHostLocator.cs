@@ -13,9 +13,11 @@ namespace Harbor.Plugins.Hosting;
 ///         composition — and reports one honest line instead of an error.
 ///     </para>
 ///     <para>
-///         Slice 3 turns the present-branch into the default compile+execute
-///         route; until then the probe only decides which absence line is
-///         logged. It spawns nothing and touches no network.
+///         #1055 slice 3: the present-branch is the default compile+execute
+///         route — the CLI registers the located binary as the
+///         <c>harbor-csharp-plugins</c> stdio MCP server and never compiles
+///         CS plugins in-process. The probe itself spawns nothing and
+///         touches no network.
 ///     </para>
 /// </remarks>
 public static class PluginHostLocator
@@ -32,9 +34,30 @@ public static class PluginHostLocator
     ///     Exposed for tests; production callers leave it null.
     /// </param>
     public static bool IsHostAvailable(string? baseDirectory = null)
+        => LocateHost(baseDirectory) is not null;
+
+    /// <summary>
+    ///     Full path of the out-of-process plugin host binary, or null when it
+    ///     does not ship next to the current binary.
+    /// </summary>
+    /// <remarks>
+    ///     #1055 slice 3: the out-of-process host is the default CS-plugin
+    ///     route. The CLI registers this path as the
+    ///     <c>harbor-csharp-plugins</c> stdio MCP server
+    ///     (<c>ToolsCatalog.CreateMcpRegistry</c>), so CS plugins execute in
+    ///     the host process and the CLI never compiles them in-process.
+    /// </remarks>
+    /// <param name="baseDirectory">
+    ///     Directory to probe. Defaults to <see cref="AppContext.BaseDirectory" />.
+    ///     Exposed for tests; production callers leave it null.
+    /// </param>
+    public static string? LocateHost(string? baseDirectory = null)
     {
         string dir = baseDirectory ?? AppContext.BaseDirectory;
-        return File.Exists(Path.Combine(dir, HostBinaryName))
-            || File.Exists(Path.Combine(dir, HostBinaryName + ".exe"));
+        string candidate = Path.Combine(dir, HostBinaryName);
+        if (File.Exists(candidate))
+            return candidate;
+        string exeCandidate = Path.Combine(dir, HostBinaryName + ".exe");
+        return File.Exists(exeCandidate) ? exeCandidate : null;
     }
 }

@@ -64,6 +64,21 @@ internal sealed class McpStdioServer
 
     private async Task HandleAsync(string line, StreamWriter stdout, CancellationToken ct)
     {
+        string? response = await HandleLineAsync(line, ct).ConfigureAwait(false);
+        if (response is null)
+            return;
+        await stdout.WriteAsync(response).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    ///     Handle one NDJSON frame and return the response frame (with its
+    ///     trailing newline), or null when the frame gets no response
+    ///     (notifications, unaddressed pings, frames without a method).
+    ///     Malformed JSON throws — <see cref="RunAsync" /> logs it per line,
+    ///     exactly as the inline DOM path did before this extraction.
+    /// </summary>
+    internal async Task<string?> HandleLineAsync(string line, CancellationToken ct)
+    {
         // #180: envelope pre-scan over pooled UTF-8 bytes. Lines without a
         // string "method" (ignored frames) and the notifications/initialized
         // no-op return before any JsonDocument exists; addressed calls and
@@ -71,45 +86,57 @@ internal sealed class McpStdioServer
         if (TryScanMethod(line, out string? scanned))
         {
             if (scanned is null)
-                return;
+                return null;
             if (scanned == "notifications/initialized")
-                return;
+                return null;
         }
 
         using var doc = JsonDocument.Parse(line);
         var root = doc.RootElement;
         if (!root.TryGetProperty("method", out var methodEl) || methodEl.ValueKind != JsonValueKind.String)
-            return;
+            return null;
 
         var method = methodEl.GetString()!;
         bool hasId = root.TryGetProperty("id", out var idEl);
         JsonElement? paramsEl = root.TryGetProperty("params", out var p) ? p : null;
 
+        using var ms = new MemoryStream();
+        using var writer = new StreamWriter(ms, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false), bufferSize: 1024, leaveOpen: true) { AutoFlush = true };
+
         switch (method)
         {
             case "initialize":
-                await WriteResultAsync(stdout, idEl, WriteInitialize, ct).ConfigureAwait(false);
+                await WriteResultAsync(writer, idEl, WriteInitialize, ct).ConfigureAwait(false);
                 break;
 
             case "notifications/initialized":
-                return;
+                return null;
 
             case "ping":
-                if (hasId) await WriteResultAsync(stdout, idEl, w => w.WriteStartObject(), ct).ConfigureAwait(false);
+                if (!hasId)
+                    return null;
+                await WriteResultAsync(writer, idEl, static w => { }, ct).ConfigureAwait(false);
                 break;
 
             case "tools/list":
-                await WriteResultAsync(stdout, idEl, WriteToolsList, ct).ConfigureAwait(false);
+                await WriteResultAsync(writer, idEl, WriteToolsList, ct).ConfigureAwait(false);
                 break;
 
             case "tools/call":
-                if (hasId) await HandleToolCallAsync(paramsEl, idEl, stdout, ct).ConfigureAwait(false);
+                if (!hasId)
+                    return null;
+                await HandleToolCallAsync(paramsEl, idEl, writer, ct).ConfigureAwait(false);
                 break;
 
             default:
-                if (hasId) await WriteErrorAsync(stdout, idEl, -32601, $"Method not found: {method}", ct).ConfigureAwait(false);
+                if (!hasId)
+                    return null;
+                await WriteErrorAsync(writer, idEl, -32601, $"Method not found: {method}", ct).ConfigureAwait(false);
                 break;
         }
+
+        await writer.FlushAsync(ct).ConfigureAwait(false);
+        return ms.Length == 0 ? null : Encoding.UTF8.GetString(ms.ToArray());
     }
 
     /// <summary>
@@ -277,7 +304,9 @@ internal sealed class McpStdioServer
             writer.WriteString("jsonrpc", "2.0");
             WriteId(writer, idEl);
             writer.WritePropertyName("result");
+            writer.WriteStartObject();
             writeResult(writer);
+            writer.WriteEndObject();
             writer.WriteEndObject();
         }
 

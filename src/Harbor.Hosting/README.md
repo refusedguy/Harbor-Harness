@@ -14,7 +14,7 @@ The **composition root** for all Harbor applications. `Registration.AddHarbor(..
 | `HarborComposeOptions.cs` | App-specific configuration passed into composition (storage backend, TUI renderer, event bus middleware, config paths). |
 | `HarborCompositionContext.cs` | Runtime bag holding resolved options, logger factory, common config, event bus, and registries. |
 | `HarborFeatureSet.cs` | Record capturing which optional feature flags are active. |
-| `Modules/*.cs` | Individual DI modules: `CoreModule`, `IntelligenceModule`, `IpcModule`, `TelemetryModule`, `TuiModule`, `PluginLoadHostAdapter`, `StorageModule`, `ConfigurationModule`, `RegistriesModule`, `ToolsCatalog`, `ProviderFactories`, `JsonProviderDiscovery`, `ConfigAuthResolver`. |
+| `Modules/*.cs` | Individual DI modules: `CoreModule`, `IntelligenceModule`, `IpcModule`, `TelemetryModule`, `TuiModule`, `StorageModule`, `ConfigurationModule`, `RegistriesModule`, `ToolsCatalog`, `ProviderFactories`, `JsonProviderDiscovery`, `ConfigAuthResolver`. CS plugins are served out-of-process (#1055s3), so no module compiles them in-process. |
 
 ## Public API summary
 

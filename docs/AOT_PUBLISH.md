@@ -15,14 +15,11 @@ gate on it.** The criterion is two things, both of which must hold:
    [`.github/aot-warning-baseline.txt`](../.github/aot-warning-baseline.txt)
    exactly — the same recorded outcome, no new id, no changed count, no new
    first-party site, and no row left behind for a warning that stopped.
-2. The **published artifact** is checked. **Today this half is inactive, and
-   saying so is part of the criterion rather than a footnote**: a failing ILC
-   publish emits no binary (measured — an earlier run of this job reached
-   `no executable at publish/aot/Harbor.App.Cli`), so while the record says the
-   publish fails there is nothing to run. The step checks the record's claim in
-   both directions — a `failed` publish must have produced *no* artifact, a
-   `published` one must have produced one that runs `--version` / `--help` /
-   `--providers` on content — so it stays a real assertion instead of a skip.
+2. The **published artifact** is checked. Since #1055s3 this half is **live**:
+   the `fulltree` publish completes, so the step executes the binary it
+   produced — `--version` / `--help` / `--providers` on content. The step
+   checks the record's claim in both directions — a `failed` publish must have
+   produced *no* artifact, a `published` one must have produced one that runs — so it stays a real assertion instead of a skip.
    The transition is forced by the outcome check below; see [the ratchet
    section](#this-gate-is-a-ratchet-not-a-green-light--and-that-is-the-whole-design).
 
@@ -36,12 +33,17 @@ makes that a decision rather than a count.
 
 ## This gate is a ratchet, not a green light — and that is the whole design
 
-**No AOT publish configuration in this repository works today.** That is
-measured, and it is the reason the gate is shaped the way it is:
+**Until #1055s3, no AOT publish configuration in this repository worked.**
+That was measured, and it is the reason the gate is shaped the way it is.
+The record below is kept because it is the transition this gate exists to
+force — #1055s3 moved the plugin compile pipeline out of the CLI process,
+the `fulltree` publish started completing, and the baseline flipped from
+`failed` to `published` in the same diff:
 
-- recipe `fulltree` (`-p:HarborWithAot=true`) reaches ILC and **fails** on
-  three ids the csproj does not demote;
-- recipe `minimal` (`HARBOR_MINIMAL=true`) **does not compile**.
+- recipe `fulltree` (`-p:HarborWithAot=true`) **publishes** since #1055s3
+  (previously: reached ILC and failed on IL3000 x4, IL2072, IL2070 — three
+  ids the csproj does not demote);
+- recipe `minimal` (`HARBOR_MINIMAL=true`) **does not compile** (unchanged).
 
 So the publish step is `continue-on-error`, and the gate step immediately after
 decides. The committed record says *"this publish fails, like this"*, and the
@@ -58,20 +60,23 @@ gate passes **only** on that:
 ### Two things about this gate are weaker than they look, stated here rather
 ### than left for the next reader to discover
 
-**The "run the published binary" half is currently inactive.** A failing ILC
-publish emits no binary, so there is nothing to execute. The step still runs and
-still asserts — that a `failed` publish left no artifact behind — but it does not
-demonstrate executability, and no amount of reading the job's green tick will
-change that. It activates on its own the moment the publish starts succeeding:
-the outcome check goes red first, the record is updated, and the branch flips.
-What is missing from the current state is the thing #413 asked for, and the
-honest description of this PR is "the gate that will hold the AOT state still",
-not "the AOT state is good".
+**The "run the published binary" half is live since #1055s3.** Before that, a
+failing ILC publish emitted no binary, so there was nothing to execute. The
+step still ran and still asserted — that a `failed` publish left no artifact
+behind — but it did not demonstrate executability, and no amount of reading
+the job's green tick changed that. The first run in which the publish
+succeeded (CI run 38035398971 on the #1055 slice-3 branch) was the first real
+test of the three artifact assertions, exactly as predicted — and one of them
+was wrong: the smoke invokes `--providers` (dashed, like `--version`/`--help`)
+while `Program.cs` only matched the bare `providers` verb, so the flag fell
+through to interactive setup and failed. The alias landed in the same diff
+that flipped the publish green.
 
-**The three published-binary assertions have never executed against a real
-artifact.** They are the part of this gate that has not been shown to work. The
-first run in which the publish succeeds is the first real test of them, and if
-they are wrong the fix will land in the same PR that fixes the AOT build.
+**The three published-binary assertions executed against a real artifact for
+the first time on the #1055 slice-3 branch.** They were the part of this gate
+that had never been shown to work, and the first green publish proved it: the
+`--providers` assertion was wrong (see above) and the fix landed in the same
+PR that fixed the AOT build — the exact outcome this section predicted.
 
 That last row is the one that matters most. A publish that produced no log, a
 truncated log, or a log from the other recipe is not "the recorded state"; it is
@@ -122,10 +127,9 @@ The CLI csproj documents **two** AOT recipes and they are not equivalent (#747):
 | Recipe | What it does |
 |---|---|
 | `minimal` — `HARBOR_MINIMAL=true dotnet publish …` | Turns AOT on **and** forces `HarborWithPlugins`, `HarborWithSpectreTui`, `HarborWithAllProviders` and `HarborWithAllTools` to `false`. The csproj calls it *"the only path that produces the stripped binary, and the only one that matches what NativeAOT is supposed to mean here"*. |
-| `fulltree` — `dotnet publish … -p:HarborWithAot=true` | Turns `PublishAot` on and **nothing else**. The four feature flags keep their `true` defaults, so the plugin projects and Roslyn stay in the compile. |
+| `fulltree` — `dotnet publish … -p:HarborWithAot=true` | Turns `PublishAot` on and **nothing else**. The four feature flags keep their `true` defaults. Since #1055s3 the CLI no longer references the plugin compile pipeline (`Harbor.Hosting` binds only `Harbor.Plugins.Hosting`), so Roslyn is not in the trim graph even though the flags stay on. |
 
-**This gate publishes `fulltree`, and both recipes were broken when it was
-written.** Three separate defects, found by running them:
+**When this gate was written both recipes were broken.** Three separate defects, found by running them (defects 2–3 below are the historical record; defect 2 resolved by #1055s3):
 
 ### 1. Neither recipe was invocable at all — `NETSDK1102`
 
@@ -144,7 +148,9 @@ the recipe was written. Fixed: the csproj now sets `SelfContained=true` inside
 the AOT block, and the job passes the flag on the command line too so the gate
 does not depend on that file staying shaped this way.
 
-### 2. `fulltree` reaches ILC and fails
+### 2. `fulltree` reached ILC and failed — resolved by #1055s3
+
+Until the out-of-process plugin route landed, the publish failed:
 
 ```
 ILC : error IL3000: Harbor.Plugins.Compilation.PluginAssemblyReferences.
@@ -164,9 +170,9 @@ ILC : Trim analysis error IL2070: Harbor.Plugins.Instantiation.
 error MSB3077: ilc … errors were detected during execution
 ```
 
-The measured inventory, which is what
+The inventory it recorded, row by row in
 [`.github/aot-warning-baseline.txt`](../.github/aot-warning-baseline.txt)
-records row by row:
+before #1055s3:
 
 | ID | count | demoted by the csproj? | effect |
 |---|---|---|---|
@@ -174,9 +180,15 @@ records row by row:
 | IL3050 | 9 | yes | printed, did not fail |
 | IL2104 | 3 | yes | printed, did not fail |
 | IL3053 | 2 | yes | printed, did not fail |
-| **IL3000** | **4** | **no** | **error — fails the publish** |
-| **IL2072** | **1** | **no** | **error — fails the publish** |
-| **IL2070** | **1** | **no** | **error — fails the publish** |
+| **IL3000** | **4** | **no** | **error — failed the publish** |
+| **IL2072** | **1** | **no** | **error — failed the publish** |
+| **IL2070** | **1** | **no** | **error — failed the publish** |
+
+The out-of-process move (#1055s3) removed the CLI's references to the four
+compile-pipeline projects, so the three error ids have no site left in the
+graph: the current inventory
+is IL2026 x8, IL3050 x7, IL2104 x2, IL3053 x2, all warnings, exit 0 — no
+suppression added, which is what #413's criteria required.
 
 Three findings fall out of that table.
 
@@ -221,11 +233,13 @@ gate's to answer. Recorded, not fixed.
 
 ### Net
 
-**The AOT state of this repository, as measured, is: the tree is not AOT-clean
-with plugins compiled in, and the stripped profile cannot be built at all.** That
-is a sharper statement than "unknown", and it is #48/S4's to resolve — the
-`Microsoft.CodeAnalysis` IL3000 is not fixable from our code, and #413's own
-criteria forbid buying green with blanket suppression.
+**The AOT state of this repository, as measured since #1055s3, is: the
+`fulltree` CLI publish completes with four demoted warning ids and no errors,
+and the stripped profile cannot be built at all.** The plugin compile path —
+including the `Microsoft.CodeAnalysis` IL3000 no code change could fix — is
+out of the CLI process, which is what resolved the errors without suppression.
+What remains for #48/S4 is the JSON-convention warnings and the unevaluable
+stripped profile, not the plugin surface.
 
 `recipe=` is part of the publish marker, and the gate rejects a log from the
 other recipe: the two build different programs, so an inventory from one
@@ -293,11 +307,13 @@ A row is `<ID> | <severity> | <count> | <verdict> | <first-party sites> | <reaso
   its version and are not actionable per site. The column is `-` when no site is
   first-party — which is the correct answer for `IL2104` and `IL3053`, which are
   per-assembly rollups.
-- **`REJECTED` means "a defect that ought to be fixed", and it is expected to
-  still be there.** A `REJECTED` row that stops appearing is an **improvement**
-  and the gate goes **red** on it, demanding the row be promoted or deleted. The
-  pass on a `REJECTED` row is printed as a `NOTE`, not swallowed: the reader is
-  told what they are passing *on*.
+- **`REJECTED` meant "a defect that ought to be fixed", and it was expected to
+  still be there.** A `REJECTED` row that stopped appearing was an
+  **improvement** and the gate went **red** on it, demanding the row be
+  promoted or deleted. #1055s3 exercised exactly that path: the three error
+  rows left with the in-process pipeline and were deleted in the same diff.
+  No `REJECTED` rows remain today; if one returns, the gate treats it as a
+  regression by the same rule.
 - **`IL0xxx` and ordinary analyzer ids are out of scope.** `CS****` is in scope
   only because the stripped recipe currently fails to compile; when that is
   fixed the `CS` rows go away and the gate says so.
@@ -413,12 +429,18 @@ it is a real risk area (the provider wire payloads are the place this repo
 already hand-writes JSON over `Utf8JsonWriter`). It is **not** evidence about
 build-time resource embedding.
 
-The assertion also asserts that all four ids are present, which is derived from
-the recipe: under `fulltree`, `HarborWithAllProviders` stays `true`, so
-`ProviderFactories` registers the native Anthropic and OpenAI factories on top
-of the Ollama one, and the JSON catalogue supplies `kilocode`. Under the
-stripped recipe `anthropic` and `openai` would legitimately disappear — the
-recipe section above says which recipe this job uses and why.
+The assertion also asserts that three ids are present — `ollama` (the native
+baseline factory, always compiled in) plus `kilocode` and `openrouter` from
+JSON. It deliberately does not assert `anthropic`/`openai`: the native
+factories sit behind `HARBOR_WITH_ALL_PROVIDERS`, whose `true` default lives
+in `Harbor.App.Cli.csproj` as a project-level property that never reaches
+`Harbor.Hosting` (only global `-p` properties flow to `ProjectReference`s),
+and `JsonProviderDiscovery` skips their JSON files because the factories own
+those ids. First measured on the #1055 slice-3 branch: a `dotnet`-built CLI
+lists 11 ids, no `anthropic`/`openai`. Only a NUKE build, which sets the flag
+globally, carries them. Under the stripped recipe even `ollama` would
+legitimately disappear — the recipe section above says which recipe this job
+uses and why.
 
 The dead embedded path is a pre-existing defect, recorded here and **not
 fixed by this gate**: repairing it changes which providers a published binary

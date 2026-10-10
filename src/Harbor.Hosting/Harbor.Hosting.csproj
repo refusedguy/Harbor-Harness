@@ -123,10 +123,13 @@
   </ItemGroup>
 
   <ItemGroup Condition="'$(HarborWithPlugins)' == 'true'">
-    <ProjectReference Include="..\Harbor.Plugins.Storage\Harbor.Plugins.Storage.csproj"/>
-    <ProjectReference Include="..\Harbor.Plugins.Compilation\Harbor.Plugins.Compilation.csproj"/>
-    <ProjectReference Include="..\Harbor.Plugins.Instantiation\Harbor.Plugins.Instantiation.csproj"/>
-    <ProjectReference Include="..\Harbor.Plugins.Registration\Harbor.Plugins.Registration.csproj"/>
+    <!--
+      #1055s3: the CLI never compiles CS plugins in-process — the default
+      route is the out-of-process host over MCP. The only plugin assembly the
+      composition root still binds is Harbor.Plugins.Hosting (host-binary
+      probe + filesystem watcher). The compile pipeline (Storage /
+      Compilation / Instantiation / Registration) lives in the host process.
+    -->
     <ProjectReference Include="..\Harbor.Plugins.Hosting\Harbor.Plugins.Hosting.csproj"/>
   </ItemGroup>
 

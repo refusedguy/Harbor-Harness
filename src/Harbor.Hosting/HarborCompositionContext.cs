@@ -210,11 +210,11 @@ public sealed class HarborRegistries
     ///     storage registry (#581). Empty when the plugin stack is compiled out.
     /// </summary>
     /// <remarks>
-    ///     Startup only, by the same contract that governs every other registration: a
-    ///     hot-reload pass composes its own load host over a throwaway service
-    ///     collection, so a backend it registers cannot reach the already-built storage
-    ///     singleton. Known limitation, not a silent gap — the same one
-    ///     <c>PluginRuntimeComposer</c> documents for late-loaded plugins.
+    ///     Startup only. Out-of-process (#1055s3) no plugin backend reaches
+    ///     these maps — CS-plugin session stores and TUI backends are not
+    ///     served over the MCP route — so they stay at their empty defaults
+    ///     and StorageModule/TuiModule snapshot emptiness. Known limitation,
+    ///     not a silent gap.
     /// </remarks>
     public IReadOnlyDictionary<string, Func<ISessionStore>> SessionStores { get; internal set; } =
         new Dictionary<string, Func<ISessionStore>>(StringComparer.OrdinalIgnoreCase);

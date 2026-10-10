@@ -636,17 +636,17 @@ where the risk is highest. 1.3.0 predates the `ResultValueWalker` rework (change
 
 ### 5.2 Measured baseline (CI, `dotnet build Harbor.slnx -c Release`, analyzer 1.3.0)
 
-**210 CFE0001 sites total: 36 in shipped code (src/ + apps/), 174 under `tests/`.** (#561 moved one site out of production when it deleted `PluginCompilationResult`, and added two when the compiler contract became a real `Result<T>` — the `compiled.Value` read in `PluginHost.LoadAllAsync` and the `inner.Value.AssemblyBytes` read in `CachingCompiler.CompileAsync`, both false positives of the early-return guard shape, both carrying a documented pragma. #671 took one out of production: `ProviderModelPickerViewModel.BuildProviderGroupAsync` read `cfgResult.Value` to decide a provider's authorization from a config dictionary, and deleting that read — `IAuthResolver` answers that question now — deleted the site and its pragma with it.)
+**209 CFE0001 sites total: 35 in shipped code (src/ + apps/), 174 under `tests/`.** (#561 moved one site out of production when it deleted `PluginCompilationResult`, and added two when the compiler contract became a real `Result<T>` — the `compiled.Value` read in `PluginHost.LoadAllAsync` and the `inner.Value.AssemblyBytes` read in `CachingCompiler.CompileAsync`, both false positives of the early-return guard shape, both carrying a documented pragma. #671 took one out of production: `ProviderModelPickerViewModel.BuildProviderGroupAsync` read `cfgResult.Value` to decide a provider's authorization from a config dictionary, and deleting that read — `IAuthResolver` answers that question now — deleted the site and its pragma with it. #1055s3 took one out of production: deleting the in-process plugin pipeline removed `PluginReloadService.ReloadCoreAsync` and its `result.Value` read with it.)
 
 | area | sites | verdict |
 |---|---|---|
 | shipped — real defect, fixed | 1 | **fixed** (see 5.3) |
 | shipped — real defect, baselined | 1 | `SettingsViewModel` ctor; needs a product decision (5.3) |
-| shipped — false positives | 34 | baselined, one documented pragma each (5.4) |
+| shipped — false positives | 33 | baselined, one documented pragma each (5.4) |
 | `tests/` | 174 | all false positives of ONE shape; suppressed centrally (5.5) |
 
 Per project: `Harbor.Lsp` 8, `Harbor.Application` 7, `Harbor.Desktop.Abstractions` 2,
-`Harbor.Hosting` 3, `Harbor.Storage.Jsonl` 2, `Harbor.App.Cli` 6, `Harbor.Plugins.Hosting` 1,
+`Harbor.Hosting` 2, `Harbor.Storage.Jsonl` 2, `Harbor.App.Cli` 6, `Harbor.Plugins.Hosting` 1,
 `Harbor.Plugins.Runtime` 1, `Harbor.App.Avalonia` 3, `Harbor.Terminal.Abstractions.Tests` 1 (pre-existing break, see 5.9).
 
 **A partial build reports a LOWER BOUND, never the count.** The shipped-code sites were found across
@@ -669,14 +669,14 @@ crash class, live. Now `GetValueOrDefault(IdentityConfig.Default.Model!)`, which
 the property's own summary always promised. This is the only unguarded `.Value` the analyzer found in
 shipped code, and the prior "35/35 clean" audit had missed it.
 
-### 5.4 The 24 production false positives, by shape
+### 5.4 The 23 production false positives, by shape
 
 The analyzer's guard detection is a heuristic function-body walk. It models `if`-scoped checks,
 ternaries and switch arms; it does **not** model these, all of which Harbor uses constantly:
 
 | shape | example | count |
 |---|---|---|
-| early `return` guard | `if (r.IsFailure) return; … r.Value` | 15 |
+| early `return` guard | `if (r.IsFailure) return; … r.Value` | 14 |
 | early `continue` guard | `if (r.IsFailure) { …; continue; } … r.Value` | 4 |
 | fail-fast `throw` guard | `if (psk.IsFailure) throw; … psk.Value` | 1 |
 | `&&` short-circuit | `r.IsSuccess && … r.Value` | 1 |

@@ -63,6 +63,7 @@ policy is a separate statement and does not live here.
 ## Public API summary
 
 - **`McpStdioServer.RunAsync(CancellationToken)`**: reads JSON-RPC lines from stdin, writes results to stdout.
+- **`McpStdioServer.HandleLineAsync(string, CancellationToken)`**: one frame in, one response frame (or null) out — the seam the test suite drives.
 - **`McpPluginLoadHost`**: `Tools` (read-only tool dictionary), `RegisterTool`, `RegisterProvider`, `RegisterAgent`, `RegisterTuiPlugin`, plus access to `Services`, `Configuration`, `LoggerFactory`, `EventBus`, `Panels`.
 - **MCP methods**: `initialize` (returns `2024-11-05` protocol version), `tools/list`, `tools/call`, `ping`.
 
@@ -89,26 +90,26 @@ policy is a separate statement and does not live here.
 
 ## Tests
 
-**No test project covers this host, and the build is what stands behind it.**
+`tests/Harbor.Plugins.Host.Tests` drives the JSON-RPC surface through
+`McpStdioServer.HandleLineAsync` (no subprocess needed): `initialize`
+(protocol version `2024-11-05`, server name `harbor-csharp-plugins`),
+`tools/list`, `tools/call` (success, unknown tool `-32602`, missing name
+`-32602`, throwing tool → `isError` with the loop still alive), unknown
+method (`-32601`), `ping`, and the response-less frames
+(`notifications/initialized`, method-less lines → no frame).
 
-`Harbor.slnx` compiles this project, so a change that does not compile fails
-`build` — but nothing here has an assertion of its own. Two things that look
-like coverage are not:
+The parity suite pins the table above as an executable spec: every non-tool
+door accepts and discards, and `tools/list` stays empty for them. The
+declared-contract set (#1012) is pinned where it lives
+(`tests/Harbor.Plugins.Runtime.Tests/Compilation/PluginReferenceContractTests`),
+against the same `PluginAssemblyReferences` the host process builds.
 
-- `Harbor.Plugins.Runtime.Tests` does **not** reference this project. It
-  references `Harbor.Plugins.Hosting`, a different assembly; the name
-  similarity is the whole of the resemblance. It exercises the in-process
-  `PluginHost` pipeline, never this stdio server.
-- No E2E project references it either. Grepping `McpStdioServer` finds this
-  project, and comments in other files using the same words about a different
-  subject.
-
-So the JSON-RPC surface below — `initialize` / `tools/list` / `tools/call` /
-`ping`, the protocol version, the NDJSON framing — is unverified. Until a
-subprocess test drives the binary over a pipe, treat that list as a description
-of the code, not as a contract anything holds it to. Wiring one is a new axis:
-it needs a process fixture, and the architecture gate deliberately does not
-reference this project, so it would not be a rule addition.
+Latency (acceptance data for #1055): `ToolsCall_DispatchLatency_StaysInteractive`
+measures loopback `tools/call` dispatch (60 calls, warmed up) and fails above
+a 100 ms mean. Each test's stdout — the measured mean — is filed under the
+test in TRX and rendered into the CI summary by
+`tools/test-measurements.py`, so the number is re-measured on every run
+rather than quoted once here.
 
 ## Build
 
