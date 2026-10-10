@@ -22,10 +22,10 @@ harbor run change agent=<name> "<task>" [--checks <file>] [--dry-run] [--repo <p
 
 ## Status
 
-Pin, isolate, and accept-gate are implemented. The command runs pin and
-isolate and then stops fail-closed: the run is left honestly at `Isolated`,
+Pin, isolate, freeze, and accept-gate are implemented. The command runs pin,
+isolate, and freeze and then stops fail-closed: the run is left honestly at `Changed`,
 exit code 4 names the missing stage, and `harbor run list` shows the run with
-its last completed transition. Nothing is faked past `Isolated`. Accept
+its last completed transition. Nothing is faked past `Changed`. Accept
 (`harbor run accept`) applies a frozen `change.patch` once the earlier slices
 produce one; until then it refuses with the missing stage named.
 
@@ -33,7 +33,7 @@ produce one; until then it refuses with the missing stage named.
 |---|---|---|
 | S1 | pin contract | landed |
 | S2 | worktree + manifest | landed |
-| S3 | frozen change set | open (#377) |
+| S3 | frozen change set | landed (#377) |
 | S4 | checks | open (#378) |
 | S5 | verification report | in progress (#379, slice 1: pure renderer, no verb yet) |
 | S6 | accept | slice 1 landed (#382): gate + apply + dry-run + at-most-once + `accept.log`; `--reverify` fail-closed pending the S5 report (#379) |
@@ -49,13 +49,14 @@ Each run owns one directory, minted id, never user input:
 ~/.harbor/runs/<RunId>/
   manifest.json   pinned contract fields, worktree path, lifecycle state
   worktree/       detached git worktree at the pinned revision
-  change.patch    frozen change set (S3); accept reads only this file
+  change.patch    frozen binary diff base..head (S3); accept reads only this file
+  changeset.json  frozen inventory: per-path status + counts (S3)
   accept.log      append-only audit trail: one line per accept attempt
 ```
 
-`change.patch` and `accept.log` already exist (S6 slice 1 reads the first,
-appends the second); `changeset.json`, `checks.json`, `report.json`, and
-`owner-report.md` arrive with their slices. The manifest is written atomically (temp + rename), so a
+`change.patch` and `changeset.json` (both S3) and `accept.log` (S6 slice 1)
+already exist; `checks.json`, `report.json`, and `owner-report.md` arrive
+with their slices. The manifest is written atomically (temp + rename), so a
 killed process leaves either the previous state or the new one, never a
 half-written file. `report.json` is rendered by slice S5-1
 (`src/Harbor.Application/Sessions/ChangeReport.cs`) from the frozen set
@@ -89,12 +90,33 @@ names the stage:
 | 1 | reported, at least one check failed (reserved for S4/S5) |
 | 2 | bad usage (missing agent, missing task, missing checks file, missing run id, unknown option, unknown run) |
 | 3 | pre-flight conflict: dirty workspace, moved base, or not a repository |
-| 4 | internal failure at a named stage (`isolate`, the missing `freeze`, accept before `Reported`, second accept on an `Accepted` run, unavailable `--reverify`, failed apply) |
+| 4 | internal failure at a named stage (`isolate`, `freeze`, the not-yet-wired `checks`, accept before `Reported`, second accept on an `Accepted` run, unavailable `--reverify`, failed apply) |
 | 5 | out-of-reach inventory (`--all-effects`): read-only, nothing written |
 
 `--dry-run` performs the pin pre-flight and prints the plan, then stops
 without creating a worktree. A failed pre-flight never leaves a worktree
 registered.
+
+## Frozen change set (S3)
+
+`ChangeSetFreezer.FreezeAsync` (in
+`src/Harbor.Application/Sessions/ChangeSetFreezer.cs`) captures the run's
+work as `change.patch` (`git diff --binary base..head`) plus
+`changeset.json` (per-path status + insertion/deletion counts, ignored-path
+count), then moves the manifest `Isolated -> Changed`. Freeze is
+`git add -A` (untracked files created by the run are included) plus one
+`git commit --no-verify` under the pinned `Harbor Run <harbor@local>`
+identity — never the operator's `~/.gitconfig`, never a hook.
+
+- Idempotent: re-freezing returns the recorded artifact, byte-identical,
+  with no second commit. Renames and deletions keep `R` / `D`; binary
+  changes are stored `--binary` and reported `Binary`.
+- Empty is success: zero entries, `isEmpty: true`, head equals base — not
+  an error, and not "verified".
+- Capped, never truncated: patch byte cap (default 8 MiB) and entry-count
+  cap (default 2000). Over-limit is a failure naming the cap.
+- `.gitignore`d paths are excluded and counted (`ignoredPathCount`) —
+  never dropped silently.
 
 ## Accept (S6 slice 1)
 
@@ -177,7 +199,7 @@ harbor run reject <RunId> (--patch | --worktree | --all-effects | --undo-apply) 
 ```
 
 - `--patch`: drop the run's frozen artifacts; the worktree is untouched.
-  Pending: the frozen set (S3, #377) has not landed, so slice 1 refuses
+  Pending: the S7 `--patch` slice has not landed, so slice 1 refuses
   with the stage named and deletes nothing.
 - `--worktree`: remove the isolated working copy; pinned state becomes `Released`.
   Pending: slice 1 refuses with the stage named and removes nothing.

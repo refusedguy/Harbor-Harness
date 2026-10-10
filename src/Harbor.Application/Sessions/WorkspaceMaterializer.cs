@@ -533,13 +533,15 @@ public static class WorkspaceMaterializer
         return false;
     }
 
-    private sealed record GitOutput(int ExitCode, string Stdout, string Stderr);
+    internal sealed record GitOutput(int ExitCode, string Stdout, string Stderr);
 
     /// <summary>
     ///     One git invocation via argument list (never a shell string) with the
     ///     non-interactive environment mirroring the S1 probe helper.
+    ///     Internal so the S3 freezer (#377) stages, commits and diffs with
+    ///     exactly these semantics instead of a second copy.
     /// </summary>
-    private static async Task<Result<GitOutput>> RunGitAsync(
+    internal static async Task<Result<GitOutput>> RunGitAsync(
         string workingDirectory, string[] argv, TimeSpan timeout, CancellationToken ct)
     {
         var psi = new ProcessStartInfo("git")
@@ -607,7 +609,7 @@ public static class WorkspaceMaterializer
         return Result.Success(new GitOutput(proc.ExitCode, stdout, stderr));
     }
 
-    private static string Clip(string text)
+    internal static string Clip(string text)
     {
         string t = text.Trim();
         if (t.Length == 0)

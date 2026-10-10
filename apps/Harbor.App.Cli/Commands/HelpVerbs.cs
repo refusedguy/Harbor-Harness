@@ -36,7 +36,7 @@ internal static class HelpVerbs
                           Harbor — modular AI coding agent.
                           Usage: harbor [ask <prompt>|run (task agent=<name> <prompt>|change agent=<name> "<task>" [--dry-run]|list)|demo|setup|auth|config|providers|models|sessions|mcp|serve|tui|events|storage|logs|help|version] [--script <path>]
 
-                          run change      Verified-change chain (S9, #397): pin, isolate, then fail-closed.
+                          run change      Verified-change chain (S9, #397): pin, isolate, freeze, then fail-closed.
                                             Exits: 0 dry-run plan; 2 bad usage; 3 pre-flight conflict; 4 named-stage failure.
                           run accept      Apply the frozen patch behind the base-unchanged gate (S6, #382).
                                             Lands as uncommitted staged changes — no commit, no branch, no stash.
