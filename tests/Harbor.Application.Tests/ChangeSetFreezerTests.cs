@@ -420,7 +420,11 @@ public class ChangeSetFreezerTests
                 await Assert.That(created.IsSuccess).IsTrue();
                 try
                 {
-                    string hook = Path.Combine(created.Value.Path, ".git", "hooks", "pre-commit");
+                    // A linked worktree's `.git` is a pointer file: hooks live
+                    // in the real git dir (`rev-parse --absolute-git-dir`).
+                    string gitDir = GitOut(created.Value.Path, "rev-parse --absolute-git-dir").Trim();
+                    Directory.CreateDirectory(Path.Combine(gitDir, "hooks"));
+                    string hook = Path.Combine(gitDir, "hooks", "pre-commit");
                     await File.WriteAllTextAsync(hook, "#!/bin/sh\nexit 1\n");
                     ChmodPlusX(hook);
                     await File.AppendAllTextAsync(Path.Combine(created.Value.Path, "a.txt"), "two\n");
