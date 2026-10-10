@@ -344,6 +344,10 @@ public sealed class LayoutTree
             _layoutCache.Remove(key);
         }
 
+        // The ToArray below is NOT removable: _solvedOrder is a reused scratch
+        // buffer cleared on every Solve, so the cache entry must own its array
+        // or the next Solve would overwrite cached rects. Miss-only cost
+        // (hits return before StoreLayout), and bounded by MaxCachedLayouts.
         var node = new LinkedListNode<LayoutCacheEntry>(
             new LayoutCacheEntry(key, _solvedOrder.ToArray(), _focusedId));
         _layoutLru.AddFirst(node);
