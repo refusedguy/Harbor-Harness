@@ -5,7 +5,6 @@ using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Abstractions.Permissions;
 using Harbor.Abstractions.Tools;
-using Harbor.Plugins.Compilation;
 using Harbor.Plugins.Host;
 using Harbor.Terminal.Abstractions;
 using Harbor.Terminal.Abstractions.Plugins;
@@ -30,10 +29,11 @@ namespace Harbor.Plugins.Host.Tests;
 ///         accepts (so plugin <c>Initialize</c> never throws) and discards.
 ///     </para>
 ///     <para>
-///         The declared-contract test pins the reference set from #1012: the
-///         host compiler resolves the panel contracts by deployment-directory
-///         name, so a panel-shaped plugin compiles the same out-of-process as
-///         it did in-process.
+///         The #1012 link set (which assemblies the host compiler resolves by
+///         deployment-directory name, including the panel assembly) is pinned
+///         where it lives — <c>Harbor.Plugins.Runtime.Tests/Compilation/PluginReferenceContractTests</c>
+///         drives the same <c>PluginAssemblyReferences</c> the host process
+///         builds — so this suite does not duplicate it.
 ///     </para>
 ///     <para>
 ///         The latency test is the issue's acceptance data: per-call dispatch
@@ -223,29 +223,6 @@ public class PluginHostJsonRpcTests
         using var doc = await CallAsync(server, """{"jsonrpc":"2.0","id":2,"method":"tools/list"}""");
         await Assert.That(doc.RootElement.GetProperty("result").GetProperty("tools").GetArrayLength())
             .IsEqualTo(0);
-    }
-
-    /// <summary>
-    ///     The #1012 link set: the host compiler resolves the plugin contracts
-    ///     by deployment-directory name — including the panel assembly, which
-    ///     no compile-time token pins — so panel-shaped plugins compile the
-    ///     same out-of-process as they did in-process.
-    /// </summary>
-    [Test]
-    public async Task DeclaredContractSet_ContainsPanelAssembly()
-    {
-        string[] declared = PluginContractAssemblies.PluginContractAssemblies;
-        await Assert.That(declared.Length).IsEqualTo(4);
-        foreach (string name in new[]
-                 {
-                     "Harbor.Abstractions",
-                     "Harbor.Abstractions.Contracts",
-                     "Harbor.Terminal.Abstractions",
-                     "Harbor.Ui.Framework.State",
-                 })
-        {
-            await Assert.That(declared.Contains(name)).IsEqualTo(true);
-        }
     }
 
     /// <summary>

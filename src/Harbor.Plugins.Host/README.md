@@ -100,8 +100,9 @@ method (`-32601`), `ping`, and the response-less frames
 
 The parity suite pins the table above as an executable spec: every non-tool
 door accepts and discards, and `tools/list` stays empty for them. The
-declared-contract test pins `PluginContractAssemblies` (#1012), including
-`Harbor.Ui.Framework.State`.
+#1012 declared-contract set is pinned where it lives
+(`tests/Harbor.Plugins.Runtime.Tests/Compilation/PluginReferenceContractTests`),
+against the same `PluginAssemblyReferences` the host process builds.
 
 Latency (acceptance data for #1055): `ToolsCall_DispatchLatency_StaysInteractive`
 measures loopback `tools/call` dispatch (60 calls, warmed up) and fails above

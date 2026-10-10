@@ -10,7 +10,6 @@
     <ProjectReference Include="..\..\src\Harbor.Abstractions\Harbor.Abstractions.csproj"/>
     <ProjectReference Include="..\..\src\Harbor.Abstractions.Contracts\Harbor.Abstractions.Contracts.csproj"/>
     <ProjectReference Include="..\..\src\Harbor.Terminal.Abstractions\Harbor.Terminal.Abstractions.csproj"/>
-    <ProjectReference Include="..\..\src\Harbor.Plugins.Compilation\Harbor.Plugins.Compilation.csproj"/>
     <ProjectReference Include="..\..\src\Harbor.Ui.Framework.State\Harbor.Ui.Framework.State.csproj"/>
   </ItemGroup>
 
