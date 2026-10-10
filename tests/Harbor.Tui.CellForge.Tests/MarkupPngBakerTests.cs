@@ -71,8 +71,8 @@ public class MarkupPngBakerTests
 
         // Anchor (0.1,0.1) → (4,2): label box starts red…
         await Assert.That(At(image!, 4, 2)).IsEqualTo(((byte)255, (byte)0, (byte)0, (byte)255));
-        // …and the H stem (row ".#.", scale 2) lands white at (8,4).
-        await Assert.That(At(image!, 8, 4)).IsEqualTo(((byte)255, (byte)255, (byte)255, (byte)255));
+        // …and the H left stem (row "#.#", scale 2) lands white at (6,4).
+        await Assert.That(At(image!, 6, 4)).IsEqualTo(((byte)255, (byte)255, (byte)255, (byte)255));
     }
 
     [Test]
