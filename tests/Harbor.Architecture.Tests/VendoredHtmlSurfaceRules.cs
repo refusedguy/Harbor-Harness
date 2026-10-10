@@ -57,6 +57,19 @@
 //     would have to write, and stays quiet on the current `MarkupControl` use.
 //   * `Detector_IgnoresTheExplanationInProse` — this file and ADR-012 both name
 //     the forbidden types; documenting them must not trip the rule.
+//
+// MECHANISM (#1086, step 2, conveyor)
+// -----------------------------------
+// The rule below is a ScanRule: one banned shape (the seven forbidden patterns
+// merged into one alternation), no baseline, five planted controls, a discovery
+// floor. Enumeration, stripping, matching and the control/discovery verdicts are
+// ScanRunner's; this file keeps the issue prose and the test names.
+//
+// The merge is mechanical, not a re-decision: the old detector reported one hit
+// per line (break after the first matching pattern), and a single alternation
+// over lines reports the same set — a line matches iff any branch matches. No
+// line in `src/` or `apps/` matches two branches at once, and the planted
+// bridge lines each match exactly one, so the control verdicts are unchanged.
 
 using System.Text.RegularExpressions;
 
@@ -69,74 +82,83 @@ namespace Harbor.Architecture.Tests;
 /// </summary>
 public class VendoredHtmlSurfaceRules
 {
-    /// <summary>
-    ///     Projects this rule polices: the only places a new call could appear.
-    ///     <c>external/</c> is the submodule's own code and <c>contrib/</c> is
-    ///     uncompiled by anything — neither is ours to scan.
-    /// </summary>
-    private static readonly string[] GuardedProjects = ["src", "apps"];
+    private const string SubId = "VENDORED-HTML-SURFACE";
 
     /// <summary>
     ///     The bridge into <c>SharpConsoleUI.Html</c>. <c>HtmlControl</c> and
     ///     <c>HtmlBuilder</c> are the only two entry points from the namespaces
     ///     Harbor actually uses; the flow/layout types below are what they reach,
     ///     and naming any of them directly is the same decision one level down.
+    ///     The namespace itself is included: a `using` is a reachability decision
+    ///     too, and it is the shape someone writes first when wiring the surface
+    ///     up.
     /// </summary>
-    private static readonly Regex[] ForbiddenPatterns =
-    [
-        new(@"\bHtmlControl\b", RegexOptions.Compiled),
-        new(@"\bHtmlBuilder\b", RegexOptions.Compiled),
-        new(@"\bHtmlLayoutEngine\b", RegexOptions.Compiled),
-        new(@"\bHtmlBlockFlow\b", RegexOptions.Compiled),
-        new(@"\bHtmlInlineFlow\b", RegexOptions.Compiled),
-        new(@"\bHtmlTableLayout\b", RegexOptions.Compiled),
-        // The namespace itself: a `using` is a reachability decision too, and it
-        // is the shape someone writes first when wiring the surface up.
-        new(@"SharpConsoleUI\.Html", RegexOptions.Compiled),
-    ];
+    private static readonly Regex ForbiddenShape = new(
+        @"\bHtmlControl\b"
+        + @"|\bHtmlBuilder\b"
+        + @"|\bHtmlLayoutEngine\b"
+        + @"|\bHtmlBlockFlow\b"
+        + @"|\bHtmlInlineFlow\b"
+        + @"|\bHtmlTableLayout\b"
+        + @"|SharpConsoleUI\.Html",
+        RegexOptions.Compiled);
 
-    /// <summary>Repo-relative <c>path:line</c> of every forbidden shape in a file.</summary>
-    private static List<string> DetectIn(string relativePath, string source)
+    /// <summary>The rule as data: one banned shape, no baseline, five controls, a floor.</summary>
+    private static readonly ScanRule Rule = new()
     {
-        var hits = new List<string>();
-        string[] lines = SourceScan.StripComments(source).Split('\n');
-        for (int i = 0; i < lines.Length; i++)
-        {
-            // One report per line: a file that does `using SharpConsoleUI.Html;`
-            // and then constructs an HtmlControl is one decision, not two.
-            foreach (Regex pattern in ForbiddenPatterns)
-            {
-                if (pattern.IsMatch(lines[i]))
+        Id = "VendoredHtmlSurface",
+        Trees = ["src", "apps"],
+        Forbidden =
+        [
+            new ScanForbidden(
+                SubId,
+                ForbiddenShape,
+                "decide the fork/replace question in "
+                + "docs/adr/ADR-012-vendored-html-collapse-whitespace-pair.md first — "
+                + "reaching the surface is a separate decision from fixing it, and it is "
+                + "NOT this rule's to make."),
+        ],
+        Controls =
+        [
+            new ScanControl("Bridge/Using.cs", "using SharpConsoleUI.Html;", SubId),
+            new ScanControl("Bridge/Builder.cs", "private readonly HtmlBuilder _builder = new();", SubId),
+            new ScanControl("Bridge/Control.cs", "private readonly HtmlControl _control = new();", SubId),
+            // The post-decision shape is not "use a different name" — it is "do not
+            // reach the surface". So the quiet case is the CURRENT one: the
+            // NickConsoleEx renderer builds a MarkupControl and a window, and that
+            // must stay unflagged. A rule that fired here would forbid the fix.
+            new ScanControl("Current.cs", """
+                public sealed class NickConsoleExTuiRenderer : ITuiRenderer
                 {
-                    hits.Add($"{relativePath}:{i + 1}: {lines[i].Trim()}");
-                    break;
+                    private MarkupControl? _log;
+                    private ConsoleWindowSystem CreateSystem()
+                    {
+                        var driver = new NetConsoleDriver(new NetConsoleDriverOptions { RenderMode = RenderMode.Buffer });
+                        var system = new ConsoleWindowSystem(driver, options: new ConsoleWindowSystemOptions());
+                        _log = new MarkupControl([]);
+                        return new WindowBuilder(system).Build();
+                    }
                 }
-            }
-        }
-
-        return hits;
-    }
+                """, null),
+            // This file's own header and ADR-012 both name every forbidden type. A
+            // guard that fails on the documentation of the rule is a guard nobody keeps.
+            new ScanControl("Prose.cs", """
+                // #878: HtmlTableLayout.CollapseWhitespace and HtmlInlineFlow.CollapseWhitespace disagree.
+                /// <summary>Never touches SharpConsoleUI.Html; see ADR-012.</summary>
+                public sealed class NickConsoleExTuiRenderer { private MarkupControl? _log; }
+                """, null),
+        ],
+        MinHits = 500,
+        MustContain =
+        [
+            "src/Harbor.Tui.NickConsoleEx/NickConsoleExTuiRenderer.cs",
+        ],
+    };
 
     [Test]
     public async Task Html_Surface_Stays_Unreachable_From_Harbor()
     {
-        string? root = RepoPaths.RepoRoot;
-        await Assert.That(root).IsNotNull()
-            .Because(
-                "This guard walks the working tree. With no Harbor.slnx above AppContext.BaseDirectory "
-                + "the scan yields nothing and the rule reports green while enforcing nothing.");
-
-        if (root is null)
-        {
-            return;
-        }
-
-        var violations = new List<string>();
-        foreach (string file in EnumerateGuardedFiles(root))
-        {
-            string relative = Path.GetRelativePath(root, file).Replace('\\', '/');
-            violations.AddRange(DetectIn(relative, File.ReadAllText(file)));
-        }
+        List<string> violations = ScanRunner.Evaluate(Rule);
 
         await Assert.That(violations).IsEmpty()
             .Because(
@@ -157,25 +179,19 @@ public class VendoredHtmlSurfaceRules
     [Test]
     public async Task Scanner_FindsTheGuardedProjects()
     {
-        string? root = RepoPaths.RepoRoot;
-        await Assert.That(root).IsNotNull()
-            .Because("The walk needs a repository root; without one this file guards nothing.");
+        List<string> discovery = ScanRunner.CheckDiscovery(Rule);
 
-        if (root is null)
-        {
-            return;
-        }
-
-        List<string> files = EnumerateGuardedFiles(root);
-        await Assert.That(files.Count).IsGreaterThan(500)
+        await Assert.That(discovery).IsEmpty()
             .Because(
-                $"src/ and apps/ together hold well over 500 source files; found {files.Count}. "
-                + "A near-zero count means the paths are stale and the rule enforces nothing.");
+                "The walk needs a repository root and must really find src/ and apps — "
+                + "src/ and apps/ together hold well over 500 source files. "
+                + "A near-zero count means the paths are stale and the rule enforces nothing. "
+                + string.Join("; ", discovery));
 
         // The one project where a call is most likely to appear: the wrapper that
         // already talks to SharpConsoleUI. If the walk stopped covering it, the
         // rule would still be green while the likeliest caller went unchecked.
-        await Assert.That(files.Any(f => f.Replace('\\', '/').Contains("src/Harbor.Tui.NickConsoleEx/")))
+        await Assert.That(ScanRunner.ScopeFiles(Rule).Any(f => f.Contains("src/Harbor.Tui.NickConsoleEx/")))
             .IsTrue()
             .Because(
                 "Harbor.Tui.NickConsoleEx is the only project holding a reference to the submodule, so it "
@@ -185,87 +201,62 @@ public class VendoredHtmlSurfaceRules
     [Test]
     public async Task Detector_FiresOnTheKnownBridgeCall_AndStaysQuietOnTheCurrentUse()
     {
-        // The exact shape a caller would have to write to reach the surface.
-        const string knownBridge = """
-            using SharpConsoleUI.Html;
+        // The exact shape a caller would have to write to reach the surface, and
+        // the current MarkupControl use that must stay unflagged. The snippets
+        // live on Rule.Controls, so the control drives the REAL matcher rather
+        // than a second implementation of it.
+        List<string> failures = ScanRunner.CheckControls(Rule);
 
-            public sealed class HtmlLog
-            {
-                private readonly HtmlBuilder _builder = new();
-                private readonly HtmlControl _control = new();
-            }
-            """;
-
-        // The post-decision shape is not "use a different name" — it is "do not
-        // reach the surface". So the quiet case is the CURRENT one: the
-        // NickConsoleEx renderer builds a MarkupControl and a window, and that
-        // must stay unflagged. A rule that fired here would forbid the fix.
-        const string currentUse = """
-            public sealed class NickConsoleExTuiRenderer : ITuiRenderer
-            {
-                private MarkupControl? _log;
-                private ConsoleWindowSystem CreateSystem()
-                {
-                    var driver = new NetConsoleDriver(new NetConsoleDriverOptions { RenderMode = RenderMode.Buffer });
-                    var system = new ConsoleWindowSystem(driver, options: new ConsoleWindowSystemOptions());
-                    _log = new MarkupControl([]);
-                    return new WindowBuilder(system).Build();
-                }
-            }
-            """;
-
-        await Assert.That(DetectIn("Known.cs", knownBridge)).IsNotEmpty()
-            .Because("the bridging shape must be detected, or the rule guards nothing");
-        await Assert.That(DetectIn("Current.cs", currentUse)).IsEmpty()
+        await Assert.That(failures).IsEmpty()
             .Because(
-                "MarkupControl/WindowBuilder are the surfaces Harbor legitimately uses today. If they are "
+                "the bridging shape must be detected, or the rule guards nothing; and "
+                + "MarkupControl/WindowBuilder are the surfaces Harbor legitimately uses today. If they are "
                 + "flagged the rule forbids the status quo as well as the change, and the only way to make "
-                + "CI green would be to widen or delete it.");
+                + "CI green would be to widen or delete it. "
+                + string.Join("; ", failures));
     }
 
     [Test]
     public async Task Detector_IgnoresTheExplanationInProse()
     {
-        // This file's own header and ADR-012 both name every forbidden type. A
-        // guard that fails on the documentation of the rule is a guard nobody keeps.
-        const string prose = """
-            // #878: HtmlTableLayout.CollapseWhitespace and HtmlInlineFlow.CollapseWhitespace disagree.
-            /// <summary>Never touches SharpConsoleUI.Html; see ADR-012.</summary>
-            public sealed class NickConsoleExTuiRenderer { private MarkupControl? _log; }
-            """;
+        // This file's header and ADR-012 both name every forbidden type. A guard
+        // that fails on its own documentation is a guard nobody keeps — proved by
+        // the Prose.cs control on the rule, driven here through the same verdict.
+        List<string> failures = ScanRunner.CheckControls(Rule);
 
-        await Assert.That(DetectIn("Prose.cs", prose)).IsEmpty()
+        await Assert.That(failures).IsEmpty()
             .Because(
                 "comments are stripped before matching, so quoting the forbidden types in order to explain "
-                + "the rule does not make the rule's own text a violation");
+                + "the rule does not make the rule's own text a violation. "
+                + string.Join("; ", failures));
     }
 
-    private static List<string> EnumerateGuardedFiles(string root)
+    /// <summary>
+    ///     Every baseline row states why it is tolerated, in the row itself. Vacuous
+    ///     while the table is empty, and deliberately so: it is wired from the first
+    ///     row so the first row cannot skip the argument.
+    /// </summary>
+    [Test]
+    public async Task Baseline_Rows_AllHaveReasons()
     {
-        List<string> found = [];
-        foreach (string project in GuardedProjects)
-        {
-            string dir = Path.Combine(root, project);
-            if (!Directory.Exists(dir))
-            {
-                continue;
-            }
+        List<string> failures = ScanRunner.CheckReasons(Rule);
 
-            foreach (string file in Directory.EnumerateFiles(dir, "*.cs", SearchOption.AllDirectories))
-            {
-                if (file.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}", StringComparison.Ordinal) ||
-                    file.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}", StringComparison.Ordinal) ||
-                    file.Contains($"{Path.DirectorySeparatorChar}external{Path.DirectorySeparatorChar}", StringComparison.Ordinal) ||
-                    file.Contains($"{Path.DirectorySeparatorChar}.worktrees{Path.DirectorySeparatorChar}", StringComparison.Ordinal))
-                {
-                    continue;
-                }
+        await Assert.That(failures).IsEmpty().Because(string.Join("\n", failures));
+    }
 
-                found.Add(file);
-            }
-        }
+    /// <summary>
+    ///     Every baseline row must still correspond to a real hit, so the table
+    ///     cannot rot into a blanket permission: fix the code without deleting the
+    ///     row and this fails.
+    /// </summary>
+    [Test]
+    public async Task Baseline_Rows_Are_Not_Stale()
+    {
+        List<string> stale = ScanRunner.StaleBaselineKeys(
+            Rule, ScanRunner.ReadSources(ScanRunner.ScopeFiles(Rule)));
 
-        found.Sort(StringComparer.Ordinal);
-        return found;
+        await Assert.That(stale).IsEmpty()
+            .Because("a baseline row with no violation behind it is a permission for a "
+                + "problem that no longer exists: " + string.Join(", ", stale));
     }
 }
