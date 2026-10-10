@@ -12,13 +12,21 @@ namespace Harbor.Tui.CellForge.Input;
 /// Timer policies run ON the reader thread only (no cross-thread parser
 /// mutation): ESC-flush at chunk boundaries (§2.4) and the paste watchdog
 /// (§4.2) are applied as due-deadline checks between reads.
+///
+/// Threading: every member below runs on the single reader thread started by
+/// <see cref="RunAsync"/> — there is deliberately NO lock on the input path.
+/// The previous <c>_gate</c> was always taken by that same thread (parse,
+/// timer, resize poll), so it never contended and only taxed every stdin chunk.
+/// The public <see cref="Parser"/> was never protected by it either (the gate
+/// was private — an external caller could not take it), so removing it changes
+/// no contract: touch <see cref="Parser"/> only from the reader thread, or
+/// before <see cref="RunAsync"/> starts / after the run task completes.
 /// </summary>
 public sealed class TerminalInputSource : IDisposable
 {
     private readonly Stream _stdin;
     private readonly TerminalInputSourceOptions _options;
     private readonly Channel<InputEvent> _channel;
-    private readonly object _gate = new();
 
     /// <summary>The parser feeding this source. Exposed so capability probing
     /// (phase 1) can intercept CapabilityEvents before UI dispatch.</summary>
@@ -100,12 +108,10 @@ public sealed class TerminalInputSource : IDisposable
                     break; // EOF
                 }
 
-                lock (_gate)
-                {
-                    Parser.Parse(buffer.AsSpan(0, bytesRead));
-                    ArmTimers();
-                    DrainParserToChannel();
-                }
+                // Reader-thread-confined: no lock (see class doc).
+                Parser.Parse(buffer.AsSpan(0, bytesRead));
+                ArmTimers();
+                DrainParserToChannel();
 
                 PollResize(force: false);
             }
@@ -146,12 +152,10 @@ public sealed class TerminalInputSource : IDisposable
             earliest = earliest is { } current ? Math.Min(current, deadlineTicks) : deadlineTicks;
         }
 
-        lock (_gate)
-        {
-            Consider(_escDeadlineTicks);
-            Consider(_pasteDeadlineTicks);
-            Consider(_nextResizePollTicks);
-        }
+        // Reader-thread-confined reads: no lock (see class doc).
+        Consider(_escDeadlineTicks);
+        Consider(_pasteDeadlineTicks);
+        Consider(_nextResizePollTicks);
 
         return earliest is null ? null : TimeSpan.FromMilliseconds(Math.Max(1, earliest.Value - Environment.TickCount64));
     }
@@ -183,29 +187,27 @@ public sealed class TerminalInputSource : IDisposable
     private void ApplyDueTimers()
     {
         var now = Environment.TickCount64;
-        lock (_gate)
+        // Reader-thread-confined: no lock (see class doc).
+        var dirty = false;
+        if (_escDeadlineTicks != long.MaxValue && now >= _escDeadlineTicks)
         {
-            var dirty = false;
-            if (_escDeadlineTicks != long.MaxValue && now >= _escDeadlineTicks)
-            {
-                Parser.FlushPendingEscape();
-                dirty = true;
-            }
-
-            if (_pasteDeadlineTicks != long.MaxValue && now >= _pasteDeadlineTicks)
-            {
-                Parser.AbortPendingPaste();
-                dirty = true;
-            }
-
-            if (dirty)
-            {
-                DrainParserToChannel();
-            }
-
-            // Re-arm from post-apply state so satisfied deadlines clear.
-            ArmTimers(now);
+            Parser.FlushPendingEscape();
+            dirty = true;
         }
+
+        if (_pasteDeadlineTicks != long.MaxValue && now >= _pasteDeadlineTicks)
+        {
+            Parser.AbortPendingPaste();
+            dirty = true;
+        }
+
+        if (dirty)
+        {
+            DrainParserToChannel();
+        }
+
+        // Re-arm from post-apply state so satisfied deadlines clear.
+        ArmTimers(now);
 
         PollResize(force: true);
     }
@@ -243,25 +245,23 @@ public sealed class TerminalInputSource : IDisposable
             return;
         }
 
-        lock (_gate)
+        // Reader-thread-confined: no lock (see class doc).
+        try
         {
-            try
+            var (width, height) = provider();
+            if ((width != _lastWidth || height != _lastHeight) && width > 0 && height > 0)
             {
-                var (width, height) = provider();
-                if ((width != _lastWidth || height != _lastHeight) && width > 0 && height > 0)
-                {
-                    _lastWidth = width;
-                    _lastHeight = height;
-                    _channel.Writer.TryWrite(InputEvent.FromResize(new ResizeSignal(width, height)));
-                }
+                _lastWidth = width;
+                _lastHeight = height;
+                _channel.Writer.TryWrite(InputEvent.FromResize(new ResizeSignal(width, height)));
             }
-            catch (IOException)
-            {
-                // Size probe unavailable mid-session — keep polling.
-            }
-
-            _nextResizePollTicks = now + (long)(_options.ResizePollInterval?.TotalMilliseconds ?? 0);
         }
+        catch (IOException)
+        {
+            // Size probe unavailable mid-session — keep polling.
+        }
+
+        _nextResizePollTicks = now + (long)(_options.ResizePollInterval?.TotalMilliseconds ?? 0);
     }
 
     private void DrainParserToChannel()
