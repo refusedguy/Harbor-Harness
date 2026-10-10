@@ -9,14 +9,21 @@ namespace Harbor.Tools.Builtin.Tests;
 ///     project-over-global shadowing, legacy flat files, scope filtering and
 ///     truncation. Skills roots are pinned temp directories (no session store).
 /// </summary>
-public class SkillToolTests : IDisposable
+public class SkillToolTests
 {
-    private readonly string _root = Path.Combine(
-        Path.GetTempPath(), $"harbor-skill-tool-tests-{Guid.NewGuid():N}");
+    private string _root = string.Empty;
     private string ProjectSkills => Path.Combine(_root, "project", ".harbor", "skills");
     private string GlobalSkills => Path.Combine(_root, "global", ".harbor", "skills");
 
-    public void Dispose()
+    [Before(Test)]
+    public void CreateTempRoot()
+    {
+        _root = Path.Combine(
+            Path.GetTempPath(), $"harbor-skill-tool-tests-{Guid.NewGuid():N}");
+    }
+
+    [After(Test)]
+    public void DeleteTempRoot()
     {
         try { Directory.Delete(_root, recursive: true); }
         catch (IOException) { }

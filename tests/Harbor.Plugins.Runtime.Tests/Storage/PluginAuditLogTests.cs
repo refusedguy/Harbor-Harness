@@ -18,14 +18,15 @@ namespace Harbor.Plugins.Runtime.Tests.Storage;
 ///     the full install flow (trust gate + first tool call) leaves exactly the
 ///     <c>read_files</c> line for the .cs source and one line per exercised capability.
 /// </summary>
-public sealed class PluginAuditLogTests : IDisposable
+public sealed class PluginAuditLogTests
 {
-    private readonly string _root;
-    private readonly string _harborDir;
-    private readonly string _pluginsDir;
-    private readonly string _logPath;
+    private string _root = string.Empty;
+    private string _harborDir = string.Empty;
+    private string _pluginsDir = string.Empty;
+    private string _logPath = string.Empty;
 
-    public PluginAuditLogTests()
+    [Before(Test)]
+    public void CreateTempRoot()
     {
         _root = Path.Combine(Path.GetTempPath(), "harbor-audit-tests", Guid.NewGuid().ToString("N"));
         _harborDir = Path.Combine(_root, "harbor");
@@ -34,7 +35,8 @@ public sealed class PluginAuditLogTests : IDisposable
         _logPath = Path.Combine(_harborDir, "logs", "plugin-audit.jsonl");
     }
 
-    public void Dispose()
+    [After(Test)]
+    public void DeleteTempRoot()
     {
         try { Directory.Delete(_root, recursive: true); }
         catch (IOException)

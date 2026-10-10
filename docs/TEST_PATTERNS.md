@@ -864,30 +864,35 @@ bus.Subscribe<AgentErrorEvent>(async (evt, ct) => errors.Add(evt));  // typed â€
 bus.Subscribe<TurnStartEvent>(async (evt, ct) => turns.Add(evt));
 ```
 
-### Disposable test classes (setup/teardown)
+### Per-test setup/teardown (hooks)
 
-Instead of `[Before]`/`[After]` per-method hooks, implement `IDisposable`
-for per-test cleanup:
+Prefer `[Before(Test)]` / `[After(Test)]` hooks over constructors +
+`IDisposable` for per-test setup/teardown (#1087): hooks keep the lifecycle
+visible next to the tests and compose with data sources, while a ctor buries
+it. Keep `IDisposable` only for fixtures shared across tests (use
+`ClassDataSource` for those instead):
 
 ```csharp
-public class MyToolTests : IDisposable
+public class MyToolTests
 {
-    private readonly string _tempDir;
+    private string _tempDir = string.Empty;
 
-    public MyToolTests()
+    [Before(Test)]
+    public void CreateTempDir()
     {
         _tempDir = Path.Combine(Path.GetTempPath(), $"harbor-test-{Guid.NewGuid():N}");
         Directory.CreateDirectory(_tempDir);
     }
 
-    public void Dispose()
+    [After(Test)]
+    public void DeleteTempDir()
     {
         if (Directory.Exists(_tempDir)) Directory.Delete(_tempDir, true);
     }
 }
 ```
 
-> TUnit also supports async disposal via `IAsyncDisposable`.
+> Hooks can be `async Task` too â€” use `async Task` for async setup/teardown.
 
 ---
 
