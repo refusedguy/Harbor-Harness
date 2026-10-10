@@ -1,4 +1,5 @@
 using System.Text;
+using Harbor.Abstractions.Extensions;
 using Harbor.Abstractions.Lsp;
 using Microsoft.Extensions.Logging;
 using Result = CSharpFunctionalExtensions.Result;
@@ -239,14 +240,16 @@ public sealed class EditTool : ITool
         }
 
         string diff = GenerateContextDiff(original, content, MaxDiffLines);
-        var msg = new StringBuilder();
-        msg.Append("Edited ").Append(path)
+        // §PERF-006: per-call result transcript rented, not allocated.
+        // Synchronous composition — no callback can touch it.
+        using var msg = StringBuilderPool.Rent(1024);
+        msg.Builder.Append("Edited ").Append(path)
             .Append(": ").Append(totalReplacements).Append(" replacement(s) in ")
             .Append(editSteps).Append(" edit step(s)");
         if (diff.Length > 0)
-            msg.Append("\n\n").Append(diff);
+            msg.Builder.Append("\n\n").Append(diff);
 
-        msg.Append(await DiagnosticsNoteAsync(path, content, cancellationToken).ConfigureAwait(false));
+        msg.Builder.Append(await DiagnosticsNoteAsync(path, content, cancellationToken).ConfigureAwait(false));
 
         return ToolResult.Success(
             msg.ToString(),
@@ -385,8 +388,11 @@ public sealed class EditTool : ITool
         if (prefix > oSuffix && prefix > nSuffix)
             return "(no line-level diff; same lines / whitespace-only mid-line change)";
 
-        var sb = new StringBuilder();
-        sb.AppendLine("Diff (context):");
+        // §PERF-006: same — diff hunk buffer rented (capped by
+        // maxHunkLines lines, so it never retains a large buffer).
+        using var sb = StringBuilderPool.Rent(1024);
+        var b = sb.Builder;
+        b.AppendLine("Diff (context):");
 
         const int ctx = 2;
         int fromOld = Math.Max(0, prefix - ctx);
@@ -397,21 +403,21 @@ public sealed class EditTool : ITool
         int linesUsed = 0;
 
         for (int i = fromOld; i < prefix && linesUsed < maxHunkLines; i++, linesUsed++)
-            sb.Append("  ").AppendLine(oldLines[i]);
+            b.Append("  ").AppendLine(oldLines[i]);
 
         for (int i = prefix; i <= oSuffix && i < oLen && linesUsed < maxHunkLines; i++, linesUsed++)
-            sb.Append("- ").AppendLine(oldLines[i]);
+            b.Append("- ").AppendLine(oldLines[i]);
 
         for (int i = prefix; i <= nSuffix && i < nLen && linesUsed < maxHunkLines; i++, linesUsed++)
-            sb.Append("+ ").AppendLine(newLines[i]);
+            b.Append("+ ").AppendLine(newLines[i]);
 
         for (int i = oSuffix + 1; i <= toOld && linesUsed < maxHunkLines; i++, linesUsed++)
-            sb.Append("  ").AppendLine(oldLines[i]);
+            b.Append("  ").AppendLine(oldLines[i]);
 
         if (linesUsed >= maxHunkLines)
-            sb.AppendLine("… diff truncated");
+            b.AppendLine("… diff truncated");
 
-        return sb.ToString().TrimEnd();
+        return b.ToString().TrimEnd();
     }
 
     private static string[] SplitLines(string text)
