@@ -848,15 +848,12 @@ public static IEnumerable<object?[]> GetPermissionCases()
 }
 ```
 
-### Mock verification (TUnit.Mocks)
+### Hand fakes over mocks
 
-```csharp
-// Strict mock by default (configured in GlobalSetup)
-var mock = new Mock<ITool>();
-mock.Setup(t => t.Name).Returns(ToolName.Create("test"));
-await mock.Object.ValidateArguments(JsonDocument.Parse("{}").RootElement);
-mock.Verify(t => t.Name, Times.Once);
-```
+Harbor tests use hand-written fakes (`CountingTool`, `ScriptedLlmClient`,
+`ThrowingLlmClient` in `Harbor.TestKit`) instead of a mocking library: few
+interfaces, zero proxy cost, AOT-safe. `TUnit.Mocks` measured zero uses and
+was removed (#1087) — do not re-add it for new tests.
 
 ### Event subscription capture
 
@@ -908,7 +905,6 @@ All in the `Harbor.TestKit` namespace. Add a `<ProjectReference>` to
 | `ThrowingLlmClient` | `ILlmClient` whose `StreamAsync` always throws. |
 | `TestMessages.*` | Message builders: `User(content, sid)`, `Assistant(text, sid)`, `ToolResult(tool, out, callId, sid)`. |
 | `TestSessionContext(Session, seedMessages?)` | `ISessionContext` with `SteeringQueue` + `EnqueueSteering`. |
-| `GlobalSetup` | Sets `Mocks.DefaultMode = MockBehavior.Strict`. |
 
 ### Example: using TestKit in an agent-loop test
 
