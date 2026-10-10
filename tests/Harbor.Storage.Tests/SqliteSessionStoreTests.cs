@@ -521,4 +521,123 @@ public class SqliteSessionStoreTests
             if (Directory.Exists(dir)) Directory.Delete(dir, recursive: true);
         }
     }
+
+    [Test]
+    public async Task UpdateAsync_PersistsStatusKindAndParentSessionId()
+    {
+        var store = Create(out string dbPath);
+        try
+        {
+            var session = (await store.CreateAsync("/proj", "code", "anthropic", "claude-opus-4")).Value;
+
+            // The SubAgentRunner.MarkStatusAsync shape: title + status stamp.
+            var marked = session with
+            {
+                Title = "task(code): do thing",
+                Status = SessionStatus.Working,
+                Kind = SessionKind.Subagent,
+                ParentSessionId = "parentsessionid",
+            };
+            var update = await store.UpdateAsync(marked);
+            await Assert.That(update.IsSuccess).IsTrue();
+
+            var fetched = await store.GetAsync(session.Id);
+            await Assert.That(fetched.IsSuccess).IsTrue();
+            await Assert.That(fetched.Value.Title).IsEqualTo("task(code): do thing");
+            await Assert.That(fetched.Value.Status).IsEqualTo(SessionStatus.Working);
+            await Assert.That(fetched.Value.Kind).IsEqualTo(SessionKind.Subagent);
+            await Assert.That(fetched.Value.ParentSessionId).IsEqualTo("parentsessionid");
+
+            // Terminal write clears back to Done — the stamp must move, not stick.
+            var done = await store.UpdateAsync(fetched.Value with { Status = SessionStatus.Done });
+            await Assert.That(done.IsSuccess).IsTrue();
+            var refetched = await store.GetAsync(session.Id);
+            await Assert.That(refetched.IsSuccess).IsTrue();
+            await Assert.That(refetched.Value.Status).IsEqualTo(SessionStatus.Done);
+            await Assert.That(refetched.Value.Kind).IsEqualTo(SessionKind.Subagent);
+        }
+        finally
+        {
+            SqliteConnection.ClearAllPools();
+            if (File.Exists(dbPath)) File.Delete(dbPath);
+        }
+    }
+
+    [Test]
+    public async Task UpdateAsync_Pre1107Database_MigratesAndRoundTripsHeader()
+    {
+        string dbPath = NewTempDbPath();
+        try
+        {
+            // Hand-build a pre-#1107 database: sessions table without the
+            // status/kind/parent_session_id columns, one legacy row.
+            using (var setup = new SqliteConnection($"Data Source={dbPath}"))
+            {
+                setup.Open();
+                using var cmd = setup.CreateCommand();
+                cmd.CommandText = """
+                                  CREATE TABLE sessions (
+                                      id TEXT PRIMARY KEY,
+                                      project_id TEXT NOT NULL,
+                                      directory TEXT NOT NULL,
+                                      title TEXT NOT NULL,
+                                      agent TEXT NOT NULL,
+                                      model TEXT NOT NULL,
+                                      provider_id TEXT NOT NULL,
+                                      version TEXT NOT NULL,
+                                      created_at TEXT NOT NULL,
+                                      updated_at TEXT NOT NULL,
+                                      metadata TEXT NOT NULL
+                                  );
+                                  CREATE TABLE messages (
+                                      id TEXT NOT NULL,
+                                      session_id TEXT NOT NULL,
+                                      parent_id TEXT,
+                                      role TEXT NOT NULL,
+                                      agent TEXT,
+                                      model TEXT,
+                                      created_at TEXT NOT NULL,
+                                      created_at_ms INTEGER NOT NULL DEFAULT 0,
+                                      payload TEXT NOT NULL,
+                                      PRIMARY KEY (session_id, id),
+                                      FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE
+                                  );
+                                  INSERT INTO sessions (id, project_id, directory, title, agent, model, provider_id, version, created_at, updated_at, metadata)
+                                  VALUES ('legacy-session', 'proj', '/proj', 'legacy', 'code', 'claude-opus-4', 'anthropic', '0.2.0', '2026-01-01T00:00:00+00:00', '2026-01-01T00:00:00+00:00', '{"cost":0,"tokensInput":0,"tokensOutput":0,"tokensReasoning":0,"tokensCacheRead":0,"tokensCacheWrite":0,"messageCount":0,"isCostKnown":true}');
+                                  """;
+                cmd.ExecuteNonQuery();
+            }
+
+            SqliteConnection.ClearAllPools();
+            var store = new SqliteSessionStore(dbPath, NullLogger<SqliteSessionStore>.Instance);
+
+            // The legacy row survives migration with benign defaults.
+            var before = await store.GetAsync("legacy-session");
+            await Assert.That(before.IsSuccess).IsTrue();
+            await Assert.That(before.Value.Title).IsEqualTo("legacy");
+            await Assert.That(before.Value.Status).IsEqualTo(SessionStatus.Idle);
+            await Assert.That(before.Value.Kind).IsEqualTo(SessionKind.User);
+            await Assert.That(before.Value.ParentSessionId).IsNull();
+
+            // And the header round-trips after the migration.
+            var update = await store.UpdateAsync(before.Value with
+            {
+                Status = SessionStatus.Working,
+                Kind = SessionKind.Subagent,
+                ParentSessionId = "parent-1",
+            });
+            await Assert.That(update.IsSuccess).IsTrue();
+
+            var after = await store.GetAsync("legacy-session");
+            await Assert.That(after.IsSuccess).IsTrue();
+            await Assert.That(after.Value.Status).IsEqualTo(SessionStatus.Working);
+            await Assert.That(after.Value.Kind).IsEqualTo(SessionKind.Subagent);
+            await Assert.That(after.Value.ParentSessionId).IsEqualTo("parent-1");
+        }
+        finally
+        {
+            SqliteConnection.ClearAllPools();
+            if (File.Exists(dbPath)) File.Delete(dbPath);
+        }
+    }
 }
