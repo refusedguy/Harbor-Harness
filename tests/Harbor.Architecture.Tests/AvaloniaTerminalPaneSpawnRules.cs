@@ -45,6 +45,20 @@
 //     shape AND on the unrelated `_ =` style discards that legitimately exist.
 //   * `Detector_IsNotDefeatedByRenamingTheLocal` — pins that the rule keys on the
 //     spawn call, not on a variable name, so it cannot be defeated by a rename.
+//
+// MECHANISM (#1086, step 2, conveyor)
+// -----------------------------------
+// The rule below is a ScanRule: one banned shape (the two forbidden patterns
+// merged into one alternation), no baseline, five planted controls, a discovery
+// floor. Enumeration, stripping, matching and the control/discovery verdicts are
+// ScanRunner's; this file keeps the issue prose and the test names.
+//
+// The merge is mechanical, not a re-decision: the old detector reported one hit
+// per line even when both patterns matched it (a single
+// `PtyProcess.Start(new PtyStartSpec(...))` is one violation), and a single
+// alternation over lines reports the same set — a line matches iff any branch
+// matches. The planted pre-#672 snippet IS that double-matching line, so the
+// control proves the merged shape reports it exactly once.
 
 using System.Text.RegularExpressions;
 
@@ -57,77 +71,91 @@ namespace Harbor.Architecture.Tests;
 /// </summary>
 public class AvaloniaTerminalPaneSpawnRules
 {
-    /// <summary>
-    ///     Projects this rule polices. Each entry must correspond to a perimeter
-    ///     that has actually been converted.
-    /// </summary>
-    private static readonly string[] GuardedProjects = ["apps/Harbor.App.Avalonia"];
+    private const string SubId = "PTY-SPAWN";
 
     /// <summary>
     ///     The forbidden shapes: a direct <c>PtyProcess</c> spawn, or the
-    ///     <c>PtyStartSpec</c> that describes one.
+    ///     <c>PtyStartSpec</c> that describes one. Keyed on the spawn CALL rather
+    ///     than on the type name, so binding the handle to a differently-named
+    ///     local does not defeat it. <c>PtyStartSpec</c> is listed because
+    ///     constructing one is already the business decision "here is the argv I
+    ///     intend to execute", which is exactly what must not happen in a
+    ///     ViewModel.
     /// </summary>
-    /// <remarks>
-    ///     <para>
-    ///         Keyed on the spawn CALL rather than on the type name, so binding the
-    ///         handle to a differently-named local does not defeat it — the
-    ///         <c>detector</c> test below pins that.
-    ///     </para>
-    ///     <para>
-    ///         <c>PtyStartSpec</c> is listed separately because constructing one is
-    ///         already the business decision "here is the argv I intend to execute",
-    ///         which is exactly what must not happen in a ViewModel.
-    ///     </para>
-    /// </remarks>
-    private static readonly Regex[] ForbiddenPatterns =
-    [
-        new(@"PtyProcess\s*\.\s*(TryStart|Start)\s*\(", RegexOptions.Compiled),
-        new(@"new\s+PtyStartSpec\s*\(", RegexOptions.Compiled),
-    ];
+    private static readonly Regex ForbiddenShape = new(
+        @"PtyProcess\s*\.\s*(TryStart|Start)\s*\("
+        + @"|new\s+PtyStartSpec\s*\(",
+        RegexOptions.Compiled);
 
-    /// <summary>Repo-relative <c>path:line</c> of every forbidden shape in a file.</summary>
-    private static List<string> DetectIn(string relativePath, string source)
+    /// <summary>The rule as data: one banned shape, no baseline, five controls, a floor.</summary>
+    private static readonly ScanRule Rule = new()
     {
-        var hits = new List<string>();
-        string[] lines = SourceScan.StripComments(source).Split('\n');
-        for (int i = 0; i < lines.Length; i++)
-        {
-            // One report per line, even when both patterns match it: a single
-            // `PtyProcess.Start(new PtyStartSpec(...))` is one violation, and a
-            // failure message that prints it twice reads as two bugs.
-            foreach (Regex pattern in ForbiddenPatterns)
-            {
-                if (pattern.IsMatch(lines[i]))
+        Id = "AvaloniaTerminalPaneSpawn",
+        Trees = ["apps/Harbor.App.Avalonia"],
+        Forbidden =
+        [
+            new ScanForbidden(
+                SubId,
+                ForbiddenShape,
+                "go through ITerminalPaneLauncher (Harbor.Abstractions.Terminal), which the "
+                + "container wires to a permission-gated, cancellable Infrastructure implementation."),
+        ],
+        Controls =
+        [
+            // The exact pre-#672 shape, verbatim from the old constructor. One line
+            // matches BOTH branches; the merged shape reports it exactly once.
+            new ScanControl("Known.cs", """
+                public sealed partial class TerminalPaneViewModel
                 {
-                    hits.Add($"{relativePath}:{i + 1}: {lines[i].Trim()}");
-                    break;
+                    private void Open(string cwd)
+                    {
+                        _pty = PtyProcess.Start(new PtyStartSpec(Title, Args: ["-i"], WorkingDirectory: cwd));
+                    }
                 }
-            }
-        }
-
-        return hits;
-    }
+                """, SubId),
+            // The post-#672 shape: the ViewModel only ever names the abstraction.
+            new ScanControl("Seam.cs", """
+                public sealed partial class TerminalPaneViewModel
+                {
+                    private void Open(string cwd)
+                    {
+                        Result<ITerminalPane> started = _launcher.Launch(TerminalPaneRequest.ForDirectory(cwd));
+                        if (started.IsFailure) { OutputText = started.Error; return; }
+                        _pane = started.Value;
+                    }
+                }
+                """, null),
+            // A non-spawn discard, of which this repo has hundreds: the rule must not
+            // fire on `_ =` alone, or it cries wolf and gets deleted.
+            new ScanControl("Unrelated.cs", """
+                public void Flush() => _ = _buffer.Append(text);
+                public void Dispatch() => _ = _store.Dispatch(msg);
+                """, null),
+            // The old code could have been written with any local name. Keying the rule
+            // on a variable name would have been the easy way to write this guard, and it
+            // would have been worthless.
+            new ScanControl("Renamed.cs", """
+                public void Open(string cwd)
+                {
+                    var session = PtyProcess.TryStart(new PtyStartSpec(Shell, Args: ["-i"], WorkingDirectory: cwd));
+                    _ = session;
+                }
+                """, SubId),
+            // The refactor's own comments name the forbidden call. A guard that fails on
+            // its own documentation is a guard nobody keeps.
+            new ScanControl("Prose.cs", """
+                // #672: this used to call PtyProcess.Start(new PtyStartSpec(...)) directly.
+                /// <summary>Launches through the seam; never PtyProcess.Start here.</summary>
+                public void Open() => _ = _launcher.Launch(request);
+                """, null),
+        ],
+        MinHits = 50,
+    };
 
     [Test]
     public async Task AvaloniaShell_DoesNot_ForkATerminalSession()
     {
-        string? root = RepoPaths.RepoRoot;
-        await Assert.That(root).IsNotNull()
-            .Because(
-                "This guard walks the working tree. With no Harbor.slnx above AppContext.BaseDirectory "
-                + "the scan yields nothing and the rule reports green while enforcing nothing.");
-
-        if (root is null)
-        {
-            return;
-        }
-
-        var violations = new List<string>();
-        foreach (string file in EnumerateGuardedFiles(root))
-        {
-            string relative = Path.GetRelativePath(root, file).Replace('\\', '/');
-            violations.AddRange(DetectIn(relative, File.ReadAllText(file)));
-        }
+        List<string> violations = ScanRunner.Evaluate(Rule);
 
         await Assert.That(violations).IsEmpty()
             .Because(
@@ -146,128 +174,87 @@ public class AvaloniaTerminalPaneSpawnRules
     [Test]
     public async Task Scanner_FindsTheGuardedProject()
     {
-        string? root = RepoPaths.RepoRoot;
-        await Assert.That(root).IsNotNull()
-            .Because("The walk needs a repository root; without one this file guards nothing.");
+        List<string> discovery = ScanRunner.CheckDiscovery(Rule);
 
-        if (root is null)
-        {
-            return;
-        }
-
-        int files = EnumerateGuardedFiles(root).Count;
-        await Assert.That(files).IsGreaterThan(50)
+        await Assert.That(discovery).IsEmpty()
             .Because(
-                $"The guarded Avalonia shell should hold well over 50 source files; found {files}. "
-                + "A near-zero count means the path is stale and the rule enforces nothing.");
+                "The walk needs a repository root and must really find the guarded Avalonia shell — "
+                + "well over 50 source files. "
+                + "A near-zero count means the path is stale and the rule enforces nothing. "
+                + string.Join("; ", discovery));
     }
 
     [Test]
     public async Task Detector_FiresOnAKnownFork_AndStaysQuietOnTheSeamCall()
     {
-        // The exact pre-#672 shape, verbatim from the old constructor.
-        const string knownFork = """
-            public sealed partial class TerminalPaneViewModel
-            {
-                private void Open(string cwd)
-                {
-                    _pty = PtyProcess.Start(new PtyStartSpec(Title, Args: ["-i"], WorkingDirectory: cwd));
-                }
-            }
-            """;
+        // The pre-#672 spawn shape must be detected, the seam call is the shape the
+        // issue converts TO (flagging it would forbid the fix), and a plain `_ =`
+        // discard is not a process spawn. The snippets live on Rule.Controls, so the
+        // control drives the REAL matcher rather than a second implementation of it.
+        List<string> failures = ScanRunner.CheckControls(Rule);
 
-        // The post-#672 shape: the ViewModel only ever names the abstraction.
-        const string seamCall = """
-            public sealed partial class TerminalPaneViewModel
-            {
-                private void Open(string cwd)
-                {
-                    Result<ITerminalPane> started = _launcher.Launch(TerminalPaneRequest.ForDirectory(cwd));
-                    if (started.IsFailure) { OutputText = started.Error; return; }
-                    _pane = started.Value;
-                }
-            }
-            """;
-
-        // A non-spawn discard, of which this repo has hundreds: the rule must not
-        // fire on `_ =` alone, or it cries wolf and gets deleted.
-        const string unrelatedDiscard = """
-            public void Flush() => _ = _buffer.Append(text);
-            public void Dispatch() => _ = _store.Dispatch(msg);
-            """;
-
-        await Assert.That(DetectIn("Known.cs", knownFork)).IsNotEmpty()
-            .Because("the pre-#672 spawn shape must be detected, or the rule guards nothing");
-        await Assert.That(DetectIn("Seam.cs", seamCall)).IsEmpty()
+        await Assert.That(failures).IsEmpty()
             .Because(
-                "the seam call is the shape this issue converts TO. If it is flagged the rule forbids the "
-                + "fix as well as the bug, and the only way to make CI green would be to widen or delete it.");
-        await Assert.That(DetectIn("Unrelated.cs", unrelatedDiscard)).IsEmpty()
-            .Because("a plain `_ =` discard is not a process spawn; the rule must stay quiet on it");
+                "the pre-#672 spawn shape must be detected, or the rule guards nothing; the seam call "
+                + "must stay quiet, or the rule forbids the fix; a plain `_ =` discard is not a spawn. "
+                + string.Join("; ", failures));
     }
 
     [Test]
     public async Task Detector_IsNotDefeatedByRenamingTheLocal()
     {
-        // The old code could have been written with any local name. Keying the rule
-        // on a variable name would have been the easy way to write this guard, and it
-        // would have been worthless.
-        const string renamed = """
-            public void Open(string cwd)
-            {
-                var session = PtyProcess.TryStart(new PtyStartSpec(Shell, Args: ["-i"], WorkingDirectory: cwd));
-                _ = session;
-            }
-            """;
+        // The rule keys on the spawn call, not on a variable name — otherwise a
+        // rename silently un-guards the very line it was written for. Proved by the
+        // Renamed.cs control on the rule, driven here through the same verdict.
+        List<string> failures = ScanRunner.CheckControls(Rule);
 
-        await Assert.That(DetectIn("Renamed.cs", renamed)).IsNotEmpty()
+        await Assert.That(failures).IsEmpty()
             .Because(
                 "the rule keys on the spawn call, not on a variable name — otherwise a rename silently "
-                + "un-guards the very line it was written for");
+                + "un-guards the very line it was written for. "
+                + string.Join("; ", failures));
     }
 
     [Test]
     public async Task Detector_IgnoresTheExplanationInProse()
     {
-        // The refactor's own comments name the forbidden call. A guard that fails on
-        // its own documentation is a guard nobody keeps.
-        const string prose = """
-            // #672: this used to call PtyProcess.Start(new PtyStartSpec(...)) directly.
-            /// <summary>Launches through the seam; never PtyProcess.Start here.</summary>
-            public void Open() => _ = _launcher.Launch(request);
-            """;
+        // Line comments are stripped before matching, so documenting the old shape
+        // does not reintroduce it — proved by the Prose.cs control on the rule.
+        List<string> failures = ScanRunner.CheckControls(Rule);
 
-        await Assert.That(DetectIn("Prose.cs", prose)).IsEmpty()
+        await Assert.That(failures).IsEmpty()
             .Because(
                 "line comments are stripped before matching, so documenting the old shape does not "
-                + "reintroduce it");
+                + "reintroduce it. "
+                + string.Join("; ", failures));
     }
 
-    private static List<string> EnumerateGuardedFiles(string root)
+    /// <summary>
+    ///     Every baseline row states why it is tolerated, in the row itself. Vacuous
+    ///     while the table is empty, and deliberately so: it is wired from the first
+    ///     row so the first row cannot skip the argument.
+    /// </summary>
+    [Test]
+    public async Task Baseline_Rows_AllHaveReasons()
     {
-        List<string> found = [];
-        foreach (string project in GuardedProjects)
-        {
-            string dir = Path.Combine(root, project);
-            if (!Directory.Exists(dir))
-            {
-                continue;
-            }
+        List<string> failures = ScanRunner.CheckReasons(Rule);
 
-            foreach (string file in Directory.EnumerateFiles(dir, "*.cs", SearchOption.AllDirectories))
-            {
-                if (file.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}", StringComparison.Ordinal) ||
-                    file.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}", StringComparison.Ordinal) ||
-                    file.Contains($"{Path.DirectorySeparatorChar}.worktrees{Path.DirectorySeparatorChar}", StringComparison.Ordinal))
-                {
-                    continue;
-                }
+        await Assert.That(failures).IsEmpty().Because(string.Join("\n", failures));
+    }
 
-                found.Add(file);
-            }
-        }
+    /// <summary>
+    ///     Every baseline row must still correspond to a real hit, so the table
+    ///     cannot rot into a blanket permission: fix the code without deleting the
+    ///     row and this fails.
+    /// </summary>
+    [Test]
+    public async Task Baseline_Rows_Are_Not_Stale()
+    {
+        List<string> stale = ScanRunner.StaleBaselineKeys(
+            Rule, ScanRunner.ReadSources(ScanRunner.ScopeFiles(Rule)));
 
-        found.Sort(StringComparer.Ordinal);
-        return found;
+        await Assert.That(stale).IsEmpty()
+            .Because("a baseline row with no violation behind it is a permission for a "
+                + "problem that no longer exists: " + string.Join(", ", stale));
     }
 }
