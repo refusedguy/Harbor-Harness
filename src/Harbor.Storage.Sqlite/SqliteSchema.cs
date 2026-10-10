@@ -23,7 +23,10 @@ internal static class SqliteSchema
                                        version TEXT NOT NULL,
                                        created_at TEXT NOT NULL,
                                        updated_at TEXT NOT NULL,
-                                       metadata TEXT NOT NULL
+                                       metadata TEXT NOT NULL,
+                                       status INTEGER NOT NULL DEFAULT 0,
+                                       kind INTEGER NOT NULL DEFAULT 0,
+                                       parent_session_id TEXT
                                    );
                                    CREATE INDEX IF NOT EXISTS idx_sessions_project ON sessions(project_id);
                                    CREATE INDEX IF NOT EXISTS idx_sessions_updated ON sessions(updated_at DESC);
@@ -46,6 +49,37 @@ internal static class SqliteSchema
                                    """;
 
     /// <summary>
+    ///     Migrate pre-#1107 session tables: rows written before Status/Kind/
+    ///     ParentSessionId were columns keep working — each missing column is
+    ///     added with a benign default (Idle/User/null). Additive
+    ///     <c>ALTER TABLE ... ADD COLUMN</c> only: existing rows and columns
+    ///     are never rewritten or dropped.
+    /// </summary>
+    internal static void MigrateSessionsIfNeeded(SqliteConnection conn)
+    {
+        if (!HasColumn(conn, "sessions", "status"))
+        {
+            using var alter = conn.CreateCommand();
+            alter.CommandText = "ALTER TABLE sessions ADD COLUMN status INTEGER NOT NULL DEFAULT 0";
+            alter.ExecuteNonQuery();
+        }
+
+        if (!HasColumn(conn, "sessions", "kind"))
+        {
+            using var alter = conn.CreateCommand();
+            alter.CommandText = "ALTER TABLE sessions ADD COLUMN kind INTEGER NOT NULL DEFAULT 0";
+            alter.ExecuteNonQuery();
+        }
+
+        if (!HasColumn(conn, "sessions", "parent_session_id"))
+        {
+            using var alter = conn.CreateCommand();
+            alter.CommandText = "ALTER TABLE sessions ADD COLUMN parent_session_id TEXT";
+            alter.ExecuteNonQuery();
+        }
+    }
+
+    /// <summary>
     ///     Migrate databases created before #85:
     ///     (1) global PRIMARY KEY (id) → composite (session_id, id);
     ///     (2) missing created_at_ms integer stamp → add + backfill from text;
@@ -56,7 +90,7 @@ internal static class SqliteSchema
         if (HasLegacyMessagePk(conn))
             RebuildMessagesTable(conn);
 
-        if (!HasColumn(conn, "created_at_ms"))
+        if (!HasColumn(conn, "messages", "created_at_ms"))
         {
             using var alter = conn.CreateCommand();
             alter.CommandText = "ALTER TABLE messages ADD COLUMN created_at_ms INTEGER NOT NULL DEFAULT 0";
@@ -72,12 +106,18 @@ internal static class SqliteSchema
         idx.ExecuteNonQuery();
     }
 
-    private static bool HasColumn(SqliteConnection conn, string column)
+    private static bool HasColumn(SqliteConnection conn, string table, string column)
     {
-        // S2077: PRAGMA takes no parameters — the table name is a hardcoded
-        // internal constant, never user input.
+        // S2077: PRAGMA takes no parameters — the table name is resolved from
+        // a closed allow-list of internal constants, never from user input.
+        string pragma = table switch
+        {
+            "sessions" => "PRAGMA table_info(sessions)",
+            "messages" => "PRAGMA table_info(messages)",
+            _ => throw new ArgumentOutOfRangeException(nameof(table), table, "Unknown internal table."),
+        };
         using var cmd = conn.CreateCommand();
-        cmd.CommandText = "PRAGMA table_info(messages)";
+        cmd.CommandText = pragma;
         using var reader = cmd.ExecuteReader();
         while (reader.Read())
         {
