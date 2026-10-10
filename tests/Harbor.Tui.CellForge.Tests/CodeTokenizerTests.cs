@@ -1,5 +1,9 @@
 using Harbor.Tui.CellForge.Rendering;
 using Harbor.Tui.CellForge.Widgets;
+// #436: the tokenizer trio speaks the Rendering style vocabulary; the engine
+// namespace import below would otherwise resolve the expected values to the
+// engine's verbatim ports.
+using UIR = Harbor.Ui.Framework.Rendering;
 
 namespace Harbor.Tui.CellForge.Tests;
 
@@ -244,10 +248,10 @@ public class CodeTokenizerTests
     [Test]
     public async Task StyleMapping_MatchesPalette()
     {
-        await Assert.That(CodeTokenizer.KeywordStyle).IsEqualTo(new CellStyle(ChatPalette.Accent, attrs: StyleAttr.Bold));
-        await Assert.That(CodeTokenizer.StringStyle).IsEqualTo(new CellStyle(ChatPalette.Success));
-        await Assert.That(CodeTokenizer.CommentStyle).IsEqualTo(new CellStyle(ChatPalette.Muted));
-        await Assert.That(CodeTokenizer.NumberStyle).IsEqualTo(new CellStyle(ChatPalette.Warning));
+        await Assert.That(CodeTokenizer.KeywordStyle).IsEqualTo(new UIR.CellStyle(ChatPalette.Accent, attrs: UIR.StyleAttr.Bold));
+        await Assert.That(CodeTokenizer.StringStyle).IsEqualTo(new UIR.CellStyle(ChatPalette.Success));
+        await Assert.That(CodeTokenizer.CommentStyle).IsEqualTo(new UIR.CellStyle(ChatPalette.Muted));
+        await Assert.That(CodeTokenizer.NumberStyle).IsEqualTo(new UIR.CellStyle(ChatPalette.Warning));
     }
 
     [Test]

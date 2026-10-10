@@ -74,7 +74,7 @@ public class AnsiWriterTests
     [Test]
     public async Task Style_FirstEmit_IsFullApplication()
     {
-        var style = new CellStyle(PackedColor.Indexed(196), PackedColor.Rgb(10, 20, 30), StyleAttr.Bold | StyleAttr.Italic);
+        var style = new EngineCells.CellStyle(EngineCells.PackedColor.Indexed(196), EngineCells.PackedColor.Rgb(10, 20, 30), EngineCells.StyleAttr.Bold | EngineCells.StyleAttr.Italic);
         var (w, backend) = Make();
         w.BeginFrame();
         w.SetStyle(in style);
@@ -87,7 +87,7 @@ public class AnsiWriterTests
     [Test]
     public async Task Style_UnchangedBetweenCells_EmitsNothingExtra()
     {
-        var style = new CellStyle(PackedColor.Indexed(21));
+        var style = new EngineCells.CellStyle(EngineCells.PackedColor.Indexed(21));
         var (w, backend) = Make();
         w.BeginFrame();
         w.SetStyle(in style);
@@ -102,12 +102,12 @@ public class AnsiWriterTests
     [Test]
     public async Task Style_PlainTarget_CollapsesToReset()
     {
-        var styled = new CellStyle(PackedColor.Indexed(9), attrs: StyleAttr.Underline);
+        var styled = new EngineCells.CellStyle(EngineCells.PackedColor.Indexed(9), attrs: EngineCells.StyleAttr.Underline);
         var (w, backend) = Make();
         w.BeginFrame();
         w.SetStyle(in styled);
         w.WriteText("a");
-        w.SetStyle(CellStyle.Plain);
+        w.SetStyle(EngineCells.CellStyle.Plain);
         w.WriteText("b");
         await w.EndFrameAsync();
 
@@ -117,8 +117,8 @@ public class AnsiWriterTests
     [Test]
     public async Task Style_AttributeDelta_EmitsOnlyOffOnPair()
     {
-        var bold = new CellStyle(attrs: StyleAttr.Bold);
-        var underline = new CellStyle(attrs: StyleAttr.Underline);
+        var bold = new EngineCells.CellStyle(attrs: EngineCells.StyleAttr.Bold);
+        var underline = new EngineCells.CellStyle(attrs: EngineCells.StyleAttr.Underline);
         var (w, backend) = Make();
         w.BeginFrame();
         w.SetStyle(in bold);
@@ -131,8 +131,8 @@ public class AnsiWriterTests
     [Test]
     public async Task Style_BoldOffKeepsDim_ReappliesDimAfterShared22()
     {
-        var both = new CellStyle(attrs: StyleAttr.Bold | StyleAttr.Dim);
-        var dim = new CellStyle(attrs: StyleAttr.Dim);
+        var both = new EngineCells.CellStyle(attrs: EngineCells.StyleAttr.Bold | EngineCells.StyleAttr.Dim);
+        var dim = new EngineCells.CellStyle(attrs: EngineCells.StyleAttr.Dim);
         var (w, backend) = Make();
         w.BeginFrame();
         w.SetStyle(in both);
@@ -145,8 +145,8 @@ public class AnsiWriterTests
     [Test]
     public async Task Style_AllGroupsChange_CollapsesToResetPlusReapply()
     {
-        var first = new CellStyle(PackedColor.Indexed(1), PackedColor.Indexed(2), StyleAttr.Bold);
-        var second = new CellStyle(PackedColor.Indexed(3), PackedColor.Indexed(4), StyleAttr.Reverse);
+        var first = new EngineCells.CellStyle(EngineCells.PackedColor.Indexed(1), EngineCells.PackedColor.Indexed(2), EngineCells.StyleAttr.Bold);
+        var second = new EngineCells.CellStyle(EngineCells.PackedColor.Indexed(3), EngineCells.PackedColor.Indexed(4), EngineCells.StyleAttr.Reverse);
         var (w, backend) = Make();
         w.BeginFrame();
         w.SetStyle(in first);
@@ -160,7 +160,7 @@ public class AnsiWriterTests
     [Test]
     public async Task EraseFromCursorDown_PreparesDefaultBackgroundFirst()
     {
-        var styled = new CellStyle(PackedColor.Indexed(2));
+        var styled = new EngineCells.CellStyle(EngineCells.PackedColor.Indexed(2));
         var (w, backend) = Make();
         w.BeginFrame();
         w.SetStyle(in styled);

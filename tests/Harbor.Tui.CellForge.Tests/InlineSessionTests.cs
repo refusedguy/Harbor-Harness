@@ -117,7 +117,7 @@ public class InlineSessionTests
     public async Task CommitBlock_Styled_WrapsWithSgrReset()
     {
         var (w, backend, session) = Make();
-        var dim = new CellStyle(attrs: StyleAttr.Dim);
+        var dim = new EngineCells.CellStyle(attrs: EngineCells.StyleAttr.Dim);
         session.WriteFinalizedBlock("ok", 10, dim);
         await WriterFlush(w);
 

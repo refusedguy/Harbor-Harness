@@ -9,6 +9,25 @@ using Harbor.Ui.Framework.Rendering.Input;
 using Harbor.Ui.Framework.State;
 using Harbor.Tui.CellForge.Widgets;
 using Microsoft.Extensions.Logging;
+// #436: same shared-name pins as Harbor.Tui.CellForge/GlobalUsings.cs — the
+// Rendering vocabulary keeps its historical meaning in this file; engine-typed
+// sites qualify through EngineCells.
+using Cell = Harbor.Ui.Framework.Rendering.Cell;
+using Rect = Harbor.Ui.Framework.Rendering.Rect;
+using ScreenBuffer = Harbor.Ui.Framework.Rendering.ScreenBuffer;
+using CellStyle = Harbor.Ui.Framework.Rendering.CellStyle;
+using PackedColor = Harbor.Ui.Framework.Rendering.PackedColor;
+using StyleAttr = Harbor.Ui.Framework.Rendering.StyleAttr;
+using UnicodeWidth = Harbor.Ui.Framework.Rendering.UnicodeWidth;
+using KeyEvent = Harbor.Ui.Framework.Rendering.Input.KeyEvent;
+using KeyCode = Harbor.Ui.Framework.Rendering.Input.KeyCode;
+using KeyModifiers = Harbor.Ui.Framework.Rendering.Input.KeyModifiers;
+using KeyEventType = Harbor.Ui.Framework.Rendering.Input.KeyEventType;
+using IFocusTarget = Harbor.Ui.Framework.Rendering.Input.IFocusTarget;
+using UiKeyDto = Harbor.Ui.Framework.Rendering.Input.UiKeyDto;
+using UiKeyKind = Harbor.Ui.Framework.Rendering.Input.UiKeyKind;
+using UiKeyMods = Harbor.Ui.Framework.Rendering.Input.UiKeyMods;
+using EngineCells = Harbor.Tui.CellForge.Rendering;
 
 namespace Harbor.App.Cli.Repl;
 
@@ -70,7 +89,7 @@ internal sealed class ReplInputLoop(CellForgeReplRunner host)
         switch (evt.Kind)
         {
             case InputEventKind.Key:
-                await HandleKeyAsync(evt.Key, ct).ConfigureAwait(false);
+                await HandleKeyAsync(ToRenderingKey(evt.Key), ct).ConfigureAwait(false);
                 break;
 
             case InputEventKind.Capability when evt.Capability.Kind == CapabilityEventKind.Osc11BackgroundReport:
@@ -181,6 +200,22 @@ internal sealed class ReplInputLoop(CellForgeReplRunner host)
                 break;
         }
     }
+
+    /// <summary>
+    /// Engine-to-renderer key adapter (#436: the byte parser lives in the
+    /// standalone leaf and produces engine keys; every consumer behind this
+    /// loop — palette, vim, composer, mapper — speaks the Rendering
+    /// vocabulary). Exact field-for-field copy; both structs are the same
+    /// shape by construction (verbatim port), so no meaning is lost.
+    /// Per-keystroke cost, never per-frame.
+    /// </summary>
+    private static KeyEvent ToRenderingKey(in Harbor.Tui.CellForge.Input.KeyEvent key) => new(
+        (KeyCode)(int)key.Key,
+        key.Character,
+        (KeyModifiers)(int)key.Modifiers,
+        (KeyEventType)(int)key.EventType,
+        key.IsKittyEncoded,
+        key.Codepoint);
 
     private async Task HandleKeyAsync(KeyEvent key, CancellationToken ct)
     {
@@ -439,7 +474,7 @@ internal sealed class ReplInputLoop(CellForgeReplRunner host)
         int rows = Math.Max(1, host.ScreenSession.CurrentRows);
         string? text = host._selection.OnRelease(
             releaseX, releaseY, cols, rows,
-            (x, y) => x >= 0 && x < cols && y >= 0 && y < rows ? host.ScreenSession.Back.Get(x, y) : Cell.Blank);
+            (x, y) => x >= 0 && x < cols && y >= 0 && y < rows ? host.ScreenSession.PaintBuffer.Get(x, y) : Cell.Blank);
         if (string.IsNullOrEmpty(text))
         {
             host._wake.Writer.TryWrite(null);

@@ -96,7 +96,7 @@ public sealed class ComposerPanel : Panel
         // persists across frames and SetText("") is a no-op, so any shrink
         // (Ctrl+C clear, Ctrl+U/K kill, backspace, shorter history recall)
         // would otherwise leave ghost characters on the emulated grid.
-        buffer.Fill(new Rect(Rect.X, Rect.Y + topPad, Rect.Width, Math.Max(0, textRows)), Cell.Blank);
+        buffer.Fill(new Rect(Rect.X, Rect.Y + topPad, Rect.Width, Math.Max(0, textRows)), Harbor.Ui.Framework.Rendering.Cell.Blank);
 
         int rowStart = 0;
         for (int row = 0; row < textRows; row++)
@@ -1093,7 +1093,7 @@ public sealed class CellForgeDockPanel : Panel
 
         // Erase first: the back buffer persists across frames, so a shrinking
         // panel (toggle-off, resize, shorter rows) must not leave ghosts.
-        buffer.Fill(Rect, Cell.Blank);
+        buffer.Fill(Rect, Harbor.Ui.Framework.Rendering.Cell.Blank);
 
         if (Placement is TuiPanelPlacement.Left or TuiPanelPlacement.Right)
         {
@@ -1518,7 +1518,7 @@ public static class ChatScreenPanelDock
             return 0;
         }
 
-        buffer.Fill(new Rect(timelineRect.X, y, timelineRect.Width, h), Cell.Blank);
+        buffer.Fill(new Rect(timelineRect.X, y, timelineRect.Width, h), Harbor.Ui.Framework.Rendering.Cell.Blank);
         var rows = CellForgePanelAdapter.RenderToRows(active, state, timelineRect.Width, h, services);
         int n = Math.Min(rows.Count, h);
         for (int r = 0; r < n; r++)

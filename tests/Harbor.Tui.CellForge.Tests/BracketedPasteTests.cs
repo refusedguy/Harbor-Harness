@@ -163,7 +163,7 @@ public class BracketedPasteTests
 
         // Parser remains fully usable after the emergency exit.
         var next = T.Feed(parser, "\u001B[A");
-        await A.IsKey(next[0], KeyCode.Up);
+        await A.IsKey(next[0], EngineInput.KeyCode.Up);
     }
 
     [Test]
@@ -201,6 +201,6 @@ public class BracketedPasteTests
         var events = T.Feed(new EscapeSequenceParser(), "\u001B[200~\u001B[201~".Replace("\u001B[200~", string.Empty) + "\u001B[3~");
 
         // Delete still decodes through the legacy tilde path.
-        await A.IsKey(events[0], KeyCode.Delete);
+        await A.IsKey(events[0], EngineInput.KeyCode.Delete);
     }
 }

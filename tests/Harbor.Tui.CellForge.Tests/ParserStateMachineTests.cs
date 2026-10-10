@@ -17,7 +17,7 @@ public class ParserStateMachineTests
         var events = T.Feed(_parser, "\u001B[", "1;5", "A");
 
         await Assert.That(events.Length).IsEqualTo(1);
-        await A.IsKey(events[0], KeyCode.Up, KeyModifiers.Ctrl);
+        await A.IsKey(events[0], EngineInput.KeyCode.Up, EngineInput.KeyModifiers.Ctrl);
         await Assert.That(_parser.State).IsEqualTo(ParserState.Ground);
     }
 
@@ -55,7 +55,7 @@ public class ParserStateMachineTests
 
         var events = T.Drain(_parser);
         await Assert.That(events.Length).IsEqualTo(1);
-        await A.IsKey(events[0], KeyCode.Escape);
+        await A.IsKey(events[0], EngineInput.KeyCode.Escape);
         await Assert.That(_parser.State).IsEqualTo(ParserState.Ground);
     }
 
@@ -66,7 +66,7 @@ public class ParserStateMachineTests
         var events = T.Feed(_parser, "[A");
 
         await Assert.That(events.Length).IsEqualTo(1);
-        await A.IsKey(events[0], KeyCode.Up);
+        await A.IsKey(events[0], EngineInput.KeyCode.Up);
     }
 
     [Test]
@@ -82,8 +82,8 @@ public class ParserStateMachineTests
         var events = T.Feed(_parser, "\u001B\u001B[A");
 
         await Assert.That(events.Length).IsEqualTo(2);
-        await A.IsKey(events[0], KeyCode.Escape);
-        await A.IsKey(events[1], KeyCode.Up);
+        await A.IsKey(events[0], EngineInput.KeyCode.Escape);
+        await A.IsKey(events[1], EngineInput.KeyCode.Up);
     }
 
     // ── OSC / DCS / string states ─────────────────────────────────────────
@@ -139,7 +139,7 @@ public class ParserStateMachineTests
         await Assert.That(events.Any(e => e.Kind == InputEventKind.Unknown)).IsTrue();
         await Assert.That(_parser.MalformedSequenceCount).IsEqualTo(1);
         // The next sequence after the aborted one decodes normally.
-        await A.IsKey(events[^1], KeyCode.Down);
+        await A.IsKey(events[^1], EngineInput.KeyCode.Down);
     }
 
     [Test]
@@ -168,7 +168,7 @@ public class ParserStateMachineTests
         var events = T.Feed(_parser, "\u001B[1\u001B[A");
 
         await Assert.That(events.Length).IsEqualTo(1);
-        await A.IsKey(events[0], KeyCode.Up);
+        await A.IsKey(events[0], EngineInput.KeyCode.Up);
     }
 
     [Test]
@@ -177,7 +177,7 @@ public class ParserStateMachineTests
         var events = T.Feed(_parser, "\u001B[1\u007FA");
 
         await Assert.That(events.Length).IsEqualTo(1);
-        await A.IsKey(events[0], KeyCode.Up);
+        await A.IsKey(events[0], EngineInput.KeyCode.Up);
     }
 
     [Test]
@@ -217,7 +217,7 @@ public class ParserStateMachineTests
         // C0 AF is the classic overlong '/'.
         var events = T.FeedBytes(_parser, [0xC0, 0xAF]);
 
-        await Assert.That(events.Count(e => e.Kind == InputEventKind.Key && e.Key.Key == KeyCode.Char)).IsGreaterThanOrEqualTo(1);
+        await Assert.That(events.Count(e => e.Kind == InputEventKind.Key && e.Key.Key == EngineInput.KeyCode.Char)).IsGreaterThanOrEqualTo(1);
         await Assert.That(events.Any(e => e.Key.Character == Rune.ReplacementChar)).IsTrue();
         await Assert.That(events.Any(e => e.Key.Character == new Rune('/'))).IsFalse();
     }
@@ -298,7 +298,7 @@ public class ParserStateMachineTests
         // (Char 'c' + Ctrl) the REPL abort path relies on.
         var events = T.FeedBytes(_parser, [(byte)0x03]);
 
-        await A.IsChar(events[0], new Rune('c'), KeyModifiers.Ctrl);
+        await A.IsChar(events[0], new Rune('c'), EngineInput.KeyModifiers.Ctrl);
         await Assert.That(_parser.State).IsEqualTo(ParserState.Ground);
     }
 
@@ -308,7 +308,7 @@ public class ParserStateMachineTests
         // ESC + 0x03: Alt-Ctrl-C composite, not a broken sequence.
         var events = T.FeedBytes(_parser, [0x1B, 0x03]);
 
-        await A.IsChar(events[0], new Rune('c'), KeyModifiers.Alt | KeyModifiers.Ctrl);
+        await A.IsChar(events[0], new Rune('c'), EngineInput.KeyModifiers.Alt | EngineInput.KeyModifiers.Ctrl);
     }
 
     [Test]
@@ -322,11 +322,11 @@ public class ParserStateMachineTests
             [0x1C],
             [0x1F]);
 
-        await A.IsChar(events[0], new Rune(' '), KeyModifiers.Ctrl);
-        await A.IsChar(events[1], new Rune('z'), KeyModifiers.Ctrl);
+        await A.IsChar(events[0], new Rune(' '), EngineInput.KeyModifiers.Ctrl);
+        await A.IsChar(events[1], new Rune('z'), EngineInput.KeyModifiers.Ctrl);
         // Legacy C0|0x40 table (crossterm-compatible): FS→\ , GS→] , RS→^ , US→_
-        await A.IsChar(events[2], new Rune('\\'), KeyModifiers.Ctrl);
-        await A.IsChar(events[3], new Rune('_'), KeyModifiers.Ctrl);
+        await A.IsChar(events[2], new Rune('\\'), EngineInput.KeyModifiers.Ctrl);
+        await A.IsChar(events[3], new Rune('_'), EngineInput.KeyModifiers.Ctrl);
     }
 
     [Test]
@@ -337,7 +337,7 @@ public class ParserStateMachineTests
         var events = T.FeedBytes(_parser, [0x07, (byte)'x']);
 
         await Assert.That(events.Length).IsEqualTo(2);
-        await A.IsChar(events[0], new Rune('g'), KeyModifiers.Ctrl);
+        await A.IsChar(events[0], new Rune('g'), EngineInput.KeyModifiers.Ctrl);
         await A.IsChar(events[1], new Rune('x'));
     }
 

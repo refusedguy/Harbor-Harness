@@ -256,7 +256,7 @@ public class CyrillicRenderingTests
         var parser = new EscapeSequenceParser();
         var events = T.FeedBytes(parser, [0x1B, 0xD0, 0xBF]);
         await Assert.That(events.Length).IsEqualTo(1);
-        await A.IsChar(events[0], new Rune('п'), KeyModifiers.Alt);
+        await A.IsChar(events[0], new Rune('п'), EngineInput.KeyModifiers.Alt);
     }
 
     [Test]
@@ -265,7 +265,7 @@ public class CyrillicRenderingTests
         var parser = new EscapeSequenceParser();
         var events = T.FeedBytes(parser, [0x1B, 0xD0], [0xBF]);
         await Assert.That(events.Length).IsEqualTo(1);
-        await A.IsChar(events[0], new Rune('п'), KeyModifiers.Alt);
+        await A.IsChar(events[0], new Rune('п'), EngineInput.KeyModifiers.Alt);
     }
 
     [Test]
@@ -274,7 +274,7 @@ public class CyrillicRenderingTests
         var parser = new EscapeSequenceParser();
         var events = T.FeedBytes(parser, [0x1B, (byte)'a']);
         await Assert.That(events.Length).IsEqualTo(1);
-        await A.IsChar(events[0], new Rune('a'), KeyModifiers.Alt);
+        await A.IsChar(events[0], new Rune('a'), EngineInput.KeyModifiers.Alt);
     }
 
     [Test]

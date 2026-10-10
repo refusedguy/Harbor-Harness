@@ -101,7 +101,7 @@ public class ScrollStoreTests
         // resolves it, here through the timeline's own binding table.
         var target = new TimelineWheelTarget("timeline", key => { _ = store.Dispatch(VirtualizedChatTimeline.WheelMsg(key)); });
         var router = new MouseRouter();
-        router.Bind(target, new Rect(0, 0, 80, 24));
+        router.Bind(target, new EngineCells.Rect(0, 0, 80, 24));
 
         router.Wheel(5, 5, 3); // one tick = one line message, magnitude stays host-side
         await Assert.That(store.State.Ui.ScrollOffset).IsEqualTo(1);
@@ -113,9 +113,9 @@ public class ScrollStoreTests
         await Assert.That(store.State.Ui.ScrollOffset).IsEqualTo(0); // clamped at the tail
 
         // The engine half: sign → framework-neutral direction, nothing else.
-        await Assert.That(MouseRouter.WheelToKey(2).Kind).IsEqualTo(UiKeyKind.Up);
-        await Assert.That(MouseRouter.WheelToKey(-1).Kind).IsEqualTo(UiKeyKind.Down);
-        await Assert.That(MouseRouter.WheelToKey(0)).IsEqualTo(UiKeyDto.Unknown);
+        await Assert.That(MouseRouter.WheelToKey(2).Kind).IsEqualTo(EngineInput.UiKeyKind.Up);
+        await Assert.That(MouseRouter.WheelToKey(-1).Kind).IsEqualTo(EngineInput.UiKeyKind.Down);
+        await Assert.That(MouseRouter.WheelToKey(0)).IsEqualTo(EngineInput.UiKeyDto.Unknown);
 
         // The host half: direction → store action. Together they are exactly what
         // the pre-#435 single method returned.

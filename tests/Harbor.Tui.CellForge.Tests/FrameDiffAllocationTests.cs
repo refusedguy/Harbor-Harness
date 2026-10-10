@@ -33,21 +33,21 @@ public class FrameDiffAllocationTests
         }
     }
 
-    private static (DiffEngine Engine, ScreenBuffer BackA, ScreenBuffer BackB, AnsiWriter Writer, CountingBackend Backend)
+    private static (DiffEngine Engine, EngineCells.ScreenBuffer BackA, EngineCells.ScreenBuffer BackB, AnsiWriter Writer, CountingBackend Backend)
         MakeSteadyPair(int cols = 80, int rows = 24)
     {
         var backend = new CountingBackend();
         var writer = new AnsiWriter(backend, syncUpdates: true);
         var engine = new DiffEngine(cols, rows);
-        var backA = new ScreenBuffer(cols, rows);
-        var backB = new ScreenBuffer(cols, rows);
+        var backA = new EngineCells.ScreenBuffer(cols, rows);
+        var backB = new EngineCells.ScreenBuffer(cols, rows);
         for (int y = 0; y < rows; y++)
         {
-            backA.SetText(0, y, $"row {y} ".PadRight(cols - 1, '.'), CellStyle.Plain);
-            backB.SetText(0, y, $"row {y} ".PadRight(cols - 1, '.'), CellStyle.Plain);
+            backA.SetText(0, y, $"row {y} ".PadRight(cols - 1, '.'), EngineCells.CellStyle.Plain);
+            backB.SetText(0, y, $"row {y} ".PadRight(cols - 1, '.'), EngineCells.CellStyle.Plain);
         }
 
-        backB.SetText(0, 0, "#", CellStyle.Plain);
+        backB.SetText(0, 0, "#", EngineCells.CellStyle.Plain);
         return (engine, backA, backB, writer, backend);
     }
 
@@ -66,7 +66,7 @@ public class FrameDiffAllocationTests
             }
             else
             {
-                engine.FrameHint(new Rect(0, 0, 80, 1));
+                engine.FrameHint(new EngineCells.Rect(0, 0, 80, 1));
                 engine.Flush(backB, writer);
             }
 
@@ -86,7 +86,7 @@ public class FrameDiffAllocationTests
             }
             else
             {
-                engine.FrameHint(new Rect(0, 0, 80, 1));
+                engine.FrameHint(new EngineCells.Rect(0, 0, 80, 1));
                 engine.Flush(backB, writer);
             }
 
@@ -134,13 +134,13 @@ public class FrameDiffAllocationTests
         var backend = new RecordingBackend();
         var writer = new AnsiWriter(backend, syncUpdates: true);
         var engine = new DiffEngine(20, 6);
-        var back = new ScreenBuffer(20, 6);
-        back.SetText(0, 0, "hello", CellStyle.Plain);
-        back.SetText(0, 5, "world", CellStyle.Plain);
+        var back = new EngineCells.ScreenBuffer(20, 6);
+        back.SetText(0, 0, "hello", EngineCells.CellStyle.Plain);
+        back.SetText(0, 5, "world", EngineCells.CellStyle.Plain);
 
         // Two disjoint damage rects still leave through a single Refresh.
-        engine.FrameHint(new Rect(0, 0, 20, 1));
-        engine.FrameHint(new Rect(0, 5, 20, 1));
+        engine.FrameHint(new EngineCells.Rect(0, 0, 20, 1));
+        engine.FrameHint(new EngineCells.Rect(0, 5, 20, 1));
         writer.BeginFrame();
         engine.Flush(back, writer);
         await writer.EndFrameAsync();
@@ -162,8 +162,8 @@ public class FrameDiffAllocationTests
         var backend = new RecordingBackend();
         var writer = new AnsiWriter(backend, syncUpdates: false);
         var engine = new DiffEngine(10, 1);
-        var back = new ScreenBuffer(10, 1);
-        back.SetText(0, 0, "ab", CellStyle.Plain);
+        var back = new EngineCells.ScreenBuffer(10, 1);
+        back.SetText(0, 0, "ab", EngineCells.CellStyle.Plain);
 
         writer.BeginFrame();
         engine.Flush(back, writer);
@@ -179,9 +179,9 @@ public class FrameDiffAllocationTests
     public async Task AlwaysUpdate_YieldsFullGrid_WhileDeltaYieldsNothing()
     {
         var engine = new DiffEngine(6, 2);
-        var back = new ScreenBuffer(6, 2);
-        back.SetText(0, 0, "abcdef", CellStyle.Plain);
-        back.SetText(0, 1, "ghijkl", CellStyle.Plain);
+        var back = new EngineCells.ScreenBuffer(6, 2);
+        back.SetText(0, 0, "abcdef", EngineCells.CellStyle.Plain);
+        back.SetText(0, 1, "ghijkl", EngineCells.CellStyle.Plain);
         var writer = new AnsiWriter(new RecordingBackend(), syncUpdates: false);
         writer.BeginFrame();
         engine.Flush(back, writer);
@@ -223,8 +223,8 @@ public class FrameDiffAllocationTests
     {
         var engineFull = new DiffEngine(20, 6);
         var engineHint = new DiffEngine(20, 6);
-        var baseline = new ScreenBuffer(20, 6);
-        baseline.SetText(0, 0, "baseline content row", CellStyle.Plain);
+        var baseline = new EngineCells.ScreenBuffer(20, 6);
+        baseline.SetText(0, 0, "baseline content row", EngineCells.CellStyle.Plain);
         var primer = new AnsiWriter(new RecordingBackend(), syncUpdates: false);
         primer.BeginFrame();
         engineFull.Flush(baseline, primer);
@@ -233,19 +233,19 @@ public class FrameDiffAllocationTests
         engineHint.Flush(baseline, primer);
         primer.EndFrame();
 
-        var mutated = new ScreenBuffer(20, 6);
-        mutated.SetText(0, 0, "baseline content row", CellStyle.Plain);
-        mutated.SetText(5, 5, "tick", CellStyle.Plain);
+        var mutated = new EngineCells.ScreenBuffer(20, 6);
+        mutated.SetText(0, 0, "baseline content row", EngineCells.CellStyle.Plain);
+        mutated.SetText(5, 5, "tick", EngineCells.CellStyle.Plain);
 
-        var fullCells = new List<(int X, int Y, Cell Cell)>();
+        var fullCells = new List<(int X, int Y, EngineCells.Cell Value)>();
         var fullCursor = engineFull.Diff(mutated).GetEnumerator();
         while (fullCursor.MoveNext())
         {
             fullCells.Add((fullCursor.X, fullCursor.Y, fullCursor.Target));
         }
 
-        engineHint.FrameHint(new Rect(0, 5, 20, 1));
-        var hintCells = new List<(int X, int Y, Cell Cell)>();
+        engineHint.FrameHint(new EngineCells.Rect(0, 5, 20, 1));
+        var hintCells = new List<(int X, int Y, EngineCells.Cell Value)>();
         var hintCursor = engineHint.Diff(mutated).GetEnumerator();
         while (hintCursor.MoveNext())
         {

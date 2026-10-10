@@ -175,14 +175,14 @@ public class ToolCallCardTests
             var card = (ToolCallBlock)tl.BlockAt(tl.Count - 1);
 
             await Assert.That(bridge.TryRouteToolCardClick(
-                new Input.MouseEvent(Input.MouseEventType.Press, Input.MouseButton.Left, 5, 0, KeyModifiers.None))).IsTrue();
+                new Input.MouseEvent(Input.MouseEventType.Press, Input.MouseButton.Left, 5, 0, EngineInput.KeyModifiers.None))).IsTrue();
             await Assert.That(card.IsExpanded).IsTrue();
 
             await Assert.That(bridge.TryRouteToolCardClick(
-                new Input.MouseEvent(Input.MouseEventType.Press, Input.MouseButton.Right, 5, 0, KeyModifiers.None))).IsFalse();
+                new Input.MouseEvent(Input.MouseEventType.Press, Input.MouseButton.Right, 5, 0, EngineInput.KeyModifiers.None))).IsFalse();
 
             await Assert.That(bridge.TryRouteToolCardClick(
-                new Input.MouseEvent(Input.MouseEventType.Press, Input.MouseButton.Left, 5, 7, KeyModifiers.None))).IsFalse();
+                new Input.MouseEvent(Input.MouseEventType.Press, Input.MouseButton.Left, 5, 7, EngineInput.KeyModifiers.None))).IsFalse();
             await Assert.That(card.IsExpanded).IsTrue();
         }
     }

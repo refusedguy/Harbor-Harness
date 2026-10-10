@@ -228,7 +228,7 @@ public class PerfBudgetTests
         _ = tl.PrepareFrame(100, screen.Timeline.Rect.Height);
         foreach (var p in screen.Tree.Panels)
         {
-            p.Paint(session.Back);
+            p.Paint(session.PaintBuffer);
         }
         await session.FlushFrameAsync();
 
@@ -240,7 +240,7 @@ public class PerfBudgetTests
             _ = tl.PrepareFrame(100, screen.Timeline.Rect.Height);
             foreach (var p in screen.Tree.Panels)
             {
-                p.Paint(session.Back);
+                p.Paint(session.PaintBuffer);
             }
 
             session.BeginFrame();

@@ -1,5 +1,9 @@
 using Harbor.Abstractions.Events;
 using Harbor.Tui.CellForge.Rendering;
+// #436: the finalized-block sink is engine-typed (InlineSession); the attrs
+// flowing in here are the Rendering vocabulary, converted value-identically
+// (both StyleAttr enums share the ushort layout member-for-member).
+using EngineCells = Harbor.Tui.CellForge.Rendering;
 
 namespace Harbor.Tui.CellForge.Streaming;
 
@@ -190,7 +194,7 @@ public sealed class InlineAgentStreamBridge : IDisposable
     private void CommitLine(string text, StyleAttr attrs)
     {
         _session.EraseLiveRegion();
-        _session.WriteFinalizedBlock(text, Width, new CellStyle(attrs: attrs));
+        _session.WriteFinalizedBlock(text, Width, new EngineCells.CellStyle(attrs: (EngineCells.StyleAttr)attrs));
     }
 
     public void Dispose() => Subscription.Dispose();

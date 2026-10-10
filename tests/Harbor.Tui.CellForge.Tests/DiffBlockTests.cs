@@ -407,12 +407,13 @@ public class GoldenDiffBlockTests
         block.Paint(new BlockPaintContext(back, new Rect(0, 0, 56, m.MinLines), 0));
 
         writer.BeginFrame();
-        engine.Flush(back, writer);
+        var eng = GridDump.ToEngine(back);
+        engine.Flush(eng, writer);
         await writer.EndFrameAsync();
 
         string doc = GoldenDoc.Build("ce3-diff-block", back, backend);
         string expected = Golden.Verify("ce3-diff-block", doc, GridDump.ToSvg(back));
         await Assert.That(doc).IsEqualTo(expected);
-        await Assert.That(engine.FrontMatches(back)).IsTrue();
+        await Assert.That(engine.FrontMatches(eng)).IsTrue();
     }
 }

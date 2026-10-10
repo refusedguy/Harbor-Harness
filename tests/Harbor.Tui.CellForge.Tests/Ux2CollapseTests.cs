@@ -193,11 +193,11 @@ public class Ux2CollapseTests
             tl.Paint(new ScreenBuffer(40, 20), new Rect(0, 0, 40, 20)); // registers the header rect
 
             await Assert.That(bridge.TryRouteToolCardClick(
-                new Input.MouseEvent(Input.MouseEventType.Press, Input.MouseButton.Left, 5, 0, KeyModifiers.None))).IsTrue();
+                new Input.MouseEvent(Input.MouseEventType.Press, Input.MouseButton.Left, 5, 0, EngineInput.KeyModifiers.None))).IsTrue();
             await Assert.That(user.IsExpanded).IsTrue();
 
             await Assert.That(bridge.TryRouteToolCardClick(
-                new Input.MouseEvent(Input.MouseEventType.Press, Input.MouseButton.Right, 5, 0, KeyModifiers.None))).IsFalse();
+                new Input.MouseEvent(Input.MouseEventType.Press, Input.MouseButton.Right, 5, 0, EngineInput.KeyModifiers.None))).IsFalse();
         }
     }
 }

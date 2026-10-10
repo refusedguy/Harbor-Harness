@@ -143,7 +143,7 @@ public class InlineImageRenderTests
 
         session.BeginFrame();
         _ = timeline.PrepareFrame(40, 20);
-        timeline.Paint(session.Back, new Rect(0, 0, 40, 20));
+        timeline.Paint(session.PaintBuffer, new Rect(0, 0, 40, 20));
         await session.FlushFrameAsync();
 
         await Assert.That(backend.Writes.Count).IsEqualTo(1);
@@ -172,17 +172,17 @@ public class InlineImageRenderTests
 
         session.BeginFrame();
         _ = timeline.PrepareFrame(40, 20);
-        timeline.Paint(session.Back, new Rect(0, 0, 40, 20));
+        timeline.Paint(session.PaintBuffer, new Rect(0, 0, 40, 20));
         await session.FlushFrameAsync();
 
         // One full-text frame, zero image bytes in the cell state.
-        await Assert.That(GridDump.Cells(session.Back)).DoesNotContain("\u001B");
+        await Assert.That(GridDump.Cells(session.PaintBuffer)).DoesNotContain("\u001B");
         await Assert.That(session.Engine.FrontMatches(session.Back)).IsTrue();
 
         backend.ResetForTests();
         session.BeginFrame();
         _ = timeline.PrepareFrame(40, 20);
-        timeline.Paint(session.Back, new Rect(0, 0, 40, 20));
+        timeline.Paint(session.PaintBuffer, new Rect(0, 0, 40, 20));
         await session.FlushFrameAsync();
 
         // Identical cells ⇒ the diff emits nothing, and the placement is
@@ -304,13 +304,13 @@ public class InlineImageRenderTests
 
         session.BeginFrame();
         _ = timeline.PrepareFrame(40, 20);
-        timeline.Paint(session.Back, new Rect(0, 0, 40, 20));
+        timeline.Paint(session.PaintBuffer, new Rect(0, 0, 40, 20));
         await session.FlushFrameAsync();
 
         string frame = Encoding.UTF8.GetString(backend.Writes[0]);
         await Assert.That(frame).DoesNotContain("\u001B_G");
         await Assert.That(frame).DoesNotContain("\u001B]1337");
-        await Assert.That(GridDump.Art(session.Back)).Contains("◉ shot.png");
+        await Assert.That(GridDump.Art(session.PaintBuffer)).Contains("◉ shot.png");
     }
 
     // ── Fullscreen zoom viewer ──────────────────────────────────────────────

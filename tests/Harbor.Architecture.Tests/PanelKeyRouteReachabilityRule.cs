@@ -8,7 +8,7 @@
 // it: `IPanelProvider.OnKey` and `IOverlayLayer.OnKey`. The whole product tree
 // contains exactly THREE such hand-offs, and none of them can be entered:
 //
-//   src/Harbor.Tui.CellForge.Engine/Rendering/OverlayStack.cs:180
+//   src/Harbor.Tui.CellForge/Chat/Rendering/OverlayStack.cs:188
 //       `if (layer.OnKey(in key))` — inside `OverlayStack.RouteKey`, which no
 //       product method calls. (#812)
 //   src/Harbor.Tui.CellForge/Chat/Panels/CellForgePanelAdapter.cs:63
@@ -257,9 +257,9 @@ internal static class PanelKeyRouteProbe
     internal static readonly AcknowledgedDebt[] Ledger =
     [
         new(
-            "src/Harbor.Tui.CellForge.Engine/Rendering/OverlayStack.cs",
+            "src/Harbor.Tui.CellForge/Chat/Rendering/OverlayStack.cs",
             "RouteKey",
-            "#812 — the engine's host-routing API; the two live layers are reached directly by ReplInputLoop"),
+            "#812 — the chat's host-routing API (#436 moved it out of the engine with the chat-owned rendering); the two live layers are reached directly by ReplInputLoop"),
         new(
             "src/Harbor.Tui.CellForge/Chat/Panels/CellForgePanelAdapter.cs",
             "RouteKey",

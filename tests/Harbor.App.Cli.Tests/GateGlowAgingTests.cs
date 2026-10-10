@@ -75,6 +75,10 @@ using Harbor.Tui.CellForge.Streaming;
 using Harbor.Tui.CellForge.Widgets;
 using Harbor.Ui.Framework.Rendering;
 using Harbor.Ui.Framework.Rendering.Widgets;
+// #436: the glow ledger under test is engine-typed; host PanelFx
+// expectations cross through packed-uint round-trips (exact).
+using EngineCells = Harbor.Tui.CellForge.Rendering;
+using UIR = Harbor.Ui.Framework.Rendering;
 using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Harbor.App.Cli.Tests;
@@ -92,21 +96,21 @@ public sealed class GateGlowAgingTests
 
     // ── Colour helpers, the PostFxTests idiom ─────────────────────────────
 
-    private static (byte R, byte G, byte B) Channels(PackedColor c) =>
+    private static (byte R, byte G, byte B) Channels(EngineCells.PackedColor c) =>
         c.IsRgb ? c.RgbChannels : ((byte)0, (byte)0, (byte)0);
 
     /// <summary>The fixed burn <c>GlowEffect</c> applies toward white to derive its hot tone.</summary>
-    private static PackedColor HotTone(PackedColor accent)
+    private static EngineCells.PackedColor HotTone(EngineCells.PackedColor accent)
     {
         var (r, g, b) = Channels(accent);
         const double burn = 0.65; // GlowEffect.HotBurn
-        return PackedColor.Rgb(
+        return EngineCells.PackedColor.Rgb(
             (byte)(r + ((255 - r) * burn)),
             (byte)(g + ((255 - g) * burn)),
             (byte)(b + ((255 - b) * burn)));
     }
 
-    private static string Sgr(PackedColor c)
+    private static string Sgr(EngineCells.PackedColor c)
     {
         var (r, g, b) = Channels(c);
         return $"\x1B[38;2;{r};{g};{b}m";
@@ -125,8 +129,10 @@ public sealed class GateGlowAgingTests
     /// assuming the peak is 1.0 produces an expected string that is brighter than anything the
     /// terminal can ever be sent, and the byte assertion then fails on a build whose glow is perfect.
     /// </remarks>
-    private static string HotSgr(PackedColor accent, double intensity) =>
-        Sgr(PanelFx.Lerp(accent, HotTone(accent), intensity * GlowEffect.PeakStrength));
+    private static UIR.PackedColor ToUi(EngineCells.PackedColor c) => UIR.PackedColor.FromRaw(c.Value);
+
+    private static string HotSgr(EngineCells.PackedColor accent, double intensity) =>
+        Sgr(EngineCells.PackedColor.FromRaw(PanelFx.Lerp(ToUi(accent), ToUi(HotTone(accent)), intensity * GlowEffect.PeakStrength).Value));
 
     // ── The producer half, observed through the real consumer ────────────
 
@@ -159,8 +165,8 @@ public sealed class GateGlowAgingTests
 
         var lifecycle = new ReplLifecycle(runner);
 
-        PackedColor accent;
-        Rect region;
+        EngineCells.PackedColor accent;
+        EngineCells.Rect region;
         double intensity;
         using (var frame = screen.BeginFrameScope())
         {
@@ -210,7 +216,7 @@ public sealed class GateGlowAgingTests
             // The slot is armed AND non-zero: this is the assertion that makes the aging test
             // below sensitive. A last-armed frame at the pulse trough would satisfy Count == 1
             // and still hide a missing drain completely.
-            var probe = Cell.From(new Rune('G'), new CellStyle(accent, attrs: StyleAttr.Bold));
+            var probe = EngineCells.Cell.From(new Rune('G'), new EngineCells.CellStyle(accent, attrs: EngineCells.StyleAttr.Bold));
             var glowed = screen.Effects.Transform(region.X, region.Y, in probe);
             await Assert.That(glowed.Style.Fg).IsNotEqualTo(probe.Style.Fg)
                 .Because("an armed slot with non-zero intensity blends an accent cell toward the hot "
@@ -218,7 +224,7 @@ public sealed class GateGlowAgingTests
                        + "blind to a missing drain and must not be trusted");
 
             // Hold the back-buffer content constant for the aging test: same cell, same colour.
-            screen.Back.SetText(region.X, region.Y, "GLOW", new CellStyle(accent, attrs: StyleAttr.Bold));
+            screen.PaintBuffer.SetText(region.X, region.Y, "GLOW", new UIR.CellStyle(UIR.PackedColor.FromRaw(accent.Value), attrs: UIR.StyleAttr.Bold));
 
             await frame.FlushAsync();
         }
@@ -260,8 +266,8 @@ public sealed class GateGlowAgingTests
 
         var lifecycle = new ReplLifecycle(runner);
 
-        PackedColor accent;
-        Rect region;
+        EngineCells.PackedColor accent;
+        EngineCells.Rect region;
         double intensity;
         using (var frame = screen.BeginFrameScope())
         {
@@ -271,7 +277,7 @@ public sealed class GateGlowAgingTests
             region = runner._glowEffects[0]!.Region;
             accent = runner._glowScratch[0].Accent;
             intensity = runner._glowScratch[0].Intensity;
-            screen.Back.SetText(region.X, region.Y, "GLOW", new CellStyle(accent, attrs: StyleAttr.Bold));
+            screen.PaintBuffer.SetText(region.X, region.Y, "GLOW", new UIR.CellStyle(UIR.PackedColor.FromRaw(accent.Value), attrs: UIR.StyleAttr.Bold));
             await frame.FlushAsync();
         }
 
@@ -302,7 +308,7 @@ public sealed class GateGlowAgingTests
             // THE CONTROLLED VARIABLE. Identical cell, identical colour, identical position as
             // the glowing frame — so if the pipeline still transforms it, the only explanation
             // left is a slot the consumer failed to drain.
-            screen.Back.SetText(region.X, region.Y, "GLOW", new CellStyle(accent, attrs: StyleAttr.Bold));
+            screen.PaintBuffer.SetText(region.X, region.Y, "GLOW", new UIR.CellStyle(UIR.PackedColor.FromRaw(accent.Value), attrs: UIR.StyleAttr.Bold));
 
             lifecycle.ArmGateGlow();
 
@@ -354,7 +360,7 @@ public sealed class GateGlowAgingTests
     private static void Solve(CellForgeReplRunner runner)
     {
         runner.Screen.Tree.Solve(Cols, Rows);
-        Rect tl = runner.Screen.Timeline.Rect;
+        UIR.Rect tl = runner.Screen.Timeline.Rect;
         _ = runner._timeline.PrepareFrame(tl.Width > 0 ? tl.Width : Cols, Math.Max(1, tl.Height));
     }
 
@@ -365,7 +371,7 @@ public sealed class GateGlowAgingTests
     /// timeline computed, not one this test made up.
     /// </summary>
     private static void PaintFrame(CellForgeReplRunner runner, ScreenSession screen) =>
-        runner.Screen.Tree.PaintAll(screen.Back);
+        runner.Screen.Tree.PaintAll(screen.PaintBuffer);
 
     /// <summary>
     /// A runner with nothing switched on. The runner takes its dependencies as

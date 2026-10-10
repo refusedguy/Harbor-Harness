@@ -10,6 +10,10 @@ using Harbor.Terminal.Abstractions.ViewModels;
 using Harbor.Terminal.Abstractions.Views;
 using Harbor.Tui.CellForge.Panels;
 using Harbor.Tui.CellForge.Rendering;
+// #436: the frame writer is the engine AnsiWriter, so styled text is built
+// in the engine style vocabulary even though this file lives outside the
+// engine namespace (aliases pin the bare names to Rendering).
+using EngineCells = Harbor.Tui.CellForge.Rendering;
 using Harbor.Tui.CellForge.Widgets;
 using Harbor.Ui.Framework.Panels;
 using Harbor.Ui.Framework.Rendering;
@@ -714,9 +718,9 @@ public sealed class CellForgeRenderContext : ITuiRenderContext
 
     public void WriteColored(string text, TuiColor foreground, TuiColor? background = null)
     {
-        var style = new CellStyle(
-            PackedColor.Rgb(foreground.R, foreground.G, foreground.B),
-            background.HasValue ? PackedColor.Rgb(background.Value.R, background.Value.G, background.Value.B) : default);
+        var style = new EngineCells.CellStyle(
+            EngineCells.PackedColor.Rgb(foreground.R, foreground.G, foreground.B),
+            background.HasValue ? EngineCells.PackedColor.Rgb(background.Value.R, background.Value.G, background.Value.B) : default);
         _writer.WriteStyledText(text, style);
         Flush();
     }
@@ -774,15 +778,15 @@ public sealed class CellForgeRenderContext : ITuiRenderContext
     /// </summary>
     public void Flush() => _writer.FlushSync();
 
-    private static CellStyle MapStyle(PackedColor color, TuiStyle style)
+    private static EngineCells.CellStyle MapStyle(EngineCells.PackedColor color, TuiStyle style)
     {
-        StyleAttr attrs = StyleAttr.None;
-        if (style.HasFlag(TuiStyle.Bold)) attrs |= StyleAttr.Bold;
-        if (style.HasFlag(TuiStyle.Italic)) attrs |= StyleAttr.Italic;
-        if (style.HasFlag(TuiStyle.Underline)) attrs |= StyleAttr.Underline;
-        if (style.HasFlag(TuiStyle.Dim)) attrs |= StyleAttr.Dim;
-        if (style.HasFlag(TuiStyle.Strike)) attrs |= StyleAttr.Strike;
-        if (style.HasFlag(TuiStyle.Reverse)) attrs |= StyleAttr.Reverse;
-        return new CellStyle(color, default, attrs);
+        EngineCells.StyleAttr attrs = EngineCells.StyleAttr.None;
+        if (style.HasFlag(TuiStyle.Bold)) attrs |= EngineCells.StyleAttr.Bold;
+        if (style.HasFlag(TuiStyle.Italic)) attrs |= EngineCells.StyleAttr.Italic;
+        if (style.HasFlag(TuiStyle.Underline)) attrs |= EngineCells.StyleAttr.Underline;
+        if (style.HasFlag(TuiStyle.Dim)) attrs |= EngineCells.StyleAttr.Dim;
+        if (style.HasFlag(TuiStyle.Strike)) attrs |= EngineCells.StyleAttr.Strike;
+        if (style.HasFlag(TuiStyle.Reverse)) attrs |= EngineCells.StyleAttr.Reverse;
+        return new EngineCells.CellStyle(color, default, attrs);
     }
 }

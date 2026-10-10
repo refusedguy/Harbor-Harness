@@ -145,18 +145,19 @@ public class MaybeAbsenceTests
             "BLOCKED ON A DEPENDENCY DECISION #435/#436 OWN, not a Maybe decision this wave can "
             + "make (#591). `TryTake` is a pure absence — one state, 'nothing pending' — so "
             + "Maybe<BufferPair> is the correct target and there is no Result axis here at all. "
-            + "But the engine reaches `Maybe<T>` only TRANSITIVELY: its csproj declares zero "
+            + "But the engine reached `Maybe<T>` only TRANSITIVELY: its csproj declares zero "
             + "PackageReference entries, and CSharpFunctionalExtensions arrived through THREE "
             + "projects — Harbor.Abstractions and Harbor.Ui.Framework.State by direct edge, plus "
             + "Harbor.Abstractions.Contracts via Harbor.Ui.Framework.Rendering. #789 and #591 "
             + "recorded two carriers: true of the two direct edges, wrong about the closure, which "
-            + "#809 measured. #435 then removed the two direct edges, so ONE carrier is left and the "
-            + "ladder this text used to predict (3 -> 1 after #435 -> 0 after #436) is two-thirds "
-            + "taken. The survivor is Harbor.Abstractions.Contracts, reached via "
-            + "Harbor.Ui.Framework.Rendering, which #435 keeps and only #436 removes — so #435 alone "
-            + "does NOT make the engine CSE-free, and "
-            + "a PackageReference added on the day it lands would be an answer to that open "
-            + "question nobody made deliberately. Converting today picks a dependency owner "
+            + "#809 measured. #435 removed the two direct edges and #436 the last one, so ZERO carriers are left and the "
+            + "ladder this text used to predict (3 -> 1 after #435 -> 0 after #436) is fully "
+            + "taken: the engine is a standalone leaf. The last carrier was "
+            + nameof(HarborAbstractionsContractsCarrierNote)
+            + " (Harbor.Abstractions.Contracts, reached via Harbor.Ui.Framework.Rendering), which "
+            + "#436 removed, so a PackageReference added from today on re-opens a path no slice "
+            + "accounts for, and would answer #789's owner question without a decision behind it. "
+            + "Converting today picks a dependency owner "
             + "without answering 'direct PackageReference on CSE, or a vendored Maybe<T>?'. "
             + "Converted the moment that decision lands; the recipe is in #591. "
             + "Conversion note for whoever does it: CSE's Maybe<T> is a STRUCT, so `?.` and "
@@ -420,21 +421,19 @@ public class MaybeAbsenceTests
                 + "pinned it; this text was left saying \"the exact two references #435 deletes\", which "
                 + "omitted "
                 + nameof(HarborAbstractionsContractsCarrierNote)
-                + " — the carrier reached via Harbor.Ui.Framework.Rendering, which #435 keeps and only "
-                + "#436 removes. #435 has now landed and removed the two direct edges, so this reason's "
-                + "carrier count matches the pin again by subtraction rather than by re-measurement. The "
-                + "ladder was 3 -> 1 after #435 -> 0 after #436 and is two-thirds taken; an author "
-                + "landing #435 who trusted the old sentence sees the package still resolve, concludes it "
-                + "is needed, and adds a direct PackageReference — answering #789's open owner question as a "
-                + "side effect of a slice meant to drop two references. Name every carrier here, or fix "
-                + "the pin, but the two must not disagree.");
+                + " — the last carrier, reached via Harbor.Ui.Framework.Rendering, which #436 removed. "
+                + "Both slices have now landed, so this reason's carrier count (zero) matches the pin by "
+                + "re-measurement, not by subtraction. The ladder was 3 -> 1 after #435 -> 0 after #436 "
+                + "and is fully taken; a PackageReference added from today on re-opens a path no slice "
+                + "accounts for — answering #789's open owner question without a decision behind it. "
+                + "Name every carrier here, or fix the pin, but the two must not disagree.");
     }
 
     /// <summary>
-    ///     Anchors the remaining carrier in a compile-checked symbol so the sentence
-    ///     above cannot drift into naming a project that does not exist. Since #435
-    ///     it is the LAST carrier: the two direct edges it used to accompany are
-    ///     gone, and only #436 can close this one.
+    ///     Anchors the last carrier in a compile-checked symbol so the sentence
+    ///     above cannot drift into naming a project that does not exist. #435
+    ///     left it the LAST carrier and #436 closed it; the symbol now anchors
+    ///     the history the reason retells, not a live edge.
     /// </summary>
     private const string HarborAbstractionsContractsCarrierNote = "Harbor.Abstractions.Contracts";
 
@@ -472,13 +471,18 @@ public class MaybeAbsenceTests
         }
 
         // And the pin it grades is the one the CSE guard actually enforces.
-        await Assert.That(CellForgeEngineCseOwnershipTests.PinnedCseCarriers.Length).IsEqualTo(1)
+        await Assert.That(CellForgeEngineCseOwnershipTests.PinnedCseCarriers.Length).IsEqualTo(0)
             .Because(
-                "The ladder this rule documents was 3 carriers -> 1 after #435 -> 0 after #436. #435 has "
-                + "landed, so one is correct and the survivor is Harbor.Abstractions.Contracts via "
-                + "Harbor.Ui.Framework.Rendering. If #436 lands the count goes to 0 and both the pin and "
-                + "the reason are due an edit — and at 0 this assertion has to change shape, because a "
-                + "zero-length carrier list makes the missing-set comparison above vacuously true.");
+                "The ladder this rule documents was 3 carriers -> 1 after #435 -> 0 after #436, and #436 "
+                + "has landed, so zero is correct and the engine is a standalone leaf. At 0 the "
+                + "missing-set comparison above is vacuously true, so the reason must state the landed "
+                + "count out loud — asserted next — or the rule is green because it compared nothing "
+                + "against nothing.");
+        await Assert.That(reason.Contains("ZERO carriers", StringComparison.Ordinal)).IsTrue()
+            .Because(
+                "At a zero-length carrier list the missing-set comparison above passes no matter what "
+                + "the reason says. The reason must therefore carry the landed count in words, so a "
+                + "regression that re-opens the path cannot hide behind a stale sentence.");
     }
 
     [Test]

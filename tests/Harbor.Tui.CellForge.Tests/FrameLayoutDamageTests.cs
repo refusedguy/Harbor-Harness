@@ -184,7 +184,7 @@ public class FrameLayoutDamageTests
             _ = Chat.Timeline.Timeline.PrepareFrame(tlRect.Width > 0 ? tlRect.Width : cols, Math.Max(0, tlRect.Height));
 
             Screen.BeginFrame();
-            Chat.Tree.PaintAll(Screen.Back);
+            Chat.Tree.PaintAll(Screen.PaintBuffer);
 
             bool wide = Chat.Timeline.Timeline.ConsumeFrameDamage(Fx, out int fxCount);
             if (narrowDamage && !wide)
@@ -211,7 +211,7 @@ public class FrameLayoutDamageTests
     /// <summary>Every row where <paramref name="expected"/> and
     /// <paramref name="actual"/> disagree, as <c>row | expected | actual</c> —
     /// the band, spelled out.</summary>
-    private static string Diff(ScreenBuffer expected, ScreenBuffer actual)
+    private static string Diff(EngineCells.ScreenBuffer expected, EngineCells.ScreenBuffer actual)
     {
         var sb = new StringBuilder();
         for (int y = 0; y < expected.Rows; y++)
@@ -227,19 +227,19 @@ public class FrameLayoutDamageTests
         return sb.ToString();
     }
 
-    private static string Describe(ScreenBuffer expected, ScreenBuffer actual)
+    private static string Describe(EngineCells.ScreenBuffer expected, EngineCells.ScreenBuffer actual)
     {
         string drift = Diff(expected, actual);
         return drift.Length > 0 ? drift : "(grid agrees — check FRONT/BACK geometry)";
     }
 
-    private static string Row(ScreenBuffer buffer, int y)
+    private static string Row(EngineCells.ScreenBuffer buffer, int y)
     {
         var sb = new StringBuilder(buffer.Cols);
         for (int x = 0; x < buffer.Cols; x++)
         {
             var cell = buffer.Get(x, y);
-            if (cell.Width == Cell.WSkip)
+            if (cell.Width == EngineCells.Cell.WSkip)
             {
                 sb.Append('·');
                 continue;

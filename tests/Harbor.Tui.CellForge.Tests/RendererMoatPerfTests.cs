@@ -70,7 +70,7 @@ public class RendererMoatPerfTests
             _ = chat.Timeline.Timeline.PrepareFrame(tlRect.Width, Math.Max(0, tlRect.Height));
 
             screen.BeginFrame();
-            chat.Tree.PaintAll(screen.Back);
+            chat.Tree.PaintAll(screen.PaintBuffer);
 
             if (hint)
             {
@@ -251,13 +251,13 @@ public class RendererMoatPerfTests
 
         // Arm a real glow over the status row (the frame's animated strip).
         var statusRect = probe.Chat.Status.Rect;
-        var accent = ChatPalette.Warning;
+        var accent = EngineCells.PackedColor.FromRaw(ChatPalette.Warning.Value);
         var glow = new GlowEffect();
         probe.Screen.Effects.Set(0, glow);
 
         for (int i = 0; i < 300; i++)
         {
-            glow.Update(new GlowRegion(new Rect(0, Math.Max(0, statusRect.Y), cols, Math.Max(1, statusRect.Height)), accent, 0.5 + (0.5 * Math.Sin(i / 10.0))));
+            glow.Update(new GlowRegion(new EngineCells.Rect(0, Math.Max(0, statusRect.Y), cols, Math.Max(1, statusRect.Height)), accent, 0.5 + (0.5 * Math.Sin(i / 10.0))));
             probe.SteadyFrame(cols, hint: true);
         }
 
@@ -265,7 +265,7 @@ public class RendererMoatPerfTests
         var sw = Stopwatch.StartNew();
         for (int i = 0; i < frames; i++)
         {
-            glow.Update(new GlowRegion(new Rect(0, Math.Max(0, statusRect.Y), cols, Math.Max(1, statusRect.Height)), accent, 0.5 + (0.5 * Math.Sin(i / 10.0))));
+            glow.Update(new GlowRegion(new EngineCells.Rect(0, Math.Max(0, statusRect.Y), cols, Math.Max(1, statusRect.Height)), accent, 0.5 + (0.5 * Math.Sin(i / 10.0))));
             probe.SteadyFrame(cols, hint: true);
         }
 

@@ -1,13 +1,18 @@
 using Harbor.Ui.Framework.Rendering;
 using Harbor.Ui.Framework.Rendering.Markdown;
 
+// #436: spans paint into Rendering grids, so span styles are pinned to the
+// Rendering vocabulary through UIR (same capture as CodeHighlightPalette).
+using UIR = Harbor.Ui.Framework.Rendering;
+
 namespace Harbor.Tui.CellForge.Rendering;
 
 /// <summary>
 /// One syntax-highlighted run inside a fenced code line: raw text plus its
-/// resolved <see cref="CellStyle"/>.
+/// resolved <see cref="CellStyle"/> (Rendering vocabulary — spans paint into
+/// Rendering grids; see CodeHighlightPalette for why the pin is explicit).
 /// </summary>
-public readonly record struct CodeSpan(string Text, CellStyle Style);
+public readonly record struct CodeSpan(string Text, UIR.CellStyle Style);
 
 /// <summary>
 /// Back-compat static façade over <see cref="CodeSyntaxTokenizer.Default"/>
@@ -21,16 +26,16 @@ public readonly record struct CodeSpan(string Text, CellStyle Style);
 public static class CodeTokenizer
 {
     /// <summary>Keyword style: accent primary + bold.</summary>
-    public static CellStyle KeywordStyle => CodeSyntaxTokenizer.Default.KeywordStyle;
+    public static UIR.CellStyle KeywordStyle => CodeSyntaxTokenizer.Default.KeywordStyle;
 
     /// <summary>String-literal style: success green.</summary>
-    public static CellStyle StringStyle => CodeSyntaxTokenizer.Default.StringStyle;
+    public static UIR.CellStyle StringStyle => CodeSyntaxTokenizer.Default.StringStyle;
 
     /// <summary>Comment style: muted (terminal tertiary).</summary>
-    public static CellStyle CommentStyle => CodeSyntaxTokenizer.Default.CommentStyle;
+    public static UIR.CellStyle CommentStyle => CodeSyntaxTokenizer.Default.CommentStyle;
 
     /// <summary>Number-literal style: warning amber.</summary>
-    public static CellStyle NumberStyle => CodeSyntaxTokenizer.Default.NumberStyle;
+    public static UIR.CellStyle NumberStyle => CodeSyntaxTokenizer.Default.NumberStyle;
 
     /// <summary>
     /// Tokenizes a whole code region in one shot (multi-line aware).

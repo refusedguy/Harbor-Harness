@@ -13,6 +13,49 @@ namespace Harbor.Tui.CellForge.Tests;
 /// </summary>
 internal static class GridDump
 {
+    /// <summary>
+    /// Painted grids are Rendering-typed while the differ is engine-typed:
+    /// golden flushes cross through this exact field-for-field snapshot so
+    /// the pinned bytes don't move (both cell structs share the 16-byte
+    /// layout, and row hashes are invalidated so the diff rehashes).
+    /// </summary>
+    internal static EngineCells.ScreenBuffer ToEngine(ScreenBuffer painted)
+    {
+        var eng = new EngineCells.ScreenBuffer(painted.Cols, painted.Rows);
+        for (int y = 0; y < painted.Rows; y++)
+        {
+            for (int x = 0; x < painted.Cols; x++)
+            {
+                var c = painted.Get(x, y);
+                eng.At(x, y) = EngineCells.Cell.FromRaw(c.Rune, c.Fg, c.Bg, c.Flags, c.Width);
+            }
+        }
+
+        eng.InvalidateAll();
+        return eng;
+    }
+
+    /// <summary>
+    /// The reverse crossing, for diagnostics over terminal state (the
+    /// engine FRONT mirror): exact field-for-field copy into a Rendering
+    /// grid. Never asserted in goldens — message context only.
+    /// </summary>
+    internal static ScreenBuffer ToUi(EngineCells.ScreenBuffer front)
+    {
+        var ui = new ScreenBuffer(front.Cols, front.Rows);
+        for (int y = 0; y < front.Rows; y++)
+        {
+            for (int x = 0; x < front.Cols; x++)
+            {
+                var c = front.Get(x, y);
+                ui.At(x, y) = Cell.FromRaw(c.Rune, c.Fg, c.Bg, c.Flags, c.Width);
+            }
+        }
+
+        ui.InvalidateAll();
+        return ui;
+    }
+
     /// <summary>Cosmetic rendering: one line per row; wide tails collapse.</summary>
     public static string Art(ScreenBuffer buffer)
     {

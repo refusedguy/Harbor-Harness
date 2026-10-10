@@ -14,14 +14,14 @@ public sealed class FlexLayoutTests
     {
         var rects = FlexLayout.Solve(
             SplitDir.Horizontal,
-            new Rect(0, 0, 40, 10),
+            new EngineCells.Rect(0, 0, 40, 10),
             [FlexTrack.Fixed(10), FlexTrack.Fill(1), FlexTrack.Fixed(6)],
             gap: 1);
 
         await Assert.That(rects).IsEquivalentTo([
-            new Rect(0, 0, 10, 10),
-            new Rect(11, 0, 22, 10),
-            new Rect(34, 0, 6, 10),
+            new EngineCells.Rect(0, 0, 10, 10),
+            new EngineCells.Rect(11, 0, 22, 10),
+            new EngineCells.Rect(34, 0, 6, 10),
         ]);
     }
 
@@ -30,14 +30,14 @@ public sealed class FlexLayoutTests
     {
         var rects = FlexLayout.Solve(
             SplitDir.Vertical,
-            new Rect(0, 0, 10, 40),
+            new EngineCells.Rect(0, 0, 10, 40),
             [FlexTrack.Fixed(10), FlexTrack.Fill(1), FlexTrack.Fixed(6)],
             gap: 1);
 
         await Assert.That(rects).IsEquivalentTo([
-            new Rect(0, 0, 10, 10),
-            new Rect(0, 11, 10, 22),
-            new Rect(0, 34, 10, 6),
+            new EngineCells.Rect(0, 0, 10, 10),
+            new EngineCells.Rect(0, 11, 10, 22),
+            new EngineCells.Rect(0, 34, 10, 6),
         ]);
     }
 
@@ -46,13 +46,13 @@ public sealed class FlexLayoutTests
     {
         var rects = FlexLayout.Solve(
             SplitDir.Vertical,
-            new Rect(5, 2, 30, 20),
+            new EngineCells.Rect(5, 2, 30, 20),
             [FlexTrack.Percent(0.25f), FlexTrack.Percent(0.75f)],
             gap: 2);
 
         await Assert.That(rects).IsEquivalentTo([
-            new Rect(5, 2, 30, 4),
-            new Rect(5, 8, 30, 13),
+            new EngineCells.Rect(5, 2, 30, 4),
+            new EngineCells.Rect(5, 8, 30, 13),
         ]);
     }
 
@@ -61,31 +61,31 @@ public sealed class FlexLayoutTests
     {
         var rects = FlexLayout.Solve(
             SplitDir.Horizontal,
-            new Rect(0, 0, 31, 6),
+            new EngineCells.Rect(0, 0, 31, 6),
             [FlexTrack.Fill(1), FlexTrack.Fill(2)]);
 
         await Assert.That(rects).IsEquivalentTo([
-            new Rect(0, 0, 10, 6),
-            new Rect(10, 0, 21, 6),
+            new EngineCells.Rect(0, 0, 10, 6),
+            new EngineCells.Rect(10, 0, 21, 6),
         ]);
     }
 
     [Test]
     public async Task JustifyCenter_End_OffsetPackedRun()
     {
-        var avail = new Rect(0, 0, 20, 4);
+        var avail = new EngineCells.Rect(0, 0, 20, 4);
         FlexTrack[] tracks = [FlexTrack.Fixed(6), FlexTrack.Fixed(4)];
 
         var centered = FlexLayout.Solve(SplitDir.Horizontal, avail, tracks, gap: 2, justify: FlexJustify.Center);
         await Assert.That(centered).IsEquivalentTo([
-            new Rect(4, 0, 6, 4),
-            new Rect(12, 0, 4, 4),
+            new EngineCells.Rect(4, 0, 6, 4),
+            new EngineCells.Rect(12, 0, 4, 4),
         ]);
 
         var end = FlexLayout.Solve(SplitDir.Horizontal, avail, tracks, gap: 2, justify: FlexJustify.End);
         await Assert.That(end).IsEquivalentTo([
-            new Rect(8, 0, 6, 4),
-            new Rect(16, 0, 4, 4),
+            new EngineCells.Rect(8, 0, 6, 4),
+            new EngineCells.Rect(16, 0, 4, 4),
         ]);
     }
 
@@ -94,14 +94,14 @@ public sealed class FlexLayoutTests
     {
         var rects = FlexLayout.Solve(
             SplitDir.Horizontal,
-            new Rect(0, 0, 20, 4),
+            new EngineCells.Rect(0, 0, 20, 4),
             [FlexTrack.Fixed(6), FlexTrack.Fixed(4), FlexTrack.Fixed(2)],
             justify: FlexJustify.SpaceBetween);
 
         await Assert.That(rects).IsEquivalentTo([
-            new Rect(0, 0, 6, 4),
-            new Rect(10, 0, 4, 4),
-            new Rect(18, 0, 2, 4),
+            new EngineCells.Rect(0, 0, 6, 4),
+            new EngineCells.Rect(10, 0, 4, 4),
+            new EngineCells.Rect(18, 0, 2, 4),
         ]);
     }
 
@@ -110,13 +110,13 @@ public sealed class FlexLayoutTests
     {
         var rects = FlexLayout.Solve(
             SplitDir.Horizontal,
-            new Rect(0, 0, 20, 4),
+            new EngineCells.Rect(0, 0, 20, 4),
             [FlexTrack.Fixed(4), FlexTrack.Fixed(4)],
             justify: FlexJustify.SpaceAround);
 
         await Assert.That(rects).IsEquivalentTo([
-            new Rect(3, 0, 4, 4),
-            new Rect(13, 0, 4, 4),
+            new EngineCells.Rect(3, 0, 4, 4),
+            new EngineCells.Rect(13, 0, 4, 4),
         ]);
     }
 
@@ -125,11 +125,11 @@ public sealed class FlexLayoutTests
     {
         var rects = FlexLayout.Solve(
             SplitDir.Horizontal,
-            new Rect(0, 0, 20, 4),
+            new EngineCells.Rect(0, 0, 20, 4),
             [FlexTrack.Fixed(6)],
             justify: FlexJustify.SpaceBetween);
 
-        await Assert.That(rects).IsEquivalentTo([new Rect(0, 0, 6, 4)]);
+        await Assert.That(rects).IsEquivalentTo([new EngineCells.Rect(0, 0, 6, 4)]);
     }
 
     [Test]
@@ -137,12 +137,12 @@ public sealed class FlexLayoutTests
     {
         var rects = FlexLayout.Solve(
             SplitDir.Horizontal,
-            new Rect(0, 0, 20, 4),
+            new EngineCells.Rect(0, 0, 20, 4),
             [FlexTrack.Min(14), FlexTrack.Fill(1)]);
 
         await Assert.That(rects).IsEquivalentTo([
-            new Rect(0, 0, 14, 4),
-            new Rect(14, 0, 6, 4),
+            new EngineCells.Rect(0, 0, 14, 4),
+            new EngineCells.Rect(14, 0, 6, 4),
         ]);
     }
 
@@ -151,12 +151,12 @@ public sealed class FlexLayoutTests
     {
         var rects = FlexLayout.Solve(
             SplitDir.Horizontal,
-            new Rect(0, 0, 20, 4),
+            new EngineCells.Rect(0, 0, 20, 4),
             [FlexTrack.Max(6), FlexTrack.Fill(1)]);
 
         await Assert.That(rects).IsEquivalentTo([
-            new Rect(0, 0, 6, 4),
-            new Rect(6, 0, 10, 4),
+            new EngineCells.Rect(0, 0, 6, 4),
+            new EngineCells.Rect(6, 0, 10, 4),
         ]);
     }
 
@@ -165,12 +165,12 @@ public sealed class FlexLayoutTests
     {
         var rects = FlexLayout.Solve(
             SplitDir.Horizontal,
-            new Rect(0, 0, 30, 4),
+            new EngineCells.Rect(0, 0, 30, 4),
             [FlexTrack.Fixed(21), FlexTrack.Fixed(20)]);
 
         await Assert.That(rects).IsEquivalentTo([
-            new Rect(0, 0, 15, 4),
-            new Rect(15, 0, 15, 4),
+            new EngineCells.Rect(0, 0, 15, 4),
+            new EngineCells.Rect(15, 0, 15, 4),
         ]);
     }
 
@@ -179,13 +179,13 @@ public sealed class FlexLayoutTests
     {
         var rects = FlexLayout.Solve(
             SplitDir.Horizontal,
-            new Rect(0, 0, 4, 4),
+            new EngineCells.Rect(0, 0, 4, 4),
             [FlexTrack.Fixed(2), FlexTrack.Fixed(2)],
             gap: 5);
 
         await Assert.That(rects).IsEquivalentTo([
-            new Rect(0, 0, 0, 4),
-            new Rect(0, 0, 0, 4),
+            new EngineCells.Rect(0, 0, 0, 4),
+            new EngineCells.Rect(0, 0, 0, 4),
         ]);
     }
 
@@ -194,19 +194,19 @@ public sealed class FlexLayoutTests
     {
         var rects = FlexLayout.Solve(
             SplitDir.Horizontal,
-            new Rect(0, 0, 20, 4),
+            new EngineCells.Rect(0, 0, 20, 4),
             [FlexTrack.Percent(float.NaN), FlexTrack.Fill(1)]);
 
         await Assert.That(rects).IsEquivalentTo([
-            new Rect(0, 0, 0, 4),
-            new Rect(0, 0, 20, 4),
+            new EngineCells.Rect(0, 0, 0, 4),
+            new EngineCells.Rect(0, 0, 20, 4),
         ]);
     }
 
     [Test]
     public async Task EmptyTracks_ReturnsEmpty()
     {
-        var rects = FlexLayout.Solve(SplitDir.Horizontal, new Rect(0, 0, 20, 4), []);
+        var rects = FlexLayout.Solve(SplitDir.Horizontal, new EngineCells.Rect(0, 0, 20, 4), []);
 
         await Assert.That(rects.Length).IsEqualTo(0);
     }
@@ -216,7 +216,7 @@ public sealed class FlexLayoutTests
     {
         FlexTrack[] tracks = [FlexTrack.Fixed(4)];
 
-        await Assert.That(() => FlexLayout.Solve(SplitDir.Horizontal, new Rect(0, 0, 20, 4), tracks, gap: -1))
+        await Assert.That(() => FlexLayout.Solve(SplitDir.Horizontal, new EngineCells.Rect(0, 0, 20, 4), tracks, gap: -1))
             .Throws<ArgumentOutOfRangeException>();
     }
 
@@ -224,26 +224,26 @@ public sealed class FlexLayoutTests
     public async Task Arrange_ShortDestinationSpan_Throws()
     {
         FlexTrack[] tracks = [FlexTrack.Fixed(4), FlexTrack.Fixed(4)];
-        var into = new Rect[1];
+        var into = new EngineCells.Rect[1];
 
-        await Assert.That(() => FlexLayout.Arrange(SplitDir.Horizontal, new Rect(0, 0, 20, 4), tracks, into))
+        await Assert.That(() => FlexLayout.Arrange(SplitDir.Horizontal, new EngineCells.Rect(0, 0, 20, 4), tracks, into))
             .Throws<ArgumentException>();
     }
 
     [Test]
     public async Task Center_FitsBox_AtMidpoint()
     {
-        var rect = CenterLayout.Arrange(new Rect(0, 0, 40, 10), 10, 4);
+        var rect = CenterLayout.Arrange(new EngineCells.Rect(0, 0, 40, 10), 10, 4);
 
-        await Assert.That(rect).IsEqualTo(new Rect(15, 3, 10, 4));
+        await Assert.That(rect).IsEqualTo(new EngineCells.Rect(15, 3, 10, 4));
     }
 
     [Test]
     public async Task Center_OversizedContent_ClampsToAvail()
     {
-        var avail = new Rect(0, 0, 40, 10);
+        var avail = new EngineCells.Rect(0, 0, 40, 10);
 
-        var rect = CenterLayout.Arrange(avail, new Size(100, 50));
+        var rect = CenterLayout.Arrange(avail, new EngineCells.Size(100, 50));
 
         await Assert.That(rect).IsEqualTo(avail);
     }
@@ -251,7 +251,7 @@ public sealed class FlexLayoutTests
     [Test]
     public async Task Stack_EveryChild_TakesFullArea()
     {
-        var avail = new Rect(2, 3, 10, 5);
+        var avail = new EngineCells.Rect(2, 3, 10, 5);
 
         var rects = StackLayout.Solve(avail, 3);
 
@@ -261,7 +261,7 @@ public sealed class FlexLayoutTests
     [Test]
     public async Task Stack_ZeroCount_ReturnsEmpty()
     {
-        var rects = StackLayout.Solve(new Rect(0, 0, 10, 5), 0);
+        var rects = StackLayout.Solve(new EngineCells.Rect(0, 0, 10, 5), 0);
 
         await Assert.That(rects.Length).IsEqualTo(0);
     }
@@ -269,7 +269,7 @@ public sealed class FlexLayoutTests
     [Test]
     public async Task Stack_NegativeCount_Throws()
     {
-        await Assert.That(() => StackLayout.Solve(new Rect(0, 0, 10, 5), -1))
+        await Assert.That(() => StackLayout.Solve(new EngineCells.Rect(0, 0, 10, 5), -1))
             .Throws<ArgumentOutOfRangeException>();
     }
 }

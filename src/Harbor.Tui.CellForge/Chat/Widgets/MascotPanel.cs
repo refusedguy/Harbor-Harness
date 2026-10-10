@@ -1,6 +1,8 @@
 using Harbor.Tui.CellForge.Rendering;
 using Harbor.Ui.Framework.Rendering;
 using Harbor.Ui.Framework.Rendering.Widgets;
+// #436: GlowRegion is engine-typed; the accent/rect convert exactly below.
+using EngineCells = Harbor.Tui.CellForge.Rendering;
 
 namespace Harbor.Tui.CellForge.Widgets;
 
@@ -118,7 +120,10 @@ public sealed class MascotPanel : Panel
                 MascotReaction.SuccessBounce => ChatPalette.Success,
                 _ => ChatPalette.Warning,
             };
-            _glow.Update(new GlowRegion(Rect, accent, GlowEffect.PeakStrength));
+            _glow.Update(new GlowRegion(
+                new EngineCells.Rect(Rect.X, Rect.Y, Rect.Width, Rect.Height),
+                EngineCells.PackedColor.FromRaw(accent.Value),
+                GlowEffect.PeakStrength));
             _postFx.Set(0, _glow);
         }
 
@@ -137,10 +142,22 @@ public sealed class MascotPanel : Panel
                     continue;
                 }
 
-                var transformed = _postFx.Transform(x, y, in cell);
+                // #436: the post pipeline is engine-typed while the painted
+                // grid is Rendering-typed. Both cell structs share the 16-byte
+                // layout, so the crossing is an exact field round-trip — and it
+                // only runs on reaction frames (Count == 0 returns above).
+                var echo = EngineCells.Cell.FromRaw(cell.Rune, cell.Fg, cell.Bg, cell.Flags, cell.Width);
+                var transformed = _postFx.Transform(x, y, in echo);
                 if (transformed.Fg != cell.Fg || transformed.Bg != cell.Bg)
                 {
-                    buffer.SetStyleAt(x, y, transformed.Style);
+                    var style = transformed.Style;
+                    buffer.SetStyleAt(
+                        x,
+                        y,
+                        new CellStyle(
+                            PackedColor.FromRaw(style.Fg.Value),
+                            PackedColor.FromRaw(style.Bg.Value),
+                            (StyleAttr)style.Attrs));
                 }
             }
         }

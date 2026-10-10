@@ -18,11 +18,11 @@ public class GoldenKittyKeyTests
     private readonly EscapeSequenceParser _parser = new();
 
     [Test]
-    [Arguments("\u001B[13u", KeyCode.Enter)]
-    [Arguments("\u001B[27u", KeyCode.Escape)]
-    [Arguments("\u001B[9u", KeyCode.Tab)]
-    [Arguments("\u001B[127u", KeyCode.Backspace)]
-    public async Task Functional_Keys_Decode_From_CsiU(string input, KeyCode expected)
+    [Arguments("\u001B[13u", EngineInput.KeyCode.Enter)]
+    [Arguments("\u001B[27u", EngineInput.KeyCode.Escape)]
+    [Arguments("\u001B[9u", EngineInput.KeyCode.Tab)]
+    [Arguments("\u001B[127u", EngineInput.KeyCode.Backspace)]
+    public async Task Functional_Keys_Decode_From_CsiU(string input, EngineInput.KeyCode expected)
     {
         var events = T.Feed(_parser, input);
 
@@ -39,23 +39,23 @@ public class GoldenKittyKeyTests
         var shifted = T.Feed(_parser, input);
         var ctrl = T.Feed(new EscapeSequenceParser(), "\u001B[13;3u"); // 1 + ctrl
 
-        await Assert.That(plain[0].Key.Modifiers).IsEqualTo(KeyModifiers.None);
-        await Assert.That(shifted[0].Key.Modifiers & KeyModifiers.Shift).IsEqualTo(KeyModifiers.Shift);
-        await Assert.That(ctrl[0].Key.Modifiers & KeyModifiers.Ctrl).IsEqualTo(KeyModifiers.Ctrl);
+        await Assert.That(plain[0].Key.Modifiers).IsEqualTo(EngineInput.KeyModifiers.None);
+        await Assert.That(shifted[0].Key.Modifiers & EngineInput.KeyModifiers.Shift).IsEqualTo(EngineInput.KeyModifiers.Shift);
+        await Assert.That(ctrl[0].Key.Modifiers & EngineInput.KeyModifiers.Ctrl).IsEqualTo(EngineInput.KeyModifiers.Ctrl);
         // All three are still Enter — never Tab (\t ≡ Ctrl+I ambiguity lives only in legacy).
-        await Assert.That(plain[0].Key.Key).IsEqualTo(KeyCode.Enter);
-        await Assert.That(shifted[0].Key.Key).IsEqualTo(KeyCode.Enter);
-        await Assert.That(ctrl[0].Key.Key).IsEqualTo(KeyCode.Enter);
+        await Assert.That(plain[0].Key.Key).IsEqualTo(EngineInput.KeyCode.Enter);
+        await Assert.That(shifted[0].Key.Key).IsEqualTo(EngineInput.KeyCode.Enter);
+        await Assert.That(ctrl[0].Key.Key).IsEqualTo(EngineInput.KeyCode.Enter);
     }
 
     [Test]
-    [Arguments("\u001B[97u", KeyModifiers.None, 'a')]
-    [Arguments("\u001B[97;2u", KeyModifiers.Shift, 'a')]
-    [Arguments("\u001B[97;3u", KeyModifiers.Ctrl, 'a')]      // 1 + ctrl
-    [Arguments("\u001B[97;5u", KeyModifiers.Alt, 'a')]       // 1 + alt
-    [Arguments("\u001B[97;7u", KeyModifiers.Alt | KeyModifiers.Ctrl, 'a')]
-    [Arguments("\u001B[97;9u", KeyModifiers.Meta, 'a')]      // 1 + super → Meta
-    public async Task Modified_Chars_Decode_Kitty_Modifier_Bits(string input, KeyModifiers mods, char letter)
+    [Arguments("\u001B[97u", EngineInput.KeyModifiers.None, 'a')]
+    [Arguments("\u001B[97;2u", EngineInput.KeyModifiers.Shift, 'a')]
+    [Arguments("\u001B[97;3u", EngineInput.KeyModifiers.Ctrl, 'a')]      // 1 + ctrl
+    [Arguments("\u001B[97;5u", EngineInput.KeyModifiers.Alt, 'a')]       // 1 + alt
+    [Arguments("\u001B[97;7u", EngineInput.KeyModifiers.Alt | EngineInput.KeyModifiers.Ctrl, 'a')]
+    [Arguments("\u001B[97;9u", EngineInput.KeyModifiers.Meta, 'a')]      // 1 + super → Meta
+    public async Task Modified_Chars_Decode_Kitty_Modifier_Bits(string input, EngineInput.KeyModifiers mods, char letter)
     {
         var events = T.Feed(_parser, input);
 
@@ -64,9 +64,9 @@ public class GoldenKittyKeyTests
     }
 
     [Test]
-    [Arguments(":3", KeyEventType.Release)]
-    [Arguments(":2", KeyEventType.Repeat)]
-    public async Task Event_Type_Subparameter_Encodes_Release_And_Repeat(string sub, KeyEventType expected)
+    [Arguments(":3", EngineInput.KeyEventType.Release)]
+    [Arguments(":2", EngineInput.KeyEventType.Repeat)]
+    public async Task Event_Type_Subparameter_Encodes_Release_And_Repeat(string sub, EngineInput.KeyEventType expected)
     {
         var events = T.Feed(_parser, $"\u001B[97;1{sub}u");
 
@@ -91,7 +91,7 @@ public class GoldenKittyKeyTests
         var events = T.Feed(_parser, "\u001B[97:65;2u");
 
         await Assert.That(events.Length).IsEqualTo(1);
-        await A.IsChar(events[0], new Rune('A'), KeyModifiers.Shift, kitty: true);
+        await A.IsChar(events[0], new Rune('A'), EngineInput.KeyModifiers.Shift, kitty: true);
     }
 
     [Test]
@@ -100,7 +100,7 @@ public class GoldenKittyKeyTests
         var events = T.Feed(_parser, "\u001B[97:65:98;2u");
 
         await Assert.That(events.Length).IsEqualTo(1);
-        await A.IsChar(events[0], new Rune('A'), KeyModifiers.Shift, kitty: true);
+        await A.IsChar(events[0], new Rune('A'), EngineInput.KeyModifiers.Shift, kitty: true);
     }
 
     [Test]
@@ -109,7 +109,7 @@ public class GoldenKittyKeyTests
         var events = T.Feed(_parser, "\u001B[57414u");
 
         await Assert.That(events.Length).IsEqualTo(1);
-        await Assert.That(events[0].Key.Key).IsEqualTo(KeyCode.Unknown);
+        await Assert.That(events[0].Key.Key).IsEqualTo(EngineInput.KeyCode.Unknown);
         await Assert.That((int)events[0].Key.Codepoint).IsEqualTo(57414);
         await Assert.That(events[0].Key.IsKittyEncoded).IsTrue();
     }

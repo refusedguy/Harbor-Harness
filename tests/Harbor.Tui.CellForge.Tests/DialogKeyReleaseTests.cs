@@ -19,7 +19,7 @@ namespace Harbor.Tui.CellForge.Tests;
 ///
 ///   * <c>KeyEvent.EventType</c> exists (<c>KeyEventType.Press/Repeat/
 ///     Release</c>), <c>EscapeSequenceParser.DecodeKittyKey</c> decodes the
-///     kitty event-type sub-parameter into it (EscapeSequenceParser.cs:690),
+///     kitty event-type sub-parameter into it (EscapeSequenceParser.cs:689),
 ///     and <c>KeyEventMapper.ToDto</c> DROPS releases by returning null
 ///     (KeyEventMapper.cs:26). So the vocabulary is present and one consumer
 ///     already uses it — <c>ApprovalGateView.HandleKey</c> gates on
@@ -40,7 +40,7 @@ namespace Harbor.Tui.CellForge.Tests;
 ///
 ///   * <c>TerminalQueries.KittyPush</c> (CSI <c>&gt; flags u</c>) is defined
 ///     and referenced only from tests. The enter-alt-screen sequence
-///     (CellForgeReplRunner.cs:81) is alt-screen + hide-cursor + paste +
+///     (CellForgeReplRunner.cs:85) is alt-screen + hide-cursor + paste +
 ///     mouse, and no kitty push. The prober QUERIES the current flags
 ///     (CapabilityProber.cs:87) and records them, then pushes nothing.
 ///   * Without the push there is no report-event-types flag, so a conforming

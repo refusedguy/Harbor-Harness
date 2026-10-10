@@ -39,7 +39,7 @@ public class DiffEngineFuzzTests
         var backend = new RecordingBackend();
         var writer = new AnsiWriter(backend, syncUpdates: true);
         var engine = new DiffEngine(24, 8);
-        var back = new ScreenBuffer(24, 8);
+        var back = new EngineCells.ScreenBuffer(24, 8);
 
         for (int step = 0; step < 80; step++)
         {
@@ -64,12 +64,12 @@ public class DiffEngineFuzzTests
             if (!engine.FrontMatches(back))
             {
                 throw new InvalidOperationException(
-                    $"fuzz seed {seed} step {step}: FRONT != BACK after flush\n{GoldenDoc.Build($"fuzz-{seed}", back, backend)}");
+                    $"fuzz seed {seed} step {step}: FRONT != BACK after flush\n{GoldenDoc.Build($"fuzz-{seed}", GridDump.ToUi(back), backend)}");
             }
         }
     }
 
-    private static void Mutate(Random rng, ScreenBuffer back)
+    private static void Mutate(Random rng, EngineCells.ScreenBuffer back)
     {
         int cols = back.Cols;
         int rows = back.Rows;
@@ -88,7 +88,7 @@ public class DiffEngineFuzzTests
             case 2:
                 int w = Math.Min(cols - 1, 1 + rng.Next(6));
                 int h = Math.Min(rows, 1 + rng.Next(3));
-                back.Fill(new Rect(rng.Next(cols), rng.Next(rows), w, h), Cell.From(RunePool[rng.Next(RunePool.Length)], RandomStyle(rng)));
+                back.Fill(new EngineCells.Rect(rng.Next(cols), rng.Next(rows), w, h), EngineCells.Cell.From(RunePool[rng.Next(RunePool.Length)], RandomStyle(rng)));
                 break;
             default:
                 int y = rng.Next(rows);
@@ -101,12 +101,12 @@ public class DiffEngineFuzzTests
         }
     }
 
-    private static CellStyle RandomStyle(Random rng) => rng.Next(5) switch
+    private static EngineCells.CellStyle RandomStyle(Random rng) => rng.Next(5) switch
     {
-        0 => CellStyle.Plain,
-        1 => new CellStyle(PackedColor.Indexed((byte)rng.Next(256))),
-        2 => new CellStyle(PackedColor.Rgb((byte)rng.Next(256), (byte)rng.Next(256), (byte)rng.Next(256))),
-        3 => new CellStyle(attrs: StyleAttr.Bold | StyleAttr.Underline),
-        _ => new CellStyle(PackedColor.Indexed((byte)rng.Next(256)), PackedColor.Indexed((byte)rng.Next(256)), StyleAttr.Reverse),
+        0 => EngineCells.CellStyle.Plain,
+        1 => new EngineCells.CellStyle(EngineCells.PackedColor.Indexed((byte)rng.Next(256))),
+        2 => new EngineCells.CellStyle(EngineCells.PackedColor.Rgb((byte)rng.Next(256), (byte)rng.Next(256), (byte)rng.Next(256))),
+        3 => new EngineCells.CellStyle(attrs: EngineCells.StyleAttr.Bold | EngineCells.StyleAttr.Underline),
+        _ => new EngineCells.CellStyle(EngineCells.PackedColor.Indexed((byte)rng.Next(256)), EngineCells.PackedColor.Indexed((byte)rng.Next(256)), EngineCells.StyleAttr.Reverse),
     };
 }
