@@ -54,7 +54,11 @@ public sealed class FileTrustPolicy : IPluginTrustPolicy
     private readonly IReadOnlyList<string> _trustedDirs;
     private readonly string _storePath;
     private readonly object _sync = new();
-    private List<TrustEntry>? _entries;
+    // Published once, replaced never mutated: readers share the instance, so the
+    // hot path (DecideAsync/GetGrantedCapabilities after warmup) is a lock-free
+    // volatile read with no disk IO. Volatile so the fast-path read below is an
+    // acquire load pairing with the publish inside the lock.
+    private volatile List<TrustEntry>? _entries;
 
     /// <summary>
     ///     Construct a file-backed trust policy.
@@ -196,31 +200,41 @@ public sealed class FileTrustPolicy : IPluginTrustPolicy
 
     private List<TrustEntry> LoadEntries()
     {
+        // Hot path: serve from the in-memory cache with neither lock nor disk IO.
+        var cached = _entries;
+        if (cached is not null)
+            return cached;
+
+        // Cold path (first call only): read + parse the store file with NO lock
+        // held, so disk latency never serializes concurrent DecideAsync /
+        // GetGrantedCapabilities callers. The parsed list is published below.
+        List<TrustEntry> loaded;
+        try
+        {
+            if (File.Exists(_storePath))
+            {
+                using var doc = JsonDocument.Parse(File.ReadAllText(_storePath));
+                loaded = doc.RootElement.ValueKind == JsonValueKind.Array
+                    ? DeserializeList(doc.RootElement)
+                    : [];
+            }
+            else
+            {
+                loaded = [];
+            }
+        }
+        catch (Exception ex) when (ex is JsonException or IOException or UnauthorizedAccessException)
+        {
+            _logger.LogWarning(ex, "Trust store {Store} unreadable — treating as empty", _storePath);
+            loaded = [];
+        }
+
         lock (_sync)
         {
-            if (_entries is not null)
-                return _entries;
-
-            try
-            {
-                if (File.Exists(_storePath))
-                {
-                    using var doc = JsonDocument.Parse(File.ReadAllText(_storePath));
-                    _entries = doc.RootElement.ValueKind == JsonValueKind.Array
-                        ? DeserializeList(doc.RootElement)
-                        : [];
-                }
-                else
-                {
-                    _entries = [];
-                }
-            }
-            catch (Exception ex) when (ex is JsonException or IOException or UnauthorizedAccessException)
-            {
-                _logger.LogWarning(ex, "Trust store {Store} unreadable — treating as empty", _storePath);
-                _entries = [];
-            }
-
+            // A concurrent loader may have won: keep the first published instance
+            // so every reader shares one list object (never mutated after publish).
+            if (_entries is null)
+                _entries = loaded;
             return _entries;
         }
     }
@@ -253,12 +267,16 @@ public sealed class FileTrustPolicy : IPluginTrustPolicy
         var persisted = granted.Where(declared.Contains).Select(PluginCapabilities.ToName).ToList();
         updated.Add(new TrustEntry { Path = fullPath, Hash = hash, Capabilities = persisted });
 
+        // Serialize outside the lock: pure CPU work over the thread-local
+        // `updated` list with no shared state. Only the file write + cache
+        // publish below stay serialized — concurrent approvals are rare (one per
+        // first-seen plugin), so this lock never sits on the hot path.
+        var json = JsonSerializer.Serialize(updated, StoreOptions);
         lock (_sync)
         {
             try
             {
                 Directory.CreateDirectory(Path.GetDirectoryName(_storePath)!);
-                var json = JsonSerializer.Serialize(updated, StoreOptions);
                 File.WriteAllText(_storePath, json);
 
                 // Only promote to the live cache after a successful save — an unwritable

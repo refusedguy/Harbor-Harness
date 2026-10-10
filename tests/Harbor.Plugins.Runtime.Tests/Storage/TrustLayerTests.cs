@@ -168,6 +168,58 @@ public sealed class TrustLayerTests : IDisposable
     }
 
     [Test]
+    public async Task FileTrustPolicy_CacheSurvivesStoreDeletion()
+    {
+        // Control for the lock-free trust fast path: once warmed, decisions are
+        // served from the in-memory cache — deleting the store file must not
+        // regress an already-trusted script back to a prompt.
+        string path = WritePlugin(_projectDir, "cached.cs", "// cached v1");
+        const string sourceText = "// cached v1";
+        string store = Path.Combine(_globalDir, "trust.json");
+        int prompts = 0;
+
+        var policy = new FileTrustPolicy(
+            new[] { _globalDir }, store, NullLogger<FileTrustPolicy>.Instance,
+            trustPrompt: _ => { Interlocked.Increment(ref prompts); return Task.FromResult(true); });
+
+        var first = await policy.DecideAsync(new PluginScript(path, sourceText));
+        File.Delete(store);
+
+        var second = await policy.DecideAsync(new PluginScript(path, sourceText));
+
+        await Assert.That(first).IsEqualTo(PluginTrustDecision.Trusted);
+        await Assert.That(second).IsEqualTo(PluginTrustDecision.Trusted);
+        await Assert.That(prompts).IsEqualTo(1);
+    }
+
+    [Test]
+    public async Task FileTrustPolicy_ConcurrentDecide_AllTrusted()
+    {
+        // Control for the narrowed trust lock (disk IO outside _sync): concurrent
+        // first-time decisions must neither deadlock nor fail each other. Bounded
+        // wait: a real deadlock must fail the test, not hang the CI job.
+        const int writers = 8;
+        string store = Path.Combine(_globalDir, "trust.json");
+        int prompts = 0;
+        var policy = new FileTrustPolicy(
+            new[] { _globalDir }, store, NullLogger<FileTrustPolicy>.Instance,
+            trustPrompt: _ => { Interlocked.Increment(ref prompts); return Task.FromResult(true); });
+
+        var tasks = new Task<PluginTrustDecision>[writers];
+        for (int w = 0; w < writers; w++)
+        {
+            int writer = w;
+            string path = WritePlugin(_projectDir, $"c{writer}.cs", $"// concurrent v{writer}");
+            tasks[w] = policy.DecideAsync(new PluginScript(path, $"// concurrent v{writer}"));
+        }
+
+        var verdicts = await Task.WhenAll(tasks).WaitAsync(TimeSpan.FromSeconds(30));
+
+        await Assert.That(verdicts.All(v => v == PluginTrustDecision.Trusted)).IsTrue();
+        await Assert.That(prompts).IsEqualTo(writers);
+    }
+
+    [Test]
     public async Task TrustingPluginSource_NarrowsYieldedScriptToApprovedSubset()
     {
         const string body = "// harbor:capabilities read_files,http_requests\nclass G { }";
