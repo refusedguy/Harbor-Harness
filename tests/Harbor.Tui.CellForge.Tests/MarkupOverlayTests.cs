@@ -201,16 +201,16 @@ public class MarkupOverlayTests
         // Image centre cell → (0.5, 0.5) in unit space.
         int cx = image.X + (image.Width / 2);
         int cy = image.Y + (image.Height / 2);
-        var press = overlay.HandleMouse(new MouseEvent(MouseEventType.Press, MouseButton.Left, cx, cy, KeyModifiers.None), viewport);
+        var press = overlay.HandleMouse(new MouseEvent(MouseEventType.Press, MouseButton.Left, cx, cy, Harbor.Tui.CellForge.Input.KeyModifiers.None), viewport);
         await Assert.That(press is ChatAppMsg.MarkupPressAt).IsTrue();
 
-        var drag = overlay.HandleMouse(new MouseEvent(MouseEventType.Drag, MouseButton.Left, cx + 4, cy + 2, KeyModifiers.None), viewport);
+        var drag = overlay.HandleMouse(new MouseEvent(MouseEventType.Drag, MouseButton.Left, cx + 4, cy + 2, Harbor.Tui.CellForge.Input.KeyModifiers.None), viewport);
         await Assert.That(drag is ChatAppMsg.MarkupDragTo).IsTrue();
 
-        var release = overlay.HandleMouse(new MouseEvent(MouseEventType.Release, MouseButton.Left, cx + 4, cy + 2, KeyModifiers.None), viewport);
+        var release = overlay.HandleMouse(new MouseEvent(MouseEventType.Release, MouseButton.Left, cx + 4, cy + 2, Harbor.Tui.CellForge.Input.KeyModifiers.None), viewport);
         await Assert.That(release is ChatAppMsg.MarkupReleaseAt).IsTrue();
 
-        var click = overlay.HandleMouse(new MouseEvent(MouseEventType.Click, MouseButton.Left, cx, cy, KeyModifiers.None), viewport);
+        var click = overlay.HandleMouse(new MouseEvent(MouseEventType.Click, MouseButton.Left, cx, cy, Harbor.Tui.CellForge.Input.KeyModifiers.None), viewport);
         await Assert.That(click is ChatAppMsg.MarkupSelectAt select && select.X == 0.5 && select.Y == 0.5).IsTrue();
     }
 
@@ -221,11 +221,11 @@ public class MarkupOverlayTests
         var viewport = new Rect(0, 0, 80, 24);
 
         await Assert.That(overlay.HandleMouse(
-            new MouseEvent(MouseEventType.Press, MouseButton.Left, 0, 0, KeyModifiers.None), viewport) is null).IsTrue();
+            new MouseEvent(MouseEventType.Press, MouseButton.Left, 0, 0, Harbor.Tui.CellForge.Input.KeyModifiers.None), viewport) is null).IsTrue();
         await Assert.That(overlay.HandleMouse(
-            new MouseEvent(MouseEventType.WheelUp, MouseButton.None, 40, 12, KeyModifiers.None), viewport) is null).IsTrue();
+            new MouseEvent(MouseEventType.WheelUp, MouseButton.None, 40, 12, Harbor.Tui.CellForge.Input.KeyModifiers.None), viewport) is null).IsTrue();
         await Assert.That(overlay.HandleMouse(
-            new MouseEvent(MouseEventType.Press, MouseButton.Right, 40, 12, KeyModifiers.None), viewport) is null).IsTrue();
+            new MouseEvent(MouseEventType.Press, MouseButton.Right, 40, 12, Harbor.Tui.CellForge.Input.KeyModifiers.None), viewport) is null).IsTrue();
     }
 
     [Test]
