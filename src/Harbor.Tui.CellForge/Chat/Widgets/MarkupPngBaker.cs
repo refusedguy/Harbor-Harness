@@ -241,7 +241,7 @@ public static class MarkupPngBaker
             for (int x = 0; x < width; x++)
             {
                 int dst = (y * width * 4) + (x * 4);
-                int src = (y * stride) + (x * channels);
+                int src = x * channels;
                 pixels[dst] = recon[src];
                 pixels[dst + 1] = recon[src + 1];
                 pixels[dst + 2] = recon[src + 2];

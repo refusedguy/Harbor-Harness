@@ -230,6 +230,7 @@ public sealed class MarkupOverlay
         if (image.Width > 0 && image.Height > 0)
         {
             PaintImageFrame(buffer, image);
+            PaintCursor(buffer, image, markup.Cursor);
             foreach (MarkupAnnotation item in markup.Model.Items)
             {
                 PaintAnnotation(buffer, image, item, selected: item.Id == markup.Model.SelectedId);
@@ -239,8 +240,6 @@ public sealed class MarkupOverlay
             {
                 PaintDraft(buffer, image, markup.ActiveTool, draft);
             }
-
-            PaintCursor(buffer, image, markup.Cursor);
         }
 
         int footerY = box.Bottom - 2;
@@ -258,7 +257,7 @@ public sealed class MarkupOverlay
             buffer.SetText(box.X + 1, footerY - 1, Truncate("Text: " + markup.PendingText + "|", innerW), ChatPalette.ToolArgs);
         }
 
-        const string Hints = "1/2/3 tool | space place | arrows move | shift+arrows resize | u undo ^R redo | del remove | ^S save | esc close";
+        const string Hints = "1/2/3|space|arrows move|S+arrows resize|u undo|^R redo|del|^S save|esc close";
         buffer.SetText(box.X + 1, footerY, Truncate(Hints, innerW), ChatPalette.Dim);
     }
 
@@ -418,10 +417,13 @@ public sealed class MarkupOverlay
             Plot(buffer, image, right, y, '│', style);
         }
 
-        Plot(buffer, image, left, top, '┌', style);
-        Plot(buffer, image, right, top, '┐', style);
-        Plot(buffer, image, left, bottom, '└', style);
-        Plot(buffer, image, right, bottom, '┘', style);
+        // Corners come from the single spelling (PanelChrome.CornersFor), so
+        // the one-file rule on box-drawing corners keeps holding.
+        ReadOnlySpan<char> corners = PanelChrome.CornersFor(BoxStyle.SquareFrame);
+        Plot(buffer, image, left, top, corners[0], style);
+        Plot(buffer, image, right, top, corners[1], style);
+        Plot(buffer, image, left, bottom, corners[2], style);
+        Plot(buffer, image, right, bottom, corners[3], style);
     }
 
     private static void PaintArrow(ScreenBuffer buffer, Rect image, NormalizedPoint a, NormalizedPoint b, CellStyle style)
