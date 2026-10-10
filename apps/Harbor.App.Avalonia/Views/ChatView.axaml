@@ -242,6 +242,7 @@
                 <TextBox Grid.Column="0"
                          x:Name="InputBox"
                          AutomationProperties.Name="Message input"
+                         AutomationProperties.HelpText="Type a message. Enter to send, Shift+Enter for newline."
                          Text="{Binding InputText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                          PlaceholderText="Message Harbor…"
                          AcceptsReturn="True"
@@ -252,6 +253,7 @@
                          KeyDown="InputBox_KeyDown" />
                 <Button Grid.Column="1" Classes="Primary" Content="Send ▶"
                         AutomationProperties.Name="Send message"
+                        AutomationProperties.HelpText="Send the current message to the agent."
                         Command="{Binding SendCommand}"
                         Margin="8,0,0,0"
                         Padding="20,12"

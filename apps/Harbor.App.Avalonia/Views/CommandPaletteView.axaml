@@ -27,6 +27,7 @@
             <TextBox Grid.Row="1"
                      x:Name="QueryBox"
                      Text="{Binding Query, Mode=TwoWay}"
+                     AutomationProperties.Name="Command palette query"
                      PlaceholderText="Type a command, /slash, or search…"
                      Padding="16,12"
                      BorderThickness="0,0,0,1"
@@ -37,6 +38,7 @@
 
             <ListBox Grid.Row="2"
                      ItemsSource="{Binding Results}"
+                     AutomationProperties.Name="Command results"
                      SelectedIndex="{Binding SelectedIndex, Mode=TwoWay}"
                      Background="Transparent"
                      BorderThickness="0"
