@@ -78,10 +78,10 @@ public sealed class SessionSwitchMidTurnScenarioTests : CellForgePtyScenarioBase
     }
 
     /// <summary>Commit a slash line through the palette overlay: <c>/</c> opens
-    /// it, the rest filters it, Enter commits the top match. The palette has no
-    /// "[slash]" caption — its stable open marker is the footer hint
-    /// <c>enter run · esc close</c> (see CommandPaletteView), and the painted
-    /// query row (<c>&gt; new</c>) proves the filter applied, so the commit
+    /// it, the rest filters it, Enter commits the top match. The palette's
+    /// stable open marker is the footer hint <c>enter run · esc close</c>
+    /// (see CommandPaletteView), and the painted query row
+    /// (<c>&gt; [slash] new</c>) proves the filter applied, so the commit
     /// deterministically resolves the <c>new</c> item (the only slash command
     /// matching it). Sent in two phases with a render-sync between them: a
     /// single burst could commit before the filter keystrokes are processed.
@@ -95,7 +95,7 @@ public sealed class SessionSwitchMidTurnScenarioTests : CellForgePtyScenarioBase
         Session.SendKey(line[1..]);
         _ = await WaitForScreenAsync(
             l => l.Any(x => x.Contains("enter run", StringComparison.Ordinal))
-                && l.Any(x => x.Contains("> new", StringComparison.Ordinal)),
+                && l.Any(x => x.Contains("[slash] new", StringComparison.Ordinal)),
             TimeSpan.FromSeconds(15)).ConfigureAwait(false);
         Session.SendKey("\r");
     }
