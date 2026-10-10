@@ -62,13 +62,23 @@ public sealed record MarkupOverlayState(
         NormalizedPoint.Create(0.5, 0.5), string.Empty, null, Math.Max(0, scrollOffset), string.Empty, string.Empty);
 
     /// <summary>Topmost annotation within tolerance of <paramref name="point" />, or null.</summary>
+    /// <remarks>
+    /// A rectangle is hit by its BORDER, not its diagonal: clicking inside a
+    /// box selects what is under the cursor there (or nothing), the same way
+    /// the painted wireframe reads.
+    /// </remarks>
     public static int? HitTest(MarkupAnnotationModel model, NormalizedPoint point)
     {
         for (int i = model.Items.Length - 1; i >= 0; i--)
         {
             var item = model.Items[i];
-            if (NearSegment(item.From, item.To, point, HitTolerance) ||
-                (item.Kind == MarkupKind.Text && Distance(item.From, point) <= HitTolerance))
+            bool hit = item.Kind switch
+            {
+                MarkupKind.Rectangle => NearRectBorder(item.From, item.To, point, HitTolerance),
+                MarkupKind.Text => Distance(item.From, point) <= HitTolerance,
+                _ => NearSegment(item.From, item.To, point, HitTolerance),
+            };
+            if (hit)
             {
                 return item.Id;
             }
@@ -82,6 +92,18 @@ public sealed record MarkupOverlayState(
         double dx = a.X - b.X;
         double dy = a.Y - b.Y;
         return Math.Sqrt((dx * dx) + (dy * dy));
+    }
+
+    private static bool NearRectBorder(NormalizedPoint a, NormalizedPoint b, NormalizedPoint point, double tolerance)
+    {
+        var topLeft = NormalizedPoint.Create(Math.Min(a.X, b.X), Math.Min(a.Y, b.Y));
+        var bottomRight = NormalizedPoint.Create(Math.Max(a.X, b.X), Math.Max(a.Y, b.Y));
+        var topRight = NormalizedPoint.Create(bottomRight.X, topLeft.Y);
+        var bottomLeft = NormalizedPoint.Create(topLeft.X, bottomRight.Y);
+        return NearSegment(topLeft, topRight, point, tolerance) ||
+            NearSegment(topRight, bottomRight, point, tolerance) ||
+            NearSegment(bottomRight, bottomLeft, point, tolerance) ||
+            NearSegment(bottomLeft, topLeft, point, tolerance);
     }
 
     private static bool NearSegment(NormalizedPoint a, NormalizedPoint b, NormalizedPoint p, double tolerance)
