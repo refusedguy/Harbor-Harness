@@ -465,10 +465,14 @@ public static class MarkupPngBaker
         var (x0, y0) = ToPixels(item.From, image);
         var (x1, y1) = ToPixels(item.To, image);
         int half = item.Weight / 2;
-        Line(image, x0, y0, x1, y0, half, Red);
-        Line(image, x1, y0, x1, y1, half, Red);
-        Line(image, x0: x1, y0: y1, x1: x0, y1: y1, half: half, rgba: Red);
-        Line(image, x0: x0, y0: y1, x1: x0, y1: y0, half: half, rgba: Red);
+        int left = Math.Min(x0, x1);
+        int right = Math.Max(x0, x1);
+        int top = Math.Min(y0, y1);
+        int bottom = Math.Max(y0, y1);
+        Line(image, left, top, right, top, half, Red);
+        Line(image, right, top, right, bottom, half, Red);
+        Line(image, right, bottom, left, bottom, half, Red);
+        Line(image, left, bottom, left, top, half, Red);
     }
 
     private static void DrawArrow(RgbaImage image, MarkupAnnotation item)
