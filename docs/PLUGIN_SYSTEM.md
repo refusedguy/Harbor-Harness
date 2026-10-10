@@ -10,9 +10,12 @@
 2. The file must contain at least one public class implementing `IPlugin` (or one of its
    sub-interfaces: `IToolPlugin`, `IProviderPlugin`, `IAgentPlugin`) with a parameterless
    constructor.
-3. Start Harbor — the file is compiled in-memory, instantiated, and registered.
-4. Compilation errors are logged to the console and to the host file log
-   (`~/.harbor/logs/harbor-cli-*.log`).
+3. Start Harbor — `harbor-plugins-host` (registered automatically as the
+   `harbor-csharp-plugins` MCP server when it ships next to the CLI)
+   compiles the file and serves its tools over MCP. The CLI process itself
+   never compiles plugins (#1055).
+4. Compilation errors are reported by the host and surface through MCP as
+   `isError` tool results; the CLI logs which plugin route it took at startup.
 5. Compiled assemblies are cached by source SHA-256 in `~/.harbor/plugins/cache/`.
 
 ## Architecture (layered runtime)
@@ -406,7 +409,7 @@ rm -rf ~/.harbor/plugins/cache/
 
 ## Security warning ⚠️
 
-**CS plugins run in-process with full trust.** A plugin `.cs` file can:
+**CS plugins run with full trust inside `harbor-plugins-host`.** A plugin `.cs` file can:
 
 - Read and write any file on the system (via `System.IO`).
 - Make arbitrary HTTP requests (via `HttpClient`).
@@ -415,7 +418,9 @@ rm -rf ~/.harbor/plugins/cache/
 
 Harbor does NOT sandbox CS plugins. Only drop source files you have reviewed into
 `~/.harbor/plugins/`. Treat plugin installation with the same caution as
-`pip install` or `npm install -g`.
+`pip install` or `npm install -g`. Since #1055s3 the CLI serves CS plugins
+out-of-process by default (see `src/Harbor.Plugins.Host/README.md`): the
+process boundary is crash containment, not a sandbox.
 
 For sandboxed plugin execution, use the planned DLL-based out-of-process plugin path
 (see `specs/02-plugins.md` and `specs/08-native-aot.md`). The legacy DLL-based plugin
