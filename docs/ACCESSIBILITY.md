@@ -36,6 +36,10 @@ Each interactive control was checked against the WCAG 2.1 AA checklist:
 
 ### 2.2 Gaps (need remediation)
 
+> Status 2026-10-10: G1–G7 all fixed in this slice (additive
+> `AutomationProperties.Name`/`HelpText` XAML only, no behavior change);
+> entries below are kept as the audit record. See §4.
+
 #### G1 — Chat input & send button
 **File:** `Views/ChatView.axaml`  
 **Severity:** Medium  
@@ -166,13 +170,13 @@ All remediations are additive XAML changes — no viewmodel or behavior changes 
 - [x] Checked `AutomationProperties.Name` / `HelpText` coverage
 - [x] Verified keyboard navigation (TabIndex, FocusManager, IsTabStop)
 - [x] Verified color contrast in Dark and Light palettes
-- [ ] Fix G1 (Chat input + Send button)
-- [ ] Fix G2 (ToolCallCardView Expander)
-- [ ] Fix G3 (CodeBlock Copy button)
-- [ ] Fix G4 (ProviderModelPicker)
-- [ ] Fix G5 (SessionCardView kebab)
-- [ ] Fix G6 (Settings form labels)
-- [ ] Fix G7 (Command palette)
+- [x] Fix G1 (Chat input + Send button)
+- [x] Fix G2 (ToolCallCardView Expander)
+- [x] Fix G3 (CodeBlock Copy button)
+- [x] Fix G4 (ProviderModelPicker)
+- [x] Fix G5 (SessionCardView kebab)
+- [x] Fix G6 (Settings form labels)
+- [x] Fix G7 (Command palette)
 - [ ] Re-run accessibility tests post-fix
 
 ---
@@ -234,6 +238,9 @@ Covered by the gates above:
 - WCAG 1.4.3 Contrast (Minimum) for the eight desktop token pairs in §5.1.
 - WCAG 4.1.2 Name/Role/Value for interactive controls in the four views in
   §5.2 (name-or-id presence, not screen-reader semantics).
+- WCAG 4.1.2 names for the G1–G7 controls in §2.2 (additive XAML names,
+  fixed 2026-10-10; no tracking issues remain — no open High findings,
+  no Medium/Low left unfixed).
 
 Explicitly out of scope for this slice (not performed, not gated):
 
@@ -243,7 +250,6 @@ Explicitly out of scope for this slice (not performed, not gated):
   announcement checks.
 - Full 64-view manual re-audit, 2.4.6 Headings and 3.3.x Error
   Identification, keyboard trap testing of modal overlays.
-- Severity triage of G1–G7 and tracking issues for Medium/Low findings.
 
 Audit date: 2026-10-09. Re-run the gates after the i18n slice lands (it
 changes the string layer the audit reads).
