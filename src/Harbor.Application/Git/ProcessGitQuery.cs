@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Text;
+using Harbor.Abstractions.Extensions;
 using Harbor.Abstractions.Git;
 using Microsoft.Extensions.Logging;
 
@@ -194,8 +195,61 @@ public sealed class ProcessGitQuery(ILogger<ProcessGitQuery> logger) : IGitQuery
         // than discarded: a non-repository is the common case and its "fatal: not a
         // git repository" is the reason GetStatus answers None, so it is worth having
         // where #708 wanted a notifier's stderr to end up.
-        var stdout = new StringBuilder();
-        process.OutputDataReceived += (_, e) =>
+        // §PERF-006: per-call `new StringBuilder()` rented from StringBuilderPool
+        // (this runs on the render thread, up to three spawns per UI refresh).
+        // Deliberately NOT capped: the buffer is machine-parsed (porcelain
+        // split, worktree parser), so truncation would corrupt data rather
+        // than shorten a transcript. Oversized builders are simply dropped on
+        // return per pool policy. Named locals so they detach in the finally
+        // before the pooled builder is read or returned.
+        using var stdout = StringBuilderPool.Rent(4096);
+        process.OutputDataReceived += OnStdout;
+        process.ErrorDataReceived += OnStderr;
+        process.BeginOutputReadLine();
+        process.BeginErrorReadLine();
+
+        try
+        {
+            bool exited = process.WaitForExit(Timeout);
+            if (!exited)
+            {
+                try
+                {
+                    process.Kill();
+                }
+                catch (InvalidOperationException)
+                {
+                    // Already exited between the timeout and the kill — nothing to do.
+                }
+            }
+
+            // The parameterless overload is the one that waits for the ASYNCHRONOUS
+            // readers as well as the child; the timed overload is documented not to. It
+            // cannot block on the child here — either the child exited, or the kill above
+            // ended it, and in both cases the pipes are at EOF — but it is what makes
+            // reading `stdout` below a statement rather than a race.
+            process.WaitForExit();
+
+            if (!exited || process.ExitCode != 0)
+            {
+                return null;
+            }
+
+            // A cancelled caller gets nothing, but only once the child is accounted for:
+            // the readers are already running, and abandoning them here would hand a
+            // half-drained pipe back to a process that is about to be disposed.
+            cancellationToken.ThrowIfCancellationRequested();
+            return stdout.ToString();
+        }
+        finally
+        {
+            // Detach BEFORE the pooled builder is read or returned, so no
+            // late callback can append into a recycled builder.
+            process.OutputDataReceived -= OnStdout;
+            process.ErrorDataReceived -= OnStderr;
+        }
+
+        void OnStdout(object _, DataReceivedEventArgs e)
         {
             // '\n', not AppendLine's Environment.NewLine. git emits LF on every
             // platform and all three consumers split or trim on it, so
@@ -203,48 +257,16 @@ public sealed class ProcessGitQuery(ILogger<ProcessGitQuery> logger) : IGitQuery
             // on Windows instead of handing them a CRLF corpus they tolerate.
             if (e.Data is { } line)
             {
-                stdout.Append(line).Append('\n');
+                stdout.Builder.Append(line).Append('\n');
             }
-        };
-        process.ErrorDataReceived += (_, e) =>
+        }
+
+        void OnStderr(object _, DataReceivedEventArgs e)
         {
             if (e.Data is { } line)
             {
                 logger.LogDebug("git {Arguments} wrote to stderr: {Line}", string.Join(' ', args), line);
             }
-        };
-        process.BeginOutputReadLine();
-        process.BeginErrorReadLine();
-
-        bool exited = process.WaitForExit(Timeout);
-        if (!exited)
-        {
-            try
-            {
-                process.Kill();
-            }
-            catch (InvalidOperationException)
-            {
-                // Already exited between the timeout and the kill — nothing to do.
-            }
         }
-
-        // The parameterless overload is the one that waits for the ASYNCHRONOUS
-        // readers as well as the child; the timed overload is documented not to. It
-        // cannot block on the child here — either the child exited, or the kill above
-        // ended it, and in both cases the pipes are at EOF — but it is what makes
-        // reading `stdout` below a statement rather than a race.
-        process.WaitForExit();
-
-        if (!exited || process.ExitCode != 0)
-        {
-            return null;
-        }
-
-        // A cancelled caller gets nothing, but only once the child is accounted for:
-        // the readers are already running, and abandoning them here would hand a
-        // half-drained pipe back to a process that is about to be disposed.
-        cancellationToken.ThrowIfCancellationRequested();
-        return stdout.ToString();
     }
 }
