@@ -168,7 +168,7 @@ internal static class RegistriesModule
                 scriptCount);
         else
             ctx.Logger.LogWarning(
-                "plugins: {Count} script(s) need harbor-plugins-host (missing) — in-process compile removed (#1055s3), skipping",
+                "plugins: {Count} script(s) need harbor-plugins-host (missing) — out-of-proc route unavailable, in-process compile removed (#1055s3), skipping",
                 scriptCount);
         return StartupPluginLoad.Empty();
     }
