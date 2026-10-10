@@ -44,6 +44,8 @@
   href: CONFIGURATION.md
 - name: Contrib Boundary Measurement
   href: CONTRIB_BOUNDARY_MEASUREMENT.md
+- name: Ddmin Shrink Contract
+  href: DDMIN_SHRINK_CONTRACT.md
 - name: Demo Gifs
   href: DEMO_GIFS.md
 - name: Design System

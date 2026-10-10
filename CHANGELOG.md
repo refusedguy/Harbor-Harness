@@ -6,6 +6,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+### #46 S7 — ddmin shrink contract for UI-sequence failures (#424)
+
+**Shrinking a flaky UI sequence is now a bounded mechanical step: fixed cancel-approve-commit list by default, opt-in seeded generator, determinism gate, 50-check / 30-second budgets.**
+
+- `tests/Harbor.Tui.E2E.Tests/Shrink/` holds the contract implementation: fixed order (`UiSequence`), opt-in seeded generator with recorded version (`UiSequenceGenerator`), harness-controlled schedule on an injected clock (`UiStepSchedule`), five-field failure artifact (`FailureArtifact`), and the time-boxed ddmin shrinker (`DdminShrinker`). No runner integration in this slice.
+- The gate replays the full sequence twice under the same schedule and refuses with a non-determinism finding unless both replays fail with the same signature. Either budget stops the loop and the report carries `BestKnownFailingCase`, which still reproduces the signature. Every check receives a token carrying the remaining run budget, so one hung cooperative check cannot blow the 30 s window (a check that ignores its token is documented residual risk).
+- Contract document: `docs/DDMIN_SHRINK_CONTRACT.md`. `DdminShrinkerTests` asserts each clause, including two source-scan gates (no failure verdict for the run itself, no unqualified optimality claim) in the CostAnimatorGuardTests style.
+
 ### cellforge — a moved layout is viewport-wide damage (#508 regression, #551)
 
 **Узкий damage-путь не перерисовывал строки, которые сдвинул лейаут: чёрные полосы в шапке, у `INPUT` и в статус-строке.**
