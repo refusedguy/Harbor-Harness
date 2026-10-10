@@ -9,7 +9,7 @@ namespace Harbor.Benchmarks;
 /// <summary>
 ///     Benchmarks <see cref="MessageConverter.ToLlmMessages"/> — the Adapter (GOF) that
 ///     converts domain <see cref="AgentMessage"/>s to provider-agnostic <see cref="LlmMessage"/>s.
-///     Called every turn in <c>TurnRunner.cs:159</c> to build the <see cref="LlmRequest.Messages"/>
+///     Called every turn in <c>TurnRunner.cs:161</c> to build the <see cref="LlmRequest.Messages"/>
 // check-doc-cites: the call left AgentLoop.cs for TurnRunner.cs in the [G4] per-turn
 // extraction, so a citation into AgentLoop.cs can only ever drift; it now names the
 // real call site, which is why the deferred record-drift marker is gone rather than

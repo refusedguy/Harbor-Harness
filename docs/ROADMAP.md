@@ -203,7 +203,7 @@ Moved platform-agnostic logic out of `Harbor.App.Avalonia` into `Harbor.Ui.Frame
 - [ ] Performance benchmarks vs baseline
 - [ ] Security audit
 - [ ] Accessibility audit (WCAG 2.1 AA for Blazor/Avalonia)
-- [ ] Internationalization (i18n) for UI strings
+- [ ] Internationalization (i18n) for UI strings (slice 1 landed: inventory in `docs/I18N_STRING_INVENTORY.md`, catalogue home decided in ADR-015; ~1 370 occurrences pending extraction; locales + fallback tests are separate slices)
 
 ---
 

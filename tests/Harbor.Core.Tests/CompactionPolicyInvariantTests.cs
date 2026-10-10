@@ -29,7 +29,7 @@
 //      `MinimumKeptMessages` at :168.
 //   3. MaterializeCompactedView IS IDEMPOTENT.
 //      The compacted view is recomputed from the raw append-only history on every turn
-//      (TurnRunner.cs:120, CompactionBehavior.cs:78). Materializing a view that has
+//      (TurnRunner.cs:122, CompactionBehavior.cs:78). Materializing a view that has
 //      already been materialized must not shrink it again, or the session bleeds one
 //      turn at a time.
 //   4. MaterializeCompactedView FAILS SAFE.
@@ -45,7 +45,7 @@
 // the list, and the "always keep at least one message" clamp puts the cut back on the
 // last result — a kept slice that is exactly one orphan ToolResultMessage.
 //
-// That slice goes straight into the next LLM request: TurnRunner.cs:136 calls
+// That slice goes straight into the next LLM request: TurnRunner.cs:138 calls
 // TruncateToFitStrict and hands the result to the request builder, on the same turn
 // where summarization has ALREADY failed. The provider rejects an unpaired tool result,
 // so the run that was already degraded becomes a hard failure — and the fallback stays
@@ -161,7 +161,7 @@ public class CompactionPolicyInvariantTests
     /// <summary>
     ///     Rule 1 again, for <c>TruncateToFitStrict</c> — and this is the one that
     ///     matters, because unlike its sibling this method is ON the live path:
-    ///     <c>TurnRunner.cs:136</c> calls it and feeds the result straight into the next
+    ///     <c>TurnRunner.cs:138</c> calls it and feeds the result straight into the next
     ///     LLM request, on a turn where summarization has already failed.
     /// </summary>
     [Test]
@@ -266,7 +266,7 @@ public class CompactionPolicyInvariantTests
     /// <summary>
     ///     Rule 3: materializing an already-materialized view changes nothing. The view
     ///     is rebuilt from the raw append-only history on every single turn
-    ///     (<c>TurnRunner.cs:120</c>, <c>CompactionBehavior.cs:78</c>), so a second pass
+    ///     (<c>TurnRunner.cs:122</c>, <c>CompactionBehavior.cs:78</c>), so a second pass
     ///     over an already-folded view is a guaranteed code path, not a hypothetical.
     /// </summary>
     [Test]
