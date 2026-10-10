@@ -7,6 +7,11 @@ namespace Harbor.App.Avalonia.Views.Chrome;
 
 public partial class TitleBarView : UserControl
 {
+    public TitleBarView()
+    {
+        InitializeComponent();
+    }
+
     private Window? HostWindow => TopLevel.GetTopLevel(this) as Window;
 
     private WindowChromeService Chrome => (HostWindow as MainWindow)?.ChromeService

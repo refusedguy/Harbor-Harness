@@ -10,6 +10,11 @@ namespace Harbor.App.Avalonia.Views.Shell;
 /// </summary>
 public partial class RightDrawerView : UserControl
 {
+    public RightDrawerView()
+    {
+        InitializeComponent();
+    }
+
     private IShellChrome? _shellChrome;
     private IShellChrome ShellChrome => _shellChrome ??= ShellLocator.Of(this).Get<IShellChrome>();
 
