@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Text.Json;
+using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Application.Sessions;
