@@ -888,7 +888,8 @@ public static class ChangeSetFreezer
             {
                 Result<FrozenChangeEntry> entry = ReadEntry(el);
                 if (entry.IsFailure)
-                    return Result.Failure<FrozenChangeSet>($"Frozen change set at '{changesetPath}' has an invalid entry: {entry.Error}");
+                    return entry.ConvertFailure<FrozenChangeSet>()
+                        .MapError(e => $"Frozen change set at '{changesetPath}' has an invalid entry: {e}");
                 // Hoisted to the guard level (see FreezeIsolatedAsync).
                 FrozenChangeEntry parsed = entry.Value;
                 entries.Add(parsed);
