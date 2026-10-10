@@ -461,22 +461,20 @@ public static class UnfinishedRunDetector
 ///         run from its last confirmed boundary; it never re-issues an
 ///         unconfirmed tool call, and it never claims an effect happened
 ///         exactly once. <see cref="NoExactlyOnceDisclaimer" /> is appended to
-///         every refusal involving a tool outside the known read-only set
-///         (<c>read</c>, <c>glob</c>, <c>grep</c>, <c>ls</c>, <c>tree</c>,
-///         <c>ripgrep</c>, <c>session_read</c>, <c>read_mcp_resource</c>,
-///         <c>mcp_prompt</c>). Any other tool name — including future tools —
-///         is treated as effectful by default: the strict reading is the safe
-///         one, and a new tool becomes "known read-only" only by being listed
-///         here deliberately, never by falling through a default.
+///         every <c>InFlightToolCall</c> refusal. No read-only carve-out in
+///         v1: an unknown result is unknown even for reads — a read whose
+///         result never persisted may already have been acted on, so the
+///         refusal shape is identical for every tool and no per-tool table
+///         is maintained here (#595: derivable facts live on the tool).
 ///     </para>
 /// </remarks>
 public static class RunRecoveryPolicy
 {
     /// <summary>
-    ///     The exactly-once disclaimer appended to refusals involving tools
-    ///     outside the known read-only set. Exactly-once execution cannot be
-    ///     promised for arbitrary shell or external APIs — the word appears
-    ///     only in this qualified form, never bare.
+    ///     The exactly-once disclaimer appended to every in-flight refusal.
+    ///     Exactly-once execution cannot be promised for arbitrary shell or
+    ///     external APIs — the word appears only in this qualified form,
+    ///     never bare.
     /// </summary>
     public const string NoExactlyOnceDisclaimer =
         "Exactly-once execution cannot be guaranteed for shell, network, or file-write tools: an automatic retry could execute the same side effect twice.";
@@ -523,21 +521,9 @@ public static class RunRecoveryPolicy
 
     private static string InFlightReason(UnfinishedRunReport report)
     {
-        string preface =
+        return
             $"Run {report.RunId.Value}: tool '{report.InFlightToolName ?? "unknown tool"}' " +
             $"(call {report.InFlightToolCallId ?? "unknown call"}) has no confirmed result — what it did is unknown, " +
-            "so an automatic resume would risk executing it twice.";
-        if (report.InFlightToolName is string name && IsKnownReadOnly(name))
-            return preface +
-                " This tool is read-only, so re-issuing it would be side-effect-free; even so, the result the " +
-                "interrupted run may already have acted on is unknown, so resume is refused — start a new run explicitly.";
-        return preface + " " + NoExactlyOnceDisclaimer;
+            "so an automatic resume would risk executing it twice. " + NoExactlyOnceDisclaimer;
     }
-
-    private static bool IsKnownReadOnly(string toolName) => toolName switch
-    {
-        "read" or "glob" or "grep" or "ls" or "tree" or "ripgrep"
-            or "session_read" or "read_mcp_resource" or "mcp_prompt" => true,
-        _ => false,
-    };
 }
