@@ -894,7 +894,7 @@ public sealed class CellForgeWidgetAxisRules
             .Because(
                 "the redirect this issue's documentation fix points at has to be a real door, or the fix "
                 + "is a dead end pointed in a different direction. IPluginLoadHost.RegisterPanelProvider "
-                + "is declared and implemented (McpPluginLoadHost, PluginLoadHostAdapter), and "
+                + "is declared and implemented (McpPluginLoadHost), and "
                 + "PanelRegistryPluginAdapter invokes it on the host — that is the ITuiPanelPlugin axis, "
                 + "the one seam that reaches CellForge. If this is empty, the panel axis closed and the "
                 + "documents have been redirected to a door that is not there. Matched: "

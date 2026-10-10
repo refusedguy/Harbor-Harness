@@ -159,40 +159,34 @@ public class PluginOutOfProcDefaultTests
     }
 
     /// <summary>
-    ///     #1055 slice 3: composing with plugin scripts must not load
-    ///     <c>Microsoft.CodeAnalysis.*</c> into the CLI process — there is no
-    ///     in-proc Roslyn path left to pay for. Diff-based (not absolute): only
-    ///     what THIS composition loads counts.
+    ///     #1055 slice 3: the CLI assembly must not reference the in-process
+    ///     compile pipeline at all — no edge to compile means no Roslyn in
+    ///     the process, whatever the ambient load state. The host-binary
+    ///     probe seam (<c>Harbor.Plugins.Hosting</c>) stays.
     /// </summary>
     [Test]
-    public async Task ScriptsPresent_ComposeLoadsNoCodeAnalysisAssemblies()
+    public async Task CliComposition_DoesNotReferenceInProcCompilePipeline()
     {
-        string harborDir = TempHarborDir();
-        string pluginsDir = Path.Combine(harborDir, "plugins");
-        Directory.CreateDirectory(pluginsDir);
-        await File.WriteAllTextAsync(
-            Path.Combine(pluginsDir, "outofproc-probe.cs"),
-            ProbeSource).ConfigureAwait(false);
-
-        var before = AppDomain.CurrentDomain.GetAssemblies()
-            .Select(a => a.GetName().Name ?? string.Empty)
+        var referenced = typeof(HarborCompositionContext).Assembly
+            .GetReferencedAssemblies()
+            .Select(a => a.Name ?? string.Empty)
             .ToHashSet(StringComparer.Ordinal);
 
-        var capture = new CaptureLoggerFactory();
-        using var _cwd = WithTempCwd(); // empty project scope
-        using ServiceProvider sp = Compose(harborDir, capture);
-        _ = await sp.GetRequiredService<StartupPluginLoad>().Completion
-            .WaitAsync(TimeSpan.FromMinutes(2)).ConfigureAwait(false);
+        foreach (string assembly in new[]
+                 {
+                     "Harbor.Plugins.Storage",
+                     "Harbor.Plugins.Compilation",
+                     "Harbor.Plugins.Instantiation",
+                     "Harbor.Plugins.Registration",
+                 })
+        {
+            await Assert.That(referenced.Contains(assembly)).IsEqualTo(false)
+                .Because("slice 3: " + assembly + " is the in-process compile pipeline — "
+                    + "the CLI must not reference it; CS plugins compile in harbor-plugins-host");
+        }
 
-        var addedRoslyn = AppDomain.CurrentDomain.GetAssemblies()
-            .Select(a => a.GetName().Name ?? string.Empty)
-            .Where(n => n.StartsWith("Microsoft.CodeAnalysis", StringComparison.Ordinal))
-            .Where(n => !before.Contains(n))
-            .ToArray();
-        await Assert.That(addedRoslyn.Length).IsEqualTo(0)
-            .Because("slice 3: with no in-proc compile path, scripts on disk must never "
-                + "pull Roslyn into the CLI process: "
-                + string.Join(",", addedRoslyn));
+        await Assert.That(referenced.Contains("Harbor.Plugins.Hosting")).IsEqualTo(true)
+            .Because("the host-binary probe and the filesystem watcher stay in-process");
     }
 
     private const string ProbeSource = """

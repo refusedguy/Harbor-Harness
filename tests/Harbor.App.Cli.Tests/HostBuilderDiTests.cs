@@ -52,7 +52,7 @@ namespace Harbor.App.Cli.Tests;
 // #823: the Lazy above writes HOME, USERPROFILE and HARBOR_HOME into the
 // process environment and never restores them, and the composition root reads
 // all three back — HARBOR_MCP_CONFIG through ToolsCatalog.CreateMcpRegistry
-// (ToolsCatalog.cs:72), the harbor home through HarborPaths (HostBuilder.cs:160).
+// (ToolsCatalog.cs:75), the harbor home through HarborPaths (HostBuilder.cs:160).
 // McpLoginRunnerTests swaps HARBOR_MCP_CONFIG in the same process, and its own
 // line 61 records the resulting flake. Keyed rather than keyless: #700 priced
 // keyless on the twin class and refused it.

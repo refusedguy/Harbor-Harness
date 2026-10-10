@@ -8,7 +8,7 @@
 // decision tree, not the CLI:
 //
 //   1. src/Harbor.Abstractions/Agents/AgentDefinition.cs              declaration
-//   2. src/Harbor.Hosting/Modules/ToolsCatalog.cs:27-29                registration
+//   2. src/Harbor.Hosting/Modules/ToolsCatalog.cs:30-32                registration
 //   3. src/Harbor.Application/Onboarding/OnboardingWizard.cs:376-390   the menu
 //   4. apps/Harbor.App.Cli/Commands/AgentCommand.cs:25                 /agent's own text
 // check-doc-cites: record-drift apps/Harbor.App.Cli/Commands/AgentCommand.cs:25 now="" [#947: cited line is blank; repair deferred to the owner's decision] -->

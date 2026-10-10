@@ -4,9 +4,12 @@ using Microsoft.Extensions.DependencyInjection;
 namespace Harbor.Hosting.Tests;
 
 /// <summary>
-///     Integration tests for <see cref="PluginReloadService" /> — a real end-to-end
-///     reload: sample plugin dropped into the global scope, hot-loaded through the
-///     live composition graph, tool visible in the singleton IToolRegistry.
+///     Integration tests for <see cref="PluginReloadService" />.
+///     Slice 3 of #1055 serves CS plugins out-of-process
+///     (<c>harbor-plugins-host</c> over MCP), so a reload pass registers
+///     nothing in-process: it returns zero loaded with the restart-the-host
+///     note, while <see cref="PluginReloadService.ListInstalled" /> keeps
+///     enumerating both scopes for the <c>/plugins</c> panel.
 /// </summary>
 [NotInParallel("hosting")]
 public class PluginReloadServiceTests
@@ -49,11 +52,18 @@ public class PluginReloadServiceTests
         var service = sp.GetRequiredService<PluginReloadService>();
         var summary = await service.ReloadAsync();
 
-        await Assert.That(summary.Loaded).IsGreaterThanOrEqualTo(1);
+        // Slice 3: reload registers nothing in-process — the tools live in
+        // the host process. Zero loaded with the restart-the-host note.
+        await Assert.That(summary.Loaded).IsEqualTo(0);
+        await Assert.That(summary.Notes.Any(n => n.Contains("harbor-plugins-host", StringComparison.Ordinal))).IsEqualTo(true);
         var toolsNow = sp.GetRequiredService<IToolRegistry>().GetAllTools()
             .Select(t => t.Name.Value)
             .ToArray();
-        await Assert.That(toolsNow).Contains($"hello_{uniqueSuffix}");
+        await Assert.That(toolsNow.Contains($"hello_{uniqueSuffix}")).IsEqualTo(false);
+
+        // The scope enumeration still sees the file for the /plugins panel.
+        var installed = service.ListInstalled();
+        await Assert.That(installed.Any(p => p.Name.Equals($"reload-probe-{uniqueSuffix}.cs", StringComparison.Ordinal))).IsEqualTo(true);
     }
 
     /// <summary>
@@ -81,11 +91,14 @@ public class PluginReloadServiceTests
 
         var service = sp.GetRequiredService<PluginReloadService>();
         _ = await service.ReloadAsync();
-        _ = await service.ReloadAsync();
+        var second = await service.ReloadAsync();
 
+        // Slice 3: every pass is a no-op in-process — still zero, still the
+        // same note, and the tool never appears in the live registry.
+        await Assert.That(second.Loaded).IsEqualTo(0);
         int occurrences = sp.GetRequiredService<IToolRegistry>().GetAllTools()
             .Count(t => t.Name.Value.Equals($"hello_{uniqueSuffix}", StringComparison.Ordinal));
-        await Assert.That(occurrences).IsEqualTo(1);
+        await Assert.That(occurrences).IsEqualTo(0);
     }
 
     private static string SamplePluginText(string suffix) => $$"""

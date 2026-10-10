@@ -16,7 +16,7 @@ namespace Harbor.App.Cli.Tests;
 ///         that admitted a CI flake are now explained — <c>HostBuilderDiTests</c>
 ///         composes the CLI host in the same process and reads
 ///         <c>HARBOR_MCP_CONFIG</c> through <c>ToolsCatalog.CreateMcpRegistry</c>
-///         (<c>ToolsCatalog.cs:72</c>), and neither class held a key, so the
+///         (<c>ToolsCatalog.cs:75</c>), and neither class held a key, so the
 ///         scheduler put them in different buckets. Both carry
 ///         <c>process-env</c> now; the lock stays because it also orders this
 ///         class's own methods against each other.

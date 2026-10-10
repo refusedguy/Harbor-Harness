@@ -649,12 +649,11 @@ internal sealed class SlashCommandDispatcher
         Harbor.Hosting.PluginReloadService reload, Action<string> writer)
     {
         var summary = await reload.ReloadAsync().ConfigureAwait(false);
-        writer(summary.Loaded == 0
-            ? "Plugins: no new plugin(s) loaded."
-            : $"Plugins: {summary.Loaded} loaded.");
+        // #1055s3: reload registers nothing in-process (Loaded is always 0) —
+        // plugins run in harbor-plugins-host; the notes say where.
         foreach (var note in summary.Notes)
-            writer($"  - {note}");
-        writer("Hint: edited/removed plugins need a restart to fully rebind.");
+            writer($"Plugin reload: {note}");
+        writer("Hint: plugins run in harbor-plugins-host — restart it to pick up changed scripts.");
         return Result.Success();
     }
 

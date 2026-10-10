@@ -103,15 +103,20 @@ public sealed class CfeValueBaselineTests
     ///         baselined production site with it. One site out, none in — the
     ///         delta is derived from the diff, not re-measured; CI re-measures.
     ///     </para>
+    ///     <para>
+    ///         #1055s3 lowered it by one more: deleting the in-process plugin
+    ///         pipeline removed <c>PluginReloadService.ReloadCoreAsync</c> and
+    ///         its <c>result.Value</c> read with it (-1 member, -1 site).
+    ///     </para>
     /// </remarks>
-    private const int MeasuredTotalSites = 210;
+    private const int MeasuredTotalSites = 209;
 
     /// <summary>
     ///     Measured CFE0001 sites in shipped code: 1 real defect baselined
-    ///     pending a product decision, plus 35 false positives now carrying a
+    ///     pending a product decision, plus 34 false positives now carrying a
     ///     documented pragma.
     /// </summary>
-    private const int MeasuredProductionSites = 36;
+    private const int MeasuredProductionSites = 35;
 
     /// <summary>Measured CFE0001 sites under tests/, all suppressed centrally.</summary>
     private const int MeasuredTestSites = 174;
@@ -161,8 +166,6 @@ public sealed class CfeValueBaselineTests
             "if (IsFailure) { log; continue; } loop continue"),
         new("src/Harbor.Hosting/Modules/JsonProviderDiscovery.cs", "RegisterJsonProviders",
             "if (IsFailure) { log; continue; } loop continue"),
-        new("src/Harbor.Hosting/Modules/PluginReloadService.cs", "ReloadCoreAsync",
-            "if (IsFailure) { log; return summary; } early return"),
         new("apps/Harbor.App.Cli/Hosting/HostBuilder.CliConfig.cs", "CliConfig",
             "if/else where the failure branch assigns a default"),
         new("apps/Harbor.App.Cli/Repl/Commands/NewSessionCommand.cs", "ExecuteAsync",
@@ -405,8 +408,8 @@ public sealed class CfeValueBaselineTests
             .Because("an empty baseline would mean the backstop is not demonstrably load-bearing; "
                    + "it is only meaningful because these 17 sites are real and were measured");
 
-        await Assert.That(Baseline.Length).IsEqualTo(28)
-            .Because("the shipped-code baseline is pinned at 28 members / 35 sites (CFE0001 counts "
+        await Assert.That(Baseline.Length).IsEqualTo(27)
+            .Because("the shipped-code baseline is pinned at 27 members / 34 sites (CFE0001 counts "
                    + "sites, this table counts members). It may only shrink: a new row is a new "
                    + "false positive claim that must be justified in review, and removing a row is "
                    + "always safe. If this number moved, re-measure and update "
@@ -416,8 +419,10 @@ public sealed class CfeValueBaselineTests
                    + "PluginHost.LoadAllAsync gained a second site for `compiled.Value` (+0 member, "
                    + "+1 site). #671 dropped it to 28: deleting the picker's config-dictionary "
                    + "auth read took its `cfgResult.Value` site and its pragma with it (-1 member, "
-                   + "-1 site), which is the whole point — the baseline only ever shrinks because "
-                   + "the guarded code stopped needing a guard.");
+                   + "-1 site). #1055s3 dropped it to 27: deleting the in-process plugin pipeline "
+                   + "took `PluginReloadService.ReloadCoreAsync` and its `result.Value` site with "
+                   + "it (-1 member, -1 site), which is the whole point — the baseline only ever "
+                   + "shrinks because the guarded code stopped needing a guard.");
     }
 
     /// <summary>
@@ -435,8 +440,8 @@ public sealed class CfeValueBaselineTests
         // re-measures and updates one side, this fails and forces the other.
         string inventory = ReadRepoFile("docs/ROP-API-INVENTORY.md");
 
-        await Assert.That(MeasuredTotalSites).IsEqualTo(210)
-            .Because("210 is the CFE0001 count (36 shipped + 174 tests) on analyzer "
+        await Assert.That(MeasuredTotalSites).IsEqualTo(209)
+            .Because("209 is the CFE0001 count (35 shipped + 174 tests) on analyzer "
                    + "1.3.0. It is recorded so that a future package bump which drops the "
                    + "diagnostic to zero shows up as a number to re-verify, not as a silent "
                    + "green build. See docs/ROP-API-INVENTORY.md §5.");

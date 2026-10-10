@@ -177,9 +177,13 @@ public class PluginGracefulAbsenceTests
     }
 
     /// <summary>
-    ///     #1055 (b): a broken <c>.cs</c> warns with its file name, the healthy
-    ///     plugin still registers, and composition (the CLI startup equivalent)
-    ///     succeeds — exit 0, not a failed load.
+    ///     #1055 (b) slice 3: composition (the CLI startup equivalent) succeeds
+    ///     with scripts on disk — exit 0, not a failed load — and registers
+    ///     nothing in-process. A broken <c>.cs</c> no longer warns per file
+    ///     (there is no in-process compile left to fail); instead one honest
+    ///     line says where the scripts go. Per-plugin isolation now lives in
+    ///     the host process (<c>SafePluginRegistrar</c>), covered by
+    ///     <c>Harbor.Plugins.Host.Tests</c>.
     /// </summary>
     [Test]
     public async Task BrokenPlugin_WarnsWithFileName_OthersLoad()
@@ -202,24 +206,29 @@ public class PluginGracefulAbsenceTests
         using var _cwd = WithTempCwd(); // empty project scope
         using ServiceProvider sp = Compose(harborDir, capture);
 
-        // Slice 2 loads plugins in the background: await the startup load
-        // (bounded) before asserting — the warning is logged before it
-        // completes, so both pins below observe the finished run.
-        await sp.GetRequiredService<StartupPluginLoad>().Completion
+        // Slice 3 has no background in-process load; Completion is already
+        // empty. Awaiting it keeps the observation point, not a race.
+        var loaded = await sp.GetRequiredService<StartupPluginLoad>().Completion
             .WaitAsync(TimeSpan.FromMinutes(2)).ConfigureAwait(false);
+        await Assert.That(loaded.Count).IsEqualTo(0)
+            .Because("slice 3: the CLI never compiles CS plugins in-process");
 
         var toolNames = sp.GetRequiredService<IToolRegistry>()
             .GetAllTools()
             .Select(t => t.Name.Value)
             .ToArray();
-        await Assert.That(toolNames.Contains("absence_s1_hello")).IsTrue()
-            .Because("a broken sibling must not take the healthy plugin down with it");
+        await Assert.That(toolNames.Contains("absence_s1_hello")).IsEqualTo(false)
+            .Because("slice 3: plugin tools arrive over MCP from harbor-plugins-host, "
+                + "never through the in-process IToolRegistry");
+        await Assert.That(toolNames.Contains("read")).IsTrue()
+            .Because("scripts on disk must not degrade the builtin tool set");
 
-        var warnings = capture.Entries
-            .Where(e => e.Level == LogLevel.Warning && e.Message.Contains("broken.cs", StringComparison.Ordinal))
+        var pluginLines = capture.Entries
+            .Where(e => e.Message.Contains("plugins:", StringComparison.Ordinal))
             .ToArray();
-        await Assert.That(warnings.Length >= 1).IsTrue()
-            .Because("a skipped plugin must warn with its file name at Warning level, not Error");
+        await Assert.That(pluginLines.Length).IsEqualTo(1)
+            .Because("the plugin route reports itself in exactly one line, not zero and not per-file");
+        await Assert.That(pluginLines[0].Message).Contains("harbor-plugins-host");
     }
 
     private const string GoodSource = """
