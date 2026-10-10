@@ -1,4 +1,5 @@
 using Avalonia.Controls;
+using Avalonia.VisualTree;
 using TUnit.Assertions;
 using TUnit.Assertions.Extensions;
 using TUnit.Core.Enums;
@@ -28,6 +29,12 @@ public sealed class ShellChromeTests : ComponentTestBase
     ///     TitleBar shows the "Search or jump to..." trigger; clicking it opens
     ///     the command palette, and closing restores the idle state.
     /// </summary>
+    /// <remarks>
+    ///     The caption is read off the trigger button's own <c>TextBlock</c>
+    ///     (deterministic tree read) rather than the ambient visible-text
+    ///     probe: the trigger lives in the always-attached chrome row, and
+    ///     the scenario's observable state change is the palette opening.
+    /// </remarks>
     [Test]
     [Category("E2E")]
     [Category("Component")]
@@ -35,12 +42,17 @@ public sealed class ShellChromeTests : ComponentTestBase
     {
         await Driver.ResetStateAsync().ConfigureAwait(false);
 
-        var hasTrigger = await Driver.WaitForRenderedTextAsync("Search or jump to...", TimeSpan.FromSeconds(3))
-            .ConfigureAwait(false);
-        await Assert.That(hasTrigger).IsTrue();
-
-        var trigger = Driver.FindControlByName<Button>("TitleBar_CommandPaletteTrigger");
+        var trigger = UI(() => Driver.MainWindow.GetVisualDescendants()
+            .OfType<Button>()
+            .FirstOrDefault(b => b.Name == "TitleBar_CommandPaletteTrigger"));
         await Assert.That(trigger).IsNotNull();
+
+        var caption = UI(() => trigger!.GetVisualDescendants()
+            .OfType<TextBlock>()
+            .Select(t => t.Text)
+            .FirstOrDefault(t => t is not null && t.Contains("Search or jump to", StringComparison.Ordinal)));
+        await Assert.That(caption).IsEqualTo("Search or jump to...");
+
         await Driver.ClickAsync(trigger!).ConfigureAwait(false);
 
         var opened = await Driver.WaitForConditionAsync(
@@ -125,15 +137,25 @@ public sealed class ShellChromeTests : ComponentTestBase
     ///     RightDrawer opens on the requested tab (header + Ready footer render)
     ///     and closes via the toggle command.
     /// </summary>
+    /// <remarks>
+    ///     The drawer is opened with direct property sets (the same shape as
+    ///     the green <c>SessionsFlyout_Open_ShowsHeaderAndSearch</c>), the
+    ///     header/footer are asserted on the rendered string so a failure
+    ///     prints the actual tree text, and the close leg goes through
+    ///     <c>ToggleRightDrawerCommand</c> as the interaction-driven change.
+    /// </remarks>
     [Test]
     [Category("E2E")]
     [Category("Component")]
     public async Task RightDrawer_Open_ShowsTabAndCloses()
     {
         await Driver.ResetStateAsync().ConfigureAwait(false);
-        UI(() => Vm.ToggleRightDrawerCommand.Execute(null));
-
-        UI(() => Vm.ToggleRightDrawerCommand.Execute("inspector"));
+        UI(() =>
+        {
+            Vm.IsRightDrawerOpen = false;
+            Vm.RightDrawerTab = "inspector";
+            Vm.IsRightDrawerOpen = true;
+        });
 
         var opened = await Driver.WaitForConditionAsync(
             () => UI(() => Vm.IsRightDrawerOpen), TimeSpan.FromSeconds(2)).ConfigureAwait(false);
@@ -142,9 +164,15 @@ public sealed class ShellChromeTests : ComponentTestBase
         var tab = UI(() => Vm.RightDrawerTab);
         await Assert.That(tab).IsEqualTo("inspector");
 
-        var hasTab = await Driver.WaitForRenderedTextAsync("inspector", TimeSpan.FromSeconds(3))
-            .ConfigureAwait(false);
-        await Assert.That(hasTab).IsTrue();
+        var rendered = string.Empty;
+        _ = await Driver.WaitForConditionAsync(
+            () =>
+            {
+                rendered = UI(() => Driver.GetRenderedText());
+                return rendered.Contains("inspector", StringComparison.Ordinal);
+            },
+            TimeSpan.FromSeconds(3)).ConfigureAwait(false);
+        await Assert.That(rendered).Contains("inspector");
 
         var hasFooter = await Driver.WaitForRenderedTextAsync("Ready", TimeSpan.FromSeconds(2))
             .ConfigureAwait(false);

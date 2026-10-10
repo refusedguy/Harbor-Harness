@@ -60,13 +60,20 @@ public sealed class StandaloneControlsTests : ComponentTestBase
         }
     }
 
-    /// <summary>Show a control in a host window on the UI thread.</summary>
-    private static Window ShowHost(Control content, double width = 560, double height = 220)
+    /// <summary>
+    ///     Show a control in a host window on the UI thread. The factory runs
+    ///     on the UI thread too: Avalonia controls are UI-thread-affine, and
+    ///     constructing them on the test thread (with a bound
+    ///     <c>DataContext</c>) is the headless deadlock shape — cf. the
+    ///     one-delegate pin/construct/capture pattern in
+    ///     <c>GoldenFrameTests</c>.
+    /// </summary>
+    private static Window ShowHost(Func<Control> create, double width = 560, double height = 220)
     {
         return UI(() =>
         {
             GoldenFrame.PinDarkTheme();
-            var window = GoldenFrame.CreateHostWindow(content, width, height);
+            var window = GoldenFrame.CreateHostWindow(create(), width, height);
             window.Show();
             return window;
         });
@@ -86,7 +93,7 @@ public sealed class StandaloneControlsTests : ComponentTestBase
         await Driver.ResetStateAsync().ConfigureAwait(false);
 
         var chat = UI(() => Vm.Chat);
-        var window = ShowHost(new ComposerView { DataContext = chat });
+        var window = ShowHost(() => new ComposerView { DataContext = chat });
         try
         {
             var hasHelper = await Driver.WaitForTextInWindowAsync(
@@ -117,7 +124,7 @@ public sealed class StandaloneControlsTests : ComponentTestBase
         await Driver.ResetStateAsync().ConfigureAwait(false);
 
         var chat = UI(() => Vm.Chat);
-        var window = ShowHost(new ComposerView { DataContext = chat });
+        var window = ShowHost(() => new ComposerView { DataContext = chat });
         try
         {
             UI(() =>
@@ -182,7 +189,7 @@ public sealed class StandaloneControlsTests : ComponentTestBase
             Status = ToolCallState.Running,
             IsExpanded = false,
         });
-        var window = ShowHost(new ToolCallCardView { DataContext = cardVm }, 420, 160);
+        var window = ShowHost(() => new ToolCallCardView { DataContext = cardVm }, 420, 160);
         try
         {
             var hasName = await Driver.WaitForTextInWindowAsync(
@@ -236,7 +243,7 @@ public sealed class StandaloneControlsTests : ComponentTestBase
             Status = ToolCallState.Running,
             IsExpanded = false,
         });
-        var window = ShowHost(new ToolCallCardView { DataContext = cardVm }, 420, 160);
+        var window = ShowHost(() => new ToolCallCardView { DataContext = cardVm }, 420, 160);
         try
         {
             var shown = await Driver.WaitForTextInWindowAsync(
@@ -280,7 +287,7 @@ public sealed class StandaloneControlsTests : ComponentTestBase
     {
         await Driver.ResetStateAsync().ConfigureAwait(false);
 
-        var window = ShowHost(new EmptyState
+        var window = ShowHost(() => new EmptyState
         {
             Title = "No sessions yet",
             Subtitle = "Create a session to begin.",
@@ -315,7 +322,7 @@ public sealed class StandaloneControlsTests : ComponentTestBase
         await Driver.ResetStateAsync().ConfigureAwait(false);
 
         var shell = UI(() => Vm);
-        var window = ShowHost(new ModalHostView { DataContext = shell }, 520, 200);
+        var window = ShowHost(() => new ModalHostView { DataContext = shell }, 520, 200);
         try
         {
             var scrim = UI(() => window.GetVisualDescendants()
