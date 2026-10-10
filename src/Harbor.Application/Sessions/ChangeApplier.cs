@@ -259,9 +259,7 @@ public static class ChangeApplier
 
         Result<GitOutput> check = await RunGitAsync(
             manifest.RepoRoot, ["apply", "--check", patchPath], ApplyTimeout, ct).ConfigureAwait(false);
-        if (check.IsFailure)
-            sb.Append($" Pre-check did not run: {check.Error}");
-        else
+        if (check.IsSuccess)
         {
             GitOutput checkOut = check.Value;
             if (checkOut.ExitCode != 0)
@@ -269,12 +267,12 @@ public static class ChangeApplier
             else
                 sb.Append(" Pre-check passes.");
         }
+        else
+            sb.Append($" Pre-check did not run: {check.Error}");
 
         Result<GitOutput> stat = await RunGitAsync(
             manifest.RepoRoot, ["diff", "--stat"], ProbeTimeout, ct).ConfigureAwait(false);
-        if (stat.IsFailure)
-            sb.Append(" git diff --stat did not run.");
-        else
+        if (stat.IsSuccess)
         {
             string statOut = stat.Value.Stdout;
             if (statOut.Trim().Length == 0)
@@ -282,6 +280,8 @@ public static class ChangeApplier
             else
                 sb.Append($" git diff --stat: {OneLine(statOut, 300)}");
         }
+        else
+            sb.Append(" git diff --stat did not run.");
 
         sb.Append(" Nothing written.");
         return new AcceptResult(AcceptOutcome.Cancelled, 0, sb.ToString());
