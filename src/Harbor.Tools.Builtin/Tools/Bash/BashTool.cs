@@ -1,5 +1,4 @@
 using System.Diagnostics;
-using System.Text;
 using Harbor.Abstractions.Extensions;
 using Microsoft.Extensions.Logging;
 namespace Harbor.Tools.Builtin;
@@ -206,15 +205,20 @@ public sealed class BashTool : ITool
             }
         }
 
-        var output = new StringBuilder();
-        if (stdout.Builder.Length > 0) output.Append(stdout.Builder).Append('\n');
-        if (stderr.Builder.Length > 0) output.Append("[stderr]\n").Append(stderr.Builder).Append('\n');
-        output.Append("[exit code: ").Append(process.ExitCode).Append(']').Append('\n');
+        // §PERF-006 (tail): the composed transcript was the last per-call
+        // `new StringBuilder()` in this method — rented now. Safe: built
+        // synchronously after the drain+detach in the finally above, so no
+        // process callback can touch it; read into the ToolResult string
+        // before the `using` returns it.
+        using var output = StringBuilderPool.Rent(8192);
+        if (stdout.Builder.Length > 0) output.Builder.Append(stdout.Builder).Append('\n');
+        if (stderr.Builder.Length > 0) output.Builder.Append("[stderr]\n").Append(stderr.Builder).Append('\n');
+        output.Builder.Append("[exit code: ").Append(process.ExitCode).Append(']').Append('\n');
         if (stdoutDropped > 0 || stderrDropped > 0)
         {
             // Surface truncation to the model, not just to the logs — the
             // agent must be able to tell that output was incomplete.
-            output.Append("[output truncated: ").Append(stdoutDropped + stderrDropped)
+            output.Builder.Append("[output truncated: ").Append(stdoutDropped + stderrDropped)
                 .Append(" chars dropped (cap=").Append(MaxOutputChars).Append(")]\n");
             _logger.LogWarning("Bash output truncated: stdout dropped {StdoutDropped} chars, stderr dropped {StderrDropped} chars (cap={Cap})",
                 stdoutDropped, stderrDropped, MaxOutputChars);
@@ -222,11 +226,11 @@ public sealed class BashTool : ITool
 
         _logger.LogInformation("Command completed: exit={ExitCode}", process.ExitCode);
 
-        if (output.Length > 50_000)
+        if (output.Builder.Length > 50_000)
         {
             const string HardCutNote = "\n[output truncated to 50000 chars]\n";
-            output.Length = 50_000 - HardCutNote.Length;
-            output.Append(HardCutNote);
+            output.Builder.Length = 50_000 - HardCutNote.Length;
+            output.Builder.Append(HardCutNote);
         }
 
         bool isError = process.ExitCode != 0;
