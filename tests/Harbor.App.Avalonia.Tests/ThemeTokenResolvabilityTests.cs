@@ -156,7 +156,7 @@ public class ThemeTokenResolvabilityTests
     ///     declared in the view that uses it resolves there and correctly.
     /// </remarks>
     [Test]
-    [Retry(3)]
+    [Retry(3)] // Retention(#1087): headless-Avalonia resolve flake (dispatcher/compositor wobble); rerun, not fix.
     public async Task Every_Theme_Key_A_View_Asks_For_Resolves_At_Runtime()
     {
         var asked = AskedMarkupResourceKeys();
@@ -200,7 +200,7 @@ public class ThemeTokenResolvabilityTests
     ///     (which compares values, not names).
     /// </remarks>
     [Test]
-    [Retry(3)]
+    [Retry(3)] // Retention(#1087): headless-Avalonia resolve flake (dispatcher/compositor wobble); rerun, not fix.
     public async Task Every_Theme_Key_App_Csharp_Names_Resolves_At_Runtime()
     {
         var asked = TokenShapedKeysInCSharp();
@@ -323,7 +323,7 @@ public class ThemeTokenResolvabilityTests
     ///     </para>
     /// </remarks>
     [Test]
-    [Retry(3)]
+    [Retry(3)] // Retention(#1087): headless-Avalonia resolve flake (dispatcher/compositor wobble); rerun, not fix.
     public async Task Every_Declared_Hds_Token_Resolves_Under_Every_Shipped_Palette()
     {
         var keys = DeclaredThemeTokenNames();
