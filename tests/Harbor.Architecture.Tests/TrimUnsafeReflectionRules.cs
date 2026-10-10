@@ -116,6 +116,20 @@
 // own rule and reported plausible zeros. A guard with no escape hatch has to be
 // honest, which is the property worth having here.
 //
+// The plugin-family exemption is NOT restated here either: it is read off
+// ReflectionConventionRule.AllowedProjectPrefixes into the ScanRule baseline,
+// so the shared fact has one home.
+//
+// MECHANISM (#1086, step 2)
+// -------------------------
+// The serialization rule below is the CUSTOM-PARSER etalon for the ScanRule
+// engine: its verdict needs per-file facts (resolver installed? options field
+// or ambient parameter? declared JsonTypeInfo?) plus balanced-paren argument
+// reading across wrapped lines — no line regex can do that. So the rule is a
+// ScanRule whose CustomParse IS the file-facts parser (Func-overload), while
+// the other two rules stay handwritten line scans until the conveyor reaches
+// them. The planted serialization controls drive the same parser.
+//
 // NON-VACUITY
 // -----------
 //   * `NonVacuity_The_Serialization_Matcher_Fires_On_Planted_Offenders_Only`
@@ -433,6 +447,118 @@ public sealed class TrimUnsafeReflectionRules
     private static bool BuildsExpressionTrees(string source) =>
         ExpressionTree.IsMatch(SourceScan.StripComments(source));
 
+    /// <summary>
+    ///     The serialization rule as data. The banned shape is one row; the
+    ///     grading is <see cref="ParseSerialization" /> — the file-facts parser
+    ///     below, plugged in through the Func-overload because the verdict spans
+    ///     the whole file (resolver installed anywhere?) and wrapped lines
+    ///     (balanced-paren argument reading). The plugin-family baseline is read
+    ///     off #626's table, not restated.
+    /// </summary>
+    private static readonly ScanRule SerializationRule = new()
+    {
+        Id = "TrimUnsafeReflection.Serialization",
+        Trees = ["src", "apps"],
+        Forbidden =
+        [
+            new ScanForbidden(
+                NoUnprovenType,
+                SerializerCall,
+                "a `JsonSerializer` call that is handed only a JsonSerializerOptions resolves its "
+                + "contract by reflection at run time. Pass a source-generated JsonTypeInfo, or set "
+                + "TypeInfoResolver on the options object."),
+        ],
+        Baseline =
+        [
+            .. ReflectionConventionRule.AllowedProjectPrefixes.Select(static a => new ScanBaseline(
+                a.Prefix,
+                IsPrefix: true,
+                a.Allowance.Reason,
+                a.Allowance.TrackedBy)),
+        ],
+        Controls =
+        [
+            new ScanControl("src/Harbor.X/A.cs",
+                "private static readonly JsonSerializerOptions Opts = new();\n"
+                + "var v = JsonSerializer.Deserialize<T>(json, Opts);", NoUnprovenType),
+            new ScanControl("src/Harbor.X/B.cs",
+                "private static readonly JsonSerializerOptions Opts = new() { WriteIndented = true };\n"
+                + "string s = JsonSerializer.Serialize(cfg, Opts);", NoUnprovenType),
+            new ScanControl("src/Harbor.X/C.cs",
+                "private static readonly JsonSerializerOptions Opts = new();\n"
+                + "byte[] b = JsonSerializer.SerializeToUtf8Bytes(entry, Opts);", NoUnprovenType),
+            new ScanControl("src/Harbor.X/D.cs",
+                "private static readonly JsonSerializerOptions Opts = new(JsonSerializerDefaults.Web);\n"
+                + "var cfg = _info is not null\n"
+                + "    ? JsonSerializer.Deserialize(json, _info)\n"
+                + "    : JsonSerializer.Deserialize<T>(json, Opts);", NoUnprovenType),
+            new ScanControl("src/Harbor.X/M.cs",
+                "private static readonly JsonSerializerOptions Opts = new();\n"
+                + "JsonSerializer . SerializeToUtf8Bytes(payload, Opts);", NoUnprovenType),
+            new ScanControl("src/Harbor.X/N.cs",
+                "private static readonly JsonSerializerOptions Opts = new();\n"
+                + "string s = JsonSerializer.SerializeToUtf8Text(entry, Opts);", NoUnprovenType),
+            new ScanControl("src/Harbor.X/O.cs",
+                "private static readonly JsonSerializerOptions Opts = new();\n"
+                + "var v = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(j, Opts);", NoUnprovenType),
+            new ScanControl("src/Harbor.X/E.cs",
+                "var b = JsonSerializer.Serialize(entry, JsonlCodecContext.Default.MessageEntry);", null),
+            new ScanControl("src/Harbor.X/F.cs",
+                "var e = JsonSerializer.Deserialize(line, JsonlCodecContext.Default.MessageEntry);", null),
+            new ScanControl("src/Harbor.X/G.cs",
+                "JsonTypeInfo<Foo> _info = Ctx.Default.Foo;\nvar x = JsonSerializer.Deserialize(json, _info);", null),
+            new ScanControl("src/Harbor.X/H.cs",
+                "public override JsonTypeInfo<T> Read(ref Utf8JsonReader r, Type t, JsonSerializerOptions options)\n"
+                + "    => (JsonTypeInfo<T>)JsonSerializer.Deserialize(ref r, options);", null),
+            new ScanControl("src/Harbor.X/I.cs",
+                "private static readonly JsonSerializerOptions Opts = new() { TypeInfoResolver = Ctx.Default };\n"
+                + "var x = JsonSerializer.Deserialize<ProviderConfig>(text, Opts);", null),
+            new ScanControl("src/Harbor.X/J.cs",
+                "private static readonly JsonSerializerOptions Opts = JsonlCodecContext.JsonOptions;\n"
+                + "var x = JsonSerializer.Deserialize(json, Opts);", null),
+            new ScanControl("src/Harbor.X/K.cs",
+                "writer.WriteString(\"model\", request.Model);", null),
+            new ScanControl("src/Harbor.X/L.cs",
+                "[JsonSerializable(typeof(Foo))]\ninternal sealed partial class Ctx : JsonSerializerContext;", null),
+        ],
+        MinHits = 100,
+        MustContain =
+        [
+            "src/Harbor.Storage.Jsonl/JsonlSessionStore.cs",
+            "src/Harbor.Tools.Builtin/Tools/Read/ReadTool.cs",
+            "apps/Harbor.App.Cli/Hosting/HostBuilder.cs",
+        ],
+        CustomParse = ParseSerialization,
+    };
+
+    /// <summary>
+    ///     The custom parser: the serialization verdict over one file's raw
+    ///     source. Same facts, same balanced-args reading, same skip of nothing —
+    ///     the plugin-family exemption is the baseline's job, not the parser's,
+    ///     so the planted controls (under <c>src/Harbor.X/</c>) grade identically
+    ///     to product files.
+    /// </summary>
+    private static IEnumerable<ScanHit> ParseSerialization(string displayPath, string rawSource)
+    {
+        FileFacts facts = FileFacts.Of(rawSource);
+        foreach (Match match in SerializerCall.Matches(facts.Source))
+        {
+            string args = BalancedArgs(facts.Source, match.Index + match.Length - 1);
+            if (facts.CarriesTypeInfo(args))
+            {
+                continue;
+            }
+
+            if (facts.UnprovenOptionsField(args) is not { } optionsField)
+            {
+                continue;
+            }
+
+            int line = facts.Source[..match.Index].Count(c => c == '\n') + 1;
+            yield return new ScanHit(NoUnprovenType, displayPath, line, optionsField);
+        }
+    }
+
     /// <summary>An identifier bound to a source-generated context's options surface.</summary>
     private static readonly Regex ContextAlias = new(@"\b\w*Context\b", RegexOptions.Compiled);
 
@@ -510,34 +636,7 @@ public sealed class TrimUnsafeReflectionRules
     [Test]
     public async Task Hot_Paths_May_Not_Serialize_Through_A_Reflection_Contract()
     {
-        var failures = new List<string>();
-
-        foreach ((string displayPath, string rawSource) in ProductSource())
-        {
-            string projectDir = ProjectDirOf(displayPath);
-            if (ReflectionConventionRule.IsAllowed(projectDir))
-            {
-                continue;
-            }
-
-            FileFacts facts = FileFacts.Of(rawSource);
-            foreach (Match match in SerializerCall.Matches(facts.Source))
-            {
-                string args = BalancedArgs(facts.Source, match.Index + match.Length - 1);
-                if (facts.CarriesTypeInfo(args))
-                {
-                    continue;
-                }
-
-                if (facts.UnprovenOptionsField(args) is not { } optionsField)
-                {
-                    continue;
-                }
-
-                int line = facts.Source[..match.Index].Count(c => c == '\n') + 1;
-                failures.Add(new Hit(NoUnprovenType, displayPath, line, optionsField).Report());
-            }
-        }
+        List<string> failures = ScanRunner.Evaluate(SerializationRule);
 
         await Assert.That(failures).IsEmpty()
             .Because("a `JsonSerializer` call that is handed only a JsonSerializerOptions resolves "
@@ -633,97 +732,21 @@ public sealed class TrimUnsafeReflectionRules
     [Test]
     public async Task NonVacuity_The_Serialization_Matcher_Fires_On_Planted_Offenders_Only()
     {
-        const string ResolverFreeRead =
-            "private static readonly JsonSerializerOptions Opts = new();\n"
-            + "var v = JsonSerializer.Deserialize<T>(json, Opts);";
-        const string ResolverFreeWrite =
-            "private static readonly JsonSerializerOptions Opts = new() { WriteIndented = true };\n"
-            + "string s = JsonSerializer.Serialize(cfg, Opts);";
-        const string ResolverFreeFieldOnThreeLines =
-            "private static readonly JsonSerializerOptions Opts = new(JsonSerializerDefaults.Web);\n"
-            + "var cfg = _info is not null\n"
-            + "    ? JsonSerializer.Deserialize(json, _info)\n"
-            + "    : JsonSerializer.Deserialize<T>(json, Opts);";
-        // `SerializeToUtf8Bytes` carries a DIGIT. With `[A-Za-z]*` instead of
-        // `[A-Za-z0-9]*` the matcher stopped one character short of the `(` and
-        // was blind to this form — which is the write call this repository uses
-        // most. Planted explicitly so a future narrowing of the character class
-        // is caught here rather than by a caller.
-        const string ResolverFreeUtf8Bytes =
-            "private static readonly JsonSerializerOptions Opts = new();\n"
-            + "byte[] b = JsonSerializer.SerializeToUtf8Bytes(entry, Opts);";
-        const string ResolverFreeSpacedUtf8Bytes =
-            "private static readonly JsonSerializerOptions Opts = new();\n"
-            + "JsonSerializer . SerializeToUtf8Bytes(payload, Opts);";
-        const string ResolverFreeUtf8Text =
-            "private static readonly JsonSerializerOptions Opts = new();\n"
-            + "string s = JsonSerializer.SerializeToUtf8Text(entry, Opts);";
-        const string ResolverFreeNestedGeneric =
-            "private static readonly JsonSerializerOptions Opts = new();\n"
-            + "var v = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(j, Opts);";
+        // Seven planted resolver-free calls (A–D, M, N, O) must be caught —
+        // including the ternary-third-line form JsonAppConfigStore actually uses
+        // and the digit-bearing SerializeToUtf8Bytes this matcher got wrong on
+        // its first run, reporting a plausible 3 of 4 — and the eight correct
+        // shapes (E–L) must stay silent. The snippets live on
+        // SerializationRule.Controls, so the control drives the REAL parser
+        // (ParseSerialization) rather than a second implementation of it.
+        List<string> failures = ScanRunner.CheckControls(SerializationRule);
 
-        const string ContextDefault =
-            "var b = JsonSerializer.Serialize(entry, JsonlCodecContext.Default.MessageEntry);";
-        const string ContextDefaultRead =
-            "var e = JsonSerializer.Deserialize(line, JsonlCodecContext.Default.MessageEntry);";
-        const string DeclaredTypeInfo =
-            "JsonTypeInfo<Foo> _info = Ctx.Default.Foo;\nvar x = JsonSerializer.Deserialize(json, _info);";
-        const string ConverterAmbientParameter =
-            "public override JsonTypeInfo<T> Read(ref Utf8JsonReader r, Type t, JsonSerializerOptions options)\n"
-            + "    => (JsonTypeInfo<T>)JsonSerializer.Deserialize(ref r, options);";
-        const string FileThatInstallsAResolver =
-            "private static readonly JsonSerializerOptions Opts = new() { TypeInfoResolver = Ctx.Default };\n"
-            + "var x = JsonSerializer.Deserialize<ProviderConfig>(text, Opts);";
-        const string FieldAliasedFromAContext =
-            "private static readonly JsonSerializerOptions Opts = JsonlCodecContext.JsonOptions;\n"
-            + "var x = JsonSerializer.Deserialize(json, Opts);";
-        const string PlainWriter =
-            "writer.WriteString(\"model\", request.Model);";
-        const string ContextDeclaration =
-            "[JsonSerializable(typeof(Foo))]\ninternal sealed partial class Ctx : JsonSerializerContext;";
-
-        var offenders = ScanSerialization([
-            ("src/Harbor.X/A.cs", ResolverFreeRead),
-            ("src/Harbor.X/B.cs", ResolverFreeWrite),
-            ("src/Harbor.X/C.cs", ResolverFreeUtf8Bytes),
-            ("src/Harbor.X/D.cs", ResolverFreeFieldOnThreeLines),
-            ("src/Harbor.X/M.cs", ResolverFreeSpacedUtf8Bytes),
-            ("src/Harbor.X/N.cs", ResolverFreeUtf8Text),
-            ("src/Harbor.X/O.cs", ResolverFreeNestedGeneric),
-        ]);
-
-        await Assert.That(offenders).IsEquivalentTo(new[]
-        {
-            "src/Harbor.X/A.cs",
-            "src/Harbor.X/B.cs",
-            "src/Harbor.X/C.cs",
-            "src/Harbor.X/D.cs",
-            "src/Harbor.X/M.cs",
-            "src/Harbor.X/N.cs",
-            "src/Harbor.X/O.cs",
-        }).Because("seven planted resolver-free calls must be caught, including the one that only "
-                   + "appears on the third line of a ternary (the form JsonAppConfigStore actually "
-                   + "uses) and the digit-bearing SerializeToUtf8Bytes — which this matcher got wrong "
-                   + "on its first run, reporting a plausible 3 of 4. Found: "
-                   + string.Join(", ", offenders));
-
-        var correct = ScanSerialization([
-            ("src/Harbor.X/E.cs", ContextDefault),
-            ("src/Harbor.X/F.cs", ContextDefaultRead),
-            ("src/Harbor.X/G.cs", DeclaredTypeInfo),
-            ("src/Harbor.X/H.cs", ConverterAmbientParameter),
-            ("src/Harbor.X/I.cs", FileThatInstallsAResolver),
-            ("src/Harbor.X/J.cs", FieldAliasedFromAContext),
-            ("src/Harbor.X/K.cs", PlainWriter),
-            ("src/Harbor.X/L.cs", ContextDeclaration),
-        ]);
-
-        await Assert.That(correct).IsEmpty()
-            .Because("the eight correct shapes must stay silent. A source-generated JsonTypeInfo, an "
-                   + "options object that installs a TypeInfoResolver, a field aliased from a context, "
-                   + "and a converter's ambient parameter are all trim-safe, and reporting them is the "
-                   + "false positive that gets a guard deleted instead of fixed. Reported: "
-                   + string.Join(", ", correct));
+        await Assert.That(failures).IsEmpty()
+            .Because("seven planted resolver-free calls must be caught and the eight correct shapes "
+                   + "must stay silent — including the JSON-key form, the converter's ambient "
+                   + "parameter, and a file that installs a resolver. Without the negatives a "
+                   + "matcher widened until everything is a violation would still pass. "
+                   + string.Join("; ", failures));
     }
 
     /// <summary>
@@ -901,33 +924,5 @@ public sealed class TrimUnsafeReflectionRules
         await Assert.That(ReflectionConventionRule.IsAllowed("src/Harbor.Storage.Jsonl")).IsFalse()
             .Because("a prefix that matched everything would exempt the entire product tree, which is "
                    + "the widening #626's own allowance test refuses");
-    }
-
-    /// <summary>
-    ///     The serialization rule, reduced to the file names it reports, so the
-    ///     non-vacuity control can assert on it directly.
-    /// </summary>
-    private static List<string> ScanSerialization(IEnumerable<(string DisplayPath, string Source)> sources)
-    {
-        var reported = new List<string>();
-        foreach ((string displayPath, string rawSource) in sources)
-        {
-            FileFacts facts = FileFacts.Of(rawSource);
-            foreach (Match match in SerializerCall.Matches(facts.Source))
-            {
-                string args = BalancedArgs(facts.Source, match.Index + match.Length - 1);
-                if (facts.CarriesTypeInfo(args))
-                {
-                    continue;
-                }
-
-                if (facts.UnprovenOptionsField(args) is not null)
-                {
-                    reported.Add(displayPath);
-                }
-            }
-        }
-
-        return reported;
     }
 }
