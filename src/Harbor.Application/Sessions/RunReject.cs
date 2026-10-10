@@ -61,7 +61,7 @@ public static class RunRejectEffects
     /// </summary>
     public static string RenderInventory(string runId)
     {
-        string items = string.Join('\n', OutOfReach.Select(entry => $"  - {entry}"));
+        string items = string.Join('\n', OutOfReach.Select(entry => $"  - {entry}").ToArray());
         return $"Run '{runId}': no local undo reaches outside the frozen change set. Out of reach:\n" +
             items + "\n" +
             "--all-effects is read-only: nothing was deleted, no isolated copy was removed, the manifest is unchanged.";
