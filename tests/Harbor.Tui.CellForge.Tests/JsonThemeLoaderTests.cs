@@ -1,4 +1,5 @@
 using Harbor.DesignSystem;
+using Harbor.TestKit;
 using Harbor.Tui.CellForge.Widgets;
 using Harbor.Ui.Framework.Projection;
 using TUnit.Core;
@@ -54,7 +55,7 @@ public class JsonThemeLoaderTests
 
         var result = JsonThemeLoader.Parse(json);
 
-        await Assert.That(result.IsSuccess).IsTrue();
+        await Assert.That(result).IsSuccessful();
         await Assert.That(result.Value.Name).IsEqualTo("sunset");
         await Assert.That(result.Value.Accent).IsEqualTo(new RgbColor(0xFF, 0x88, 0x00));
         await Assert.That(result.Value.Text).IsEqualTo(new RgbColor(0xFF, 0xFF, 0xFF));
@@ -69,7 +70,7 @@ public class JsonThemeLoaderTests
         {
             var result = JsonThemeLoader.Parse("""{ "name": "cool-plus", "accent": "#123456" }""");
 
-            await Assert.That(result.IsSuccess).IsTrue();
+            await Assert.That(result).IsSuccessful();
             await Assert.That(result.Value.Accent).IsEqualTo(new RgbColor(0x12, 0x34, 0x56));
             await Assert.That(result.Value.Text).IsEqualTo(HarborTheme.HarborCool.Text);       // merged
             await Assert.That(result.Value.Background).IsEqualTo(HarborTheme.HarborCool.Background);
@@ -85,7 +86,7 @@ public class JsonThemeLoaderTests
     {
         var result = JsonThemeLoader.Parse("""{ "accent": "#nope" }""");
 
-        await Assert.That(result.IsFailure).IsTrue();
+        await Assert.That(result).IsFailed();
         await Assert.That(result.Error).Contains("accent");
     }
 
@@ -94,7 +95,7 @@ public class JsonThemeLoaderTests
     {
         var result = JsonThemeLoader.Parse("{ not json ");
 
-        await Assert.That(result.IsFailure).IsTrue();
+        await Assert.That(result).IsFailed();
     }
 
     [Test]
@@ -102,7 +103,7 @@ public class JsonThemeLoaderTests
     {
         var result = JsonThemeLoader.Parse("{}");
 
-        await Assert.That(result.IsSuccess).IsTrue();
+        await Assert.That(result).IsSuccessful();
         await Assert.That(result.Value.Name).IsEqualTo("custom");
     }
 

@@ -2,6 +2,7 @@ using System.Text.Json;
 using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Permissions;
 using Harbor.Abstractions.Tools;
+using Harbor.TestKit;
 using Microsoft.Extensions.Logging.Abstractions;
 namespace Harbor.Tools.Builtin.Tests;
 /// <summary>
@@ -67,7 +68,7 @@ public class SkillToolTests
         var tool = NewTool();
         var result = await tool.ExecuteAsync(Args("review"), CreateContext());
 
-        await Assert.That(result.IsError).IsFalse();
+        await Assert.That(result).HasSucceeded();
         await Assert.That(result.Output).Contains("Project review body");
     }
 
@@ -80,7 +81,7 @@ public class SkillToolTests
         var tool = NewTool();
         var result = await tool.ExecuteAsync(Args("deploy"), CreateContext());
 
-        await Assert.That(result.IsError).IsFalse();
+        await Assert.That(result).HasSucceeded();
         await Assert.That(result.Output).Contains("Project deploy");
     }
 
@@ -92,7 +93,7 @@ public class SkillToolTests
         var tool = NewTool();
         var result = await tool.ExecuteAsync(Args("deploy"), CreateContext());
 
-        await Assert.That(result.IsError).IsFalse();
+        await Assert.That(result).HasSucceeded();
         await Assert.That(result.Output).Contains("Global deploy");
     }
 
@@ -105,7 +106,7 @@ public class SkillToolTests
         var tool = NewTool();
         var result = await tool.ExecuteAsync(Args("deploy", "global"), CreateContext());
 
-        await Assert.That(result.IsError).IsFalse();
+        await Assert.That(result).HasSucceeded();
         await Assert.That(result.Output).Contains("Global deploy");
     }
 
@@ -115,7 +116,7 @@ public class SkillToolTests
         var tool = NewTool();
         var result = await tool.ExecuteAsync(Args("nope"), CreateContext());
 
-        await Assert.That(result.IsError).IsTrue();
+        await Assert.That(result).HasFailed();
         await Assert.That(result.Output).Contains("nope");
         await Assert.That(result.Output).Contains("available_skills");
     }
@@ -127,7 +128,7 @@ public class SkillToolTests
         foreach (string bad in new[] { "../evil", "a/b", "..", "a\\b" })
         {
             var result = await tool.ExecuteAsync(Args(bad), CreateContext());
-            await Assert.That(result.IsError).IsTrue();
+            await Assert.That(result).HasFailed();
         }
     }
 
@@ -139,7 +140,7 @@ public class SkillToolTests
         var tool = NewTool();
         var result = await tool.ExecuteAsync(Args("big"), CreateContext());
 
-        await Assert.That(result.IsError).IsFalse();
+        await Assert.That(result).HasSucceeded();
         await Assert.That(result.Output).Contains("truncated");
         await Assert.That(result.Output.Length).IsLessThanOrEqualTo(SkillTool.MaxContentChars + 256);
     }
