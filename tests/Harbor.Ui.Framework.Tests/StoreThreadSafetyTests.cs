@@ -114,4 +114,51 @@ public class StoreThreadSafetyTests
         await Assert.That(delivered).IsEqualTo(1);
         await Assert.That(store.State.Revision).IsEqualTo(1);
     }
+
+    [Test]
+    public async Task ConcurrentSubscribeDuringDispatch_NoDeadlockNoTornDelivery()
+    {
+        // Control for the UiStore subscribe/dispatch asymmetry: Dispatch/Notify
+        // never take _subscribersGate, so subscription churn must neither deadlock
+        // dispatchers nor tear the delivery set (the stable subscriber observes
+        // every dispatch exactly once). Bounded wait: a real deadlock must fail
+        // the test, not hang the CI job.
+        var store = new UiStore();
+        int deliveredA = 0;
+        int deliveredB = 0;
+        EventHandler<UiStateChangedEventArgs> handlerA = (_, _) => Interlocked.Increment(ref deliveredA);
+        EventHandler<UiStateChangedEventArgs> handlerB = (_, _) => Interlocked.Increment(ref deliveredB);
+        store.Changed += handlerA;
+
+        var dispatchers = new Task[Writers];
+        for (int w = 0; w < Writers; w++)
+        {
+            int writer = w;
+            dispatchers[w] = Task.Run(() =>
+            {
+                for (int i = 0; i < PerWriter; i++)
+                    store.Dispatch(new ChatAppMsg.AppendLine(ChatRole.User, $"w{writer}-l{i}"));
+            });
+        }
+
+        var churn = Task.Run(() =>
+        {
+            for (int i = 0; i < Total; i++)
+            {
+                store.Changed += handlerB;
+                store.Changed -= handlerB;
+            }
+        });
+
+        var all = new Task[Writers + 1];
+        Array.Copy(dispatchers, all, Writers);
+        all[Writers] = churn;
+        await Task.WhenAll(all).WaitAsync(TimeSpan.FromSeconds(30));
+
+        // Every dispatch applied exactly once; the never-unsubscribed handler saw all.
+        await Assert.That(store.State.Revision).IsEqualTo(Total);
+        await Assert.That(store.State.Chat.Lines.Length).IsEqualTo(Total);
+        await Assert.That(deliveredA).IsEqualTo(Total);
+        await Assert.That(deliveredB).IsLessThanOrEqualTo(Total);
+    }
 }

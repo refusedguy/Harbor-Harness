@@ -121,6 +121,11 @@ public sealed class UiStore
     public event EventHandler<UiStateChangedEventArgs>? Changed
     {
         // Subscribe/unsubscribe are cold; the delivery set is what dispatch pays for.
+        // No-contention note: Dispatch/Notify never take _subscribersGate — Notify
+        // only does a volatile read of _delivery — so the hot path (1000+
+        // dispatches/sec under streaming) never contends with subscription churn.
+        // The gate serializes concurrent add/remove only. Control test:
+        // StoreThreadSafetyTests.ConcurrentSubscribeDuringDispatch_*.
         add
         {
             if (value is null)
