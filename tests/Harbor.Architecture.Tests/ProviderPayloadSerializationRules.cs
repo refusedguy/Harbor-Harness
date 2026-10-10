@@ -77,7 +77,7 @@
 //
 // NO EXEMPTION TABLE YET, DELIBERATELY
 // ------------------------------------
-// `KnownViolations` exists so a violation nobody has fixed yet can be tolerated
+// The baseline exists so a violation nobody has fixed yet can be tolerated
 // WITH A REASON (`ExemptionReason`). It is empty here, and the rule lands RED
 // against three real files rather than green-with-three-grandf-rows. A baseline
 // row says "this may stay"; the honest state of this debt is "this has not been
@@ -111,8 +111,16 @@
 // `contrib/` and `.worktrees/`. `NonVacuity_Scope_Excludes_TestsAndContrib_On
 // _Purpose` proves that exclusion is load-bearing for THIS rule rather than
 // inherited and untested.
+//
+// MECHANISM (#1086, step 2)
+// -------------------------
+// This rule is the TABULAR etalon for the ScanRule engine: two sub-rules
+// sharing one scope, each its own row of (SubId, Pattern, Instead) plus its
+// own planted controls. Enumeration, stripping, matching, baseline and control
+// verdicts are ScanRunner's; this file keeps the issue prose and the test names.
 
 using System.Text.RegularExpressions;
+using TUnit.Assertions;
 
 namespace Harbor.Architecture.Tests;
 
@@ -124,6 +132,9 @@ public sealed class ProviderPayloadSerializationRules
 {
     /// <summary>Project-directory prefix that puts a file in this rule's scope.</summary>
     internal const string ProviderPrefix = "src/Harbor.Providers.";
+
+    private const string NoReflectionWrite = "PROVIDER-PAYLOAD-MUST-NOT-BE-SERIALIZED-BY-REFLECTION";
+    private const string NoUntypedCarrier = "PROVIDER-PAYLOAD-MUST-NOT-CARRY-UNTYPED-PAYLOADS";
 
     /// <summary>
     ///     The <c>JsonSerializer.Serialize*</c> write family, as one alternation.
@@ -173,40 +184,71 @@ public sealed class ProviderPayloadSerializationRules
         + @"|\bobject\s*\[\s*\]",
         RegexOptions.Compiled);
 
-    /// <summary>
-    ///     Tolerated violations, keyed <c>"&lt;ruleId&gt; &lt;repo-relative file&gt;"</c>.
-    ///     Empty on purpose — see the header. Adding a row means choosing
-    ///     reflection over <see cref="System.Text.Json.Utf8JsonWriter" /> for a
-    ///     named file, and the row has to say why in words that survive review.
-    /// </summary>
-    private static readonly Dictionary<string, ExemptionReason.Row> KnownViolations
-        = new(StringComparer.Ordinal);
-
-    /// <summary>
-    ///     Every <c>*.cs</c> file under a provider project, as repo-relative
-    ///     forward-slashed paths. Shared by the rules and by the non-vacuity tests,
-    ///     so "the scope" is one answer rather than three re-derivations.
-    /// </summary>
-    internal static IReadOnlyList<string> ProviderFiles() =>
-    [
-        .. SourceScan.EnumerateCsFiles("src")
-            .Select(SourceScan.Relative)
-            .Where(p => p.StartsWith(ProviderPrefix, StringComparison.Ordinal)),
-    ];
-
-    /// <summary>One violation, located.</summary>
-    /// <param name="RuleId">Which rule was violated.</param>
-    /// <param name="File">Repo-relative file name.</param>
-    /// <param name="Line">1-based line in the comment-stripped source.</param>
-    /// <param name="Text">The matched text, trimmed.</param>
-    internal readonly record struct Hit(string RuleId, string File, int Line, string Text)
+    /// <summary>The write rule as data: one banned shape, ten planted controls.</summary>
+    private static readonly ScanRule ReflectionRule = new()
     {
-        /// <summary>The line a failure message prints.</summary>
-        internal string Report() => $"{File}:{Line}  [{RuleId}]  {Text}";
-    }
+        Id = "ProviderPayloadSerialization.ReflectionWrite",
+        Trees = ["src"],
+        InScope = static p => p.StartsWith(ProviderPrefix, StringComparison.Ordinal),
+        Forbidden =
+        [
+            new ScanForbidden(
+                NoReflectionWrite,
+                ReflectionWrite,
+                "write with a Utf8JsonWriter (the pattern OpenAiCompatibleLlmClient already uses) "
+                + "or through a source-generated context."),
+        ],
+        Controls =
+        [
+            new ScanControl("src/Harbor.Providers.X/A.cs", "var b = JsonSerializer.SerializeToUtf8Bytes(payload, o);", NoReflectionWrite),
+            new ScanControl("src/Harbor.Providers.X/B.cs", "JsonSerializer.Serialize(value, options);", NoReflectionWrite),
+            new ScanControl("src/Harbor.Providers.X/C.cs", "JsonSerializer . SerializeToStream(v, s, o);", NoReflectionWrite),
+            new ScanControl("src/Harbor.Providers.X/D.cs", "JsonSerializer.SerializeToElement(v, o).ToString();", NoReflectionWrite),
+            new ScanControl("src/Harbor.Providers.X/E.cs", "var x = JsonSerializer.Deserialize<T>(bytes, o);", null),
+            new ScanControl("src/Harbor.Providers.X/F.cs", "internal sealed partial class Ctx : JsonSerializerContext;", null),
+            new ScanControl("src/Harbor.Providers.X/G.cs", "writer.WriteString(\"model\", request.Model);", null),
+            new ScanControl("src/Harbor.Providers.X/H.cs",
+                "/// The base64 never reaches JsonSerializer.Serialize(Dictionary<string, object?>).", null),
+            new ScanControl("src/Harbor.Providers.X/I.cs",
+                "// JsonSerializer.SerializeToUtf8Bytes was the old shape.", null),
+            new ScanControl("src/Harbor.Providers.X/J.cs", "o.TypeInfoResolver = OpenAiWireContext.Default;", null),
+        ],
+        MinHits = 1,
+        MustContain =
+        [
+            "src/Harbor.Providers.Anthropic/AnthropicRequestBuilder.cs",
+            "src/Harbor.Providers.OpenAI/OpenAiRequestBuilder.cs",
+            "src/Harbor.Providers.Ollama/OllamaLlmClient.cs",
+        ],
+    };
 
-    private const string NoReflectionWrite = "PROVIDER-PAYLOAD-MUST-NOT-BE-SERIALIZED-BY-REFLECTION";
-    private const string NoUntypedCarrier = "PROVIDER-PAYLOAD-MUST-NOT-CARRY-UNTYPED-PAYLOADS";
+    /// <summary>The carrier rule as data: one banned shape, seven planted controls.</summary>
+    private static readonly ScanRule CarrierRule = new()
+    {
+        Id = "ProviderPayloadSerialization.UntypedCarrier",
+        Trees = ["src"],
+        InScope = static p => p.StartsWith(ProviderPrefix, StringComparison.Ordinal),
+        Forbidden =
+        [
+            new ScanForbidden(
+                NoUntypedCarrier,
+                UntypedCarrier,
+                "the anti-corruption layer from LlmMessage to a provider dialect is named code, "
+                + "not a bag of runtime values."),
+        ],
+        Controls =
+        [
+            new ScanControl("src/Harbor.Providers.X/A.cs", "var payload = new Dictionary<string, object?>(12);", NoUntypedCarrier),
+            new ScanControl("src/Harbor.Providers.X/B.cs", "public static List<object> BuildMessages(LlmRequest r)", NoUntypedCarrier),
+            new ScanControl("src/Harbor.Providers.X/C.cs", "object[] converted = new object[blocks.Count];", NoUntypedCarrier),
+            new ScanControl("src/Harbor.Providers.X/G.cs", "Dictionary<string, object> map = new();", NoUntypedCarrier),
+            new ScanControl("src/Harbor.Providers.X/D.cs", "var messages = new List<LlmMessage>();", null),
+            new ScanControl("src/Harbor.Providers.X/E.cs", "Dictionary<string, string> headers;", null),
+            new ScanControl("src/Harbor.Providers.X/F.cs",
+                "/// was a Dictionary<string, object?> before #475", null),
+        ],
+        MinHits = 1,
+    };
 
     // =====================================================================
     // 1. The rules.
@@ -222,7 +264,7 @@ public sealed class ProviderPayloadSerializationRules
     [Test]
     public async Task Provider_MustNot_SerializePayloadsByReflection()
     {
-        var failures = Evaluate(NoReflectionWrite, ReflectionWrite);
+        List<string> failures = ScanRunner.Evaluate(ReflectionRule);
         await Assert.That(failures).IsEmpty().Because(string.Join("\n", failures));
     }
 
@@ -235,73 +277,8 @@ public sealed class ProviderPayloadSerializationRules
     [Test]
     public async Task Provider_MustNot_CarryUntypedPayloads()
     {
-        var failures = Evaluate(NoUntypedCarrier, UntypedCarrier);
+        List<string> failures = ScanRunner.Evaluate(CarrierRule);
         await Assert.That(failures).IsEmpty().Because(string.Join("\n", failures));
-    }
-
-    /// <summary>
-    ///     The failures for one rule, after subtracting the baseline. Returns one
-    ///     message per hit so the report names every line, not just the first.
-    /// </summary>
-    private static List<string> Evaluate(string ruleId, Regex matcher)
-    {
-        var failures = new List<string>();
-        foreach (Hit hit in ScanSource(Source(ProviderFiles()), ruleId, matcher))
-        {
-            if (KnownViolations.ContainsKey($"{ruleId} {hit.File}"))
-            {
-                continue;
-            }
-
-            failures.Add(hit.Report());
-        }
-
-        return failures;
-    }
-
-    /// <summary>The on-disk provider files, as (display path, source) pairs.</summary>
-    private static List<(string DisplayPath, string Source)> Source(IReadOnlyList<string> relativePaths)
-    {
-        var sources = new List<(string, string)>(relativePaths.Count);
-        foreach (string relative in relativePaths)
-        {
-            string full = Path.Combine(RepoPaths.RepoRoot ?? ".", relative);
-            if (SourceScan.TryReadAllText(full) is { } text)
-            {
-                sources.Add((relative, text));
-            }
-        }
-
-        return sources;
-    }
-
-    /// <summary>
-    ///     The matcher, over (display path, source) pairs so the non-vacuity
-    ///     controls can hand it synthetic source without touching the disk.
-    ///     Comments are stripped first (line count preserved), so prose about a
-    ///     rule cannot trip it.
-    /// </summary>
-    private static List<Hit> ScanSource(
-        IEnumerable<(string DisplayPath, string Source)> sources,
-        string ruleId,
-        Regex matcher)
-    {
-        var hits = new List<Hit>();
-
-        foreach ((string displayPath, string source) in sources)
-        {
-            string[] lines = SourceScan.StripComments(source).Split('\n');
-            for (int i = 0; i < lines.Length; i++)
-            {
-                Match match = matcher.Match(lines[i]);
-                if (match.Success)
-                {
-                    hits.Add(new Hit(ruleId, displayPath, i + 1, match.Value.Trim()));
-                }
-            }
-        }
-
-        return hits;
     }
 
     // =====================================================================
@@ -316,23 +293,11 @@ public sealed class ProviderPayloadSerializationRules
     [Test]
     public async Task NonVacuity_Discovery_Sees_The_Provider_Trees()
     {
-        IReadOnlyList<string> files = ProviderFiles();
+        List<string> failures = ScanRunner.CheckDiscovery(ReflectionRule);
 
-        await Assert.That(files.Count).IsGreaterThan(0)
-            .Because("a provider scope that discovers no files makes every rule here "
-                   + "green for no reason");
-
-        foreach (string expected in new[]
-                 {
-                     "src/Harbor.Providers.Anthropic/AnthropicRequestBuilder.cs",
-                     "src/Harbor.Providers.OpenAI/OpenAiRequestBuilder.cs",
-                     "src/Harbor.Providers.Ollama/OllamaLlmClient.cs",
-                 })
-        {
-            await Assert.That(files).Contains(expected)
-                .Because($"{expected} is a provider file and the issue is about it; if the "
-                       + "scope stopped seeing it, the scope stopped seeing the providers");
-        }
+        await Assert.That(failures).IsEmpty()
+            .Because("a provider scope that discovers no files makes every rule here green for no "
+                   + "reason. " + string.Join("; ", failures));
     }
 
     /// <summary>
@@ -344,58 +309,16 @@ public sealed class ProviderPayloadSerializationRules
     [Test]
     public async Task NonVacuity_The_Matchers_Fire_On_Planted_Offenders_Only()
     {
-        var reflectionSource = new (string Path, string Source)[]
-        {
-            // Hits.
-            ("src/Harbor.Providers.X/A.cs", "var b = JsonSerializer.SerializeToUtf8Bytes(payload, o);"),
-            ("src/Harbor.Providers.X/B.cs", "JsonSerializer.Serialize(value, options);"),
-            ("src/Harbor.Providers.X/C.cs", "JsonSerializer . SerializeToStream(v, s, o);"),
-            ("src/Harbor.Providers.X/D.cs", "JsonSerializer.SerializeToElement(v, o).ToString();"),
-            // Must stay silent.
-            ("src/Harbor.Providers.X/E.cs", "var x = JsonSerializer.Deserialize<T>(bytes, o);"),
-            ("src/Harbor.Providers.X/F.cs", "internal sealed partial class Ctx : JsonSerializerContext;"),
-            ("src/Harbor.Providers.X/G.cs", "writer.WriteString(\"model\", request.Model);"),
-            ("src/Harbor.Providers.X/H.cs",
-                "/// The base64 never reaches JsonSerializer.Serialize(Dictionary<string, object?>)."),
-            ("src/Harbor.Providers.X/I.cs",
-                "// JsonSerializer.SerializeToUtf8Bytes was the old shape."),
-            ("src/Harbor.Providers.X/J.cs", "o.TypeInfoResolver = OpenAiWireContext.Default;"),
-        };
+        List<string> failures =
+        [
+            .. ScanRunner.CheckControls(ReflectionRule),
+            .. ScanRunner.CheckControls(CarrierRule),
+        ];
 
-        List<Hit> reflectionHits = ScanSource(reflectionSource, NoReflectionWrite, ReflectionWrite);
-        await Assert.That(reflectionHits.Select(h => h.File)).IsEquivalentTo(new[]
-        {
-            "src/Harbor.Providers.X/A.cs",
-            "src/Harbor.Providers.X/B.cs",
-            "src/Harbor.Providers.X/C.cs",
-            "src/Harbor.Providers.X/D.cs",
-        }).Because("four planted offenders must be caught and the six correct shapes "
-                  + "must stay silent — including the two comment forms, or the rule "
-                  + "reports its own documentation");
-
-        var carrierSource = new (string Path, string Source)[]
-        {
-            // Hits.
-            ("src/Harbor.Providers.X/A.cs", "var payload = new Dictionary<string, object?>(12);"),
-            ("src/Harbor.Providers.X/B.cs", "public static List<object> BuildMessages(LlmRequest r)"),
-            ("src/Harbor.Providers.X/C.cs", "object[] converted = new object[blocks.Count];"),
-            ("src/Harbor.Providers.X/G.cs", "Dictionary<string, object> map = new();"),
-            // Must stay silent.
-            ("src/Harbor.Providers.X/D.cs", "var messages = new List<LlmMessage>();"),
-            ("src/Harbor.Providers.X/E.cs", "Dictionary<string, string> headers;"),
-            ("src/Harbor.Providers.X/F.cs",
-                "/// was a Dictionary<string, object?> before #475"),
-        };
-
-        List<Hit> carrierHits = ScanSource(carrierSource, NoUntypedCarrier, UntypedCarrier);
-        await Assert.That(carrierHits.Select(h => h.File)).IsEquivalentTo(new[]
-        {
-            "src/Harbor.Providers.X/A.cs",
-            "src/Harbor.Providers.X/B.cs",
-            "src/Harbor.Providers.X/C.cs",
-            "src/Harbor.Providers.X/G.cs",
-        }).Because("four planted carriers must be caught; a Dictionary<string, string> "
-                  + "and a List<LlmMessage> are typed and must not be reported");
+        await Assert.That(failures).IsEmpty()
+            .Because("planted offenders must be caught and the correct neighbouring shapes must stay "
+                   + "silent — including the comment forms, or the rule reports its own documentation. "
+                   + string.Join("; ", failures));
     }
 
     /// <summary>
@@ -414,12 +337,12 @@ public sealed class ProviderPayloadSerializationRules
             .Because("the raw prose does contain the forbidden text, so the test below is "
                    + "proving the stripper and not that the matcher is blind");
 
-        await Assert.That(ScanSource(
-                [("src/Harbor.Providers.X/A.cs", Prose)], NoReflectionWrite, ReflectionWrite))
+        await Assert.That(ScanRunner.EvaluateOver(
+                [("src/Harbor.Providers.X/A.cs", Prose)], ReflectionRule))
             .IsEmpty().Because("comment stripping has to run before matching");
 
-        await Assert.That(ScanSource(
-                [("src/Harbor.Providers.X/A.cs", Prose)], NoUntypedCarrier, UntypedCarrier))
+        await Assert.That(ScanRunner.EvaluateOver(
+                [("src/Harbor.Providers.X/A.cs", Prose)], CarrierRule))
             .IsEmpty().Because("the same prose names the untyped carrier");
     }
 
@@ -431,7 +354,7 @@ public sealed class ProviderPayloadSerializationRules
     [Test]
     public async Task NonVacuity_Scope_Excludes_TestsAndContrib_On_Purpose()
     {
-        IReadOnlyList<string> files = ProviderFiles();
+        IReadOnlyList<string> files = ScanRunner.ScopeFiles(ReflectionRule);
 
         await Assert.That(files.Any(p => p.StartsWith("tests/", StringComparison.Ordinal))).IsFalse()
             .Because("tests/ is where the planted offenders above live; a scope that "
@@ -458,7 +381,7 @@ public sealed class ProviderPayloadSerializationRules
     [Test]
     public async Task Baseline_Is_Empty_Because_The_Rule_Is_Armed()
     {
-        await Assert.That(KnownViolations.Count).IsEqualTo(0)
+        await Assert.That(ReflectionRule.Baseline.Length + CarrierRule.Baseline.Length).IsEqualTo(0)
             .Because("both rules are fully armed — there is no tolerated reflection write "
                    + "in the provider layer. A row here means a provider deliberately "
                    + "chose reflection over Utf8JsonWriter; the rule is red until then.");
@@ -472,9 +395,11 @@ public sealed class ProviderPayloadSerializationRules
     [Test]
     public async Task Baseline_Rows_AllHaveReasons()
     {
-        var failures = ExemptionReason.RowsWithoutAReason(
-            "ProviderPayloadSerializationRules.KnownViolations",
-            KnownViolations.Select(kv => (kv.Key, kv.Value)));
+        List<string> failures =
+        [
+            .. ScanRunner.CheckReasons(ReflectionRule),
+            .. ScanRunner.CheckReasons(CarrierRule),
+        ];
 
         await Assert.That(failures).IsEmpty().Because(string.Join("\n", failures));
     }
@@ -487,15 +412,14 @@ public sealed class ProviderPayloadSerializationRules
     [Test]
     public async Task Baseline_Rows_Are_Not_Stale()
     {
-        var real = Source(ProviderFiles())
-            .SelectMany(s => SourceScan.StripComments(s.Source).Split('\n')
-                .SelectMany(line => new[] { NoReflectionWrite, NoUntypedCarrier }
-                    .Where(ruleId => (ruleId == NoReflectionWrite ? ReflectionWrite : UntypedCarrier)
-                        .IsMatch(line))
-                    .Select(ruleId => $"{ruleId} {s.DisplayPath}")))
-            .ToHashSet(StringComparer.Ordinal);
+        List<(string DisplayPath, string Source)> sources =
+            ScanRunner.ReadSources(ScanRunner.ScopeFiles(ReflectionRule));
 
-        var stale = KnownViolations.Keys.Where(key => !real.Contains(key)).ToList();
+        List<string> stale =
+        [
+            .. ScanRunner.StaleBaselineKeys(ReflectionRule, sources),
+            .. ScanRunner.StaleBaselineKeys(CarrierRule, sources),
+        ];
 
         await Assert.That(stale).IsEmpty()
             .Because("a baseline row with no violation behind it is a permission for a "

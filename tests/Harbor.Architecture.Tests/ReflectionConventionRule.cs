@@ -69,6 +69,15 @@
 // runs the matcher over synthetic source, and
 // `NonVacuity_Discovery_Sees_The_Product_Tree_And_Excludes_Tests_On_Purpose` proves
 // the `tests/` exclusion is load-bearing rather than incidental (see there).
+//
+// MECHANISM (#1086, step 2)
+// -------------------------
+// This rule is the SIMPLE etalon for the ScanRule engine: one forbidden shape,
+// one prefix baseline, ten planted controls, a discovery floor. The enumeration,
+// stripping, matching, baseline subtraction and control/discovery verdicts are
+// ScanRunner's; this file keeps the convention prose, the allowance table (shared
+// with #414 — TrimUnsafeReflectionRules reads it rather than restating it), and
+// the test names.
 
 using System.Text.RegularExpressions;
 using TUnit.Assertions;
@@ -124,6 +133,46 @@ public sealed class ReflectionConventionRule
         + @"|\bAppDomain\s*\.\s*DefineDynamicAssembly\b",
         RegexOptions.Compiled);
 
+    private const string RuleId = "REFLECTION-DYNAMIC-CODE";
+
+    /// <summary>The rule as data: one shape, one prefix baseline, ten controls, a floor.</summary>
+    private static readonly ScanRule Rule = new()
+    {
+        Id = "ReflectionConvention",
+        Trees = ["src", "apps"],
+        Forbidden =
+        [
+            new ScanForbidden(
+                RuleId,
+                ForbiddenConstruct,
+                "loading code at run time is invisible to NativeAOT and to every ProjectReference rule — "
+                + "unless this file genuinely needs it, say so by adding an explained row to "
+                + "AllowedProjectPrefixes, and be ready to justify it in review."),
+        ],
+        Baseline =
+        [
+            .. AllowedProjectPrefixes.Select(static a => new ScanBaseline(
+                a.Prefix,
+                IsPrefix: true,
+                a.Allowance.Reason,
+                a.Allowance.TrackedBy)),
+        ],
+        Controls =
+        [
+            new ScanControl("load.cs", "var a = Assembly.Load(bytes);", RuleId),
+            new ScanControl("loadfrom.cs", "var a = Assembly.LoadFrom(path);", RuleId),
+            new ScanControl("context.cs", "public sealed class Ctx : AssemblyLoadContext { }", RuleId),
+            new ScanControl("emit.cs", "var t = new TypeBuilder(\"T\", attrs);", RuleId),
+            new ScanControl("dynamic.cs", "var m = new DynamicMethod(\"go\", typeof(void), Type.EmptyTypes);", RuleId),
+            new ScanControl("spaced.cs", "var a = Assembly . Load ( bytes );", RuleId),
+            new ScanControl("json.cs", "var name = element.GetProperty(\"models\")", null),
+            new ScanControl("prose.cs", "/// Loads via Assembly.Load(byte[]) — see IPluginCompiler.", null),
+            new ScanControl("benign.cs", "var name = assembly.FullName;", null),
+            new ScanControl("field.cs", "var v = field.GetValue(instance);", null),
+        ],
+        MinHits = 100,
+    };
+
     /// <summary>
     ///     Repo-relative project directory of a repo-relative file path, e.g.
     ///     <c>src/Harbor.Plugins.Compilation</c>. Only ever called on the OUTPUT of
@@ -144,72 +193,6 @@ public sealed class ReflectionConventionRule
     internal static bool IsAllowed(string projectDir) =>
         AllowedProjectPrefixes.Any(a => projectDir.StartsWith(a.Prefix, StringComparison.Ordinal));
 
-    /// <summary>
-    ///     Every forbidden construct in the named files. A file that cannot be read
-    ///     is skipped, not reported: that is a discovery problem, and the discovery
-    ///     self-check below is what catches it.
-    /// </summary>
-    private static List<Hit> Scan(IEnumerable<string> files)
-    {
-        var sources = new List<(string DisplayPath, string Source)>();
-        foreach (string file in files)
-        {
-            if (SourceScan.TryReadAllText(file) is { } text)
-            {
-                sources.Add((SourceScan.Relative(file), text));
-            }
-        }
-
-        return ScanSource(sources);
-    }
-
-    /// <summary>
-    ///     The matcher itself, over (display path, source) pairs so the non-vacuity
-    ///     control can hand it synthetic source without touching the disk — and so a
-    ///     synthetic name comes back out verbatim instead of being relativised
-    ///     against a bin directory it does not live in.
-    ///     Comments are stripped first, preserving line count, so a `///` sentence
-    ///     ABOUT <c>Assembly.Load</c> — of which <c>src/</c> has several, and the
-    ///     plugin exception is documented in them — cannot report itself as a
-    ///     violation. That is the difference between a rule and a grep: a grep
-    ///     has to be re-read every time somebody writes a comment, and the first
-    ///     time it cries wolf it gets deleted.
-    /// </summary>
-    private static List<Hit> ScanSource(
-        IEnumerable<(string DisplayPath, string Source)> sources)
-    {
-        var hits = new List<Hit>();
-
-        foreach ((string displayPath, string source) in sources)
-        {
-            string projectDir = ProjectDirOf(displayPath);
-            string[] lines = SourceScan.StripComments(source).Split('\n');
-            for (int i = 0; i < lines.Length; i++)
-            {
-                Match match = ForbiddenConstruct.Match(lines[i]);
-                if (match.Success)
-                {
-                    hits.Add(new Hit(displayPath, projectDir, i + 1, match.Value.Trim()));
-                }
-            }
-        }
-
-        return hits;
-    }
-
-    /// <summary>
-    ///     One forbidden construct. <see cref="ProjectDir" /> is carried on the hit
-    ///     rather than recomputed at the call site, because the two call sites hold
-    ///     different things — a repo-relative path from the scan, a bare name from
-    ///     the synthetic control — and a helper that cannot tell them apart is how
-    ///     the allowance quietly stops matching.
-    /// </summary>
-    /// <param name="File">Repo-relative (or synthetic) file name.</param>
-    /// <param name="ProjectDir">Repo-relative project directory.</param>
-    /// <param name="Line">1-based line in the comment-stripped source.</param>
-    /// <param name="Text">The matched construct, trimmed.</param>
-    private readonly record struct Hit(string File, string ProjectDir, int Line, string Text);
-
     // =====================================================================
     // 1. The rule.
     // =====================================================================
@@ -224,25 +207,15 @@ public sealed class ReflectionConventionRule
     [Test]
     public async Task Reflection_May_Not_Appear_In_Product_Code_Outside_The_Plugin_Family()
     {
-        var offenders = new List<string>();
-        foreach (Hit hit in Scan(SourceScan.EnumerateProductCsFiles()))
-        {
-            if (IsAllowed(hit.ProjectDir))
-            {
-                continue;
-            }
-
-            offenders.Add($"{hit.File}:{hit.Line}  {hit.Text}");
-        }
+        List<string> offenders = ScanRunner.Evaluate(Rule);
 
         await Assert.That(offenders).IsEmpty()
             .Because("AGENTS.md §Architecture decisions requires NativeAOT-readiness — no "
                    + "reflection emit, no Assembly.Load — and a run-time-loaded assembly appears in no "
                    + "ProjectReference, so no reference rule can see it. The one place this capability "
-                   + "is wanted is the plugin family, where loading code at run time IS the product. If "
-                   + "this file genuinely needs it, say so by adding an explained row to "
-                   + "AllowedProjectPrefixes, and be ready to justify it in review. Offenders: "
-                   + string.Join(" | ", offenders));
+                   + "is wanted is the plugin family, where loading code at run time IS the product. "
+                   + string.Join(" | ", Rule.Forbidden.Select(f => f.SubId + " → " + f.Instead))
+                   + " Offenders: " + string.Join(" | ", offenders));
     }
 
     // =====================================================================
@@ -259,7 +232,7 @@ public sealed class ReflectionConventionRule
     [Test]
     public async Task The_Plugin_Allowance_Is_NonEmpty_Scoped_And_Explained()
     {
-        var failures = new List<string>();
+        var failures = new List<string>(ScanRunner.CheckReasons(Rule));
 
         if (AllowedProjectPrefixes.Length == 0)
         {
@@ -269,15 +242,10 @@ public sealed class ReflectionConventionRule
                 + "reflection anywhere\", including in the code whose job is plugins.");
         }
 
-        failures.AddRange(
-            ExemptionReason.RowsWithoutAReason(
-                "ReflectionConventionRule.AllowedProjectPrefixes",
-                AllowedProjectPrefixes.Select(static a => (a.Prefix, a.Allowance))));
-
         // Every real project directory, so "this prefix matches something" can be
         // answered from the repository rather than assumed.
-        var realProjectDirs = SourceScan.EnumerateProductCsFiles()
-            .Select(static file => ProjectDirOf(SourceScan.Relative(file)))
+        var realProjectDirs = ScanRunner.ScopeFiles(Rule)
+            .Select(static file => ProjectDirOf(file))
             .Where(static dir => dir.Length > 0)
             .ToHashSet(StringComparer.Ordinal);
 
@@ -324,8 +292,9 @@ public sealed class ReflectionConventionRule
     [Test]
     public async Task The_Plugin_Allowance_Is_Not_A_Dead_Prefix()
     {
-        var allowedHits = Scan(SourceScan.EnumerateProductCsFiles())
-            .Where(hit => IsAllowed(hit.ProjectDir))
+        var allowedHits = ScanRunner
+            .Collect(Rule, ScanRunner.ReadSources(ScanRunner.ScopeFiles(Rule)))
+            .Where(hit => IsAllowed(ProjectDirOf(hit.File)))
             .ToList();
 
         await Assert.That(allowedHits.Count).IsGreaterThan(0)
@@ -351,54 +320,14 @@ public sealed class ReflectionConventionRule
     [Test]
     public async Task NonVacuity_The_Forbidden_Construct_Matcher_Fires_On_A_Planted_Offender_Only()
     {
-        const string loadImage = "var a = Assembly.Load(bytes);";
-        const string loadFrom = "var a = Assembly.LoadFrom(path);";
-        const string loadContext = "public sealed class Ctx : AssemblyLoadContext { }";
-        const string emit = "var t = new TypeBuilder(\"T\", attrs);";
-        const string dynamicMethod = "var m = new DynamicMethod(\"go\", typeof(void), Type.EmptyTypes);";
-        const string spacedOut = "var a = Assembly . Load ( bytes );";
+        List<string> failures = ScanRunner.CheckControls(Rule);
 
-        const string jsonAccess = "var name = element.GetProperty(\"models\")";
-        const string prose = "/// Loads via Assembly.Load(byte[]) — see IPluginCompiler.";
-        const string benignAssembly = "var name = assembly.FullName;";
-        const string threadOnly = "var v = field.GetValue(instance);";
-
-        var reported = ScanSource(
-        [
-            ("load.cs", loadImage),
-            ("loadfrom.cs", loadFrom),
-            ("context.cs", loadContext),
-            ("emit.cs", emit),
-            ("dynamic.cs", dynamicMethod),
-            ("spaced.cs", spacedOut),
-            ("json.cs", jsonAccess),
-            ("prose.cs", prose),
-            ("benign.cs", benignAssembly),
-            ("field.cs", threadOnly),
-        ])
-            .Select(static hit => hit.File)
-            .ToList();
-
-        await Assert.That(reported.Count).IsEqualTo(6)
-            .Because("six of the ten planted snippets are the capability. If the matcher reported "
-                   + "fewer the rule is vacuous; if it reported more it is flagging JSON keys and "
-                   + "prose, and the first person to hit that will delete the guard instead of "
-                   + "working around it. Reported: " + string.Join(", ", reported));
-
-        foreach (string expected in new[] { "context.cs", "dynamic.cs", "emit.cs", "load.cs", "loadfrom.cs", "spaced.cs" })
-        {
-            await Assert.That(reported.Contains(expected)).IsTrue()
-                .Because($"'{expected}' is one of the dynamic-code forms the convention names; missing it "
-                       + "means the matcher has a hole, and a hole in this guard is a hole in the rule");
-        }
-
-        foreach (string quiet in new[] { "benign.cs", "field.cs", "json.cs", "prose.cs" })
-        {
-            await Assert.That(reported.Contains(quiet)).IsFalse()
-                .Because($"'{quiet}' is not the capability — JSON property access, a doc comment, an "
-                       + "ordinary Assembly member and a FieldInfo read are four different things, and "
-                       + "banning them is the failure mode this matcher is tuned against");
-        }
+        await Assert.That(failures).IsEmpty()
+            .Because("six of the ten planted snippets are the capability and four are not — JSON "
+                   + "property access, a doc comment, an ordinary Assembly member and a FieldInfo "
+                   + "read. A matcher that reported fewer is vacuous; one that reported more flags "
+                   + "JSON keys and prose, and the first person to hit that deletes the guard. "
+                   + string.Join("; ", failures));
     }
 
     /// <summary>
@@ -410,31 +339,27 @@ public sealed class ReflectionConventionRule
     ///     unions to prove exhaustiveness, and every architecture test that
     ///     loads an assembly to inspect its references.
     ///     <para>
-    ///     The exclusion is load-bearing if, and only if, the excluded tree really
-    ///     does contain what the rule bans. So this test looks for a forbidden
-    ///     construct in <c>tests/</c> and REQUIRES one:
-    ///     <c>tests/Harbor.Architecture.Tests/GlobalUsings.cs</c> calls
-    ///     <c>Assembly.Load</c> in <c>ArchitectureTestHelpers.LoadHarborAssemblies</c>.
-    ///     If that ever stops being true the exclusion has become indistinguishable
-    ///     from an oversight and the doc comment above is lying.
+    ///         The exclusion is load-bearing if, and only if, the excluded tree really
+    ///         does contain what the rule bans. So this test looks for a forbidden
+    ///         construct in <c>tests/</c> and REQUIRES one:
+    ///         <c>tests/Harbor.Architecture.Tests/GlobalUsings.cs</c> calls
+    ///         <c>Assembly.Load</c> in <c>ArchitectureTestHelpers.LoadHarborAssemblies</c>.
+    ///         If that ever stops being true the exclusion has become indistinguishable
+    ///         from an oversight and the doc comment above is lying.
     ///     </para>
     /// </summary>
     [Test]
     public async Task NonVacuity_Discovery_Sees_The_Product_Tree_And_Excludes_Tests_On_Purpose()
     {
-        IReadOnlyList<string> product = SourceScan.EnumerateProductCsFiles();
-
-        await Assert.That(RepoPaths.RepoRoot).IsNotNull()
+        List<string> discovery = ScanRunner.CheckDiscovery(Rule);
+        await Assert.That(discovery).IsEmpty()
             .Because("without a repository root the scan finds no files and every rule in this file "
                    + "passes for the wrong reason. RepoPaths degrades to empty rather than throwing, so "
-                   + "this is the one assertion standing between a green run and a blind one.");
+                   + "this is the one assertion standing between a green run and a blind one. "
+                   + string.Join("; ", discovery));
 
-        await Assert.That(product.Count).IsGreaterThan(100)
-            .Because("the product trees are src/ and apps/ together; a count this low means discovery "
-                   + "is broken rather than the code being clean");
-
-        var scannedTests = product
-            .Where(static file => SourceScan.Relative(file).StartsWith("tests/", StringComparison.Ordinal))
+        var scannedTests = ScanRunner.ScopeFiles(Rule)
+            .Where(static file => file.StartsWith("tests/", StringComparison.Ordinal))
             .ToList();
 
         await Assert.That(scannedTests).IsEmpty()
@@ -454,9 +379,9 @@ public sealed class ReflectionConventionRule
                    + "or was renamed, update this file — do not let the exclusion quietly become "
                    + "unfalsifiable");
 
-        List<Hit> reflectiveHits = reflectiveSource is null
+        List<ScanHit> reflectiveHits = reflectiveSource is null
             ? []
-            : ScanSource([(KnownReflectiveTestFile, reflectiveSource)]);
+            : ScanRunner.Collect(Rule, [(KnownReflectiveTestFile, reflectiveSource)]);
 
         await Assert.That(reflectiveHits.Count).IsGreaterThan(0)
             .Because($"{KnownReflectiveTestFile} no longer contains a forbidden construct, so excluding "
