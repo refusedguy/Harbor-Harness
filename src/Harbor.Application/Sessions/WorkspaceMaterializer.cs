@@ -227,6 +227,34 @@ public static class WorkspaceMaterializer
     }
 
     /// <summary>
+    ///     Advance the manifest of <paramref name="runIdValue" /> to <paramref name="to" />.
+    ///     The move is validated by <see cref="RunChangeTransitions" /> first: an
+    ///     illegal step (including any step out of a terminal state) is a
+    ///     <c>Result.Failure</c> with the named reason and the manifest is left
+    ///     untouched. This is the single state-writer for later slices
+    ///     (freeze/checks/report/accept/reject) — they call it, they do not
+    ///     reinterpret states.
+    /// </summary>
+    public static Result<RunManifest> TryAdvanceState(string? runIdValue, RunState to)
+    {
+        Result<RunManifest> loaded = TryLoad(runIdValue);
+        if (loaded.IsFailure)
+            return loaded;
+        RunManifest manifest = loaded.Value;
+
+        Result<RunState> gate = RunChangeTransitions.TryTransition(manifest.State, to);
+        if (gate.IsFailure)
+            return gate.ConvertFailure<RunManifest>();
+
+        var advanced = manifest with { State = gate.Value };
+        string manifestPath = Path.Combine(RunDir(manifest.RunId), "manifest.json");
+        Result<string> written = WriteManifestAtomic(manifestPath, advanced, overwrite: true);
+        if (written.IsFailure)
+            return written.ConvertFailure<RunManifest>();
+        return Result.Success(advanced);
+    }
+
+    /// <summary>
     ///     Release the run: <c>git worktree remove --force</c> plus
     ///     <c>State=Released</c>. Idempotent — releasing an already-released
     ///     run is a no-op success, followed by <c>git worktree prune</c> so no
