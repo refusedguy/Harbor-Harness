@@ -27,7 +27,7 @@ namespace Harbor.Tui.CellForge.PtyTests;
 public sealed class WriteResultScenarioTests : CellForgePtyScenarioBase
 {
     [Test]
-    [Timeout(90_000)]
+    [Timeout(120_000)]
     public async Task WriteCall_CreatedCardStreams_AndFileLandsOnDisk()
     {
         // Target file does NOT exist yet: the first execution must
@@ -87,12 +87,19 @@ public sealed class WriteResultScenarioTests : CellForgePtyScenarioBase
 
         await Assert.That(approved).IsTrue().Because($"approval prompt never appeared:\n{ScreenText}");
 
-        // The approved call executed and the follow-up turn landed as text.
+        // The approved call executed and the follow-up turn landed as text,
+        // then the run went idle — only now is the timeline fully settled.
         _ = await WaitForScreenAsync(
             l => l.Any(x => x.Contains("probe-write-done-1057", StringComparison.Ordinal)),
-            TimeSpan.FromSeconds(15)).ConfigureAwait(false);
+            TimeSpan.FromSeconds(10)).ConfigureAwait(false);
         _ = await WaitForScreenAsync(
             l => l.Any(x => x.Contains("idle", StringComparison.Ordinal) || x.Contains("○ idle", StringComparison.Ordinal)),
+            TimeSpan.FromSeconds(15)).ConfigureAwait(false);
+
+        // The write card body paints on completion frames that can land after
+        // the text turn — poll for its row with patience, then snapshot.
+        _ = await WaitForScreenAsync(
+            l => l.Any(x => x.Contains("Created ", StringComparison.Ordinal)),
             TimeSpan.FromSeconds(10)).ConfigureAwait(false);
 
         // The write card settled on the timeline: tool header with the success

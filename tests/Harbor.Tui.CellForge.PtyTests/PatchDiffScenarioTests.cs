@@ -26,7 +26,7 @@ namespace Harbor.Tui.CellForge.PtyTests;
 public sealed class PatchDiffScenarioTests : CellForgePtyScenarioBase
 {
     [Test]
-    [Timeout(90_000)]
+    [Timeout(120_000)]
     public async Task PatchCall_PreviewStreams_AndFileChangesOnDisk()
     {
         // Probe file inside the isolated $HOME; markers are unique per issue.
@@ -85,12 +85,22 @@ public sealed class PatchDiffScenarioTests : CellForgePtyScenarioBase
 
         await Assert.That(approved).IsTrue().Because($"approval prompt never appeared:\n{ScreenText}");
 
-        // The approved call executed and the follow-up turn landed as text.
+        // The approved call executed and the follow-up turn landed as text,
+        // then the run went idle — only now is the timeline fully settled.
         _ = await WaitForScreenAsync(
             l => l.Any(x => x.Contains("probe-patch-done-1057", StringComparison.Ordinal)),
-            TimeSpan.FromSeconds(15)).ConfigureAwait(false);
+            TimeSpan.FromSeconds(10)).ConfigureAwait(false);
         _ = await WaitForScreenAsync(
             l => l.Any(x => x.Contains("idle", StringComparison.Ordinal) || x.Contains("○ idle", StringComparison.Ordinal)),
+            TimeSpan.FromSeconds(15)).ConfigureAwait(false);
+
+        // The patch card body paints on completion frames that can land after
+        // the text turn — poll for its rows with patience, then snapshot.
+        _ = await WaitForScreenAsync(
+            l => l.Any(x => x.Contains("Patched ", StringComparison.Ordinal)),
+            TimeSpan.FromSeconds(10)).ConfigureAwait(false);
+        _ = await WaitForScreenAsync(
+            l => l.Any(x => x.Contains("Patch preview:", StringComparison.Ordinal)),
             TimeSpan.FromSeconds(10)).ConfigureAwait(false);
 
         // The patch card settled on the timeline: tool header with the success
