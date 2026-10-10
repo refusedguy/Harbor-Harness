@@ -79,7 +79,10 @@ public sealed class PluginHost
             var compiled = await _compiler.CompileAsync(script, ct).ConfigureAwait(false);
             if (compiled.IsFailure)
             {
-                _logger.LogError("Plugin compilation failed for {Path}: {Error}", script.Path, compiled.Error);
+                // #1055 slice 1: a broken plugin warns (with its file name) and the
+                // run continues — per-plugin failure is never an error, because the
+                // overall load still succeeds under ContinueOnError.
+                _logger.LogWarning("Plugin compilation failed for {Path}: {Error}", script.Path, compiled.Error);
                 if (FailOrContinue(compiled.Error))
                     return compiled.ConvertFailure<IReadOnlyList<LoadedPlugin>>();
                 continue;
@@ -93,7 +96,7 @@ public sealed class PluginHost
 #pragma warning restore CFE0001
             if (instantiated.IsFailure)
             {
-                _logger.LogError("Plugin instantiation failed for {Path}: {Error}", script.Path, instantiated.Error);
+                _logger.LogWarning("Plugin instantiation failed for {Path}: {Error}", script.Path, instantiated.Error);
                 if (FailOrContinue(instantiated.Error))
                     return instantiated.ConvertFailure<IReadOnlyList<LoadedPlugin>>();
                 continue;
@@ -109,7 +112,7 @@ public sealed class PluginHost
                 var registerResult = _registrar.Register(plugin, host);
                 if (registerResult.IsFailure)
                 {
-                    _logger.LogError("Plugin registration failed for {DisplayName}: {Error}", plugin.DisplayName, registerResult.Error);
+                    _logger.LogWarning("Plugin registration failed for {DisplayName}: {Error}", plugin.DisplayName, registerResult.Error);
                     if (FailOrContinue(registerResult.Error))
                         return registerResult.ConvertFailure<IReadOnlyList<LoadedPlugin>>();
                     continue;

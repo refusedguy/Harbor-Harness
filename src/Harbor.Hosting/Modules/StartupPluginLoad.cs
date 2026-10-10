@@ -33,6 +33,18 @@ internal sealed class StartupPluginLoad
     public Task<IReadOnlyList<LoadedPlugin>> Completion => _completion;
 
     /// <summary>
+    ///     Absence handle (#1055, slice 1): no plugin scripts anywhere, so there
+    ///     is nothing to load. <see cref="Completion" /> is an already-completed
+    ///     empty list and <see cref="Attach" /> fires immediately with it.
+    /// </summary>
+    public static StartupPluginLoad Empty()
+    {
+        var sink = new StartupPluginLoad();
+        sink.Complete([]);
+        return sink;
+    }
+
+    /// <summary>
     ///     Start the background load over an already-composed pipeline.
     /// </summary>
     /// <param name="runtime">Composed plugin runtime (lazy compiler inside).</param>
