@@ -4,16 +4,19 @@ namespace Harbor.Tui.CellForge.PtyTests;
 
 /// <summary>
 ///     Issue #423 Track 1 — session switch during a running turn: <c>/new</c>
-///     while the agent runs is rejected with a marker (the rebind path aborts
-///     the in-flight agent first, so a mid-turn switch is refused by design —
-///     see <c>NewSessionCommand</c>); once idle, <c>/new</c> opens a fresh
-///     session whose timeline is cleared and keeps working.
+///     while the agent runs is rejected with a marker, and once idle <c>/new</c>
+///     opens a fresh session whose timeline is cleared and keeps working.
 ///
-///     PTY mechanics: typing <c>/</c> opens the slash palette overlay (it owns
-///     focus, so a bare Enter never reaches the composer) — the test closes it
-///     with Esc (footer: <c>esc close</c>, composer text kept) and only then
-///     submits, so the line dispatches through <c>ClassifySubmit</c>.
-///     Marker asserts only (streaming cadence is nondeterministic — celldiff §8).
+///     PTY mechanics: typing <c>/</c> on the empty composer opens the slash
+///     palette overlay (it owns focus, so keys never reach the composer while
+///     it is up). Committing the filtered <c>new</c> item with Enter runs it
+///     through ReplCommandCatalog's NewSessionCommand, whose busy guard
+///     appends the <c>Cannot create session while running</c> marker — the
+///     Esc+Enter composer-submit route must NOT be used here, it lands in
+///     PromptPipeline's busy branch instead (a different marker). The commit
+///     leaves the palette open, so the test closes it with Esc (footer:
+///     <c>esc close</c>) before asserting timeline markers. Marker asserts
+///     only (streaming cadence is nondeterministic — celldiff §8).
 /// </summary>
 [NotInParallel("pty")]
 public sealed class SessionSwitchMidTurnScenarioTests : CellForgePtyScenarioBase
@@ -38,17 +41,22 @@ public sealed class SessionSwitchMidTurnScenarioTests : CellForgePtyScenarioBase
             TimeSpan.FromSeconds(15)).ConfigureAwait(false);
 
         // /new mid-turn is refused — the in-flight turn keeps its session.
-        await SubmitSlashAsync("/new").ConfigureAwait(false);
+        await CommitSlashAsync("/new").ConfigureAwait(false);
+        Session.SendKey("\x1b"); // the commit leaves the palette open; close it
         _ = await WaitForScreenAsync(
             l => l.Any(x => x.Contains("Cannot create session while running", StringComparison.Ordinal)),
-            TimeSpan.FromSeconds(10)).ConfigureAwait(false);
+            TimeSpan.FromSeconds(15)).ConfigureAwait(false);
 
         _ = await WaitForScreenAsync(
             l => l.Any(x => x.Contains("idle", StringComparison.Ordinal) || x.Contains("○ idle", StringComparison.Ordinal)),
             TimeSpan.FromSeconds(30)).ConfigureAwait(false);
 
         // Idle /new opens a fresh session and clears the timeline.
-        await SubmitSlashAsync("/new").ConfigureAwait(false);
+        await CommitSlashAsync("/new").ConfigureAwait(false);
+        Session.SendKey("\x1b"); // same: close the palette left open by the commit
+        _ = await WaitForScreenAsync(
+            l => l.Any(x => x.Contains("Started fresh session", StringComparison.Ordinal)),
+            TimeSpan.FromSeconds(15)).ConfigureAwait(false);
         _ = await WaitForScreenAsync(
             l => !l.Any(x => x.Contains("ххх", StringComparison.Ordinal)),
             TimeSpan.FromSeconds(15)).ConfigureAwait(false);
@@ -69,20 +77,26 @@ public sealed class SessionSwitchMidTurnScenarioTests : CellForgePtyScenarioBase
         await Assert.That(settled.Any(x => x.Contains("ххх", StringComparison.Ordinal))).IsFalse().Because($"screen:\n{ScreenText}");
     }
 
-    /// <summary>Submit a slash line through the palette overlay: type (opens it),
-    /// Esc (closes it, composer text kept), Enter (dispatches via ClassifySubmit).
-    /// The palette has no "[slash]" caption — its stable open marker is the
-    /// footer hint <c>enter run · esc close</c> (see CommandPaletteView).</summary>
-    private async Task SubmitSlashAsync(string line)
+    /// <summary>Commit a slash line through the palette overlay: <c>/</c> opens
+    /// it, the rest filters it, Enter commits the top match. The palette has no
+    /// "[slash]" caption — its stable open marker is the footer hint
+    /// <c>enter run · esc close</c> (see CommandPaletteView), and the painted
+    /// query row (<c>&gt; new</c>) proves the filter applied, so the commit
+    /// deterministically resolves the <c>new</c> item (the only slash command
+    /// matching it). Sent in two phases with a render-sync between them: a
+    /// single burst could commit before the filter keystrokes are processed.
+    /// </summary>
+    private async Task CommitSlashAsync(string line)
     {
-        Session.SendKey(line);
+        Session.SendKey("/");
         _ = await WaitForScreenAsync(
             l => l.Any(x => x.Contains("enter run", StringComparison.Ordinal)),
-            TimeSpan.FromSeconds(10)).ConfigureAwait(false);
-        Session.SendKey("\x1b");
+            TimeSpan.FromSeconds(15)).ConfigureAwait(false);
+        Session.SendKey(line[1..]);
         _ = await WaitForScreenAsync(
-            l => !l.Any(x => x.Contains("enter run", StringComparison.Ordinal)),
-            TimeSpan.FromSeconds(10)).ConfigureAwait(false);
+            l => l.Any(x => x.Contains("enter run", StringComparison.Ordinal))
+                && l.Any(x => x.Contains("> new", StringComparison.Ordinal)),
+            TimeSpan.FromSeconds(15)).ConfigureAwait(false);
         Session.SendKey("\r");
     }
 }
