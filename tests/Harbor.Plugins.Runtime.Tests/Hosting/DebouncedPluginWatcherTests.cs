@@ -147,16 +147,22 @@ public sealed class DebouncedPluginWatcherTests : IDisposable
     ///     (issue #1046). Only a missing change would be wrong here, so
     ///     the kind assertion mirrors the top-level test (anything but Removed).
     /// </summary>
+    /// <remarks>
+    ///     The subdirectory pre-exists the watcher: on Linux a FileSystemWatcher
+    ///     does not pick up subdirectories created after watching starts, so
+    ///     creating it first tests the supported shape (pre-existing tree).
+    /// </remarks>
     [Test]
     public async Task Created_FileInSubdirectory_RaisesChange()
     {
+        string sub = Path.Combine(_dir, "nested");
+        Directory.CreateDirectory(sub);
+
         var received = new ConcurrentQueue<PluginSourceChangeEventArgs>();
         using var watcher = new DebouncedPluginWatcher(
             [_dir], Debounce, NullLogger<DebouncedPluginWatcher>.Instance);
         watcher.ChangesReady += (_, c) => received.Enqueue(c);
 
-        string sub = Path.Combine(_dir, "nested");
-        Directory.CreateDirectory(sub);
         string path = Path.Combine(sub, "nested-plugin.cs");
         File.WriteAllText(path, "// v1");
 
