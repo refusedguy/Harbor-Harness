@@ -97,4 +97,78 @@ public class AccessibilityTests
             throw new InvalidOperationException("WCAG math regression");
         }
     }
+
+    // ── Avalonia desktop theme tokens (#433) ─────────────────────────────
+    // Measured, not asserted: the foreground/background pairs
+    // docs/ACCESSIBILITY.md §2.3–2.4 claims for the Catppuccin Mocha (dark)
+    // and Latte (light) dictionaries in apps/Harbor.App.Avalonia/Themes/.
+    // Hex literals are pinned to the token values in {Dark,Light}.axaml so a
+    // palette edit that silently breaks readability fails CI. Pure math —
+    // no Avalonia runtime, no headless session.
+
+    private static RgbColor Hex(string h) => new(
+        Convert.ToByte(h.Substring(1, 2), 16),
+        Convert.ToByte(h.Substring(3, 2), 16),
+        Convert.ToByte(h.Substring(5, 2), 16));
+
+    [Test]
+    public async Task AvaloniaDark_BodyText_ClearsAA()
+    {
+        var @base = Hex("#1E1E2E"); // MochaBase
+        foreach (var (fg, name) in new[] { ("#CDD6F4", "MochaText"), ("#A6ADC8", "MochaSubtext0") })
+        {
+            double ratio = Accessibility.ContrastRatio(Hex(fg), @base);
+            await Assert.That(ratio).IsGreaterThanOrEqualTo(Accessibility.TextAaRatio)
+                .Because($"{name} on MochaBase = {ratio:F2}");
+        }
+    }
+
+    [Test]
+    public async Task AvaloniaDark_LargeTextAndUiTier_Clears3To1()
+    {
+        var @base = Hex("#1E1E2E"); // MochaBase
+        // MochaOverlay2 (secondary text) and Crust-on-Blue (text on accent).
+        foreach (var (fg, bg, name) in new[] { ("#9399B2", "#1E1E2E", "MochaOverlay2"), ("#11111B", "#89B4FA", "MochaCrust-on-MochaBlue") })
+        {
+            double ratio = Accessibility.ContrastRatio(Hex(fg), Hex(bg));
+            await Assert.That(ratio).IsGreaterThanOrEqualTo(Accessibility.LargeTextAaRatio)
+                .Because($"{name} = {ratio:F2}");
+        }
+    }
+
+    [Test]
+    public async Task AvaloniaLight_BodyText_ClearsAA()
+    {
+        var @base = Hex("#EFF1F5"); // LatteBase
+        double text = Accessibility.ContrastRatio(Hex("#4C4F69"), @base); // LatteText
+        await Assert.That(text).IsGreaterThanOrEqualTo(Accessibility.TextAaRatio)
+            .Because($"LatteText on LatteBase = {text:F2}");
+        double accentText = Accessibility.ContrastRatio(Hex("#FFFFFF"), Hex("#1E66F5")); // White on LatteBlue
+        await Assert.That(accentText).IsGreaterThanOrEqualTo(Accessibility.TextAaRatio)
+            .Because($"White on LatteBlue = {accentText:F2}");
+    }
+
+    /// <summary>
+    /// Subtext-tier documentation contract: LatteSubtext0 (4.37:1) and
+    /// MochaOverlay0 (3.36:1) clear the ≥3:1 large-text/UI-component tier but
+    /// are BELOW the 4.5:1 body-text tier — they must never be used for
+    /// normal-size body copy. The strict-less-than assertions prove the gate
+    /// discriminates: these pairs would fail if they were moved into a
+    /// body-text test above.
+    /// </summary>
+    [Test]
+    public async Task Avalonia_SubtextTier_DocumentationContract()
+    {
+        double latte = Accessibility.ContrastRatio(Hex("#6C6F85"), Hex("#EFF1F5"));
+        await Assert.That(latte).IsGreaterThanOrEqualTo(Accessibility.LargeTextAaRatio)
+            .Because($"LatteSubtext0 on LatteBase = {latte:F2}");
+        await Assert.That(latte < Accessibility.TextAaRatio).IsTrue()
+            .Because($"LatteSubtext0 on LatteBase = {latte:F2} is not body-text tier");
+
+        double mocha = Accessibility.ContrastRatio(Hex("#6C7086"), Hex("#1E1E2E"));
+        await Assert.That(mocha).IsGreaterThanOrEqualTo(Accessibility.UiComponentRatio)
+            .Because($"MochaOverlay0 on MochaBase = {mocha:F2}");
+        await Assert.That(mocha < Accessibility.TextAaRatio).IsTrue()
+            .Because($"MochaOverlay0 on MochaBase = {mocha:F2} is not body-text tier");
+    }
 }
