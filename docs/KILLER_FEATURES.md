@@ -1256,6 +1256,16 @@ Each entry: **Feature / Source path / Description / Why it matters / Implementat
 - **Effort:** L (24 hours)
 - **Priority:** P2
 - **Dependencies:** Embedded webview (SkiaSharp + WebView2?)
+- **Status:** Slice 1/2 landed (#400): pure `MarkupAnnotationModel`
+  (`src/Harbor.Ui.Framework.State/Markup/`, arrow/rectangle/text in
+  normalized coordinates with bounded undo/redo) with TUnit coverage,
+  session in `UiState` (`Chat.Markup`, transitions in `ChatAppReducer`),
+  cell-native `MarkupOverlay` on the existing `LayoutTree.Overlays` stack
+  (opens with `m` over the image viewer, keyboard- and mouse-driven
+  placement, `Esc` closes restoring scroll), and a BCL-only PNG bake
+  (`MarkupPngBaker`, no image NuGet) writing the annotated copy into the
+  workspace as a new `ImageBlock`. Sending the annotated image back to the
+  model is the next slice and is explicitly out of scope here.
 
 ---
 

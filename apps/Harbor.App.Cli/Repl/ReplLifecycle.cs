@@ -559,6 +559,9 @@ internal sealed class ReplLifecycle(CellForgeReplRunner host)
         // this frame's layout rather than a post-paint overlay, and so a resize
         // re-derives the row count from the new height.
         host.Screen.SyncTabStrip(host._replStore.State.Chat.TabStrip, rows);
+        // Markup overlay (issue #400): the store owns the session, the overlay
+        // only paints the snapshot — same TEA mirror as the tab strip above.
+        host.Screen.SyncMarkup(host._replStore.State.Chat.Markup);
         host.Screen.Tree.Solve(cols, rows);
 
         // CF-D-002: feed projected state from the view-model snapshot so

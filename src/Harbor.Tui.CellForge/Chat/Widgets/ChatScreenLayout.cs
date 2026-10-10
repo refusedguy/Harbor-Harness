@@ -794,11 +794,21 @@ public sealed record ChatScreen(
     /// </summary>
     public ImageViewerOverlay ImageViewer { get; } = new();
 
+    /// <summary>
+    /// Screenshot-markup overlay (KILLER_FEATURES §2.7 Feature 14, issue
+    /// #400 slice 1/2); seated on <see cref="LayoutTree.Overlays"/> by
+    /// <see cref="SyncOverlays"/>. The session lives in the store
+    /// (<c>Chat.Markup</c>); this object only paints the snapshot the host
+    /// pushes through <see cref="SyncMarkup"/> each frame.
+    /// </summary>
+    public MarkupOverlay Markup { get; } = new();
+
     private DialogOverlayLayer? _dialogLayer;
     private ToastOverlayLayer? _toastLayer;
     private DiffViewerOverlayLayer? _diffLayer;
     private SetupChecklistOverlayLayer? _setupLayer;
     private ImageViewerOverlayLayer? _imageLayer;
+    private MarkupOverlayLayer? _markupLayer;
 
     /// <summary>Ratio the tab-strip split was last driven to, so a frame that
     /// re-derives the SAME row count claims no damage it did not cause — the
@@ -825,11 +835,13 @@ public sealed record ChatScreen(
         _diffLayer ??= new DiffViewerOverlayLayer(DiffViewer);
         _setupLayer ??= new SetupChecklistOverlayLayer(SetupChecklist);
         _imageLayer ??= new ImageViewerOverlayLayer(ImageViewer);
+        _markupLayer ??= new MarkupOverlayLayer(Markup);
         _dialogLayer.Sync(viewport);
         _toastLayer.Sync(viewport);
         _diffLayer.Sync(viewport);
         _setupLayer.Sync(viewport);
         _imageLayer.Sync(viewport);
+        _markupLayer.Sync(viewport);
         if (_dialogLayer.Visible)
         {
             Tree.Overlays.Push(_dialogLayer);
@@ -865,6 +877,18 @@ public sealed record ChatScreen(
         else
         {
             Tree.Overlays.Remove(ImageViewerOverlayLayer.LayerId);
+        }
+
+        // Markup overlay (issue #400) sits above the image viewer: it opens
+        // from the viewer (which hides underneath) and carries the same
+        // fullscreen-takeover contract, still below the toasts.
+        if (_markupLayer.Visible)
+        {
+            Tree.Overlays.Push(_markupLayer);
+        }
+        else
+        {
+            Tree.Overlays.Remove(MarkupOverlayLayer.LayerId);
         }
 
         if (_toastLayer.Visible)
@@ -1031,6 +1055,14 @@ public sealed record ChatScreen(
         // — the LAYOUT moved — so this is the honest description.
         Timeline.Timeline.MarkViewportWide();
     }
+
+    /// <summary>
+    ///     Pushes the store's markup snapshot into the overlay (issue #400):
+    ///     the TEA mirror of <see cref="SyncTabStrip" />. The overlay paints
+    ///     only this snapshot and never edits it — every key and click becomes
+    ///     a store message the reducer folds.
+    /// </summary>
+    public void SyncMarkup(MarkupOverlayState snapshot) => Markup.Sync(snapshot);
 }
 
 /// <summary>

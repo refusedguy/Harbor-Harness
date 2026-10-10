@@ -400,7 +400,7 @@ public class InlineImageRenderTests
         string art = GridDump.Art(buffer);
         await Assert.That(art).Contains("shot.png");
         await Assert.That(art).Contains("zoom 100%");
-        await Assert.That(art).Contains("+/- zoom | esc close");
+        await Assert.That(art).Contains("+/- zoom | m markup | esc close");
         await Assert.That(art.Contains('┌')).IsTrue();
 
         await Assert.That(layer.Count).IsEqualTo(1);

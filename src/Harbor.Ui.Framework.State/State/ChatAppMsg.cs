@@ -193,4 +193,75 @@ public abstract record ChatAppMsg : AppMsg
     /// <param name="Snapshot">Persisted order + focus, as session-id strings.</param>
     /// <param name="Tabs">Descriptors for the sessions that still exist.</param>
     public sealed record HydrateTabStrip(TabStripSnapshot Snapshot, ImmutableArray<SessionTab> Tabs) : ChatAppMsg;
+
+    // ── screenshot-markup overlay (#400, slice 1/2 — state + transitions; the
+    // CellForge overlay paints this snapshot, the host owns open scroll
+    // restore, file I/O and the bake) ──
+
+    /// <summary>
+    ///     Open the markup overlay over an image row. Snapshots the feed scroll
+    ///     (<paramref name="ScrollOffset" />) so close restores it exactly.
+    /// </summary>
+    public sealed record OpenMarkup(
+        string SourcePath,
+        string SourceName,
+        int SourceWidth,
+        int SourceHeight,
+        int ScrollOffset) : ChatAppMsg;
+
+    /// <summary>Close the overlay, discarding the session. The host restores the snapshotted scroll.</summary>
+    public sealed record CloseMarkup : ChatAppMsg;
+
+    /// <summary>Switch the placement tool (arrow / rectangle / text).</summary>
+    public sealed record MarkupSelectTool(MarkupKind Tool) : ChatAppMsg;
+
+    /// <summary>Move the placement cursor by (<paramref name="Dx"/>, <paramref name="Dy"/>) in unit space.</summary>
+    public sealed record MarkupMoveCursor(double Dx, double Dy) : ChatAppMsg;
+
+    /// <summary>
+    ///     Place the active tool at the cursor (keyboard placement). Arrow and
+    ///     rectangle land with a default size; text needs
+    ///     <see cref="MarkupOverlayState.PendingText" /> and is a no-op while
+    ///     it is empty. Clears the error and, for text, the pending buffer.
+    /// </summary>
+    public sealed record MarkupPlace : ChatAppMsg;
+
+    /// <summary>Replace the pending text buffer (host accumulates keystrokes; the reducer clamps length).</summary>
+    public sealed record MarkupSetPendingText(string Text) : ChatAppMsg;
+
+    /// <summary>Move the selected annotation (undoable).</summary>
+    public sealed record MarkupNudge(double Dx, double Dy) : ChatAppMsg;
+
+    /// <summary>Resize the selected annotation (arrow head / rectangle corner; text is a no-op).</summary>
+    public sealed record MarkupResize(double Dx, double Dy) : ChatAppMsg;
+
+    /// <summary>Cycle the selection through the annotations in order.</summary>
+    public sealed record MarkupSelectNext : ChatAppMsg;
+
+    /// <summary>Click: select the topmost annotation under the point, or move the cursor there.</summary>
+    public sealed record MarkupSelectAt(double X, double Y) : ChatAppMsg;
+
+    /// <summary>Mouse press: hit → select + drag checkpoint; miss → start a placement draft.</summary>
+    public sealed record MarkupPressAt(double X, double Y) : ChatAppMsg;
+
+    /// <summary>Mouse drag: move the pressed annotation (transient) or stretch the draft.</summary>
+    public sealed record MarkupDragTo(double X, double Y) : ChatAppMsg;
+
+    /// <summary>Mouse release: commit the draft as a new primitive, or end the move.</summary>
+    public sealed record MarkupReleaseAt(double X, double Y) : ChatAppMsg;
+
+    /// <summary>Delete the selected annotation.</summary>
+    public sealed record MarkupDeleteSelected : ChatAppMsg;
+
+    /// <summary>Undo the last content operation.</summary>
+    public sealed record MarkupUndo : ChatAppMsg;
+
+    /// <summary>Redo the last undone operation.</summary>
+    public sealed record MarkupRedo : ChatAppMsg;
+
+    /// <summary>Record a successful bake: the annotated copy at <paramref name="Path" />.</summary>
+    public sealed record MarkupSaved(string Path) : ChatAppMsg;
+
+    /// <summary>Record a bake/save failure as inline display text (never an exception).</summary>
+    public sealed record MarkupFailed(string Error) : ChatAppMsg;
 }

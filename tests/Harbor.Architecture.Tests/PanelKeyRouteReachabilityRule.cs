@@ -14,13 +14,13 @@
 //   src/Harbor.Tui.CellForge/Chat/Panels/CellForgePanelAdapter.cs:63
 //       `return provider.OnKey(key, ctx);` — inside
 //       `CellForgePanelAdapter.RouteKey`, whose only caller in the whole tree is
-//       `ChatScreenLayout.cs:1481`.
+//       `ChatScreenLayout.cs:1513`.
 //   src/Harbor.Tui.CellForge/Chat/Panels/CellForgeJumpPaletteOverlayLayer.cs:170
 // check-doc-cites: record-drift src/Harbor.Tui.CellForge/Chat/Panels/CellForgeJumpPaletteOverlayLayer.cs:170 now="/// sees it." [#947: written over `return _panel.OnKey(`; repair deferred to the owner's symbol-rename decision] -->
 //       `return _panel.OnKey(` — inside that layer's own `OnKey`, and the layer
 //       is never constructed outside tests.
 //
-// And `ChatScreenLayout.RoutePanelKey` (`:1435`), the caller at `:1481`, has NO
+// And `ChatScreenLayout.RoutePanelKey` (`:1467`), the caller at `:1513`, has NO
 // caller either. So the chain is two links long and both ends are in the air.
 //
 // WHY THE USER-VISIBLE PART IS SMALLER THAN "7 BROKEN PANELS"
@@ -44,7 +44,7 @@
 //     capability the global keymap does not already have — plus
 //     `CellForgeJumpPalettePanel`, which is keyed AND unpainted, because
 //     `DefaultPlacement => Center` sends the dock home early
-//     (`ChatScreenLayout.cs:1284-1290`) and the `IOverlayLayer` meant to paint it
+//     (`ChatScreenLayout.cs:1316-1322`) and the `IOverlayLayer` meant to paint it
 //     is constructed by nothing but a test.
 //
 // So the honest count is "three panels with unreachable input, one hotkey that
@@ -60,7 +60,7 @@
 //     in the chain above is skipped by construction;
 //   * it dispatches `AppMsg.FocusPanel("logs")` by hand first, because
 //     `RoutePanelKey` returns early unless the panel is `Focused`
-//     (`ChatScreenLayout.cs:1453-1456`) and the product's F12 path only ever
+//     (`ChatScreenLayout.cs:1485-1488`) and the product's F12 path only ever
 //     reaches `Visible` — `AppReducer.TogglePanel` (`:172-187`) toggles
 //     Hidden↔Visible and never sets `FocusedPanelId`. NO product host dispatches
 //     `AppMsg.FocusPanel` with a non-null id; the one non-test dispatch is

@@ -24,7 +24,7 @@
 //     `new PanelServices { Diagnostics = … }` and asserts on rendered rows;
 //     CellForgeSubagentsPanelTests.cs builds
 //     `new PanelServices { SessionStore = store, Sessions = manager, Store = uiStore }`.
-//   * The cited `ChatScreenLayout.cs:928,1003,1033,1116,1169` "5 more methods the
+//   * The cited `ChatScreenLayout.cs:952,1027,1057,1148,1201` "5 more methods the
 //     provider is threaded through" are comments and layout arithmetic. The file
 //     has drifted since the audit; there is no provider there.
 //

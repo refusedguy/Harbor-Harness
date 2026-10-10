@@ -615,6 +615,14 @@ public sealed class ChatScreenBridge : IDisposable
     /// (kitty APC / OSC 1337 per terminal capability); false when drained.</summary>
     public bool TryTakePendingImage(out InlineImage image) => _cards.TryTakePendingImage(out image);
 
+    /// <summary>
+    ///     Host-driven image card into the timeline (issue #400: the annotated
+    ///     copy the markup overlay baked). Same card the attachment path
+    ///     appends, so the saved PNG renders with its real dimensions.
+    /// </summary>
+    public void AppendImageCard(string path, string mime, long sizeBytes, byte[]? data) =>
+        _cards.AppendImageCard(path, mime, sizeBytes, data);
+
     /// <summary>Typed-ish diff extraction (widgets §5): tools that attach a
     /// unified diff in Metadata win; otherwise a raw diff-shaped Output is
     /// used verbatim. No heuristics beyond shape checks.</summary>

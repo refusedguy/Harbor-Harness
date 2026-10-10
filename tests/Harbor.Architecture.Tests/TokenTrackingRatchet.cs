@@ -51,9 +51,9 @@
 // A DOCUMENTED GAP: THE REPL STATUS POLLERS
 // -----------------------------------------
 // ReplLifecycle really is a GetStats consumer — `host.Tokens?.GetStats()` at
-// ReplLifecycle.cs:579 — and it is deliberately NOT a row in the table below.
+// ReplLifecycle.cs:582 — and it is deliberately NOT a row in the table below.
 // The only place its text names the aggregate is a `//` comment at
-// ReplLifecycle.cs:587, so the name-based holder scan strips it and it never
+// ReplLifecycle.cs:590, so the name-based holder scan strips it and it never
 // enters the measurement. Its twin PromptPipeline is a row because it takes an
 // `ITokenTracker?` parameter directly.
 //
@@ -119,7 +119,7 @@
 // stripped first (SourceCommentStripper) so that the XML docs which NAME the
 // aggregate to explain it are not graded as holders of it. Three files mention
 // it in prose only and are therefore NOT rows: ContextUsage.cs:16,
-// StatusViewModel.cs:114, and ReplLifecycle.cs:587 — the last of which is a
+// StatusViewModel.cs:114, and ReplLifecycle.cs:590 — the last of which is a
 // real consumer reached through the host and is discussed under the gap above.
 //
 //   * Holders: files whose comment-stripped text names the type.
