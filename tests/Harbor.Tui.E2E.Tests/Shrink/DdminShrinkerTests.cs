@@ -353,7 +353,7 @@ public class DdminShrinkerTests
         await Assert.That(offenders).IsEmpty()
             .Because("exhaustion returns the best-known failing case; the run itself has no failure verdict");
 
-        await Assert.That("result = \"" + banned + "\";".Contains(banned, StringComparison.OrdinalIgnoreCase))
+        await Assert.That(("result = \"" + banned + "\";").Contains(banned, StringComparison.OrdinalIgnoreCase))
             .IsTrue().Because("the rule must still match the verdict it was written against");
         await Assert.That("shrinking did not start".Contains(banned, StringComparison.OrdinalIgnoreCase))
             .IsFalse().Because("the refusal phrasing is not the banned verdict");
