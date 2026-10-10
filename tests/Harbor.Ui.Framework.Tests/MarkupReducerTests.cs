@@ -13,7 +13,7 @@ public class MarkupReducerTests
 {
     private static UiState Open() =>
         ChatAppReducer.Update(new UiState(), new ChatAppMsg.OpenMarkup(
-            "/shots/broken.png", "broken.png", 800, 600, scrollOffset: 12)).State;
+            "/shots/broken.png", "broken.png", 800, 600, ScrollOffset: 12)).State;
 
     [Test]
     public async Task Open_SnapshotsScroll_AndStartsEmpty()
