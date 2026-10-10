@@ -640,6 +640,27 @@ only. Before the fix a 24-segment row packed down to its 2-segment fixed pair is
 it now issues 24, and the assertion holds on any machine. This is the #465 lesson applied: a
 wall-clock assertion only fails on a machine slow enough to notice.
 
+### 5.7 Run-budget check (`RunBudgetBenchmark`, #404) ⏳ not yet measured
+
+`CheckCap` is the per-turn/per-delta budget gate: three threshold compares (tokens / tariff /
+output bytes) behind one null-branch when the agent sets no caps. Run by the CI `benchmark`
+job pattern (`--filter '*RunBudget*'`); locally:
+
+```bash
+dotnet run -c Release --project tests/Harbor.Benchmarks -- --filter '*RunBudget*'
+```
+
+| Benchmark | Mean | Allocated |
+|---|---|---|
+| `CheckCap (caps set, no trip)` ⏳ not yet measured | — | — |
+| `RecordOutputBytes + CheckCap (streaming delta path)` ⏳ not yet measured | — | — |
+
+> **Numbers pending.** The rows above are filled from the first run of `RunBudgetBenchmark`
+> on the CI `benchmark` job (which runs on pushes to `dev`); until then no figure here may be
+> quoted. The load-bearing claim is structural, not measured: with no caps the loop pays a
+> single null-branch per turn, and with caps the check is integer/decimal compares — never a
+> dictionary lookup per message. That justification is argued in the #404 PR description.
+
 ### Per-stage counters — what the instrumentation costs (#409, #46 slice 2)
 
 **There is no per-stage *time* breakdown of the TextDelta → visible-frame pipeline in this file,

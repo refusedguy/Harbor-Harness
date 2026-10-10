@@ -2,6 +2,7 @@
 
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
+    <!-- Non-packable: intermediate module, ships to NuGet via the Harbor.Ui.Framework meta-package. (#429) -->
     <IsPackable>false</IsPackable>
     <PackageId>Harbor.Ui.Framework.Services</PackageId>
     <Description>Harbor UI Framework — platform services (dispatcher, dialogs, theme, toast, file picker, overlays).</Description>

@@ -59,6 +59,30 @@ public class RunLimitPrintTests
     }
 
     [Test]
+    public async Task AgentEnd_WithBudgetLimits_PrintKindSpecificLines()
+    {
+        // #404: a spend-capped run must not read as a step-capped one — the
+        // transcript names the ceiling so the user tunes the right knob.
+        (RunLimitKind Kind, string Word)[] cases =
+        [
+            (RunLimitKind.MaxTokens, "token"),
+            (RunLimitKind.MaxCost, "spend"),
+            (RunLimitKind.MaxOutputBytes, "output-size"),
+        ];
+        foreach ((RunLimitKind kind, string word) in cases)
+        {
+            var ended = ChatAppReducer.Update(
+                new UiState(), new ChatAppMsg.Agent(new AgentEndEvent([], Limit: kind))).State;
+
+            await Assert.That(ended.Chat.SessionStatus).IsEqualTo(SessionStatus.Done);
+            await Assert.That(ended.Chat.Lines.Length).IsEqualTo(1);
+            await Assert.That(ended.Chat.Lines[0].Role).IsEqualTo(ChatRole.System);
+            await Assert.That(ended.Chat.Lines[0].Text).Contains(word);
+            await Assert.That(ended.Chat.Lines[0].Text.Contains("step budget")).IsFalse();
+        }
+    }
+
+    [Test]
     public async Task AgentEnd_WithoutLimit_PrintsNoLine()
     {
         // NON-VACUITY. A run that did its work must leave the transcript

@@ -42,8 +42,9 @@ public enum RunStopReason
     Stopped,
 
     /// <summary>
-    ///     The run was ended by a limit the user set — the step budget or the
-    ///     wall-clock budget (<see cref="RunLimitKind" />). Not a failure and not a
+    ///     The run was ended by a limit the user set — a bound from
+    ///     <see cref="RunLimitKind" /> (step, wall-clock, token, spend or
+    ///     output-size). Not a failure and not a
     ///     cancellation: nothing malfunctioned, and nobody pressed stop. The work
     ///     is INCOMPLETE, which is what distinguishes this from
     ///     <see cref="Succeeded" /> and why it cannot be folded into
@@ -53,7 +54,7 @@ public enum RunStopReason
 }
 
 /// <summary>
-///     Which limit ended a run (epic #41, slice B2.2).
+///     Which limit ended a run (epic #41, slice B2.2; budget members B2.3).
 /// </summary>
 /// <remarks>
 ///     <para>
@@ -81,6 +82,15 @@ public enum RunLimitKind
 
     /// <summary>The step budget (<c>AgentDefinition.MaxSteps</c>) was consumed.</summary>
     MaxSteps,
+
+    /// <summary>The token budget (<c>RunBudgetCaps.MaxTokens</c>) was consumed (#404).</summary>
+    MaxTokens,
+
+    /// <summary>The spend budget (<c>RunBudgetCaps.MaxCostUsd</c>) was consumed (#404).</summary>
+    MaxCost,
+
+    /// <summary>The output-size budget (<c>RunBudgetCaps.MaxOutputBytes</c>) was consumed (#404).</summary>
+    MaxOutputBytes,
 }
 
 /// <summary>

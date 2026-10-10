@@ -2,6 +2,7 @@
 
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
+    <!-- Non-packable: intermediate module, ships to NuGet via the Harbor.Ui.Framework meta-package. (#429) -->
     <IsPackable>false</IsPackable>
     <PackageId>Harbor.Ui.Framework.State</PackageId>
     <Description>Harbor UI Framework — TEA state machine + panel system (UiStore, UiState, UiReducer, UiMsg, TuiEffect).</Description>

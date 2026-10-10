@@ -23,9 +23,18 @@ namespace Harbor.Plugins.Registration;
 ///             wins, the abandoned execution is left to die on its own (a synchronous
 ///             loop cannot be thread-aborted in .NET) and the agent loop receives an
 ///             error result immediately.</item>
-///             <item><b>Memory guard</b> — a process-wide allocated-bytes delta is sampled
-///             around the call; over the budget, the result is converted to an error and
-///             a <c>memory</c> block event is published.</item>
+///             <item><b>Memory guard</b> — the returned result's own payload size
+///             (output text as UTF-16 plus attachment bytes) is measured against
+///             the budget; over the budget, the result is converted to an error and
+///             a <c>memory</c> block event is published. Deliberately NOT a GC
+///             allocation delta: <c>GC.GetTotalAllocatedBytes</c> counts the whole
+///             process, so an unrelated burst on another thread inside the await
+///             window (a parallel agent turn, a background compile — issue #1050)
+///             was attributed to the tool call and produced false
+///             <c>[sandbox:memory]</c> blocks. Per-thread accounting
+///             (<c>GC.GetAllocatedBytesForCurrentThread</c>) is not a fix either:
+///             an await continuation may resume on a different pool thread, making
+///             a before/after delta across the await meaningless.</item>
 ///             <item><b>Audit + events</b> — every block publishes
 ///             <see cref="PluginBlockedEvent" /> and appends an audit line, so the agent
 ///             loop sees <see cref="ToolResult.IsError" /> and the operator sees why.</item>
@@ -37,7 +46,7 @@ public sealed class SandboxedPluginTool : ITool
     /// <summary>Default wall-clock budget per plugin tool execution.</summary>
     public static readonly TimeSpan DefaultTimeout = TimeSpan.FromSeconds(30);
 
-    /// <summary>Default per-call allocation budget (10 MB).</summary>
+    /// <summary>Default per-call result-payload budget (10 MB).</summary>
     public const long DefaultMemoryBudgetBytes = 10 * 1024 * 1024;
 
     private readonly ITool _inner;
@@ -57,7 +66,7 @@ public sealed class SandboxedPluginTool : ITool
     /// <param name="eventBus">Host event bus — <see cref="PluginBlockedEvent" /> target.</param>
     /// <param name="logger">Diagnostics logger.</param>
     /// <param name="timeout">Execution budget; defaults to 30s.</param>
-    /// <param name="memoryBudgetBytes">Allocation budget per call; defaults to 10 MB.</param>
+    /// <param name="memoryBudgetBytes">Result-payload budget per call; defaults to 10 MB.</param>
     /// <param name="capabilities">
     ///     Capabilities granted to the owning plugin (audited per call). Empty set when
     ///     unknown — nothing is audited as granted, blocks still are.
@@ -119,7 +128,6 @@ public sealed class SandboxedPluginTool : ITool
         ToolContext context,
         CancellationToken cancellationToken = default)
     {
-        long allocatedBefore = GC.GetTotalAllocatedBytes(precise: true);
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         cts.CancelAfter(_timeout);
 
@@ -152,13 +160,12 @@ public sealed class SandboxedPluginTool : ITool
         // An OperationCanceledException from the agent-loop token is NOT caught here:
         // the filter above fails and it propagates untouched to the caller.
 
-        long allocatedAfter = GC.GetTotalAllocatedBytes(precise: true);
-        long delta = allocatedAfter - allocatedBefore;
-        if (delta > _memoryBudgetBytes)
+        long payloadBytes = EstimatePayloadBytes(result);
+        if (payloadBytes > _memoryBudgetBytes)
         {
             return await BlockAsync(
                 "memory",
-                $"Plugin tool '{_inner.Name}' exceeded its allocation budget: {delta / 1024.0 / 1024.0:F1} MB > {_memoryBudgetBytes / 1024.0 / 1024.0:0} MB.",
+                $"Plugin tool '{_inner.Name}' exceeded its result-payload budget: {payloadBytes / 1024.0 / 1024.0:F1} MB > {_memoryBudgetBytes / 1024.0 / 1024.0:0} MB.",
                 args,
                 cancellationToken).ConfigureAwait(false);
         }
@@ -168,6 +175,24 @@ public sealed class SandboxedPluginTool : ITool
 
         await AuditCallAsync(args, "allow", detail: null, cancellationToken).ConfigureAwait(false);
         return result;
+    }
+
+    /// <summary>
+    ///     The call's own result-payload size in bytes: output text as UTF-16 plus
+    ///     attachment bytes. Attributable by construction — no shared process
+    ///     counter, no await window, no other thread can inflate it.
+    /// </summary>
+    private static long EstimatePayloadBytes(ToolResult result)
+    {
+        long bytes = (long)(result.Output?.Length ?? 0) * sizeof(char);
+        var attachments = result.Attachments;
+        if (attachments is not null)
+        {
+            foreach (var attachment in attachments)
+                bytes += attachment.Data?.LongLength ?? 0;
+        }
+
+        return bytes;
     }
 
     /// <summary>

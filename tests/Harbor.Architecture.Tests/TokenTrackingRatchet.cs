@@ -299,8 +299,11 @@ public sealed class TokenTrackingRatchet
             ["RecordAppendedMessage"],
             "records the steer message that was appended to the history", false),
         new("src/Harbor.Application/Agents/TurnRunner.cs",
-            ["EstimateTokens", "RecordAppendedMessage", "RecordTurnUsage"],
-            "records what the turn spent and what it appended, and sizes the turn for a metric",
+            ["EstimateMessage", "EstimateTokens", "RecordAppendedMessage", "RecordTurnUsage"],
+            "records what the turn spent and what it appended, sizes the turn for a metric, "
+            + "and — #404 — sizes the just-streamed message for the run-budget ledger when the "
+            + "provider reported no usage. Same counting role the row already needed "
+            + "(ITokenEstimator in TargetSlices already lists this file), not a new one",
             false),
         new("src/Harbor.Application/Sessions/CompactionPolicy.cs", ["EstimateMessage"],
             "sizes the kept tail of a truncation: the cut walks the history backwards "
