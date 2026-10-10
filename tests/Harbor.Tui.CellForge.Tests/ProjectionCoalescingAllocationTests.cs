@@ -271,7 +271,11 @@ public class ProjectionCoalescingAllocationTests
                         _ = buffer.InsertText(text);
                 }
 
-                _ = SideBarView.ProjectFromStore(state); // 200-scan + fresh array
+                _ = SideBarView.ProjectFromStore(state);
+                // The 200-element copy the pre-#466 body did inline: production
+                // no longer copies (the immutable array is handed over), so the
+                // replica owns the copy to keep measuring the old shape.
+                _ = state.Chat.Sessions.ToArray();
             }
 
             // The pre-#466 UiStore.Notify fan-out, verbatim — a LINQ Cast over
@@ -599,9 +603,9 @@ public class SideBarProjectionCacheTests
         var uncached = SideBarView.ProjectFromStore(state);
         var cached = SideBarView.Project(state, new SideBarProjectionCache());
 
-        // Field-wise, not record equality: Sessions is an array, so record
-        // equality would compare it by reference and the two arms necessarily
-        // hold different (equal-content) copies.
+        // Field-wise, not record equality: Sessions is a boxed immutable
+        // array, so record equality would compare the boxes by reference and
+        // the two arms hold different boxes over the same content.
         await Assert.That(cached.SessionTitle).IsEqualTo(uncached.SessionTitle);
         await Assert.That(cached.SessionId).IsEqualTo(uncached.SessionId);
         await Assert.That(cached.Model).IsEqualTo(uncached.Model);

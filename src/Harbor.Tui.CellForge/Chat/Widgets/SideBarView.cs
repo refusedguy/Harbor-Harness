@@ -579,7 +579,12 @@ public static class SideBarView
             }
         }
 
-        var sessions = state.Chat.Sessions.Length == 0 ? null : state.Chat.Sessions.ToArray();
+        // No ToArray: ImmutableArray<SessionInfo> is already immutable (never
+        // mutated in place — the projection cache relies on that too) and it
+        // implements IReadOnlyList<SessionInfo>, so handing it over boxes one
+        // struct instead of copying N elements on every cache miss.
+        IReadOnlyList<SessionInfo>? sessions =
+            state.Chat.Sessions.Length == 0 ? null : state.Chat.Sessions;
         var projected = new SideBarState(
             SessionTitle: active?.Title,
             SessionId: active?.SessionId?.Value,
