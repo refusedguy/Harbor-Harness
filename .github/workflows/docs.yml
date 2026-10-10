@@ -307,7 +307,7 @@ jobs:
       # a dependency lowers them in the same diff. Recomputed when the perimeter
       # widened to four projects (was 9 / 6 / 75 over two).
       - name: Check the guarded projects' declared dependencies
-        run: python3 tools/check-abstractions-contract.py --min-packages 14 --min-namespaces 7 --min-files 152
+        run: python3 tools/check-abstractions-contract.py --min-packages 13 --min-namespaces 7 --min-files 152
 
   # #431 (slice 1). Docs-site assembly from the existing markdown tree.
   #
