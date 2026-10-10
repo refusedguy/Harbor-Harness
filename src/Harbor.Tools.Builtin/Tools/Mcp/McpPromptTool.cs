@@ -1,6 +1,6 @@
+using Harbor.Abstractions.Extensions;
 using Harbor.Tools.Mcp;
 using Microsoft.Extensions.Logging;
-using System.Text;
 using Result = CSharpFunctionalExtensions.Result;
 
 namespace Harbor.Tools.Builtin;
@@ -157,7 +157,10 @@ public sealed class McpPromptTool : ITool
                 || messages.GetArrayLength() == 0)
                 return Result.Failure<string>($"MCP server returned no messages for prompt '{name}'.");
 
-            var sb = new StringBuilder();
+            // §PERF-006: per-call concat buffer rented. Synchronous, no
+            // callback can touch it; early returns dispose via `using`.
+            using var sb = StringBuilderPool.Rent(512);
+            var b = sb.Builder;
             int skipped = 0;
             foreach (var message in messages.EnumerateArray())
             {
@@ -182,16 +185,16 @@ public sealed class McpPromptTool : ITool
                     continue;
                 }
 
-                if (sb.Length > 0)
-                    sb.Append("\n\n");
-                sb.Append('[').Append(role).Append("]\n").Append(text);
+                if (b.Length > 0)
+                    b.Append("\n\n");
+                b.Append('[').Append(role).Append("]\n").Append(text);
             }
 
-            if (sb.Length == 0)
+            if (b.Length == 0)
                 return Result.Failure<string>($"MCP server returned no text messages for prompt '{name}'.");
             if (skipped > 0)
-                sb.Append($"\n\n({skipped} non-text message part(s) omitted.)");
-            return Result.Success(sb.ToString());
+                b.Append($"\n\n({skipped} non-text message part(s) omitted.)");
+            return Result.Success(b.ToString());
         }
         catch (JsonException ex)
         {
