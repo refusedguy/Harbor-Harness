@@ -141,7 +141,6 @@
 //     family namespace are deliberately untouched — see the header.
 
 using System.Text.RegularExpressions;
-using System.Xml.Linq;
 
 namespace Harbor.Architecture.Tests;
 
@@ -819,27 +818,9 @@ public class AbstractionsNamespaceOwnershipRules
 
     /// <summary>
     ///     The <c>&lt;AssemblyName&gt;</c> a csproj declares, defaulting to its
-    ///     directory name — the same convention the SDK and
-    ///     <see cref="RepoPaths" /> use.
+    ///     directory name — <see cref="RepoPaths" />'s reader, shared so the two
+    ///     cannot drift on the default.
     /// </summary>
-    private static string ReadAssemblyName(string csprojPath, string projectDir)
-    {
-        try
-        {
-            XDocument document = XDocument.Load(csprojPath, LoadOptions.None);
-            foreach (XElement element in document.Descendants())
-            {
-                if (element.Name.LocalName == "AssemblyName" && element.Value.Length > 0)
-                {
-                    return element.Value.Trim();
-                }
-            }
-        }
-        catch (Exception ex) when (ex is IOException or System.Xml.XmlException)
-        {
-            // Fall through to the directory-name default.
-        }
-
-        return projectDir;
-    }
+    private static string ReadAssemblyName(string csprojPath, string projectDir) =>
+        RepoPaths.ReadAssemblyName(csprojPath, projectDir);
 }
