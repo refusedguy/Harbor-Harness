@@ -106,6 +106,9 @@
 //     NonProductMembers  Live (1): Harbor.Architecture.Tests
 //     BlindProjects      Live (5 trees): apps=2 | contrib=14 | samples=5
 //                                      | tests=31 | tools=1        (53 total)
+//     #1055s3: +1 (tests=32, 54 total) — the new Harbor.Plugins.Host.Tests
+//     declares ProjectReferences into src/. The red-run record above stands;
+//     this delta is derived from the diff.
 //
 // Both baselines above are transcribed verbatim from that log rather than
 // recomputed. The three non-vacuity assertions and the positive control passed
@@ -364,7 +367,7 @@ public sealed class ScanUniverseRule
     ///     referrers of the assembly it was grading.
     /// </remarks>
     private static readonly string[] MeasuredBlindTrees =
-        ["apps=2", "contrib=14", "samples=5", "tests=31", "tools=1"];
+        ["apps=2", "contrib=14", "samples=5", "tests=32", "tools=1"];
 
     /// <summary>What the two walks found, once.</summary>
     private sealed record UniverseReport(

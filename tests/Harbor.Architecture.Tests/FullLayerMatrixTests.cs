@@ -579,10 +579,11 @@ public class FullLayerMatrixTests
             // were permitted but never bound — the composition root composes the
             // plugin family through Plugins.Hosting/Abstractions and the session
             // slice through Hosting's own modules. Dead permission, removed.
-            "Harbor.Plugins.Storage",
-            "Harbor.Plugins.Compilation", "Harbor.Plugins.Instantiation",
-            "Harbor.Plugins.Registration", "Harbor.Plugins.Hosting",
-            // Trust gate (IPluginSource/PluginScript contract) composed in RegistriesModule:
+            // #1055s3: Storage/Compilation/Instantiation/Registration were the
+            // in-process compile pipeline; the composition root binds none of
+            // them any more, so only the Hosting edge below stays.
+            "Harbor.Plugins.Hosting",
+            // LoadedPlugin handle (StartupPluginLoad/PluginReloadService):
             "Harbor.Plugins.Abstractions",
             // contrib/tui renderer references live outside src/: // renderer-unification Phase 3: nickprotop/ConsoleEx wrapper,
             // wired behind HarborWithNickConsoleEx (mutually exclusive with
