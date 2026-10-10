@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Models;
 using Harbor.Application.Sessions;
 
