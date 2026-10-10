@@ -95,24 +95,11 @@ public class VendoredHtmlSurfaceRules
         new(@"SharpConsoleUI\.Html", RegexOptions.Compiled),
     ];
 
-    /// <summary>
-    ///     Strips whole-line <c>//</c> comments and XML doc comments so a file that
-    ///     explains this rule — including the guard's own header and ADR-012's
-    ///     quotations — is not itself a violation.
-    /// </summary>
-    private static string StripComments(string source) =>
-        string.Join('\n', source.Split('\n')
-            .Select(line =>
-            {
-                int idx = line.IndexOf("//", StringComparison.Ordinal);
-                return idx < 0 ? line : line[..idx];
-            }));
-
     /// <summary>Repo-relative <c>path:line</c> of every forbidden shape in a file.</summary>
     private static List<string> DetectIn(string relativePath, string source)
     {
         var hits = new List<string>();
-        string[] lines = StripComments(source).Split('\n');
+        string[] lines = SourceScan.StripComments(source).Split('\n');
         for (int i = 0; i < lines.Length; i++)
         {
             // One report per line: a file that does `using SharpConsoleUI.Html;`

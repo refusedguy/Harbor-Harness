@@ -326,7 +326,11 @@ internal static class RepoPaths
         ];
     }
 
-    private static string ReadAssemblyName(string csprojPath, string projectDir)
+    /// <summary>
+    ///     The <c>&lt;AssemblyName&gt;</c> a csproj declares, defaulting to
+    ///     <paramref name="projectDir" />.
+    /// </summary>
+    internal static string ReadAssemblyName(string csprojPath, string projectDir)
     {
         try
         {

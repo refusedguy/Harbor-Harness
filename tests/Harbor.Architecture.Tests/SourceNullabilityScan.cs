@@ -3,9 +3,10 @@
 // `null!` compiles away: by the time an assembly is loaded there is nothing
 // left to inspect, so the only way to see the null-forgiving operator is the
 // source text. Two gates need that scan (the TEA state layer and the
-// composition root), so the regexes and the comment stripper live here once
-// instead of twice — a gate that copied the scanner would be free to drift
-// from the rule it claims to enforce.
+// composition root), so the matcher regex lives here once instead of twice —
+// a gate that copied the scanner would be free to drift from the rule it
+// claims to enforce. The comment stripper both gates need is
+// SourceScan.StripComments, shared for the same non-drift reason.
 //
 // WHAT IS ALLOWED, and why.
 //
@@ -47,12 +48,6 @@ internal static class SourceNullabilityScan
     ///     of the regex is exactly the drift this file exists to prevent.
     /// </remarks>
     internal static readonly Regex NullForgivingOnNull = new(@"(?<!\w)null!(?!\w)", RegexOptions.Compiled);
-
-    /// <summary>Matches one or more consecutive single-line comments.</summary>
-    private static readonly Regex LineComment = new(@"//[^\n]*", RegexOptions.Compiled);
-
-    /// <summary>Matches a C-style block comment, including the newlines it spans.</summary>
-    private static readonly Regex BlockComment = new(@"/\*.*?\*/", RegexOptions.Singleline | RegexOptions.Compiled);
 
     /// <summary>
     ///     Every <c>.cs</c> file under <c>src/</c> in a directory matching
@@ -112,7 +107,7 @@ internal static class SourceNullabilityScan
             }
 
             // Split after stripping, so a line number here indexes the real source.
-            string[] lines = StripComments(source).Split('\n');
+            string[] lines = SourceScan.StripComments(source).Split('\n');
             for (int i = 0; i < lines.Length; i++)
             {
                 if (NullForgivingOnNull.IsMatch(lines[i]))
@@ -125,32 +120,4 @@ internal static class SourceNullabilityScan
 
         return violations;
     }
-
-    /// <summary>
-    ///     Blanks out one block-comment match, preserving every newline so line numbers
-    ///     computed downstream still point at the right source line.
-    /// </summary>
-    private static string BlankOutComment(Match match)
-    {
-        var blank = new char[match.Length];
-        for (int i = 0; i < match.Length; i++)
-        {
-            blank[i] = match.Value[i] == '\n' ? '\n' : ' ';
-        }
-
-        return new string(blank);
-    }
-
-    /// <summary>
-    ///     Strips comments so documentation about the rule cannot trip it.
-    ///     <see cref="LineComment" /> runs last because it cannot span a line.
-    /// </summary>
-    /// <remarks>
-    ///     <c>internal</c> for the same reason as <see cref="NullForgivingOnNull" />:
-    ///     <c>AgentStateContractRules</c> (#559) blanks comments with the SAME
-    ///     stripper before matching, because a contributor documenting why a field
-    ///     is no longer null-forgiving must not fail a gate.
-    /// </remarks>
-    internal static string StripComments(string source) =>
-        LineComment.Replace(BlockComment.Replace(source, BlankOutComment), " ");
 }
