@@ -351,6 +351,7 @@ jobs:
               Harbor.Transport.Remote.Tests
               Harbor.Plugins.Abstractions.Tests
               Harbor.Plugins.Runtime.Tests
+              Harbor.Plugins.Host.Tests
               Harbor.Ipc.Tests
           - shard: ui
             guard: true
@@ -371,7 +372,7 @@ jobs:
             # 36849021180, so none is near the zero the flag exists to catch.
             # Without it a suite that discovered nothing exits 0 and this shard
             # reports green — and e2e is the ONLY home of those 479 tests:
-            # neither test-os's 9-project list nor coverage's 18 contains any of
+            # neither test-os's 9-project list nor coverage's 19 contains any of
             # them, and fail-on-empty: false never notices an empty TRX.
             guard: true
             projects: >-
@@ -571,6 +572,7 @@ jobs:
             Harbor.Transport.Remote.Tests \
             Harbor.Plugins.Abstractions.Tests \
             Harbor.Plugins.Runtime.Tests \
+            Harbor.Plugins.Host.Tests \
             Harbor.Ipc.Tests; do
             echo "::group::coverage $p"
             dll="tests/$p/bin/Release/net10.0/$p.dll"

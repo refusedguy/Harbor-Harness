@@ -18,6 +18,10 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <InternalsVisibleTo Include="Harbor.Plugins.Host.Tests"/>
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\Harbor.Plugins.Hosting\Harbor.Plugins.Hosting.csproj"/>
     <ProjectReference Include="..\Harbor.Plugins.Storage\Harbor.Plugins.Storage.csproj"/>
     <ProjectReference Include="..\Harbor.Plugins.Compilation\Harbor.Plugins.Compilation.csproj"/>
