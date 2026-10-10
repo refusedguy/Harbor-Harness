@@ -302,28 +302,33 @@ public static class ChangeSetFreezer
         }
         if (staged.IsFailure)
             return staged.ConvertFailure<FrozenChangeSet>();
+        // Hoisted to the guard level: CFE0001 tracks the IsFailure early
+        // return only at this nesting — a .Value read inside a branch below
+        // is reported.
+        List<FrozenChangeEntry> stagedEntries = staged.Value.Entries;
+        byte[] stagedPatch = staged.Value.Patch;
 
-        if (staged.Value.Entries.Count > maxEntries)
+        if (stagedEntries.Count > maxEntries)
         {
             await ResetIndexAsync(worktree).ConfigureAwait(false);
             return Result.Failure<FrozenChangeSet>(
                 $"Freeze of run '{manifest.RunId}' exceeds the entry-count cap " +
-                $"({staged.Value.Entries.Count.ToString(CultureInfo.InvariantCulture)} paths, cap {maxEntries.ToString(CultureInfo.InvariantCulture)} entries): " +
+                $"({stagedEntries.Count.ToString(CultureInfo.InvariantCulture)} paths, cap {maxEntries.ToString(CultureInfo.InvariantCulture)} entries): " +
                 "refusing to freeze — narrow the change set and retry.");
         }
-        if (staged.Value.Patch.Length > patchByteCapBytes)
+        if (stagedPatch.Length > patchByteCapBytes)
         {
             await ResetIndexAsync(worktree).ConfigureAwait(false);
             return Result.Failure<FrozenChangeSet>(
                 $"Freeze of run '{manifest.RunId}' exceeds the patch byte cap " +
-                $"({staged.Value.Patch.Length.ToString(CultureInfo.InvariantCulture)} bytes, cap {patchByteCapBytes.ToString(CultureInfo.InvariantCulture)} bytes): " +
+                $"({stagedPatch.Length.ToString(CultureInfo.InvariantCulture)} bytes, cap {patchByteCapBytes.ToString(CultureInfo.InvariantCulture)} bytes): " +
                 "the patch is never silently truncated — narrow the change set and retry.");
         }
 
         Result<string> head;
         try
         {
-            head = await ResolveHeadAsync(worktree, baseRevision, manifest.RunId, staged.Value.Entries.Count, ct).ConfigureAwait(false);
+            head = await ResolveHeadAsync(worktree, baseRevision, manifest.RunId, stagedEntries.Count, ct).ConfigureAwait(false);
         }
         catch (OperationCanceledException)
         {
@@ -350,17 +355,20 @@ public static class ChangeSetFreezer
             return frozenPatch.ConvertFailure<FrozenChangeSet>();
         if (status.IsFailure)
             return status.ConvertFailure<FrozenChangeSet>();
-        if (!BytesEqual(frozenPatch.Value, staged.Value.Patch))
+        // Hoisted to the guard level (see the staged-diff hoist above).
+        byte[] frozenBytes = frozenPatch.Value;
+        string statusText = status.Value;
+        if (!BytesEqual(frozenBytes, stagedPatch))
             return Result.Failure<FrozenChangeSet>(
                 $"Freeze of run '{manifest.RunId}' failed at stage 'verify': " +
                 "the committed diff does not match the staged diff — refusing to record a half-frozen set.");
-        if (status.Value.Length > 0)
+        if (statusText.Length > 0)
             return Result.Failure<FrozenChangeSet>(
                 $"Freeze of run '{manifest.RunId}' failed at stage 'verify': " +
-                $"the worktree is not clean after the freeze ({FirstLine(status.Value)}) — refusing to record a half-frozen set.");
+                $"the worktree is not clean after the freeze ({FirstLine(statusText)}) — refusing to record a half-frozen set.");
 
         var set = FrozenChangeSet.Create(
-            manifest.RunId, baseRevision, headRevision, patchPath, staged.Value.Entries, ignored.Value);
+            manifest.RunId, baseRevision, headRevision, patchPath, stagedEntries, ignored.Value);
 
         Result<string> writtenPatch = WriteBytesAtomic(patchPath, frozenPatch.Value, manifest.RunId);
         if (writtenPatch.IsFailure)
@@ -430,8 +438,10 @@ public static class ChangeSetFreezer
         Result<string> head = await RevParseHeadAsync(worktree, ct).ConfigureAwait(false);
         if (head.IsFailure)
             return head;
-        if (entryCount == 0 || !head.Value.Equals(baseRevision, StringComparison.Ordinal))
-            return head;
+        // Hoisted to the guard level (see FreezeIsolatedAsync).
+        string current = head.Value;
+        if (entryCount == 0 || !current.Equals(baseRevision, StringComparison.Ordinal))
+            return Result.Success(current);
         return await CommitFrozenAsync(worktree, runId, ct).ConfigureAwait(false);
     }
 
@@ -462,14 +472,17 @@ public static class ChangeSetFreezer
         }
         if (head.IsFailure)
             return head.ConvertFailure<FrozenChangeSet>();
+        // Hoisted to the guard level (see FreezeIsolatedAsync).
+        string currentHead = head.Value;
 
         Result<FrozenChangeSet> recorded = ReadChangesetJson(changesetPath, patchPath);
         if (recorded.IsFailure)
             return recorded;
-        if (!recorded.Value.HeadRevision.Equals(head.Value, StringComparison.Ordinal))
+        FrozenChangeSet existing = recorded.Value;
+        if (!existing.HeadRevision.Equals(currentHead, StringComparison.Ordinal))
             return Result.Failure<FrozenChangeSet>(
-                $"Run '{manifest.RunId}' is {manifest.State} at recorded head {recorded.Value.HeadRevision} " +
-                $"but the worktree is at {head.Value} — refusing to present a stale frozen set.");
+                $"Run '{manifest.RunId}' is {manifest.State} at recorded head {existing.HeadRevision} " +
+                $"but the worktree is at {currentHead} — refusing to present a stale frozen set.");
         return recorded;
     }
 
@@ -875,7 +888,9 @@ public static class ChangeSetFreezer
                 Result<FrozenChangeEntry> entry = ReadEntry(el);
                 if (entry.IsFailure)
                     return Result.Failure<FrozenChangeSet>($"Frozen change set at '{changesetPath}' has an invalid entry: {entry.Error}");
-                entries.Add(entry.Value);
+                // Hoisted to the guard level (see FreezeIsolatedAsync).
+                FrozenChangeEntry parsed = entry.Value;
+                entries.Add(parsed);
             }
             return Result.Success(FrozenChangeSet.Create(
                 runId, baseRevision, headRevision, patchPath, entries, ignoredPathCount));
