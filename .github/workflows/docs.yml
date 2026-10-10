@@ -74,6 +74,9 @@ on:
       - 'tools/check-doc-facts.py'
       - 'tools/md_gate.py'
       - 'tools/check-abstractions-contract.py'
+      # #431 (slice D3). `check-xml-doc-coverage.py` gates the XML-doc surface
+      # of the frozen contract assembly: a PR that edits the gate must run it.
+      - 'tools/check-xml-doc-coverage.py'
       # #431. docfx.json is the docs-site manifest and docs/toc.yml is its nav:
       # a PR that touches either must run the assembly + link gates below.
       # api/** is the tracked API landing (api/index.md is .md and already
@@ -108,6 +111,9 @@ on:
       - 'tools/check-doc-facts.py'
       - 'tools/md_gate.py'
       - 'tools/check-abstractions-contract.py'
+      # #431 (slice D3). Same trigger as above: the XML-doc coverage gate
+      # reads the frozen contract sources, so a PR touching the gate runs it.
+      - 'tools/check-xml-doc-coverage.py'
       # #431. Same trigger as above: the site manifest and its nav.
       # api/** mirrors the push block for the same reason.
       - 'docfx.json'
@@ -167,6 +173,15 @@ jobs:
       # so rather than implying coverage that is not there.
       - name: Guarded-project dependency gate fails on a phantom package
         run: python3 tools/check-abstractions-contract.py --self-test
+      # #431 (slice D3). The sixth gate is the only one that asks whether a
+      # public member of the frozen contract assembly carries an XML doc (or
+      # an explicit suppression with a reason). Its self-test carries fixtures
+      # for every shape that made a draft of this gate wrong — a `record
+      # struct` named "struct", a `= new(...)` tail donating the name "new",
+      # parameter continuations named "1"/"default" — and the load-bearing
+      # non-vacuity proof: one undocumented member fails, naming it.
+      - name: XML-doc coverage gate fails on an undocumented member
+        run: python3 tools/check-xml-doc-coverage.py --self-test
 
   links:
     name: internal links
@@ -314,6 +329,39 @@ jobs:
       - name: Check the guarded projects' declared dependencies
         run: python3 tools/check-abstractions-contract.py --min-packages 13 --min-namespaces 7 --min-files 152
 
+  # #431 (slice D3). XML-doc coverage gate for the frozen contract assembly.
+  #
+  # `Directory.Build.props` keeps CS1591 in NoWarn, so the compiler never asks
+  # whether a public member of Harbor.Abstractions.Contracts carries an XML
+  # doc — and the D2 metadata lane turns those docs into the published API
+  # reference, so a silent gap ships silently. This job asks the question
+  # instead, with stdlib python only (no SDK, this workflow stays dotnet-free).
+  #
+  # The gate is zero-tolerance on top of an explicit suppression list, not a
+  # bare percentage: every public/protected declaration, enum value, and
+  # implicit interface member must carry `///` (or `<inheritdoc/>`) or an entry
+  # in SUPPRESSED with a reason. Any single undocumented, unsuppressed member
+  # fails the job — the first gap goes red. Every suppression must match
+  # exactly one currently-undocumented member, so documenting one means
+  # dropping its entry in the same diff, where a reviewer can see it.
+  #
+  # The floors are a ratchet, like the ones above. Measured on dev@702647a9:
+  # 494 members, 479 documented (97.0%, floor 0.96), 15 suppressed. The count
+  # floors are set AT those values, not below: a floor with slack cannot tell
+  # "the surface got smaller" from "the matcher stopped matching". The
+  # non-vacuity proof is the gate's own --self-test (one undocumented member
+  # fails, naming it), run in the `selftest` job above.
+  xmldoc:
+    name: xml-doc coverage
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+      - name: Check XML-doc coverage of the frozen contract assembly
+        run: python3 tools/check-xml-doc-coverage.py --min-members 494 --min-documented 479 --min-coverage 0.96
+
   # #431 (slice 1). Docs-site assembly from the existing markdown tree.
   #
   # docfx.json is the manifest (metadata lane + content globs + nav); this job
@@ -322,8 +370,9 @@ jobs:
   # dest api, the global GenerateDocumentationFile flag stays on) and assembles
   # a static `_site` (copied markdown + generated index) with stdlib python
   # only — no SDK, no docfx binary, so this workflow stays dotnet-free.
-  # The full `docfx build` with generated API pages (api/*.yml) and the XML-doc
-  # coverage gate are later slices (ADR-017). Internal links inside the
+  # The full `docfx build` with generated API pages (api/*.yml) is a later
+  # slice (ADR-017); the XML-doc coverage gate is the `xmldoc` job above.
+  # Internal links inside the
   # assembled site are covered by the `links` job above, which runs on the same
   # tree and the same trigger paths — no second link checker is introduced here.
   #
