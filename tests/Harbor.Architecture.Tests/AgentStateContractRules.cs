@@ -244,7 +244,7 @@ public sealed class AgentStateContractRules
     internal static IReadOnlyList<(int Line, string Text)> ScanSource(string source)
     {
         // Split after stripping, so a line number indexes the real source.
-        string[] lines = SourceNullabilityScan.StripComments(source).Split('\n');
+        string[] lines = SourceScan.StripComments(source).Split('\n');
         var hits = new List<(int, string)>();
         for (int i = 0; i < lines.Length; i++)
         {
@@ -259,13 +259,13 @@ public sealed class AgentStateContractRules
 
     /// <summary>
     ///     The comment-stripped text of one file. Delegates to
-    ///     <see cref="SourceNullabilityScan.StripComments" /> for the same non-drift reason.
+    ///     <see cref="SourceScan.StripComments" /> for the same non-drift reason.
     /// </summary>
     private static string ReadCommentStripped(string path)
     {
         try
         {
-            return SourceNullabilityScan.StripComments(File.ReadAllText(path));
+            return SourceScan.StripComments(File.ReadAllText(path));
         }
         catch (IOException)
         {
