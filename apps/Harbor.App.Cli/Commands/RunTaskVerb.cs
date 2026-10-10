@@ -8,6 +8,8 @@ namespace Harbor.App.Cli.Commands;
 ///     runner directly (same isolation path as the <c>task</c> tool) without a
 ///     parent agent turn. Extracted from <c>Program</c> (#176), 1:1 behavior.
 ///     <c>harbor run list</c> (S2, #376) prints the persisted run manifests.
+///     <c>harbor run change</c> (S9 slice 1, #397) pins and isolates one
+///     verified-change run, then stops fail-closed past <c>Isolated</c>.
 /// </summary>
 internal static class RunTaskVerb
 {
@@ -16,11 +18,14 @@ internal static class RunTaskVerb
         string sub = args.Length > 0 ? args[0].ToLowerInvariant() : string.Empty;
         if (sub == "list")
             return RunList();
+        if (sub == "change")
+            return await RunChangeVerb.RunAsync(args.Skip(1).ToArray()).ConfigureAwait(false);
         if (sub != "task")
         {
             Console.Error.WriteLine("""
                                     Usage: harbor run task agent=<name> <prompt>
                                       run task agent=explore "find all .cs files"
+                                      harbor run change agent=<name> "<task>" [--checks <file>] [--dry-run] [--repo <path>]
                                       harbor run list
                                     """);
             return sub.Length == 0 ? 2 : 1;
