@@ -86,6 +86,24 @@
 // port, and the app may CONSUME it but may not DECLARE an implementer of it. That
 // is the `ThemeStoreSeamRules` shape, and it is a red/green pair of its own —
 // `FileTreePolicy_...Exists...` fails until the port is actually there.
+//
+// MECHANISM (#1086, step 2, conveyor)
+// -----------------------------------
+// The WALK half below is a ScanRule: one banned shape (the two forbidden
+// patterns merged into one alternation), no baseline, six planted controls, a
+// discovery floor. Enumeration, stripping, matching and the control/discovery
+// verdicts are ScanRunner's; this file keeps the issue prose and the test names.
+//
+// The merge is mechanical, not a re-decision: the old detector reported one hit
+// per line even when both patterns matched it (a single
+// `new DirectoryInfo(p).EnumerateFiles()` is one violation), and a single
+// alternation over lines reports the same set — a line matches iff any branch
+// matches.
+//
+// The POLICY half (`FileTreePolicy_IsADomainPort_TheAppOnlyConsumes`) and the
+// carve-out citation test stay handwritten: the first is a structural
+// existence-plus-non-declaration check rather than a forbidden-shape scan, and
+// the second grades this file's own prose. Both keep their helpers.
 
 using System.Text.RegularExpressions;
 
@@ -98,6 +116,8 @@ namespace Harbor.Architecture.Tests;
 /// </summary>
 public class AvaloniaFileTreeWalkRules
 {
+    private const string SubId = "DIRECTORY-WALK";
+
     /// <summary>
     ///     Projects this rule polices. Each entry must correspond to a perimeter
     ///     that has actually been converted.
@@ -105,30 +125,19 @@ public class AvaloniaFileTreeWalkRules
     private static readonly string[] GuardedProjects = ["apps/Harbor.App.Avalonia"];
 
     /// <summary>
-    ///     The forbidden shapes: the four spellings of "enumerate a directory",
-    ///     plus constructing a <c>DirectoryInfo</c> to enumerate through.
+    ///     The forbidden walk shapes: the four spellings of "enumerate a directory",
+    ///     plus constructing a <c>DirectoryInfo</c> to enumerate through. Keyed on
+    ///     the CALL rather than on the type name, so binding the result to a
+    ///     differently-named local does not defeat it. <c>Directory.CreateDirectory</c>
+    ///     is absent on purpose (bounded config-dir creation, see the file remarks);
+    ///     <c>Path.*</c> is absent too (<c>Path.GetFileName</c> and
+    ///     <c>Path.GetExtension</c> are pure string handling over a path the port
+    ///     already handed over).
     /// </summary>
-    /// <remarks>
-    ///     <para>
-    ///         Keyed on the CALL rather than on the type name, so binding the
-    ///         result to a differently-named local does not defeat it — the
-    ///         <c>Detector_IsNotDefeatedByRenamingTheLocal</c> test below pins
-    ///         that.
-    ///     </para>
-    ///     <para>
-    ///         <c>Directory.CreateDirectory</c> is absent on purpose; see the file
-    ///         remarks. <c>Path.*</c> is absent too: <c>Path.GetFileName</c> and
-    ///         <c>Path.GetExtension</c> are pure string handling over a path the
-    ///         port already handed over, and the #667 note in
-    ///         docs/ARCHITECTURE_LAYERS.md §ARCH-5 makes the same call for
-    ///         <c>Path.GetDirectoryName</c>.
-    ///     </para>
-    /// </remarks>
-    private static readonly Regex[] ForbiddenPatterns =
-    [
-        new(@"Directory\s*\.\s*(Get|Enumerate)\w*\s*\(", RegexOptions.Compiled),
-        new(@"new\s+DirectoryInfo\s*\(", RegexOptions.Compiled),
-    ];
+    private static readonly Regex ForbiddenShape = new(
+        @"Directory\s*\.\s*(Get|Enumerate)\w*\s*\("
+        + @"|new\s+DirectoryInfo\s*\(",
+        RegexOptions.Compiled);
 
     /// <summary>
     ///     The Domain port that owns "what counts as source" — the directory
@@ -142,49 +151,92 @@ public class AvaloniaFileTreeWalkRules
     /// </summary>
     private const string ListerContractName = "IDirectoryLister";
 
-    /// <summary>Repo-relative <c>path:line</c> of every forbidden shape in a file.</summary>
-    private static List<string> DetectIn(string relativePath, string source)
+    /// <summary>The walk rule as data: one banned shape, no baseline, six controls, a floor.</summary>
+    private static readonly ScanRule WalkRule = new()
     {
-        var hits = new List<string>();
-        string[] lines = SourceScan.StripComments(source).Split('\n');
-        for (int i = 0; i < lines.Length; i++)
-        {
-            // One report per line, even when both patterns match it: a single
-            // `new DirectoryInfo(p).EnumerateFiles()` is one violation, and a
-            // failure message that prints it twice reads as two bugs.
-            foreach (Regex pattern in ForbiddenPatterns)
-            {
-                if (pattern.IsMatch(lines[i]))
+        Id = "AvaloniaFileTreeWalk",
+        Trees = ["apps/Harbor.App.Avalonia"],
+        Forbidden =
+        [
+            new ScanForbidden(
+                SubId,
+                ForbiddenShape,
+                "go through the Domain IDirectoryLister (Application: SystemDirectoryLister, "
+                + "bounded at 4096 entries, 5s timeout, cancellable between entries) and the Domain "
+                + "IFileTreePolicy for what a tree shows."),
+        ],
+        Controls =
+        [
+            // The exact pre-#492 shape: the two enumeration calls.
+            new ScanControl("Known/Get.cs", "foreach (var dir in Directory.GetDirectories(path).OrderBy(d => d))", SubId),
+            new ScanControl("Known/Files.cs", "foreach (var file in Directory.GetFiles(path).OrderBy(f => f))", SubId),
+            // The post-#492 shape: the view-model only ever names the scanner, and
+            // the walk itself is somebody else's problem.
+            new ScanControl("Seam.cs", """
+                public sealed partial class MainViewModel
                 {
-                    hits.Add($"{relativePath}:{i + 1}: {lines[i].Trim()}");
-                    break;
-                }
-            }
-        }
+                    private readonly ProjectFileTreeScanner _scanner;
 
-        return hits;
-    }
+                    public async Task RefreshFileTreeAsync()
+                    {
+                        IReadOnlyList<FileTreeNode> nodes = await _scanner.ScanAsync(ProjectRootPath, token);
+                        FileTree.Clear();
+                        foreach (FileTreeNode node in nodes) { FileTree.Add(node); }
+                    }
+                }
+                """, null),
+            // The two neighbouring capabilities the rule must NOT swallow. Both exist
+            // in the app today (AppHost.cs, CodeEditorViewModel.cs); a rule that fires
+            // on them is a rule whose only fix is deletion.
+            new ScanControl("Unrelated.cs", """
+                public void EnsureConfigDirs(string homeDir)
+                {
+                    Directory.CreateDirectory(Path.Combine(homeDir, ".harbor"));
+                    Directory.CreateDirectory(Path.Combine(homeDir, ".harbor", "sessions"));
+                }
+
+                public async Task OpenAsync(string path)
+                {
+                    if (!File.Exists(path)) return;
+                    string content = await File.ReadAllTextAsync(path);
+                }
+                """, null),
+            // Working out a file's extension and base name is pure string handling over
+            // a path the port already produced.
+            new ScanControl("Strings.cs", """
+                public string Display(string fullPath)
+                {
+                    string ext = Path.GetExtension(fullPath).ToLowerInvariant();
+                    return Path.GetFileName(ext);
+                }
+                """, null),
+            // The walk could have been reached through a `DirectoryInfo` instead of
+            // the static overloads, with any local name. Keying the rule on a variable
+            // name would have been worthless.
+            new ScanControl("Renamed.cs", """
+                public void LoadDirectory(FileTreeNode parent, string path, int depth)
+                {
+                    var handle = new DirectoryInfo(path);
+                    var dirs = handle.EnumerateDirectories();
+                    var files = handle.EnumerateFiles();
+                    parent.Children.Add(new FileTreeNode { FullPath = dirs.First() });
+                }
+                """, SubId),
+            // The refactor's own comments name the forbidden call. A guard that fails
+            // on its own documentation is a guard nobody keeps.
+            new ScanControl("Prose.cs", """
+                // #492: this used to call Directory.GetDirectories(path) and Directory.GetFiles(path).
+                /// <summary>Scans through the port; never Directory.GetFiles here.</summary>
+                public void Refresh() => _scanner.ScanAsync(root, token);
+                """, null),
+        ],
+        MinHits = 50,
+    };
 
     [Test]
     public async Task AvaloniaShell_DoesNotWalkTheFilesystem()
     {
-        string? root = RepoPaths.RepoRoot;
-        await Assert.That(root).IsNotNull()
-            .Because(
-                "This guard walks the working tree. With no Harbor.slnx above AppContext.BaseDirectory "
-                + "the scan yields nothing and the rule reports green while enforcing nothing.");
-
-        if (root is null)
-        {
-            return;
-        }
-
-        var violations = new List<string>();
-        foreach (string file in EnumerateGuardedFiles(root))
-        {
-            string relative = Path.GetRelativePath(root, file).Replace('\\', '/');
-            violations.AddRange(DetectIn(relative, File.ReadAllText(file)));
-        }
+        List<string> violations = ScanRunner.Evaluate(WalkRule);
 
         await Assert.That(violations).IsEmpty()
             .Because(
@@ -205,108 +257,32 @@ public class AvaloniaFileTreeWalkRules
     [Test]
     public async Task Scanner_FindsTheGuardedProject()
     {
-        string? root = RepoPaths.RepoRoot;
-        await Assert.That(root).IsNotNull()
-            .Because("The walk needs a repository root; without one this file guards nothing.");
+        List<string> discovery = ScanRunner.CheckDiscovery(WalkRule);
 
-        if (root is null)
-        {
-            return;
-        }
-
-        int files = EnumerateGuardedFiles(root).Count;
-        await Assert.That(files).IsGreaterThan(50)
+        await Assert.That(discovery).IsEmpty()
             .Because(
-                $"The guarded Avalonia shell should hold well over 50 source files; found {files}. "
-                + "A near-zero count means the path is stale and the rule enforces nothing.");
+                "The walk needs a repository root and must really find the guarded Avalonia shell — "
+                + "well over 50 source files. "
+                + "A near-zero count means the path is stale and the rule enforces nothing. "
+                + string.Join("; ", discovery));
     }
 
     [Test]
     public async Task Detector_FiresOnAKnownWalk_AndStaysQuietOnTheSeamCall()
     {
-        // The exact pre-#492 shape: the two enumeration calls and the DirectoryInfo.
-        const string knownWalk = """
-            public sealed partial class MainViewModel
-            {
-                private void LoadDirectory(FileTreeNode parent, string path, int depth)
-                {
-                    if (depth > 3) return;
-                    foreach (var dir in Directory.GetDirectories(path).OrderBy(d => d))
-                    {
-                        parent.Children.Add(new FileTreeNode { FullPath = dir });
-                    }
-                    foreach (var file in Directory.GetFiles(path).OrderBy(f => f))
-                    {
-                        parent.Children.Add(new FileTreeNode { FullPath = file });
-                    }
-                }
-            }
-            """;
+        // The pre-#492 walk shape must be detected; the seam call is the shape the
+        // issue converts TO; the neighbouring CreateDirectory/File.* capabilities
+        // and the pure Path string work must stay quiet. The snippets live on
+        // WalkRule.Controls, so the control drives the REAL matcher rather than a
+        // second implementation of it.
+        List<string> failures = ScanRunner.CheckControls(WalkRule);
 
-        // The post-#492 shape: the view-model only ever names the two ports, and
-        // the walk itself is somebody else's problem.
-        const string seamCall = """
-            public sealed partial class MainViewModel
-            {
-                private readonly ProjectFileTreeScanner _scanner;
-
-                public async Task RefreshFileTreeAsync()
-                {
-                    IReadOnlyList<FileTreeNode> nodes = await _scanner.ScanAsync(ProjectRootPath, token);
-                    FileTree.Clear();
-                    foreach (FileTreeNode node in nodes) { FileTree.Add(node); }
-                }
-            }
-            """;
-
-        // The two neighbouring capabilities the rule must NOT swallow. Both exist
-        // in the app today (AppHost.cs, CodeEditorViewModel.cs); a rule that fires
-        // on them is a rule whose only fix is deletion.
-        const string unrelatedIo = """
-            public void EnsureConfigDirs(string homeDir)
-            {
-                Directory.CreateDirectory(Path.Combine(homeDir, ".harbor"));
-                Directory.CreateDirectory(Path.Combine(homeDir, ".harbor", "sessions"));
-            }
-
-            public async Task OpenAsync(string path)
-            {
-                if (!File.Exists(path)) return;
-                string content = await File.ReadAllTextAsync(path);
-            }
-            """;
-
-        // Working out a file's extension and base name is pure string handling over
-        // a path the port already produced; #667 made the same call for
-        // GetDirectoryName in the TUI panel.
-        const string pureStringPathWork = """
-            public string Display(string fullPath)
-            {
-                string ext = Path.GetExtension(fullPath).ToLowerInvariant();
-                return Path.GetFileName(ext);
-            }
-            """;
-
-        await Assert.That(DetectIn("Known.cs", knownWalk)).IsNotEmpty()
-            .Because("the pre-#492 walk shape must be detected, or the rule guards nothing");
-        await Assert.That(DetectIn("Seam.cs", seamCall)).IsEmpty()
+        await Assert.That(failures).IsEmpty()
             .Because(
-                "the seam call is the shape this issue converts TO. If it is flagged the rule forbids the "
-                + "fix as well as the bug, and the only way to make CI green would be to widen or delete it.");
-        await Assert.That(DetectIn("Unrelated.cs", unrelatedIo)).IsEmpty()
-            .Because(
-                "creating the app's own config directory and reading the file the user picked are two other "
-                + "capabilities. Folding them into a rule whose subject is the walk would make it "
-                + "permanently red and therefore deletable. The file-I/O half has its own rule since #934 — "
-                + "`AvaloniaTextFileIoRules`, scoped to the view-model type — and NOT #534/#535, which this "
-                + "text used to cite: those two are closed and were about JsonCommonConfigStore / "
-                + "JsonAppConfigStore / RecentItemsService in different projects, and never covered "
-                + "CodeEditorViewModel or ThemeService. A carve-out citing a closed issue that does not "
-                + "cover the code it excuses reads as 'handled' to the next person who checks.");
-        await Assert.That(DetectIn("Strings.cs", pureStringPathWork)).IsEmpty()
-            .Because(
-                "`Path.GetExtension` / `Path.GetFileName` are string operations, not syscalls. The icon "
-                + "mapping keys on an extension, so forbidding this would forbid the fix.");
+                "the pre-#492 walk shape must be detected, or the rule guards nothing; the seam call "
+                + "must stay quiet, or the rule forbids the fix; the neighbouring capabilities must stay "
+                + "quiet, or the rule is permanently red and therefore deletable. "
+                + string.Join("; ", failures));
     }
 
     /// <summary>
@@ -424,41 +400,59 @@ public class AvaloniaFileTreeWalkRules
     [Test]
     public async Task Detector_IsNotDefeatedByRenamingTheLocal()
     {
-        // The old code could have been written with any local name, and the walk
-        // could have been reached through a `DirectoryInfo` instead of the static
-        // overloads. Keying the rule on a variable name would have been the easy
-        // way to write this guard, and it would have been worthless.
-        const string renamed = """
-            public void LoadDirectory(FileTreeNode parent, string path, int depth)
-            {
-                var handle = new DirectoryInfo(path);
-                var dirs = handle.EnumerateDirectories();
-                var files = handle.EnumerateFiles();
-                parent.Children.Add(new FileTreeNode { FullPath = dirs.First() });
-            }
-            """;
+        // The rule keys on the walk call and on the DirectoryInfo, not on a variable
+        // name — proved by the Renamed.cs control on the rule, driven here through
+        // the same verdict.
+        List<string> failures = ScanRunner.CheckControls(WalkRule);
 
-        await Assert.That(DetectIn("Renamed.cs", renamed)).IsNotEmpty()
+        await Assert.That(failures).IsEmpty()
             .Because(
                 "the rule keys on the walk call and on the DirectoryInfo, not on a variable name — otherwise "
-                + "a rename silently un-guards the very line it was written for");
+                + "a rename silently un-guards the very line it was written for. "
+                + string.Join("; ", failures));
     }
 
     [Test]
     public async Task Detector_IgnoresTheExplanationInProse()
     {
-        // The refactor's own comments name the forbidden call. A guard that fails
-        // on its own documentation is a guard nobody keeps.
-        const string prose = """
-            // #492: this used to call Directory.GetDirectories(path) and Directory.GetFiles(path).
-            /// <summary>Scans through the port; never Directory.GetFiles here.</summary>
-            public void Refresh() => _scanner.ScanAsync(root, token);
-            """;
+        // Line comments are stripped before matching, so documenting the old shape
+        // does not reintroduce it — proved by the Prose.cs control on the rule.
+        List<string> failures = ScanRunner.CheckControls(WalkRule);
 
-        await Assert.That(DetectIn("Prose.cs", prose)).IsEmpty()
+        await Assert.That(failures).IsEmpty()
             .Because(
                 "line comments are stripped before matching, so documenting the old shape does not "
-                + "reintroduce it");
+                + "reintroduce it. "
+                + string.Join("; ", failures));
+    }
+
+    /// <summary>
+    ///     Every baseline row states why it is tolerated, in the row itself. Vacuous
+    ///     while the table is empty, and deliberately so: it is wired from the first
+    ///     row so the first row cannot skip the argument.
+    /// </summary>
+    [Test]
+    public async Task Baseline_Rows_AllHaveReasons()
+    {
+        List<string> failures = ScanRunner.CheckReasons(WalkRule);
+
+        await Assert.That(failures).IsEmpty().Because(string.Join("\n", failures));
+    }
+
+    /// <summary>
+    ///     Every baseline row must still correspond to a real hit, so the table
+    ///     cannot rot into a blanket permission: fix the code without deleting the
+    ///     row and this fails.
+    /// </summary>
+    [Test]
+    public async Task Baseline_Rows_Are_Not_Stale()
+    {
+        List<string> stale = ScanRunner.StaleBaselineKeys(
+            WalkRule, ScanRunner.ReadSources(ScanRunner.ScopeFiles(WalkRule)));
+
+        await Assert.That(stale).IsEmpty()
+            .Because("a baseline row with no violation behind it is a permission for a "
+                + "problem that no longer exists: " + string.Join(", ", stale));
     }
 
     // ── the policy half ───────────────────────────────────────────────────

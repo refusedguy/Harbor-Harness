@@ -69,6 +69,16 @@
 // multi-line block comment is prose this rule does not govern. The limitation is
 // bounded by construction: the only way to bring the table back is to make the
 // arm DO work, and arms are string literals on code lines.
+//
+// MECHANISM (#1086, step 2, conveyor)
+// -----------------------------------
+// The rule below is a ScanRule with a CustomParse: the verdict needs the
+// catalogue ids (read out of `providers/*.json`, so the guard tracks the
+// catalogue instead of a stale copy) plus the literal-then-arrow arm test, which
+// no single line regex expresses. So the rule plugs the unchanged arm finder
+// through the Func-overload; the `Forbidden` row documents the arm shape and
+// carries the failure text. Enumeration, baseline and the control/discovery
+// verdicts are ScanRunner's; this file keeps the issue prose and the test names.
 
 using System.Collections.Frozen;
 using System.Text.Json;
@@ -84,8 +94,7 @@ namespace Harbor.Architecture.Tests;
 /// </summary>
 public sealed class ProviderIdDispatchRule
 {
-    /// <summary>Product trees scanned for provider-keyed dispatch arms.</summary>
-    private static readonly string[] ProductTrees = ["src", "apps"];
+    private const string SubId = "PROVIDER-ID-DISPATCH-ARM";
 
     /// <summary>
     ///     Files allowed to carry a provider-keyed arm, each with the reason it
@@ -126,8 +135,113 @@ public sealed class ProviderIdDispatchRule
     /// </summary>
     private static readonly Regex ArmArrow = new(@"^\s*=>", RegexOptions.Compiled);
 
-    /// <summary>A file, a 1-based line number, and the offending line.</summary>
-    private sealed record ArmSite(string RelativePath, int Line, string Text);
+    /// <summary>
+    ///     The rule as data: one documented arm shape, a catalogue-aware parser,
+    ///     planted controls, a floor. Built lazily because the ids — and the planted
+    ///     control keyed on one of them — are read out of <c>providers/*.json</c>.
+    /// </summary>
+    private static readonly Lazy<ScanRule> LazyRule = new(BuildRule);
+
+    private static ScanRule Rule => LazyRule.Value;
+
+    private static ScanRule BuildRule()
+    {
+        string root = RequireRepoRoot();
+        IReadOnlySet<string> ids = BundledProviderIds(root);
+        // Deterministic pick: the guard must not depend on set iteration order for
+        // which id it plants, so take the ordinal-first one explicitly. The set is
+        // non-empty by construction (BundledProviderCatalogue_IsDiscoverable_
+        // AndNonTrivial asserts the directory walk works), and Min on a non-empty
+        // sequence cannot return null.
+        string id = ids.Min(StringComparer.Ordinal)
+            ?? throw new InvalidOperationException("no bundled provider ids were discovered");
+
+        return new ScanRule
+        {
+            Id = "ProviderIdDispatch",
+            Trees = ["src", "apps"],
+            Forbidden =
+            [
+                new ScanForbidden(
+                    SubId,
+                    QuotedLiteral,
+                    "a switch/expression arm keyed on a provider id is a row of a hand-maintained, "
+                    + "provider-keyed table. Declare the value as data on the provider's own "
+                    + "providers/<id>.json or as a registered IProviderCompatFlag. If this file is a "
+                    + "genuine exception, add it to DispatchExemptions WITH the reason."),
+            ],
+            Baseline =
+            [
+                .. DispatchExemptions.Select(static kv => new ScanBaseline(
+                    $"{SubId} {kv.Key}",
+                    IsPrefix: false,
+                    kv.Value)),
+            ],
+            Controls =
+            [
+                // A planted provider-keyed arm must be detected, or the guard is blind.
+                new ScanControl("Planted.cs", string.Join("\n",
+                    "internal static class Planted",
+                    "{",
+                    "    private static string Glyph(string id) => id switch",
+                    "    {",
+                    "        \"" + id + "\" => \"x\",",
+                    "        _ => \"y\"",
+                    "    };",
+                    "}"), SubId),
+                // Comment lines are prose, not a table row.
+                new ScanControl("Comment.cs", "// prose: \"" + id + "\" => \"x\" in a comment", null),
+                // Doc-comment lines are prose, not a table row.
+                new ScanControl("Doc.cs", "/// <c>\"" + id + "\"</c> in a doc comment.", null),
+                // Looking a provider up by id is a lookup, not a table — the rule
+                // targets arms only, or it would flag every legitimate reference.
+                new ScanControl("Lookup.cs", "    var m = ProviderPresets.Find(\"" + id + "\");", null),
+                // An arm keyed by a string that is not a bundled provider id is not
+                // this rule's business.
+                new ScanControl("Other.cs", "        \"not-a-provider\" => \"x\",", null),
+            ],
+            MinHits = 200,
+            MustContain = [FormerTableFileRelativePath],
+            CustomParse = (path, raw) => ParseArms(path, raw, ids),
+        };
+    }
+
+    /// <summary>
+    ///     The custom parser: the arm verdict over one file's raw source. The same
+    ///     finder the rule always used — comment lines skipped, every quoted
+    ///     literal tested against the catalogue, the arrow required right after —
+    ///     so the planted controls grade identically to product files.
+    /// </summary>
+    private static IEnumerable<ScanHit> ParseArms(string displayPath, string rawSource, IReadOnlySet<string> ids)
+    {
+        int number = 0;
+        foreach (string line in SplitLines(rawSource))
+        {
+            number++;
+            if (IsComment(line))
+            {
+                continue;
+            }
+
+            foreach (Match literal in QuotedLiteral.Matches(line))
+            {
+                string value = literal.Groups["value"].Value;
+                if (!ids.Contains(value))
+                {
+                    continue;
+                }
+
+                // The literal must be the ARM KEY, i.e. an arrow follows it before
+                // any other literal — that is what distinguishes a table row from a
+                // lookup, a comparison, or a value.
+                string tail = line[(literal.Index + literal.Length)..];
+                if (ArmArrow.IsMatch(tail))
+                {
+                    yield return new ScanHit(SubId, displayPath, number, line.Trim());
+                }
+            }
+        }
+    }
 
     /// <summary>
     ///     The bundled provider ids, read from <c>providers/*.json</c> rather than
@@ -155,21 +269,13 @@ public sealed class ProviderIdDispatchRule
     [Test]
     public async Task NoProductFile_DispatchesOnABundledProviderIdInAnArm()
     {
-        string root = RequireRepoRoot();
-        IReadOnlySet<string> ids = BundledProviderIds(root);
-        IReadOnlyList<string> files = EnumerateProductCsFiles(root);
+        List<string> sites = ScanRunner.Evaluate(Rule);
 
-        List<ArmSite> sites =
-        [
-            .. files.SelectMany(f => FindArmSites(root, f, ids))
-                    .Where(s => !DispatchExemptions.ContainsKey(s.RelativePath))
-        ];
-
-        await Assert.That(sites.Count).IsEqualTo(0)
+        await Assert.That(sites).IsEmpty()
             .Because(
                 "a switch/expression arm keyed on a provider id is a row of a hand-maintained, "
                 + "provider-keyed table — the Open/Closed violation #560 reported, and the one §OOP-002 "
-                + "removed from the request-payload path. Offending arm(s): " + Describe(sites)
+                + "removed from the request-payload path. Offending arm(s): " + string.Join("; ", sites)
                 + ". Declare the value as data on the provider's own providers/<id>.json (the "
                 + "ProviderPresetCatalog projection is the precedent: displayName, description, "
                 + "icon, priority) or as a registered IProviderCompatFlag. If this file is a genuine "
@@ -178,26 +284,35 @@ public sealed class ProviderIdDispatchRule
 
     /// <summary>
     ///     The exemption list stays honest in both directions: a reason is
-    ///     mandatory, and an entry whose file no longer exists or no longer carries
-    ///     an arm is dead weight that would silently widen the rule.
+    ///     mandatory, an entry must name a file the scan still sees that still
+    ///     carries an arm, and no row may rot into a blanket permission.
     /// </summary>
     [Test]
     public async Task EveryExemption_StillNamesAFileThatStillCarriesAnArm()
     {
-        string root = RequireRepoRoot();
-        IReadOnlySet<string> ids = BundledProviderIds(root);
-        IReadOnlyList<string> files = EnumerateProductCsFiles(root);
+        // Reasons are mandatory — an exemption without one is an oversight.
+        List<string> reasons = ScanRunner.CheckReasons(Rule);
 
+        await Assert.That(reasons).IsEmpty()
+            .Because("every exemption must state why it cannot be data instead. " + string.Join("\n", reasons));
+
+        // Every entry must still correspond to a real hit.
+        List<string> stale = ScanRunner.StaleBaselineKeys(
+            Rule, ScanRunner.ReadSources(ScanRunner.ScopeFiles(Rule)));
+
+        await Assert.That(stale).IsEmpty()
+            .Because(
+                "an exemption that no longer carries a provider-keyed arm is no longer "
+                + "an exception — delete the entry and let the rule apply. " + string.Join(", ", stale));
+
+        // And every entry must name a file the scan still sees.
+        IReadOnlyList<string> files = ScanRunner.ScopeFiles(Rule);
         foreach ((string path, string reason) in DispatchExemptions)
         {
             await Assert.That(reason.Length).IsGreaterThan(0)
                 .Because("exemption " + path + " must state why it cannot be data instead");
             await Assert.That(files.Contains(path)).IsTrue()
                 .Because("exemption " + path + " names a file the scan does not see — drop the entry");
-            await Assert.That(FindArmSites(root, path, ids).Count).IsGreaterThan(0)
-                .Because(
-                    "exemption " + path + " no longer carries a provider-keyed arm, so it is no longer "
-                    + "an exception — delete the entry and let the rule apply.");
         }
     }
 
@@ -209,21 +324,17 @@ public sealed class ProviderIdDispatchRule
     [Test]
     public async Task Discovery_FindsARealFileSet_IncludingTheFormerTableFile()
     {
-        IReadOnlyList<string> files = EnumerateProductCsFiles(RequireRepoRoot());
+        List<string> discovery = ScanRunner.CheckDiscovery(Rule);
 
-        await Assert.That(files.Count).IsGreaterThan(200)
+        await Assert.That(discovery).IsEmpty()
             .Because(
-                "src/ + apps/ hold an order of magnitude more than 200 C# files; a smaller count means "
-                + "the glob broke and the arm scan is looking at nothing.");
-        await Assert.That(files.Contains(FormerTableFileRelativePath)).IsTrue()
-            .Because(
-                FormerTableFileRelativePath + " must be inside the scanned set — it is the file that "
-                + "carried the 13-arm icon table, so its absence means discovery is broken rather than "
-                + "the tree being clean.");
+                "src/ + apps/ hold an order of magnitude more than 200 C# files, including the file "
+                + "that carried the 13-arm icon table; a smaller count means the glob broke and the "
+                + "arm scan is looking at nothing. " + string.Join("; ", discovery));
     }
 
     /// <summary>
-    ///     Non-vacuity, part 2: the SAME matcher must fire on a planted arm, and
+    ///     Non-vacuity, part 2: the SAME parser must fire on a planted arm, and
     ///     stay silent on the three things that are not provider-keyed dispatch —
     ///     a comment, a plain lookup of the same id, and an arm keyed by something
     ///     that is not a provider. This is what separates "the guard is green" from
@@ -232,43 +343,18 @@ public sealed class ProviderIdDispatchRule
     [Test]
     public async Task Matcher_FiresOnAPlantedArm_AndStaysSilentOtherwise()
     {
-        IReadOnlySet<string> ids = BundledProviderIds(RequireRepoRoot());
-        // Deterministic pick: the guard must not depend on set iteration order for
-        // which id it plants, so take the ordinal-first one explicitly. The set is
-        // non-empty by construction (BundledProviderCatalogue_IsDiscoverable_
-        // AndNonTrivial asserts the directory walk works), and Min on a non-empty
-        // sequence cannot return null.
-        string id = ids.Min(StringComparer.Ordinal)
-            ?? throw new InvalidOperationException("no bundled provider ids were discovered");
+        // The snippets live on Rule.Controls — including the planted arm keyed on
+        // the ordinal-first catalogue id, the comment and doc-comment prose, the
+        // incidental lookup, and the non-provider arm — so the control drives the
+        // REAL parser rather than a second implementation of it.
+        List<string> failures = ScanRunner.CheckControls(Rule);
 
-        string[] planted =
-        [
-            "internal static class Planted",
-            "{",
-            "    private static string Glyph(string id) => id switch",
-            "    {",
-            "        \"" + id + "\" => \"x\",",
-            "        _ => \"y\"",
-            "    };",
-            "}"
-        ];
-
-        await Assert.That(FindArmLines(planted, ids).Count).IsGreaterThan(0)
-            .Because("a planted provider-keyed arm must be detected, or the guard is blind");
-
-        await Assert.That(FindArmLines(["// prose: \"" + id + "\" => \"x\" in a comment"], ids).Count).IsEqualTo(0)
-            .Because("comment lines are prose, not a table row");
-
-        await Assert.That(FindArmLines(["/// <c>\"" + id + "\"</c> in a doc comment."], ids).Count).IsEqualTo(0)
-            .Because("doc-comment lines are prose, not a table row");
-
-        await Assert.That(FindArmLines(["    var m = ProviderPresets.Find(\"" + id + "\");"], ids).Count).IsEqualTo(0)
+        await Assert.That(failures).IsEmpty()
             .Because(
-                "looking a provider up by id is a lookup, not a table — the rule targets arms only, "
-                + "or it would flag every legitimate reference to a provider id");
-
-        await Assert.That(FindArmLines(["        \"not-a-provider\" => \"x\","], ids).Count).IsEqualTo(0)
-            .Because("an arm keyed by a string that is not a bundled provider id is not this rule's business");
+                "a planted provider-keyed arm must be detected, or the guard is blind; and the comment, "
+                + "the lookup and the non-provider arm must stay silent, or the rule targets more than "
+                + "arms and flags every legitimate reference to a provider id. "
+                + string.Join("; ", failures));
     }
 
     /// <summary>Locate the repository root; fail loudly rather than scan nothing.</summary>
@@ -325,72 +411,6 @@ public sealed class ProviderIdDispatchRule
         return ids.ToFrozenSet(StringComparer.Ordinal);
     }
 
-    /// <summary>Every C# file under <c>src/</c> and <c>apps/</c>, as repo-relative paths.</summary>
-    private static IReadOnlyList<string> EnumerateProductCsFiles(string root)
-    {
-        var found = new List<string>();
-        foreach (string tree in ProductTrees)
-        {
-            string dir = Path.Combine(root, tree);
-            if (!Directory.Exists(dir)) continue;
-            foreach (string path in Directory.GetFiles(dir, "*.cs", SearchOption.AllDirectories))
-            {
-                // Never descend into build output or into a sibling worktree: a stale
-                // obj/ copy would be scanned as if it were product code.
-                if (path.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}", StringComparison.Ordinal)
-                    || path.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}", StringComparison.Ordinal)
-                    || path.Contains($"{Path.DirectorySeparatorChar}.worktrees{Path.DirectorySeparatorChar}", StringComparison.Ordinal))
-                {
-                    continue;
-                }
-                found.Add(Path.GetRelativePath(root, path).Replace(Path.DirectorySeparatorChar, '/'));
-            }
-        }
-
-        found.Sort(StringComparer.Ordinal);
-        return found;
-    }
-
-    private static IReadOnlyList<ArmSite> FindArmSites(string root, string relativePath, IReadOnlySet<string> ids)
-    {
-        string text = File.ReadAllText(Path.Combine(root, relativePath));
-        return
-        [
-            .. FindArmLines(SplitLines(text), ids)
-                .Select(line => new ArmSite(relativePath, line.Number, line.Text.Trim()))
-        ];
-    }
-
-    /// <summary>
-    ///     A (number, text) pair for every code line carrying an arm keyed on one
-    ///     of <paramref name="ids" />.
-    /// </summary>
-    private static IReadOnlyList<(int Number, string Text)> FindArmLines(
-        IEnumerable<string> lines, IReadOnlySet<string> ids)
-    {
-        var hits = new List<(int, string)>();
-        int number = 0;
-        foreach (string line in lines)
-        {
-            number++;
-            if (IsComment(line)) continue;
-
-            foreach (Match literal in QuotedLiteral.Matches(line))
-            {
-                string value = literal.Groups["value"].Value;
-                if (!ids.Contains(value)) continue;
-
-                // The literal must be the ARM KEY, i.e. an arrow follows it before
-                // any other literal — that is what distinguishes a table row from a
-                // lookup, a comparison, or a value.
-                string tail = line[(literal.Index + literal.Length)..];
-                if (ArmArrow.IsMatch(tail)) hits.Add((number, line));
-            }
-        }
-
-        return hits;
-    }
-
     /// <summary>Comment and doc-comment lines are prose, not code.</summary>
     private static bool IsComment(string line)
     {
@@ -402,13 +422,4 @@ public sealed class ProviderIdDispatchRule
 
     private static string[] SplitLines(string text) =>
         text.Replace("\r\n", "\n", StringComparison.Ordinal).Split('\n');
-
-    /// <summary>Render offending sites for a failure message, with a sane cap.</summary>
-    private static string Describe(IReadOnlyList<ArmSite> sites)
-    {
-        if (sites.Count == 0) return "(none)";
-        const int Cap = 10;
-        string joined = string.Join("; ", sites.Take(Cap).Select(s => s.RelativePath + ":" + s.Line));
-        return sites.Count <= Cap ? joined : joined + " (+" + (sites.Count - Cap) + " more)";
-    }
 }

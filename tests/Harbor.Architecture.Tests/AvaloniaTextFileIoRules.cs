@@ -52,9 +52,7 @@
 // policed when it declares a type whose name ends in — or contains — `ViewModel`.
 // #941 counted view-models by declaration for the same reason, and a rule keyed on
 // the path `ViewModels/` would be defeated by moving the file while keeping the
-// behaviour. The names are collected app-wide first, so the second part of a
-// `partial` split — which repeats the type name but declares nothing new — is
-// still inside the perimeter.
+// behaviour.
 //
 // Deliberately NOT forbidden, each for a stated reason:
 //   * `Path.*` — pure string handling over a path the picker or the tree already
@@ -102,6 +100,23 @@
 //      nowhere would simply not have;
 //   4. a view-model CONSUMES one — the contract named in a `*ViewModel*` type, so
 //      the port is on a live path and not decoration.
+//
+// MECHANISM (#1086, step 2, conveyor)
+// -----------------------------------
+// The two forbidden-shape halves below are ScanRules: the view-model file-I/O
+// ban (a CustomParse, because the perimeter is the declaring TYPE — a per-file
+// gate the shared line scan cannot express) and the no-implementer ban (a plain
+// line scan). Enumeration, stripping, matching and the control/discovery verdicts
+// are ScanRunner's; this file keeps the issue prose and the test names.
+//
+// The per-file gate is exactly equivalent to the old app-wide collection, not a
+// re-decision: the old `IsViewModel` tested a file's declaration matches against
+// the set of ALL matches across the project, and every match of this file is in
+// that set by construction — so a file was inside the perimeter iff the
+// declaration pattern matches it. The second part of a `partial` split repeats
+// the type name and therefore still matches, which the Partial controls prove.
+// The registration/consumption existence checks (facts 3–4) and the contract
+// existence (fact 1) are not forbidden-shape scans and stay handwritten.
 
 using System.Text.RegularExpressions;
 
@@ -115,6 +130,9 @@ namespace Harbor.Architecture.Tests;
 /// </summary>
 public class AvaloniaTextFileIoRules
 {
+    private const string SubId = "VIEWMODEL-FILE-IO";
+    private const string NoImplementerSubId = "DOMAIN-PORT-IMPLEMENTER";
+
     /// <summary>
     ///     Projects this rule polices. A composition root is the only kind of
     ///     project a reference-free scan can reach, so this list is expected to
@@ -164,6 +182,30 @@ public class AvaloniaTextFileIoRules
     ];
 
     /// <summary>
+    ///     The three forbidden shapes as one alternation, composed from the same
+    ///     fields the parser grades — not a copy — so this row cannot drift from
+    ///     them. The runner does not execute it (the rule grades through
+    ///     <see cref="ParseViewModelFileIo" />); it documents the shape the rule
+    ///     bans and carries the failure text. One report per line, as before: a
+    ///     shape spelled `new FileStream(p)` on a line that also calls
+    ///     `File.Exists(p)` is one violation.
+    /// </summary>
+    private static readonly Regex ForbiddenShape = new(
+        string.Join("|", ForbiddenPatterns.Select(static p => "(?:" + p.ToString() + ")")),
+        RegexOptions.Compiled);
+
+    /// <summary>
+    ///     Declaring an implementer of the Domain port in the app — the shape the
+    ///     seam half forbids. Consuming the port (a constructor parameter, a
+    ///     registration line) does not match: the colon must directly precede the
+    ///     contract name, and the construction must name the implementation.
+    /// </summary>
+    private static readonly Regex ImplementerShape = new(
+        @":\s*" + PortContractName + @"\b"
+        + @"|new\s+" + PortImplementationName + @"\s*\(",
+        RegexOptions.Compiled);
+
+    /// <summary>
     ///     Matches a class/record declaration whose type name contains
     ///     <c>ViewModel</c>. Over-inclusive on purpose: a type called
     ///     <c>NotAViewModel</c> joins the perimeter, and the cost of that is one
@@ -172,6 +214,208 @@ public class AvaloniaTextFileIoRules
     private static readonly Regex ViewModelDeclaration =
         new(@"\b(?:class|record(?:\s+(?:class|struct))?)\s+[A-Za-z_][A-Za-z0-9_]*ViewModel[A-Za-z0-9_]*\b",
             RegexOptions.Compiled);
+
+    /// <summary>The file-I/O ban as data: one documented shape, a per-file type-gated parser, controls, a floor.</summary>
+    private static readonly ScanRule FileIoRule = new()
+    {
+        Id = "AvaloniaTextFileIo",
+        Trees = ["apps/Harbor.App.Avalonia"],
+        Forbidden =
+        [
+            new ScanForbidden(
+                SubId,
+                ForbiddenShape,
+                "go through the Domain ITextFileStore (Harbor.Abstractions, beside IDirectoryLister), "
+                + "implemented in Harbor.Application beside SystemDirectoryLister, registered in "
+                + "ServiceRegistration.RegisterAppServices, and injected into the view-model. "
+                + "Path strings are still the view-model's business."),
+        ],
+        Controls =
+        [
+            // The exact pre-#934 shape, from CodeEditorViewModel: three offending
+            // lines, each its own control — each graded with the declaration that
+            // puts the file inside the perimeter.
+            new ScanControl("Pre/Exists.cs", """
+                public sealed partial class CodeEditorViewModel : ObservableObject
+                {
+                    public async Task LoadFileAsync(string path)
+                    {
+                        if (!File.Exists(path)) return;
+                    }
+                }
+                """, SubId),
+            new ScanControl("Pre/Read.cs", """
+                public sealed partial class CodeEditorViewModel : ObservableObject
+                {
+                    public async Task LoadFileAsync(string path)
+                    {
+                        string content = await File.ReadAllTextAsync(path).ConfigureAwait(false);
+                    }
+                }
+                """, SubId),
+            new ScanControl("Pre/Write.cs", """
+                public sealed partial class CodeEditorViewModel : ObservableObject
+                {
+                    [RelayCommand]
+                    private async Task SaveAsync()
+                    {
+                        await File.WriteAllTextAsync(ActiveTab.FilePath, ActiveTab.Content).ConfigureAwait(false);
+                    }
+                }
+                """, SubId),
+            // The post-#934 shape: the view-model names the port and never `File`.
+            new ScanControl("Seam.cs", """
+                public sealed partial class CodeEditorViewModel : ObservableObject
+                {
+                    private readonly ITextFileStore _files;
+
+                    public async Task LoadFileAsync(string path)
+                    {
+                        Result<bool> present = await _files.ExistsAsync(path).ConfigureAwait(false);
+                        if (!present.Value) return;
+                        string content = (await _files.ReadAsync(path).ConfigureAwait(false)).Value;
+                    }
+
+                    [RelayCommand]
+                    private async Task SaveAsync()
+                    {
+                        await _files.WriteAsync(ActiveTab.FilePath, ActiveTab.Content).ConfigureAwait(false);
+                    }
+                }
+                """, null),
+            // Labelling a tab is string handling over a path the picker produced.
+            new ScanControl("Strings.cs", """
+                public sealed partial class CodeEditorViewModel : ObservableObject
+                {
+                    public void Label(string path)
+                    {
+                        TabName = Path.GetFileName(path);
+                        TabSyntax = Path.GetExtension(path).TrimStart('.');
+                    }
+                }
+                """, null),
+            // The same capability, one type over, outside the perimeter: a service
+            // that touches a file is a different defect with a different owner.
+            // No ViewModel declaration — so the gate stays shut. This is the
+            // control that proves the rule is not merely "no `File` in the app".
+            new ScanControl("Service.cs", """
+                public sealed class ThemeService : IThemeService
+                {
+                    public Result<string> LoadJson(string path)
+                    {
+                        if (!File.Exists(path)) return Result.Failure<string>("theme file not found");
+                        return Result.Success(File.ReadAllText(path));
+                    }
+                }
+                """, null),
+            // The read could have been reached through a FileStream instead of the
+            // static overloads, with any local name.
+            new ScanControl("Renamed/Info.cs", """
+                public sealed partial class CodeEditorViewModel : ObservableObject
+                {
+                    public async Task LoadFileAsync(string path)
+                    {
+                        var handle = new FileInfo(path);
+                        TabContent = handle.FullName;
+                    }
+                }
+                """, SubId),
+            new ScanControl("Renamed/Reader.cs", """
+                public sealed partial class CodeEditorViewModel : ObservableObject
+                {
+                    public async Task LoadFileAsync(string path)
+                    {
+                        using var reader = new StreamReader(path);
+                        TabContent = await reader.ReadToEndAsync().ConfigureAwait(false);
+                    }
+                }
+                """, SubId),
+            // The fix's own comments name the forbidden call. A guard that fails on
+            // its own documentation is a guard nobody keeps.
+            new ScanControl("Prose.cs", """
+                // #934: this used to call File.Exists(path) and File.ReadAllTextAsync(path).
+                /// <summary>Reads through the port; never File.WriteAllTextAsync here.</summary>
+                public sealed partial class CodeEditorViewModel : ObservableObject
+                {
+                    public Task SaveAsync(string path, string text) => _files.WriteAsync(path, text);
+                }
+                """, null),
+            // A `partial` split is the cheapest way to move the calls out of a
+            // perimeter: the second file names the type and declares nothing new.
+            // The declaring half is clean; the naming half still matches the gate.
+            new ScanControl("Partial/First.cs", """
+                public sealed partial class CodeEditorViewModel : ObservableObject
+                {
+                    public ObservableCollection<EditorTabViewModel> Tabs { get; } = new();
+                }
+                """, null),
+            new ScanControl("Partial/Second.cs", """
+                public sealed partial class CodeEditorViewModel
+                {
+                    public async Task LoadFileAsync(string path)
+                    {
+                        string content = await File.ReadAllTextAsync(path).ConfigureAwait(false);
+                    }
+                }
+                """, SubId),
+        ],
+        MinHits = 50,
+        CustomParse = ParseViewModelFileIo,
+    };
+
+    /// <summary>The no-implementer ban as data: one shape, planted controls, the same floor.</summary>
+    private static readonly ScanRule NoImplementerRule = new()
+    {
+        Id = "AvaloniaTextFileIo.NoImplementer",
+        Trees = ["apps/Harbor.App.Avalonia"],
+        Forbidden =
+        [
+            new ScanForbidden(
+                NoImplementerSubId,
+                ImplementerShape,
+                "the desktop shell consumes ITextFileStore; it does not provide it. The System.IO "
+                + "implementation belongs in Harbor.Application beside SystemDirectoryLister."),
+        ],
+        Controls =
+        [
+            new ScanControl("Impl/Declares.cs", "public sealed class AppTextFileStore : ITextFileStore", NoImplementerSubId),
+            new ScanControl("Impl/Builds.cs", "ITextFileStore store = new SystemTextFileStore(root);", NoImplementerSubId),
+            // Consuming the port — a constructor parameter — is the point, not a violation.
+            new ScanControl("Impl/Consumes.cs", "public CodeEditorViewModel(ITextFileStore files)", null),
+            // Registering the port is the point, not a violation.
+            new ScanControl("Impl/Registers.cs", "services.AddSingleton<ITextFileStore, SystemTextFileStore>();", null),
+        ],
+        MinHits = 50,
+    };
+
+    /// <summary>
+    ///     The custom parser: the file-I/O verdict over one file's raw source. The
+    ///     file is policed only when it matches the view-model declaration — the
+    ///     per-file form of the old app-wide collection, exactly equivalent (every
+    ///     match of this file is in the app-wide set by construction) — and then
+    ///     graded line by line with one report per line, as before.
+    /// </summary>
+    private static IEnumerable<ScanHit> ParseViewModelFileIo(string displayPath, string rawSource)
+    {
+        string stripped = SourceScan.StripComments(rawSource);
+        if (!ViewModelDeclaration.IsMatch(stripped))
+        {
+            yield break;
+        }
+
+        string[] lines = stripped.Split('\n');
+        for (int i = 0; i < lines.Length; i++)
+        {
+            foreach (Regex pattern in ForbiddenPatterns)
+            {
+                if (pattern.IsMatch(lines[i]))
+                {
+                    yield return new ScanHit(SubId, displayPath, i + 1, lines[i].Trim());
+                    break;
+                }
+            }
+        }
+    }
 
     /// <summary>
     ///     The type names the app declares that contain <c>ViewModel</c>, collected
@@ -216,59 +460,10 @@ public class AvaloniaTextFileIoRules
         return false;
     }
 
-    /// <summary>
-    ///     Repo-relative <c>path:line</c> of every forbidden shape in a view-model
-    ///     file; empty for a file outside the perimeter.
-    /// </summary>
-    private static List<string> DetectIn(string relativePath, string source, HashSet<string> viewModelTypeNames)
-    {
-        if (!IsViewModel(source, viewModelTypeNames))
-        {
-            return [];
-        }
-
-        var hits = new List<string>();
-        string[] lines = SourceScan.StripComments(source).Split('\n');
-        for (int i = 0; i < lines.Length; i++)
-        {
-            // One report per line: a shape spelled `new FileStream(p)` on a line
-            // that also calls `File.Exists(p)` is one violation, and a failure
-            // message printing it twice reads as two bugs.
-            foreach (Regex pattern in ForbiddenPatterns)
-            {
-                if (pattern.IsMatch(lines[i]))
-                {
-                    hits.Add($"{relativePath}:{i + 1}: {lines[i].Trim()}");
-                    break;
-                }
-            }
-        }
-
-        return hits;
-    }
-
     [Test]
     public async Task AvaloniaShell_ViewModelsDoNotTouchTheFilesystem()
     {
-        string? root = RepoPaths.RepoRoot;
-        await Assert.That(root).IsNotNull()
-            .Because(
-                "This guard walks the working tree. With no Harbor.slnx above AppContext.BaseDirectory "
-                + "the scan yields nothing and the rule reports green while enforcing nothing.");
-
-        if (root is null)
-        {
-            return;
-        }
-
-        List<(string Path, string Source)> files = ReadGuardedFiles(out var unreadable);
-        var violations = new List<string>(unreadable);
-        HashSet<string> viewModelTypeNames = CollectViewModelTypeNames(files);
-        foreach ((string path, string source) in files)
-        {
-            string relative = SourceScan.Relative(path);
-            violations.AddRange(DetectIn(relative, source, viewModelTypeNames));
-        }
+        List<string> violations = ScanRunner.Evaluate(FileIoRule);
 
         await Assert.That(violations).IsEmpty()
             .Because(
@@ -331,16 +526,19 @@ public class AvaloniaTextFileIoRules
             return;
         }
 
-        List<(string Path, string Source)> files = ReadGuardedFiles(out _);
-        await Assert.That(files.Count).IsGreaterThan(50)
+        List<string> discovery = ScanRunner.CheckDiscovery(FileIoRule);
+
+        await Assert.That(discovery).IsEmpty()
             .Because(
-                $"The guarded Avalonia shell should hold well over 50 source files; found {files.Count}. "
-                + "A near-zero count means the path is stale and the rule enforces nothing.");
+                "The guarded Avalonia shell holds well over 50 source files. "
+                + "A near-zero count means the path is stale and the rule enforces nothing. "
+                + string.Join("; ", discovery));
 
         // The perimeter needs its own floor. An empty view-model set makes every
         // violation check pass with nothing judged, which is the same green as
         // "the app has no view-models" — a state in which the rule is worthless and
         // reports so.
+        List<(string Path, string Source)> files = ReadGuardedFiles(out _);
         HashSet<string> perimeter = CollectViewModelTypeNames(files);
         int viewModelFiles = files.Count(f => IsViewModel(f.Source, perimeter));
         await Assert.That(viewModelFiles).IsGreaterThan(5)
@@ -367,150 +565,64 @@ public class AvaloniaTextFileIoRules
     [Test]
     public async Task Detector_FiresOnThePreFixShape_AndStaysQuietOnTheSeamCall()
     {
-        // The exact pre-#934 shape, from CodeEditorViewModel.
-        const string preFixShape = """
-            public sealed partial class CodeEditorViewModel : ObservableObject
-            {
-                private readonly ITextFileStore _files;
+        // The exact pre-#934 shape, from CodeEditorViewModel, must fire; the
+        // post-#934 port shape and the tab-labelling string work must stay quiet.
+        // The snippets live on FileIoRule.Controls, so the control drives the REAL
+        // parser rather than a second implementation of it.
+        List<string> failures = ScanRunner.CheckControls(FileIoRule);
 
-                public async Task LoadFileAsync(string path)
-                {
-                    if (!File.Exists(path)) return;
-                    string content = await File.ReadAllTextAsync(path).ConfigureAwait(false);
-                }
-
-                [RelayCommand]
-                private async Task SaveAsync()
-                {
-                    await File.WriteAllTextAsync(ActiveTab.FilePath, ActiveTab.Content).ConfigureAwait(false);
-                }
-            }
-            """;
-
-        // The post-#934 shape: the view-model names the port and never `File`.
-        const string seamCall = """
-            public sealed partial class CodeEditorViewModel : ObservableObject
-            {
-                private readonly ITextFileStore _files;
-
-                public async Task LoadFileAsync(string path)
-                {
-                    Result<bool> present = await _files.ExistsAsync(path).ConfigureAwait(false);
-                    if (!present.Value) return;
-                    string content = (await _files.ReadAsync(path).ConfigureAwait(false)).Value;
-                }
-
-                [RelayCommand]
-                private async Task SaveAsync()
-                {
-                    await _files.WriteAsync(ActiveTab.FilePath, ActiveTab.Content).ConfigureAwait(false);
-                }
-            }
-            """;
-
-        // Labelling a tab is string handling over a path the picker produced.
-        const string pureStringPathWork = """
-            public sealed partial class CodeEditorViewModel : ObservableObject
-            {
-                public void Label(string path)
-                {
-                    TabName = Path.GetFileName(path);
-                    TabSyntax = Path.GetExtension(path).TrimStart('.');
-                }
-            }
-            """;
-
-        HashSet<string> perimeter = new(StringComparer.Ordinal) { "CodeEditorViewModel" };
-
-        await Assert.That(DetectIn("Pre.cs", preFixShape, perimeter)).IsNotEmpty()
-            .Because("the pre-#934 shape is what this rule exists for; if it is not detected the rule guards nothing");
-        await Assert.That(DetectIn("Seam.cs", seamCall, perimeter)).IsEmpty()
+        await Assert.That(failures).IsEmpty()
             .Because(
-                "going through the port is the shape this issue converts TO. If it is flagged, the rule "
-                + "forbids the fix as well as the bug, and the only way to make CI green would be to widen "
-                + "or delete it.");
-        await Assert.That(DetectIn("Strings.cs", pureStringPathWork, perimeter)).IsEmpty()
-            .Because(
-                "`Path.GetFileName` / `Path.GetExtension` are string operations, not syscalls. The tab is "
-                + "labelled from the path, so forbidding this would forbid the fix.");
+                "the pre-#934 shape is what this rule exists for — if it is not detected the rule guards "
+                + "nothing — and going through the port is the shape the issue converts TO, so flagging it "
+                + "would forbid the fix. "
+                + string.Join("; ", failures));
     }
 
     [Test]
     public async Task Detector_IgnoresAServiceInTheSameProject()
     {
-        // The same capability, one type over, outside the perimeter. This is the
-        // control that proves the rule is not merely "no `File` in the app" — a
-        // rule phrased that way would be red for `ThemeService` and `App.axaml.cs`
+        // The perimeter is the view-model TYPE — proved by the Service.cs control
+        // on the rule, which touches files from a service and must stay quiet. A
+        // rule phrased as "no `File` in the app" would be red for `ThemeService`
         // on day one, which is the permanently-red rule the walk rule's header
-        // warns about, and `IThemeStore`'s own remarks already own ThemeService.
-        const string serviceShape = """
-            public sealed class ThemeService : IThemeService
-            {
-                public Result<string> LoadJson(string path)
-                {
-                    if (!File.Exists(path)) return Result.Failure<string>("theme file not found");
-                    return Result.Success(File.ReadAllText(path));
-                }
-            }
-            """;
+        // warns about.
+        List<string> failures = ScanRunner.CheckControls(FileIoRule);
 
-        HashSet<string> perimeter = new(StringComparer.Ordinal) { "CodeEditorViewModel" };
-
-        await Assert.That(DetectIn("Service.cs", serviceShape, perimeter)).IsEmpty()
+        await Assert.That(failures).IsEmpty()
             .Because(
                 "the perimeter is the view-model TYPE. A service that touches a file is a different defect "
-                + "with a different owner — `src/Harbor.DesignSystem/DesignSystem/IThemeStore.cs` names "
-                + "ThemeService.LoadJson in its own remarks as a site that did not adopt that port — and a "
-                + "rule that swallowed it would be red for a reason this issue does not fix.");
+                + "with a different owner. "
+                + string.Join("; ", failures));
     }
 
     [Test]
     public async Task Detector_IsNotDefeatedByRenamingTheLocal()
     {
-        // The pre-#934 code could have been written with any local name, and the
-        // read could have been reached through a FileStream instead of the static
-        // overloads. Keying the rule on a variable name would have been the easy
-        // way to write this guard, and it would have been worthless.
-        const string renamed = """
-            public sealed partial class CodeEditorViewModel : ObservableObject
-            {
-                public async Task LoadFileAsync(string path)
-                {
-                    var handle = new FileInfo(path);
-                    using var reader = new StreamReader(handle.FullName);
-                    TabContent = await reader.ReadToEndAsync().ConfigureAwait(false);
-                }
-            }
-            """;
+        // The rule keys on the `File.*` call and on the handle types, not on a
+        // variable name — proved by the Renamed controls on the rule, driven here
+        // through the same verdict.
+        List<string> failures = ScanRunner.CheckControls(FileIoRule);
 
-        HashSet<string> perimeter = new(StringComparer.Ordinal) { "CodeEditorViewModel" };
-
-        await Assert.That(DetectIn("Renamed.cs", renamed, perimeter)).IsNotEmpty()
+        await Assert.That(failures).IsEmpty()
             .Because(
                 "the rule keys on the `File.*` call and on the handle types, not on a variable name — "
-                + "otherwise a rename silently un-guards the very line it was written for");
+                + "otherwise a rename silently un-guards the very line it was written for. "
+                + string.Join("; ", failures));
     }
 
     [Test]
     public async Task Detector_IgnoresTheExplanationInProse()
     {
-        // The fix's own comments name the forbidden call. A guard that fails on its
-        // own documentation is a guard nobody keeps.
-        const string prose = """
-            // #934: this used to call File.Exists(path) and File.ReadAllTextAsync(path).
-            /// <summary>Reads through the port; never File.WriteAllTextAsync here.</summary>
-            public sealed partial class CodeEditorViewModel : ObservableObject
-            {
-                public Task SaveAsync(string path, string text) => _files.WriteAsync(path, text);
-            }
-            """;
+        // Comments are stripped before matching, so documenting the old shape does
+        // not reintroduce it — proved by the Prose.cs control on the rule.
+        List<string> failures = ScanRunner.CheckControls(FileIoRule);
 
-        HashSet<string> perimeter = new(StringComparer.Ordinal) { "CodeEditorViewModel" };
-
-        await Assert.That(DetectIn("Prose.cs", prose, perimeter)).IsEmpty()
+        await Assert.That(failures).IsEmpty()
             .Because(
                 "comments are stripped before matching, so documenting the old shape does not "
-                + "reintroduce it");
+                + "reintroduce it. "
+                + string.Join("; ", failures));
     }
 
     [Test]
@@ -518,39 +630,55 @@ public class AvaloniaTextFileIoRules
     {
         // A `partial` split is the cheapest way to move the calls out of a
         // perimeter keyed on declarations alone: the second file names the type and
-        // declares nothing new.
-        const string firstPart = """
-            public sealed partial class CodeEditorViewModel : ObservableObject
-            {
-                public ObservableCollection<EditorTabViewModel> Tabs { get; } = new();
-            }
-            """;
+        // declares nothing new. Proved by the Partial controls on the rule — the
+        // declaring half is clean and the naming half still fires.
+        List<string> failures = ScanRunner.CheckControls(FileIoRule);
 
-        const string secondPart = """
-            public sealed partial class CodeEditorViewModel
-            {
-                public async Task LoadFileAsync(string path)
-                {
-                    string content = await File.ReadAllTextAsync(path).ConfigureAwait(false);
-                }
-            }
-            """;
-
-        var app = new[] { ("First.cs", firstPart), ("Second.cs", secondPart) };
-        HashSet<string> perimeter = CollectViewModelTypeNames(app);
-        var violations = new List<string>();
-        foreach ((string name, string source) in app)
-        {
-            violations.AddRange(DetectIn(name, source, perimeter));
-        }
-
-        await Assert.That(perimeter.Contains("CodeEditorViewModel")).IsTrue()
-            .Because("the type name is collected app-wide, so a part that declares nothing new is still named");
-        await Assert.That(violations).IsNotEmpty()
+        await Assert.That(failures).IsEmpty()
             .Because(
-                "the second part of a partial repeats the type name and nothing else. A perimeter that "
-                + "judged each file only on what it DECLARES would be emptied by splitting the class, "
-                + "which is a rename with no diff in behaviour.");
+                "the second part of a partial repeats the type name and nothing else, and it must still "
+                + "be judged — otherwise splitting the class empties the perimeter with no diff in "
+                + "behaviour. "
+                + string.Join("; ", failures));
+    }
+
+    /// <summary>
+    ///     Every baseline row states why it is tolerated, in the row itself. Vacuous
+    ///     while the tables are empty, and deliberately so: wired from the first row
+    ///     so the first row cannot skip the argument.
+    /// </summary>
+    [Test]
+    public async Task Baseline_Rows_AllHaveReasons()
+    {
+        List<string> failures =
+        [
+            .. ScanRunner.CheckReasons(FileIoRule),
+            .. ScanRunner.CheckReasons(NoImplementerRule),
+        ];
+
+        await Assert.That(failures).IsEmpty().Because(string.Join("\n", failures));
+    }
+
+    /// <summary>
+    ///     Every baseline row must still correspond to a real hit, so the tables
+    ///     cannot rot into blanket permissions: fix the code without deleting the
+    ///     row and this fails.
+    /// </summary>
+    [Test]
+    public async Task Baseline_Rows_Are_Not_Stale()
+    {
+        List<(string DisplayPath, string Source)> sources =
+            ScanRunner.ReadSources(ScanRunner.ScopeFiles(FileIoRule));
+
+        List<string> stale =
+        [
+            .. ScanRunner.StaleBaselineKeys(FileIoRule, sources),
+            .. ScanRunner.StaleBaselineKeys(NoImplementerRule, sources),
+        ];
+
+        await Assert.That(stale).IsEmpty()
+            .Because("a baseline row with no violation behind it is a permission for a "
+                + "problem that no longer exists: " + string.Join(", ", stale));
     }
 
     // ── the seam half ─────────────────────────────────────────────────────
@@ -608,6 +736,12 @@ public class AvaloniaTextFileIoRules
                 + $"`System.IO` implementation belongs in Harbor.Application beside SystemDirectoryLister. #934.");
         }
 
+        // (2) The app may CONSUME the port and may not DECLARE an implementer of
+        //     it. An implementer here puts the bytes back in the app with a
+        //     friendlier name. Graded by the no-implementer rule, over the same
+        //     scope and the same stripper the violation check runs.
+        failures.AddRange(ScanRunner.Evaluate(NoImplementerRule));
+
         List<(string Path, string Source)> files = ReadGuardedFiles(out _);
         HashSet<string> viewModelTypeNames = CollectViewModelTypeNames(files);
         bool registered = false;
@@ -615,22 +749,7 @@ public class AvaloniaTextFileIoRules
 
         foreach ((string path, string source) in files)
         {
-            string relative = SourceScan.Relative(path);
             string stripped = SourceScan.StripComments(source);
-
-            // (2) The app may CONSUME the port and may not DECLARE an implementer of
-            //     it. An implementer here puts the bytes back in the app with a
-            //     friendlier name.
-            foreach (string line in stripped.Split('\n'))
-            {
-                if (Regex.IsMatch(line, $@":\s*{PortContractName}\b", RegexOptions.Compiled)
-                    || Regex.IsMatch(line, $@"new\s+{PortImplementationName}\s*\(", RegexOptions.Compiled))
-                {
-                    failures.Add(
-                        $"{relative}: declares an implementer of a Domain port. The desktop shell consumes "
-                        + $"{PortContractName}; it does not provide it. {line.Trim()}");
-                }
-            }
 
             // (3) REGISTERED. The composition root is stated in exactly one place,
             //     and this is it.

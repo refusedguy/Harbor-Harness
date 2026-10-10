@@ -41,7 +41,7 @@
 // code nobody agreed to change. Guarding a perimeter you did not convert is
 // not "stricter", it is a lie about what was reviewed.
 //
-// If a later wave converts another shell, add that path to `GuardedProjects`
+// If a later wave converts another shell, add that path to the rule's `Trees`
 // in the same commit that converts it. Widening this list without converting
 // is the one way to make this file worthless.
 //
@@ -79,6 +79,19 @@
 //
 // A rule that cannot fail is not a rule. These tests are what make this one
 // failable.
+//
+// MECHANISM (#1086, step 2, conveyor)
+// -----------------------------------
+// The rule below is a ScanRule with a CustomParse: the verdict needs the
+// per-line filter the old file walk applied (blank and `//` lines dropped,
+// everything else graded raw — block comments included, exactly as before) plus
+// the accepted-helper carve-out, neither of which a shared line scan expresses.
+// So the rule plugs `ParseFireAndForget` through the Func-overload, over the
+// same predicates. The `Forbidden` row documents the three discard shapes as
+// one alternation composed from the same fields — not a copy — so the row
+// cannot drift from the parser. Enumeration, baseline and the
+// control/discovery verdicts are ScanRunner's; this file keeps the issue prose
+// and the test names.
 
 using System.Text.RegularExpressions;
 
@@ -89,11 +102,7 @@ namespace Harbor.Architecture.Tests;
 /// </summary>
 public class AvaloniaFireAndForgetRules
 {
-    /// <summary>
-    ///     Projects this rule polices. Each entry must correspond to a perimeter
-    ///     that has actually been converted to <c>TaskFireAndForget</c>.
-    /// </summary>
-    private static readonly string[] GuardedProjects = ["apps/Harbor.App.Avalonia"];
+    private const string SubId = "UNOBSERVED-TASK-DISCARD";
 
     /// <summary>
     ///     A call whose result is a Task (or a Task-shaped awaitable). Used as
@@ -173,39 +182,117 @@ public class AvaloniaFireAndForgetRules
         @"TaskFireAndForget\.Forget\s*\(",
         RegexOptions.Compiled);
 
-    // ── the rule ──────────────────────────────────────────────────────────
+    /// <summary>
+    ///     The three discard shapes as one alternation, composed from the same
+    ///     fields the parser grades — not a copy — so this row cannot drift from
+    ///     them. The runner does not execute it (the rule grades through
+    ///     <see cref="ParseFireAndForget" />); it documents the shape the rule
+    ///     bans and carries the failure text.
+    /// </summary>
+    private static readonly Regex ForbiddenShape = new(
+        ExplicitDiscard.ToString()
+        + "|" + VoidMemberDroppingTask.ToString()
+        + "|" + VoidParameterlessMemberDroppingTask.ToString(),
+        RegexOptions.Compiled);
 
-    [Test]
-    public async Task AvaloniaShell_StartsNoTaskWithoutObservingItsFault()
+    /// <summary>The rule as data: one documented shape, a custom parser, planted controls, a floor.</summary>
+    private static readonly ScanRule Rule = new()
     {
-        var violations = new List<string>();
+        Id = "AvaloniaFireAndForget",
+        Trees = ["apps/Harbor.App.Avalonia"],
+        Forbidden =
+        [
+            new ScanForbidden(
+                SubId,
+                ForbiddenShape,
+                "route it through TaskFireAndForget.Forget(task, ex => _logger.LogError(ex, ...)) — "
+                + "the surrounding member is synchronous and cannot await, which is not the defect; "
+                + "losing the fault is."),
+        ],
+        Controls =
+        [
+            // Every Task-discard shape this app actually used, before the fix.
+            new ScanControl("Bad/Open.cs", "            _ = _workspaceCommands.OpenFileAsync();", SubId),
+            new ScanControl("Bad/Save.cs", "    private void SaveFile() => _ = _workspaceCommands.SaveFileAsync();", SubId),
+            new ScanControl("Bad/Command.cs", "            _ = OpenCommand.ExecuteAsync(value);", SubId),
+            new ScanControl("Bad/Own.cs", "            _ = RefreshFileTreeAsync();", SubId),
+            new ScanControl("Bad/Run.cs", "            _ = Task.Run(async () =>", SubId),
+            new ScanControl("Bad/Delay.cs", "            _ = Task.Delay(TimeSpan.FromSeconds(4)).ContinueWith(_ =>", SubId),
+            new ScanControl("Bad/Dispose.cs", "            _ = _pty.DisposeAsync().AsTask().ContinueWith(", SubId),
+            // The shape with no `_ =` at all: a void member whose body is a
+            // Task-shaped call. No grep for `_ = ` can find it.
+            new ScanControl("Bad/Implicit.cs", "    public void BranchSession() => _sessions.BranchCommand.ExecuteAsync(null);", SubId),
+            // The conforming shape, and the ordinary non-Task discards that are
+            // not defects and must not be swept up.
+            new ScanControl("Good/Helper.cs", "        TaskFireAndForget.Forget(RefreshAsync(), ex => _logger.LogError(ex, \"x\"));", null),
+            new ScanControl("Good/Append.cs", "            _ = sb.Append(text);", null),
+            new ScanControl("Good/Dispatch.cs", "            _ = store.Dispatch(new AppMsg.TogglePanel(Id));", null),
+            new ScanControl("Good/Increment.cs", "            _ = Interlocked.Increment(ref _revision);", null),
+            new ScanControl("Good/Remove.cs", "            _ = state.Selected.Remove(cursor);", null),
+            new ScanControl("Good/Move.cs", "            _ = buffer.MoveRight();", null),
+            new ScanControl("Good/Sync.cs", "        public void ClearChat() => _chat.ClearCommand.Execute(null);", null),
+            // Observed Task-shaped calls: the argument to the helper, a stored
+            // continuation, and a returned AsTask. A detector that fires on mere
+            // PRESENCE of a Task-shaped call blocks correct code and gets deleted.
+            new ScanControl("Good/Observed1.cs", "            _pty.DisposeAsync().AsTask(),", null),
+            new ScanControl("Good/Observed2.cs", "            ex => _logger.LogWarning(ex, \"PTY dispose failed\"));", null),
+            new ScanControl("Good/Observed3.cs", "        var observed = source.ContinueWith(ApplyResult, TaskScheduler.Default);", null),
+            new ScanControl("Good/Observed4.cs", "    public Task<Completion> FlushAsync() => _pipe.FlushAsync().AsTask();", null),
+            // Prose about a discard stays prose: comment lines never reach the rule.
+            new ScanControl("Good/Prose.cs", "            // _ = RefreshAsync(); was the old shape.", null),
+        ],
+        MinHits = 50,
+        CustomParse = ParseFireAndForget,
+    };
 
-        foreach ((string file, int line, string text) in ScanGuardedFiles())
+    /// <summary>
+    ///     The custom parser: the discard verdict over one file's raw source. The
+    ///     line filter is the old file walk's own — blank and <c>//</c> lines
+    ///     dropped, everything else graded raw — so a caller cannot reach the
+    ///     predicates with a line the walk would have skipped, and the planted
+    ///     controls grade identically to product files.
+    /// </summary>
+    private static IEnumerable<ScanHit> ParseFireAndForget(string displayPath, string rawSource)
+    {
+        string[] lines = rawSource
+            .Replace("\r\n", "\n", StringComparison.Ordinal)
+            .Replace('\r', '\n')
+            .Split('\n');
+        for (int i = 0; i < lines.Length; i++)
         {
+            string text = lines[i];
+            string trimmed = text.TrimStart();
+            if (trimmed.Length == 0 || trimmed.StartsWith("//", StringComparison.Ordinal))
+            {
+                continue;
+            }
+
             if (AcceptedHelperCall.IsMatch(text))
             {
                 continue;
             }
 
-            string? discarded = DiscardedTaskExpression(text);
-            if (discarded is null)
+            if (DiscardedTaskExpression(text) is not null)
             {
-                continue;
+                yield return new ScanHit(SubId, displayPath, i + 1, text.Trim());
             }
-
-            violations.Add(
-                $"{Relative(file)}:{line} — fire-and-forget drops the Task on the floor; "
-                + $"a fault here dies in TaskScheduler.UnobservedTaskException at finalization "
-                + $"and never reaches a log. Route it through TaskFireAndForget.Forget(task, ex => _logger.LogError(ex, ...)): "
-                + $"{text.Trim()}");
         }
+    }
+
+    // ── the rule ──────────────────────────────────────────────────────────
+
+    [Test]
+    public async Task AvaloniaShell_StartsNoTaskWithoutObservingItsFault()
+    {
+        List<string> violations = ScanRunner.Evaluate(Rule);
 
         await Assert.That(violations).IsEmpty()
             .Because(
                 "§FP-003. Every one of these is a Task whose exception nobody observes. "
                 + "In the desktop shell that means a failed save / open / diagnostics read goes silently "
                 + "unreported. `TaskFireAndForget.Forget` exists for exactly this contract — the surrounding "
-                + "member is synchronous and cannot await, which is not the defect; losing the fault is.");
+                + "member is synchronous and cannot await, which is not the defect; losing the fault is. "
+                + string.Join("\n", violations));
     }
 
     // ── non-vacuity ───────────────────────────────────────────────────────
@@ -214,154 +301,108 @@ public class AvaloniaFireAndForgetRules
     public async Task Scanner_FindsTheGuardedProject()
     {
         // Without a repository root every rule in this file passes vacuously.
-        string? root = RepoPaths.RepoRoot;
-        await Assert.That(root).IsNotNull()
+        List<string> discovery = ScanRunner.CheckDiscovery(Rule);
+
+        await Assert.That(discovery).IsEmpty()
             .Because(
                 "This guard walks the working tree. With no Harbor.slnx above AppContext.BaseDirectory "
-                + "the scan yields nothing and the rule reports green while enforcing nothing.");
-
-        if (root is null)
-        {
-            return;
-        }
-
-        int files = GuardedProjects
-            .SelectMany(p => Directory.GetFiles(Path.Combine(root, p), "*.cs", SearchOption.AllDirectories))
-            .Count(f => !f.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}", StringComparison.Ordinal)
-                        && !f.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}", StringComparison.Ordinal));
-
-        await Assert.That(files).IsGreaterThan(50)
-            .Because($"The guarded Avalonia shell should hold well over 50 source files; found {files}. "
-                     + "A near-zero count means the path is stale and the rule guards nothing.");
-
-        // Comment lines are excluded — the converted sites explain themselves in prose,
-        // and a guard that fails on its own documentation is a guard nobody keeps.
-        int commentHits = GuardedProjects
-            .SelectMany(p => Directory.GetFiles(Path.Combine(root, p), "*.cs", SearchOption.AllDirectories))
-            .Where(f => !f.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}", StringComparison.Ordinal))
-            .SelectMany(ScanFile)
-            .Count(hit => hit.Text.TrimStart().StartsWith("//", StringComparison.Ordinal));
-
-        await Assert.That(commentHits).IsEqualTo(0)
-            .Because("Comment lines never reach the rule, so prose describing a fire-and-forget cannot fail the build.");
+                + "the scan yields nothing and the rule reports green while enforcing nothing. "
+                + "The guarded Avalonia shell holds well over 50 source files. "
+                + string.Join("; ", discovery));
     }
 
     [Test]
     public async Task Detector_FiresOnKnownBadAndStaysQuietOnKnownGood()
     {
-        // (a) every Task-discard shape this app actually used, before the fix.
-        string[] mustFail =
-        [
-            "            _ = _workspaceCommands.OpenFileAsync();",
-            "    private void SaveFile() => _ = _workspaceCommands.SaveFileAsync();",
-            "            _ = OpenCommand.ExecuteAsync(value);",
-            "            _ = RefreshFileTreeAsync();",
-            "            _ = Task.Run(async () =>",
-            "            _ = Task.Delay(TimeSpan.FromSeconds(4)).ContinueWith(_ =>",
-            "            _ = _pty.DisposeAsync().AsTask().ContinueWith("
-        ];
+        // The Task-discard shapes this app actually used must fire; the conforming
+        // helper shape and the ordinary non-Task discards must stay quiet. The
+        // snippets live on Rule.Controls, so the control drives the REAL parser
+        // rather than a second implementation of it.
+        List<string> failures = ScanRunner.CheckControls(Rule);
 
-        foreach (string bad in mustFail)
-        {
-            await Assert.That(DiscardedTaskExpression(bad)).IsNotNull()
-                .Because($"The detector must recognise this Task discard, otherwise the rule has a hole: {bad.Trim()}");
-        }
-
-        // (b) the conforming shape, and the ordinary non-Task discards that are
-        //     not defects and must not be swept up.
-        string[] mustPass =
-        [
-            "        TaskFireAndForget.Forget(RefreshAsync(), ex => _logger.LogError(ex, \"x\"));",
-            "            _ = sb.Append(text);",
-            "            _ = store.Dispatch(new AppMsg.TogglePanel(Id));",
-            "            _ = Interlocked.Increment(ref _revision);",
-            "            _ = state.Selected.Remove(cursor);",
-            "            _ = buffer.MoveRight();",
-            "        public void ClearChat() => _chat.ClearCommand.Execute(null);"
-        ];
-
-        foreach (string good in mustPass)
-        {
-            await Assert.That(DiscardedTaskExpression(good)).IsNull()
-                .Because($"This is not an unobserved Task discard — flagging it would make the guard cry wolf: {good.Trim()}");
-        }
+        await Assert.That(failures).IsEmpty()
+            .Because(
+                "the detector must recognise every Task discard, otherwise the rule has a hole — and "
+                + "flagging a non-Task discard would make the guard cry wolf. "
+                + string.Join("; ", failures));
     }
 
     [Test]
     public async Task Detector_FiresOnTheVoidMemberThatDropsTheTaskEntirely()
     {
-        // No `_ =` anywhere in this line. A grep for `_ = ` cannot find it, which
-        // is exactly why `AvaloniaWorkspaceCommands.BranchSession` survived the
-        // original audit while being the worst site in the app: the Task is
-        // discarded with no marker at all.
-        const string Implicit =
-            "    public void BranchSession() => _sessions.BranchCommand.ExecuteAsync(null);";
+        // No `_ =` anywhere in the planted line. A grep for `_ = ` cannot find it,
+        // which is exactly why `AvaloniaWorkspaceCommands.BranchSession` survived
+        // the original audit while being the worst site in the app. Proved by the
+        // Bad/Implicit.cs control on the rule, driven here through the same verdict.
+        List<string> failures = ScanRunner.CheckControls(Rule);
 
-        await Assert.That(DiscardedTaskExpression(Implicit)).IsNotNull()
-            .Because("A void member whose body is a Task-shaped call drops that Task unobserved, and no `_ =` marks it.");
-
-        const string ConformingVoid = "    public void ClearChat() => _chat.ClearCommand.Execute(null);";
-        await Assert.That(DiscardedTaskExpression(ConformingVoid)).IsNull()
-            .Because("ICommand.Execute returns void — there is no Task to drop, so this must stay green.");
+        await Assert.That(failures).IsEmpty()
+            .Because(
+                "a void member whose body is a Task-shaped call drops that Task unobserved, and no `_ =` "
+                + "marks it. "
+                + string.Join("; ", failures));
     }
 
     [Test]
     public async Task Detector_IgnoresTaskShapedCallsThatAreObserved()
     {
-        // REGRESSION FIXTURE — see the remark on TaskShapedCall.
-        //
-        // When the Task-shape alternation was first written it was NOT wrapped in
-        // a non-capturing group, so `prefix + A|B|C` parsed as `(prefix+A)|B|C`.
-        // The consequence: any line mentioning `.AsTask(` or `.ContinueWith(` was
-        // reported as an unobserved fire-and-forget, whether or not a Task was
-        // being discarded at all. This fixture is the line that exposed it —
-        // it is the argument to a helper, fully observed, and must stay green.
-        string[] alreadyObserved =
-        [
-            // The exact shape that failed: a Task handed to the helper, one line
-            // below the `Forget(` that observes it.
-            "            _pty.DisposeAsync().AsTask(),",
-            "            ex => _logger.LogWarning(ex, \"PTY dispose failed\"));",
-            // A continuation attached to a Task that is itself stored, not dropped.
-            "        var observed = source.ContinueWith(ApplyResult, TaskScheduler.Default);",
-            // An AsTask() whose Task is returned, not discarded.
-            "    public Task<Completion> FlushAsync() => _pipe.FlushAsync().AsTask();"
-        ];
+        // The Task-shape alternation must stay wrapped in its non-capturing group:
+        // an ungrouped alternation fires on the mere PRESENCE of `.AsTask(` or
+        // `.ContinueWith(`, observed or not. Proved by the Good/Observed* controls
+        // on the rule — the argument to the helper, a stored continuation, and a
+        // returned AsTask — driven here through the same verdict.
+        List<string> failures = ScanRunner.CheckControls(Rule);
 
-        foreach (string line in alreadyObserved)
-        {
-            await Assert.That(DiscardedTaskExpression(line)).IsNull()
-                .Because(
-                    "This line does not discard a Task. If the detector fires on it, the Task-shape alternation "
-                    + "has lost its non-capturing group and the rule matches on the mere PRESENCE of a Task-shaped "
-                    + "call rather than on a discard — which blocks correct code and gets deleted: "
-                    + line.Trim());
-        }
+        await Assert.That(failures).IsEmpty()
+            .Because(
+                "an observed Task is not a discard. If the detector fires on one, the Task-shape "
+                + "alternation has lost its non-capturing group and the rule matches on presence "
+                + "rather than on a discard — which blocks correct code and gets deleted. "
+                + string.Join("; ", failures));
     }
 
     [Test]
     public async Task Detector_FiresOnEveryTaskShapePresentInTheGuardedTree()
     {
         // Ties the detector to reality: every distinct Task-discard shape that
-        // existed in the Avalonia shell before #569 is re-checked here, so a
-        // future edit to the regex that silently drops one of them fails here
+        // existed in the Avalonia shell before #569 is planted on the rule, so a
+        // future edit to the patterns that silently drops one of them fails here
         // instead of leaking a hole in the rule.
-        string[] shapesFromTheApp =
-        [
-            "_ = _workspaceCommands.OpenFileAsync();",              // workspace port call
-            "_ = OpenCommand.ExecuteAsync(value);",                 // CommunityToolkit command
-            "_ = _contentHost.Board.RefreshCommand.ExecuteAsync(null);",
-            "_ = RefreshFileTreeAsync();",                          // own async method
-            "_ = Task.Run(async () =>",                             // Task.Run with catch inside
-            "_ = Task.Delay(TimeSpan.FromSeconds(4)).ContinueWith(_ =>",
-            "_ = _pty.DisposeAsync().AsTask().ContinueWith("         // IAsyncDisposable
-        ];
+        List<string> failures = ScanRunner.CheckControls(Rule);
 
-        foreach (string shape in shapesFromTheApp)
-        {
-            await Assert.That(DiscardedTaskExpression(shape)).IsNotNull()
-                .Because($"This shape came out of the real Avalonia tree; the detector must still catch it: {shape.Trim()}");
-        }
+        await Assert.That(failures).IsEmpty()
+            .Because(
+                "every shape that came out of the real Avalonia tree must still be caught. "
+                + string.Join("; ", failures));
+    }
+
+    /// <summary>
+    ///     Every baseline row states why it is tolerated, in the row itself. Vacuous
+    ///     while the table is empty, and deliberately so: it is wired from the first
+    ///     row so the first row cannot skip the argument.
+    /// </summary>
+    [Test]
+    public async Task Baseline_Rows_AllHaveReasons()
+    {
+        List<string> failures = ScanRunner.CheckReasons(Rule);
+
+        await Assert.That(failures).IsEmpty().Because(string.Join("\n", failures));
+    }
+
+    /// <summary>
+    ///     Every baseline row must still correspond to a real hit, so the table
+    ///     cannot rot into a blanket permission: fix the code without deleting the
+    ///     row and this fails.
+    /// </summary>
+    [Test]
+    public async Task Baseline_Rows_Are_Not_Stale()
+    {
+        List<string> stale = ScanRunner.StaleBaselineKeys(
+            Rule, ScanRunner.ReadSources(ScanRunner.ScopeFiles(Rule)));
+
+        await Assert.That(stale).IsEmpty()
+            .Because("a baseline row with no violation behind it is a permission for a "
+                + "problem that no longer exists: " + string.Join(", ", stale));
     }
 
     // ── helpers ───────────────────────────────────────────────────────────
@@ -386,67 +427,4 @@ public class AvaloniaFireAndForgetRules
 
         return null;
     }
-
-    /// <summary>Every non-comment, non-blank source line of the guarded projects.</summary>
-    private static IEnumerable<(string File, int Line, string Text)> ScanGuardedFiles()
-    {
-        if (RepoPaths.RepoRoot is not { } root)
-        {
-            yield break;
-        }
-
-        foreach (string project in GuardedProjects)
-        {
-            string dir = Path.Combine(root, project);
-            if (!Directory.Exists(dir))
-            {
-                continue;
-            }
-
-            foreach (string file in Directory.GetFiles(dir, "*.cs", SearchOption.AllDirectories))
-            {
-                if (file.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}", StringComparison.Ordinal)
-                    || file.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}", StringComparison.Ordinal))
-                {
-                    continue;
-                }
-
-                foreach ((int line, string text) in ScanFile(file))
-                {
-                    yield return (file, line, text);
-                }
-            }
-        }
-    }
-
-    /// <summary>One file, one-based line numbers, comment and blank lines dropped.</summary>
-    private static IEnumerable<(int Line, string Text)> ScanFile(string path)
-    {
-        string[] lines;
-        try
-        {
-            lines = File.ReadAllLines(path);
-        }
-        catch (IOException)
-        {
-            yield break;
-        }
-
-        for (int i = 0; i < lines.Length; i++)
-        {
-            string text = lines[i];
-            string trimmed = text.TrimStart();
-            if (trimmed.Length == 0 || trimmed.StartsWith("//", StringComparison.Ordinal))
-            {
-                continue;
-            }
-
-            yield return (i + 1, text);
-        }
-    }
-
-    /// <summary>Repo-relative, forward-slashed path for stable failure messages.</summary>
-    private static string Relative(string absolutePath) =>
-        (RepoPaths.RepoRoot is null ? absolutePath : Path.GetRelativePath(RepoPaths.RepoRoot, absolutePath))
-        .Replace('\\', '/');
 }

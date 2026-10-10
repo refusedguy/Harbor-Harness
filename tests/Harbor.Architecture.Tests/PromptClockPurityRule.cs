@@ -99,6 +99,21 @@
 //      two MUST be reported, the third and fourth MUST NOT. The fourth is what
 //      proves the rule is not "no UtcNow in src/" — 63 of those exist today,
 //      in message timestamps, store writes and token TTLs, all legitimate.
+//
+// MECHANISM (#1086, step 2, conveyor)
+// -----------------------------------
+// The rule below is a ScanRule with a CustomParse: the verdict needs the
+// two-phase classification (a file is bound only when it DECLARES an
+// `ISystemPromptBuilder` implementation, over the whole stripped text because a
+// base list may wrap) plus the wall-clock matcher, which no shared line scan
+// expresses. So the rule plugs a thin adapter over the UNCHANGED
+// `PromptClockProbe` through the Func-overload — the probe keeps its own
+// stripper (`SourceCommentStripper`, carried inside, never silently swapped for
+// the shared one) and stays the single implementation the occupancy test and
+// the controls drive. The `Forbidden` row holds the probe's own clock-read
+// locator (widened to `internal` for exactly this) and carries the failure
+// text. Enumeration and the control/discovery verdicts are ScanRunner's; this
+// file keeps the issue prose and the test names.
 
 using System.Collections.Frozen;
 using System.Text.RegularExpressions;
@@ -262,11 +277,17 @@ internal static partial class PromptClockProbe
     /// lookahead: including it would put a bracket in the middle of the quoted
     /// name, and the positive control asserts on the exact string.
     /// </remarks>
+    /// <remarks>
+    ///     Internal since #1086: the ScanRule below documents its banned shape
+    ///     with this same locator rather than a copy, so the row cannot drift
+    ///     from the parser. The runner never executes the row — the rule grades
+    ///     through the probe — it carries the failure text.
+    /// </remarks>
     [GeneratedRegex(
         @"\b(?:DateTimeOffset|DateTime|DateOnly)\s*\.\s*(?:UtcNow|Now|Today|UtcDate|Date|LocalDateTime|FromDateTime|FromDateTimeUtc)\b"
         + @"|[\w\]\)]*\s*\.\s*(?:Get(?:Utc|Local)Now|Today)(?=\s*\()"
         + @"|\bEnvironment\s*\.\s*TickCount\d*")]
-    private static partial Regex ClockRead();
+    internal static partial Regex ClockRead();
 
     private static IEnumerable<string> EnumerateSources(string repoRoot)
     {
@@ -304,8 +325,106 @@ internal static partial class PromptClockProbe
 /// </summary>
 public sealed class PromptClockPurityRule
 {
+    private const string SubId = "PROMPT-BUILDER-WALL-CLOCK";
+
     private static readonly Lazy<PromptClockScan> Report = new(
         () => PromptClockProbe.Scan(RepoPaths.RepoRoot));
+
+    /// <summary>The rule as data: one documented shape, the probe as parser, controls, a floor.</summary>
+    private static readonly ScanRule Rule = new()
+    {
+        Id = "PromptClockPurity",
+        Trees = ["src"],
+        Forbidden =
+        [
+            new ScanForbidden(
+                SubId,
+                PromptClockProbe.ClockRead(),
+                "remove the read rather than key it — keying it would put a clock inside the key "
+                + "derivation and break the purity the decorator documents. A date the model genuinely "
+                + "needs belongs in SystemPromptContext, where #792's mechanism already covers it."),
+        ],
+        Controls =
+        [
+            // A prompt builder with an ambient clock read — the defect this rule
+            // exists for — must be reported.
+            new ScanControl("src/Synthetic/Ambient.cs", """
+                public sealed class AmbientDateBuilder : ISystemPromptBuilder
+                {
+                    public Task<string> BuildAsync(SystemPromptContext context, CancellationToken ct = default)
+                    {
+                        var sb = new StringBuilder();
+                        sb.Append("- Today: ").Append(DateTimeOffset.UtcNow.ToString("yyyy-MM-dd"));
+                        return Task.FromResult(sb.ToString());
+                    }
+                }
+                """, SubId),
+            // Injecting the clock makes the impurity TESTABLE, not absent — the
+            // value still moves under an identical context, so the cache is still
+            // wrong. The obvious "fix" must not walk straight past the rule.
+            new ScanControl("src/Synthetic/Injected.cs", """
+                public sealed class InjectedDateBuilder(TimeProvider clock) : ISystemPromptBuilder
+                {
+                    public Task<string> BuildAsync(SystemPromptContext context, CancellationToken ct = default)
+                    {
+                        var sb = new StringBuilder();
+                        sb.Append("- Today: ").Append(clock.GetUtcNow().ToString("yyyy-MM-dd"));
+                        return Task.FromResult(sb.ToString());
+                    }
+                }
+                """, SubId),
+            // The shape the rule REQUIRES: every value on the prompt comes off the
+            // context. Also proves the parser is not matching the interface NAME
+            // or the word `Today` as prose.
+            new ScanControl("src/Synthetic/Clean.cs", """
+                public sealed class CleanBuilder : ISystemPromptBuilder
+                {
+                    public Task<string> BuildAsync(SystemPromptContext context, CancellationToken ct = default)
+                    {
+                        var sb = new StringBuilder();
+                        sb.Append("- Working directory: ").Append(context.WorkingDirectory);
+                        sb.Append("- Model: ").Append(context.Model.Id);
+                        return Task.FromResult(sb.ToString());
+                    }
+                }
+                """, null),
+            // The same wall-clock read outside any prompt builder. This is the
+            // control that keeps the rule from degenerating into "no UtcNow
+            // anywhere in src/" — a claim src/ violates dozens of times over, in
+            // message timestamps, store writes and token TTLs, all legitimate.
+            new ScanControl("src/Synthetic/Factory.cs", """
+                public static class SummaryMessageFactory
+                {
+                    public static AssistantMessage Create(string id) => new(id, "s", DateTimeOffset.UtcNow);
+                }
+                """, null),
+        ],
+        MinHits = 100,
+        MustContain = [PromptClockProbe.CanonicalFile],
+        CustomParse = ParseClockReads,
+    };
+
+    /// <summary>
+    ///     The custom parser: the clock-read verdict over one file's raw source.
+    ///     A thin adapter over the unchanged <see cref="PromptClockProbe" /> — the
+    ///     probe keeps its own stripper and its declaration classification, and the
+    ///     planted controls grade identically to product files because they drive
+    ///     this same path.
+    /// </summary>
+    private static IEnumerable<ScanHit> ParseClockReads(string displayPath, string rawSource)
+    {
+        string[] lines = rawSource
+            .Replace("\r\n", "\n", StringComparison.Ordinal)
+            .Replace('\r', '\n')
+            .Split('\n');
+        var builders = new List<string>();
+        var reads = new List<PromptClockSite>();
+        PromptClockProbe.ScanSource(displayPath, lines, builders, reads);
+        foreach (PromptClockSite site in reads)
+        {
+            yield return new ScanHit(SubId, site.File, site.Line, site.Read);
+        }
+    }
 
     // =====================================================================
     // 1. The rule.
@@ -324,9 +443,7 @@ public sealed class PromptClockPurityRule
     [Test]
     public async Task PromptBuilder_ReadsNoWallClock()
     {
-        var offenders = Report.Value.ClockReads
-            .Select(r => $"{r.File}:{r.Line} — {r.Read} — {r.Text}")
-            .ToList();
+        List<string> offenders = ScanRunner.Evaluate(Rule);
 
         await Assert.That(offenders).IsEmpty()
             .Because(
@@ -392,127 +509,68 @@ public sealed class PromptClockPurityRule
     [Test]
     public async Task NonVacuity_Scan_DetectsAClockReadInSyntheticSource()
     {
-        const string ambientClock = """
-            public sealed class AmbientDateBuilder : ISystemPromptBuilder
-            {
-                public Task<string> BuildAsync(SystemPromptContext context, CancellationToken ct = default)
-                {
-                    var sb = new StringBuilder();
-                    sb.Append("- Today: ").Append(DateTimeOffset.UtcNow.ToString("yyyy-MM-dd"));
-                    return Task.FromResult(sb.ToString());
-                }
-            }
-            """;
+        // The four snippets live on Rule.Controls — two prompt builders with a
+        // clock read that MUST be reported, a clean builder and a non-builder
+        // that MUST NOT — so the control drives the REAL parser rather than a
+        // second implementation of it.
+        List<string> failures = ScanRunner.CheckControls(Rule);
 
-        // The issue's own option (b): inject the clock instead of reading it
-        // ambiently. Injection makes the impurity TESTABLE, not absent — the
-        // value still moves under an identical context, so the cache is still
-        // wrong. The rule has to catch this spelling too, or the obvious
-        // "fix" walks straight past it.
-        const string injectedClock = """
-            public sealed class InjectedDateBuilder(TimeProvider clock) : ISystemPromptBuilder
-            {
-                public Task<string> BuildAsync(SystemPromptContext context, CancellationToken ct = default)
-                {
-                    var sb = new StringBuilder();
-                    sb.Append("- Today: ").Append(clock.GetUtcNow().ToString("yyyy-MM-dd"));
-                    return Task.FromResult(sb.ToString());
-                }
-            }
-            """;
+        await Assert.That(failures).IsEmpty()
+            .Because(
+                "the ambient and injected clock reads must be reported, and the clean builder and the "
+                + "non-builder must stay silent. The fourth snippet is the one that keeps the rule "
+                + "honest: it holds the same DateTimeOffset.UtcNow as the first, outside any prompt "
+                + "builder, and a probe that ignored the interface would be red on the moment this "
+                + "file was written. "
+                + string.Join("; ", failures));
 
-        const string cleanBuilder = """
-            public sealed class CleanBuilder : ISystemPromptBuilder
-            {
-                public Task<string> BuildAsync(SystemPromptContext context, CancellationToken ct = default)
-                {
-                    var sb = new StringBuilder();
-                    sb.Append("- Working directory: ").Append(context.WorkingDirectory);
-                    sb.Append("- Model: ").Append(context.Model.Id);
-                    return Task.FromResult(sb.ToString());
-                }
-            }
-            """;
+        // And the reads are quoted exactly: the ambient defect by its static, the
+        // injected one by METHOD NAME (the field is spelled _timeProvider or
+        // _clock or _time — a type-shaped matcher catches only the static nobody
+        // injects, and the obvious "fix" would walk straight past the rule).
+        List<ScanHit> ambient = ScanRunner.Collect(Rule, [(Rule.Controls[0].File, Rule.Controls[0].Source)]);
+        List<ScanHit> injected = ScanRunner.Collect(Rule, [(Rule.Controls[1].File, Rule.Controls[1].Source)]);
 
-        const string notAPromptBuilder = """
-            public static class SummaryMessageFactory
-            {
-                public static AssistantMessage Create(string id) => new(id, "s", DateTimeOffset.UtcNow);
-            }
-            """;
-
-        var ambientBuilders = new List<string>();
-        var ambientReads = new List<PromptClockSite>();
-        PromptClockProbe.ScanSource("src/Synthetic/Ambient.cs", ambientClock.Split('\n'),
-            ambientBuilders, ambientReads);
-
-        var injectedBuilders = new List<string>();
-        var injectedReads = new List<PromptClockSite>();
-        PromptClockProbe.ScanSource("src/Synthetic/Injected.cs", injectedClock.Split('\n'),
-            injectedBuilders, injectedReads);
-
-        var cleanBuilders = new List<string>();
-        var cleanReads = new List<PromptClockSite>();
-        PromptClockProbe.ScanSource("src/Synthetic/Clean.cs", cleanBuilder.Split('\n'),
-            cleanBuilders, cleanReads);
-
-        var otherBuilders = new List<string>();
-        var otherReads = new List<PromptClockSite>();
-        PromptClockProbe.ScanSource("src/Synthetic/Factory.cs", notAPromptBuilder.Split('\n'),
-            otherBuilders, otherReads);
-
-        await Assert.That(string.Join(" | ", ambientBuilders)).Contains("src/Synthetic/Ambient.cs")
-            .Because("the first snippet declares an ISystemPromptBuilder implementation, so the probe "
-                   + "must classify it as one. A miss means the declaration signal stopped matching and "
-                   + "rule 1 passes because the probe finds nothing at all. Classified: "
-                   + (ambientBuilders.Count == 0 ? "(nothing)" : string.Join(" | ", ambientBuilders)));
-
-        await Assert.That(string.Join(" | ", ambientReads.Select(r => r.Read)))
+        await Assert.That(string.Join(" | ", ambient.Select(static h => h.Text)))
             .Contains("DateTimeOffset.UtcNow")
             .Because("the first snippet IS the defect this rule exists for: a wall-clock read folded "
                    + "into the prompt assembly, so every turn of a session left open across 00:00 UTC "
                    + "keeps answering with the date the cache was filled at. Scanned: "
-                   + (ambientReads.Count == 0 ? "(nothing)" : string.Join(" | ", ambientReads.Select(r => r.Read))));
+                   + (ambient.Count == 0 ? "(nothing)" : string.Join(" | ", ambient.Select(static h => h.Text))));
 
-        await Assert.That(string.Join(" | ", injectedBuilders)).Contains("src/Synthetic/Injected.cs")
-            .Because("the second snippet declares the interface through a primary constructor, which is "
-                   + "how CachingSystemPromptBuilder itself is declared. A matcher that only understood "
-                   + "the plain `class X : I` spelling would miss it and the rule would be trivially "
-                   + "evaded by writing the constructor. Classified: "
-                   + (injectedBuilders.Count == 0 ? "(nothing)" : string.Join(" | ", injectedBuilders)));
-
-        await Assert.That(string.Join(" | ", injectedReads.Select(r => r.Read)))
+        await Assert.That(string.Join(" | ", injected.Select(static h => h.Text)))
             .Contains("clock.GetUtcNow")
             .Because("injecting a TimeProvider makes the impurity testable, not absent: the value still "
-                   + "moves under an identical context, so the cache is still wrong. The matcher has to "
-                   + "see an injected clock by METHOD NAME, because the field is spelled _timeProvider or "
-                   + "_clock or _time and a type-shaped matcher catches only the static nobody injects. "
-                   + "Scanned: "
-                   + (injectedReads.Count == 0 ? "(nothing)" : string.Join(" | ", injectedReads.Select(r => r.Read))));
+                   + "moves under an identical context, so the cache is still wrong. Scanned: "
+                   + (injected.Count == 0 ? "(nothing)" : string.Join(" | ", injected.Select(static h => h.Text))));
+    }
 
-        await Assert.That(string.Join(" | ", cleanBuilders)).Contains("src/Synthetic/Clean.cs")
-            .Because("the third snippet is a prompt builder too, so the probe must still classify it — "
-                   + "otherwise rule 1 is green because the probe finds nothing rather than because the "
-                   + "code is clean");
+    /// <summary>
+    ///     Every baseline row states why it is tolerated, in the row itself. Vacuous
+    ///     while the table is empty, and deliberately so: it is wired from the first
+    ///     row so the first row cannot skip the argument.
+    /// </summary>
+    [Test]
+    public async Task Baseline_Rows_AllHaveReasons()
+    {
+        List<string> failures = ScanRunner.CheckReasons(Rule);
 
-        await Assert.That(cleanReads).IsEmpty()
-            .Because("the third snippet is the shape the rule REQUIRES: every value on the prompt comes "
-                   + "off the context. It also proves the matchers are not matching the interface NAME "
-                   + "or the word `Today` as prose. Scanned: "
-                   + (cleanReads.Count == 0 ? "(nothing)" : string.Join(" | ", cleanReads.Select(r => r.Text))));
+        await Assert.That(failures).IsEmpty().Because(string.Join("\n", failures));
+    }
 
-        await Assert.That(otherBuilders).IsEmpty()
-            .Because("the fourth snippet declares no interface, so it is not a prompt builder and the "
-                   + "rule does not claim it. This is the control that keeps the rule from degenerating "
-                   + "into 'no UtcNow anywhere in src/' — a claim src/ violates dozens of times over, "
-                   + "in message timestamps, store writes and token TTLs, all of them legitimate. "
-                   + "Classified: "
-                   + (otherBuilders.Count == 0 ? "(nothing)" : string.Join(" | ", otherBuilders)));
+    /// <summary>
+    ///     Every baseline row must still correspond to a real hit, so the table
+    ///     cannot rot into a blanket permission: fix the code without deleting the
+    ///     row and this fails.
+    /// </summary>
+    [Test]
+    public async Task Baseline_Rows_Are_Not_Stale()
+    {
+        List<string> stale = ScanRunner.StaleBaselineKeys(
+            Rule, ScanRunner.ReadSources(ScanRunner.ScopeFiles(Rule)));
 
-        await Assert.That(otherReads).IsEmpty()
-            .Because("the fourth snippet holds the same DateTimeOffset.UtcNow as the first but is not a "
-                   + "prompt builder, so grading it would mean the rule is really about arbitrary "
-                   + "methods — and it would be red on the moment this file was written. Scanned: "
-                   + (otherReads.Count == 0 ? "(nothing)" : string.Join(" | ", otherReads.Select(r => r.Text))));
+        await Assert.That(stale).IsEmpty()
+            .Because("a baseline row with no violation behind it is a permission for a "
+                + "problem that no longer exists: " + string.Join(", ", stale));
     }
 }
