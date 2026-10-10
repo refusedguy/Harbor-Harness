@@ -88,7 +88,7 @@ public sealed class MegaConstructorDoneStateTests
     /// </summary>
     private static int CountParameters(string text, string declaration)
     {
-        string clean = StripComments(text);
+        string clean = SourceScan.StripComments(text);
         int at = clean.IndexOf(declaration, StringComparison.Ordinal);
         if (at < 0)
         {
@@ -162,44 +162,5 @@ public sealed class MegaConstructorDoneStateTests
         }
 
         return entries;
-    }
-
-    private static string StripComments(string text)
-    {
-        var builder = new System.Text.StringBuilder(text.Length);
-        int i = 0;
-        while (i < text.Length)
-        {
-            if (text[i] == '/' && i + 1 < text.Length && text[i + 1] == '/')
-            {
-                while (i < text.Length && text[i] != '\n')
-                {
-                    builder.Append(' ');
-                    i++;
-                }
-
-                continue;
-            }
-
-            if (text[i] == '/' && i + 1 < text.Length && text[i + 1] == '*')
-            {
-                builder.Append("  ");
-                i += 2;
-                while (i + 1 < text.Length && !(text[i] == '*' && text[i + 1] == '/'))
-                {
-                    builder.Append(text[i] == '\n' ? '\n' : ' ');
-                    i++;
-                }
-
-                builder.Append("  ");
-                i = Math.Min(i + 2, text.Length);
-                continue;
-            }
-
-            builder.Append(text[i]);
-            i++;
-        }
-
-        return builder.ToString();
     }
 }

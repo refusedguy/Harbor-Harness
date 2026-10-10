@@ -1,5 +1,20 @@
 {
-  "metadata": [],
+  "metadata": [
+    {
+      "src": [
+        {
+          "files": ["src/Harbor.Abstractions/Harbor.Abstractions.csproj"]
+        },
+        {
+          "files": ["src/Harbor.Abstractions.Contracts/Harbor.Abstractions.Contracts.csproj"]
+        }
+      ],
+      "dest": "api",
+      "properties": {
+        "TargetFramework": "net10.0"
+      }
+    }
+  ],
   "build": {
     "content": [
       {
@@ -10,6 +25,9 @@
       },
       {
         "files": ["src/**/README.md"]
+      },
+      {
+        "files": ["api/*.md"]
       }
     ],
     "resource": [],

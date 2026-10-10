@@ -1,6 +1,11 @@
 using Harbor.Ui.Framework.Rendering;
 using Harbor.Ui.Framework.Rendering.Markdown;
 
+// #436: spans paint into Rendering grids, so every style flowing through the
+// tokenizer is pinned to the Rendering vocabulary through UIR (same capture
+// as CodeHighlightPalette).
+using UIR = Harbor.Ui.Framework.Rendering;
+
 namespace Harbor.Tui.CellForge.Rendering;
 
 /// <summary>
@@ -49,16 +54,16 @@ public sealed class CodeSyntaxTokenizer
     public LanguageSupportRegistry Registry => _registry;
 
     /// <summary>Keyword style (palette snapshot at call time).</summary>
-    public CellStyle KeywordStyle => Palette.Keyword;
+    public UIR.CellStyle KeywordStyle => Palette.Keyword;
 
     /// <summary>String-literal style (palette snapshot at call time).</summary>
-    public CellStyle StringStyle => Palette.String;
+    public UIR.CellStyle StringStyle => Palette.String;
 
     /// <summary>Comment style (palette snapshot at call time).</summary>
-    public CellStyle CommentStyle => Palette.Comment;
+    public UIR.CellStyle CommentStyle => Palette.Comment;
 
     /// <summary>Number-literal style (palette snapshot at call time).</summary>
-    public CellStyle NumberStyle => Palette.Number;
+    public UIR.CellStyle NumberStyle => Palette.Number;
 
     /// <summary>
     /// Tokenizes a whole code region in one shot (multi-line aware:
@@ -200,7 +205,7 @@ public sealed class CodeSyntaxTokenizer
             {
                 if (i > plainStart)
                 {
-                    outSpans.Add(new CodeSpan(code.Slice(plainStart, i - plainStart).ToString(), CellStyle.Plain));
+                    outSpans.Add(new CodeSpan(code.Slice(plainStart, i - plainStart).ToString(), UIR.CellStyle.Plain));
                 }
 
                 int j = i;
@@ -221,7 +226,7 @@ public sealed class CodeSyntaxTokenizer
             {
                 if (i > plainStart)
                 {
-                    outSpans.Add(new CodeSpan(code.Slice(plainStart, i - plainStart).ToString(), CellStyle.Plain));
+                    outSpans.Add(new CodeSpan(code.Slice(plainStart, i - plainStart).ToString(), UIR.CellStyle.Plain));
                 }
 
                 int j = i + 2;
@@ -251,7 +256,7 @@ public sealed class CodeSyntaxTokenizer
             {
                 if (i > plainStart)
                 {
-                    outSpans.Add(new CodeSpan(code.Slice(plainStart, i - plainStart).ToString(), CellStyle.Plain));
+                    outSpans.Add(new CodeSpan(code.Slice(plainStart, i - plainStart).ToString(), UIR.CellStyle.Plain));
                 }
 
                 char quote = c;
@@ -308,7 +313,7 @@ public sealed class CodeSyntaxTokenizer
                 {
                     if (i > plainStart)
                     {
-                        outSpans.Add(new CodeSpan(code.Slice(plainStart, i - plainStart).ToString(), CellStyle.Plain));
+                        outSpans.Add(new CodeSpan(code.Slice(plainStart, i - plainStart).ToString(), UIR.CellStyle.Plain));
                     }
 
                     outSpans.Add(new CodeSpan(code.Slice(i, j - i).ToString(), keywordStyle));
@@ -325,7 +330,7 @@ public sealed class CodeSyntaxTokenizer
 
         if (n > plainStart)
         {
-            outSpans.Add(new CodeSpan(code.Slice(plainStart, n - plainStart).ToString(), CellStyle.Plain));
+            outSpans.Add(new CodeSpan(code.Slice(plainStart, n - plainStart).ToString(), UIR.CellStyle.Plain));
         }
     }
 

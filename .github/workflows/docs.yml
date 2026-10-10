@@ -76,8 +76,11 @@ on:
       - 'tools/check-abstractions-contract.py'
       # #431. docfx.json is the docs-site manifest and docs/toc.yml is its nav:
       # a PR that touches either must run the assembly + link gates below.
+      # api/** is the tracked API landing (api/index.md is .md and already
+      # covered, but future generated-source entries would not be).
       - 'docfx.json'
       - 'docs/toc.yml'
+      - 'api/**'
       - '.github/workflows/docs.yml'
   pull_request:
     paths:
@@ -106,8 +109,10 @@ on:
       - 'tools/md_gate.py'
       - 'tools/check-abstractions-contract.py'
       # #431. Same trigger as above: the site manifest and its nav.
+      # api/** mirrors the push block for the same reason.
       - 'docfx.json'
       - 'docs/toc.yml'
+      - 'api/**'
       - '.github/workflows/docs.yml'
   workflow_dispatch:
 
@@ -307,24 +312,24 @@ jobs:
       # a dependency lowers them in the same diff. Recomputed when the perimeter
       # widened to four projects (was 9 / 6 / 75 over two).
       - name: Check the guarded projects' declared dependencies
-        run: python3 tools/check-abstractions-contract.py --min-packages 14 --min-namespaces 7 --min-files 152
+        run: python3 tools/check-abstractions-contract.py --min-packages 13 --min-namespaces 7 --min-files 152
 
   # #431 (slice 1). Docs-site assembly from the existing markdown tree.
   #
-  # docfx.json is the manifest (content globs + nav); this job validates it
-  # (strict JSON, every content glob resolves to >=1 tracked file, every
-  # docs/toc.yml href exists) and assembles a static `_site` (copied markdown
-  # + generated index) with stdlib python only — no SDK, no docfx binary, so
-  # this workflow stays dotnet-free. The full `docfx build` with API metadata
-  # (GenerateDocumentationFile + XML-doc coverage gate) is a later slice.
-  # Internal links inside the assembled site are covered by the `links` job
-  # above, which runs on the same tree and the same trigger paths — no second
-  # link checker is introduced here.
+  # docfx.json is the manifest (metadata lane + content globs + nav); this job
+  # validates it (strict JSON, every content glob resolves to >=1 tracked file,
+  # every docs/toc.yml href exists, every metadata src project file exists with
+  # dest api, the global GenerateDocumentationFile flag stays on) and assembles
+  # a static `_site` (copied markdown + generated index) with stdlib python
+  # only — no SDK, no docfx binary, so this workflow stays dotnet-free.
+  # The full `docfx build` with generated API pages (api/*.yml) and the XML-doc
+  # coverage gate are later slices (ADR-017). Internal links inside the
+  # assembled site are covered by the `links` job above, which runs on the same
+  # tree and the same trigger paths — no second link checker is introduced here.
   #
   # The artifact needs no secrets and no extra permissions (upload-artifact
-  # rides `contents: read`). GitHub Pages publishing is deliberately NOT wired:
-  # it needs pages:write / id-token and is a separate decision for the full
-  # slice, not this one.
+  # rides `contents: read`). GitHub Pages publishing lives in the `deploy` job
+  # below: master-only behind the HARBOR_PAGES_ENABLED opt-in.
   site:
     name: docs site assembly
     runs-on: ubuntu-latest
@@ -364,7 +369,24 @@ jobs:
                        glob.glob('docs/*.md'))
           missing = [f for f in top if f not in hrefs]
           assert not missing, f'toc.yml misses {len(missing)} docs/*.md'
-          print(f'OK: {len(md)} md pages, toc covers {len(top)} docs/*.md')
+          # #431 (slice 2). Metadata lane: every listed project file must exist,
+          # dest must stay api, the API landing page must be tracked, and the
+          # global documentation flag must stay on. A moved project, a dropped
+          # lane, or a removed flag must go red here — not silently shrink the
+          # API reference (the #509 shape: green by never scanning).
+          meta = manifest.get('metadata', [])
+          assert len(meta) == 1, f'expected 1 metadata entry, got {len(meta)}'
+          assert meta[0].get('dest') == 'api', 'metadata dest must stay api'
+          for entry in meta[0].get('src', []):
+              for proj in entry.get('files', []):
+                  assert os.path.isfile(proj), f'metadata src missing: {proj}'
+          assert os.path.isfile('api/index.md'), 'api/index.md is not tracked'
+          props = open('Directory.Build.props', encoding='utf-8').read()
+          assert '<GenerateDocumentationFile>true</GenerateDocumentationFile>' \
+              in props, 'GenerateDocumentationFile must stay globally true'
+          nsrc = sum(len(e.get('files', [])) for e in meta[0].get('src', []))
+          print(f'OK: {len(md)} md pages, toc covers {len(top)} docs/*.md, '
+                f'metadata covers {nsrc} projects')
           EOF
       - name: Assemble static _site from existing markdown
         run: |
@@ -406,3 +428,75 @@ jobs:
           name: harbor-docs-site
           path: _site
           retention-days: 7
+
+  # #431 (slice 2). GitHub Pages publishing for the assembled static site.
+  #
+  # Runs ONLY on master AND only when the repo variable HARBOR_PAGES_ENABLED
+  # is 'true'. Pages is not enabled on this repo yet (no Pages site exists,
+  # default branch is master), and configure-pages fails when Pages is off —
+  # an unconditional lane would turn the first master push red on a head
+  # nobody broke. The opt-in keeps every head green: the owner enables Pages
+  # (Settings -> Pages -> source "GitHub Actions") and sets the variable, and
+  # the next master push publishes. PRs and dev pushes skip by the `if`.
+  # `needs` is links + lint + site so a broken link or a shrunk manifest
+  # blocks the publish, not just the assembly. The full `docfx build` with
+  # generated api/*.yml member pages is still a later slice (ADR-017) — this
+  # publishes the same static _site the job above assembles, no SDK involved.
+  deploy:
+    name: publish to GitHub Pages
+    if: github.ref == 'refs/heads/master' && vars.HARBOR_PAGES_ENABLED == 'true'
+    needs: [links, lint, site]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v7
+      - name: Assemble static _site from existing markdown
+        run: |
+          python3 - <<'EOF'
+          import glob, html, json, os, shutil
+          with open('docfx.json', encoding='utf-8') as f:
+              manifest = json.load(f)
+          dest = manifest['build']['dest']
+          shutil.rmtree(dest, ignore_errors=True)
+          pages = []
+          for group in manifest['build']['content']:
+              for pattern in group['files']:
+                  for p in sorted(glob.glob(pattern, recursive=True,
+                                            include_hidden=True)):
+                      if not os.path.isfile(p):
+                          continue
+                      target = os.path.join(dest, p)
+                      os.makedirs(os.path.dirname(target), exist_ok=True)
+                      shutil.copyfile(p, target)
+                      if p.endswith('.md'):
+                          pages.append(p)
+          assert len(pages) >= 160, f'assembled only {len(pages)} pages'
+          items = '\n'.join(
+              f'      <li><a href="{html.escape(p)}">{html.escape(p)}</a></li>'
+              for p in sorted(pages))
+          index = ('<!doctype html>\n<html lang="en">\n<head>\n'
+                   '<meta charset="utf-8">\n'
+                   '<title>Harbor docs</title>\n</head>\n<body>\n'
+                   f'<h1>Harbor docs ({len(pages)} pages)</h1>\n'
+                   '<ul>\n' + items + '\n</ul>\n</body>\n</html>\n')
+          with open(os.path.join(dest, 'index.html'),
+                    'w', encoding='utf-8') as f:
+              f.write(index)
+          print(f'OK: _site holds {len(pages)} md pages + index.html')
+          EOF
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

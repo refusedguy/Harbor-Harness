@@ -103,7 +103,7 @@ public class TimelineDirtyRectTests
             _ = Timeline.PrepareFrame(tlRect.Width > 0 ? tlRect.Width : cols, Math.Max(0, tlRect.Height));
 
             Screen.BeginFrame();
-            Chat.Tree.PaintAll(Screen.Back);
+            Chat.Tree.PaintAll(Screen.PaintBuffer);
 
             // Snapshot BEFORE consuming: ConsumeFrameDamage hands the ledger to
             // the host and clears it, so reading HasDirtyRect afterwards would

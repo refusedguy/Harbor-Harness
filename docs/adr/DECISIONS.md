@@ -444,3 +444,22 @@ sign-off lands as the closing comment on #418 before any gated perf work merges.
 
 - Full text, evidence table, per-option verdicts, unblock/still-blocked lists:
   [ADR-016](ADR-016-roslyn-plugin-host-split.md).
+
+## ADR-017: docs site stays DocFX — metadata lane wired, Pages behind an opt-in
+
+Issue #431 asked for the DocFX-vs-MdDocs decision with a default to DocFX; slice D1
+(PR #1049) had already landed the DocFX-shaped foundation (`docfx.json`,
+`docs/toc.yml`, assembly lane), so this slice records the decision rather than
+re-litigating it. Measured on `dev` = `21bdef4f`: markdown-only cannot produce the
+required API surface for the two frozen contract assemblies, and
+`GenerateDocumentationFile` is already global in `Directory.Build.props` (shared
+once with the API-freeze slice), so D2 wires the consumer — the metadata lane for
+`Harbor.Abstractions` + `Harbor.Abstractions.Contracts` (`dest` set to `api`) —
+plus a `deploy` job that publishes to Pages only on `master` behind the
+`HARBOR_PAGES_ENABLED` opt-in (Pages is not enabled yet, so an unconditional lane
+would be red on a head nobody broke). Deliberately deferred: full `docfx build`
+(`docs.yml` stays dotnet-free), the XML-doc coverage gate (no measurement yet),
+and the README link (no live URL until the first green deploy).
+
+- Full text, the three measured reasons, the wired-vs-deferred split:
+  [ADR-017](ADR-017-docs-site-docfx.md).

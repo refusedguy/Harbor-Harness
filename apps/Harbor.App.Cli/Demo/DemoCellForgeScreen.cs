@@ -10,6 +10,25 @@ using Harbor.Tui.CellForge.Widgets;
 using Harbor.Ui.Framework.Rendering;
 using Harbor.Ui.Framework.Rendering.Widgets;
 using Microsoft.Extensions.DependencyInjection;
+// #436: same shared-name pins as Harbor.Tui.CellForge/GlobalUsings.cs — the
+// Rendering vocabulary keeps its historical meaning in this file; engine-typed
+// sites qualify through EngineCells.
+using Cell = Harbor.Ui.Framework.Rendering.Cell;
+using Rect = Harbor.Ui.Framework.Rendering.Rect;
+using ScreenBuffer = Harbor.Ui.Framework.Rendering.ScreenBuffer;
+using CellStyle = Harbor.Ui.Framework.Rendering.CellStyle;
+using PackedColor = Harbor.Ui.Framework.Rendering.PackedColor;
+using StyleAttr = Harbor.Ui.Framework.Rendering.StyleAttr;
+using UnicodeWidth = Harbor.Ui.Framework.Rendering.UnicodeWidth;
+using KeyEvent = Harbor.Ui.Framework.Rendering.Input.KeyEvent;
+using KeyCode = Harbor.Ui.Framework.Rendering.Input.KeyCode;
+using KeyModifiers = Harbor.Ui.Framework.Rendering.Input.KeyModifiers;
+using KeyEventType = Harbor.Ui.Framework.Rendering.Input.KeyEventType;
+using IFocusTarget = Harbor.Ui.Framework.Rendering.Input.IFocusTarget;
+using UiKeyDto = Harbor.Ui.Framework.Rendering.Input.UiKeyDto;
+using UiKeyKind = Harbor.Ui.Framework.Rendering.Input.UiKeyKind;
+using UiKeyMods = Harbor.Ui.Framework.Rendering.Input.UiKeyMods;
+using EngineCells = Harbor.Tui.CellForge.Rendering;
 
 namespace Harbor.App.Cli.Demo;
 
@@ -282,7 +301,7 @@ internal sealed class DemoCellForgeScreen
 
         using var frame = _session.BeginFrameScope();
         _screen.SyncOverlays(new Rect(0, 0, cols, rows));
-        _screen.Tree.PaintAll(_session.Back);
+        _screen.Tree.PaintAll(_session.PaintBuffer);
         await frame.FlushAsync().ConfigureAwait(false);
     }
 

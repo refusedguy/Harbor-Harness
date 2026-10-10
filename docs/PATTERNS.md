@@ -369,7 +369,7 @@ is normative rather than advisory. Also blessed, all pointing the same way:
 
 - `src/Harbor.Terminal.Abstractions/Views/ITuiView.cs:29` — `HandleKey => false`
   (the key falls through).
-- `src/Harbor.Tui.CellForge.Engine/Rendering/OverlayStack.cs:43,49` —
+- `src/Harbor.Tui.CellForge/Chat/Rendering/OverlayStack.cs:51,57` —
   `IsModal => false`, `OnKey => false` (observe-only layer).
 - `src/Harbor.Ui.Framework.Rendering/Widgets/ChatBlock.cs:161` —
   `TryHitHeader => false` (an unpainted block never claims a click).

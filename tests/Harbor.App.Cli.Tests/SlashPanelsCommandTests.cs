@@ -8,7 +8,6 @@ using Harbor.Abstractions.Sessions;
 using Harbor.App.Cli.Repl.Commands;
 using Harbor.Application.Configuration;
 using Harbor.Hosting.Rendering;
-using Harbor.Tui.CellForge.Input;
 using Harbor.Tui.CellForge.Rendering;
 using Harbor.Tui.CellForge.Streaming;
 using Harbor.Tui.CellForge.Widgets;

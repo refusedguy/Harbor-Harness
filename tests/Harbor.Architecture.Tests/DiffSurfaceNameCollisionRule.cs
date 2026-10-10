@@ -247,6 +247,23 @@ internal static partial class DiffSurfaceNameCollisionProbe
     private static readonly string[] SourceRoots = ["src", "apps"];
 
     /// <summary>
+    ///     Input-vocabulary names the CellForge engine owns as deliberate #436 ports
+    ///     (verbatim copies that let it drop the Rendering reference and stand as a
+    ///     leaf). They match the kind-enum-plus-carrier shape, so without this the
+    ///     vocabulary derivation would read them as a second diff vocabulary — the
+    ///     same shape, a different concern. Scoped to the engine project and to
+    ///     these names: a new duplicated diff name still fails.
+    /// </summary>
+    internal static readonly HashSet<string> EngineOwnedInputPorts = new(StringComparer.Ordinal)
+    {
+        "KeyCode",
+        "KeyEventType",
+        "KeyModifiers",
+        "UiKeyKind",
+        "UiKeyMods",
+    };
+
+    /// <summary>
     ///     Directory names never descended into during the scan.
     /// </summary>
     /// <remarks>
@@ -410,6 +427,16 @@ internal static partial class DiffSurfaceNameCollisionProbe
                 {
                     if (vocabularyOwners.TryGetValue(kind, out string? owner))
                     {
+                        // #436: the engine's input ports are owned twice on purpose —
+                        // the engine carries them so it can stand without the Rendering
+                        // reference. Only the names in EngineOwnedInputPorts are excused,
+                        // and only when the engine declares them.
+                        if (string.Equals(project, "Harbor.Tui.CellForge.Engine", StringComparison.Ordinal)
+                            && EngineOwnedInputPorts.Contains(kind))
+                        {
+                            continue;
+                        }
+
                         foreign.Add(new ForeignDiffVocabulary(kind, source.Relative, project, owner));
                     }
                 }

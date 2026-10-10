@@ -64,8 +64,25 @@ public abstract class CellForgePtyScenarioBase
     }
 
     /// <summary>Spawn Harbor.App.Cli (interactive mode) inside a fresh PTY.</summary>
-    protected Task StartAppAsync(int cols = 100, int rows = 30)
+    /// <param name="tui">Backend id for the child's <c>HARBOR_TUI</c> — the canonical
+    /// <c>cellforge</c> or its legacy alias <c>consoleex</c> (both must render identically).</param>
+    protected async Task StartAppAsync(int cols = 100, int rows = 30, string tui = "consoleex")
     {
+        // Relaunch support (alias-equivalence scenarios boot twice in one test):
+        // reap the previous child and its pump before replacing them.
+        if (_pumpCts is not null)
+        {
+            await _pumpCts.CancelAsync().ConfigureAwait(false);
+            _pumpCts.Dispose();
+            _pumpCts = null;
+        }
+
+        if (Session is not null)
+        {
+            await Session.DisposeAsync().ConfigureAwait(false);
+            Session = null!;
+        }
+
         Cols = cols;
         Rows = rows;
         lock (_screenLock)
@@ -81,12 +98,11 @@ public abstract class CellForgePtyScenarioBase
             Args: ["exec", dll],
             Cols: cols,
             Rows: rows,
-            Environment: ChildEnv());
+            Environment: ChildEnv(tui));
         Session = PtySession.Start(spec);
 
         _pumpCts = new CancellationTokenSource();
         _ = Task.Run(() => PumpLoop(_pumpCts.Token));
-        return Task.CompletedTask;
     }
 
     /// <summary>Current visible grid as raw text (emulated terminal state).</summary>
@@ -162,6 +178,12 @@ public abstract class CellForgePtyScenarioBase
     /// <summary>Send Ctrl+C (byte 0x03 — ISIG is off in raw mode).</summary>
     protected void SendCtrlC() => Session.SendKey("\x03");
 
+    /// <summary>Overwrite the child's <c>$HOME/.harbor/config.json</c> from the test side.
+    /// Call before <see cref="StartAppAsync" /> (pre-launch seeding) or mid-session
+    /// (runtime-toggle survival); the fixture's installer wrote the baseline.</summary>
+    protected void WriteHomeConfig(string json) =>
+        File.WriteAllText(Path.Combine(TempHome, ".harbor", "config.json"), json);
+
     private void PumpLoop(CancellationToken ct)
     {
         // Decoder state is pump-thread-private; only screen writes take the lock.
@@ -208,7 +230,7 @@ public abstract class CellForgePtyScenarioBase
         return text.Length <= max ? text : text[^max..];
     }
 
-    private Dictionary<string, string> ChildEnv() => new()
+    private Dictionary<string, string> ChildEnv(string tui = "consoleex") => new()
     {
         ["HOME"] = TempHome,
         ["USERPROFILE"] = TempHome,
@@ -216,7 +238,7 @@ public abstract class CellForgePtyScenarioBase
         ["MOCK_API_KEY"] = "pty-test-key",
         ["HARBOR_LOGLEVEL"] = VerboseLogging ? "Information" : "Warning",
         ["HARBOR_SKIP_ONBOARDING"] = "1",
-        ["HARBOR_TUI"] = "consoleex",
+        ["HARBOR_TUI"] = tui,
         ["HARBOR_MASCOT"] = "off", // ambient cat blinks per tick — byte-exact goldens need it out of the frame
         // Background AI title upgrade races wire-order assertions by design
         // (submit flows assert requests[^1]); auto-title has no PTY coverage.

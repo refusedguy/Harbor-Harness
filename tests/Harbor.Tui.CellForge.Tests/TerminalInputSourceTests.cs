@@ -27,8 +27,8 @@ public class TerminalInputSourceTests
 
         await Assert.That(wheel.Mouse.Type).IsEqualTo(MouseEventType.WheelUp);
         await Assert.That(letter.Key.Character).IsEqualTo(new Rune('a'));
-        await Assert.That(shiftEnter.Key.Key).IsEqualTo(KeyCode.Enter);
-        await Assert.That(shiftEnter.Key.Modifiers).IsEqualTo(KeyModifiers.Shift);
+        await Assert.That(shiftEnter.Key.Key).IsEqualTo(EngineInput.KeyCode.Enter);
+        await Assert.That(shiftEnter.Key.Modifiers).IsEqualTo(EngineInput.KeyModifiers.Shift);
 
         // EOF completes the run task and closes the channel.
         await run;
@@ -54,12 +54,12 @@ public class TerminalInputSourceTests
 
         var evt = await ReadOne(source.Events, cts.Token);
         await Assert.That(evt.Kind).IsEqualTo(InputEventKind.Key);
-        await Assert.That(evt.Key.Key).IsEqualTo(KeyCode.Escape);
+        await Assert.That(evt.Key.Key).IsEqualTo(EngineInput.KeyCode.Escape);
 
         // Continuation afterwards still decodes as its own sequence.
         stream.Push("\u001B[A"u8.ToArray());
         var arrow = await ReadOne(source.Events, cts.Token);
-        await Assert.That(arrow.Key.Key).IsEqualTo(KeyCode.Up);
+        await Assert.That(arrow.Key.Key).IsEqualTo(EngineInput.KeyCode.Up);
     }
 
     [Test]

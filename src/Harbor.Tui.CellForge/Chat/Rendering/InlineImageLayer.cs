@@ -2,6 +2,13 @@ using System.Runtime.InteropServices;
 using Harbor.Tui.CellForge.Capabilities;
 using Harbor.Ui.Framework.Rendering;
 
+// #436: same-namespace capture as LayoutTree — the engine's verbatim Rect
+// port shadows the Rendering vocabulary in this namespace, but this layer
+// implements the Rendering IInlineImageSink, so Rect is pinned through UIR.
+// InlineImageKind/InlineImageEncoder/AnsiWriter stay engine-typed: they have
+// no Rendering twins and never cross into Rendering-typed APIs.
+using UIR = Harbor.Ui.Framework.Rendering;
+
 namespace Harbor.Tui.CellForge.Rendering;
 
 /// <summary>
@@ -43,9 +50,9 @@ public sealed class InlineImageLayer : IInlineImageSink
     // cells), so an unchanged placement keeps painting itself — re-transmitting
     // megabytes of base64 at frame rate would be the single most expensive
     // thing this feature could do.
-    private readonly Rect[] _lastRects = new Rect[MaxPlacements];
+    private readonly UIR.Rect[] _lastRects = new UIR.Rect[MaxPlacements];
     private readonly byte[]?[] _lastPayloads = new byte[]?[MaxPlacements];
-    private Rect _lastFrame;
+    private UIR.Rect _lastFrame;
     private bool _hasLastFrame;
 
     /// <summary>
@@ -56,7 +63,7 @@ public sealed class InlineImageLayer : IInlineImageSink
     public InlineImageKind Kind { get; set; } = InlineImageKind.None;
 
     /// <summary>Frame the placements are clipped to (set per frame by the host).</summary>
-    public Rect FrameBounds { get; set; } = new(0, 0, 80, 24);
+    public UIR.Rect FrameBounds { get; set; } = new(0, 0, 80, 24);
 
     /// <inheritdoc />
     public bool Enabled => Kind != InlineImageKind.None;
@@ -107,10 +114,10 @@ public sealed class InlineImageLayer : IInlineImageSink
     }
 
     /// <inheritdoc />
-    public Rect ClipToFrame(Rect cellRect) => cellRect.Intersect(FrameBounds);
+    public UIR.Rect ClipToFrame(UIR.Rect cellRect) => cellRect.Intersect(FrameBounds);
 
     /// <inheritdoc />
-    public void Place(Rect cellRect, ReadOnlyMemory<byte> payload)
+    public void Place(UIR.Rect cellRect, ReadOnlyMemory<byte> payload)
     {
         if (!Enabled || payload.IsEmpty)
         {
@@ -121,7 +128,7 @@ public sealed class InlineImageLayer : IInlineImageSink
         // position the bitmap at a row the frame does not have. Callers are
         // expected to have run ClipToFrame before encoding, so in practice this
         // is a no-op and the aspect ratio the payload asked for still holds.
-        Rect clipped = cellRect.Intersect(FrameBounds);
+        UIR.Rect clipped = cellRect.Intersect(FrameBounds);
         if (clipped.Area == 0)
         {
             return;
@@ -205,5 +212,5 @@ public sealed class InlineImageLayer : IInlineImageSink
         MemoryMarshal.TryGetArray(memory, out ArraySegment<byte> segment) ? segment.Array : null;
 
     /// <summary>One frame's image placement: a clipped cell rect + borrowed bytes.</summary>
-    internal readonly record struct InlinePlacement(Rect Cells, ReadOnlyMemory<byte> Payload);
+    internal readonly record struct InlinePlacement(UIR.Rect Cells, ReadOnlyMemory<byte> Payload);
 }

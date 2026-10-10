@@ -3,7 +3,6 @@ using Harbor.Abstractions.Events;
 using Harbor.Abstractions.Permissions;
 using Harbor.App.Cli.Repl;
 using Harbor.Application.Permissions;
-using Harbor.Tui.CellForge.Input;
 using Harbor.Tui.CellForge.Rendering;
 using Harbor.Tui.CellForge.Streaming;
 using Harbor.Tui.CellForge.Widgets;

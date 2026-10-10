@@ -1,7 +1,5 @@
 using System.Buffers;
 using System.Text;
-using Harbor.Ui.Framework.Rendering;
-using Harbor.Ui.Framework.Rendering.Protocol;
 
 namespace Harbor.Tui.CellForge.Rendering;
 
@@ -26,8 +24,8 @@ namespace Harbor.Tui.CellForge.Rendering;
 /// </summary>
 public sealed class DiffEngine
 {
-    /// <summary>Hints above this share of the screen fall back to full scan (canonical value: <see cref="CellDiffHints.HintAreaThreshold"/>).</summary>
-    public const double HintAreaThreshold = CellDiffHints.HintAreaThreshold;
+    /// <summary>Hints above this share of the screen fall back to full scan. Canonical 25%: duplicated from the portable encoder's threshold, not shared with it — the engine holds no reference to share it through, so a change here must be mirrored there by hand.</summary>
+    public const double HintAreaThreshold = 0.25;
 
     private ScreenBuffer _front;
     private readonly List<Rect> _hints = new(16);

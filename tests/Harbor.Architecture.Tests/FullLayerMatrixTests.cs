@@ -422,26 +422,24 @@ public class FullLayerMatrixTests
         ["Harbor.Tui.AnsiPlain"] = new(Layer.Presentation,
             ["Harbor.Abstractions", "Harbor.Terminal.Abstractions", "Harbor.Ui.Framework.State"]),
         // CellForge engine (issue #33 split): input/parsing/capabilities/cell
-        // primitives. No Chat vocabulary: a wheel tick surfaces as the BCL-only
-        // UiKeyDto (#162) and the Enter decision as the BCL-only EnterDecision
-        // (#435), both of which the host converts through the State
-        // KeyEventAdapter; cell styles via DesignSystem tokens; shared blocks via
-        // Ui.Framework.Rendering.
+        // primitives. A standalone leaf: ZERO Harbor references (#436). The
+        // vocabulary it uses (cells, keys, probe) lives here now as
+        // engine-owned ports (verbatim copies under Harbor.Tui.CellForge.*);
+        // the chat-owned rendering (prompt/composer/markdown/overlay/layout/
+        // image-layer) moved to Harbor.Tui.CellForge/Chat/Rendering, which
+        // references both sides. The host boundary is explicit: ScreenSession
+        // paints a Rendering grid and the flush copies it cell-for-cell into
+        // the engine staging buffer; keys convert Engine->Rendering once at
+        // the REPL loop entry; wheel ticks arrive as the engine UiKeyDto.
         //
-        // #435 removed two edges from this row's assembly:
-        //   Harbor.Ui.Framework.State — was permitted because MouseRouter returned
-        //     AppMsg.KeyInput and ComposerController asked EnterKeyPolicy for the
-        //     Enter decision. Both now speak the #162/#435 BCL-only vocabulary
-        //     instead, so the engine names no store type at all. This is also the
-        //     edge whose presence is why "Harbor.Abstractions" was legal-by-
-        //     expansion here without ever appearing in the row: State's own
-        //     expansion carried it. Both went together — the #980 shape, a declared
-        //     reference over a dependency that measured as zero.
-        ["Harbor.Tui.CellForge.Engine"] = new(Layer.Presentation,
-            [
-                "Harbor.Ui.Framework.Rendering",
-                "Harbor.DesignSystem",
-            ]),
+        // #435 removed Harbor.Ui.Framework.State + Harbor.Abstractions (the
+        // latter dead-by-fact, the former via the #162/#435 BCL vocabularies).
+        // #436 removes the last two edges below. The #1009 caveat is checked
+        // and cleared: Contracts reached the engine ONLY transitively (State
+        // until #435, Rendering->Contracts after); with both edges gone no
+        // Harbor assembly is reachable at all — direct or transitive — so the
+        // BCL-only claim in the csproj is now simply true.
+        ["Harbor.Tui.CellForge.Engine"] = new(Layer.Presentation, []),
         // CellForge owns its own input+render stack; reuses Presentation-state
         // streaming buffers (StreamingSync/ChunkedBuffer) and the shared
         // renderer-agnostic layer. Terminal.Abstractions supplies the

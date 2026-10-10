@@ -89,15 +89,23 @@ public class MascotReviveTests
     [Test]
     public async Task Auto_Clears_StaleErrorLatch_Immediately()
     {
-        // Hour-long latch: only the run boundary may clear it here, not time.
-        var director = new MascotDirector(moodLatchMs: 3_600_000);
+        var clock = new ManualTimeProvider();
+        // Production latch on an injected clock: 1 ms is four orders of
+        // magnitude short of the 12 s budget, so time cannot be the cause of
+        // what happens next. The hour-long proxy this replaces existed only
+        // to say the same thing (#1026).
+        var director = new MascotDirector(timeProvider: clock);
         var status = IdleStatus(AgentPhase.Errored);
 
         await Assert.That(director.Advance(status, tick: 1)).IsEqualTo(MascotMood.Error);
         await Assert.That(director.HasActiveAnimation).IsTrue();
 
+        clock.AdvanceMs(1);
+        await Assert.That(director.Advance(status, tick: 2)).IsEqualTo(MascotMood.Error);
+        await Assert.That(director.HasActiveAnimation).IsTrue();
+
         status.Phase = AgentPhase.Auto;
-        await Assert.That(director.Advance(status, tick: 2)).IsEqualTo(MascotMood.Idle);
+        await Assert.That(director.Advance(status, tick: 3)).IsEqualTo(MascotMood.Idle);
         await Assert.That(director.HasActiveAnimation).IsFalse();
     }
 

@@ -142,23 +142,11 @@ public class AvaloniaFileTreeWalkRules
     /// </summary>
     private const string ListerContractName = "IDirectoryLister";
 
-    /// <summary>
-    ///     Strips whole-line <c>//</c> comments so a file that explains the rule
-    ///     (including this guard's own failure text) is not itself a violation.
-    /// </summary>
-    private static string StripLineComments(string source) =>
-        string.Join('\n', source.Split('\n')
-            .Select(line =>
-            {
-                int idx = line.IndexOf("//", StringComparison.Ordinal);
-                return idx < 0 ? line : line[..idx];
-            }));
-
     /// <summary>Repo-relative <c>path:line</c> of every forbidden shape in a file.</summary>
     private static List<string> DetectIn(string relativePath, string source)
     {
         var hits = new List<string>();
-        string[] lines = StripLineComments(source).Split('\n');
+        string[] lines = SourceScan.StripComments(source).Split('\n');
         for (int i = 0; i < lines.Length; i++)
         {
             // One report per line, even when both patterns match it: a single
@@ -530,7 +518,7 @@ public class AvaloniaFileTreeWalkRules
         foreach (string file in EnumerateGuardedFiles(root))
         {
             string relative = Path.GetRelativePath(root, file).Replace('\\', '/');
-            string source = StripLineComments(File.ReadAllText(file));
+            string source = SourceScan.StripComments(File.ReadAllText(file));
             foreach (string line in source.Split('\n'))
             {
                 if (Regex.IsMatch(line, $@":\s*({PolicyContractName}|{ListerContractName})\b", RegexOptions.Compiled)

@@ -178,7 +178,7 @@
 // `onApplied` callback, `ThemeDirectoryWatcher` always applied. Both product call
 // sites pass a callback, so `HARBOR_THEME_FILE` / `~/.harbor/theme.json` polled,
 // printed "theme: live-reload → …", marked the screen dirty
-// (`ReplLifecycle.cs:248`) and changed no color, while the `~/.harbor/themes/`
+// (`ReplLifecycle.cs:271`) and changed no color, while the `~/.harbor/themes/`
 // directory arm repainted. Same document, different colors by which branch ran.
 //
 // Why no rule caught it, and why none of these rules would: they are source

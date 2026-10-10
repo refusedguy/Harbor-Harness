@@ -1,5 +1,9 @@
 using System.Collections.Frozen;
 using Harbor.Tui.CellForge.Rendering;
+// #436: the tokenizer trio speaks the Rendering style vocabulary; the engine
+// namespace import above would otherwise resolve the expected values to the
+// engine's verbatim ports.
+using UIR = Harbor.Ui.Framework.Rendering;
 
 namespace Harbor.Tui.CellForge.Tests;
 
@@ -87,10 +91,10 @@ public class LanguageSupportRegistryTests
     public async Task InjectedPalette_OverridesStyles()
     {
         var palette = new CodeHighlightPalette(
-            new CellStyle(PackedColor.Rgb(1, 2, 3), attrs: StyleAttr.Bold),
-            new CellStyle(PackedColor.Rgb(4, 5, 6)),
-            new CellStyle(PackedColor.Rgb(7, 8, 9)),
-            new CellStyle(PackedColor.Rgb(10, 11, 12)));
+            new UIR.CellStyle(UIR.PackedColor.Rgb(1, 2, 3), attrs: UIR.StyleAttr.Bold),
+            new UIR.CellStyle(UIR.PackedColor.Rgb(4, 5, 6)),
+            new UIR.CellStyle(UIR.PackedColor.Rgb(7, 8, 9)),
+            new UIR.CellStyle(UIR.PackedColor.Rgb(10, 11, 12)));
         var tokenizer = new CodeSyntaxTokenizer(palette);
 
         var spans = tokenizer.Tokenize("class Foo {}", "csharp");

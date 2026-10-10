@@ -1,7 +1,5 @@
 using System.Buffers;
 using System.Text;
-using Harbor.Ui.Framework.Rendering;
-using Harbor.Ui.Framework.Rendering.PerformanceContracts;
 
 namespace Harbor.Tui.CellForge.Rendering;
 
@@ -136,7 +134,7 @@ public sealed class AnsiWriter
 
         // #409 write stage — past the empty-frame drop above, so this counts
         // frames that reached the backend, not frames that were asked for.
-        UiStageCounters.CountTerminalWrite();
+        EngineStageCounters.CountTerminalWrite();
         await _backend.WriteAsync(_buf.AsMemory(0, _len), cancellationToken).ConfigureAwait(false);
         _len = 0;
     }
@@ -170,7 +168,7 @@ public sealed class AnsiWriter
             AppendAscii("\x1B[?2026l");
         }
 
-        UiStageCounters.CountTerminalWrite(); // #409 — same site as the async twin above
+        EngineStageCounters.CountTerminalWrite(); // #409 — same site as the async twin above
         sink.Write(_buf.AsSpan(0, _len));
         _len = 0;
     }

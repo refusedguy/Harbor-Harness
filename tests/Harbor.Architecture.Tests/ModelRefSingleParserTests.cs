@@ -145,6 +145,10 @@ public sealed class ModelRefSingleParserTests
             "NOT A REFERENCE. A skill NAME may be slash-namespaced.",
         ["src/Harbor.DesignSystem/DesignSystem/TerminalBackgroundProbe.cs"] =
             "NOT A REFERENCE. An OSC terminal payload is slash-separated by the protocol.",
+        ["src/Harbor.Tui.CellForge.Engine/Capabilities/TerminalBackgroundProbe.cs"] =
+            "NOT A REFERENCE. #436's engine-owned port of the same OSC probe: the "
+            + "payload is slash-separated by the protocol, same as the DesignSystem "
+            + "original it was copied from.",
         ["src/Harbor.Hosting/Modules/ToolsCatalog.cs"] =
             "REAL DEBT, out of #678's scope. The composition root resolves (provider, model) "
             + "for the agent registry with the same hand-rolled prefix strip SessionFactory had — "

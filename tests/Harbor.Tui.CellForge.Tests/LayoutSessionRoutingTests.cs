@@ -28,13 +28,13 @@ public class ScreenSessionResizeTests
     {
         var (session, backend, writer) = Make();
         session.BeginFrame();
-        session.Back.SetText(0, 0, "content", CellStyle.Plain);
+        session.PaintBuffer.SetText(0, 0, "content", CellStyle.Plain);
         await session.FlushFrameAsync();
         backend.ResetForTests();
 
         session.Resize(20, 10);
         session.BeginFrame(); // ED2 goes here, inside sync wrapper
-        session.Back.SetText(0, 0, "content", CellStyle.Plain);
+        session.PaintBuffer.SetText(0, 0, "content", CellStyle.Plain);
         await session.FlushFrameAsync();
 
         string frame = backend.Escaped;
@@ -59,12 +59,12 @@ public class ScreenSessionResizeTests
     public async Task Shrink_RepaintsFully_FrontMatchesBack()
     {
         var (session, _, writer) = Make(40, 8);
-        session.Back.FillAll(Cell.From(new Rune('#'), CellStyle.Plain));
+        session.PaintBuffer.FillAll(Cell.From(new Rune('#'), CellStyle.Plain));
         session.BeginFrame();
         await session.FlushFrameAsync();
 
         session.Resize(15, 8);
-        session.Back.Fill(new Rect(0, 0, 15, 8), Cell.From(new Rune('+'), CellStyle.Plain));
+        session.PaintBuffer.Fill(new Rect(0, 0, 15, 8), Cell.From(new Rune('+'), CellStyle.Plain));
         session.BeginFrame();
         await session.FlushFrameAsync();
 
@@ -274,7 +274,7 @@ public class BorderPanelTests
 
 public class FocusRouterTests
 {
-    private sealed class Target(string id) : IFocusTarget
+    private sealed class Target(string id) : EngineInput.IFocusTarget
     {
         public string Id { get; } = id;
         public bool Focused { get; private set; }
@@ -350,7 +350,7 @@ public class MouseRouterTests
     {
         var router = new MouseRouter();
         var sink = new Sink("panel");
-        router.Bind(sink, new Rect(10, 5, 20, 8));
+        router.Bind(sink, new EngineCells.Rect(10, 5, 20, 8));
 
         router.Press(12, 7);
         await Assert.That(sink.Events).IsEquivalentTo(["press 2,2"]);
@@ -361,7 +361,7 @@ public class MouseRouterTests
     {
         var router = new MouseRouter(screenCols: 80, screenRows: 24);
         var sink = new Sink("panel");
-        router.Bind(sink, new Rect(70, 0, 10, 8)); // panel hugging the right edge
+        router.Bind(sink, new EngineCells.Rect(70, 0, 10, 8)); // panel hugging the right edge
 
         router.Release(500, -3); // SGR may report raw coords beyond the window
         await Assert.That(sink.Events).IsEquivalentTo(["release 9,0"]); // clamped to (79,0)
@@ -372,7 +372,7 @@ public class MouseRouterTests
     {
         var router = new MouseRouter();
         var sink = new Sink("panel");
-        router.Bind(sink, new Rect(10, 10, 5, 5));
+        router.Bind(sink, new EngineCells.Rect(10, 10, 5, 5));
 
         router.Press(0, 0);
         router.Wheel(20, 20, -3);
@@ -384,7 +384,7 @@ public class MouseRouterTests
     {
         var router = new MouseRouter();
         var sink = new Sink("panel");
-        router.Bind(sink, new Rect(0, 0, 5, 5));
+        router.Bind(sink, new EngineCells.Rect(0, 0, 5, 5));
         router.Wheel(1, 1, 3);
         await Assert.That(sink.Events).IsEquivalentTo(["wheel 1,1 3"]);
     }

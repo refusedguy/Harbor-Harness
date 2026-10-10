@@ -4,8 +4,10 @@ using Microsoft.Extensions.Logging;
 namespace Harbor.Plugins.Storage;
 /// <summary>
 ///     <see cref="IPluginSource" /> that discovers <c>.cs</c> files under one or more
-///     filesystem directories. Each file is loaded into a <see cref="PluginScript" />
-///     via <see cref="PluginScript.LoadAsync" />.
+///     filesystem directories, including subdirectories. Each file is loaded into
+///     a <see cref="PluginScript" /> via <see cref="PluginScript.LoadAsync" /> and
+///     still compiles as one plugin on its own (single-file contract: files that
+///     reference each other's types fail compilation, loudly, instead of loading).
 /// </summary>
 /// <remarks>
 ///     <para>
@@ -15,7 +17,9 @@ namespace Harbor.Plugins.Storage;
 ///     </para>
 ///     <para>
 ///         This is the default plugin source used by the Harbor CLI. It scans
-///         <c>~/.harbor/plugins/*.cs</c> and <c>&lt;cwd&gt;/.harbor/plugins/*.cs</c>.
+///         <c>~/.harbor/plugins/</c> and <c>&lt;cwd&gt;/.harbor/plugins/</c> recursively:
+///         a plugin may live in a subdirectory (e.g. for organization), but it must
+///         stay self-contained in its own file. See #1046.
 ///     </para>
 /// </remarks>
 public sealed class FileSystemPluginSource : IPluginSource
@@ -53,9 +57,11 @@ public sealed class FileSystemPluginSource : IPluginSource
             string[] files;
             try
             {
-                files = Directory.GetFiles(dir, "*.cs");
+                // Recursive: a plugin may live in a subdirectory, but each file is
+                // still discovered (and compiled) on its own. See #1046.
+                files = Directory.GetFiles(dir, "*.cs", SearchOption.AllDirectories);
             }
-            catch (IOException ex)
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
             {
                 _logger.LogWarning(ex, "Failed to enumerate plugin directory {Dir}", dir);
                 continue;

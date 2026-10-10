@@ -133,7 +133,10 @@ public sealed class DebouncedPluginWatcher : IDisposable
 
             var fsw = new FileSystemWatcher(dir, "*.cs")
             {
-                IncludeSubdirectories = false,
+                // Discovery (FileSystemPluginSource) is recursive, so the watcher
+                // must be too — otherwise subdirectory plugins load once and never
+                // reload. See #1046.
+                IncludeSubdirectories = true,
                 NotifyFilter = NotifyFilters.FileName | NotifyFilters.LastWrite | NotifyFilters.Size,
                 InternalBufferSize = WatcherBufferSizeBytes,
             };

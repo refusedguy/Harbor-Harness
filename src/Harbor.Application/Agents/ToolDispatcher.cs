@@ -600,7 +600,9 @@ public sealed class ToolDispatcher(
         // G3 fail-closed: a permission-SUBSYSTEM failure (agent not in the
         // registry, invalid name) used to fall through to execution — i.e.
         // every tool ran as "allow all". Any non-success verdict now denies.
-        if (permResponse.IsSuccess && permResponse.Value.Action != PermissionAction.Deny)
+        // #1109: only an explicit Allow proceeds — a deferred Ask (asker
+        // returned without approval) is fail-closed, never fail-open.
+        if (permResponse.IsSuccess && permResponse.Value.Action == PermissionAction.Allow)
         {
             return null;
         }

@@ -41,7 +41,7 @@
 // The full measured inventory — this is the deliverable of the issue:
 //
 //   BUFFER (a rune can reach a buffer; Shift types, Ctrl/Meta/Alt refuse)
-//     ComposerController.cs:194              == 0            (kitty)
+//     src/Harbor.Tui.CellForge/Chat/Rendering/ComposerController.cs:193 == 0            (kitty)
 //     DialogOverlay.cs:649                    != 0            (kitty)
 //     DialogOverlay.cs:718                    == 0 && !IsControl   (legacy ConsoleKeyInfo)
 //     QuestionFormView.cs:571                 != 0            (custom row only)
@@ -49,7 +49,7 @@
 //     CommandPaletteView.cs:254               is None or Shift
 //     CellForgeJumpPalettePanel.cs:216        is None or Shift && !IsControl
 // check-doc-cites: record-drift CellForgeJumpPalettePanel.cs:216 now="ReseedLocked(ctx);" [#947: written over `}`; repair deferred to the owner's symbol-rename decision] -->
-//     ReplInputLoop.cs:403                    is None or Shift
+//     ReplInputLoop.cs:438                    is None or Shift
 //
 //   COMMAND (no buffer; runes are h/j/k/l or a y/n/a vote; Shift refused)
 //     QuestionFormView.cs:512 + :576          != None / == None  (option rows)
@@ -58,7 +58,7 @@
 //     Tabs.cs:143                             != None
 //     ToolCardTracker.cs:624 + :667           != None
 //     LeaderKeyRouter.cs:94                   != None  (consume-and-disarm)
-//     VimComposerMode.cs:38                   == None  (NORMAL MODE ONLY)
+//     src/Harbor.Tui.CellForge/Chat/Rendering/VimComposerMode.cs:37 == None  (NORMAL MODE ONLY)
 //
 //   BUFFER, BUT NOT A TEXT BUFFER — the taxonomy's sharpest edge, and the
 //   reason the two families are not a spectrum. These sites hold no text
@@ -70,12 +70,12 @@
 //     DiffViewerOverlay.cs:282 + :210         (Ctrl|Alt|Meta) != 0
 //     ImageViewerOverlay.cs:124               (Ctrl|Alt|Meta) != 0
 // check-doc-cites: record-drift ImageViewerOverlay.cs:124 now="case KeyCode.Left:" [#947: written over `if (key.Modifiers.IsCommandModifier())`; repair deferred to the owner's symbol-rename decision] -->
-//     VimComposerMode.cs:38 (fall-through)    delegates to the composer
+//     src/Harbor.Tui.CellForge/Chat/Rendering/VimComposerMode.cs:37 (fall-through)    delegates to the composer
 //
 //   UNGATED — a third state the issue's two-family taxonomy cannot name, and the
 //   reason a guard that counts only the two families is not enough. Six sites
 //   matched a rune with NO modifier test at all, so a chord modifier rode
-//   straight through. ONE WAS A LIVE DEFECT: ReplInputLoop.cs:379 calls
+//   straight through. ONE WAS A LIVE DEFECT: ReplInputLoop.cs:414 calls
 //   SetupChecklistController.HandleKey, so Ctrl+q closed the setup guide AND was
 //   consumed — the chord never reached the composer behind it.
 //     SetupChecklistOverlay.cs:95     product input loop — LIVE
@@ -267,7 +267,7 @@ public class KeyGateFamilyRules
     private static readonly KeyGateSiteRecord[] Table =
     [
         // ---- BUFFER: a rune can reach a buffer the user is filling in --------
-        new("ComposerController", KeyGateFamily.Buffer, "src/Harbor.Tui.CellForge.Engine/Rendering/ComposerController.cs"),
+        new("ComposerController", KeyGateFamily.Buffer, "src/Harbor.Tui.CellForge/Chat/Rendering/ComposerController.cs"),
         new("DialogOverlay(kitty)", KeyGateFamily.Buffer, "src/Harbor.Tui.CellForge/Chat/Widgets/DialogOverlay.cs"),
         new("DialogOverlay(legacy)", KeyGateFamily.Buffer, "src/Harbor.Tui.CellForge/Chat/Widgets/DialogOverlay.cs"),
         new("QuestionFormView(custom row)", KeyGateFamily.Buffer, "src/Harbor.Ui.Framework.Rendering/Widgets/QuestionFormView.cs"),
@@ -284,8 +284,8 @@ public class KeyGateFamilyRules
 
         // ---- COMMAND: no buffer; runes navigate or vote ------------------------
         new("QuestionFormView(option rows)", KeyGateFamily.Command, "src/Harbor.Ui.Framework.Rendering/Widgets/QuestionFormView.cs"),
-        new("VimComposerMode(normal mode)", KeyGateFamily.Command, "src/Harbor.Tui.CellForge.Engine/Rendering/VimComposerMode.cs"),
-        new("VimComposerMode(fall-through)", KeyGateFamily.Buffer, "src/Harbor.Tui.CellForge.Engine/Rendering/VimComposerMode.cs"),
+        new("VimComposerMode(normal mode)", KeyGateFamily.Command, "src/Harbor.Tui.CellForge/Chat/Rendering/VimComposerMode.cs"),
+        new("VimComposerMode(fall-through)", KeyGateFamily.Buffer, "src/Harbor.Tui.CellForge/Chat/Rendering/VimComposerMode.cs"),
         new("ApprovalGateView", KeyGateFamily.Command, "src/Harbor.Ui.Framework.Rendering/Widgets/ApprovalGateView.cs"),
         new("TreeView", KeyGateFamily.Command, "src/Harbor.Ui.Framework.Rendering/Widgets/TreeView.cs"),
         new("Tabs", KeyGateFamily.Command, "src/Harbor.Ui.Framework.Rendering/Widgets/Tabs.cs"),
@@ -325,7 +325,7 @@ public class KeyGateFamilyRules
 
         // ---- UNGATED: no modifier test at all (#833's real finding) ------------
         // SetupChecklistOverlay is REACHED from the product input loop
-        // (ReplInputLoop.cs:379 → SetupChecklistController), so its missing
+        // (ReplInputLoop.cs:414 → SetupChecklistController), so its missing
         // gate is a live chord-swallowing defect. The rest are reachable only
         // from tests today; they are listed because the gate is absent in code
         // regardless of who calls it, and because a wiring change is exactly
@@ -528,7 +528,7 @@ public class KeyGateFamilyRules
         [
             "src/Harbor.Ui.Framework.Rendering/Widgets/QuestionFormView.cs",
             "src/Harbor.Tui.CellForge/Chat/Widgets/DialogOverlay.cs",
-            "src/Harbor.Tui.CellForge.Engine/Rendering/VimComposerMode.cs",
+            "src/Harbor.Tui.CellForge/Chat/Rendering/VimComposerMode.cs",
         ];
 
         foreach (string file in bothFamilies)
@@ -544,7 +544,7 @@ public class KeyGateFamilyRules
     /// <summary>
     /// The six sites that had NO modifier gate at all, which is the finding
     /// #833's two-family taxonomy could not name. One of them was a LIVE defect:
-    /// <c>ReplInputLoop.cs:379</c> calls <c>SetupChecklistController.HandleKey</c>,
+    /// <c>ReplInputLoop.cs:414</c> calls <c>SetupChecklistController.HandleKey</c>,
     /// so <c>Ctrl+q</c> closed the setup guide AND was consumed — the chord never
     /// reached the composer behind it.
     /// <para>
@@ -957,6 +957,12 @@ public class KeyGateFamilyRules
     ///   KeyEventAdapter.cs  — DTO → State translation. Same shape.
     ///   UiKey.cs            — the State-side type, same as KeyEvent.cs.
     ///
+    ///   The five Harbor.Tui.CellForge.Engine/Input rows below are #436's
+    ///   engine-owned ports of the same vocabulary (verbatim copies so the
+    ///   engine stands without the Rendering reference). They match the
+    ///   routed-site grep the way the Rendering originals do — a key arrives,
+    ///   a rune is judged inside the factories — and they gate nothing.
+    ///
     /// ChatKeyMap.cs is deliberately NOT here: :156 is a real gate (an
     /// unmatched printable rune becomes <c>ChatAction.Char</c>, i.e. text), so
     /// it is a site and is in the table.
@@ -967,6 +973,11 @@ public class KeyGateFamilyRules
         "src/Harbor.Ui.Framework.Rendering/Input/KeyEventMapper.cs",
         "src/Harbor.Ui.Framework.State/State/KeyEventAdapter.cs",
         "src/Harbor.Ui.Framework.State/State/UiKey.cs",
+        "src/Harbor.Tui.CellForge.Engine/Input/KeyEvent.cs",
+        "src/Harbor.Tui.CellForge.Engine/Input/KeyCode.cs",
+        "src/Harbor.Tui.CellForge.Engine/Input/KeyEventType.cs",
+        "src/Harbor.Tui.CellForge.Engine/Input/KeyModifiers.cs",
+        "src/Harbor.Tui.CellForge.Engine/Input/UiKeyDto.cs",
     };
 
     /// <summary>

@@ -1,6 +1,8 @@
 using Harbor.Tui.CellForge.Rendering;
 using Harbor.Ui.Framework.Rendering;
 using Harbor.Ui.Framework.Rendering.Widgets;
+// #436: GlowRegion is engine-typed; the accent/rect convert exactly below.
+using EngineCells = Harbor.Tui.CellForge.Rendering;
 
 namespace Harbor.Tui.CellForge.Widgets;
 
@@ -8,16 +10,29 @@ public sealed class MascotPanel : Panel
 {
     public const string DefaultId = "chat.mascot";
 
-    private readonly MascotDirector _director = new();
+    private readonly MascotDirector _director;
     private readonly SpringFx _entranceSpring = new(0.0);
     private readonly PostFxPipeline _postFx = new();
     private readonly GlowEffect _glow = new();
     private bool _entranceArmed;
 
-    public MascotPanel(string id, StatusViewModel status, int minWidth = AmbientMascot.PanelMinWidth, int minHeight = AmbientMascot.PanelRows, int priority = 4)
+    /// <summary>Creates a panel-mode mascot bound to <paramref name="status"/>.</summary>
+    /// <param name="id">Panel id.</param>
+    /// <param name="status">Status payload this mascot reads the phase from.</param>
+    /// <param name="minWidth">Solver minimum width.</param>
+    /// <param name="minHeight">Solver minimum height.</param>
+    /// <param name="priority">Collapse priority.</param>
+    /// <param name="timeProvider">
+    /// Clock for the mood latch (#1026). Production leaves the default
+    /// (<see cref="TimeProvider.System"/>); tests inject a manual clock so a
+    /// latch assertion is a function of declared time, not runner speed —
+    /// the same seam <see cref="MascotDirector"/> exposes (#1007).
+    /// </param>
+    public MascotPanel(string id, StatusViewModel status, int minWidth = AmbientMascot.PanelMinWidth, int minHeight = AmbientMascot.PanelRows, int priority = 4, TimeProvider? timeProvider = null)
         : base(id, new Size(minWidth, minHeight), priority)
     {
         Vm = status;
+        _director = new MascotDirector(timeProvider: timeProvider);
     }
 
     public StatusViewModel Vm { get; }
@@ -105,7 +120,10 @@ public sealed class MascotPanel : Panel
                 MascotReaction.SuccessBounce => ChatPalette.Success,
                 _ => ChatPalette.Warning,
             };
-            _glow.Update(new GlowRegion(Rect, accent, GlowEffect.PeakStrength));
+            _glow.Update(new GlowRegion(
+                new EngineCells.Rect(Rect.X, Rect.Y, Rect.Width, Rect.Height),
+                EngineCells.PackedColor.FromRaw(accent.Value),
+                GlowEffect.PeakStrength));
             _postFx.Set(0, _glow);
         }
 
@@ -124,10 +142,22 @@ public sealed class MascotPanel : Panel
                     continue;
                 }
 
-                var transformed = _postFx.Transform(x, y, in cell);
+                // #436: the post pipeline is engine-typed while the painted
+                // grid is Rendering-typed. Both cell structs share the 16-byte
+                // layout, so the crossing is an exact field round-trip — and it
+                // only runs on reaction frames (Count == 0 returns above).
+                var echo = EngineCells.Cell.FromRaw(cell.Rune, cell.Fg, cell.Bg, cell.Flags, cell.Width);
+                var transformed = _postFx.Transform(x, y, in echo);
                 if (transformed.Fg != cell.Fg || transformed.Bg != cell.Bg)
                 {
-                    buffer.SetStyleAt(x, y, transformed.Style);
+                    var style = transformed.Style;
+                    buffer.SetStyleAt(
+                        x,
+                        y,
+                        new CellStyle(
+                            PackedColor.FromRaw(style.Fg.Value),
+                            PackedColor.FromRaw(style.Bg.Value),
+                            (StyleAttr)style.Attrs));
                 }
             }
         }

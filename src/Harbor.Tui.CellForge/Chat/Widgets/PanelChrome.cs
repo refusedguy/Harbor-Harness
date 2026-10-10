@@ -49,13 +49,14 @@ public enum BoxStyle : byte
 /// All painters are bounds-safe (clip to the buffer, never throw on tiny or
 /// empty rects) and allocation-free on steady-state frames.
 ///
-/// <see cref="PaintBorderBox"/> is the only frame painter in this layer: the
-/// seven private copies it replaced in #553 were the nearest-existing-code
-/// trap — whichever one you copied decided whether the degenerate-rect guard
-/// came with it. The frame <c>Panel</c> widgets in
-/// <c>Harbor.Tui.CellForge.Engine</c> (<c>BorderKind</c>/<c>BorderPanel</c>)
-/// are a deliberately separate owner: the Engine sits BELOW this assembly, so
-/// folding it in would invert the layering.
+/// <see cref="PaintBorderBox"/> is the only frame painter for overlays in
+/// this layer: the seven private copies it replaced in #553 were the
+/// nearest-existing-code trap — whichever one you copied decided whether
+/// the degenerate-rect guard came with it. The frame <c>Panel</c> widgets
+/// (<c>BorderKind</c>/<c>BorderPanel</c>, in <c>Chat/Rendering/LayoutTree.cs</c>
+/// since the #436 move out of the engine) are a deliberately separate owner:
+/// four dialects plus title/shadow/focus semantics that overlays do not
+/// share — so a new overlay still calls <c>PaintBorderBox</c> instead.
 /// </summary>
 public static class PanelChrome
 {
@@ -88,8 +89,8 @@ public static class PanelChrome
 
     /// <summary>
     /// The four corner glyphs of <paramref name="style"/> in paint order —
-    /// top-left, top-right, bottom-left, bottom-right. The only place in the
-    /// CellForge chat layer where box-drawing corners are spelled out.
+    /// top-left, top-right, bottom-left, bottom-right. The overlay-frame
+    /// glyph table (layout frames keep their own in <c>BorderPanel</c>).
     /// </summary>
     public static ReadOnlySpan<char> CornersFor(BoxStyle style) => style == BoxStyle.SquareFrame
         ? "┌┐└┘"

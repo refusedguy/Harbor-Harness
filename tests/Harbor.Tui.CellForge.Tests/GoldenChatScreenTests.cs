@@ -43,18 +43,18 @@ public class GoldenChatScreenTests
         session.BeginFrame();
         foreach (var panel in screen.Tree.Panels)
         {
-            panel.Paint(session.Back);
+            panel.Paint(session.PaintBuffer);
         }
 
         await session.FlushFrameAsync();
 
-        string doc = GoldenDoc.Build("ce3-chat-screen", session.Back, backend);
-        string expected = Golden.Verify("ce3-chat-screen", doc, GridDump.ToSvg(session.Back));
+        string doc = GoldenDoc.Build("ce3-chat-screen", session.PaintBuffer, backend);
+        string expected = Golden.Verify("ce3-chat-screen", doc, GridDump.ToSvg(session.PaintBuffer));
         await Assert.That(doc).IsEqualTo(expected);
         await Assert.That(session.Engine.FrontMatches(session.Back)).IsTrue();
 
         // Zone sanity: prompt text on a lower row, model id on the bottom row.
-        string art = GridDump.Art(session.Back);
+        string art = GridDump.Art(session.PaintBuffer);
         var rows = art.Split('\n');
         await Assert.That(rows.Any(r => r.Contains("fix the bug"))).IsTrue();          // composer zone
         await Assert.That(rows.Any(r => r.StartsWith('⠙') || r.StartsWith('⠸'))).IsTrue(); // spinner glyph
