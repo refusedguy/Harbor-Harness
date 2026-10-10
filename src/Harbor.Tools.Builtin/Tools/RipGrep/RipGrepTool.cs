@@ -1,5 +1,5 @@
 using System.Diagnostics;
-using System.Text;
+using Harbor.Abstractions.Extensions;
 using Microsoft.Extensions.Logging;
 using Result = CSharpFunctionalExtensions.Result;
 
@@ -148,24 +148,24 @@ public sealed class RipGrepTool : ITool
         psi.ArgumentList.Add(path);
 
         using var process = new Process { StartInfo = psi };
-        var stdout = new StringBuilder();
-        var stderr = new StringBuilder();
+        // §PERF-006: per-call `new StringBuilder()` replaced with pooled rents
+        // (sample: BashTool stdout/stderr). Capped at MaxOutputChars so a
+        // runaway match stream can't OOM the process; Append('\n') keeps the
+        // separator platform-independent. Named locals (not inline lambdas)
+        // so they can be detached in the finally below — async output
+        // callbacks can still fire after WaitForExitAsync returns, and a late
+        // callback must never append into a returned pooled builder.
+        const int MaxOutputChars = 200_000;
+        using var stdout = StringBuilderPool.Rent(8192);
+        using var stderr = StringBuilderPool.Rent(1024);
+        var stdoutEof = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var stderrEof = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
 
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         cts.CancelAfter(TimeSpan.FromSeconds(TimeoutSeconds));
 
-        process.OutputDataReceived += (_, e) =>
-        {
-            if (e.Data is not null)
-            {
-                if (stdout.Length < 200_000)
-                    stdout.AppendLine(e.Data);
-            }
-        };
-        process.ErrorDataReceived += (_, e) =>
-        {
-            if (e.Data is not null) stderr.AppendLine(e.Data);
-        };
+        process.OutputDataReceived += OnStdout;
+        process.ErrorDataReceived += OnStderr;
 
         _logger.LogDebug("rg {Args}", string.Join(' ', psi.ArgumentList));
 
@@ -184,14 +184,27 @@ public sealed class RipGrepTool : ITool
         try
         {
             await process.WaitForExitAsync(cts.Token).ConfigureAwait(false);
+            await DrainAsync().ConfigureAwait(false);
         }
         catch (OperationCanceledException oce)
         {
             // ROP-A П.13: one catch + classifier instead of two duplicated
             // kill-and-message branches; kill semantics live in KillQuietly.
             ToolErrors.KillQuietly(process);
+            await DrainAsync().ConfigureAwait(false);
             return ToolResult.Error(ToolErrors.Handler("ripgrep", cancellationToken,
                 timeout: TimeSpan.FromSeconds(TimeoutSeconds))(oce));
+        }
+        finally
+        {
+            // Detach BEFORE the pooled builders are read or returned, so no
+            // late process callback can append into a recycled builder.
+            process.OutputDataReceived -= OnStdout;
+            process.ErrorDataReceived -= OnStderr;
+            try { process.CancelOutputRead(); }
+            catch (InvalidOperationException) { /* never started reading */ }
+            try { process.CancelErrorRead(); }
+            catch (InvalidOperationException) { /* never started reading */ }
         }
 
         // rg exit codes: 0 = matches, 1 = no matches, 2 = error.
@@ -201,7 +214,7 @@ public sealed class RipGrepTool : ITool
                 $"`rg` error (exit 2): {stderr.ToString().Trim()}");
         }
 
-        if (process.ExitCode == 1 || stdout.Length == 0)
+        if (process.ExitCode == 1 || stdout.Builder.Length == 0)
         {
             return ToolResult.Success(
                 $"No matches for pattern '{pattern}' in {path}",
@@ -216,6 +229,47 @@ public sealed class RipGrepTool : ITool
         return ToolResult.Success(
             $"Found {count} match(es) for '{pattern}' in {path}:\n\n{output}",
             new { count, pattern, path, glob, ignoreCase, regex, exitCode = process.ExitCode });
+
+        // Bounded drain: wait for the reader callbacks to signal end-of-stream
+        // so the builders are quiescent before they are read or returned.
+        // A drain timeout never propagates — throwing here would dispose the
+        // pooled builders while callbacks may still be in flight.
+        async Task DrainAsync()
+        {
+            try
+            {
+                await Task.WhenAll(stdoutEof.Task, stderrEof.Task)
+                    .WaitAsync(TimeSpan.FromSeconds(2), CancellationToken.None).ConfigureAwait(false);
+            }
+            catch (TimeoutException ex)
+            {
+                _logger.LogWarning(ex, "Timed out waiting for rg output drains; continuing with output so far");
+            }
+        }
+
+        void OnStdout(object _, DataReceivedEventArgs e)
+        {
+            if (e.Data is null)
+            {
+                stdoutEof.TrySetResult();
+                return;
+            }
+            if (stdout.Builder.Length >= MaxOutputChars)
+                return;
+            stdout.Builder.Append(e.Data).Append('\n');
+        }
+
+        void OnStderr(object _, DataReceivedEventArgs e)
+        {
+            if (e.Data is null)
+            {
+                stderrEof.TrySetResult();
+                return;
+            }
+            if (stderr.Builder.Length >= MaxOutputChars)
+                return;
+            stderr.Builder.Append(e.Data).Append('\n');
+        }
     }
 
     private static int CountLines(string s)
