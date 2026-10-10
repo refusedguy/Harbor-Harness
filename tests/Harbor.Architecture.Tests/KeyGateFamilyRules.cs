@@ -103,7 +103,7 @@
 //   printable rune becomes ChatAction.Char, which is the tree deciding "this
 //   is text" in a sixth vocabulary position.
 //
-// So: 22 files, 27 rows (five files hold two families each), three modifier
+// So: 23 files, 30 rows (six files hold two or more rows each), three modifier
 // vocabularies (KeyModifiers, KeyModifierSet, ConsoleModifiers), and — after
 // measuring the six ungated sites — TWO families, with "ungated" demoted from a
 // family to the absence of a decision. The issue's count of "four spellings at
@@ -314,6 +314,20 @@ public class KeyGateFamilyRules
         new("DiffViewerOverlay(kitty)", KeyGateFamily.Buffer, "src/Harbor.Tui.CellForge/Chat/Widgets/DiffViewerOverlay.cs"),
         new("DiffViewerOverlay(legacy)", KeyGateFamily.Buffer, "src/Harbor.Tui.CellForge/Chat/Widgets/DiffViewerOverlay.cs"),
         new("ImageViewerOverlay", KeyGateFamily.Buffer, "src/Harbor.Tui.CellForge/Chat/Widgets/ImageViewerOverlay.cs"),
+
+        // MarkupOverlay (#400) is the viewer shape with a buffer added:
+        // Shift+arrows resize in EVERY tool state (:82-94), the text tool
+        // feeds PendingText (:300), and command chords are refused at the
+        // gate (:267) — so the family is Buffer, not Command. Ctrl+R redo
+        // (:273) is the one consumed chord, claimed the way the viewer's
+        // own shifted rune is.
+        new("MarkupOverlay", KeyGateFamily.Buffer, "src/Harbor.Tui.CellForge/Chat/Widgets/MarkupOverlay.cs"),
+
+        // MarkupOverlay (#400 slice 1/2) holds a text buffer behind the text
+        // tool — shifted runes feed PendingText and Shift+arrows resize —
+        // while Ctrl|Alt|Meta are refused (Ctrl+R redo excepted). Same gate
+        // as the two viewers above: Shift means something at this site.
+        new("MarkupOverlay", KeyGateFamily.Buffer, "src/Harbor.Tui.CellForge/Chat/Widgets/MarkupOverlay.cs"),
 
         // ---- UNGATED: no modifier test at all (#833's real finding) ------------
         // SetupChecklistOverlay is REACHED from the product input loop
