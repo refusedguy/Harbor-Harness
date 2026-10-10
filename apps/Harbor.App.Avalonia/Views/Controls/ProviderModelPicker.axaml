@@ -34,6 +34,7 @@
             <!-- Search -->
             <TextBox Grid.Row="0"
                      PlaceholderText="Search models or providers…"
+                     AutomationProperties.Name="Search models or providers"
                      Text="{Binding SearchText, Mode=TwoWay}"
                      Margin="0,0,0,8" />
 
@@ -60,6 +61,7 @@
                     <ItemsControl.ItemTemplate>
                         <DataTemplate DataType="vma:ProviderGroupViewModel">
                             <Expander IsExpanded="{Binding IsExpanded, Mode=TwoWay}"
+                                      AutomationProperties.Name="{Binding DisplayName}"
                                       Margin="0,2"
                                       Padding="0">
                                 <Expander.Header>
@@ -102,6 +104,7 @@
                                                 <Button Classes="Subtle"
                                                         HorizontalAlignment="Stretch"
                                                         HorizontalContentAlignment="Left"
+                                                        AutomationProperties.Name="{Binding DisplayName}"
                                                         Padding="8,6" Margin="0,1"
                                                         Command="{Binding DataContext.SelectModelCommand, ElementName=Root}"
                                                         CommandParameter="{Binding}">

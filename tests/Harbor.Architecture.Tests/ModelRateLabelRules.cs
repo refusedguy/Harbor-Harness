@@ -20,7 +20,7 @@
 // disprove — a duplicate nobody can reach is not a defect. Reachability was
 // traced to the XAML, in the same app:
 //
-//   apps/Harbor.App.Avalonia/Views/Controls/ProviderModelPicker.axaml:121
+//   apps/Harbor.App.Avalonia/Views/Controls/ProviderModelPicker.axaml:124
 //       <TextBlock Text="{Binding PricingText}" …>            (PickerModelViewModel)
 //   apps/Harbor.App.Avalonia/Views/ProviderBrowserView.axaml:84
 //       <TextBlock Text="{Binding PricingLabel}" …>           (ModelRowViewModel)

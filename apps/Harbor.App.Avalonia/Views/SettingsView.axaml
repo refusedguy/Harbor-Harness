@@ -48,6 +48,7 @@
                                    FontSize="11" Foreground="{StaticResource TextMutedBrush}" />
                     </StackPanel>
                     <Button Grid.Column="1" Classes="Subtle" Content="✕" Padding="10,4"
+                            AutomationProperties.Name="Close settings"
                             Click="Close_Click" ToolTip.Tip="Close (Esc)" />
                 </Grid>
 
@@ -59,7 +60,8 @@
                         <StackPanel Spacing="4">
                             <TextBlock Text="Theme" Classes="Label" />
                             <StackPanel Orientation="Horizontal" Spacing="8">
-                                <ComboBox SelectedItem="{Binding ThemeSettings.Theme, Mode=TwoWay}" MinWidth="180">
+                                <ComboBox SelectedItem="{Binding ThemeSettings.Theme, Mode=TwoWay}" MinWidth="180"
+                                          AutomationProperties.Name="Theme">
                                     <ComboBoxItem Content="dark" />
                                     <ComboBoxItem Content="light" />
                                     <ComboBoxItem Content="system" />
@@ -114,6 +116,7 @@
                         <StackPanel Spacing="4">
                             <TextBlock Text="Default provider" Classes="Label" />
                             <TextBox Text="{Binding DefaultProvider, Mode=TwoWay}"
+                                     AutomationProperties.Name="Default provider"
                                      PlaceholderText="ollama, openai, anthropic, …" />
                         </StackPanel>
 
@@ -121,13 +124,15 @@
                         <StackPanel Spacing="4">
                             <TextBlock Text="Default model" Classes="Label" />
                             <TextBox Text="{Binding DefaultModel, Mode=TwoWay}"
+                                     AutomationProperties.Name="Default model"
                                      PlaceholderText="tencent/hy3:free, gpt-4o, claude-sonnet-4, …" />
                         </StackPanel>
 
                         <!-- Font family -->
                         <StackPanel Spacing="4">
                             <TextBlock Text="Font family" Classes="Label" />
-                            <TextBox Text="{Binding FontFamily, Mode=TwoWay}" PlaceholderText="Inter" />
+                            <TextBox Text="{Binding FontFamily, Mode=TwoWay}" PlaceholderText="Inter"
+                                     AutomationProperties.Name="Font family" />
                         </StackPanel>
 
                         <!-- Storage backend -->
@@ -137,7 +142,8 @@
                                  means "not chosen", and the composition preset decides
                                  (CLI jsonl, desktop memory). The old view-model filled this
                                  box with "jsonl" so the preset was unreachable. -->
-                            <ComboBox SelectedItem="{Binding StorageBackend, Mode=TwoWay}" MinWidth="180">
+                            <ComboBox SelectedItem="{Binding StorageBackend, Mode=TwoWay}" MinWidth="180"
+                                      AutomationProperties.Name="Storage backend">
                                 <ComboBoxItem Content="memory" />
                                 <ComboBoxItem Content="jsonl" />
                                 <ComboBoxItem Content="sqlite" />
@@ -149,7 +155,8 @@
                         <!-- Log level -->
                         <StackPanel Spacing="4">
                             <TextBlock Text="Log level" Classes="Label" />
-                            <ComboBox SelectedItem="{Binding LogLevel, Mode=TwoWay}" MinWidth="180">
+                            <ComboBox SelectedItem="{Binding LogLevel, Mode=TwoWay}" MinWidth="180"
+                                      AutomationProperties.Name="Log level">
                                 <ComboBoxItem Content="trace" />
                                 <ComboBoxItem Content="debug" />
                                 <ComboBoxItem Content="info" />
@@ -166,6 +173,7 @@
                         <StackPanel Spacing="4">
                             <TextBlock Text="Ollama host" Classes="Label" />
                             <TextBox Text="{Binding OllamaHost, Mode=OneWay}" IsReadOnly="True"
+                                     AutomationProperties.Name="Ollama host"
                                      PlaceholderText="http://localhost:11434"
                                      ToolTip.Tip="Read from OLLAMA_HOST when Harbor starts. Set the environment variable before launching to change it." />
                         </StackPanel>
@@ -218,6 +226,7 @@
                                                 <TextBox Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="2"
                                                          Margin="0,6,0,0"
                                                          IsVisible="{Binding RequiresApiKey}"
+                                                         AutomationProperties.Name="Provider API key"
                                                          Text="{Binding ApiKey, Mode=TwoWay}"
                                                          PasswordChar="•"
                                                          PlaceholderText="Paste API key…" />
