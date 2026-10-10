@@ -128,7 +128,9 @@ public partial class AnsiPlainTuiRenderer : BaseTuiRenderer
             // #1111: args come from the model and are attacker-controlled —
             // strip terminal control characters (incl. ESC) so an embedded
             // sequence (e.g. "\x1b[2J") can never execute in the terminal.
-            string args = SanitizeForTerminal(tes.Args.GetRawText());
+            // Empty payloads skip GetRawText (one string alloc per tool-start
+            // event); the literal keeps the "{}"-filter below behavior-identical.
+            string args = EmptyPayloadLiteral(tes.Args) ?? SanitizeForTerminal(tes.Args.GetRawText());
             if (!string.IsNullOrEmpty(args) && args != "{}")
             {
                 context.WriteStyled($" {args}", TuiStyle.Dim);
@@ -175,6 +177,25 @@ public partial class AnsiPlainTuiRenderer : BaseTuiRenderer
             }
 
             return sb.ToString();
+        }
+
+        /// <summary>Empty object/array payload without materializing
+        /// <c>GetRawText</c> (struct-enumerator probe, zero allocation).
+        /// Returns null for anything non-empty — the caller falls through to
+        /// the raw text exactly as before.</summary>
+        private static string? EmptyPayloadLiteral(JsonElement args)
+        {
+            if (args.ValueKind == JsonValueKind.Array && args.GetArrayLength() == 0)
+            {
+                return "[]";
+            }
+
+            if (args.ValueKind == JsonValueKind.Object && !args.EnumerateObject().MoveNext())
+            {
+                return "{}";
+            }
+
+            return null;
         }
     }
 

@@ -208,7 +208,7 @@ public sealed class ChatScreenBridge : IDisposable
                         break;
                     }
 
-                    _cards.EnsureCard(execStart.ToolCallId, execStart.ToolName, Summarize(execStart.Args), FullArgs(execStart.Args), restampStarted: true);
+                    _cards.EnsureCard(execStart.ToolCallId, execStart.ToolName, execStart.Args, restampStarted: true);
                     _status.Phase = AgentPhase.ToolCall;
                     _status.Mode = StatusBarMode.Running;
                     break;

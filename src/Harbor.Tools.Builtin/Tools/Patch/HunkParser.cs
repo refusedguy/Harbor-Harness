@@ -17,19 +17,17 @@ public static class HunkParser
     public static Result<List<Hunk>> TryParse(string patch)
     {
         var hunks = new List<Hunk>();
-        string[] lines = patch.Replace("\r\n", "\n", StringComparison.Ordinal)
-            .Replace('\r', '\n')
-            .Split('\n');
+        List<string> lines = SplitLines(patch);
 
         int i = 0;
         // Skip past the diff header lines (origin and destination file markers)
         // until we reach the first hunk header line beginning with double-at sign.
-        while (i < lines.Length && !lines[i].StartsWith("@@", StringComparison.Ordinal))
+        while (i < lines.Count && !lines[i].StartsWith("@@", StringComparison.Ordinal))
         {
             i++;
         }
 
-        while (i < lines.Length)
+        while (i < lines.Count)
         {
             if (!lines[i].StartsWith("@@", StringComparison.Ordinal))
             {
@@ -47,7 +45,7 @@ public static class HunkParser
             var hunkLines = new List<HunkLine>(header.OldCount + header.NewCount);
             int seenOld = 0, seenNew = 0;
 
-            while (i < lines.Length
+            while (i < lines.Count
                    && (seenOld < header.OldCount || seenNew < header.NewCount)
                    && !lines[i].StartsWith("@@", StringComparison.Ordinal))
             {
@@ -84,7 +82,7 @@ public static class HunkParser
                         break;
                     default:
                         // Unknown line — stop hunk.
-                        i = lines.Length;
+                        i = lines.Count;
                         break;
                 }
                 i++;
@@ -103,6 +101,35 @@ public static class HunkParser
     /// <exception cref="FormatException">A hunk header is malformed.</exception>
     public static List<Hunk> Parse(string patch) =>
         TryParse(patch).Match(static h => h, err => throw new FormatException(err));
+
+    /// <summary>Span-based line split: one pass with <c>\r\n</c> folded as a
+    /// single break. Drops the two full-text <c>Replace</c> copies the old
+    /// <c>Split('\n')</c> needed (BENCHMARKS PatchTool row: 10.1 ms / 9.3 MB
+    /// @5000 hunks) while keeping <c>Split('\n')</c> line accounting exactly,
+    /// incl. the trailing "" hunk-body counting relies on.</summary>
+    private static List<string> SplitLines(string text)
+    {
+        var lines = new List<string>();
+        ReadOnlySpan<char> rest = text.AsSpan();
+        while (true)
+        {
+            int nl = rest.IndexOfAny('\r', '\n');
+            if (nl < 0)
+            {
+                lines.Add(rest.ToString());
+                return lines;
+            }
+
+            lines.Add(rest.Slice(0, nl).ToString());
+            int next = nl + 1;
+            if (rest[nl] == '\r' && next < rest.Length && rest[next] == '\n')
+            {
+                next++;
+            }
+
+            rest = rest.Slice(next);
+        }
+    }
 
     private static Result<HunkHeader> TryParseHunkHeader(string line)
     {

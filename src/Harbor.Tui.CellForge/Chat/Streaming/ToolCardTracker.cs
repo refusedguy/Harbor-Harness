@@ -1,3 +1,4 @@
+using System.Buffers;
 using System.Text;
 using System.Text.Json;
 using Harbor.Abstractions.Events;
@@ -66,6 +67,16 @@ internal sealed class ToolCardTracker
     private sealed record ChildRun(string ToolName, string Summary, long StartedMs);
 
     private readonly Dictionary<string, TaskState> _tasks = new(StringComparer.Ordinal);
+
+    /// <summary>Returns the live card, creating and appending it on first sight.
+    /// With <paramref name="restampStarted"/> the start timestamp is refreshed
+    /// even for an existing card (ToolExecutionStart arrives after
+    /// ToolCallStart, and durations measure from execution).</summary>
+    public void EnsureCard(string id, string toolName, JsonElement args, bool restampStarted = false)
+    {
+        ShapeArgs(args, out string summary, out string full);
+        EnsureCard(id, toolName, summary, full, restampStarted);
+    }
 
     /// <summary>Returns the live card, creating and appending it on first sight.
     /// With <paramref name="restampStarted"/> the start timestamp is refreshed
@@ -550,26 +561,98 @@ internal sealed class ToolCardTracker
 
     internal static string Summarize(JsonElement args)
     {
-        if (args.ValueKind is not (JsonValueKind.Object or JsonValueKind.Array))
-        {
-            return string.Empty;
-        }
-
-        var raw = args.GetRawText().Replace("\n", " ", StringComparison.Ordinal).Replace("  ", " ", StringComparison.Ordinal);
-        return raw.Length <= 48 ? raw : raw[..47] + "…";
+        ShapeArgs(args, out string summary, out _);
+        return summary;
     }
 
     /// <summary>Complete single-line args payload for the expanded card row (bounded for eviction accounting).</summary>
     internal static string FullArgs(JsonElement args)
     {
+        ShapeArgs(args, out _, out string full);
+        return full;
+    }
+
+    /// <summary>Args-shape caps (summary line vs expanded payload).</summary>
+    private const int SummaryCap = 48;
+    private const int FullArgsCap = 2000;
+
+    /// <summary>Fused per-tool-start args shaping: one <c>GetRawText</c>
+    /// materialization feeds both the header summary and the expanded payload.
+    /// The previous shape called <c>GetRawText</c> twice (once per helper) plus
+    /// up to three <c>Replace</c> temporaries per tool-call start event; this
+    /// is one raw string plus one single-pass result per output. The transform
+    /// is an exact port of the old chain — <c>'\n' → ' '</c>, one
+    /// non-overlapping <c>"  " → " "</c> pass for the summary, truncate at
+    /// <c>cap - 1</c> plus <c>"…"</c> — so card text is byte-identical.</summary>
+    internal static void ShapeArgs(JsonElement args, out string summary, out string full)
+    {
         if (args.ValueKind is not (JsonValueKind.Object or JsonValueKind.Array))
         {
-            return string.Empty;
+            summary = string.Empty;
+            full = string.Empty;
+            return;
         }
 
-        var raw = args.GetRawText().Replace("\n", " ", StringComparison.Ordinal);
-        const int cap = 2000;
-        return raw.Length <= cap ? raw : raw[..(cap - 1)] + "…";
+        string raw = args.GetRawText();
+        ReadOnlySpan<char> span = raw.AsSpan();
+        full = SingleLine(span, collapseDoubleSpaces: false, cap: FullArgsCap, clean: raw);
+        summary = SingleLine(span, collapseDoubleSpaces: true, cap: SummaryCap, clean: raw);
+    }
+
+    /// <summary>Single-pass single-line projection of <paramref name="span"/>
+    /// with no intermediate strings. When nothing needs rewriting and the text
+    /// fits, <paramref name="clean"/> (the already-materialized raw) is
+    /// returned as-is — zero further allocation.</summary>
+    private static string SingleLine(ReadOnlySpan<char> span, bool collapseDoubleSpaces, int cap, string clean)
+    {
+        int dirty = -1;
+        for (int i = 0; i < span.Length; i++)
+        {
+            char c = span[i];
+            if (c == '\n'
+                || (collapseDoubleSpaces && c == ' ' && i + 1 < span.Length && span[i + 1] == ' '))
+            {
+                dirty = i;
+                break;
+            }
+        }
+
+        if (dirty < 0)
+        {
+            return span.Length <= cap ? clean : clean[..(cap - 1)] + "…";
+        }
+
+        char[] buf = ArrayPool<char>.Shared.Rent(cap);
+        try
+        {
+            int n = 0;
+            char prev = '\0';
+            bool justCollapsed = false;
+            for (int i = 0; i < span.Length; i++)
+            {
+                char c = span[i] == '\n' ? ' ' : span[i];
+                if (collapseDoubleSpaces && c == ' ' && prev == ' ' && !justCollapsed)
+                {
+                    justCollapsed = true;
+                    continue;
+                }
+
+                justCollapsed = false;
+                if (n >= cap - 1)
+                {
+                    return new string(buf.AsSpan(0, n)) + "…";
+                }
+
+                buf[n++] = c;
+                prev = c;
+            }
+
+            return new string(buf.AsSpan(0, n));
+        }
+        finally
+        {
+            ArrayPool<char>.Shared.Return(buf);
+        }
     }
 
     /// <summary>

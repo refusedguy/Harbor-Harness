@@ -1,4 +1,5 @@
 using System.Text;
+using System.Text.Json;
 using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Contracts;
 using Harbor.Abstractions.Events;
@@ -119,7 +120,7 @@ public sealed partial class NickConsoleExTuiRenderer : BaseTuiRenderer
             {
                 case ToolExecutionStartEvent tes:
                     owner.NoteToolStart(tes);
-                    string args = tes.Args.GetRawText();
+                    string args = EmptyPayloadLiteral(tes.Args) ?? tes.Args.GetRawText();
                     owner.Append(string.IsNullOrEmpty(args) || args == "{}"
                         ? $"[blue]→ {tes.ToolName}[/]"
                         : $"[blue]→ {tes.ToolName}[/] [dim]{Escape(args)}[/]");
@@ -134,6 +135,24 @@ public sealed partial class NickConsoleExTuiRenderer : BaseTuiRenderer
             }
 
             return Task.CompletedTask;
+        }
+
+        /// <summary>Empty object/array payload without materializing
+        /// <c>GetRawText</c> (struct-enumerator probe, zero allocation).
+        /// Mirrors the AnsiPlain twin — the two handlers stay in step.</summary>
+        private static string? EmptyPayloadLiteral(JsonElement args)
+        {
+            if (args.ValueKind == JsonValueKind.Array && args.GetArrayLength() == 0)
+            {
+                return "[]";
+            }
+
+            if (args.ValueKind == JsonValueKind.Object && !args.EnumerateObject().MoveNext())
+            {
+                return "{}";
+            }
+
+            return null;
         }
     }
 
@@ -407,7 +426,9 @@ public sealed partial class NickConsoleExTuiRenderer : BaseTuiRenderer
     private static readonly object ScreenGate = new();
 
     private static string Escape(string text) =>
-        text.Replace("[", "[[", StringComparison.Ordinal).Replace("]", "]]", StringComparison.Ordinal);
+        text.AsSpan().IndexOfAny('[', ']') < 0
+            ? text
+            : text.Replace("[", "[[", StringComparison.Ordinal).Replace("]", "]]", StringComparison.Ordinal);
 }
 
 /// <summary>
