@@ -11,6 +11,7 @@ using Harbor.Terminal.Abstractions;
 using Harbor.Terminal.Abstractions.Plugins;
 using Harbor.Terminal.Abstractions.ViewModels;
 using Harbor.Ui.Framework.Panels;
+using Harbor.Ui.Framework.State;
 using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Harbor.Plugins.Host.Tests;
