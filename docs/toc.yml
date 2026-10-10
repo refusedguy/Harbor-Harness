@@ -1,0 +1,136 @@
+- name: Accessibility
+  href: ACCESSIBILITY.md
+- name: Alternative Uis
+  href: ALTERNATIVE_UIS.md
+- name: Ambient Mascot Extension Assessment
+  href: AMBIENT_MASCOT_EXTENSION_ASSESSMENT.md
+- name: Analyzers
+  href: ANALYZERS.md
+- name: Antipatterns
+  href: ANTIPATTERNS.md
+- name: Aot Publish
+  href: AOT_PUBLISH.md
+- name: Architecture
+  href: ARCHITECTURE.md
+- name: Architecture Audit V2
+  href: ARCHITECTURE_AUDIT_V2.md
+- name: Architecture Layers
+  href: ARCHITECTURE_LAYERS.md
+- name: Avalonia Ux Audit
+  href: AVALONIA_UX_AUDIT.md
+- name: Benchmarks
+  href: BENCHMARKS.md
+- name: Benchmarks Renderers
+  href: BENCHMARKS_RENDERERS.md
+- name: Build
+  href: BUILD.md
+- name: Central Package Management
+  href: CENTRAL_PACKAGE_MANAGEMENT.md
+- name: Citation Drift Measurement
+  href: CITATION_DRIFT_MEASUREMENT.md
+- name: Ci Ui Tests
+  href: CI_UI_TESTS.md
+- name: Claude Code Ui Ux Analysis
+  href: CLAUDE_CODE_UI_UX_ANALYSIS.md
+- name: Codegen Boilerplate
+  href: CODEGEN_BOILERPLATE.md
+- name: Code Principles Audit
+  href: CODE_PRINCIPLES_AUDIT.md
+- name: Competitive Analysis Ui Ux
+  href: COMPETITIVE_ANALYSIS_UI_UX.md
+- name: Component Catalog
+  href: COMPONENT_CATALOG.md
+- name: Configuration
+  href: CONFIGURATION.md
+- name: Contrib Boundary Measurement
+  href: CONTRIB_BOUNDARY_MEASUREMENT.md
+- name: Demo Gifs
+  href: DEMO_GIFS.md
+- name: Design System
+  href: DESIGN_SYSTEM.md
+- name: Design System Api
+  href: DESIGN_SYSTEM_API.md
+- name: Desktop App Plan
+  href: DESKTOP_APP_PLAN.md
+- name: Development
+  href: DEVELOPMENT.md
+- name: Dialog Overlay Kind Census
+  href: DIALOG_OVERLAY_KIND_CENSUS.md
+- name: E2E Testing
+  href: E2E_TESTING.md
+- name: Evals
+  href: EVALS.md
+- name: Event Bus Sinks
+  href: EVENT_BUS_SINKS.md
+- name: Event Topology
+  href: EVENT_TOPOLOGY.md
+- name: Examples
+  href: EXAMPLES.md
+- name: Feature Research
+  href: FEATURE_RESEARCH.md
+- name: Getting Started
+  href: GETTING_STARTED.md
+- name: I18N String Inventory
+  href: I18N_STRING_INVENTORY.md
+- name: Ide Integration Patterns
+  href: IDE_INTEGRATION_PATTERNS.md
+- name: Killer Features
+  href: KILLER_FEATURES.md
+- name: Nuget Packaging
+  href: NUGET_PACKAGING.md
+- name: Osc Protocol Matrix
+  href: OSC_PROTOCOL_MATRIX.md
+- name: Patterns
+  href: PATTERNS.md
+- name: Plugin Development
+  href: PLUGIN_DEVELOPMENT.md
+- name: Plugin System
+  href: PLUGIN_SYSTEM.md
+- name: Project Status
+  href: PROJECT_STATUS.md
+- name: Release Engineering Analysis
+  href: RELEASE_ENGINEERING_ANALYSIS.md
+- name: Remote Tailscale
+  href: REMOTE-TAILSCALE.md
+- name: Roadmap
+  href: ROADMAP.md
+- name: Rop Api Inventory
+  href: ROP-API-INVENTORY.md
+- name: Scripting
+  href: SCRIPTING.md
+- name: Spectre Tui Deep Dive
+  href: SPECTRE_TUI_DEEP_DIVE.md
+- name: State Ownership
+  href: STATE_OWNERSHIP.md
+- name: Task Template
+  href: TASK_TEMPLATE.md
+- name: Test Patterns
+  href: TEST_PATTERNS.md
+- name: Tools Catalog
+  href: TOOLS_CATALOG.md
+- name: Tui Ux Plan
+  href: TUI_UX_PLAN.md
+- name: Testkit Expansion Report
+  href: TestKit-Expansion-Report.md
+- name: Verified Change
+  href: VERIFIED_CHANGE.md
+- name: Xml Doc Audit
+  href: XML_DOC_AUDIT.md
+- name: Hotfix Sprint Prompt
+  href: hotfix-sprint-prompt.md
+- name: Performance Patterns Analysis
+  href: performance-patterns-analysis.md
+- name: Security Sandboxing Analysis
+  href: security-sandboxing-analysis.md
+- name: Shell Recon Desktop
+  href: shell-recon-desktop.md
+- name: Shell Recon Specs
+  href: shell-recon-specs.md
+- name: Shell Recon Tests
+  href: shell-recon-tests.md
+- name: Shell Recon Tui
+  href: shell-recon-tui.md
+- name: Shell Recon
+  href: shell-recon.md
+- name: Testing Strategy Analysis
+  href: testing-strategy-analysis.md
