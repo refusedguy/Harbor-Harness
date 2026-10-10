@@ -103,7 +103,7 @@ samples/plugins-cs/                   — CS-source sample plugins (HelloWorldPl
 samples/mcp/                          — sample MCP servers (node/python/rust/csharp-hello)
 providers/                            — 13 JSON LLM provider configs (embedded via <EmbedProviders>)
 docs/specs/                           — 19 design specification documents (top-level specs/ no longer exists)
-docs/                                 — 65 top-level docs (architecture, tools catalog, roadmap, patterns, …)
+docs/                                 — 69 top-level docs (architecture, tools catalog, roadmap, patterns, …)
                                         + adr/, specs/, standards/, ui/, themes/, notes/, .kilo-docs/ (archived sprint notes)
 tests/                                — 36 test/bench projects, one directory each
                                         incl. shared Harbor.TestKit and Harbor.Benchmarks
