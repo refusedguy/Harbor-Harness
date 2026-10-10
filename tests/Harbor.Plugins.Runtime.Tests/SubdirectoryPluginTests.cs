@@ -17,9 +17,9 @@ namespace Harbor.Plugins.Runtime.Tests;
 ///     Subdirectory plugins (issue #1046): <see cref="FileSystemPluginSource" />
 ///     discovers <c>.cs</c> files at any depth, and a self-contained plugin filed
 ///     into a subdirectory loads end-to-end. The single-file contract still holds —
-///     files that reference each other's types fail compilation loudly (CS0246)
-///     instead of vanishing silently at discovery; joint per-directory
-///     compilation stays a <c>#422</c> follow-up decision.
+///     files that reference each other's types fail compilation loudly (a missing-type
+///     diagnostic naming the sibling type) instead of vanishing silently at
+///     discovery; joint per-directory compilation stays a <c>#422</c> follow-up decision.
 /// </summary>
 public sealed class SubdirectoryPluginTests
 {
@@ -72,15 +72,17 @@ public sealed class SubdirectoryPluginTests
 
     /// <summary>
     ///     Two cross-referencing files in a subdirectory are discovered (2 scripts)
-    ///     but still compile in isolation, so the run fails loudly with the Roslyn
-    ///     CS0246 diagnostic instead of loading nothing with no explanation.
+    ///     but still compile in isolation, so the run fails loudly with a Roslyn
+    ///     missing-type diagnostic naming the sibling type (CS0103 for a name used
+    ///     inside a method body, CS0246 in type position — assert the name, not the
+    ///     code) instead of loading nothing with no explanation.
     ///     Guards both directions: a regression to silent skipping breaks the
     ///     count assertion, an unreviewed joint-compilation change breaks the
     ///     failure assertion (its cache-key and capability-union semantics need
     ///     their own design, see #1046).
     /// </summary>
     [Test]
-    public async Task CrossFileReferences_FailLoudlyWithCs0246()
+    public async Task CrossFileReferences_FailLoudly()
     {
         using var fixture = await PluginTestFixture.CreateAsync("subdir-loud").ConfigureAwait(false);
         await WriteDuoAsync(fixture.PluginsDir).ConfigureAwait(false);
@@ -94,7 +96,7 @@ public sealed class SubdirectoryPluginTests
         var result = await pluginHost.LoadAllAsync(new FakePluginLoadHost()).ConfigureAwait(false);
 
         await Assert.That(result.IsFailure).IsTrue();
-        await Assert.That(result.Error).Contains("CS0246");
+        await Assert.That(result.Error).Contains("DuoHelperMfprobe");
     }
 
     private static async Task<List<PluginScript>> CollectAsync(string pluginsDir)
