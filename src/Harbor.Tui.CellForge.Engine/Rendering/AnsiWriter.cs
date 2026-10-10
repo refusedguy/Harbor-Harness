@@ -630,6 +630,9 @@ public sealed class AnsiWriter
         Array.Resize(ref _buf, target);
     }
 
+    // One-time cost: runs once per process in the static initializers above
+    // (PaletteFg/PaletteBg), never per frame — the ToArray here builds the
+    // interned palette, it is not a snapshot copy.
     private static byte[][] BuildPalette(int selector) =>
         Enumerable.Range(0, 256)
             .Select(i => Encoding.ASCII.GetBytes($"\x1B[{selector};5;{i}m"))
