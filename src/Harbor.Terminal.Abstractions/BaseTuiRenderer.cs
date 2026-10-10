@@ -249,9 +249,12 @@ public abstract class BaseTuiRenderer : ITuiRenderer
     /// </summary>
     protected async Task DispatchToHandlersAsync(AgentEvent @event, CancellationToken ct = default)
     {
-        // ENG12 #284 (TGui snapshot pattern): handler list is snapshotted —
-        // a late plugin registration mid-dispatch must not invalidate it.
-        foreach (var handler in _eventHandlers.ToArray())
+        // No snapshot: every RegisterHandler call happens in a subclass
+        // constructor, and DispatchToHandlersAsync only runs from RenderAsync
+        // (post-construction), so the list is effectively frozen during
+        // dispatch — a per-event ToArray copied it for a mutation that cannot
+        // happen. Plugins cannot register handlers (no public API).
+        foreach (var handler in _eventHandlers)
         {
             bool handles;
             try
