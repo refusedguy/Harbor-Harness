@@ -101,8 +101,13 @@ public class ToolDispatcherRetryTests
 
     private static ToolDispatcher NewDispatcher(
         IPermissionService permissions, ITool tool, IToolRetryDecider? decider, FakeEventBus bus) =>
+        NewDispatcher(permissions, tool, decider, bus, abandonGrace: null, clock: null);
+
+    private static ToolDispatcher NewDispatcher(
+        IPermissionService permissions, ITool tool, IToolRetryDecider? decider, FakeEventBus bus,
+        TimeSpan? abandonGrace, TimeProvider? clock) =>
         new(new FakeToolRegistry(tool), permissions, bus,
-            NullLogger<ToolDispatcher>.Instance, null, decider);
+            NullLogger<ToolDispatcher>.Instance, null, decider, abandonGrace, clock);
 
     private static async Task WaitForAsync(Func<bool> condition, string what)
     {
@@ -181,18 +186,50 @@ public class ToolDispatcherRetryTests
         await Assert.That(message.Results[0].IsError).IsTrue();
     }
 
+    /// <summary>
+    ///     #1088: frozen clock — the grace timer never fires, so the cancel
+    ///     path cannot lose a wall-clock race to it. Mirrors
+    ///     <c>RunWallClockLimitTests.ManualTimeProvider</c>: the timer callback
+    ///     is never invoked, so <c>Task.Delay(grace, clock)</c> only completes
+    ///     if the test advances it — which this test never does. BCL only.
+    /// </summary>
+    private sealed class FrozenTimeProvider : TimeProvider
+    {
+        public override ITimer CreateTimer(
+            TimerCallback callback, object? state, TimeSpan dueTime, TimeSpan period) =>
+            NoopTimer.Instance;
+
+        private sealed class NoopTimer : ITimer
+        {
+            public static readonly NoopTimer Instance = new();
+            public bool Change(TimeSpan dueTime, TimeSpan period) => false;
+            public void Dispose() { }
+            public ValueTask DisposeAsync() => default;
+        }
+    }
+
     [Test]
     public async Task CancelDuringBackoff_NoSecondStart()
     {
+        // #1088: cancel lands provably inside the backoff (sequenced on the
+        // retry-update event, not on "attempt started"), and the grace timer
+        // runs on a frozen clock so the cancel path cannot lose a 250ms
+        // wall-clock race on a loaded runner — the #1007 class. The 250ms
+        // budget is unchanged; determinism comes from owning the clock, not
+        // from raising the number (#996).
         var tool = new FlakyTool(_ => new IOException("reset"));
+        var bus = new FakeEventBus();
         var dispatcher = NewDispatcher(
-            new AllowPermissions(), tool, new FixedDecider(ex => ex is IOException));
+            new AllowPermissions(), tool, new FixedDecider(ex => ex is IOException), bus,
+            abandonGrace: TimeSpan.FromMilliseconds(250), clock: new FrozenTimeProvider());
         using var cts = new CancellationTokenSource();
 
         var run = dispatcher.ExecuteAsync(
             [Call()], NewSession(), AssistantMessage.Empty("s", "m"), CodeAgent(), cts.Token);
-        await WaitForAsync(() => tool.Executions == 1, "first attempt");
-        cts.Cancel(); // lands inside the fixed 500ms backoff
+        await WaitForAsync(
+            () => bus.Events.OfType<ToolExecutionUpdateEvent>().Any(e => e.RetryAttempt.HasValue),
+            "backoff entered");
+        cts.Cancel(); // provably inside the fixed 500ms backoff
 
         var message = await run.WaitAsync(TimeSpan.FromSeconds(10)).ConfigureAwait(false);
         await Assert.That(tool.Executions).IsEqualTo(1);
