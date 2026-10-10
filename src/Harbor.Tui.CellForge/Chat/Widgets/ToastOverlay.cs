@@ -129,19 +129,18 @@ public sealed class ToastOverlay
 
         int width = Math.Min(MaxWidth, Math.Min(MinWidth, rect.Width - AccentWidth));
         int right = rect.X + width + AccentWidth - 1;
-        // ENG12 #284 (TGui snapshot pattern): Dismiss/Tick/Clear can run on
-        // the event thread while this draw pass runs — iterate a copy.
-        var snapshot = _active.ToArray();
-        int bottom = Math.Min(rect.Y + snapshot.Length - 1, rect.Bottom - 1);
+        // No snapshot: _active is owned by the render thread (mutated only via
+        // Show/Dismiss/Tick/Clear on the owning ChatScreenLayout; Paint runs on
+        // the same pass) and never published, so a per-paint ToArray copied a
+        // list nothing else can touch mid-pass. Capped index loop: at most
+        // MaxVisible reads, no allocation.
+        int count = Math.Min(_active.Count, MaxVisible);
+        int bottom = Math.Min(rect.Y + count - 1, rect.Bottom - 1);
         int painted = 0;
-        for (int i = 0; i < snapshot.Length && rect.Y + painted <= bottom; i++)
+        for (int i = 0; i < count && rect.Y + painted <= bottom; i++)
         {
-            PaintToast(buffer, rect.X, rect.Y + painted, right, snapshot[i]);
+            PaintToast(buffer, rect.X, rect.Y + painted, right, _active[i]);
             painted++;
-            if (painted >= MaxVisible)
-            {
-                break;
-            }
         }
     }
 
