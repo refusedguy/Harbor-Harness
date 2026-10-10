@@ -19,7 +19,7 @@
 
   <ItemGroup>
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions"/>
-    <PackageReference Include="Microsoft.Extensions.Logging"/>
+    <!-- #957: Microsoft.Extensions.Logging removed — project uses only ILogger<T>/LoggerExtensions (Logging.Abstractions types). -->
     <PackageReference Include="CSharpFunctionalExtensions"/>
   </ItemGroup>
 
