@@ -323,12 +323,6 @@ public class KeyGateFamilyRules
         // own shifted rune is.
         new("MarkupOverlay", KeyGateFamily.Buffer, "src/Harbor.Tui.CellForge/Chat/Widgets/MarkupOverlay.cs"),
 
-        // MarkupOverlay (#400 slice 1/2) holds a text buffer behind the text
-        // tool — shifted runes feed PendingText and Shift+arrows resize —
-        // while Ctrl|Alt|Meta are refused (Ctrl+R redo excepted). Same gate
-        // as the two viewers above: Shift means something at this site.
-        new("MarkupOverlay", KeyGateFamily.Buffer, "src/Harbor.Tui.CellForge/Chat/Widgets/MarkupOverlay.cs"),
-
         // ---- UNGATED: no modifier test at all (#833's real finding) ------------
         // SetupChecklistOverlay is REACHED from the product input loop
         // (ReplInputLoop.cs:379 → SetupChecklistController), so its missing
