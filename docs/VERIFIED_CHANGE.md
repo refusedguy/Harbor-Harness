@@ -22,16 +22,16 @@ harbor run change agent=<name> "<task>" [--checks <file>] [--dry-run] [--repo <p
 
 ## Status
 
-Only the first two stages are implemented. The command runs them and then
-stops fail-closed: the run is left honestly at `Isolated`, exit code 4 names
+Only the first three stages are implemented. The command runs them and then
+stops fail-closed: the run is left honestly at `Changed`, exit code 4 names
 the missing stage, and `harbor run list` shows the run with its last
-completed transition. Nothing is faked past `Isolated`.
+completed transition. Nothing is faked past `Changed`.
 
 | Slice | Stage | State |
 |---|---|---|
 | S1 | pin contract | landed |
 | S2 | worktree + manifest | landed |
-| S3 | frozen change set | open (#377) |
+| S3 | frozen change set | landed (#377) |
 | S4 | checks | open (#378) |
 | S5 | verification report | in progress (#379, slice 1: pure renderer, no verb yet) |
 | S6 | accept | open (#382) |
@@ -47,13 +47,14 @@ Each run owns one directory, minted id, never user input:
 ~/.harbor/runs/<RunId>/
   manifest.json   pinned contract fields, worktree path, lifecycle state
   worktree/       detached git worktree at the pinned revision
+  change.patch    frozen binary diff base..head (S3)
+  changeset.json  frozen inventory: per-path status + counts (S3)
 ```
 
-Later slices add their artifacts beside the manifest (`change.patch`,
-`changeset.json`, `checks.json`, `report.json`, `owner-report.md`,
-`accept.log`). The manifest is written atomically (temp + rename), so a
-killed process leaves either the previous state or the new one, never a
-half-written file. `report.json` is rendered by slice S5-1
+Later slices add their artifacts beside these (`checks.json`, `report.json`,
+`owner-report.md`, `accept.log`). The manifest is written atomically (temp +
+rename), so a killed process leaves either the previous state or the new one,
+never a half-written file. `report.json` is rendered by slice S5-1
 (`src/Harbor.Application/Sessions/ChangeReport.cs`) from the frozen set
 and the recorded checks; see Report format below.
 
@@ -85,12 +86,33 @@ names the stage:
 | 1 | reported, at least one check failed (reserved for S4/S5) |
 | 2 | bad usage (missing agent, missing task, missing checks file, unknown option) |
 | 3 | pre-flight conflict: dirty workspace, moved base, or not a repository |
-| 4 | internal failure at a named stage (today: `isolate`, or the missing `freeze`) |
+| 4 | internal failure at a named stage (today: `isolate` or `freeze`, or the not-yet-wired `checks`) |
 | 5 | out-of-reach inventory (`--all-effects`): read-only, nothing written |
 
 `--dry-run` performs the pin pre-flight and prints the plan, then stops
 without creating a worktree. A failed pre-flight never leaves a worktree
 registered.
+
+## Frozen change set (S3)
+
+`ChangeSetFreezer.FreezeAsync` (in
+`src/Harbor.Application/Sessions/ChangeSetFreezer.cs`) captures the run's
+work as `change.patch` (`git diff --binary base..head`) plus
+`changeset.json` (per-path status + insertion/deletion counts, ignored-path
+count), then moves the manifest `Isolated -> Changed`. Freeze is
+`git add -A` (untracked files created by the run are included) plus one
+`git commit --no-verify` under the pinned `Harbor Run <harbor@local>`
+identity — never the operator's `~/.gitconfig`, never a hook.
+
+- Idempotent: re-freezing returns the recorded artifact, byte-identical,
+  with no second commit. Renames and deletions keep `R` / `D`; binary
+  changes are stored `--binary` and reported `Binary`.
+- Empty is success: zero entries, `isEmpty: true`, head equals base — not
+  an error, and not "verified".
+- Capped, never truncated: patch byte cap (default 8 MiB) and entry-count
+  cap (default 2000). Over-limit is a failure naming the cap.
+- `.gitignore`d paths are excluded and counted (`ignoredPathCount`) —
+  never dropped silently.
 
 ## Report format (S5 slice 1)
 
@@ -141,7 +163,7 @@ harbor run reject <RunId> (--patch | --worktree | --all-effects | --undo-apply) 
 ```
 
 - `--patch`: drop the run's frozen artifacts; the worktree is untouched.
-  Pending: the frozen set (S3, #377) has not landed, so slice 1 refuses
+  Pending: the S7 `--patch` slice has not landed, so slice 1 refuses
   with the stage named and deletes nothing.
 - `--worktree`: remove the isolated working copy; pinned state becomes `Released`.
   Pending: slice 1 refuses with the stage named and removes nothing.

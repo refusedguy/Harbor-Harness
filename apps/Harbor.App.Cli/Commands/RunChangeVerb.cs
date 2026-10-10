@@ -7,12 +7,13 @@ namespace Harbor.App.Cli.Commands;
 /// <summary>
 ///     <c>harbor run change agent=&lt;name&gt; "&lt;task&gt;" [--checks &lt;file&gt;] [--dry-run] [--repo &lt;path&gt;]</c>
 ///     (epic #42, slice S9, #397): one command driving the verified-change
-///     chain end to end. Slice 1 implements pin (S1) and isolate (S2) and
-///     then stops fail-closed: freeze (S3) through owner report (S8) are not
-///     implemented yet, so the run is left honestly at <c>Isolated</c> and
-///     the command exits 4 naming the stage. Nothing is faked, no step is
-///     skipped to "success", and <c>harbor run list</c> shows the run with
-///     its last completed transition.
+///     chain end to end. This slice implements pin (S1), isolate (S2) and
+///     freeze (S3, #377) and then stops fail-closed: checks (S4) through
+///     owner report (S8) are not wired into this command yet, so the run is
+///     left honestly at <c>Changed</c> and the command exits 4 naming the
+///     stage. Nothing is faked, no step is skipped to "success", and
+///     <c>harbor run list</c> shows the run with its last completed
+///     transition.
 ///     Exit codes: 0 dry-run plan printed; 2 bad usage; 3 pre-flight
 ///     conflict (dirty workspace, moved base, not a repo); 4 internal
 ///     failure at a named stage.
@@ -121,9 +122,22 @@ internal static class RunChangeVerb
         }
 
         Console.WriteLine($"run {ws.Value.RunId.Value} isolated at {ws.Value.Path} (base {contract.BaseRevision}, state Isolated).");
+
+        Result<FrozenChangeSet> frozen =
+            await ChangeSetFreezer.FreezeAsync(ws.Value).ConfigureAwait(false);
+        if (frozen.IsFailure)
+        {
+            Console.Error.WriteLine($"Internal failure at stage 'freeze': {frozen.Error}");
+            return 4;
+        }
+
+        FrozenChangeSet set = frozen.Value;
+        Console.WriteLine(
+            $"run {set.RunId} frozen at {set.HeadRevision} " +
+            $"({set.Entries.Count} paths, {(set.IsEmpty ? "empty" : "changed")}, state Changed).");
         Console.Error.WriteLine(
-            "Stage 'freeze' (S3, #377) is not implemented: the run stays at Isolated, " +
-            $"`harbor run list` shows it honestly. Resume this run when S3 lands.");
+            "Stage 'checks' (S4, #378) is not wired into this command yet: the run stays at Changed, " +
+            $"`harbor run list` shows it honestly. Resume this run when the checks wiring lands.");
         return 4;
     }
 
