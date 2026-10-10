@@ -139,6 +139,34 @@ public class TerminalInputSourceTests
     }
 
     [Test]
+    public async Task Rapid_Chunks_Preserve_Event_Order()
+    {
+        // Control for the lock-free input path: the single reader thread must
+        // deliver every byte in arrival order even when chunks arrive back-to-back.
+        using var stream = new PulsedStream();
+        using var source = new TerminalInputSource(
+            stream,
+            new TerminalInputSourceOptions { EscFlushTimeout = TimeSpan.Zero, PasteAbortTimeout = TimeSpan.Zero });
+
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        _ = source.RunAsync(cts.Token);
+
+        const string payload = "abcdefgh";
+        foreach (var ch in payload)
+            stream.Push([(byte)ch]);
+
+        var sb = new StringBuilder();
+        for (int i = 0; i < payload.Length; i++)
+        {
+            var evt = await ReadOne(source.Events, cts.Token);
+            await Assert.That(evt.Kind).IsEqualTo(InputEventKind.Key);
+            sb.Append(evt.Key.Character.ToString());
+        }
+
+        await Assert.That(sb.ToString()).IsEqualTo(payload);
+    }
+
+    [Test]
     public async Task Double_Start_Is_Rejected()
     {
         var source = new TerminalInputSource(
