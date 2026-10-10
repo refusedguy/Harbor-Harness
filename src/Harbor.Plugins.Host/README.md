@@ -100,7 +100,7 @@ method (`-32601`), `ping`, and the response-less frames
 
 The parity suite pins the table above as an executable spec: every non-tool
 door accepts and discards, and `tools/list` stays empty for them. The
-#1012 declared-contract set is pinned where it lives
+declared-contract set (#1012) is pinned where it lives
 (`tests/Harbor.Plugins.Runtime.Tests/Compilation/PluginReferenceContractTests`),
 against the same `PluginAssemblyReferences` the host process builds.
 
