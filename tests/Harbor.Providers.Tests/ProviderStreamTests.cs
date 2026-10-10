@@ -412,4 +412,48 @@ public class ProviderStreamTests
         await Assert.That(events.Count(e => e is ErrorEvent)).IsEqualTo(0);
         await Assert.That(events.Count(e => e is FinishEvent)).IsEqualTo(1);
     }
+
+    [Test]
+    public async Task LongStream_BoundedChannel_DeliversAllInOrder()
+    {
+        // #1104: the bounded channel applies backpressure, never drops —
+        // 500 deltas (well over the bound) arrive complete and ordered.
+        const int Count = 500;
+        var lines = new string[Count + 1];
+        for (int i = 0; i < Count; i++)
+            lines[i] = """{"choices":[{"delta":{"content":"x"}}]}""";
+        lines[Count] = "[DONE]";
+
+        var client = CreateCompatClient(new StubHttpHandler(_ => Sse(lines)));
+
+        var events = await CollectAsync(client.StreamAsync(new LlmRequest(
+            "m1", [LlmUserMessage.Text("hello")], "", [])));
+
+        await Assert.That(events.OfType<TextDeltaEvent>().Count()).IsEqualTo(Count);
+        await Assert.That(events.Count(e => e is ErrorEvent)).IsEqualTo(0);
+        await Assert.That(events.Count(e => e is FinishEvent)).IsEqualTo(1);
+    }
+
+    [Test]
+    [Timeout(30_000)]
+    public async Task PreCancelledToken_TerminatesPromptly()
+    {
+        // #1104: the pump must run (and complete the writer) even when the
+        // token is already cancelled — Task.Run must not swallow the
+        // delegate. The stream terminates instead of hanging.
+        var client = CreateCompatClient(new StubHttpHandler(_ => Sse(
+            """{"choices":[{"delta":{"content":"hi"},"finish_reason":"stop"}]}""",
+            "[DONE]")));
+
+        using var cts = new CancellationTokenSource();
+        cts.Cancel();
+
+        await Assert.ThrowsAsync<OperationCanceledException>(async () =>
+        {
+            await foreach (var _ in client.StreamAsync(new LlmRequest(
+                "m1", [LlmUserMessage.Text("hello")], "", []), cts.Token))
+            {
+            }
+        });
+    }
 }
