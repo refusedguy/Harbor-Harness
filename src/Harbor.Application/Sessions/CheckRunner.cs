@@ -297,19 +297,29 @@ public static class CheckRunner
         using var timeoutCts = new CancellationTokenSource(TimeSpan.FromSeconds(spec.TimeoutSeconds));
         try
         {
+            Task ctTask = Task.Delay(Timeout.InfiniteTimeSpan, ct);
+            Task timeoutTask = Task.Delay(Timeout.InfiniteTimeSpan, timeoutCts.Token);
             Task done = await Task.WhenAny(
-                exited.Task, Task.Delay(Timeout.InfiniteTimeSpan, timeoutCts.Token)).ConfigureAwait(false);
+                exited.Task, timeoutTask, ctTask).ConfigureAwait(false);
             if (!ReferenceEquals(done, exited.Task))
             {
+                // Caller cancellation and the per-check timeout both land here:
+                // the WhenAny above must observe ct, otherwise a cancel that
+                // fires while the child still runs is ignored until the child
+                // exits on its own (a 30s sleep cancelled at 300ms was recorded
+                // Passed after the full 30s). ct wins the tie: the caller asked
+                // to stop, so the record says Cancelled, never Passed.
+                bool cancelled = ct.IsCancellationRequested;
                 KillTree(proc);
-                StreamCapture timeoutOut = await stdoutTask.ConfigureAwait(false);
-                StreamCapture timeoutErr = await stderrTask.ConfigureAwait(false);
+                StreamCapture earlyOut = await stdoutTask.ConfigureAwait(false);
+                StreamCapture earlyErr = await stderrTask.ConfigureAwait(false);
                 sw.Stop();
                 return new CheckResult(
-                    spec.Name, commandLine, worktreePath, null, CheckOutcome.TimedOut, sw.Elapsed,
+                    spec.Name, commandLine, worktreePath, null,
+                    cancelled ? CheckOutcome.Cancelled : CheckOutcome.TimedOut, sw.Elapsed,
                     baseRevision, headRevision, envKeys,
-                    timeoutOut.Text, timeoutErr.Text,
-                    timeoutOut.Truncated || timeoutErr.Truncated, spec.Shell);
+                    earlyOut.Text, earlyErr.Text,
+                    earlyOut.Truncated || earlyErr.Truncated, spec.Shell);
             }
 
             await proc.WaitForExitAsync(ct).ConfigureAwait(false);
