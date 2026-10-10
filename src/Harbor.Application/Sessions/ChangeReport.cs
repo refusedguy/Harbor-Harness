@@ -295,11 +295,18 @@ public sealed record ChangeReport
     ///     the type rather than a convention.
     /// </summary>
     private ChangeReport(ChangeReport original)
-        : this(
-            original.RunId, original.BaseRevision, original.HeadRevision,
-            original.Changed, original.Verified, original.NotVerified,
-            original.TimeoutSeconds, original.MaxSteps, original.KnownRisks, original.ExitCode)
+        : base()
     {
+        RunId = original.RunId;
+        BaseRevision = original.BaseRevision;
+        HeadRevision = original.HeadRevision;
+        Changed = original.Changed;
+        Verified = original.Verified;
+        NotVerified = original.NotVerified;
+        TimeoutSeconds = original.TimeoutSeconds;
+        MaxSteps = original.MaxSteps;
+        KnownRisks = original.KnownRisks;
+        ExitCode = original.ExitCode;
     }
 
     /// <summary>Minted run id (matches the run directory name).</summary>
