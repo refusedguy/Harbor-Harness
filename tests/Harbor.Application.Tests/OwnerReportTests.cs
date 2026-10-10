@@ -209,3 +209,132 @@ public class OwnerReportTests
         await Assert.That(text.Contains(report.RecommendationAndRollbackText)).IsTrue();
     }
 }
+
+/// <summary>
+///     S8 remainder (#392): the render fits 80 columns with no ANSI, and the
+///     report persists under <c>runs/&lt;RunId&gt;/owner-report.md</c> for the
+///     <c>harbor run owner-report</c> verb to print.
+/// </summary>
+[NotInParallel("harbor-home")]
+public class OwnerReportPersistenceTests
+{
+    private const string Run = "abc123";
+    private const string Rev = "cafef00dcafef00dcafef00dcafef00dcafef00d";
+    private const string PatchRollback = "git apply --reverse runs/abc123/change.patch";
+
+    private static Result<OwnerReport> Create(
+        string run = Run,
+        string narrative = "Limits narrative.",
+        string recommendation = "Keep it.") =>
+        OwnerReport.Create(
+            RunId.Create(run),
+            RunStopReason.Succeeded,
+            Rev,
+            new List<OwnerVerifiedEntry> { new("dotnet build", Rev, 0) },
+            new List<OwnerNotVerifiedEntry>(),
+            new List<string> { "timeout 300s" },
+            narrative,
+            new List<OwnerRuleChange> { new("perm:bash", "deny", "ask") },
+            recommendation,
+            PatchRollback,
+            "operator");
+
+    [Test]
+    public async Task Render_LongLines_WrappedToEightyColumns_NoAnsi()
+    {
+        string prose = string.Join(' ', Enumerable.Repeat("evidence-word", 40));
+        var result = Create(narrative: prose, recommendation: prose);
+        await Assert.That(result.IsSuccess).IsTrue();
+        string text = result.Value.Render();
+
+        string[] lines = text.Split('\n');
+        for (int i = 0; i < lines.Length; i++)
+            await Assert.That(lines[i].Length <= OwnerReport.TextWidth).IsTrue();
+        await Assert.That(!text.Contains('\x1b')).IsTrue();
+
+        var validated = OwnerReportFormat.ValidateRendered(text, Run);
+        await Assert.That(validated.IsSuccess).IsTrue();
+    }
+
+    [Test]
+    public async Task Save_Load_RoundTrip_ByteIdentical()
+    {
+        await WithIsolatedHome(async home =>
+        {
+            var created = Create();
+            await Assert.That(created.IsSuccess).IsTrue();
+
+            Result<string> saved = created.Value.Save();
+            await Assert.That(saved.IsSuccess).IsTrue();
+            string expectedPath = Path.Combine(home, "runs", Run, OwnerReport.OwnerReportFileName);
+            await Assert.That(saved.Value).IsEqualTo(expectedPath);
+            await Assert.That(File.Exists(expectedPath)).IsTrue();
+
+            Result<string> loaded = OwnerReport.TryLoad(Run);
+            await Assert.That(loaded.IsSuccess).IsTrue();
+            await Assert.That(loaded.Value).IsEqualTo(created.Value.Render());
+        });
+    }
+
+    [Test]
+    public async Task TryLoad_UnknownRun_Fails()
+    {
+        await WithIsolatedHome(async _ =>
+        {
+            Result<string> loaded = OwnerReport.TryLoad("nosuchrun");
+            await Assert.That(loaded.IsFailure).IsTrue();
+        });
+    }
+
+    [Test]
+    public async Task Save_PathSeparatorRunId_Refused()
+    {
+        await WithIsolatedHome(async _ =>
+        {
+            var created = Create(run: "a/b");
+            await Assert.That(created.IsSuccess).IsTrue();
+
+            Result<string> saved = created.Value.Save();
+            await Assert.That(saved.IsFailure).IsTrue();
+            await Assert.That(saved.Error.Contains("run id")).IsTrue();
+        });
+    }
+
+    [Test]
+    public async Task TryLoad_CorruptReport_Fails()
+    {
+        await WithIsolatedHome(async home =>
+        {
+            string runDir = Path.Combine(home, "runs", Run);
+            Directory.CreateDirectory(runDir);
+            File.WriteAllText(Path.Combine(runDir, OwnerReport.OwnerReportFileName), "not a report\n");
+
+            Result<string> loaded = OwnerReport.TryLoad(Run);
+            await Assert.That(loaded.IsFailure).IsTrue();
+        });
+    }
+
+    private static async Task WithIsolatedHome(Func<string, Task> body)
+    {
+        string? savedHarborHome = Environment.GetEnvironmentVariable("HARBOR_HOME");
+        string home = Path.Combine(Path.GetTempPath(), $"harbor-home-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(home);
+        Environment.SetEnvironmentVariable("HARBOR_HOME", home);
+        try
+        {
+            await body(home).ConfigureAwait(false);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("HARBOR_HOME", savedHarborHome);
+            try
+            {
+                Directory.Delete(home, recursive: true);
+            }
+            catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException || ex is DirectoryNotFoundException)
+            {
+                _ = ex;
+            }
+        }
+    }
+}
