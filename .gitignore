@@ -108,7 +108,11 @@ runtime/
 
 ## Docs build
 _site/
-api/
+# api/ holds docfx BUILD OUTPUT (generated *.yml + toc.yml from the metadata
+# lane in docfx.json) — except api/index.md, which is a hand-written landing
+# page and the one tracked file in this directory (#431 D2).
+api/*
+!api/index.md
 
 ## E2E screenshots / test artifacts
 docs/screenshots/
