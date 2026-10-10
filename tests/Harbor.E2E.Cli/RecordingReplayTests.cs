@@ -14,55 +14,71 @@ public class RecordingReplayTests : IAsyncDisposable
 {
     private readonly List<MockLlmServer> _servers = [];
 
-    [Test]
-    public async Task Recorded_Sequence_Replays_Identically_In_Order()
+    /// <summary>
+    ///     Artifact shared by the record → replay chain below: created once per
+    ///     test-session process (unique name, no cross-run collisions), deleted
+    ///     after the class finishes. The replay phase genuinely depends on this
+    ///     file, which is what the <c>[DependsOn]</c> chain expresses instead of
+    ///     one monolithic test doing both phases.
+    /// </summary>
+    private static readonly string SharedRecordingPath = Path.Combine(
+        Path.GetTempPath(), $"harbor-rec-chain-{Guid.NewGuid():N}.jsonl");
+
+    [After(Class)]
+    public static void DeleteSharedRecording()
     {
-        string recordingPath = Path.Combine(Path.GetTempPath(), $"harbor-rec-{Guid.NewGuid():N}.jsonl");
-        try
-        {
-            // ── Record: two text turns + one tool call + one error ──
-            var recorder = CreateServer();
-            await recorder.StartAsync();
-            recorder.StartRecording(recordingPath);
-            recorder.SetResponse("m-a", "hello replay");
-            recorder.SetResponse("m-b", "second model");
-            recorder.SetToolCallResponse("m-tool", "read", new { path = "x.cs", limit = 10 });
-            recorder.SetErrorResponse("m-err", "boom");
+        try { File.Delete(SharedRecordingPath); }
+        catch (IOException) { }
+        catch (UnauthorizedAccessException) { }
+    }
 
-            HttpClient client = new();
-            string firstTurn = await PostCompletionAsync(client, recorder.BaseUri, "m-a");
-            string toolTurn = await PostCompletionAsync(client, recorder.BaseUri, "m-tool");
-            string errRaw500 = await PostRawExpect500Async(client, recorder.BaseUri, "m-err");
-            string secondModel = await PostCompletionAsync(client, recorder.BaseUri, "m-b");
+    [Test]
+    public async Task Record_Phase_WritesReplayableSequence()
+    {
+        // ── Record: two text turns + one tool call + one error ──
+        var recorder = CreateServer();
+        await recorder.StartAsync();
+        recorder.StartRecording(SharedRecordingPath);
+        recorder.SetResponse("m-a", "hello replay");
+        recorder.SetResponse("m-b", "second model");
+        recorder.SetToolCallResponse("m-tool", "read", new { path = "x.cs", limit = 10 });
+        recorder.SetErrorResponse("m-err", "boom");
 
-            await Assert.That(ExtractContent(firstTurn)).Contains("hello replay");
-            await Assert.That(toolTurn).Contains("\"read\"");
-            await Assert.That(errRaw500).Contains("boom");
-            await Assert.That(ExtractContent(secondModel)).Contains("second model");
-            await recorder.StopAsync();
+        HttpClient client = new();
+        string firstTurn = await PostCompletionAsync(client, recorder.BaseUri, "m-a");
+        string toolTurn = await PostCompletionAsync(client, recorder.BaseUri, "m-tool");
+        string errRaw500 = await PostRawExpect500Async(client, recorder.BaseUri, "m-err");
+        string secondModel = await PostCompletionAsync(client, recorder.BaseUri, "m-b");
 
-            // ── Replay: no scripted responses at all, purely the recording ──
-            var replayer = CreateServer();
-            await replayer.StartAsync();
-            replayer.ReplayFrom(recordingPath);
+        await Assert.That(ExtractContent(firstTurn)).Contains("hello replay");
+        await Assert.That(toolTurn).Contains("\"read\"");
+        await Assert.That(errRaw500).Contains("boom");
+        await Assert.That(ExtractContent(secondModel)).Contains("second model");
+        await recorder.StopAsync();
+    }
 
-            string replayFirst = await PostCompletionAsync(client, replayer.BaseUri, "m-a");
-            string replayTool = await PostCompletionAsync(client, replayer.BaseUri, "m-tool");
-            _ = await PostRawExpect500Async(client, replayer.BaseUri, "m-err");
-            string replaySecond = await PostCompletionAsync(client, replayer.BaseUri, "m-b");
+    [Test]
+    [DependsOn(nameof(Record_Phase_WritesReplayableSequence))]
+    public async Task Replay_Phase_ServesRecordedSequenceIdentically()
+    {
+        // ── Replay: no scripted responses at all, purely the recording ──
+        var replayer = CreateServer();
+        await replayer.StartAsync();
+        replayer.ReplayFrom(SharedRecordingPath);
 
-            await Assert.That(ExtractContent(replayFirst)).IsEqualTo(ExtractContent(firstTurn));
-            await Assert.That(replayTool).Contains("\"read\"");
-            await Assert.That(ExtractContent(replaySecond)).Contains("second model");
+        HttpClient client = new();
+        string replayFirst = await PostCompletionAsync(client, replayer.BaseUri, "m-a");
+        string replayTool = await PostCompletionAsync(client, replayer.BaseUri, "m-tool");
+        _ = await PostRawExpect500Async(client, replayer.BaseUri, "m-err");
+        string replaySecond = await PostCompletionAsync(client, replayer.BaseUri, "m-b");
 
-            // Exhaustion is loud, not silent repetition.
-            string exhausted = await PostCompletionAsync(client, replayer.BaseUri, "m-a");
-            await Assert.That(ExtractContent(exhausted)).Contains("recording exhausted for model 'm-a'");
-        }
-        finally
-        {
-            File.Delete(recordingPath);
-        }
+        await Assert.That(ExtractContent(replayFirst)).Contains("hello replay");
+        await Assert.That(replayTool).Contains("\"read\"");
+        await Assert.That(ExtractContent(replaySecond)).Contains("second model");
+
+        // Exhaustion is loud, not silent repetition.
+        string exhausted = await PostCompletionAsync(client, replayer.BaseUri, "m-a");
+        await Assert.That(ExtractContent(exhausted)).Contains("recording exhausted for model 'm-a'");
     }
 
     [Test]
