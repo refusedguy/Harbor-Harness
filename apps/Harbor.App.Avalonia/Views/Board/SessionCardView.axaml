@@ -26,6 +26,8 @@
                 <Button Classes="hds-ghost"
                         Padding="4"
                         HorizontalAlignment="Right"
+                        AutomationProperties.Name="Session actions"
+                        AutomationProperties.HelpText="Rename, duplicate, archive, or delete this session."
                         PointerPressed="OnKebabPointerPressed">
                     <Button.Flyout>
                         <MenuFlyout>

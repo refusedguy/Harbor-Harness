@@ -35,6 +35,7 @@
                 <Button Grid.Column="1"
                         Classes="CodeCopyButton"
                         Content="Copy"
+                        AutomationProperties.Name="Copy code to clipboard"
                         Click="CopyButton_Click"
                         Padding="8,2"
                         FontSize="11"

@@ -78,6 +78,7 @@
             <Expander Grid.Row="2"
                       IsExpanded="{Binding IsExpanded}"
                       Header="details"
+                      AutomationProperties.Name="{Binding ToolName}"
                       Margin="0,4,0,0">
                 <StackPanel Spacing="6">
                     <TextBlock Text="Args"
