@@ -125,7 +125,10 @@ public partial class AnsiPlainTuiRenderer : BaseTuiRenderer
             var tes = (ToolExecutionStartEvent)@event;
             context.WriteLine();
             context.WriteColored($"→ {tes.ToolName}", TuiColor.Blue);
-            string args = tes.Args.GetRawText();
+            // #1111: args come from the model and are attacker-controlled —
+            // strip terminal control characters (incl. ESC) so an embedded
+            // sequence (e.g. "\x1b[2J") can never execute in the terminal.
+            string args = SanitizeForTerminal(tes.Args.GetRawText());
             if (!string.IsNullOrEmpty(args) && args != "{}")
             {
                 context.WriteStyled($" {args}", TuiStyle.Dim);
@@ -133,6 +136,45 @@ public partial class AnsiPlainTuiRenderer : BaseTuiRenderer
 
             context.WriteLine();
             return Task.CompletedTask;
+        }
+
+        /// <summary>
+        ///     Drops terminal control characters (C0 incl. ESC, DEL, C1) while
+        ///     keeping <c>\n</c>/<c>\t</c> and all printable text, so model-
+        ///     supplied args paint as inert text, never as escape sequences.
+        ///     Fast path returns the input untouched when there is nothing to
+        ///     strip (the common case — plain JSON args).
+        /// </summary>
+        private static string SanitizeForTerminal(string text)
+        {
+            int dirty = -1;
+            for (int i = 0; i < text.Length; i++)
+            {
+                char c = text[i];
+                if (c != '\n' && c != '\t' && char.IsControl(c))
+                {
+                    dirty = i;
+                    break;
+                }
+            }
+
+            if (dirty < 0)
+            {
+                return text;
+            }
+
+            var sb = new StringBuilder(text.Length);
+            sb.Append(text, 0, dirty);
+            for (int i = dirty; i < text.Length; i++)
+            {
+                char c = text[i];
+                if (c == '\n' || c == '\t' || !char.IsControl(c))
+                {
+                    sb.Append(c);
+                }
+            }
+
+            return sb.ToString();
         }
     }
 
