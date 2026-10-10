@@ -14,6 +14,8 @@ namespace Harbor.App.Cli.Commands;
 ///     behind the base-unchanged gate.
 ///     <c>harbor run reject</c> (S7 slice 1, #385) routes the three reject
 ///     modes; only <c>--all-effects</c> is implemented yet.
+///     <c>harbor run owner-report</c> (S8 remainder, #392) prints the persisted
+///     owner report as plain text (80 columns, no ANSI).
 /// </summary>
 internal static class RunTaskVerb
 {
@@ -26,6 +28,8 @@ internal static class RunTaskVerb
             return await RunAcceptVerb.RunAsync(args.Skip(1).ToArray()).ConfigureAwait(false);
         if (sub == "reject")
             return RunRejectVerb.Run(args.Skip(1).ToArray());
+        if (sub == "owner-report")
+            return RunOwnerReportVerb.Run(args.Skip(1).ToArray());
         if (sub == "change")
             return await RunChangeVerb.RunAsync(args.Skip(1).ToArray()).ConfigureAwait(false);
         if (sub != "task")
@@ -36,6 +40,7 @@ internal static class RunTaskVerb
                                       harbor run change agent=<name> "<task>" [--checks <file>] [--dry-run] [--repo <path>]
                                       harbor run accept <RunId> [--dry-run] [--reverify]
                                       harbor run reject <RunId> (--patch | --worktree | --all-effects) [--force]
+                                      harbor run owner-report <RunId>
                                       harbor run list
                                     """);
             return sub.Length == 0 ? 2 : 1;

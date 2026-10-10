@@ -46,15 +46,22 @@ public sealed record OwnerRuleChange(string Rule, string Before, string After);
 ///         the recommendation, and the rollback command.
 ///     </para>
 ///     <para>
-///         Persistence (<c>runs/&lt;RunId&gt;/owner-report.md</c>) and the
-///         <c>harbor run owner-report</c> verb belong to later slices; this
-///         type is the format plus its structural guard.
+ ///         Persistence (<c>runs/&lt;RunId&gt;/owner-report.md</c>, via
+ ///         <see cref="Save" /> / <see cref="TryLoad" />) and the
+ ///         <c>harbor run owner-report</c> verb print <see cref="Render" />
+ ///         verbatim: plain text, <see cref="TextWidth" /> columns, no ANSI.
 ///     </para>
 /// </remarks>
 public sealed class OwnerReport
 {
     /// <summary>The fixed signer of every report: the agent prepares, never accepts.</summary>
     public const string PreparedBy = "agent";
+
+    /// <summary>Plain-text width. The <see cref="Render" /> output never exceeds this.</summary>
+    public const int TextWidth = 80;
+
+    /// <summary>File name of the persisted report (<c>runs/&lt;RunId&gt;/owner-report.md</c>).</summary>
+    public const string OwnerReportFileName = "owner-report.md";
 
     private OwnerReport(
         RunId runId,
@@ -209,33 +216,209 @@ public sealed class OwnerReport
             rollbackCommand.Trim(), signer));
     }
 
-    /// <summary>Render the full report: title plus the five sections in fixed order.</summary>
+    /// <summary>
+    ///     Render the full report: title plus the five sections in fixed order.
+    ///     Plain text, <see cref="TextWidth" /> columns, no ANSI escapes —
+    ///     identical when stdout is redirected.
+    /// </summary>
     /// <returns>The report document.</returns>
     public string Render()
     {
         StringBuilder sb = new();
         sb.Append("# Owner report for run ").Append(RunId.Value).Append('\n');
         sb.Append('\n');
-        sb.Append(OwnerReportFormat.ResultHeading).Append('\n');
-        sb.Append('\n');
-        sb.Append(ResultText).Append('\n');
-        sb.Append('\n');
-        sb.Append(OwnerReportFormat.EvidenceHeading).Append('\n');
-        sb.Append('\n');
-        sb.Append(EvidenceText).Append('\n');
-        sb.Append('\n');
-        sb.Append(OwnerReportFormat.LimitsHeading).Append('\n');
-        sb.Append('\n');
-        sb.Append(LimitsText).Append('\n');
-        sb.Append('\n');
-        sb.Append(OwnerReportFormat.RuleChangesHeading).Append('\n');
-        sb.Append('\n');
-        sb.Append(RuleChangesText).Append('\n');
-        sb.Append('\n');
+        AppendSection(sb, OwnerReportFormat.ResultHeading, ResultText);
+        AppendSection(sb, OwnerReportFormat.EvidenceHeading, EvidenceText);
+        AppendSection(sb, OwnerReportFormat.LimitsHeading, LimitsText);
+        AppendSection(sb, OwnerReportFormat.RuleChangesHeading, RuleChangesText);
         sb.Append(OwnerReportFormat.RecommendationHeading).Append('\n');
         sb.Append('\n');
-        sb.Append(RecommendationAndRollbackText).Append('\n');
+        AppendWrappedBody(sb, RecommendationAndRollbackText);
         return sb.ToString();
+    }
+
+    /// <summary>
+    ///     Persist this report as <c>runs/&lt;RunId&gt;/owner-report.md</c>,
+    ///     atomically (temp + rename). Overwrite is allowed: re-generation
+    ///     replaces the artifact, history is the accept/reject audit trail's job.
+    /// </summary>
+    /// <returns>The absolute path written, or a failure naming why not.</returns>
+    public Result<string> Save() => Save(this);
+
+    /// <summary>
+    ///     Persist <paramref name="report" /> as
+    ///     <c>runs/&lt;RunId&gt;/owner-report.md</c>, atomically (temp + rename).
+    /// </summary>
+    /// <param name="report">The report to persist. Must not be null.</param>
+    /// <returns>The absolute path written, or a failure naming why not.</returns>
+    public static Result<string> Save(OwnerReport report)
+    {
+        if (report is null)
+            return Result.Failure<string>("Owner report must not be null.");
+        Result<string> id = ValidateRunId(report.RunId.Value);
+        if (id.IsFailure)
+            return id.ConvertFailure<string>();
+        string runId = id.Value;
+
+        string runDir = WorkspaceMaterializer.RunDir(runId);
+        try
+        {
+            Directory.CreateDirectory(runDir);
+        }
+        catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException)
+        {
+            return Result.Failure<string>($"Cannot create run directory '{runDir}': {ex.Message}");
+        }
+
+        string path = Path.Combine(runDir, OwnerReportFileName);
+        string tmp = path + ".tmp";
+        try
+        {
+            File.WriteAllText(tmp, report.Render());
+        }
+        catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException || ex is DirectoryNotFoundException)
+        {
+            return Result.Failure<string>($"Cannot write owner report for run '{runId}': {ex.Message}");
+        }
+        try
+        {
+            File.Move(tmp, path, overwrite: true);
+        }
+        catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException || ex is DirectoryNotFoundException)
+        {
+            DeleteQuiet(tmp);
+            return Result.Failure<string>($"Cannot write owner report for run '{runId}': {ex.Message}");
+        }
+        return Result.Success(path);
+    }
+
+    /// <summary>
+    ///     Load the persisted <c>runs/&lt;RunId&gt;/owner-report.md</c> for
+    ///     <paramref name="runIdValue" />. The text is checked by the structural
+    ///     guard before it is returned: an unknown id or a corrupt file is a
+    ///     <c>Result.Failure</c> — never null, never a half report.
+    /// </summary>
+    /// <param name="runIdValue">Run id (no path separators, like everywhere else).</param>
+    /// <returns>The persisted report text, or a failure naming why not.</returns>
+    public static Result<string> TryLoad(string? runIdValue)
+    {
+        Result<string> id = ValidateRunId(runIdValue);
+        if (id.IsFailure)
+            return id.ConvertFailure<string>();
+        string runId = id.Value;
+
+        string path = Path.Combine(WorkspaceMaterializer.RunDir(runId), OwnerReportFileName);
+        string text;
+        try
+        {
+            text = File.ReadAllText(path);
+        }
+        catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException || ex is DirectoryNotFoundException || ex is FileNotFoundException)
+        {
+            return Result.Failure<string>($"Unknown owner report '{runId}': no report at '{path}'.");
+        }
+
+        Result structure = OwnerReportFormat.ValidateRendered(text, runId);
+        if (structure.IsFailure)
+            return structure.ConvertFailure<string>();
+        return Result.Success(text);
+    }
+
+    private static void AppendSection(StringBuilder sb, string heading, string body)
+    {
+        sb.Append(heading).Append('\n');
+        sb.Append('\n');
+        AppendWrappedBody(sb, body);
+        sb.Append('\n');
+    }
+
+    private static void AppendWrappedBody(StringBuilder sb, string body)
+    {
+        string[] lines = body.Split('\n');
+        for (int i = 0; i < lines.Length; i++)
+            AppendWrappedLine(sb, lines[i]);
+    }
+
+    private static void AppendWrappedLine(StringBuilder sb, string line)
+    {
+        const string contIndent = "  ";
+        if (line.Length <= TextWidth)
+        {
+            sb.Append(line).Append('\n');
+            return;
+        }
+        string[] words = line.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        if (words.Length == 0)
+        {
+            sb.Append(line).Append('\n');
+            return;
+        }
+        var current = new StringBuilder(TextWidth + 16);
+        bool fresh = true;
+        for (int i = 0; i < words.Length; i++)
+        {
+            string word = words[i];
+            if (word.Length > TextWidth - contIndent.Length)
+            {
+                if (!fresh)
+                {
+                    sb.AppendLine(current.ToString());
+                    current.Clear();
+                }
+                AppendOverlongWord(sb, word, current.ToString(), contIndent);
+                current.Clear().Append(contIndent);
+                fresh = true;
+                continue;
+            }
+            int need = word.Length + (fresh ? 0 : 1);
+            if (current.Length + need > TextWidth)
+            {
+                sb.AppendLine(current.ToString());
+                current.Clear().Append(contIndent);
+                fresh = true;
+            }
+            if (!fresh)
+                current.Append(' ');
+            current.Append(word);
+            fresh = false;
+        }
+        if (!fresh)
+            sb.AppendLine(current.ToString());
+    }
+
+    private static void AppendOverlongWord(StringBuilder sb, string word, string head, string contIndent)
+    {
+        int headWidth = TextWidth - head.Length;
+        int firstLen = Math.Min(headWidth, word.Length);
+        sb.Append(head).Append(word, 0, firstLen).AppendLine();
+        int width = TextWidth - contIndent.Length;
+        for (int at = firstLen; at < word.Length; at += width)
+        {
+            int len = Math.Min(width, word.Length - at);
+            sb.Append(contIndent).Append(word, at, len).AppendLine();
+        }
+    }
+
+    private static Result<string> ValidateRunId(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return Result.Failure<string>("Run ID cannot be empty.");
+        if (value != Path.GetFileName(value) || value is "." or "..")
+            return Result.Failure<string>($"Invalid run id '{value}': path separators are not allowed.");
+        return Result.Success(value);
+    }
+
+    private static void DeleteQuiet(string path)
+    {
+        try
+        {
+            if (File.Exists(path))
+                File.Delete(path);
+        }
+        catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException)
+        {
+            _ = ex;
+        }
     }
 
     private static string BuildEvidence(
@@ -430,17 +613,28 @@ public static class OwnerReportFormat
         {
             string[] lines = rulesBody.Split('\n');
             bool seen = false;
+            bool seenRule = false;
             for (int i = 0; i < lines.Length; i++)
             {
                 if (lines[i].Trim().Length == 0)
                     continue;
                 seen = true;
-                if (!lines[i].Contains(RuleArrow, StringComparison.Ordinal))
-                    return Result.Failure("Rule changes block lists each changed rule on one line as 'before → after'.");
+                if (lines[i].Contains(RuleArrow, StringComparison.Ordinal))
+                {
+                    seenRule = true;
+                    continue;
+                }
+                // A wrapped rule line folds onto an indented continuation;
+                // it belongs to the rule above, not to a new entry.
+                if (seenRule && char.IsWhiteSpace(lines[i][0]))
+                    continue;
+                return Result.Failure("Rule changes block lists each changed rule on one line as 'before → after'.");
             }
 
             if (!seen)
                 return Result.Failure("Owner report sections must never be omitted: an empty section prints '(none)'.");
+            if (!seenRule)
+                return Result.Failure("Rule changes block lists each changed rule on one line as 'before → after'.");
         }
 
         string? rollback = FindLineValue(tailBody, RollbackPrefix);
