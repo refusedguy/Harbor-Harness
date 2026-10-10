@@ -10,16 +10,29 @@ public sealed class MascotPanel : Panel
 {
     public const string DefaultId = "chat.mascot";
 
-    private readonly MascotDirector _director = new();
+    private readonly MascotDirector _director;
     private readonly SpringFx _entranceSpring = new(0.0);
     private readonly PostFxPipeline _postFx = new();
     private readonly GlowEffect _glow = new();
     private bool _entranceArmed;
 
-    public MascotPanel(string id, StatusViewModel status, int minWidth = AmbientMascot.PanelMinWidth, int minHeight = AmbientMascot.PanelRows, int priority = 4)
+    /// <summary>Creates a panel-mode mascot bound to <paramref name="status"/>.</summary>
+    /// <param name="id">Panel id.</param>
+    /// <param name="status">Status payload this mascot reads the phase from.</param>
+    /// <param name="minWidth">Solver minimum width.</param>
+    /// <param name="minHeight">Solver minimum height.</param>
+    /// <param name="priority">Collapse priority.</param>
+    /// <param name="timeProvider">
+    /// Clock for the mood latch (#1026). Production leaves the default
+    /// (<see cref="TimeProvider.System"/>); tests inject a manual clock so a
+    /// latch assertion is a function of declared time, not runner speed —
+    /// the same seam <see cref="MascotDirector"/> exposes (#1007).
+    /// </param>
+    public MascotPanel(string id, StatusViewModel status, int minWidth = AmbientMascot.PanelMinWidth, int minHeight = AmbientMascot.PanelRows, int priority = 4, TimeProvider? timeProvider = null)
         : base(id, new Size(minWidth, minHeight), priority)
     {
         Vm = status;
+        _director = new MascotDirector(timeProvider: timeProvider);
     }
 
     public StatusViewModel Vm { get; }

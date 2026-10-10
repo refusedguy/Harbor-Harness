@@ -38,6 +38,9 @@ internal static class HelpVerbs
 
                           run change      Verified-change chain (S9, #397): pin, isolate, then fail-closed.
                                             Exits: 0 dry-run plan; 2 bad usage; 3 pre-flight conflict; 4 named-stage failure.
+                          run reject      Drop the patch, delete the worktree, or list what cannot be undone (S7, #385).
+                                            One mode flag is required: --patch, --worktree, --all-effects, --undo-apply.
+                                            Exits: 2 bad usage; 4 named-stage failure; 5 out-of-reach inventory (--all-effects).
 
                           demo [--scene hero|markdown|approval|all] [--tui ansi|plain|cellforge]
                                             Scripted demo with an in-process mock LLM — no API keys.
