@@ -101,7 +101,7 @@ internal sealed class McpStdioServer
         JsonElement? paramsEl = root.TryGetProperty("params", out var p) ? p : null;
 
         using var ms = new MemoryStream();
-        using var writer = new StreamWriter(ms, Encoding.UTF8, bufferSize: 1024, leaveOpen: true) { AutoFlush = true };
+        using var writer = new StreamWriter(ms, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false), bufferSize: 1024, leaveOpen: true) { AutoFlush = true };
 
         switch (method)
         {
@@ -115,7 +115,7 @@ internal sealed class McpStdioServer
             case "ping":
                 if (!hasId)
                     return null;
-                await WriteResultAsync(writer, idEl, w => w.WriteStartObject(), ct).ConfigureAwait(false);
+                await WriteResultAsync(writer, idEl, static w => { }, ct).ConfigureAwait(false);
                 break;
 
             case "tools/list":
@@ -304,7 +304,9 @@ internal sealed class McpStdioServer
             writer.WriteString("jsonrpc", "2.0");
             WriteId(writer, idEl);
             writer.WritePropertyName("result");
+            writer.WriteStartObject();
             writeResult(writer);
+            writer.WriteEndObject();
             writer.WriteEndObject();
         }
 
