@@ -19,8 +19,10 @@ namespace Harbor.LoadTests;
 /// </summary>
 /// <remarks>
 ///     <para>
-///         <b>Matrix.</b> Session shapes (<c>1×1</c>, <c>10×3</c> fast;
-///         <c>50×1</c>, <c>100×1</c> behind <c>HARBOR_LOAD=1</c>) crossed with
+///         <b>Matrix.</b> Session shapes are the cartesian product of
+///         <c>{1, 10}</c> sessions × <c>{1, 3}</c> agents via
+///         <c>[MatrixDataSource]</c> (<c>50×1</c>, <c>100×1</c> behind
+///         <c>HARBOR_LOAD=1</c>), crossed with
 ///         the durable-store axis (<c>memory</c>, <c>jsonl</c>, <c>sqlite</c>).
 ///         Every leg asserts the same invariants: all runs complete, no
 ///         EventBus deadlock (every agent start has a matching end), no
@@ -60,11 +62,12 @@ public sealed class MultiSessionLoadTests
     private static bool FullMatrixEnabled =>
         Environment.GetEnvironmentVariable("HARBOR_LOAD") == "1";
 
-    [Arguments(1, 1)]
-    [Arguments(10, 3)]
     [Test]
+    [MatrixDataSource]
     [Timeout(300_000)]
-    public async Task ScenarioMatrix_Fast_CompletesWithoutCorruptionOrDeadlock(int sessions, int agents)
+    public async Task ScenarioMatrix_Fast_CompletesWithoutCorruptionOrDeadlock(
+        [Matrix(1, 10)] int sessions,
+        [Matrix(1, 3)] int agents)
     {
         using var cts = new CancellationTokenSource(TimeSpan.FromMinutes(4));
         await DriveAndVerifyAsync(sessions, agents, LoadStoreBackend.Memory, bucketCapacity: 6, cts.Token);

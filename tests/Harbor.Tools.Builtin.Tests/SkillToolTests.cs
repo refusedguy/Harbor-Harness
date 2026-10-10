@@ -2,6 +2,7 @@ using System.Text.Json;
 using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Permissions;
 using Harbor.Abstractions.Tools;
+using Harbor.TestKit;
 using Microsoft.Extensions.Logging.Abstractions;
 namespace Harbor.Tools.Builtin.Tests;
 /// <summary>
@@ -9,14 +10,21 @@ namespace Harbor.Tools.Builtin.Tests;
 ///     project-over-global shadowing, legacy flat files, scope filtering and
 ///     truncation. Skills roots are pinned temp directories (no session store).
 /// </summary>
-public class SkillToolTests : IDisposable
+public class SkillToolTests
 {
-    private readonly string _root = Path.Combine(
-        Path.GetTempPath(), $"harbor-skill-tool-tests-{Guid.NewGuid():N}");
+    private string _root = string.Empty;
     private string ProjectSkills => Path.Combine(_root, "project", ".harbor", "skills");
     private string GlobalSkills => Path.Combine(_root, "global", ".harbor", "skills");
 
-    public void Dispose()
+    [Before(Test)]
+    public void CreateTempRoot()
+    {
+        _root = Path.Combine(
+            Path.GetTempPath(), $"harbor-skill-tool-tests-{Guid.NewGuid():N}");
+    }
+
+    [After(Test)]
+    public void DeleteTempRoot()
     {
         try { Directory.Delete(_root, recursive: true); }
         catch (IOException) { }
@@ -60,7 +68,7 @@ public class SkillToolTests : IDisposable
         var tool = NewTool();
         var result = await tool.ExecuteAsync(Args("review"), CreateContext());
 
-        await Assert.That(result.IsError).IsFalse();
+        await Assert.That(result).HasSucceeded();
         await Assert.That(result.Output).Contains("Project review body");
     }
 
@@ -73,7 +81,7 @@ public class SkillToolTests : IDisposable
         var tool = NewTool();
         var result = await tool.ExecuteAsync(Args("deploy"), CreateContext());
 
-        await Assert.That(result.IsError).IsFalse();
+        await Assert.That(result).HasSucceeded();
         await Assert.That(result.Output).Contains("Project deploy");
     }
 
@@ -85,7 +93,7 @@ public class SkillToolTests : IDisposable
         var tool = NewTool();
         var result = await tool.ExecuteAsync(Args("deploy"), CreateContext());
 
-        await Assert.That(result.IsError).IsFalse();
+        await Assert.That(result).HasSucceeded();
         await Assert.That(result.Output).Contains("Global deploy");
     }
 
@@ -98,7 +106,7 @@ public class SkillToolTests : IDisposable
         var tool = NewTool();
         var result = await tool.ExecuteAsync(Args("deploy", "global"), CreateContext());
 
-        await Assert.That(result.IsError).IsFalse();
+        await Assert.That(result).HasSucceeded();
         await Assert.That(result.Output).Contains("Global deploy");
     }
 
@@ -108,7 +116,7 @@ public class SkillToolTests : IDisposable
         var tool = NewTool();
         var result = await tool.ExecuteAsync(Args("nope"), CreateContext());
 
-        await Assert.That(result.IsError).IsTrue();
+        await Assert.That(result).HasFailed();
         await Assert.That(result.Output).Contains("nope");
         await Assert.That(result.Output).Contains("available_skills");
     }
@@ -120,7 +128,7 @@ public class SkillToolTests : IDisposable
         foreach (string bad in new[] { "../evil", "a/b", "..", "a\\b" })
         {
             var result = await tool.ExecuteAsync(Args(bad), CreateContext());
-            await Assert.That(result.IsError).IsTrue();
+            await Assert.That(result).HasFailed();
         }
     }
 
@@ -132,7 +140,7 @@ public class SkillToolTests : IDisposable
         var tool = NewTool();
         var result = await tool.ExecuteAsync(Args("big"), CreateContext());
 
-        await Assert.That(result.IsError).IsFalse();
+        await Assert.That(result).HasSucceeded();
         await Assert.That(result.Output).Contains("truncated");
         await Assert.That(result.Output.Length).IsLessThanOrEqualTo(SkillTool.MaxContentChars + 256);
     }

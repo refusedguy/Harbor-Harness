@@ -122,7 +122,7 @@ public class HdsThemeCatalogParityTests
     ///     previews is the defect, so the expectation is the file's own value.
     /// </summary>
     [Test]
-    [Retry(3)]
+    [Retry(3)] // Retention(#1087): headless-Avalonia palette-swap flake (SetInheritanceParent class); rerun, not fix.
     public async Task Catalog_Resolves_Preview_Brushes_From_The_Palette_Dictionaries()
     {
         // The catalog walk needs Avalonia's asset loader, so it runs inside the
@@ -193,7 +193,7 @@ public class HdsThemeCatalogParityTests
 
     /// <summary>Every declared palette loads — none is silently dropped.</summary>
     [Test]
-    [Retry(3)]
+    [Retry(3)] // Retention(#1087): headless-Avalonia palette-swap flake (SetInheritanceParent class); rerun, not fix.
     public async Task Catalog_Loads_One_Preview_Per_Declared_Palette()
     {
         int loaded = -1;
@@ -227,7 +227,7 @@ public class HdsThemeCatalogParityTests
     ///     tests in this class exist to rule out.
     /// </remarks>
     [Test]
-    [Retry(3)]
+    [Retry(3)] // Retention(#1087): headless-Avalonia palette-swap flake (SetInheritanceParent class); rerun, not fix.
     public async Task DisplayName_Is_Derived_From_The_Palette_Id()
     {
         // Recorded inside the dispatch, asserted outside it — the reason is in

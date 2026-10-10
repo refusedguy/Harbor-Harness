@@ -353,7 +353,7 @@ public class JsonlUnboundedAllocationTests
     // window below for why the per-thread counter produced that number); the
     // retry is the rerun-once policy for a residual scheduling wobble, not the
     // thing making it correct.
-    [Retry(3)]
+    [Retry(3)] // Retention(#1087): reason in the comment above (GC/scheduling wobble).
     public async Task Read_ThousandRecordSession_ReadsEveryRecordWithoutAddingTheFile()
     {
         if (!OperatingSystem.IsLinux())

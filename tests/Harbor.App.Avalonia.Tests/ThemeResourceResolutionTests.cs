@@ -98,7 +98,7 @@ public class ThemeResourceResolutionTests
     ///     assumed.
     /// </remarks>
     [Test]
-    [Retry(3)]
+    [Retry(3)] // Retention(#1087): headless-Avalonia resolve flake (dispatcher/compositor wobble); rerun, not fix.
     public async Task A_Merged_Theme_Key_Is_Resolvable_But_Not_Through_The_Indexer()
     {
         bool resolvedThroughMerged = false;
@@ -141,7 +141,7 @@ public class ThemeResourceResolutionTests
     ///     find at any point in the app's life, palette swaps included.
     /// </remarks>
     [Test]
-    [Retry(3)]
+    [Retry(3)] // Retention(#1087): headless-Avalonia resolve flake (dispatcher/compositor wobble); rerun, not fix.
     public async Task The_Top_Level_Resource_Dictionary_Holds_Nothing()
     {
         int topLevelCount = -1;
@@ -163,7 +163,7 @@ public class ThemeResourceResolutionTests
     ///     which is precisely why #948 was invisible rather than loud.
     /// </summary>
     [Test]
-    [Retry(3)]
+    [Retry(3)] // Retention(#1087): headless-Avalonia resolve flake (dispatcher/compositor wobble); rerun, not fix.
     public async Task AMiss_Is_A_Null_Rather_Than_A_Throw_Or_A_Default()
     {
         object? missing = "not-run";
@@ -195,7 +195,7 @@ public class ThemeResourceResolutionTests
     ///     silently unstyled.
     /// </remarks>
     [Test]
-    [Retry(3)]
+    [Retry(3)] // Retention(#1087): headless-Avalonia resolve flake (dispatcher/compositor wobble); rerun, not fix.
     public async Task Every_Toast_Kind_Resolves_Its_Theme_Brush()
     {
         var resolved = new List<string>();
@@ -225,7 +225,7 @@ public class ThemeResourceResolutionTests
     ///     dots each look up their own key.
     /// </summary>
     [Test]
-    [Retry(3)]
+    [Retry(3)] // Retention(#1087): headless-Avalonia resolve flake (dispatcher/compositor wobble); rerun, not fix.
     public async Task Every_Stepper_Position_Resolves_Its_Theme_Brush()
     {
         var resolved = new List<string>();
@@ -288,7 +288,7 @@ public class ThemeResourceResolutionTests
     ///     </para>
     /// </remarks>
     [Test]
-    [Retry(3)]
+    [Retry(3)] // Retention(#1087): headless-Avalonia resolve flake (dispatcher/compositor wobble); rerun, not fix.
     public async Task Every_Status_Dot_Key_Resolves_Its_Own_Theme_Brush()
     {
         string[] keys =
@@ -327,7 +327,7 @@ public class ThemeResourceResolutionTests
     ///     fallback cannot be reintroduced as if it were a safety net.
     /// </summary>
     [Test]
-    [Retry(3)]
+    [Retry(3)] // Retention(#1087): headless-Avalonia resolve flake (dispatcher/compositor wobble); rerun, not fix.
     public async Task The_Generic_Brush_Key_Converter_Resolves_A_Merged_Key()
     {
         object? brush = "not-run";
@@ -357,7 +357,7 @@ public class ThemeResourceResolutionTests
     ///     colour is the only thing that catches it.
     /// </remarks>
     [Test]
-    [Retry(3)]
+    [Retry(3)] // Retention(#1087): headless-Avalonia resolve flake (dispatcher/compositor wobble); rerun, not fix.
     public async Task Every_Diff_Line_Paints_Its_Own_Theme_Brush()
     {
         (string Marker, string BrushKey)[] lines =

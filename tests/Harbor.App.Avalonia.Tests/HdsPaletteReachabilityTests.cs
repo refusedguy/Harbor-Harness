@@ -38,7 +38,7 @@ public class HdsPaletteReachabilityTests
     ///     of the session and was gone on the next launch.
     /// </summary>
     [Test]
-    [Retry(3)]
+    [Retry(3)] // Retention(#1087): headless-Avalonia palette-swap flake (SetInheritanceParent class); rerun, not fix.
     public async Task Picking_A_Palette_Is_What_Settings_Persists()
     {
         // Assertions OUTSIDE the dispatch: `Dispatch(async () => …)` binds to
@@ -76,7 +76,7 @@ public class HdsPaletteReachabilityTests
     ///     meets it.
     /// </summary>
     [Test]
-    [Retry(3)]
+    [Retry(3)] // Retention(#1087): headless-Avalonia palette-swap flake (SetInheritanceParent class); rerun, not fix.
     public async Task Every_Shipped_Palette_Can_Be_Picked()
     {
         // Every assertion outside the dispatch, for the reason spelled out in
@@ -146,7 +146,7 @@ public class HdsPaletteReachabilityTests
     ///     picker would work and then forget.
     /// </summary>
     [Test]
-    [Retry(3)]
+    [Retry(3)] // Retention(#1087): headless-Avalonia palette-swap flake (SetInheritanceParent class); rerun, not fix.
     public async Task A_Restored_Palette_Name_Comes_Back_As_The_Palette()
     {
         string? selected = null;
@@ -180,7 +180,7 @@ public class HdsPaletteReachabilityTests
     ///     a selected palette.
     /// </summary>
     [Test]
-    [Retry(3)]
+    [Retry(3)] // Retention(#1087): headless-Avalonia palette-swap flake (SetInheritanceParent class); rerun, not fix.
     public async Task Restoring_A_Variant_Is_Not_Mistaken_For_A_Palette()
     {
         string? selected = null;
@@ -223,7 +223,7 @@ public class HdsPaletteReachabilityTests
     ///     </para>
     /// </remarks>
     [Test]
-    [Retry(3)]
+    [Retry(3)] // Retention(#1087): headless-Avalonia palette-swap flake (SetInheritanceParent class); rerun, not fix.
     public async Task An_Unknown_Palette_Name_Applies_Nothing()
     {
         int appliedCount = -1;

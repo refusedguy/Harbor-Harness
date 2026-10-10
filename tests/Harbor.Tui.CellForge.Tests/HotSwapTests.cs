@@ -375,7 +375,7 @@ public class HotSwapTests
     // ── Concurrent producers/consumers: no locks, no torn pairs ────────────
 
     [Test]
-    [Retry(3)]
+    [Retry(3)] // Retention(#1087): lock-free 4x250 publish/take race; rerun absorbs scheduler wobble, a torn pair fails all 3.
     public async Task SwapChain_ConcurrentPublishTake_NeverTearsPairs()
     {
         // Distinct geometry per producer: a torn handoff (back from one offer,

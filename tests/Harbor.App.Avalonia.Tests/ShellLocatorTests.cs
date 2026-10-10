@@ -42,7 +42,7 @@ public sealed class ShellLocatorTests
     ///     make the suite the thing that flakes.
     /// </summary>
     [Test]
-    [Retry(3)]
+    [Retry(3)] // Retention(#1087): headless-Avalonia UI-thread flake; see class remarks (#972, #766).
     public async Task Of_ResolvesThroughTheAncestorHost()
     {
         // The tree is built on the UI thread (Avalonia controls), and every

@@ -168,7 +168,7 @@ public class FileClaimRegistryTests : IDisposable
     }
 
     [Test]
-    [Retry(3)] // Known flake: timing-sensitive steal contention (rerun-once policy waste otherwise).
+    [Retry(3)] // Known flake (Retention(#1087)): timing-sensitive steal contention (rerun-once policy waste otherwise).
     public async Task StealLocks_BoundedAfterManySteals()
     {
         // #93: the static steal-lock table is FIFO-capped at MaxStealLocks
@@ -366,7 +366,7 @@ public class FileClaimRegistryTests : IDisposable
     /// winner; serialized hand-off rounds terminate with zero orphan files.
     /// </summary>
     [Test]
-    [Retry(3)] // Known flake: parallel CreateNew atomicity race across rounds.
+    [Retry(3)] // Known flake (Retention(#1087)): parallel CreateNew atomicity race across rounds.
     public async Task IndependentRegistries_Race_OneWinner_PerRound_ZeroOrphans()
     {
         const int contendersPerRound = 8;

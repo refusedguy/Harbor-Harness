@@ -45,7 +45,7 @@ namespace Harbor.App.Avalonia.Tests;
 public class DiffViewBindingTests
 {
     [Test]
-    [Retry(3)]
+    [Retry(3)] // Retention(#1087): headless-Avalonia UI-thread flake; see class remarks (#972, #766).
     public async Task DiffView_ResolvesFrameworkBindings()
     {
         // Everything the view needs is read INSIDE the dispatch (the visual tree

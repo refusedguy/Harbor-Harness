@@ -20,7 +20,6 @@
     <PackageReference Include="CSharpFunctionalExtensions"/>
     <PackageReference Include="TUnit"/>
     <PackageReference Include="TUnit.Assertions"/>
-    <PackageReference Include="TUnit.Mocks"/>
   </ItemGroup>
 
 </Project>

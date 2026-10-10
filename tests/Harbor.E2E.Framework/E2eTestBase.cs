@@ -7,13 +7,14 @@ namespace Harbor.E2E.Framework;
 /// </summary>
 /// <remarks>
 ///     <para>
-///         <b>Lifecycle:</b> TUnit's <c>[Before(HookType.Class)]</c> /
-///         <c>[After(HookType.Class)]</c> hooks run before/after every method
-///         in TUnit 0.50 — this is the documented behaviour and is why the
-///         Avalonia DI tests (task A1) had to drop their After-hook. For E2E
-///         we lean into it: each test method gets a fresh server + fresh temp
-///         home, so tests can't bleed state into each other even when running
-///         in parallel. (Cost: ~30 ms per spin-up; acceptable for E2E.)
+///         <b>Lifecycle:</b> the fixture is injected per test method
+///         (<c>SharedType.None</c>), so each test method gets a fresh server +
+///         fresh temp home even when running in parallel — tests can't bleed
+///         state into each other. (Cost: ~30 ms per spin-up; acceptable for
+///         E2E.) Class-level hooks (<c>[Before(HookType.Class)]</c> /
+///         <c>[After(HookType.Class)]</c>) run once per class, not per method —
+///         the remark that claimed otherwise (TUnit 0.50 behaviour) was stale
+///         and is corrected here (#1087).
 ///     </para>
 ///     <para>
 ///         <b>Temp home:</b> the <c>HOME</c> env var is mutated at process

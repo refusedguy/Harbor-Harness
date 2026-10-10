@@ -39,7 +39,7 @@ public sealed class MouseEdgeScenarioTests : CellForgePtyScenarioBase
     }
 
     [Test]
-    [Retry(3)]
+    [Retry(3)] // Retention(#1087): PTY wall-clock waits (5-15 s windows); loaded runners miss them.
     [Timeout(180_000)]
     public async Task WheelDown_AfterWheelUp_ReturnsToLiveBottom()
     {
