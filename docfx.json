@@ -1,0 +1,23 @@
+{
+  "metadata": [],
+  "build": {
+    "content": [
+      {
+        "files": ["README.md"]
+      },
+      {
+        "files": ["docs/**/*.md", "docs/toc.yml"]
+      },
+      {
+        "files": ["src/**/README.md"]
+      }
+    ],
+    "resource": [],
+    "dest": "_site",
+    "globalMetadata": {
+      "_appTitle": "Harbor"
+    },
+    "template": ["default"],
+    "markdownEngineName": "markdig"
+  }
+}

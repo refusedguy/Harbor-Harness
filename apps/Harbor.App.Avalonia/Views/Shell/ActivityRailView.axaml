@@ -53,11 +53,13 @@
                                    VerticalAlignment="Center"/>
                         <Button Grid.Column="1" Padding="4" Width="28" Height="28"
                                 Click="Refresh_Click" HorizontalAlignment="Right"
+                                AutomationProperties.Name="Refresh file tree"
                                 ToolTip.Tip="Refresh file tree">
                             <PathIcon Data="{StaticResource IcRefresh}" Width="14" Height="14"/>
                         </Button>
                     </Grid>
                     <TreeView ItemsSource="{Binding FileTree}" Name="FileTreeView"
+                              AutomationProperties.Name="File explorer"
                               SelectionChanged="FileTreeView_SelectionChanged">
                         <TreeView.ItemTemplate>
                             <!-- #492: FileTreeNode moved to Harbor.App.Avalonia.Services

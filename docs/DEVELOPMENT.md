@@ -1028,6 +1028,33 @@ Dependabot auto-merge is NOT enabled. Patch/minor auto-merge for trusted
 actions stays an open option (issue #25) once merge-queue + required-checks
 stabilize; until then every Dependabot PR merges manually after green CI.
 
+## Disciplinary rules
+
+Spec 17 [agentic product direction](./specs/17-agentic-product-direction.md)
+§6 rules the machinery must honour: the agent does not author its own
+acceptance criteria, does not weaken the checks, and does not accept its own
+work. The five rules:
+
+- Architecture matrix: changing an architecture rule is a product decision,
+  not plumbing — see `### Architecture matrix changes` under Contributing
+  below (edge, why, alternative, permanent vs exception with a removal
+  condition). Matrix + code ship in the same commit.
+- Retry/flaky: a retry or quarantine is allowed only registered (tracking
+  issue + hypothesis + visible first-pass + watched counts + not permanent)
+  — see `### Flaky-test / Retry policy` under Contributing below.
+  A concurrency-test flake is a suspected product race first: disprove the
+  race before blaming the runner.
+- Goldens: a blessed snapshot needs the expected visual change explained
+  with before/after; snapshots alone never gate a state-management
+  migration (add semantic tests: dedup, clean session switch, subscription
+  disposal, reconnect contract, approval/cancellation race).
+- Live-model E2E is a separate signal, not a gate (provider, limits,
+  determinism). A live failure is tracked, never deleted from reporting,
+  and never blocks deterministic tests.
+- Owner report: result → evidence (commands, CI, before/after, regression
+  test) → limits → rule changes as a separate block → recommendation +
+  rollback. The agent proposes neither the criteria nor the acceptance.
+
 ## Contributing
 
 1. Fork the repo.

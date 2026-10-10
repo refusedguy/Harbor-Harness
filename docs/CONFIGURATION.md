@@ -166,6 +166,10 @@ kill-switch and frame-wrapper knob
 A legacy root-level `"consoleEx": {...}` key is still **read** for backward
 compat but is no longer written — the nested `ui.consoleEx` form is canonical.
 
+`ui.consoleEx.enabled` is read once at REPL startup (boot-only): toggling it
+mid-session has no effect until restart — there is no config-file watcher
+(`IConfigStore` is pull-only; `ReplRunner` decides the renderer once).
+
 ### Presentation fields on config.json
 
 | Field | Default | Description |

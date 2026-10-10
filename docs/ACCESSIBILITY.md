@@ -174,3 +174,76 @@ All remediations are additive XAML changes — no viewmodel or behavior changes 
 - [ ] Fix G6 (Settings form labels)
 - [ ] Fix G7 (Command palette)
 - [ ] Re-run accessibility tests post-fix
+
+---
+
+## 5. Automated Gates (#433, 2026-10-09)
+
+Mechanical subset of this audit, wired into CI. Both gates are pure/green
+deterministic: no headless session, no screen reader, no network.
+
+### 5.1 Contrast gate
+
+`tests/Harbor.DesignSystem.Tests/AccessibilityTests.cs` (section "Avalonia
+desktop theme tokens") computes WCAG contrast via
+`Harbor.DesignSystem.Accessibility.ContrastRatio` for the exact token pairs
+from §2.3–§2.4. Hex literals are pinned to the values in
+`apps/Harbor.App.Avalonia/Themes/`, so a palette edit that breaks readability
+fails CI. Measured values (recomputed 2026-10-09, Python WCAG implementation
+cross-check):
+
+| Pair | Measured | Tier | Gate |
+|---|---|---|---|
+| `MochaText` (#CDD6F4) on `MochaBase` (#1E1E2E) | 11.34:1 | body ≥ 4.5:1 | ✅ must stay ≥ 4.5 |
+| `MochaSubtext0` (#A6ADC8) on `MochaBase` | 7.37:1 | body ≥ 4.5:1 | ✅ must stay ≥ 4.5 |
+| `MochaOverlay2` (#9399B2) on `MochaBase` | 5.81:1 | large/UI ≥ 3:1 | ✅ must stay ≥ 3.0 |
+| `MochaCrust` (#11111B) on `MochaBlue` (#89B4FA) | 8.91:1 | body ≥ 4.5:1 | ✅ must stay ≥ 3.0 |
+| `LatteText` (#4C4F69) on `LatteBase` (#EFF1F5) | 7.06:1 | body ≥ 4.5:1 | ✅ must stay ≥ 4.5 |
+| `White` (#FFFFFF) on `LatteBlue` (#1E66F5) | 4.91:1 | body ≥ 4.5:1 | ✅ must stay ≥ 4.5 |
+| `LatteSubtext0` (#6C6F85) on `LatteBase` | 4.37:1 | large/UI only | ⚠️ ≥ 3.0, below 4.5 — not body-text tier |
+| `MochaOverlay0` (#6C7086) on `MochaBase` | 3.36:1 | large/UI only | ⚠️ ≥ 3.0, below 4.5 — not body-text tier |
+
+Notes:
+
+- §2.4 claimed `LatteSubtext0` at ~5.8:1; the measured value is 4.37:1.
+  It stays usable for secondary/large text but must not be used for
+  normal-size body copy. Tracked as a Medium finding (control: all
+  `TextSecondaryBrush` usages on light background; criterion 1.4.3).
+- The `Avalonia_SubtextTier_DocumentationContract` test asserts the two
+  subtext pairs are simultaneously ≥ 3.0 and < 4.5. The strict-less-than
+  half proves the gate discriminates: a pair moved into a body-text test
+  would fail CI.
+
+### 5.2 Name gate
+
+`tests/Harbor.App.Avalonia.Tests/AccessibilityNamesTests.cs` inflates four
+views that construct without a headless session (`ActivityRailView`,
+`StatusBarView`, `SessionsFlyoutView`, `TitleBarView`) and asserts every
+logical-descendant `Button`/`TextBox`/`ComboBox`/`ListBox`/`Expander`/
+`TreeView`/`MenuItem` carries `AutomationProperties.Name` or
+`AutomationId`. Two additive XAML names were added to make the invariant
+hold (`Refresh file tree` button, `File explorer` tree in
+`ActivityRailView.axaml`); no behavior change.
+
+---
+
+## 6. Done Definition and Scope (This Slice)
+
+Covered by the gates above:
+
+- WCAG 1.4.3 Contrast (Minimum) for the eight desktop token pairs in §5.1.
+- WCAG 4.1.2 Name/Role/Value for interactive controls in the four views in
+  §5.2 (name-or-id presence, not screen-reader semantics).
+
+Explicitly out of scope for this slice (not performed, not gated):
+
+- Blazor audit and remediation (`contrib/apps/Harbor.App.Blazor/` lives in
+  unmaintained `contrib/`, not compiled by CI — not touched).
+- Screen-reader walkthroughs (NVDA/Narrator/VoiceOver) and live-region
+  announcement checks.
+- Full 64-view manual re-audit, 2.4.6 Headings and 3.3.x Error
+  Identification, keyboard trap testing of modal overlays.
+- Severity triage of G1–G7 and tracking issues for Medium/Low findings.
+
+Audit date: 2026-10-09. Re-run the gates after the i18n slice lands (it
+changes the string layer the audit reads).
