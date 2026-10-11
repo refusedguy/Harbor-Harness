@@ -80,5 +80,23 @@ public static class JsonThemeLoader
             : Result.Failure<HarborTheme>(result.Error);
     }
 
+    /// <summary>
+    /// Parse a theme JSON string with live variable overrides (Textual
+    /// <c>set_variables</c> shape): <paramref name="variableOverrides" /> win over
+    /// the document's own <c>variables</c> table. A pure reparse over the string —
+    /// no disk, no reload; the caller keeps the last text.
+    /// </summary>
+    public static Result<HarborTheme> Parse(
+        string json,
+        HarborTheme fallback,
+        IReadOnlyDictionary<string, string>? variableOverrides)
+    {
+        ArgumentNullException.ThrowIfNull(fallback);
+        var result = ThemeJson.Parse(json, fallback, variableOverrides);
+        return result.IsSuccess
+            ? Result.Success(result.Theme)
+            : Result.Failure<HarborTheme>(result.Error);
+    }
+
     internal static bool TryParseHex(string hex, out RgbColor color) => ThemeJson.TryParseHex(hex, out color);
 }
