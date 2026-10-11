@@ -17,7 +17,6 @@ namespace Harbor.Tui.CellForge.Tests;
 ///     - <c>src/Harbor.Tui.CellForge/Chat/Rendering/ComposerController.cs:281</c>   composer body          (Ctrl|Meta|Alt)
 ///     - <c>DialogOverlay.cs:632</c>       reject reason, prompt, multiline (Ctrl|Meta|Alt)
 ///     - <c>FilePickerView.cs:153</c>, <c>CommandPaletteView.cs:255</c>  (None or Shift)
-// check-doc-cites: record-drift FilePickerView.cs:153 now="case KeyCode.Char when key.Modifiers.AcceptsTypedChar():" [#947: written over `case KeyCode.Char when key.Modifiers is `; repair deferred to the owner's symbol-rename decision] -->
 ///     - <c>QuestionFormView.cs:498</c>    custom answer         (!= None)  <-- the defect
 ///
 ///   COMMAND ONLY — no buffer; runes are navigation (h/j/k/l) or a 3-letter
