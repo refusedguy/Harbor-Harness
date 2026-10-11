@@ -52,6 +52,53 @@ public class DifferentialMarkdownPipelineTests
     }
 
     [Test]
+    public async Task Cache_ReFreeze_RefreshesMruPosition()
+    {
+        // Guards the O(1) node-map relink (#1136 slice 2): re-freezing an
+        // existing block must move it to the MRU front exactly like the old
+        // linear touch did, or eviction would eat a live block.
+        var cache = new FrozenTailMarkdownCache(capacity: 3);
+        foreach (int id in new[] { 1, 2, 3 })
+        {
+            cache.Freeze(id, [Cell.Blank]);
+        }
+
+        cache.Freeze(1, [Cell.Blank]); // re-freeze: 1 becomes MRU, 2 is now LRU
+        cache.Freeze(4, [Cell.Blank]); // must evict 2
+
+        await Assert.That(cache.Count).IsEqualTo(3);
+        await Assert.That(cache.TryGet(2, out _)).IsFalse();
+        await Assert.That(cache.TryGet(1, out _)).IsTrue();
+        await Assert.That(cache.TryGet(4, out _)).IsTrue();
+    }
+
+    [Test]
+    public async Task Cache_ConcurrentFreezeAndGet_StaysBounded()
+    {
+        // Control for the narrowed gate (#1136 slice 2): hammer Freeze/TryGet
+        // from the pool; the run must finish with no throw and a bounded map.
+        // No timing assertions — a loaded CI machine must not fail this.
+        var cache = new FrozenTailMarkdownCache(capacity: 16);
+        var tasks = new Task[8];
+        for (int t = 0; t < tasks.Length; t++)
+        {
+            int seed = t;
+            tasks[t] = Task.Run(() =>
+            {
+                for (int i = 0; i < 200; i++)
+                {
+                    int id = (seed + i) % 64;
+                    cache.Freeze(id, [Cell.Blank]);
+                    cache.TryGet(id, out _);
+                }
+            });
+        }
+
+        await Task.WhenAll(tasks);
+        await Assert.That(cache.Count).IsLessThanOrEqualTo(16);
+    }
+
+    [Test]
     public async Task Pipeline_FrozenBlock_RestoresWithoutRestyle()
     {
         var pipeline = new DifferentialMarkdownPipeline(40, 10);

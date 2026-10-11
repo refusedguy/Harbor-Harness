@@ -19,6 +19,14 @@ namespace Harbor.Ui.Framework.Rendering.Markdown;
 ///         invalidate their own derived state when a block freezes (e.g. a
 ///         SpectreTui panel dropping a precomputed widget).
 ///     </para>
+///     <para>
+///         <b>Gate scope (#1136 slice 2).</b> Every body under
+///         <c>_gate</c> is O(1) dictionary/node work — lookups, the
+///         node-map MRU relink, one eviction at most. No IO, no parsing,
+///         and no event invocation ever runs under it
+///         (<see cref="BlockFrozen"/> is raised after release, so a
+///         handler re-entering via <see cref="TryGet"/> cannot deadlock).
+///     </para>
 /// </remarks>
 public sealed class FrozenTailMarkdownCache
 {
@@ -30,6 +38,15 @@ public sealed class FrozenTailMarkdownCache
     private readonly Dictionary<int, Cell[]> _blocks;
     private readonly LinkedList<int> _lru; // MRU at front
 
+    /// <summary>
+    ///     Node handle per retained block (#1136 slice 2): makes the MRU
+    ///     relink in <see cref="TouchLocked"/> a pointer swing instead of an
+    ///     O(capacity) list walk, so the hot <see cref="TryGet"/> path holds
+    ///     the gate only for two dictionary hits. Invariant: same key set as
+    ///     <see cref="_blocks"/>; every mutation updates both or neither.
+    /// </summary>
+    private readonly Dictionary<int, LinkedListNode<int>> _nodes;
+
     public FrozenTailMarkdownCache(int capacity = DefaultCapacity)
     {
         if (capacity < 1)
@@ -40,6 +57,7 @@ public sealed class FrozenTailMarkdownCache
         _capacity = capacity;
         _blocks = new Dictionary<int, Cell[]>(capacity);
         _lru = new LinkedList<int>();
+        _nodes = new Dictionary<int, LinkedListNode<int>>(capacity);
     }
 
     /// <summary>Raised when a block freezes (or re-freezes) — after the snapshot is stored.</summary>
@@ -98,10 +116,11 @@ public sealed class FrozenTailMarkdownCache
                     int evicted = _lru.Last!.Value;
                     _lru.RemoveLast();
                     _blocks.Remove(evicted);
+                    _nodes.Remove(evicted);
                 }
 
                 _blocks[blockId] = snapshot;
-                _lru.AddFirst(blockId);
+                _nodes[blockId] = _lru.AddFirst(blockId);
             }
 
             args = new BlockFrozenEventArgs(blockId, snapshot);
@@ -119,20 +138,17 @@ public sealed class FrozenTailMarkdownCache
         {
             _blocks.Clear();
             _lru.Clear();
+            _nodes.Clear();
         }
     }
 
     private void TouchLocked(int blockId)
     {
-        // Relink to MRU front if not already there (dictionary hit implies
-        // the node exists; find is O(n) worst case but n == capacity ≤ 500).
-        LinkedListNode<int>? node = _lru.First;
-        while (node is not null && node.Value != blockId)
-        {
-            node = node.Next;
-        }
-
-        if (node is not null && node != _lru.First)
+        // O(1) via the node map: unlink + re-add at the MRU front. The old
+        // shape walked the list (O(capacity), up to DefaultCapacity nodes)
+        // under the gate on every TryGet — the hottest read path in the
+        // render pipeline — so a full cache made every restore pay a scan.
+        if (_nodes.TryGetValue(blockId, out LinkedListNode<int>? node) && node != _lru.First)
         {
             _lru.Remove(node);
             _lru.AddFirst(node);
