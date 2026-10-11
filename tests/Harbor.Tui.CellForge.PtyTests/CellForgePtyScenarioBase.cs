@@ -145,6 +145,32 @@ public abstract class CellForgePtyScenarioBase
     internal static string NormalizeToGoldenText(string visibleText) =>
         string.Join("\n", NormalizeLines(visibleText));
 
+    /// <summary>
+    /// R2 steal: scrollback rows scrolled off the top (oldest first) — the
+    /// buffer that makes asserts on virtualized ленты possible.
+    /// </summary>
+    protected string[] ScrollbackLines()
+    {
+        lock (_screenLock)
+        {
+            return _screen.GetScrollbackLines();
+        }
+    }
+
+    /// <summary>
+    /// R2 steal: per-line assert over the live grid — the PTY-side half of the
+    /// single idiom shared with <c>TestBackend.AssertBufferLinesAsync</c>.
+    /// </summary>
+    protected Task AssertScreenLinesAsync(params string[] expected) =>
+        PtyBufferAsserts.AssertBufferLinesAsync(NormalizedLines(), expected);
+
+    /// <summary>
+    /// R2 steal: per-line assert over the scrollback — pairs with
+    /// <c>TestBackend.AssertScrollbackLinesAsync</c>.
+    /// </summary>
+    protected Task AssertScrollbackLinesAsync(params string[] expected) =>
+        PtyBufferAsserts.AssertScrollbackLinesAsync(ScrollbackLines(), expected);
+
     protected async Task<string[]> WaitForScreenAsync(Func<string[], bool> predicate, TimeSpan? timeout = null)
     {
         var deadline = TimeSpan.FromSeconds(10);
