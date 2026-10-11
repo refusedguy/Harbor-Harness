@@ -177,6 +177,7 @@ All remediations are additive XAML changes — no viewmodel or behavior changes 
 - [x] Fix G5 (SessionCardView kebab)
 - [x] Fix G6 (Settings form labels)
 - [x] Fix G7 (Command palette)
+- [x] Focus-order gate on 4 chrome views (§5.3)
 - [ ] Re-run accessibility tests post-fix
 
 ---
@@ -229,6 +230,20 @@ logical-descendant `Button`/`TextBox`/`ComboBox`/`ListBox`/`Expander`/
 hold (`Refresh file tree` button, `File explorer` tree in
 `ActivityRailView.axaml`); no behavior change.
 
+### 5.3 Focus-order gate (2026-10-11)
+
+`tests/Harbor.App.Avalonia.Tests/AccessibilityFocusOrderTests.cs` pins WCAG
+2.4.3 Focus Order + 2.1.1 Keyboard for the same four chrome views as §5.2.
+Avalonia tabs in visual-tree order while no `TabIndex` override exists, and no
+`TabIndex` override exists anywhere under `apps/Harbor.App.Avalonia/` (§2.5) —
+so the gate asserts the mechanical equivalent: the document order of
+interactive controls equals the expected visual order (exact per-view
+sequence: TitleBar trigger → theme → settings; rail top-to-bottom;
+StatusBar model picker; flyout new → search → list), every interactive control
+stays `Focusable` + `IsTabStop`, and no control opts out of Tab navigation
+(`IsTabStop="False"` — the two legitimate cases, chat timeline and
+SegmentedControl items, live outside these views).
+
 ---
 
 ## 6. Done Definition and Scope (This Slice)
@@ -241,6 +256,9 @@ Covered by the gates above:
 - WCAG 4.1.2 names for the G1–G7 controls in §2.2 (additive XAML names,
   fixed 2026-10-10; no tracking issues remain — no open High findings,
   no Medium/Low left unfixed).
+- WCAG 2.4.3 Focus Order + 2.1.1 Keyboard for the four views in §5.2/§5.3
+  (document order == Tab order, no Tab opt-outs; name-or-id presence only,
+  not screen-reader semantics).
 
 Explicitly out of scope for this slice (not performed, not gated):
 
