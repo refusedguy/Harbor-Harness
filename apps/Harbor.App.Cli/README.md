@@ -51,13 +51,15 @@ Local Ollama needs no key (`HARBOR_PROVIDER=ollama`, `OLLAMA_HOST=http://localho
 ## Run
 
 ```bash
-harbor [ask <prompt>|setup|auth|config|providers|models|sessions|daemon|status|logs|help|version] [--loglevel <lvl>]
+harbor [ask <prompt>|run|demo|setup|auth|config|providers|models|sessions|mcp|serve|tui|events|storage|logs|daemon|plugins|skills|headless|help|version] [--script <path>] [--loglevel <lvl>]
 ```
 
 | Command          | Description                                                                  |
 |------------------|------------------------------------------------------------------------------|
 | *(none)*         | Interactive REPL with the selected TUI renderer (default).                   |
 | `ask <prompt>`   | One-shot: run the prompt through the agent loop and exit.                    |
+| `run`            | Verified-change chain (`task`/`change`/`accept`/`reject`/`list`).            |
+| `demo`           | Scripted demo with an in-process mock LLM — no API keys (`--scene hero\|markdown\|approval\|all`, `--tui ansi\|plain\|cellforge`). |
 | `headless`       | Full agent host + IPC server, no UI — blocks until SIGINT/SIGTERM (pairing QR printed). |
 | `setup`          | Onboarding wizard (pick provider/model interactively).                       |
 | `auth`           | Set/list stored API keys in `~/.harbor/config.json`.                         |
@@ -65,10 +67,17 @@ harbor [ask <prompt>|setup|auth|config|providers|models|sessions|daemon|status|l
 | `providers`      | List registered providers with client-health status.                         |
 | `models [prov]`  | List live models for a provider (or all).                                    |
 | `sessions`       | List saved sessions.                                                         |
-| `daemon`         | Start/stop the background headless daemon.                                   |
-| `status`         | Show daemon/host status.                                                     |
+| `mcp`            | MCP login helper.                                                            |
+| `serve`          | Start the HTTP/remote server.                                                |
+| `events`         | Watch the agent event stream.                                                |
+| `daemon`         | Start/stop the background headless daemon (`start\|stop\|status`).           |
+| `status`         | Show daemon/host status (daemon builds only).                                |
 | `logs`           | Manage per-run log files (`--list`, `--last`, `--follow`, `--clean`).        |
+| `plugins`        | List loaded plugins.                                                         |
+| `skills`         | List available skills.                                                       |
 | `tui` / `storage`| Print available TUI renderers / storage backends.                            |
+
+`--script <path>` runs a `.js`/`.ts` script at startup (registers tools via `Harbor.registerTool` — see `docs/SCRIPTING.md`).
 
 Log verbosity: `--loglevel <lvl>` (or `-ll` / `HARBOR_LOGLEVEL`). Console defaults to Information; the file log under `~/.harbor/logs/` always captures Debug.
 
