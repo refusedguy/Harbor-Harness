@@ -30,6 +30,10 @@ internal static class SessionStoreErrors
     public static string MessageNotFound(string sessionId, string messageId) =>
         $"Message '{messageId}' not found in session '{sessionId}'.";
 
+    /// <summary>Missing checkpoint: <c>Checkpoint '{cid}' not found in session '{sid}'.</c></summary>
+    public static string CheckpointNotFound(string sessionId, string checkpointId) =>
+        $"Checkpoint '{checkpointId}' not found in session '{sessionId}'.";
+
     /// <summary>Caller-supplied id that must never reach <c>File.*</c> (#83).</summary>
     public static string InvalidSessionId(string? sessionId) =>
         $"Invalid session id '{sessionId}'.";

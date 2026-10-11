@@ -195,7 +195,9 @@ internal sealed class DropMessagePlan : SessionRewritePlan
 /// <summary>
 ///     "Rewind to here": keep every record up to and including the one carrying
 ///     the given id, then drop every further <c>"message"</c> record. Header
-///     and non-message records survive wherever they are.
+///     and non-message records survive wherever they are — except checkpoint
+///     markers past the anchor (#1247 slice 1): a checkpoint pointing into
+///     the dropped future is stale and goes with the messages it indexes.
 ///
 ///     One pass, and it needs to be one: file order IS insertion order for this
 ///     store (append-only plus rewrite-in-place), so the first id match is the
@@ -249,6 +251,17 @@ internal sealed class DeleteAfterAnchorPlan : SessionRewritePlan
         if (SessionFileReader.IsAnyMessageEntry(record))
         {
             Removed++;
+            return LineAction.Drop;
+        }
+
+        // #1247 slice 1: a checkpoint past the anchor indexes the dropped
+        // future, so it goes too. Pre-anchor checkpoints never reach here.
+        // Dropped checkpoints do not count toward Removed — that number
+        // reports messages, matching DeleteMessagesAfterAsync's contract —
+        // and do not flip Changed: a rewind to the tail message stays a
+        // no-op even when a checkpoint line sits after it.
+        if (SessionFileReader.IsCheckpointLine(record))
+        {
             return LineAction.Drop;
         }
 

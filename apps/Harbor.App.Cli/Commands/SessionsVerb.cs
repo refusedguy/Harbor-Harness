@@ -7,7 +7,7 @@ namespace Harbor.App.Cli.Commands;
 
 /// <summary>
 ///     <c>harbor sessions</c> family: list (default), rename, export, import,
-///     search, revert, tree, fork. Extracted from <c>Program</c> (#176);
+///     search, revert, checkpoint, checkpoints, rewind, tree, fork. Extracted from <c>Program</c> (#176);
 ///     rename persists a new title via ISessionStore.UpdateAsync,
 ///     export/import round-trip one session through the portable line payload
 ///     built by <c>ISessionPorter</c> (see StorageModule for the backend wiring).
@@ -32,19 +32,28 @@ internal static class SessionsVerb
                 return await RunSearchSessionsAsync(args.Skip(1).ToArray());
             case "revert":
                 return await RunRevertSessionAsync(logger, args.Skip(1).ToArray());
+            case "checkpoint":
+                return await RunCheckpointSessionAsync(logger, args.Skip(1).ToArray());
+            case "checkpoints":
+                return await RunListCheckpointsAsync(logger, args.Skip(1).ToArray());
+            case "rewind":
+                return await RunRewindSessionAsync(logger, args.Skip(1).ToArray());
             case "tree":
                 return await RunTreeSessionsAsync();
             case "fork":
                 return await RunForkSessionAsync(logger, args.Skip(1).ToArray());
             default:
                 Console.Error.WriteLine("""
-                                        Usage: harbor sessions [list|rename|export|import|search|revert|tree|fork]
+                                        Usage: harbor sessions [list|rename|export|import|search|revert|checkpoint|checkpoints|rewind|tree|fork]
                                           sessions                        list all sessions
                                           sessions rename <id> <title>    rename a session
                                           sessions export <id> [file]     export session to a portable file (default: harbor-session-<id>.jsonl)
                                           sessions import <file>          import an exported file as a NEW session
                                           sessions search <query> [--session <id>]   find messages by substring
                                           sessions revert <id> <message-id>          rewind session to the given message
+                                          sessions checkpoint <id> <message-id> [label]  mark a checkpoint over the message
+                                          sessions checkpoints <id>             list checkpoints (and rewind trail) of the session
+                                          sessions rewind <id> <checkpoint-id>  rewind session to the checkpoint (records a trail marker)
                                           sessions tree                   show fork/branch lineage as an indented tree
                                           sessions fork <id> <message-id>            branch a NEW session copying messages up to and including the given one
                                         """);
@@ -250,6 +259,115 @@ internal static class SessionsVerb
         var messages = await store.GetMessagesAsync(sessionId).ConfigureAwait(false);
         int remaining = messages.IsSuccess ? messages.Value.Count : -1;
         Console.WriteLine($"Reverted session {sessionId}: deleted {reverted.Value} message(s), {remaining} remain.");
+        return 0;
+    }
+
+    /// <summary>
+    ///     <c>harbor sessions checkpoint &lt;session-id&gt; &lt;message-id&gt; [label]</c> —
+    ///     mark a checkpoint over the message (records its message index).
+    ///     Jsonl backend only in slice 1 (#1247).
+    /// </summary>
+    internal static async Task<int> RunCheckpointSessionAsync(ILogger logger, string[] args)
+    {
+        if (args.Length < 2)
+        {
+            Console.Error.WriteLine("""
+                                    Usage: harbor sessions checkpoint <session-id> <message-id> [label]
+                                      Record a checkpoint over the given message.
+                                    """);
+            return 2;
+        }
+
+        string sessionId = args[0];
+        string messageId = args[1];
+        string? label = args.Length > 2 ? string.Join(' ', args.Skip(2)) : null;
+        using var host = HostBuilder.Build();
+        var store = host.Services.GetRequiredService<ISessionStore>();
+
+        var marked = await new SessionCheckpointRunner(store).CheckpointAsync(sessionId, messageId, label).ConfigureAwait(false);
+        if (marked.IsFailure)
+        {
+            logger.LogError("Checkpoint failed: {Error}", marked.Error);
+            Console.Error.WriteLine($"Cannot checkpoint '{sessionId}' at '{messageId}': {marked.Error}");
+            return 1;
+        }
+
+        Console.WriteLine($"Checkpoint {marked.Value.Id} on session {sessionId}: message '{messageId}' at index {marked.Value.MessageIndex}.");
+        return 0;
+    }
+
+    /// <summary>
+    ///     <c>harbor sessions checkpoints &lt;session-id&gt;</c> — list the
+    ///     session's checkpoints and rewind trail markers in file order.
+    ///     Jsonl backend only in slice 1 (#1247).
+    /// </summary>
+    internal static async Task<int> RunListCheckpointsAsync(ILogger logger, string[] args)
+    {
+        if (args.Length < 1)
+        {
+            Console.Error.WriteLine("""
+                                    Usage: harbor sessions checkpoints <session-id>
+                                      List checkpoints (and rewind trail markers) of the session.
+                                    """);
+            return 2;
+        }
+
+        string sessionId = args[0];
+        using var host = HostBuilder.Build();
+        var store = host.Services.GetRequiredService<ISessionStore>();
+
+        var listed = await new SessionCheckpointRunner(store).ListAsync(sessionId).ConfigureAwait(false);
+        if (listed.IsFailure)
+        {
+            logger.LogError("Cannot list checkpoints: {Error}", listed.Error);
+            Console.Error.WriteLine($"Cannot list checkpoints of '{sessionId}': {listed.Error}");
+            return 1;
+        }
+
+        if (listed.Value.Count == 0)
+            Console.WriteLine($"No checkpoints on session {sessionId}.");
+        foreach (var c in listed.Value)
+        {
+            string line = c.IsRewindTrail
+                ? $"  {c.Id} — rewind to '{c.MessageId}' (removed {c.Removed}, {c.CreatedAt:yyyy-MM-dd HH:mm})"
+                : $"  {c.Id} — '{c.MessageId}' at index {c.MessageIndex} ({c.CreatedAt:yyyy-MM-dd HH:mm}){(c.Label is null ? string.Empty : $" — {c.Label}")}";
+            Console.WriteLine(line);
+        }
+
+        return 0;
+    }
+
+    /// <summary>
+    ///     <c>harbor sessions rewind &lt;session-id&gt; &lt;checkpoint-id&gt;</c> —
+    ///     truncate the session to the checkpoint's anchor message and record
+    ///     a trail marker (the honest trail — the rewind itself stays in the
+    ///     file). Jsonl backend only in slice 1 (#1247).
+    /// </summary>
+    internal static async Task<int> RunRewindSessionAsync(ILogger logger, string[] args)
+    {
+        if (args.Length < 2)
+        {
+            Console.Error.WriteLine("""
+                                    Usage: harbor sessions rewind <session-id> <checkpoint-id>
+                                      Truncate the session to the checkpoint's message and record a trail marker.
+                                    """);
+            return 2;
+        }
+
+        string sessionId = args[0];
+        string checkpointId = args[1];
+        using var host = HostBuilder.Build();
+        var store = host.Services.GetRequiredService<ISessionStore>();
+
+        var rewound = await new SessionCheckpointRunner(store).RewindAsync(sessionId, checkpointId).ConfigureAwait(false);
+        if (rewound.IsFailure)
+        {
+            logger.LogError("Rewind failed: {Error}", rewound.Error);
+            Console.Error.WriteLine($"Cannot rewind '{sessionId}' to '{checkpointId}': {rewound.Error}");
+            return 1;
+        }
+
+        Console.WriteLine($"Rewound session {sessionId} to checkpoint {checkpointId}: deleted {rewound.Value.Removed} message(s), {rewound.Value.Remaining} remain.");
         return 0;
     }
 
