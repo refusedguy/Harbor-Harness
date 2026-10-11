@@ -148,6 +148,31 @@
 // baseline tables start empty, so the two claim rules report the real borrows
 // rather than a curated list of them.
 
+// MECHANISM (#1086, step 2, conveyor)
+// -----------------------------------
+// The two source-scan halves below are ScanRules: the ambient-channel ban (no
+// `global using` — a plain line scan over the shared stripper) and the
+// UI-vocabulary import ban (a CustomParse, because the verdict needs the
+// using-directive's captured namespace plus the reviewed-rows exemption, which
+// no line regex expresses). Enumeration and the control/discovery verdicts are
+// ScanRunner's; this file keeps the issue prose and the test names.
+//
+// Deliberately NOT moved, and why:
+//   * The reviewed tables (`ReviewedImports` / `ReviewedVocabulary` /
+//     `ReviewedReferences`) stay as the exemption vehicle with their own
+//     reasons check (`ReviewedRowsStateWhyTheyAreTolerated`) and liveness
+//     checks (`ReviewedImportRowsAreStillReal`,
+//     `ReviewedReferenceRowsAreStillDeclared`) — that is where a future borrow
+//     is declared, not in a ScanRule baseline, so no baseline rows exist here.
+//   * Scope parity was verified, not assumed: this csproj declares no
+//     `<Compile Include>` outside its directory, so the shared tree walk sees
+//     exactly the file set `RepoPaths.EnumerateCsFiles` (directory + linked
+//     sources) saw — the linked arm is empty here.
+//   * The csproj half (`TheBclOnlyClaimIsCheckedAgainstRealReferencesAndImports`,
+//     `ANonAtomicEngineNamesItsTrackingIssueInItsOwnDescription`, the Description
+//     pins in the discovery test) reads XML, not source — a different flavor,
+//     out of this conveyor's scope per #1086.
+
 using System.Text.RegularExpressions;
 using System.Xml.Linq;
 using TUnit.Assertions;
@@ -399,50 +424,6 @@ public sealed class CellForgeEngineAtomicityRules
     // =====================================================================
 
     /// <summary>
-    ///     Every <c>global using</c> in every file the engine compiles. The
-    ///     merged guard could not see a borrower that arrives through an
-    ///     already-baselined ambient namespace: by the time the borrow exists,
-    ///     every import line involved is already in the table, so no
-    ///     import-reading rule and no reference-reading rule can catch it. That
-    ///     was demonstrated on the merged guard with a synthetic file binding
-    ///     six ambient types and no <c>using</c> line of its own — 9 rows found,
-    ///     both decisive predicates green. Deleting the block closes the hole
-    ///     for today; this rule is what stops it being reopened, because with
-    ///     zero ambient namespaces there is no channel left to borrow through.
-    /// </summary>
-    private static IReadOnlyList<(string FileName, int Line)> AllGlobalUsings()
-    {
-        var found = new List<(string, int)>();
-
-        if (RepoPaths.FindProjectDir(ProjectDir) is not { } projectRoot)
-        {
-            return found;
-        }
-
-        foreach (string path in RepoPaths.EnumerateCsFiles(ProjectDir))
-        {
-            string? source = SourceScan.TryReadAllText(path);
-            if (source is null)
-            {
-                continue;
-            }
-
-            string fileName = Path.GetRelativePath(projectRoot, path).Replace('\\', '/');
-            string[] lines = SourceScan.StripComments(source).Split('\n');
-
-            for (int i = 0; i < lines.Length; i++)
-            {
-                if (GlobalUsingDirective.IsMatch(lines[i]))
-                {
-                    found.Add((fileName, i + 1));
-                }
-            }
-        }
-
-        return found;
-    }
-
-    /// <summary>
     ///     An ambient <c>using</c>, in any of its spellings
     ///     (<c>global using X;</c>, <c>global using static X;</c>).
     ///     Comment-stripped input only, so a doc comment mentioning the phrase
@@ -452,6 +433,130 @@ public sealed class CellForgeEngineAtomicityRules
     private static readonly Regex GlobalUsingDirective = new(
         @"^\s*global\s+using\s+",
         RegexOptions.Compiled | RegexOptions.CultureInvariant);
+
+    private const string GlobalUsingSubId = "ENGINE-AMBIENT-USING";
+    private const string ImportSubId = "ENGINE-UI-VOCABULARY-IMPORT";
+
+    /// <summary>
+    ///     The ambient-channel ban as data: no `global using` in any engine file.
+    ///     A plain line scan — the shape is line-anchored and needs no file facts.
+    /// </summary>
+    private static readonly ScanRule GlobalUsingRule = new()
+    {
+        Id = "CellForgeEngineAtomicity.GlobalUsing",
+        Trees = ["src/" + ProjectDir],
+        Forbidden =
+        [
+            new ScanForbidden(
+                GlobalUsingSubId,
+                GlobalUsingDirective,
+                "spell the borrow in the file that needs it — an ambient namespace makes "
+                + "every borrower invisible to the import rule below. See issue #795."),
+        ],
+        Controls =
+        [
+            new ScanControl("Ambient/Plain.cs", "global using Harbor.Ui.Framework.Rendering;", GlobalUsingSubId),
+            new ScanControl("Ambient/Static.cs", "global using static Harbor.Ui.Framework.Rendering.Widgets;", GlobalUsingSubId),
+            new ScanControl("Ambient/Indented.cs", "    global using Harbor.Abstractions.Models;", GlobalUsingSubId),
+            new ScanControl(
+                "Ambient/SecondInFile.cs",
+                "namespace N;\nglobal using Harbor.Ui.Framework.Rendering;",
+                GlobalUsingSubId),
+            new ScanControl("Ambient/NoSemicolon.cs", "global using System.Text", GlobalUsingSubId),
+            // A per-file using is one of the rows this project requires — not ambient.
+            new ScanControl("Ambient/PerFile.cs", "using Harbor.Ui.Framework.Rendering;", null),
+            // Prose about the deleted block is documentation, not a channel.
+            new ScanControl("Ambient/Comment.cs", "// GlobalUsings.cs used to carry global using of the UI namespaces.", null),
+            new ScanControl(
+                "Ambient/Trailing.cs",
+                "public sealed class C { } // global using X;",
+                null),
+            new ScanControl("Ambient/Doc.cs", "/// <c>global using</c> is what this project deleted.", null),
+            // A string literal is data, and a type merely named GlobalUsing is not a directive.
+            new ScanControl("Ambient/String.cs", "var s = \"global using Harbor.Ui.Framework.Rendering;\";", null),
+            new ScanControl("Ambient/Type.cs", "public sealed class GlobalUsing {}", null),
+        ],
+        MinHits = 20,
+    };
+
+    /// <summary>
+    ///     The import ban as data: no `Harbor.Ui.Framework.*` /
+    ///     `Harbor.Abstractions.*` import outside the reviewed rows (empty today —
+    ///     fully armed). The verdict needs the directive's captured namespace, so
+    ///     the rule grades through `ParseVocabularyImport`.
+    /// </summary>
+    private static readonly ScanRule ImportRule = new()
+    {
+        Id = "CellForgeEngineAtomicity.Import",
+        Trees = ["src/" + ProjectDir],
+        Forbidden =
+        [
+            // The directive shape the parser grades — not a copy of it. The ban
+            // itself (the two forbidden prefixes minus the reviewed rows) is
+            // applied by `ParseVocabularyImport`, which this row documents.
+            new ScanForbidden(
+                ImportSubId,
+                UsingDirective,
+                "the engine's csproj calls itself BCL-only: a new borrow is red until it "
+                + "carries a reviewed row with an allowance and a tracking issue. See issue #795."),
+        ],
+        Controls =
+        [
+            new ScanControl("Imports/Plain.cs", "using Harbor.Ui.Framework.State;", ImportSubId),
+            new ScanControl("Imports/Global.cs", "global using Harbor.Ui.Framework.Rendering;", ImportSubId),
+            new ScanControl("Imports/Sub.cs", "using Harbor.Ui.Framework.Rendering.Input;", ImportSubId),
+            new ScanControl("Imports/Abstractions.cs", "using Harbor.Abstractions.Models;", ImportSubId),
+            new ScanControl("Imports/Indented.cs", "    using Harbor.Abstractions.Contracts;", ImportSubId),
+            new ScanControl("Imports/Static.cs", "using static Harbor.Ui.Framework.Rendering.Widgets;", ImportSubId),
+            new ScanControl("Imports/Alias.cs", "using Cells = Harbor.Ui.Framework.Rendering;", ImportSubId),
+            // Prose and string literals naming a namespace are documentation.
+            new ScanControl("Imports/Comment.cs", "// IFocusTarget moved to Harbor.Ui.Framework.Rendering.Input.", null),
+            new ScanControl(
+                "Imports/Doc.cs",
+                "/// <see cref=\"Harbor.Ui.Framework.State.AppMsg\" /> is a message.",
+                null),
+            new ScanControl("Imports/String.cs", "var ns = \"using Harbor.Ui.Framework.State;\";", null),
+            // The engine's own namespace, a mere prefix-sharer, #436's edge, the
+            // #626-exempt plugin family, the BCL, and a non-directive mention.
+            new ScanControl("Imports/Own.cs", "using Harbor.Tui.CellForge.Rendering;", null),
+            new ScanControl("Imports/Prefix.cs", "using Harbor.Ui.Frameworking;", null),
+            new ScanControl("Imports/DesignSystem.cs", "using Harbor.DesignSystem;", null),
+            new ScanControl("Imports/Plugins.cs", "using Harbor.Plugins.Abstractions;", null),
+            new ScanControl("Imports/System.cs", "using System.Text;", null),
+            new ScanControl("Imports/NotUsing.cs", "public sealed class HarborUiFrameworkState { }", null),
+        ],
+        MinHits = 20,
+        CustomParse = ParseVocabularyImport,
+    };
+
+    /// <summary>
+    ///     The custom parser: the `AllForbiddenImports` inner loop over one file's
+    ///     raw source — the shared stripper, the directive's captured namespace,
+    ///     the forbidden prefixes, minus the reviewed rows. Same fields, same
+    ///     order, same verdict; the synthetic controls below grade this parser
+    ///     while `NonVacuityTheImportMatcherFiresOnPlantedOffendersOnly` keeps
+    ///     pinning `ForbiddenImportsIn` directly, so the two stay honest about
+    ///     each other. Reviewed rows are keyed by the PROJECT-relative file name,
+    ///     derived here by trimming this rule's own tree prefix.
+    /// </summary>
+    private static IEnumerable<ScanHit> ParseVocabularyImport(string displayPath, string rawSource)
+    {
+        string prefix = "src/" + ProjectDir + "/";
+        string fileName = displayPath.StartsWith(prefix, StringComparison.Ordinal)
+            ? displayPath[prefix.Length..]
+            : displayPath;
+
+        string[] lines = SourceScan.StripComments(rawSource).Split('\n');
+        for (int i = 0; i < lines.Length; i++)
+        {
+            Match match = UsingDirective.Match(lines[i]);
+            if (match.Success && IsForbidden(match.Groups["ns"].Value)
+                && !IsReviewed(fileName, match.Groups["ns"].Value))
+            {
+                yield return new ScanHit(ImportSubId, displayPath, i + 1, lines[i].Trim());
+            }
+        }
+    }
 
     /// <summary>
     ///     No file the engine compiles may declare a <c>global using</c>. This is
@@ -463,14 +568,9 @@ public sealed class CellForgeEngineAtomicityRules
     [Test]
     public async Task NoEngineFileDeclaresAGlobalUsing()
     {
-        IReadOnlyList<(string FileName, int Line)> globals = AllGlobalUsings();
+        List<string> violations = ScanRunner.Evaluate(GlobalUsingRule);
 
-        var offenders = globals
-            .Select(g => $"{g.FileName}:{g.Line}")
-            .OrderBy(k => k, StringComparer.Ordinal)
-            .ToList();
-
-        await Assert.That(offenders).IsEmpty()
+        await Assert.That(violations).IsEmpty()
             .Because(
                 "a global using is the one construct that makes a borrow invisible to every rule in "
                 + "this file. When Harbor.Tui.CellForge.Engine/GlobalUsings.cs pre-imported four "
@@ -482,7 +582,7 @@ public sealed class CellForgeEngineAtomicityRules
                 + "rule and no reference-reading rule can close that; removing the channel can. So "
                 + "the borrow must be spelled in the file that needs it — which is exactly what the "
                 + "34 reviewed rows above now enumerate, one per file. Ambient usings found: "
-                + Offenders(offenders));
+                + (violations.Count == 0 ? "(none)" : string.Join("; ", violations)));
     }
 
     // =====================================================================
@@ -496,15 +596,9 @@ public sealed class CellForgeEngineAtomicityRules
     [Test]
     public async Task NoEngineFileImportsTheUiVocabularyOutsideTheReviewedRows()
     {
-        var violations = new List<string>();
-
-        foreach ((ImportHit hit, int line) in AllForbiddenImports())
-        {
-            if (!IsReviewed(hit.FileName, hit.Namespace))
-            {
-                violations.Add(hit.Describe(line));
-            }
-        }
+        // The reviewed-rows exemption lives in the parser now; this test reads the
+        // shared evaluation.
+        List<string> violations = ScanRunner.Evaluate(ImportRule);
 
         await Assert.That(violations).IsEmpty()
             .Because(
@@ -732,12 +826,17 @@ public sealed class CellForgeEngineAtomicityRules
                    + "passes for the wrong reason. RepoPaths degrades to empty rather than throwing, "
                    + "so this is the one assertion standing between a green run and a blind one.");
 
-        IReadOnlyList<string> files = RepoPaths.EnumerateCsFiles(ProjectDir);
+        List<string> globalDiscovery = ScanRunner.CheckDiscovery(GlobalUsingRule);
+        List<string> importDiscovery = ScanRunner.CheckDiscovery(ImportRule);
 
-        await Assert.That(files.Count).IsGreaterThan(20)
+        await Assert.That(globalDiscovery).IsEmpty()
+            .Because($"{ProjectDir} is a large project directory. A much smaller number means the "
+                   + "walk stopped finding files and the channel rule above is grading an empty set. "
+                   + string.Join("; ", globalDiscovery));
+        await Assert.That(importDiscovery).IsEmpty()
             .Because($"{ProjectDir} is a large project directory. A much smaller number means the "
                    + "walk stopped finding files and the import rule above is grading an empty set. "
-                   + "Found: " + files.Count);
+                   + string.Join("; ", importDiscovery));
 
         string? csproj = CsprojPath();
         await Assert.That(csproj).IsNotNull()
@@ -772,105 +871,41 @@ public sealed class CellForgeEngineAtomicityRules
     [Test]
     public async Task NonVacuityTheGlobalUsingMatcherFiresOnPlantedAmbientUsingsOnly()
     {
-        (string Name, string Source)[] ambient =
-        [
-            ("plain.cs", "global using Harbor.Ui.Framework.Rendering;"),
-            ("static.cs", "global using static Harbor.Ui.Framework.Rendering.Widgets;"),
-            ("indented.cs", "    global using Harbor.Abstractions.Models;"),
-            ("second-in-file.cs", "namespace N;\nglobal using Harbor.Ui.Framework.Rendering;"),
-            ("no-trailing-semicolon-needed.cs", "global using System.Text"),
-        ];
+        // The ambient spellings (five) and the must-stay-silent cases (six) live
+        // as controls on the rule and drive the REAL line scan. The silent cases
+        // are the ones that matter: a doc comment saying `global using` is what
+        // `FocusRouter.cs` used to carry, and a plain per-file `using` is among
+        // the reviewed rows this project requires — if the matcher fired on
+        // either, the rule would be red for a tree that is doing exactly the
+        // right thing.
+        List<string> failures = ScanRunner.CheckControls(GlobalUsingRule);
 
-        (string Name, string Source)[] quiet =
-        [
-            ("per-file.cs", "using Harbor.Ui.Framework.Rendering;"),
-            ("comment.cs", "// GlobalUsings.cs used to carry global using of the UI namespaces."),
-            ("trailing-comment.cs", "public sealed class C { } // global using X;"),
-            ("doc.cs", "/// <c>global using</c> is what this project deleted."),
-            ("string.cs", "var s = \"global using Harbor.Ui.Framework.Rendering;\";"),
-            ("notusing.cs", "public sealed class GlobalUsing {}"),
-        ];
-
-        foreach ((string name, string source) in ambient)
-        {
-            bool fired = SourceScan.StripComments(source).Split('\n')
-                .Any(l => GlobalUsingDirective.IsMatch(l));
-
-            await Assert.That(fired).IsTrue()
-                .Because($"'{name}' declares an ambient using, so the matcher must see it. Zero here "
-                       + "means the rule cannot fire at all, and a rule that cannot fire is the "
-                       + "merged guard's blind spot rebuilt one clause later.");
-        }
-
-        foreach ((string name, string source) in quiet)
-        {
-            bool fired = SourceScan.StripComments(source).Split('\n')
-                .Any(l => GlobalUsingDirective.IsMatch(l));
-
-            await Assert.That(fired).IsFalse()
-                .Because($"'{name}' is NOT an ambient using. A per-file using is one of the 34 reviewed "
-                       + "rows this project now requires, prose is documentation, and a string "
-                       + "literal is data. A rule that fires on any of them would be deleted by the "
-                       + "first person it annoyed — and this rule exists precisely because the "
-                       + "previous shape let a borrower through unseen.");
-        }
+        await Assert.That(failures).IsEmpty()
+            .Because(
+                "the ambient channel must be visible in every spelling and invisible "
+                + "everywhere else; zero on an offender means the rule cannot fire at all, "
+                + "and a hit on prose, a literal or a per-file using means the rule would "
+                + "be deleted by the first person it annoyed. "
+                + string.Join("; ", failures));
     }
 
-    /// <summary>
-    ///     Every forbidden spelling must be caught exactly once, and every near-miss
-    ///     must stay silent: prose that names the namespace, a string literal, the
-    ///     engine's own namespace, a namespace that merely shares a prefix,
-    ///     <c>Harbor.DesignSystem</c> (#436's edge, not an import-rule target), and
-    ///     <c>Harbor.Plugins.*</c> (exempt everywhere, #626).
-    /// </summary>
     [Test]
     public async Task NonVacuityTheImportMatcherFiresOnPlantedOffendersOnly()
     {
-        (string Name, string Source)[] offenders =
-        [
-            ("plain.cs", "using Harbor.Ui.Framework.State;"),
-            ("global.cs", "global using Harbor.Ui.Framework.Rendering;"),
-            ("sub.cs", "using Harbor.Ui.Framework.Rendering.Input;"),
-            ("abstractions.cs", "using Harbor.Abstractions.Models;"),
-            ("indented.cs", "    using Harbor.Abstractions.Contracts;"),
-            ("static.cs", "using static Harbor.Ui.Framework.Rendering.Widgets;"),
-            ("alias.cs", "using Cells = Harbor.Ui.Framework.Rendering;"),
-        ];
+        // Every forbidden spelling (seven) and every near-miss (nine) live as
+        // controls on the rule and drive the REAL parser: prose that names the
+        // namespace, a string literal, the engine's own namespace, a namespace
+        // that merely shares a prefix, `Harbor.DesignSystem` (#436's edge, not
+        // an import-rule target), and `Harbor.Plugins.*` (exempt everywhere,
+        // #626). `ForbiddenImportsIn` itself stays as the matcher core the
+        // parser mirrors.
+        List<string> failures = ScanRunner.CheckControls(ImportRule);
 
-        (string Name, string Source)[] quiet =
-        [
-            ("comment.cs", "// IFocusTarget moved to Harbor.Ui.Framework.Rendering.Input."),
-            ("doc.cs", "/// <see cref=\"Harbor.Ui.Framework.State.AppMsg\" /> is a message."),
-            ("string.cs", "var ns = \"using Harbor.Ui.Framework.State;\";"),
-            ("own.cs", "using Harbor.Tui.CellForge.Rendering;"),
-            ("prefix.cs", "using Harbor.Ui.Frameworking;"),
-            ("designsystem.cs", "using Harbor.DesignSystem;"),
-            ("plugins.cs", "using Harbor.Plugins.Abstractions;"),
-            ("system.cs", "using System.Text;"),
-            ("notusing.cs", "public sealed class HarborUiFrameworkState { }"),
-        ];
-
-        foreach ((string name, string source) in offenders)
-        {
-            IReadOnlyList<ImportHit> hits = ForbiddenImportsIn(name, source);
-            await Assert.That(hits.Count).IsEqualTo(1)
-                .Because($"'{name}' is one of the forbidden shapes, so exactly one import must be "
-                       + "reported for it. Zero means the matcher has a hole in that spelling; more "
-                       + "than one means it is matching something that is not a using directive.");
-        }
-
-        foreach ((string name, string source) in quiet)
-        {
-            IReadOnlyList<ImportHit> hits = ForbiddenImportsIn(name, source);
-            await Assert.That(hits).IsEmpty()
-                .Because(
-                    $"'{name}' is NOT a forbidden import and the rule must stay silent on it. Prose "
-                    + "and string literals naming a namespace are documentation; Harbor.Tui.CellForge.* "
-                    + "is the engine's own namespace; 'Harbor.Ui.Frameworking' merely shares a "
-                    + "prefix; Harbor.DesignSystem is #436's edge and deliberately not an "
-                    + "import-rule target; Harbor.Plugins.* is exempt everywhere (#626). A guard "
-                    + "that fires on any of these is deleted by the first person it annoys. "
-                    + "Reported: " + Offenders(hits.Select(h => h.Namespace)));
-        }
+        await Assert.That(failures).IsEmpty()
+            .Because(
+                "every forbidden spelling must be caught exactly once, and every near-miss "
+                + "must stay silent. A matcher that fires on prose is deleted by the first "
+                + "person it annoys; one that fires on nothing enforces nothing. "
+                + string.Join("; ", failures));
     }
 }
