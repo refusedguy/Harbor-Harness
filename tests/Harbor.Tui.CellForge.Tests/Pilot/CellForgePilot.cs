@@ -60,7 +60,7 @@ public sealed class CellForgePilot : IAsyncDisposable
     private readonly ChatKeyMap _keyMap = new();
     private bool _disposed;
 
-    public RecordingBackend Backend { get; } = new();
+    internal RecordingBackend Backend { get; } = new();
 
     public UiStore Store { get; } = new();
 
