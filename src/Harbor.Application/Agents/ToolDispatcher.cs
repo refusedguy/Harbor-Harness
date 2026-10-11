@@ -1,6 +1,7 @@
 using System.Buffers;
 using System.Diagnostics;
 using Harbor.Abstractions.Extensions;
+using Harbor.Application.Hooks;
 using Harbor.Application.Resilience;
 using Microsoft.Extensions.Logging;
 namespace Harbor.Application.Agents;
@@ -77,7 +78,10 @@ public sealed class ToolDispatcher(
     TimeSpan? abandonGrace = null,
     // #401 B2: clock for the grace wait. Null means the system clock, while
     // tests inject a fake when they need the boundary without wall-clock.
-    TimeProvider? clock = null) : IToolDispatcher
+    TimeProvider? clock = null,
+    // PX4: user hooks (PreToolUse/PostToolUse). Null (tests, manual
+    // construction, fallback loops) keeps the legacy hooks-free path.
+    IHookRunner? hookRunner = null) : IToolDispatcher
 {
     private static readonly ActivitySource Source = new("Harbor");
     private const string ToolNameTag = "gen_ai.tool.name";
@@ -100,6 +104,7 @@ public sealed class ToolDispatcher(
 
     private readonly TimeSpan _abandonGrace = abandonGrace ?? AbandonGraceDefault;
     private readonly TimeProvider _clock = clock ?? TimeProvider.System;
+    private readonly IHookRunner? _hooks = hookRunner;
 
     /// <summary>
     ///     Publish token for the TERMINAL event of a tool call (#401).
@@ -503,12 +508,52 @@ public sealed class ToolDispatcher(
                 return denied;
             }
 
+            // PX4: user PreToolUse hooks run after the policy gate — they can
+            // only deny further, ask, or narrow the args, never widen policy.
+            ToolCallPart effectiveCall = toolCall;
+            if (_hooks is not null)
+            {
+                HookGate gate = await ApplyPreToolHooksAsync(
+                    toolCall, session.Session.Id, effectiveCt, ct, activity).ConfigureAwait(false);
+                if (gate.Refusal is not null)
+                {
+                    return gate.Refusal;
+                }
+
+                effectiveCall = gate.Call;
+            }
+
+            if (!ReferenceEquals(effectiveCall, toolCall))
+            {
+                // A hook edited the args: re-validate the edited payload the
+                // same way the original was validated above (start event is
+                // already published, so the failure entry pairs correctly).
+                ToolResultEntry? editedInvalid = await ValidateArgumentsAsync(
+                    tool, effectiveCall, activity, ct).ConfigureAwait(false);
+                if (editedInvalid is not null)
+                {
+                    return editedInvalid;
+                }
+            }
+
             // Execution runs under the commit barrier with bounded retry
             // (#49 PR2/PR3, #43) — see ExecuteWithRetryAsync.
-            var ctx = CreateToolContext(toolCall, session, partial, agent, effectiveCt);
+            var ctx = CreateToolContext(effectiveCall, session, partial, agent, effectiveCt);
 
-            return await ExecuteWithRetryAsync(
-                tool, toolCall, ctx, commitScope, attempts, activity, effectiveCt, ct).ConfigureAwait(false);
+            ToolResultEntry completed = await ExecuteWithRetryAsync(
+                tool, effectiveCall, ctx, commitScope, attempts, activity, effectiveCt, ct).ConfigureAwait(false);
+
+            // PX4: user PostToolUse hooks are advisory — the runner logs and
+            // never throws on its own, so the completed entry is unaffected.
+            if (_hooks is not null)
+            {
+                var completedResult = new ToolResult(completed.Output, completed.IsError);
+                await _hooks.RunPostToolUseAsync(
+                    effectiveCall.ToolName, effectiveCall.Args, completedResult,
+                    session.Session.Id, ct).ConfigureAwait(false);
+            }
+
+            return completed;
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
@@ -624,6 +669,110 @@ public sealed class ToolDispatcher(
         await eventBus.PublishAsync(new ToolExecutionEndEvent(
             toolCall.Id, denied, true), TerminalEventToken).ConfigureAwait(false);
         return ToolResultEntry.From(toolCall.Id, toolCall.ToolName, denied);
+    }
+
+    /// <summary>
+    ///     Outcome of the PreToolUse hook gate: the call to execute (possibly
+    ///     with hook-edited args) or a refusal entry that is already reported.
+    /// </summary>
+    private sealed record HookGate(ToolCallPart Call, ToolResultEntry? Refusal);
+
+    /// <summary>
+    ///     Run user PreToolUse hooks for one tool call. Deny (including the
+    ///     runner's fail-closed deny on hook failure) and a declined ask
+    ///     publish the end event and return a refusal entry; an accepted ask
+    ///     and allow proceed, carrying any hook-edited args.
+    /// </summary>
+    private async Task<HookGate> ApplyPreToolHooksAsync(
+        ToolCallPart toolCall,
+        string sessionId,
+        CancellationToken effectiveCt,
+        CancellationToken ct,
+        Activity? activity)
+    {
+        HookVerdict verdict;
+        try
+        {
+            verdict = await _hooks!.RunPreToolUseAsync(
+                toolCall.ToolName, toolCall.Args, sessionId, effectiveCt).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            // The runner is contracted never to throw on its own; a failure
+            // here is a hooks-subsystem failure, which fails closed to deny
+            // exactly like the permission-subsystem failure (§G3).
+            logger.LogWarning(ex, "PreToolUse hooks failed for {ToolName}; failing closed to Deny", toolCall.ToolName);
+            verdict = new HookVerdict(HookDecision.Deny, $"Hook execution failed: {ex.Message}", null);
+        }
+
+        return await ResolveHookVerdictAsync(toolCall, verdict, effectiveCt, ct, activity).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    ///     Fold one PreToolUse verdict into proceed/refuse. Ask routes to the
+    ///     permission asker (real prompt when interactive, deny when headless);
+    ///     an accepted ask proceeds with any hook-edited args.
+    /// </summary>
+    private async Task<HookGate> ResolveHookVerdictAsync(
+        ToolCallPart toolCall,
+        HookVerdict verdict,
+        CancellationToken effectiveCt,
+        CancellationToken ct,
+        Activity? activity)
+    {
+        if (verdict.Decision == HookDecision.Allow)
+        {
+            ToolCallPart call = verdict.EditedArgs is { } edited && edited.ValueKind == JsonValueKind.Object
+                ? toolCall with { Args = edited.Clone() }
+                : toolCall;
+            return new HookGate(call, null);
+        }
+
+        if (verdict.Decision == HookDecision.Ask)
+        {
+            Result<PermissionResponse> asked = await permissions.AskUserAsync(
+                new PermissionRequest(
+                    toolCall.ToolName,
+                    "hook",
+                    toolCall.Args,
+                    new[] { "allow", "deny" },
+                    toolCall.Id,
+                    1),
+                effectiveCt).ConfigureAwait(false);
+            if (asked.IsSuccess && asked.Value.Action == PermissionAction.Allow)
+            {
+                ToolCallPart call = verdict.EditedArgs is { } edited && edited.ValueKind == JsonValueKind.Object
+                    ? toolCall with { Args = edited.Clone() }
+                    : toolCall;
+                return new HookGate(call, null);
+            }
+
+            string askReason = asked.IsFailure
+                ? $"Hook requested confirmation and the ask failed: {asked.Error}"
+                : verdict.Reason ?? $"Hook '{toolCall.ToolName}' requested confirmation.";
+            return await RefuseHook(toolCall, askReason, activity).ConfigureAwait(false);
+        }
+
+        return await RefuseHook(toolCall, verdict.Reason ?? $"Hook denied tool '{toolCall.ToolName}'.", activity).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    ///     Build the refusal entry for a denied/declined hook verdict, with its
+    ///     terminal end event (mirrors the permission-deny path above).
+    /// </summary>
+    private async Task<HookGate> RefuseHook(ToolCallPart toolCall, string reason, Activity? activity)
+    {
+        activity?.SetStatus(ActivityStatusCode.Error, "Hook denied");
+        logger.LogInformation("Tool {ToolName} (call {CallId}) refused by user hook: {Reason}",
+            toolCall.ToolName, toolCall.Id, reason);
+        var refused = ToolResult.Error(reason);
+        await eventBus.PublishAsync(new ToolExecutionEndEvent(
+            toolCall.Id, refused, true), TerminalEventToken).ConfigureAwait(false);
+        return new HookGate(toolCall, ToolResultEntry.From(toolCall.Id, toolCall.ToolName, refused));
     }
 
     /// <summary>
