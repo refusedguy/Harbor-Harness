@@ -81,7 +81,7 @@
 | PermissionRuleset.Evaluate (default Allow) | 0.35 µs | 0 |
 | PermissionRuleset.Evaluate (Deny bash rm -rf /) | 0.17 µs | 488 B |
 | ToolRegistry.ResolveTools frozen @4 (no permission) | 0.085 µs | 344 B |
-| ToolRegistry.ResolveTools frozen @4 (with permission) | 2.3 µs | 88 B |
+| ToolRegistry.ResolveTools frozen @4 (with permission) ⚠️ retracted, see §5.1 | 2.3 µs | 88 B |
 | ToolRegistry.ResolveTools frozen @8 / @16 (no permission) | 0.16 / 0.31 µs | 664 B / 1304 B |
 | ToolRegistry.GetTool (frozen) | 0.10–0.20 µs | 80–160 B |
 | ProviderRegistry.GetClient frozen | 0.14 µs | 288 B |
@@ -119,11 +119,11 @@
 
 | Category | Count |
 |---|---:|
-| App projects (`apps/`) | 2 (`Harbor.App.Cli`, `Harbor.App.Avalonia`; WPF/MAUI/Blazor переехали в `contrib/apps/`) |
-| Source projects (`src/`) | 51 |
-| Test projects (`tests/`, csproj dirs) | 27 |
+| App projects (`apps/`, на диске) | 2 (`Harbor.App.Cli`, `Harbor.App.Avalonia`; WPF/MAUI/Blazor переехали в `contrib/apps/`) |
+| Source projects (`src/`, на диске) | 52 (51 в `Harbor.slnx` + `Harbor.CodeGen` build-tool вне решения) |
+| Test projects (`tests/`, csproj dirs) | 37 |
 | Sample plugins (`samples/`) | 4 |
-| **Total in `Harbor.slnx`** | **~84** (без contrib; по данным текущего `Harbor.slnx`: src+tests+apps+samples+build-проект) |
+| **Total in `Harbor.slnx`** | **95** (src 51 + tests 37 + apps 1 + samples 4 + build 1 + tools 1) |
 
 > Составы ниже соответствуют состоянию на дату замера (2026-07-18) — тогда в слюнксе
 > было ~60 проектов; сегодня счётчик выше приведён к актуальной структуре.
