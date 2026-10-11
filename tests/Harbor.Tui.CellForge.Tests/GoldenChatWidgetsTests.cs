@@ -95,6 +95,8 @@ public class GoldenChatWidgetsTests
     public async Task ThinkingBlock_Text_Golden()
     {
         var block = new ThinkingBlock("Considering edge cases in the diff path.");
+        block.SetExpanded(true); // O10 #1179: collapsed is the summary header —
+                                 // pin the expanded body byte-identical.
         var buffer = new ScreenBuffer(40, block.Measure(40).MinLines);
         PaintBlock(block, buffer);
 

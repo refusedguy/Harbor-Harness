@@ -5,9 +5,11 @@ using TUnit.Core;
 
 namespace Harbor.Tui.CellForge.Tests;
 
-// [UX4] #264: thinking as collapsed box (crush pattern) — reasoning streams
-// into a default-collapsed 10-line box, never interleaved with the final
-// answer; 3-stage expand (collapsed → expanded → full) lives block-side.
+// O10 #1179 (opencode ReasoningPart steal): thinking is collapsed to a single
+// summary line plus duration by default — one row throughout, so the layout
+// never shifts; click / feed Enter expands through the existing
+// ICollapsibleChatBlock gesture. The 3-stage expand (collapsed → expanded →
+// full, [UX4] #264) lives on unchanged for the expanded body.
 public class ThinkingCollapseTests
 {
     private static string LongThinking(int lines)
@@ -22,49 +24,93 @@ public class ThinkingCollapseTests
     }
 
     [Test]
-    public async Task Defaults_AreCollapsedTenLineBox()
+    public async Task Defaults_AreCollapsedOneLineSummary()
     {
         var streaming = new StreamingThinkingBlock();
         await Assert.That(streaming.IsExpanded).IsFalse();
         await Assert.That(streaming.IsFullyExpanded).IsFalse();
-        await Assert.That(streaming.MaxBodyLines).IsEqualTo(10);
+        await Assert.That(streaming.Measure(80).MinLines).IsEqualTo(1);
+        await Assert.That(streaming.CheapEstimate(80)).IsEqualTo(1);
 
         var final = new ThinkingBlock("short");
         await Assert.That(final.IsExpanded).IsFalse();
         await Assert.That(final.IsFullyExpanded).IsFalse();
+        await Assert.That(final.Measure(80).MinLines).IsEqualTo(1);
+        await Assert.That(final.CheapEstimate(80)).IsEqualTo(1);
+
+        // Expanded-stage budgets are unchanged (10 / 20 / full).
+        await Assert.That(streaming.MaxBodyLines).IsEqualTo(10);
         await Assert.That(final.MaxBodyLines).IsEqualTo(10);
     }
 
     [Test]
-    public async Task ShortBlock_StaysByteIdentical()
+    public async Task Collapsed_ShowsSingleSummaryLine()
+    {
+        var block = new ThinkingBlock(LongThinking(30));
+        await Assert.That(block.Measure(80).MinLines).IsEqualTo(1);
+        await Assert.That(block.CheapEstimate(80)).IsEqualTo(1);
+
+        var buffer = new ScreenBuffer(80, 1);
+        block.Paint(new BlockPaintContext(buffer, new Rect(0, 0, 80, 1), 0));
+        string art = GridDump.Art(buffer);
+        await Assert.That(art.Contains("+ Thought: reasoning line 1")).IsTrue();
+        await Assert.That(art.Contains("reasoning line 11")).IsFalse();
+        await Assert.That(art.Contains("…")).IsFalse();
+    }
+
+    [Test]
+    public async Task Collapsed_HeaderCarriesDuration()
+    {
+        var block = new ThinkingBlock("weighing the options", TimeSpan.FromSeconds(2.5));
+        var buffer = new ScreenBuffer(80, 1);
+        block.Paint(new BlockPaintContext(buffer, new Rect(0, 0, 80, 1), 0));
+        string art = GridDump.Art(buffer);
+        await Assert.That(art.Contains("+ Thought: weighing the options · 2.5s")).IsTrue();
+    }
+
+    [Test]
+    public async Task Collapsed_BoldTitleBecomesSummary()
+    {
+        var block = new ThinkingBlock("**Inspecting PR workflow**\n\nFirst step\nSecond step");
+        var buffer = new ScreenBuffer(80, 1);
+        block.Paint(new BlockPaintContext(buffer, new Rect(0, 0, 80, 1), 0));
+        string art = GridDump.Art(buffer);
+        await Assert.That(art.Contains("+ Thought: Inspecting PR workflow")).IsTrue();
+        await Assert.That(art.Contains("First step")).IsFalse();
+    }
+
+    [Test]
+    public async Task Streaming_CollapsedStaysOneLine()
+    {
+        var block = new StreamingThinkingBlock();
+        block.Append("first thought\nsecond thought\nthird thought\n");
+        await Assert.That(block.Measure(80).MinLines).IsEqualTo(1);
+
+        var buffer = new ScreenBuffer(80, 1);
+        block.Paint(new BlockPaintContext(buffer, new Rect(0, 0, 80, 1), 0));
+        string art = GridDump.Art(buffer);
+        await Assert.That(art.Contains("+ Thinking: first thought")).IsTrue();
+        await Assert.That(art.Contains("second thought")).IsFalse();
+    }
+
+    [Test]
+    public async Task ExpandedBody_StaysByteIdentical()
     {
         var block = new ThinkingBlock("one\ntwo\nthree");
+        block.SetExpanded(true);
         await Assert.That(block.Measure(80).MinLines).IsEqualTo(3);
 
         var streaming = new StreamingThinkingBlock();
         streaming.Append("one\ntwo\nthree");
+        streaming.SetExpanded(true);
         await Assert.That(streaming.Measure(80).MinLines).IsEqualTo(3);
-    }
-
-    [Test]
-    public async Task Collapsed_ShowsTenPlusMarker()
-    {
-        var block = new ThinkingBlock(LongThinking(30));
-        await Assert.That(block.Measure(80).MinLines).IsEqualTo(11);
-
-        var buffer = new ScreenBuffer(80, 11);
-        block.Paint(new BlockPaintContext(buffer, new Rect(0, 0, 80, 11), 0));
-        string art = GridDump.Art(buffer);
-        await Assert.That(art.Contains("reasoning line 10")).IsTrue();
-        await Assert.That(art.Contains("reasoning line 11")).IsFalse();
-        await Assert.That(art.Contains("…")).IsTrue();
     }
 
     [Test]
     public async Task CycleExpand_WalksThreeStages()
     {
         var block = new ThinkingBlock(LongThinking(30));
-        await Assert.That(block.Measure(80).MinLines).IsEqualTo(11);
+        await Assert.That(block.Measure(80).MinLines).IsEqualTo(1);
 
         block.CycleExpand();
         await Assert.That(block.IsExpanded).IsTrue();
@@ -84,7 +130,7 @@ public class ThinkingCollapseTests
         block.CycleExpand();
         await Assert.That(block.IsExpanded).IsFalse();
         await Assert.That(block.IsFullyExpanded).IsFalse();
-        await Assert.That(block.Measure(80).MinLines).IsEqualTo(11);
+        await Assert.That(block.Measure(80).MinLines).IsEqualTo(1);
     }
 
     [Test]
@@ -97,7 +143,7 @@ public class ThinkingCollapseTests
         await Assert.That(block.Measure(80).MinLines).IsEqualTo(21);
 
         block.ToggleExpanded();
-        await Assert.That(block.Measure(80).MinLines).IsEqualTo(11);
+        await Assert.That(block.Measure(80).MinLines).IsEqualTo(1);
 
         block.SetExpanded(true);
         await Assert.That(block.IsFullyExpanded).IsFalse();
@@ -106,12 +152,12 @@ public class ThinkingCollapseTests
     }
 
     [Test]
-    public async Task Streaming_CheapEstimate_MirrorsCollapsedMeasure()
+    public async Task Streaming_CheapEstimate_MirrorsMeasure()
     {
         var block = new StreamingThinkingBlock();
         block.Append(LongThinking(30));
-        await Assert.That(block.Measure(80).MinLines).IsEqualTo(11);
-        await Assert.That(block.CheapEstimate(80)).IsLessThanOrEqualTo(11);
+        await Assert.That(block.Measure(80).MinLines).IsEqualTo(1);
+        await Assert.That(block.CheapEstimate(80)).IsEqualTo(1);
 
         block.CycleExpand();
         block.CycleExpand();

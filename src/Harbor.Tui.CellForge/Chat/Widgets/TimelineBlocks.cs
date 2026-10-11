@@ -27,8 +27,10 @@ public sealed class ChatTimelinePanel : Rendering.Panel
 /// incremental FNV-1a content hash short-circuits frames with no new text, so
 /// steady-state Measure/Paint is O(1) instead of O(document).
 /// Collapsible per the <c>ICollapsibleChatBlock</c> mixin (PRIM1c #293):
-/// collapsed paint shows the first <see cref="MaxBodyLines"/> wrapped lines
-/// plus a <c>…</c> overflow marker.</summary>
+/// O10 #1179 (opencode ReasoningPart steal) renders the collapsed state as a
+/// single summary line (<see cref="ThinkingSummary.CollapsedHeader"/>) — one
+/// row throughout, so the layout never shifts mid-stream; click / feed Enter
+/// expands to the wrapped body via <see cref="ToggleExpanded"/>.</summary>
 public sealed class StreamingThinkingBlock : ICollapsibleChatBlock
 {
     private const ulong FnvOffsetBasis = 14695981039346656037ul;
@@ -43,6 +45,11 @@ public sealed class StreamingThinkingBlock : ICollapsibleChatBlock
     private ulong _contentHash = FnvOffsetBasis;
     private ulong _wrappedHash = FnvOffsetBasis;
     private int _wrappedLength;
+
+    // O10 #1179: collapsed header cache — the title refines as deltas land,
+    // but steady-state Paint stays allocation-free via the content hash.
+    private string? _header;
+    private ulong _headerHash = ulong.MaxValue;
 
     public string Kind => "thinking";
 
@@ -62,7 +69,9 @@ public sealed class StreamingThinkingBlock : ICollapsibleChatBlock
 
     /// <summary>
     /// [UX4] #264: default collapsed budget for thinking — the crush
-    /// 10-line box. Short blocks (≤10 wrapped lines) stay byte-identical
+    /// 10-line box. Since O10 #1179 the collapsed state paints a single
+    /// summary line instead, so this budget only governs the expanded
+    /// stages; short expanded blocks (≤10 wrapped lines) stay byte-identical
     /// to the pre-collapse layout.
     /// </summary>
     public const int CollapsedBodyLines = 10;
@@ -76,8 +85,9 @@ public sealed class StreamingThinkingBlock : ICollapsibleChatBlock
     /// <summary>
     /// Whether the block is expanded (feed Enter/click toggles via
     /// <see cref="ToggleExpanded"/>). Satisfies the <c>ICollapsibleChatBlock</c>
-    /// mixin contract. Defaults to <c>false</c> ([UX4] #264
-    /// default-collapsed policy: thinking never steals feed height).
+    /// mixin contract. Defaults to <c>false</c> (O10 #1179
+    /// default-collapsed policy: thinking never steals feed height — the
+    /// collapsed state is one summary line, not a 10-line box).
     /// </summary>
     public bool IsExpanded { get; private set; }
 
@@ -179,6 +189,15 @@ public sealed class StreamingThinkingBlock : ICollapsibleChatBlock
 
     public BlockMeasure Measure(int width)
     {
+        // O10 #1179: collapsed paints one summary line — a single row for the
+        // whole stream, so the layout never shifts as deltas land (opencode
+        // hide-mode: "a single line throughout"). SetText clips overlong
+        // headers at width, so the height is width-independent.
+        if (!IsExpanded)
+        {
+            return BlockMeasure.Exact(1);
+        }
+
         EnsureWrapped(width);
         int total = _stable.Count + _tail.Length;
         int budget = EffectiveBudget;
@@ -189,6 +208,12 @@ public sealed class StreamingThinkingBlock : ICollapsibleChatBlock
 
     public int CheapEstimate(int width)
     {
+        // O10 #1179: mirror Measure — collapsed is one row, no estimate needed.
+        if (!IsExpanded)
+        {
+            return 1;
+        }
+
         width = Math.Max(1, width);
         int total = 0;
         int run = 0;
@@ -221,9 +246,28 @@ public sealed class StreamingThinkingBlock : ICollapsibleChatBlock
         _lastPaintRect = ctx.Rect;
         _lastSkipRows = ctx.SkipRows;
 
-        EnsureWrapped(ctx.Rect.Width);
         var buffer = ctx.Buffer;
         var style = new CellStyle(attrs: StyleAttr.Dim | StyleAttr.Italic);
+
+        // O10 #1179: collapsed paints only the summary line (cached — the
+        // title refines mid-stream, the hash keeps steady-state Paint free).
+        if (!IsExpanded)
+        {
+            if (ctx.SkipRows == 0 && ctx.Rect.Height > 0)
+            {
+                if (_header is null || _headerHash != _contentHash)
+                {
+                    _header = ThinkingSummary.CollapsedHeader(_text.ToString(), durationText: null, done: false);
+                    _headerHash = _contentHash;
+                }
+
+                buffer.SetText(ctx.Rect.X, ctx.Rect.Y, _header, style);
+            }
+
+            return;
+        }
+
+        EnsureWrapped(ctx.Rect.Width);
         int total = _stable.Count + _tail.Length;
         int budget = EffectiveBudget;
         int shown = budget == int.MaxValue ? total : budget <= 0 ? 0 : Math.Min(total, budget);
@@ -334,14 +378,26 @@ public sealed class StreamingThinkingBlock : ICollapsibleChatBlock
 /// <summary>Finalized thinking block: renders committed reasoning text with
 /// dim+italic styling, wrapped to the available width.
 /// Collapsible per the <c>ICollapsibleChatBlock</c> mixin (PRIM1c #293,
-/// parent #286): collapsed paint shows the first <see cref="MaxBodyLines"/>
-/// wrapped lines plus a <c>…</c> overflow marker; short blocks stay
-/// byte-identical to the pre-collapse layout.</summary>
+/// parent #286): O10 #1179 (opencode ReasoningPart steal) renders the
+/// collapsed state as a single summary line plus duration
+/// (<see cref="ThinkingSummary.CollapsedHeader"/>) — click / feed Enter
+/// expands to the wrapped body via <see cref="ToggleExpanded"/>; expanded
+/// budgets are unchanged, so short expanded blocks stay byte-identical to
+/// the pre-collapse layout.</summary>
 public sealed class ThinkingBlock : ICollapsibleChatBlock
 {
     private readonly WrappedText _text;
+    private readonly string _header;
 
-    public ThinkingBlock(string text) => _text = new WrappedText(text ?? string.Empty);
+    public ThinkingBlock(string text, TimeSpan? duration = null)
+    {
+        _text = new WrappedText(text ?? string.Empty);
+        string? durationText = duration is { } d
+            ? Harbor.Ui.Framework.Converters.StatusMappers.DurationToText(d)
+            : null;
+        _header = ThinkingSummary.CollapsedHeader(
+            text, string.IsNullOrEmpty(durationText) ? null : durationText, done: true);
+    }
 
     public string Kind => "thinking";
 
@@ -357,9 +413,11 @@ public sealed class ThinkingBlock : ICollapsibleChatBlock
     public int MaxBodyLines { get; set; } = CollapsedBodyLines;
 
     /// <summary>
-    /// [UX4] #264: default collapsed budget for thinking — the crush
-    /// 10-line box. Short blocks (≤10 wrapped lines) stay byte-identical
-    /// to the pre-collapse layout.
+    /// [UX4] #264: expanded-stage budget for thinking — the crush 10-line
+    /// box. Since O10 #1179 the collapsed state paints a single summary
+    /// line plus duration instead, so this budget only governs the expanded
+    /// stages; short expanded blocks stay byte-identical to the pre-collapse
+    /// layout.
     /// </summary>
     public const int CollapsedBodyLines = 10;
 
@@ -372,8 +430,9 @@ public sealed class ThinkingBlock : ICollapsibleChatBlock
     /// <summary>
     /// Whether the block is expanded (feed Enter/click toggles via
     /// <see cref="ToggleExpanded"/>). Satisfies the <c>ICollapsibleChatBlock</c>
-    /// mixin contract. Defaults to <c>false</c> ([UX4] #264
-    /// default-collapsed policy: finalized reasoning never steals feed height).
+    /// mixin contract. Defaults to <c>false</c> (O10 #1179
+    /// default-collapsed policy: finalized reasoning never steals feed height —
+    /// the collapsed state is one summary line plus duration).
     /// </summary>
     public bool IsExpanded { get; private set; }
 
@@ -454,10 +513,16 @@ public sealed class ThinkingBlock : ICollapsibleChatBlock
     }
 
     public BlockMeasure Measure(int width) =>
-        BlockMeasure.Exact(Math.Max(1, ClampLineCount(_text.GetLines(Math.Max(1, width)).Length)));
+        // O10 #1179: collapsed paints one summary line plus duration (SetText
+        // clips at width, so the height is width-independent).
+        !IsExpanded
+            ? BlockMeasure.Exact(1)
+            : BlockMeasure.Exact(Math.Max(1, ClampLineCount(_text.GetLines(Math.Max(1, width)).Length)));
 
     public int CheapEstimate(int width) =>
-        Math.Max(1, ClampLineCount(BlockMath.EstimateLines(_text.Source, Math.Max(1, width))));
+        !IsExpanded
+            ? 1
+            : Math.Max(1, ClampLineCount(BlockMath.EstimateLines(_text.Source, Math.Max(1, width))));
 
     public void Paint(in BlockPaintContext ctx)
     {
@@ -465,8 +530,20 @@ public sealed class ThinkingBlock : ICollapsibleChatBlock
         _lastSkipRows = ctx.SkipRows;
 
         var buffer = ctx.Buffer;
-        var lines = _text.GetLines(Math.Max(1, ctx.Rect.Width));
         var style = new CellStyle(attrs: StyleAttr.Dim | StyleAttr.Italic);
+
+        // O10 #1179: collapsed paints only the precomputed summary line.
+        if (!IsExpanded)
+        {
+            if (ctx.SkipRows == 0 && ctx.Rect.Height > 0)
+            {
+                buffer.SetText(ctx.Rect.X, ctx.Rect.Y, _header, style);
+            }
+
+            return;
+        }
+
+        var lines = _text.GetLines(Math.Max(1, ctx.Rect.Width));
         int total = lines.Length;
         int budget = EffectiveBudget;
         int shown = budget == int.MaxValue ? total : budget <= 0 ? 0 : Math.Min(total, budget);
