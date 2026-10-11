@@ -38,7 +38,20 @@ namespace Harbor.Tools.Builtin;
 ///         but is not a hermetic containment boundary.
 ///     </para>
 /// </remarks>
-public sealed class WebFetchTool : ITool
+[ToolInfo(
+    "webfetch",
+    "WebFetch",
+    "Fetch a URL and return markdown-converted content. HTML is stripped to text + links + code; binary responses are rejected. Use for documentation, search results, API endpoints returning text.",
+    Glyph = "🌍",
+    PromptSnippet = "webfetch: Fetch a URL and return markdown",
+    PromptGuidelines = new[]
+    {
+        "Use `webfetch` to read web pages, docs, JSON endpoints",
+        "Pass `selector` to extract a single CSS-like element (e.g. 'main', 'article', '#content')",
+        "Default maxChars=50000; raise for long pages, lower for snippets",
+        "Binary and >5 MiB responses are rejected"
+    })]
+public sealed partial class WebFetchTool : ITool
 {
     private const int DefaultMaxChars = 50_000;
     private const int HardMaxChars = 500_000;
@@ -110,38 +123,7 @@ public sealed class WebFetchTool : ITool
     public ICollection<string> AllowedHosts { get; } = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
     /// <inheritdoc />
-    public ToolName Name => ToolName.Create("webfetch");
-
-    /// <inheritdoc />
     public ToolSafetyProfile SafetyProfile => ToolSafetyProfile.Opaque;
-
-    /// <inheritdoc />
-    public string DisplayName => "WebFetch";
-
-    /// <summary>Glyph beside the tool name in every UI surface (#680).</summary>
-    public string Glyph => "🌍";
-
-
-    /// <inheritdoc />
-    public string Description =>
-        "Fetch a URL and return markdown-converted content. HTML is stripped to text + " +
-        "links + code; binary responses are rejected. Use for documentation, search results, " +
-        "API endpoints returning text.";
-
-    /// <inheritdoc />
-    public ExecutionMode ExecutionMode => ExecutionMode.Parallel;
-
-    /// <inheritdoc />
-    public string? PromptSnippet => "webfetch: Fetch a URL and return markdown";
-
-    /// <inheritdoc />
-    public IReadOnlyList<string> PromptGuidelines { get; } =
-    [
-        "Use `webfetch` to read web pages, docs, JSON endpoints",
-        "Pass `selector` to extract a single CSS-like element (e.g. 'main', 'article', '#content')",
-        "Default maxChars=50000; raise for long pages, lower for snippets",
-        "Binary and >5 MiB responses are rejected"
-    ];
 
     /// <inheritdoc />
     public JsonDocument ParameterSchema { get; } = JsonDocument.Parse("""

@@ -18,7 +18,21 @@ namespace Harbor.Tools.Builtin;
 ///         so a sub-agent cannot recurse into <c>task</c>.
 ///     </para>
 /// </remarks>
-public sealed class TaskTool : ITool
+[ToolInfo(
+    "task",
+    "Task",
+    "Delegate a self-contained task to a sub-agent (explore, plan, or custom agents marked as sub-agents). The sub-agent runs in its own isolated session with its own context window and tool access; only its final answer is returned here. Use it for wide read-only reconnaissance or focused planning that would otherwise flood your context. The sub-agent cannot spawn further sub-agents. Long independent work: pass background=true and continue other work — the final report arrives as a follow-up message, no polling needed.",
+    Glyph = "☐",
+    ExecutionMode = ExecutionMode.Sequential,
+    PromptSnippet = "task: delegate a self-contained task to a sub-agent and receive its final report",
+    PromptGuidelines = new[]
+    {
+        "`prompt` must be fully self-contained: include file paths, constraints, and exactly what to report back",
+        "sub-agents cannot see this conversation and cannot delegate further — do not ask them to call `task`",
+        "prefer `task(explore)` for broad code searches, keep small lookups in your own session",
+        "long independent recon: `background: true`, keep working — the report arrives as a follow-up message, do not poll"
+    })]
+public sealed partial class TaskTool : ITool
 {
     private readonly IAgentRegistry _agents;
     private readonly ILogger<TaskTool> _logger;
@@ -33,35 +47,8 @@ public sealed class TaskTool : ITool
         _backgroundTasks = backgroundTasks;
     }
 
-    public ToolName Name => ToolName.Create("task");
-
     /// <inheritdoc />
     public ToolSafetyProfile SafetyProfile => ToolSafetyProfile.Opaque;
-
-    public string DisplayName => "Task";
-
-    /// <summary>Glyph beside the tool name in every UI surface (#680).</summary>
-    public string Glyph => "☐";
-
-    public string Description =>
-        "Delegate a self-contained task to a sub-agent (explore, plan, or custom agents marked as sub-agents). " +
-        "The sub-agent runs in its own isolated session with its own context window and tool access; " +
-        "only its final answer is returned here. Use it for wide read-only reconnaissance or focused planning " +
-        "that would otherwise flood your context. The sub-agent cannot spawn further sub-agents. " +
-        "Long independent work: pass background=true and continue other work — the final report " +
-        "arrives as a follow-up message, no polling needed.";
-
-    public ExecutionMode ExecutionMode => ExecutionMode.Sequential;
-
-    public string? PromptSnippet => "task: delegate a self-contained task to a sub-agent and receive its final report";
-
-    public IReadOnlyList<string> PromptGuidelines { get; } =
-    [
-        "`prompt` must be fully self-contained: include file paths, constraints, and exactly what to report back",
-        "sub-agents cannot see this conversation and cannot delegate further — do not ask them to call `task`",
-        "prefer `task(explore)` for broad code searches, keep small lookups in your own session",
-        "long independent recon: `background: true`, keep working — the report arrives as a follow-up message, do not poll"
-    ];
 
     public JsonDocument ParameterSchema { get; } = JsonDocument.Parse("""
                                                                       {
