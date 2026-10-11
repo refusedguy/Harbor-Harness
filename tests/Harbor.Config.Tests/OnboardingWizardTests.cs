@@ -84,7 +84,11 @@ public class OnboardingWizardTests
     private static TestAgentRegistry BuiltinAgents() => new(
         AgentDefinition.CodeDefault("model", "provider"),
         AgentDefinition.PlanDefault("model", "provider"),
-        AgentDefinition.ExploreDefault("model", "provider"));
+        AgentDefinition.ExploreDefault("model", "provider"),
+        AgentDefinition.AskDefault("model", "provider"),
+        AgentDefinition.ArchitectDefault("model", "provider"),
+        AgentDefinition.DebugDefault("model", "provider"),
+        AgentDefinition.OrchestratorDefault("model", "provider"));
 
     private static (OnboardingWizard wizard, JsonConfigStore store, AuthStore auth, string path) CreateWizard()
     {
@@ -590,7 +594,7 @@ public class OnboardingWizardTests
         // (fallback first, the rest by name), so a literal "2" would test a
         // coincidence. Both halves together mean: whatever number the wizard shows
         // for an agent, that number selects it, and so does typing its name.
-        foreach (string agent in new[] { "code", "plan", "explore" })
+        foreach (string agent in new[] { "code", "plan", "explore", "ask", "architect", "debug", "orchestrator" })
         {
             foreach (bool byIndex in new[] { false, true })
             {

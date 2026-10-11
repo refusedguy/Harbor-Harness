@@ -221,7 +221,7 @@ All are `ValueObject` subclasses with `Create()` (throws) and `TryCreate()` (ret
 
 `PermissionRuleset` evaluates `(toolName, argPath)` → `Allow|Ask|Deny`:
 - Glob patterns: `src/*`, `*.env`, `*`.
-- Per-agent defaults: `code`, `plan`, `explore`.
+- Per-agent defaults: `code`, `plan`, `explore`, `ask`, `architect`, `debug`, `orchestrator`.
 - Mergeable: user config overrides defaults.
 
 ### 8. Plugin contract

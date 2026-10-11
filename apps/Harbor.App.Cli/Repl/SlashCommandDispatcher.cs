@@ -103,7 +103,8 @@ internal sealed class SlashCommandDispatcher
         IAgentRegistry AgentRegistry,
         IProviderRegistry Providers,
         IConfigStore ConfigStore,
-        AuthStore AuthStore);
+        AuthStore AuthStore,
+        Action<string>? OnAgentSwitched = null);
 
     public SlashCommandDispatcher(
         ILogger<SlashCommandDispatcher> logger,
@@ -141,7 +142,8 @@ internal sealed class SlashCommandDispatcher
                 var r = await renderer.ReadLineAsync(prompt).ConfigureAwait(false);
                 return r.GetValueOrDefault(string.Empty);
             },
-            agent, agentRegistry, configStore, authStore, providers, session).ConfigureAwait(false);
+            agent, agentRegistry, configStore, authStore, providers, session,
+            onAgentSwitched: name => (renderer as BaseTuiRenderer)?.SetActiveAgent(name)).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -154,7 +156,8 @@ internal sealed class SlashCommandDispatcher
         Action<string> writer, Func<string, Task<string>> reader,
         IAgent agent, IAgentRegistry agentRegistry,
         IConfigStore configStore, AuthStore authStore,
-        IProviderRegistry providers, Session session)
+        IProviderRegistry providers, Session session,
+        Action<string>? onAgentSwitched = null)
     {
         string[] parts = input[1..].Split(' ', StringSplitOptions.RemoveEmptyEntries);
         if (parts.Length == 0) return Task.FromResult(SlashCommandOutcome.Continue);
@@ -179,7 +182,7 @@ internal sealed class SlashCommandDispatcher
         // for its own lifetime was closed over by the registration groups, so it
         // is not re-boxed per dispatch and not in reach of a command.
         var ctx = new CommandContext(writer, reader, session, agent, agentRegistry, providers,
-            configStore, authStore);
+            configStore, authStore, onAgentSwitched);
 
         return ExecuteRegisteredAsync(reg, ctx, args);
     }
@@ -404,7 +407,7 @@ internal sealed class SlashCommandDispatcher
 
         Register(dict, "agent", (ctx, args) =>
         {
-            return new AgentCommand(ctx.ConfigStore, ctx.AgentRegistry, ctx.Writer)
+            return new AgentCommand(ctx.ConfigStore, ctx.AgentRegistry, ctx.Writer, ctx.Agent, ctx.Session, ctx.OnAgentSwitched)
                 .ExecuteAsync(args, MakeCtx(ctx));
         });
 

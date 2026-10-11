@@ -65,6 +65,22 @@ public abstract class BaseTuiRenderer : ITuiRenderer
     public abstract ITuiRenderContext Context { get; }
 
     /// <summary>
+    ///     Point the status-bar indicator at the named agent/mode (PX5 #1251).
+    ///     The <c>agent:</c> cell of <see cref="StatusBarViewModel.Formatted" />
+    ///     is otherwise write-once (<c>"code"</c>): no <see cref="AgentEvent" />
+    ///     carries the active agent name, so the event fan-out can never move
+    ///     it and the switch has to — at startup from the resolved definition
+    ///     and on every live <c>/mode</c> switch. No-op when the status-bar VM
+    ///     is absent (a plugin replaced the view).
+    /// </summary>
+    /// <param name="agentName">The agent name to display (e.g. <c>ask</c>).</param>
+    public void SetActiveAgent(string agentName)
+    {
+        if (ViewModels.Get<StatusBarViewModel>("status-bar") is { } vm)
+            vm.Agent = agentName;
+    }
+
+    /// <summary>
     ///     Registered <see cref="AgentEvent"/> handlers (issue #185 visitor registry).
     ///     Renderers register one handler per event group in their constructor;
     ///     <see cref="DispatchToHandlersAsync"/> fans each event out to them.

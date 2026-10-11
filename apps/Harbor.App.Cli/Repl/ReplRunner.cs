@@ -273,6 +273,7 @@ internal sealed class ReplRunner
         }
         _agent.Initialize(sessionResult.Value, defaultAgent);
         _logger.LogInformation("Agent initialized: session={SessionId}, agent={Agent}", sessionResult.Value.Id, defaultAgent.Name.Value);
+        (_renderer as BaseTuiRenderer)?.SetActiveAgent(defaultAgent.Name.Value);
 
         if (_renderer is IInteractiveTuiRenderer interactive)
         {
@@ -479,6 +480,7 @@ internal sealed class ReplRunner
             return 1;
         }
         _agent.Initialize(sessionResult.Value, defaultAgent);
+        (_renderer as BaseTuiRenderer)?.SetActiveAgent(defaultAgent.Name.Value);
         _logger.LogInformation("Agent initialized, sending prompt");
         var result = await _agent.PromptAsync(prompt).ConfigureAwait(false);
         _logger.LogInformation("Ask completed: success={Success}", result.IsSuccess);
