@@ -158,7 +158,22 @@ public sealed class RowHashDiffEncoder : ICellDiffEncoder
                     continue;
                 }
 
+                // Generic emit: a naive At-replay (DifferentialRenderPipeline.ApplyTo)
+                // does not synthesize wide tails, so a wide lead must carry its
+                // trailing cell explicitly — otherwise the mirror keeps the stale
+                // cell and diverges from next. Emit the true next cell (normally
+                // WideTail); the scan still advances past it below. Equal tails
+                // stay silent unless a repaint is armed (AlwaysUpdate).
                 Emit(ref count, prev, next, x, y);
+                if (width == Cell.Wide && x + 1 < cols
+                    && next.GetDiffOption(x + 1, y) != CellDiffOption.Skip
+                    && (prev.Get(x + 1, y) != next.Get(x + 1, y)
+                        || nopt == CellDiffOption.AlwaysUpdate
+                        || next.GetDiffOption(x + 1, y) == CellDiffOption.AlwaysUpdate))
+                {
+                    Emit(ref count, prev, next, x + 1, y);
+                }
+
                 x += Math.Max(1, width);
             }
         }
