@@ -135,11 +135,20 @@ internal sealed class PromptPipeline(
     }
 
     /// <summary>Begin a model turn for already-extracted text (submit + queue drain share it).</summary>
-    private void StartPromptRun(string text, CancellationToken ct)
+    /// <param name="text">User-turn text (composer buffer or a caller-built preamble).</param>
+    /// <param name="ct">Cancellation token.</param>
+    /// <param name="extra">
+    ///     Caller-built attachments (issue #402: the markup overlay's "send to
+    ///     agent" bypasses the composer — the preamble IS the text). Combined
+    ///     with the drained stash so a staged <c>/attach</c> image is never
+    ///     stranded behind an image turn.
+    /// </param>
+    private void StartPromptRun(string text, CancellationToken ct, IReadOnlyList<ImageAttachment>? extra = null)
     {
         // #386: staged images ride THIS turn and only this one — draining here
         // (not at compose time) keeps a queued prompt from stealing them.
-        IReadOnlyList<ImageAttachment>? images = host.Attachments?.Drain();
+        IReadOnlyList<ImageAttachment>? staged = host.Attachments?.Drain();
+        IReadOnlyList<ImageAttachment>? images = CombineAttachments(extra, staged);
 
         host.Agent.ResetAbortSource();
         ResetRetryCountdown();
@@ -154,6 +163,56 @@ internal sealed class PromptPipeline(
         _promptInFlight = true;
         ArmLongTurnNotify();
         _ = RunPromptAsync(text, images, ct);
+    }
+
+    /// <summary>
+    ///     Submit an explicit image turn built by the caller (issue #402: the
+    ///     markup overlay's "send to agent" bypasses the composer — the
+    ///     preamble IS the text). Same busy discipline as
+    ///     <see cref="SubmitAsync" />: a running turn refuses with a timeline
+    ///     note instead of queueing a billing surprise behind the user's back.
+    /// </summary>
+    public Task SubmitImageTurnAsync(string text, IReadOnlyList<ImageAttachment> images, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(images);
+        if (string.IsNullOrWhiteSpace(text) || images.Count == 0)
+        {
+            return Task.CompletedTask;
+        }
+
+        if (host.Agent.IsRunning() || _promptInFlight)
+        {
+            host.Bridge.AppendSystemLine("⚠ Agent is busy — wait for completion or press Esc / Ctrl+C to abort.");
+            host.WakeUp();
+            return Task.CompletedTask;
+        }
+
+        StartPromptRun(text, ct, images);
+        return Task.CompletedTask;
+    }
+
+    /// <summary>
+    ///     Merge caller-built attachments with the drained stash (issue #402):
+    ///     either side alone passes through untouched, so text-only turns keep
+    ///     the exact null-stash path they had before.
+    /// </summary>
+    private static IReadOnlyList<ImageAttachment>? CombineAttachments(
+        IReadOnlyList<ImageAttachment>? extra, IReadOnlyList<ImageAttachment>? staged)
+    {
+        if (extra is not { Count: > 0 })
+        {
+            return staged;
+        }
+
+        if (staged is not { Count: > 0 })
+        {
+            return extra;
+        }
+
+        var all = new List<ImageAttachment>(extra.Count + staged.Count);
+        all.AddRange(extra);
+        all.AddRange(staged);
+        return all;
     }
 
     /// <summary>

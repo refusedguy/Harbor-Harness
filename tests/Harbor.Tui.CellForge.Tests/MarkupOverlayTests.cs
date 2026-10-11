@@ -54,6 +54,8 @@ public class MarkupOverlayTests
         await Assert.That(art).Contains("broken.png");
         await Assert.That(art).Contains("800×600");
         await Assert.That(art).Contains("0 ann");
+        await Assert.That(art).Contains("^S save");
+        await Assert.That(art).Contains("^Enter send");
         await Assert.That(art).Contains("esc close");
         await Assert.That(art.Contains('┌')).IsTrue();
     }
