@@ -51,7 +51,8 @@ implementing `Harbor.Abstractions.Tools.ITool`.
 > **Tool sets**: hosts pick a `HarborToolSetKind` in `HarborComposeOptions`. `Full14`
 > (the CLI default — the enum name predates the tool count) registers all 20 tools
 > (14 classic + `lsp` + `skill` + `read_mcp_resource` + `mcp_prompt` + `session_read` +
-> `session_steer`); `Standard10` omits the eight heavier ones (`task`, `webfetch`,
+> `session_steer`); `Standard10` (name likewise predates the count — 12 members today)
+> omits the eight heavier ones (`task`, `webfetch`,
 > `ripgrep`, `mcp`, `read_mcp_resource`, `mcp_prompt`, `session_read`, `session_steer`).
 > The Avalonia desktop app uses `Standard10` (see `apps/Harbor.App.Avalonia/AppHost.cs`).
 > `session_read` / `session_steer` also require a wired `ISessionStore`; without one the

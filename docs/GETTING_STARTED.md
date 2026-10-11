@@ -385,8 +385,8 @@ harbor sessions  # list
 
 ## Tools available to the agent
 
-Full set (`HarborToolSetKind.Full14`, the CLI default — see
-[TOOLS_CATALOG.md](./TOOLS_CATALOG.md)):
+Full set (`HarborToolSetKind.Full14`, the CLI default — the enum name predates the
+20-tool count, see [TOOLS_CATALOG.md](./TOOLS_CATALOG.md)):
 
 | Tool | Description |
 |---|---|
@@ -407,9 +407,13 @@ Full set (`HarborToolSetKind.Full14`, the CLI default — see
 | `read_mcp_resource` | Read an MCP server resource by URI |
 | `mcp_prompt` | Render an MCP server prompt by name |
 | `skill` | Load a SKILL.md skill body by name |
+| `lsp` | Language-server diagnostics / references / definition (when an LSP service is wired) |
+| `session_read` | Inspect a peer session's status, outcome and recent transcript (requires a session store) |
+| `session_steer` | Send a message / redirect / restart directive to a peer session (requires a session store) |
 
-The Avalonia desktop host registers the smaller `Standard10` set (without
-`task`, `webfetch`, `ripgrep`, `mcp`, `read_mcp_resource`, `mcp_prompt`).
+The Avalonia desktop host registers the smaller `Standard10` set (the enum name
+predates the count — 12 members today: without `task`, `webfetch`, `ripgrep`,
+`mcp`, `read_mcp_resource`, `mcp_prompt`, `session_read`, `session_steer`).
 
 ## Agents (modes)
 
