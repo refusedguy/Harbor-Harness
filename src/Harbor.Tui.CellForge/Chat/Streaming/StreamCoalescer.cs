@@ -31,6 +31,27 @@ internal sealed class StreamCoalescer
     public long NowMs { get; set; }
 
     /// <summary>
+    /// True while a live assistant stream slot is open (between
+    /// <see cref="StartStream"/> and <see cref="FinishStream"/>) — the render-side
+    /// busy signal behind submit-while-busy queueing (opencode steal O7, #1176).
+    /// </summary>
+    public bool IsStreaming => _stream is not null;
+
+    /// <summary>
+    /// Mirror of the composer queue depth, fed by the host on every
+    /// enqueue/drain/clear — the dock-counter source for the prompt rail.
+    /// Render-thread only, like every other field here.
+    /// </summary>
+    public int QueuedCount { get; private set; }
+
+    /// <summary>Host feed for <see cref="QueuedCount"/>; negatives clamp to zero.</summary>
+    public void SetQueuedCount(int count) => QueuedCount = Math.Max(0, count);
+
+    /// <summary>Dock-counter line for the prompt rail; null when the queue is empty.</summary>
+    public string? QueuedCounterText() =>
+        QueuedCount > 0 ? $"⏳ {QueuedCount} queued" : null;
+
+    /// <summary>
     /// Characters handed to the newline scan since the last
     /// <see cref="StartStream"/> — the measurement seam for #489. The scan is
     /// delta-local, so this tracks streamed bytes, never accumulated buffer
