@@ -22,7 +22,7 @@
     8. Terminal.Gui / Termina / RazorConsole / Avalonia (alt UI stacks)
     9. Jint                     (scripting engine)
    10. Roslyn analyzers         (Roslynator, Sonar, Meziantou, AsyncFixer, Reflection)
-   11. Performance              (ZLinq, DotNext, NonBlocking, KZDev, MemoryPack, CSharpFunctionalExtensions)
+   11. Performance              (ZLinq, NonBlocking, MemoryPack, CSharpFunctionalExtensions)
    12. SQLite drivers
    13. Source generators        (ZLinq.DropInGenerator, Termina.Generators)
 -->
@@ -168,10 +168,7 @@
     <!-- ── Performance / collections / serialization ─────────────────────── -->
     <PackageVersion Include="ZLinq" Version="1.5.6" />
     <PackageVersion Include="ZLinq.DropInGenerator" Version="1.5.6" />
-    <PackageVersion Include="DotNext" Version="6.4.1" />
-    <PackageVersion Include="DotNext.Threading" Version="6.4.1" />
     <PackageVersion Include="NonBlocking" Version="2.1.2" />
-    <PackageVersion Include="KZDev.PerfUtils" Version="3.0.1" />
     <PackageVersion Include="MemoryPack" Version="1.21.4" />
     <PackageVersion Include="MemoryPack.Core" Version="1.21.4" />
     <PackageVersion Include="CSharpFunctionalExtensions" Version="3.7.0" />
