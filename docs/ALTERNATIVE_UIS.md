@@ -8,11 +8,22 @@ catalogs every renderer — the original terminal-based set plus the new
 desktop / web / mobile / non-interactive renderers — so you can pick the right
 one for your workflow.
 
-> **Расположение проектов (актуально на 2026-08-27):** in-solution рендереры —
-> `src/Harbor.Tui.{Ansi,Plain,ConsoleEx,Notifications}/`. Рендереры семейства Spectre +
-> TerminalGui/Termina/RazorConsole/Sixel живут в `contrib/tui/` и подключаются билд-флагом
-> `HARBOR_WITH_SPECTRE_TUI` (по умолчанию включён; интерактивный default id — `spectre-tui`,
-> см. `apps/Harbor.App.Cli/Hosting/TuiMode.cs`). Десктоп/веб приложения — `contrib/apps/`.
+> **Расположение проектов:** in-solution рендереры —
+> `src/Harbor.Tui.AnsiPlain/` (`ansi` + `plain`), `src/Harbor.Tui.CellForge/` +
+> `CellForge.Engine/` (`cellforge`, legacy-алиас `consoleex`),
+> `src/Harbor.Tui.NickConsoleEx/` (`nickconsoleex` — только при инициализированном
+> сабмодуле `external/ConsoleEx` и `HarborWithRenderer=all|nickconsoleex`) и
+> `src/Harbor.Tui.Notifications/` (не скомпонован в CLI). Рендереры семейства Spectre +
+> TerminalGui/Termina/RazorConsole живут в `contrib/tui/` и комплируются только когда
+> `Harbor.Hosting` собран с `HarborWithSpectreTui=true` (NUKE/distro-сборки либо
+> `-p:HarborWithSpectreTui=true`; см. `src/Harbor.Hosting/Harbor.Hosting.csproj:158-165`).
+> Обычный `dotnet build` / `dotnet run` их НЕ включает: живые id — `ansi`, `plain`,
+> `cellforge`; `spectre`/`fullscreen`/`spectre-tui`/`terminal-gui`/`termina`/`razor`
+> откатываются на `plain` с предупреждением в логе. `contrib/tui/Harbor.Tui.Sixel` и
+> десктоп/веб приложения (`contrib/apps/`: wpf/avalonia/maui/blazor) не входят в
+> `Harbor.slnx` и в CLI не комплируются вовсе — их строки ниже описывают код
+> в `contrib/`, а не доступные id (`harbor tui` честно говорит, что для них нужна
+> ручная правка `Harbor.App.Cli.csproj`).
 >
 > **Сводка для русскоязычных читателей:** каждый рендерер реализует
 > `ITuiRenderer`/`IInteractiveTuiRenderer`, читает из общего `UiStore`, и
@@ -34,7 +45,7 @@ one for your workflow.
 | **`CellForge`** ⭐ CE-0…5 | `cellforge` (`consoleex` legacy alias) | Any terminal (alt screen)       | Full-screen   | cell-diff, 0 alloc steady-state | none (raw termios P/Invoke) | **Second in-process interactive renderer.** Virtualized chat timeline, streaming markdown, tool/diff cards; opt-in (`HARBOR_TUI=cellforge`), MVP — см. `src/Harbor.Tui.CellForge/README.md`. |
 | `Spectre`               | `spectre`        | Any terminal (color)            | Streaming     | ~10 MB        | `Spectre.Console`                 | Rich panels, tables, markup. CI dashboards.                          |
 | `Spectre.Fullscreen`    | `fullscreen`     | Any terminal (alt screen)       | Full-screen   | ~15 MB        | `Spectre.Console`                 | Full-screen spectre rendering with mouse support.                    |
-| `SpectreTui`            | `spectre-tui`    | Any terminal (alt screen)       | Full-screen   | ~50 MB        | `Spectre.Tui`                     | **Default interactive.** Live layout, scroll, panels, command palette. Проект в `contrib/tui/`. |
+| `SpectreTui`            | `spectre-tui`    | Any terminal (alt screen)       | Full-screen   | ~50 MB        | `Spectre.Tui`                     | Interactive default **только в сборках с `HarborWithSpectreTui=true`**. Live layout, scroll, panels, command palette. Проект в `contrib/tui/` (в обычном `dotnet build` отсутствует — id откатывается на `plain`). |
 | `TerminalGui`           | `terminal-gui`   | Any terminal                    | Full-screen   | ~20 MB        | `Terminal.Gui v2`                 | **Mature widget set.** Mouse, menus, dialogs. Classic full-screen TUI like `tig`/`htop`. |
 | `Termina`               | `termina`        | Any terminal                    | Full-screen   | ~20 MB        | `Termina`                         | **ANSI precision.** 24-bit true color, Kitty keyboard, DCS sync output. Reactive MVVM. |
 | `RazorConsole`          | `razor`          | Any terminal                    | Full-screen   | ~30 MB        | `RazorConsole.Core`               | **Component model.** `.razor` files, hot reload, React-like composition. |
@@ -71,13 +82,14 @@ workflow.
 | **Maturity**                  | Stable (default)                   | Experimental                                     | Mature (since 2014)                          | Experimental                                |
 | **Trade-off**                 | Heaviest of the four (~50 MB)      | More code for less (no widget zoo)               | Synchronous `Application.Run` blocks calling thread; fights async IAgent | Stream-based repaint (no differential); slower build (Razor codegen) |
 | **Best for**                  | Default everyday chat              | Power users on modern terminals (Kitty/WezTerm/Ghostty) | Classic full-screen TUI apps (tig/htop/lazygit style) | Web devs moving to TUI; reusable component libraries |
-| **Status**                    | **Default**                        | Competitive                                      | Competitive                                  | Competitive                                 |
+| **Status**                    | **Default in full builds** (`HarborWithSpectreTui=true`; absent from plain `dotnet build`) | Competitive                                      | Competitive                                  | Competitive                                 |
 
 ### Quick picker
 
-- **Just want it to work?** → `HARBOR_TUI=spectre-tui` (default).
+- **Just want it to work?** → run with no `HARBOR_TUI` override: plain `dotnet build`
+  falls back to `plain`, full (`HarborWithSpectreTui=true`) builds to `spectre-tui`.
 - **Want the in-process cell-diff REPL (CellForge)?** → `HARBOR_TUI=cellforge`
-- **On Kitty/WezTerm/Ghostty and want pixel-perfect color?** → `HARBOR_TUI=termina`
+- **On Kitty/WezTerm/Ghostty and want pixel-perfect color?** → `HARBOR_TUI=termina` (только сборки с `HarborWithSpectreTui=true`)
 - **Want menus, dialogs, mouse, classic TUI feel?** → `HARBOR_TUI=terminal-gui`
 - **Coming from Blazor and want `.razor` hot reload?** → `HARBOR_TUI=razor`
 
