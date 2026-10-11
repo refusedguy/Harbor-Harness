@@ -9,7 +9,19 @@ namespace Harbor.Tools.Builtin;
 ///     Fast recursive content search. Local disk: sync bulk I/O + dir prune + binary skip.
 ///     Parallel across files; stops at maxResults.
 /// </summary>
-public sealed class GrepTool : ITool
+[ToolInfo(
+    "grep",
+    "Grep",
+    "Search file contents with regex. Returns matching lines as file:line:content. Recurses from path; skips VCS/build dirs and binary files.",
+    Glyph = "🔍",
+    PromptSnippet = "grep: Search file contents",
+    PromptGuidelines = new[]
+    {
+        "Use `grep` to find code or text by content",
+        "Pattern is a regular expression",
+        "Use `include` to limit search (e.g. '*.cs' or '*.{cs,ts}')"
+    })]
+public sealed partial class GrepTool : ITool
 {
 
     private const int MaxFileBytes = 2 * 1024 * 1024; // 2 MiB — skip monsters
@@ -37,28 +49,8 @@ public sealed class GrepTool : ITool
 
     public GrepTool(ILogger<GrepTool> logger) { _logger = logger; }
 
-    public ToolName Name => ToolName.Create("grep");
-
     /// <inheritdoc />
     public ToolSafetyProfile SafetyProfile => ToolSafetyProfile.Path();
-
-    public string DisplayName => "Grep";
-
-    /// <summary>Glyph beside the tool name in every UI surface (#680).</summary>
-    public string Glyph => "🔍";
-
-    public string Description =>
-        "Search file contents with regex. Returns matching lines as file:line:content. " +
-        "Recurses from path; skips VCS/build dirs and binary files.";
-    public ExecutionMode ExecutionMode => ExecutionMode.Parallel;
-    public string? PromptSnippet => "grep: Search file contents";
-
-    public IReadOnlyList<string> PromptGuidelines { get; } =
-    [
-        "Use `grep` to find code or text by content",
-        "Pattern is a regular expression",
-        "Use `include` to limit search (e.g. '*.cs' or '*.{cs,ts}')"
-    ];
 
     public JsonDocument ParameterSchema { get; } = JsonDocument.Parse("""
                                                                       {

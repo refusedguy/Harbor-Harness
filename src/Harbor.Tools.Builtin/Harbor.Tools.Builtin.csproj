@@ -15,6 +15,10 @@
   <ItemGroup>
     <ProjectReference Include="..\Harbor.Abstractions\Harbor.Abstractions.csproj"/>
     <ProjectReference Include="..\Harbor.Extensions\Harbor.Extensions.csproj"/>
+    <!-- SG3 spike (issue 1244): ToolGlueGenerator consumed as an analyzer; no runtime edge. -->
+    <ProjectReference Include="..\Harbor.CodeGen\Harbor.CodeGen.csproj">
+      <OutputItemType>Analyzer</OutputItemType>
+    </ProjectReference>
   </ItemGroup>
 
   <ItemGroup>
