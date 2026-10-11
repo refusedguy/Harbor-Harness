@@ -107,8 +107,15 @@ public sealed class EnforcerIntegrityTests
             "#450: permitted by the matrix but the compiled assembly emits no AssemblyRef for it (the IL gate proved the edge is dead). The ProjectReference stays declared until the tracked cleanup removes it."),
         new("Harbor.Ui.Framework.Rendering", "Harbor.Desktop.Animations",
             "#450: permitted by the matrix but the compiled assembly emits no AssemblyRef for it (the IL gate proved the edge is dead). The ProjectReference stays declared until the tracked cleanup removes it."),
-        new("Harbor.Ui.Framework.Services", "Harbor.Ui.Framework.Abstractions",
-            "#450: permitted by the matrix but the compiled assembly emits no AssemblyRef for it (the IL gate proved the edge is dead). The ProjectReference stays declared until the tracked cleanup removes it."),
+        // #1186: the (Services → Abstractions) exemption that sat here is GONE —
+        // SlashCommandProvider projects SlashCommandCatalog and
+        // SystemCommandProvider reuses OverlayIds (the single slash vocabulary
+        // and overlay ids, both Ui.Framework.Abstractions), so the edge now
+        // binds real types in IL. DeclaredButUnboundProjectReferences_
+        // AreReallyUnbound fails the moment an exempt edge turns out to be
+        // live, so the exemption was removed and the edge justified in the
+        // matrix instead (the Services row in FullLayerMatrixTests.Matrix).
+        // Same shape as #567 (ViewModels → Abstractions) and #663.
         // #663: the (Sessions → ViewModels) exemption is GONE. It was a #450
         // dead edge until SessionContext.StatusText began calling
         // StatusMappers.SessionStatusToText rather than carrying its own

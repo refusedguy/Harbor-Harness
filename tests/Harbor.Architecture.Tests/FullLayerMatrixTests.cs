@@ -320,8 +320,12 @@ public class FullLayerMatrixTests
         // way round: the INTERFACE is in State, the implementation in Services.
         // Naming the concrete loader in `PanelServices` would have needed the
         // reverse edge and a project cycle.
+        // #1186 T4: SlashCommandProvider projects SlashCommandCatalog and
+        // SystemCommandProvider reuses OverlayIds, so Services now binds the
+        // Abstractions package in IL. Same Presentation → Domain edge the
+        // other Ui.Framework.* rows already declare (#567 precedent).
         ["Harbor.Ui.Framework.Services"] = new(Layer.Presentation,
-            ["Harbor.Abstractions", "Harbor.Ui.Framework.State"]),
+            ["Harbor.Abstractions", "Harbor.Ui.Framework.State", "Harbor.Ui.Framework.Abstractions"]),
         // #567: ToolCallViewModel.Status is a ToolCallState, so the view-models
         // now bind the Abstractions package in IL rather than carrying an
         // unbound reference to it. Same Presentation → Domain edge the other
