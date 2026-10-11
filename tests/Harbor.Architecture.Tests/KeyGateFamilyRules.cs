@@ -293,6 +293,11 @@ public class KeyGateFamilyRules
         new("ToolCardTracker(image)", KeyGateFamily.Command, "src/Harbor.Tui.CellForge/Chat/Streaming/ToolCardTracker.cs"),
         new("LeaderKeyRouter", KeyGateFamily.Command, "src/Harbor.Tui.CellForge/Chat/Widgets/LeaderKeyRouter.cs"),
 
+        // ChatAppReducer.ActivateSlotFromKey (#1173): the Ctrl+digit
+        // quick-slot path judges the pressed rune (1-9 focus the Nth tab).
+        // No buffer anywhere on this path — the rune navigates — so Command.
+        new("ChatAppReducer(slot digit)", KeyGateFamily.Command, "src/Harbor.Ui.Framework.State/State/ChatAppReducer.cs"),
+
         // ReplInputLoop's two palette chords (#857 added ctrl+j beside the
         // existing ctrl+p). Neither holds a text buffer and both require an
         // EXACT modifier set, so an unmodified 'p'/'j' is not claimed and
