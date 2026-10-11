@@ -49,16 +49,30 @@ public class ThemeFileWatcherTests
     /// </summary>
     private IThemeStore RealStore() => new ThemeStore(Path.GetDirectoryName(_path)!);
 
+    /// <summary>
+    ///     Write + pin the mtime. Two rapid writes can share one filesystem
+    ///     timestamp on Windows, which the stamp-comparing <c>Poll</c> reads as
+    ///     "unchanged" — a wall-clock race, not a product defect. Pinning keeps
+    ///     the real file + real stat path while making the change deterministic
+    ///     on every OS (win leg, #1249).
+    /// </summary>
+    private async Task WritePinnedAsync(string content, int stampSeconds)
+    {
+        await File.WriteAllTextAsync(_path, content);
+        File.SetLastWriteTimeUtc(
+            _path, new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc).AddSeconds(stampSeconds));
+    }
+
     [Test]
     public async Task Poll_AppliesRewrittenTheme()
     {
-        await File.WriteAllTextAsync(_path, """{ "name": "v1", "accent": "#111111" }""");
+        await WritePinnedAsync("""{ "name": "v1", "accent": "#111111" }""", 1);
         using var watcher = new ThemeFileWatcher(_path, RealStore());
 
         watcher.Poll(); // first sight — same stamp as initial, no apply yet
         await Assert.That(watcher.LastApplied.HasNoValue).IsTrue();
 
-        await File.WriteAllTextAsync(_path, """{ "name": "v2", "accent": "#222222" }""");
+        await WritePinnedAsync("""{ "name": "v2", "accent": "#222222" }""", 2);
         watcher.Poll();
 
         await Assert.That(watcher.LastApplied.HasValue).IsTrue();
@@ -71,11 +85,11 @@ public class ThemeFileWatcherTests
     [Test]
     public async Task Poll_CallbackFiresOnSuccess()
     {
-        await File.WriteAllTextAsync(_path, """{ "name": "cb", "accent": "#333333" }""");
+        await WritePinnedAsync("""{ "name": "cb", "accent": "#333333" }""", 1);
         var applied = new List<string>();
         using var watcher = new ThemeFileWatcher(_path, RealStore(), onApplied: t => applied.Add(t.Name));
 
-        await File.WriteAllTextAsync(_path, """{ "name": "cb2", "accent": "#444444" }""");
+        await WritePinnedAsync("""{ "name": "cb2", "accent": "#444444" }""", 2);
         watcher.Poll();
 
         await Assert.That(applied).IsEquivalentTo(["cb2"]);
@@ -84,11 +98,11 @@ public class ThemeFileWatcherTests
     [Test]
     public async Task Poll_BrokenJson_KeepsLastTheme_ReportsError()
     {
-        await File.WriteAllTextAsync(_path, """{ "name": "good", "accent": "#555555" }""");
+        await WritePinnedAsync("""{ "name": "good", "accent": "#555555" }""", 1);
         string? error = null;
         using var watcher = new ThemeFileWatcher(_path, RealStore(), onError: e => error = e);
 
-        await File.WriteAllTextAsync(_path, """{ "name": "good", "accent": "#666666" }""");
+        await WritePinnedAsync("""{ "name": "good", "accent": "#666666" }""", 2);
         watcher.Poll();
         // This file deliberately asserts only the watcher's OWN record and not
         // the process-global palette, and that division is on purpose: the
@@ -98,7 +112,7 @@ public class ThemeFileWatcherTests
         // it here would assert the same static N more times and buy no coverage.
         await Assert.That(watcher.LastApplied.Value.Name).IsEqualTo("good");
 
-        await File.WriteAllTextAsync(_path, "totally not json");
+        await WritePinnedAsync("totally not json", 3);
         watcher.Poll();
 
         await Assert.That(watcher.LastApplied.Value.Name).IsEqualTo("good"); // unchanged
