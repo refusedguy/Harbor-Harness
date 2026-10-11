@@ -295,6 +295,12 @@ public sealed class AnsiWriter
     /// <summary>Writes a text run at the pen position, advancing by measured widths.</summary>
     public void WriteText(ReadOnlySpan<char> text)
     {
+        // R1 steal (epic #1155, ratatui VS16 backend rule): terminals disagree
+        // on the advance of VS16 presentation sequences (1 vs 2 columns), so
+        // after emitting one the tracked pen is unknowable — mark it unknown
+        // so the next MoveTo is always emitted instead of inheriting a drifted
+        // column. Certain-width runs keep the tracked pen exactly as before.
+        bool uncertain = UnicodeWidth.HasUncertainWidth(text);
         var slice = text;
         while (!slice.IsEmpty)
         {
@@ -308,6 +314,12 @@ public sealed class AnsiWriter
                 PutRuneWidth(Rune.ReplacementChar, 1);
                 slice = slice[1..];
             }
+        }
+
+        if (uncertain)
+        {
+            _posX = -1;
+            _posY = -1;
         }
     }
 
