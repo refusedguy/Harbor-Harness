@@ -173,6 +173,15 @@ public static class WorkspaceContextSource
     ///     Load skills from explicit skills roots (e.g. CLI <c>skill list</c>
     ///     with injected roots). Project root wins on name collisions.
     /// </summary>
+    /// <remarks>
+    ///     #1240: the returned array is sorted by name (ordinal) — a frozen
+    ///     snapshot the per-turn consumer (<c>SystemPromptBuilder</c>) iterates
+    ///     as-is instead of paying an <c>OrderBy</c> per turn. Discovery walks
+    ///     two roots (project, then global) and two shapes per root (flat, then
+    ///     directory), so per-root ordering alone cannot yield a globally
+    ///     sorted list; the sort here is what makes it total. A front-matter
+    ///     <c>name:</c> can also reorder within one root for the same reason.
+    /// </remarks>
     public static IReadOnlyList<SkillDescriptor> LoadSkillsFromRoots(string? projectSkillsDir, string? globalSkillsDir)
     {
         var skills = new List<SkillDescriptor>();
@@ -181,8 +190,12 @@ public static class WorkspaceContextSource
         // Project first so it shadows same-named global skills.
         CollectSkills(projectSkillsDir, skills, seenNames);
         CollectSkills(globalSkillsDir, skills, seenNames);
-        return skills;
+        skills.Sort(CompareSkillsByName);
+        return skills.ToArray();
     }
+
+    private static int CompareSkillsByName(SkillDescriptor left, SkillDescriptor right) =>
+        string.CompareOrdinal(left.Name, right.Name);
 
     private static void CollectSkills(string? directory, List<SkillDescriptor> skills, HashSet<string> seenNames)
     {
