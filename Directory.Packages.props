@@ -215,5 +215,13 @@
     <PackageVersion Include="Serilog.Sinks.File" Version="7.0.0" />
     <PackageVersion Include="Serilog.Sinks.Console" Version="6.0.0" />
     <PackageVersion Include="Serilog.Sinks.Async" Version="2.1.0" />
+    <!-- ── Diff ──────────────────────────────────────────────────────────── -->
+    <!--
+      DiffPlex — line + word diff engine, pilot for #1236 (strictly outside
+      the CellForge engine: consumed only by Harbor.Ui.Framework.State's
+      DiffPlexPilot and the desktop/patch preview call sites it serves).
+      1.7.2 per docs/FEATURE_RESEARCH.md + docs/DESKTOP_APP_PLAN.md.
+    -->
+    <PackageVersion Include="DiffPlex" Version="1.7.2" />
   </ItemGroup>
 </Project>

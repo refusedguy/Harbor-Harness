@@ -1,5 +1,6 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using Harbor.Ui.Framework.Rendering.Widgets;
+using Harbor.Ui.Framework.State;
 
 namespace Harbor.Desktop.Abstractions.ViewModels;
 
@@ -67,8 +68,21 @@ public sealed partial class DiffViewModel : ObservableObject
     ///     anywhere above rewrote the whole remainder of the file in the output
     ///     (#679). This view-model is display state: it holds the two texts and
     ///     hands the answer to the view.
+    ///     The #1236 DiffPlex pilot may supply the same unified text behind the
+    ///     existing shape when its flag is set; the default path is untouched.
     /// </remarks>
-    public void ComputeDiff() => DiffText = LineDiff.ToUnifiedText(LineDiff.Compute(Before, After));
+    public void ComputeDiff()
+    {
+        if (DiffPlexPilot.IsEnabled
+            && DiffPlexPilot.TryComputeUnified(Before, After, out string? pilot)
+            && pilot is not null)
+        {
+            DiffText = pilot;
+            return;
+        }
+
+        DiffText = LineDiff.ToUnifiedText(LineDiff.Compute(Before, After));
+    }
 
     /// <summary>
     ///     Copy the computed diff to the clipboard. The actual clipboard write
