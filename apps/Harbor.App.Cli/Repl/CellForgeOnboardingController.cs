@@ -47,10 +47,13 @@ internal sealed class CellForgeOnboardingController
                 }
 
                 var existing = await host.AuthStore.GetApiKeyAsync(preset.Id, ct).ConfigureAwait(false);
-                if (existing.IsSuccess)
+                if (existing.IsFailure)
                 {
-                    configured.Add(preset.Id);
+                    // No key stored yet — the auth step stays, nothing to report.
+                    continue;
                 }
+
+                configured.Add(preset.Id);
             }
 
             _flow = new OnboardingFlow(catalogue, configured);

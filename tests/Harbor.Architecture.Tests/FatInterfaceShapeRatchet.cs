@@ -237,6 +237,8 @@ public sealed class FatInterfaceShapeRatchet
     /// </summary>
     private static readonly ReplHostConsumerBaseline[] ReplHostConsumers =
     [
+        new("apps/Harbor.App.Cli/Repl/CellForgeOnboardingController.cs",
+            ["AuthStore", "Bridge", "ConfigStore", "Screen"]),
         new("apps/Harbor.App.Cli/Repl/Commands/AgentCommand.cs",
             ["Agent", "AgentRegistry", "Bridge", "ConfigStore", "Palette", "Screen", "Selection", "SessionModel", "Store", "WakeUp"]),
         new("apps/Harbor.App.Cli/Repl/Commands/AttachCommand.cs",
