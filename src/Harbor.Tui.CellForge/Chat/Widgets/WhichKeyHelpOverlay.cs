@@ -12,6 +12,16 @@ namespace Harbor.Tui.CellForge.Widgets;
 public sealed record WhichKeyContext(string? FocusedPanelId, string? ActiveOverlayId);
 
 /// <summary>
+/// One leader-chord row for the which-key panel (opencode steal O6, #1175):
+/// the group it belongs to (session / panel / diff …), the single chord
+/// character after the leader, and what it does. The host pushes its live
+/// <see cref="LeaderKeyRouter"/> bindings here via
+/// <see cref="WhichKeyHelpOverlay.SetLeaderBindings"/> — the overlay never
+/// reads the router itself, so it stays a pure render surface.
+/// </summary>
+public sealed record LeaderEntry(string Group, char Chord, string Description);
+
+/// <summary>
 /// Context-aware which-key help overlay (PRIM11, crush ctrl+g / codex
 /// ?-overlay pattern): a centered modal for the PRIM2a z-stack rendering the
 /// shared <see cref="HelpKeymap"/> rows read-only plus a context section
@@ -39,6 +49,14 @@ public sealed class WhichKeyHelpOverlay
     private Maybe<WhichKeyContext> _context;
 
     private bool _shown;
+
+    // ── leader groups + pending preview (opencode steal O6, #1175) ──────
+    // The host mirrors its LeaderKeyRouter bindings here (grouped rows) and
+    // the in-flight chord while the router is armed (pending preview). Both
+    // default to empty/absent so hidden paint and the no-context goldens stay
+    // byte-identical until the host supplies them.
+    private readonly List<LeaderEntry> _leader = new();
+    private char? _pendingChord;
 
     /// <summary>
     ///     The single authority on "did the host show this overlay?". The layer's
@@ -100,6 +118,42 @@ public sealed class WhichKeyHelpOverlay
     }
 
     public void SetContext(WhichKeyContext? context) => _context = Maybe.From(context);
+
+    /// <summary>
+    /// Mirrors the host's live leader bindings as grouped which-key rows.
+    /// Null clears. The overlay copies the rows — later router rebinds need
+    /// another call, which keeps the render surface pure (no router read).
+    /// </summary>
+    public void SetLeaderBindings(IEnumerable<LeaderEntry>? entries)
+    {
+        _leader.Clear();
+        if (entries is null)
+        {
+            return;
+        }
+
+        foreach (var entry in entries)
+        {
+            if (entry is not null)
+            {
+                _leader.Add(entry);
+            }
+        }
+    }
+
+    /// <summary>Grouped leader rows mirrored from the host (empty until <see cref="SetLeaderBindings"/>).</summary>
+    public IReadOnlyList<LeaderEntry> LeaderBindings => _leader;
+
+    /// <summary>
+    /// Stages the in-flight chord for the pending preview (the router is
+    /// armed and waiting for this chord). Null clears — no preview.
+    /// </summary>
+    public void SetPending(char? chord) => _pendingChord = chord is null
+        ? null
+        : char.ToLowerInvariant(chord.Value);
+
+    /// <summary>In-flight chord awaiting resolution (null when the router is not armed).</summary>
+    public char? PendingChord => _pendingChord;
 
     /// <summary>
     /// Overlay-local dismissal (Esc / '?'), mirroring
@@ -240,6 +294,29 @@ public sealed class WhichKeyHelpOverlay
             }
         }
 
+        if (_leader.Count > 0)
+        {
+            lines.Add(string.Empty);
+            lines.Add("Leader");
+            string? currentGroup = null;
+            foreach (LeaderEntry entry in _leader)
+            {
+                if (!string.Equals(currentGroup, entry.Group, StringComparison.Ordinal))
+                {
+                    currentGroup = entry.Group;
+                    lines.Add($"  {currentGroup}");
+                }
+
+                lines.Add($"    ctrl+x {entry.Chord}  {entry.Description}");
+            }
+        }
+
+        if (_pendingChord.HasValue)
+        {
+            lines.Add(string.Empty);
+            lines.Add($"  pending ctrl+x {_pendingChord.Value} …");
+        }
+
         lines.Add(string.Empty);
         lines.Add("Press ? to close.");
 
@@ -264,7 +341,7 @@ public sealed class WhichKeyHelpOverlay
             return new CellStyle(ChatPalette.Accent, attrs: StyleAttr.Bold);
         }
 
-        if (line is "Hotkeys" or "Context")
+        if (line is "Hotkeys" or "Context" or "Leader")
         {
             return new CellStyle(ChatPalette.Text, attrs: StyleAttr.Bold);
         }
