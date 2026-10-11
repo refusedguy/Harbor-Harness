@@ -198,6 +198,44 @@ public abstract class CellForgePtyScenarioBase
     protected Task<bool> WaitForRawTextAsync(string needle, TimeSpan? timeout = null) =>
         Session.WaitForTextAsync(needle, timeout);
 
+    /// <summary>
+    /// PTY-side idle wait (#1183 Pilot steal — the out-of-process analogue of
+    /// the in-process <c>WaitForIdle</c>): resolves when the emulated grid
+    /// stops changing for <paramref name="stableFor" /> instead of sleeping a
+    /// fixed delay. A fixed <c>Task.Delay(n)</c> always pays <c>n</c> and still
+    /// flakes on slow CI; this pays only what the child needed and never
+    /// proceeds mid-repaint. Never throws: on timeout it returns the current
+    /// grid so the caller's <c>WaitForScreenAsync</c> still guards.
+    /// <para />
+    /// Keep fixed delays where the timing itself is the subject (Ctrl+C
+    /// gesture window, PTY chunk gaps) — quiescence is for "let the UI
+    /// settle" pauses only.
+    /// </summary>
+    protected async Task<string[]> WaitForQuiescenceAsync(TimeSpan? stableFor = null, TimeSpan? timeout = null)
+    {
+        TimeSpan stable = stableFor ?? TimeSpan.FromMilliseconds(300);
+        TimeSpan deadline = timeout ?? TimeSpan.FromSeconds(5);
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        string last = ScreenText;
+        TimeSpan lastChange = TimeSpan.Zero;
+        while (sw.Elapsed < deadline)
+        {
+            await Task.Delay(100).ConfigureAwait(false);
+            string current = ScreenText;
+            if (!string.Equals(current, last, StringComparison.Ordinal))
+            {
+                last = current;
+                lastChange = sw.Elapsed;
+            }
+            else if (sw.Elapsed - lastChange >= stable)
+            {
+                break;
+            }
+        }
+
+        return NormalizeLines(last);
+    }
+
     /// <summary>Type text + Enter into the composer (raw byte '\r' = Enter in raw mode).</summary>
     protected void SubmitLine(string text) => Session.WriteLine(text);
 

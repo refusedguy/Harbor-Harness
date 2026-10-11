@@ -312,6 +312,42 @@ public sealed partial class CellForgeTuiRenderer : BaseTuiRenderer
     /// <summary>True while a store notification is parked awaiting the frame tick.</summary>
     internal bool HasPendingProjection => Volatile.Read(ref _projectionPending) != 0;
 
+    /// <summary>True while a store notification is parked awaiting the frame tick.</summary>
+    public bool HasPendingWork => HasPendingProjection;
+
+    /// <summary>
+    /// Headless-test idle seam (#1183, textual Pilot steal): drain parked
+    /// projections until none remains (or the timeout elapses). Textual's
+    /// pilot waits for the message pump to drain instead of sleeping fixed
+    /// delays; the parked projection is the CellForge equivalent of "pump
+    /// work outstanding" (#466). Polls on a short quantum and exits early the
+    /// moment the pump drains — a fixed <c>Task.Delay(n)</c> always pays
+    /// <c>n</c>, this pays only what the pump needed.
+    /// <para />
+    /// NOTE: this member lives in the main file (not a new partial) because
+    /// <c>RendererAdapterGenerator</c> emits one source per class-declaration
+    /// syntax node — a second <c>partial CellForgeTuiRenderer</c> file
+    /// collides on the adapter hintName (CS8785).
+    /// </para>
+    /// </summary>
+    /// <param name="timeout">Maximum wait. Null means 5 seconds.</param>
+    /// <param name="ct">Cancellation token.</param>
+    /// <returns>True when idle, false on timeout.</returns>
+    public async Task<bool> WaitForIdleAsync(TimeSpan? timeout = null, CancellationToken ct = default)
+    {
+        TimeSpan deadline = timeout ?? TimeSpan.FromSeconds(5);
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        while (true)
+        {
+            _ = PumpProjection();
+            if (!HasPendingProjection)
+                return true;
+            if (sw.Elapsed >= deadline)
+                return false;
+            await Task.Delay(5, ct).ConfigureAwait(false);
+        }
+    }
+
     public override Task RenderAsync(AgentEvent @event, CancellationToken ct = default)
     {
         EnsureSubscribedToActiveStore();
