@@ -295,7 +295,7 @@ public class ThinkingBridgeTests
     {
         var bus = new FakeEventBus();
         var backend = new RecordingBackend();
-        var writer = new AnsiWriter(backend, sync: false);
+        var writer = new AnsiWriter(backend);
         var session = new InlineSession(writer);
         var composer = new ComposerController();
         var bridge = new InlineAgentStreamBridge(bus, writer, session, composer);
