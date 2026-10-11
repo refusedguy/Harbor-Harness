@@ -9,6 +9,15 @@ namespace Harbor.Application.Permissions;
 ///     Single lock orders decisions vs cancellation per gate; every blocking
 ///     or reentrant action (CTS cancel, TCS completion) happens outside it.
 /// </summary>
+/// <remarks>
+///     <b>Gate scope (#1136 slice 2).</b> <c>_gate</c> is never held across an
+///     await: <see cref="WaitForDecisionAsync"/> fetches the slot under the
+///     lock and awaits the TCS outside it, so a decision or cancel landing
+///     while a waiter is parked never blocks behind the waiter. The cross-
+///     thread decide below would time out instead of resolving if this ever
+///     regressed: pinned by
+///     <c>ApprovalCoordinatorTests.DecideFromAnotherThread_WhileWaiterParked_CompletesPromptly</c>.
+/// </remarks>
 public sealed class ApprovalCoordinator(ILogger<ApprovalCoordinator> logger) : IApprovalCoordinator
 {
     private readonly object _gate = new();
