@@ -46,7 +46,7 @@
 //     DialogOverlay.cs:718                    == 0 && !IsControl   (legacy ConsoleKeyInfo)
 //     QuestionFormView.cs:571                 != 0            (custom row only)
 //     FilePickerView.cs:153                   is None or Shift
-//     CommandPaletteView.cs:254               is None or Shift
+//     CommandPaletteView.cs:255               is None or Shift
 //     CellForgeJumpPalettePanel.cs:216        is None or Shift && !IsControl
 // check-doc-cites: record-drift CellForgeJumpPalettePanel.cs:216 now="ReseedLocked(ctx);" [#947: written over `}`; repair deferred to the owner's symbol-rename decision] -->
 //     ReplInputLoop.cs:453                    is None or Shift
