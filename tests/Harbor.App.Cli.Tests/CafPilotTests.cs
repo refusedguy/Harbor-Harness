@@ -8,6 +8,15 @@ namespace Harbor.App.Cli.Tests;
 ///     Bare invocations must stay byte-identical to <see cref="HelpVerbs" />;
 ///     <c>--help</c> comes from the framework.
 /// </summary>
+/// <remarks>
+///     The bare <see cref="NotInParallelAttribute" /> is load-bearing:
+///     TUnit runs classes in parallel and these tests swap the process-wide
+///     <see cref="Console.Out" /> (as does
+///     <c>CommandDispatchTests.Program_MainDispatch_UsesICommandArray</c>);
+///     without the constraint a concurrent swap steals our output and the
+///     capture reads back empty (e2e shard: 2/6 red with exit 0).
+/// </remarks>
+[NotInParallel]
 public class CafPilotTests
 {
     [Test]
