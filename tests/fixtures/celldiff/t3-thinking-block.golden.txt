@@ -1,0 +1,44 @@
+# golden: t3-thinking-block
+## art (40x1)
+Considering edge cases in the diff path.
+## cells
+0,0: 'C' d/d/DI w1
+1,0: 'o' d/d/DI w1
+2,0: 'n' d/d/DI w1
+3,0: 's' d/d/DI w1
+4,0: 'i' d/d/DI w1
+5,0: 'd' d/d/DI w1
+6,0: 'e' d/d/DI w1
+7,0: 'r' d/d/DI w1
+8,0: 'i' d/d/DI w1
+9,0: 'n' d/d/DI w1
+10,0: 'g' d/d/DI w1
+11,0: ' ' d/d/DI w1
+12,0: 'e' d/d/DI w1
+13,0: 'd' d/d/DI w1
+14,0: 'g' d/d/DI w1
+15,0: 'e' d/d/DI w1
+16,0: ' ' d/d/DI w1
+17,0: 'c' d/d/DI w1
+18,0: 'a' d/d/DI w1
+19,0: 's' d/d/DI w1
+20,0: 'e' d/d/DI w1
+21,0: 's' d/d/DI w1
+22,0: ' ' d/d/DI w1
+23,0: 'i' d/d/DI w1
+24,0: 'n' d/d/DI w1
+25,0: ' ' d/d/DI w1
+26,0: 't' d/d/DI w1
+27,0: 'h' d/d/DI w1
+28,0: 'e' d/d/DI w1
+29,0: ' ' d/d/DI w1
+30,0: 'd' d/d/DI w1
+31,0: 'i' d/d/DI w1
+32,0: 'f' d/d/DI w1
+33,0: 'f' d/d/DI w1
+34,0: ' ' d/d/DI w1
+35,0: 'p' d/d/DI w1
+36,0: 'a' d/d/DI w1
+37,0: 't' d/d/DI w1
+38,0: 'h' d/d/DI w1
+39,0: '.' d/d/DI w1

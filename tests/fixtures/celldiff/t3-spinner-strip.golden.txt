@@ -1,0 +1,12 @@
+# golden: t3-spinner-strip
+## art (16x1)
+⠙ working       
+## cells
+0,0: '⠙' d/d/- w1
+2,0: 'w' d/d/- w1
+3,0: 'o' d/d/- w1
+4,0: 'r' d/d/- w1
+5,0: 'k' d/d/- w1
+6,0: 'i' d/d/- w1
+7,0: 'n' d/d/- w1
+8,0: 'g' d/d/- w1
