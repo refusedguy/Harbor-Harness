@@ -5,7 +5,7 @@
 // THE DEFECT THIS GUARDS
 // ----------------------
 // ApprovalCoordinator holds each gate in a `GateSlot` whose `Tcs` is built with
-// RunContinuationsAsynchronously (ApprovalCoordinator.cs:26). Deciding a gate
+// RunContinuationsAsynchronously (ApprovalCoordinator.cs:35). Deciding a gate
 // calls `TrySetResult` OUTSIDE the lock, which queues the waiter's continuation
 // on the thread pool instead of running it inline. When that continuation runs,
 // WaitForDecisionAsync calls `ForgetGate` (:213 / :218), which REMOVES the slot
