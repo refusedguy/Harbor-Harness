@@ -161,8 +161,17 @@ public sealed class SystemPromptBuilder : ISystemPromptBuilder
         else
         {
             builder.AppendLine("## Available Tools");
-            foreach (var tool in context.Tools.OrderBy(t => t.Name.Value, StringComparer.Ordinal))
+            // #1240: the per-turn lists arrive pre-sorted (FrozenToolView sorts
+            // at freeze time; WorkspaceContextSource sorts at load time), so the
+            // warm path iterates as-is with zero allocation. The IsSorted probe
+            // is O(n) with no allocation; only an unsorted caller pays for one
+            // Array.Sort over a copy, keeping the render deterministic.
+            IReadOnlyList<ToolDescriptor> tools = IsSortedByToolName(context.Tools)
+                ? context.Tools
+                : SortedToolsCopy(context.Tools);
+            for (int i = 0; i < tools.Count; i++)
             {
+                ToolDescriptor tool = tools[i];
                 builder.Append("- `").Append(tool.Name.Value).Append("`: ")
                     .AppendLine(tool.PromptSnippet ?? tool.Description);
 
@@ -206,8 +215,13 @@ public sealed class SystemPromptBuilder : ISystemPromptBuilder
             builder.AppendLine("The following skills provide specialized instructions:");
             builder.AppendLine();
             builder.AppendLine("<available_skills>");
-            foreach (var skill in context.Skills.OrderBy(s => s.Name, StringComparer.Ordinal))
+            // #1240: same pre-sorted contract as the tools section above.
+            IReadOnlyList<SkillDescriptor> skills = IsSortedBySkillName(context.Skills)
+                ? context.Skills
+                : SortedSkillsCopy(context.Skills);
+            for (int i = 0; i < skills.Count; i++)
             {
+                SkillDescriptor skill = skills[i];
                 builder.Append("  <skill>").AppendLine();
                 builder.Append("    <name>").Append(skill.Name).AppendLine("</name>");
                 builder.Append("    <description>").Append(skill.Description).AppendLine("</description>");
@@ -355,6 +369,73 @@ public sealed class SystemPromptBuilder : ISystemPromptBuilder
         builder.Append('`').Append(toolName).Append("` ").Append(text);
         first = false;
     }
+
+    /// <summary>
+    ///     O(n) pre-sorted probe for the tools section (#1240). The frozen
+    ///     registry sorts at freeze time, so the per-turn warm path lands here
+    ///     sorted and iterates with zero allocation.
+    /// </summary>
+    private static bool IsSortedByToolName(IReadOnlyList<ToolDescriptor> tools)
+    {
+        for (int i = 1; i < tools.Count; i++)
+        {
+            if (string.CompareOrdinal(tools[i - 1].Name.Value, tools[i].Name.Value) > 0)
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /// <summary>
+    ///     O(n) pre-sorted probe for the skills section (#1240).
+    ///     <see cref="WorkspaceContextSource" /> sorts at load time.
+    /// </summary>
+    private static bool IsSortedBySkillName(IReadOnlyList<SkillDescriptor> skills)
+    {
+        for (int i = 1; i < skills.Count; i++)
+        {
+            if (string.CompareOrdinal(skills[i - 1].Name, skills[i].Name) > 0)
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /// <summary>Unsorted-input fallback: one copy + one sort, no LINQ.</summary>
+    private static ToolDescriptor[] SortedToolsCopy(IReadOnlyList<ToolDescriptor> tools)
+    {
+        var copy = new ToolDescriptor[tools.Count];
+        for (int i = 0; i < tools.Count; i++)
+        {
+            copy[i] = tools[i];
+        }
+
+        Array.Sort(copy, CompareToolsByName);
+        return copy;
+    }
+
+    /// <summary>Unsorted-input fallback: one copy + one sort, no LINQ.</summary>
+    private static SkillDescriptor[] SortedSkillsCopy(IReadOnlyList<SkillDescriptor> skills)
+    {
+        var copy = new SkillDescriptor[skills.Count];
+        for (int i = 0; i < skills.Count; i++)
+        {
+            copy[i] = skills[i];
+        }
+
+        Array.Sort(copy, CompareSkillsByName);
+        return copy;
+    }
+
+    private static int CompareToolsByName(ToolDescriptor left, ToolDescriptor right) =>
+        string.CompareOrdinal(left.Name.Value, right.Name.Value);
+
+    private static int CompareSkillsByName(SkillDescriptor left, SkillDescriptor right) =>
+        string.CompareOrdinal(left.Name, right.Name);
 
     /// <summary>
     ///     Whether <paramref name="toolName" /> is among the turn's resolved

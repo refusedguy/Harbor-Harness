@@ -165,6 +165,29 @@ public class WorkspaceContextSourceTests : IDisposable
         await Assert.That(skills[0].FilePath.Replace('\\', '/')).Contains("deploy.md");
     }
 
+    /// <summary>
+    ///     #1240: skill discovery returns a pre-sorted (ordinal by name) frozen
+    ///     snapshot — the per-turn consumer iterates it as-is. Files land in
+    ///     enumeration order and front-matter names can reorder within a root,
+    ///     so the sort must be total, not per-root.
+    /// </summary>
+    [Test]
+    public async Task LoadSkills_ReturnsPreSortedByNameOrdinal()
+    {
+        string projectSkills = Path.Combine(_dir, ".harbor", "skills");
+        Directory.CreateDirectory(projectSkills);
+        await File.WriteAllTextAsync(Path.Combine(projectSkills, "zeta.md"), "# Zeta\n");
+        await File.WriteAllTextAsync(Path.Combine(projectSkills, "alpha.md"), "# Alpha\n");
+        await File.WriteAllTextAsync(Path.Combine(projectSkills, "delta.md"), "# Delta\n");
+
+        var skills = WorkspaceContextSource.LoadSkills(_dir, globalSkillsDir: null);
+
+        await Assert.That(skills.Count).IsEqualTo(3);
+        await Assert.That(skills[0].Name).IsEqualTo("alpha");
+        await Assert.That(skills[1].Name).IsEqualTo("delta");
+        await Assert.That(skills[2].Name).IsEqualTo("zeta");
+    }
+
     // ---- ROP-D Z3: MCP instruction aggregation formatting ------------------
 
     [Test]

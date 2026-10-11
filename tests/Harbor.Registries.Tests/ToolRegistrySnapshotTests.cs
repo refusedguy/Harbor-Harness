@@ -253,4 +253,32 @@ public class ToolRegistrySnapshotTests
         await AssertSameNames(first, "alpha_tool", "beta_tool");
         await AssertSameNames(filteredFirst, "alpha_tool", "beta_tool");
     }
+
+    /// <summary>
+    ///     #1240: frozen arrays are pre-sorted by name (ordinal) — the per-turn
+    ///     consumer iterates them as-is instead of paying an OrderBy per turn.
+    ///     Registration order must not leak into the snapshot order.
+    /// </summary>
+    [Test]
+    public async Task FrozenArrays_ArePreSortedByNameOrdinal()
+    {
+        var registry = CreateFrozenRegistry("zeta_tool", "beta_tool", "alpha_tool", "delta_tool");
+        var permission = new PermissionRuleset(new[]
+        {
+            new PermissionRule("*", "*", PermissionAction.Allow)
+        });
+
+        await AssertNamesInOrder(registry.GetAllTools(), "alpha_tool", "beta_tool", "delta_tool", "zeta_tool");
+        await AssertNamesInOrder(registry.ResolveTools("code"), "alpha_tool", "beta_tool", "delta_tool", "zeta_tool");
+        await AssertNamesInOrder(registry.ResolveTools("code", permission), "alpha_tool", "beta_tool", "delta_tool", "zeta_tool");
+    }
+
+    private static async Task AssertNamesInOrder(IReadOnlyList<ToolDescriptor> actual, params string[] expected)
+    {
+        await Assert.That(actual.Count).IsEqualTo(expected.Length);
+        for (int i = 0; i < expected.Length; i++)
+        {
+            await Assert.That(actual[i].Name.Value).IsEqualTo(expected[i]);
+        }
+    }
 }
