@@ -243,7 +243,7 @@ Grouped top-to-bottom (see the file for the full listing):
 | Alternative UI stacks | 11 | `Terminal.Gui`, `Termina`, `RazorConsole.Core`, `Avalonia`, `Avalonia.Desktop`, `Avalonia.Themes.Fluent`, `Avalonia.Fonts.Inter`, `Avalonia.Diagnostics`, `Avalonia.AvaloniaEdit`, `Markdig`, `AvalonEdit`, `Dirkster.AvalonDock`, `LiveChartsCore.SkiaSharpView.WPF` |
 | Scripting engines | 1 | `Jint` |
 | Roslyn analyzers | 5 | `Roslynator.Analyzers`, `SonarAnalyzer.CSharp`, `AsyncFixer`, `ReflectionAnalyzers`, `Meziantou.Analyzer` |
-| Performance / collections / serialization | 8 | `ZLinq`, `ZLinq.DropInGenerator`, `DotNext`, `DotNext.Threading`, `NonBlocking`, `KZDev.PerfUtils`, `MemoryPack`, `CSharpFunctionalExtensions` |
+| Performance / collections / serialization | 5 | `ZLinq`, `ZLinq.DropInGenerator`, `NonBlocking`, `MemoryPack`, `CSharpFunctionalExtensions` |
 | SQLite native driver | 1 | `SQLitePCLRaw.lib.e_sqlite3` |
 | Source generators | 1 | `Termina.Generators` |
 | **Total (at migration time; now 79)** | **41** | |
