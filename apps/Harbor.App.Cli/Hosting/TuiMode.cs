@@ -276,7 +276,7 @@ internal static class TuiMode
     ///     never fires there.
     /// </summary>
     public static bool IsCellForgeBlockedOnThisOs() =>
-        IsCellForgeBlocked(RuntimeInformation.IsOSPlatform(OSPlatform.Windows));
+        IsCellForgeBlocked(OperatingSystem.IsWindows());
 
     /// <summary>
     ///     The first-run gate (issue #1248, slice 2): CellForge serves the run
