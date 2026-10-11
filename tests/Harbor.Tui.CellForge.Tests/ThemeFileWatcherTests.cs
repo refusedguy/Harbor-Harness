@@ -202,12 +202,16 @@ public class ThemeFileWatcherTests
         List<string> applied,
         List<string>? errors = null)
     {
-        store.Stamps["/x.json"] = Stamp2026Next;
         store.Seen = ThemeJson.Parse(VarsThemeJson, HarborTheme.HarborDark);
         var watcher = new ThemeFileWatcher(
             "/x.json", store,
             onApplied: t => applied.Add(t.Name),
             onError: e => errors?.Add(e));
+        // Publish the new stamp AFTER construction: the ctor pins InitialStamp
+        // to the current value, so setting it beforehand makes Poll() read the
+        // change as "unchanged" and apply nothing (LastApplied stays None and
+        // every TryUpdateVariables test fails closed).
+        store.Stamps["/x.json"] = Stamp2026Next;
         watcher.Poll();
         return watcher;
     }
