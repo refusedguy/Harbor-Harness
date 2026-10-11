@@ -29,7 +29,7 @@
 //      `MinimumKeptMessages` at :168.
 //   3. MaterializeCompactedView IS IDEMPOTENT.
 //      The compacted view is recomputed from the raw append-only history on every turn
-//      (TurnRunner.cs:122, CompactionBehavior.cs:78). Materializing a view that has
+//      (TurnRunner.cs:122, CompactionBehavior.cs:110). Materializing a view that has
 //      already been materialized must not shrink it again, or the session bleeds one
 //      turn at a time.
 //   4. MaterializeCompactedView FAILS SAFE.
@@ -266,7 +266,7 @@ public class CompactionPolicyInvariantTests
     /// <summary>
     ///     Rule 3: materializing an already-materialized view changes nothing. The view
     ///     is rebuilt from the raw append-only history on every single turn
-    ///     (<c>TurnRunner.cs:122</c>, <c>CompactionBehavior.cs:78</c>), so a second pass
+    ///     (<c>TurnRunner.cs:122</c>, <c>CompactionBehavior.cs:110</c>), so a second pass
     ///     over an already-folded view is a guaranteed code path, not a hypothetical.
     /// </summary>
     [Test]
