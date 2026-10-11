@@ -133,6 +133,10 @@ public sealed class PilotPortedPtyScenariosTests
             "tc1",
             ToolResult.Success("Edited pty-edit-probe-1057.txt\nDiff (context):\n- oldmarker-line-1057\n+ newmarker-line-1057"),
             IsError: false));
+        // The follow-up text streams as deltas (MessageEnd commits the
+        // streamed buffer, not the message content — same as the live path).
+        var followUp = TestMessages.Assistant(string.Empty);
+        await pilot.PublishAsync(new MessageUpdateEvent(new TextDeltaEvent("m2", "probe-edit-done-1057"), followUp));
         await pilot.PublishAsync(new MessageEndEvent(TestMessages.Assistant("probe-edit-done-1057")));
         await pilot.PublishAsync(new AgentEndEvent(Array.Empty<AgentMessage>()));
 
