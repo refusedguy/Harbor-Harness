@@ -202,6 +202,80 @@ public class CellForgeReplSmokeTests
             "the palette's own hint footer, painted only while a frame is open");
     }
 
+    /// <summary>
+    ///     PX2 slice 2 (issue #1248): a first run (<c>Onboarded == false</c>)
+    ///     enters CellForge with the setup overlay up — no legacy diversion,
+    ///     no key press needed. Empty stdin closes input at once; the loop
+    ///     then exits idle, and the flow is still active at exit, which is
+    ///     the assertion: the overlay opened by itself.
+    /// </summary>
+    [Test]
+    public async Task FirstRun_OpensSetupOverlayWithoutInput()
+    {
+        var backend = new FrameCaptureBackend();
+        var writer = new AnsiWriter(backend, syncUpdates: true);
+        var session = new ScreenSession(writer, Cols, Rows, sizeSource: () => (Cols, Rows));
+        var composer = new ComposerController();
+        var status = new StatusViewModel { Model = "mock/mock-model" };
+        var screen = ChatScreen.Build(composer, status);
+        screen.Timeline.Timeline.DisableEntranceFx();
+
+        var bus = new InMemoryEventBus();
+        var agentDef = new AgentDefinition(
+            AgentName.Create("code"), "Code", "smoke agent",
+            "mock-model", "mock", PermissionRuleset.Default);
+        var sessionModel = new Session(
+            "ce4-firstrun", "proj", Directory.GetCurrentDirectory(), "first-run smoke",
+            "code", "mock-model", "mock",
+            DateTimeOffset.UnixEpoch, DateTimeOffset.UnixEpoch, SessionMetadata.Empty);
+        using var agent = new ScriptedAgent(bus, sessionModel.Id);
+        agent.Initialize(sessionModel, agentDef);
+
+        using var bridge = new ChatScreenBridge(bus, screen.Timeline, status, autoSubscribe: false);
+
+        var stdin = new MemoryStream(Encoding.UTF8.GetBytes(string.Empty));
+        using var input = new TerminalInputSource(stdin, new TerminalInputSourceOptions
+        {
+            SizeProvider = () => (Cols, Rows),
+        });
+
+        var configStore = new StubConfigStore(onboarded: false);
+        var agentRegistry = new FakeAgentRegistry(agentDef);
+        var authStore = new AuthStore(configStore);
+        var providerRegistry = new FakeProviderRegistry(new ScriptedLlmClient());
+        var legacySlash = new LegacySlashRunner(
+            new SlashCommandDispatcher(
+                NullLogger<SlashCommandDispatcher>.Instance,
+                new FakeToolRegistry(),
+                new FakeSessionStore(),
+                new OnboardingWizard(configStore, authStore),
+                new PermissionService(agentRegistry, NullLogger<PermissionService>.Instance)),
+            agentRegistry,
+            configStore,
+            authStore,
+            providerRegistry);
+        var runner = new CellForgeReplRunner(
+            new CellForgeCoreServices(
+                configStore, providerRegistry, agentRegistry, authStore, bus, agent,
+                legacySlash, NullLogger<CellForgeReplRunner>.Instance),
+            new CellForgeOptionalServices(null, null, null, null, null, null, null, null),
+            new CellForgeScreens(
+                session, screen, bridge, input, backend,
+                new ApprovalCoordinator(NullLogger<ApprovalCoordinator>.Instance)),
+            sessionModel,
+            new NullModeController());
+
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(20));
+        int exitCode = await runner.RunAsync(cts.Token);
+
+        await Assert.That(exitCode).IsEqualTo(0)
+            .Because("an idle first run with closed stdin exits cleanly — the overlay must not trap shutdown");
+        await Assert.That(runner.Onboarding.Active).IsTrue()
+            .Because("nobody pressed a key, so an active flow means the lifecycle auto-opened it on first run");
+        await Assert.That(runner.Screen.Dialog.Visible).IsTrue()
+            .Because("the flow mirrors its dialog onto the screen for painting — active but unpainted is a dead overlay");
+    }
+
     // ── Local test infrastructure (CellForge.Tests helpers are internal to that assembly) ──
 
     private static string Art(EngineCells.ScreenBuffer buffer)
@@ -329,8 +403,21 @@ public class CellForgeReplSmokeTests
 
     private sealed class StubConfigStore : IConfigStore
     {
-        public Task<Result<HarborConfig>> LoadAsync(CancellationToken ct = default) =>
-            Task.FromResult(Result.Success(HarborConfig.Default));
+        // Onboarded by default (issue #1248, slice 2): the smoke runs pin
+        // REPL turns, not first-run, and a first run now opens the setup
+        // overlay — which would own the scripted stdin before the composer
+        // ever sees it. The first-run overlay has its own test below, which
+        // is the one caller that passes onboarded: false.
+        private readonly bool _onboarded;
+
+        public StubConfigStore(bool onboarded = true) => _onboarded = onboarded;
+
+        public Task<Result<HarborConfig>> LoadAsync(CancellationToken ct = default)
+        {
+            HarborConfig config = HarborConfig.Default;
+            config.Onboarded = _onboarded;
+            return Task.FromResult(Result.Success(config));
+        }
 
         public Task<Result> SaveAsync(HarborConfig config, CancellationToken ct = default) =>
             Task.FromResult(Result.Success());
