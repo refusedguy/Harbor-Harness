@@ -1,5 +1,7 @@
 using Harbor.Ui.Framework.State;
 using Harbor.Abstractions.Models;
+using Harbor.Tui.CellForge.Widgets;
+using FrameworkStatusMappers = Harbor.Ui.Framework.Converters.StatusMappers;
 
 namespace Harbor.Tui.CellForge.Streaming;
 
@@ -20,6 +22,13 @@ public sealed class StreamBlock
     private long _nowMs;
     private int _scanFrom;
 
+    // O10 #1179: thinking-stream clock (monotonic ms, same basis as
+    // <see cref="Tick"/>). Stamped on the first thinking delta and on
+    // <see cref="Complete"/> — the elapsed time feeds the collapsed
+    // one-line summary + duration header (opencode ReasoningPart steal).
+    private long? _thinkStartMs;
+    private long? _thinkEndMs;
+
     /// <summary>Injects monotonic time for deterministic tests.</summary>
     public StreamBlock(long initialNowMs = 0) => _nowMs = initialNowMs;
 
@@ -30,6 +39,26 @@ public sealed class StreamBlock
 
     /// <summary>Thinking text accumulated so far (not yet revealed).</summary>
     public string ThinkBuffer => _thinkBuffer;
+
+    /// <summary>
+    /// O10 #1179: elapsed thinking time in ms (first thinking delta to
+    /// <see cref="Complete"/>); 0 when no thinking streamed.
+    /// </summary>
+    public long ThinkDurationMs =>
+        _thinkStartMs.HasValue && _thinkEndMs.HasValue
+            ? Math.Max(0, _thinkEndMs.Value - _thinkStartMs.Value)
+            : 0;
+
+    /// <summary>O10 #1179: summary title for the collapsed one-line header.</summary>
+    public string? ThinkTitle => ThinkingSummary.Summarize(_thinkBuffer).Title;
+
+    /// <summary>
+    /// O10 #1179: collapsed one-line summary + duration header (opencode
+    /// ReasoningPart); streaming form before <see cref="Complete"/>, done
+    /// form after.
+    /// </summary>
+    public string ThinkHeaderLine => ThinkingSummary.CollapsedHeader(
+        _thinkBuffer, ThinkDurationText(), IsFinalized);
 
     /// <summary>Char cursor just past everything revealed (the partial-tail start).</summary>
     public int RevealedChars { get; private set; }
@@ -67,12 +96,14 @@ public sealed class StreamBlock
             return;
         }
 
+        _thinkStartMs ??= _nowMs;
         _thinkBuffer += delta;
     }
 
     /// <summary>Flushes everything still pending; no more deltas accepted.</summary>
     public void Complete()
     {
+        _thinkEndMs = _nowMs;
         MaterializePending();
 
         // Everything after the last newline becomes a final unterminated line.
@@ -141,5 +172,20 @@ public sealed class StreamBlock
 
         _synced = StreamingSync.Concat(_synced, _pending);
         _pending = ChunkedBuffer.Empty;
+    }
+
+    /// <summary>
+    /// Duration text for the collapsed header; null when unknown or
+    /// sub-millisecond (DurationToText hides instantaneous spans).
+    /// </summary>
+    private string? ThinkDurationText()
+    {
+        if (ThinkDurationMs <= 0)
+        {
+            return null;
+        }
+
+        string text = FrameworkStatusMappers.DurationToText(TimeSpan.FromMilliseconds(ThinkDurationMs));
+        return text.Length == 0 ? null : text;
     }
 }

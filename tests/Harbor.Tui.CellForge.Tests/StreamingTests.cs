@@ -177,6 +177,44 @@ public class StreamBlockTests
         block.AppendDelta("b");
         await Assert.That(block.SyncedText).IsEqualTo("a");
     }
+
+    [Test]
+    public async Task Thinking_TracksDuration_AndBuildsOneLineHeader()
+    {
+        // O10 #1179: first thinking delta → Complete elapsed becomes the
+        // collapsed header duration (opencode ReasoningPart).
+        var block = new StreamBlock(initialNowMs: 1000);
+        block.Tick(nowMs: 1000);
+        block.AppendThinking("**Inspecting PR workflow**\n\nFirst step\nSecond step");
+        block.Tick(nowMs: 3500);
+        block.Complete();
+
+        await Assert.That(block.ThinkDurationMs).IsEqualTo(2500);
+        await Assert.That(block.ThinkTitle).IsEqualTo("Inspecting PR workflow");
+        await Assert.That(block.ThinkHeaderLine).IsEqualTo("+ Thought: Inspecting PR workflow · 2.5s");
+    }
+
+    [Test]
+    public async Task Thinking_BeforeComplete_UsesStreamingHeader_WithoutDuration()
+    {
+        var block = new StreamBlock(initialNowMs: 0);
+        block.AppendThinking("weighing options here");
+
+        await Assert.That(block.ThinkDurationMs).IsEqualTo(0);
+        await Assert.That(block.ThinkHeaderLine).IsEqualTo("+ Thinking: weighing options here");
+    }
+
+    [Test]
+    public async Task NoThinking_ZeroDuration_NullTitle()
+    {
+        var block = new StreamBlock();
+        block.AppendDelta("answer");
+        block.Complete();
+
+        await Assert.That(block.ThinkDurationMs).IsEqualTo(0);
+        await Assert.That(block.ThinkTitle).IsNull();
+        await Assert.That(block.ThinkBuffer).IsEqualTo(string.Empty);
+    }
 }
 
 public class InlineAgentStreamBridgeTests
@@ -240,6 +278,26 @@ public class InlineAgentStreamBridgeTests
         await bridge.FlushAsync();
 
         await Assert.That(backend.Escaped.Contains("! boom")).IsTrue();
+    }
+
+    [Test]
+    public async Task Thinking_CommitsCollapsedOneLiner_BeforeAnswer()
+    {
+        // O10 #1179: thinking never streams inline — one summary line commits
+        // above the answer (opencode ReasoningPart, collapsed by default).
+        var (bridge, backend, _, _, bus) = Make();
+        await bus.PublishAsync(new MessageStartEvent(null!));
+        await bus.PublishAsync(new MessageUpdateEvent(new ThinkingDeltaEvent("t", "weighing options here"), null!));
+        await bus.PublishAsync(Update(new TextDeltaEvent("t", "done")));
+        await bus.PublishAsync(new MessageEndEvent(null!));
+        await bridge.FlushAsync();
+
+        string escaped = backend.Escaped;
+        await Assert.That(escaped.Contains("+ Thought: weighing options here")).IsTrue();
+        await Assert.That(
+            escaped.IndexOf("+ Thought:", StringComparison.Ordinal)
+            < escaped.IndexOf("done", StringComparison.Ordinal)).IsTrue();
+        bridge.Dispose();
     }
 
     [Test]
