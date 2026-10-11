@@ -89,7 +89,7 @@
 //       IEventBus, ITokenTracker, IAgent, ILogger<>, PluginReloadService,
 //       IProviderHealthCheck)
 //    6  MEMBERS OF ONE AGGREGATE THE ROOT ALREADY BUILDS — `CellForgeScreens`
-//       (ReplRunner.cs:553), which the composition root constructs as a single
+//       (ReplRunner.cs:564), which the composition root constructs as a single
 //       value and then hands over PIECE BY PIECE: ScreenSession, ChatScreen,
 //       ChatScreenBridge, TerminalInputSource, ITerminalBackend,
 //       IApprovalCoordinator. Six of the twenty-four parameters are one

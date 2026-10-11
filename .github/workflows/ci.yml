@@ -706,6 +706,7 @@ jobs:
             'Harbor.Storage.Tests',
             'Harbor.Storage.Jsonl.Tests',
             'Harbor.Tui.Tests',
+            'Harbor.Tui.CellForge.Tests',
             'Harbor.Ipc.Tests'
           )
           $failed = @()
