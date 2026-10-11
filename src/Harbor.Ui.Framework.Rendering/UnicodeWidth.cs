@@ -519,6 +519,28 @@ public static class UnicodeWidth
         return total;
     }
 
+    /// <summary>
+    /// True when terminals disagree on how many columns <paramref name="symbol"/>
+    /// occupies (R1 steal, epic #1155: ratatui <c>has_uncertain_width</c> port).
+    /// The known case is emoji presentation sequences carrying VS16 (U+FE0F):
+    /// width tables report 2, but some terminals draw 1. The diff cannot assume
+    /// either, so uncertain output must clear reserved columns before painting
+    /// and must never let cursor elision inherit the advance (see
+    /// <c>AnsiWriter.WriteText</c>). VS16 itself is BMP, so a char scan is exact.
+    /// </summary>
+    public static bool HasUncertainWidth(ReadOnlySpan<char> symbol)
+    {
+        foreach (char c in symbol)
+        {
+            if (c == '\uFE0F')
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     // ── Per-run width cache (ENG5, issue #276; per-thread since #487) ───
     //
     // Status rows and markdown lines re-measure the same run texts every

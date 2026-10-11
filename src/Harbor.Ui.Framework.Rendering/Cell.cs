@@ -61,6 +61,18 @@ public readonly struct Cell : IEquatable<Cell>
     /// <summary>True when this cell is a printable space with default styling.</summary>
     public bool IsBlankSpace => Width == Narrow && Rune == ' ' && Fg == 0 && Bg == 0 && Flags == 0;
 
+    /// <summary>
+    /// True when this cell's style stays visible on a blank (space) cell: a
+    /// non-default background, or Reverse/Underline/Blink/Strike (R1 steal,
+    /// epic #1155: ratatui <c>VISIBLE_ON_BLANK</c> port — REVERSED, UNDERLINED,
+    /// SLOW/rapid BLINK, CROSSED_OUT; our single Blink covers both blink rates).
+    /// The diff must force-refresh trailing columns of a replaced wide glyph
+    /// carrying such a style — the terminal painted them with it even though
+    /// the buffer holds blanks there.
+    /// </summary>
+    public bool StyleVisibleOnBlank =>
+        Bg != 0 || (Flags & (ushort)(StyleAttr.Reverse | StyleAttr.Underline | StyleAttr.Blink | StyleAttr.Strike)) != 0;
+
     /// <summary>Wide lead whose tail got clobbered — diff must repaint both halves (§1.3).</summary>
     public static Cell BlankAt(byte width) => width switch
     {
