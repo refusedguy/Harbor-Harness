@@ -40,7 +40,7 @@ A modular .NET 10 AI coding harness. Modular = every concern behind an interface
 5. Read [docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md) for high-level design + principles summary.
 6. Read [docs/DEVELOPMENT.md](./docs/DEVELOPMENT.md) for development workflow + **principles checklist** for PRs.
 7. Read [docs/ROADMAP.md](./docs/ROADMAP.md) for current state + planned next steps.
-8. If touching the interactive shell or any renderer — read [docs/SPECTRE_TUI_DEEP_DIVE.md](./docs/SPECTRE_TUI_DEEP_DIVE.md) for render-loop anatomy + recipes for opencode/kilocode/pi-agent features. The canonical renderer is `src/Harbor.Tui.CellForge`; the interactive Spectre shell is `src/Harbor.Tui.Spectre` (the similarly-named `contrib/` copies are unmaintained, see the project map).
+8. If touching the interactive shell or any renderer — read [docs/SPECTRE_TUI_DEEP_DIVE.md](./docs/SPECTRE_TUI_DEEP_DIVE.md) for render-loop anatomy + recipes for opencode/kilocode/pi-agent features. The canonical renderer is `src/Harbor.Tui.CellForge`; the optional interactive Spectre shell is `contrib/tui/Harbor.Tui.SpectreTui` (NOT in the default build — own `Contrib.slnx`, opt-in via `HARBOR_WITH_SPECTRE_TUI`; see the project map below).
 9. Run `dotnet build` to make sure the project compiles.
 10. Run the affected test projects individually (`dotnet run --project tests/<Project> -c Release --no-build`) — **including `tests/Harbor.Architecture.Tests/`** after every project-reference change. Do not use `dotnet test` (see the MTP note in "Quick state" above for why, and for what is still unverified).
 
@@ -634,18 +634,24 @@ independently typed. When you re-measure, update BENCHMARKS.md first, then this
 table in the same commit; a stale headline number in AGENTS.md/CLAUDE.md is a
 doc bug, not a rounding difference.
 
-Key numbers (2026-09-09 CI-short run, AMD EPYC 9V74 — full table and provenance
-in [docs/BENCHMARKS.md](./docs/BENCHMARKS.md)):
+Key numbers — microbenchmarks only, all **[CI-short]** (PR `benchmark` job,
+`--job Short`, ubuntu-latest, 2026-09-09, AMD EPYC 9V74 — full tables and
+provenance in [docs/BENCHMARKS.md](./docs/BENCHMARKS.md) §5.1).
+Startup / RSS / binary size are NOT in this table: the old
+38 ms / 28 MB / 5 MB rows were Debug-JIT-inflated (see BENCHMARKS.md §4.2–§4.4;
+measured JIT `--version` spawn-to-exit is ~138 ms / ~42 MB RSS peak, AOT binary
+29 MB self-contained) — quote those sections, never this table.
 
 | Metric | Value |
 |---|---|
-| Cold start (Debug JIT) | **38 ms** |
-| RSS idle | **28 MB** |
-| Binary size | **5 MB** |
 | `ProviderRegistry.GetClient` (frozen) | **0.14 µs** |
 | `ToolRegistry.ResolveTools` (4 tools, no permission) | **0.085 µs** |
-| `ToolRegistry.ResolveTools` (4 tools, with permission) | **2.3 µs** |
 | `PermissionRuleset.Evaluate` | **0.35 µs** |
+
+> The `ToolRegistry.ResolveTools` "with permission" rows (2.3 µs @4 and
+> 4.1 / 8.3 µs @8/@16) are ⚠️ **retracted by #408** — they measured a 0-of-N
+> result-shape change, not filtering cost. Do not quote them; the allow-all
+> replacements are ⏳ pending the next CI run (BENCHMARKS.md §5.1).
 
 Do not quote these on a hot-path PR without re-measuring — historical
 spot-checks from other machines live in BENCHMARKS.md §5 and are not
