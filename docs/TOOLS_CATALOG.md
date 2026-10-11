@@ -1309,6 +1309,15 @@ Pick `Allow` only for tools that (a) have no side effects AND (b) cannot leak se
 data. `read`, `glob`, `grep`, `ls`, `tree`, `ripgrep`, `notebook` are Allow. Everything
 else (writes, network, MCP) is at least `Ask`.
 
+> **Reserved plugin-vocabulary names.** `PermissionRuleset.Default` also carries
+> `session_broadcast` and `session_inbox` rules, and `BuiltinToolSafetyProfiles`
+> declares `Opaque` profiles for them — but the builtin host never registers tools
+> under those names. They exist so a plugin that loads later (peer-supervision
+> style, issue #165) still finds its permission/safety row; there is no builtin
+> `session_broadcast`/`session_inbox` tool to call. Do not add ad-hoc rules for
+> names no tool registers — these two are the only exception, and
+> `BuiltinToolSafetyDeclarationsTests` pins that.
+
 ### Step 6 — Write tests
 
 In `tests/Harbor.Tools.Builtin.Tests/<Name>ToolTests.cs`. Cover:
