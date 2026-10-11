@@ -24,8 +24,8 @@ internal static class PtyBufferAsserts
     public static async Task AssertBufferLinesAsync(string[] actual, IEnumerable<string> expected)
     {
         var list = expected.ToList();
-        await Assert.That(actual.Length).IsEqualTo(list.Count).ConfigureAwait(false);
-        await Assert.That(BufferView(actual)).IsEqualTo(BufferView(list)).ConfigureAwait(false);
+        await Assert.That(actual.Length).IsEqualTo(list.Count);
+        await Assert.That(BufferView(actual)).IsEqualTo(BufferView(list));
     }
 
     /// <summary>
@@ -40,8 +40,8 @@ internal static class PtyBufferAsserts
     public static async Task AssertScrollbackLinesAsync(string[] actual, IEnumerable<string> expected)
     {
         var list = expected.ToList();
-        await Assert.That(actual.Length).IsEqualTo(list.Count).ConfigureAwait(false);
-        await Assert.That(BufferView(actual)).IsEqualTo(BufferView(list)).ConfigureAwait(false);
+        await Assert.That(actual.Length).IsEqualTo(list.Count);
+        await Assert.That(BufferView(actual)).IsEqualTo(BufferView(list));
     }
 
     /// <summary>Quoted per-row view for failure messages (ratatui buffer_view).</summary>

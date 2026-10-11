@@ -164,8 +164,8 @@ internal sealed class TestBackend
     public async Task AssertBufferLinesAsync(IEnumerable<string> expected)
     {
         var list = expected.ToList();
-        await Assert.That(list.Count).IsEqualTo(Buffer.Rows).ConfigureAwait(false);
-        await Assert.That(BufferView(Buffer)).IsEqualTo(BufferView(RenderLines(list, Buffer.Cols, Buffer.Rows))).ConfigureAwait(false);
+        await Assert.That(list.Count).IsEqualTo(Buffer.Rows);
+        await Assert.That(BufferView(Buffer)).IsEqualTo(BufferView(RenderLines(list, Buffer.Cols, Buffer.Rows)));
     }
 
     /// <summary>
@@ -180,7 +180,7 @@ internal sealed class TestBackend
     public async Task AssertScrollbackLinesAsync(IEnumerable<string> expected)
     {
         var list = expected.ToList();
-        await Assert.That(list.Count).IsEqualTo(_scrollback.Count).ConfigureAwait(false);
+        await Assert.That(list.Count).IsEqualTo(_scrollback.Count);
 
         var rendered = new string[list.Count];
         for (int i = 0; i < list.Count; i++)
@@ -190,20 +190,20 @@ internal sealed class TestBackend
             rendered[i] = ArtLines(RenderLines([list[i]], _scrollback[i].Cols, 1))[0];
         }
 
-        await Assert.That(BufferViewLines(Scrollback)).IsEqualTo(BufferViewLines(rendered)).ConfigureAwait(false);
+        await Assert.That(BufferViewLines(Scrollback)).IsEqualTo(BufferViewLines(rendered));
     }
 
     /// <summary>Asserts no line has scrolled off yet (<c>assert_scrollback_empty</c>).</summary>
     public async Task AssertScrollbackEmptyAsync()
     {
-        await Assert.That(_scrollback.Count).IsEqualTo(0).ConfigureAwait(false);
+        await Assert.That(_scrollback.Count).IsEqualTo(0);
     }
 
     /// <summary>Asserts the cursor position (<c>assert_cursor_position</c>).</summary>
     public async Task AssertCursorPositionAsync(int x, int y)
     {
-        await Assert.That(CursorX).IsEqualTo(x).ConfigureAwait(false);
-        await Assert.That(CursorY).IsEqualTo(y).ConfigureAwait(false);
+        await Assert.That(CursorX).IsEqualTo(x);
+        await Assert.That(CursorY).IsEqualTo(y);
     }
 
     /// <summary>
