@@ -92,6 +92,21 @@
 // A rule that cannot fail is not a rule. These tests are what make this one
 // failable.
 
+// MECHANISM (#1086, step 2, conveyor)
+// -----------------------------------
+// The declaration ban below is a ScanRule: one shape, no baseline, thirteen
+// planted controls, a discovery floor over the guarded app. Enumeration and the
+// control/discovery verdicts are ScanRunner's; this file keeps the issue prose
+// and the test names.
+//
+// One deliberate carry, not a re-decision: the line filter is the old walk's
+// own `IsProseOrBlank` (blank and `//` lines dropped, everything else graded
+// raw — block comments included, exactly as before), plugged through the
+// Func-overload in `ParseShadowDeclaration`. The six pre-fix declaration sites
+// survive as literal controls, so "this rule was red" stays falsifiable. The
+// generated-shape premise (`The_Generated_Shape_Is_Not_In_The_Tree`) is not a
+// forbidden-shape scan and stays handwritten.
+
 using System.Text.RegularExpressions;
 
 namespace Harbor.Architecture.Tests;
@@ -128,26 +143,82 @@ public class AvaloniaInitializeComponentShadowRules
         @"\b(?:private|public|protected|internal)\s+void\s+InitializeComponent\s*\(",
         RegexOptions.Compiled);
 
+    private const string SubId = "HANDWRITTEN-INITIALIZE-COMPONENT";
+
+    /// <summary>The declaration ban as data: one shape, no baseline, planted controls, a floor.</summary>
+    private static readonly ScanRule Rule = new()
+    {
+        Id = "AvaloniaInitializeComponentShadow",
+        Trees = ["apps/Harbor.App.Avalonia"],
+        Forbidden =
+        [
+            new ScanForbidden(
+                SubId,
+                Declaration,
+                "delete this method: the generated "
+                + "`public void InitializeComponent(bool loadXaml = true)` is the one a constructor "
+                + "should call. See issue #973."),
+        ],
+        Controls =
+        [
+            // The six exact pre-fix declaration sites, as literals: re-reading them
+            // from the tree cannot work, because the fix deletes all six.
+            new ScanControl("Prefix/ModalHostView.axaml.cs", "    private void InitializeComponent()", SubId),
+            new ScanControl("Prefix/ComponentGalleryView.axaml.cs", "    private void InitializeComponent()", SubId),
+            new ScanControl("Prefix/EmptyState.axaml.cs", "    private void InitializeComponent()", SubId),
+            new ScanControl("Prefix/Kbd.axaml.cs", "    private void InitializeComponent()", SubId),
+            new ScanControl("Prefix/SegmentedControl.axaml.cs", "    private void InitializeComponent()", SubId),
+            new ScanControl("Prefix/StatusDot.axaml.cs", "    private void InitializeComponent()", SubId),
+            // `InitializeComponent();` in a constructor is how every view in this app
+            // legitimately inflates its XAML — a call, not a declaration.
+            new ScanControl("Calls/Ctor.cs", "        InitializeComponent();", null),
+            new ScanControl("Calls/Indented.cs", "            InitializeComponent();", null),
+            new ScanControl(
+                "Calls/Guarded.cs",
+                "        if (global::Avalonia.Application.Current is not null)\n            InitializeComponent();",
+                null),
+            new ScanControl("Calls/Loader.cs", "        AvaloniaXamlLoader.Load(this);", null),
+            new ScanControl("Calls/Qualified.cs", "        _ = view.InitializeComponent();", null),
+            // Prose naming the defect and blank lines never reach the matcher.
+            new ScanControl("Prose.cs", "        // a hand-written InitializeComponent copy", null),
+            new ScanControl("Blank.cs", "   ", null),
+        ],
+        MinHits = 50,
+        MustContain =
+        [
+            "apps/Harbor.App.Avalonia/Views/Components/StatusDot.axaml.cs",
+        ],
+        CustomParse = ParseShadowDeclaration,
+    };
+
+    /// <summary>
+    ///     The custom parser: the old file walk's verdict over one file's raw
+    ///     source — blank and <c>//</c> lines dropped, everything else graded raw
+    ///     against the declaration shape.
+    /// </summary>
+    private static IEnumerable<ScanHit> ParseShadowDeclaration(string displayPath, string rawSource)
+    {
+        string[] lines = rawSource.Replace("\r\n", "\n", StringComparison.Ordinal).Split('\n');
+        for (int i = 0; i < lines.Length; i++)
+        {
+            if (IsProseOrBlank(lines[i]))
+            {
+                continue;
+            }
+
+            if (Declaration.IsMatch(lines[i]))
+            {
+                yield return new ScanHit(SubId, displayPath, i + 1, lines[i].Trim());
+            }
+        }
+    }
+
     // ── the rule ──────────────────────────────────────────────────────────
 
     [Test]
     public async Task AvaloniaShell_DeclaresNoInitializeComponentOfItsOwn()
     {
-        var violations = new List<string>();
-
-        foreach ((string file, int line, string text) in ScanGuardedFiles())
-        {
-            if (!Declaration.IsMatch(text))
-            {
-                continue;
-            }
-
-            violations.Add(
-                $"{Relative(file)}:{line} — hand-written InitializeComponent shadows the overload "
-                + $"Avalonia's NameGenerator emits, so the named-element field it assigns is never wired. "
-                + $"Delete this method: the generated `public void InitializeComponent(bool loadXaml = true)` "
-                + $"is the one a constructor should call. {text.Trim()}");
-        }
+        List<string> violations = ScanRunner.Evaluate(Rule);
 
         await Assert.That(violations).IsEmpty()
             .Because(
@@ -177,45 +248,36 @@ public class AvaloniaInitializeComponentShadowRules
             return;
         }
 
-        int files = GuardedProjects
-            .SelectMany(p => Directory.GetFiles(Path.Combine(root, p), "*.cs", SearchOption.AllDirectories))
-            .Count(f => !IsBuildOutput(f));
+        List<string> discovery = ScanRunner.CheckDiscovery(Rule);
 
-        await Assert.That(files).IsGreaterThan(50)
-            .Because($"The guarded Avalonia shell holds well over 50 source files; found {files}. "
-                     + "A near-zero count means the path is stale and the rule guards nothing.");
+        await Assert.That(discovery).IsEmpty()
+            .Because("The guarded Avalonia shell holds well over 50 source files, including the "
+                     + "StatusDot view that carried the live crash. "
+                     + "A near-zero count means the path is stale and the rule guards nothing. "
+                     + string.Join("; ", discovery));
     }
 
     [Test]
     public async Task ProseDescribingTheDefectIsNotADeclaration()
     {
-        // The scanner drops comments, so this rule can explain itself — and so can
+        // The parser drops comments, so this rule can explain itself — and so can
         // the controls it fixed. StatusDot's constructor now carries a comment
         // naming the overload that used to shadow it, and ThemeResourceResolutionTests
-        // documents the whole mechanism. None of that may be reported.
-        //
-        // The earlier version of this file asserted "zero lines in the guarded tree
-        // both start with // and match the declaration regex". That was the wrong
-        // invariant: it forbade the documentation rather than the defect, so the
-        // first honest comment explaining the bug would have failed the build. What
-        // actually has to hold is that the scanner drops prose, which is what these
-        // two cases pin.
-        await Assert.That(IsProseOrBlank("        // a hand-written InitializeComponent copy")).IsTrue()
-            .Because("A comment naming the defect is prose. If the scanner reported it, a guard would fail on "
-                     + "the documentation of its own rule, and the documentation would get deleted instead.");
+        // documents the whole mechanism. None of that may be reported. The Prose.cs
+        // and Blank.cs controls prove it through the REAL parser; the pairing below
+        // proves the regex alone is not what saves us.
+        List<string> failures = ScanRunner.CheckControls(Rule);
 
-        await Assert.That(IsProseOrBlank("   ")).IsTrue()
-            .Because("A blank line carries no declaration either.");
+        await Assert.That(failures).IsEmpty()
+            .Because("A comment naming the defect is prose, and a blank line carries no "
+                      + "declaration either. If the parser reported either, the guard would fail "
+                      + "on the documentation of its own rule. "
+                      + string.Join("; ", failures));
 
-        await Assert.That(IsProseOrBlank("    private void InitializeComponent()")).IsFalse()
-            .Because("This is the defect. If the scanner dropped it, the rule would report nothing and pass.");
-
-        // And the pairing that makes the rule work at all: prose is dropped AND a
-        // declaration is kept, so the difference between them is the whole rule.
         await Assert.That(Declaration.IsMatch("        // private void InitializeComponent()")).IsTrue()
-            .Because("The regex does match the commented form — which is precisely why the scanner has to drop "
-                     + "comments first, and why this pair of assertions is the non-vacuity proof: matching prose "
-                     + "is harmless ONLY because prose never reaches the matcher.");
+            .Because("The regex does match the commented form — which is precisely why the parser has to drop "
+                      + "comments first, and why this pair of assertions is the non-vacuity proof: matching prose "
+                      + "is harmless ONLY because prose never reaches the matcher.");
     }
 
     [Test]
@@ -224,13 +286,12 @@ public class AvaloniaInitializeComponentShadowRules
         // THE POSITIVE CONTROL, and the reason the rule is known to have been red
         // before the fix.
         //
-        // These six are the complete set of hand-written declarations in
-        // apps/Harbor.App.Avalonia at the commit that added this file, recorded
-        // as (repo-relative path, line, verbatim line). They are literals on
-        // purpose: re-reading them from the tree cannot work, because the fix
-        // deletes all six, and a positive control that disappears with the bug
-        // it pins proves nothing. A literal keeps the pre-fix state reviewable
-        // forever, and keeps the rule failable on a tree it has never seen.
+        // The six pre-fix declaration sites now live as literal controls on the
+        // rule (Prefix/*.axaml.cs) — the complete set of hand-written declarations
+        // in apps/Harbor.App.Avalonia at the commit that added this file. They are
+        // literals on purpose: re-reading them from the tree cannot work, because
+        // the fix deletes all six, and a positive control that disappears with the
+        // bug it pins proves nothing.
         //
         // Only StatusDot of the six was a live crash: it is the only one whose
         // XAML names an element the code-behind dereferences (`Dot`, twice,
@@ -240,42 +301,20 @@ public class AvaloniaInitializeComponentShadowRules
         // touched. Same latent defect, one live wound. The rule covers all six
         // because the next person to add an x:Name to Kbd would otherwise
         // inherit a null field nobody notices until it is dereferenced.
-        (string Path, int Line, string Text)[] sitesFoundBeforeTheFix =
-        [
-            ("apps/Harbor.App.Avalonia/Views/Overlays/ModalHostView.axaml.cs", 20,
-                "    private void InitializeComponent()"),
-            ("apps/Harbor.App.Avalonia/Views/Dev/ComponentGalleryView.axaml.cs", 14,
-                "    private void InitializeComponent()"),
-            ("apps/Harbor.App.Avalonia/Views/Components/EmptyState.axaml.cs", 64,
-                "    private void InitializeComponent()"),
-            ("apps/Harbor.App.Avalonia/Views/Components/Kbd.axaml.cs", 23,
-                "    private void InitializeComponent()"),
-            ("apps/Harbor.App.Avalonia/Views/Components/SegmentedControl.axaml.cs", 31,
-                "    private void InitializeComponent()"),
-            ("apps/Harbor.App.Avalonia/Views/Components/StatusDot.axaml.cs", 69,
-                "    private void InitializeComponent()")
-        ];
+        List<string> failures = ScanRunner.CheckControls(Rule);
 
-        var missed = new List<string>();
-        foreach ((string path, int line, string text) in sitesFoundBeforeTheFix)
-        {
-            if (!Declaration.IsMatch(text))
-            {
-                missed.Add($"{path}:{line}");
-            }
-        }
-
-        await Assert.That(missed).IsEmpty()
+        await Assert.That(failures).IsEmpty()
             .Because(
-                "Every declaration the rule reported before the fix must still be one the detector recognises. "
-                + "A miss here means the regex was loosened after the fact and the rule now under-reports: "
-                + string.Join(", ", missed));
+                "Every declaration the rule reported before the fix must still be one the parser "
+                + "recognises. A miss here means the shape was loosened after the fact and the rule "
+                + "now under-reports. "
+                + string.Join("; ", failures));
 
         // Six recorded sites, and all six are the same shape. Pin the count so a
         // reader can tell a complete record from a partial one.
-        await Assert.That(sitesFoundBeforeTheFix.Length).IsEqualTo(6)
+        await Assert.That(Rule.Controls.Count(c => c.ExpectSubId == SubId)).IsEqualTo(6)
             .Because("The pre-fix scan of apps/Harbor.App.Avalonia found exactly six hand-written declarations. "
-                     + "If this number is edited, the fix has changed scope and the header claim must change with it.");
+                      + "If this number is edited, the fix has changed scope and the header claim must change with it.");
 
         // Indentation must not decide whether a declaration is seen: a rule
         // anchored to a column catches one file and misses the rest.
@@ -288,7 +327,7 @@ public class AvaloniaInitializeComponentShadowRules
         // decorative.
         await Assert.That(Declaration.IsMatch("    public void InitializeComponent(bool loadXaml = true)")).IsTrue()
             .Because("The detector matches any declared signature. That is right for a hand-written copy and "
-                     + "wrong for the generator's output, so the premise test below has to keep holding.");
+                      + "wrong for the generator's output, so the premise test below has to keep holding.");
     }
 
     [Test]
@@ -297,22 +336,14 @@ public class AvaloniaInitializeComponentShadowRules
         // `InitializeComponent();` in a constructor is how every view in this app
         // legitimately inflates its XAML. The paren-after-the-name is the whole
         // difference between the call that must stay and the declaration that
-        // must go, and getting it wrong produces a rule that blocks the fix.
-        string[] mustPass =
-        [
-            "        InitializeComponent();",
-            "            InitializeComponent();",
-            "        if (global::Avalonia.Application.Current is not null)\n            InitializeComponent();",
-            "        AvaloniaXamlLoader.Load(this);",
-            "        _ = view.InitializeComponent();"
-        ];
+        // must go, and getting it wrong produces a rule that blocks the fix. The
+        // five call shapes live as silent controls on the rule (Calls/*).
+        List<string> failures = ScanRunner.CheckControls(Rule);
 
-        foreach (string good in mustPass)
-        {
-            await Assert.That(Declaration.IsMatch(good)).IsFalse()
-                .Because("This is a call to the generated member, not a declaration of one. Flagging it would "
-                         + "make the guard cry wolf on thirty-odd working constructors: " + good.Trim());
-        }
+        await Assert.That(failures).IsEmpty()
+            .Because("These are calls to the generated member, not declarations of one. Flagging them "
+                      + "would make the guard cry wolf on thirty-odd working constructors. "
+                      + string.Join("; ", failures));
     }
 
     [Test]
@@ -347,6 +378,35 @@ public class AvaloniaInitializeComponentShadowRules
                 + "one would now flag the generator's own members.");
     }
 
+    /// <summary>
+    ///     Every baseline row states why it is tolerated, in the row itself. Vacuous
+    ///     while the table is empty, and deliberately so: wired from the first row
+    ///     so the first row cannot skip the argument.
+    /// </summary>
+    [Test]
+    public async Task Baseline_Rows_AllHaveReasons()
+    {
+        List<string> failures = ScanRunner.CheckReasons(Rule);
+
+        await Assert.That(failures).IsEmpty().Because(string.Join("\n", failures));
+    }
+
+    /// <summary>
+    ///     Every baseline row must still correspond to a real hit, so the table
+    ///     cannot rot into a blanket permission: fix the code without deleting the
+    ///     row and this fails.
+    /// </summary>
+    [Test]
+    public async Task Baseline_Rows_Are_Not_Stale()
+    {
+        List<string> stale = ScanRunner.StaleBaselineKeys(
+            Rule, ScanRunner.ReadSources(ScanRunner.ScopeFiles(Rule)));
+
+        await Assert.That(stale).IsEmpty()
+            .Because("a baseline row with no violation behind it is a permission for a "
+                + "problem that no longer exists: " + string.Join(", ", stale));
+    }
+
     // ── helpers ───────────────────────────────────────────────────────────
 
     private static bool IsBuildOutput(string path) =>
@@ -363,37 +423,6 @@ public class AvaloniaInitializeComponentShadowRules
     {
         string trimmed = line.TrimStart();
         return trimmed.Length == 0 || trimmed.StartsWith("//", StringComparison.Ordinal);
-    }
-
-    /// <summary>Every non-comment, non-blank source line of the guarded projects.</summary>
-    private static IEnumerable<(string File, int Line, string Text)> ScanGuardedFiles()
-    {
-        if (RepoPaths.RepoRoot is not { } root)
-        {
-            yield break;
-        }
-
-        foreach (string project in GuardedProjects)
-        {
-            string dir = Path.Combine(root, project);
-            if (!Directory.Exists(dir))
-            {
-                continue;
-            }
-
-            foreach (string file in Directory.GetFiles(dir, "*.cs", SearchOption.AllDirectories))
-            {
-                if (IsBuildOutput(file))
-                {
-                    continue;
-                }
-
-                foreach ((int line, string text) in ScanFile(file))
-                {
-                    yield return (file, line, text);
-                }
-            }
-        }
     }
 
     /// <summary>One file, one-based line numbers, comment and blank lines dropped.</summary>
@@ -421,8 +450,4 @@ public class AvaloniaInitializeComponentShadowRules
         }
     }
 
-    /// <summary>Repo-relative, forward-slashed path for stable failure messages.</summary>
-    private static string Relative(string absolutePath) =>
-        (RepoPaths.RepoRoot is null ? absolutePath : Path.GetRelativePath(RepoPaths.RepoRoot, absolutePath))
-        .Replace('\\', '/');
 }
