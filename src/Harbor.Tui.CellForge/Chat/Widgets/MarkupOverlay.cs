@@ -53,9 +53,10 @@ public sealed class MarkupOverlay
     /// Routes a decoded key to a store message. Null means "not a markup
     /// gesture" — the host still swallows the key (the barrier contract:
     /// panels beneath starve) but dispatches nothing. Release events are
-    /// never gestures. Ctrl+S is the host's save chord and is deliberately
-    /// NOT claimed here: the reducer is pure, so saving stays a host effect
-    /// (see the save path in the REPL loop).
+    /// never gestures. Ctrl+S is the host's save chord and Ctrl+Enter its
+    /// send chord (issue #402); both are deliberately NOT claimed here: the
+    /// reducer is pure, so saving and sending stay host effects
+    /// (see the save/send paths in the REPL loop).
     /// </summary>
     public AppMsg? HandleKey(in KeyEvent key)
     {
@@ -257,7 +258,7 @@ public sealed class MarkupOverlay
             buffer.SetText(box.X + 1, footerY - 1, Truncate("Text: " + markup.PendingText + "|", innerW), ChatPalette.ToolArgs);
         }
 
-        const string Hints = "1/2/3|space|arrows move|S+arrows resize|u undo|^R redo|del|^S save|esc close";
+        const string Hints = "1/2/3|space|arrows|S+arrs|u undo|^R redo|del|^S save|^Enter send|esc close";
         buffer.SetText(box.X + 1, footerY, Truncate(Hints, innerW), ChatPalette.Dim);
     }
 

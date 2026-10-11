@@ -37,7 +37,7 @@ The list below is the **ruthless, ship-first** ranking. Each entry has:
 | 12 | Skill freshness pill (update available)            | 3      | S      | Orca          | ✅ (`SkillFreshnessModel` + default-on status-line aggregate `skills ●N` + `/skills update`; per-skill panel opt-in via `HARBOR_SKILL_FRESHNESS=1`) |
 | 13 | Setup-guide progress ring + checklist              | 4      | M      | Orca          | ✅ R28 (onboarding wizard with stepper) |
 | 14 | Dictation / speech-to-text input                   | 3      | L      | Orca (sherpa) | ❌ |
-| 15 | Browser/markup overlay for screenshots             | 4      | L      | Orca          | ❌ |
+| 15 | Browser/markup overlay for screenshots             | 4      | L      | Orca          | ✅ (`MarkupAnnotationModel` + cell-native `MarkupOverlay` + BCL-only PNG bake + Ctrl+Enter send-back as image turn with preamble) |
 | 16 | Mobile-driver overlay (responsive phone preview)   | 3      | L      | Orca          | ❌ |
 | 17 | PR-comment sidebar cards with code context         | 4      | L      | Orca, Kilo    | ❌ |
 | 18 | Star-nag card (gentle GitHub star reminder)        | 2      | S      | Orca          | ❌ |
@@ -1264,8 +1264,12 @@ Each entry: **Feature / Source path / Description / Why it matters / Implementat
   (opens with `m` over the image viewer, keyboard- and mouse-driven
   placement, `Esc` closes restoring scroll), and a BCL-only PNG bake
   (`MarkupPngBaker`, no image NuGet) writing the annotated copy into the
-  workspace as a new `ImageBlock`. Sending the annotated image back to the
-  model is the next slice and is explicitly out of scope here.
+  workspace as a new `ImageBlock`. Slice 2/2 landed (#402): `Ctrl+Enter`
+  over the overlay sends the saved copy back as a user turn carrying the
+  baked PNG as a real image block plus a preamble (source name, annotation
+  count, saved path), validated through the shared `ImageAttachmentReader`
+  (magic bytes, size cap, vision check) — baking stays silent, only the
+  explicit chord spends tokens.
 
 ---
 

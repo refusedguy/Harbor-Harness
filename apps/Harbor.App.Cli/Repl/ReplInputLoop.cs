@@ -2,6 +2,7 @@ using System.Linq;
 using Harbor.Abstractions.Agents;
 using Harbor.Abstractions.Models;
 using Harbor.App.Cli.Repl.Commands;
+using Harbor.Application.Attachments;
 using Harbor.Tui.CellForge.Capabilities;
 using Harbor.Tui.CellForge.Input;
 using Harbor.Tui.CellForge.Rendering;
@@ -55,6 +56,15 @@ internal sealed class ReplInputLoop(CellForgeReplRunner host)
 
     /// <summary>Wheel tick ≈ three rows (xterm convention).</summary>
     private const int WheelScrollLines = 3;
+
+    /// <summary>
+    ///     Send-to-agent latch (issue #402): Press-only plus the busy refuse
+    ///     already dedupes most double keypresses, but the validation await
+    ///     below still yields — without this flag two Ctrl+Enter presses in
+    ///     the same gap would each submit a turn. Two DELIBERATE sends still
+    ///     produce two blocks, as specified.
+    /// </summary>
+    private bool _markupSendInFlight;
 
     // ── Input routing ──────────────────────────────────────────────────────
 
@@ -286,12 +296,17 @@ internal sealed class ReplInputLoop(CellForgeReplRunner host)
         // FROM the viewer (which hides underneath) and carries the same
         // barrier contract — consumed gestures dispatch store messages
         // (the session lives in UiState, transitions in the reducer),
-        // everything else is swallowed. Ctrl+S bakes the annotated copy; that
-        // is a host effect, so it never reaches the overlay router: the
+        // everything else is swallowed. Ctrl+S bakes the annotated copy and
+        // Ctrl+Enter sends the saved copy to the agent; both are host
+        // effects, so neither reaches the overlay router: the
         // reducer stays pure and file I/O lives here.
         if (host.Screen.Markup.Visible)
         {
-            if (IsMarkupSave(key))
+            if (IsMarkupSend(key))
+            {
+                await SendMarkupAsync(ct).ConfigureAwait(false);
+            }
+            else if (IsMarkupSave(key))
             {
                 await SaveMarkupAsync(ct).ConfigureAwait(false);
             }
@@ -551,6 +566,17 @@ internal sealed class ReplInputLoop(CellForgeReplRunner host)
         && (key.Modifiers & KeyModifiers.Ctrl) != 0
         && (key.Character.ToString() == "s" || key.Character.ToString() == "S");
 
+    /// <summary>
+    ///     Ctrl+Enter over the markup overlay: send the saved annotated copy
+    ///     to the agent (a host effect, issue #402). Press-only — Repeat would
+    ///     re-submit a held chord as a second billable turn, and legacy
+    ///     terminals only ever produce Press anyway.
+    /// </summary>
+    private static bool IsMarkupSend(KeyEvent key) =>
+        key.Key == KeyCode.Enter
+        && key.EventType == KeyEventType.Press
+        && (key.Modifiers & KeyModifiers.Ctrl) != 0;
+
     /// <summary>`m` over the image viewer: swap it for the markup overlay on the same block.</summary>
     private static bool IsMarkupAnnotateKey(KeyEvent key) =>
         key.Key == KeyCode.Char
@@ -612,6 +638,74 @@ internal sealed class ReplInputLoop(CellForgeReplRunner host)
         _ = host._replStore.Dispatch(new ChatAppMsg.MarkupSaved(target));
         _ = host._replStore.Dispatch(new ChatAppMsg.AppendLine(ChatRole.System, $"Saved annotated image: {target}"));
         host._wake.Writer.TryWrite(null);
+        return;
+
+        void Fail(string error)
+        {
+            _ = host._replStore.Dispatch(new ChatAppMsg.MarkupFailed(error));
+            host._wake.Writer.TryWrite(null);
+        }
+    }
+
+    /// <summary>
+    ///     Sends the SAVED annotated copy back to the agent as a real image
+    ///     turn (issue #402 slice 2/2): validate the file through the same
+    ///     <c>ImageAttachmentReader</c> every <c>/attach</c> goes through
+    ///     (magic bytes, size cap, vision capability) and submit a user turn
+    ///     carrying the baked PNG plus the <see cref="MarkupSendPreamble" />
+    ///     text naming source, count and path. Every failure lands in
+    ///     <c>MarkupFailed</c> as inline overlay text — a non-vision model is
+    ///     a one-line note, never a raw provider 400. Baking stays silent;
+    ///     only this explicit chord spends tokens. This method never throws
+    ///     out of the input loop.
+    /// </summary>
+    private async Task SendMarkupAsync(CancellationToken ct)
+    {
+        var markup = host._replStore.State.Chat.Markup;
+        if (!markup.IsOpen || _markupSendInFlight)
+        {
+            return;
+        }
+
+        if (markup.Model.Items.Length == 0)
+        {
+            Fail("Nothing to send yet — place an arrow, box or text first.");
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(markup.SavedPath))
+        {
+            Fail("Save first (Ctrl+S), then send (Ctrl+Enter).");
+            return;
+        }
+
+        if (host.Pipeline.IsBusy)
+        {
+            host.Bridge.AppendSystemLine("⚠ Agent is busy — wait for completion or press Esc / Ctrl+C to abort.");
+            host._wake.Writer.TryWrite(null);
+            return;
+        }
+
+        _markupSendInFlight = true;
+        try
+        {
+            var reader = new ImageAttachmentReader(host.ProviderRegistry, host.Log);
+            var read = await reader.ReadAsync(
+                markup.SavedPath, host.SessionModel.ProviderId, host.SessionModel.Model, ct).ConfigureAwait(false);
+            if (read.IsFailure)
+            {
+                Fail(read.Error);
+                return;
+            }
+
+            string preamble = MarkupSendPreamble.Build(markup.SourceName, markup.Model.Items.Length, read.Value.Path);
+            await host.Pipeline.SubmitImageTurnAsync(preamble, [read.Value], ct).ConfigureAwait(false);
+        }
+        finally
+        {
+            _markupSendInFlight = false;
+        }
+
         return;
 
         void Fail(string error)
