@@ -147,12 +147,12 @@ public static class Program
             "serve" => await ServeVerb.RunAsync(_logger, args.Skip(1).ToArray()),
             "tui" => await TuiAttachVerb.RunAsync(args.Skip(1).ToArray()),
             "events" => await EventsVerb.RunAsync(args.Skip(1).ToArray()),
-            "storage" => HelpVerbs.PrintStorageOptions(),
+            "storage" => await CafPilotVerbs.RunStorageAsync(args.Skip(1).ToArray()),
             "setup" => await SetupVerb.RunAsync(_logger),
             "auth" => await AuthVerb.RunAsync(_logger, args.Skip(1).ToArray()),
             "config" => await ConfigVerb.RunAsync(_logger, args.Skip(1).ToArray()),
             "help" or "--help" or "-h" => HelpVerbs.PrintHelp(),
-            "version" or "--version" or "-v" => HelpVerbs.PrintVersion(),
+            "version" or "--version" or "-v" => await CafPilotVerbs.RunVersionAsync(args.Skip(1).ToArray()),
             _ => await InteractiveVerb.RunAsync(_logger, Array.Empty<string>(), scriptPath)
         };
         }
