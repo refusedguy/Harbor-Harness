@@ -42,9 +42,15 @@ global using Harbor.Desktop.Abstractions.Configuration;
 global using Harbor.Storage.Jsonl;
 global using Harbor.Storage.Memory;
 global using Harbor.Providers.Ollama;
+#if HARBOR_WITH_DAEMON
+// Slice A (#1144): the daemon IPC assemblies leave the graph when switched
+// off (HarborWithDaemon=false); see HarborModeRegistry / IpcModule.
 global using Harbor.Ipc.Client;
+#endif
 global using Harbor.Ipc.InProcess;
+#if HARBOR_WITH_DAEMON
 global using Harbor.Ipc.Server;
+#endif
 global using Harbor.Tools.Builtin;
 global using Harbor.Tools.Mcp;
 global using Harbor.Tui.AnsiPlain;

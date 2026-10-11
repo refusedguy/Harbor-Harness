@@ -35,7 +35,11 @@ public static class IpcPublishTarget
         ArtifactPathResolver resolver,
         BuildSettings settings,
         FeatureFlags flags,
-        BuildOutput output) => PublishIpcVariant(resolver, settings, flags, "ipc-server", output);
+        BuildOutput output)
+    {
+        new CliBuildConfigurator().EnsureDaemonAllowed(flags, "PublishIpcServer");
+        return PublishIpcVariant(resolver, settings, flags, "ipc-server", output);
+    }
     /// <summary>
     ///     Publish the <c>ipc-client</c> variant. The resulting binary is a
     ///     thin client that talks to a separately-running <c>ipc-server</c>.
@@ -45,7 +49,11 @@ public static class IpcPublishTarget
         ArtifactPathResolver resolver,
         BuildSettings settings,
         FeatureFlags flags,
-        BuildOutput output) => PublishIpcVariant(resolver, settings, flags, "ipc-client", output);
+        BuildOutput output)
+    {
+        new CliBuildConfigurator().EnsureDaemonAllowed(flags, "PublishIpcClient");
+        return PublishIpcVariant(resolver, settings, flags, "ipc-client", output);
+    }
     private static AbsolutePath PublishIpcVariant(
         ArtifactPathResolver resolver,
         BuildSettings settings,
@@ -66,6 +74,8 @@ public static class IpcPublishTarget
             .SetProperty("HarborWithSpectreTui", resolvedFlags.WithSpectreTui.ToString().ToLowerInvariant())
             .SetProperty("HarborWithAllProviders", resolvedFlags.WithAllProviders.ToString().ToLowerInvariant())
             .SetProperty("HarborWithAllTools", resolvedFlags.WithAllTools.ToString().ToLowerInvariant())
+            .SetProperty("HarborWithRenderer", resolvedFlags.WithRenderer.ToString().ToLowerInvariant())
+            .SetProperty("HarborWithDaemon", resolvedFlags.WithDaemon.ToString().ToLowerInvariant())
             .SetOutput(outputDir);
         output.Cmd("PublishIpc", DotNetArgv.RenderPublish(publishSettings));
         if (output.IsDryRun)

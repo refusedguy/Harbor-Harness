@@ -8,6 +8,8 @@ public sealed class FeatureFlags
     public bool WithAllProviders { get; init; }
     public bool WithAllTools { get; init; }
     public bool Minimal { get; init; }
+    public RendererSelection WithRenderer { get; init; } = RendererSelection.All;
+    public bool WithDaemon { get; init; } = true;
 
     public FeatureFlags Resolved() => this;
 
@@ -15,6 +17,6 @@ public sealed class FeatureFlags
 
     public override string ToString()
     {
-        return $"plugins={WithPlugins}, scripting={WithScripting}, spectre={WithSpectreTui}, providers={WithAllProviders}, tools={WithAllTools}, minimal={Minimal}";
+        return $"plugins={WithPlugins}, scripting={WithScripting}, spectre={WithSpectreTui}, providers={WithAllProviders}, tools={WithAllTools}, minimal={Minimal}, renderer={WithRenderer.ToString().ToLowerInvariant()}, daemon={WithDaemon}";
     }
 }

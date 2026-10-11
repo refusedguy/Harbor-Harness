@@ -1,11 +1,17 @@
 using System.Collections.Frozen;
 using CSharpFunctionalExtensions;
 using Harbor.Ipc;
+#if HARBOR_WITH_DAEMON
+// Slice A (#1144): Client/Server/Transport assemblies leave the graph when the
+// daemon is off (same convention as HARBOR_WITH_PLUGINS below).
 using Harbor.Ipc.Client;
+#endif
 using Harbor.Ipc.InProcess;
 using Harbor.Ipc.Protocol;
+#if HARBOR_WITH_DAEMON
 using Harbor.Ipc.Server;
 using Harbor.Ipc.Transport;
+#endif
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
@@ -42,6 +48,7 @@ internal static class IpcModule
         return services;
     }
 
+#if HARBOR_WITH_DAEMON
     /// <summary>
     ///     Optional networked daemon listener (sprint 6 zone T): set
     ///     <c>HARBOR_LISTEN</c> to loopback | tailscale0 | all (port via
@@ -50,6 +57,12 @@ internal static class IpcModule
     ///     first run), and a <see cref="DaemonPairingInfo"/> is registered so
     ///     the CLI can print the pairing block.
     /// </summary>
+    /// <remarks>
+    ///     Slice A (#1144): compiled only with the daemon on. The body names
+    ///     Server-assembly types (<c>HarborIpcServer</c>,
+    ///     <c>TcpServerTransport</c>); the only caller is the likewise-gated
+    ///     <c>IpcServerHarborModeStrategy</c>.
+    /// </remarks>
     internal static void AddNetworkedListenerIfConfigured(IServiceCollection services, HarborCompositionContext ctx)
     {
         string? listenOn = Environment.GetEnvironmentVariable("HARBOR_LISTEN");
@@ -102,4 +115,5 @@ internal static class IpcModule
         string advertiseHost = DaemonBindPolicy.SelectAdvertiseAddress()?.ToString() ?? bindText;
         services.AddSingleton(new DaemonPairingInfo(advertiseHost, port, psk.Value));
     }
+#endif
 }

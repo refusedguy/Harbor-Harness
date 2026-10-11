@@ -77,6 +77,70 @@ Other CLI feature flags exclude categories of project references:
 is the legacy shorthand forcing all of them off. The NUKE build
 (`build/_build/`) exposes these as command-line flags.
 
+### Renderer selection (build-time, slice A of #1144)
+
+The runtime renderer stays `HARBOR_TUI` (untouched). The build-time selection
+is `-p:HarborWithRenderer=all|cellforge|ansiplain|nickconsoleex`
+(default `all`) or `./build.sh Publish --with-renderer <value>`:
+
+```bash
+# CLI without the SharpConsoleUI subtree (NickConsoleEx backend excluded)
+./build.sh Publish --with-renderer cellforge --dry-run
+
+# Fail fast when the ConsoleEx submodule is missing (also a doctor check)
+./build.sh doctor --check renderer.deps
+```
+
+What each value excludes today:
+
+| Value | Effect |
+|---|---|
+| `all` (default) | Every backend (status quo). |
+| `cellforge`, `ansiplain` | Only the NickConsoleEx backend (+ vendored SharpConsoleUI). |
+| `nickconsoleex` | Keeps NickConsoleEx; requires the submodule (`git submodule update --init external/ConsoleEx`). |
+
+CellForge and AnsiPlain stay in every CLI build on purpose: the agent-turn
+driver (`apps/Harbor.App.Cli/Repl/ReplRunner.cs`, used by both `ask` and the
+REPL) is CellForge-bound source, and the plain-pipe path plus the headless
+pairing QR resolve through AnsiPlain (`CliInfrastructure.cs`). Decoupling them
+into composable backends is the tracked remainder of #1144 gap (1) — the issue
+stays open until then. Unknown values fail the build via the `Error` guards in
+`src/Harbor.Hosting/Harbor.Hosting.csproj`; `Publish`/`Release`/`PublishIpc*`
+targets forward the flag automatically.
+
+### Daemon on/off (build-time, slice A of #1144)
+
+How the pieces relate today (`build/` mentioned the daemon zero times):
+
+- `harbor daemon start` spawns this same executable with `--headless`
+  (`DaemonCommand.cs` → `HeadlessVerb.cs`), which requires an `IHarborServer`
+  from the `Harbor.Ipc.Server` assembly and defaults `HARBOR_MODE=ipc-server`.
+- `harbor status --all` and `harbor ide` are IPC *clients* (transports and
+  `IdeSessionBridge` from the `Harbor.Ipc.Client` assembly).
+- `PublishIpcServer`/`PublishIpcClient` only tag the binary with
+  `HarborMode=ipc-server|ipc-client` (informational MSBuild property); the
+  runtime mode switch is `HARBOR_MODE`, resolved by `HarborModeRegistry`.
+
+The flag is `-p:HarborWithDaemon=false` or
+`./build.sh Publish --with-daemon false` (default `true`; forced to `false`
+by `HARBOR_MINIMAL=true` like the other granular flags):
+
+```bash
+# Single-process binary: no Server/Client assemblies, HARBOR_MODE=inprocess only
+./build.sh Publish --with-daemon false --dry-run
+```
+
+Effect and degradation:
+
+| Off (`false`) | Result |
+|---|---|
+| `Harbor.Ipc.Server` + `Harbor.Ipc.Client` refs | Excluded from CLI + Hosting. |
+| Mode registry | `inprocess` strategy only (`HarborModeRegistry.cs`). |
+| `status`, `ide` verbs | Excluded from the compile; print a rebuild hint. |
+| `daemon start` / `--headless` | Still accepted; fail with "IPC server unavailable". |
+| `daemon stop` / `daemon status` | Kept (pid-file ops need no IPC types). |
+| `PublishIpcServer`/`PublishIpcClient` | Fail fast with the fix attached. |
+
 ## Run tests
 
 ```bash

@@ -58,6 +58,10 @@ internal class Build : NukeBuild
     [Parameter("Include scripting (Jint JS engine) — not AOT-compatible")] private readonly bool WithScripting = true;
     [Parameter("Include Spectre.TUI interactive renderer — not AOT-compatible")]
     private readonly bool WithSpectreTui = true;
+    [Parameter("Renderer backends to compose (All, CellForge, AnsiPlain, NickConsoleEx)")]
+    private readonly RendererSelection WithRenderer = RendererSelection.All;
+    [Parameter("Include the daemon IPC layer (server + client transports)")]
+    private readonly bool WithDaemon = true;
 
     // ── Meta command parameters ─────────────────────────────────────────────
     [Parameter("Output format: Pretty (human) or Json (JSON-lines on stdout)")]
@@ -103,6 +107,8 @@ internal class Build : NukeBuild
         WithSpectreTui = WithSpectreTui,
         WithAllProviders = WithAllProviders,
         WithAllTools = WithAllTools,
+        WithRenderer = WithRenderer,
+        WithDaemon = WithDaemon,
         Minimal = Minimal
     };
 
@@ -280,7 +286,8 @@ internal class Build : NukeBuild
                 TargetFramework,
                 Variant is PublishVariant.AOT or PublishVariant.Trimmed,
                 _invokedTargets.Contains("Release"),
-                ReleaseTag);
+                ReleaseTag,
+                WithRenderer.ToString().ToLowerInvariant());
             var report = DoctorChecks.RunAll(context, filter?.Ids);
             Output.EmitDocument(
                 DoctorChecks.ToJson(report),
