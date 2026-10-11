@@ -49,7 +49,10 @@ never zero); failure classes (`incorrect_change`, `broke_existing`,
   (Settings → Secrets and variables → Actions → New repository secret,
   value `klo_...`). The workflow reads it as `secrets.KILO_API_KEY` and
   passes it as env `KILO_API_KEY` to the runner (model
-  `kilocode/kilo-auto/free`, free tier, no card required).
+  `kilocode/kilo-auto/free`, free tier, no card required). The evals pin deliberately
+  differs from the embedded provider default (`tencent/hy3:free` in
+  `providers/kilocode.json`); background on the two ids:
+  `docs/notes/kilocode-default-model-probe.md`.
 - No key → graceful skip (green): the `Check model key` step writes a
   notice + job summary and skips build/run; the run stays green because
   live evals are diagnostic, not a gate. Add the secret by hand to enable

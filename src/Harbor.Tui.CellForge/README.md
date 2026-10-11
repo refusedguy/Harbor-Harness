@@ -63,14 +63,19 @@ Kill-switch в `~/.harbor/config.json` (приоритет выше выбора
 
 ## Что запускается
 
+Движок терминала ввода-вывода живёт в `Harbor.Tui.CellForge.Engine/` (подробно —
+его [README](../Harbor.Tui.CellForge.Engine/README.md)); чат-слой — в `Chat/`
+этого проекта. Неймспейсы остались `Harbor.Tui.CellForge.*` (сплит — issue #33).
+
 | Подсистема | Файлы | Ответственность |
 |---|---|---|
-| Capabilities | `Capabilities/` (5: `TerminalCapabilities`, `CapabilityProber`, `TerminalQueries`, `InlineImageProbe`, `NotifyProbe`) | проба возможностей терминала: цвета, inline-картинки (kitty/Sixel/OSC1337), уведомления (OSC99/OSC777) |
-| Input | `Input/` (15: `TerminalInputSource(+Options)`, `TerminalInputStream`, `InputEvent`, `MouseEvent`/`MouseRouter`, `PasteEvent`/`PasteSanitizer`, `ResizeSignal`, `FocusRouter`, `CapabilityEvent`, `ITerminalModeController`/`Null`/`UnixTermios`/`WindowsVt`) | поток чтения stdin → типизированные события (key/mouse/paste/resize); raw-mode контроллеры; bracketed-paste anti-injection |
-| Parsing | `Parsing/` (4: `EscapeSequenceParser(+Options)`, `ParserState`, `Utf8IncrementalDecoder`) | байтовый state-machine парсер: kitty-клавиатура, SGR-мышь, bracketed paste, инкрементальный UTF-8 |
-| Rendering | `Rendering/` (22: `AnsiWriter` (SGR-автомат), `DiffEngine`, `BufferSwapChain`, `LayoutTree`, `ComposerController`, `PromptBuffer`/`PromptHistory`/`PromptRenderer`/`PromptViewport`, `VimComposerMode`, `MarkdownEditOps`, `InlineSession`, `Osc99Notify`/`Osc777Notify`/`Osc52Clipboard`/`Osc1337Image`, `Graphics`, `PostFx`, `SpringFx`, `CellForgeDiffEncoder`, `ITerminalBackend`/`StdoutBackend`) | BACK/FRONT буферы, один атомарный флаш на кадр; композер и его саб-режимы; OSC-форматтеры; remote/OTA diff-энкодер |
-| Streaming | `Streaming/` (5: `ScreenSession`, `ChatScreenBridge`, `InlineAgentStreamBridge`, `StreamBlock`, `CommitTickPacer`) | события агента → блоки ленты (стрим через `CommitTickPacer`); alt-screen и inline пути |
-| Widgets | `Chat/Widgets/` (23, неймспейсы без изменений; `QuickSwitchSlots` уехали в `Harbor.Ui.Framework.State/Slots/`): `VirtualizedChatTimeline`, `ChatScreenLayout`, `SideBarView`, `CommandPaletteView`+`FuzzyMatcher`, `ToolCallBlock`, `StreamingMarkdownBlock`/`AssistantMarkdownBlock`, `SelectionEngine`, `TimelineRing`/`TimelineLayoutCache`, `SpinnerStrip`, `RetryCountdown`, `LeaderKeyRouter`, `MascotDirector`/`MascotPanel`/`AmbientMascot`/`MascotMode`, `JsonThemeLoader`/`ThemeFileWatcher`, `ImageBlock`/`JpegProbe` | лента чата, сайдбар, палитра, тулы, темы (live-reload), выделение copy-on-select, маскот |
+| Capabilities | `Engine/Capabilities/` (7: `TerminalCapabilities`, `CapabilityProber`, `TerminalQueries`, `TerminalBackgroundProbe`, `InlineImageProbe`, `NotifyProbe`, `RgbColor`) | проба возможностей терминала: цвета, фон, inline-картинки (kitty/Sixel/OSC1337), уведомления (OSC99/OSC777) |
+| Input | `Engine/Input/` (21: `TerminalInputSource(+Options)`, `TerminalInputStream`, `InputEvent`, `KeyEvent(+Type/Code/Modifiers)`, `MouseEvent`/`MouseRouter`, `PasteEvent`/`PasteSanitizer`, `ResizeSignal`, `FocusRouter`/`IFocusTarget`, `CapabilityEvent`, `UiKeyDto`, `ITerminalModeController`/`Null`/`UnixTermios`/`WindowsVt`) | поток чтения stdin → типизированные события (key/mouse/paste/resize); raw-mode контроллеры; bracketed-paste anti-injection |
+| Parsing | `Engine/Parsing/` (4: `EscapeSequenceParser`, `ParserOptions`, `ParserState`, `Utf8IncrementalDecoder`) | байтовый state-machine парсер: kitty-клавиатура, SGR-мышь, bracketed paste, инкрементальный UTF-8 |
+| Rendering | `Engine/Rendering/` (27: `AnsiWriter` (SGR-автомат), `DiffEngine`/`FrameDiff`, `ScreenBuffer`/`BufferSwapChain`, `Cell`/`CellStyle`/`UnicodeWidth`, `LayoutPrimitives`+`ContainerNode`/`FlexLayout`/`ZStackNode`/`DirtyRect`, `ITerminalBackend`/`ISyncTerminalBackend`/`StdoutBackend`, `Osc99Notify`/`Osc777Notify`/`Osc52Clipboard`/`Osc1337Image`+`InlineImageEncoder`, `Graphics`, `PostFx`, `SpringFx`, `EngineStageCounters`) | BACK/FRONT буферы, один атомарный флаш на кадр; layout-дерево; OSC-форматтеры |
+| Streaming | `Chat/Streaming/` (10: `ScreenSession`, `ChatScreenBridge`, `InlineAgentStreamBridge`, `StreamBlock`, `StreamCoalescer`, `CommitTickPacer`, `ApprovalGateRouter`, `ContextSegmentSync`, `EventSubscription`, `ToolCardTracker`) | события агента → блоки ленты (стрим через `CommitTickPacer`); alt-screen и inline пути |
+| Chat-слой | `Chat/Rendering/` (18: `ComposerController`, `PromptBuffer`/`PromptHistory`/`PromptRenderer`/`PromptViewport`, `VimComposerMode`, `MarkdownEditOps`, `InlineSession`, `LayoutTree`, …), `Chat/Panels/` (17 панелей), `Chat/Adapters/` (2), `Chat/Onboarding/` (1) | композер и его саб-режимы; панели; адаптеры; онбординг |
+| Widgets | `Chat/Widgets/` (48: `VirtualizedChatTimeline`, `ChatScreenLayout`, `SideBarView`, `SessionTabStripPanel`, `CommandPaletteView`+`FuzzyMatcher`+`PaletteCatalogs`, `ToolCallBlock`, `TimelineBlocks`, `StreamingMarkdownBlock`/`AssistantMarkdownBlock`, `SelectionEngine`+`ScrollableViewport`/`Scrollbar`, `TimelineRing`/`TimelineLayoutCache`, `SpinnerStrip`+`GaugeBar`, `RetryCountdown`, `LeaderKeyRouter`+`WhichKeyHelpOverlay`, `MascotDirector`/`MascotPanel`/`AmbientMascot`/`MascotMode`, `JsonThemeLoader`/`ThemeFileWatcher`, `ImageBlock`/`JpegProbe`/`MarkupPngBaker`, `TableBlock`, `ReadGroupBlock`, `PanelChrome`, `ToastOverlay`, `FilePickerView`, `DialogFormWidgets`, `DiffViewerOverlay`, `ImageViewerOverlay`, `MarkupOverlay`, `SetupChecklistOverlay` (+`*Layer` для оверлеев)) | лента чата, сайдбар, палитра, тулы, темы (live-reload), выделение copy-on-select, маскот, оверлеи |
 | Адаптер рендера | `CellForgeTuiRenderer.cs` (+ `CellForgeRenderContext`) | `ITuiRenderer`/`BaseTuiRenderer`-адаптер для event-driven пути (`HARBOR_TUI=cellforge`); проекция `UiState` в виджеты (`ProjectStateIntoWidgets`); контекст пишет через `AnsiWriter` |
 
 ## Кадровой цикл (REPL)
@@ -104,4 +109,4 @@ HARBOR_UPDATE_GOLDENS=1 dotnet exec <test.dll>        # пересев golden-ф
 ```
 
 Golden-фикстуры: `tests/fixtures/celldiff/*.golden.txt`. Спецификации:
-`.kilo-docs/consoleex-{design,celldiff,widgets,perf}.md`.
+`docs/.kilo-docs/consoleex-{design,celldiff,widgets,perf}.md`.

@@ -54,9 +54,12 @@ Alternative TUI renderers (`contrib/tui/`: Spectre, Spectre.Fullscreen,
 SpectreTui, TerminalGui, Termina, RazorConsole, Sixel), desktop apps
 (Wpf / Maui / Blazor) and the scripting stack (SharpTS/Jint) live under `contrib/`
 and are **not** listed in `Harbor.slnx`. They are built by `contrib/Contrib.slnx`
-or pulled into the CLI build: the CLI compiles the alternative renderers in when
-`HarborWithSpectreTui=true` (the default) — pass
-`-p:HarborWithSpectreTui=false` (or set `HARBOR_MINIMAL=true`) for a core-only binary:
+or pulled into the CLI build: `Harbor.Hosting` compiles the alternative renderers in
+only when built with `HarborWithSpectreTui=true` (NUKE/distro builds, or
+`-p:HarborWithSpectreTui=true` on the command line; Sixel is not in that set and never
+joins the CLI build) — plain `dotnet build` / `dotnet run` does NOT include them,
+so `HARBOR_TUI=spectre*|terminal-gui|termina|razor` falls back to `plain` there. Pass `-p:HarborWithSpectreTui=false`
+(or set `HARBOR_MINIMAL=true`) explicitly for a core-only binary:
 
 ```bash
 # All contrib projects that build on the current OS

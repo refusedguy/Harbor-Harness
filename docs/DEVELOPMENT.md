@@ -70,7 +70,7 @@ dotnet run --project tests/Harbor.Core.Tests -c Release --no-build -- --output D
 dotnet run --project tests/Harbor.Architecture.Tests -c Release --no-build -- --minimum-expected-tests 1
 ```
 
-Tests use [TUnit](https://github.com/thomhurst/TUnit) v1.61.0 with Microsoft Testing Platform v2.3.2. Test files are in `tests/<Project>.Tests/`.
+Tests use [TUnit](https://github.com/thomhurst/TUnit) v1.61.0 (pinned in `Directory.Packages.props`; the Microsoft Testing Platform runner version arrives transitively via TUnit and is not pinned here). Test files are in `tests/<Project>.Tests/`.
 
 ### Known test status
 

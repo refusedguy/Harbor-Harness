@@ -93,22 +93,28 @@ Type messages, hit Enter to send. Use `/help` for commands. Onboarding wizard ru
 
 ### Pick a TUI renderer
 
-Resolved from `HARBOR_TUI` or `~/.harbor/cli.json` `defaultTuiRenderer`; falls back to `spectre-tui` (or `plain` in minimal builds without Spectre — `TuiMode.cs:74-97`).
+Resolved from `HARBOR_TUI` or `~/.harbor/cli.json` `defaultTuiRenderer`; the CLI-side
+fallback is `spectre-tui` (or `plain` in minimal builds without Spectre — `TuiMode.cs:74-97`),
+but an id that was not compiled in falls back to `plain` with a warning at runtime.
 
 ```bash
 HARBOR_TUI=ansi        harbor     # streaming renderer (always compiled in)
 HARBOR_TUI=plain       harbor     # no colors, pipe-safe (always compiled in)
 HARBOR_TUI=cellforge   harbor     # cell-diff renderer, own input pipeline (kitty/mouse/paste)
-HARBOR_TUI=spectre-tui harbor     # official Spectre widget framework (default in full builds)
-HARBOR_TUI=spectre     harbor     # rich panels
-HARBOR_TUI=fullscreen  harbor     # spectre fullscreen mode
-HARBOR_TUI=terminal-gui harbor    # mature widget set, menus, dialogs, mouse
-HARBOR_TUI=termina     harbor     # ANSI precision, 24-bit color, reactive MVVM
-HARBOR_TUI=razor       harbor     # .razor components, hot reload
+HARBOR_TUI=nickconsoleex harbor   # SharpConsoleUI backend (only with the external/ConsoleEx submodule checked out)
+HARBOR_TUI=spectre-tui harbor     # official Spectre widget framework (full builds only, see below)
+HARBOR_TUI=spectre     harbor     # rich panels (full builds only)
+HARBOR_TUI=fullscreen  harbor     # spectre fullscreen mode (full builds only)
+HARBOR_TUI=terminal-gui harbor    # mature widget set, menus, dialogs, mouse (full builds only)
+HARBOR_TUI=termina     harbor     # ANSI precision, 24-bit color, reactive MVVM (full builds only)
+HARBOR_TUI=razor       harbor     # .razor components, hot reload (full builds only)
 ```
 
-`spectre*`, `terminal-gui`, `termina`, `razor` are compiled from `contrib/tui/*` when
-`HarborWithSpectreTui=true` (the default; excluded in minimal builds).
+`spectre*`, `terminal-gui`, `termina`, `razor` are compiled from `contrib/tui/*` only
+when `Harbor.Hosting` is built with `HarborWithSpectreTui=true` (NUKE/distro builds or
+`-p:HarborWithSpectreTui=true`; plain `dotnet build` / `dotnet run` does NOT include
+them — those ids fall back to `plain`). `sixel`, `wpf`, `avalonia`, `maui`, `blazor`
+and `notifications` are never compiled into the CLI.
 One-shot commands (`ask`, `providers`, …) are always non-interactive regardless of `HARBOR_TUI`.
 
 #### Interactive renderer notes
@@ -169,7 +175,7 @@ curl https://api.anthropic.com/v1/messages \
 ### TUI looks broken on Windows cmd.exe
 
 Use Windows Terminal. Legacy conhost doesn't render ANSI escapes correctly.
-ConsoleEx additionally requires VT input/raw-mode bring-up on Windows (falls back to legacy automatically).
+CellForge additionally requires VT input/raw-mode bring-up on Windows (falls back to legacy automatically).
 
 ### Plugin load failed with Roslyn error
 
@@ -188,11 +194,11 @@ apps/Harbor.App.Cli/
 ├── Hosting/
 │   ├── HostBuilder.cs          # Microsoft.Extensions.Hosting bootstrap, DI registration (+ partials CliConfig/Logging)
 │   ├── TuiMode.cs              # Renderer id resolution, interactive vs non-interactive classification
-│   ├── ConsoleExModule.cs      # DI wiring for the ConsoleEx renderer frame owner
+│   ├── CellForgeModule.cs      # DI wiring for the CellForge renderer frame owner
 │   └── Adapters.cs             # Renderer writer/reader adapters for commands & wizard
 ├── Repl/
 │   ├── ReplRunner.cs           # Interactive + ask driver (delegates rendering to the active TUI)
-│   ├── ConsoleExReplRunner.cs  # Event-driven frame-loop runner when ConsoleEx is active
+│   ├── CellForgeReplRunner.cs  # Event-driven frame-loop runner when CellForge is active
 │   └── SlashCommandDispatcher.cs # /help, /model, /agent, ... dispatch
 ├── Commands/                   # Top-level ICommand impls: daemon, status, logs, config, auth
 ├── Configuration/CliConfig.cs  # ~/.harbor/cli.json (default renderer, disabled tools, ...)

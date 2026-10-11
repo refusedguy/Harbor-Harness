@@ -51,7 +51,8 @@ implementing `Harbor.Abstractions.Tools.ITool`.
 > **Tool sets**: hosts pick a `HarborToolSetKind` in `HarborComposeOptions`. `Full14`
 > (the CLI default — the enum name predates the tool count) registers all 20 tools
 > (14 classic + `lsp` + `skill` + `read_mcp_resource` + `mcp_prompt` + `session_read` +
-> `session_steer`); `Standard10` omits the eight heavier ones (`task`, `webfetch`,
+> `session_steer`); `Standard10` (name likewise predates the count — 12 members today)
+> omits the eight heavier ones (`task`, `webfetch`,
 > `ripgrep`, `mcp`, `read_mcp_resource`, `mcp_prompt`, `session_read`, `session_steer`).
 > The Avalonia desktop app uses `Standard10` (see `apps/Harbor.App.Avalonia/AppHost.cs`).
 > `session_read` / `session_steer` also require a wired `ISessionStore`; without one the
@@ -1307,6 +1308,15 @@ new("webfetch", "*", PermissionAction.Ask),
 Pick `Allow` only for tools that (a) have no side effects AND (b) cannot leak sensitive
 data. `read`, `glob`, `grep`, `ls`, `tree`, `ripgrep`, `notebook` are Allow. Everything
 else (writes, network, MCP) is at least `Ask`.
+
+> **Reserved plugin-vocabulary names.** `PermissionRuleset.Default` also carries
+> `session_broadcast` and `session_inbox` rules, and `BuiltinToolSafetyProfiles`
+> declares `Opaque` profiles for them — but the builtin host never registers tools
+> under those names. They exist so a plugin that loads later (peer-supervision
+> style, issue #165) still finds its permission/safety row; there is no builtin
+> `session_broadcast`/`session_inbox` tool to call. Do not add ad-hoc rules for
+> names no tool registers — these two are the only exception, and
+> `BuiltinToolSafetyDeclarationsTests` pins that.
 
 ### Step 6 — Write tests
 
