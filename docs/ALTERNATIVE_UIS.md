@@ -690,7 +690,7 @@ Notes:
 ## 8. How to add another renderer
 
 1. Create `src/Harbor.Tui.<Framework>/` project.
-2. Reference `Harbor.Abstractions` and `Harbor.Tui.Abstractions`.
+2. Reference `Harbor.Abstractions` and `Harbor.Terminal.Abstractions`.
 3. Implement `ITuiRenderer` (or `BaseTuiRenderer` for placement-driven rendering,
    `IInteractiveTuiRenderer` if you own the input loop).
 4. In `RunInteractiveAsync`:

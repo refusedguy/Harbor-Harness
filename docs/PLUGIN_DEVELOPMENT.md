@@ -281,18 +281,23 @@ A single `.cs` file can contain multiple types (plugin + tool + view model).
 
 ### `using` directives
 
-A `.cs` plugin is compiled verbatim — the compiler does **not** auto-inject `using`s
-(see `RoslynPluginCompiler.CompileAsync`). Include the ones you need, as the canonical
-sample does:
+A `.cs` plugin is compiled with a fixed prelude of `global using`s injected by
+`RoslynPluginCompiler` (`ImplicitUsingNamespaces`) — the .NET SDK implicit-usings
+set (`System`, `System.Collections.Generic`, `System.IO`, `System.Linq`,
+`System.Net.Http`, `System.Threading`, `System.Threading.Tasks`) plus the Harbor
+contract namespaces every plugin shape needs (`Harbor.Abstractions.Models`,
+`Harbor.Abstractions.Plugins`, `Harbor.Abstractions.Tools`,
+`Microsoft.Extensions.Logging`). Everything else must be explicit, as the canonical
+sample shows:
 
 ```csharp
-using System.Text.Json;
-using CSharpFunctionalExtensions;
-using Harbor.Abstractions.Models;
-using Harbor.Abstractions.Models.Identifiers;
-using Harbor.Abstractions.Permissions;
-using Harbor.Abstractions.Plugins;
-using Harbor.Abstractions.Tools;
+using System.Text.Json;                  // NOT injected — explicit
+using CSharpFunctionalExtensions;        // NOT injected — explicit
+using Harbor.Abstractions.Models;        // injected, explicit is harmless (duplicates are legal)
+using Harbor.Abstractions.Models.Identifiers;  // NOT injected — explicit (ToolName lives here)
+using Harbor.Abstractions.Permissions;   // NOT injected — explicit
+using Harbor.Abstractions.Plugins;       // injected
+using Harbor.Abstractions.Tools;         // injected
 ```
 
 You can reference any type from assemblies already loaded in the host AppDomain.
@@ -329,7 +334,7 @@ using Microsoft.Extensions.Logging;  // for LogInformation
 #### CS0246: "The type 'X' could not be found"
 
 Missing assembly reference. Plugin can only reference assemblies already loaded
-by Harbor (i.e. `Harbor.Abstractions`, `Harbor.Tui.Abstractions`, `System.Text.Json`,
+by Harbor (i.e. `Harbor.Abstractions`, `Harbor.Terminal.Abstractions`, `System.Text.Json`,
 `CSharpFunctionalExtensions`, `Microsoft.Extensions.*`). For anything else, use
 a DLL plugin.
 
@@ -1083,8 +1088,10 @@ using Harbor.Abstractions.Tools;
 public ToolName Name => ToolName.Create("foo");
 ```
 
-For `.cs` plugins, the loader auto-injects this using — but DLL plugins need it
-explicitly.
+For `.cs` plugins the namespaces above still need their explicit `using` —
+the loader injects only the fixed prelude (`### using directives`), which does
+not include `Harbor.Abstractions.Models.Identifiers` — and DLL plugins need it
+explicitly too.
 
 ### `using Microsoft.Extensions.Logging`
 
@@ -1141,7 +1148,7 @@ public void Initialize(PluginContext context)
 
 ### Plugins can't reference the Application layer
 
-TUI plugins must use only `Harbor.Abstractions` + `Harbor.Tui.Abstractions`.
+TUI plugins must use only `Harbor.Abstractions` + `Harbor.Terminal.Abstractions`.
 Referencing `Harbor.Application` or `Harbor.Registries` couples TUI to the Application layer, breaks AOT.
 
 ```csharp
