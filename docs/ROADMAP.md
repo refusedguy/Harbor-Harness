@@ -257,8 +257,10 @@ Moved platform-agnostic logic out of `Harbor.App.Avalonia` into `Harbor.Ui.Frame
 - [ ] API docs not published yet. Decided: DocFX ([ADR-017](adr/ADR-017-docs-site-docfx.md));
   metadata lane for `Harbor.Abstractions` + `Harbor.Abstractions.Contracts` wired and
   CI-validated, static assembly publishes to Pages on `master` behind the
-  `HARBOR_PAGES_ENABLED` opt-in (Pages not enabled yet). Still open: full `docfx build`
-  with generated member pages, XML-doc coverage gate, README link after the live URL.
+  `HARBOR_PAGES_ENABLED` opt-in (Pages not enabled yet). Full `docfx build` with
+  generated member pages is CI-proven by `.github/workflows/docs-site.yml` (#431 D4);
+  XML-doc coverage gate landed (D3, 494 members / 97.0%). Still open: README link
+  after the live URL (needs the first green Pages deploy).
 - [x] Per-project READMEs: **54/54 `src/` projects** have a README, enforced by
   `ReadmeCoverageTests` in `tests/Harbor.Architecture.Tests/` (fails the Release
   build via the `HarborArchitectureGate` target). Measured 2026-09-28 on

@@ -1,0 +1,95 @@
+# Harbor docs site — full `docfx build` with generated API pages.
+#
+# WHY THIS FILE EXISTS (issue #431, slice D4)
+#
+#   `docs.yml` validates the `docfx.json` manifest and assembles a static
+#   `_site` with stdlib python only — deliberately dotnet-free (ADR-017), so
+#   docs-only PRs get a signal in ~30s. That lane never invokes the docfx
+#   binary: the metadata lane (`Harbor.Abstractions` +
+#   `Harbor.Abstractions.Contracts` into `api/`) is validated for shape
+#   (srcs exist, dest stays `api`) but the generated member pages
+#   (`api/*.yml`) are never produced. A manifest that `docfx build` itself
+#   rejects would stay green there.
+#
+#   This workflow asks the one question the static lane cannot: does the
+#   full `docfx build` — metadata over the two contract assemblies plus the
+#   markdown content — succeed. Pattern matches the proven lane in
+#   `external/ConsoleEx/.github/workflows/docs.yml`
+#   (`dotnet tool install -g docfx`, then `docfx` on the manifest).
+#
+# WHAT RUNS HERE
+#
+#   docfx-build  setup .NET 10 (the tree's TargetFramework), install the
+#             docfx global tool, run `docfx build docfx.json`, upload the
+#             resulting `_site` as `harbor-docs-site-docfx` (7 days, no
+#             secrets, `contents: read` only).
+#
+#   docfx logs warnings but exits non-zero only on errors, so this job is
+#   green on warnings and red on a broken manifest, a moved metadata src,
+#   or a metadata crash — exactly the failures the static lane cannot see.
+#   No `--warningsAsErrors`: the XML-doc coverage ratchet is the `xmldoc`
+#   job in `docs.yml`, not this build.
+#
+# NOT here (deliberately)
+#
+#   - Pages publishing stays the `deploy` job in `docs.yml` (master-only
+#     behind the `HARBOR_PAGES_ENABLED` opt-in; Pages is not enabled yet).
+#     This lane publishes nothing — it only proves the build.
+#   - README link to the published URL lands after the first green Pages
+#     deploy, not here: there is still no live URL to link to.
+#
+# TRIGGER SCOPE IS NARROW ON PURPOSE. The metadata reads the two contract
+# assemblies, but their sources are already gated by the `xmldoc` job in
+# `docs.yml` on every .cs touch; running an SDK restore + metadata build on
+# each product PR would tax every unrelated change for a signal the static
+# lane plus `xmldoc` already give. This lane runs when the site inputs move:
+# the manifest, its nav, the API landing, or this file itself.
+name: docs-site
+
+on:
+  push:
+    branches: [dev, master]
+    paths:
+      - 'docfx.json'
+      - 'docs/toc.yml'
+      - 'api/**'
+      - '.github/workflows/docs-site.yml'
+  pull_request:
+    paths:
+      - 'docfx.json'
+      - 'docs/toc.yml'
+      - 'api/**'
+      - '.github/workflows/docs-site.yml'
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: docs-site-${{ github.workflow }}-${{ github.head_ref || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  docfx-build:
+    name: full docfx build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: "10.0.x"
+      - name: Install DocFX
+        run: |
+          dotnet tool install -g docfx
+          echo "$HOME/.dotnet/tools" >> "$GITHUB_PATH"
+      - name: Full docfx build (metadata + content)
+        run: docfx build docfx.json
+      - name: Upload docfx _site artifact (no secrets)
+        uses: actions/upload-artifact@v7
+        with:
+          name: harbor-docs-site-docfx
+          path: _site
+          retention-days: 7
