@@ -126,6 +126,8 @@ public class StreamingHoldbackTests
     public async Task Thinking_StablePrefix_MatchesWrapDocument()
     {
         var b = new StreamingThinkingBlock();
+        b.SetExpanded(true); // O10 #1179: collapsed is one summary line — the
+                             // stable-prefix wrap contract lives on the expanded body.
         b.Append("first logical line here\nsecond ");
         int m1 = b.Measure(20).MinLines;
         b.Append("logical line here\nthird");
@@ -143,6 +145,7 @@ public class StreamingHoldbackTests
     public async Task Thinking_HashChangesPerAppend_CheapEstimateMatchesFormula()
     {
         var b = new StreamingThinkingBlock();
+        b.SetExpanded(true); // O10 #1179: collapsed estimate is the constant 1.
         ulong h0 = b.ContentHash;
         b.Append("hello world, this is a thinking line\n");
         ulong h1 = b.ContentHash;
@@ -159,6 +162,8 @@ public class StreamingHoldbackTests
     public async Task Thinking_PaintsStableRows_WithoutThrowing()
     {
         var b = new StreamingThinkingBlock();
+        b.SetExpanded(true); // O10 #1179: collapsed paints the summary header,
+                             // not body rows — pin body paint expanded.
         b.Append("thinking line one\nthinking line two\npartial");
         var m = b.Measure(30);
         var buffer = new ScreenBuffer(30, m.MinLines);
