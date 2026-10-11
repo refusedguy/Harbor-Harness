@@ -10,9 +10,10 @@ namespace Harbor.Registries.Tools;
 /// </summary>
 /// <remarks>
 ///     <para>
-///         The unfiltered descriptor array is built at freeze time and returned
-///         as-is: repeat <c>ResolveTools</c> / <c>GetAllTools</c> calls allocate
-///         nothing. Per-ruleset filtered arrays are memoized on first use, so the
+///         The unfiltered descriptor array is built at freeze time, sorted by
+///         name (ordinal), and returned as-is: repeat <c>ResolveTools</c> /
+///         <c>GetAllTools</c> calls allocate nothing and the per-turn consumer
+///         iterates without sorting. Per-ruleset filtered arrays are memoized on first use, so the
 ///         per-turn hot path (the same <c>agent.Permission</c> instance every turn)
 ///         also resolves without allocating. Filtered entries are keyed by ruleset
 ///         reference — a fresh ruleset instance computes once, then hits the cache.
@@ -46,6 +47,12 @@ internal sealed class FrozenToolView : IToolSource
     /// </summary>
     /// <param name="tools">The frozen tool map.</param>
     /// <param name="describe">Descriptor factory (no LINQ — plain loop).</param>
+    /// <remarks>
+    ///     #1240: the array is sorted by name (ordinal) at freeze time, so the
+    ///     per-turn consumer (<c>SystemPromptBuilder</c>) iterates it as-is
+    ///     instead of paying an <c>OrderBy</c> per turn. Freeze is a
+    ///     startup/reload event, never the hot path.
+    /// </remarks>
     public static FrozenToolView Build(
         FrozenDictionary<ToolName, ITool> tools,
         Func<ITool, ToolDescriptor> describe)
@@ -57,8 +64,12 @@ internal sealed class FrozenToolView : IToolSource
             all[i++] = describe(kv.Value);
         }
 
+        Array.Sort(all, CompareByName);
         return new FrozenToolView(tools, all, describe);
     }
+
+    private static int CompareByName(ToolDescriptor left, ToolDescriptor right) =>
+        string.CompareOrdinal(left.Name.Value, right.Name.Value);
 
     /// <summary>
     ///     All descriptors in this snapshot. The cached array is returned as-is (zero alloc).
@@ -114,6 +125,13 @@ internal sealed class FrozenToolView : IToolSource
         {
             snapshot = new ToolDescriptor[n];
             Array.Copy(buf, snapshot, n);
+        }
+
+        // #1240: keep the per-ruleset cache pre-sorted (ordinal by name), like
+        // the unfiltered array above — the per-turn consumer iterates as-is.
+        if (snapshot.Length > 1)
+        {
+            Array.Sort(snapshot, CompareByName);
         }
 
         lock (_gate)
