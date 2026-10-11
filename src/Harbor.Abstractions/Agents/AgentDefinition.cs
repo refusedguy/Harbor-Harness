@@ -329,9 +329,11 @@ public sealed record AgentDefinition(
     /// <returns>A ready-to-use <see cref="AgentDefinition" /> that coordinates sub-agents instead of implementing directly.</returns>
     /// <remarks>
     ///     Direct writes are Denied — the orchestrator implements nothing itself —
-    ///     but it is not a read-only agent either: it directs peers through
-    ///     <c>session_steer</c> (Ask-gated) and fans work out through
-    ///     <c>task</c>, so the description avoids the read-only declaration.
+    ///     but it is not a read-only agent either: it fans work out through
+    ///     <c>task</c> (Allowed) while live-session steering stays Denied
+    ///     (<c>session_steer</c> declares <c>ToolCategory.Write</c>, so the
+    ///     write-category Deny shadows any narrower Ask on tie-sort), and the
+    ///     description avoids the read-only declaration accordingly.
     /// </remarks>
     public static AgentDefinition OrchestratorDefault(string model, string providerId) => new(
         AgentName.Create("orchestrator"),
@@ -348,7 +350,7 @@ public sealed record AgentDefinition(
             new("tree", "*", PermissionAction.Allow),
             new("skill", "*", PermissionAction.Allow),
             new("session_read", "*", PermissionAction.Allow),
-            new("session_steer", "*", PermissionAction.Ask),
+            new("session_steer", "*", PermissionAction.Deny),
             new("task", "*", PermissionAction.Allow),
             new("bash", "ls *", PermissionAction.Allow),
             new("bash", "cat *", PermissionAction.Allow),

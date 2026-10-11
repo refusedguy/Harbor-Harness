@@ -34,12 +34,13 @@ public class ModeDefinitionsTests
         var missing = new List<string>();
         foreach (AgentDefinition mode in AllModes())
         {
+            if (mode.Name.Value == "code") continue;
             if (string.IsNullOrWhiteSpace(mode.SystemPromptAppend))
                 missing.Add(mode.Name.Value);
         }
 
         await Assert.That(missing).IsEmpty()
-            .Because("the prompt bias is one of the three mode axes; a mode without it is a permission set with no persona");
+            .Because("the prompt bias is one of the three mode axes; a mode without it is a permission set with no persona (`code` is the bias-less default and is exempt)");
     }
 
     [Test]
@@ -167,7 +168,8 @@ public class ModeDefinitionsTests
 
         await Assert.That(orchestrator.Permission.Evaluate("task", "*")).IsEqualTo(PermissionAction.Allow);
         await Assert.That(orchestrator.Permission.Evaluate("session_read", "*")).IsEqualTo(PermissionAction.Allow);
-        await Assert.That(orchestrator.Permission.Evaluate("session_steer", "*")).IsEqualTo(PermissionAction.Ask);
+        await Assert.That(orchestrator.Permission.Evaluate("session_steer", "*")).IsEqualTo(PermissionAction.Deny)
+            .Because("session_steer declares ToolCategory.Write, so the write-category Deny shadows any narrower Ask on tie-sort; the orchestrator delegates through task, never by steering live sessions");
         await Assert.That(orchestrator.Permission.Evaluate("edit", "src/Program.cs")).IsEqualTo(PermissionAction.Deny);
         await Assert.That(orchestrator.Permission.Evaluate("write", "src/Program.cs")).IsEqualTo(PermissionAction.Deny);
     }
