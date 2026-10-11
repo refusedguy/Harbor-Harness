@@ -175,7 +175,7 @@ curl https://api.anthropic.com/v1/messages \
 ### TUI looks broken on Windows cmd.exe
 
 Use Windows Terminal. Legacy conhost doesn't render ANSI escapes correctly.
-ConsoleEx additionally requires VT input/raw-mode bring-up on Windows (falls back to legacy automatically).
+CellForge additionally requires VT input/raw-mode bring-up on Windows (falls back to legacy automatically).
 
 ### Plugin load failed with Roslyn error
 
@@ -194,11 +194,11 @@ apps/Harbor.App.Cli/
 ├── Hosting/
 │   ├── HostBuilder.cs          # Microsoft.Extensions.Hosting bootstrap, DI registration (+ partials CliConfig/Logging)
 │   ├── TuiMode.cs              # Renderer id resolution, interactive vs non-interactive classification
-│   ├── ConsoleExModule.cs      # DI wiring for the ConsoleEx renderer frame owner
+│   ├── CellForgeModule.cs      # DI wiring for the CellForge renderer frame owner
 │   └── Adapters.cs             # Renderer writer/reader adapters for commands & wizard
 ├── Repl/
 │   ├── ReplRunner.cs           # Interactive + ask driver (delegates rendering to the active TUI)
-│   ├── ConsoleExReplRunner.cs  # Event-driven frame-loop runner when ConsoleEx is active
+│   ├── CellForgeReplRunner.cs  # Event-driven frame-loop runner when CellForge is active
 │   └── SlashCommandDispatcher.cs # /help, /model, /agent, ... dispatch
 ├── Commands/                   # Top-level ICommand impls: daemon, status, logs, config, auth
 ├── Configuration/CliConfig.cs  # ~/.harbor/cli.json (default renderer, disabled tools, ...)
