@@ -56,7 +56,8 @@ internal static partial class ProcessTree
         if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
             return null;
 
-        var job = CreateJobObject(IntPtr.Zero, null);
+        var raw = CreateJobObject(IntPtr.Zero, null);
+        var job = new SafeJobHandle(raw, true);
         if (job.IsInvalid) return null;
 
         var info = new JobObjectExtendedLimitInformation
@@ -84,7 +85,7 @@ internal static partial class ProcessTree
     }
 
     [LibraryImport("kernel32.dll", SetLastError = true, StringMarshalling = StringMarshalling.Utf16)]
-    private static partial SafeJobHandle CreateJobObject(IntPtr lpJobAttributes, string? lpName);
+    private static partial IntPtr CreateJobObject(IntPtr lpJobAttributes, string? lpName);
 
     [LibraryImport("kernel32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
@@ -157,6 +158,8 @@ internal static partial class ProcessTree
 internal sealed class SafeJobHandle : SafeHandleZeroOrMinusOneIsInvalid
 {
     private SafeJobHandle() : base(true) { }
+
+    internal SafeJobHandle(IntPtr handle, bool ownsHandle) : base(ownsHandle) => SetHandle(handle);
 
     protected override bool ReleaseHandle() => ProcessTree.CloseHandle(handle);
 }
