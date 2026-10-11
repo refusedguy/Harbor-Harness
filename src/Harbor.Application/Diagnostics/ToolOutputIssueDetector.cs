@@ -63,29 +63,42 @@ public static partial class ToolOutputIssueDetector
         }
 
         List<DiagnosticIssue>? found = null;
-        string[] rows = output.Split('\n');
 
-        for (int i = 0; i < rows.Length; i++)
+        // Span line walk, no string[] materialization: Split('\n') allocated
+        // one string per line of the whole output even when the cap below
+        // stopped classification at 50 rows. The walk yields the same rows in
+        // the same order ('\r' stays on the line; Trim takes it off, exactly
+        // as Split('\n') + Trim did), and the tail past the cap is never
+        // touched — the megabyte-log win.
+        ReadOnlySpan<char> rest = output.AsSpan();
+        while (true)
         {
             if (found is not null && found.Count >= MaxIssuesPerOutput)
             {
                 break;
             }
 
-            string row = rows[i].Trim();
-            if (row.Length == 0 || !TryClassify(row, out string name, out DiagnosticIssueSeverity severity))
+            int nl = rest.IndexOf('\n');
+            ReadOnlySpan<char> line = nl < 0 ? rest : rest.Slice(0, nl);
+            string row = line.Trim().ToString();
+            if (row.Length != 0 && TryClassify(row, out string name, out DiagnosticIssueSeverity severity))
             {
-                continue;
+                found ??= [];
+                found.Add(new DiagnosticIssue(
+                    DiagnosticIssueSource.ToolOutput,
+                    severity,
+                    name.Length == 0 ? producer : name,
+                    null,
+                    0,
+                    row));
             }
 
-            found ??= [];
-            found.Add(new DiagnosticIssue(
-                DiagnosticIssueSource.ToolOutput,
-                severity,
-                name.Length == 0 ? producer : name,
-                null,
-                0,
-                row));
+            if (nl < 0)
+            {
+                break;
+            }
+
+            rest = rest.Slice(nl + 1);
         }
 
         if (found is null)
