@@ -4,12 +4,18 @@ using Harbor.Ui.Framework.State;
 namespace Harbor.Tui.CellForge.Widgets;
 
 /// <summary>
-/// Leader-key chord router (ctrl+x pattern): the leader press arms the router,
-/// the next key inside the timeout window resolves the chord and fires its
-/// bound action; unknown chords disarm silently. Keys while unarmed pass
-/// through untouched — the host keeps full routing control.
+/// Leader-key chord router (ctrl+x pattern, opencode keybind.ts steal, #1175):
+/// the leader press arms the router, the next key inside the timeout window
+/// resolves the chord and fires its bound action; unknown chords disarm
+/// silently. Keys while unarmed pass through untouched — the host keeps full
+/// routing control.
 /// </summary>
 /// <remarks>
+/// The 2000 ms window mirrors opencode's leader timeout (config/keybind.ts).
+/// <see cref="ChatAction.None"/> is the unbound convention on the store side:
+/// <see cref="Unbind"/> returns a chord to it. Any printable char (including
+/// ',') can be a chord — comma bindings need no special case. Escape while
+/// armed disarms (escape-clears-pending, context/keymap.tsx).
 /// Epic C: chord meaning travels as <see cref="AppMsg"/> — hosts bind chords
 /// with <see cref="Bind(char, AppMsg, Action?)"/> and drain the resolved message
 /// via <see cref="TakePendingMsg"/> to <c>UiStore.Dispatch</c> it, so every
@@ -19,8 +25,8 @@ namespace Harbor.Tui.CellForge.Widgets;
 /// </remarks>
 public sealed class LeaderKeyRouter
 {
-    /// <summary>Chord resolve window in ms (arm → key).</summary>
-    public const int TimeoutMs = 1500;
+    /// <summary>Chord resolve window in ms (arm → key). Mirrors opencode's leader timeout.</summary>
+    public const int TimeoutMs = 2000;
 
     private readonly Dictionary<char, Action> _bindings = [];
     private readonly Dictionary<char, (AppMsg Msg, Action? Run)> _messages = [];
@@ -68,9 +74,37 @@ public sealed class LeaderKeyRouter
     }
 
     /// <summary>
+    /// Removes a chord binding (action and message forms). The chord returns
+    /// to the unbound convention: resolving it disarms silently, and the
+    /// store side stays <see cref="ChatAction.None"/>.
+    /// </summary>
+    public void Unbind(char chord)
+    {
+        char key = char.ToLowerInvariant(chord);
+        _ = _bindings.Remove(key);
+        _ = _messages.Remove(key);
+    }
+
+    /// <summary>
+    /// Disarms a pending leader press without resolving (escape-clears-pending).
+    /// Returns true when a pending press was actually cleared.
+    /// </summary>
+    public bool Cancel()
+    {
+        if (!IsPending)
+        {
+            return false;
+        }
+
+        _armedAtMs = long.MinValue;
+        return true;
+    }
+
+    /// <summary>
     /// Feeds a key event. Returns true when the event was consumed (the leader
     /// press itself, a resolved chord, or a failed chord attempt). The bound
-    /// action fires synchronously on resolution.
+    /// action fires synchronously on resolution. Escape while armed disarms
+    /// (escape-clears-pending) and is consumed.
     /// </summary>
     public bool HandleKey(in KeyEvent key, long nowMs)
     {
@@ -88,6 +122,12 @@ public sealed class LeaderKeyRouter
             }
 
             return false;
+        }
+
+        if (key.Key == KeyCode.Escape)
+        {
+            _armedAtMs = long.MinValue; // escape-clears-pending
+            return true;
         }
 
         _armedAtMs = long.MinValue;

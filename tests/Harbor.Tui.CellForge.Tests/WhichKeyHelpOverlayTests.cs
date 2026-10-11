@@ -180,4 +180,77 @@ public sealed class WhichKeyHelpOverlayTests
         await Assert.That(GridDump.Art(buffer)).DoesNotContain("Which-key");
         await Assert.That(buffer.Get(40, 12).Rune).IsEqualTo((int)'a');
     }
+
+    [Test]
+    public async Task NoLeaderBindings_HidesLeaderSection()
+    {
+        var overlay = new WhichKeyHelpOverlay();
+        overlay.Show();
+        var buffer = new ScreenBuffer(80, 24);
+
+        overlay.Paint(buffer, new Rect(0, 0, 80, 24));
+
+        await Assert.That(GridDump.Art(buffer)).DoesNotContain("Leader");
+        await Assert.That(GridDump.Art(buffer)).DoesNotContain("pending ctrl+x");
+    }
+
+    [Test]
+    public async Task LeaderBindings_RenderGroupedRows()
+    {
+        var overlay = new WhichKeyHelpOverlay();
+        overlay.SetLeaderBindings([
+            new LeaderEntry("session", 's', "save session"),
+            new LeaderEntry("session", 'l', "list sessions"),
+            new LeaderEntry("panel", 'p', "toggle panel"),
+        ]);
+        overlay.Show();
+        var buffer = new ScreenBuffer(80, 24);
+
+        overlay.Paint(buffer, new Rect(0, 0, 80, 24));
+
+        string art = GridDump.Art(buffer);
+        await Assert.That(art).Contains("Leader");
+        await Assert.That(art).Contains("session");
+        await Assert.That(art).Contains("panel");
+        await Assert.That(art).Contains("save session");
+        await Assert.That(art).Contains("ctrl+x s");
+        await Assert.That(art).Contains("Press ? to close.");
+    }
+
+    [Test]
+    public async Task LeaderBindings_Null_ClearsRows()
+    {
+        var overlay = new WhichKeyHelpOverlay();
+        overlay.SetLeaderBindings([new LeaderEntry("session", 's', "save session")]);
+        overlay.SetLeaderBindings(null);
+        overlay.Show();
+        var buffer = new ScreenBuffer(80, 24);
+
+        overlay.Paint(buffer, new Rect(0, 0, 80, 24));
+
+        await Assert.That(GridDump.Art(buffer)).DoesNotContain("Leader");
+        await Assert.That(overlay.LeaderBindings.Count).IsEqualTo(0);
+    }
+
+    [Test]
+    public async Task PendingChord_ShowsPreview_AndClears()
+    {
+        var overlay = new WhichKeyHelpOverlay();
+        overlay.Show();
+        overlay.SetPending('G');
+
+        await Assert.That(overlay.PendingChord.HasValue).IsTrue();
+        await Assert.That(overlay.PendingChord.Value).IsEqualTo('g');
+
+        var buffer = new ScreenBuffer(80, 24);
+        overlay.Paint(buffer, new Rect(0, 0, 80, 24));
+        await Assert.That(GridDump.Art(buffer)).Contains("pending ctrl+x g");
+
+        overlay.SetPending(null);
+        await Assert.That(overlay.PendingChord.HasValue).IsFalse();
+
+        var cleared = new ScreenBuffer(80, 24);
+        overlay.Paint(cleared, new Rect(0, 0, 80, 24));
+        await Assert.That(GridDump.Art(cleared)).DoesNotContain("pending ctrl+x");
+    }
 }

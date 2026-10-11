@@ -86,6 +86,48 @@ public class ChatKeyMapTests
     }
 
     [Test]
+    public async Task CtrlAltK_ResolvesToWhichKey_BeforePanelSlot()
+    {
+        await Assert.That(Map.Resolve(UiKey.ForChar('k', KeyModifierSet.Ctrl | KeyModifierSet.Alt)))
+            .IsEqualTo(ChatAction.WhichKey);
+    }
+
+    [Test]
+    public async Task WhichKey_NeedsBothModifiers()
+    {
+        await Assert.That(Map.Resolve(UiKey.ForChar('k', KeyModifierSet.Ctrl))).IsNotEqualTo(ChatAction.WhichKey);
+        await Assert.That(Map.Resolve(UiKey.ForChar('k', KeyModifierSet.Alt))).IsNotEqualTo(ChatAction.WhichKey);
+        await Assert.That(Map.Resolve(UiKey.ForChar('k'))).IsEqualTo(ChatAction.Char);
+    }
+
+    [Test]
+    public async Task WhichKey_TogglesRegisteredWhichKeyPanel()
+    {
+        var state = new UiState
+        {
+            Ui = TerminalUiState.Empty with
+            {
+                RegisteredPanelIds = ["whichkey"],
+                PanelStates = ImmutableDictionary<string, TuiPanelState>.Empty.SetItem("whichkey", TuiPanelState.Hidden)
+            }
+        };
+        var key = UiKey.ForChar('k', KeyModifierSet.Ctrl | KeyModifierSet.Alt);
+        var action = Map.Resolve(key);
+        var result = ChatAppReducer.Update(state, new AppMsg.KeyInput(action, key));
+        await Assert.That(result.State.Ui.PanelStates["whichkey"]).IsEqualTo(TuiPanelState.Visible);
+    }
+
+    [Test]
+    public async Task WhichKey_WithoutRegisteredPanel_IsNoop()
+    {
+        var state = new UiState();
+        var key = UiKey.ForChar('k', KeyModifierSet.Ctrl | KeyModifierSet.Alt);
+        var action = Map.Resolve(key);
+        var result = ChatAppReducer.Update(state, new AppMsg.KeyInput(action, key));
+        await Assert.That(result.State.Ui.PanelStates.ContainsKey("whichkey")).IsFalse();
+    }
+
+    [Test]
     public async Task LineFeed_ResolvesToJumpPalette_TerminalAlias()
     {
         // Some terminals report Ctrl+J as a bare LF (0x0A) with no Ctrl flag.

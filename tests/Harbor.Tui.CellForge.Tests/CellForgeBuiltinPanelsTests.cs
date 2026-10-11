@@ -415,9 +415,9 @@ public class CellForgeBuiltinPanelsTests
     }
 
     [Test]
-    public async Task HelpKeymap_HasTenUniqueKeys()
+    public async Task HelpKeymap_HasElevenUniqueKeys()
     {
-        await Assert.That(HelpKeymap.Rows.Count).IsEqualTo(10);
+        await Assert.That(HelpKeymap.Rows.Count).IsEqualTo(11);
         var keys = new HashSet<string>(StringComparer.Ordinal);
         foreach (HelpKeymap.Entry hotkey in HelpKeymap.Rows)
         {

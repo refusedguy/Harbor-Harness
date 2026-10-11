@@ -47,6 +47,9 @@ public enum ChatAction
     /// <summary>'?' — toggle the help / keymap panel.</summary>
     HelpPanel,
 
+    /// <summary>Ctrl+Alt+K — toggle the which-key bindings panel (opencode steal O6, #1175).</summary>
+    WhichKey,
+
     /// <summary>F12 — toggle the in-TUI diagnostics / logs panel (shows live ILogger output).</summary>
     ToggleLogsPanel,
 

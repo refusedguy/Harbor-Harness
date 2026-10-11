@@ -21,6 +21,7 @@ public static class HelpKeymap
         new("Ctrl+↑/↓", "grow / shrink focused panel"),
         new("q / Esc", "return focus to chat"),
         new("?", "toggle this help panel"),
+        new("Ctrl+Alt+K", "toggle which-key bindings"),
         new("F2", "toggle input/chat focus"),
         new("F12", "toggle logs panel (live ILogger output)"),
         new("Ctrl+L", "clear transcript"),

@@ -97,4 +97,60 @@ public class LeaderKeyRouterTests
         await Assert.That(first).IsEqualTo(0);
         await Assert.That(second).IsEqualTo(1);
     }
+
+    [Test]
+    public async Task HandleKey_EscapeWhileArmed_ClearsPending()
+    {
+        var router = new LeaderKeyRouter();
+        int fired = 0;
+        router.Bind('g', () => fired++);
+
+        _ = router.HandleKey(Leader(), nowMs: 0);
+        await Assert.That(router.HandleKey(KeyEvent.Simple(KeyCode.Escape), nowMs: 100)).IsTrue();
+        await Assert.That(router.IsPending).IsFalse();
+
+        // The cleared press resolves nothing afterwards.
+        await Assert.That(router.HandleKey(Plain('g'), nowMs: 200)).IsFalse();
+        await Assert.That(fired).IsEqualTo(0);
+    }
+
+    [Test]
+    public async Task Cancel_ClearsPending_ReportsWhetherArmed()
+    {
+        var router = new LeaderKeyRouter();
+
+        await Assert.That(router.Cancel()).IsFalse();
+
+        _ = router.HandleKey(Leader(), nowMs: 0);
+        await Assert.That(router.Cancel()).IsTrue();
+        await Assert.That(router.IsPending).IsFalse();
+    }
+
+    [Test]
+    public async Task CommaChord_ResolvesLikeAnyPrintable()
+    {
+        var router = new LeaderKeyRouter();
+        int fired = 0;
+        router.Bind(',', () => fired++);
+
+        _ = router.HandleKey(Leader(), nowMs: 0);
+        _ = router.HandleKey(Plain(','), nowMs: 100);
+
+        await Assert.That(fired).IsEqualTo(1);
+        await Assert.That(router.IsPending).IsFalse();
+    }
+
+    [Test]
+    public async Task Unbind_ReturnsChordToUnbound()
+    {
+        var router = new LeaderKeyRouter();
+        int fired = 0;
+        router.Bind('g', () => fired++);
+        router.Unbind('g');
+
+        _ = router.HandleKey(Leader(), nowMs: 0);
+        await Assert.That(router.HandleKey(Plain('g'), nowMs: 100)).IsTrue();
+        await Assert.That(fired).IsEqualTo(0);
+        await Assert.That(router.IsPending).IsFalse();
+    }
 }
