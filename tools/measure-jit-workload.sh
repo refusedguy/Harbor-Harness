@@ -9,15 +9,13 @@
 # CLI verbs that need no provider key and no network, so runs are free and
 # reproducible — the same set the aot-publish smoke step (#413) uses.
 #
-# WHY NOT AOT HERE: the NativeAOT publish of this tree FAILS today (recorded in
-# .github/aot-warning-baseline.txt, gated by #413: IL3000 x3 incl. one inside
-# Microsoft.CodeAnalysis itself, IL2072, IL2070 — ILC runs warnings-as-errors).
-# A failing ILC publish emits no binary, so there is no AOT artifact to drive.
-# This script therefore establishes the JIT half of the #411 table (median +
-# spread, never a single number — #998 measured 1.43x spread on one unchanged
-# job) and prints the verbatim AOT recipe + recorded outcome alongside, so the
-# day #413's record flips to published the same workload runs unchanged
-# against both binaries. No pass/fail threshold: an absolute wall-clock gate on
+# WHY AOT LIVES ELSEWHERE: the NativeAOT publish of this tree completes since
+# #1055s3 (record: .github/aot-warning-baseline.txt, gate: #413) and is driven
+# by the sibling script tools/measure-aot-workload.sh with the verbatim #413
+# recipe — same verbs, same N, same table shape, so the two logs are comparable
+# cell by cell. This script establishes the JIT half of the #411 table (median
+# + spread, never a single number — #998 measured 1.43x spread on one unchanged
+# job). No pass/fail threshold: an absolute wall-clock gate on
 # a shared runner is a wrong metric, not a bad number (#998, #410).
 #
 # RUN: locally `./tools/measure-jit-workload.sh [N]` (default N=7, odd so the
@@ -87,9 +85,8 @@ for args in wl:
           f"{max(walls) / min(walls):>7.2f}x{s.median(rss):>12.0f}{max(rss):>12.0f}")
 print("wall = spawn-to-exit per verb; rss = ru_maxrss peak (KB).")
 EOF
-  echo "== AOT side (not runnable — recorded outcome, #413) =="
-  echo "recipe: dotnet publish apps/Harbor.App.Cli -c Release -r linux-x64 --self-contained true -p:HarborWithAot=true -o publish/aot"
-  echo "outcome: failed — IL3000 (x3, one inside Microsoft.CodeAnalysis), IL2072, IL2070 as errors under ILC warnings-as-errors; no binary emitted."
-  echo "record: .github/aot-warning-baseline.txt (aot-publish job compares every run)."
+  echo "== AOT side (sibling script, same verbs — #413 recipe) =="
+  echo "harness: tools/measure-aot-workload.sh (NativeAOT, self-contained linux-x64)."
+  echo "record: .github/aot-warning-baseline.txt (status=published since #1055s3)."
 } | tee "$LOG"
 echo "log: $LOG"
