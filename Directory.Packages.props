@@ -185,6 +185,17 @@
     <PackageVersion Include="MessagePack" Version="3.1.8" />
     <!-- ── SQLite native driver ──────────────────────────────────────────── -->
     <PackageVersion Include="SQLitePCLRaw.lib.e_sqlite3" Version="3.53.3" />
+    <!-- ── CLI parsing (sourcegen, AOT-first) ─────────────────────────────── -->
+    <!--
+      ConsoleAppFramework v5 (LB2 pilot, #1235): zero-dependency,
+      zero-reflection CLI parser driven by an incremental source generator —
+      the Run/Add methods (including help text) are emitted as static code,
+      so the result is NativeAOT/trimming-safe. Spectre.Console.Cli and
+      System.CommandLine are NOT used (AOT/trim issues — see issue body).
+      Analyzer-only package: no runtime dll ships (PrivateAssets=all at the
+      consumption site in apps/Harbor.App.Cli).
+    -->
+    <PackageVersion Include="ConsoleAppFramework" Version="5.7.13" />
     <!-- ── Source generators (PrivateAssets="all" at consumption site) ───── -->
     <PackageVersion Include="Termina.Generators" Version="0.15.0" />
     <!-- ── NUKE build system (consumed by build/_build.csproj only) ─────── -->
