@@ -15,7 +15,7 @@
 - **[docs/SPECTRE_TUI_DEEP_DIVE.md](./docs/SPECTRE_TUI_DEEP_DIVE.md)** — full anatomy of the optional interactive shell (`contrib/tui/Harbor.Tui.SpectreTui`; NOT compiled into the default CLI build — own `Contrib.slnx`, opt-in via `HARBOR_WITH_SPECTRE_TUI`) for adding features from opencode/kilocode/pi-agent.
 - **[docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md)** — high-level design + principles summary.
 - **[docs/DEVELOPMENT.md](./docs/DEVELOPMENT.md)** — how to contribute + **principles checklist** for PRs.
-- **[docs/PATTERNS.md](./docs/PATTERNS.md)** — 18 pattern catalog with real code (Strategy, Registry, Observer, Builder, Adapter, Command, Specification, Value Object, Factory, Plugin, Repository, Chain of Resp, Flyweight, Object Pool, MVVM, Decorator, TEA, DU).
+- **[docs/PATTERNS.md](./docs/PATTERNS.md)** — 8 pattern catalog with real code (Observer, Factory, Decorator, Command, Extension points, Default members, Type unions, State).
 - **[docs/ANTIPATTERNS.md](./docs/ANTIPATTERNS.md)** — 38 antipatterns we forbid (with before/after code).
 - **[docs/EXAMPLES.md](./docs/EXAMPLES.md)** — 40+ recipes ("How do I...?").
 - **[docs/TOOLS_CATALOG.md](./docs/TOOLS_CATALOG.md)** — comprehensive reference for all 20 builtin tools: args schema, 3+ examples per tool, "when to use X vs Y" matrix, tool chains, JSON Schema tips, permission rationale, sub-agent `task` deep dive, MCP integration, and a full WebFetchTool walkthrough.
@@ -84,7 +84,7 @@ docs/        — architecture, benchmarks, build, dev, getting started, plugin d
 ## Layering rules — Clean / Hexagonal / Onion Architecture
 
 > **Canonical reference:** [docs/ARCHITECTURE_LAYERS.md](./docs/ARCHITECTURE_LAYERS.md).
-> **Mechanically enforced by:** `tests/Harbor.Architecture.Tests` (46 tests: 21 reflection-based + 25 NetArchTest-based).
+> **Mechanically enforced by:** `tests/Harbor.Architecture.Tests` (143 files / 874 `[Test]` methods — see [docs/ARCHITECTURE_LAYERS.md](./docs/ARCHITECTURE_LAYERS.md) §5).
 > **User mandate:** *"слои должны быть по чистой архитектуре, гексогональная луковая называй как хочешь но это надо"*.
 
 Harbor follows **Clean / Hexagonal / Onion Architecture**. The dependency direction is
