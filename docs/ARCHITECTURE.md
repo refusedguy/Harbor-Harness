@@ -15,7 +15,7 @@
 2. **NativeAOT-ready** — Core can be AOT-compiled; TUI runs JIT.
 3. **Low memory** — <30MB RSS idle target (vs 1GB+ for Node.js equivalents).
 4. **Plugin-extensible** — tools, providers, agents, UI all extensible.
-5. **Testable** — ~1350 tests across 20+ test projects; interfaces make mocking easy.
+5. **Testable** — ~1350 tests across 37 test projects; interfaces make mocking easy.
 
 ## Solution structure
 
@@ -48,8 +48,9 @@ Harbor.slnx                          (.sln не существует; есть �
 
 > **Canonical reference:** [ARCHITECTURE_LAYERS.md](./ARCHITECTURE_LAYERS.md) — the
 > authoritative matrix of allowed and forbidden `<ProjectReference>` edges, mechanically
-> enforced by `tests/Harbor.Architecture.Tests` (46 tests: 21 reflection-based +
-> 25 NetArchTest-based). The diagram below is the TL;DR; the full rules, Mermaid
+> enforced by `tests/Harbor.Architecture.Tests` (143 files / 874 `[Test]` methods —
+> see [ARCHITECTURE_LAYERS.md](./ARCHITECTURE_LAYERS.md) §5 for the current count).
+> The diagram below is the TL;DR; the full rules, Mermaid
 > diagram, and audit history live in that document.
 
 Harbor follows **Clean / Hexagonal / Onion Architecture** — dependency direction is
@@ -861,6 +862,6 @@ See [docs/specs/14-architecture-revised.md](./specs/14-architecture-revised.md) 
 - [CLAUDE.md](../CLAUDE.md) — code conventions.
 - [AGENTS.md](../AGENTS.md) — guide for AI agents.
 - [Development Guide](./DEVELOPMENT.md) — how to contribute.
-- [PATTERNS.md](./PATTERNS.md) — 18 patterns catalog with code.
+- [PATTERNS.md](./PATTERNS.md) — 8 patterns catalog with code.
 - [ANTIPATTERNS.md](./ANTIPATTERNS.md) — 38 antipatterns we forbid.
 - [EXAMPLES.md](./EXAMPLES.md) — 40+ recipes.
