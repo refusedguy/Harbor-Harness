@@ -1,8 +1,10 @@
 # Component Catalog
 
-> Reusable UI components in Harbor. Each component exists in 3 platform flavors
-> (Avalonia / Blazor / WPF) with identical prop names and shared logic via
-> `Harbor.Ui.Framework.Converters.StatusMappers`.
+> Reusable UI components in Harbor. The core three (`StatusBadge`, `ChatBubble`,
+> `SessionRow`) exist in 3 platform flavors (Avalonia / Blazor / WPF) with
+> identical prop names and shared logic via
+> `Harbor.Ui.Framework.Converters.StatusMappers`; every newer component is
+> Avalonia-only until ported — each section below names its own platforms.
 >
 > **Note (sprint-2):** the Blazor/WPF/MAUI apps moved to [`contrib/apps/`](../contrib/apps/) —
 > paths below reflect that; Avalonia stays in `apps/Harbor.App.Avalonia`.

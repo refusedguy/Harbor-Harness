@@ -451,9 +451,14 @@ Concrete implementations of:
   (`PermissionRuleset`).
 - **Forbidden:** any I/O (file, network, console), any DI registration, any
   Roslyn/Jint/HttpClient dependency, any `sealed class` with mutable state.
-- **Allowed NuGet:** `CSharpFunctionalExtensions` (for `Result<T>`),
-  `Microsoft.Extensions.Logging.Abstractions`, `MemoryPack`,
-  `CommunityToolkit.HighPerformance`, `ZLinq`.
+- **Allowed NuGet:** `CSharpFunctionalExtensions` (for `Result<T>`), `MemoryPack`,
+  `Microsoft.Extensions.Configuration.Abstractions`,
+  `Microsoft.Extensions.DependencyInjection.Abstractions`,
+  `Microsoft.Extensions.Logging.Abstractions`, `ZLinq` (+ `ZLinq.DropInGenerator`
+  source generator). Gated by `tools/check-abstractions-contract.py` — the
+  previously listed `CommunityToolkit.HighPerformance` was a phantom edge
+  (declared, used by nothing — the `Frozen*`/`Span<T>` usage it looked like it
+  justified is BCL) and has been removed.
 
 ### Application
 
@@ -562,9 +567,12 @@ Concrete implementations of:
 mechanically-enforced rules. The test project references every Harbor project so it can
 load each assembly via reflection and assert on `GetReferencedAssemblies()`.
 
-The tests come in **six files** (`LayerDependencyTests`, `NetArchLayerRules`,
+The tests come in **143 `.cs` files / 874 `[Test]` methods** (measured 2026-10-11
+via `grep -rn "\[Test\]" tests/Harbor.Architecture.Tests/ | wc -l`; the core rule
+files are `LayerDependencyTests`, `NetArchLayerRules`,
 `AbstractionsSplitLayerRules`, `FullLayerMatrixTests`, `CellForgeGraphRules`,
-`PresentationCapabilityRules`, `EnforcerIntegrityTests`) — the executed total
+`PresentationCapabilityRules`, `EnforcerIntegrityTests`, plus per-rule `*Rules.cs`
+files and their `*Tests.cs` positive controls) — the executed total
 exceeds the method count because of parameterised cases:
 
 ### 5.1 Reflection-based — `LayerDependencyTests.cs`
@@ -644,8 +652,10 @@ re-run.
 
 Before ROP-D only assemblies with a hand-written `typeof()` probe had layer rules
 (~18 src projects). `FullLayerMatrixTests.cs` closes the gap with one data
-table covering **every main-solution src assembly** (45 rows at the time; grown to
-47/50 src dirs as of 2026-08-27 — see §2 banner):
+table covering **every main-solution src assembly** (**50 rows** as of 2026-10-11:
+51 src assemblies in `Harbor.slnx` minus the `Harbor.Plugins.Host` exe, which is
+`OutOfScopeAssemblies` — see §2 banner; the table was 45 rows at inception and
+47/50 src dirs as of 2026-08-27):
 
 1. *Reference check* — actual `Assembly.GetReferencedAssemblies()` ⊆ the row's
    Allowed set (+ documented exceptions). IL-level: transitive ProjectReferences
@@ -1098,8 +1108,10 @@ grandfathers is gone.
 
 **As of 2026-09-29 (issue #455) the REFERENCE matrix has zero known violations** —
 `LayerDependencyTests` + `NetArchLayerRules` + `AbstractionsSplitLayerRules` +
-`FullLayerMatrixTests` + `CellForgeGraphRules` are all green. The previously cited counts
-(46 tests = 21 reflection + 25 NetArchTest, 54 executed cases) are historical.
+`FullLayerMatrixTests` + `CellForgeGraphRules` are all green. The suite has since
+grown to 143 `.cs` files / 874 `[Test]` methods (measured 2026-10-11); the
+previously cited counts (46 tests = 21 reflection + 25 NetArchTest, 54 executed
+cases) are historical.
 
 **The CAPABILITY rules added in #455 have ZERO known violations.** `KnownViolations` is
 an empty table, so all five rules are enforced across all 17 Presentation assemblies with

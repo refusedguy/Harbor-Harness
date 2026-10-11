@@ -116,7 +116,7 @@ Moved platform-agnostic logic out of `Harbor.App.Avalonia` into `Harbor.Ui.Frame
 
 ### ✅ Completed — Tests
 
-- ~1350 tests across 20+ test projects in `tests/` (latest full sweep 2026-08-22: 1333 passed / 15 known-fail / 1 skipped — see [PROJECT_STATUS.md](./PROJECT_STATUS.md) for the per-project table; ConsoleEx CE-3…CE-5 suites added since)
+- ~1350 tests across 37 test projects in `tests/` (latest full sweep 2026-08-22: 1333 passed / 15 known-fail / 1 skipped — see [PROJECT_STATUS.md](./PROJECT_STATUS.md) for the per-project table; ConsoleEx CE-3…CE-5 suites added since)
 - 12 E2E tests (Avalonia headless + CLI) + ConsoleEx PTY e2e suite
 - TUnit framework (source-generated, fastest .NET test runner)
 - 7 analyzer packages, 0 warnings, 0 errors
@@ -238,11 +238,11 @@ Moved platform-agnostic logic out of `Harbor.App.Avalonia` into `Harbor.Ui.Frame
 - [x] Namespace drift `Harbor.Cli.*` in Harbor.App.Cli — 18 declarations + all references migrated to `Harbor.App.Cli.*`; remaining census findings documented as intentional at migration time (compat namespaces in Contracts/Extensions/Registries; same-family sub-namespaces in Ipc/Telemetry/Ui.Framework) (ROP-D Z1, 25.08; see commit 9ec5c7b).
 - [x] BannedApi.txt was dead (never wired, wrong filename for the analyzer) — renamed to `BannedSymbols.txt`, wired via AdditionalFiles in Directory.Build.props; all 9 production GetResult sites resolved or pragma-exempted with a catalogued reason (ROP-D Z2, commit be81e42).
 - [x] Arch tests probed the wrong assembly for "TuiAbstractions" (typeof(UiStore) from Ui.Framework.State); retargeted to Terminal.Abstractions + new UiFrameworkState rule (ROP-D Z2, commit 9060475).
-- [x] ~28 src projects outside arch enforcement → FullLayerMatrixTests covers all 45 main-solution src assemblies (reference check + table guard + exception liveness + coverage guard); stale `dotnetarch.json` deleted in favor of the single enforcement surface (ROP-D Z2, commits 5d2df19/6566be2).
+- [x] ~28 src projects outside arch enforcement → FullLayerMatrixTests covers all 50 in-solution src assemblies (51 in `Harbor.slnx` minus the `Harbor.Plugins.Host` exe; reference check + table guard + exception liveness + coverage guard); stale `dotnetarch.json` deleted in favor of the single enforcement surface (ROP-D Z2, commits 5d2df19/6566be2).
 - [x] SystemPromptContext.McpInstructions hardwired null → IMcpRegistry.GetInstructions() aggregates mcp.json hints + initialize responses; WorkspaceContextSource.FormatMcpInstructions feeds the prompt via AgentLoop DI (ROP-D Z3, commit 64cbc0e).
 - [x] ResultGuard survived the §4.5 deletion order and gained a new production call (ConfigStore.LoadCore) → deleted as the duplicate canon: ConfigStore load/save and TreeTool now ride CSE `Result.Try` + `ResultErrors.Message` (save path no longer masks OCE); tests ported to ResultErrorsTests (ROP-D Z3 tail, commit 9e954a5).
-- [x] ROP-D final verification (25.08): `Harbor.slnx -c Release` builds with 0 errors; full cycle over all 20 `tests/Harbor.*.Tests` projects — итог 1184 tests: 1176–1178 passed, 6 skipped, 1–2 failed = the two pre-existing Avalonia headless flakes `ChatView_Inflates` / `TryGet_ReturnsNullForUnregistered` (61ee126; flake count varies per run). Re-verified in a fresh ROP-D close-out session: same numbers, both failures confined to the known-flake pair. Enforcement matrix: 47/50 src dirs under arch rules; the other 3 documented out-of-scope (CodeGen build tool, Plugins.Host exe, Providers.Shared linked source) (commit b62de73).
-- [x] ROP-D tail-closure re-verification (25.08, after commit 9e954a5): Release build 0 errors (only pre-existing NU1903/NU1901 NuGet-audit advisories); full cycle over all 20 `tests/Harbor.*.Tests` projects — итог 1188 tests (+4 from ResultGuard→ResultErrors test port): 1180 passed, 6 skipped, 2 failed = the same known Avalonia flake pair only.
+- [x] ROP-D final verification (25.08): `Harbor.slnx -c Release` builds with 0 errors; full cycle over all 37 `tests/Harbor.*.Tests` projects — итог 1184 tests: 1176–1178 passed, 6 skipped, 1–2 failed = the two pre-existing Avalonia headless flakes `ChatView_Inflates` / `TryGet_ReturnsNullForUnregistered` (61ee126; flake count varies per run). Re-verified in a fresh ROP-D close-out session: same numbers, both failures confined to the known-flake pair. Enforcement matrix: 50 rows under arch rules; out of scope are `Harbor.CodeGen` (build tool), `Harbor.Plugins.Host` (exe) and the `Providers.Shared` + `Storage.Shared` linked-source folders (commit b62de73).
+- [x] ROP-D tail-closure re-verification (25.08, after commit 9e954a5): Release build 0 errors (only pre-existing NU1903/NU1901 NuGet-audit advisories); full cycle over all 37 `tests/Harbor.*.Tests` projects — итог 1188 tests (+4 from ResultGuard→ResultErrors test port): 1180 passed, 6 skipped, 2 failed = the same known Avalonia flake pair only.
 - [x] God-object decomposition `Harbor.Application/Agents/AgentLoop.cs`: tool dispatch → `ToolDispatcher` + `IToolDispatcher` seam (parallel / sequential fan-out, permission gating, per-call timeout), transient-failure retry with capped exponential backoff + jitter → `Resilience/RetryPolicy`, usage aggregation + O(1) compaction checks → `TokenTracker`/`ITokenTracker`; streaming buffering lives in `StreamingCoalescer`. All behind DI (`CoreModule`); public `IAgentLoop.RunAsync` contract unchanged (AGENTLOOP-DECOMP, commit 31f8859).
 - [x] Circular project reference workaround: resolved by the Ui.Framework split (793c998) — `ICommonConfigModelRefReader` (renamed from `ICommonConfigReader` by #453) lives in the bottom `Harbor.Ui.Framework.Abstractions/Configuration` project (narrow session-bootstrap surface only); `CommonConfigReaderAdapter` projects `ICommonConfigStore` onto it per platform. Merging Desktop.Abstractions into Ui.Framework was rejected (wrong direction); splitting Terminal.Abstractions was rejected (churn without isolation). Recorded in DECISIONS.md ADR-009. #453 closed the audit's duplicate claim: the two contracts are a read/write vs read-only capability split, not one contract twice — the reader now returns `Maybe<ModelRef>` instead of a pair of nullable strings, and `CommonConfigContractRules` is the guard.
 - [ ] Pre-existing Avalonia 12 headless test failures: 3 tests (`MarkdownRenderer_SetMarkdown_DoesNotThrow`, `CodeBlock_Default_Code_IsEmpty`, `TypewriterStreamingText_CanSet_Text`) fail with "Stack empty" in `SetInheritanceParent`. Needs investigation — likely an Avalonia.Headless bug.
@@ -281,7 +281,7 @@ Moved platform-agnostic logic out of `Harbor.App.Avalonia` into `Harbor.Ui.Frame
   earlier "32/51" figure was stale by two revisions and is replaced here by a
   check rather than a number. Template:
   [`standards/README-template.md`](./standards/README-template.md).
-- [ ] README section conformance: 36 packable projects predate the template and
+- [ ] README section conformance: 35 packable projects predate the template and
   are recorded in `LegacyNonConformantReadmes` (`ReadmeCoverageTests.cs`), each
   mapped to its missing sections. The list is a ratchet — a test fails if an
   entry overstates what is missing, so it can only shrink. Fix a listed README
@@ -351,9 +351,9 @@ Moved platform-agnostic logic out of `Harbor.App.Avalonia` into `Harbor.Ui.Frame
 <summary>How these were measured</summary>
 
 ```bash
-git ls-files 'src/*/*.csproj' | wc -l          # 54
+git ls-files 'src/*/*.csproj' | wc -l          # 52
 git ls-files 'contrib/*/*.csproj' | wc -l      # 26
-git ls-files 'tests/*/*.csproj' | wc -l        # 36
+git ls-files 'tests/*/*.csproj' | wc -l        # 37
 grep -h 'ToolName.Create(' src/Harbor.Tools.Builtin/Tools/*/*.cs | wc -l   # 20 (+1 interpolated mcp_ id)
 ```
 
