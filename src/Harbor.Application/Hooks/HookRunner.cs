@@ -134,9 +134,9 @@ public sealed class HookRunner : IHookRunner
                 LogAdvisory(HookEvents.PostToolUse, entry, toolName, attempt);
             }
         }
-        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        catch (OperationCanceledException ex) when (ct.IsCancellationRequested)
         {
-            _logger.LogDebug("PostToolUse hooks skipped: run cancelled");
+            _logger.LogDebug(ex, "PostToolUse hooks skipped: run cancelled");
         }
         catch (Exception ex)
         {
@@ -164,9 +164,9 @@ public sealed class HookRunner : IHookRunner
                 LogAdvisory(HookEvents.SessionEnd, entry, null, attempt);
             }
         }
-        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        catch (OperationCanceledException ex) when (ct.IsCancellationRequested)
         {
-            _logger.LogDebug("SessionEnd hooks skipped: run cancelled");
+            _logger.LogDebug(ex, "SessionEnd hooks skipped: run cancelled");
         }
         catch (Exception ex)
         {
@@ -262,7 +262,7 @@ public sealed class HookRunner : IHookRunner
         Task<string> stderrTask;
         try
         {
-            await proc.StandardInput.WriteAsync(payloadJson, ct).ConfigureAwait(false);
+            await proc.StandardInput.WriteAsync(payloadJson.AsMemory(), ct).ConfigureAwait(false);
             await proc.StandardInput.FlushAsync(ct).ConfigureAwait(false);
             proc.StandardInput.Close();
             stdoutTask = proc.StandardOutput.ReadToEndAsync(ct);

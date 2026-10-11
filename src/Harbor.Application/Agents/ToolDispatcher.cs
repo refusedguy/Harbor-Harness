@@ -754,10 +754,10 @@ public sealed class ToolDispatcher(
             string askReason = asked.IsFailure
                 ? $"Hook requested confirmation and the ask failed: {asked.Error}"
                 : verdict.Reason ?? $"Hook '{toolCall.ToolName}' requested confirmation.";
-            return RefuseHook(toolCall, askReason, activity);
+            return await RefuseHook(toolCall, askReason, activity).ConfigureAwait(false);
         }
 
-        return RefuseHook(toolCall, verdict.Reason ?? $"Hook denied tool '{toolCall.ToolName}'.", activity);
+        return await RefuseHook(toolCall, verdict.Reason ?? $"Hook denied tool '{toolCall.ToolName}'.", activity).ConfigureAwait(false);
     }
 
     /// <summary>
