@@ -58,7 +58,7 @@ CI regenerates the GIFs on TUI changes (`.github/workflows/demo.yml`).
 - **Telemetry** — `Harbor.Telemetry.Core` + OTLP exporter
 - **Railway Oriented Programming** — `Result<T>` everywhere (`CSharpFunctionalExtensions`); exceptions reserved for truly exceptional failures
 - **Performance techniques** — `FrozenDictionary` registries, `ArrayPool<T>`, `StringBuilderPool`, `Channel<T>` streaming, manual `for` loops on hot paths, zero `unsafe`
-- **TUnit tests** — source-generated test discovery across ~25 test projects under [`tests/`](./tests)
+- **TUnit tests** — source-generated test discovery across 37 test projects under [`tests/`](./tests)
 
 ## Quick start
 
