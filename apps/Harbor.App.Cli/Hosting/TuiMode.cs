@@ -230,6 +230,27 @@ internal static class TuiMode
     }
 
     /// <summary>
+    ///     Opt-in variable for the legacy first-run path (issue #1248, slice 2):
+    ///     <c>HARBOR_LEGACY_SETUP=1</c> (or <c>true</c>, case-insensitive — the
+    ///     same shape as <c>HARBOR_CELLFORGE_WINDOWS</c>). Without it, a
+    ///     first run (<c>config.Onboarded == false</c>) enters CellForge with
+    ///     the setup overlay up; with it, the run diverts to the legacy
+    ///     line-reader wizard exactly as before slice 2.
+    /// </summary>
+    public const string LegacySetupOptInVariable = "HARBOR_LEGACY_SETUP";
+
+    /// <summary>
+    ///     True when the legacy first-run path above is requested.
+    ///     Platform-independent parsing — the caller owns the rest of the gate.
+    /// </summary>
+    public static bool IsLegacySetupRequested()
+    {
+        string? raw = Environment.GetEnvironmentVariable(LegacySetupOptInVariable)?.Trim();
+        return string.Equals(raw, "1", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(raw, "true", StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
     ///     True when CellForge must stay off this OS: Windows without the
     ///     opt-in above. Everywhere else the platform raw-mode controller is
     ///     established, so the gate never fires. Checked by
@@ -239,6 +260,20 @@ internal static class TuiMode
     /// </summary>
     public static bool IsCellForgeBlockedOnThisOs() =>
         OperatingSystem.IsWindows() && !IsWindowsCellForgeOptedIn();
+
+    /// <summary>
+    ///     The first-run gate (issue #1248, slice 2): CellForge serves the run
+    ///     when it is selected and enabled; <c>onboarded == false</c> no longer
+    ///     diverts to legacy by itself — the setup overlay (slice 1) is the
+    ///     entry point, and legacy survives only behind
+    ///     <see cref="LegacySetupOptInVariable" />.
+    /// </summary>
+    /// <param name="uiCellForgeEnabled"><c>ui.consoleEx.enabled</c> (the kill-switch).</param>
+    /// <param name="onboarded"><c>config.Onboarded</c>.</param>
+    public static bool ShouldEnterCellForge(bool uiCellForgeEnabled, bool onboarded) =>
+        IsCellForgeSelected()
+        && uiCellForgeEnabled
+        && (onboarded || !IsLegacySetupRequested());
 
     /// <summary>
     ///     Best-effort read of <c>CliConfig.DefaultTuiRenderer</c> directly from
