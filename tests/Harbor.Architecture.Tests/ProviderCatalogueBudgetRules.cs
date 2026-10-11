@@ -45,6 +45,27 @@
 // isolation — the surfaces are each self-consistent and mutually inconsistent.
 // Reading the four files side by side is what makes the disagreement visible.
 
+// MECHANISM (#1086, step 2, conveyor)
+// -----------------------------------
+// The two surface bans below are one ScanRule over the governed ViewModels
+// directory: the duration-literal ban and the retired probe-name ban.
+// Enumeration, matching and the control/discovery verdicts are ScanRunner's;
+// this file keeps the issue prose and the test names.
+//
+// Three deliberate carries, not re-decisions:
+//   * Subjects are DISCOVERED by marker, not listed: the parser admits only a
+//     file naming the feed, the call, or either budget name — raw `Contains`,
+//     exactly as `CatalogueSurfaces` did — so a fourth surface joins the rule
+//     the moment it touches the fan-out, and a file that never did stays out.
+//   * The owner file (declaring the canonical budget) is exempt IN the parser,
+//     exactly as the old loop `continue`d past it. A second duration literal in
+//     the owner's own file stays silent, as before.
+//   * The matchers run over the RAW source with no comment stripping — the old
+//     `Matches(source)`/`Contains` calls graded comments too. Preserved verbatim.
+// The count/existence halves (exactly one owner, every spender names a budget,
+// the live-subjects pins) are not forbidden-shape scans and stay handwritten
+// over the unchanged `CatalogueSurfaces` discovery.
+
 using System.Text.RegularExpressions;
 
 namespace Harbor.Architecture.Tests;
@@ -65,6 +86,15 @@ public class ProviderCatalogueBudgetRules
 
     /// <summary>The probe-flavoured name #671 retired. No surface may reintroduce it.</summary>
     private const string RetiredName = "ModelFetchTimeout";
+
+    /// <summary>
+    ///     The retired name as a pattern. The parser grades it with a verbatim
+    ///     <c>Contains</c> (as the old check did), so this row documents the same
+    ///     literal substring — not a copy of a different shape — and the runner
+    ///     never executes it (the rule grades through <see cref="ParseCatalogueSurface" />).
+    /// </summary>
+    private static readonly Regex RetiredNamePattern = new(
+        Regex.Escape(RetiredName), RegexOptions.Compiled);
 
     /// <summary>The canonical probe budget, for surfaces that probe rather than list.</summary>
     private const string ProbeCanon = "IProviderHealthCheck.DefaultTimeout";
@@ -93,16 +123,129 @@ public class ProviderCatalogueBudgetRules
     private static readonly Regex SpendsABudget =
         new(@"new\s+AsyncFeed|GetAllModelsAsync\s*\(", RegexOptions.Compiled);
 
-    /// <summary>Source of a view-model file, or <c>null</c> when the directory is absent.</summary>
-    private static string? ReadViewModel(string fileName)
+    private const string DurationSubId = "CATALOGUE-DURATION-LITERAL";
+    private const string ProbeNameSubId = "CATALOGUE-PROBE-NAME";
+
+    /// <summary>The surface bans as data: duration literals and the retired probe name.</summary>
+    private static readonly ScanRule Rule = new()
     {
-        if (RepoPaths.FindProjectDir(ProjectDir) is not { } dir)
+        Id = "ProviderCatalogueBudget",
+        Trees = ["src/" + ProjectDir + "/ViewModels"],
+        Forbidden =
+        [
+            new ScanForbidden(
+                DurationSubId,
+                DurationLiteral,
+                "only the budget's owner states a duration — spend the declared "
+                + CanonicalName + ". See issue #685."),
+            new ScanForbidden(
+                ProbeNameSubId,
+                RetiredNamePattern,
+                "'" + RetiredName + "' is the probe-flavoured name #671 retired. See issue #685."),
+        ],
+        Controls =
+        [
+            // A second surface with its own number: discovered by the feed, not
+            // the owner, carrying a duration literal.
+            new ScanControl(
+                "Surfaces/Browser.cs",
+                """
+                public async Task LoadAsync()
+                {
+                    var feed = new AsyncFeed<Model>();
+                    using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+                }
+                """,
+                DurationSubId),
+            // The retired name on a discovered surface.
+            new ScanControl(
+                "Surfaces/Legacy.cs",
+                """
+                public TimeSpan Wait => ModelFetchTimeout;
+                public async Task LoadAsync() { await GetAllModelsAsync(); }
+                """,
+                ProbeNameSubId),
+            // The owner states the number once — the one place it may be written down.
+            new ScanControl(
+                "Surfaces/Owner.cs",
+                """
+                private static readonly TimeSpan UiFeedbackBudget = TimeSpan.FromSeconds(8);
+                public async Task LoadAsync() { await GetAllModelsAsync(); }
+                """,
+                null),
+            // A duration literal in a file that never touches the fan-out is not
+            // a catalogue wait at all — the discovery gate, proved through the parser.
+            new ScanControl(
+                "Elsewhere/Timer.cs",
+                "using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));",
+                null),
+            // A discovered surface spending the declared budget.
+            new ScanControl(
+                "Surfaces/Spender.cs",
+                """
+                public async Task LoadAsync()
+                {
+                    var feed = new AsyncFeed<Model>(UiFeedbackBudget);
+                    await GetAllModelsAsync();
+                }
+                """,
+                null),
+        ],
+        MinHits = 10,
+        MustContain =
+        [
+            "src/" + ProjectDir + "/ViewModels/ProviderBrowserViewModel.cs",
+            "src/" + ProjectDir + "/ViewModels/ProviderConfigViewModel.cs",
+            "src/" + ProjectDir + "/ViewModels/ProviderModelPickerViewModel.cs",
+            "src/" + ProjectDir + "/ViewModels/ProviderModelPickerViewModelBase.cs",
+        ],
+        CustomParse = ParseCatalogueSurface,
+    };
+
+    /// <summary>
+    ///     The custom parser: the old per-file verdict verbatim — undiscovered
+    ///     files silent, the owner exempt, raw source throughout — with match
+    ///     indexes mapped back to 1-based lines.
+    /// </summary>
+    private static IEnumerable<ScanHit> ParseCatalogueSurface(string displayPath, string rawSource)
+    {
+        if (!CatalogueMarkers.Any(marker => rawSource.Contains(marker, StringComparison.Ordinal)))
         {
-            return null;
+            yield break;
         }
 
-        string path = Path.Combine(dir, "ViewModels", fileName);
-        return File.Exists(path) ? File.ReadAllText(path) : null;
+        if (CanonicalDeclaration.IsMatch(rawSource))
+        {
+            yield break;
+        }
+
+        foreach (Match match in DurationLiteral.Matches(rawSource))
+        {
+            yield return new ScanHit(DurationSubId, displayPath, LineOf(rawSource, match.Index), match.Value.Trim());
+        }
+
+        string[] lines = rawSource.Replace("\r\n", "\n", StringComparison.Ordinal).Split('\n');
+        for (int i = 0; i < lines.Length; i++)
+        {
+            if (lines[i].Contains(RetiredName, StringComparison.Ordinal))
+            {
+                yield return new ScanHit(ProbeNameSubId, displayPath, i + 1, lines[i].Trim());
+            }
+        }
+    }
+
+    private static int LineOf(string source, int index)
+    {
+        int line = 1;
+        for (int i = 0; i < index && i < source.Length; i++)
+        {
+            if (source[i] == '\n')
+            {
+                line++;
+            }
+        }
+
+        return line;
     }
 
     /// <summary>
@@ -170,21 +313,12 @@ public class ProviderCatalogueBudgetRules
     [Test]
     public async Task NoCatalogueSurfaceDeclaresADurationOfItsOwn()
     {
-        var violations = new List<string>();
-
-        foreach ((string file, string source) in CatalogueSurfaces())
-        {
-            // The owner is the one place the number is allowed to be written down.
-            if (CanonicalDeclaration.IsMatch(source))
-            {
-                continue;
-            }
-
-            foreach (Match match in DurationLiteral.Matches(source))
-            {
-                violations.Add($"{file}: declares a duration literal ('{match.Value}') outside the budget owner");
-            }
-        }
+        // The owner exemption and the discovery gate live in the parser now; this
+        // test reads the duration-sub-id verdict out of the shared evaluation.
+        List<string> violations =
+        [
+            .. ScanRunner.Evaluate(Rule).Where(line => line.Contains("[" + DurationSubId + "]", StringComparison.Ordinal)),
+        ];
 
         await Assert.That(violations).IsEmpty()
             .Because(
@@ -197,10 +331,10 @@ public class ProviderCatalogueBudgetRules
     [Test]
     public async Task NoCatalogueSurfaceNamesItsBudgetLikeAProbe()
     {
-        var violations = CatalogueSurfaces()
-            .Where(kv => kv.Value.Contains(RetiredName, StringComparison.Ordinal))
-            .Select(kv => kv.Key)
-            .ToArray();
+        List<string> violations =
+        [
+            .. ScanRunner.Evaluate(Rule).Where(line => line.Contains("[" + ProbeNameSubId + "]", StringComparison.Ordinal)),
+        ];
 
         await Assert.That(violations).IsEmpty()
             .Because(
@@ -277,5 +411,69 @@ public class ProviderCatalogueBudgetRules
                 "The subjects are discovered, so they can silently drift out of scope. Today four view-models in "
                 + ProjectDir + " load the provider catalogue; if that set changes, this rule must be re-pointed "
                 + "deliberately rather than left governing nothing. Offenders: " + Offenders(violations));
+    }
+
+    /// <summary>
+    ///     Non-vacuity for both surface bans: the parser fires on a second
+    ///     surface's own number and on the retired name, stays silent for the
+    ///     owner, for files outside the discovery, and for spenders of the
+    ///     declared budget. The shapes live on the rule as data and drive the
+    ///     REAL parser.
+    /// </summary>
+    [Test]
+    public async Task Detector_FiresOnRogueSurfaces_AndStaysQuietOnOwnerAndOutsiders()
+    {
+        List<string> failures = ScanRunner.CheckControls(Rule);
+
+        await Assert.That(failures).IsEmpty()
+            .Because(
+                "a surface that picks its own number, or that still speaks the retired "
+                + "probe-flavoured name, must be detected — and the owner, an undiscovered "
+                + "file, and a spender of the declared budget must stay silent. "
+                + string.Join("; ", failures));
+    }
+
+    /// <summary>
+    ///     The walk really reaches the governed directory with all four
+    ///     discovered surfaces inside it.
+    /// </summary>
+    [Test]
+    public async Task Scanner_SeesTheViewModels()
+    {
+        List<string> discovery = ScanRunner.CheckDiscovery(Rule);
+
+        await Assert.That(discovery).IsEmpty()
+            .Because(
+                "The subjects are discovered, so the scope must provably contain them — "
+                + "a scan rooted at a typo finds zero files and then passes everything. "
+                + string.Join("; ", discovery));
+    }
+
+    /// <summary>
+    ///     Every baseline row states why it is tolerated, in the row itself. Vacuous
+    ///     while the table is empty, and deliberately so: wired from the first row
+    ///     so the first row cannot skip the argument.
+    /// </summary>
+    [Test]
+    public async Task Baseline_Rows_AllHaveReasons()
+    {
+        List<string> failures = ScanRunner.CheckReasons(Rule);
+
+        await Assert.That(failures).IsEmpty().Because(string.Join("\n", failures));
+    }
+
+    /// <summary>
+    ///     Every baseline row must still correspond to a real hit, so the table
+    ///     cannot rot into a blanket permission.
+    /// </summary>
+    [Test]
+    public async Task Baseline_Rows_Are_Not_Stale()
+    {
+        List<string> stale = ScanRunner.StaleBaselineKeys(
+            Rule, ScanRunner.ReadSources(ScanRunner.ScopeFiles(Rule)));
+
+        await Assert.That(stale).IsEmpty()
+            .Because("a baseline row with no violation behind it is a permission for a "
+                + "problem that no longer exists: " + string.Join(", ", stale));
     }
 }
