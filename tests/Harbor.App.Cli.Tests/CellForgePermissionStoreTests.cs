@@ -9,6 +9,7 @@ using Harbor.Application.Configuration;
 using Harbor.Application.Permissions;
 using Harbor.Registries.Agents;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Harbor.App.Cli.Tests;
