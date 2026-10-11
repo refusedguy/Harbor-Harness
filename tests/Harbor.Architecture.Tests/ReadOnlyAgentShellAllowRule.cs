@@ -100,6 +100,10 @@ public sealed class ReadOnlyAgentShellAllowRule
         AgentDefinition.CodeDefault("probe-model", "probe-provider"),
         AgentDefinition.PlanDefault("probe-model", "probe-provider"),
         AgentDefinition.ExploreDefault("probe-model", "probe-provider"),
+        AgentDefinition.AskDefault("probe-model", "probe-provider"),
+        AgentDefinition.ArchitectDefault("probe-model", "probe-provider"),
+        AgentDefinition.DebugDefault("probe-model", "probe-provider"),
+        AgentDefinition.OrchestratorDefault("probe-model", "probe-provider"),
     ];
 
     /// <summary>
@@ -232,9 +236,9 @@ public sealed class ReadOnlyAgentShellAllowRule
     {
         string[] agents = [.. ReadOnlyAgents().Select(a => a.Name.Value)];
 
-        await Assert.That(agents).IsEquivalentTo(new[] { "explore", "plan" })
-            .Because("`plan` and `explore` both declare themselves read-only in their own "
-                   + "Description and `code` does not. If this came back empty the rule above "
+        await Assert.That(agents).IsEquivalentTo(new[] { "architect", "ask", "explore", "plan" })
+            .Because("`plan`, `explore`, `ask` and `architect` declare themselves read-only in their own "
+                   + "Description and `code`, `debug` and `orchestrator` do not. If this came back empty the rule above "
                    + "would loop over nothing and be vacuously green");
 
         foreach (AgentDefinition agent in ReadOnlyAgents())
