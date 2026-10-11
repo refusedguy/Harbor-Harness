@@ -24,8 +24,8 @@ Harbor.slnx                          (.sln не существует; есть �
 ├── apps/
 │   ├── Harbor.App.Cli/              (entry point, DI wiring, ReplRunner, TuiMode)
 │   └── Harbor.App.Avalonia/         (cross-platform desktop GUI)
-├── src/                             (51 проектов; representative subset below)
-│   ├── Harbor.Abstractions/         (zero-dep contract surface)
+├── src/                             (52 проекта на диске — 51 в Harbor.slnx + Harbor.CodeGen build-tool; representative subset below)
+│   ├── Harbor.Abstractions/         (contract surface: no Harbor deps except Contracts; 7 NuGet, gated — см. AGENTS.md)
 │   ├── Harbor.Abstractions.Contracts/ (models/formatters; бывший Harbor.Domain)
 │   ├── Harbor.Application/          (AgentLoop, Configuration, Permissions…)
 │   ├── Harbor.Ui.Framework*/        (TEA state + VMs + services, 9 проектов)
@@ -33,13 +33,14 @@ Harbor.slnx                          (.sln не существует; есть �
 │   ├── Harbor.Providers.Anthropic|OpenAI|Ollama|OpenAiCompatible|Shared/
 │   ├── Harbor.Plugins.{Abstractions..Runtime,Host}/  (8 проектов plugin pipeline)
 │   ├── Harbor.Ipc.{Abstractions,Client,Server,InProcess}/
-│   ├── Harbor.Tui.{Abstractions,Ansi,Plain,ConsoleEx,Notifications}/
+│   ├── Harbor.Terminal.Abstractions/ (контракты TUI: ITuiRenderer, UiState, AppReducer, ViewRegistry, IPanels, …)
+│   ├── Harbor.Tui.{AnsiPlain,CellForge(+.Engine),NickConsoleEx,Notifications}/
 │   ├── Harbor.Tools.Builtin/        (20 builtin tools в Tools/)
 │   └── … (Telemetry.*, Logging, Extensions, Hosting, CodeGen и др.)
 ├── contrib/                         (optional components: tui/, apps/, scripting/, tests/)
-├── tests/                           (27 csproj dirs incl. benchmarks + E2E harnesses)
+├── tests/                           (37 csproj dirs incl. benchmarks + E2E harnesses)
 ├── providers/                       (13 JSON LLM provider configs)
-├── specs/                           (16 design documents)
+├── specs/                           (docs/specs/: 19 файлов — 18 design documents + README; top-level specs/ no longer exists)
 └── docs/                            (architecture, development guides)
 ```
 
@@ -52,16 +53,22 @@ Harbor.slnx                          (.sln не существует; есть �
 > diagram, and audit history live in that document.
 
 Harbor follows **Clean / Hexagonal / Onion Architecture** — dependency direction is
-inward only. The innermost layer (Domain) references nothing but the BCL.
+inward only. The innermost layer (Domain) references no other Harbor assembly —
+only BCL plus a gated set of 7 NuGet packages (см. `Harbor.Abstractions` ниже и
+`tools/check-abstractions-contract.py`).
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
 │  PRESENTATION (UI / CLI)                                        │
 │  - Harbor.App.Cli (composition root) / Harbor.App.Avalonia      │
 │  - contrib: App.Wpf / App.Maui / App.Blazor                     │
-│  - In-solution TUI: Ansi, Plain, ConsoleEx, Notifications       │
-│  - contrib/tui (optional): Spectre, Spectre.Fullscreen,         │
-│    SpectreTui, TerminalGui, Termina, RazorConsole, Sixel        │
+│  - In-solution TUI backends: plain, ansi, cellforge (legacy alias consoleex), │
+│    nickconsoleex (conditional: vendored ConsoleEx submodule + renderer flag) — │
+│    projects Harbor.Tui.AnsiPlain, Harbor.Tui.CellForge(+.Engine),            │
+│    Harbor.Tui.NickConsoleEx, Harbor.Tui.Notifications; TUI contracts live in │
+│    Harbor.Terminal.Abstractions (Presentation)                               │
+│  - contrib/tui (optional, NOT in the default build): Spectre,               │
+│    Spectre.Fullscreen, SpectreTui, TerminalGui, Termina, RazorConsole, Sixel │
 │  Depends on: Application + Abstractions                         │
 └─────────────────────────────────────────────────────────────────┘
                                   ▲
@@ -101,28 +108,40 @@ inward only. The innermost layer (Domain) references nothing but the BCL.
 │  - Harbor.Abstractions.Contracts (models; namespace            │
 │    `Harbor.Abstractions.Models`; бывший Harbor.Domain.dll —     │
 │    переименован в F1 decoupling, ADR-007, commit fa8d3ae)       │
-│  - Harbor.Tui.Abstractions (TUI interfaces, UiState, AppReducer, │
-│    ViewRegistry, IPanels, ITuiViewModel, ITuiView, ITuiPlugin)  │
-│  Depends on: NOTHING (only BCL + CSharpFunctionalExtensions +   │
-│              Microsoft.Extensions.Logging.Abstractions etc.)    │
+│  Depends on: no other Harbor assembly (BCL + 7 gated NuGet —    │
+│              CSharpFunctionalExtensions, MemoryPack, ZLinq +     │
+│              ZLinq.DropInGenerator, three                       │
+│              Microsoft.Extensions.*.Abstractions; gate:          │
+│              tools/check-abstractions-contract.py)              │
+│                                                                 │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
 **Key layering invariants** (enforced by `Harbor.Architecture.Tests` — reflection rules
 + NetArchTest + `FullLayerMatrixTests` data-table over all main-solution src assemblies):
 
+> Историческая заметка: этот раздел раньше называл `Harbor.Tui.Abstractions`
+> проектом слоя Domain. Такого проекта нет — у него нет `.csproj`, нет каталога
+> в `src/`, нет строки в матрице. Контракты TUI живут в
+> `Harbor.Terminal.Abstractions` (Presentation); см.
+> [ARCHITECTURE_LAYERS.md §1](./ARCHITECTURE_LAYERS.md) (примечание как здесь).
+
 1. `Harbor.Abstractions` references no other Harbor assembly.
-2. `Harbor.Tui.Abstractions` references only `Harbor.Abstractions`.
+2. `Harbor.Terminal.Abstractions` (Presentation; бывший `Harbor.Tui.Abstractions`,
+   переименован) references only `Harbor.Abstractions`.
 3. `Harbor.Application` and `Harbor.Registries` each reference only Domain and
    not each other; never Infrastructure or Presentation.
-4. `Harbor.Plugins.*` reference Domain (Runtime may also reference Tui.Abstractions);
-   NOT Application.
+4. `Harbor.Plugins.*` reference Domain (NOT Application). The plugin host's
+   out-of-process route is default since #1055, so no in-process compile edge
+   is implied here.
 5. contrib `Harbor.Scripting` references `Harbor.Abstractions` only (NOT `Harbor.Application`).
 6. `Harbor.Providers.*` references `Harbor.Abstractions` only (NOT `Harbor.Application`).
 7. `Harbor.Storage.*` references `Harbor.Abstractions` only (NOT `Harbor.Application`).
 8. `Harbor.Tools.Builtin` references `Harbor.Abstractions` only (NOT `Harbor.Application`).
 9. `Harbor.Tui.*` concrete renderers reference `Harbor.Abstractions` +
-   `Harbor.Tui.Abstractions` only (NOT Application, NOT Infrastructure).
+   `Harbor.Terminal.Abstractions` plus the UI-framework Presentation siblings
+   they actually consume — never Application, never Infrastructure
+   (см. ARCHITECTURE_LAYERS.md §2; prose — не гейт, гейт — матрица).
 10. `apps/Harbor.App.Cli` references everything — it is the Composition Root
     (composition root'ы `apps/*` вне матрицы; исключения также CodeGen и Plugins.Host exe).
 
@@ -134,7 +153,10 @@ audit trail of violations found and fixed.
 
 ### 1. Abstractions-first
 
-`Harbor.Abstractions` has zero implementation dependencies (only `CSharpFunctionalExtensions`). All interfaces, models, events live here. Plugins and external code can reference just this package.
+`Harbor.Abstractions` has no Harbor dependencies except `Harbor.Abstractions.Contracts`,
+plus a gated set of 7 NuGet packages (`CSharpFunctionalExtensions`, `MemoryPack`,
+`ZLinq` + `ZLinq.DropInGenerator`, three `Microsoft.Extensions.*.Abstractions`;
+gate: `tools/check-abstractions-contract.py`). All interfaces, models, events live here. Plugins and external code can reference just this package.
 
 ### 2. Event bus decoupling
 
@@ -391,7 +413,7 @@ public static IHost Build(params string[] args)
     RegisterCore(builder);                              // AgentLoop, EventBus, registries
     RegisterRegistries(builder, harborDir);             // Tools, Providers, Agents
     RegisterStorage(builder, sessionsDir, sqlitePath);  // Jsonl | Memory | Sqlite
-    RegisterTui(builder);                               // Ansi | Plain | Spectre | Fullscreen | ...
+    RegisterTui(builder);                               // plain | ansi | cellforge | nickconsoleex (+ contrib shells iff HARBOR_WITH_SPECTRE_TUI; см. TuiBackendRegistry)
     RegisterHttpClients(builder);
     return builder.Build();
 }
