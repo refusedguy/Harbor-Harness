@@ -17,7 +17,7 @@ namespace Harbor.Tools.Builtin.Tests;
 ///     <c>registry.InvokeAsync</c> below builds a transport through
 ///     <c>McpRegistry.GetTransport</c>, whose no-auth branch reads
 ///     <c>HARBOR_MCP_OAUTH_TOKEN</c> from the process environment
-///     (McpRegistry.cs:575) — the variable <c>McpRemoteTransportTests</c> pins to
+///     (McpRegistry.cs:573) — the variable <c>McpRemoteTransportTests</c> pins to
 ///     null. A named key is a mutex over its named peers, so this side has to hold
 ///     the same one or the writer's key excludes nothing.
 /// </remarks>

@@ -19,7 +19,7 @@ namespace Harbor.Tools.Builtin.Tests;
 ///     #823: the two tests below write <c>HARBOR_MCP_OAUTH_TOKEN</c> and
 ///     <c>HARBOR_HOME</c> into the process environment, and the product reads both
 ///     back — the token in <c>McpRegistry.GetTransport</c>'s no-auth branch
-///     (McpRegistry.cs:575), the home in <c>McpOAuthTokenCache.DefaultDirectory</c>.
+///     (McpRegistry.cs:573), the home in <c>McpOAuthTokenCache.DefaultDirectory</c>.
 ///     <c>McpTransportFactoryTests</c> reaches that same branch through
 ///     <c>registry.InvokeAsync</c> and is not in the issue's list. Both carry
 ///     <c>process-env</c> now; neither held any key before, so the scheduler was
