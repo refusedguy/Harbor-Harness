@@ -1,0 +1,19 @@
+# golden: t3-streaming-markdown
+## art (40x2)
+Ship fast.                              
+- one                                   
+## cells
+0,0: 'S' d/d/- w1
+1,0: 'h' d/d/- w1
+2,0: 'i' d/d/- w1
+3,0: 'p' d/d/- w1
+5,0: 'f' d/d/B w1
+6,0: 'a' d/d/B w1
+7,0: 's' d/d/B w1
+8,0: 't' d/d/B w1
+9,0: '.' d/d/- w1
+0,1: '-' i4/d/- w1
+1,1: ' ' i4/d/- w1
+2,1: 'o' d/d/- w1
+3,1: 'n' d/d/- w1
+4,1: 'e' d/d/- w1
