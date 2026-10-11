@@ -108,7 +108,11 @@ public static class Program
         {
             new LogsCommand(Console.Out, Console.Error),
             new DaemonCommand(Console.Out, Console.Error),
+#if HARBOR_WITH_DAEMON
+            // Slice A (#1144): StatusCommand names Client-assembly transports;
+            // the file leaves the compile when the daemon is off.
             new StatusCommand(Console.Out, Console.Error),
+#endif
             new PluginsCommand(Console.Out, Console.Error),
             new SkillsCommand(Console.Out, Console.Error),
             new DemoCommand(Console.Out, Console.Error),
@@ -116,10 +120,23 @@ public static class Program
         if (await SlashCommandDispatcherStatic.TryHandleAsync(command, args.Skip(1).ToArray(), cliCommands).ConfigureAwait(false) is int exitCode)
             return exitCode;
 
+#if !HARBOR_WITH_DAEMON
+        // Slice A (#1144): without the daemon there is no IPC Client assembly,
+        // so `status` (daemon probing) and `ide` (daemon attach) cannot run.
+        // `status` without flags is local text, but its command type lives in
+        // the excluded file — point at the rebuild instead of the REPL.
+        if (command is "status" or "ide")
+        {
+            Console.Error.WriteLine($"{command}: not available in a build without daemon support (rebuild with --with-daemon).");
+            return 1;
+        }
+#endif
         return command switch
         {
             "ask" => await AskVerb.RunAsync(_logger, args.Skip(1).ToArray(), scriptPath),
+#if HARBOR_WITH_DAEMON
             "ide" => await IdeVerb.RunAsync(_logger, args.Skip(1).ToArray()),
+#endif
             "--headless" or "headless" => await HeadlessVerb.RunAsync(_logger, args.Skip(1).ToArray()),
             "run" => await RunTaskVerb.RunAsync(args.Skip(1).ToArray()),
             "providers" or "--providers" => await ProviderVerbs.RunListProvidersAsync(_logger),

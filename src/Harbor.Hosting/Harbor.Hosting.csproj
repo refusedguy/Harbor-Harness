@@ -50,6 +50,8 @@
     <DefineConstants Condition="Exists('..\..\external\ConsoleEx\SharpConsoleUI\SharpConsoleUI.csproj') AND ('$(HarborWithRenderer)' == 'all' OR '$(HarborWithRenderer)' == 'nickconsoleex')">$(DefineConstants);HARBOR_WITH_NICK_CONSOLE_EX</DefineConstants>
     <DefineConstants Condition="'$(HarborWithAllProviders)' == 'true'">$(DefineConstants);HARBOR_WITH_ALL_PROVIDERS</DefineConstants>
     <DefineConstants Condition="'$(HarborWithAllTools)' == 'true'">$(DefineConstants);HARBOR_WITH_ALL_TOOLS</DefineConstants>
+    <!-- Slice A (#1144): read by #if in HarborModeRegistry / IpcModule. -->
+    <DefineConstants Condition="'$(HarborWithDaemon)' == 'true'">$(DefineConstants);HARBOR_WITH_DAEMON</DefineConstants>
   </PropertyGroup>
 
   <PropertyGroup>
@@ -123,6 +125,15 @@
     <!-- IPC -->
     <ProjectReference Include="..\Harbor.Ipc.Abstractions\Harbor.Ipc.Abstractions.csproj"/>
     <ProjectReference Include="..\Harbor.Ipc.InProcess\Harbor.Ipc.InProcess.csproj"/>
+  </ItemGroup>
+
+  <!--
+    Slice A (#1144): Server + Client leave the composition when the daemon
+    is switched off (HarborWithDaemon=false) — the mode registry then holds
+    the inprocess strategy only. Group-level Condition: see the note in
+    Harbor.App.Cli.csproj (FeatureFlagWiringRules reads bodies off groups).
+  -->
+  <ItemGroup Condition="'$(HarborWithDaemon)' == 'true'">
     <ProjectReference Include="..\Harbor.Ipc.Server\Harbor.Ipc.Server.csproj"/>
     <ProjectReference Include="..\Harbor.Ipc.Client\Harbor.Ipc.Client.csproj"/>
   </ItemGroup>

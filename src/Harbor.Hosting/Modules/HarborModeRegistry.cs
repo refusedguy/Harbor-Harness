@@ -47,6 +47,7 @@ internal sealed class InProcessHarborModeStrategy : IHarborModeStrategy
         context.Services.UseInProcessHarborClient();
 }
 
+#if HARBOR_WITH_DAEMON
 /// <summary>Daemon mode: serve IPC on top of the in-process client.</summary>
 internal sealed class IpcServerHarborModeStrategy : IHarborModeStrategy
 {
@@ -59,7 +60,9 @@ internal sealed class IpcServerHarborModeStrategy : IHarborModeStrategy
         IpcModule.AddNetworkedListenerIfConfigured(context.Services, context.Context);
     }
 }
+#endif
 
+#if HARBOR_WITH_DAEMON
 /// <summary>Remote-client mode: talk to a daemon over IPC.</summary>
 internal sealed class IpcClientHarborModeStrategy : IHarborModeStrategy
 {
@@ -68,6 +71,7 @@ internal sealed class IpcClientHarborModeStrategy : IHarborModeStrategy
     public void Apply(HarborModeContext context) =>
         context.Services.UseIpcHarborClient(context.PipeName);
 }
+#endif
 
 /// <summary>
 ///     Lookup registry over the <see cref="IHarborModeStrategy"/>
@@ -82,8 +86,10 @@ public static class HarborModeRegistry
         IHarborModeStrategy[] strategies =
         [
             new InProcessHarborModeStrategy(),
+#if HARBOR_WITH_DAEMON
             new IpcServerHarborModeStrategy(),
             new IpcClientHarborModeStrategy(),
+#endif
         ];
         return strategies.ToFrozenDictionary(s => s.ModeId, StringComparer.OrdinalIgnoreCase);
     }

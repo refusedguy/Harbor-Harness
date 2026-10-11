@@ -60,6 +60,8 @@ internal class Build : NukeBuild
     private readonly bool WithSpectreTui = true;
     [Parameter("Renderer backends to compose (All, CellForge, AnsiPlain, NickConsoleEx)")]
     private readonly RendererSelection WithRenderer = RendererSelection.All;
+    [Parameter("Include the daemon IPC layer (server + client transports)")]
+    private readonly bool WithDaemon = true;
 
     // ── Meta command parameters ─────────────────────────────────────────────
     [Parameter("Output format: Pretty (human) or Json (JSON-lines on stdout)")]
@@ -106,6 +108,7 @@ internal class Build : NukeBuild
         WithAllProviders = WithAllProviders,
         WithAllTools = WithAllTools,
         WithRenderer = WithRenderer,
+        WithDaemon = WithDaemon,
         Minimal = Minimal
     };
 

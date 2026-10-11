@@ -25,6 +25,11 @@
                                           longer referenced from the main CLI)
       * `HarborWithAllProviders=false`  — keeps only Harbor.Providers.Ollama
       * `HarborWithAllTools=false`      — (future) keeps only 6 core tools
+      * `HarborWithDaemon=false`        — drops Harbor.Ipc.Server + Client
+                                           (single-process binary, HARBOR_MODE=inprocess
+                                           only; `status`/`ide` verbs excluded, `daemon`
+                                           start degrades to a clear error via the headless
+                                           verb; PublishIpcServer/Client fail fast)
       * `HarborWithRenderer=all|cellforge|ansiplain|nickconsoleex` (default
         `all`, global default in Directory.Build.props, NUKE with-renderer flag) —
         build-time renderer-backend selection (slice A, #1144). Values other than
@@ -90,6 +95,13 @@
     <HarborWithPlugins Condition="'$(HARBOR_MINIMAL)' == 'true'">false</HarborWithPlugins>
     <HarborWithPlugins Condition="'$(HarborWithPlugins)' == ''">true</HarborWithPlugins>
 
+    <!--
+      Slice A (#1144): daemon on/off. Default true (full IPC graph). When
+      HARBOR_MINIMAL=true, forced to false like the other granular flags.
+    -->
+    <HarborWithDaemon Condition="'$(HARBOR_MINIMAL)' == 'true'">false</HarborWithDaemon>
+    <HarborWithDaemon Condition="'$(HarborWithDaemon)' == ''">true</HarborWithDaemon>
+
     <HarborWithSpectreTui Condition="'$(HARBOR_MINIMAL)' == 'true'">false</HarborWithSpectreTui>
     <HarborWithSpectreTui Condition="'$(HarborWithSpectreTui)' == ''">true</HarborWithSpectreTui>
 
@@ -107,6 +119,8 @@
     <DefineConstants Condition="'$(HarborWithSpectreTui)' == 'true'">$(DefineConstants);HARBOR_WITH_SPECTRE_TUI</DefineConstants>
     <DefineConstants Condition="'$(HarborWithAllProviders)' == 'true'">$(DefineConstants);HARBOR_WITH_ALL_PROVIDERS</DefineConstants>
     <DefineConstants Condition="'$(HarborWithAllTools)' == 'true'">$(DefineConstants);HARBOR_WITH_ALL_TOOLS</DefineConstants>
+    <!-- Slice A (#1144): read by #if in Program.cs (status/ide verbs). -->
+    <DefineConstants Condition="'$(HarborWithDaemon)' == 'true'">$(DefineConstants);HARBOR_WITH_DAEMON</DefineConstants>
 
     <!--
       Back-compat symbol for the minimal shorthand (CLI flag spelled with a
@@ -290,8 +304,31 @@
     -->
     <ProjectReference Include="..\..\src\Harbor.Ipc.Abstractions\Harbor.Ipc.Abstractions.csproj"/>
     <ProjectReference Include="..\..\src\Harbor.Ipc.InProcess\Harbor.Ipc.InProcess.csproj"/>
+  </ItemGroup>
+
+  <!--
+    Slice A (#1144): daemon on/off. Server + Client leave the graph when
+    HarborWithDaemon=false (single-process binary: HARBOR_MODE=inprocess
+    only). Abstractions + InProcess stay — the CLI names IHarborClient /
+    IHarborServer / DaemonPairingInfo / PskStore from Abstractions, and the
+    headless verb degrades gracefully when no server is registered.
+    Commands that name Client-assembly types (StatusCommand: transports +
+    MessagePackRpcClient; IdeBridgeRunner/IdeVerb: IdeSessionBridge) are
+    Compile-removed below and their Program.cs registrations gated on
+    HARBOR_WITH_DAEMON. Group-level Condition (not per-reference): the
+    architecture guard FeatureFlagWiringRules reads bodies off ItemGroup /
+    PropertyGroup conditions.
+  -->
+  <ItemGroup Condition="'$(HarborWithDaemon)' == 'true'">
     <ProjectReference Include="..\..\src\Harbor.Ipc.Server\Harbor.Ipc.Server.csproj"/>
     <ProjectReference Include="..\..\src\Harbor.Ipc.Client\Harbor.Ipc.Client.csproj"/>
+  </ItemGroup>
+
+  <!-- Slice A (#1144): verbs that require the IPC Client assembly. -->
+  <ItemGroup Condition="'$(HarborWithDaemon)' != 'true'">
+    <Compile Remove="Commands/StatusCommand.cs" />
+    <Compile Remove="Commands/IdeBridgeRunner.cs" />
+    <Compile Remove="Commands/IdeVerb.cs" />
   </ItemGroup>
 
   <!--

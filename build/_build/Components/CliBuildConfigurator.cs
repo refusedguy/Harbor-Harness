@@ -32,6 +32,7 @@ public sealed class CliBuildConfigurator
             ["HarborWithAllProviders"] = resolved.WithAllProviders.ToString().ToLowerInvariant(),
             ["HarborWithAllTools"] = resolved.WithAllTools.ToString().ToLowerInvariant(),
             ["HarborWithRenderer"] = resolved.WithRenderer.ToString().ToLowerInvariant(),
+            ["HarborWithDaemon"] = resolved.WithDaemon.ToString().ToLowerInvariant(),
             ["HARBOR_MINIMAL"] = resolved.Minimal.ToString().ToLowerInvariant()
         };
     }
@@ -63,6 +64,23 @@ public sealed class CliBuildConfigurator
                 $"Publish variant '{variant}' requires AOT-compatible feature flags " +
                 $"(no plugins, no scripting, no Spectre.TUI). Current flags: {flags}. " +
                 $"Pass --minimal to disable all AOT-incompatible features.");
+        }
+    }
+
+    /// <summary>
+    ///     Throws <see cref="InvalidOperationException" /> when an IPC publish
+    ///     target (<c>PublishIpcServer</c>/<c>PublishIpcClient</c>) is requested
+    ///     with the daemon switched off. The tagged binary would fail at startup
+    ///     with "Unknown HARBOR_MODE" because the mode registry then holds the
+    ///     inprocess strategy only — fail here instead, with the fix attached.
+    /// </summary>
+    public void EnsureDaemonAllowed(FeatureFlags flags, string target)
+    {
+        if (!flags.Resolved().WithDaemon)
+        {
+            throw new InvalidOperationException(
+                $"Target '{target}' publishes a daemon binary but --with-daemon=false is set. " +
+                $"Current flags: {flags}. Drop the target or re-enable the daemon.");
         }
     }
 }

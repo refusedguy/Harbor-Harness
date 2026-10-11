@@ -46,6 +46,16 @@
     <HarborWithPlugins Condition="'$(HARBOR_MINIMAL)' == 'true'">false</HarborWithPlugins>
 
     <!--
+      Slice A (#1144): daemon on/off. Default keeps the full IPC graph
+      (in-process + server + client); with-daemon=false (NUKE spelling carries
+      the usual double-hyphen prefix) or HARBOR_MINIMAL drops the Server/Client
+      assemblies so the binary is single-process only.
+      HarborWithRenderer above deliberately has no HARBOR_MINIMAL row.
+    -->
+    <HarborWithDaemon Condition="'$(HarborWithDaemon)' == '' AND '$(HARBOR_MINIMAL)' != 'true'">true</HarborWithDaemon>
+    <HarborWithDaemon Condition="'$(HARBOR_MINIMAL)' == 'true'">false</HarborWithDaemon>
+
+    <!--
       Slice A (#1144): build-time renderer selection. Default composes every
       backend (status quo); the NUKE with-renderer flag narrows it (see
       src/Harbor.Hosting/Harbor.Hosting.csproj for what each value excludes).
