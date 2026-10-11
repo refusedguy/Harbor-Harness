@@ -82,6 +82,15 @@ public sealed class TermiosLayoutGuards
     [Test]
     public async Task Enter_WithNonTtyStdin_ThrowsInvalidOperationException_NotAccessViolation()
     {
+        // isatty(2) is probed through libc — unavailable on Windows, where the
+        // DllImport itself would throw instead of skipping. (macOS ships a
+        // libc isatty, so only Windows is excluded.)
+        if (OperatingSystem.IsWindows())
+        {
+            Skip.Test("isatty is probed via libc — unavailable on Windows.");
+            return;
+        }
+
         if (isatty(0) != 0)
         {
             Skip.Test("stdin is a real terminal in this run — the non-TTY graceful path is unreachable here.");

@@ -31,8 +31,11 @@ public class StreamingMarkdownTests
         // empty-ish
         "",
         "\n\n\n",
-        // combined kitchen sink
-        """
+        // combined kitchen sink — a raw literal, so its embedded newlines are
+        // the checkout's own (CRLF on Windows). Normalized to LF: the
+        // contract is over '\n'-delimited markdown, and the source file's
+        // line endings must not leak into the corpus (win leg, #1249).
+        Lf("""
         # Build report
 
         Everything **succeeded** in *record* time.
@@ -46,8 +49,13 @@ public class StreamingMarkdownTests
 
         ## Notes
         Final thoughts here.
-        """,
+        """),
     ];
+
+    /// <summary>
+    ///     Checkout line-ending shield for raw-literal corpus entries (see above).
+    /// </summary>
+    private static string Lf(string s) => s.Replace("\r\n", "\n", StringComparison.Ordinal);
 
     private static List<string> Flatten(IReadOnlyList<MdLine> lines)
     {

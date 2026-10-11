@@ -208,6 +208,39 @@ internal static class TuiMode
     }
 
     /// <summary>
+    ///     Opt-in variable for CellForge raw mode on Windows (issue #1249,
+    ///     PX3 slice 1): <c>HARBOR_CELLFORGE_WINDOWS=1</c> (or <c>true</c>,
+    ///     case-insensitive — the same shape as
+    ///     <c>HARBOR_TUI_RUNTIME_SWAP</c>). Without it, <c>HARBOR_TUI=cellforge</c>
+    ///     on Windows falls back to the legacy renderer; the Windows VT
+    ///     controller behind the flag is bring-up code, not yet the default.
+    /// </summary>
+    public const string WindowsCellForgeOptInVariable = "HARBOR_CELLFORGE_WINDOWS";
+
+    /// <summary>
+    ///     True when the Windows opt-in above is set. Platform-independent
+    ///     parsing — the OS half of the gate lives in
+    ///     <see cref="IsCellForgeBlockedOnThisOs" />.
+    /// </summary>
+    public static bool IsWindowsCellForgeOptedIn()
+    {
+        string? raw = Environment.GetEnvironmentVariable(WindowsCellForgeOptInVariable)?.Trim();
+        return string.Equals(raw, "1", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(raw, "true", StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    ///     True when CellForge must stay off this OS: Windows without the
+    ///     opt-in above. Everywhere else the platform raw-mode controller is
+    ///     established, so the gate never fires. Checked by
+    ///     <c>ReplRunner.RunCellForgeAsync</c> before the raw-mode probe —
+    ///     a blocked run returns a failure the caller already turns into the
+    ///     logged legacy fallback.
+    /// </summary>
+    public static bool IsCellForgeBlockedOnThisOs() =>
+        OperatingSystem.IsWindows() && !IsWindowsCellForgeOptedIn();
+
+    /// <summary>
     ///     Best-effort read of <c>CliConfig.DefaultTuiRenderer</c> directly from
     ///     <c>~/.harbor/cli.json</c>. Returns <see langword="null" /> if the file
     ///     is missing or unreadable. We deliberately avoid the full
