@@ -72,23 +72,89 @@ public sealed class RowHashDiffEncoder : ICellDiffEncoder
         {
             // Row-hash fast path: an equal hash means the row is unchanged —
             // the same invariant DiffEngine's fuzz tests rely on. Hashes are
-            // computed lazily and cached inside each buffer.
+            // computed lazily and cached inside each buffer. The hash folds
+            // the directive table, so an option-only change still breaks
+            // equality here (R1 steal).
             if (!useHints && prev.RowHashCode(y) == next.RowHashCode(y))
             {
                 continue;
             }
 
-            for (int x = 0; x < cols; x++)
+            for (int x = 0; x < cols;)
             {
-                if (prev.Get(x, y) != next.Get(x, y))
+                var nopt = next.GetDiffOption(x, y);
+                var n = next.Get(x, y);
+                int width = n.Width;
+
+                if (nopt == CellDiffOption.Skip)
                 {
-                    if (count == _staging.Length)
+                    // Out-of-band paint contract (R1 steal, ratatui Skip): never
+                    // encoded. Advance one — a skipped wide lead lands on its
+                    // tail next, which compares normally below.
+                    x += 1;
+                    continue;
+                }
+
+                if (nopt == CellDiffOption.ForcedWidth)
+                {
+                    // Explicit advance (image payloads — ratatui #2685 class):
+                    // the reserved columns it covers are the widget's own, not
+                    // the scan's to emit.
+                    int fw = Math.Max(1, (int)next.GetForcedWidth(x, y));
+                    if (prev.Get(x, y) != n)
                     {
-                        Array.Resize(ref _staging, Math.Max(64, _staging.Length * 2));
+                        Emit(ref count, prev, next, x, y);
                     }
 
-                    _staging[count++] = new CellDiffMessage(x, y, prev.Get(x, y), next.Get(x, y));
+                    x += fw;
+                    continue;
                 }
+
+                // None skips equal cells; AlwaysUpdate emits even when equal
+                // (remote mirrors, repaints).
+                if (nopt == CellDiffOption.None && prev.Get(x, y) == n)
+                {
+                    x += Math.Max(1, width);
+                    continue;
+                }
+
+                var f = prev.Get(x, y);
+                if (width == Cell.Wide && n.Rune == f.Rune
+                    && n.Style != f.Style && f.StyleVisibleOnBlank)
+                {
+                    // Style-only change on an unchanged wide glyph whose
+                    // previous style was visible on blanks: trailing columns
+                    // first (they still show the old style downstream), then
+                    // the lead — ratatui #2652 order.
+                    int end = Math.Min(x + width, cols);
+                    for (int j = x + 1; j < end;)
+                    {
+                        j = EmitTrailing(ref count, prev, next, j, y, ref end, cols);
+                    }
+
+                    Emit(ref count, prev, next, x, y);
+                    x += Math.Max(1, width);
+                    continue;
+                }
+
+                if (width != Cell.Wide && f.Width > width && f.StyleVisibleOnBlank)
+                {
+                    // Narrow content replacing a visibly-styled wide glyph:
+                    // the lead, then a force-refresh of every trailing column
+                    // (downstream still shows the old style on blanks there).
+                    Emit(ref count, prev, next, x, y);
+                    int end = Math.Min(x + f.Width, cols);
+                    for (int j = x + 1; j < end;)
+                    {
+                        j = EmitTrailing(ref count, prev, next, j, y, ref end, cols);
+                    }
+
+                    x += Math.Max(1, width);
+                    continue;
+                }
+
+                Emit(ref count, prev, next, x, y);
+                x += Math.Max(1, width);
             }
         }
 
@@ -112,6 +178,42 @@ public sealed class RowHashDiffEncoder : ICellDiffEncoder
             rows,
             changes,
             hintArray);
+    }
+
+    /// <summary>Stages one change message, growing the retained scratch array.</summary>
+    private void Emit(ref int count, ScreenBuffer prev, ScreenBuffer next, int x, int y)
+    {
+        if (count == _staging.Length)
+        {
+            Array.Resize(ref _staging, Math.Max(64, _staging.Length * 2));
+        }
+
+        _staging[count++] = new CellDiffMessage(x, y, prev.Get(x, y), next.Get(x, y));
+    }
+
+    /// <summary>
+    /// Force-stages one trailing-range cell (R1 steal): every non-Skip cell in
+    /// the range is emitted unconditionally — the previous wide glyph's style
+    /// was visible on blanks, so downstream may show stale style there
+    /// regardless of buffer equality. A wide cell inside the range covers its
+    /// own trailing column too, so <paramref name="end"/> extends past it
+    /// (clamped to <paramref name="cols"/>). Returns the next index to visit.
+    /// </summary>
+    private int EmitTrailing(ref int count, ScreenBuffer prev, ScreenBuffer next, int j, int y, ref int end, int cols)
+    {
+        int jw = Math.Max(1, (int)next.Get(j, y).Width);
+        int advanced = j + jw;
+        if (advanced > end)
+        {
+            end = Math.Min(advanced, cols);
+        }
+
+        if (next.GetDiffOption(j, y) != CellDiffOption.Skip)
+        {
+            Emit(ref count, prev, next, j, y);
+        }
+
+        return advanced;
     }
 
     private static bool HintAreaWithinThreshold(IReadOnlyList<Rect> hints, int cols, int rows)

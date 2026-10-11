@@ -88,6 +88,12 @@ public static class CellForgeDiffEncoder
             {
                 var c = src.Get(x, y);
                 dst.At(x, y) = UIR.Cell.FromRaw(c.Rune, c.Fg, c.Bg, c.Flags, c.Width);
+                // R1 steal: the directive table crosses with the cells — both
+                // enums are byte-backed with identical members in identical
+                // order, so the numeric cast is exact. Copied per cell (not
+                // just when non-None): the snapshot buffer is retained across
+                // calls and a stale Skip would hide the next frame.
+                dst.SetDiffOption(x, y, (UIR.CellDiffOption)(byte)src.GetDiffOption(x, y), src.GetForcedWidth(x, y));
             }
         }
 
