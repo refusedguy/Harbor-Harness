@@ -91,6 +91,28 @@ public class ApprovalCoordinatorTests
     }
 
     [Test]
+    public async Task DecideFromAnotherThread_WhileWaiterParked_CompletesPromptly()
+    {
+        // #1136 slice 2: _gate is never held across an await. The waiter below
+        // is parked on the TCS while the decision lands from a pool thread —
+        // if the gate were ever held across the await, DecideApproval would
+        // block behind the waiter and the WaitAsync would time out instead of
+        // resolving. The timeout turns a would-be CI hang into a failure.
+        var coordinator = NewCoordinator();
+        coordinator.RegisterGate("g1");
+        var wait = coordinator.WaitForDecisionAsync("g1", CancellationToken.None);
+
+        var decideTask = Task.Run(() => coordinator.DecideApproval("g1", Approve()));
+        var finished = await Task.WhenAny(decideTask, Task.Delay(TimeSpan.FromSeconds(5)));
+        await Assert.That(ReferenceEquals(finished, decideTask)).IsTrue();
+
+        await Assert.That(await decideTask).IsEqualTo(ApprovalDecisionDisposition.Accepted);
+        var outcome = await wait.WaitAsync(TimeSpan.FromSeconds(5));
+        await Assert.That(outcome).IsNotNull();
+        await Assert.That(outcome!.Approved).IsTrue();
+    }
+
+    [Test]
     public async Task DecideUnknownGate_IsStaleGate()
     {
         var coordinator = NewCoordinator();

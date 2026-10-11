@@ -164,6 +164,32 @@ public sealed class FileTreeLoaderTests
         await Assert.That(lister.Calls).IsEqualTo(1);
     }
 
+    [Test]
+    public async Task Request_ForPreSettledDirectory_DispatchesNothing()
+    {
+        // Pins the hoisted settled check (#1136 slice 2): a store that is
+        // already settled short-circuits before the gate AND before the
+        // pending publish, so a settled panel costs the render thread one
+        // volatile read and zero dispatches — no walk, no in-flight slot.
+        var lister = new CountingLister();
+        using var loader = new FileTreeLoader(lister, NullLogger<FileTreeLoader>.Instance);
+        var store = PointedAt(DirA);
+        store.Dispatch(new AppMsg.SetFileTreeLoaded(
+            PanelId,
+            DirA,
+            [new FileTreeEntry("kept", DirA + "/kept", false, false)]));
+
+        int dispatches = 0;
+        store.Changed += (_, _) => Interlocked.Increment(ref dispatches);
+
+        loader.Request(PanelId, DirA, store);
+        await Settled(loader);
+
+        await Assert.That(lister.Calls).IsEqualTo(0);
+        await Assert.That(loader.InFlightCount).IsEqualTo(0);
+        await Assert.That(Volatile.Read(ref dispatches)).IsEqualTo(0);
+    }
+
     // ── supersession: a late result must never repaint a left directory ────
 
     [Test]

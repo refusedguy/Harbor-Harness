@@ -58,7 +58,7 @@ public class ApprovalGateRouterTupleTests
         // #797: this is what the previous BoundMatch_Accepted_WaiterResolves asserted
         // with a waiter parked on the very TCS the router just completed — a
         // disposition the test did not own. WaitForDecisionAsync drops the slot on
-        // consume (ApprovalCoordinator.cs:218), and the continuation is queued by
+        // consume (ApprovalCoordinator.cs:227), and the continuation is queued by
         // RunContinuationsAsynchronously, so who runs first was up to the scheduler:
         // test thread first → AlreadyDecided, waiter first → the slot is gone → StaleGate.
         // Both are correct product states; only the first was the one asserted.
