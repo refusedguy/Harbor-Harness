@@ -1,3 +1,4 @@
+using System.Text;
 
 namespace Harbor.Tui.CellForge.Rendering;
 
@@ -18,6 +19,9 @@ public enum FrameDiffMode : byte
     /// remote mirrors and repaints where FRONT cannot be trusted). Wide-tail
     /// halves are still skipped — they are undrawable by construction — but
     /// FRONT still mirrors them so the post-drain invariant holds.
+    /// Per-cell <see cref="CellDiffOption.Skip"/> wins over the mode: Skip
+    /// cells are painted out-of-band, so even a full repaint must not emit
+    /// them (they are still mirrored silently).
     /// </summary>
     AlwaysUpdate = 1,
 }
@@ -94,6 +98,16 @@ public ref struct FrameDiffEnumerator
     private bool _rowArmed;
     private bool _started;
 
+    // R1 steal (epic #1155): ratatui TrailingState port — pending trailing
+    // columns of a wide-glyph update. Armed mid-row, drained at the head of
+    // the next MoveNext before the main scan resumes; ranges never cross rows
+    // (clamped to _rowRight, strictly tighter than ratatui's buffer-len clamp).
+    private bool _trailingActive;
+    private int _trailingNext;
+    private int _trailingEnd;
+    private bool _trailingForce;
+    private int _deferredX;
+
     internal FrameDiffEnumerator(
         ScreenBuffer front,
         ScreenBuffer next,
@@ -114,9 +128,16 @@ public ref struct FrameDiffEnumerator
         _rowRight = 0;
         _rowArmed = false;
         _started = false;
+        _trailingActive = false;
+        _trailingNext = 0;
+        _trailingEnd = 0;
+        _trailingForce = false;
+        _deferredX = -1;
         X = -1;
         Y = -1;
         Target = Cell.Blank;
+        Advance = 1;
+        IsForcedWidth = false;
     }
 
     /// <summary>Column of the yielded cell.</summary>
@@ -131,6 +152,21 @@ public ref struct FrameDiffEnumerator
     /// <see cref="MoveNext"/> and before the next one.
     /// </summary>
     public Cell Target { get; private set; }
+
+    /// <summary>
+    /// Cursor advance the writer must apply after drawing
+    /// <see cref="Target"/>: 1 for narrow cells, 2 for wide leads, the armed
+    /// width for <see cref="CellDiffOption.ForcedWidth"/> cells.
+    /// </summary>
+    public int Advance { get; private set; }
+
+    /// <summary>
+    /// True when this yield carries an explicit
+    /// <see cref="CellDiffOption.ForcedWidth"/> advance — Flush paints it via
+    /// <c>PutRuneWidth</c> and advances its adjacency bookkeeping by
+    /// <see cref="Advance"/>, not by one.
+    /// </summary>
+    public bool IsForcedWidth { get; private set; }
 
     /// <summary>
     /// Tuple view of the yield (<c>(X, Y, Target)</c>) for <c>foreach</c>
@@ -152,6 +188,13 @@ public ref struct FrameDiffEnumerator
 
         while (true)
         {
+            // Pending trailing range first (R1 steal, ratatui TrailingState):
+            // a wide-glyph update armed this before its lead was (re)painted.
+            if (_trailingActive && DrainTrailing())
+            {
+                return true;
+            }
+
             if (_x >= _rowRight)
             {
                 CloseRow();
@@ -165,6 +208,18 @@ public ref struct FrameDiffEnumerator
 
             ref readonly Cell n = ref _next.At(_x, _y);
             int width = n.Width;
+            var option = _next.GetDiffOption(_x, _y);
+
+            if (option == CellDiffOption.Skip)
+            {
+                // Out-of-band paint contract: never yielded, mirrored silently
+                // so the post-drain FRONT == BACK invariant holds. Advance one
+                // (ratatui parity — Skip consumes no width); a skipped wide
+                // lead lands on its tail next, which the WSkip arm mirrors.
+                MirrorSilent(_x);
+                _x += 1;
+                continue;
+            }
 
             if (width == Cell.WSkip)
             {
@@ -178,6 +233,8 @@ public ref struct FrameDiffEnumerator
                     _front.At(_x, _y) = n;
                 }
 
+                _front.MirrorDiffOption(_x, _y, option, _next.GetForcedWidth(_x, _y));
+
                 if (_x > 0)
                 {
                     ref readonly Cell leadNext = ref _next.At(_x - 1, _y);
@@ -187,7 +244,10 @@ public ref struct FrameDiffEnumerator
                         X = _x - 1;
                         Y = _y;
                         Target = leadTarget;
+                        Advance = Math.Max(1, (int)leadNext.Width);
+                        IsForcedWidth = false;
                         _front.At(_x - 1, _y) = leadTarget;
+                        _front.MirrorDiffOption(_x - 1, _y, _next.GetDiffOption(_x - 1, _y), _next.GetForcedWidth(_x - 1, _y));
                         if (leadNext.Width == Cell.Wide)
                         {
                             _front.At(_x, _y) = Cell.WideTail;
@@ -202,26 +262,198 @@ public ref struct FrameDiffEnumerator
                 continue;
             }
 
+            if (option == CellDiffOption.ForcedWidth)
+            {
+                // Explicit advance (image-protocol payloads): yield when
+                // different, then skip width - 1 reserved columns — mirrored
+                // silently so FRONT == BACK holds even though they are never
+                // painted (ratatui #2685 class: the advance must not hide
+                // later cells, and the mirror must not go stale).
+                int fw = Math.Max(1, (int)_next.GetForcedWidth(_x, _y));
+                var forcedTarget = DiffEngine.ApplyFx(_fx, _x, _y, in n);
+                bool changed = _front.At(_x, _y) != forcedTarget;
+                _front.At(_x, _y) = forcedTarget;
+                _front.MirrorDiffOption(_x, _y, option, (ushort)Math.Min(fw, ushort.MaxValue));
+                int reservedEnd = Math.Min(_x + fw, _rowRight);
+                for (int j = _x + 1; j < reservedEnd; j++)
+                {
+                    MirrorSilent(j);
+                }
+
+                int leadX = _x;
+                _x += fw;
+                if (!changed && _mode == FrameDiffMode.Delta)
+                {
+                    continue;
+                }
+
+                X = leadX;
+                Y = _y;
+                Target = forcedTarget;
+                Advance = fw;
+                IsForcedWidth = true;
+                return true;
+            }
+
             var target = DiffEngine.ApplyFx(_fx, _x, _y, in n);
 
-            if (_mode == FrameDiffMode.Delta && _front.At(_x, _y) == target)
+            if (_mode == FrameDiffMode.Delta && option == CellDiffOption.None && _front.At(_x, _y) == target)
             {
-                _x += width;
+                _x += Math.Max(1, width);
                 continue;
             }
 
+            Cell frontCell = _front.At(_x, _y);
+            int prevWidth = frontCell.Width;
+            bool prevVisible = frontCell.StyleVisibleOnBlank;
+
+            // Style-only change on an unchanged wide glyph whose previous
+            // style was visible on blanks: clear the trailing columns FIRST
+            // (the terminal still shows the old style there), then repaint the
+            // lead. Trailing-before-lead: clearing after can erase the glyph
+            // on some terminals (ratatui #2652).
+            if (width == Cell.Wide && n.Rune == frontCell.Rune
+                && target.Style != frontCell.Style && prevVisible)
+            {
+                ArmTrailing(_x + 1, Math.Min(_x + width, _rowRight), force: true, deferredX: _x);
+                continue;
+            }
+
+            if (width != Cell.Wide && prevWidth > width && prevVisible)
+            {
+                // Narrow content replacing a visibly-styled wide glyph: the
+                // terminal still shows the old style on the trailing columns
+                // even though the buffer holds blanks there — force-refresh
+                // every cell in the trailing range after the lead below.
+                ArmTrailing(_x + 1, Math.Min(_x + prevWidth, _rowRight), force: true, deferredX: -1);
+            }
+
+            int advance = Math.Max(1, width);
             X = _x;
             Y = _y;
             Target = target;
+            Advance = advance;
+            IsForcedWidth = false;
             _front.At(_x, _y) = target;
-            if (width == Cell.Wide)
+            _front.MirrorDiffOption(_x, _y, option, _next.GetForcedWidth(_x, _y));
+            if (width == Cell.Wide && _x + 1 < _cols)
             {
+                // The bound is real: direct At-writes can orphan a wide lead
+                // at the row edge (SetRune/Fill refuse it, At does not).
                 _front.At(_x + 1, _y) = Cell.WideTail;
+                _front.MirrorDiffOption(_x + 1, _y, _next.GetDiffOption(_x + 1, _y), _next.GetForcedWidth(_x + 1, _y));
             }
 
-            _x += width;
+            _x += advance;
             return true;
         }
+    }
+
+    /// <summary>
+    /// Arms a pending trailing range (R1 steal, ratatui TrailingState): columns
+    /// <c>[next, end)</c> drain before the main scan resumes; a non-negative
+    /// <paramref name="deferredX"/> repaints that lead cell after the drain.
+    /// Both bounds are row-relative and pre-clamped to the row span.
+    /// </summary>
+    private void ArmTrailing(int next, int end, bool force, int deferredX)
+    {
+        _trailingActive = true;
+        _trailingNext = next;
+        _trailingEnd = end;
+        _trailingForce = force;
+        _deferredX = deferredX;
+    }
+
+    /// <summary>
+    /// Drains one cell from the armed trailing range (true = yielded, drive
+    /// <see cref="X"/>/<see cref="Y"/>/<see cref="Target"/>); false = range
+    /// exhausted (plus a possible deferred-lead yield — also true), resume the
+    /// main scan. Force mode emits every non-Skip cell unconditionally: the
+    /// previous wide glyph's style was visible on blanks, so the terminal may
+    /// show stale style there regardless of buffer equality.
+    /// </summary>
+    private bool DrainTrailing()
+    {
+        while (_trailingNext < _trailingEnd)
+        {
+            int j = _trailingNext;
+            // Advance past this cell; a wide cell inside the range covers its
+            // own trailing column too, so extend the end past it (clamped) —
+            // otherwise the main scan would write EMPTY over the just-drawn
+            // glyph's right half.
+            ref readonly Cell jc = ref _next.At(j, _y);
+            int jw = Math.Max(1, (int)jc.Width);
+            _trailingNext += jw;
+            if (_trailingNext > _trailingEnd)
+            {
+                _trailingEnd = Math.Min(_trailingNext, _rowRight);
+            }
+
+            var trailingOption = _next.GetDiffOption(j, _y);
+            if (trailingOption == CellDiffOption.Skip)
+            {
+                MirrorSilent(j);
+                continue;
+            }
+
+            var t = DiffEngine.ApplyFx(_fx, j, _y, in jc);
+            if (!_trailingForce && _front.At(j, _y) == t)
+            {
+                continue;
+            }
+
+            // A tail cell is undrawable (rune 0 would emit a NUL byte): paint
+            // a space carrying the tail's own style — what the column must
+            // show once cleared — while mirroring the true tail below, so
+            // FRONT == BACK still holds.
+            X = j;
+            Y = _y;
+            Target = t.Width == Cell.WSkip ? Cell.From(new Rune(t.Rune == 0 ? ' ' : t.Rune), t.Style) : t;
+            Advance = jw;
+            IsForcedWidth = false;
+            _front.At(j, _y) = t;
+            _front.MirrorDiffOption(j, _y, trailingOption, _next.GetForcedWidth(j, _y));
+            if (jw == Cell.Wide && j + 1 < _rowRight)
+            {
+                _front.At(j + 1, _y) = Cell.WideTail;
+                _front.MirrorDiffOption(j + 1, _y, _next.GetDiffOption(j + 1, _y), _next.GetForcedWidth(j + 1, _y));
+            }
+
+            return true;
+        }
+
+        _x = _trailingEnd;
+        _trailingActive = false;
+        if (_deferredX < 0)
+        {
+            return false;
+        }
+
+        int lx = _deferredX;
+        _deferredX = -1;
+        ref readonly Cell ln = ref _next.At(lx, _y);
+        var lt = DiffEngine.ApplyFx(_fx, lx, _y, in ln);
+        X = lx;
+        Y = _y;
+        Target = lt;
+        Advance = Math.Max(1, (int)ln.Width);
+        IsForcedWidth = false;
+        _front.At(lx, _y) = lt;
+        _front.MirrorDiffOption(lx, _y, _next.GetDiffOption(lx, _y), _next.GetForcedWidth(lx, _y));
+        if (ln.Width == Cell.Wide && lx + 1 < _cols)
+        {
+            _front.At(lx + 1, _y) = Cell.WideTail;
+            _front.MirrorDiffOption(lx + 1, _y, _next.GetDiffOption(lx + 1, _y), _next.GetForcedWidth(lx + 1, _y));
+        }
+
+        return true;
+    }
+
+    /// <summary>Mirrors one NEXT cell into FRONT (content + directive), no yield.</summary>
+    private void MirrorSilent(int x)
+    {
+        _front.At(x, _y) = _next.At(x, _y);
+        _front.MirrorDiffOption(x, _y, _next.GetDiffOption(x, _y), _next.GetForcedWidth(x, _y));
     }
 
     private bool OpenNextRow()
@@ -276,7 +508,8 @@ public ref struct FrameDiffEnumerator
 
             if (_mode == FrameDiffMode.Delta
                 && _front.IsRowHashValid(_y) && _next.IsRowHashValid(_y)
-                && _front.RowHash[_y] == _next.RowHash[_y])
+                && _front.RowHash[_y] == _next.RowHash[_y]
+                && !_front.HasAlwaysUpdate(_y) && !_next.HasAlwaysUpdate(_y))
             {
                 // Row-hash fast path: both sides validated & identical —
                 // nothing to do (adopt is skipped exactly as before: the
@@ -304,7 +537,8 @@ public ref struct FrameDiffEnumerator
         _rowArmed = _fx is { Count: > 0 };
         if (_mode == FrameDiffMode.Delta
             && _front.IsRowHashValid(y) && _next.IsRowHashValid(y)
-            && _front.RowHash[y] == _next.RowHash[y])
+            && _front.RowHash[y] == _next.RowHash[y]
+            && !_front.HasAlwaysUpdate(y) && !_next.HasAlwaysUpdate(y))
         {
             return false;
         }

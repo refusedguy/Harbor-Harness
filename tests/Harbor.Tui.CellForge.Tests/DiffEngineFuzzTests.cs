@@ -24,6 +24,17 @@ public class DiffEngineFuzzTests
         new(0x2713),   // ✓ — narrow dingbat
     ];
 
+    // Narrow-only pool for in-place rewrites below: an At-write keeps the
+    // pair structure intact only for narrow runes — a wide rune written
+    // without its tail would orphan the pair in BACK itself (the mirror is
+    // right to disagree then; FRONT == BACK assumes a pair-valid BACK).
+    private static readonly Rune[] NarrowPool =
+    [
+        new('a'), new('Z'), new('9'), new(' '), new('─'), new('│'),
+        new(0x00E9),
+        new(0x2713),
+    ];
+
     [Test]
     public async Task Fuzz_AfterEveryFlush_FrontEqualsNext()
     {
@@ -73,7 +84,7 @@ public class DiffEngineFuzzTests
     {
         int cols = back.Cols;
         int rows = back.Rows;
-        switch (rng.Next(4))
+        switch (rng.Next(6))
         {
             case 0:
                 back.SetRune(
@@ -90,13 +101,41 @@ public class DiffEngineFuzzTests
                 int h = Math.Min(rows, 1 + rng.Next(3));
                 back.Fill(new EngineCells.Rect(rng.Next(cols), rng.Next(rows), w, h), EngineCells.Cell.From(RunePool[rng.Next(RunePool.Length)], RandomStyle(rng)));
                 break;
-            default:
+            case 3:
                 int y = rng.Next(rows);
                 for (int x = 0; x < cols; x += 1 + rng.Next(3))
                 {
                     _ = back.SetRune(x, y, RunePool[rng.Next(RunePool.Length)], RandomStyle(rng));
                 }
 
+                break;
+            case 4:
+                // R1 steal: incremental in-place rewrite (no wide-pair
+                // clear) — the trailing force arm's live shape. The tail cell
+                // stays identical while the lead changes, possibly under a
+                // visibly-styled wide glyph. Narrow pool only (see above),
+                // and never onto a tail half: the scan trusts pair structure
+                // (equal lead ⇒ pair skipped), so orphaning the tail in BACK
+                // would be a broken-pair mutation, not a diff bug — step left
+                // to the lead instead.
+                int iy = rng.Next(rows);
+                int ix = rng.Next(cols);
+                if (back.Get(ix, iy).Width == EngineCells.Cell.WSkip && ix > 0)
+                {
+                    ix--;
+                }
+
+                back.At(ix, iy) = EngineCells.Cell.From(NarrowPool[rng.Next(NarrowPool.Length)], RandomStyle(rng));
+                back.MarkRowDirty(iy);
+                break;
+            default:
+                // R1 steal: random directives — Skip (silent mirror), AlwaysUpdate
+                // (fast-path bypass), ForcedWidth (reserved advance). FRONT ==
+                // BACK must hold through all of them.
+                back.SetDiffOption(
+                    rng.Next(cols), rng.Next(rows),
+                    (EngineCells.CellDiffOption)rng.Next(4),
+                    (ushort)rng.Next(1, 5));
                 break;
         }
     }

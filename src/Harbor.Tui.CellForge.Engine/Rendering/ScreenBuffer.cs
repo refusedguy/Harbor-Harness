@@ -24,8 +24,17 @@ public sealed class ScreenBuffer
 
     private Cell[] _cells;
     private bool[] _rowHashValid;
+    private bool[] _rowAlwaysUpdate;
     private int _capCols;
     private int _capRows;
+
+    // R1 steal (epic #1155): per-cell diff directives live here, NOT in Cell —
+    // the 16-byte cell layout and its five-compare equality stay untouched.
+    // Both arrays track _cells.Length exactly (allocated in the same breath),
+    // so any valid cell index is a valid option index. Paint ops (Fill/SetRune/
+    // SetText/SetStyleAt) are sticky — they never touch these; BlankAll resets.
+    private CellDiffOption[] _diffOptions;
+    private ushort[] _forcedWidths;
 
     public ScreenBuffer(int cols, int rows)
     {
@@ -33,6 +42,9 @@ public sealed class ScreenBuffer
         ArgumentOutOfRangeException.ThrowIfNegative(rows);
         _cells = [];
         _rowHashValid = [];
+        _rowAlwaysUpdate = [];
+        _diffOptions = [];
+        _forcedWidths = [];
         Resize(cols, rows);
     }
 
@@ -43,6 +55,13 @@ public sealed class ScreenBuffer
     public ulong[] RowHash { get; private set; } = [];
 
     internal bool IsRowHashValid(int y) => _rowHashValid[y];
+
+    /// <summary>
+    /// True when row <paramref name="y"/> carries an
+    /// <see cref="CellDiffOption.AlwaysUpdate"/> cell (R1 steal): the row-hash
+    /// fast path must not skip the row — identical content still emits.
+    /// </summary>
+    internal bool HasAlwaysUpdate(int y) => _rowAlwaysUpdate[y];
 
     /// <summary>Backing array identity, for capacity-reuse assertions in tests.</summary>
     internal Cell[] CellsForTests => _cells;
@@ -86,8 +105,11 @@ public sealed class ScreenBuffer
             _capCols = targetCols;
             _capRows = targetRows;
             _cells = new Cell[(long)targetCols * targetRows];
+            _diffOptions = new CellDiffOption[_cells.Length];
+            _forcedWidths = new ushort[_cells.Length];
             RowHash = new ulong[targetRows];
             _rowHashValid = new bool[targetRows];
+            _rowAlwaysUpdate = new bool[targetRows];
             BlankAll();
             return;
         }
@@ -96,10 +118,13 @@ public sealed class ScreenBuffer
         {
             var hash = new ulong[Math.Max(rows, _capRows)];
             var valid = new bool[Math.Max(rows, _capRows)];
+            var always = new bool[Math.Max(rows, _capRows)];
             Array.Copy(RowHash, hash, Math.Min(RowHash.Length, hash.Length));
             Array.Copy(_rowHashValid, valid, Math.Min(_rowHashValid.Length, valid.Length));
+            Array.Copy(_rowAlwaysUpdate, always, Math.Min(_rowAlwaysUpdate.Length, always.Length));
             RowHash = hash;
             _rowHashValid = valid;
+            _rowAlwaysUpdate = always;
         }
 
         BlankAll();
@@ -108,6 +133,13 @@ public sealed class ScreenBuffer
     public void BlankAll()
     {
         Array.Fill(_cells, Cell.Blank, 0, Cols * Rows);
+        // Full clear drops diff directives too: a blanked screen is a blank
+        // slate, and a stale Skip would hide the next paint. Per-cell paint ops
+        // stay sticky (ratatui parity) — only this and Resize reset the table.
+        Array.Clear(_diffOptions, 0, Cols * Rows);
+        Array.Clear(_forcedWidths, 0, Cols * Rows);
+        // Directives reset with the content, so the bypass flags reset too.
+        Array.Clear(_rowAlwaysUpdate, 0, Rows);
         InvalidateAll();
     }
 
@@ -273,6 +305,65 @@ public sealed class ScreenBuffer
         return true;
     }
 
+    // ── Diff directives (R1 steal, epic #1155) ──────────────────────────
+
+    /// <summary>Diff directive at (x,y) (None when never armed).</summary>
+    public CellDiffOption GetDiffOption(int x, int y) => _diffOptions[(y * Cols) + x];
+
+    /// <summary>
+    /// Explicit cursor advance for <see cref="CellDiffOption.ForcedWidth"/>
+    /// cells (0 unless armed with ForcedWidth — use sites clamp to ≥ 1).
+    /// </summary>
+    public ushort GetForcedWidth(int x, int y) => _forcedWidths[(y * Cols) + x];
+
+    /// <summary>
+    /// Arms a diff directive at (x,y). Sticky across paint ops (ratatui
+    /// parity): repainting the cell keeps the directive — a ForcedWidth image
+    /// placeholder is armed once, not every frame. Cleared by
+    /// <see cref="BlankAll"/>/Resize. Marks the row dirty: the row hash folds
+    /// the directive, so an option-only change still breaks hash equality and
+    /// the fast path cannot hide it. Returns false when out of range.
+    /// </summary>
+    public bool SetDiffOption(int x, int y, CellDiffOption option, ushort forcedWidth = 0)
+    {
+        if ((uint)x >= (uint)Cols || (uint)y >= (uint)Rows)
+        {
+            return false;
+        }
+
+        int index = (y * Cols) + x;
+        _diffOptions[index] = option;
+        // A zero advance would stall the scan (_x += 0); clamp at arm time so
+        // use sites can trust the stored value.
+        _forcedWidths[index] = option == CellDiffOption.ForcedWidth ? Math.Max((ushort)1, forcedWidth) : (ushort)0;
+        _rowHashValid[y] = false;
+        if (option == CellDiffOption.AlwaysUpdate)
+        {
+            // Set-only: the row-hash fast path cannot prove an AlwaysUpdate
+            // row clean (identical content must still emit), so the row opts
+            // out until the next BlankAll/Resize. Clearing the last
+            // AlwaysUpdate cell back to None keeps the bypass — conservative
+            // (a rescan), never wrong.
+            _rowAlwaysUpdate[y] = true;
+        }
+
+        return true;
+    }
+
+    /// <summary>
+    /// Raw directive mirror for the diff scan (R1 steal): writes without
+    /// dirty-marking — the scan owns hash discipline through CloseRow
+    /// adopt/invalidate, and per-cell invalidation there would cost a flag
+    /// write per mirrored cell. NOT for widget use (use
+    /// <see cref="SetDiffOption"/>).
+    /// </summary>
+    internal void MirrorDiffOption(int x, int y, CellDiffOption option, ushort forcedWidth)
+    {
+        int index = (y * Cols) + x;
+        _diffOptions[index] = option;
+        _forcedWidths[index] = forcedWidth;
+    }
+
     // ── Row hashes (§2.3) ──────────────────────────────────────────────────
 
     /// <summary>Returns the cached hash, computing it on first use since last dirt.</summary>
@@ -308,6 +399,12 @@ public sealed class ScreenBuffer
             hash ^= c.Bg;
             hash *= FnvPrime;
             hash ^= ((ulong)c.Flags << 8) | c.Width;
+            hash *= FnvPrime;
+            // R1 steal: the directive table is outside Cell, so the hash folds
+            // it explicitly — otherwise an option-only change (Skip armed, stale
+            // AlwaysUpdate cleared) would keep hash equality and the fast path
+            // would hide the behavioral change.
+            hash ^= ((ulong)_diffOptions[baseIndex + x] << 16) | _forcedWidths[baseIndex + x];
             hash *= FnvPrime;
         }
 
