@@ -18,6 +18,7 @@ namespace Harbor.Tui.CellForge.Widgets;
 /// <param name="Width">Total cells reserved: dot + gap + title + markers + padding.</param>
 /// <param name="IsActive">Whether this is the focused tab (drives the underline and the style).</param>
 /// <param name="HasDirtyMarker">Draw the "uncommitted work" marker after the title.</param>
+/// <param name="HasErrorMarker">The unread signal is a failure: the marker paints error, not amber (#1173).</param>
 /// <param name="HasPinMarker">Draw the pinned marker before the status dot.</param>
 /// <param name="Status">Short status text driving the dot colour (never painted verbatim).</param>
 public readonly record struct TabCell(
@@ -28,6 +29,7 @@ public readonly record struct TabCell(
     int Width,
     bool IsActive,
     bool HasDirtyMarker,
+    bool HasErrorMarker,
     bool HasPinMarker,
     string Status)
 {
@@ -94,6 +96,16 @@ public readonly record struct TabStripPlan(
 ///     and degrades to a single reverse-styled titles row rather than writing
 ///     outside it.
 /// </para>
+/// <para>
+///     <b>Unread.</b> A tab with an unread signal (#1173) draws a static
+///     marker after its title: amber for activity, error-red for a failed run
+///     (opencode's <c>"activity" | "error"</c> split). When the signal clears,
+///     the marker does not blink out — it settles through
+///     <see cref="GlowEffect.TabMarkerFade" /> over a few painted frames. The
+///     sweep animation itself is intentionally not ported (no Renderable clock
+///     on a cell-diff surface); the static marker plus the settle drain is the
+///     whole motion vocabulary here.
+/// </para>
 /// </remarks>
 public sealed class SessionTabStripPanel : Panel
 {
@@ -146,7 +158,21 @@ public sealed class SessionTabStripPanel : Panel
     private static readonly CellStyle InactiveTitleStyle = ChatPalette.Dim;
     private static readonly CellStyle PinnedStyle = new(ChatPalette.Accent);
     private static readonly CellStyle DirtyStyle = new(ChatPalette.Warning);
+    private static readonly CellStyle ErrorMarkerStyle = new(ChatPalette.Error);
     private static readonly CellStyle OverflowStyle = ChatPalette.Dim;
+
+    /// <summary>
+    ///     Painted frames a just-cleared unread marker lingers for (#1173).
+    ///     The fade is frame-counted, not clocked: each <see cref="Paint" />
+    ///     drains one tick through <see cref="GlowEffect.TabMarkerFade" />.
+    /// </summary>
+    internal const int MarkerFadeTicks = 4;
+
+    /// <summary>Ticks left per settling tab, by session-id string. Cosmetic only — never state.</summary>
+    private readonly Dictionary<string, int> _settle = new(StringComparer.Ordinal);
+
+    /// <summary>Session ids that carried an unread signal on the last painted frame.</summary>
+    private HashSet<string> _lastUnread = new(StringComparer.Ordinal);
 
     /// <summary>Latest tab-strip snapshot, projected by the renderer (never mutated here).</summary>
     public TabStripState Strip { get; set; } = TabStripState.Empty;
@@ -192,7 +218,7 @@ public sealed class SessionTabStripPanel : Panel
         for (int i = 0; i < tabs.Length; i++)
             minima[i] = DotWidth + GapWidth + PadWidth + MinTitleCells
                         + (tabs[i].IsPinned ? PinWidth : 0)
-                        + (tabs[i].IsDirty ? DirtyWidth : 0);
+                        + (tabs[i].HasUnread ? DirtyWidth : 0);
 
         // Grow a window outwards from the focused tab so it is always inside it,
         // right first then left, alternating: a strip that always shows the tab
@@ -309,7 +335,8 @@ public sealed class SessionTabStripPanel : Panel
                 X: x,
                 Width: cellWidth,
                 IsActive: lo + i == active,
-                HasDirtyMarker: tab.IsDirty,
+                HasDirtyMarker: tab.HasUnread,
+                HasErrorMarker: tab.HasError,
                 HasPinMarker: tab.IsPinned,
                 Status: tab.ShortStatus));
             x += cellWidth + SeparatorWidth;
@@ -399,8 +426,14 @@ public sealed class SessionTabStripPanel : Panel
         // erase the row it no longer uses before anything is drawn.
         buffer.Fill(rect, Cell.Blank);
 
+        TrackSettle();
+
         for (int i = 0; i < plan.Cells.Length; i++)
-            PaintCell(buffer, rect, plan.Cells[i]);
+        {
+            var cell = plan.Cells[i];
+            double settle = cell.HasDirtyMarker ? 1.0 : SettleLevel(cell.Index);
+            PaintCell(buffer, rect, cell, settle);
+        }
 
         if (plan.MoreLeft)
             buffer.SetText(rect.X, rect.Y, MoreLeftGlyph.ToString(), OverflowStyle);
@@ -449,6 +482,23 @@ public sealed class SessionTabStripPanel : Panel
     /// <summary>Dispatch <c>CyclePreviousTab</c>.</summary>
     public bool Previous() => Send(new ChatAppMsg.CyclePreviousTab());
 
+    /// <summary>Dispatch <c>ReopenTab</c> — restore the most recently closed tab (#1173).</summary>
+    public bool Reopen() => Send(new ChatAppMsg.ReopenTab());
+
+    /// <summary>Dispatch <c>CycleNextUnreadTab</c>.</summary>
+    public bool NextUnread() => Send(new ChatAppMsg.CycleNextUnreadTab());
+
+    /// <summary>Dispatch <c>CyclePreviousUnreadTab</c>.</summary>
+    public bool PreviousUnread() => Send(new ChatAppMsg.CyclePreviousUnreadTab());
+
+    /// <summary>
+    ///     Dispatch <c>ActivateTabSlot</c> for one-based <paramref name="slot" />
+    ///     (#1173 — <c>Ctrl+1</c>..<c>Ctrl+9</c>). False without dispatching
+    ///     when the slot is outside the strip on screen.
+    /// </summary>
+    public bool ActivateSlot(int slot) =>
+        slot >= 1 && slot <= 9 && slot <= Strip.Tabs.Length && Send(new ChatAppMsg.ActivateTabSlot(slot));
+
     /// <summary>
     ///     Hands <paramref name="msg" /> to the sink, if one is wired. Named
     ///     <c>Send</c> rather than <c>Dispatch</c> so it cannot be confused with
@@ -474,7 +524,66 @@ public sealed class SessionTabStripPanel : Panel
 
     // ── painting helpers ────────────────────────────────────────────────────
 
-    private void PaintCell(ScreenBuffer buffer, in Rect rect, in TabCell cell)
+    /// <summary>
+    ///     Settle level for the tab at <paramref name="tabIndex" />: full (1)
+    ///     while unread, a draining <see cref="GlowEffect.TabMarkerFade" />
+    ///     level for a few frames after the signal clears, 0 otherwise. Reads
+    ///     the cosmetic <see cref="_settle" /> map only — never state.
+    /// </summary>
+    private double SettleLevel(int tabIndex)
+    {
+        var tabs = Strip.Tabs;
+        if ((uint)tabIndex >= (uint)tabs.Length)
+            return 0.0;
+        return _settle.TryGetValue(tabs[tabIndex].SessionId.Value, out int left)
+            ? GlowEffect.TabMarkerFade(left, MarkerFadeTicks)
+            : 0.0;
+    }
+
+    /// <summary>
+    ///     Advances the marker settle (#1173): tabs that lost their unread
+    ///     signal since the last painted frame start draining, re-marked tabs
+    ///     cancel their drain, finished entries leave the map. One tick per
+    ///     painted frame — the frame-counted stand-in for opencode's clocked
+    ///     fade. Purely cosmetic: nothing here touches the store.
+    /// </summary>
+    private void TrackSettle()
+    {
+        var tabs = Strip.Tabs;
+        var unread = new HashSet<string>(StringComparer.Ordinal);
+        for (int i = 0; i < tabs.Length; i++)
+        {
+            if (tabs[i].HasUnread)
+                unread.Add(tabs[i].SessionId.Value);
+        }
+
+        // A re-marked tab shows the full marker again — its drain is over.
+        foreach (var id in unread)
+            _settle.Remove(id);
+
+        if (_settle.Count > 0)
+        {
+            var ids = new List<string>(_settle.Keys);
+            for (int i = 0; i < ids.Count; i++)
+            {
+                int left = _settle[ids[i]] - 1;
+                if (left <= 0)
+                    _settle.Remove(ids[i]);
+                else
+                    _settle[ids[i]] = left;
+            }
+        }
+
+        foreach (var id in _lastUnread)
+        {
+            if (!unread.Contains(id) && !_settle.ContainsKey(id))
+                _settle[id] = MarkerFadeTicks;
+        }
+
+        _lastUnread = unread;
+    }
+
+    private void PaintCell(ScreenBuffer buffer, in Rect rect, in TabCell cell, double settleLevel)
     {
         int y = rect.Y;
 
@@ -493,13 +602,21 @@ public sealed class SessionTabStripPanel : Panel
             cell.Title.AsSpan(),
             cell.IsActive ? ActiveStyle : InactiveTitleStyle);
 
-        if (cell.HasDirtyMarker)
+        // The marker: full colour while unread (error-red wins over amber),
+        // a dimming linger for a few frames after the signal clears. A
+        // settling tab reserved no marker cell, so it draws over its own
+        // right-pad cell — one cell, always inside the tab's span.
+        bool showMarker = cell.HasDirtyMarker || settleLevel > 0;
+        if (showMarker)
         {
+            var style = cell.HasDirtyMarker
+                ? (cell.HasErrorMarker ? ErrorMarkerStyle : DirtyStyle)
+                : (settleLevel >= 0.5 ? DirtyStyle : InactiveTitleStyle);
             buffer.SetText(
                 rect.X + cell.TitleX + cell.TitleCells,
                 y,
                 DirtyGlyph.ToString(),
-                DirtyStyle);
+                style);
         }
     }
 
