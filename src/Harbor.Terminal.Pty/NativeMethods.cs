@@ -10,7 +10,7 @@ namespace Harbor.Terminal.Pty;
 ///     tty exactly like a login shell). Flag/request constants resolve per-OS
 ///     at first touch: asm-generic (Linux) vs Darwin values.
 /// </summary>
-internal static class NativeMethods
+internal static partial class NativeMethods
 {
     private static readonly bool IsDarwin = OperatingSystem.IsMacOS();
 
@@ -40,78 +40,78 @@ internal static class NativeMethods
         public ushort YPixel;
     }
 
-    [DllImport("libc", SetLastError = true)]
-    internal static extern int posix_openpt(int flags);
+    [LibraryImport("libc", SetLastError = true)]
+    internal static partial int posix_openpt(int flags);
 
-    [DllImport("libc", SetLastError = true)]
-    internal static extern int grantpt(int fd);
+    [LibraryImport("libc", SetLastError = true)]
+    internal static partial int grantpt(int fd);
 
-    [DllImport("libc", SetLastError = true)]
-    internal static extern int unlockpt(int fd);
+    [LibraryImport("libc", SetLastError = true)]
+    internal static partial int unlockpt(int fd);
 
-    [DllImport("libc", SetLastError = true)]
-    private static extern int ptsname_r(int fd, [Out] byte[] buf, nuint buflen);
+    [LibraryImport("libc", SetLastError = true)]
+    private static partial int ptsname_r(int fd, [Out] byte[] buf, nuint buflen);
 
-    [DllImport("libc", SetLastError = true)]
-    internal static extern int open(string path, int flags);
+    [LibraryImport("libc", SetLastError = true, StringMarshalling = StringMarshalling.Utf8)]
+    internal static partial int open(string path, int flags);
 
-    [DllImport("libc", SetLastError = true)]
-    internal static extern int close(int fd);
+    [LibraryImport("libc", SetLastError = true)]
+    internal static partial int close(int fd);
 
-    [DllImport("libc", SetLastError = true)]
-    internal static extern int ioctl(int fd, uint request, ref WinSize winsize);
+    [LibraryImport("libc", SetLastError = true)]
+    internal static partial int ioctl(int fd, uint request, ref WinSize winsize);
 
-    [DllImport("libc", SetLastError = true)]
-    internal static extern int read(int fd, [Out] byte[] buffer, int count);
+    [LibraryImport("libc", SetLastError = true)]
+    internal static partial int read(int fd, [Out] byte[] buffer, int count);
 
-    [DllImport("libc", SetLastError = true)]
-    internal static extern int write(int fd, ref byte buffer, int count);
+    [LibraryImport("libc", SetLastError = true)]
+    internal static partial int write(int fd, ref byte buffer, int count);
 
-    [DllImport("libc", SetLastError = true)]
-    private static extern int posix_spawn_file_actions_init(IntPtr fileActions);
+    [LibraryImport("libc", SetLastError = true)]
+    private static partial int posix_spawn_file_actions_init(IntPtr fileActions);
 
-    [DllImport("libc", SetLastError = true)]
-    private static extern int posix_spawn_file_actions_addopen(
+    [LibraryImport("libc", SetLastError = true, StringMarshalling = StringMarshalling.Utf8)]
+    private static partial int posix_spawn_file_actions_addopen(
         IntPtr fileActions, int fileDescriptor, string path, int flags, int mode);
 
-    [DllImport("libc", SetLastError = true)]
-    private static extern int posix_spawn_file_actions_adddup2(
+    [LibraryImport("libc", SetLastError = true)]
+    private static partial int posix_spawn_file_actions_adddup2(
         IntPtr fileActions, int fromFileDescriptor, int toFileDescriptor);
 
     // chdir(2) inside the spawned child — glibc: *_np (≥ 2.29), Darwin: public symbol.
-    [DllImport("libc", SetLastError = true, EntryPoint = "posix_spawn_file_actions_addchdir_np")]
-    private static extern int posix_spawn_file_actions_addchdir_linux(IntPtr fileActions, string path);
+    [LibraryImport("libc", SetLastError = true, StringMarshalling = StringMarshalling.Utf8, EntryPoint = "posix_spawn_file_actions_addchdir_np")]
+    private static partial int posix_spawn_file_actions_addchdir_linux(IntPtr fileActions, string path);
 
-    [DllImport("libc", SetLastError = true, EntryPoint = "posix_spawn_file_actions_addchdir")]
-    private static extern int posix_spawn_file_actions_addchdir_darwin(IntPtr fileActions, string path);
+    [LibraryImport("libc", SetLastError = true, StringMarshalling = StringMarshalling.Utf8, EntryPoint = "posix_spawn_file_actions_addchdir")]
+    private static partial int posix_spawn_file_actions_addchdir_darwin(IntPtr fileActions, string path);
 
-    [DllImport("libc", SetLastError = true)]
-    private static extern int posix_spawn_file_actions_destroy(IntPtr fileActions);
+    [LibraryImport("libc", SetLastError = true)]
+    private static partial int posix_spawn_file_actions_destroy(IntPtr fileActions);
 
-    [DllImport("libc", SetLastError = true)]
-    private static extern int posix_spawnattr_init(IntPtr attr);
+    [LibraryImport("libc", SetLastError = true)]
+    private static partial int posix_spawnattr_init(IntPtr attr);
 
-    [DllImport("libc", SetLastError = true)]
-    private static extern int posix_spawnattr_setflags(IntPtr attr, ushort flags);
+    [LibraryImport("libc", SetLastError = true)]
+    private static partial int posix_spawnattr_setflags(IntPtr attr, ushort flags);
 
-    [DllImport("libc", SetLastError = true)]
-    private static extern int posix_spawnattr_destroy(IntPtr attr);
+    [LibraryImport("libc", SetLastError = true)]
+    private static partial int posix_spawnattr_destroy(IntPtr attr);
 
     /// <summary>Exact-path spawn (no PATH search). argv/envp are native char*[] blocks.</summary>
-    [DllImport("libc", SetLastError = true)]
-    private static extern int posix_spawn(
+    [LibraryImport("libc", SetLastError = true, StringMarshalling = StringMarshalling.Utf8)]
+    private static partial int posix_spawn(
         out int pid, string path, IntPtr fileActions, IntPtr attrp, IntPtr argv, IntPtr envp);
 
     /// <summary>PATH-searching spawn variant (<c>posix_spawnp</c>).</summary>
-    [DllImport("libc", SetLastError = true)]
-    private static extern int posix_spawnp(
+    [LibraryImport("libc", SetLastError = true, StringMarshalling = StringMarshalling.Utf8)]
+    private static partial int posix_spawnp(
         out int pid, string path, IntPtr fileActions, IntPtr attrp, IntPtr argv, IntPtr envp);
 
-    [DllImport("libc", SetLastError = true)]
-    internal static extern int waitpid(int pid, out int status, int options);
+    [LibraryImport("libc", SetLastError = true)]
+    internal static partial int waitpid(int pid, out int status, int options);
 
-    [DllImport("libc", SetLastError = true)]
-    internal static extern int kill(int pid, int sig);
+    [LibraryImport("libc", SetLastError = true)]
+    internal static partial int kill(int pid, int sig);
 
     /// <summary>
     ///     Resolves the slave-side device path of a fresh PTY master (<c>ptsname_r(3)</c>).

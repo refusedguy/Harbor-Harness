@@ -4,6 +4,10 @@
     <TargetFramework>net10.0</TargetFramework>
     <IsPackable>true</IsPackable>
     <PackageId>Harbor.Tools.Builtin</PackageId>
+    <!-- #1243 (SG2): [LibraryImport] source generator emits unsafe code for
+         string marshalling — the flag covers generated code only; no `unsafe`
+         keyword in hand-written sources (MA0046 still holds). -->
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <Description>Harbor builtin tools — 14 tools (Read, Write, Edit, Bash, Grep, Glob, Ls, Task, WebFetch, Patch, Notebook, RipGrep, Tree, MCP) consolidated from the former 14 leaf projects into a single assembly.</Description>
     <PackageTags>harbor;tools;builtin;ai-agent</PackageTags>
   </PropertyGroup>

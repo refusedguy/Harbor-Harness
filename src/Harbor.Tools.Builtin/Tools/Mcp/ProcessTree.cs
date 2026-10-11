@@ -12,7 +12,7 @@ namespace Harbor.Tools.Mcp;
 ///         group with <c>kill(-pid)</c>.
 ///     </para>
 /// </summary>
-internal static class ProcessTree
+internal static partial class ProcessTree
 {
     private const int SigKill = 9;
 
@@ -56,7 +56,8 @@ internal static class ProcessTree
         if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
             return null;
 
-        var job = CreateJobObject(IntPtr.Zero, null);
+        var raw = CreateJobObject(IntPtr.Zero, null);
+        var job = new SafeJobHandle(raw, true);
         if (job.IsInvalid) return null;
 
         var info = new JobObjectExtendedLimitInformation
@@ -83,25 +84,28 @@ internal static class ProcessTree
         return job;
     }
 
-    [DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
-    private static extern SafeJobHandle CreateJobObject(IntPtr lpJobAttributes, string? lpName);
+    [LibraryImport("kernel32.dll", SetLastError = true, StringMarshalling = StringMarshalling.Utf16)]
+    private static partial IntPtr CreateJobObject(IntPtr lpJobAttributes, string? lpName);
 
-    [DllImport("kernel32.dll", SetLastError = true)]
-    private static extern bool SetInformationJobObject(
+    [LibraryImport("kernel32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static partial bool SetInformationJobObject(
         SafeJobHandle hJob, JobObjectInfoClass infoClass,
         ref JobObjectExtendedLimitInformation lpJobObjectInfo, int cbJobObjectInfoLength);
 
-    [DllImport("kernel32.dll", SetLastError = true)]
-    private static extern bool AssignProcessToJobObject(SafeJobHandle hJob, IntPtr hProcess);
+    [LibraryImport("kernel32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static partial bool AssignProcessToJobObject(SafeJobHandle hJob, IntPtr hProcess);
 
-    [DllImport("kernel32.dll", SetLastError = true)]
-    internal static extern bool CloseHandle(IntPtr hObject);
+    [LibraryImport("kernel32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static partial bool CloseHandle(IntPtr hObject);
 
-    [DllImport("libc", SetLastError = true)]
-    private static extern int kill(int pid, int sig);
+    [LibraryImport("libc", SetLastError = true)]
+    private static partial int kill(int pid, int sig);
 
-    [DllImport("libc", SetLastError = true)]
-    private static extern int setpgid(int pid, int pgid);
+    [LibraryImport("libc", SetLastError = true)]
+    private static partial int setpgid(int pid, int pgid);
 
     [StructLayout(LayoutKind.Sequential)]
     private struct JobObjectBasicLimitInformation
@@ -154,6 +158,8 @@ internal static class ProcessTree
 internal sealed class SafeJobHandle : SafeHandleZeroOrMinusOneIsInvalid
 {
     private SafeJobHandle() : base(true) { }
+
+    internal SafeJobHandle(IntPtr handle, bool ownsHandle) : base(ownsHandle) => SetHandle(handle);
 
     protected override bool ReleaseHandle() => ProcessTree.CloseHandle(handle);
 }

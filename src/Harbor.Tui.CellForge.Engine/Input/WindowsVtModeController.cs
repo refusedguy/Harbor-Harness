@@ -13,7 +13,7 @@ namespace Harbor.Tui.CellForge.Input;
 /// Crash-safe and idempotent: <see cref="Restore"/> after a failed
 /// <see cref="Enter"/> is a no-op.
 /// </summary>
-public sealed class WindowsVtModeController : ITerminalModeController
+public sealed partial class WindowsVtModeController : ITerminalModeController
 {
     // stdin / stdout handle ids (WinBase.h)
     private const int StdInputHandle = -10;
@@ -184,26 +184,30 @@ public sealed class WindowsVtModeController : ITerminalModeController
         }
     }
 
-    [DllImport("kernel32", SetLastError = true)]
-    private static extern IntPtr GetStdHandle(int nStdHandle);
+    [LibraryImport("kernel32", SetLastError = true)]
+    private static partial IntPtr GetStdHandle(int nStdHandle);
 
-    [DllImport("kernel32", SetLastError = true)]
-    private static extern bool GetConsoleMode(IntPtr hConsoleHandle, out uint lpMode);
+    [LibraryImport("kernel32", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static partial bool GetConsoleMode(IntPtr hConsoleHandle, out uint lpMode);
 
-    [DllImport("kernel32", SetLastError = true)]
-    private static extern bool SetConsoleMode(IntPtr hConsoleHandle, uint dwMode);
+    [LibraryImport("kernel32", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static partial bool SetConsoleMode(IntPtr hConsoleHandle, uint dwMode);
 
-    [DllImport("kernel32", SetLastError = true)]
-    private static extern uint GetConsoleCP();
+    [LibraryImport("kernel32", SetLastError = true)]
+    private static partial uint GetConsoleCP();
 
-    [DllImport("kernel32", SetLastError = true)]
-    private static extern uint GetConsoleOutputCP();
+    [LibraryImport("kernel32", SetLastError = true)]
+    private static partial uint GetConsoleOutputCP();
 
-    [DllImport("kernel32", SetLastError = true)]
-    private static extern bool SetConsoleCP(uint wCodePageID);
+    [LibraryImport("kernel32", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static partial bool SetConsoleCP(uint wCodePageID);
 
-    [DllImport("kernel32", SetLastError = true)]
-    private static extern bool SetConsoleOutputCP(uint wCodePageID);
+    [LibraryImport("kernel32", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static partial bool SetConsoleOutputCP(uint wCodePageID);
 
 #pragma warning restore S108, S2486
 }
