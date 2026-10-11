@@ -19,7 +19,7 @@ public static class CompileTarget
     {
         var configuration = settings.ConfigurationString;
         var solutionPath = solution.Path.ToString();
-        output.Cmd("Compile", ["dotnet", "build", solutionPath, "-c", configuration, "--no-restore", "-p:MaxCpuCount=0"]);
+        output.Cmd("Compile", ["dotnet", "build", solutionPath, "-c", configuration, "--no-restore", "-p:MaxCpuCount=0", "-p:ContinuousIntegrationBuild=true"]);
         if (output.IsDryRun)
         {
             return;
@@ -28,6 +28,9 @@ public static class CompileTarget
             .SetProjectFile(solution)
             .SetConfiguration(configuration)
             .EnableNoRestore()
+            // Same deterministic-build property the ci.yml build job passes,
+            // so ./build.sh Compile and CI compile the identical graph.
+            .SetProperty("ContinuousIntegrationBuild", "true")
             .SetProperty("MaxCpuCount", "0")); // 0 = use all CPUs (parallel build)
     }
 }

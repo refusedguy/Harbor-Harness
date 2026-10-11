@@ -71,6 +71,12 @@ public sealed class ArtifactPathResolver
     public AbsolutePath GetArchiveOutputDir() => ArtifactsDirectory / "archives";
 
     /// <summary>
+    ///     NuGet packages output directory. The Pack target lands here with
+    ///     names like <c>Harbor.Abstractions.0.4.0-alpha.nupkg</c>.
+    /// </summary>
+    public AbsolutePath GetPackagesOutputDir() => ArtifactsDirectory / "packages";
+
+    /// <summary>
     ///     Returns the canonical archive base name for an app + variant + RID.
     ///     Example: <c>harbor-cli-framework-dependent-linux-x64</c>.
     /// </summary>
