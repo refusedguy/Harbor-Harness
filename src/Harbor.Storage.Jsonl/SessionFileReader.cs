@@ -65,6 +65,20 @@ internal static class SessionFileReader
         return line.IndexOf("\"type\":\"session\""u8) >= 0;
     }
 
+    /// <summary>
+    ///     True when the line is a checkpoint marker (<c>"type":"checkpoint"</c>).
+    ///     Pure byte probe, same as <see cref="IsSessionHeaderLine" />: a
+    ///     message payload carrying the literal is JSON-escaped
+    ///     (<c>\"type\":\"checkpoint\"</c>), so the unescaped probe only
+    ///     matches structural lines. Checkpoints are metadata, not history —
+    ///     the read path drops them here instead of routing them to the
+    ///     message parser (which would warn per line, #1247 slice 1).
+    /// </summary>
+    internal static bool IsCheckpointLine(ReadOnlySpan<byte> line)
+    {
+        return line.IndexOf("\"type\":\"checkpoint\""u8) >= 0;
+    }
+
     /// <summary>True when the line is a <c>"message"</c> entry with any id.</summary>
     internal static bool IsAnyMessageEntry(ReadOnlySpan<byte> line)
     {
@@ -293,6 +307,11 @@ internal static class SessionFileReader
         }
 
         if (IsSessionHeaderLine(record))
+        {
+            return;
+        }
+
+        if (IsCheckpointLine(record))
         {
             return;
         }

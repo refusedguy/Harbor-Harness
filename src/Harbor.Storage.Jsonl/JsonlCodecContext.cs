@@ -31,6 +31,7 @@ namespace Harbor.Storage.Jsonl;
 [JsonSourceGenerationOptions(PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase)]
 [JsonSerializable(typeof(SessionHeaderEntry))]
 [JsonSerializable(typeof(MessageEntry))]
+[JsonSerializable(typeof(CheckpointEntry))]
 [JsonSerializable(typeof(Usage))]
 [JsonSerializable(typeof(Session))]
 [JsonSerializable(typeof(SessionMetadata))]

@@ -185,6 +185,8 @@ public sealed class SessionStoreFailureTextParityRules
         "Invalid session id '{}'.",
         "Message '{}' not found in session '{}'.",
         "Session '{}' not found.",
+        // #1247 slice 1: rewind-to-checkpoint needs its own not-found shape.
+        "Checkpoint '{}' not found in session '{}'.",
     ];
 
     /// <summary>
@@ -314,8 +316,9 @@ public sealed class SessionStoreFailureTextParityRules
     // =====================================================================
 
     /// <summary>
-    ///     R3 — the home still declares the three shapes it declared when
-    ///     measured, so R1 cannot pass over a vocabulary that has narrowed.
+    ///     R3 — the home still declares the four shapes it declares after
+    ///     #1247 (three measured at 0c29da77 plus the checkpoint shape),
+    ///     so R1 cannot pass over a vocabulary that has narrowed.
     /// </summary>
     [Test]
     public async Task The_Home_Declares_The_Measured_Shapes()
@@ -324,7 +327,7 @@ public sealed class SessionStoreFailureTextParityRules
 
         await Assert.That(now).IsEquivalentTo(MeasuredHomeShapes)
             .Because(
-                "SessionNotFound, MessageNotFound and InvalidSessionId are the whole vocabulary "
+                "SessionNotFound, MessageNotFound, CheckpointNotFound and InvalidSessionId are the whole vocabulary "
                 + "R1 judges against. A shape removed from the home is not a smaller guard — it is a "
                 + "guard that accepts less while still reporting green, and any store still writing "
                 + "that shape would then be flagged for a text the repo no longer declares. Measured: "

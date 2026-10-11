@@ -544,6 +544,270 @@ public sealed class JsonlSessionStore : ISessionStore
     }
 
     /// <summary>
+    ///     Mark a checkpoint over a message (#1247 slice 1, jsonl only): the
+    ///     anchor's zero-based index in message order is recorded as a
+    ///     <c>"type":"checkpoint"</c> line appended to the session file, so a
+    ///     later <see cref="RewindToCheckpointAsync" /> can restore it by
+    ///     checkpoint id instead of message id. Checkpoints are metadata —
+    ///     the message read path skips them, so history, stats and export
+    ///     are unchanged by their presence.
+    /// </summary>
+    /// <param name="sessionId">The session id.</param>
+    /// <param name="messageId">Anchor message id to mark.</param>
+    /// <param name="label">Optional human label.</param>
+    /// <param name="ct">Cancellation token.</param>
+    /// <returns>The recorded checkpoint, or failure if session/message not found.</returns>
+    public async Task<Result<SessionCheckpoint>> CreateCheckpointAsync(
+        string sessionId, string messageId, string? label = null, CancellationToken ct = default)
+    {
+        // §3.4: observe cancellation BEFORE the existence policy.
+        ct.ThrowIfCancellationRequested();
+        var resolved = SessionFilePaths.TryResolveSessionFile(_rootDirectory, sessionId);
+        if (resolved.IsFailure)
+            return resolved.ConvertFailure<SessionCheckpoint>();
+        string sessionFile = resolved.Value; // guarded: returned above on failure.
+        if (!File.Exists(sessionFile))
+        {
+            _messageCache.TryRemove(sessionId, out _);
+            return Result.Failure<SessionCheckpoint>(SessionStoreErrors.SessionNotFound(sessionId));
+        }
+
+        var messagesResult = await GetMessagesAsync(sessionId, ct).ConfigureAwait(false);
+        if (messagesResult.IsFailure)
+            return messagesResult.ConvertFailure<SessionCheckpoint>();
+
+#pragma warning disable CFE0001
+        // CFE0001: false positive — the IsFailure guard above is an early
+        // return, a control-flow shape the analyzer does not model.
+        IReadOnlyList<AgentMessage> messages = messagesResult.Value;
+#pragma warning restore CFE0001
+        int index = -1;
+        for (int i = 0; i < messages.Count; i++)
+        {
+            if (string.Equals(messages[i].Id, messageId, StringComparison.Ordinal))
+            {
+                index = i;
+                break;
+            }
+        }
+
+        if (index < 0)
+            return Result.Failure<SessionCheckpoint>(SessionStoreErrors.MessageNotFound(sessionId, messageId));
+
+        var checkpoint = new SessionCheckpoint(
+            Guid.NewGuid().ToString("N"), sessionId, messageId, index,
+            DateTimeOffset.UtcNow, label);
+
+        var appended = await AppendCheckpointEntryAsync(sessionId, sessionFile, new CheckpointEntry(
+            "checkpoint", checkpoint.Id, checkpoint.MessageId, checkpoint.MessageIndex,
+            checkpoint.CreatedAt, checkpoint.Label), ct).ConfigureAwait(false);
+        if (appended.IsFailure)
+            return appended.ConvertFailure<SessionCheckpoint>();
+
+        return Result.Success(checkpoint);
+    }
+
+    /// <summary>
+    ///     List checkpoints (and rewind trail markers) for a session in file
+    ///     order (#1247 slice 1, jsonl only). Unparseable checkpoint lines are
+    ///     skipped with a warning, never a whole-list failure (§ROP-001).
+    /// </summary>
+    public Task<Result<IReadOnlyList<SessionCheckpoint>>> ListCheckpointsAsync(
+        string sessionId, CancellationToken ct = default)
+    {
+        // §3.4: observe cancellation BEFORE the existence policy.
+        ct.ThrowIfCancellationRequested();
+        var resolved = SessionFilePaths.TryResolveSessionFile(_rootDirectory, sessionId);
+        if (resolved.IsFailure)
+            return Task.FromResult(resolved.ConvertFailure<IReadOnlyList<SessionCheckpoint>>());
+        string sessionFile = resolved.Value; // guarded: returned above on failure.
+        if (!File.Exists(sessionFile))
+        {
+            _messageCache.TryRemove(sessionId, out _);
+            return Task.FromResult(Result.Failure<IReadOnlyList<SessionCheckpoint>>(
+                SessionStoreErrors.SessionNotFound(sessionId)));
+        }
+
+        return Result.Try(async () =>
+        {
+            ct.ThrowIfCancellationRequested();
+            // Span locals cannot live in an async method (CS4012), so the
+            // byte-level scan is a sync helper; the only await is the lock.
+            var semaphore = await GetSessionLockAsync(sessionId, ct).ConfigureAwait(false);
+            await semaphore.WaitAsync(ct).ConfigureAwait(false);
+            try
+            {
+                ct.ThrowIfCancellationRequested();
+                return (IReadOnlyList<SessionCheckpoint>)ReadCheckpoints(sessionFile, sessionId, _logger);
+            }
+            finally
+            {
+                semaphore.Release();
+            }
+        }, ResultErrors.Message)
+            .TapError(e => _logger.LogError("Failed to list checkpoints of session {SessionId}: {Error}", sessionId, e));
+    }
+
+    /// <summary>
+    ///     Rewind a session to a checkpoint (#1247 slice 1, jsonl only): the
+    ///     session is truncated to the checkpoint's anchor message via
+    ///     <see cref="DeleteMessagesAfterAsync" /> (checkpoints past the
+    ///     anchor go with the dropped future), then a trail marker is
+    ///     appended — the honest trail: which checkpoint was restored, how
+    ///     many messages were dropped, when. History is truncated, but the
+    ///     rewind itself is recorded, not silent.
+    /// </summary>
+    /// <param name="sessionId">The session id.</param>
+    /// <param name="checkpointId">Id of the checkpoint to restore (from <see cref="ListCheckpointsAsync" />).</param>
+    /// <param name="ct">Cancellation token.</param>
+    /// <returns>How many messages were dropped and how many remain.</returns>
+    public async Task<Result<SessionRewindOutcome>> RewindToCheckpointAsync(
+        string sessionId, string checkpointId, CancellationToken ct = default)
+    {
+        ct.ThrowIfCancellationRequested();
+
+        var listed = await ListCheckpointsAsync(sessionId, ct).ConfigureAwait(false);
+        if (listed.IsFailure)
+            return listed.ConvertFailure<SessionRewindOutcome>();
+
+#pragma warning disable CFE0001
+        // CFE0001: false positive — the IsFailure guard above is an early return.
+        IReadOnlyList<SessionCheckpoint> checkpoints = listed.Value;
+#pragma warning restore CFE0001
+        SessionCheckpoint? checkpoint = null;
+        foreach (var c in checkpoints)
+        {
+            if (!c.IsRewindTrail && string.Equals(c.Id, checkpointId, StringComparison.Ordinal))
+            {
+                checkpoint = c;
+                break;
+            }
+        }
+
+        if (checkpoint is null)
+            return Result.Failure<SessionRewindOutcome>(SessionStoreErrors.CheckpointNotFound(sessionId, checkpointId));
+
+        var truncated = await DeleteMessagesAfterAsync(sessionId, checkpoint.MessageId, ct).ConfigureAwait(false);
+        if (truncated.IsFailure)
+            return truncated.ConvertFailure<SessionRewindOutcome>();
+
+#pragma warning disable CFE0001
+        // CFE0001: false positive — the IsFailure guard above is an early return.
+        int removed = truncated.Value;
+#pragma warning restore CFE0001
+
+        var resolved = SessionFilePaths.TryResolveSessionFile(_rootDirectory, sessionId);
+        if (resolved.IsFailure)
+            return resolved.ConvertFailure<SessionRewindOutcome>();
+        var trailed = await AppendCheckpointEntryAsync(sessionId, resolved.Value, new CheckpointEntry(
+            "checkpoint", Guid.NewGuid().ToString("N"), checkpoint.MessageId, checkpoint.MessageIndex,
+            DateTimeOffset.UtcNow, null, checkpoint.Id, removed), ct).ConfigureAwait(false);
+        if (trailed.IsFailure)
+            return trailed.ConvertFailure<SessionRewindOutcome>();
+
+        var reread = await GetMessagesAsync(sessionId, ct).ConfigureAwait(false);
+        if (reread.IsFailure)
+            return reread.ConvertFailure<SessionRewindOutcome>();
+
+#pragma warning disable CFE0001
+        // CFE0001: false positive — the IsFailure guard above is an early return.
+        int remaining = reread.Value.Count;
+#pragma warning restore CFE0001
+        return Result.Success(new SessionRewindOutcome(checkpointId, checkpoint.MessageId, removed, remaining));
+    }
+
+    /// <summary>
+    ///     Append one checkpoint line under the per-session lock and drop the
+    ///     parse cache for the session (the file changed). The caller decides
+    ///     existence/failure semantics; this only performs the write.
+    /// </summary>
+    private async Task<Result> AppendCheckpointEntryAsync(
+        string sessionId, string sessionFile, CheckpointEntry entry, CancellationToken ct)
+    {
+        return await Result.Try(async () =>
+        {
+            var semaphore = await GetSessionLockAsync(sessionId, ct).ConfigureAwait(false);
+            await semaphore.WaitAsync(ct).ConfigureAwait(false);
+            try
+            {
+                ct.ThrowIfCancellationRequested();
+                byte[] line = SessionFileIO.EncodeLine(entry, JsonlCodecContext.Default.CheckpointEntry);
+                await File.AppendAllBytesAsync(sessionFile, line, ct).ConfigureAwait(false);
+            }
+            finally
+            {
+                semaphore.Release();
+            }
+
+            _messageCache.TryRemove(sessionId, out _);
+        }, ResultErrors.Message)
+            .TapError(e => _logger.LogError("Failed to append checkpoint to session {SessionId}: {Error}", sessionId, e));
+    }
+
+    /// <summary>
+    ///     Sync byte-level scan of one session file for checkpoint lines.
+    ///     Sync on purpose: the verdicts run over <c>ReadOnlySpan&lt;byte&gt;</c>
+    ///     locals (CS4012), mirroring <see cref="SessionFileIO.Scan" />.
+    /// </summary>
+    private static List<SessionCheckpoint> ReadCheckpoints(
+        string sessionFile, string sessionId, ILogger logger)
+    {
+        var checkpoints = new List<SessionCheckpoint>();
+        using var source = new FileStream(
+            sessionFile, FileMode.Open, FileAccess.Read, FileShare.Read, bufferSize: 64 * 1024);
+        using var reader = new ChunkedLineReader(source);
+        while (reader.Fill())
+        {
+            while (reader.TryGetRecord(out var record))
+            {
+                FoldCheckpointRecord(record, sessionId, checkpoints, logger);
+            }
+        }
+
+        if (reader.TryGetTrailingRecord(out var trailing))
+        {
+            FoldCheckpointRecord(trailing, sessionId, checkpoints, logger);
+        }
+
+        return checkpoints;
+    }
+
+    /// <summary>
+    ///     Fold one record into <paramref name="checkpoints" /> when it is a
+    ///     well-formed checkpoint line; anything else is not this method's
+    ///     business. A corrupt checkpoint line warns and is skipped (§ROP-001).
+    /// </summary>
+    private static void FoldCheckpointRecord(
+        ReadOnlySpan<byte> record, string sessionId, List<SessionCheckpoint> checkpoints, ILogger logger)
+    {
+        if (!SessionFileReader.IsCheckpointLine(record))
+        {
+            return;
+        }
+
+        CheckpointEntry? entry;
+        try
+        {
+            entry = JsonSerializer.Deserialize(record, JsonlCodecContext.Default.CheckpointEntry);
+        }
+        catch (JsonException ex)
+        {
+            logger.LogWarning(ex, "Skipping malformed checkpoint line in session {SessionId}.", sessionId);
+            return;
+        }
+
+        if (entry is not { Type: "checkpoint", Id: { Length: > 0 }, MessageId: { Length: > 0 } })
+        {
+            logger.LogWarning("Skipping malformed checkpoint line in session {SessionId}: missing id/messageId.", sessionId);
+            return;
+        }
+
+        checkpoints.Add(new SessionCheckpoint(
+            entry.Id, sessionId, entry.MessageId, entry.MessageIndex,
+            entry.CreatedAt, entry.Label, entry.RewindOf, entry.Removed));
+    }
+
+    /// <summary>
     ///     Aggregate per-session stats from the message history. Every fallible
     ///     step (<see cref="GetMessagesAsync" />) already returns a
     ///     <see cref="Result{T}" /> and nothing here throws, so no try boundary
