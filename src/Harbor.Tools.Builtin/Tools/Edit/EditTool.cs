@@ -219,11 +219,11 @@ public sealed class EditTool : ITool
             return ToolResult.Error($"Edit failed: {ex.Message}");
         }
 
-        _logger.LogDebug("Editing: {Path} ({Steps} steps, {Replacements} replacements)", path, editSteps, totalReplacements);
+        EditToolLog.Editing(_logger, path, editSteps, totalReplacements);
 
         if (totalReplacements == 0 || ReferenceEquals(content, original) || content == original)
         {
-            _logger.LogWarning("Edit not found: {Snippet}", Snippet(args.TryGetProperty("oldString", out var os2) ? os2.GetString() ?? "" : ""));
+            EditToolLog.EditNotFound(_logger, Snippet(args.TryGetProperty("oldString", out var os2) ? os2.GetString() ?? "" : ""));
             return ToolResult.Error("No changes applied (oldString not found or identical to newString).");
         }
 
@@ -290,7 +290,7 @@ public sealed class EditTool : ITool
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            _logger.LogDebug(ex, "LSP diagnostics note failed for {Path}", path);
+            EditToolLog.LspDiagnosticsNoteFailed(_logger, ex, path);
             return string.Empty;
         }
     }
@@ -454,4 +454,20 @@ public sealed class EditTool : ITool
 
     private static bool GetBool(JsonElement args, string name)
         => JsonArgs.GetBool(args, name);
+}
+
+/// <summary>
+///     SG1: BCL <c>[LoggerMessage]</c> delegates for <see cref="EditTool" />.
+///     Templates, levels and operands are 1-to-1 with the former <c>LogX</c> calls.
+/// </summary>
+internal static partial class EditToolLog
+{
+    [LoggerMessage(EventId = 1, Level = LogLevel.Debug, Message = "Editing: {Path} ({Steps} steps, {Replacements} replacements)")]
+    public static partial void Editing(ILogger logger, string path, int steps, int replacements);
+
+    [LoggerMessage(EventId = 2, Level = LogLevel.Warning, Message = "Edit not found: {Snippet}")]
+    public static partial void EditNotFound(ILogger logger, string snippet);
+
+    [LoggerMessage(EventId = 3, Level = LogLevel.Debug, Message = "LSP diagnostics note failed for {Path}")]
+    public static partial void LspDiagnosticsNoteFailed(ILogger logger, Exception ex, string path);
 }
