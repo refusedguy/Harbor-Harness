@@ -2,6 +2,7 @@ using System.Text;
 using Harbor.Tui.CellForge.Input;
 using Harbor.Tui.CellForge.Rendering;
 using Harbor.Ui.Framework.Navigation;
+using Harbor.Ui.Framework.Overlays;
 
 namespace Harbor.Tui.CellForge.Widgets;
 
@@ -454,5 +455,34 @@ public sealed class CommandPaletteView
     public void ShowDefaultCatalog(bool useNerdFont = false)
     {
         Show(CommandPaletteCatalog.GetDefaultCatalog(useNerdFont));
+    }
+
+    /// <summary>
+    /// Maps one provider hit to a view item (hit group → section header).
+    /// </summary>
+    public static CommandItem FromHit(CommandHit hit)
+    {
+        ArgumentNullException.ThrowIfNull(hit);
+        return new CommandItem(hit.Id, hit.Title, hit.Detail, string.Empty, hit.Group);
+    }
+
+    /// <summary>
+    /// Shows merged provider hits (#1186 T4). Hits arrive pre-ranked from
+    /// <see cref="CommandProviderRegistry" /> — discovery hits in provider
+    /// order, scored hits best-first — so the frame keeps seed order
+    /// (<c>PreserveOrder</c>) instead of the default Group/Title sort.
+    /// Typing still fuzzy-filters via <see cref="FuzzyMatcher" /> like any
+    /// frame; groups still render as section headers.
+    /// </summary>
+    public void ShowFromHits(IReadOnlyList<CommandHit> hits)
+    {
+        ArgumentNullException.ThrowIfNull(hits);
+        var items = new List<CommandItem>(hits.Count);
+        for (int i = 0; i < hits.Count; i++)
+        {
+            items.Add(FromHit(hits[i]));
+        }
+
+        PushFrame(new PaletteFrame("Commands", "", items, null, PreserveOrder: true));
     }
 }
