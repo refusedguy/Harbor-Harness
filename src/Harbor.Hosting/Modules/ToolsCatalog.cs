@@ -30,6 +30,10 @@ internal static class ToolsCatalog
         ab.AddAgent(AgentDefinition.CodeDefault(modelId, providerId));
         ab.AddAgent(AgentDefinition.PlanDefault(modelId, providerId));
         ab.AddAgent(AgentDefinition.ExploreDefault(modelId, providerId));
+        ab.AddAgent(AgentDefinition.AskDefault(modelId, providerId));
+        ab.AddAgent(AgentDefinition.ArchitectDefault(modelId, providerId));
+        ab.AddAgent(AgentDefinition.DebugDefault(modelId, providerId));
+        ab.AddAgent(AgentDefinition.OrchestratorDefault(modelId, providerId));
         return registry;
     }
 

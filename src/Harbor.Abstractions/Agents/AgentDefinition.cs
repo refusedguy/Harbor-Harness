@@ -168,6 +168,201 @@ public sealed record AgentDefinition(
         SystemPromptAppend: "You are a fast codebase explorer. Quickly gather information and report back concisely.");
 
     /// <summary>
+    ///     Returns the default <c>ask</c> mode — read-only question-answering, 50 steps.
+    /// </summary>
+    /// <param name="model">Model id (without provider prefix).</param>
+    /// <param name="providerId">Provider id (e.g. <c>anthropic</c>).</param>
+    /// <returns>A ready-to-use <see cref="AgentDefinition" /> that answers and explains without modifying files.</returns>
+    /// <remarks>
+    ///     <para>
+    ///         PX5 slice 1 (issue #1251): modes ARE agents — the registry is the
+    ///         declaration, so a mode is a factory plus a registration and nothing
+    ///         else (#582). The three mode axes live on this record already:
+    ///         <see cref="Permission" /> is the permission preset,
+    ///         <see cref="SystemPromptAppend" /> is the prompt bias, and the tool
+    ///         allowlist is derived — <c>IToolRegistry.ResolveTools</c> offers a
+    ///         tool exactly when the ruleset Allows it, so no hand-written tool
+    ///         list exists to rot (#595).
+    ///     </para>
+    ///     <para>
+    ///         The bash allow-verbs are a SUBSET of <see cref="PermissionRuleset.Default" />'s,
+    ///         and the write-class tools (<c>write</c> category: write/edit/patch/
+    ///         notebook/session_steer) are Denied — the same two invariants
+    ///         <c>PlanDefault</c> holds, graded by <c>ReadOnlyAgentShellAllowRule</c>
+    ///         and <c>ReadOnlyAgentPermissionRule</c>.
+    ///     </para>
+    /// </remarks>
+    public static AgentDefinition AskDefault(string model, string providerId) => new(
+        AgentName.Create("ask"),
+        "Ask",
+        "Read-only question-answering agent. Cannot modify files.",
+        model,
+        providerId,
+        new PermissionRuleset(new PermissionRule[]
+        {
+            new("read", "*", PermissionAction.Allow),
+            new("glob", "*", PermissionAction.Allow),
+            new("grep", "*", PermissionAction.Allow),
+            new("ls", "*", PermissionAction.Allow),
+            new("tree", "*", PermissionAction.Allow),
+            new("ripgrep", "*", PermissionAction.Allow),
+            new("lsp", "*", PermissionAction.Allow),
+            new("skill", "*", PermissionAction.Allow),
+            new("session_read", "*", PermissionAction.Allow),
+            new("webfetch", "*", PermissionAction.Allow),
+            new("bash", "ls *", PermissionAction.Allow),
+            new("bash", "cat *", PermissionAction.Allow),
+            new("bash", "grep *", PermissionAction.Allow),
+            new("bash", "rg *", PermissionAction.Allow),
+            new("bash", "find *", PermissionAction.Allow),
+            new("bash", "git status", PermissionAction.Allow),
+            new("bash", "git diff *", PermissionAction.Allow),
+            new("bash", "git log *", PermissionAction.Allow),
+            new("bash", "*", PermissionAction.Deny),
+            new("edit", "*", PermissionAction.Deny),
+            new("write", "*", PermissionAction.Deny)
+        }),
+        50,
+        SystemPromptAppend: "You are in ASK mode. Answer questions and explain code. Do not implement changes, do not modify files. When asked to change something, explain how instead.");
+
+    /// <summary>
+    ///     Returns the default <c>architect</c> mode — read-only software design, 100 steps.
+    /// </summary>
+    /// <param name="model">Model id (without provider prefix).</param>
+    /// <param name="providerId">Provider id (e.g. <c>anthropic</c>).</param>
+    /// <returns>A ready-to-use <see cref="AgentDefinition" /> that designs and plans without modifying files.</returns>
+    /// <remarks>
+    ///     Same read-only invariants as <see cref="AskDefault" /> (subset shell
+    ///     verbs, denied write category), plus the <c>task</c> tool so the design
+    ///     can fan exploration out to read-only sub-agents.
+    /// </remarks>
+    public static AgentDefinition ArchitectDefault(string model, string providerId) => new(
+        AgentName.Create("architect"),
+        "Architect",
+        "Read-only software architect. Cannot modify files — produces designs for approval.",
+        model,
+        providerId,
+        new PermissionRuleset(new PermissionRule[]
+        {
+            new("read", "*", PermissionAction.Allow),
+            new("glob", "*", PermissionAction.Allow),
+            new("grep", "*", PermissionAction.Allow),
+            new("ls", "*", PermissionAction.Allow),
+            new("tree", "*", PermissionAction.Allow),
+            new("ripgrep", "*", PermissionAction.Allow),
+            new("lsp", "*", PermissionAction.Allow),
+            new("skill", "*", PermissionAction.Allow),
+            new("session_read", "*", PermissionAction.Allow),
+            new("webfetch", "*", PermissionAction.Allow),
+            new("task", "*", PermissionAction.Allow),
+            new("bash", "ls *", PermissionAction.Allow),
+            new("bash", "cat *", PermissionAction.Allow),
+            new("bash", "grep *", PermissionAction.Allow),
+            new("bash", "rg *", PermissionAction.Allow),
+            new("bash", "find *", PermissionAction.Allow),
+            new("bash", "git status", PermissionAction.Allow),
+            new("bash", "git diff *", PermissionAction.Allow),
+            new("bash", "git log *", PermissionAction.Allow),
+            new("bash", "*", PermissionAction.Deny),
+            new("edit", "*", PermissionAction.Deny),
+            new("write", "*", PermissionAction.Deny)
+        }),
+        100,
+        SystemPromptAppend: "You are in ARCHITECT mode. Design before code: explore the codebase, weigh trade-offs, and produce a concrete implementation plan for approval. Do not modify files.");
+
+    /// <summary>
+    ///     Returns the default <c>debug</c> mode — failure diagnosis with approval-gated fixes, 50 steps.
+    /// </summary>
+    /// <param name="model">Model id (without provider prefix).</param>
+    /// <param name="providerId">Provider id (e.g. <c>anthropic</c>).</param>
+    /// <returns>A ready-to-use <see cref="AgentDefinition" /> that reproduces, isolates, and fixes failures.</returns>
+    /// <remarks>
+    ///     NOT a read-only agent: it runs test/build commands and applies fixes,
+    ///     so the description deliberately avoids the read-only declaration the
+    ///     shell/tool guards derive from. Writes and unlisted shell stay
+    ///     <see cref="PermissionAction.Ask" /> — the prompt is the policy.
+    /// </remarks>
+    public static AgentDefinition DebugDefault(string model, string providerId) => new(
+        AgentName.Create("debug"),
+        "Debug",
+        "Diagnostic agent. Reproduces failures, isolates causes, and fixes with approval.",
+        model,
+        providerId,
+        new PermissionRuleset(new PermissionRule[]
+        {
+            new("read", "*", PermissionAction.Allow),
+            new("glob", "*", PermissionAction.Allow),
+            new("grep", "*", PermissionAction.Allow),
+            new("ls", "*", PermissionAction.Allow),
+            new("tree", "*", PermissionAction.Allow),
+            new("ripgrep", "*", PermissionAction.Allow),
+            new("lsp", "*", PermissionAction.Allow),
+            new("skill", "*", PermissionAction.Allow),
+            new("session_read", "*", PermissionAction.Allow),
+            new("webfetch", "*", PermissionAction.Allow),
+            new("bash", "ls *", PermissionAction.Allow),
+            new("bash", "cat *", PermissionAction.Allow),
+            new("bash", "grep *", PermissionAction.Allow),
+            new("bash", "rg *", PermissionAction.Allow),
+            new("bash", "find *", PermissionAction.Allow),
+            new("bash", "git status", PermissionAction.Allow),
+            new("bash", "git diff *", PermissionAction.Allow),
+            new("bash", "git log *", PermissionAction.Allow),
+            new("bash", "dotnet test *", PermissionAction.Allow),
+            new("bash", "dotnet build *", PermissionAction.Allow),
+            new("bash", "npm test *", PermissionAction.Allow),
+            new("bash", "npm run build *", PermissionAction.Allow),
+            new("bash", "rm -rf /", PermissionAction.Deny),
+            new("bash", "sudo *", PermissionAction.Deny),
+            new("bash", "*", PermissionAction.Ask),
+            new("edit", "*", PermissionAction.Ask),
+            new("write", "*", PermissionAction.Ask)
+        }),
+        50,
+        SystemPromptAppend: "You are in DEBUG mode. Diagnose first: reproduce the failure, isolate the cause, then fix. Run tests to confirm. Broad or destructive changes need explicit user approval.");
+
+    /// <summary>
+    ///     Returns the default <c>orchestrator</c> mode — work decomposition and delegation, 100 steps.
+    /// </summary>
+    /// <param name="model">Model id (without provider prefix).</param>
+    /// <param name="providerId">Provider id (e.g. <c>anthropic</c>).</param>
+    /// <returns>A ready-to-use <see cref="AgentDefinition" /> that coordinates sub-agents instead of implementing directly.</returns>
+    /// <remarks>
+    ///     Direct writes are Denied — the orchestrator implements nothing itself —
+    ///     but it is not a read-only agent either: it directs peers through
+    ///     <c>session_steer</c> (Ask-gated) and fans work out through
+    ///     <c>task</c>, so the description avoids the read-only declaration.
+    /// </remarks>
+    public static AgentDefinition OrchestratorDefault(string model, string providerId) => new(
+        AgentName.Create("orchestrator"),
+        "Orchestrator",
+        "Coordination agent. Decomposes work and delegates through the task tool.",
+        model,
+        providerId,
+        new PermissionRuleset(new PermissionRule[]
+        {
+            new("read", "*", PermissionAction.Allow),
+            new("glob", "*", PermissionAction.Allow),
+            new("grep", "*", PermissionAction.Allow),
+            new("ls", "*", PermissionAction.Allow),
+            new("tree", "*", PermissionAction.Allow),
+            new("skill", "*", PermissionAction.Allow),
+            new("session_read", "*", PermissionAction.Allow),
+            new("session_steer", "*", PermissionAction.Ask),
+            new("task", "*", PermissionAction.Allow),
+            new("bash", "ls *", PermissionAction.Allow),
+            new("bash", "cat *", PermissionAction.Allow),
+            new("bash", "git status", PermissionAction.Allow),
+            new("bash", "git diff *", PermissionAction.Allow),
+            new("bash", "git log *", PermissionAction.Allow),
+            new("bash", "*", PermissionAction.Deny),
+            new("edit", "*", PermissionAction.Deny),
+            new("write", "*", PermissionAction.Deny)
+        }),
+        100,
+        SystemPromptAppend: "You are in ORCHESTRATOR mode. Decompose the goal and delegate through the task tool; do not implement directly. Track each leg to done.");
+
+    /// <summary>
     ///     Returns a copy of this agent bound to a different model and provider.
     /// </summary>
     /// <param name="model">New model id.</param>
@@ -196,7 +391,9 @@ public sealed record AgentDefinition(
 /// <remarks>
 ///     <para>
 ///         The registry is the canonical lookup table for <see cref="AgentDefinition" /> instances.
-///         Builtin agents (<c>code</c>, <c>plan</c>, <c>explore</c>) are registered at startup;
+///         Builtin agents (<c>code</c>, <c>plan</c>, <c>explore</c> and the PX5
+///         modes <c>ask</c>, <c>architect</c>, <c>debug</c>, <c>orchestrator</c>)
+///         are registered at startup;
 ///         plugins add additional agents via <see cref="IAgentRegistryBuilder" /> during
 ///         initialization.
 ///     </para>
