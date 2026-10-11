@@ -57,7 +57,7 @@ public class AutocompletePaletteModelTests
         _ = gate.Commit(Command("reset", "/reset", destructive: true));
         gate.Cancel();
         await Assert.That(gate.IsArmed).IsFalse();
-        await Assert.That(gate.ArmedId).IsNull();
+        await Assert.That(gate.ArmedId).IsEqualTo(string.Empty);
     }
 
     [Test]

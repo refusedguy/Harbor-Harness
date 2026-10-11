@@ -34,8 +34,8 @@ public sealed class AutocompleteDestructiveGate
     /// <summary>Whether a confirm is currently armed.</summary>
     public bool IsArmed => _armedId is not null;
 
-    /// <summary>Id the armed confirm belongs to (null when disarmed).</summary>
-    public string? ArmedId => _armedId;
+    /// <summary>Id the armed confirm belongs to (empty when disarmed).</summary>
+    public string ArmedId => _armedId ?? string.Empty;
 
     /// <summary>
     /// Commits <paramref name="item" />.
