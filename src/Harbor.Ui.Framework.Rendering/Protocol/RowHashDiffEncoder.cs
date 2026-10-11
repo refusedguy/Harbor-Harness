@@ -74,8 +74,10 @@ public sealed class RowHashDiffEncoder : ICellDiffEncoder
             // the same invariant DiffEngine's fuzz tests rely on. Hashes are
             // computed lazily and cached inside each buffer. The hash folds
             // the directive table, so an option-only change still breaks
-            // equality here (R1 steal).
-            if (!useHints && prev.RowHashCode(y) == next.RowHashCode(y))
+            // equality here (R1 steal). Rows carrying AlwaysUpdate bypass:
+            // identical content must still emit.
+            if (!useHints && prev.RowHashCode(y) == next.RowHashCode(y)
+                && !prev.HasAlwaysUpdate(y) && !next.HasAlwaysUpdate(y))
             {
                 continue;
             }
@@ -142,6 +144,9 @@ public sealed class RowHashDiffEncoder : ICellDiffEncoder
                     // Narrow content replacing a visibly-styled wide glyph:
                     // the lead, then a force-refresh of every trailing column
                     // (downstream still shows the old style on blanks there).
+                    // Resume past the drained range (ratatui pos = end), not
+                    // past the lead — revisiting would emit every differing
+                    // trailing cell twice.
                     Emit(ref count, prev, next, x, y);
                     int end = Math.Min(x + f.Width, cols);
                     for (int j = x + 1; j < end;)
@@ -149,7 +154,7 @@ public sealed class RowHashDiffEncoder : ICellDiffEncoder
                         j = EmitTrailing(ref count, prev, next, j, y, ref end, cols);
                     }
 
-                    x += Math.Max(1, width);
+                    x = end;
                     continue;
                 }
 
