@@ -121,16 +121,31 @@ internal static class CellForgeModule
             services.AddSingleton(sp => new CellForgePermissionAsker(
                 () => sp.GetRequiredService<ChatScreenBridge>(),
                 sp.GetRequiredService<IApprovalCoordinator>()));
-            services.AddSingleton<IPermissionService>(sp => new PermissionService(
-                sp.GetRequiredService<Harbor.Abstractions.Agents.IAgentRegistry>(),
-                sp.GetRequiredService<Microsoft.Extensions.Logging.ILogger<
-                    Harbor.Application.Permissions.PermissionService>>(),
-                sp.GetRequiredService<Repl.CellForgePermissionAsker>().AskAsync,
-                workspaceRoot: Directory.GetCurrentDirectory()));
+            services.AddSingleton<IPermissionService>(sp => CreatePermissionService(sp));
         }
 
         return services;
     }
+
+    /// <summary>
+    ///     CellForge-вариант <see cref="IPermissionService" />: тот же
+    ///     <see cref="PermissionService" />, что регистрирует
+    ///     <c>IntelligenceModule</c>, плюс интерактивный asker через
+    ///     approval-карточку. #1125: оверрайд обязан прокидывать
+    ///     <see cref="IConfigStore" /> — иначе <c>LoadPersistedAsync</c>
+    ///     no-op и секция <c>permissions</c> из <c>config.json</c> в
+    ///     интерактивном пути никогда не читается.
+    ///     Отдельным методом (а не инлайн-лямбдой), чтобы регрессионный
+    ///     тест дотягивался до фабрики напрямую: env-гейт
+    ///     <see cref="IsApprovalPromptAvailable" /> в CI недоступен.
+    /// </summary>
+    internal static PermissionService CreatePermissionService(IServiceProvider sp) => new(
+        sp.GetRequiredService<Harbor.Abstractions.Agents.IAgentRegistry>(),
+        sp.GetRequiredService<Microsoft.Extensions.Logging.ILogger<
+            Harbor.Application.Permissions.PermissionService>>(),
+        sp.GetRequiredService<Repl.CellForgePermissionAsker>().AskAsync,
+        workspaceRoot: Directory.GetCurrentDirectory(),
+        configStore: sp.GetService<IConfigStore>());
 
     /// <summary>
     ///     Есть ли кому отвечать на approval-карточку (#52). Аппрувер — живой
