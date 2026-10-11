@@ -7,13 +7,13 @@ namespace Harbor.App.Cli.Commands;
 /// <summary>
 ///     <c>harbor run change agent=&lt;name&gt; "&lt;task&gt;" [--checks &lt;file&gt;] [--dry-run] [--repo &lt;path&gt;]</c>
 ///     (epic #42, slice S9, #397): one command driving the verified-change
-///     chain end to end. This slice implements pin (S1), isolate (S2) and
-///     freeze (S3, #377) and then stops fail-closed: checks (S4) through
-///     owner report (S8) are not wired into this command yet, so the run is
-///     left honestly at <c>Changed</c> and the command exits 4 naming the
-///     stage. Nothing is faked, no step is skipped to "success", and
-///     <c>harbor run list</c> shows the run with its last completed
-///     transition.
+///     chain end to end. This slice implements pin (S1), isolate (S2),
+///     freeze (S3, #377) and checks (S4, #378) and then stops fail-closed:
+///     report (S5) through owner report (S8) are not wired into this command
+///     yet, so the run is left honestly at <c>Checked</c> and the command
+///     exits 4 naming the stage. Nothing is faked, no step is skipped to
+///     "success", and <c>harbor run list</c> shows the run with its last
+///     completed transition.
 ///     Exit codes: 0 dry-run plan printed; 2 bad usage; 3 pre-flight
 ///     conflict (dirty workspace, moved base, not a repo); 4 internal
 ///     failure at a named stage.
@@ -135,9 +135,57 @@ internal static class RunChangeVerb
         Console.WriteLine(
             $"run {set.RunId} frozen at {set.HeadRevision} " +
             $"({set.Entries.Count} paths, {(set.IsEmpty ? "empty" : "changed")}, state Changed).");
+
+        Result<IReadOnlyList<CheckSpec>> specs = CheckSpecParser.ParseFile(checksFile);
+        if (specs.IsFailure)
+        {
+            Console.Error.WriteLine($"Internal failure at stage 'checks': {specs.Error}");
+            return 4;
+        }
+
+        Result<CheckReport> checkedRun =
+            await CheckRunner.RunAsync(ws.Value, set.BaseRevision, set.HeadRevision, specs.Value).ConfigureAwait(false);
+        if (checkedRun.IsFailure)
+        {
+            Console.Error.WriteLine($"Internal failure at stage 'checks': {checkedRun.Error}");
+            return 4;
+        }
+
+        CheckReport checkReport = checkedRun.Value;
+        int passed = 0;
+        int failed = 0;
+        int other = 0;
+        for (int k = 0; k < checkReport.Checks.Count; k++)
+        {
+            if (checkReport.Checks[k].Outcome == CheckOutcome.Passed)
+                passed++;
+            else if (checkReport.Checks[k].Outcome == CheckOutcome.Failed)
+                failed++;
+            else
+                other++;
+        }
+        if (!checkReport.HasChecks)
+        {
+            Console.WriteLine($"run {set.RunId} checked (no checks declared, state Checked).");
+        }
+        else
+        {
+            Console.WriteLine(
+                $"run {set.RunId} checked " +
+                $"({passed} passed, {failed} failed, {other} recorded without a pass, state Checked).");
+        }
+
+        Result<RunManifest> moved =
+            WorkspaceMaterializer.TryAdvanceState(set.RunId, RunState.Checked);
+        if (moved.IsFailure)
+        {
+            Console.Error.WriteLine($"Internal failure at stage 'checks': {moved.Error}");
+            return 4;
+        }
+
         Console.Error.WriteLine(
-            "Stage 'checks' (S4, #378) is not wired into this command yet: the run stays at Changed, " +
-            $"`harbor run list` shows it honestly. Resume this run when the checks wiring lands.");
+            "Stage 'report' (S5, #379) is not wired into this command yet: the run stays at Checked, " +
+            $"`harbor run list` shows it honestly. Resume this run when the report wiring lands.");
         return 4;
     }
 

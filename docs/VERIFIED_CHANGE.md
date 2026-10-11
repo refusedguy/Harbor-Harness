@@ -22,10 +22,10 @@ harbor run change agent=<name> "<task>" [--checks <file>] [--dry-run] [--repo <p
 
 ## Status
 
-Pin, isolate, freeze, and accept-gate are implemented. The command runs pin,
-isolate, and freeze and then stops fail-closed: the run is left honestly at `Changed`,
-exit code 4 names the missing stage, and `harbor run list` shows the run with
-its last completed transition. Nothing is faked past `Changed`. Accept
+Pin, isolate, freeze, checks, and the accept-gate are implemented. The command runs pin,
+isolate, freeze, and checks and then stops fail-closed: the run is left honestly at `Checked`,
+exit code 4 names the missing `report` stage, and `harbor run list` shows the run with
+its last completed transition. Nothing is faked past `Checked`. Accept
 (`harbor run accept`) applies a frozen `change.patch` once the earlier slices
 produce one; until then it refuses with the missing stage named.
 
@@ -34,11 +34,11 @@ produce one; until then it refuses with the missing stage named.
 | S1 | pin contract | landed |
 | S2 | worktree + manifest | landed |
 | S3 | frozen change set | landed (#377) |
-| S4 | checks | open (#378) |
+| S4 | checks | landed (#378) |
 | S5 | verification report | in progress (#379, slice 1: pure renderer, no verb yet) |
 | S6 | accept | slice 1 landed (#382): gate + apply + dry-run + at-most-once + `accept.log`; `--reverify` fail-closed pending the S5 report (#379) |
 | S7 | reject | slice 1 landed (#385): verb + `--all-effects` (exit 5); `--patch`/`--worktree`/`--undo-apply` pending |
-| S8 | owner report | open (#392) |
+| S8 | owner report | landed (#392: format slice + persistence/verb slice) |
 | S9 | end-to-end driver | in progress (#397, this slice) |
 
 ## Run directory layout
@@ -54,9 +54,9 @@ Each run owns one directory, minted id, never user input:
   accept.log      append-only audit trail: one line per accept attempt
 ```
 
-`change.patch` and `changeset.json` (both S3) and `accept.log` (S6 slice 1)
-already exist; `checks.json`, `report.json`, and `owner-report.md` arrive
-with their slices. The manifest is written atomically (temp + rename), so a
+`change.patch` and `changeset.json` (both S3), `checks.json` (S4), and
+`accept.log` (S6 slice 1) already exist; `report.json` and `owner-report.md`
+arrive with their slices. The manifest is written atomically (temp + rename), so a
 killed process leaves either the previous state or the new one, never a
 half-written file. `report.json` is rendered by slice S5-1
 (`src/Harbor.Application/Sessions/ChangeReport.cs`) from the frozen set
@@ -90,7 +90,7 @@ names the stage:
 | 1 | reported, at least one check failed (reserved for S4/S5) |
 | 2 | bad usage (missing agent, missing task, missing checks file, missing run id, unknown option, unknown run) |
 | 3 | pre-flight conflict: dirty workspace, moved base, or not a repository |
-| 4 | internal failure at a named stage (`isolate`, `freeze`, the not-yet-wired `checks`, accept before `Reported`, second accept on an `Accepted` run, unavailable `--reverify`, failed apply) |
+| 4 | internal failure at a named stage (`isolate`, `freeze`, `checks`, the not-yet-wired `report`, accept before `Reported`, second accept on an `Accepted` run, unavailable `--reverify`, failed apply) |
 | 5 | out-of-reach inventory (`--all-effects`): read-only, nothing written |
 
 `--dry-run` performs the pin pre-flight and prints the plan, then stops
@@ -117,6 +117,34 @@ identity — never the operator's `~/.gitconfig`, never a hook.
   cap (default 2000). Over-limit is a failure naming the cap.
 - `.gitignore`d paths are excluded and counted (`ignoredPathCount`) —
   never dropped silently.
+
+## Checks (S4)
+
+`CheckRunner.RunAsync` (in
+`src/Harbor.Application/Sessions/CheckRunner.cs`) executes the operator's
+declared checks with cwd pinned to the isolated worktree — never the
+operator's tree — and records exactly what was proven to `checks.json`:
+name, full command line, working directory, exit code, duration, the frozen
+(base, head) revisions, the effective env keys (`PATH`, `HOME`, `LANG`, `TZ`
+plus contract-declared passthrough), and the capped output. Exit 0 is
+`Passed`; anything else (`Failed`, `TimedOut`, `SpawnFailed`,
+`Cancelled`, `Skipped`) is recorded, never a pass.
+
+The driver declares checks through `--checks <file>`, parsed by
+`CheckSpecParser` (in
+`src/Harbor.Application/Sessions/CheckSpecParser.cs`): one non-blank,
+non-`#` line is one check, run as `/bin/sh -c` and flagged `viaShell` in
+`checks.json`. Names are derived (`check-1..N`), so the file cannot smuggle
+an unnamed check past the runner. No `--checks` flag is zero declared
+checks — legal, recorded as `"checks": "none"`, which S5 must render as an
+explicit "nothing was verified" statement. Over-long lines, null bytes, and
+over-limit files are failures naming the cap, never silent cuts.
+
+After the checks record lands, the manifest moves `Changed -> Checked`
+through `RunChangeTransitions`. A failed check still records its evidence
+and still advances to `Checked`: the run reports what was proven, it never
+skips to "success", and the command stops with exit 4 naming the
+not-yet-wired `report` stage.
 
 ## Accept (S6 slice 1)
 
