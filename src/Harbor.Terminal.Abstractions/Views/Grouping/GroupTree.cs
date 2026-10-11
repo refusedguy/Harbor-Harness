@@ -141,7 +141,7 @@ public static class GroupTree
 
         if (count == 0)
         {
-            return ([], nodes);
+            return (Array.Empty<GroupNode<TEntry, TKind>>(), nodes);
         }
 
         int offset = 0;

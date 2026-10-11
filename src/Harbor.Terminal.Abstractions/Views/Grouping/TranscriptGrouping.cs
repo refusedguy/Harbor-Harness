@@ -237,7 +237,7 @@ public static class TranscriptGrouping
         ArgumentNullException.ThrowIfNull(group);
 
         HashSet<string> pending = includePending
-            ? []
+            ? new HashSet<string>(StringComparer.Ordinal)
             : new HashSet<string>(group.PendingToolCallIds, StringComparer.Ordinal);
         var refs = new List<string>();
         Visit(group.Children, refs, pending);
@@ -338,19 +338,25 @@ public static class TranscriptGrouping
             if (IsToolEntry(entry, out string? toolName)
                 && ToolCategories.TryClassify(toolName, out ToolCategory category))
             {
-                switch (category)
+                // A call and its result are one item: the result entry only
+                // keeps the call company in the group, it never counts twice.
+                if (!string.Equals(entry.Role, "tool-result", StringComparison.OrdinalIgnoreCase))
                 {
-                    case ToolCategory.Exec: commands++; break;
-                    case ToolCategory.Write: edits++; break;
-                    case ToolCategory.Read:
-                    case ToolCategory.Network: reads++; break;
-                    default: tools++; break;
+                    switch (category)
+                    {
+                        case ToolCategory.Exec: commands++; break;
+                        case ToolCategory.Write: edits++; break;
+                        case ToolCategory.Read:
+                        case ToolCategory.Network: reads++; break;
+                        default: tools++; break;
+                    }
                 }
 
                 continue;
             }
 
-            if (IsToolEntry(entry, out _))
+            if (IsToolEntry(entry, out _)
+                && !string.Equals(entry.Role, "tool-result", StringComparison.OrdinalIgnoreCase))
             {
                 tools++;
             }

@@ -257,3 +257,63 @@ public class InlineAgentStreamBridgeTests
         bridge.Dispose();
     }
 }
+
+public class StreamBlockThinkingTests
+{
+    [Test]
+    public async Task ThinkingStreams_CollapsedLabel_UntilCompleted()
+    {
+        var block = new StreamBlock();
+        block.AppendThinking("hmm");
+
+        await Assert.That(block.HasThinking).IsTrue();
+        await Assert.That(block.ThinkingCompleted).IsFalse();
+        await Assert.That(block.LiveThinkingLabel()).IsEqualTo("Thinking…");
+
+        block.CompleteThinking();
+
+        await Assert.That(block.ThinkingCompleted).IsTrue();
+        await Assert.That(block.LiveThinkingLabel()).IsEqualTo(string.Empty);
+    }
+
+    [Test]
+    public async Task Complete_FinalizesThinking()
+    {
+        var block = new StreamBlock();
+        block.AppendThinking("hmm");
+        block.Complete();
+
+        await Assert.That(block.ThinkingCompleted).IsTrue();
+        await Assert.That(block.LiveThinkingLabel()).IsEqualTo(string.Empty);
+    }
+}
+
+public class ThinkingBridgeTests
+{
+    [Test]
+    public async Task ThinkingDelta_RendersCollapsedLine_ThinkingEndHidesIt()
+    {
+        var bus = new FakeEventBus();
+        var backend = new RecordingBackend();
+        var writer = new AnsiWriter(backend, sync: false);
+        var session = new InlineSession(writer);
+        var composer = new ComposerController();
+        var bridge = new InlineAgentStreamBridge(bus, writer, session, composer);
+
+        await bus.PublishAsync(new MessageStartEvent(null!));
+        await bus.PublishAsync(new MessageUpdateEvent(new ThinkingDeltaEvent("h1", "pondering"), null!));
+        bridge.Tick(nowMs: 1);
+        _ = bridge.RenderLiveRegion();
+        await bridge.FlushAsync();
+
+        await Assert.That(backend.Escaped.Contains("Thinking")).IsTrue();
+        await Assert.That(session.LiveLines >= 2).IsTrue(); // thinking line + prompt row
+
+        await bus.PublishAsync(new MessageUpdateEvent(new ThinkingEndEvent("h1", "pondering"), null!));
+        _ = bridge.RenderLiveRegion();
+        await bridge.FlushAsync();
+
+        await Assert.That(session.LiveLines).IsEqualTo(1); // prompt only — the folded line hides
+        bridge.Dispose();
+    }
+}
