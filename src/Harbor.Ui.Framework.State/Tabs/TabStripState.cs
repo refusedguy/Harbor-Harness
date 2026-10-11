@@ -56,6 +56,23 @@ public sealed record TabStripState
     public static readonly TabStripState Empty = new();
 
     /// <summary>
+    ///     Reopen-stack depth (#1173): at most this many closed tabs are kept
+    ///     for <c>Ctrl+Shift+T</c>. Same bound as opencode's
+    ///     <c>CLOSED_SESSION_TAB_LIMIT</c> — a long-lived TUI must not
+    ///     accumulate one entry per closed session forever.
+    /// </summary>
+    public const int ReopenLimit = 25;
+
+    /// <summary>
+    ///     Recently closed tabs, oldest first (#1173). Pushed by every close
+    ///     transition, popped by the reopen transition, pruned when a session
+    ///     is (re)opened through <c>OpenTab</c>. Session-local memory only —
+    ///     deliberately not part of <see cref="TabStripSnapshot" />, which
+    ///     persists the open order alone.
+    /// </summary>
+    public ImmutableArray<ClosedTab> ClosedStack { get; init; } = ImmutableArray<ClosedTab>.Empty;
+
+    /// <summary>
     ///     Position of <paramref name="sessionId" /> in tab order, or <c>-1</c>
     ///     when the session has no tab. Compares the id's string value
     ///     (<see cref="SessionId" /> is a reference-typed value object, so
@@ -81,4 +98,35 @@ public sealed record TabStripState
 
     /// <summary>Whether <paramref name="sessionId" /> has an open tab.</summary>
     public bool Contains(SessionId sessionId) => IndexOf(sessionId) >= 0;
+
+    /// <summary>
+    ///     The next tab carrying an unread signal after <paramref name="from" />
+    ///     (#1173, opencode steal — <c>cycleSessionTab</c> with an unread
+    ///     matcher). Wraps around tab order; the <paramref name="from" /> tab
+    ///     itself is never the answer, so pressing next-unread while looking at
+    ///     the only unread tab is a no-op instead of an acknowledge.
+    /// </summary>
+    /// <param name="from">The tab to search from (usually the active one), or null to scan from an end.</param>
+    /// <param name="forward">True for next, false for previous.</param>
+    /// <returns>The unread tab's session id, or null when no OTHER tab is unread.</returns>
+    public SessionId? NextUnread(SessionId? from, bool forward)
+    {
+        var tabs = Tabs;
+        if (tabs.Length == 0)
+            return null;
+
+        int start = from is { } id ? IndexOf(id) : -1;
+        for (int step = 1; step <= tabs.Length; step++)
+        {
+            int candidate = start < 0
+                ? (forward ? step - 1 : tabs.Length - step)
+                : (((start + (forward ? step : -step)) % tabs.Length + tabs.Length) % tabs.Length);
+            if (candidate == start)
+                continue;
+            if (tabs[candidate].HasUnread)
+                return tabs[candidate].SessionId;
+        }
+
+        return null;
+    }
 }
