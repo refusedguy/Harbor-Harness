@@ -296,6 +296,7 @@ public sealed class MyTool : ITool
     public string Glyph => "🔧";                        // optional; the icon every UI draws (#680)
     public string Description => "Does something useful";
     public ExecutionMode ExecutionMode => ExecutionMode.Parallel;
+    public ToolSafetyProfile SafetyProfile => ToolSafetyProfile.Opaque;
     public string? PromptSnippet => "my_tool: Does something";
     public IReadOnlyList<string> PromptGuidelines => Array.Empty<string>();
 
@@ -346,7 +347,7 @@ public sealed class MyTool : ITool
 
 Register in `apps/Harbor.App.Cli/Hosting/HostBuilder.cs` (in `CreateToolRegistry`):
 ```csharp
-tb.AddTool(() => new MyTool(loggerFactory.CreateLogger<MyTool>()));
+tb.AddTool(lf => new MyTool(lf.CreateLogger<MyTool>()));
 ```
 
 If the tool needs a DI dependency (e.g. `McpToolTool` needs `IMcpRegistry`), construct it
