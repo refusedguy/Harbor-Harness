@@ -257,6 +257,13 @@ public sealed partial class ChatHistoryViewModel : ObservableObject, ITuiViewMod
     private string _thinkingText = string.Empty;
 
     /// <summary>
+    ///     In-flight tool calls by id, so a <c>tool-result</c> entry can name
+    ///     its tool (transcript grouping, #1171). Bounded: entries leave on
+    ///     <see cref="ToolExecutionEndEvent"/>.
+    /// </summary>
+    private readonly Dictionary<string, string> _toolNames = new(StringComparer.Ordinal);
+
+    /// <summary>
     ///     The accumulated chat entries (one per finalized message or tool result).
     /// </summary>
     public IReadOnlyList<ChatEntry> Entries => _entries;
@@ -285,12 +292,15 @@ public sealed partial class ChatHistoryViewModel : ObservableObject, ITuiViewMod
                         ThinkingText += thd.Delta;
                         break;
                     case ToolCallStartEvent tcs:
-                        AddEntry(new ChatEntry("tool", $"→ {tcs.ToolName}", DateTimeOffset.UtcNow));
+                        _toolNames[tcs.Id] = tcs.ToolName;
+                        AddEntry(new ChatEntry("tool", $"→ {tcs.ToolName}", DateTimeOffset.UtcNow, tcs.Id, tcs.ToolName));
                         break;
                 }
                 break;
 
             case MessageEndEvent:
+                if (!string.IsNullOrEmpty(ThinkingText))
+                    AddEntry(new ChatEntry("thinking", ThinkingText, DateTimeOffset.UtcNow));
                 if (!string.IsNullOrEmpty(StreamingText))
                     AddEntry(new ChatEntry("assistant", StreamingText, DateTimeOffset.UtcNow));
                 IsStreaming = false;
@@ -302,7 +312,9 @@ public sealed partial class ChatHistoryViewModel : ObservableObject, ITuiViewMod
             case ToolExecutionEndEvent tee:
                 string label = tee.IsError ? "✗" : "✓";
                 string preview = tee.Result.Output.Length > 200 ? tee.Result.Output[..200] + "..." : tee.Result.Output;
-                AddEntry(new ChatEntry("tool-result", $"{label} {preview}", DateTimeOffset.UtcNow));
+                _toolNames.TryGetValue(tee.ToolCallId, out string? resultTool);
+                _toolNames.Remove(tee.ToolCallId);
+                AddEntry(new ChatEntry("tool-result", $"{label} {preview}", DateTimeOffset.UtcNow, tee.ToolCallId, resultTool));
                 break;
 
             case AgentStartEvent ase:
@@ -350,6 +362,7 @@ public sealed partial class ChatHistoryViewModel : ObservableObject, ITuiViewMod
         {
             _entries.Clear();
         }
+        _toolNames.Clear();
         StreamingText = string.Empty;
         IsStreaming = false;
         ThinkingText = string.Empty;
@@ -495,10 +508,17 @@ public sealed partial class DiffPreviewViewModel : ObservableObject, ITuiViewMod
 /// <summary>
 ///     A single chat history entry.
 /// </summary>
-/// <param name="Role">The role string (<c>user</c>, <c>assistant</c>, <c>tool</c>, <c>tool-result</c>).</param>
+/// <param name="Role">The role string (<c>user</c>, <c>assistant</c>, <c>tool</c>, <c>tool-result</c>, <c>thinking</c>, <c>system</c>).</param>
 /// <param name="Content">The entry's text content.</param>
 /// <param name="Timestamp">When the entry was created.</param>
-public sealed record ChatEntry(string Role, string Content, DateTimeOffset Timestamp);
+/// <param name="ToolCallId">Stable tool-call identity for <c>tool</c> / <c>tool-result</c> entries (transcript grouping, #1171); null otherwise.</param>
+/// <param name="ToolName">Tool name for <c>tool</c> / <c>tool-result</c> entries (transcript grouping, #1171); null otherwise.</param>
+public sealed record ChatEntry(
+    string Role,
+    string Content,
+    DateTimeOffset Timestamp,
+    string? ToolCallId = null,
+    string? ToolName = null);
 
 /// <summary>
 ///     A single diff entry.

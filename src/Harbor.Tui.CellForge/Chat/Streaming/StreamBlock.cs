@@ -31,6 +31,25 @@ public sealed class StreamBlock
     /// <summary>Thinking text accumulated so far (not yet revealed).</summary>
     public string ThinkBuffer => _thinkBuffer;
 
+    /// <summary>True once any thinking delta arrived in this run.</summary>
+    public bool HasThinking => _thinkBuffer.Length > 0;
+
+    /// <summary>
+    ///     True when the reasoning run finished (opencode reasoning
+    ///     <c>time.completed</c> — transcript grouping folds a completed run
+    ///     and shows a live one as a single collapsed line). Set by
+    ///     <see cref="CompleteThinking"/> or, message end implying reasoning
+    ///     end, by <see cref="Complete"/>.
+    /// </summary>
+    public bool ThinkingCompleted { get; private set; }
+
+    /// <summary>
+    ///     Collapsed live label for the reasoning run: <c>"Thinking…"</c>
+    ///     while thinking streams, empty once it completes (the transcript
+    ///     layer owns the finished text). Never null.
+    /// </summary>
+    public string LiveThinkingLabel() => HasThinking && !ThinkingCompleted ? "Thinking…" : string.Empty;
+
     /// <summary>Char cursor just past everything revealed (the partial-tail start).</summary>
     public int RevealedChars { get; private set; }
 
@@ -68,6 +87,13 @@ public sealed class StreamBlock
         }
 
         _thinkBuffer += delta;
+        ThinkingCompleted = false;
+    }
+
+    /// <summary>Marks the reasoning run finished; the collapsed live label hides.</summary>
+    public void CompleteThinking()
+    {
+        ThinkingCompleted = true;
     }
 
     /// <summary>Flushes everything still pending; no more deltas accepted.</summary>
@@ -88,6 +114,7 @@ public sealed class StreamBlock
             _scanFrom = _synced.Length;
         }
 
+        ThinkingCompleted = true;
         IsFinalized = true;
     }
 
