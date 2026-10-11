@@ -10,7 +10,8 @@ using Microsoft.Extensions.Logging;
 namespace Harbor.Storage.Sqlite;
 /// <summary>
 ///     SQLite-backed session storage.
-///     Implements Repository pattern (GOF) via ISessionStore.
+///     Implements Repository pattern (GOF) via ISessionStore, plus the
+///     #1247 checkpoint seam (ISessionCheckpointStore).
 ///     Use for: long-running deployments, many sessions, efficient queries.
 ///     Note: pulls in native e_sqlite3 (~1.5 MB) — use JsonlSessionStore if you want zero native deps.
 /// </summary>
@@ -28,7 +29,7 @@ namespace Harbor.Storage.Sqlite;
 ///         still don't (WAL + busy_timeout carry them).
 ///     </para>
 /// </remarks>
-public sealed class SqliteSessionStore : ISessionStore
+public sealed class SqliteSessionStore : ISessionStore, ISessionCheckpointStore
 {
 
     private readonly string _dbPath;
@@ -400,6 +401,230 @@ public sealed class SqliteSessionStore : ISessionStore
         }
     }
 
+    /// <summary>
+    ///     Mark a checkpoint over <paramref name="messageId" /> (#1247): the
+    ///     anchor's zero-based index is derived by the same ordering
+    ///     <see cref="GetMessagesAsync" /> reads with, and the row is
+    ///     inserted under the per-session lock.
+    /// </summary>
+    public async Task<Result<SessionCheckpoint>> CreateCheckpointAsync(
+        string sessionId, string messageId, string? label = null, CancellationToken ct = default)
+    {
+        // §3.4: observe cancellation BEFORE the existence policy — an Esc must
+        // never surface as "session not found".
+        ct.ThrowIfCancellationRequested();
+
+        // #199: the expected "not found" outcomes are decided before the try
+        // boundary so they stay plain failures (no throw, no error log).
+        var sessionRow = await ReadRowAsync(sessionId, ct).ConfigureAwait(false);
+        if (sessionRow.IsFailure)
+            return sessionRow.ConvertFailure<SessionCheckpoint>();
+        if (sessionRow.Value.HasNoValue) // guarded: .Value only read after the failure check.
+            return Result.Failure<SessionCheckpoint>(SessionStoreErrors.SessionNotFound(sessionId));
+
+        var semaphore = await GetSessionLockAsync(sessionId, ct).ConfigureAwait(false);
+        await semaphore.WaitAsync(ct).ConfigureAwait(false);
+        try
+        {
+            return Result.Try(() =>
+            {
+                using var conn = OpenConnection();
+
+                // The index is a count over the rows ordered up to and
+                // including the anchor (created_at_ms ASC, rowid ASC — the
+                // read path's exact ordering), so it cannot disagree with
+                // the order it describes, and no history is materialized.
+                // A missing anchor surfaces here as an empty scalar rather
+                // than as a session-level failure — same decision point as
+                // JsonlSessionStore's index scan.
+                int index;
+                using (var probe = conn.CreateCommand())
+                {
+                    probe.CommandText = """
+                                        SELECT (SELECT COUNT(*) FROM messages x
+                                                WHERE x.session_id = m.session_id
+                                                  AND (x.created_at_ms < m.created_at_ms
+                                                       OR (x.created_at_ms = m.created_at_ms AND x.rowid <= m.rowid))) - 1
+                                        FROM messages m
+                                        WHERE m.session_id = @sid AND m.id = @mid
+                                        LIMIT 1
+                                        """;
+                    probe.Parameters.AddWithValue("@sid", sessionId);
+                    probe.Parameters.AddWithValue("@mid", messageId);
+                    object? scalar = probe.ExecuteScalar();
+                    if (scalar is null or DBNull)
+                        return Result.Failure<SessionCheckpoint>(
+                            SessionStoreErrors.MessageNotFound(sessionId, messageId));
+                    index = (int)(long)scalar;
+                }
+
+                var checkpoint = new SessionCheckpoint(
+                    Guid.NewGuid().ToString("N"), sessionId, messageId, index,
+                    DateTimeOffset.UtcNow, label);
+
+                using var insert = conn.CreateCommand();
+                insert.CommandText = """
+                                     INSERT INTO checkpoints (id, session_id, message_id, message_index, created_at, label, rewind_of, removed)
+                                     VALUES (@id, @sid, @mid, @idx, @created, @label, NULL, 0)
+                                     """;
+                insert.Parameters.AddWithValue("@id", checkpoint.Id);
+                insert.Parameters.AddWithValue("@sid", sessionId);
+                insert.Parameters.AddWithValue("@mid", messageId);
+                insert.Parameters.AddWithValue("@idx", index);
+                insert.Parameters.AddWithValue("@created", checkpoint.CreatedAt.ToString("O"));
+                insert.Parameters.AddWithValue("@label", (object?)label ?? DBNull.Value);
+                insert.ExecuteNonQuery();
+
+                return Result.Success(checkpoint);
+            }, ResultErrors.Message)
+                .Bind(x => x)
+                .TapError(e => _logger.LogError("Failed to record checkpoint in session {SessionId}: {Error}", sessionId, e));
+        }
+        finally
+        {
+            semaphore.Release();
+        }
+    }
+
+    /// <summary>
+    ///     List the session's checkpoints and rewind trail markers in
+    ///     recording order (#1247). Recording order is rowid order — the
+    ///     sqlite counterpart of the jsonl backend's file order.
+    /// </summary>
+    public async Task<Result<IReadOnlyList<SessionCheckpoint>>> ListCheckpointsAsync(
+        string sessionId, CancellationToken ct = default)
+    {
+        // #199: the expected "not found" outcome is decided before the try
+        // boundary so it stays a plain failure (no throw, no error log).
+        var sessionRow = await ReadRowAsync(sessionId, ct).ConfigureAwait(false);
+        if (sessionRow.IsFailure)
+            return sessionRow.ConvertFailure<IReadOnlyList<SessionCheckpoint>>();
+        if (sessionRow.Value.HasNoValue) // guarded: .Value only read after the failure check.
+            return Result.Failure<IReadOnlyList<SessionCheckpoint>>(SessionStoreErrors.SessionNotFound(sessionId));
+
+        return await Result.Try(async () =>
+        {
+            EnsureInitialized();
+            using var conn = OpenConnection();
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = """
+                              SELECT id, session_id, message_id, message_index, created_at, label, rewind_of, removed
+                              FROM checkpoints
+                              WHERE session_id = @sid
+                              ORDER BY rowid ASC
+                              """;
+            cmd.Parameters.AddWithValue("@sid", sessionId);
+
+            var checkpoints = new List<SessionCheckpoint>();
+            using var reader = await cmd.ExecuteReaderAsync(ct).ConfigureAwait(false);
+            while (await reader.ReadAsync(ct).ConfigureAwait(false))
+                checkpoints.Add(ReadCheckpoint(reader));
+            return (IReadOnlyList<SessionCheckpoint>)checkpoints;
+        }, ResultErrors.Message).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    ///     Rewind the session to <paramref name="checkpointId" /> (#1247):
+    ///     the history is truncated to the checkpoint's anchor message via
+    ///     <see cref="DeleteMessagesAfterAsync" />, checkpoints anchored past
+    ///     the anchor go with the dropped future, and a trail marker records
+    ///     the rewind — the honest trail. The cleanup and the trail write
+    ///     share one transaction, so a crash cannot leave a rewind recorded
+    ///     without its dropped checkpoints gone (or the reverse).
+    /// </summary>
+    public async Task<Result<SessionRewindOutcome>> RewindToCheckpointAsync(
+        string sessionId, string checkpointId, CancellationToken ct = default)
+    {
+        // §3.4: observe cancellation BEFORE the existence policy.
+        ct.ThrowIfCancellationRequested();
+
+        // #199: the expected "not found" outcomes are decided before the try
+        // boundary so they stay plain failures (no throw, no error log).
+        var sessionRow = await ReadRowAsync(sessionId, ct).ConfigureAwait(false);
+        if (sessionRow.IsFailure)
+            return sessionRow.ConvertFailure<SessionRewindOutcome>();
+        if (sessionRow.Value.HasNoValue) // guarded: .Value only read after the failure check.
+            return Result.Failure<SessionRewindOutcome>(SessionStoreErrors.SessionNotFound(sessionId));
+
+        // Only plain checkpoints are restore points — a trail marker records
+        // a past rewind, it is not itself a target (the jsonl backend draws
+        // the same line with its !IsRewindTrail filter).
+        var checkpointRow = await ReadCheckpointRowAsync(sessionId, checkpointId, ct).ConfigureAwait(false);
+        if (checkpointRow.IsFailure)
+            return checkpointRow.ConvertFailure<SessionRewindOutcome>();
+        if (checkpointRow.Value.HasNoValue) // guarded: .Value only read after the failure check.
+            return Result.Failure<SessionRewindOutcome>(SessionStoreErrors.CheckpointNotFound(sessionId, checkpointId));
+#pragma warning disable CFE0001
+        // CFE0001: false positive — the HasNoValue guard above is an early
+        // return, a control-flow shape the analyzer does not model.
+        SessionCheckpoint checkpoint = checkpointRow.Value;
+#pragma warning restore CFE0001
+
+        var truncated = await DeleteMessagesAfterAsync(sessionId, checkpoint.MessageId, ct).ConfigureAwait(false);
+        if (truncated.IsFailure)
+            return truncated.ConvertFailure<SessionRewindOutcome>();
+
+#pragma warning disable CFE0001
+        // CFE0001: false positive — the IsFailure guard above is an early return.
+        int removed = truncated.Value;
+#pragma warning restore CFE0001
+
+        var trailId = Guid.NewGuid().ToString("N");
+        var now = DateTimeOffset.UtcNow;
+
+        var semaphore = await GetSessionLockAsync(sessionId, ct).ConfigureAwait(false);
+        await semaphore.WaitAsync(ct).ConfigureAwait(false);
+        try
+        {
+            return Result.Try(() =>
+            {
+                using var conn = OpenConnection();
+                using var tx = conn.BeginTransaction();
+                using var cmd = conn.CreateCommand();
+                cmd.Transaction = tx;
+
+                // Checkpoints whose anchor message went with the dropped
+                // future are dropped with them; checkpoints at or before
+                // the anchor survive. The boundary is derived from "does
+                // the anchor message still exist" rather than from the
+                // recorded message_index, which an earlier rewind may have
+                // left stale — the same survive/drop split the jsonl
+                // backend draws by file order.
+                cmd.CommandText = """
+                                  DELETE FROM checkpoints
+                                  WHERE session_id = @sid
+                                    AND NOT EXISTS (
+                                        SELECT 1 FROM messages m
+                                        WHERE m.session_id = @sid AND m.id = checkpoints.message_id
+                                    );
+                                  INSERT INTO checkpoints (id, session_id, message_id, message_index, created_at, label, rewind_of, removed)
+                                  VALUES (@id, @sid, @mid, @idx, @created, NULL, @rewindOf, @removed)
+                                  """;
+                cmd.Parameters.AddWithValue("@sid", sessionId);
+                cmd.Parameters.AddWithValue("@id", trailId);
+                cmd.Parameters.AddWithValue("@mid", checkpoint.MessageId);
+                cmd.Parameters.AddWithValue("@idx", checkpoint.MessageIndex);
+                cmd.Parameters.AddWithValue("@created", now.ToString("O"));
+                cmd.Parameters.AddWithValue("@rewindOf", checkpoint.Id);
+                cmd.Parameters.AddWithValue("@removed", removed);
+                cmd.ExecuteNonQuery();
+
+                cmd.CommandText = "SELECT COUNT(*) FROM messages WHERE session_id = @sid";
+                long remaining = (long)cmd.ExecuteScalar();
+
+                tx.Commit();
+                return Result.Success(new SessionRewindOutcome(
+                    checkpoint.Id, checkpoint.MessageId, removed, (int)remaining));
+            }, ResultErrors.Message)
+                .Bind(x => x)
+                .TapError(e => _logger.LogError("Failed to record rewind in session {SessionId}: {Error}", sessionId, e));
+        }
+        finally
+        {
+            semaphore.Release();
+        }
+    }
+
     public async Task<Result<SessionMetadata>> GetStatsAsync(string sessionId, CancellationToken ct = default)
     {
         return await Result.Try(async () =>
@@ -484,6 +709,50 @@ public sealed class SqliteSessionStore : ISessionStore
             semaphore.Release();
         }
     }
+
+    /// <summary>
+    ///     Read one checkpoint row, plain checkpoints only
+    ///     (<c>rewind_of IS NULL</c>). Absence (<see cref="Maybe{T}.None" />)
+    ///     is not a storage error — the caller decides the failure text
+    ///     (ROP-B П.24).
+    /// </summary>
+    private Task<Result<Maybe<SessionCheckpoint>>> ReadCheckpointRowAsync(
+        string sessionId, string checkpointId, CancellationToken ct)
+    {
+        return Result.Try(async () =>
+        {
+            EnsureInitialized();
+            using var conn = OpenConnection();
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = """
+                              SELECT id, session_id, message_id, message_index, created_at, label, rewind_of, removed
+                              FROM checkpoints
+                              WHERE session_id = @sid AND id = @cid AND rewind_of IS NULL
+                              """;
+            cmd.Parameters.AddWithValue("@sid", sessionId);
+            cmd.Parameters.AddWithValue("@cid", checkpointId);
+            using var reader = await cmd.ExecuteReaderAsync(ct).ConfigureAwait(false);
+            if (!await reader.ReadAsync(ct).ConfigureAwait(false))
+                return Maybe<SessionCheckpoint>.None;
+            return Maybe.From(ReadCheckpoint(reader));
+        }, ResultErrors.Message);
+    }
+
+    /// <summary>
+    ///     Map one checkpoint row to the model. <c>created_at</c> is stored
+    ///     round-trip ("O"); an unparseable stamp yields <see langword="default" />
+    ///     instead of failing the whole list — the row-level tolerance of the
+    ///     message read path, applied to checkpoint metadata.
+    /// </summary>
+    private static SessionCheckpoint ReadCheckpoint(SqliteDataReader reader) => new(
+        reader.GetString(0),
+        reader.GetString(1),
+        reader.GetString(2),
+        reader.GetInt32(3),
+        DateTimeOffset.TryParse(reader.GetString(4), out var createdAt) ? createdAt : default,
+        reader.IsDBNull(5) ? null : reader.GetString(5),
+        reader.IsDBNull(6) ? null : reader.GetString(6),
+        reader.GetInt32(7));
 
     /// <summary>
     ///     One-time lazy initialization: create the directory, apply the schema,

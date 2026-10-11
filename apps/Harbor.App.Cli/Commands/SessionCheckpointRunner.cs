@@ -1,23 +1,25 @@
 // SessionCheckpointRunner.cs — CLI face of `harbor sessions checkpoint|checkpoints|rewind`
-// (#1247 slice 1): validation guards plus argument mapping over the
-// jsonl-only checkpoint API on JsonlSessionStore — load-and-cut semantics,
-// Result in / Result out. Mirrors SessionForkRunner; the store stays the
-// only place that touches the file.
+// (#1247): validation guards plus argument mapping over the checkpoint seam
+// (ISessionCheckpointStore) — load-and-cut semantics, Result in / Result out.
+// Mirrors SessionForkRunner; the store stays the only place that touches the
+// file (or the database).
 
 using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Sessions;
-using Harbor.Storage.Jsonl;
 
 namespace Harbor.App.Cli.Commands;
 
 /// <summary>
-///     CLI runner for session checkpoints. Checkpoints exist only on the
-///     JSONL backend in slice 1 (sqlite follows) — any other
-///     <see cref="ISessionStore" /> fails fast with that message instead of
-///     a cast exception.
+///     CLI runner for session checkpoints. Both durable backends implement
+///     <see cref="ISessionCheckpointStore" /> (jsonl since slice 1, sqlite
+///     since slice 2) — any other <see cref="ISessionStore" /> fails fast
+///     with that message instead of a cast exception.
 /// </summary>
 public sealed class SessionCheckpointRunner
 {
+    private const string BackendRequired =
+        "Checkpoints need the jsonl or sqlite backend (HARBOR_STORAGE=jsonl|sqlite).";
+
     private readonly ISessionStore _store;
 
     public SessionCheckpointRunner(ISessionStore store) =>
@@ -31,10 +33,10 @@ public sealed class SessionCheckpointRunner
             return Result.Failure<SessionCheckpoint>("Session id must not be empty.");
         if (string.IsNullOrWhiteSpace(messageId))
             return Result.Failure<SessionCheckpoint>("Message id must not be empty.");
-        if (_store is not JsonlSessionStore jsonl)
-            return Result.Failure<SessionCheckpoint>("Checkpoints need the jsonl backend (HARBOR_STORAGE=jsonl); sqlite follows in a later slice.");
+        if (_store is not ISessionCheckpointStore checkpoints)
+            return Result.Failure<SessionCheckpoint>(BackendRequired);
 
-        return await jsonl.CreateCheckpointAsync(sessionId, messageId, label, ct).ConfigureAwait(false);
+        return await checkpoints.CreateCheckpointAsync(sessionId, messageId, label, ct).ConfigureAwait(false);
     }
 
     /// <summary>List checkpoints (and rewind trail markers) of <paramref name="sessionId" />.</summary>
@@ -43,10 +45,10 @@ public sealed class SessionCheckpointRunner
     {
         if (string.IsNullOrWhiteSpace(sessionId))
             return Result.Failure<IReadOnlyList<SessionCheckpoint>>("Session id must not be empty.");
-        if (_store is not JsonlSessionStore jsonl)
-            return Result.Failure<IReadOnlyList<SessionCheckpoint>>("Checkpoints need the jsonl backend (HARBOR_STORAGE=jsonl); sqlite follows in a later slice.");
+        if (_store is not ISessionCheckpointStore checkpoints)
+            return Result.Failure<IReadOnlyList<SessionCheckpoint>>(BackendRequired);
 
-        return await jsonl.ListCheckpointsAsync(sessionId, ct).ConfigureAwait(false);
+        return await checkpoints.ListCheckpointsAsync(sessionId, ct).ConfigureAwait(false);
     }
 
     /// <summary>Rewind <paramref name="sessionId" /> to <paramref name="checkpointId" />.</summary>
@@ -57,9 +59,9 @@ public sealed class SessionCheckpointRunner
             return Result.Failure<SessionRewindOutcome>("Session id must not be empty.");
         if (string.IsNullOrWhiteSpace(checkpointId))
             return Result.Failure<SessionRewindOutcome>("Checkpoint id must not be empty.");
-        if (_store is not JsonlSessionStore jsonl)
-            return Result.Failure<SessionRewindOutcome>("Checkpoints need the jsonl backend (HARBOR_STORAGE=jsonl); sqlite follows in a later slice.");
+        if (_store is not ISessionCheckpointStore checkpoints)
+            return Result.Failure<SessionRewindOutcome>(BackendRequired);
 
-        return await jsonl.RewindToCheckpointAsync(sessionId, checkpointId, ct).ConfigureAwait(false);
+        return await checkpoints.RewindToCheckpointAsync(sessionId, checkpointId, ct).ConfigureAwait(false);
     }
 }

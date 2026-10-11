@@ -6,8 +6,8 @@ namespace Harbor.Storage.Sqlite;
 
 /// <summary>
 ///     SQLite DDL for session storage: session/message tables, ordering
-///     indexes, and the migration from the pre-#85 layout (global message PK,
-///     missing integer ordering stamp).
+///     indexes, the checkpoint table (#1247), and the migration from the
+///     pre-#85 layout (global message PK, missing integer ordering stamp).
 /// </summary>
 internal static class SqliteSchema
 {
@@ -46,6 +46,19 @@ internal static class SqliteSchema
                                    );
                                    CREATE INDEX IF NOT EXISTS idx_messages_session ON messages(session_id, created_at_ms);
                                    CREATE INDEX IF NOT EXISTS idx_messages_parent ON messages(parent_id);
+
+                                   CREATE TABLE IF NOT EXISTS checkpoints (
+                                       id TEXT PRIMARY KEY,
+                                       session_id TEXT NOT NULL,
+                                       message_id TEXT NOT NULL,
+                                       message_index INTEGER NOT NULL DEFAULT 0,
+                                       created_at TEXT NOT NULL,
+                                       label TEXT,
+                                       rewind_of TEXT,
+                                       removed INTEGER NOT NULL DEFAULT 0,
+                                       FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE
+                                   );
+                                   CREATE INDEX IF NOT EXISTS idx_checkpoints_session ON checkpoints(session_id);
                                    """;
 
     /// <summary>

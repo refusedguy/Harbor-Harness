@@ -26,7 +26,7 @@ namespace Harbor.Storage.Jsonl;
 ///         during the write itself, not just before it.
 ///     </para>
 /// </remarks>
-public sealed class JsonlSessionStore : ISessionStore
+public sealed class JsonlSessionStore : ISessionStore, ISessionCheckpointStore
 {
     // JSONL codec context provides AOT-safe serialization via JsonTypeInfo.
     // See JsonlCodecContext.cs for the registered types.
@@ -544,7 +544,7 @@ public sealed class JsonlSessionStore : ISessionStore
     }
 
     /// <summary>
-    ///     Mark a checkpoint over a message (#1247 slice 1, jsonl only): the
+    ///     Mark a checkpoint over a message (#1247): the
     ///     anchor's zero-based index in message order is recorded as a
     ///     <c>"type":"checkpoint"</c> line appended to the session file, so a
     ///     later <see cref="RewindToCheckpointAsync" /> can restore it by
@@ -609,7 +609,7 @@ public sealed class JsonlSessionStore : ISessionStore
 
     /// <summary>
     ///     List checkpoints (and rewind trail markers) for a session in file
-    ///     order (#1247 slice 1, jsonl only). Unparseable checkpoint lines are
+    ///     order (#1247). Unparseable checkpoint lines are
     ///     skipped with a warning, never a whole-list failure (§ROP-001).
     /// </summary>
     public Task<Result<IReadOnlyList<SessionCheckpoint>>> ListCheckpointsAsync(
@@ -649,7 +649,7 @@ public sealed class JsonlSessionStore : ISessionStore
     }
 
     /// <summary>
-    ///     Rewind a session to a checkpoint (#1247 slice 1, jsonl only): the
+    ///     Rewind a session to a checkpoint (#1247): the
     ///     session is truncated to the checkpoint's anchor message via
     ///     <see cref="DeleteMessagesAfterAsync" /> (checkpoints past the
     ///     anchor go with the dropped future), then a trail marker is
