@@ -333,14 +333,22 @@ call the freshly-compiled `hello` tool and report the result.
 
 See `samples/plugins-cs/HelloWorldPlugin.cs` for the same example as a file.
 
-## Lifecycle
+## Lifecycle (default: out-of-process since #1055)
+
+The CLI process itself never compiles plugins. By default CS-source plugins are
+served out-of-process by `harbor-plugins-host` (registered automatically as the
+`harbor-csharp-plugins` MCP server when it ships next to the CLI); the CLI lists
+and calls plugin tools over MCP stdio. The Storage → Compilation →
+Instantiation → Registration → Hosting pipeline below runs **inside the host
+process**; only the tool capability crosses the wire (capability parity table:
+`src/Harbor.Plugins.Host/README.md`).
 
 ```
-1. Harbor starts
-2. HostBuilder.Build() registers builtins (tools, providers, agents)
-3. PluginHost.LoadAllAsync() iterates the configured IPluginSource:
+1. Harbor starts; the CLI probes for the plugin host (startup log says which
+   plugin route it took)
+2. The host's PluginHost.LoadAllAsync() iterates the configured IPluginSource:
      FileSystemPluginSource — ~/.harbor/plugins/*.cs + <cwd>/.harbor/plugins/*.cs
-4. For each PluginScript:
+3. For each PluginScript:
    a. Compilation layer: CachingCompiler checks ~/.harbor/plugins/cache/{hash}.dll
       - Hit  → Assembly.LoadFrom(cache)
       - Miss → RoslynPluginCompiler compiles to in-memory assembly, write dll to cache
@@ -349,18 +357,24 @@ See `samples/plugins-cs/HelloWorldPlugin.cs` for the same example as a file.
    c. Registration layer: PluginRegistrar builds PluginContext, calls
       plugin.Initialize(context), then dispatches Register*() based on which
       sub-interface(s) the type implements:
-          IToolPlugin     → RegisterTools(IToolRegistryBuilder)
-          IProviderPlugin → RegisterProviders(IProviderRegistryBuilder)
-          IAgentPlugin    → RegisterAgents(IAgentRegistryBuilder)
+          IToolPlugin     → RegisterTools (served over MCP tools/list + tools/call)
+          IProviderPlugin → accepted, logged as not exposed over MCP, discarded
+          IAgentPlugin    → accepted, logged as not exposed over MCP, discarded
           ITuiPlugin      → host.RegisterTuiPlugin(plugin)  (accepted and
                             discarded; closed seam, #564)
-          ITuiPanelPlugin → RegisterPanels(IPanelRegistry)  (deferred until renderer starts)
+          ITuiPanelPlugin → accepted, logged as not exposed over MCP, discarded
       The SafePluginRegistrar decorator wraps each call in try/catch so one bad plugin
       doesn't abort the rest.
-5. HostBuilder.Build() returns the final IHost with all plugins wired in
-6. On shutdown: each plugin's ShutdownAsync() is called in reverse-load order
-   (planned — see §Roadmap below; current MVP does not call ShutdownAsync on exit).
+4. The CLI calls plugin tools via MCP; compilation errors surface as `isError`
+   tool results.
+5. On shutdown: each plugin's ShutdownAsync() is called in reverse-load order
+   (planned — see §Roadmap below; current host does not call ShutdownAsync on exit).
 ```
+
+Legacy in-process path (JIT only): the same pipeline compiled and registered
+inside the CLI process (`CsPluginLoader` facade over `PluginHostBuilder`,
+wired into `HostBuilder`). In-process Roslyn compilation does not work under
+AOT (see `specs/08-native-aot.md`) — that is why the default moved out.
 
 For plugin authors, **nothing changes** — drop a `.cs` file into `~/.harbor/plugins/`
 and it Just Works. The layered architecture is purely a contributor concern: it makes
@@ -416,15 +430,12 @@ rm -rf ~/.harbor/plugins/cache/
 - Execute shell commands (via `System.Diagnostics.Process`).
 - Access environment variables and the host's DI service provider.
 
-Harbor does NOT sandbox CS plugins. Only drop source files you have reviewed into
-`~/.harbor/plugins/`. Treat plugin installation with the same caution as
-`pip install` or `npm install -g`. Since #1055s3 the CLI serves CS plugins
-out-of-process by default (see `src/Harbor.Plugins.Host/README.md`): the
-process boundary is crash containment, not a sandbox.
-
-For sandboxed plugin execution, use the planned DLL-based out-of-process plugin path
-(see `specs/02-plugins.md` and `specs/08-native-aot.md`). The legacy DLL-based plugin
-projects in `samples/plugins/` remain as an alternative path but also run in-process.
+Harbor does NOT sandbox CS plugins — in-process or out-of-process. Since #1055s3
+the CLI serves CS plugins out-of-process by default (see
+`src/Harbor.Plugins.Host/README.md`): the process boundary is crash
+containment, not a sandbox. Treat plugin installation with the same caution as
+`pip install` or `npm install -g`. There is no sandboxed execution path yet; only drop
+source files you have reviewed into `~/.harbor/plugins/`.
 
 ## Migration from samples/plugins/*.csproj to .cs
 
@@ -477,7 +488,12 @@ strong naming, etc.).
 - [ ] v0.5 — `harbor plugins gc`: clean orphaned cache files.
 - [ ] v0.6 — `ShutdownAsync` lifecycle: call on Harbor exit in reverse-load order.
 - [ ] v0.6 — Hot-reload: watch `~/.harbor/plugins/` for changes and reload on the fly.
-- [ ] v0.7 — Out-of-process plugins via Unix domain sockets (NativeAOT-compatible).
+- [x] Out-of-process CS-plugin serving by default (#1055s3):
+      `harbor-plugins-host` compiles CS-source plugins with Roslyn in its own
+      process and serves tools over MCP stdio; the CLI never compiles in-process.
+- [ ] v0.7 — UDS transport for the two-process milestone + capability parity
+      beyond tools (providers/agents/panels stay in-process-only) + real
+      sandboxing (the split is crash containment, not isolation).
 
 ## See also
 

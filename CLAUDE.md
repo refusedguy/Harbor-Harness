@@ -12,7 +12,7 @@
 - **[docs/COMPONENT_CATALOG.md](./docs/COMPONENT_CATALOG.md)** — reusable UI components (StatusBadge, ChatBubble, SessionRow) across Avalonia/Blazor/WPF.
 - **[docs/ARCHITECTURE_LAYERS.md](./docs/ARCHITECTURE_LAYERS.md)** — canonical Clean / Hexagonal / Onion layering rules. The allowed/forbidden `<ProjectReference>` matrix is mechanically enforced by `tests/Harbor.Architecture.Tests`. **Read this before adding any `<ProjectReference>` to a `.csproj`.**
 - **[docs/CODE_PRINCIPLES_AUDIT.md](./docs/CODE_PRINCIPLES_AUDIT.md)** — detailed audit of OOP/SOLID/GoF/FP/ROP/perf with 45 findings and prioritized refactoring plan, plus §ARCH-001..§ARCH-NNN layering violations. Every `TODO(principles)` in code references this file.
-- **[docs/SPECTRE_TUI_DEEP_DIVE.md](./docs/SPECTRE_TUI_DEEP_DIVE.md)** — full anatomy of the interactive shell (`contrib/tui/Harbor.Tui.SpectreTui`; compiled into the default CLI build) for adding features from opencode/kilocode/pi-agent.
+- **[docs/SPECTRE_TUI_DEEP_DIVE.md](./docs/SPECTRE_TUI_DEEP_DIVE.md)** — full anatomy of the optional interactive shell (`contrib/tui/Harbor.Tui.SpectreTui`; NOT compiled into the default CLI build — own `Contrib.slnx`, opt-in via `HARBOR_WITH_SPECTRE_TUI`) for adding features from opencode/kilocode/pi-agent.
 - **[docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md)** — high-level design + principles summary.
 - **[docs/DEVELOPMENT.md](./docs/DEVELOPMENT.md)** — how to contribute + **principles checklist** for PRs.
 - **[docs/PATTERNS.md](./docs/PATTERNS.md)** — 18 pattern catalog with real code (Strategy, Registry, Observer, Builder, Adapter, Command, Specification, Value Object, Factory, Plugin, Repository, Chain of Resp, Flyweight, Object Pool, MVVM, Decorator, TEA, DU).
@@ -38,7 +38,7 @@ Harbor is a modular .NET 10 AI coding agent harness. The architecture prioritize
 
 ```
 src/                                   — ~50 projects (all included in Harbor.slnx unless noted)
-├── Harbor.Abstractions/               — base contracts (zero deps)
+├── Harbor.Abstractions/               — base contracts (no Harbor deps except Abstractions.Contracts; 7 NuGet, gated — см. AGENTS.md §What NOT to do п.1)
 ├── Harbor.Abstractions.Contracts/     — models, events, ValueObjects, PermissionRuleset
 ├── Harbor.Registries/                 — Agent/Tool/Provider registries, EventBus; builtin agents are declared in
 │                                        AgentDefinition and registered in ToolsCatalog.CreateAgentRegistry
@@ -64,7 +64,10 @@ src/                                   — ~50 projects (all included in Harbor.
 apps/Harbor.App.Cli/                   — CLI entry point, slash commands, REPL, HostBuilder DI root
 apps/Harbor.App.Avalonia/              — cross-platform desktop GUI
 
-contrib/tui/                           — extra interactive shells compiled into the default CLI build:
+contrib/tui/                           — extra interactive shells, NOT compiled into the default CLI build
+                                         (own Contrib.slnx; the CLI-side ItemGroup is commented out and the
+                                         Hosting-side group needs HarborWithSpectreTui=true, which has no
+                                         global default — AGENTS.md project map is authoritative here):
                                          SpectreTui shell, Spectre.Fullscreen, TerminalGui, Termina, RazorConsole
 contrib/apps/, contrib/scripting/      — WPF/Maui/Blazor apps + scripting stack (own Contrib.slnx)
 
@@ -86,11 +89,13 @@ docs/        — architecture, benchmarks, build, dev, getting started, plugin d
 
 Harbor follows **Clean / Hexagonal / Onion Architecture**. The dependency direction is
 **inward only**: an outer layer may reference an inner layer, never the reverse. The
-innermost layer (Domain/Abstractions) references nothing but the BCL.
+innermost layer (Domain/Abstractions) references no other Harbor assembly — only BCL
+plus a gated set of 7 NuGet packages (см. AGENTS.md §What NOT to do п.1;
+gate: `tools/check-abstractions-contract.py`).
 
 | Layer            | Harbor projects                                                                                              | May reference                                |
 |------------------|--------------------------------------------------------------------------------------------------------------|----------------------------------------------|
-| **Domain**       | `Harbor.Abstractions` (+ `.Contracts`), `Harbor.Diagnostics.Abstractions`, `Harbor.Extensions`, `Harbor.Ipc.Abstractions`, `Harbor.Ui.Framework.Abstractions` | BCL only, except the Domain→Domain edge `Harbor.Abstractions` → `Harbor.Abstractions.Contracts` |
+| **Domain**       | `Harbor.Abstractions` (+ `.Contracts`), `Harbor.Diagnostics.Abstractions`, `Harbor.Extensions`, `Harbor.Ipc.Abstractions`, `Harbor.Ui.Framework.Abstractions` | BCL + gated NuGet only, except the Domain→Domain edge `Harbor.Abstractions` → `Harbor.Abstractions.Contracts` |
 | **Application**  | `Harbor.Application`, `Harbor.Registries`, `Harbor.Plugins.Abstractions`                                  | Domain only (NOT each other, NOT Infrastructure, NOT Presentation) |
 | **Infrastructure** | `Harbor.Storage.*`, `Harbor.Providers.*`, `Harbor.Tools.Builtin`, `Harbor.Ipc.{Client,InProcess,Server}`, `Harbor.Plugins.{Compilation,Hosting,Instantiation,Registration,Runtime,Storage}` | Domain only (NOT Application, NOT each other) |
 | **Presentation** | `Harbor.Terminal.Abstractions`, `Harbor.Ui.Framework` (+ `.State`/`.ViewModels`/`.Projection`/`.Rendering`/`.Services`/`.Sessions`), `Harbor.Desktop.*`, `Harbor.DesignSystem`, `Harbor.Tui.{AnsiPlain,CellForge,NickConsoleEx,Notifications}`, `Harbor.App.Avalonia` | Domain only, plus Presentation→Presentation siblings (NOT Application, NOT Infrastructure) |
@@ -723,7 +728,8 @@ Rules:
 ### Full-screen TUI development
 
 `FullscreenTuiRenderer` (physically in `contrib/tui/Harbor.Tui.Spectre.Fullscreen`,
-compiled into the default CLI build) is a full-screen interactive
+compiled in only with `HarborWithSpectreTui=true` — NOT in default builds, see the
+project map above) is a full-screen interactive
 renderer using Spectre.Console 0.57.2 `Live` display. It owns the REPL lifecycle.
 
 | Hotkey | Action |
@@ -907,9 +913,13 @@ public sealed class RedisSessionStore : ISessionStore
 2. Implement `ITuiRenderer` from `Harbor.Terminal.Abstractions` (or extend
    `BaseTuiRenderer` / `IInteractiveTuiRenderer` if you need full-screen or
    own the input loop).
-3. Register in DI: add to the renderer switch in
-   `src/Harbor.Hosting/Modules/TuiModule.cs` (`AddHarborTui`). Also add a
-   `ProjectReference` to `Harbor.App.Cli.csproj`.
+3. Register in DI: add one `ITuiRendererFactory` strategy + one entry in the
+   factory array in `src/Harbor.Hosting/Modules/TuiBackendRegistry.cs`
+   (`TuiBackendRegistry.Build`; `TuiModule.AddHarborTui` walks that same array
+   for the runtime `/renderer` swap table, so a backend can no longer be
+   half-registered — #581/#584). Also add a `ProjectReference` to
+   `src/Harbor.Hosting/Harbor.Hosting.csproj` (behind the matching
+   `HarborWith*` condition when the backend is optional).
 4. Update `Program.PrintTuiOptions()` to list the new option.
 5. Done — no other changes needed (event-bus decoupling).
 

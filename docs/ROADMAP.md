@@ -31,10 +31,20 @@
 - `Memory` (tests)
 - `Sqlite` (indexed queries)
 
-### ✅ Completed — UI (2 apps in `apps/` + 5 TUI projects in src/ + optional contrib components)
+### ✅ Completed — UI (2 apps in `apps/` + 6 TUI projects in src/ + optional contrib components)
 
-- **TUI (in `Harbor.slnx`)**: `Harbor.Tui.Ansi`, `Plain`, **`ConsoleEx`** (alt-screen cell-diff MVP, CE-0…CE-5), `Notifications`, + `Harbor.Tui.Abstractions`
-- **TUI (optional, `contrib/tui/`)**: Spectre, Spectre.Fullscreen, SpectreTui, TerminalGui, Termina, RazorConsole, Sixel — wired via the `HARBOR_WITH_SPECTRE_TUI` build flag; interactive default TUI id is still `spectre-tui`
+- **TUI (in `Harbor.slnx`)**: `Harbor.Terminal.Abstractions` (contracts) +
+  `Harbor.Tui.AnsiPlain` (ids `plain`, `ansi`), `Harbor.Tui.CellForge` (+`.Engine`,
+  id `cellforge`, legacy alias `consoleex`; alt-screen cell-diff MVP, CE-0…CE-5),
+  `Harbor.Tui.NickConsoleEx` (id `nickconsoleex`; only when the vendored ConsoleEx
+  submodule is initialized), `Harbor.Tui.Notifications`
+- **TUI (optional, `contrib/tui/`, NOT in the default build)**: Spectre,
+  Spectre.Fullscreen, SpectreTui, TerminalGui, Termina, RazorConsole, Sixel —
+  compiled in only with `HarborWithSpectreTui=true` (see `src/Harbor.Hosting/Harbor.Hosting.csproj`;
+  the CLI-side ItemGroup is commented out). The *requested* default TUI id is
+  still `spectre-tui` (`TuiModule`), so in default builds it falls back loudly
+  to `plain` with a warning naming the available ids — `spectre-tui` is effective
+  only in spectre-enabled builds
 - **Desktop**: Avalonia (`apps/Harbor.App.Avalonia`); WPF, MAUI (`contrib/apps/`)
 - **Web**: Blazor Server (`contrib/apps/Harbor.App.Blazor`)
 
@@ -319,9 +329,9 @@ Moved platform-agnostic logic out of `Harbor.App.Avalonia` into `Harbor.Ui.Frame
 | Metric | Value |
 |---|---|
 | .NET SDK | 10.0.302 |
-| Source projects (`src/`) | 54 (+26 in `contrib/`) |
-| `src/` projects with a README | 54/54 (CI-enforced) |
-| Test projects (`tests/`, csproj dirs) | 36 (incl. benchmarks + E2E harnesses) |
+| Source projects (`src/`) | 52 (+26 in `contrib/`) |
+| `src/` projects with a README | 52/52 (CI-enforced) |
+| Test projects (`tests/`, csproj dirs) | 37 (incl. benchmarks + E2E harnesses) |
 | Unit tests passing | ~1350 (см. [PROJECT_STATUS.md](./PROJECT_STATUS.md)) |
 | E2E tests passing | 12 + CellForge PTY suite |
 | Builtin tools | 20 (`HarborToolSetKind.Full14` — enum name predates the count) |
