@@ -9,7 +9,7 @@
     <ProjectReference Include="../../src/Harbor.Lsp/Harbor.Lsp.csproj"/>
     <ProjectReference Include="../../src/Harbor.Abstractions/Harbor.Abstractions.csproj"/>
     <ProjectReference Include="../../tests/Harbor.TestKit/Harbor.TestKit.csproj"/>
-    <PackageReference Include="Microsoft.Extensions.Logging"/>
+    <!-- #957: Microsoft.Extensions.Logging removed — project uses only NullLogger/NullLogger<T>/ILogger (Logging.Abstractions types). -->
     <PackageReference Include="CSharpFunctionalExtensions"/>
   </ItemGroup>
 
