@@ -91,7 +91,27 @@ public enum ChatAction
     MoveTabLeft,
 
     /// <summary>Alt+Right — move the focused tab one step right (mirrors <see cref="MoveTabLeft" />).</summary>
-    MoveTabRight
+    MoveTabRight,
+
+    // ── tab reopen + unread model (#1173, opencode steal) ────────────────────
+    // Same split as the #389 actions above: the keymap owns "which key", the
+    // reducer owns "what it means", the host owns "switch the session".
+
+    /// <summary>
+    ///     Ctrl+Shift+T — restore the most recently closed tab at its original
+    ///     position. Always available (even with one tab open): the stack is
+    ///     about closed tabs, not the open count.
+    /// </summary>
+    ReopenTab,
+
+    /// <summary>Alt+Shift+Down — focus the next tab with an unread signal (wraps).</summary>
+    NextUnreadTab,
+
+    /// <summary>Alt+Shift+Up — focus the previous tab with an unread signal (wraps).</summary>
+    PreviousUnreadTab,
+
+    /// <summary>Ctrl+1..Ctrl+9 — focus the Nth tab in tab order. Slot index comes from the key's Character.</summary>
+    ActivateTabSlot
 }
 
 /// <summary>
