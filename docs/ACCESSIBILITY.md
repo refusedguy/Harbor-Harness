@@ -239,10 +239,14 @@ Avalonia tabs in visual-tree order while no `TabIndex` override exists, and no
 so the gate asserts the mechanical equivalent: the document order of
 interactive controls equals the expected visual order (exact per-view
 sequence: TitleBar trigger → theme → settings; rail top-to-bottom;
-StatusBar model picker; flyout new → search → list), every interactive control
-stays `Focusable` + `IsTabStop`, and no control opts out of Tab navigation
+StatusBar model picker; flyout new → search → list), every directly-focusable
+control (Button/TextBox/ComboBox/Expander/MenuItem) stays `Focusable` +
+`IsTabStop`, and no control opts out of Tab navigation
 (`IsTabStop="False"` — the two legitimate cases, chat timeline and
-SegmentedControl items, live outside these views).
+SegmentedControl items, live outside these views). `ListBox`/`TreeView`
+containers are order-pinned but exempt from the `Focusable` half: they delegate
+keyboard interaction to realized items and report `Focusable=False` when bare
+(framework behavior, observed in CI — not a trap).
 
 ---
 
