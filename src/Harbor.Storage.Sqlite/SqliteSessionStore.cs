@@ -548,18 +548,23 @@ public sealed class SqliteSessionStore : ISessionStore, ISessionCheckpointStore
 
         // Only plain checkpoints are restore points — a trail marker records
         // a past rewind, it is not itself a target (the jsonl backend draws
-        // the same line with its !IsRewindTrail filter).
-        var checkpointRow = await ReadCheckpointRowAsync(sessionId, checkpointId, ct).ConfigureAwait(false);
-        if (checkpointRow.IsFailure)
-            return checkpointRow.ConvertFailure<SessionRewindOutcome>();
-        if (checkpointRow.Value.HasNoValue) // guarded: .Value only read after the failure check.
-            return Result.Failure<SessionRewindOutcome>(SessionStoreErrors.CheckpointNotFound(sessionId, checkpointId));
-#pragma warning disable CFE0001
-        // CFE0001: false positive — the HasNoValue guard above is an early
-        // return, a control-flow shape the analyzer does not model.
-        SessionCheckpoint checkpoint = checkpointRow.Value;
-#pragma warning restore CFE0001
+        // the same line with its !IsRewindTrail filter). Absence rides the
+        // Maybe rail until it becomes the shared CheckpointNotFound text,
+        // the same ToResult idiom GetAsync uses for a missing session.
+        return await ReadCheckpointRowAsync(sessionId, checkpointId, ct).ConfigureAwait(false)
+            .Bind(checkpoint => checkpoint
+                .ToResult(SessionStoreErrors.CheckpointNotFound(sessionId, checkpointId))
+                .Bind(cp => RewindToAnchorAsync(sessionId, cp, ct)));
+    }
 
+    /// <summary>
+    ///     Truncate to <paramref name="checkpoint" />'s anchor and write the
+    ///     honest-trail marker. Kept private and separate so the public verb
+    ///     stays a thin validation-and-dispatch seam.
+    /// </summary>
+    private async Task<Result<SessionRewindOutcome>> RewindToAnchorAsync(
+        string sessionId, SessionCheckpoint checkpoint, CancellationToken ct)
+    {
         var truncated = await DeleteMessagesAfterAsync(sessionId, checkpoint.MessageId, ct).ConfigureAwait(false);
         if (truncated.IsFailure)
             return truncated.ConvertFailure<SessionRewindOutcome>();
@@ -610,7 +615,8 @@ public sealed class SqliteSessionStore : ISessionStore, ISessionCheckpointStore
                 cmd.ExecuteNonQuery();
 
                 cmd.CommandText = "SELECT COUNT(*) FROM messages WHERE session_id = @sid";
-                long remaining = (long)cmd.ExecuteScalar();
+                object? count = cmd.ExecuteScalar();
+                long remaining = count is long l ? l : 0L;
 
                 tx.Commit();
                 return Result.Success(new SessionRewindOutcome(
