@@ -1,6 +1,7 @@
 using Harbor.Application.Agents;
 using Harbor.Application.Agents.Pipeline;
 using Harbor.Application.Diagnostics;
+using Harbor.Application.Hooks;
 using Harbor.Application.Onboarding;
 using Harbor.Application.Resilience;
 using Harbor.Application.Sessions;
@@ -50,6 +51,12 @@ internal static class CoreModule
         services.AddSingleton<MessageConverter>();
         services.AddSingleton<IRetryPolicy, RetryPolicy>();
         services.AddSingleton<IToolRetryDecider, DefaultToolRetryDecider>();
+        // PX4: user hooks (plain shell commands from ~/.harbor/hooks.json —
+        // not plugins: no Roslyn, no Assembly.Load, no plugin machinery).
+        // Optional for the dispatcher below: a host without this registration
+        // keeps the hooks-free path (GetService, not GetRequiredService).
+        services.AddSingleton<IHookRunner>(sp => new HookRunner(
+            logger: sp.GetRequiredService<ILogger<HookRunner>>()));
         // ROP-C П.5: the loop depends on the IToolDispatcher seam; the concrete
         // dispatcher logs under its own category instead of borrowing the
         // AgentLoop's (ROP-C П.8).
@@ -59,7 +66,8 @@ internal static class CoreModule
             sp.GetRequiredService<IEventBus>(),
             sp.GetRequiredService<ILogger<ToolDispatcher>>(),
             sp.GetRequiredService<IApprovalCoordinator>(),
-            sp.GetRequiredService<IToolRetryDecider>()));
+            sp.GetRequiredService<IToolRetryDecider>(),
+            hookRunner: sp.GetService<IHookRunner>()));
         // #480 A10: the run's cross-cutting behaviours are the CONTAINER's list.
         // AgentLoop used to spell them out as a literal in its own constructor,
         // which made a third run-level concern reachable only by editing the
