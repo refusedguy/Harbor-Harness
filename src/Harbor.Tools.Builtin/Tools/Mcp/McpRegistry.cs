@@ -141,9 +141,7 @@ public sealed class McpRegistry : IMcpRegistry, IAsyncDisposable
             return Result.Failure($"MCP server '{name}' is already registered.");
 
         _servers[name] = new ServerEntry(name, startInfo, remote, _transports);
-        _logger?.LogInformation(
-            "Registered MCP server: {Name} -> {Target}",
-            name,
+        if (_logger is not null) McpRegistryLog.Registered(_logger, name,
             remote is not null ? $"{remote.Transport}:{remote.Url}" : startInfo!.Command);
         return Result.Success();
     }
@@ -163,7 +161,7 @@ public sealed class McpRegistry : IMcpRegistry, IAsyncDisposable
 
         if (!File.Exists(path))
         {
-            _logger?.LogInformation("MCP config file not found: {Path}", path);
+            if (_logger is not null) McpRegistryLog.ConfigFileNotFound(_logger, path);
             return Result.Success();
         }
 
@@ -174,7 +172,7 @@ public sealed class McpRegistry : IMcpRegistry, IAsyncDisposable
             var root = doc.RootElement;
             if (root.ValueKind != JsonValueKind.Object)
             {
-                _logger?.LogWarning("MCP config root is not an object: {Path}", path);
+                if (_logger is not null) McpRegistryLog.ConfigRootNotObject(_logger, path);
                 return Result.Failure("MCP config root must be an object.");
             }
 
@@ -194,20 +192,20 @@ public sealed class McpRegistry : IMcpRegistry, IAsyncDisposable
                     // ROP-A Z1 п.18: the log is glued to the result and the
                     // counter falls out of one Match expression.
                     var registered = Register(name, value.GetString() ?? string.Empty)
-                        .TapError(e => _logger?.LogWarning("Failed to register MCP server '{Name}': {Error}", name, e));
+                        .TapError(e => { if (_logger is not null) McpRegistryLog.RegisterFailed(_logger, name, e); });
                     loaded += registered.IsSuccess ? 1 : 0;
                     continue;
                 }
 
                 if (value.ValueKind != JsonValueKind.Object)
                 {
-                    _logger?.LogWarning("MCP server '{Name}' config is not an object", name);
+                    if (_logger is not null) McpRegistryLog.ServerConfigNotObject(_logger, name);
                     continue;
                 }
 
                 if (value.TryGetProperty("disabled", out var dis) && dis.ValueKind == JsonValueKind.True)
                 {
-                    _logger?.LogInformation("MCP server '{Name}' is disabled; skipping", name);
+                    if (_logger is not null) McpRegistryLog.ServerDisabled(_logger, name);
                     continue;
                 }
 
@@ -248,7 +246,7 @@ public sealed class McpRegistry : IMcpRegistry, IAsyncDisposable
                 {
                     if (!value.TryGetProperty("command", out var commandEl) || commandEl.ValueKind != JsonValueKind.String)
                     {
-                        _logger?.LogWarning("MCP server '{Name}' config has neither 'url' nor 'command'", name);
+                        if (_logger is not null) McpRegistryLog.ServerConfigNoUrlOrCommand(_logger, name);
                         continue;
                     }
 
@@ -288,16 +286,16 @@ public sealed class McpRegistry : IMcpRegistry, IAsyncDisposable
                 }
                 else
                 {
-                    _logger?.LogWarning("Failed to register MCP server '{Name}': {Error}", name, registration.Error);
+                    if (_logger is not null) McpRegistryLog.RegisterFailed(_logger, name, registration.Error);
                 }
             }
 
-            _logger?.LogInformation("Loaded {Count} MCP server(s) from config", loaded);
+            if (_logger is not null) McpRegistryLog.LoadedFromConfig(_logger, loaded);
             return Result.Success();
         }
         catch (Exception ex)
         {
-            _logger?.LogWarning(ex, "Failed to load MCP config from {Path}", path);
+            if (_logger is not null) McpRegistryLog.LoadFromConfigFailed(_logger, ex, path);
             return Result.Failure($"Failed to load MCP config: {ex.Message}");
         }
     }
@@ -307,7 +305,7 @@ public sealed class McpRegistry : IMcpRegistry, IAsyncDisposable
         if (_servers.TryRemove(name, out var entry))
         {
             entry.DisposeSync();
-            _logger?.LogInformation("Unregistered MCP server: {Name}", name);
+            if (_logger is not null) McpRegistryLog.Unregistered(_logger, name);
             return Result.Success();
         }
         return Result.Failure($"MCP server '{name}' is not registered.");
@@ -461,7 +459,7 @@ public sealed class McpRegistry : IMcpRegistry, IAsyncDisposable
             && initIns.ValueKind == JsonValueKind.String
             && entry.TrySetInstructions(initIns.GetString()))
         {
-            _logger?.LogDebug("Captured MCP instructions from '{Server}' initialize", server);
+            if (_logger is not null) McpRegistryLog.InstructionsCaptured(_logger, server);
         }
 
         return Result.Success(resultElement.GetRawText());
@@ -697,4 +695,45 @@ public sealed class McpRegistry : IMcpRegistry, IAsyncDisposable
             _transport = null;
         }
     }
+}
+
+/// <summary>
+///     SG1: BCL <c>[LoggerMessage]</c> delegates for <see cref="McpRegistry" />.
+///     Templates, levels and operands are 1-to-1 with the former <c>LogX</c> calls
+///     (including the skip-when-null semantics of the optional logger).
+/// </summary>
+internal static partial class McpRegistryLog
+{
+    [LoggerMessage(EventId = 1, Level = LogLevel.Information, Message = "Registered MCP server: {Name} -> {Target}")]
+    public static partial void Registered(ILogger logger, string name, string target);
+
+    [LoggerMessage(EventId = 2, Level = LogLevel.Information, Message = "MCP config file not found: {Path}")]
+    public static partial void ConfigFileNotFound(ILogger logger, string path);
+
+    [LoggerMessage(EventId = 3, Level = LogLevel.Warning, Message = "MCP config root is not an object: {Path}")]
+    public static partial void ConfigRootNotObject(ILogger logger, string path);
+
+    [LoggerMessage(EventId = 4, Level = LogLevel.Warning, Message = "Failed to register MCP server '{Name}': {Error}")]
+    public static partial void RegisterFailed(ILogger logger, string name, string error);
+
+    [LoggerMessage(EventId = 5, Level = LogLevel.Warning, Message = "MCP server '{Name}' config is not an object")]
+    public static partial void ServerConfigNotObject(ILogger logger, string name);
+
+    [LoggerMessage(EventId = 6, Level = LogLevel.Information, Message = "MCP server '{Name}' is disabled; skipping")]
+    public static partial void ServerDisabled(ILogger logger, string name);
+
+    [LoggerMessage(EventId = 7, Level = LogLevel.Warning, Message = "MCP server '{Name}' config has neither 'url' nor 'command'")]
+    public static partial void ServerConfigNoUrlOrCommand(ILogger logger, string name);
+
+    [LoggerMessage(EventId = 8, Level = LogLevel.Information, Message = "Loaded {Count} MCP server(s) from config")]
+    public static partial void LoadedFromConfig(ILogger logger, int count);
+
+    [LoggerMessage(EventId = 9, Level = LogLevel.Warning, Message = "Failed to load MCP config from {Path}")]
+    public static partial void LoadFromConfigFailed(ILogger logger, Exception ex, string path);
+
+    [LoggerMessage(EventId = 10, Level = LogLevel.Information, Message = "Unregistered MCP server: {Name}")]
+    public static partial void Unregistered(ILogger logger, string name);
+
+    [LoggerMessage(EventId = 11, Level = LogLevel.Debug, Message = "Captured MCP instructions from '{Server}' initialize")]
+    public static partial void InstructionsCaptured(ILogger logger, string server);
 }

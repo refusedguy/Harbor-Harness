@@ -129,7 +129,7 @@ public sealed class BashTool : ITool
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         cts.CancelAfter(TimeSpan.FromSeconds(timeout));
 
-        _logger.LogDebug("Executing: {Command} (timeout: {Timeout}s)", command, timeout);
+        BashToolLog.Executing(_logger, command, timeout);
 
         process.OutputDataReceived += OnStdout;
         process.ErrorDataReceived += OnStderr;
@@ -162,7 +162,7 @@ public sealed class BashTool : ITool
             }
             catch (TimeoutException ex)
             {
-                _logger.LogWarning(ex, "Timed out waiting for process output drains; continuing with output so far");
+                BashToolLog.OutputDrainTimeout(_logger, ex);
             }
         }
 
@@ -181,12 +181,12 @@ public sealed class BashTool : ITool
                 await DrainAsync().ConfigureAwait(false);
                 if (timedOut)
                 {
-                    _logger.LogWarning(ex, "Command timed out after {Timeout}s", timeout);
+                    BashToolLog.CommandTimedOut(_logger, ex, timeout);
                     return ToolResult.Error(
                         $"Command timed out after {timeout}s and was killed.\nStdout so far:\n{stdout}\nStderr:\n{stderr}");
                 }
 
-                _logger.LogInformation(ex, "Command cancelled before completion");
+                BashToolLog.CommandCancelled(_logger, ex);
                 return ToolResult.Error(
                     $"Command was cancelled.\nStdout so far:\n{stdout}\nStderr:\n{stderr}");
             }
@@ -220,11 +220,10 @@ public sealed class BashTool : ITool
             // agent must be able to tell that output was incomplete.
             output.Builder.Append("[output truncated: ").Append(stdoutDropped + stderrDropped)
                 .Append(" chars dropped (cap=").Append(MaxOutputChars).Append(")]\n");
-            _logger.LogWarning("Bash output truncated: stdout dropped {StdoutDropped} chars, stderr dropped {StderrDropped} chars (cap={Cap})",
-                stdoutDropped, stderrDropped, MaxOutputChars);
+            BashToolLog.OutputTruncated(_logger, stdoutDropped, stderrDropped, MaxOutputChars);
         }
 
-        _logger.LogInformation("Command completed: exit={ExitCode}", process.ExitCode);
+        BashToolLog.CommandCompleted(_logger, process.ExitCode);
 
         if (output.Builder.Length > 50_000)
         {
@@ -278,4 +277,29 @@ public sealed class BashTool : ITool
 
     private static string GetShell() =>
         OperatingSystem.IsWindows() ? "cmd.exe" : "/bin/bash";
+}
+
+/// <summary>
+///     SG1: BCL <c>[LoggerMessage]</c> delegates for <see cref="BashTool" />.
+///     Templates, levels and operands are 1-to-1 with the former <c>LogX</c> calls.
+/// </summary>
+internal static partial class BashToolLog
+{
+    [LoggerMessage(EventId = 1, Level = LogLevel.Debug, Message = "Executing: {Command} (timeout: {Timeout}s)")]
+    public static partial void Executing(ILogger logger, string command, int timeout);
+
+    [LoggerMessage(EventId = 2, Level = LogLevel.Warning, Message = "Timed out waiting for process output drains; continuing with output so far")]
+    public static partial void OutputDrainTimeout(ILogger logger, Exception ex);
+
+    [LoggerMessage(EventId = 3, Level = LogLevel.Warning, Message = "Command timed out after {Timeout}s")]
+    public static partial void CommandTimedOut(ILogger logger, Exception ex, int timeout);
+
+    [LoggerMessage(EventId = 4, Level = LogLevel.Information, Message = "Command cancelled before completion")]
+    public static partial void CommandCancelled(ILogger logger, Exception ex);
+
+    [LoggerMessage(EventId = 5, Level = LogLevel.Warning, Message = "Bash output truncated: stdout dropped {StdoutDropped} chars, stderr dropped {StderrDropped} chars (cap={Cap})")]
+    public static partial void OutputTruncated(ILogger logger, long stdoutDropped, long stderrDropped, int cap);
+
+    [LoggerMessage(EventId = 6, Level = LogLevel.Information, Message = "Command completed: exit={ExitCode}")]
+    public static partial void CommandCompleted(ILogger logger, int exitCode);
 }

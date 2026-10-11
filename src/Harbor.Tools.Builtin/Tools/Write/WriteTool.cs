@@ -96,7 +96,7 @@ public sealed class WriteTool : ITool
             return ToolResult.Error(resolvedPath.Error);
         string path = resolvedPath.Value;
 
-        _logger.LogInformation("Writing: {Path} ({Chars} chars)", path, content.Length);
+        WriteToolLog.Writing(_logger, path, content.Length);
 
         if (Directory.Exists(path))
             return ToolResult.Error($"Path is a directory, not a file: {path}");
@@ -137,7 +137,7 @@ public sealed class WriteTool : ITool
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Write error: {Path}: {Error}", path, ex.Message);
+            WriteToolLog.WriteError(_logger, ex, path, ex.Message);
             return ToolResult.Error($"Failed to write: {ex.Message}");
         }
 
@@ -161,4 +161,17 @@ public sealed class WriteTool : ITool
 
     private static bool GetBoolDefaultTrue(JsonElement args, string name)
         => JsonArgs.GetBoolOrNull(args, name) ?? true;
+}
+
+/// <summary>
+///     SG1: BCL <c>[LoggerMessage]</c> delegates for <see cref="WriteTool" />.
+///     Templates, levels and operands are 1-to-1 with the former <c>LogX</c> calls.
+/// </summary>
+internal static partial class WriteToolLog
+{
+    [LoggerMessage(EventId = 1, Level = LogLevel.Information, Message = "Writing: {Path} ({Chars} chars)")]
+    public static partial void Writing(ILogger logger, string path, int chars);
+
+    [LoggerMessage(EventId = 2, Level = LogLevel.Warning, Message = "Write error: {Path}: {Error}")]
+    public static partial void WriteError(ILogger logger, Exception ex, string path, string error);
 }

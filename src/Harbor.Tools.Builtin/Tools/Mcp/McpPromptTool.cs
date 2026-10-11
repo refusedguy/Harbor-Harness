@@ -123,7 +123,7 @@ public sealed class McpPromptTool : ITool
                 "and calls registry.Register(name, stdioCmd) for each MCP server.");
         }
 
-        _logger.LogDebug("MCP prompt render: server={Server} name={Name}", server, name);
+        McpPromptToolLog.RenderingPrompt(_logger, server, name);
 
         using var paramsDoc = McpJsonRpc.BuildPromptGetParams(name, arguments);
         var invoked = await registry.InvokeAsync(server, "prompts/get", paramsDoc.RootElement, cancellationToken)
@@ -201,4 +201,14 @@ public sealed class McpPromptTool : ITool
             return Result.Failure<string>($"MCP server returned malformed prompts/get payload: {ex.Message}");
         }
     }
+}
+
+/// <summary>
+///     SG1: BCL <c>[LoggerMessage]</c> delegates for <see cref="McpPromptTool" />.
+///     Templates, levels and operands are 1-to-1 with the former <c>LogX</c> calls.
+/// </summary>
+internal static partial class McpPromptToolLog
+{
+    [LoggerMessage(EventId = 1, Level = LogLevel.Debug, Message = "MCP prompt render: server={Server} name={Name}")]
+    public static partial void RenderingPrompt(ILogger logger, string server, string name);
 }

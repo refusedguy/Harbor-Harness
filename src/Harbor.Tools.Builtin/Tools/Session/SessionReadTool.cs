@@ -113,7 +113,7 @@ public sealed class SessionReadTool : ITool
         Result<Session> target = await _sessions.GetAsync(id, cancellationToken).ConfigureAwait(false);
         if (target.IsFailure)
         {
-            _logger.LogWarning("session_read: unknown session {SessionId} (caller {Caller})", id, context.SessionId);
+            SessionReadToolLog.UnknownSession(_logger, id, context.SessionId);
             return ToolResult.Error($"Session '{id}' was not found.");
         }
 
@@ -121,7 +121,7 @@ public sealed class SessionReadTool : ITool
             await _sessions.GetMessagesAsync(id, cancellationToken).ConfigureAwait(false);
         if (history.IsFailure)
         {
-            _logger.LogWarning("session_read: history unavailable for {SessionId}: {Error}", id, history.Error);
+            SessionReadToolLog.HistoryUnavailable(_logger, id, history.Error);
             return ToolResult.Error($"Session '{id}' transcript is unavailable: {history.Error}");
         }
 
@@ -173,4 +173,17 @@ public sealed class SessionReadTool : ITool
 
         return ToolResult.Success(sb.ToString());
     }
+}
+
+/// <summary>
+///     SG1: BCL <c>[LoggerMessage]</c> delegates for <see cref="SessionReadTool" />.
+///     Templates, levels and operands are 1-to-1 with the former <c>LogX</c> calls.
+/// </summary>
+internal static partial class SessionReadToolLog
+{
+    [LoggerMessage(EventId = 1, Level = LogLevel.Warning, Message = "session_read: unknown session {SessionId} (caller {Caller})")]
+    public static partial void UnknownSession(ILogger logger, string sessionId, string caller);
+
+    [LoggerMessage(EventId = 2, Level = LogLevel.Warning, Message = "session_read: history unavailable for {SessionId}: {Error}")]
+    public static partial void HistoryUnavailable(ILogger logger, string sessionId, string error);
 }

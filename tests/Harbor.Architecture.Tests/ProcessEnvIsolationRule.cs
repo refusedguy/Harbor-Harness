@@ -285,7 +285,7 @@ public class ProcessEnvIsolationRule
             "HARBOR_MCP_OAUTH_TOKEN. McpRemoteTransportTests pins it to null so the no-token path is "
             + "real; McpTransportFactoryTests reaches McpRegistry.GetTransport through "
             + "registry.InvokeAsync (:245,262,278,295), and that branch reads the variable "
-            + "(McpRegistry.cs:575)."),
+            + "(McpRegistry.cs:573)."),
 
         (
             "Harbor.App.Cli.Tests",

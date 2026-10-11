@@ -121,7 +121,7 @@ public sealed class TreeTool : ITool
         if (!Directory.Exists(path))
             return ToolResult.Error($"Directory not found: {path}");
 
-        _logger.LogDebug("Tree: {Path} (maxDepth={MaxDepth})", path, maxDepth);
+        TreeToolLog.Walking(_logger, path, maxDepth);
 
         // Try to get the tracked-files set from `git ls-files` (cached per call).
         var tracked = useGitignore ? TryGetGitTrackedFiles(path) : null;
@@ -179,7 +179,7 @@ public sealed class TreeTool : ITool
         catch (Exception ex) when (ex is UnauthorizedAccessException or DirectoryNotFoundException or IOException)
         {
             // ROP-A Z1 п.15: silent skip keeps the tree contract; trace explains.
-            logger.LogTrace(ex, "tree: skipping unreadable directory {Dir}", dir);
+            TreeToolLog.SkippingUnreadableDirectory(logger, ex, dir);
             return;
         }
 
@@ -252,7 +252,7 @@ public sealed class TreeTool : ITool
     /// </summary>
     private HashSet<string>? TryGetGitTrackedFiles(string root) =>
         Result.Try(() => CollectGitTrackedFiles(root, _logger), ResultErrors.Message)
-            .TapError(reason => _logger.LogTrace("tree: gitignore pruning disabled: {Reason}", reason))
+            .TapError(reason => TreeToolLog.GitignorePruningDisabled(_logger, reason))
             .AsMaybe()
             .GetValueOrDefault();
 
@@ -338,7 +338,7 @@ public sealed class TreeTool : ITool
         {
             if (e.Data is { } line)
             {
-                logger.LogTrace("git ls-files wrote to stderr: {Line}", line);
+                TreeToolLog.GitLsFilesStderr(logger, line);
             }
         };
         p.BeginOutputReadLine();
@@ -391,4 +391,23 @@ public sealed class TreeTool : ITool
         public void DirAdded() => Dirs++;
         public void FileAdded() => Files++;
     }
+}
+
+/// <summary>
+///     SG1: BCL <c>[LoggerMessage]</c> delegates for <see cref="TreeTool" />.
+///     Templates, levels and operands are 1-to-1 with the former <c>LogX</c> calls.
+/// </summary>
+internal static partial class TreeToolLog
+{
+    [LoggerMessage(EventId = 1, Level = LogLevel.Debug, Message = "Tree: {Path} (maxDepth={MaxDepth})")]
+    public static partial void Walking(ILogger logger, string path, int maxDepth);
+
+    [LoggerMessage(EventId = 2, Level = LogLevel.Trace, Message = "tree: skipping unreadable directory {Dir}")]
+    public static partial void SkippingUnreadableDirectory(ILogger logger, Exception ex, string dir);
+
+    [LoggerMessage(EventId = 3, Level = LogLevel.Trace, Message = "tree: gitignore pruning disabled: {Reason}")]
+    public static partial void GitignorePruningDisabled(ILogger logger, string reason);
+
+    [LoggerMessage(EventId = 4, Level = LogLevel.Trace, Message = "git ls-files wrote to stderr: {Line}")]
+    public static partial void GitLsFilesStderr(ILogger logger, string line);
 }

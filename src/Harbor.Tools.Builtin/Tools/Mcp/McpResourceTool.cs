@@ -111,7 +111,7 @@ public sealed class McpResourceTool : ITool
                 "and calls registry.Register(name, stdioCmd) for each MCP server.");
         }
 
-        _logger.LogDebug("MCP resource read: server={Server} uri={Uri}", server, uri);
+        McpResourceToolLog.ReadingResource(_logger, server, uri);
 
         using var paramsDoc = McpJsonRpc.BuildResourceReadParams(uri);
         var invoked = await registry.InvokeAsync(server, "resources/read", paramsDoc.RootElement, cancellationToken)
@@ -174,4 +174,14 @@ public sealed class McpResourceTool : ITool
             return Result.Failure<string>($"MCP server returned malformed resources/read payload: {ex.Message}");
         }
     }
+}
+
+/// <summary>
+///     SG1: BCL <c>[LoggerMessage]</c> delegates for <see cref="McpResourceTool" />.
+///     Templates, levels and operands are 1-to-1 with the former <c>LogX</c> calls.
+/// </summary>
+internal static partial class McpResourceToolLog
+{
+    [LoggerMessage(EventId = 1, Level = LogLevel.Debug, Message = "MCP resource read: server={Server} uri={Uri}")]
+    public static partial void ReadingResource(ILogger logger, string server, string uri);
 }

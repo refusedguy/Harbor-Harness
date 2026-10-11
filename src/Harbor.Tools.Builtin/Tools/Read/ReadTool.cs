@@ -94,7 +94,7 @@ public sealed class ReadTool : ITool
         int? offset = JsonArgs.GetInt(args, "offset");
         int? limit = JsonArgs.GetInt(args, "limit");
 
-        _logger.LogDebug("Reading: {Path} (offset={Offset}, limit={Limit})", path, offset, limit);
+        ReadToolLog.Reading(_logger, path, offset, limit);
 
         var resolvedPath = ToolPaths.Resolve(path);
         if (resolvedPath.IsFailure)
@@ -145,14 +145,14 @@ public sealed class ReadTool : ITool
         {
             if (IsBinaryFile(path, info.Length))
             {
-                _logger.LogWarning("Binary file detected: {Path}", path);
+                ReadToolLog.BinaryFileDetected(_logger, path);
                 return ToolResult.Error(
                     $"Refusing to read binary file: {path} ({mime}, {info.Length} bytes).");
             }
         }
         else if (info.Length > 0 && IsBinaryFile(path, info.Length))
         {
-            _logger.LogWarning("Binary file detected: {Path}", path);
+            ReadToolLog.BinaryFileDetected(_logger, path);
             return ToolResult.Error($"Refusing to read binary file: {path} ({info.Length} bytes).");
         }
 
@@ -250,7 +250,7 @@ public sealed class ReadTool : ITool
                 sb.Append($" (hit {MaxChars} char cap)");
         }
 
-        _logger.LogDebug("Read complete: {Lines} lines, Truncated={Truncated}", taken, truncatedByLines || truncatedByChars);
+        ReadToolLog.ReadComplete(_logger, taken, truncatedByLines || truncatedByChars);
 
         await OpenInLanguageServerAsync(path, cancellationToken).ConfigureAwait(false);
 
@@ -287,7 +287,7 @@ public sealed class ReadTool : ITool
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            _logger.LogDebug(ex, "LSP auto-open failed for {Path}", path);
+            ReadToolLog.LspAutoOpenFailed(_logger, ex, path);
         }
     }
 
@@ -356,4 +356,23 @@ public sealed class ReadTool : ITool
         => mime.StartsWith("image/", StringComparison.OrdinalIgnoreCase)
            && !mime.Equals("image/svg+xml", StringComparison.OrdinalIgnoreCase);
     // svg — text XML; often better as text. Toggle if you want vision for svg.
+}
+
+/// <summary>
+///     SG1: BCL <c>[LoggerMessage]</c> delegates for <see cref="ReadTool" />.
+///     Templates, levels and operands are 1-to-1 with the former <c>LogX</c> calls.
+/// </summary>
+internal static partial class ReadToolLog
+{
+    [LoggerMessage(EventId = 1, Level = LogLevel.Debug, Message = "Reading: {Path} (offset={Offset}, limit={Limit})")]
+    public static partial void Reading(ILogger logger, string path, int? offset, int? limit);
+
+    [LoggerMessage(EventId = 2, Level = LogLevel.Warning, Message = "Binary file detected: {Path}")]
+    public static partial void BinaryFileDetected(ILogger logger, string path);
+
+    [LoggerMessage(EventId = 3, Level = LogLevel.Debug, Message = "Read complete: {Lines} lines, Truncated={Truncated}")]
+    public static partial void ReadComplete(ILogger logger, int lines, bool truncated);
+
+    [LoggerMessage(EventId = 4, Level = LogLevel.Debug, Message = "LSP auto-open failed for {Path}")]
+    public static partial void LspAutoOpenFailed(ILogger logger, Exception ex, string path);
 }

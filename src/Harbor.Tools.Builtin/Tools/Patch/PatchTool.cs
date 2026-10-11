@@ -159,7 +159,7 @@ public sealed class PatchTool : ITool
             return ToolResult.Error(ToolErrors.Handler("patch", cancellationToken, failurePrefix: "Failed to write: ")(ex));
         }
 
-        _logger.LogInformation("Patched {Path} ({Hunks} hunks)", path, hunks.Count);
+        PatchToolLog.Patched(_logger, path, hunks.Count);
 
         string preview = BuildPreview(hunks, MaxDiffPreviewLines);
 
@@ -499,4 +499,14 @@ public sealed class PatchTool : ITool
         { /* best effort */
         }
     }
+}
+
+/// <summary>
+///     SG1: BCL <c>[LoggerMessage]</c> delegates for <see cref="PatchTool" />.
+///     Templates, levels and operands are 1-to-1 with the former <c>LogX</c> calls.
+/// </summary>
+internal static partial class PatchToolLog
+{
+    [LoggerMessage(EventId = 1, Level = LogLevel.Information, Message = "Patched {Path} ({Hunks} hunks)")]
+    public static partial void Patched(ILogger logger, string path, int hunks);
 }

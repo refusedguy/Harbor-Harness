@@ -185,8 +185,7 @@ public sealed class WebFetchTool : ITool
             ? Math.Clamp(chars, 1, HardMaxChars)
             : DefaultMaxChars;
 
-        _logger.LogDebug("WebFetch: {Url} (selector={Selector}, maxChars={MaxChars})",
-            url, selector ?? "(none)", maxChars);
+        WebFetchToolLog.Fetching(_logger, url, selector ?? "(none)", maxChars);
 
         var client = _clientFactory();
 
@@ -437,7 +436,7 @@ public sealed class WebFetchTool : ITool
 
         if (AllowedHosts.Contains("*") || AllowedHosts.Contains(host))
         {
-            _logger.LogDebug("WebFetch: host {Host} is explicitly allowed past the private-address check", host);
+            WebFetchToolLog.HostExplicitlyAllowed(_logger, host);
             return null;
         }
 
@@ -472,9 +471,7 @@ public sealed class WebFetchTool : ITool
                 continue;
             }
 
-            _logger.LogWarning(
-                "WebFetch blocked SSRF attempt: {Url} resolves to non-public address {Address}",
-                uri, address);
+            WebFetchToolLog.BlockedSsrfAttempt(_logger, uri, address);
             return $"Blocked URL '{uri}': host '{host}' resolves to non-public address {address}. " +
                    "Fetching loopback/private/link-local targets is disabled by default; " +
                    "add the host to WebFetchTool.AllowedHosts to allow it deliberately.";
@@ -652,4 +649,20 @@ public sealed class WebFetchTool : ITool
         }
         return html;
     }
+}
+
+/// <summary>
+///     SG1: BCL <c>[LoggerMessage]</c> delegates for <see cref="WebFetchTool" />.
+///     Templates, levels and operands are 1-to-1 with the former <c>LogX</c> calls.
+/// </summary>
+internal static partial class WebFetchToolLog
+{
+    [LoggerMessage(EventId = 1, Level = LogLevel.Debug, Message = "WebFetch: {Url} (selector={Selector}, maxChars={MaxChars})")]
+    public static partial void Fetching(ILogger logger, string url, string selector, int maxChars);
+
+    [LoggerMessage(EventId = 2, Level = LogLevel.Debug, Message = "WebFetch: host {Host} is explicitly allowed past the private-address check")]
+    public static partial void HostExplicitlyAllowed(ILogger logger, string host);
+
+    [LoggerMessage(EventId = 3, Level = LogLevel.Warning, Message = "WebFetch blocked SSRF attempt: {Url} resolves to non-public address {Address}")]
+    public static partial void BlockedSsrfAttempt(ILogger logger, Uri url, IPAddress address);
 }

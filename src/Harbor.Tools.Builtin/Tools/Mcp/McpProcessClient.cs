@@ -29,7 +29,7 @@ internal sealed class McpProcessClient : IAsyncDisposable
         }
         catch (Exception ex)
         {
-            _logger?.LogDebug(ex, "Process-tree setup failed for {Command}; falling back to direct kill", startInfo.FileName);
+            if (_logger is not null) McpProcessClientLog.ProcessTreeSetupFailed(_logger, ex, startInfo.FileName);
         }
 
         _stderrPump = PumpStderrAsync(_stderrCts.Token);
@@ -60,7 +60,7 @@ internal sealed class McpProcessClient : IAsyncDisposable
                 var line = await reader.ReadLineAsync(ct).ConfigureAwait(false);
                 if (line is null) break;
                 if (!string.IsNullOrWhiteSpace(line))
-                    _logger?.LogWarning("[mcp stderr] {Line}", line);
+                    if (_logger is not null) McpProcessClientLog.StderrLine(_logger, line);
             }
         }
         catch (OperationCanceledException)
@@ -69,7 +69,7 @@ internal sealed class McpProcessClient : IAsyncDisposable
         }
         catch (Exception ex)
         {
-            _logger?.LogDebug(ex, "stderr pump ended");
+            if (_logger is not null) McpProcessClientLog.StderrPumpEnded(_logger, ex);
         }
     }
 
@@ -118,4 +118,21 @@ internal sealed class McpProcessClient : IAsyncDisposable
     }
 
     private const int MillisecondsToWaitForExit = 5000;
+}
+
+/// <summary>
+///     SG1: BCL <c>[LoggerMessage]</c> delegates for <see cref="McpProcessClient" />.
+///     Templates, levels and operands are 1-to-1 with the former <c>LogX</c> calls
+///     (including the skip-when-null semantics of the optional logger).
+/// </summary>
+internal static partial class McpProcessClientLog
+{
+    [LoggerMessage(EventId = 1, Level = LogLevel.Debug, Message = "Process-tree setup failed for {Command}; falling back to direct kill")]
+    public static partial void ProcessTreeSetupFailed(ILogger logger, Exception ex, string? command);
+
+    [LoggerMessage(EventId = 2, Level = LogLevel.Warning, Message = "[mcp stderr] {Line}")]
+    public static partial void StderrLine(ILogger logger, string line);
+
+    [LoggerMessage(EventId = 3, Level = LogLevel.Debug, Message = "stderr pump ended")]
+    public static partial void StderrPumpEnded(ILogger logger, Exception ex);
 }

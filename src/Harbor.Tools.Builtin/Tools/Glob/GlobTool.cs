@@ -91,7 +91,7 @@ public sealed class GlobTool : ITool
         if (!Directory.Exists(basePath))
             return ToolResult.Error($"Directory not found: {basePath}");
 
-        _logger.LogDebug("Glob: {Pattern} from {Path}", options.Pattern, basePath);
+        GlobToolLog.Globbing(_logger, options.Pattern, basePath);
 
         List<string> matches;
         bool truncated;
@@ -110,7 +110,7 @@ public sealed class GlobTool : ITool
         if (relative.Count == 0)
             return ToolResult.Success($"No files matching pattern '{options.Pattern}' in {basePath}");
 
-        _logger.LogDebug("Glob complete: {Count} matches", relative.Count);
+        GlobToolLog.GlobComplete(_logger, relative.Count);
 
         return RenderResult(basePath, options, relative, truncated);
     }
@@ -266,4 +266,17 @@ public sealed class GlobTool : ITool
             list.Add(before + part + after);
         return list;
     }
+}
+
+/// <summary>
+///     SG1: BCL <c>[LoggerMessage]</c> delegates for <see cref="GlobTool" />.
+///     Templates, levels and operands are 1-to-1 with the former <c>LogX</c> calls.
+/// </summary>
+internal static partial class GlobToolLog
+{
+    [LoggerMessage(EventId = 1, Level = LogLevel.Debug, Message = "Glob: {Pattern} from {Path}")]
+    public static partial void Globbing(ILogger logger, string pattern, string path);
+
+    [LoggerMessage(EventId = 2, Level = LogLevel.Debug, Message = "Glob complete: {Count} matches")]
+    public static partial void GlobComplete(ILogger logger, int count);
 }

@@ -126,7 +126,7 @@ public sealed class GrepTool : ITool
         if (!string.IsNullOrWhiteSpace(include))
             includeRx = GlobToRegex(include!);
 
-        _logger.LogDebug("Grep: {Pattern} from {Path}", pattern, path);
+        GrepToolLog.Grepping(_logger, pattern, path);
 
         var results = new List<string>(Math.Min(maxResults, 128));
         bool truncated = false;
@@ -159,7 +159,7 @@ public sealed class GrepTool : ITool
         if (results.Count == 0)
             return ToolResult.Success($"No matches for pattern '{pattern}' in {path}");
 
-        _logger.LogDebug("Grep complete: {Count} matches, Truncated={Truncated}", results.Count, truncated);
+        GrepToolLog.GrepComplete(_logger, results.Count, truncated);
 
         return FormatResults(pattern, path, results, maxResults, truncated);
     }
@@ -426,4 +426,17 @@ public sealed class GrepTool : ITool
         return new Regex(pattern, RegexOptions.IgnoreCase | RegexOptions.CultureInvariant,
             TimeSpan.FromSeconds(1));
     }
+}
+
+/// <summary>
+///     SG1: BCL <c>[LoggerMessage]</c> delegates for <see cref="GrepTool" />.
+///     Templates, levels and operands are 1-to-1 with the former <c>LogX</c> calls.
+/// </summary>
+internal static partial class GrepToolLog
+{
+    [LoggerMessage(EventId = 1, Level = LogLevel.Debug, Message = "Grep: {Pattern} from {Path}")]
+    public static partial void Grepping(ILogger logger, string pattern, string path);
+
+    [LoggerMessage(EventId = 2, Level = LogLevel.Debug, Message = "Grep complete: {Count} matches, Truncated={Truncated}")]
+    public static partial void GrepComplete(ILogger logger, int count, bool truncated);
 }
