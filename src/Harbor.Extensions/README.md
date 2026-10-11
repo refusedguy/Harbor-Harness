@@ -8,7 +8,7 @@
 
 | File                      | Contents                                                                                                                                                                                                                                                                                                         |
 |---------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `ArrayPoolExtensions.cs`  | `ArrayPoolExtensions.RentScoped<T>(this ArrayPool<T>, int)` returning a disposable `RentedArray<T>` ref-struct (auto-returns on `Dispose`); `StringBuilderPool` static class with a `ConcurrentBag<StringBuilder>` backing and `MaxRetainCapacity = 16 KiB` LOH-avoidance; `PooledStringBuilder` readonly struct |
+| `ArrayPoolExtensions.cs`  | `ArrayPoolExtensions.RentScoped<T>(this ArrayPool<T>, int)` returning a disposable `RentedArray<T>` ref-struct (auto-returns on `Dispose`); `StringBuilderPool` static class with a **size-bucketed** `ConcurrentBag<StringBuilder>[]` backing (#1239 — one bag per `ceil(log2(capacity))`, 16 … 16 KiB, `MaxRetainedPerBucket` cap, `MaxRetainCapacity = 16 KiB` LOH-avoidance); `DictionaryPool<TKey, TValue>` + `PooledDictionary<TKey, TValue>` (same shape over entry bands 8 … 1024, comparers never pooled); the `PooledStringBuilder` readonly struct |
 | `CollectionExtensions.cs` | `ToFrozenSet<T>`, `ToFrozenDictionary<...>` (3 overloads), `AsReadOnlyCollection<T>`, `AsReadOnlyList<T>`, `AddRange<T>(List<T>, ReadOnlySpan<T>)` — Frozen-collection materializers and read-only-collection upcasters for hot-path public APIs                                                                 |
 | `MemoryPackExtensions.cs` | `ToMemoryPackBytes<T>(this T)` and `FromMemoryPackBytes<T>(this byte[])` — extension-method sugar over `MemoryPackSerializer.Serialize<T>` / `Deserialize<T>` for `IMemoryPackable<T>` types                                                                                                                     |
 
@@ -32,7 +32,11 @@ that no `.cs` file in this project had a `using` under any of its namespace
 prefixes, so the dependency was declared on the strength of a need the framework
 already met. The same reasoning removes it from `Harbor.Application`. The
 `StringBuilderPool` in `ArrayPoolExtensions.cs` is likewise this solution's own
-`ConcurrentBag` pool, not CommunityToolkit's namesake type.
+pool, not CommunityToolkit's namesake type — and it stays that way: #1239 rewrote it
+size-bucketed and added the `DictionaryPool` counterpart without reaching for
+`Microsoft.Extensions.ObjectPool`, because this project is one of the four
+`tools/check-abstractions-contract.py` guards and a dependency declared here is one
+every consumer inherits.
 
 **Zero Harbor project references** (F1 decoupling): no ref to `Harbor.Abstractions.Contracts`, no ref to the `Harbor.Abstractions` facade, no refs to `Harbor.Core` / `Harbor.Application` / `Harbor.Registries`, no refs to Infrastructure siblings (`Harbor.Providers.*`, `Harbor.Storage.*`, `Harbor.Tools.*`), no refs to Presentation (`Harbor.Tui.*`, `Harbor.Desktop.*`). This invariant is enforced by the test `Extensions_HasZeroHarborProjectReferences` in [`tests/Harbor.Architecture.Tests/AbstractionsSplitLayerRules.cs`](../../tests/Harbor.Architecture.Tests/AbstractionsSplitLayerRules.cs). Consumers that use these helpers reference `Harbor.Extensions` directly — it is **not** transitively re-exported by the facade.
 
@@ -57,11 +61,18 @@ rented.Span[0] = 42;
 // ... use rented.Array / rented.Span / rented.ReadOnlySpan ...
 // Dispose() returns the array to the pool automatically.
 
-// StringBuilder pool
+// StringBuilder pool (size-bucketed: a 256-char rent gets a 256-char builder,
+// never the 16 KiB one a neighbour left behind)
 using PooledStringBuilder sb = StringBuilderPool.Rent(capacity: 1024);
 sb.Builder.Append("hello ").Append("world");
 string result = sb.ToString();   // "hello world"
-// Dispose() returns the builder to the pool (unless it grew past 16 KiB).
+// Dispose() returns the builder to its band (unless it grew past 16 KiB).
+
+// Dictionary pool — the counterpart for per-call dictionaries
+using PooledDictionary<string, int> args = DictionaryPool<string, int>.Rent(8);
+args.Dictionary["limit"] = 10;
+// Dispose() returns it to its entry band (> 1024 entries, or a non-default
+// comparer, is dropped instead of retained).
 
 // Frozen materializers (build-once, read-many)
 FrozenSet<string> allowedTools = toolNames.ToFrozenSet(StringComparer.Ordinal);
@@ -75,9 +86,9 @@ Session restored = bytes.FromMemoryPackBytes<Session>();
 
 ## Design principles
 
-1. **Pooling over allocating.** `ArrayPool<T>.Shared` and `StringBuilderPool` cover the two hottest allocation patterns in the agent loop: per-turn LLM-streaming buffers (rented byte arrays) and per-turn system-prompt assembly (rented StringBuilders). Both auto-return on `Dispose`.
+1. **Pooling over allocating.** `ArrayPool<T>.Shared`, `StringBuilderPool` and `DictionaryPool<TKey, TValue>` cover the hottest allocation patterns in the agent loop: per-turn LLM-streaming buffers (rented byte arrays), per-turn system-prompt assembly (rented StringBuilders) and per-call argument maps (rented dictionaries). All three auto-return on `Dispose`.
 2. **Ref-struct disposable for rented arrays.** `RentedArray<T>` is a `readonly ref struct` — the compiler prevents it from being captured into closures or async state machines, eliminating the most common misuse of pooled buffers (accidental lifetime extension past `Dispose`).
-3. **LOH-avoidance for the StringBuilder pool.** `MaxRetainCapacity = 16 KiB` means builders that grew past the small-object-heap boundary are dropped instead of being returned to the pool — prevents the pool from becoming a long-term LOH leak.
+3. **LOH-avoidance and bounded retention for every pool.** `MaxRetainCapacity = 16 KiB` for builders and `MaxRetainEntries = 1024` for dictionaries mean anything that outgrew the small-object-heap boundary is dropped instead of returned — the pool never becomes a long-term LOH leak. Since #1239 both pools are **banded** (one `ConcurrentBag` per power-of-two size, ≤16 retained per band), so retention is bounded by the band count rather than by whatever callers happened to leave behind.
 4. **Frozen over Immutable*.** `FrozenSet<T>` / `FrozenDictionary<TKey, TValue>` are JIT-specialized for read-only lookups (the JIT generates a separate specialized lookup path per `TKey` for `string` / `int` / `ValueTuple` etc.). For build-once / read-many patterns (tool registry, provider registry, agent registry after `Freeze()`), Frozen wins over `ImmutableHashSet<T>` by 2-4× on lookup.
 5. **Extension-method sugar over direct API.** `ToMemoryPackBytes<T>(this T)` and `FromMemoryPackBytes<T>(this byte[])` exist purely so call sites read naturally (`session.ToMemoryPackBytes()` instead of `MemoryPackSerializer.Serialize(session)`). No behavior change.
 

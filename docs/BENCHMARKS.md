@@ -22,8 +22,9 @@
 > date and the job, or it carries an explicit `⏳ not yet measured` / `⚠️ retracted` marker. There is
 > no unattributed row — that is the litmus for #408.
 >
-> Suite: `tests/Harbor.Benchmarks` — 40 benchmark classes (after the #408 split and the #391
-> EventBus rewrite), `[MemoryDiagnoser]`, Release, 0 warnings.
+> Suite: `tests/Harbor.Benchmarks` — 43 benchmark classes (counted 2026-10-11; the number grew
+> with the #408 split, the #391 EventBus rewrite and the #1239 `DictionaryPoolBenchmark`),
+> `[MemoryDiagnoser]`, Release, 0 warnings.
 > Since #408 every class carries its own 7-field measurement contract (Operation / Payload /
 > StateReset / Drain / RetainedState / AwaitSemantics / AllocAttribution), enforced by
 > `BenchmarkContractTests` in `tests/Harbor.Architecture.Tests`. Read the class doc before quoting its number.
@@ -663,6 +664,78 @@ dotnet run -c Release --project tests/Harbor.Benchmarks -- --filter '*RunBudget*
 > quoted. The load-bearing claim is structural, not measured: with no caps the loop pays a
 > single null-branch per turn, and with caps the check is integer/decimal compares — never a
 > dictionary lookup per message. That justification is argued in the #404 PR description.
+
+### 5.8 Object pools — builder v2 + `DictionaryPoolBenchmark` (#1239) ⏳ not yet measured
+
+The hunt verdict on #1239 was **TAKE only via bench**: three renters
+(`SystemPromptBuilder:110`, `CompactionService:359/475`, `ProcessGitQuery:205`) share one global
+`ConcurrentBag<StringBuilder>`, so whichever caller left a 16 KiB builder in it decided the
+capacity of every later rent — the `PLAN.md` memory-efficiency bug. `src/Harbor.Extensions/PLAN.md`
+demanded proof the pool beats `new StringBuilder()` on a ~10 KiB prompt *before* shipping a
+bucketed rewrite, and demanded a `DictionaryPool` counterpart.
+
+What landed in #1239:
+
+- **`StringBuilderPool` v2** — the bag became an array of bags indexed by `ceil(log2(capacity))`
+  (16 … 16384 chars, 11 buckets, ≤16 builders per bucket). A rent is served from the smallest
+  bucket that satisfies it, a returned builder is filed under the capacity it actually grew to,
+  and anything past 16 KiB is still dropped on return.
+- **`DictionaryPool<TKey, TValue>`** — the P1 counterpart, same shape over entry bands
+  (8 … 1024 entries). Comparers are deliberately not pooled: an instance is only recycled into a
+  renter that wants `EqualityComparer<TKey>.Default`, and a return with any other comparer (or
+  more than 1024 entries) is dropped.
+- **Both are hand-written pools, not `DefaultObjectPoolProvider`.** The issue named the
+  Microsoft type as one option; `src/Harbor.Extensions` is one of the four projects
+  `tools/check-abstractions-contract.py` guards, and a `Microsoft.Extensions.ObjectPool`
+  `<PackageReference>` there is a dependency every consumer inherits. The hand-written pool is
+  AOT-safe, needs no package, and is the direction `PLAN.md` already specified.
+
+Rows (measurement contract in each class doc, per #408):
+
+| Benchmark | Class | What it answers |
+|---|---|---|
+| `Pooled 10KB prompt assembly` vs `new StringBuilder 10KB prompt assembly` | `StringBuilderPoolBenchmark` (#1239 rows) | does the pool beat `new` on the ~10 KiB system-prompt shape — the question `PLAN.md` asked |
+| `Pooled Rent/Append/Return 1KB` / `16KB` vs the raw baselines | `StringBuilderPoolBenchmark` | the existing rent/return cycle at both ends of the retain range |
+| `Pooled 8-entry dictionary` / `256-entry` vs `new Dictionary` | `DictionaryPoolBenchmark` (new in #1239) | does pooling pay for a cheap-to-construct dictionary, or only for rent/return |
+| `Pooled rent/return only (no entries)` | `DictionaryPoolBenchmark` | the pool's own cost, isolated — the floor the reuse rows have to clear |
+
+```bash
+dotnet run -c Release --project tests/Harbor.Benchmarks -- --filter '*Pool*' --buildTimeout 600
+```
+
+| Benchmark | Mean | Allocated |
+|---|---|---|
+| `Pooled 10KB prompt assembly` ⏳ not yet measured | — | — |
+| `new StringBuilder 10KB prompt assembly` ⏳ not yet measured | — | — |
+| `Pooled 8-entry dictionary` ⏳ not yet measured | — | — |
+| `new Dictionary 8 entries` ⏳ not yet measured | — | — |
+| `Pooled rent/return only` ⏳ not yet measured | — | — |
+
+> **Numbers pending — why there are none here, stated rather than implied.** The `benchmark`
+> workflow runs on pushes to `dev`/`master` only (not on PR branches), behind a cooldown, and its
+> curated `--filter` set does not match these classes; the `perf-gate` job in `ci.yml` is the TUI
+> renderer gate, not a BenchmarkDotNet run. Nothing in this change's path measured a wall-clock
+> number, and a figure typed here without a run is exactly the unattributed number the #408
+> contract exists to forbid. Fill the table from the first local full run or from a
+> `workflow_dispatch` of `benchmark`, and record machine + date next to it.
+
+**What is measured in the meantime is machine-independent.** The load-bearing claims of #1239 are
+structural, so they are pinned as invariants in `tests/Harbor.Abstractions.Tests` rather than as
+timings — and unlike a wall-clock assertion, they fail on any machine:
+
+| Invariant | Test |
+|---|---|
+| a rent of N chars is served by a builder of at least N chars | `StringBuilderPoolTests.Rent_ReturnsBuilderOfAtLeastRequestedCapacity` |
+| a 256-char rent never inherits the neighbour's 16 KiB builder (the bug this fixes) | `StringBuilderPoolTests.SmallRent_AfterLargeReturn_StaysInItsOwnBucket` |
+| rents from the same band recycle the same instance (pooling actually pools) | `StringBuilderPoolTests.RepeatedRents_FromSameBucket_ReuseTheSameBuilder`, `DictionaryPoolTests.RepeatedRents_FromSameBand_ReuseTheSameDictionary` |
+| a rent above the retain cap is unpooled and not recycled | `StringBuilderPoolTests.RequestAboveRetainCap_AllocatesUnpooledBuilder`, `DictionaryPoolTests.DictionaryThatOutgrewTheLargestBand_IsDropped` |
+| a custom comparer never leaks into a default-comparer rent | `DictionaryPoolTests.CustomComparer_IsNeverRecycledIntoADefaultRent` |
+| concurrent renters never share one instance | both classes' `ConcurrentRents_*` |
+
+> **Not yet done (deliberately, and outside this slice):** no product call site consumes
+> `DictionaryPool` yet. Wiring it into the per-call argument dictionaries is a separate change in
+> the hot-path area, and it should land with its own allocation tripwire rather than ride along
+> with the pool that makes it possible.
 
 ### Per-stage counters — what the instrumentation costs (#409, #46 slice 2)
 
