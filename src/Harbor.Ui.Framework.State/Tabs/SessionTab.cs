@@ -35,14 +35,33 @@ namespace Harbor.Ui.Framework.State;
 /// <param name="ShortStatus">One-or-two-word status (<c>idle</c>, <c>run</c>, <c>err</c>) for the tab glyph.</param>
 /// <param name="IsDirty">Unread / unfinished work in the session — drives the dirty dot.</param>
 /// <param name="IsPinned">Pinned tabs are exempt from the strip's close gestures. Flag only, no reordering.</param>
+/// <param name="HasError">
+///     The unread signal is a failure, not plain activity (#1173). Paints the
+///     marker in the error colour instead of amber (opencode's
+///     <c>"activity" | "error"</c> split). Implies unread on its own — see
+///     <see cref="Unread" />.
+/// </param>
 public sealed record SessionTab(
     SessionId SessionId,
     string Title = "session",
     string WorkingDirectory = "",
     string ShortStatus = "idle",
     bool IsDirty = false,
-    bool IsPinned = false)
+    bool IsPinned = false,
+    bool HasError = false)
 {
+    /// <summary>
+    ///     The unread signal this tab carries (#1173): an error flag wins over
+    ///     plain activity, and either one counts as unread. Derived, never
+    ///     stored — the two booleans stay the single source of truth so the
+    ///     positional constructor keeps its shape.
+    /// </summary>
+    public TabUnread Unread => HasError ? TabUnread.Error
+        : IsDirty ? TabUnread.Activity
+        : TabUnread.None;
+
+    /// <summary>Whether the tab carries any unread signal (<see cref="Unread" /> is not none).</summary>
+    public bool HasUnread => Unread != TabUnread.None;
     /// <summary>
     ///     Ids of the panels this tab owns while it is open. Not a positional
     ///     parameter on purpose: a plain init property keeps the primary

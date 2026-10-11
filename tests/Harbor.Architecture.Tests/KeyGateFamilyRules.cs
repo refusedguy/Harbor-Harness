@@ -99,7 +99,7 @@
 //   #824's guard enumerates three sites by hand and therefore cannot see any
 //   of these.
 //
-//   ChatKeyMap.cs:172 is a site the issue does not list at all: an unmatched
+//   ChatKeyMap.cs:234 is a site the issue does not list at all: an unmatched
 //   printable rune becomes ChatAction.Char, which is the tree deciding "this
 //   is text" in a sixth vocabulary position.
 //
@@ -277,7 +277,7 @@ public class KeyGateFamilyRules
         new("ReplInputLoop(slash)", KeyGateFamily.Buffer, "apps/Harbor.App.Cli/Repl/ReplInputLoop.cs"),
 
         // The host key map, found by the coverage grep and NOT on the issue's
-        // list: ChatKeyMap.cs:172 turns an unmatched printable rune into
+        // list: ChatKeyMap.cs:234 turns an unmatched printable rune into
         // ChatAction.Char, i.e. it is the place the tree decides "this is
         // text". It is a buffer site by the same test as the composer.
         new("ChatKeyMap", KeyGateFamily.Buffer, "src/Harbor.Ui.Framework.State/State/ChatKeyMap.cs"),
@@ -292,6 +292,11 @@ public class KeyGateFamilyRules
         new("ToolCardTracker(expand)", KeyGateFamily.Command, "src/Harbor.Tui.CellForge/Chat/Streaming/ToolCardTracker.cs"),
         new("ToolCardTracker(image)", KeyGateFamily.Command, "src/Harbor.Tui.CellForge/Chat/Streaming/ToolCardTracker.cs"),
         new("LeaderKeyRouter", KeyGateFamily.Command, "src/Harbor.Tui.CellForge/Chat/Widgets/LeaderKeyRouter.cs"),
+
+        // ChatAppReducer.ActivateSlotFromKey (#1173): the Ctrl+digit
+        // quick-slot path judges the pressed rune (1-9 focus the Nth tab).
+        // No buffer anywhere on this path — the rune navigates — so Command.
+        new("ChatAppReducer(slot digit)", KeyGateFamily.Command, "src/Harbor.Ui.Framework.State/State/ChatAppReducer.cs"),
 
         // ReplInputLoop's two palette chords (#857 added ctrl+j beside the
         // existing ctrl+p). Neither holds a text buffer and both require an

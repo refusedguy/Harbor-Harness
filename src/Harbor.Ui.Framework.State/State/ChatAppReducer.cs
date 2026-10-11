@@ -91,6 +91,12 @@ public static class ChatAppReducer
         ChatAppMsg.ReorderTab ro => ReduceResult.NoOp(ReorderTab(state, ro.SessionId, ro.ToIndex)),
         ChatAppMsg.CycleNextTab => CycleNextTab(state),
         ChatAppMsg.CyclePreviousTab => CyclePreviousTab(state),
+        ChatAppMsg.ReopenTab => ReopenTab(state),
+        ChatAppMsg.CycleNextUnreadTab => CycleUnreadTab(state, forward: true),
+        ChatAppMsg.CyclePreviousUnreadTab => CycleUnreadTab(state, forward: false),
+        ChatAppMsg.ActivateTabSlot s => ActivateTabSlot(state, s.Slot),
+        ChatAppMsg.MarkTabUnread m => ReduceResult.NoOp(MarkTabUnread(state, m.SessionId, m.IsError)),
+        ChatAppMsg.MarkTabRead m => ReduceResult.NoOp(MarkTabRead(state, m.SessionId)),
         ChatAppMsg.HydrateTabStrip ht => HydrateTabStrip(state, ht),
         ChatAppMsg.OpenMarkup om => ReduceResult.NoOp(state with
         {
@@ -826,6 +832,14 @@ public static class ChatAppReducer
                 return CloseFocusedTab(state);
             case ChatAction.OpenTab:
                 return RequestOpenTab(state);
+            case ChatAction.ReopenTab:
+                return ReopenTab(state);
+            case ChatAction.NextUnreadTab:
+                return CycleUnreadTab(state, forward: true);
+            case ChatAction.PreviousUnreadTab:
+                return CycleUnreadTab(state, forward: false);
+            case ChatAction.ActivateTabSlot:
+                return ActivateSlotFromKey(state, k.Pressed);
             case ChatAction.MoveTabLeft:
                 return MoveFocusedTab(state, -1);
             case ChatAction.MoveTabRight:
@@ -899,7 +913,15 @@ public static class ChatAppReducer
         {
             Chat = state.Chat with
             {
-                TabStrip = strip with { Tabs = strip.Tabs.Add(tab), ActiveTabId = tab.SessionId }
+                // Selecting a session drops its reopen entry (opencode's
+                // reopenSessionTab-by-id rule): it is open again, so the
+                // stack must not offer to restore it a second time.
+                TabStrip = strip with
+                {
+                    Tabs = strip.Tabs.Add(tab),
+                    ActiveTabId = tab.SessionId,
+                    ClosedStack = PruneClosed(strip.ClosedStack, tab.SessionId)
+                }
             }
         };
         return new ReduceResult(next, new TuiEffect.ActivateSession(tab.SessionId));
@@ -907,20 +929,36 @@ public static class ChatAppReducer
 
     /// <summary>
     ///     Focus an already-open tab and ask the host to switch to its session.
-    ///     Order is untouched (activating never reorders). Unknown session or
-    ///     already-active tab → same state instance and no effect, so the store
-    ///     does not bump the revision on a no-op.
+    ///     Order is untouched (activating never reorders). Focusing also
+    ///     acknowledges the tab: viewing is reading, so its unread signal is
+    ///     cleared (#1173, opencode's view watermark). Unknown session or an
+    ///     already-active clean tab → same state instance and no effect, so the
+    ///     store does not bump the revision on a no-op.
     /// </summary>
     public static ReduceResult ActivateTab(UiState state, SessionId sessionId)
     {
         var strip = state.Chat.TabStrip;
-        if (strip.IndexOf(sessionId) < 0)
-            return ReduceResult.NoOp(state);
-        if (SameSession(strip.ActiveTabId, sessionId))
+        int index = strip.IndexOf(sessionId);
+        if (index < 0)
             return ReduceResult.NoOp(state);
 
-        var next = state with { Chat = state.Chat with { TabStrip = strip with { ActiveTabId = sessionId } } };
-        return new ReduceResult(next, new TuiEffect.ActivateSession(sessionId));
+        var tab = strip.Tabs[index];
+        bool refocus = !SameSession(strip.ActiveTabId, sessionId);
+        bool acknowledge = tab.HasUnread;
+        if (!refocus && !acknowledge)
+            return ReduceResult.NoOp(state);
+
+        var tabs = acknowledge
+            ? strip.Tabs.SetItem(index, tab with { IsDirty = false, HasError = false })
+            : strip.Tabs;
+        var next = state with
+        {
+            Chat = state.Chat with { TabStrip = strip with { Tabs = tabs, ActiveTabId = sessionId } }
+        };
+        // An acknowledge-only transition switches nothing — the host is
+        // already showing this session — so no activate effect fires.
+        TuiEffect effect = refocus ? new TuiEffect.ActivateSession(sessionId) : new TuiEffect.None();
+        return new ReduceResult(next, effect);
     }
 
     /// <summary>
@@ -945,7 +983,15 @@ public static class ChatAppReducer
 
         var next = released with
         {
-            Chat = released.Chat with { TabStrip = strip with { Tabs = remaining, ActiveTabId = activeId } }
+            Chat = released.Chat with
+            {
+                TabStrip = strip with
+                {
+                    Tabs = remaining,
+                    ActiveTabId = activeId,
+                    ClosedStack = PushClosed(strip.ClosedStack, tabs[index], index)
+                }
+            }
         };
         // The neighbour (if any) is the session the host must now open.
         TuiEffect effect = activeId is { } target && closedActive
@@ -997,15 +1043,22 @@ public static class ChatAppReducer
         }
 
         var released = state;
+        var closedStack = strip.ClosedStack;
         for (int i = 0; i < tabs.Length; i++)
         {
             if (i != keepIndex && !tabs[i].IsPinned)
+            {
                 released = ReleaseOwnedPanels(released, tabs[i], remaining);
+                closedStack = PushClosed(closedStack, tabs[i], i);
+            }
         }
 
         var next = released with
         {
-            Chat = released.Chat with { TabStrip = strip with { Tabs = remaining, ActiveTabId = keep } }
+            Chat = released.Chat with
+            {
+                TabStrip = strip with { Tabs = remaining, ActiveTabId = keep, ClosedStack = closedStack }
+            }
         };
         TuiEffect effect = SameSession(strip.ActiveTabId, keep)
             ? new TuiEffect.None()
@@ -1056,15 +1109,22 @@ public static class ChatAppReducer
 
         var remaining = survivors.ToImmutable();
         var released = state;
+        var closedStack = strip.ClosedStack;
         for (int i = index + 1; i < tabs.Length; i++)
         {
             if (!tabs[i].IsPinned)
+            {
                 released = ReleaseOwnedPanels(released, tabs[i], remaining);
+                closedStack = PushClosed(closedStack, tabs[i], i);
+            }
         }
 
         var next = released with
         {
-            Chat = released.Chat with { TabStrip = strip with { Tabs = remaining, ActiveTabId = from } }
+            Chat = released.Chat with
+            {
+                TabStrip = strip with { Tabs = remaining, ActiveTabId = from, ClosedStack = closedStack }
+            }
         };
         TuiEffect effect = SameSession(strip.ActiveTabId, from)
             ? new TuiEffect.None()
@@ -1121,6 +1181,193 @@ public static class ChatAppReducer
 
     /// <summary>Focus the previous tab in tab order (wraps around; no-op with fewer than two tabs).</summary>
     public static ReduceResult CyclePreviousTab(UiState state) => CycleTab(state, forward: false);
+
+    // ── reopen stack + unread model (#1173, opencode steal — pure) ──────────
+
+    /// <summary>
+    ///     Push a closed tab onto the reopen stack: same-session entries are
+    ///     replaced (a session is either open or on the stack, never both
+    ///     twice) and the tail past <see cref="TabStripState.ReopenLimit" />
+    ///     falls off oldest-first. Cold path — clarity over cleverness.
+    /// </summary>
+    public static ImmutableArray<ClosedTab> PushClosed(
+        ImmutableArray<ClosedTab> stack, SessionTab tab, int index)
+    {
+        var builder = ImmutableArray.CreateBuilder<ClosedTab>(stack.Length + 1);
+        foreach (var entry in stack)
+        {
+            if (!SameSession(entry.SessionId, tab.SessionId))
+                builder.Add(entry);
+        }
+
+        builder.Add(new ClosedTab(tab, index));
+        int drop = builder.Count - TabStripState.ReopenLimit;
+        for (int i = 0; i < drop; i++)
+            builder.RemoveAt(0);
+        return builder.ToImmutable();
+    }
+
+    /// <summary>
+    ///     Drop a session's reopen entry, if any (at most one — see
+    ///     <see cref="PushClosed" />). Returns the input array untouched when
+    ///     the session has no entry.
+    /// </summary>
+    public static ImmutableArray<ClosedTab> PruneClosed(ImmutableArray<ClosedTab> stack, SessionId sessionId)
+    {
+        for (int i = 0; i < stack.Length; i++)
+        {
+            if (SameSession(stack[i].SessionId, sessionId))
+                return stack.RemoveAt(i);
+        }
+
+        return stack;
+    }
+
+    /// <summary>
+    ///     Restore the most recently closed tab at its original position
+    ///     (#1173 — <c>Ctrl+Shift+T</c>, opencode's
+    ///     <c>reopenSessionTab</c>). Entries whose session is already open are
+    ///     consumed and skipped, so repeated reopens walk the stack instead of
+    ///     stalling on a stale head. The insert index is clamped: a tab closed
+    ///     from a longer strip restores at the end. Nothing restorable → the
+    ///     stack is pruned (or already empty) and the state is a no-op.
+    /// </summary>
+    /// <remarks>
+    ///     The restored tab becomes the focused one, so its unread signal is
+    ///     cleared on the way in — focusing is acknowledging (see
+    ///     <see cref="ActivateTab" />), and a stale marker on the tab now on
+    ///     screen would be a lie.
+    /// </remarks>
+    public static ReduceResult ReopenTab(UiState state)
+    {
+        var strip = state.Chat.TabStrip;
+        var remaining = strip.ClosedStack;
+        if (remaining.IsEmpty)
+            return ReduceResult.NoOp(state);
+
+        while (!remaining.IsEmpty)
+        {
+            var entry = remaining[remaining.Length - 1];
+            remaining = remaining.RemoveAt(remaining.Length - 1);
+            if (strip.Contains(entry.SessionId))
+                continue;
+
+            int at = Math.Clamp(entry.Index, 0, strip.Tabs.Length);
+            var tabs = strip.Tabs.Insert(at, entry.Tab with { IsDirty = false, HasError = false });
+            var next = state with
+            {
+                Chat = state.Chat with
+                {
+                    TabStrip = strip with
+                    {
+                        Tabs = tabs,
+                        ActiveTabId = entry.SessionId,
+                        ClosedStack = remaining
+                    }
+                }
+            };
+            return new ReduceResult(next, new TuiEffect.ActivateSession(entry.SessionId));
+        }
+
+        // Every entry was stale (all sessions already open): the pruned stack
+        // is still a real change, so it commits instead of being rediscovered
+        // on the next reopen.
+        return ReduceResult.NoOp(state with
+        {
+            Chat = state.Chat with { TabStrip = strip with { ClosedStack = remaining } }
+        });
+    }
+
+    /// <summary>
+    ///     Focus the next (or previous) tab with an unread signal (#1173).
+    ///     No other unread tab → same state instance, no effect.
+    /// </summary>
+    public static ReduceResult CycleUnreadTab(UiState state, bool forward)
+    {
+        var strip = state.Chat.TabStrip;
+        var target = strip.NextUnread(strip.ActiveTabId, forward);
+        return target is null ? ReduceResult.NoOp(state) : ActivateTab(state, target);
+    }
+
+    /// <summary>
+    ///     Focus the Nth tab in tab order (#1173 — <c>Ctrl+1</c>..<c>Ctrl+9</c>).
+    ///     Slots are one-based; anything outside the open strip is a no-op.
+    /// </summary>
+    public static ReduceResult ActivateTabSlot(UiState state, int slot)
+    {
+        var tabs = state.Chat.TabStrip.Tabs;
+        int index = slot - 1;
+        return index < 0 || index >= tabs.Length
+            ? ReduceResult.NoOp(state)
+            : ActivateTab(state, tabs[index].SessionId);
+    }
+
+    /// <summary>
+    ///     <see cref="ChatAction.ActivateTabSlot" /> — the <c>Ctrl+digit</c>
+    ///     key path. The slot rides the pressed key's character (like
+    ///     <see cref="ChatAction.TogglePanelSlot" />); a non-digit character
+    ///     is a no-op, which cannot happen through the keymap guard but keeps
+    ///     a hand-built <c>KeyInput</c> honest.
+    /// </summary>
+    public static ReduceResult ActivateSlotFromKey(UiState state, UiKey key)
+    {
+        if (key.Character is not { } c || c < '1' || c > '9')
+            return ReduceResult.NoOp(state);
+        return ActivateTabSlot(state, c - '0');
+    }
+
+    /// <summary>
+    ///     Mark a background tab unread (#1173). Unknown session, an already
+    ///     sufficient mark (an error subsumes activity), or the active tab
+    ///     (viewing is reading) → the input state back, untouched.
+    /// </summary>
+    public static UiState MarkTabUnread(UiState state, SessionId sessionId, bool isError)
+    {
+        var strip = state.Chat.TabStrip;
+        int index = strip.IndexOf(sessionId);
+        if (index < 0 || SameSession(strip.ActiveTabId, sessionId))
+            return state;
+
+        var tab = strip.Tabs[index];
+        bool error = tab.HasError || isError;
+        if (tab.IsDirty && tab.HasError == error)
+            return state;
+
+        return state with
+        {
+            Chat = state.Chat with
+            {
+                TabStrip = strip with
+                {
+                    Tabs = strip.Tabs.SetItem(index, tab with { IsDirty = true, HasError = error })
+                }
+            }
+        };
+    }
+
+    /// <summary>Clear a tab's unread signal without focusing it (#1173).</summary>
+    public static UiState MarkTabRead(UiState state, SessionId sessionId)
+    {
+        var strip = state.Chat.TabStrip;
+        int index = strip.IndexOf(sessionId);
+        if (index < 0)
+            return state;
+
+        var tab = strip.Tabs[index];
+        if (!tab.HasUnread)
+            return state;
+
+        return state with
+        {
+            Chat = state.Chat with
+            {
+                TabStrip = strip with
+                {
+                    Tabs = strip.Tabs.SetItem(index, tab with { IsDirty = false, HasError = false })
+                }
+            }
+        };
+    }
 
     // ── tab strip from the keyboard (#389) ──────────────────────────────────
     // ChatAction → tab-transition aliases. They exist so the keymap stays the
