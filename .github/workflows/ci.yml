@@ -108,6 +108,13 @@ jobs:
               # a different payload. Editing the tool has the same problem.
               - 'tools/aot-publish-gate.py'
               - '.github/aot-warning-baseline.txt'
+              # NUKE build code, the installer and the native-packaging
+              # scripts. Same #618 argument: without these lines an edit to
+              # the build tool would set dotnet=false, skip the build job
+              # that compiles it (via ./build.sh), and land unvalidated.
+              - 'build/**'
+              - 'dist/**'
+              - 'packaging/**'
             ui:
               - 'src/Harbor.Tui*/**'
               - 'src/Harbor.Ui.Framework*/**'
@@ -180,11 +187,25 @@ jobs:
       # second-guesses it. Test projects also set GenerateDocumentationFile=false
       # there, so the doc gate covers src/ + apps/ + tools/, which is the
       # shipped surface.
-      - name: Build solution (Release, zero warnings, docs, deterministic)
-        run: dotnet build Harbor.slnx -c Release -p:ContinuousIntegrationBuild=true
+      # Issue #1144 slice B.3 (CI+local parity): this step runs the same
+      # NUKE Compile target developers run locally — same solution, same
+      # configuration, same ContinuousIntegrationBuild property
+      # (CompileTarget carries it). The bootstrap also compiles
+      # build/_build.csproj, so NUKE build-code edits validate here too.
+      - name: Build solution via NUKE (Release, zero warnings, docs, deterministic)
+        run: bash build/build.sh Compile --configuration Release
 
       - name: Smoke — CLI binary runs
         run: dotnet exec apps/Harbor.App.Cli/bin/Release/net10.0/Harbor.App.Cli.dll --version
+
+      # Slice B.1/B.2 proof without new jobs: shell syntax of the installer
+      # + .deb builder, and the NUKE target catalog still 1:1 with
+      # reflection (TargetCatalog.Verify fails the list run on drift).
+      - name: Validate installer scripts + build catalog
+        run: |
+          bash -n dist/install.sh
+          bash -n packaging/deb/build-deb.sh
+          bash build/build.sh list --format json > /dev/null
 
       # NuGet pack + validation (issue #429). Steps, not a new job: no new
       # matrix axis, same Release outputs built above. Pack warnings fail
