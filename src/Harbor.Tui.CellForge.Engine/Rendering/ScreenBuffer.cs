@@ -325,6 +325,20 @@ public sealed class ScreenBuffer
         return true;
     }
 
+    /// <summary>
+    /// Raw directive mirror for the diff scan (R1 steal): writes without
+    /// dirty-marking — the scan owns hash discipline through CloseRow
+    /// adopt/invalidate, and per-cell invalidation there would cost a flag
+    /// write per mirrored cell. NOT for widget use (use
+    /// <see cref="SetDiffOption"/>).
+    /// </summary>
+    internal void MirrorDiffOption(int x, int y, CellDiffOption option, ushort forcedWidth)
+    {
+        int index = (y * Cols) + x;
+        _diffOptions[index] = option;
+        _forcedWidths[index] = forcedWidth;
+    }
+
     // ── Row hashes (§2.3) ──────────────────────────────────────────────────
 
     /// <summary>Returns the cached hash, computing it on first use since last dirt.</summary>
