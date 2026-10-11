@@ -792,7 +792,7 @@ public sealed class JsonlSessionStore : ISessionStore
         }
         catch (JsonException ex)
         {
-            logger.LogWarning("Skipping malformed checkpoint line in session {SessionId}: {Error}", sessionId, ex.Message);
+            logger.LogWarning(ex, "Skipping malformed checkpoint line in session {SessionId}.", sessionId);
             return;
         }
 
