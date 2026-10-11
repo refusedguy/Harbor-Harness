@@ -9,7 +9,20 @@ namespace Harbor.Tools.Builtin;
 ///     Reads text (optionally a line window) or reports image metadata.
 ///     Streams lines for offset/limit — never loads whole multi‑MB files just to slice.
 /// </summary>
-public sealed class ReadTool : ITool
+[ToolInfo(
+    "read",
+    "Read",
+    "Read a file. Text: returns numbered lines (use offset/limit for large files). Images: returns path/mime/size (vision payload depends on host wiring).",
+    Glyph = "▸",
+    PromptSnippet = "read: Read file contents (text or image)",
+    PromptGuidelines = new[]
+    {
+        "Use `read` before editing",
+        "For large files always pass offset + limit",
+        "offset is 1-indexed line number",
+        "Binary non-image files are rejected"
+    })]
+public sealed partial class ReadTool : ITool
 {
 
     private const int MaxChars = 100_000;
@@ -36,29 +49,8 @@ public sealed class ReadTool : ITool
         _lsp = lsp;
     }
 
-    public ToolName Name => ToolName.Create("read");
-
     /// <inheritdoc />
     public ToolSafetyProfile SafetyProfile => ToolSafetyProfile.Path();
-
-    public string DisplayName => "Read";
-
-    /// <summary>Glyph beside the tool name in every UI surface (#680).</summary>
-    public string Glyph => "▸";
-
-    public string Description =>
-        "Read a file. Text: returns numbered lines (use offset/limit for large files). " +
-        "Images: returns path/mime/size (vision payload depends on host wiring).";
-    public ExecutionMode ExecutionMode => ExecutionMode.Parallel;
-    public string? PromptSnippet => "read: Read file contents (text or image)";
-
-    public IReadOnlyList<string> PromptGuidelines { get; } =
-    [
-        "Use `read` before editing",
-        "For large files always pass offset + limit",
-        "offset is 1-indexed line number",
-        "Binary non-image files are rejected"
-    ];
 
     public JsonDocument ParameterSchema { get; } = JsonDocument.Parse("""
                                                                       {

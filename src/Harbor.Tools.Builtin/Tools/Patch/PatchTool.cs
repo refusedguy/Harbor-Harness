@@ -1,4 +1,5 @@
 using System.Text;
+using AutoCtor;
 using Harbor.Abstractions.Extensions;
 using Microsoft.Extensions.Logging;
 using Result = CSharpFunctionalExtensions.Result;
@@ -9,7 +10,22 @@ namespace Harbor.Tools.Builtin;
 ///     applying; writes to a temp file and renames atomically. Returns a compact preview of
 ///     what changed.
 /// </summary>
-public sealed class PatchTool : ITool
+[ToolInfo(
+    "patch",
+    "Patch",
+    "Apply a unified-diff patch to a file. Context lines must match exactly. Atomic: writes a temp file then renames. Returns a compact preview of changes.",
+    Glyph = "⌥",
+    ExecutionMode = ExecutionMode.Sequential,
+    PromptSnippet = "patch: Apply a unified-diff patch to a file",
+    PromptGuidelines = new[]
+    {
+        "Use `patch` for multi-line or multi-hunk edits produced by `git diff` or similar",
+        "For single-token changes prefer `edit` (faster, simpler)",
+        "Patch must include 3 lines of context around each change (unified diff convention)",
+        "Hunks with mismatched context are rejected — the file is left untouched"
+    })]
+[AutoConstruct]
+public sealed partial class PatchTool : ITool
 {
     private const int MaxFileChars = 5_000_000;
     private const int MaxPatchLines = 5000;
@@ -17,46 +33,9 @@ public sealed class PatchTool : ITool
 
     private readonly ILogger<PatchTool> _logger;
 
-    /// <summary>
-    ///     Construct a <see cref="PatchTool" />.
-    /// </summary>
-    /// <param name="logger">Logger for diagnostics.</param>
-    public PatchTool(ILogger<PatchTool> logger) { _logger = logger; }
-
-    /// <inheritdoc />
-    public ToolName Name => ToolName.Create("patch");
-
     /// <inheritdoc />
     public ToolSafetyProfile SafetyProfile => ToolSafetyProfile.Path();
 
-    /// <inheritdoc />
-    public string DisplayName => "Patch";
-
-    /// <summary>Glyph beside the tool name in every UI surface (#680).</summary>
-    public string Glyph => "⌥";
-
-
-    /// <inheritdoc />
-    public string Description =>
-        "Apply a unified-diff patch to a file. Context lines must match exactly. " +
-        "Atomic: writes a temp file then renames. Returns a compact preview of changes.";
-
-    /// <inheritdoc />
-    public ExecutionMode ExecutionMode => ExecutionMode.Sequential;
-
-    /// <inheritdoc />
-    public string? PromptSnippet => "patch: Apply a unified-diff patch to a file";
-
-    /// <inheritdoc />
-    public IReadOnlyList<string> PromptGuidelines { get; } =
-    [
-        "Use `patch` for multi-line or multi-hunk edits produced by `git diff` or similar",
-        "For single-token changes prefer `edit` (faster, simpler)",
-        "Patch must include 3 lines of context around each change (unified diff convention)",
-        "Hunks with mismatched context are rejected — the file is left untouched"
-    ];
-
-    /// <inheritdoc />
     public JsonDocument ParameterSchema { get; } = JsonDocument.Parse("""
                                                                       {
                                                                         "type": "object",
