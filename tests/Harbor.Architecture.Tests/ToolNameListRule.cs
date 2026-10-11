@@ -125,6 +125,7 @@ public sealed class ToolNameListRule
     ///         six carrying a table the finder recognises, across nine recognised
     ///         tables in six files and zero offenders; #860 removed the two that
     ///         carried none. The count is a measurement, not a target.
+    ///         (#1170 adds a seventh: per-tool permission presentation.)
     ///     </para>
     /// </remarks>
     private static readonly Dictionary<string, string> PolicyExemptions = new(StringComparer.Ordinal)
@@ -151,6 +152,11 @@ public sealed class ToolNameListRule
         ["src/Harbor.Ui.Framework.State/Diff/DiffPreview.cs"] =
             "The diff preview must decide which tool calls render a diff. A tool does "
             + "not declare that it is diff-shaped; the renderer owns that.",
+
+        ["src/Harbor.Tui.CellForge/Chat/Panels/PermissionPresentation.cs"] =
+            "Per-tool permission presentation (opencode steal #1170): which gate "
+            + "renders a diff, a command, a pattern or file:line:col. A tool does "
+            + "not declare how its permission prompt is drawn; the renderer owns that.",
     };
 
     /// <summary>

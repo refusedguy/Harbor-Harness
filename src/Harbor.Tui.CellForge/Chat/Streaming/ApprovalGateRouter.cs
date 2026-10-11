@@ -53,11 +53,127 @@ public sealed class ApprovalGateRouter(ChatTimelinePanel panel, StatusViewModel 
     private const int MaxRejectReasons = 32;
 
     /// <summary>
+    /// Always-pattern allowlist ([steal/opencode] #1170, epic #1155):
+    /// patterns persisted from <see cref="ApprovalChoice.AlwaysAllow"/>
+    /// decisions (<c>"tool:*"</c> per tool). Shown at the always-stage
+    /// (<c>permissionAlwaysLines</c> in opencode's permission.ts) — never a
+    /// blind allow: the user picks a scoped pattern, not "everything".
+    /// Bounded; oldest entries are evicted past the cap.
+    /// </summary>
+    public IReadOnlyList<string> AlwaysPatterns => _alwaysPatterns;
+
+    private readonly List<string> _alwaysPatterns = new();
+
+    private const int MaxAlwaysPatterns = 32;
+
+    /// <summary>
+    /// Per-gate 3-stage machines (<c>permission → always → reject</c>), keyed
+    /// by gate id. Created lazily on first stage query; gates created before
+    /// this field existed resolve to a fresh machine at
+    /// <see cref="PermissionStage.Permission"/> (never null, never throws).
+    /// </summary>
+    private readonly Dictionary<string, PermissionMachine> _machines = new(StringComparer.Ordinal);
+
+    /// <summary>
     /// Reject reason recorded for <paramref name="gateId"/> (empty when the
     /// gate was not denied through the modal path or carried no reason).
     /// </summary>
     public string GetRejectReason(string? gateId) =>
         gateId is not null && _rejectReasons.TryGetValue(gateId, out string? reason) ? reason : string.Empty;
+
+    /// <summary>
+    /// Reject-with-message as agent feedback ([steal/opencode] #1170 (b)):
+    /// the Deny reason the user typed is returned verbatim so the host can
+    /// send it back to the agent as a feedback message (opencode routes the
+    /// reject text into the next turn's context). Empty when the gate was
+    /// not denied with a message.
+    /// </summary>
+    public string GetRejectFeedback(string? gateId) => GetRejectReason(gateId);
+
+    /// <summary>
+    /// Streaming-input guard ([steal/opencode] #1170 (d)): permission info
+    /// must be built from final tool args only — a partial delta mid-stream
+    /// (half a command, half a path) would present a lie and, worse, an
+    /// always-pattern scoped to a truncation. Streaming calls contribute an
+    /// empty detail; the gate still queues so ordering is preserved.
+    /// </summary>
+    public static string SanitizeGateDetail(string? detail, bool isStreaming) =>
+        isStreaming ? string.Empty : (detail ?? string.Empty).Trim();
+
+    /// <summary>Current 3-stage position of <paramref name="gateId"/> (fresh gates sit at <see cref="PermissionStage.Permission"/>).</summary>
+    public PermissionStage GateStage(string gateId) => MachineFor(gateId).Stage;
+
+    /// <summary>
+    /// Moves <paramref name="gateId"/> from permission to the always-stage
+    /// (pattern list). Returns false when the gate already left permission
+    /// (cancel first to come back).
+    /// </summary>
+    public bool RequestAlwaysStage(string gateId) => MachineFor(gateId).RequestAlways();
+
+    /// <summary>
+    /// Moves <paramref name="gateId"/> to the reject-stage (message field).
+    /// Returns false when already there.
+    /// </summary>
+    public bool RequestRejectStage(string gateId) => MachineFor(gateId).RequestReject();
+
+    /// <summary>Abandons the always-/reject-stage and returns to permission (opencode's cancel).</summary>
+    public void CancelStage(string gateId) => MachineFor(gateId).Cancel();
+
+    /// <summary>
+    /// Always-stage pattern list for <paramref name="toolName"/>
+    /// (<c>permissionAlwaysLines</c>): persisted patterns first, then the
+    /// candidate for this gate (<c>"tool:*"</c>) when not already stored.
+    /// The UI renders exactly this — an explicit scoped list, never a blind
+    /// "always allow everything".
+    /// </summary>
+    public IReadOnlyList<string> PermissionAlwaysLines(string? toolName)
+    {
+        string candidate = AlwaysPatternFor(toolName);
+        if (_alwaysPatterns.Contains(candidate))
+        {
+            return _alwaysPatterns.ToArray();
+        }
+
+        var lines = new List<string>(_alwaysPatterns.Count + 1);
+        lines.AddRange(_alwaysPatterns);
+        lines.Add(candidate);
+        return lines;
+    }
+
+    private PermissionMachine MachineFor(string gateId)
+    {
+        if (string.IsNullOrEmpty(gateId))
+        {
+            return new PermissionMachine();
+        }
+
+        if (!_machines.TryGetValue(gateId, out var machine))
+        {
+            machine = new PermissionMachine();
+            _machines[gateId] = machine;
+        }
+
+        return machine;
+    }
+
+    private static string AlwaysPatternFor(string? toolName) =>
+        (string.IsNullOrWhiteSpace(toolName) ? "?" : toolName.Trim()) + ":*";
+
+    private void RecordAlwaysPattern(string? toolName)
+    {
+        string pattern = AlwaysPatternFor(toolName);
+        if (_alwaysPatterns.Contains(pattern))
+        {
+            return;
+        }
+
+        if (_alwaysPatterns.Count >= MaxAlwaysPatterns)
+        {
+            _alwaysPatterns.RemoveAt(0);
+        }
+
+        _alwaysPatterns.Add(pattern);
+    }
 
     /// <summary>
     /// Thread-safe approval request for the agent-loop side of the seam:
@@ -67,9 +183,9 @@ public sealed class ApprovalGateRouter(ChatTimelinePanel panel, StatusViewModel 
     /// The PR4 identity rides on the gate view itself (created here off the
     /// render thread, read after the queue handoff — no shared map needed).
     /// </summary>
-    public ApprovalGateView RequestApprovalGate(string toolName, string detail, string? invocationId = null, int generation = 1)
+    public ApprovalGateView RequestApprovalGate(string toolName, string detail, string? invocationId = null, int generation = 1, bool isStreaming = false)
     {
-        var gate = new ApprovalGateView(toolName, detail, invocationId, generation);
+        var gate = new ApprovalGateView(toolName, SanitizeGateDetail(detail, isStreaming), invocationId, generation);
         _gateQueue.Enqueue(gate);
         status.SignalMascot(MascotReaction.ApprovalWiggle);
         return gate;
@@ -80,9 +196,9 @@ public sealed class ApprovalGateRouter(ChatTimelinePanel panel, StatusViewModel 
     /// the pending queue. Every queued gate stays interactable in arrival
     /// order — the front one is answered first; deciding it exposes the next.
     /// </summary>
-    public ApprovalGateView BeginApprovalGate(string toolName, string detail, string? invocationId = null, int generation = 1)
+    public ApprovalGateView BeginApprovalGate(string toolName, string detail, string? invocationId = null, int generation = 1, bool isStreaming = false)
     {
-        var gate = new ApprovalGateView(toolName, detail, invocationId, generation);
+        var gate = new ApprovalGateView(toolName, SanitizeGateDetail(detail, isStreaming), invocationId, generation);
         panel.Timeline.Append(gate);
         EnqueuePendingGate(gate);
         panel.Timeline.MarkLastDirty();
@@ -292,6 +408,16 @@ public sealed class ApprovalGateRouter(ChatTimelinePanel panel, StatusViewModel 
     /// </summary>
     private void StampDecision(ApprovalGateView gate)
     {
+        if (gate.Decision == ApprovalChoice.AlwaysAllow)
+        {
+            RecordAlwaysPattern(gate.ToolName);
+            MachineFor(gate.Id).ConfirmAlways(AlwaysPatternFor(gate.ToolName));
+        }
+        else if (gate.Decision == ApprovalChoice.Deny)
+        {
+            MachineFor(gate.Id).ConfirmReject(GetRejectReason(gate.Id));
+        }
+
         var coordinator = Coordinator;
         if (coordinator is null)
         {
@@ -322,5 +448,87 @@ public sealed class ApprovalGateRouter(ChatTimelinePanel panel, StatusViewModel 
         {
             _ = _pendingGates.Dequeue();
         }
+    }
+}
+
+/// <summary>
+/// Position in the opencode-style 3-stage permission flow
+/// ([steal/opencode] #1170, epic #1155): the user answers the permission
+/// prompt (<see cref="Permission"/>), optionally steps into the
+/// always-stage to pick a scoped pattern (<see cref="Always"/>) or into
+/// the reject-stage to type feedback for the agent (<see cref="Reject"/>),
+/// then confirms or cancels back to permission.
+/// </summary>
+public enum PermissionStage : byte
+{
+    /// <summary>Initial prompt: approve once / always / deny.</summary>
+    Permission = 0,
+
+    /// <summary>Pattern list (<c>permissionAlwaysLines</c>) — confirm persists a scoped always-rule.</summary>
+    Always,
+
+    /// <summary>Message field — confirm denies and sends the text back to the agent as feedback.</summary>
+    Reject,
+}
+
+/// <summary>
+/// Pure per-gate 3-stage machine behind <see cref="ApprovalGateRouter"/>
+/// (opencode <c>mini/permission.shared.ts</c>): once/always/reject intent
+/// becomes confirm/cancel. No UI, no threads, no coordinator — the router
+/// owns persistence (always-patterns) and stamping; this type only tracks
+/// the stage plus the confirmed payload. Terminal confirms keep their
+/// stage (the gate is decided); <see cref="Cancel"/> returns to
+/// <see cref="PermissionStage.Permission"/>.
+/// </summary>
+public sealed class PermissionMachine
+{
+    /// <summary>Current stage (starts at <see cref="PermissionStage.Permission"/>).</summary>
+    public PermissionStage Stage { get; private set; } = PermissionStage.Permission;
+
+    /// <summary>Pattern confirmed at the always-stage (empty until <see cref="ConfirmAlways"/>).</summary>
+    public string ConfirmedPattern { get; private set; } = string.Empty;
+
+    /// <summary>Message confirmed at the reject-stage (empty until <see cref="ConfirmReject"/>).</summary>
+    public string ConfirmedRejectMessage { get; private set; } = string.Empty;
+
+    /// <summary>Enters the always-stage; false when already past permission (cancel first).</summary>
+    public bool RequestAlways()
+    {
+        if (Stage != PermissionStage.Permission)
+        {
+            return false;
+        }
+
+        Stage = PermissionStage.Always;
+        return true;
+    }
+
+    /// <summary>Enters the reject-stage; false when already there.</summary>
+    public bool RequestReject()
+    {
+        if (Stage == PermissionStage.Reject)
+        {
+            return false;
+        }
+
+        Stage = PermissionStage.Reject;
+        return true;
+    }
+
+    /// <summary>Abandons the always-/reject-stage, back to permission (payloads are kept for audit).</summary>
+    public void Cancel() => Stage = PermissionStage.Permission;
+
+    /// <summary>Confirms the always-stage with a scoped <paramref name="pattern"/> (blank coerces to <c>"?:*"</c>).</summary>
+    public void ConfirmAlways(string? pattern)
+    {
+        ConfirmedPattern = string.IsNullOrWhiteSpace(pattern) ? "?:*" : pattern.Trim();
+        Stage = PermissionStage.Always;
+    }
+
+    /// <summary>Confirms the reject-stage with <paramref name="message"/> feedback for the agent.</summary>
+    public void ConfirmReject(string? message)
+    {
+        ConfirmedRejectMessage = (message ?? string.Empty).Trim();
+        Stage = PermissionStage.Reject;
     }
 }
