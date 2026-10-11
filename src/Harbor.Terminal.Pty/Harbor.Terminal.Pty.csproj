@@ -4,6 +4,10 @@
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+    <!-- #1243 (SG2): [LibraryImport] source generator emits unsafe code for
+         string marshalling — the flag covers generated code only; no `unsafe`
+         keyword in hand-written sources (MA0046 still holds). -->
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <IsPackable>true</IsPackable>
     <PackageId>Harbor.Terminal.Pty</PackageId>
     <Description>Harbor pseudo-terminal (PTY) host — posix_openpt/posix_spawn based out-of-process terminal sessions for the desktop floating panes. Unix (Linux + macOS); Windows ConPTY is a documented follow-up.</Description>
