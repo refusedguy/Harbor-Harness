@@ -349,4 +349,38 @@ public class SystemPromptBuilderTests
         await Assert.That(prompt).Contains("Harbor");
         await Assert.That(prompt).Contains("tools");
     }
+
+    /// <summary>
+    ///     #1240: the render is deterministic in the input order — a pre-sorted
+    ///     (frozen) list and a shuffled one holding the same set render
+    ///     byte-identical prompts. The warm path skips the sort; the fallback
+    ///     sorts one copy, so only the allocation differs, never the text.
+    /// </summary>
+    [Test]
+    public async Task BuildAsync_UnsortedInput_RendersSamePromptAsSorted()
+    {
+        var builder = new SystemPromptBuilder();
+        var sortedTools = new[]
+        {
+            Tool("aaa", "Tool aaa"),
+            Tool("mmm", "Tool mmm"),
+            Tool("zzz", "Tool zzz")
+        };
+        var shuffledTools = new[] { sortedTools[2], sortedTools[0], sortedTools[1] };
+        var sortedSkills = new[]
+        {
+            new SkillDescriptor("aaa-skill", "Aaa skill", "/skills/aaa.md"),
+            new SkillDescriptor("mmm-skill", "Mmm skill", "/skills/mmm.md"),
+            new SkillDescriptor("zzz-skill", "Zzz skill", "/skills/zzz.md")
+        };
+        var shuffledSkills = new[] { sortedSkills[1], sortedSkills[2], sortedSkills[0] };
+
+        var sortedCtx = Context(Agent(), sortedTools) with { Skills = sortedSkills };
+        var shuffledCtx = Context(Agent(), shuffledTools) with { Skills = shuffledSkills };
+
+        string sorted = await builder.BuildAsync(sortedCtx);
+        string shuffled = await builder.BuildAsync(shuffledCtx);
+
+        await Assert.That(shuffled).IsEqualTo(sorted);
+    }
 }
