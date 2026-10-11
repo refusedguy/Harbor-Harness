@@ -335,8 +335,10 @@ public ref struct FrameDiffEnumerator
             IsForcedWidth = false;
             _front.At(_x, _y) = target;
             _front.MirrorDiffOption(_x, _y, option, _next.GetForcedWidth(_x, _y));
-            if (width == Cell.Wide)
+            if (width == Cell.Wide && _x + 1 < _cols)
             {
+                // The bound is real: direct At-writes can orphan a wide lead
+                // at the row edge (SetRune/Fill refuse it, At does not).
                 _front.At(_x + 1, _y) = Cell.WideTail;
                 _front.MirrorDiffOption(_x + 1, _y, _next.GetDiffOption(_x + 1, _y), _next.GetForcedWidth(_x + 1, _y));
             }
