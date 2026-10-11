@@ -63,6 +63,94 @@ public sealed class ComposerController
     /// <summary>Readline-style submitted-prompt history owned by the composer.</summary>
     public PromptHistory History { get; } = new();
 
+    // ── Queued prompts (opencode steal O7, #1176) ─────────────────────────
+    // Submit-while-busy never interrupts the running turn: the payload waits
+    // here (oldest-first) until the pipeline drains it when idle. The queue
+    // is composer-owned so undo/cancel can hand the text straight back to
+    // the buffer (opencode's queued_prompt.undo + cancel→projectedPromptInput)
+    // and the dock-counter reads its depth from one place.
+
+    /// <summary>Waiting prompts, oldest-first.</summary>
+    private readonly List<string> _queued = [];
+
+    /// <summary>Number of prompts waiting for the agent to idle (dock-counter source).</summary>
+    public int QueuedCount => _queued.Count;
+
+    /// <summary>Oldest-first snapshot of the waiting prompts (queue-dialog source).</summary>
+    public IReadOnlyList<string> QueuedPrompts => _queued.ToArray();
+
+    /// <summary>Dock-counter line for the prompt rail; null when the queue is empty.</summary>
+    public string? QueuedCounterText() =>
+        _queued.Count > 0 ? $"⏳ {_queued.Count} queued" : null;
+
+    /// <summary>Queues a busy-time submit: trims, drops empties, keeps every
+    /// deliberate submit (no dupe-collapse — each stroke is intentional).</summary>
+    public void EnqueueQueued(string text)
+    {
+        var trimmed = text.Trim();
+        if (trimmed.Length == 0)
+        {
+            return;
+        }
+
+        _queued.Add(trimmed);
+    }
+
+    /// <summary>FIFO take for the idle drain; false when the queue is empty.</summary>
+    public bool TryDequeueQueued(out string text)
+    {
+        if (_queued.Count == 0)
+        {
+            text = string.Empty;
+            return false;
+        }
+
+        text = _queued[0];
+        _queued.RemoveAt(0);
+        return true;
+    }
+
+    /// <summary>Undo: drops the NEWEST queued prompt and hands its text back
+    /// (caller restores it via <see cref="RestoreToComposer"/>).</summary>
+    public bool TryUndoQueued(out string text)
+    {
+        if (_queued.Count == 0)
+        {
+            text = string.Empty;
+            return false;
+        }
+
+        int last = _queued.Count - 1;
+        text = _queued[last];
+        _queued.RemoveAt(last);
+        return true;
+    }
+
+    /// <summary>Drops every waiting prompt (session switch: the queue never survives it).</summary>
+    public void ClearQueued() => _queued.Clear();
+
+    /// <summary>Abort path: drops the queue but hands the newest payload back
+    /// instead of losing it (opencode's cancel→composer); false when empty.</summary>
+    public bool ClearQueuedReturningLast(out string? last)
+    {
+        if (_queued.Count == 0)
+        {
+            last = null;
+            return false;
+        }
+
+        last = _queued[^1];
+        _queued.Clear();
+        return true;
+    }
+
+    /// <summary>Returns an undo/cancel payload to the composer (caret lands at
+    /// the end of the restored text, per the <see cref="PromptBuffer"/> contract).</summary>
+    public void RestoreToComposer(string text)
+    {
+        _ = Buffer.InsertText(text);
+    }
+
     /// <summary>Key-family dispatch table (#197): a new key family adds a handler, never an edit here.</summary>
     private readonly IKeyHandler[] _handlers;
 
