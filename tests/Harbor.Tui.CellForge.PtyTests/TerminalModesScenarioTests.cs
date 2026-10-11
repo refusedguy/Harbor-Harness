@@ -24,11 +24,14 @@ public sealed class TerminalModesScenarioTests : CellForgePtyScenarioBase
             "\x1b[?1049h\x1b[?25l\x1b[?2004h\x1b[?1000h\x1b[?1002h\x1b[?1006h", TimeSpan.FromSeconds(10)).ConfigureAwait(false);
         await Assert.That(entered).IsTrue();
 
-        // Ensure composer is idle and prompt ready before /exit
+        // Ensure composer is idle and prompt ready before /exit: first the
+        // boot marker (an empty pre-paint grid is trivially "stable", so
+        // quiescence alone cannot open the wait), then settle (quiescence —
+        // strictly more deterministic than the fixed 400ms this replaced, #1183).
         _ = await WaitForScreenAsync(
             l => l.Any(x => x.Contains("model: mock/test-model", StringComparison.Ordinal)),
             TimeSpan.FromSeconds(5)).ConfigureAwait(false);
-        await Task.Delay(400).ConfigureAwait(false);
+        _ = await WaitForQuiescenceAsync().ConfigureAwait(false);
 
         // 2. Graceful exit restores every mode in the fixed leave order — use Ctrl+C gesture (more reliable than /exit palette)
         SendCtrlC();
@@ -70,7 +73,9 @@ public sealed class TerminalModesScenarioTests : CellForgePtyScenarioBase
         Session.SendKey("\x1b[O");
         Session.SendKey("\x1b[6n");
         Session.SendKey("\x1b[c");
-        await Task.Delay(500).ConfigureAwait(false);
+        // The app must not stall on unanswered queries: wait for the grid to
+        // settle (quiescence, #1183) rather than a fixed 500ms.
+        _ = await WaitForQuiescenceAsync().ConfigureAwait(false);
 
         // Nothing executed, session responsive.
         await Assert.That(Server.RequestCount).IsEqualTo(0);
