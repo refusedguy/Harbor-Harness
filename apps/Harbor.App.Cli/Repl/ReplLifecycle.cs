@@ -1,6 +1,7 @@
 using System.Text;
 using Harbor.Abstractions.Events;
 using Harbor.Abstractions.Models.Identifiers;
+using Harbor.Application.Configuration;
 using Harbor.DesignSystem;
 using Harbor.Hosting.Themes;
 using Harbor.Tui.CellForge.Capabilities;
