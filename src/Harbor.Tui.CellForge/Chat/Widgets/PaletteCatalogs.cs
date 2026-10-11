@@ -1,6 +1,6 @@
 using Harbor.Tui.CellForge.Rendering;
 using Harbor.Ui.Framework.Commands;
-using Harbor.Ui.Framework.Navigation;
+using Harbor.Ui.Framework.Overlays;
 using Harbor.Ui.Framework.Rendering;
 
 namespace Harbor.Tui.CellForge.Widgets;
@@ -84,20 +84,21 @@ public static class PaletteIconMap
 /// <c>/plugins</c>, <c>/skills</c>, <c>/tree</c>, <c>/fork</c> and <c>/renderer</c>, which it can.
 /// </para>
 /// <para>
-/// The builtin half keeps its literal copy of <c>BuiltInCommands.Templates()</c>: those are
-/// palette <i>actions</i> (overlay ids, not slash text), so they are a different vocabulary and
-/// are not part of the slash registry. No project reference to <c>Harbor.Desktop.Shared</c>
-/// is taken on purpose — the architecture matrix forbids a
-/// <c>Harbor.Tui.CellForge → Harbor.Desktop.Shared</c> edge. Existing palette behavior
-/// (fuzzy via <see cref="FuzzyMatcher" />, groups, navigation,
+/// The builtin half is projected from <c>SystemCommandProvider.Defaults</c>
+/// (#1186 T4: system commands are just another provider) — palette
+/// <i>actions</i> (overlay ids, not slash text), so they are a different
+/// vocabulary and are not part of the slash registry. No project reference to
+/// <c>Harbor.Desktop.Shared</c> is taken on purpose — the architecture matrix
+/// forbids a <c>Harbor.Tui.CellForge → Harbor.Desktop.Shared</c> edge
+/// (the provider lives in <c>Harbor.Ui.Framework.Services</c>, which CellForge
+/// already references). Existing palette behavior (fuzzy via
+/// <see cref="FuzzyMatcher" />, groups, navigation,
 /// <see cref="CommandPaletteView.OnCommit" />) is untouched — only item sources change.
 /// </para>
 /// </summary>
 public static class CommandPaletteCatalog
 {
     private sealed record SlashDef(string Name, string Description, IReadOnlyList<string> Aliases);
-
-    private sealed record BuiltinDef(string Title, string Subtitle, string IconKey, string Id);
 
     /// <summary>Slash half, projected from the single registry (#462).</summary>
     private static readonly SlashDef[] SlashDefs = BuildSlashDefs();
@@ -106,19 +107,8 @@ public static class CommandPaletteCatalog
 
     private static readonly Dictionary<string, CommandItem> SlashByName = BuildSlashLookup();
 
-    private static readonly BuiltinDef[] BuiltinDefs =
-    [
-        new("Open Session", "Open an existing chat session", "FolderIcon", OverlayIds.SessionsFlyout),
-        new("New Session", "Start a fresh chat session", "PlusIcon", "new-session"),
-        new("Branch Session", "Branch the current session at the selected message", "BranchIcon", "branch-session"),
-        new("Toggle Theme", "Switch between dark and light", "ThemeIcon", "toggle-theme"),
-        new("Open Code Editor", "Open the built-in code editor", "CodeIcon", "open-code-editor"),
-        new("Open Diff View", "Open the diff viewer", "DiffIcon", OverlayIds.Diff),
-        new("Open Token Usage", "Show per-session token usage and cost", "ChartIcon", OverlayIds.TokenUsage),
-        new("Open Settings", "Configure providers, theme, fonts", "SettingsIcon", OverlayIds.Settings),
-        new("Open Provider Browser", "Browse and configure LLM providers", "ProviderIcon", OverlayIds.ProviderBrowser),
-        new("Quit", "Exit Harbor", "QuitIcon", "quit"),
-    ];
+    /// <summary>Builtin half, projected from <see cref="SystemCommandProvider.Defaults" /> (#1186 T4).</summary>
+    private static IReadOnlyList<SystemCommandDef> BuiltinDefs => SystemCommandProvider.Defaults;
 
     private static SlashDef[] BuildSlashDefs()
     {
@@ -145,7 +135,7 @@ public static class CommandPaletteCatalog
     /// <param name="useNerdFont">When true, titles use Nerd Font glyphs; otherwise ASCII fallbacks.</param>
     public static IReadOnlyList<CommandItem> GetBuiltinCatalog(bool useNerdFont = false)
     {
-        var list = new List<CommandItem>(BuiltinDefs.Length);
+        var list = new List<CommandItem>(BuiltinDefs.Count);
         foreach (var def in BuiltinDefs)
         {
             list.Add(MakeBuiltinItem(def, useNerdFont));
@@ -193,7 +183,7 @@ public static class CommandPaletteCatalog
         }
 
         string trimmed = query.Trim();
-        for (int i = 0; i < BuiltinDefs.Length; i++)
+        for (int i = 0; i < BuiltinDefs.Count; i++)
         {
             var def = BuiltinDefs[i];
             if (def.Id.Equals(trimmed, StringComparison.OrdinalIgnoreCase)
@@ -248,11 +238,11 @@ public static class CommandPaletteCatalog
         return lookup;
     }
 
-    private static CommandItem MakeBuiltinItem(BuiltinDef def, bool useNerdFont)
+    private static CommandItem MakeBuiltinItem(SystemCommandDef def, bool useNerdFont)
     {
         string glyph = PaletteIconMap.Resolve(def.IconKey, useNerdFont);
         string title = glyph.Length == 0 ? def.Title : $"{glyph} {def.Title}";
-        return new CommandItem(def.Id, title, def.Subtitle, string.Empty, "Commands");
+        return new CommandItem(def.Id, title, def.Subtitle, string.Empty, def.Group);
     }
 }
 
