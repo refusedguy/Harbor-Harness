@@ -8,7 +8,7 @@ namespace Harbor.Terminal.Abstractions.Tests;
 ///     T2 reactive conventions (#1184): dirty flags, watch_*, validate_*,
 ///     compute_* on <see cref="ReactiveViewModel" />.
 /// </summary>
-public class ReactiveViewModelTests
+public partial class ReactiveViewModelTests
 {
     public sealed partial class StubVm : ReactiveViewModel
     {
