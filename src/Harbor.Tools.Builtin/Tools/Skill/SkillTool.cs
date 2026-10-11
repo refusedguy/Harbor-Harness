@@ -155,7 +155,7 @@ public sealed class SkillTool : ITool
 
         if (body is null)
         {
-            _logger.LogDebug("Skill not found: name={Name} scope={Scope}", name, scope);
+            SkillToolLog.SkillNotFound(_logger, name, scope);
             return ToolResult.Error(
                 $"Skill '{name}' not found (scope='{scope}'). " +
                 "Available skills are listed in the system prompt's <available_skills> block.",
@@ -166,7 +166,7 @@ public sealed class SkillTool : ITool
         string content = truncated
             ? body[..MaxContentChars] + $"\n\n…(truncated to {MaxContentChars} chars; read the skill file directly for the rest: {foundPath})"
             : body;
-        _logger.LogDebug("Skill loaded: name={Name} scope={Scope} chars={Chars}", name, foundScope, body.Length);
+        SkillToolLog.SkillLoaded(_logger, name, foundScope, body.Length);
         return ToolResult.Success(content, new { name, scope = foundScope, chars = body.Length, truncated });
     }
 
@@ -259,4 +259,17 @@ public sealed class SkillTool : ITool
             return false;
         }
     }
+}
+
+/// <summary>
+///     SG1: BCL <c>[LoggerMessage]</c> delegates for <see cref="SkillTool" />.
+///     Templates, levels and operands are 1-to-1 with the former <c>LogX</c> calls.
+/// </summary>
+internal static partial class SkillToolLog
+{
+    [LoggerMessage(EventId = 1, Level = LogLevel.Debug, Message = "Skill not found: name={Name} scope={Scope}")]
+    public static partial void SkillNotFound(ILogger logger, string name, string scope);
+
+    [LoggerMessage(EventId = 2, Level = LogLevel.Debug, Message = "Skill loaded: name={Name} scope={Scope} chars={Chars}")]
+    public static partial void SkillLoaded(ILogger logger, string name, string? scope, int chars);
 }

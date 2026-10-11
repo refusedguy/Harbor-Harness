@@ -134,8 +134,7 @@ public sealed class SessionSteerTool : ITool
         {
             if (string.Equals(supervisors[i], id, StringComparison.Ordinal))
             {
-                _logger.LogWarning("session_steer refused: {Caller} tried to steer its own supervisor {Target}",
-                    context.SessionId, id);
+                SessionSteerToolLog.RefusedSupervisorSteer(_logger, context.SessionId, id);
                 return ToolResult.Error(
                     $"Cannot steer session '{id}': it is your supervisor (it steered you) — supervision depth is 1.");
             }
@@ -144,7 +143,7 @@ public sealed class SessionSteerTool : ITool
         Result<Session> target = await _sessions.GetAsync(id, cancellationToken).ConfigureAwait(false);
         if (target.IsFailure)
         {
-            _logger.LogWarning("session_steer: unknown session {SessionId} (caller {Caller})", id, context.SessionId);
+            SessionSteerToolLog.UnknownSession(_logger, id, context.SessionId);
             return ToolResult.Error($"Session '{id}' was not found.");
         }
 
@@ -160,12 +159,11 @@ public sealed class SessionSteerTool : ITool
         Result appended = await _sessions.AppendMessageAsync(peer.Id, steer, cancellationToken).ConfigureAwait(false);
         if (appended.IsFailure)
         {
-            _logger.LogWarning("session_steer: append to {SessionId} failed: {Error}", peer.Id, appended.Error);
+            SessionSteerToolLog.AppendFailed(_logger, peer.Id, appended.Error);
             return ToolResult.Error($"Failed to steer session '{id}': {appended.Error}");
         }
 
-        _logger.LogInformation("session_steer: {Operation} from {Caller} to {Target}",
-            operation, context.SessionId, peer.Id);
+        SessionSteerToolLog.Steered(_logger, operation, context.SessionId, peer.Id);
 
         string pickup = peer.Status == SessionStatus.Working
             ? "It is working now: the directive is queued in its history and applies at its next run — the live run is not interrupted."
@@ -177,4 +175,23 @@ public sealed class SessionSteerTool : ITool
         return ToolResult.Success(
             $"[{operation} delivered to session '{peer.Id}' ({peer.Title})] {pickup}{restartNote}");
     }
+}
+
+/// <summary>
+///     SG1: BCL <c>[LoggerMessage]</c> delegates for <see cref="SessionSteerTool" />.
+///     Templates, levels and operands are 1-to-1 with the former <c>LogX</c> calls.
+/// </summary>
+internal static partial class SessionSteerToolLog
+{
+    [LoggerMessage(EventId = 1, Level = LogLevel.Warning, Message = "session_steer refused: {Caller} tried to steer its own supervisor {Target}")]
+    public static partial void RefusedSupervisorSteer(ILogger logger, string caller, string target);
+
+    [LoggerMessage(EventId = 2, Level = LogLevel.Warning, Message = "session_steer: unknown session {SessionId} (caller {Caller})")]
+    public static partial void UnknownSession(ILogger logger, string sessionId, string caller);
+
+    [LoggerMessage(EventId = 3, Level = LogLevel.Warning, Message = "session_steer: append to {SessionId} failed: {Error}")]
+    public static partial void AppendFailed(ILogger logger, string sessionId, string error);
+
+    [LoggerMessage(EventId = 4, Level = LogLevel.Information, Message = "session_steer: {Operation} from {Caller} to {Target}")]
+    public static partial void Steered(ILogger logger, string operation, string caller, string target);
 }

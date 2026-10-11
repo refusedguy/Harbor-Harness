@@ -130,8 +130,7 @@ public sealed class TaskTool : ITool
 
         if (!_subAgents.CanSpawn)
         {
-            _logger.LogWarning("Nested 'task' invocation refused: agent={Agent} caller={Caller}",
-                agentName, context.Agent);
+            TaskToolLog.NestedInvocationRefused(_logger, agentName, context.Agent);
             return ToolResult.Error(
                 "Sub-agents cannot invoke 'task'. Finish your part of the work with your own tools; " +
                 "the parent agent will aggregate results.");
@@ -185,9 +184,7 @@ public sealed class TaskTool : ITool
 
     private ToolResult SuccessResult(SubAgentRunResult run)
     {
-        _logger.LogInformation(
-            "Sub-agent completed: agent={Agent} session={SessionId} messages={Messages} outputChars={Length}",
-            run.AgentName, run.SessionId, run.NewMessages, run.FinalOutput.Length);
+        TaskToolLog.SubAgentCompleted(_logger, run.AgentName, run.SessionId, run.NewMessages, run.FinalOutput.Length);
         // [UX6] #266: the child cost delta rides the envelope header so the
         // parent model sees what the delegation burned. Zero-cost runs keep
         // the legacy shape byte-identical.
@@ -206,10 +203,24 @@ public sealed class TaskTool : ITool
     {
         // G4: honest failure when the host did not wire a runner — never fabricate a run
         // that did not happen.
-        _logger.LogWarning(
-            "No sub-agent runner wired: agent={Agent} promptLength={Length}",
-            agentName, prompt.Length);
+        TaskToolLog.NoRunnerWired(_logger, agentName, prompt.Length);
         return ToolResult.Error(
             $"Sub-agent execution is unavailable in this configuration (no runner wired). Do the work yourself with the available tools instead.");
     }
+}
+
+/// <summary>
+///     SG1: BCL <c>[LoggerMessage]</c> delegates for <see cref="TaskTool" />.
+///     Templates, levels and operands are 1-to-1 with the former <c>LogX</c> calls.
+/// </summary>
+internal static partial class TaskToolLog
+{
+    [LoggerMessage(EventId = 1, Level = LogLevel.Warning, Message = "Nested 'task' invocation refused: agent={Agent} caller={Caller}")]
+    public static partial void NestedInvocationRefused(ILogger logger, string agent, string caller);
+
+    [LoggerMessage(EventId = 2, Level = LogLevel.Information, Message = "Sub-agent completed: agent={Agent} session={SessionId} messages={Messages} outputChars={Length}")]
+    public static partial void SubAgentCompleted(ILogger logger, string agent, string sessionId, int messages, int length);
+
+    [LoggerMessage(EventId = 3, Level = LogLevel.Warning, Message = "No sub-agent runner wired: agent={Agent} promptLength={Length}")]
+    public static partial void NoRunnerWired(ILogger logger, string agent, int length);
 }
