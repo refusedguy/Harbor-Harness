@@ -18,6 +18,9 @@ namespace Harbor.App.Cli.Repl;
 ///     plus claude-style queued prompts, the 30 s long-turn notify timer, the
 ///     retry-countdown mirror, and the token/cost footer feed. Owns all of that
 ///     state; the frame loop only calls the small public surface below.
+///     The waiting prompts themselves live in the composer (O7 #1176), so
+///     undo/cancel can hand the text back to the buffer; this pipeline only
+///     routes enqueue/drain/clear and mirrors the depth into the bridge dock-counter.
 ///     Abort/switch queue clearing (decided: queue never survives either) goes
 ///     through <see cref="ClearQueue"/>.
 /// </summary>
@@ -33,7 +36,6 @@ internal sealed class PromptPipeline(
     /// kept in sync for the countdown's «n/3» display only.</summary>
     private const int MaxStreamRetries = 3;
 
-    private readonly Queue<string> _pendingPrompts = new();
     private volatile bool _promptInFlight;
 
     private int _retryAttempt;
@@ -64,11 +66,30 @@ internal sealed class PromptPipeline(
     /// <summary>Drop queued prompts — abort and session switch both clear.</summary>
     public void ClearQueue()
     {
-        _pendingPrompts.Clear();
+        host.Composer.ClearQueued();
+        host.Bridge.SetQueuedCount(0);
 
         // #386: staged images belong to the session they were attached in, so
         // a switch must not carry them into an unrelated conversation.
         host.Attachments?.Clear();
+    }
+
+    /// <summary>Abort path (O7 #1176, opencode's cancel→composer): drops the
+    /// queue but hands the newest payload back to the composer instead of
+    /// losing it — never sent after a kill, just restored as editable text.</summary>
+    public void AbortAndRestoreQueuedToComposer()
+    {
+        if (host.Composer.ClearQueuedReturningLast(out string? last) && last is not null)
+        {
+            host.Composer.RestoreToComposer(last);
+            host.Bridge.AppendSystemLine("↩ queued prompt returned to composer");
+        }
+
+        host.Bridge.SetQueuedCount(0);
+
+        // Same #386 session rule as ClearQueue: staged images do not survive.
+        host.Attachments?.Clear();
+        host.WakeUp();
     }
 
     public async Task SubmitAsync(CancellationToken ct)
@@ -86,8 +107,9 @@ internal sealed class PromptPipeline(
         {
             if (!text.StartsWith('/'))
             {
-                _pendingPrompts.Enqueue(text);
-                host.Bridge.AppendSystemLine($"⏳ queued ({_pendingPrompts.Count}) — will send when idle");
+                host.Composer.EnqueueQueued(text);
+                host.Bridge.SetQueuedCount(host.Composer.QueuedCount);
+                host.Bridge.AppendSystemLine($"⏳ queued ({host.Composer.QueuedCount}) — will send when idle");
                 host.WakeUp();
                 return;
             }
@@ -329,9 +351,10 @@ internal sealed class PromptPipeline(
             return;
         }
 
-        if (_pendingPrompts.TryDequeue(out string? next))
+        if (host.Composer.TryDequeueQueued(out var next))
         {
-            host.Bridge.AppendSystemLine($"⏵ sending queued prompt ({_pendingPrompts.Count} left)");
+            host.Bridge.SetQueuedCount(host.Composer.QueuedCount);
+            host.Bridge.AppendSystemLine($"⏵ sending queued prompt ({host.Composer.QueuedCount} left)");
             StartPromptRun(next, ct);
         }
     }
