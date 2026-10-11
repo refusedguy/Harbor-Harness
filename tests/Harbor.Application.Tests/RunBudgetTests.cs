@@ -13,6 +13,8 @@ using Harbor.Application.Sessions;
 using Harbor.Application.Tests.Fakes;
 using Harbor.TestKit;
 using System.Reflection;
+using System.Runtime.CompilerServices;
+using CSharpFunctionalExtensions;
 using Microsoft.Extensions.Logging.Abstractions;
 using TestSessionContext = Harbor.Application.Tests.Fakes.TestSessionContext;
 using TUnit.Assertions;
@@ -273,5 +275,80 @@ public class RunBudgetTests
         var end = bus.Events.OfType<AgentEndEvent>().Single();
         await Assert.That(end.Limit).IsNull();
         await Assert.That(end.Cancelled).IsFalse();
+    }
+
+    /// <summary>
+    ///     #1104: captures the token handed to StreamAsync so the test can
+    ///     prove the capped consumer cancels its producer.
+    /// </summary>
+    private sealed class TokenCapturingLlmClient(LlmEvent[] script) : ILlmClient
+    {
+        public CancellationToken StreamToken { get; private set; }
+
+        public ProviderId ProviderId => ProviderId.Create("test");
+
+        public async IAsyncEnumerable<LlmEvent> StreamAsync(
+            LlmRequest request,
+            [EnumeratorCancellation] CancellationToken cancellationToken = default)
+        {
+            StreamToken = cancellationToken;
+            foreach (LlmEvent evt in script)
+            {
+                yield return evt;
+                await Task.Yield();
+            }
+        }
+
+        public Task<Result<IReadOnlyList<ModelInfo>>> GetModelsAsync(CancellationToken cancellationToken = default)
+            => Task.FromResult(Result.Success<IReadOnlyList<ModelInfo>>(new[] { ScriptedLlmClient.TestModel }));
+    }
+
+    [Test]
+    public async Task RunAsync_OutputCapBreak_CancelsProducerToken()
+    {
+        // #1104: the delta-path break must kill the producer — the token the
+        // stream was handed is cancelled, so a fire-and-forget pump observing
+        // it stops pouring into a channel nobody reads. Fails while the raw
+        // caller token flows through uncancelled.
+        const int Deltas = 10;
+        const int DeltaChars = 1000;
+        const int CapBytes = 3000;
+        var script = new LlmEvent[Deltas + 1];
+        for (int i = 0; i < Deltas; i++)
+            script[i] = new TextDeltaEvent($"t-{i}", new string('x', DeltaChars));
+        script[Deltas] = new StepFinishEvent(0, "stop", null);
+        var client = new TokenCapturingLlmClient(script);
+        var bus = new FakeEventBus();
+        var agent = BudgetAgent(new RunBudgetCaps(MaxOutputBytes: CapBytes));
+        var loop = Loop(client, new CountingTool(), bus, agent);
+
+        var result = await loop.RunAsync(NewSession(), agent);
+
+        await Assert.That(result.IsSuccess).IsTrue();
+        var end = bus.Events.OfType<AgentEndEvent>().Single();
+        await Assert.That(end.Limit).IsEqualTo(RunLimitKind.MaxOutputBytes);
+        await Assert.That(client.StreamToken.IsCancellationRequested).IsTrue();
+    }
+
+    [Test]
+    public async Task RunAsync_UncappedRun_DoesNotCancelProducerToken()
+    {
+        // NON-VACUITY (#1104): a run that never hits the cap must NOT cancel
+        // the producer token — the fix cancels on the cap break, not always.
+        var client = new TokenCapturingLlmClient(
+        [
+            new TextDeltaEvent("t", "finished"),
+            new StepFinishEvent(1, "stop", new Usage(10, 10))
+        ]);
+        var bus = new FakeEventBus();
+        var agent = BudgetAgent(new RunBudgetCaps(MaxTokens: 1_000_000, MaxCostUsd: 1000m, MaxOutputBytes: 1_000_000));
+        var loop = Loop(client, new CountingTool(), bus, agent);
+
+        var result = await loop.RunAsync(NewSession(), agent);
+
+        await Assert.That(result.IsSuccess).IsTrue();
+        var end = bus.Events.OfType<AgentEndEvent>().Single();
+        await Assert.That(end.Limit).IsNull();
+        await Assert.That(client.StreamToken.IsCancellationRequested).IsFalse();
     }
 }

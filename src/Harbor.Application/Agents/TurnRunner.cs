@@ -385,9 +385,15 @@ internal sealed class TurnRunner(
 
         using var coalescer = new StreamingCoalescer();
 
+        // #1104: the output-size break below stops READING while the
+        // provider pump keeps WRITING. The linked source lets this consumer
+        // kill its producer on early break; everything past the loop keeps
+        // the caller's ct (MessageEnd must publish even on a capped break).
+        using var streamCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+
         try
         {
-            await foreach (var evt in client.StreamAsync(request, ct).ConfigureAwait(false))
+            await foreach (var evt in client.StreamAsync(request, streamCts.Token).ConfigureAwait(false))
             {
                 // LogTrace is the most frequent log call in the hot path (one per
                 // stream event = potentially thousands per turn). Guarding it with
@@ -469,7 +475,13 @@ internal sealed class TurnRunner(
                 // the output axis can newly trip here; the post-stream check
                 // reports the limit kind.
                 if (budget is not null && budget.CheckCap() == RunLimitKind.MaxOutputBytes)
+                {
+                    // #1104: producer dies with the consumer — without this
+                    // the fire-and-forget pump keeps pouring the whole
+                    // response into the channel after nobody reads it.
+                    streamCts.Cancel();
                     break;
+                }
             }
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)

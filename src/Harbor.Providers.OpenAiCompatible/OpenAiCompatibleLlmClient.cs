@@ -45,14 +45,23 @@ public sealed class OpenAiCompatibleLlmClient : ILlmClient
         LlmRequest request,
         [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
-        var channel = Channel.CreateUnbounded<LlmEvent>(new UnboundedChannelOptions
+        // #1104: bounded — when the consumer stops early (output-size cap)
+        // the pump parks on a full channel instead of buffering the whole
+        // response behind a reader that is already gone.
+        var channel = Channel.CreateBounded<LlmEvent>(new BoundedChannelOptions(64)
         {
             SingleReader = true,
-            SingleWriter = false
+            SingleWriter = true,
+            FullMode = BoundedChannelFullMode.Wait
         });
 
         var writer = channel.Writer;
 
+        // #1104: no cancellationToken on Task.Run — a pre-cancelled token
+        // would skip the delegate entirely and the writer would never
+        // complete. The token still flows into every await inside (SsePump
+        // observes it), so the pump exits promptly; the finally below
+        // always completes the writer.
         _ = Task.Run(async () =>
         {
             using var activity = Source.StartActivity("LLM.Call");
@@ -135,7 +144,7 @@ public sealed class OpenAiCompatibleLlmClient : ILlmClient
             {
                 writer.TryComplete();
             }
-        }, cancellationToken);
+        });
 
         await foreach (var evt in channel.Reader.ReadAllAsync(cancellationToken).ConfigureAwait(false))
         {

@@ -107,8 +107,36 @@ public class ToolDispatcherCommitTests
         "tc1", "counter", JsonDocument.Parse("""{"n":1}""").RootElement);
 
     private static ToolDispatcher NewDispatcher(IPermissionService permissions, ITool tool, IApprovalCoordinator coordinator) =>
+        NewDispatcher(permissions, tool, coordinator, abandonGrace: null, clock: null);
+
+    private static ToolDispatcher NewDispatcher(
+        IPermissionService permissions, ITool tool, IApprovalCoordinator coordinator,
+        TimeSpan? abandonGrace, TimeProvider? clock) =>
         new(new FakeToolRegistry(tool), permissions, new FakeEventBus(),
-            NullLogger<ToolDispatcher>.Instance, coordinator);
+            NullLogger<ToolDispatcher>.Instance, coordinator, null, abandonGrace, clock);
+
+    /// <summary>
+    ///     Frozen clock — the grace timer never fires, so the best-effort
+    ///     cancel path cannot lose a 250ms wall-clock race on a loaded runner
+    ///     (macos red on #1117; same 250ms class as the #1055s3 Windows flake,
+    ///     see #401). Mirrors <c>ToolDispatcherRetryTests.FrozenTimeProvider</c>
+    ///     (#1088): <c>Task.Delay(grace, clock)</c> only completes if the test
+    ///     advances it — which this test never does. BCL only.
+    /// </summary>
+    private sealed class FrozenTimeProvider : TimeProvider
+    {
+        public override ITimer CreateTimer(
+            TimerCallback callback, object? state, TimeSpan dueTime, TimeSpan period) =>
+            NoopTimer.Instance;
+
+        private sealed class NoopTimer : ITimer
+        {
+            public static readonly NoopTimer Instance = new();
+            public bool Change(TimeSpan dueTime, TimeSpan period) => false;
+            public void Dispose() { }
+            public ValueTask DisposeAsync() => default;
+        }
+    }
 
     private static async Task WaitForAsync(Func<bool> condition, string what)
     {
@@ -173,7 +201,13 @@ public class ToolDispatcherCommitTests
         var runner = new FakeRunner();
         var permissions = new GatedPermissions(null);
         var tool = new SpyTool();
-        var dispatcher = NewDispatcher(permissions, tool, coordinator);
+        // Frozen grace clock: the SpyTool observes its token (Infinite delay
+        // throws promptly on cancel), so the "cancelled" entry only needs the
+        // grace timer to not win the race — determinism comes from owning the
+        // clock, not from raising the 250ms product default (#996, #1088).
+        var dispatcher = NewDispatcher(
+            permissions, tool, coordinator,
+            abandonGrace: TimeSpan.FromMilliseconds(250), clock: new FrozenTimeProvider());
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(runner.AbortToken);
 
         var run = dispatcher.ExecuteAsync([Call()], NewSession(), AssistantMessage.Empty("s", "m"), CodeAgent(), cts.Token);
