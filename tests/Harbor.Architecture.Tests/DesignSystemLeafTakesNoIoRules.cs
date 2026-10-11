@@ -81,6 +81,29 @@
 //     than where the answer went — a different host would satisfy it too, or
 //     fail it, on the merits.
 //   * `contrib/` — unmaintained, compiled by no CI job.
+//
+// MECHANISM (#1086, step 2, conveyor)
+// -----------------------------------
+// The two bans below are ScanRules sharing the leaf scope: the disk-call ban
+// and the environment-lookup ban, both fully armed (no baseline). Enumeration,
+// matching and the control/discovery verdicts are ScanRunner's; this file keeps
+// the issue prose and the test names.
+//
+// Two deliberate carries, not re-decisions:
+//   * The matcher input is `SourceCommentStripper.StripAll`, NOT the shared
+//     `SourceScan.StripComments` — the old probe graded through the former, and
+//     the two strippers have divergent contracts (see ScanRule.cs: the shared
+//     one preserves string literals where the masking lexer blanks them).
+//     Folding silently would change what the matcher sees. So both rules grade
+//     through `ParseLeafIo`, which runs the old line loop verbatim.
+//   * The old probe reported an unreadable file as a hit ("the probe cannot
+//     grade a file it cannot read"). The rule reads what the walk yields, so
+//     that arm fired only on the enumerate-then-read race; on a stable tree the
+//     verdict is identical, and a scope that lost the leaf fails the discovery
+//     floor instead.
+// The planted controls are synthetic lines in the REAL shapes (the watcher and
+// store lines the old liveness tests pointed at), so a broken regex goes red
+// here exactly as it did there.
 
 using System.Text.RegularExpressions;
 
@@ -94,6 +117,9 @@ namespace Harbor.Architecture.Tests;
 /// </summary>
 public sealed class DesignSystemLeafTakesNoIoRules
 {
+    private const string DiskSubId = "TOKEN-LEAF-DISK-IO";
+    private const string EnvSubId = "TOKEN-LEAF-USER-LOCATION";
+
     /// <summary>The project directory of the leaf, as <c>src/&lt;dir&gt;</c>.</summary>
     private const string LeafProjectDir = "Harbor.DesignSystem";
 
@@ -116,83 +142,175 @@ public sealed class DesignSystemLeafTakesNoIoRules
         @"\bEnvironment\s*\.\s*Get(?:EnvironmentVariable|FolderPath)\s*\(",
         RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
-    /// <summary>
-    ///     A file that legitimately keeps its disk access forever: the plugin
-    ///     watcher is Infrastructure, watches real directories, and is not moving.
-    ///     The right control for <see cref="DiskCall" />.
-    /// </summary>
-    private const string DiskControlFile = "src/Harbor.Plugins.Hosting/DebouncedPluginWatcher.cs";
+    /// <summary>The disk-call ban as data: one shape, no baseline, four controls, a floor.</summary>
+    private static readonly ScanRule DiskRule = new()
+    {
+        Id = "DesignSystemLeafTakesNoIo.Disk",
+        Trees = ["src/" + LeafProjectDir],
+        Forbidden =
+        [
+            new ScanForbidden(
+                DiskSubId,
+                DiskCall,
+                "persistence is an outer layer's job — the leaf keeps the PORT (IThemeStore, #668) "
+                + "and the tokens. See issue #536."),
+        ],
+        Controls =
+        [
+            // The watcher line the old liveness test pointed at: Infrastructure,
+            // watches real plugin directories, legitimately calls Directory.Exists.
+            new ScanControl("Real/Watcher.cs", "            if (!Directory.Exists(dir))", DiskSubId),
+            // The session-store line: Infrastructure, the ISessionStore the whole
+            // repository persists through.
+            new ScanControl("Real/Store.cs", "        if (!File.Exists(sessionFile))", DiskSubId),
+            // The fix's own comments name the forbidden call. A guard that fails on
+            // its own documentation is a guard nobody keeps.
+            new ScanControl("Prose.cs", "// #536: ThemeStore used File.ReadAllText here before #742.", null),
+            // Path is string manipulation, not a syscall — deliberately not ruled.
+            new ScanControl("Strings.cs", "                        TabName = Path.GetFileName(path);", null),
+        ],
+        MinHits = 5,
+        CustomParse = ParseDiskCall,
+    };
+
+    /// <summary>The user-location ban as data: one shape, no baseline, four controls, a floor.</summary>
+    private static readonly ScanRule EnvRule = new()
+    {
+        Id = "DesignSystemLeafTakesNoIo.Env",
+        Trees = ["src/" + LeafProjectDir],
+        Forbidden =
+        [
+            new ScanForbidden(
+                EnvSubId,
+                EnvironmentLookup,
+                "reading HARBOR_THEMES_DIR or the user profile is how the leaf reaches into the "
+                + "user's home directory. A theme catalog that can be told where to look has a "
+                + "configuration surface. See issue #536."),
+        ],
+        Controls =
+        [
+            // The composition-root lines the old liveness test pointed at: the
+            // ThemeStore legitimately resolves the user's Harbor directory.
+            new ScanControl(
+                "Real/ThemeStoreEnv.cs",
+                "            string? env = Environment.GetEnvironmentVariable(\"HARBOR_THEMES_DIR\");",
+                EnvSubId),
+            new ScanControl(
+                "Real/ThemeStorePath.cs",
+                "                Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),",
+                EnvSubId),
+            // #536 names both members in prose; documenting them must not trip the rule.
+            new ScanControl(
+                "Prose.cs",
+                "// #536: also reads HARBOR_THEMES_DIR and Environment.GetFolderPath(UserProfile).",
+                null),
+            // NewLine is not user-profile reach — deliberately not ruled.
+            new ScanControl("Strings.cs", "            Lines = text.Split(Environment.NewLine);", null),
+        ],
+        MinHits = 5,
+        CustomParse = ParseEnvLookup,
+    };
 
     /// <summary>
-    ///     A file that legitimately resolves the user's profile: the plugin host
-    ///     reads the user's Harbor directory to find its own install. Infrastructure,
-    ///     and not moving. The right control for <see cref="EnvironmentLookup" />.
+    ///     The custom parsers: the old probe's line loop verbatim — the leaf's own
+    ///     masking-lexer stripper, one report per matching line. The shared line
+    ///     scan would grade different input, so the rules carry their stripper.
     /// </summary>
-    private const string EnvironmentControlFile = "src/Harbor.Plugins.Hosting/PluginHostOptions.cs";
+    private static IEnumerable<ScanHit> ParseDiskCall(string displayPath, string rawSource) =>
+        ParseLeafIo(displayPath, rawSource, DiskCall, DiskSubId);
+
+    /// <inheritdoc cref="ParseDiskCall" />
+    private static IEnumerable<ScanHit> ParseEnvLookup(string displayPath, string rawSource) =>
+        ParseLeafIo(displayPath, rawSource, EnvironmentLookup, EnvSubId);
+
+    private static IEnumerable<ScanHit> ParseLeafIo(
+        string displayPath, string rawSource, Regex pattern, string subId)
+    {
+        string[] lines = SourceCommentStripper.StripAll(
+            rawSource.Replace("\r\n", "\n", StringComparison.Ordinal).Split('\n'));
+        for (int i = 0; i < lines.Length; i++)
+        {
+            if (pattern.IsMatch(lines[i]))
+            {
+                yield return new ScanHit(subId, displayPath, i + 1, lines[i].Trim());
+            }
+        }
+    }
 
     [Test]
     public async Task The_Token_Leaf_Touches_No_Disk()
     {
-        IReadOnlyList<string> files = RepoPaths.EnumerateCsFiles(LeafProjectDir);
-        IReadOnlyList<string> hits = FindIo(DiskCall, files);
+        List<string> violations = ScanRunner.Evaluate(DiskRule);
 
-        await Assert.That(files.Count).IsGreaterThan(0).Because(
-            "Every rule in this file scans the leaf through RepoPaths.EnumerateCsFiles. "
-            + "Outside a checkout — or if the project directory were renamed — that returns "
-            + "nothing, and both rules would pass because they read nothing. A rule that "
-            + "cannot see its subject is not a rule about its subject. Found "
-            + files.Count + " .cs files under src/" + LeafProjectDir + ".");
-
-        await Assert.That(hits.Count).IsEqualTo(0).Because(
-            "Harbor.DesignSystem is the HDS v1 package: IsPackable, PackageId "
-            + "Harbor.DesignSystem, an EMPTY allowed-reference set and no PackageReference. "
-            + "It is the one assembly a consumer can take without pulling Harbor in, which is "
-            + "exactly why it must not enumerate a directory or stat a file. The theme store "
-            + "and the theme directory watcher are persistence, and persistence is an outer "
-            + "layer's job — the leaf keeps the PORT (IThemeStore, #668) and the tokens. "
-            + "Found: " + (hits.Count == 0 ? "(none)" : string.Join("\n", hits)));
+        await Assert.That(violations).IsEmpty()
+            .Because(
+                "Harbor.DesignSystem is the HDS v1 package: IsPackable, PackageId "
+                + "Harbor.DesignSystem, an EMPTY allowed-reference set and no PackageReference. "
+                + "It is the one assembly a consumer can take without pulling Harbor in, which is "
+                + "exactly why it must not enumerate a directory or stat a file. The theme store "
+                + "and the theme directory watcher are persistence, and persistence is an outer "
+                + "layer's job — the leaf keeps the PORT (IThemeStore, #668) and the tokens. "
+                + "Found: " + (violations.Count == 0 ? "(none)" : string.Join("\n", violations)));
     }
 
     [Test]
     public async Task The_Token_Leaf_Resolves_No_User_Location()
     {
-        IReadOnlyList<string> files = RepoPaths.EnumerateCsFiles(LeafProjectDir);
-        IReadOnlyList<string> hits = FindIo(EnvironmentLookup, files);
+        List<string> violations = ScanRunner.Evaluate(EnvRule);
 
-        await Assert.That(files.Count).IsGreaterThan(0).Because(
-            "Shared precondition with The_Token_Leaf_Touches_No_Disk, and for the same reason: "
-            + "an empty enumeration would make this rule pass without reading anything. Found "
-            + files.Count + " .cs files under src/" + LeafProjectDir + ".");
+        await Assert.That(violations).IsEmpty()
+            .Because(
+                "The capability rules do NOT cover these two members — they are not File.* or "
+                + "Directory.* — so nothing else in the build would fail if they stayed. But "
+                + "#536 names them as part of the same defect: reading HARBOR_THEMES_DIR and "
+                + "Environment.GetFolderPath(UserProfile) is how the leaf reaches into the user's "
+                + "home directory, and the complaint was never 'this file opens a handle', it was "
+                + "'the zero-dependency package knows where my home is'. A theme catalog that can "
+                + "be told where to look is a theme catalog with a configuration surface. Found: "
+                + (violations.Count == 0 ? "(none)" : string.Join("\n", violations)));
+    }
 
-        await Assert.That(hits.Count).IsEqualTo(0).Because(
-            "The capability rules do NOT cover these two members — they are not File.* or "
-            + "Directory.* — so nothing else in the build would fail if they stayed. But "
-            + "#536 names them as part of the same defect: reading HARBOR_THEMES_DIR and "
-            + "Environment.GetFolderPath(UserProfile) is how the leaf reaches into the user's "
-            + "home directory, and the complaint was never 'this file opens a handle', it was "
-            + "'the zero-dependency package knows where my home is'. A theme catalog that can "
-            + "be told where to look is a theme catalog with a configuration surface. Found: "
-            + (hits.Count == 0 ? "(none)" : string.Join("\n", hits)));
+    /// <summary>
+    ///     The walk really reaches the leaf. Outside a checkout — or if the project
+    ///     directory were renamed — both rules would pass because they read nothing.
+    /// </summary>
+    [Test]
+    public async Task Scanner_SeesTheLeaf()
+    {
+        List<string> diskDiscovery = ScanRunner.CheckDiscovery(DiskRule);
+        List<string> envDiscovery = ScanRunner.CheckDiscovery(EnvRule);
+
+        await Assert.That(diskDiscovery).IsEmpty()
+            .Because(
+                "Every rule in this file scans the leaf through the shared walk. "
+                + "A near-zero count means the path is stale and the rules enforce nothing. "
+                + string.Join("; ", diskDiscovery));
+        await Assert.That(envDiscovery).IsEmpty()
+            .Because(
+                "Shared precondition with The_Token_Leaf_Touches_No_Disk, and for the same reason: "
+                + "an empty enumeration would make the second rule pass without reading anything. "
+                + string.Join("; ", envDiscovery));
     }
 
     /// <summary>
     ///     Non-vacuity for <see cref="The_Token_Leaf_Touches_No_Disk" />. The same
-    ///     scanner must still find a real call in a file that legitimately has one,
-    ///     or "no violations in the leaf" is indistinguishable from "the regex reads
+    ///     parser must still find a real call in the watcher/store shape, or "no
+    ///     violations in the leaf" is indistinguishable from "the regex reads
     ///     nothing".
     /// </summary>
     [Test]
     public async Task Disk_Scanner_Still_Sees_A_Real_Call()
     {
-        IReadOnlyList<string> hits = FindIoInRepoFile(DiskCall, DiskControlFile);
+        // The Real/* controls carry the Infrastructure lines the old liveness test
+        // read from the tree; they drive the REAL parser rather than a second
+        // implementation of it. If the regex stops matching, this goes red — and
+        // the fix is the REGEX, not the watcher.
+        List<string> failures = ScanRunner.CheckControls(DiskRule);
 
-        await Assert.That(hits.Count).IsGreaterThan(0).Because(
-            "The scanner behind The_Token_Leaf_Touches_No_Disk must be able to fail. "
-            + "DebouncedPluginWatcher is Infrastructure, watches real plugin directories, and "
-            + "legitimately calls Directory.Exists / File.Exists — if the scanner reports "
-            + "nothing even there, it is reporting nothing everywhere and the leaf's pass is "
-            + "meaningless. If this control ever goes red, the fix is the REGEX, not the "
-            + "watcher.");
+        await Assert.That(failures).IsEmpty()
+            .Because(
+                "The parser behind The_Token_Leaf_Touches_No_Disk must be able to fail. "
+                + string.Join("; ", failures));
     }
 
     /// <summary>
@@ -202,89 +320,47 @@ public sealed class DesignSystemLeafTakesNoIoRules
     [Test]
     public async Task Environment_Scanner_Still_Sees_A_Real_Lookup()
     {
-        IReadOnlyList<string> hits = FindIoInRepoFile(EnvironmentLookup, EnvironmentControlFile);
+        List<string> failures = ScanRunner.CheckControls(EnvRule);
 
-        await Assert.That(hits.Count).IsGreaterThan(0).Because(
-            "The scanner behind The_Token_Leaf_Resolves_No_User_Location must be able to "
-            + "fail. PluginHostOptions is Infrastructure and legitimately resolves "
-            + "Environment.GetFolderPath(UserProfile) to find the user's Harbor directory — if "
-            + "the scanner reports nothing even there, it is reporting nothing everywhere. If "
-            + "this control ever goes red, the fix is the REGEX, not the plugin host.");
-    }
-
-    // ---------------------------------------------------------------------
-    // Probes.
-    // ---------------------------------------------------------------------
-
-    /// <summary>
-    ///     Every match of <paramref name="pattern" /> in the named ABSOLUTE files, one
-    ///     entry per site, as <c>repo-relative-path:line  matched-text</c>. Comments
-    ///     are stripped first, so prose that NAMES <c>File.Exists</c> to explain a past
-    ///     defect is not graded as code.
-    /// </summary>
-    /// <param name="pattern">The shape to look for.</param>
-    /// <param name="files">Absolute paths to grade.</param>
-    /// <param name="missingFileIsAViolation">
-    ///     Whether an unreadable file is reported as a hit. TRUE for a rule, whose
-    ///     subject must not vanish under it — <c>ThemeAxisStaysDataRules</c> grades
-    ///     the same way, and a file the guard cannot read is a file it cannot rule
-    ///     on. FALSE for a CONTROL, where a missing file would otherwise be
-    ///     reported as a hit and turn the control green on the one condition that
-    ///     should redden it: the control proving the scanner works must fail when
-    ///     there is nothing to scan.
-    /// </param>
-    private static IReadOnlyList<string> FindIo(
-        Regex pattern,
-        IReadOnlyList<string> files,
-        bool missingFileIsAViolation = true)
-    {
-        if (RepoPaths.RepoRoot is not { } root)
-        {
-            return [];
-        }
-
-        var hits = new List<string>();
-        foreach (string file in files)
-        {
-            if (!File.Exists(file))
-            {
-                if (missingFileIsAViolation)
-                {
-                    hits.Add($"{Relative(root, file)}  (file is missing — the probe cannot "
-                            + "grade a file it cannot read)");
-                }
-
-                continue;
-            }
-
-            string[] lines = SourceCommentStripper.StripAll(File.ReadLines(file));
-            for (int i = 0; i < lines.Length; i++)
-            {
-                Match match = pattern.Match(lines[i]);
-                if (match.Success)
-                {
-                    hits.Add($"{Relative(root, file)}:{i + 1}  {match.Value.Trim()}");
-                }
-            }
-        }
-
-        return hits;
+        await Assert.That(failures).IsEmpty()
+            .Because(
+                "The parser behind The_Token_Leaf_Resolves_No_User_Location must be able to "
+                + "fail. "
+                + string.Join("; ", failures));
     }
 
     /// <summary>
-    ///     The control probe, for a single repo-relative file. A missing control file
-    ///     yields no hits, so the control fails — which is the point of it.
+    ///     Every baseline row states why it is tolerated, in the row itself. Vacuous
+    ///     while both tables are empty, and deliberately so: wired from the first
+    ///     row so the first row cannot skip the argument.
     /// </summary>
-    private static IReadOnlyList<string> FindIoInRepoFile(Regex pattern, string relative)
+    [Test]
+    public async Task Baseline_Rows_AllHaveReasons()
     {
-        if (RepoPaths.RepoRoot is not { } root)
-        {
-            return [];
-        }
+        List<string> disk = ScanRunner.CheckReasons(DiskRule);
+        List<string> env = ScanRunner.CheckReasons(EnvRule);
 
-        return FindIo(pattern, [Path.Combine(root, relative)], missingFileIsAViolation: false);
+        await Assert.That(disk).IsEmpty().Because(string.Join("\n", disk));
+        await Assert.That(env).IsEmpty().Because(string.Join("\n", env));
     }
 
-    private static string Relative(string root, string path)
-        => Path.GetRelativePath(root, path).Replace('\\', '/');
+    /// <summary>
+    ///     Every baseline row must still correspond to a real hit, so the table
+    ///     cannot rot into a blanket permission.
+    /// </summary>
+    [Test]
+    public async Task Baseline_Rows_Are_Not_Stale()
+    {
+        List<string> disk = ScanRunner.StaleBaselineKeys(
+            DiskRule, ScanRunner.ReadSources(ScanRunner.ScopeFiles(DiskRule)));
+        List<string> env = ScanRunner.StaleBaselineKeys(
+            EnvRule, ScanRunner.ReadSources(ScanRunner.ScopeFiles(EnvRule)));
+
+        await Assert.That(disk).IsEmpty()
+            .Because("a baseline row with no violation behind it is a permission for a "
+                + "problem that no longer exists: " + string.Join(", ", disk));
+        await Assert.That(env).IsEmpty()
+            .Because("a baseline row with no violation behind it is a permission for a "
+                + "problem that no longer exists: " + string.Join(", ", env));
+    }
 }
