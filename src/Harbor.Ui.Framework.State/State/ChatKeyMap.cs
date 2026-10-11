@@ -34,6 +34,17 @@ public sealed class ChatKeyMap
         new(ChatAction.ScrollDownPage, "page down", new Binding(UiKeyCode.PageDown)),
         new(ChatAction.ScrollTop, "top", new Binding(UiKeyCode.Home)),
         new(ChatAction.ScrollBottom, "bottom", new Binding(UiKeyCode.End)),
+        // ── unread navigation (#1173) ────────────────────────────────────
+        // Alt+Shift+Up / Alt+Shift+Down — next / previous UNREAD tab. Listed
+        // BEFORE the input-history pair below, which owns the same arrows
+        // with subset matching (a bare-Alt binding also matches Alt+Shift):
+        // without the Shift check the history entry would swallow the nav.
+        // Stateless Resolve passes null, so the guard can never fire and the
+        // legacy Alt+arrows → history mapping is preserved.
+        new(ChatAction.NextUnreadTab, "next unread",
+            new Binding(UiKeyCode.Down, KeyModifierSet.Alt)) { Guard = TabStripUnreadNext },
+        new(ChatAction.PreviousUnreadTab, "prev unread",
+            new Binding(UiKeyCode.Up, KeyModifierSet.Alt)) { Guard = TabStripUnreadPrevious },
         new(ChatAction.InputHistoryPrev, "prev input", new Binding(UiKeyCode.Up, KeyModifierSet.Alt)),
         new(ChatAction.InputHistoryNext, "next input", new Binding(UiKeyCode.Down, KeyModifierSet.Alt)),
         new(ChatAction.Autocomplete, "complete", new Binding(UiKeyCode.Tab)),
@@ -66,7 +77,13 @@ public sealed class ChatKeyMap
         new(ChatAction.CloseTab, "close tab", new Binding(UiKeyCode.Char, KeyModifierSet.Ctrl, 'w')),
         // Ctrl+T — open / switch tab. Rebindable through this table like every
         // other entry (the slice-3 gesture layer reuses the same action).
-        new(ChatAction.OpenTab, "open tab", new Binding(UiKeyCode.Char, KeyModifierSet.Ctrl, 't')),
+        // Guarded on no-Shift: Ctrl+Shift+T is reopen (#1173), split exactly
+        // like the Next/PreviousTab pair above.
+        new(ChatAction.OpenTab, "open tab", new Binding(UiKeyCode.Char, KeyModifierSet.Ctrl, 't')) { Guard = OpenTabPlain },
+        // Ctrl+Shift+T — restore the most recently closed tab (#1173).
+        // Shift-only guard, deliberately NOT strip-gated: the stack is about
+        // closed tabs, so one open tab with a deep stack still reopens.
+        new(ChatAction.ReopenTab, "reopen tab", new Binding(UiKeyCode.Char, KeyModifierSet.Ctrl, 't')) { Guard = ReopenShifted },
         // Alt+Left / Alt+Right — move the focused tab (#390, slice 3/3). The
         // Left/Right codes are unclaimed (resize owns Ctrl+Up/Down/Left/Right,
         // panel slots own Alt+char), so no ordering hazard. Guarded on a live
@@ -93,7 +110,15 @@ public sealed class ChatKeyMap
         // instead — both resolve here so no shell needs its own branch.
         new(ChatAction.JumpPalette, "jump worktree",
             new Binding(UiKeyCode.Char, KeyModifierSet.Ctrl, 'j'),
-            new Binding(UiKeyCode.Char, KeyModifierSet.None, '\n'))
+            new Binding(UiKeyCode.Char, KeyModifierSet.None, '\n')),
+        // ── tab quick slots (#1173) ────────────────────────────────────────
+        // Ctrl+1..Ctrl+9 — focus the Nth tab. The null-character binding
+        // matches any Ctrl+char, so this entry sits AFTER every specific
+        // Ctrl+letter above (first-match-wins) and the digit guard keeps
+        // unclaimed chords (Ctrl+Q, …) falling through to Char exactly as
+        // before. Alt+digits stay panel slots — no conflict either way.
+        new(ChatAction.ActivateTabSlot, "tab slot",
+            new Binding(UiKeyCode.Char, KeyModifierSet.Ctrl)) { Guard = TabSlotDigit },
     ];
 
     public ChatKeyMap()
@@ -137,6 +162,43 @@ public sealed class ChatKeyMap
     ///     so there is no chord to disambiguate, only a strip to require.
     /// </summary>
     private static bool TabStripGuard(UiKey _, UiState? state) => TabStripOpen(state);
+
+    /// <summary>
+    ///     Chord guard for the plain Ctrl+T ("open tab") entry (#1173): without
+    ///     the Shift check the subset match would swallow Ctrl+Shift+T, which
+    ///     is <see cref="ChatAction.ReopenTab" />. Stateless-safe (reads only
+    ///     the key), so the legacy Ctrl+T mapping never changes.
+    /// </summary>
+    private static bool OpenTabPlain(UiKey key, UiState? _) =>
+        !key.Mods.HasFlag(KeyModifierSet.Shift);
+
+    /// <summary>
+    ///     Chord guard for Ctrl+Shift+T ("reopen tab", #1173). Shift-only and
+    ///     deliberately strip-agnostic — see the entry comment.
+    /// </summary>
+    private static bool ReopenShifted(UiKey key, UiState? _) =>
+        key.Mods.HasFlag(KeyModifierSet.Shift);
+
+    /// <summary>
+    ///     Guards for the Alt+Shift+Up/Down unread pair (#1173): the Shift half
+    ///     disambiguates from input history (subset match), the strip half from
+    ///     a chord with nothing to act on. A null snapshot disables both,
+    ///     degrading exactly to the legacy history mapping.
+    /// </summary>
+    private static bool TabStripUnreadNext(UiKey key, UiState? state) =>
+        key.Mods.HasFlag(KeyModifierSet.Shift) && TabStripOpen(state);
+
+    /// <summary>Previous-direction twin of <see cref="TabStripUnreadNext" />.</summary>
+    private static bool TabStripUnreadPrevious(UiKey key, UiState? state) =>
+        key.Mods.HasFlag(KeyModifierSet.Shift) && TabStripOpen(state);
+
+    /// <summary>
+    ///     Digit guard for the Ctrl+1..Ctrl+9 quick-slot entry (#1173): the
+    ///     entry's null-character binding matches any Ctrl+char, so only an
+    ///     ASCII digit claims the press and everything else falls through.
+    /// </summary>
+    private static bool TabSlotDigit(UiKey key, UiState? _) =>
+        key.Character is >= '1' and <= '9';
 
     /// <summary>
     ///     Resolve a key press to an action (first matching entry wins), without

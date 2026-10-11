@@ -167,6 +167,44 @@ public abstract record ChatAppMsg : AppMsg
     /// <summary>Focus the previous tab in tab order (wraps; no-op with fewer than two tabs).</summary>
     public sealed record CyclePreviousTab : ChatAppMsg;
 
+    // ── tab reopen + unread model (#1173, opencode steal — stack + markers) ──
+
+    /// <summary>
+    ///     Restore the most recently closed tab at its original position
+    ///     (<c>Ctrl+Shift+T</c>). Entries whose session is already open are
+    ///     consumed and skipped, so repeated reopens walk the stack. Empty
+    ///     stack (or nothing restorable) → no-op, no revision bump.
+    /// </summary>
+    public sealed record ReopenTab : ChatAppMsg;
+
+    /// <summary>Focus the next tab carrying an unread signal (wraps; no-op when no other tab is unread).</summary>
+    public sealed record CycleNextUnreadTab : ChatAppMsg;
+
+    /// <summary>Focus the previous tab carrying an unread signal (wraps; no-op when no other tab is unread).</summary>
+    public sealed record CyclePreviousUnreadTab : ChatAppMsg;
+
+    /// <summary>
+    ///     Focus the Nth tab in tab order (<c>Ctrl+1</c>..<c>Ctrl+9</c>).
+    ///     Out-of-range slots are a no-op.
+    /// </summary>
+    /// <param name="Slot">One-based slot (<c>1</c> is the leftmost tab).</param>
+    public sealed record ActivateTabSlot(int Slot) : ChatAppMsg;
+
+    /// <summary>
+    ///     Mark a background tab unread so the strip shows the marker. The host
+    ///     dispatches this when a non-visible session finishes a turn
+    ///     (<paramref name="IsError" /> when the run failed — the error colour,
+    ///     not amber). Marking the <i>active</i> tab is a no-op: viewing is
+    ///     reading, and a marker on the tab on screen would be a lie.
+    /// </summary>
+    /// <param name="SessionId">The background tab's session id.</param>
+    /// <param name="IsError">Whether the unread signal is a failure.</param>
+    public sealed record MarkTabUnread(SessionId SessionId, bool IsError = false) : ChatAppMsg;
+
+    /// <summary>Clear a tab's unread signal without focusing it.</summary>
+    /// <param name="SessionId">The tab's session id.</param>
+    public sealed record MarkTabRead(SessionId SessionId) : ChatAppMsg;
+
     /// <summary>
     ///     Restore the open-tab order + active tab from a persisted
     ///     <see cref="TabStripSnapshot" /> (#390, slice 3/3).
