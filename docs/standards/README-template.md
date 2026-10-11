@@ -47,7 +47,7 @@ write "None known." — an empty section is a claim, a missing one is a gap.
 
 ## The grandfather list
 
-36 packable projects predate this template and are recorded in
+35 packable projects predate this template and are recorded in
 `LegacyNonConformantReadmes` in `ReadmeCoverageTests.cs`, each mapped to the
 sections it is still missing. The list is a **ratchet, not a waiver**:
 
