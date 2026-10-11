@@ -27,6 +27,11 @@ internal sealed class StreamCoalescer
     private int _msgTokensIn;
     private int _msgTokensOut;
 
+    // O10 #1179: thinking-stream start tick (renderer clock) — the elapsed
+    // time to FinishThinkingStream becomes the finalized block's duration
+    // (opencode part.time completed − created, one-line summary + duration).
+    private long? _thinkStartMs;
+
     /// <summary>Last frame-loop tick (mirrors the bridge clock).</summary>
     public long NowMs { get; set; }
 
@@ -163,6 +168,7 @@ internal sealed class StreamCoalescer
     public void StartThinkingStream()
     {
         _thinkingIncoming.Clear();
+        _thinkStartMs = NowMs;
         var fresh = new StreamingThinkingBlock();
         if (_thinkStream is null)
         {
@@ -228,6 +234,11 @@ internal sealed class StreamCoalescer
 
     public void FinishThinkingStream()
     {
+        // O10 #1179: consume the start tick on every finish path (present or
+        // not) so a retried stream never inherits a stale duration.
+        long thinkStartMs = _thinkStartMs ?? NowMs;
+        _thinkStartMs = null;
+
         if (_thinkStream is null)
         {
             return;
@@ -242,7 +253,8 @@ internal sealed class StreamCoalescer
         var text = _thinkStream.RawText();
         if (!string.IsNullOrEmpty(text))
         {
-            var final = new ThinkingBlock(text);
+            var final = new ThinkingBlock(
+                text, TimeSpan.FromMilliseconds(Math.Max(0, NowMs - thinkStartMs)));
 
             // [UX4] #264: default-collapsed policy — the finalized block
             // starts collapsed like the stream; only an explicit user expand

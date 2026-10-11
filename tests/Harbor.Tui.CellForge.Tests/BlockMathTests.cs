@@ -47,10 +47,12 @@ public class BlockMathTests
     {
         // The two implementations are literal twins; with the width floored to 1
         // they must agree even for the pathological zero-width case. Text is
-        // short enough to stay inside the collapsed 10-line thinking budget, so
-        // no clamp interferes.
+        // short enough to stay inside the expanded 10-line thinking budget, so
+        // no clamp interferes (O10 #1179: collapsed is the constant 1 — the
+        // formula twinship lives on the expanded body).
         const string text = "ab\ncd";
         var block = new StreamingThinkingBlock();
+        block.SetExpanded(true);
         block.Append(text);
 
         await Assert.That(block.CheapEstimate(1)).IsEqualTo(4);
