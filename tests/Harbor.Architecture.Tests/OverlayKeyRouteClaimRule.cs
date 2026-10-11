@@ -42,7 +42,7 @@
 //     -> ReplInputLoop.cs:95 HandleKeyAsync
 //
 // and `HandleKeyAsync` is a working router — it just routes AROUND the stack.
-// `ReplInputLoop.cs:354 host.Images.HandleKey(key)` and `:429 host.Setup.HandleKey(key)`
+// `ReplInputLoop.cs:354 host.Images.HandleKey(key)` and `:437 host.Setup.HandleKey(key)`
 // call the two live overlays directly. The same objects, a different hop: not
 // `ImageViewerOverlayLayer.OnKey`. That asymmetry is why #857's `JumpCommand`
 // could correctly say the panel `OnKey` has "no product host [that can] reach" it.
