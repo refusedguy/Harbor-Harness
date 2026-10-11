@@ -1,4 +1,5 @@
 using System.Collections.Immutable;
+using System.Text.Json;
 using Harbor.Abstractions.Events;
 using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Models.Identifiers;
@@ -196,7 +197,7 @@ public static class ChatAppReducer
         // rather than once per rendering path.
         ToolExecutionStartEvent tes => state
             .PutToolCall(ToolCallSnapshot.Start(
-                tes.ToolCallId, tes.ToolName, tes.Glyph, tes.Args.GetRawText()))
+                tes.ToolCallId, tes.ToolName, tes.Glyph, EmptyPayloadLiteral(tes.Args) ?? tes.Args.GetRawText()))
             .AddLine(ChatRole.Tool, FormatToolStart(tes), tes.ToolCallId),
         ToolExecutionEndEvent tee => state
             .CompleteToolCall(
@@ -552,7 +553,7 @@ public static class ChatAppReducer
 
     private static string FormatToolStart(ToolExecutionStartEvent tes)
     {
-        string args = tes.Args.GetRawText();
+        string args = EmptyPayloadLiteral(tes.Args) ?? tes.Args.GetRawText();
         return string.IsNullOrEmpty(args) || args == "{}"
             ? $"→ {tes.ToolName}"
             : $"→ {tes.ToolName}  {args}";
@@ -580,6 +581,28 @@ public static class ChatAppReducer
 
     private static UiState WithStatus(this UiState state, string status) =>
         state with { Chat = state.Chat with { Status = status } };
+
+    /// <summary>Empty object/array payload without materializing
+    /// <c>GetRawText</c> (struct-enumerator probe, zero allocation).
+    /// Same probe as the AnsiPlain/Nick twins (#1134 slice 1) — the store is
+    /// the third consumer of per-tool-start args, and the literals keep both
+    /// filters behavior-identical (<c>ToolCallSnapshot.Start</c> maps
+    /// <c>"{}"</c> to empty; <c>FormatToolStart</c> hides <c>"{}"</c>).
+    /// Returns null for anything non-empty.</summary>
+    private static string? EmptyPayloadLiteral(JsonElement args)
+    {
+        if (args.ValueKind == JsonValueKind.Array && args.GetArrayLength() == 0)
+        {
+            return "[]";
+        }
+
+        if (args.ValueKind == JsonValueKind.Object && !args.EnumerateObject().MoveNext())
+        {
+            return "{}";
+        }
+
+        return null;
+    }
 
     /// <summary>
     ///     Fold the core's terminal fact into state (#687, #1024): the status
