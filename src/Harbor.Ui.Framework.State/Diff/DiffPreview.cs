@@ -120,6 +120,16 @@ public static class DiffPreview
         {
             if (!string.IsNullOrEmpty(oldString) && newString != null)
             {
+                // #1236 DiffPlex pilot: same payload shape from the pilot engine
+                // when its flag is set; the default path below is untouched.
+                if (DiffPlexPilot.IsEnabled
+                    && DiffPlexPilot.TryComputePreview(oldString, newString, MaxPreviewLines, out string? pilotPreview)
+                    && DiffPlexPilot.TryComputePreview(oldString, newString, MaxFullDiffLines, out string? pilotFull)
+                    && pilotPreview is not null && pilotFull is not null)
+                {
+                    return (true, filePath, pilotPreview, pilotFull);
+                }
+
                 return (
                     true,
                     filePath,

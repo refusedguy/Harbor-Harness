@@ -22,6 +22,10 @@
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions"/>
     <PackageReference Include="CommunityToolkit.Mvvm"/>
     <PackageReference Include="CSharpFunctionalExtensions"/>
+    <!-- #1236 DiffPlex pilot (desktop/patch preview only; Engine untouched).
+         Rollback: delete this line + the PackageVersion pin + Diff/DiffPlexPilot.cs
+         and the two gated call sites (DiffPreview, desktop DiffViewModel). -->
+    <PackageReference Include="DiffPlex"/>
   </ItemGroup>
 
   <ItemGroup>
