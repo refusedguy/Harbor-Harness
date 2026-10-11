@@ -260,19 +260,49 @@ public sealed class HookRunner : IHookRunner
 
         Task<string> stdoutTask;
         Task<string> stderrTask;
+        // The stdin write rides its own ceiling, not the run token: a hook
+        // that never reads stdin must stall into a hook timeout, never hang
+        // the run past it.
+        using var stdinCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        stdinCts.CancelAfter(timeout);
         try
         {
-            await proc.StandardInput.WriteAsync(payloadJson.AsMemory(), ct).ConfigureAwait(false);
-            await proc.StandardInput.FlushAsync(ct).ConfigureAwait(false);
-            proc.StandardInput.Close();
-            stdoutTask = proc.StandardOutput.ReadToEndAsync(ct);
-            stderrTask = proc.StandardError.ReadToEndAsync(ct);
+            await proc.StandardInput.WriteAsync(payloadJson.AsMemory(), stdinCts.Token).ConfigureAwait(false);
+            await proc.StandardInput.FlushAsync(stdinCts.Token).ConfigureAwait(false);
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
             KillQuietly(proc);
             throw;
         }
+        catch (OperationCanceledException)
+        {
+            // The write stalled past the hook ceiling (the hook never reads
+            // stdin): the same verdict as any other timeout.
+            KillQuietly(proc);
+            return HookAttempt.Failed(
+                $"Hook '{entry.Command}' timed out after {timeout.TotalSeconds:0.#}s and was killed.", "", "");
+        }
+        catch (Exception ex) when (ex is IOException || ex is ObjectDisposedException)
+        {
+            // A fast hook that never reads stdin (echo/true) may exit before
+            // the write lands — EPIPE then describes the race, not a failure.
+            // Fall through to drain whatever it printed; the verdict parse
+            // stays the gate (silence is still fail-closed deny).
+            _logger.LogDebug(ex, "Hook '{Command}' exited before the stdin write landed; draining output", entry.Command);
+        }
+
+        try
+        {
+            proc.StandardInput.Close();
+        }
+        catch (Exception ex)
+        {
+            _ = ex;
+        }
+
+        stdoutTask = proc.StandardOutput.ReadToEndAsync(ct);
+        stderrTask = proc.StandardError.ReadToEndAsync(ct);
 
         using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
         timeoutCts.CancelAfter(timeout);
