@@ -42,6 +42,7 @@ public sealed class HelloTool : ITool
     public string DisplayName => "Hello";
     public string Description => "Returns a hello message";
     public ExecutionMode ExecutionMode => ExecutionMode.Parallel;
+    public ToolSafetyProfile SafetyProfile => ToolSafetyProfile.Opaque;
     public string? PromptSnippet => "hello: Say hello";
     public IReadOnlyList<string> PromptGuidelines => Array.Empty<string>();
     public JsonDocument ParameterSchema =>
@@ -214,6 +215,8 @@ public sealed class MyTool : ITool
 
     public MyTool(ISessionStore store) => _store = store;
 
+    public ToolSafetyProfile SafetyProfile => ToolSafetyProfile.Opaque;
+
     public async Task<ToolResult> ExecuteAsync(JsonElement args, ToolContext ctx, CancellationToken ct)
     {
         var session = await _store.GetAsync(ctx.SessionId, ct);
@@ -287,6 +290,7 @@ using System.Text.Json;
 using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Models.Identifiers;
+using Harbor.Abstractions.Permissions;
 using Harbor.Abstractions.Plugins;
 using Harbor.Abstractions.Tools;
 ```
@@ -395,6 +399,7 @@ public sealed class TodoWriteTool : ITool
     public string DisplayName => "Todo";
     public string Description => "Manage a todo list... (add, update, list, complete, clear)";
     public ExecutionMode ExecutionMode => ExecutionMode.Sequential;   // ← side effects, run sequentially
+    public ToolSafetyProfile SafetyProfile => ToolSafetyProfile.Opaque;
     public string? PromptSnippet => "todo: Manage task list (add/update/complete/list)";
     public IReadOnlyList<string> PromptGuidelines { get; } = new[]
     {
@@ -530,6 +535,7 @@ public sealed class HelloTool : ITool
     public string DisplayName => "Hello";
     public string Description => "Returns a hello message";
     public ExecutionMode ExecutionMode => ExecutionMode.Parallel;
+    public ToolSafetyProfile SafetyProfile => ToolSafetyProfile.Opaque;
     public string? PromptSnippet => "hello: Say hello";
     public IReadOnlyList<string> PromptGuidelines => Array.Empty<string>();
     public JsonDocument ParameterSchema =>
@@ -574,6 +580,7 @@ public sealed class FsharpTool : ITool
     public string DisplayName => "F#";
     public string Description => "Execute F# code via the fsi interpreter";
     public ExecutionMode ExecutionMode => ExecutionMode.Sequential;
+    public ToolSafetyProfile SafetyProfile => ToolSafetyProfile.Command("code");
     public string? PromptSnippet => "fsharp: Run F# code (fsi)";
     public IReadOnlyList<string> PromptGuidelines => new[] { "Use for F# code execution" };
     public JsonDocument ParameterSchema =>
@@ -997,8 +1004,7 @@ public class TodoWriteToolTests
         SessionId: sessionId, MessageId: "m1", CallId: "tc1", Agent: "code",
         Abort: CancellationToken.None, Messages: Array.Empty<AgentMessage>(),
         ReportProgress: (_, _) => Task.CompletedTask,
-        Ask: (_, _) => Task.FromResult(new PermissionResponse(PermissionAction.Allow, false)),
-        Services: null!);
+        Ask: (_, _) => Task.FromResult(new PermissionResponse(PermissionAction.Allow, false)));
 }
 ```
 

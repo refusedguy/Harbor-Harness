@@ -248,8 +248,10 @@ timeout, returns non-zero exit codes as `ToolResult.Error`.
 {
   "type": "object",
   "properties": {
-    "command":   { "type": "string",  "description": "Shell command (passed to /bin/sh -c)" },
-    "timeoutMs": { "type": "integer", "description": "Per-command timeout (default 60000)" }
+    "command": { "type": "string",  "description": "Shell command (passed to /bin/sh -c)" },
+    "cwd":     { "type": "string",  "description": "Working directory (default: current)" },
+    "timeout": { "type": "integer", "description": "Timeout in seconds (default: 30, max: 600)" },
+    "env":     { "type": "object",  "description": "Additional environment variables" }
   },
   "required": ["command"]
 }
@@ -261,8 +263,8 @@ timeout, returns non-zero exit codes as `ToolResult.Error`.
 // 1. Run the build
 {"command": "dotnet build"}
 
-// 2. Run tests, longer timeout
-{"command": "dotnet run --project tests/Harbor.Tools.Builtin.Tests -c Release --no-build -- --minimum-expected-tests 1 --treenode-filter \"/*/*/*/*[Category=Integration]\"", "timeoutMs": 300000}
+// 2. Run tests, longer timeout (seconds, not ms)
+{"command": "dotnet run --project tests/Harbor.Tools.Builtin.Tests -c Release --no-build -- --minimum-expected-tests 1 --treenode-filter \"/*/*/*/*[Category=Integration]\"", "timeout": 300}
 
 // 3. Pipe to grep
 {"command": "rg TODO | wc -l"}
@@ -278,7 +280,7 @@ timeout, returns non-zero exit codes as `ToolResult.Error`.
 - For file reads, prefer `read` (gets line numbers + binary rejection).
 - For content search, prefer `ripgrep` (faster, respects gitignore).
 - For directory listing, prefer `ls` (structured output) or `tree` (overview).
-- Set `timeoutMs` generously for a full-suite test run / `npm install` style commands.
+- Set `timeout` (seconds, default 30, max 600) generously for a full-suite test run / `npm install` style commands.
 
 ---
 
@@ -336,10 +338,11 @@ matched content per match.
 {
   "type": "object",
   "properties": {
-    "pattern": { "type": "string",  "description": "Regex pattern" },
-    "path":    { "type": "string",  "description": "Base dir or file (default: cwd)" },
-    "glob":    { "type": "string",  "description": "File name glob filter" },
-    "ignoreCase": { "type": "boolean", "description": "Case-insensitive (default false)" }
+    "pattern":    { "type": "string",  "description": "Regex pattern" },
+    "path":       { "type": "string",  "description": "Base dir or file (default: cwd)" },
+    "include":    { "type": "string",  "description": "File name glob (e.g. '*.cs')" },
+    "ignoreCase": { "type": "boolean", "description": "Case-insensitive (default false)" },
+    "maxResults": { "type": "integer", "description": "Max matches (default: 100)" }
   },
   "required": ["pattern"]
 }
@@ -349,7 +352,7 @@ matched content per match.
 
 ```jsonc
 // 1. Find all TODOs in C# code
-{"pattern": "TODO\\(", "glob": "*.cs"}
+{"pattern": "TODO\\(", "include": "*.cs"}
 
 // 2. Case-insensitive search for a class name
 {"pattern": "class\\s+Agent", "ignoreCase": true}
@@ -365,7 +368,7 @@ matched content per match.
 **Tips.**
 - `grep` is implemented in-process — works everywhere, no external binary required.
 - For large repos (>10k files) prefer `ripgrep` (10–100× faster).
-- Pass a `glob` filter — searching 5 files is 1000× faster than searching 5000.
+- Pass an `include` filter — searching 5 files is 1000× faster than searching 5000.
 
 ---
 
@@ -1074,7 +1077,7 @@ Find a pattern across files, read each hit, then apply a multi-hunk patch:
 
 ```jsonc
 // Turn 1 — discover all callers (Parallel)
-[{"tool":"grep", "args":{"pattern":"\\.Result\\b","glob":"*.cs","maxResults":50}}]
+[{"tool":"grep", "args":{"pattern":"\\.Result\\b","include":"*.cs","maxResults":50}}]
 
 // Turn 2 — read 5 of them in parallel (Parallel)
 [
@@ -1199,6 +1202,7 @@ public sealed class WebFetchTool : ITool
     public string Glyph => "🌍";
     public string Description => "Fetch a URL and return markdown-converted content ...";
     public ExecutionMode ExecutionMode => ExecutionMode.Parallel;
+    public ToolSafetyProfile SafetyProfile => ToolSafetyProfile.Opaque;
     public string? PromptSnippet => "webfetch: Fetch a URL and return markdown";
 
     public IReadOnlyList<string> PromptGuidelines { get; } =
@@ -1279,7 +1283,7 @@ public sealed class WebFetchTool : ITool
 In `src/Harbor.Hosting/Modules/ToolsCatalog.cs`'s `CreateToolRegistry`:
 
 ```csharp
-tb.AddTool(() => new WebFetchTool(loggerFactory.CreateLogger<WebFetchTool>()));
+tb.AddTool(lf => new WebFetchTool(lf.CreateLogger<WebFetchTool>()));
 ```
 
 If your tool needs an injected dependency (like `McpToolTool` needs `IMcpRegistry`), either:

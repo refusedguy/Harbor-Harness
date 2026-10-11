@@ -93,7 +93,7 @@ HARBOR_TUI=cellforge dotnet run --project apps/Harbor.App.Cli
 dotnet run --project apps/Harbor.App.Avalonia
 ```
 
-CLI verbs (see `help`): `ask <prompt> | setup | auth | config | providers | models [provider] | sessions | tui | storage | logs | daemon | status | help | version`.
+CLI verbs (see `help`): `ask <prompt> | run | demo | setup | auth | config | providers | models [provider] | sessions | mcp | serve | tui | events | storage | logs | daemon (start|stop|status) | plugins | skills | headless | help | version` (`status`/`ide` need a daemon build).
 
 > **Env var note**: Kilocode uses `KILO_API_KEY` (not `KILOCODE_API_KEY`). Get a free key at <https://kilo.ai>.
 
@@ -160,7 +160,7 @@ Presentation      Harbor.Ui.Framework (+ .State/.ViewModels/.Projection/.Renderi
 Composition Root  apps/Harbor.App.Cli (+ src/Harbor.Hosting, Harbor.Plugins.Host)
 ```
 
-All IDs are strongly-typed value objects (`SessionId`, `ProviderId`, `ToolName`, …) defined in `Harbor.Abstractions.Models.Identifiers`. Agent state reaches every UI exclusively as `AgentEvent`s published on `IEventBus` — renderers never touch Core.
+All IDs are strongly-typed value objects (`SessionId`, `ProviderId`, `ToolName`, …) in the `Harbor.Abstractions.Models.Identifiers` namespace (file: `src/Harbor.Abstractions.Contracts/Models/Identifiers/Identifiers.cs` — the namespace was kept when the models moved to the Contracts project). Agent state reaches every UI exclusively as `AgentEvent`s published on `IEventBus` — renderers never touch Core.
 
 ### Data flow
 

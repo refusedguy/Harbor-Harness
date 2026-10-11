@@ -296,6 +296,7 @@ public sealed class MyTool : ITool
     public string Glyph => "🔧";                        // optional; the icon every UI draws (#680)
     public string Description => "Does something useful";
     public ExecutionMode ExecutionMode => ExecutionMode.Parallel;
+    public ToolSafetyProfile SafetyProfile => ToolSafetyProfile.Opaque;
     public string? PromptSnippet => "my_tool: Does something";
     public IReadOnlyList<string> PromptGuidelines => Array.Empty<string>();
 
@@ -346,7 +347,7 @@ public sealed class MyTool : ITool
 
 Register in `apps/Harbor.App.Cli/Hosting/HostBuilder.cs` (in `CreateToolRegistry`):
 ```csharp
-tb.AddTool(() => new MyTool(loggerFactory.CreateLogger<MyTool>()));
+tb.AddTool(lf => new MyTool(lf.CreateLogger<MyTool>()));
 ```
 
 If the tool needs a DI dependency (e.g. `McpToolTool` needs `IMcpRegistry`), construct it
@@ -739,8 +740,9 @@ dotnet run --project tests/Harbor.Tui.Tests -c Release --no-build -- --treenode-
 # Run CLI
 dotnet run --project apps/Harbor.App.Cli
 
-# CLI verbs: ask <prompt> | setup | auth | config | providers | models [provider] |
-#            sessions | tui | storage | logs | daemon/status/logs-commands | help | version
+# CLI verbs: ask <prompt> | run | demo | setup | auth | config | providers | models [provider] |
+#            sessions | mcp | serve | tui | events | storage | logs | daemon (start|stop|status) |
+#            plugins | skills | headless | help | version (status/ide need a daemon build)
 dotnet run --project apps/Harbor.App.Cli -- help
 dotnet run --project apps/Harbor.App.Cli -- providers
 dotnet run --project apps/Harbor.App.Cli -- models kilocode

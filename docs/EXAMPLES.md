@@ -48,6 +48,7 @@ public sealed class TimeTool : ITool
     public string DisplayName => "Time";
     public string Description => "Returns the current UTC time in ISO-8601.";
     public ExecutionMode ExecutionMode => ExecutionMode.Parallel;
+    public ToolSafetyProfile SafetyProfile => ToolSafetyProfile.Opaque;
     public string? PromptSnippet => "time: Get current UTC time";
     public IReadOnlyList<string> PromptGuidelines => Array.Empty<string>();
 
@@ -169,10 +170,10 @@ public async Task<ToolResult> ExecuteAsync(JsonElement args, ToolContext ctx, Ca
 
 ```csharp
 var response = await ctx.Ask(new PermissionRequest(
-    ToolName: "webhook",
-    ArgPath: "https://example.com/hook",
+    Permission: "webhook",
+    Pattern: "https://example.com/hook",
     Args: args,
-    Choices: new[] { "allow", "deny" }), ct).ConfigureAwait(false);
+    AlwaysOptions: new[] { "allow", "deny" }), ct).ConfigureAwait(false);
 
 if (response.Action == PermissionAction.Deny)
     return ToolResult.Error("user denied webhook");
@@ -338,13 +339,16 @@ dotnet run --project apps/Harbor.App.Cli -- ask "Write a haiku about .NET"
 ### 13. Switch provider mid-REPL
 
 ```
-harbor> /models openrouter
-  anthropic/claude-sonnet-4   $3/$15 per MTok
-  openai/gpt-4o               $2.50/$10
-  deepseek/deepseek-chat      $0.27/$1.10
+harbor> /model list openrouter
+Models for openrouter:
+  anthropic/claude-sonnet-4                           Claude Sonnet 4
+  ...
+harbor> /model openrouter/anthropic/claude-sonnet-4
 ```
 
-(Planned feature — `HARBOR_MODEL` env var works today.)
+(`harbor models [provider]` lists models without entering the REPL; `/providers`
+lists registered providers with client-health status. `HARBOR_MODEL` env var
+selects the model non-interactively.)
 
 ---
 
@@ -375,8 +379,8 @@ sqlite3 ~/.harbor/sessions.db "SELECT COUNT(*) FROM messages;"
 
 ```csharp
 var store = new MemorySessionStore();
-var session = Session.Create("/tmp", "code", "anthropic", "claude-sonnet-4");
-await store.SaveAsync(session, ct);
+var createResult = await store.CreateAsync("/tmp", "code", "anthropic", "claude-sonnet-4", ct);
+var session = createResult.Value;
 ```
 
 ### 17. Implement a custom session store
@@ -384,16 +388,17 @@ await store.SaveAsync(session, ct);
 ```csharp
 public sealed class RedisSessionStore : ISessionStore
 {
-    public Task<Result<Session>> LoadAsync(string sessionId, CancellationToken ct = default)
+    public Task<Result<Session>> GetAsync(string sessionId, CancellationToken ct = default)
     {
         // ... fetch from Redis
     }
-    public Task<Result> SaveAsync(Session session, CancellationToken ct = default) { /* ... */ }
+    public Task<Result> UpdateAsync(Session session, CancellationToken ct = default) { /* ... */ }
     public Task<Result<IReadOnlyList<Session>>> ListAsync(string? projectId = null, CancellationToken ct = default) { /* ... */ }
-    public Task<Result<Session>> CreateAsync(string directory, string agentName, string providerId, string modelId, string? title = null, CancellationToken ct = default) { /* ... */ }
+    public Task<Result<Session>> CreateAsync(string directory, string agentName, string providerId, string modelId, CancellationToken ct = default) { /* ... */ }
     public Task<Result> AppendMessageAsync(string sessionId, AgentMessage message, CancellationToken ct = default) { /* ... */ }
     public Task<Result<IReadOnlyList<AgentMessage>>> GetMessagesAsync(string sessionId, CancellationToken ct = default) { /* ... */ }
     public Task<Result> DeleteAsync(string sessionId, CancellationToken ct = default) { /* ... */ }
+    // ... plus UpdateMessageAsync, UpdateStatsAsync, GetStatsAsync, DeleteMessagesAfterAsync
 }
 ```
 
@@ -542,6 +547,7 @@ using System.Text.Json;
 using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Models.Identifiers;
+using Harbor.Abstractions.Permissions;
 using Harbor.Abstractions.Plugins;
 using Harbor.Abstractions.Tools;
 
@@ -563,6 +569,7 @@ public sealed class HelloTool : ITool
     public string DisplayName => "Hello";
     public string Description => "Returns a hello message";
     public ExecutionMode ExecutionMode => ExecutionMode.Parallel;
+    public ToolSafetyProfile SafetyProfile => ToolSafetyProfile.Opaque;
     public string? PromptSnippet => "hello: Say hello";
     public IReadOnlyList<string> PromptGuidelines => Array.Empty<string>();
     public JsonDocument ParameterSchema =>
@@ -681,7 +688,7 @@ wizard, as a `DefaultAgent` in `config.json`, and — if you set
 `IsSubAgent: true` — as `task(review)`, because `TaskTool` validates
 sub-agents against the registry too.
 
-`BuiltinAgentPickerProjectionTests` in
+`BuiltinAgentPickerProjectionRules` in
 `tests/Harbor.Architecture.Tests/` fails if a picker ever starts spelling an
 agent name again, and `Onboarding_Offers_An_Agent_That_Exists_In_No_Hand_Written_List`
 plants a fourth agent to prove the menu really is a projection.
@@ -754,6 +761,7 @@ var planRuleset = new PermissionRuleset(new[]
 
 ```csharp
 new PermissionRule("write", "*.env", PermissionAction.Ask),
+new PermissionRule("write", "*.env.*", PermissionAction.Ask),
 new PermissionRule("write", "*secret*", PermissionAction.Ask),
 new PermissionRule("write", "*", PermissionAction.Allow),
 ```

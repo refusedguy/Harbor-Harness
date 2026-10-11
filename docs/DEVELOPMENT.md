@@ -74,7 +74,7 @@ Tests use [TUnit](https://github.com/thomhurst/TUnit) v1.61.0 with Microsoft Tes
 
 ### Known test status
 
-- **Pre-existing Avalonia 12 headless failures** (`MarkdownRenderer_SetMarkdown_DoesNotThrow`, `CodeBlock_Default_Code_IsEmpty`, `TypewriterStreamingText_CanSet_Text` — "Stack empty" in `AvaloniaPropertyDictionaryPool.Get()`), plus an occasional flaky pair `ChatView_Inflates` / `TryGet_ReturnsNullForUnregistered`. Not Harbor bugs — see ROADMAP backlog.
+- **Pre-existing Avalonia 12 headless failures** (`MarkdownRenderer_SetMarkdown_DoesNotThrow`, `CodeBlock_Default_Code_IsEmpty`, `TypewriterStreamingText_CanSet_Text` — "Stack empty" in `SetInheritanceParent`), plus an occasional flaky pair `ChatView_Inflates` / `TryGet_ReturnsNullForUnregistered`. Not Harbor bugs — see ROADMAP backlog.
 - **IPC named-pipe event-stream tests on Linux** (`Harbor.Ipc.Tests`) self-skip unless `HARBOR_IPC_EVENTSTREAM=1` is set; some timing flakes remain.
 
 ## Documentation checks
@@ -348,8 +348,7 @@ public class TimeToolTests
             SessionId: "test", MessageId: "test", CallId: "test", Agent: "code",
             Abort: CancellationToken.None, Messages: Array.Empty<AgentMessage>(),
             ReportProgress: (_, _) => Task.CompletedTask,
-            Ask: (_, _) => Task.FromResult(new PermissionResponse(PermissionAction.Allow, false)),
-            Services: null!);
+            Ask: (_, _) => Task.FromResult(new PermissionResponse(PermissionAction.Allow, false)));
 
         var result = await tool.ExecuteAsync(args, ctx);
 
