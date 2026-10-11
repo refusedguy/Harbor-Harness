@@ -92,6 +92,11 @@ public sealed class RowHashDiffEncoder : ICellDiffEncoder
             }
         }
 
+        // Both copies below are NOT removable: _staging is a reused scratch
+        // buffer retained across Encode calls (see remarks), so the batch must
+        // own its array — and hints is caller-owned, retained by the batch for
+        // sink fan-out and replay. Miss-shaped cost: bounded by the changed
+        // cells of this frame, not the screen size.
         ImmutableArray<CellDiffMessage> changes = count == 0
             ? ImmutableArray<CellDiffMessage>.Empty
             : _staging[..count].ToImmutableArray();

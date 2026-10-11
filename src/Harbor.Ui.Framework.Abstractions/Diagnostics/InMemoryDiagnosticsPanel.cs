@@ -80,22 +80,27 @@ public sealed class InMemoryDiagnosticsPanel : IDiagnosticsPanel
         if (max <= 0)
             return Array.Empty<DiagnosticEntry>();
 
-        DiagnosticEntry[] snapshot;
+        // Per-paint path: the logs panel rebuilds every frame asking for at
+        // most ~50 rows out of a 1000-entry ring, so copy only the requested
+        // tail under the gate — never the whole buffer plus a re-slice.
+        // Oldest-first within the window, as before.
         lock (_gate)
         {
             if (_entries.Count == 0)
                 return Array.Empty<DiagnosticEntry>();
-            snapshot = _entries.ToArray();
-        }
+            int take = Math.Min(max, _entries.Count);
+            int skip = _entries.Count - take;
+            var result = new DiagnosticEntry[take];
+            int i = 0;
+            int j = 0;
+            foreach (var entry in _entries)
+            {
+                if (i++ >= skip)
+                    result[j++] = entry;
+            }
 
-        // The user wants the most-recent N entries, oldest-first within that window.
-        int start = Math.Max(0, snapshot.Length - max);
-        int count = snapshot.Length - start;
-        if (start == 0 && count == snapshot.Length)
-            return snapshot;
-        var result = new DiagnosticEntry[count];
-        Array.Copy(snapshot, start, result, 0, count);
-        return result;
+            return result;
+        }
     }
 
     /// <inheritdoc />
