@@ -739,8 +739,9 @@ dotnet run --project tests/Harbor.Tui.Tests -c Release --no-build -- --treenode-
 # Run CLI
 dotnet run --project apps/Harbor.App.Cli
 
-# CLI verbs: ask <prompt> | setup | auth | config | providers | models [provider] |
-#            sessions | tui | storage | logs | daemon/status/logs-commands | help | version
+# CLI verbs: ask <prompt> | run | demo | setup | auth | config | providers | models [provider] |
+#            sessions | mcp | serve | tui | events | storage | logs | daemon (start|stop|status) |
+#            plugins | skills | headless | help | version (status/ide need a daemon build)
 dotnet run --project apps/Harbor.App.Cli -- help
 dotnet run --project apps/Harbor.App.Cli -- providers
 dotnet run --project apps/Harbor.App.Cli -- models kilocode
