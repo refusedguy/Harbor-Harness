@@ -22,6 +22,16 @@ namespace Harbor.Application.Hooks;
 ///         tool): stdin/stdout are piped, stderr is captured for diagnostics,
 ///         the environment is inherited.
 ///     </para>
+///     <para>
+///         <b>Two shapes, one runner.</b> The gate loop
+///         (<see cref="RunVerdictGateAsync" />) merges verdicts and is the
+///         ONLY place fail-closed lives — both <c>PreToolUse</c> and
+///         <c>UserPromptSubmit</c> go through it. The advisory loop
+///         (<see cref="RunAdvisoryAsync" />) runs hooks for their side effects
+///         and discards verdicts — the other four events go through it. A new
+///         event point is therefore a constant plus one call, never a second
+///         copy of the fail-closed rules.
+///     </para>
 /// </remarks>
 public sealed class HookRunner : IHookRunner
 {
@@ -50,20 +60,48 @@ public sealed class HookRunner : IHookRunner
     }
 
     /// <inheritdoc />
-    public async Task<HookVerdict> RunPreToolUseAsync(
+    public Task<HookVerdict> RunPreToolUseAsync(
         string toolName, JsonElement args, string sessionId, CancellationToken ct = default)
     {
         // A cancelled run never gets a verdict — cancellation propagates so
         // the dispatcher reports it honestly instead of collapsing into deny.
         ct.ThrowIfCancellationRequested();
 
-        IReadOnlyList<HookEntry> matches = GetHooks(HookEvents.PreToolUse, toolName);
+        return RunVerdictGateAsync(
+            HookEvents.PreToolUse,
+            new HookPayload(HookEvents.PreToolUse, toolName, args, null, sessionId),
+            allowEdits: true, ct);
+    }
+
+    /// <summary>
+    ///     The gate loop both blocking events share: run every matching hook,
+    ///     fold their verdicts, fail closed when one never decided.
+    /// </summary>
+    /// <remarks>
+    ///     <para>
+    ///         Merge order (slice 1, unchanged): the first deny wins
+    ///         immediately; an ask is remembered and a LATER deny overrides it;
+    ///         edits accumulate into the payload later hooks see, so a chain
+    ///         of narrowing hooks composes instead of the last one winning.
+    ///     </para>
+    ///     <para>
+    ///         <paramref name="allowEdits" /> is what tells the two callers
+    ///         apart. <c>PreToolUse</c> lets a hook rewrite the args; a prompt
+    ///         submit has nothing to rewrite, so a hook that answers
+    ///         <c>edit</c> there is read as an allow rather than a fail-closed
+    ///         error — the hook asked to proceed, and it did.
+    ///     </para>
+    /// </remarks>
+    private async Task<HookVerdict> RunVerdictGateAsync(
+        string eventName, HookPayload payload, bool allowEdits, CancellationToken ct)
+    {
+        IReadOnlyList<HookEntry> matches = GetHooks(eventName, payload.Tool);
         if (matches.Count == 0)
         {
             return HookVerdict.Allow;
         }
 
-        JsonElement currentArgs = args;
+        HookPayload current = payload;
         bool edited = false;
         string? askReason = null;
 
@@ -71,23 +109,24 @@ public sealed class HookRunner : IHookRunner
         {
             ct.ThrowIfCancellationRequested();
             HookEntry entry = matches[i];
-            var payload = new HookPayload(HookEvents.PreToolUse, toolName, currentArgs, null, sessionId);
-            HookAttempt attempt = await RunOneAsync(entry, payload, ct).ConfigureAwait(false);
+            HookAttempt attempt = await RunOneAsync(entry, current, ct).ConfigureAwait(false);
 
             if (attempt.Verdict is null)
             {
                 // Fail-closed: a hook that timed out, failed to start, or
-                // printed garbage denies the tool call it was asked about.
+                // printed garbage denies the work it was asked about.
                 _logger.LogWarning(
-                    "PreToolUse hook '{Command}' failed for tool {ToolName}; failing closed to Deny: {Error}",
-                    entry.Command, toolName, attempt.Error);
+                    "{EventName} hook '{Command}' failed; failing closed to Deny: {Error}",
+                    eventName, entry.Command, attempt.Error);
                 return new HookVerdict(HookDecision.Deny, attempt.Error, null);
             }
 
             HookVerdict verdict = attempt.Verdict;
-            if (verdict.EditedArgs is { } editedArgs && editedArgs.ValueKind == JsonValueKind.Object)
+            if (allowEdits
+                && verdict.EditedArgs is { } editedArgs
+                && editedArgs.ValueKind == JsonValueKind.Object)
             {
-                currentArgs = editedArgs.Clone();
+                current = current with { Args = editedArgs.Clone() };
                 edited = true;
             }
 
@@ -95,8 +134,8 @@ public sealed class HookRunner : IHookRunner
             {
                 case HookDecision.Deny:
                     _logger.LogInformation(
-                        "PreToolUse hook '{Command}' denied tool {ToolName}: {Reason}",
-                        entry.Command, toolName, verdict.Reason);
+                        "{EventName} hook '{Command}' denied the call: {Reason}",
+                        eventName, entry.Command, verdict.Reason);
                     return new HookVerdict(HookDecision.Deny, verdict.Reason, null);
                 case HookDecision.Ask:
                     askReason ??= verdict.Reason ?? $"Hook '{entry.Command}' requested confirmation.";
@@ -108,45 +147,84 @@ public sealed class HookRunner : IHookRunner
 
         if (askReason is not null)
         {
-            return new HookVerdict(HookDecision.Ask, askReason, edited ? currentArgs : null);
+            return new HookVerdict(HookDecision.Ask, askReason, edited ? current.Args : null);
         }
 
-        return edited ? new HookVerdict(HookDecision.Allow, null, currentArgs) : HookVerdict.Allow;
+        return edited
+            ? new HookVerdict(HookDecision.Allow, null, current.Args)
+            : HookVerdict.Allow;
     }
 
     /// <inheritdoc />
     public async Task RunPostToolUseAsync(
         string toolName, JsonElement args, ToolResult result, string sessionId, CancellationToken ct = default)
     {
-        if (ct.IsCancellationRequested)
-        {
-            return;
-        }
-
-        try
-        {
-            IReadOnlyList<HookEntry> matches = GetHooks(HookEvents.PostToolUse, toolName);
-            for (int i = 0; i < matches.Count; i++)
-            {
-                HookEntry entry = matches[i];
-                var payload = new HookPayload(HookEvents.PostToolUse, toolName, args, result.Output, sessionId);
-                HookAttempt attempt = await RunOneAsync(entry, payload, ct).ConfigureAwait(false);
-                LogAdvisory(HookEvents.PostToolUse, entry, toolName, attempt);
-            }
-        }
-        catch (OperationCanceledException ex) when (ct.IsCancellationRequested)
-        {
-            _logger.LogDebug(ex, "PostToolUse hooks skipped: run cancelled");
-        }
-        catch (Exception ex)
-        {
-            // Advisory by contract: a hook failure must never fail the tool call.
-            _logger.LogWarning(ex, "PostToolUse hooks failed for tool {ToolName}", toolName);
-        }
+        var payload = new HookPayload(HookEvents.PostToolUse, toolName, args, result.Output, sessionId);
+        await RunAdvisoryAsync(HookEvents.PostToolUse, toolName, payload, ct).ConfigureAwait(false);
     }
 
     /// <inheritdoc />
-    public async Task RunSessionEndAsync(string sessionId, CancellationToken ct = default)
+    public Task RunSessionEndAsync(string sessionId, CancellationToken ct = default)
+    {
+        var payload = new HookPayload(HookEvents.SessionEnd, null, null, null, sessionId);
+        return RunAdvisoryAsync(HookEvents.SessionEnd, null, payload, ct);
+    }
+
+    /// <inheritdoc />
+    public Task RunSessionStartAsync(
+        string sessionId, string? agent = null, string? model = null, CancellationToken ct = default)
+    {
+        var payload = new HookPayload(HookEvents.SessionStart, null, null, null, sessionId)
+        {
+            Agent = agent,
+            Model = model,
+        };
+        return RunAdvisoryAsync(HookEvents.SessionStart, null, payload, ct);
+    }
+
+    /// <inheritdoc />
+    public async Task<HookVerdict> RunUserPromptSubmitAsync(
+        string sessionId, string prompt, string? agent = null, string? model = null,
+        CancellationToken ct = default)
+    {
+        // Same cancellation contract as PreToolUse: a cancelled run reports
+        // cancellation, never a hook deny that never happened.
+        ct.ThrowIfCancellationRequested();
+
+        var payload = new HookPayload(HookEvents.UserPromptSubmit, null, null, null, sessionId)
+        {
+            Agent = agent,
+            Model = model,
+            Prompt = prompt,
+        };
+        return await RunVerdictGateAsync(
+            HookEvents.UserPromptSubmit, payload, allowEdits: false, ct).ConfigureAwait(false);
+    }
+
+    /// <inheritdoc />
+    public Task RunPreCompactAsync(
+        string sessionId, string? agent = null, string? model = null, CancellationToken ct = default)
+    {
+        var payload = new HookPayload(HookEvents.PreCompact, null, null, null, sessionId)
+        {
+            Agent = agent,
+            Model = model,
+        };
+        return RunAdvisoryAsync(HookEvents.PreCompact, null, payload, ct);
+    }
+
+    /// <summary>
+    ///     The advisory loop the non-gating events share: run every matching
+    ///     hook, log what it printed or how it failed, and return normally.
+    /// </summary>
+    /// <remarks>
+    ///     Nothing here reaches the model or the run outcome. That is the
+    ///     whole contract — a hook on <c>PostToolUse</c>, <c>SessionStart</c>,
+    ///     <c>PreCompact</c> or <c>SessionEnd</c> is a notification, so a
+    ///     broken one costs a log line, never a failed turn.
+    /// </remarks>
+    private async Task RunAdvisoryAsync(
+        string eventName, string? toolName, HookPayload payload, CancellationToken ct)
     {
         if (ct.IsCancellationRequested)
         {
@@ -155,22 +233,22 @@ public sealed class HookRunner : IHookRunner
 
         try
         {
-            IReadOnlyList<HookEntry> matches = GetHooks(HookEvents.SessionEnd, null);
+            IReadOnlyList<HookEntry> matches = GetHooks(eventName, toolName);
             for (int i = 0; i < matches.Count; i++)
             {
                 HookEntry entry = matches[i];
-                var payload = new HookPayload(HookEvents.SessionEnd, null, null, null, sessionId);
                 HookAttempt attempt = await RunOneAsync(entry, payload, ct).ConfigureAwait(false);
-                LogAdvisory(HookEvents.SessionEnd, entry, null, attempt);
+                LogAdvisory(eventName, entry, toolName, attempt);
             }
         }
         catch (OperationCanceledException ex) when (ct.IsCancellationRequested)
         {
-            _logger.LogDebug(ex, "SessionEnd hooks skipped: run cancelled");
+            _logger.LogDebug(ex, "{EventName} hooks skipped: run cancelled", eventName);
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "SessionEnd hooks failed for session {SessionId}", sessionId);
+            // Advisory by contract: a hook failure must never fail the run.
+            _logger.LogWarning(ex, "{EventName} hooks failed", eventName);
         }
     }
 

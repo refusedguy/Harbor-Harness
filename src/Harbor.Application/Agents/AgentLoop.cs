@@ -101,9 +101,11 @@ public sealed class AgentLoop : IAgentLoop
         // token, which would read as a user cancel.
         TimeProvider? timeProvider = null,
         TimeSpan? runTimeout = null,
-        // PX4: user SessionEnd hooks. Optional so every direct-construction
-        // caller keeps compiling unchanged; null keeps the hooks-free path.
-        // Forwarded to the fallback dispatcher below for Pre/PostToolUse.
+        // PX4: user hooks (slice 1: Pre/PostToolUse + SessionEnd; slice 2:
+        // SessionStart + UserPromptSubmit + PreCompact). Optional so every
+        // direct-construction caller keeps compiling unchanged; null keeps
+        // the hooks-free path. Forwarded to the fallback dispatcher and the
+        // compaction behavior below for their own event points.
         IHookRunner? hookRunner = null)
     {
         _providers = providers;
@@ -138,7 +140,11 @@ public sealed class AgentLoop : IAgentLoop
         // IPipelineBehavior nobody could register meant a third run-level concern
         // could only be added by editing the class that runs the agent.
         _pipeline = new AgentPipeline(pipelineBehaviors ?? DefaultRunBehaviors(logger));
-        _compactionBehavior = new CompactionBehavior(compaction, tokenTracker, eventBus, _metrics, logger);
+        // PX4 slice 2: the optional hook runner rides here too, so the
+        // advisory PreCompact point fires from the same seam the loop already
+        // used for the Pre/PostToolUse gate. Null keeps the hooks-free path.
+        _compactionBehavior = new CompactionBehavior(
+            compaction, tokenTracker, eventBus, _metrics, logger, hookRunner);
         _steering = new SteeringDrainBehavior(tokenTracker, logger);
         // ROP-D Z3: MCP server instructions flow into the system prompt when a
         // registry is composed in; tests without one keep the section absent.
@@ -233,6 +239,27 @@ public sealed class AgentLoop : IAgentLoop
             var (client, model) = resolved.Value;
 
             await _eventBus.PublishAsync(new AgentStartEvent(session.Session.Id, SnapshotMessages(session.Messages), model, session.Session.Kind), ct).ConfigureAwait(false);
+
+            // PX4 slice 2: the run's start events. UserPromptSubmit is the
+            // only new one that can stop the run, so it runs FIRST and its
+            // deny ends the run before a single model call — the same
+            // fail-closed gate shape slice 1 gave PreToolUse, one level up.
+            HookVerdict promptVerdict = await RunUserPromptHooksAsync(session, agent, model, ct).ConfigureAwait(false);
+            if (promptVerdict.Decision == HookDecision.Deny)
+            {
+                // A prompt the user's own hook refused is not a run failure
+                // in the provider sense: it never started. Nothing further is
+                // published for it — AgentStartEvent above already happened,
+                // and a turn/agent end pair for a run with no turns would lie
+                // about what occurred.
+                _logger.LogInformation(
+                    "User hook denied the prompt for session={SessionId} agent={Agent}: {Reason}",
+                    session.Session.Id, agent.Name.Value, promptVerdict.Reason);
+                return Result.Failure(promptVerdict.Reason ?? "A user hook denied this prompt.");
+            }
+
+            await RunSessionStartHooksAsync(
+                session.Session.Id, agent.Name.Value, model.Id, ct).ConfigureAwait(false);
 
             // Previous-run background completions land before the first turn
             // so a new run picks up reports that finished while idle.
@@ -350,6 +377,80 @@ public sealed class AgentLoop : IAgentLoop
         }
 
         await _hooks.RunSessionEndAsync(sessionId, CancellationToken.None).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    ///     Run the <c>UserPromptSubmit</c> gate for the prompt that opened
+    ///     this run. Returns <see cref="HookVerdict.Allow" /> — which is what
+    ///     every hooks-free and no-prompt path costs — or the hook's verdict.
+    /// </summary>
+    /// <remarks>
+    ///     The prompt is read as "the last message in the session is a
+    ///     <see cref="UserMessage" />", which is exactly the shape
+    ///     <c>DefaultAgent.PromptAsync</c> produces: it persists the message,
+    ///     then loads the context and calls this loop. A run opened without a
+    ///     fresh user message (an internal re-entry, a drained background
+    ///     completion) has no prompt to submit and fires no hook — claiming a
+    ///     stale prompt would send the hook text the user never typed this
+    ///     turn.
+    /// </remarks>
+    private async Task<HookVerdict> RunUserPromptHooksAsync(
+        ISessionContext session, AgentDefinition agent, ModelInfo model, CancellationToken ct)
+    {
+        if (_hooks is null)
+        {
+            return HookVerdict.Allow;
+        }
+
+        IReadOnlyList<AgentMessage> messages = session.Messages;
+        if (messages.Count == 0 || messages[^1] is not UserMessage prompt)
+        {
+            return HookVerdict.Allow;
+        }
+
+        try
+        {
+            return await _hooks.RunUserPromptSubmitAsync(
+                session.Session.Id, prompt.Content, agent.Name.Value, model.Id, ct).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            // The runner is contracted never to throw on its own; a failure
+            // here is a hooks-subsystem failure, which fails closed to deny
+            // exactly like the permission-subsystem failure (§G3) rather than
+            // silently letting the prompt through.
+            _logger.LogWarning(
+                ex, "UserPromptSubmit hooks failed for session={SessionId}; failing closed to Deny",
+                session.Session.Id);
+            return new HookVerdict(HookDecision.Deny, $"Hook execution failed: {ex.Message}", null);
+        }
+    }
+
+    /// <summary>
+    ///     Run the advisory <c>SessionStart</c> hooks once, after the terminal
+    ///     decision on the prompt gate. Log-only by contract: a hook here
+    ///     cannot fail the run it just watched begin.
+    /// </summary>
+    /// <remarks>
+    ///     Deliberately rides the run token, where the post-terminal
+    ///     <see cref="RunSessionEndHooksAsync" /> cannot: this event fires
+    ///     mid-run, so a user who cancels must not be held for up to 30s per
+    ///     hook afterwards. A cancelled run therefore simply never reports a
+    ///     SessionStart it was not given the time to run.
+    /// </remarks>
+    private async Task RunSessionStartHooksAsync(
+        string sessionId, string agent, string model, CancellationToken ct)
+    {
+        if (_hooks is null)
+        {
+            return;
+        }
+
+        await _hooks.RunSessionStartAsync(sessionId, agent, model, ct).ConfigureAwait(false);
     }
 
     /// <summary>
