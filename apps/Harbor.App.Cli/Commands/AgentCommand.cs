@@ -82,7 +82,7 @@ public sealed class AgentCommand : ISlashCommand
         if (parsed.IsFailure)
         {
             _writer($"Invalid agent name: {parsed.Error}");
-            return Result.Failure(parsed.Error);
+            return parsed.ConvertFailure();
         }
 
         var definition = _agents.GetAgent(parsed.Value);
@@ -92,10 +92,11 @@ public sealed class AgentCommand : ISlashCommand
                 ", ",
                 _agents.GetAllAgents().Select(a => a.Name.Value).Order(StringComparer.Ordinal));
             _writer($"Unknown agent '{name}'. Known agents: {known}");
-            return Result.Failure(definition.Error);
+            return definition.ConvertFailure();
         }
 
-        string resolved = definition.Value.Name.Value;
+        AgentDefinition agentDef = definition.Value;
+        string resolved = agentDef.Name.Value;
         var updateResult = await _configStore.UpdateAsync(c =>
         {
             c.Agent = resolved;
@@ -110,7 +111,7 @@ public sealed class AgentCommand : ISlashCommand
 
         if (_agent is not null && _session is not null)
         {
-            _agent.Initialize(_session with { Agent = resolved }, definition.Value);
+            _agent.Initialize(_session with { Agent = resolved }, agentDef);
             _onAgentSwitched?.Invoke(resolved);
         }
 
