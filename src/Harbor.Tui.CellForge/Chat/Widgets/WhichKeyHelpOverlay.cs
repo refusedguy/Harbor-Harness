@@ -152,8 +152,8 @@ public sealed class WhichKeyHelpOverlay
         ? null
         : char.ToLowerInvariant(chord.Value);
 
-    /// <summary>In-flight chord awaiting resolution (null when the router is not armed).</summary>
-    public char? PendingChord => _pendingChord;
+    /// <summary>In-flight chord awaiting resolution (None when the router is not armed).</summary>
+    public Maybe<char> PendingChord => Maybe.From(_pendingChord);
 
     /// <summary>
     /// Overlay-local dismissal (Esc / '?'), mirroring

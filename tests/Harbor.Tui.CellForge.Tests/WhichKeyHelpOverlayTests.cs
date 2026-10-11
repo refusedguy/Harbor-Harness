@@ -239,7 +239,8 @@ public sealed class WhichKeyHelpOverlayTests
         overlay.Show();
         overlay.SetPending('G');
 
-        await Assert.That(overlay.PendingChord).IsEqualTo((char?)'g');
+        await Assert.That(overlay.PendingChord.HasValue).IsTrue();
+        await Assert.That(overlay.PendingChord.Value).IsEqualTo('g');
 
         var buffer = new ScreenBuffer(80, 24);
         overlay.Paint(buffer, new Rect(0, 0, 80, 24));
