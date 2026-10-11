@@ -606,6 +606,14 @@ public sealed class ChatScreenBridge : IDisposable
     /// <summary>Bypasses pacing: everything buffered becomes visible at once.</summary>
     internal void FlushStreamNow() => _streams.FlushStreamNow();
 
+    /// <summary>Queued-prompt dock-counter mirror (O7 #1176): the composer owns
+    /// the queue, the coalescer paints the count — this shim is the only path
+    /// between them, mirroring the stream shims above.</summary>
+    public void SetQueuedCount(int count) => _streams.SetQueuedCount(count);
+
+    /// <summary>Render-side busy signal for submit-while-busy routing.</summary>
+    public bool IsStreaming => _streams.IsStreaming;
+
     // ── Tool-card compatibility shims (internals now owned by ToolCardTracker) ──
 
     /// <summary>One drained attachment for the inline-image pipeline.</summary>
