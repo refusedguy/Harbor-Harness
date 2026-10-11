@@ -3,23 +3,29 @@ using Harbor.Tui.CellForge.Widgets;
 namespace Harbor.App.Cli.Repl.Commands;
 
 /// <summary>
-/// Setup checklist re-entry (issue #383) — the post-wizard "you are N/M done,
-/// here is what is left" surface. Complements the linear onboarding wizard,
-/// which stays a separate, optional flow reachable through <c>/config</c>,
-/// <c>/model</c> and <c>/auth</c>.
+/// Setup entry (issue #1248, slice 1): <c>/setup</c> opens the interactive
+/// onboarding flow (provider → key → model) as a CellForge dialog overlay,
+/// persisted to the config/auth stores. <c>/checklist</c> keeps the read-only
+/// setup-guide progress surface (issue #383).
 /// </summary>
 internal sealed class SetupCommand : IReplCommand
 {
     public string Id => "setup";
     public IReadOnlyList<string> Aliases => ["checklist"];
     public string Title => "Setup";
-    public string Description => "setup guide checklist (progress + remaining steps)";
+    public string Description => "interactive setup (provider, key, model)";
     public string Group => "Config";
 
     public Task ExecuteAsync(ReplCommandContext ctx, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(ctx);
         ctx.Host.Palette.Hide();
+
+        if (!string.Equals(ctx.RawId, "checklist", StringComparison.OrdinalIgnoreCase)
+            && ctx.Host is Harbor.App.Cli.Repl.CellForgeReplRunner runner)
+        {
+            return runner.Onboarding.OpenAsync(ct);
+        }
 
         // The checklist overlay is seated on the chat screen by every CellForge
         // host; Show() paints the last published snapshot, so the modal opens

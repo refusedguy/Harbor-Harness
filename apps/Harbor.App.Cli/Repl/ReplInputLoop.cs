@@ -113,6 +113,16 @@ internal sealed class ReplInputLoop(CellForgeReplRunner host)
 
             case InputEventKind.Paste:
             {
+                // Onboarding modal (issue #1248, slice 1): the dialog takes
+                // text one key at a time and owns the keyboard, so a paste
+                // must not land in the composer behind it.
+                if (host.Onboarding.Active)
+                {
+                    host.Bridge.AppendSystemLine("⎘ paste: setup is open — type into the dialog instead");
+                    host._wake.Writer.TryWrite(null);
+                    break;
+                }
+
                 // Paste payload is verbatim by parser contract — sanitize it
                 // BEFORE it reaches the composer and, through submit, the agent
                 // (osc-sprint): escape sequences and control bytes stripped, a
@@ -356,6 +366,14 @@ internal sealed class ReplInputLoop(CellForgeReplRunner host)
                 host._wake.Writer.TryWrite(null);
             }
 
+            return;
+        }
+
+        // Onboarding flow (issue #1248, slice 1): modal dialog — while it is
+        // up every key belongs to it, so typing never reaches the composer.
+        if (await host.Onboarding.HandleKeyAsync(key, ct).ConfigureAwait(false))
+        {
+            host._wake.Writer.TryWrite(null);
             return;
         }
 
