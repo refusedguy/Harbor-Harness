@@ -61,6 +61,12 @@ public sealed class InlineAgentStreamBridge : IDisposable
                 _stream?.AppendDelta(delta.Delta);
                 break;
 
+            case MessageUpdateEvent update when update.LlmEvent is ThinkingDeltaEvent thd:
+                // O10 #1179: thinking accumulates for the collapsed one-liner
+                // committed on finish — never interleaved with the answer.
+                _stream?.AppendThinking(thd.Delta);
+                break;
+
             case MessageEndEvent:
                 FinishStream();
                 break;
@@ -104,6 +110,13 @@ public sealed class InlineAgentStreamBridge : IDisposable
         {
             // Finalized blocks reveal everything in one pass (BatchAll).
             Tick(_lastNowMs);
+        }
+
+        // O10 #1179: collapsed thinking — one summary + duration line above
+        // the answer (opencode ReasoningPart); nothing streams inline.
+        if (_stream.ThinkBuffer.Length > 0)
+        {
+            CommitLine(_stream.ThinkHeaderLine, StyleAttr.Dim | StyleAttr.Italic);
         }
 
         var full = BuildStreamText();
