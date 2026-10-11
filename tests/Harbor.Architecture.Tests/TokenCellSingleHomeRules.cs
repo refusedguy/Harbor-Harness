@@ -386,7 +386,7 @@ public sealed class TokenCellSingleHomeRules
         // policed them would be the #591 failure mode — half a rule, reporting a
         // plausible 0.
         //
-        //   TuiViewModels.cs:105        `ctx: {RequestTokens / 1000}k/{ContextPct}%`
+        //   TuiViewModels.cs:115        `ctx: {RequestTokens / 1000}k/{ContextPct}%`
         //     CONTEXT OCCUPANCY, a different magnitude, and one the repo separates
         //     on purpose (#623/#630): ContextUsage.DisplayedInputTokens itself splits
         //     "paid" from "occupied". Uniting it with the spend above would be a

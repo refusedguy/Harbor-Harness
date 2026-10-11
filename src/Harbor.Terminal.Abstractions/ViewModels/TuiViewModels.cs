@@ -9,10 +9,10 @@ namespace Harbor.Terminal.Abstractions.ViewModels;
 ///     line of <c>model | ctx% | cost | queue</c> with a status tail.
 ///     Uses CommunityToolkit.Mvvm source generators for INPC.
 /// </summary>
-public sealed partial class StatusBarViewModel : ObservableObject, ITuiViewModel
+public sealed partial class StatusBarViewModel : ReactiveViewModel
 {
-
     [ObservableProperty]
+    [Reactive]
     private string _agent = "code";
 
     /// <summary>
@@ -24,15 +24,18 @@ public sealed partial class StatusBarViewModel : ObservableObject, ITuiViewModel
     ///     a window reading (#623).
     /// </summary>
     [ObservableProperty]
+    [Reactive]
     private int _requestTokens;
 
     /// <summary>
     ///     Model context window (max input tokens). 0 when unknown.
     /// </summary>
     [ObservableProperty]
+    [Reactive]
     private int _contextWindow;
 
     [ObservableProperty]
+    [Reactive]
     private decimal _cost;
 
     /// <summary>
@@ -44,20 +47,26 @@ public sealed partial class StatusBarViewModel : ObservableObject, ITuiViewModel
     ///     flag renders exactly as it did.
     /// </summary>
     [ObservableProperty]
+    [Reactive]
     private bool _isCostKnown = true;
     [ObservableProperty]
+    [Reactive]
     private string _model = string.Empty;
 
     [ObservableProperty]
+    [Reactive]
     private string _provider = string.Empty;
 
     [ObservableProperty]
+    [Reactive]
     private string _status = "idle";
 
     [ObservableProperty]
+    [Reactive]
     private int _tokensIn;
 
     [ObservableProperty]
+    [Reactive]
     private int _tokensOut;
 
     /// <summary>
@@ -68,6 +77,7 @@ public sealed partial class StatusBarViewModel : ObservableObject, ITuiViewModel
     ///     <c>queue: N</c> only while non-zero so the idle line stays clean.
     /// </summary>
     [ObservableProperty]
+    [Reactive(Layout = true)]
     private int _queuedCount;
 
     private Pricing? _pricing;
@@ -133,10 +143,10 @@ public sealed partial class StatusBarViewModel : ObservableObject, ITuiViewModel
         : UsdCell.Unpriced;
 
     /// <inheritdoc />
-    public string Id => "status-bar";
+    public override string Id => "status-bar";
 
     /// <inheritdoc />
-    public Task UpdateFromEventAsync(AgentEvent @event, CancellationToken ct = default)
+    public override Task UpdateFromEventAsync(AgentEvent @event, CancellationToken ct = default)
     {
         switch (@event)
         {
@@ -227,12 +237,75 @@ public sealed partial class StatusBarViewModel : ObservableObject, ITuiViewModel
         QueuedCount = 0;
         Status = "idle";
     }
+
+    // T2 reactive conventions (#1184): watch_* side-effects, validate_* coercion,
+    // compute_* derived. compute_*: ContextPct, Formatted, CostText above are
+    // read-only derivations — never manually two-field-synced.
+
+    private void Watch_Status(string newValue) => MarkRepaint();
+
+    partial void OnStatusChanged(string value) => Watch_Status(value);
+
+    partial void OnAgentChanged(string value) => MarkRepaint();
+
+    partial void OnModelChanged(string value) => MarkRepaint();
+
+    partial void OnProviderChanged(string value) => MarkRepaint();
+
+    partial void OnCostChanged(decimal value) => MarkRepaint();
+
+    partial void OnIsCostKnownChanged(bool value) => MarkRepaint();
+
+    partial void OnTokensInChanged(int value) => MarkRepaint();
+
+    partial void OnTokensOutChanged(int value) => MarkRepaint();
+
+    private static int Validate_RequestTokens(int value) => NonNegative(value);
+
+    partial void OnRequestTokensChanged(int value)
+    {
+        int coerced = Validate_RequestTokens(value);
+        if (coerced != value)
+        {
+            RequestTokens = coerced;
+            return;
+        }
+        MarkRepaint();
+    }
+
+    private static int Validate_ContextWindow(int value) => NonNegative(value);
+
+    partial void OnContextWindowChanged(int value)
+    {
+        int coerced = Validate_ContextWindow(value);
+        if (coerced != value)
+        {
+            ContextWindow = coerced;
+            return;
+        }
+        MarkRepaint();
+    }
+
+    private static int Validate_QueuedCount(int value) => NonNegative(value);
+
+    partial void OnQueuedCountChanged(int value)
+    {
+        int coerced = Validate_QueuedCount(value);
+        if (coerced != value)
+        {
+            QueuedCount = coerced;
+            return;
+        }
+        // The queue segment appears/disappears with the count — line shape
+        // change, so layout, not just repaint.
+        MarkLayout();
+    }
 }
 
 /// <summary>
 ///     Chat history view model — accumulates messages with streaming support.
 /// </summary>
-public sealed partial class ChatHistoryViewModel : ObservableObject, ITuiViewModel
+public sealed partial class ChatHistoryViewModel : ReactiveViewModel
 {
     private readonly ObservableCollection<ChatEntry> _entries = new();
 
@@ -244,16 +317,20 @@ public sealed partial class ChatHistoryViewModel : ObservableObject, ITuiViewMod
     private readonly object _entriesLock = new();
 
     [ObservableProperty]
+    [Reactive(Layout = true)]
     private bool _isStreaming;
 
     [ObservableProperty]
+    [Reactive]
     private bool _isThinking;
 
     [ObservableProperty]
+    [Reactive]
     [property: BindsToView("chat-history")]
     private string _streamingText = string.Empty;
 
     [ObservableProperty]
+    [Reactive]
     private string _thinkingText = string.Empty;
 
     /// <summary>
@@ -269,10 +346,10 @@ public sealed partial class ChatHistoryViewModel : ObservableObject, ITuiViewMod
     public IReadOnlyList<ChatEntry> Entries => _entries;
 
     /// <inheritdoc />
-    public string Id => "chat-history";
+    public override string Id => "chat-history";
 
     /// <inheritdoc />
-    public Task UpdateFromEventAsync(AgentEvent @event, CancellationToken ct = default)
+    public override Task UpdateFromEventAsync(AgentEvent @event, CancellationToken ct = default)
     {
         switch (@event)
         {
@@ -351,6 +428,8 @@ public sealed partial class ChatHistoryViewModel : ObservableObject, ITuiViewMod
         {
             _entries.Add(entry);
         }
+        // A new entry changes the transcript shape — layout, not just repaint.
+        MarkLayout();
     }
 
     /// <summary>
@@ -367,6 +446,7 @@ public sealed partial class ChatHistoryViewModel : ObservableObject, ITuiViewMod
         IsStreaming = false;
         ThinkingText = string.Empty;
         IsThinking = false;
+        MarkLayout();
     }
 
     /// <summary>
@@ -374,30 +454,58 @@ public sealed partial class ChatHistoryViewModel : ObservableObject, ITuiViewMod
     /// </summary>
     [RelayCommand]
     private void ClearHistory() => Clear();
+
+    // T2 reactive conventions (#1184). Streaming/thinking text deltas are
+    // cheap repaints; entry-list and streaming-lifecycle flips are layout.
+
+    private void Watch_StreamingText(string newValue) => MarkRepaint();
+
+    private static string Validate_StreamingText(string? value) => NonNull(value);
+
+    partial void OnStreamingTextChanged(string value)
+    {
+        string coerced = Validate_StreamingText(value);
+        if (!string.Equals(coerced, value, StringComparison.Ordinal))
+        {
+            StreamingText = coerced;
+            return;
+        }
+        Watch_StreamingText(value);
+    }
+
+    partial void OnThinkingTextChanged(string value) => MarkRepaint();
+
+    partial void OnIsStreamingChanged(bool value) => MarkLayout();
+
+    partial void OnIsThinkingChanged(bool value) => MarkRepaint();
 }
 
 /// <summary>
 ///     Input editor view model — tracks user input.
 /// </summary>
-public sealed partial class InputViewModel : ObservableObject, ITuiViewModel
+public sealed partial class InputViewModel : ReactiveViewModel
 {
 
     [ObservableProperty]
+    [Reactive]
     private int _cursorPosition;
 
     [ObservableProperty]
+    [Reactive(Layout = true)]
     private bool _isMultiline;
 
     [ObservableProperty]
+    [Reactive]
     private string _placeholder = "Type your message...";
     [ObservableProperty]
+    [Reactive]
     private string _text = string.Empty;
 
     /// <inheritdoc />
-    public string Id => "input";
+    public override string Id => "input";
 
     /// <inheritdoc />
-    public Task UpdateFromEventAsync(AgentEvent @event, CancellationToken ct = default) => Task.CompletedTask;
+    public override Task UpdateFromEventAsync(AgentEvent @event, CancellationToken ct = default) => Task.CompletedTask;
 
     /// <summary>
     ///     Submit the current text and reset the editor. Bound to the <c>Submit</c> command.
@@ -418,6 +526,38 @@ public sealed partial class InputViewModel : ObservableObject, ITuiViewModel
         // Keep text for reference, just reset cursor
         CursorPosition = 0;
     }
+
+    // T2 reactive conventions (#1184).
+
+    private void Watch_Text(string newValue) => MarkRepaint();
+
+    private static string Validate_Text(string? value) => NonNull(value);
+
+    partial void OnTextChanged(string value)
+    {
+        string coerced = Validate_Text(value);
+        if (!string.Equals(coerced, value, StringComparison.Ordinal))
+        {
+            Text = coerced;
+            return;
+        }
+        Watch_Text(value);
+    }
+
+    private static int Validate_CursorPosition(int value) => NonNegative(value);
+
+    partial void OnCursorPositionChanged(int value)
+    {
+        int coerced = Validate_CursorPosition(value);
+        if (coerced != value)
+        {
+            CursorPosition = coerced;
+            return;
+        }
+        MarkRepaint();
+    }
+
+    partial void OnIsMultilineChanged(bool value) => MarkLayout();
 }
 
 /// <summary>
