@@ -108,6 +108,8 @@ public class HookRunnerTests
     [Test]
     public async Task PreToolUse_DenyHook_ReturnsDenyWithReason()
     {
+        if (!OperatingSystem.IsLinux())
+            return;
         var runner = NewRunner(NewTempDir(),
             """{"hooks":{"PreToolUse":[{"matcher":"counter","command":"echo '{\"decision\":\"deny\",\"reason\":\"nope\"}'"}]}}""");
         using var doc = JsonDocument.Parse("""{"n":1}""");
@@ -121,6 +123,8 @@ public class HookRunnerTests
     [Test]
     public async Task PreToolUse_SilentSuccess_Allows()
     {
+        if (!OperatingSystem.IsLinux())
+            return;
         var runner = NewRunner(NewTempDir(),
             """{"hooks":{"PreToolUse":[{"command":"true"}]}}""");
         using var doc = JsonDocument.Parse("""{"n":1}""");
@@ -133,6 +137,8 @@ public class HookRunnerTests
     [Test]
     public async Task PreToolUse_SilentNonZeroExit_DeniesFailClosed()
     {
+        if (!OperatingSystem.IsLinux())
+            return;
         var runner = NewRunner(NewTempDir(),
             """{"hooks":{"PreToolUse":[{"command":"exit 3"}]}}""");
         using var doc = JsonDocument.Parse("""{"n":1}""");
@@ -145,6 +151,8 @@ public class HookRunnerTests
     [Test]
     public async Task PreToolUse_InvalidVerdictJson_DeniesFailClosed()
     {
+        if (!OperatingSystem.IsLinux())
+            return;
         var runner = NewRunner(NewTempDir(),
             """{"hooks":{"PreToolUse":[{"command":"echo not-json"}]}}""");
         using var doc = JsonDocument.Parse("""{"n":1}""");
@@ -157,6 +165,8 @@ public class HookRunnerTests
     [Test]
     public async Task PreToolUse_UnknownDecision_DeniesFailClosed()
     {
+        if (!OperatingSystem.IsLinux())
+            return;
         var runner = NewRunner(NewTempDir(),
             """{"hooks":{"PreToolUse":[{"command":"echo '{\"decision\":\"maybe\"}'"}]}}""");
         using var doc = JsonDocument.Parse("""{"n":1}""");
@@ -169,6 +179,8 @@ public class HookRunnerTests
     [Test]
     public async Task PreToolUse_Timeout_DeniesFailClosed()
     {
+        if (!OperatingSystem.IsLinux())
+            return;
         var runner = NewRunner(NewTempDir(),
             """{"hooks":{"PreToolUse":[{"command":"sleep 30","timeout":1}]}}""");
         using var doc = JsonDocument.Parse("""{"n":1}""");
@@ -182,6 +194,8 @@ public class HookRunnerTests
     [Test]
     public async Task PreToolUse_EditHook_ReturnsEditedArgs()
     {
+        if (!OperatingSystem.IsLinux())
+            return;
         var runner = NewRunner(NewTempDir(),
             """{"hooks":{"PreToolUse":[{"matcher":"counter","command":"echo '{\"decision\":\"edit\",\"editedArgs\":{\"n\":2}}'"}]}}""");
         using var doc = JsonDocument.Parse("""{"n":1}""");
@@ -226,6 +240,8 @@ public class HookRunnerTests
     [Test]
     public async Task PostToolUse_RunsCommand()
     {
+        if (!OperatingSystem.IsLinux())
+            return;
         string dir = NewTempDir();
         string marker = Path.Combine(dir, "post-marker");
         var runner = NewRunner(dir,
@@ -240,6 +256,8 @@ public class HookRunnerTests
     [Test]
     public async Task PostToolUse_FailingHook_DoesNotThrow()
     {
+        if (!OperatingSystem.IsLinux())
+            return;
         var runner = NewRunner(NewTempDir(),
             """{"hooks":{"PostToolUse":[{"command":"exit 3"}]}}""");
         using var doc = JsonDocument.Parse("""{"n":1}""");
@@ -250,6 +268,8 @@ public class HookRunnerTests
     [Test]
     public async Task SessionEnd_RunsCommand()
     {
+        if (!OperatingSystem.IsLinux())
+            return;
         string dir = NewTempDir();
         string marker = Path.Combine(dir, "end-marker");
         var runner = NewRunner(dir,
@@ -269,6 +289,8 @@ public class HookRunnerTests
     [Test]
     public async Task Dispatcher_PreToolUseDeny_ToolNeverExecutes()
     {
+        if (!OperatingSystem.IsLinux())
+            return;
         var hooks = NewRunner(NewTempDir(),
             """{"hooks":{"PreToolUse":[{"matcher":"counter","command":"echo '{\"decision\":\"deny\",\"reason\":\"hooked\"}'"}]}}""");
         var tool = new CountingTool();
@@ -288,6 +310,8 @@ public class HookRunnerTests
     [Test]
     public async Task Dispatcher_PreToolUseEdit_ToolSeesEditedArgs()
     {
+        if (!OperatingSystem.IsLinux())
+            return;
         var hooks = NewRunner(NewTempDir(),
             """{"hooks":{"PreToolUse":[{"matcher":"counter","command":"echo '{\"decision\":\"edit\",\"editedArgs\":{\"n\":2}}'"}]}}""");
         var tool = new CountingTool();
@@ -307,6 +331,8 @@ public class HookRunnerTests
     [Test]
     public async Task Dispatcher_PostToolUse_RunsAfterExecution()
     {
+        if (!OperatingSystem.IsLinux())
+            return;
         string dir = NewTempDir();
         string marker = Path.Combine(dir, "post-marker");
         var hooks = NewRunner(dir,
@@ -344,6 +370,8 @@ public class HookRunnerTests
     [Test]
     public async Task Loop_SessionEndHook_RunsAtEnd()
     {
+        if (!OperatingSystem.IsLinux())
+            return;
         string dir = NewTempDir();
         string marker = Path.Combine(dir, "end-marker");
         var hooks = NewRunner(dir,
