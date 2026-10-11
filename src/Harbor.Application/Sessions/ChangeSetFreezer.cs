@@ -533,11 +533,16 @@ public static class ChangeSetFreezer
         if (porcelain.IsFailure)
             return porcelain.ConvertFailure<int>();
         int ignored = 0;
-        string[] lines = porcelain.Value.Split('\n');
-        for (int i = 0; i < lines.Length; i++)
+        ReadOnlySpan<char> rest = porcelain.Value.AsSpan();
+        while (true)
         {
-            if (lines[i].StartsWith("!!", StringComparison.Ordinal))
+            int nl = rest.IndexOf('\n');
+            ReadOnlySpan<char> line = nl < 0 ? rest : rest.Slice(0, nl);
+            if (line.StartsWith("!!", StringComparison.Ordinal))
                 ignored++;
+            if (nl < 0)
+                break;
+            rest = rest.Slice(nl + 1);
         }
         return Result.Success(ignored);
     }
@@ -576,32 +581,54 @@ public static class ChangeSetFreezer
     private static Result<IReadOnlyList<NameStatus>> ParseNameStatus(string stdout)
     {
         var entries = new List<NameStatus>();
-        string[] tokens = stdout.Split('\0');
-        int i = 0;
-        while (i < tokens.Length)
+        ReadOnlySpan<char> rest = stdout.AsSpan();
+        while (TryReadNulToken(ref rest, out ReadOnlySpan<char> token))
         {
-            string token = tokens[i];
-            i++;
-            if (token.Length == 0)
+            if (token.IsEmpty)
                 continue;
             char kind = token[0];
             bool rename = kind is 'R' or 'C';
-            int want = rename ? 2 : 1;
-            if (i + want - 1 >= tokens.Length)
-                return Result.Failure<IReadOnlyList<NameStatus>>(
-                    "Freeze failed at stage 'inventory': truncated name-status — refusing to record a partial set.");
             if (rename)
             {
-                entries.Add(new NameStatus(kind.ToString(), tokens[i + 1], tokens[i]));
-                i += 2;
+                if (!TryReadNulToken(ref rest, out ReadOnlySpan<char> oldPath)
+                    || !TryReadNulToken(ref rest, out ReadOnlySpan<char> newPath))
+                    return Result.Failure<IReadOnlyList<NameStatus>>(
+                        "Freeze failed at stage 'inventory': truncated name-status — refusing to record a partial set.");
+                entries.Add(new NameStatus(kind.ToString(), newPath.ToString(), oldPath.ToString()));
             }
             else
             {
-                entries.Add(new NameStatus(kind.ToString(), tokens[i], null));
-                i += 1;
+                if (!TryReadNulToken(ref rest, out ReadOnlySpan<char> path))
+                    return Result.Failure<IReadOnlyList<NameStatus>>(
+                        "Freeze failed at stage 'inventory': truncated name-status — refusing to record a partial set.");
+                entries.Add(new NameStatus(kind.ToString(), path.ToString(), null));
             }
         }
         return Result.Success<IReadOnlyList<NameStatus>>(entries);
+    }
+
+    /// <summary>
+    ///     Read one raw <c>-z</c> token (NUL-separated), preserving empty
+    ///     segments exactly like <c>string.Split('\0')</c> so the
+    ///     truncated-output checks keep their semantics without the array.
+    /// </summary>
+    private static bool TryReadNulToken(ref ReadOnlySpan<char> rest, out ReadOnlySpan<char> token)
+    {
+        if (rest.IsEmpty)
+        {
+            token = default;
+            return false;
+        }
+        int nul = rest.IndexOf('\0');
+        if (nul < 0)
+        {
+            token = rest;
+            rest = ReadOnlySpan<char>.Empty;
+            return true;
+        }
+        token = rest.Slice(0, nul);
+        rest = rest.Slice(nul + 1);
+        return true;
     }
 
     private static async Task<Result<IReadOnlyList<NumStat>>> DiffNumstatAsync(
@@ -623,47 +650,43 @@ public static class ChangeSetFreezer
     private static Result<IReadOnlyList<NumStat>> ParseNumstat(string stdout)
     {
         var entries = new List<NumStat>();
-        string[] tokens = stdout.Split('\0');
-        int i = 0;
-        while (i < tokens.Length)
+        ReadOnlySpan<char> rest = stdout.AsSpan();
+        while (TryReadNulToken(ref rest, out ReadOnlySpan<char> token))
         {
-            string token = tokens[i];
-            i++;
-            if (token.Length == 0)
+            if (token.IsEmpty)
                 continue;
             int tab = token.IndexOf('\t');
             if (tab < 0)
                 return Result.Failure<IReadOnlyList<NumStat>>(
                     "Freeze failed at stage 'inventory': malformed numstat — refusing to record a partial set.");
-            int tab2 = token.IndexOf('\t', tab + 1);
-            if (tab2 < 0)
+            int rel = token.Slice(tab + 1).IndexOf('\t');
+            if (rel < 0)
                 return Result.Failure<IReadOnlyList<NumStat>>(
                     "Freeze failed at stage 'inventory': malformed numstat — refusing to record a partial set.");
-            string added = token.Substring(0, tab);
-            string deleted = token.Substring(tab + 1, tab2 - tab - 1);
-            string rest = token.Substring(tab2 + 1);
+            int tab2 = tab + 1 + rel;
+            ReadOnlySpan<char> added = token.Slice(0, tab);
+            ReadOnlySpan<char> deleted = token.Slice(tab + 1, tab2 - tab - 1);
+            ReadOnlySpan<char> remainder = token.Slice(tab2 + 1);
             bool binary = added.Length == 1 && added[0] == '-'
                 && deleted.Length == 1 && deleted[0] == '-';
-            if (rest.Length == 0)
+            if (remainder.IsEmpty)
             {
                 // Rename/copy with -z: the two paths arrive as the next tokens.
-                if (i + 1 >= tokens.Length)
+                if (!TryReadNulToken(ref rest, out ReadOnlySpan<char> oldPath)
+                    || !TryReadNulToken(ref rest, out ReadOnlySpan<char> newPath))
                     return Result.Failure<IReadOnlyList<NumStat>>(
                         "Freeze failed at stage 'inventory': truncated numstat — refusing to record a partial set.");
-                string oldPath = tokens[i];
-                string newPath = tokens[i + 1];
-                i += 2;
-                entries.Add(MakeNumStat(newPath, oldPath, added, deleted, binary));
+                entries.Add(MakeNumStat(newPath.ToString(), oldPath.ToString(), added, deleted, binary));
             }
             else
             {
-                entries.Add(MakeNumStat(rest, null, added, deleted, binary));
+                entries.Add(MakeNumStat(remainder.ToString(), null, added, deleted, binary));
             }
         }
         return Result.Success<IReadOnlyList<NumStat>>(entries);
     }
 
-    private static NumStat MakeNumStat(string path, string? oldPath, string added, string deleted, bool binary)
+    private static NumStat MakeNumStat(string path, string? oldPath, ReadOnlySpan<char> added, ReadOnlySpan<char> deleted, bool binary)
     {
         if (binary)
             return new NumStat(path, oldPath, null, null, true);
