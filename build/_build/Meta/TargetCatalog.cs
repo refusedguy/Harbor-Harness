@@ -33,13 +33,13 @@ public static class TargetCatalog
     private static readonly TargetDoc[] Entries =
     [
         new("Clean", "Delete bin/obj under src/apps/tests/samples and clear artifacts/.",
-            [], ["Restore"],
+            [], [],
             [],
             [new TargetOutput("dir", "artifacts/ (cleared)")],
             ["./build.sh Clean"],
             ["safe to run repeatedly; runs automatically before Restore"]),
         new("Restore", "dotnet restore for the whole solution.",
-            [], [],
+            [], ["Clean"],
             [],
             [new TargetOutput("none", null)],
             ["./build.sh Restore"],
