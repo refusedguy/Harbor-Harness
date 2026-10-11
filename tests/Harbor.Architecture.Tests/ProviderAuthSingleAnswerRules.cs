@@ -46,6 +46,28 @@
 // every surface that touches the registry fan-out, and it deliberately does not
 // name IAuthResolver, because reachability is not authorization.
 
+// MECHANISM (#1086, step 2, conveyor)
+// -----------------------------------
+// The bans below are one ScanRule over the two governed view-models: the
+// auth-verdict shapes (dictionary / model-count) plus the probe-budget shape
+// (hard-coded duration, reported only for the settings row — the only file the
+// old check read for it). Enumeration, matching and the control/discovery
+// verdicts are ScanRunner's; this file keeps the issue prose and the test names.
+//
+// Three deliberate carries, not re-decisions:
+//   * The matchers run over the RAW source with no comment stripping — the old
+//     code called `Regex.Matches(source)` on the file text as read. A comment
+//     naming `TimeSpan.FromSeconds` trips this rule exactly as before; the
+//     parsers replicate the call verbatim (whole-source match, index-mapped
+//     line numbers) rather than re-deciding it.
+//   * The scope is two NAMED files, not a tree: `InScope` admits exactly the
+//     picker and the settings row, and `MustContain` names both — so a deleted
+//     subject fails the discovery floor instead of vanishing, as the old
+//     missing-file arm did.
+//   * The positive-existence halves (names IAuthResolver / the canonical
+//     timeout / UiFeedbackBudget, the live-subjects pins) are not
+//     forbidden-shape scans and stay handwritten.
+
 using System.Text.RegularExpressions;
 
 namespace Harbor.Architecture.Tests;
@@ -87,6 +109,114 @@ public class ProviderAuthSingleAnswerRules
     private static readonly Regex HardCodedDuration =
         new(@"TimeSpan\s*\.\s*FromSeconds\s*\(", RegexOptions.Compiled);
 
+    private const string AuthDictSubId = "AUTH-FROM-CONFIG-DICTIONARY";
+    private const string AuthCountSubId = "AUTH-FROM-MODEL-COUNT";
+    private const string ProbeBudgetSubId = "PROBE-HARDCODED-DURATION";
+
+    /// <summary>The bans as data: two verdict shapes plus the probe-budget shape, over the two governed files.</summary>
+    private static readonly ScanRule Rule = new()
+    {
+        Id = "ProviderAuthSingleAnswer",
+        Trees = ["src/" + ProjectDir + "/ViewModels"],
+        InScope = path =>
+            path.EndsWith("/" + PickerFile, StringComparison.Ordinal)
+            || path.EndsWith("/" + ConfigRowFile, StringComparison.Ordinal),
+        Forbidden =
+        [
+            new ScanForbidden(
+                AuthDictSubId,
+                AuthFromConfigDictionary,
+                "a config dictionary cannot see an env key — read the verdict from IAuthResolver. "
+                + "See issue #671."),
+            new ScanForbidden(
+                AuthCountSubId,
+                AuthFromModelCount,
+                "a model count is reachability, not identity — read the verdict from IAuthResolver. "
+                + "See issue #671."),
+            new ScanForbidden(
+                ProbeBudgetSubId,
+                HardCodedDuration,
+                "a provider probe spends IProviderHealthCheck.DefaultTimeout — the same 10s the "
+                + "onboarding wizard spends — not a literal of its own. See issue #671."),
+        ],
+        Controls =
+        [
+            // The exact shape the picker shipped.
+            new ScanControl("Picker/Dict.cs", "var key = ApiKeys.GetValueOrDefault(providerId);", AuthDictSubId),
+            new ScanControl("Picker/Try.cs", "if (ApiKeys.TryGetValue(id, out var k)) { }", AuthDictSubId),
+            // The exact shape the settings row shipped.
+            new ScanControl("Row/Count.cs", "IsAuthenticated = count > 0;", AuthCountSubId),
+            // The exact probe shape the settings row shipped: its own 5s with a
+            // user-facing string promising "Timed out after 5s". The control file
+            // carries the governed name, because the old check read only that file.
+            new ScanControl(
+                "Row/ProviderConfigViewModel.cs",
+                "using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));",
+                ProbeBudgetSubId),
+            // The post-fix shapes: the verdict from the abstraction, the budget
+            // from the canonical constant.
+            new ScanControl("Fixed/Resolver.cs", "_authState.IsAuthenticated = resolved;", null),
+            new ScanControl(
+                "Fixed/ProviderConfigViewModel.cs",
+                "using var cts = new CancellationTokenSource(IProviderHealthCheck.DefaultTimeout);",
+                null),
+            // A duration literal in the PICKER is not a probe budget — the old
+            // check never read that file for this shape.
+            new ScanControl(
+                "Picker/ProviderModelPickerViewModel.cs",
+                "using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));",
+                null),
+        ],
+        MinHits = 2,
+        MustContain =
+        [
+            "src/" + ProjectDir + "/ViewModels/" + PickerFile,
+            "src/" + ProjectDir + "/ViewModels/" + ConfigRowFile,
+        ],
+        CustomParse = ParseAuthSubjects,
+    };
+
+    /// <summary>
+    ///     The custom parser: the old whole-source `Matches` calls verbatim — raw
+    ///     source, no stripping — with match indexes mapped back to 1-based lines.
+    ///     The duration shape is reported only for the settings row, exactly as
+    ///     the old check read only that file.
+    /// </summary>
+    private static IEnumerable<ScanHit> ParseAuthSubjects(string displayPath, string rawSource)
+    {
+        foreach (Match match in AuthFromConfigDictionary.Matches(rawSource))
+        {
+            yield return new ScanHit(AuthDictSubId, displayPath, LineOf(rawSource, match.Index), match.Value.Trim());
+        }
+
+        foreach (Match match in AuthFromModelCount.Matches(rawSource))
+        {
+            yield return new ScanHit(AuthCountSubId, displayPath, LineOf(rawSource, match.Index), match.Value.Trim());
+        }
+
+        if (displayPath.EndsWith("/" + ConfigRowFile, StringComparison.Ordinal))
+        {
+            foreach (Match match in HardCodedDuration.Matches(rawSource))
+            {
+                yield return new ScanHit(ProbeBudgetSubId, displayPath, LineOf(rawSource, match.Index), match.Value.Trim());
+            }
+        }
+    }
+
+    private static int LineOf(string source, int index)
+    {
+        int line = 1;
+        for (int i = 0; i < index && i < source.Length; i++)
+        {
+            if (source[i] == '\n')
+            {
+                line++;
+            }
+        }
+
+        return line;
+    }
+
     /// <summary>Source of a named view-model under the governed project.</summary>
     private static string? ReadViewModel(string fileName)
     {
@@ -121,26 +251,10 @@ public class ProviderAuthSingleAnswerRules
     [Test]
     public async Task NoAuthViewModel_DecidesAuthorizationFromAConfigDictionaryOrAModelCount()
     {
-        var violations = new List<string>();
-
-        foreach ((string file, string? source) in AuthRenderingViewModels())
-        {
-            if (source is null)
-            {
-                violations.Add($"{file}: file not found — the rule lost its subject");
-                continue;
-            }
-
-            foreach (Match match in AuthFromConfigDictionary.Matches(source))
-            {
-                violations.Add($"{file}: authorization read from the config dictionary ('{match.Value}')");
-            }
-
-            foreach (Match match in AuthFromModelCount.Matches(source))
-            {
-                violations.Add($"{file}: authorization inferred from a model count ('{match.Value.Trim()}')");
-            }
-        }
+        // A missing subject fails the discovery floor (MustContain names both
+        // files) rather than vanishing — the old missing-file arm, preserved as
+        // a verdict rather than a message.
+        List<string> violations = ScanRunner.Evaluate(Rule);
 
         await Assert.That(violations).IsEmpty()
             .Because(
@@ -171,15 +285,13 @@ public class ProviderAuthSingleAnswerRules
         await Assert.That(source).IsNotNull()
             .Because("The settings row must exist — it is the surface whose auth flag must not track a model count.");
 
-        var literals = HardCodedDuration.Matches(source!)
-            .Select(m => m.Value)
-            .ToArray();
+        List<string> violations = ScanRunner.Evaluate(Rule);
 
-        await Assert.That(literals).IsEmpty()
+        await Assert.That(violations).IsEmpty()
             .Because(
                 "TestConnectionAsync probes a provider (it fetches /models), so its budget is "
                 + "IProviderHealthCheck.DefaultTimeout — the same 10s the onboarding wizard spends — not a literal "
-                + "of its own. Found: " + Offenders(literals));
+                + "of its own. Found: " + Offenders(violations));
     }
 
     [Test]
@@ -230,5 +342,50 @@ public class ProviderAuthSingleAnswerRules
             .Because("The picker still projects an auth verdict (ProviderGroupViewModel.IsAuthenticated drives the ✓/✗ glyph).");
         await Assert.That(viewModels[ConfigRowFile]!).Contains("IsAuthenticated")
             .Because("The settings row still exposes an auth verdict (AuthIcon/AuthText branch on it).");
+    }
+
+    /// <summary>
+    ///     The walk really reaches both governed view-models. A deleted subject
+    ///     fails here (MustContain) and in <see cref="TheRuleStillHasLiveSubjects" />,
+    ///     never by silently leaving the scope.
+    /// </summary>
+    [Test]
+    public async Task Scanner_SeesBothSubjects()
+    {
+        List<string> discovery = ScanRunner.CheckDiscovery(Rule);
+
+        await Assert.That(discovery).IsEmpty()
+            .Because(
+                "Both auth-rendering view-models must stay inside the scanned set, or the "
+                + "bans above police nothing. "
+                + string.Join("; ", discovery));
+    }
+
+    /// <summary>
+    ///     Every baseline row states why it is tolerated, in the row itself. Vacuous
+    ///     while both tables are empty, and deliberately so: wired from the first
+    ///     row so the first row cannot skip the argument.
+    /// </summary>
+    [Test]
+    public async Task Baseline_Rows_AllHaveReasons()
+    {
+        List<string> failures = ScanRunner.CheckReasons(Rule);
+
+        await Assert.That(failures).IsEmpty().Because(string.Join("\n", failures));
+    }
+
+    /// <summary>
+    ///     Every baseline row must still correspond to a real hit, so the table
+    ///     cannot rot into a blanket permission.
+    /// </summary>
+    [Test]
+    public async Task Baseline_Rows_Are_Not_Stale()
+    {
+        List<string> stale = ScanRunner.StaleBaselineKeys(
+            Rule, ScanRunner.ReadSources(ScanRunner.ScopeFiles(Rule)));
+
+        await Assert.That(stale).IsEmpty()
+            .Because("a baseline row with no violation behind it is a permission for a "
+                + "problem that no longer exists: " + string.Join(", ", stale));
     }
 }

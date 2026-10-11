@@ -146,6 +146,22 @@
 // `ProviderPresets` catalog out of `Harbor.Application`, which has nothing to do
 // with config persistence. Retiring it is a separate move, in a separate issue.
 
+// MECHANISM (#1086, step 2, conveyor)
+// -----------------------------------
+// The disk-call ban below is a ScanRule: one shape, no baseline, four planted
+// controls, a discovery floor. Enumeration, matching and the control/discovery
+// verdicts are ScanRunner's; this file keeps the issue prose and the test names.
+//
+// Two deliberate carries, not re-decisions:
+//   * The verdict runs through `SourceCommentStripper.StripAll` inside
+//     `ParseDiskCall` — never the shared stripper (see ScanRule.cs: divergent
+//     contracts) — and reports a missing subject file the way the old probe
+//     did only on the enumerate-then-read race.
+//   * The declaration half (`The_File_Backed_Stores_Are_Not_Declared_Here` and
+//     its control) is NOT a forbidden-shape scan — it asserts an ABSENCE (the
+//     stores) and a PRESENCE (the ports) — so it stays handwritten with its
+//     helpers (`DeclaredTypesInLeaf`, `FindInRepoFile`, `MatchAll`).
+
 using System.Text.RegularExpressions;
 
 namespace Harbor.Architecture.Tests;
@@ -174,6 +190,55 @@ public sealed class DesktopAbstractionsLeafTakesNoIoRules
         @"(?:\b(?:File|Directory)\s*\.\s*[A-Za-z_])|\bnew\s+(?:FileInfo|DirectoryInfo)\s*\(",
         RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
+    private const string DiskSubId = "CONFIG-LEAF-DISK-IO";
+
+    /// <summary>The disk-call ban as data: one shape, no baseline, four controls, a floor.</summary>
+    private static readonly ScanRule DiskRule = new()
+    {
+        Id = "DesktopAbstractionsLeafTakesNoIo.Disk",
+        Trees = ["src/" + LeafProjectDir],
+        Forbidden =
+        [
+            new ScanForbidden(
+                DiskSubId,
+                DiskCall,
+                "the config STORES are persistence and belong to an outer layer "
+                + "(Harbor.Hosting/Configuration); the config SCHEMA, the PORTS and the DTOs are "
+                + "the leaf's. See issue #534."),
+        ],
+        Controls =
+        [
+            // The watcher line the old liveness test pointed at: Infrastructure,
+            // watches real plugin directories, legitimately calls Directory.Exists.
+            new ScanControl("Real/Watcher.cs", "            if (!Directory.Exists(dir))", DiskSubId),
+            new ScanControl("Real/Store.cs", "        if (!File.Exists(sessionFile))", DiskSubId),
+            // The fix's own comments name the forbidden call. A guard that fails on
+            // its own documentation is a guard nobody keeps.
+            new ScanControl("Prose.cs", "// #534: JsonCommonConfigStore called File.WriteAllText here.", null),
+            // Path is string manipulation, not a syscall — deliberately not ruled.
+            new ScanControl("Strings.cs", "            string full = Path.Combine(home, name);", null),
+        ],
+        MinHits = 10,
+        CustomParse = ParseDiskCall,
+    };
+
+    /// <summary>
+    ///     The custom parser: the old probe's line loop verbatim — the leaf's own
+    ///     masking-lexer stripper, one report per matching line.
+    /// </summary>
+    private static IEnumerable<ScanHit> ParseDiskCall(string displayPath, string rawSource)
+    {
+        string[] lines = SourceCommentStripper.StripAll(
+            rawSource.Replace("\r\n", "\n", StringComparison.Ordinal).Split('\n'));
+        for (int i = 0; i < lines.Length; i++)
+        {
+            if (DiskCall.IsMatch(lines[i]))
+            {
+                yield return new ScanHit(DiskSubId, displayPath, i + 1, lines[i].Trim());
+            }
+        }
+    }
+
     /// <summary>
     ///     A type DECLARATION in the leaf: the <c>class</c> / <c>interface</c> /
     ///     <c>record</c> / <c>struct</c> keyword followed by the name. Used to ask
@@ -193,13 +258,6 @@ public sealed class DesktopAbstractionsLeafTakesNoIoRules
     private static readonly Regex TypeDeclaration = new(
         @"\b(?:class|interface|record|struct)\s+(?:partial\s+)*(?<name>[A-Za-z_][A-Za-z0-9_]*)",
         RegexOptions.Compiled | RegexOptions.CultureInvariant);
-
-    /// <summary>
-    ///     A file that legitimately keeps its disk access forever: the plugin
-    ///     watcher is Infrastructure, watches real directories, and is not moving.
-    ///     The right control for <see cref="DiskCall" />.
-    /// </summary>
-    private const string DiskControlFile = "src/Harbor.Plugins.Hosting/DebouncedPluginWatcher.cs";
 
     /// <summary>
     ///     The two ports #534 keeps in the leaf. They must survive the move: the
@@ -224,17 +282,9 @@ public sealed class DesktopAbstractionsLeafTakesNoIoRules
     [Test]
     public async Task The_Config_Leaf_Touches_No_Disk()
     {
-        IReadOnlyList<string> files = RepoPaths.EnumerateCsFiles(LeafProjectDir);
-        IReadOnlyList<string> hits = FindInLeaf(DiskCall);
+        List<string> violations = ScanRunner.Evaluate(DiskRule);
 
-        await Assert.That(files.Count).IsGreaterThan(0).Because(
-            "Every rule in this file scans the leaf through RepoPaths.EnumerateCsFiles. "
-            + "Outside a checkout — or if the project directory were renamed — that returns "
-            + "nothing and both rules would pass because they read nothing. A rule that cannot "
-            + "see its subject is not a rule about its subject. Found " + files.Count
-            + " .cs files under src/" + LeafProjectDir + ".");
-
-        await Assert.That(hits.Count).IsEqualTo(0).Because(
+        await Assert.That(violations).IsEmpty().Because(
             "Harbor.Desktop.Abstractions: the layer matrix calls it Presentation, and has since "
             + "the row was created (5d2df19f). PresentationCapabilityRules already forbids "
             + "System.IO.File* / System.IO.Directory* in every Presentation assembly, with an "
@@ -248,7 +298,7 @@ public sealed class DesktopAbstractionsLeafTakesNoIoRules
             + "(ICommonConfigStore, IAppConfigStore<T>) and the DTOs are the leaf's. Note the "
             + "matrix forbids the other direction too: an Infrastructure row may never "
             + "reference Presentation. Found: "
-            + (hits.Count == 0 ? "(none)" : string.Join("\n", hits)));
+            + (violations.Count == 0 ? "(none)" : string.Join("\n", violations)));
     }
 
     [Test]
@@ -295,15 +345,19 @@ public sealed class DesktopAbstractionsLeafTakesNoIoRules
     [Test]
     public async Task Disk_Scanner_Still_Sees_A_Real_Call()
     {
-        IReadOnlyList<string> hits = FindInRepoFile(DiskCall, DiskControlFile);
+        // The Real/* controls carry the Infrastructure lines the old liveness test
+        // read from the tree; they drive the REAL parser rather than a second
+        // implementation of it. If this control ever goes red, the fix is the
+        // REGEX, not the watcher.
+        List<string> failures = ScanRunner.CheckControls(DiskRule);
 
-        await Assert.That(hits.Count).IsGreaterThan(0).Because(
-            "The scanner behind The_Config_Leaf_Touches_No_Disk must be able to fail. "
+        await Assert.That(failures).IsEmpty().Because(
+            "The parser behind The_Config_Leaf_Touches_No_Disk must be able to fail. "
             + "DebouncedPluginWatcher is Infrastructure, watches real plugin directories, and "
-            + "legitimately calls Directory.Exists / File.Exists — if the scanner reports "
+            + "legitimately calls Directory.Exists / File.Exists — if the parser reports "
             + "nothing even there, it is reporting nothing everywhere and the leaf's pass is "
-            + "meaningless. If this control ever goes red, the fix is the REGEX, not the "
-            + "watcher.");
+            + "meaningless. "
+            + string.Join("; ", failures));
     }
 
     /// <summary>
@@ -325,6 +379,50 @@ public sealed class DesktopAbstractionsLeafTakesNoIoRules
             + "rule requires to be THERE — if the scanner misses it, the 'the ports stayed' "
             + "assertion is passing because the probe reads nothing. If this control ever goes "
             + "red, the fix is the REGEX, not the port.");
+    }
+
+    /// <summary>
+    ///     The walk really reaches the leaf. Outside a checkout — or if the project
+    ///     directory were renamed — the banning rule would pass because it reads nothing.
+    /// </summary>
+    [Test]
+    public async Task Scanner_SeesTheLeaf()
+    {
+        List<string> discovery = ScanRunner.CheckDiscovery(DiskRule);
+
+        await Assert.That(discovery).IsEmpty()
+            .Because(
+                "Every banning rule in this file scans the leaf through the shared walk. "
+                + "A near-zero count means the path is stale and the rule enforces nothing. "
+                + string.Join("; ", discovery));
+    }
+
+    /// <summary>
+    ///     Every baseline row states why it is tolerated, in the row itself. Vacuous
+    ///     while the table is empty, and deliberately so: wired from the first row
+    ///     so the first row cannot skip the argument.
+    /// </summary>
+    [Test]
+    public async Task Baseline_Rows_AllHaveReasons()
+    {
+        List<string> failures = ScanRunner.CheckReasons(DiskRule);
+
+        await Assert.That(failures).IsEmpty().Because(string.Join("\n", failures));
+    }
+
+    /// <summary>
+    ///     Every baseline row must still correspond to a real hit, so the table
+    ///     cannot rot into a blanket permission.
+    /// </summary>
+    [Test]
+    public async Task Baseline_Rows_Are_Not_Stale()
+    {
+        List<string> stale = ScanRunner.StaleBaselineKeys(
+            DiskRule, ScanRunner.ReadSources(ScanRunner.ScopeFiles(DiskRule)));
+
+        await Assert.That(stale).IsEmpty()
+            .Because("a baseline row with no violation behind it is a permission for a "
+                + "problem that no longer exists: " + string.Join(", ", stale));
     }
 
     // ---------------------------------------------------------------------
@@ -358,35 +456,6 @@ public sealed class DesktopAbstractionsLeafTakesNoIoRules
         }
 
         return names;
-    }
-
-    /// <summary>
-    ///     Every match of <paramref name="pattern" /> in the leaf, as
-    ///     <c>repo-relative-path:line  matched-text</c>. A file the probe cannot read
-    ///     is reported as a hit: the subject of this rule must not be able to vanish
-    ///     under it.
-    /// </summary>
-    private static IReadOnlyList<string> FindInLeaf(Regex pattern)
-    {
-        if (RepoPaths.RepoRoot is not { } root)
-        {
-            return [];
-        }
-
-        var hits = new List<string>();
-        foreach (string file in RepoPaths.EnumerateCsFiles(LeafProjectDir))
-        {
-            if (!File.Exists(file))
-            {
-                hits.Add($"{Relative(root, file)}  (file is missing — the probe cannot grade a "
-                        + "file it cannot read)");
-                continue;
-            }
-
-            hits.AddRange(MatchAll(root, pattern, file));
-        }
-
-        return hits;
     }
 
     /// <summary>
