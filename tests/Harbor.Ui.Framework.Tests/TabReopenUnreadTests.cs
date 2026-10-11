@@ -253,7 +253,10 @@ public class TabReopenUnreadTests
         var wrapped = ChatAppReducer.Update(next.State, new ChatAppMsg.CycleNextUnreadTab());
         await Assert.That(ActiveId(wrapped.State)).IsEqualTo("s4");
 
-        var back = ChatAppReducer.Update(wrapped.State, new ChatAppMsg.CyclePreviousUnreadTab());
+        // Both jumps acknowledged their targets, so re-mark s2: backward nav
+        // needs a live unread to find (viewing is reading).
+        var resurrected = ChatAppReducer.MarkTabUnread(wrapped.State, Id("s2"), isError: false);
+        var back = ChatAppReducer.Update(resurrected, new ChatAppMsg.CyclePreviousUnreadTab());
         await Assert.That(ActiveId(back.State)).IsEqualTo("s2");
     }
 
