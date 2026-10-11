@@ -74,7 +74,8 @@ public static class TargetCatalog
                 new TargetParam("--with-scripting", "bool", "true", "include Jint scripting"),
                 new TargetParam("--with-spectre-tui", "bool", "true", "include Spectre TUI renderer"),
                 new TargetParam("--with-all-providers", "bool", "true", "all LLM providers instead of Ollama only"),
-                new TargetParam("--with-all-tools", "bool", "true", "all builtin tools instead of core six")
+                new TargetParam("--with-all-tools", "bool", "true", "all builtin tools instead of core six"),
+                new TargetParam("--with-renderer", "enum[All|CellForge|AnsiPlain|NickConsoleEx]", "all", "renderer backends to compose (nickconsoleex needs the ConsoleEx submodule)")
             ],
             [new TargetOutput("dir", "artifacts/publish/<app>/<variant>")],
             ["./build.sh Publish --variant SingleFileSelfContained", "./build.sh Publish --variant AOT --minimal"],

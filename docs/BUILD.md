@@ -77,6 +77,37 @@ Other CLI feature flags exclude categories of project references:
 is the legacy shorthand forcing all of them off. The NUKE build
 (`build/_build/`) exposes these as command-line flags.
 
+### Renderer selection (build-time, slice A of #1144)
+
+The runtime renderer stays `HARBOR_TUI` (untouched). The build-time selection
+is `-p:HarborWithRenderer=all|cellforge|ansiplain|nickconsoleex`
+(default `all`) or `./build.sh Publish --with-renderer <value>`:
+
+```bash
+# CLI without the SharpConsoleUI subtree (NickConsoleEx backend excluded)
+./build.sh Publish --with-renderer cellforge --dry-run
+
+# Fail fast when the ConsoleEx submodule is missing (also a doctor check)
+./build.sh doctor --check renderer.deps
+```
+
+What each value excludes today:
+
+| Value | Effect |
+|---|---|
+| `all` (default) | Every backend (status quo). |
+| `cellforge`, `ansiplain` | Only the NickConsoleEx backend (+ vendored SharpConsoleUI). |
+| `nickconsoleex` | Keeps NickConsoleEx; requires the submodule (`git submodule update --init external/ConsoleEx`). |
+
+CellForge and AnsiPlain stay in every CLI build on purpose: the agent-turn
+driver (`apps/Harbor.App.Cli/Repl/ReplRunner.cs`, used by both `ask` and the
+REPL) is CellForge-bound source, and the plain-pipe path plus the headless
+pairing QR resolve through AnsiPlain (`CliInfrastructure.cs`). Decoupling them
+into composable backends is the tracked remainder of #1144 gap (1) — the issue
+stays open until then. Unknown values fail the build via the `Error` guards in
+`src/Harbor.Hosting/Harbor.Hosting.csproj`; `Publish`/`Release`/`PublishIpc*`
+targets forward the flag automatically.
+
 ## Run tests
 
 ```bash

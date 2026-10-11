@@ -31,6 +31,7 @@ public sealed class CliBuildConfigurator
             ["HarborWithSpectreTui"] = resolved.WithSpectreTui.ToString().ToLowerInvariant(),
             ["HarborWithAllProviders"] = resolved.WithAllProviders.ToString().ToLowerInvariant(),
             ["HarborWithAllTools"] = resolved.WithAllTools.ToString().ToLowerInvariant(),
+            ["HarborWithRenderer"] = resolved.WithRenderer.ToString().ToLowerInvariant(),
             ["HARBOR_MINIMAL"] = resolved.Minimal.ToString().ToLowerInvariant()
         };
     }

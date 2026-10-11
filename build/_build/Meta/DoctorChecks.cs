@@ -8,7 +8,8 @@ public sealed record DoctorContext(
     string TargetFramework,
     bool AotVariantRequested,
     bool ReleaseRequested,
-    string ReleaseTag);
+    string ReleaseTag,
+    string WithRenderer);
 /// <summary>Result of one doctor check.</summary>
 public sealed record CheckResult(string Id, string Status, string Detail, string? Fix = null)
 {
@@ -51,6 +52,7 @@ public static class DoctorChecks
         "aot.toolchain",
         "solution.files",
         "bootstrap.cache",
+        "renderer.deps",
         "node.pnpm"
     ];
     /// <summary>
@@ -72,6 +74,7 @@ public static class DoctorChecks
             CheckAotToolchain(ctx),
             CheckSolutionFiles(ctx),
             CheckBootstrapCache(ctx),
+            CheckRendererDeps(ctx),
             CheckNodePnpm()
         };
         var checks = checkFilter is null
@@ -370,6 +373,37 @@ public static class DoctorChecks
         return new CheckResult(
             "node.pnpm", CheckResult.NotApplicable,
             "repository does not use Node.js/pnpm (slot kept for future web assets)");
+    }
+    /// <summary>
+    ///     Slice A (#1144): the <c>--with-renderer</c> selection is satisfiable
+    ///     offline. An unknown value fails the MSBuild evaluation later; this
+    ///     check reports it before any target runs. <c>nickconsoleex</c> needs
+    ///     the vendored ConsoleEx submodule — without it both this check and
+    ///     the MSBuild guard fail with the same fix.
+    /// </summary>
+    private static CheckResult CheckRendererDeps(DoctorContext ctx)
+    {
+        string renderer = (ctx.WithRenderer ?? "all").Trim().ToLowerInvariant();
+        string[] valid = ["all", "cellforge", "ansiplain", "nickconsoleex"];
+        if (!valid.Contains(renderer, StringComparer.Ordinal))
+        {
+            return new CheckResult(
+                "renderer.deps", CheckResult.Fail, $"unknown renderer '{ctx.WithRenderer}'",
+                "Use --with-renderer all|cellforge|ansiplain|nickconsoleex");
+        }
+        if (renderer == "nickconsoleex")
+        {
+            string probe = System.IO.Path.Combine(
+                ctx.RootDirectory, "external", "ConsoleEx", "SharpConsoleUI", "SharpConsoleUI.csproj");
+            if (!File.Exists(probe))
+            {
+                return new CheckResult(
+                    "renderer.deps", CheckResult.Fail,
+                    "renderer=nickconsoleex but external/ConsoleEx is not initialized",
+                    "Run: git submodule update --init external/ConsoleEx (or pick another --with-renderer)");
+            }
+        }
+        return new CheckResult("renderer.deps", CheckResult.Ok, $"renderer={renderer}");
     }
     private static string? FindDotnetExecutable()
     {

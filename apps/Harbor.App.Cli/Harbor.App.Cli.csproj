@@ -25,6 +25,16 @@
                                           longer referenced from the main CLI)
       * `HarborWithAllProviders=false`  — keeps only Harbor.Providers.Ollama
       * `HarborWithAllTools=false`      — (future) keeps only 6 core tools
+      * `HarborWithRenderer=all|cellforge|ansiplain|nickconsoleex` (default
+        `all`, global default in Directory.Build.props, NUKE with-renderer flag) —
+        build-time renderer-backend selection (slice A, #1144). Values other than
+        `all`/`nickconsoleex` currently exclude only the NickConsoleEx backend
+        (+ vendored SharpConsoleUI) from the composition: CellForge stays because
+        the agent-turn driver (Repl/ReplRunner.cs, used by `ask` and the REPL) is
+        CellForge-bound source, and AnsiPlain stays for the plain-pipe path and
+        the headless pairing QR (CliInfrastructure.cs). Unknown values fail the
+        build (see the Error guards in Harbor.Hosting.csproj); the runtime
+        HARBOR_TUI selection is untouched.
 
     The legacy `HARBOR_MINIMAL=true` is a shorthand that forces all of the
     above to `false`. It also defines the `HARBOR_MINIMAL` C# symbol, which no

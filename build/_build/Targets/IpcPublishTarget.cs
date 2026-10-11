@@ -66,6 +66,7 @@ public static class IpcPublishTarget
             .SetProperty("HarborWithSpectreTui", resolvedFlags.WithSpectreTui.ToString().ToLowerInvariant())
             .SetProperty("HarborWithAllProviders", resolvedFlags.WithAllProviders.ToString().ToLowerInvariant())
             .SetProperty("HarborWithAllTools", resolvedFlags.WithAllTools.ToString().ToLowerInvariant())
+            .SetProperty("HarborWithRenderer", resolvedFlags.WithRenderer.ToString().ToLowerInvariant())
             .SetOutput(outputDir);
         output.Cmd("PublishIpc", DotNetArgv.RenderPublish(publishSettings));
         if (output.IsDryRun)

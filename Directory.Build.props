@@ -45,6 +45,14 @@
     <HarborWithPlugins Condition="'$(HarborWithPlugins)' == '' AND '$(HARBOR_MINIMAL)' != 'true'">true</HarborWithPlugins>
     <HarborWithPlugins Condition="'$(HARBOR_MINIMAL)' == 'true'">false</HarborWithPlugins>
 
+    <!--
+      Slice A (#1144): build-time renderer selection. Default composes every
+      backend (status quo); the NUKE with-renderer flag narrows it (see
+      src/Harbor.Hosting/Harbor.Hosting.csproj for what each value excludes).
+      Case-insensitive in MSBuild; canonical lowercase spellings.
+    -->
+    <HarborWithRenderer Condition="'$(HarborWithRenderer)' == ''">all</HarborWithRenderer>
+
     <!-- Debugging -->
     <DebugType>portable</DebugType>
     <DebugSymbols>true</DebugSymbols>
