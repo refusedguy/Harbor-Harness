@@ -501,7 +501,8 @@ public ref struct FrameDiffEnumerator
 
             if (_mode == FrameDiffMode.Delta
                 && _front.IsRowHashValid(_y) && _next.IsRowHashValid(_y)
-                && _front.RowHash[_y] == _next.RowHash[_y])
+                && _front.RowHash[_y] == _next.RowHash[_y]
+                && !_front.HasAlwaysUpdate(_y) && !_next.HasAlwaysUpdate(_y))
             {
                 // Row-hash fast path: both sides validated & identical —
                 // nothing to do (adopt is skipped exactly as before: the
@@ -529,7 +530,8 @@ public ref struct FrameDiffEnumerator
         _rowArmed = _fx is { Count: > 0 };
         if (_mode == FrameDiffMode.Delta
             && _front.IsRowHashValid(y) && _next.IsRowHashValid(y)
-            && _front.RowHash[y] == _next.RowHash[y])
+            && _front.RowHash[y] == _next.RowHash[y]
+            && !_front.HasAlwaysUpdate(y) && !_next.HasAlwaysUpdate(y))
         {
             return false;
         }

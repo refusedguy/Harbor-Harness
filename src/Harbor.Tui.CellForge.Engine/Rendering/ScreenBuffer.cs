@@ -24,6 +24,7 @@ public sealed class ScreenBuffer
 
     private Cell[] _cells;
     private bool[] _rowHashValid;
+    private bool[] _rowAlwaysUpdate;
     private int _capCols;
     private int _capRows;
 
@@ -41,6 +42,7 @@ public sealed class ScreenBuffer
         ArgumentOutOfRangeException.ThrowIfNegative(rows);
         _cells = [];
         _rowHashValid = [];
+        _rowAlwaysUpdate = [];
         _diffOptions = [];
         _forcedWidths = [];
         Resize(cols, rows);
@@ -53,6 +55,13 @@ public sealed class ScreenBuffer
     public ulong[] RowHash { get; private set; } = [];
 
     internal bool IsRowHashValid(int y) => _rowHashValid[y];
+
+    /// <summary>
+    /// True when row <paramref name="y"/> carries an
+    /// <see cref="CellDiffOption.AlwaysUpdate"/> cell (R1 steal): the row-hash
+    /// fast path must not skip the row — identical content still emits.
+    /// </summary>
+    internal bool HasAlwaysUpdate(int y) => _rowAlwaysUpdate[y];
 
     /// <summary>Backing array identity, for capacity-reuse assertions in tests.</summary>
     internal Cell[] CellsForTests => _cells;
@@ -100,6 +109,7 @@ public sealed class ScreenBuffer
             _forcedWidths = new ushort[_cells.Length];
             RowHash = new ulong[targetRows];
             _rowHashValid = new bool[targetRows];
+            _rowAlwaysUpdate = new bool[targetRows];
             BlankAll();
             return;
         }
@@ -108,10 +118,13 @@ public sealed class ScreenBuffer
         {
             var hash = new ulong[Math.Max(rows, _capRows)];
             var valid = new bool[Math.Max(rows, _capRows)];
+            var always = new bool[Math.Max(rows, _capRows)];
             Array.Copy(RowHash, hash, Math.Min(RowHash.Length, hash.Length));
             Array.Copy(_rowHashValid, valid, Math.Min(_rowHashValid.Length, valid.Length));
+            Array.Copy(_rowAlwaysUpdate, always, Math.Min(_rowAlwaysUpdate.Length, always.Length));
             RowHash = hash;
             _rowHashValid = valid;
+            _rowAlwaysUpdate = always;
         }
 
         BlankAll();
@@ -125,6 +138,8 @@ public sealed class ScreenBuffer
         // stay sticky (ratatui parity) — only this and Resize reset the table.
         Array.Clear(_diffOptions, 0, Cols * Rows);
         Array.Clear(_forcedWidths, 0, Cols * Rows);
+        // Directives reset with the content, so the bypass flags reset too.
+        Array.Clear(_rowAlwaysUpdate, 0, Rows);
         InvalidateAll();
     }
 
@@ -322,6 +337,16 @@ public sealed class ScreenBuffer
         // use sites can trust the stored value.
         _forcedWidths[index] = option == CellDiffOption.ForcedWidth ? Math.Max((ushort)1, forcedWidth) : (ushort)0;
         _rowHashValid[y] = false;
+        if (option == CellDiffOption.AlwaysUpdate)
+        {
+            // Set-only: the row-hash fast path cannot prove an AlwaysUpdate
+            // row clean (identical content must still emit), so the row opts
+            // out until the next BlankAll/Resize. Clearing the last
+            // AlwaysUpdate cell back to None keeps the bypass — conservative
+            // (a rescan), never wrong.
+            _rowAlwaysUpdate[y] = true;
+        }
+
         return true;
     }
 
