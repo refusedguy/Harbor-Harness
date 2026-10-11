@@ -28,8 +28,7 @@ internal sealed class SetNoteCommand : INoteCommand
         if (notes.Count >= NoteLimits.MaxNotesPerSession && !notes.ContainsKey(key!))
             return ToolResult.Error($"Too many notes (max {NoteLimits.MaxNotesPerSession}).");
         notes[key!] = new NoteEntry(content!, DateTimeOffset.UtcNow);
-        invocation.Logger.LogDebug(
-            "Notebook set {Key} ({Chars} chars) for {Session}", key, content!.Length, invocation.SessionId);
+        SetNoteCommandLog.NoteSet(invocation.Logger, key, content!.Length, invocation.SessionId);
 
         Result saved = await invocation.Store
             .SaveAsync(invocation.NotesPath, notes, ct)
@@ -40,4 +39,14 @@ internal sealed class SetNoteCommand : INoteCommand
                 new { key, chars = content.Length, totalNotes = notes.Count })
             : ToolResult.Error(saved.Error);
     }
+}
+
+/// <summary>
+///     SG1: BCL <c>[LoggerMessage]</c> delegates for <see cref="SetNoteCommand" />.
+///     Templates, levels and operands are 1-to-1 with the former <c>LogX</c> calls.
+/// </summary>
+internal static partial class SetNoteCommandLog
+{
+    [LoggerMessage(EventId = 1, Level = LogLevel.Debug, Message = "Notebook set {Key} ({Chars} chars) for {Session}")]
+    public static partial void NoteSet(ILogger logger, string? key, int chars, string session);
 }
