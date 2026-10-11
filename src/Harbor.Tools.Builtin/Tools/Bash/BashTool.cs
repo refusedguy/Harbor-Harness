@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using AutoCtor;
 using Harbor.Abstractions.Extensions;
 using Microsoft.Extensions.Logging;
 namespace Harbor.Tools.Builtin;
@@ -18,11 +19,10 @@ namespace Harbor.Tools.Builtin;
         "Use `bash` for compilation, testing, git, and other shell tasks",
         "Specify `timeout` for long-running commands (default: 30s)"
     })]
+[AutoConstruct]
 public sealed partial class BashTool : ITool
 {
     private readonly ILogger<BashTool> _logger;
-
-    public BashTool(ILogger<BashTool> logger) { _logger = logger; }
 
     /// <inheritdoc />
     public ToolSafetyProfile SafetyProfile => ToolSafetyProfile.Command();

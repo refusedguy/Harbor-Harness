@@ -1,6 +1,7 @@
 using System.Buffers;
 using System.Text;
 using System.Text.RegularExpressions;
+using AutoCtor;
 using Microsoft.Extensions.Logging;
 using Result = CSharpFunctionalExtensions.Result;
 
@@ -21,6 +22,7 @@ namespace Harbor.Tools.Builtin;
         "Pattern is a regular expression",
         "Use `include` to limit search (e.g. '*.cs' or '*.{cs,ts}')"
     })]
+[AutoConstruct]
 public sealed partial class GrepTool : ITool
 {
 
@@ -46,8 +48,6 @@ public sealed partial class GrepTool : ITool
         ".nupkg", ".jar", ".class", ".pyc", ".pyo"
     };
     private readonly ILogger<GrepTool> _logger;
-
-    public GrepTool(ILogger<GrepTool> logger) { _logger = logger; }
 
     /// <inheritdoc />
     public ToolSafetyProfile SafetyProfile => ToolSafetyProfile.Path();

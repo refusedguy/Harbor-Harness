@@ -1,4 +1,5 @@
 using System.Text;
+using AutoCtor;
 using Microsoft.Extensions.FileSystemGlobbing;
 using Microsoft.Extensions.FileSystemGlobbing.Abstractions;
 using Microsoft.Extensions.Logging;
@@ -23,6 +24,7 @@ namespace Harbor.Tools.Builtin;
         "Simple braces work: `*.{cs,ts}`",
         "Set ignoreGitignore=true to also search node_modules/bin/obj/etc."
     })]
+[AutoConstruct]
 public sealed partial class GlobTool : ITool
 {
 
@@ -37,8 +39,6 @@ public sealed partial class GlobTool : ITool
         "coverage", ".turbo", ".cache"
     };
     private readonly ILogger<GlobTool> _logger;
-
-    public GlobTool(ILogger<GlobTool> logger) { _logger = logger; }
 
     /// <inheritdoc />
     public ToolSafetyProfile SafetyProfile => ToolSafetyProfile.Path();
