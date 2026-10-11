@@ -100,7 +100,7 @@ public sealed class LsTool : ITool
         if (!Directory.Exists(path))
             return ToolResult.Error($"Directory not found: {path}");
 
-        _logger.LogDebug("Ls: {Path} (recursive={Recursive})", path, recursive);
+        LsToolLog.Listing(_logger, path, recursive);
 
         var sb = new StringBuilder(Math.Min(maxEntries, 256) * 48);
         sb.Append("Contents of ").Append(path).Append(':').Append('\n');
@@ -174,7 +174,7 @@ public sealed class LsTool : ITool
         {
             // ROP-A Z1 п.15: silent skip keeps the listing contract; trace
             // explains why the subtree is missing.
-            logger.LogTrace(ex, "ls: skipping unreadable directory {Dir}", path);
+            LsToolLog.SkippingUnreadableDirectory(logger, ex, path);
             return;
         }
 
@@ -335,4 +335,17 @@ public sealed class LsTool : ITool
             return true;
         }
     }
+}
+
+/// <summary>
+///     SG1: BCL <c>[LoggerMessage]</c> delegates for <see cref="LsTool" />.
+///     Templates, levels and operands are 1-to-1 with the former <c>LogX</c> calls.
+/// </summary>
+internal static partial class LsToolLog
+{
+    [LoggerMessage(EventId = 1, Level = LogLevel.Debug, Message = "Ls: {Path} (recursive={Recursive})")]
+    public static partial void Listing(ILogger logger, string path, bool recursive);
+
+    [LoggerMessage(EventId = 2, Level = LogLevel.Trace, Message = "ls: skipping unreadable directory {Dir}")]
+    public static partial void SkippingUnreadableDirectory(ILogger logger, Exception ex, string dir);
 }

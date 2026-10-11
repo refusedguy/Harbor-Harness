@@ -134,7 +134,7 @@ public sealed class LspTool : ITool
                 "Supported: .ts/.tsx/.js/.jsx, .py, .go, .rs, .cs.");
         }
 
-        _logger.LogDebug("LSP {Action}: {Path}", action, path);
+        LspToolLog.Dispatching(_logger, action, path);
         return action switch
         {
             "diagnostics" => await DiagnosticsAsync(lsp, path, cancellationToken).ConfigureAwait(false),
@@ -212,4 +212,14 @@ public sealed class LspTool : ITool
             : 0;
         return (line, column);
     }
+}
+
+/// <summary>
+///     SG1: BCL <c>[LoggerMessage]</c> delegates for <see cref="LspTool" />.
+///     Templates, levels and operands are 1-to-1 with the former <c>LogX</c> calls.
+/// </summary>
+internal static partial class LspToolLog
+{
+    [LoggerMessage(EventId = 1, Level = LogLevel.Debug, Message = "LSP {Action}: {Path}")]
+    public static partial void Dispatching(ILogger logger, string action, string path);
 }
