@@ -72,6 +72,8 @@
   href: FEATURE_RESEARCH.md
 - name: Getting Started
   href: GETTING_STARTED.md
+- name: Generic Layout
+  href: GENERIC_LAYOUT.md
 - name: I18N String Inventory
   href: I18N_STRING_INVENTORY.md
 - name: Ide Integration Patterns

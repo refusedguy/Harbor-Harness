@@ -35,6 +35,16 @@ namespace Harbor.Ui.Framework.Panels;
 ///         <see cref="UiState" /> record directly.
 ///     </para>
 ///     <para>
+///         <b>Generic layout:</b> the side-effect-free discipline above is the
+///         panel-side instance of the composition contract documented in
+///         <c>docs/GENERIC_LAYOUT.md</c> (§1 node contract, §4 Build purity
+///         rule). A provider is a leaf in that sense: <see cref="Build" />
+///         is its <c>Measure</c> (answer, never mutate); the host owns
+///         arrange/paint. New composable nodes land in
+///         <c>Harbor.Tui.CellForge.Engine/Rendering</c>, BCL-only, with zero
+///         edits to the chat layer — see the doc's §3 forbids.
+///     </para>
+///     <para>
 ///         <b>Thread safety:</b> the host may call <see cref="Build" /> from the render
 ///         thread and <see cref="OnKey" /> from the input thread concurrently.
 ///         Implementations MUST be thread-safe (prefer immutable state, no shared
