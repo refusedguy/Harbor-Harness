@@ -7,7 +7,20 @@ namespace Harbor.Tools.Builtin;
 ///     method via the <see cref="IMcpRegistry" />; the registry looks up the server,
 ///     transports the JSON-RPC call, and returns the response payload as a string.
 /// </summary>
-public sealed class McpToolTool : ITool
+[ToolInfo(
+    "mcp",
+    "MCP",
+    "Invoke a method on a registered Model Context Protocol server. Servers are registered via IMcpRegistry.Register(name, stdioCmd). Common methods: tools/list, tools/call, resources/list, prompts/list.",
+    ExecutionMode = ExecutionMode.Sequential,
+    PromptSnippet = "mcp: Invoke a method on a registered MCP server",
+    PromptGuidelines = new[]
+    {
+        "Use `mcp` to call tools exposed by MCP servers (filesystem, db, browser, …)",
+        "Server must be registered first via IMcpRegistry.Register(name, stdioCmd)",
+        "args is a JSON object — for tools/call include `name` and `arguments`",
+        "Result is the server's JSON response serialized to a string"
+    })]
+public sealed partial class McpToolTool : ITool
 {
     private readonly ILogger<McpToolTool> _logger;
     private readonly IMcpRegistry? _registry;
@@ -35,9 +48,6 @@ public sealed class McpToolTool : ITool
         _registry = registry;
     }
 
-    /// <inheritdoc />
-    public ToolName Name => ToolName.Create("mcp");
-
     /// <summary>
     ///     Path, not Opaque — even though this tool's own schema carries no
     ///     <c>path</c> property.
@@ -64,30 +74,6 @@ public sealed class McpToolTool : ITool
     ///     </para>
     /// </remarks>
     public ToolSafetyProfile SafetyProfile => ToolSafetyProfile.Path();
-
-    /// <inheritdoc />
-    public string DisplayName => "MCP";
-
-    /// <inheritdoc />
-    public string Description =>
-        "Invoke a method on a registered Model Context Protocol server. " +
-        "Servers are registered via IMcpRegistry.Register(name, stdioCmd). " +
-        "Common methods: tools/list, tools/call, resources/list, prompts/list.";
-
-    /// <inheritdoc />
-    public ExecutionMode ExecutionMode => ExecutionMode.Sequential;
-
-    /// <inheritdoc />
-    public string? PromptSnippet => "mcp: Invoke a method on a registered MCP server";
-
-    /// <inheritdoc />
-    public IReadOnlyList<string> PromptGuidelines { get; } =
-    [
-        "Use `mcp` to call tools exposed by MCP servers (filesystem, db, browser, …)",
-        "Server must be registered first via IMcpRegistry.Register(name, stdioCmd)",
-        "args is a JSON object — for tools/call include `name` and `arguments`",
-        "Result is the server's JSON response serialized to a string"
-    ];
 
     /// <inheritdoc />
     public JsonDocument ParameterSchema { get; } = JsonDocument.Parse("""

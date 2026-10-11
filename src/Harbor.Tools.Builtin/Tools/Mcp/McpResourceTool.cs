@@ -10,7 +10,18 @@ namespace Harbor.Tools.Builtin;
 ///     (via the generic <c>mcp</c> tool); this tool wraps the read path with a
 ///     fixed schema so the model doesn't have to hand-craft JSON-RPC params.
 /// </summary>
-public sealed class McpResourceTool : ITool
+[ToolInfo(
+    "read_mcp_resource",
+    "MCP Resource",
+    "Read a resource from a registered Model Context Protocol server by URI. List available URIs first with the mcp tool (method 'resources/list'). Returns the resource text contents.",
+    PromptSnippet = "read_mcp_resource: Read an MCP server resource by URI",
+    PromptGuidelines = new[]
+    {
+        "Use `read_mcp_resource` for server-side data (docs, schemas, file views) exposed as MCP resources",
+        "Discover URIs with mcp {\"method\":\"resources/list\"} before reading",
+        "Binary (base64 blob) resources are rejected — ask for a text view instead",
+    })]
+public sealed partial class McpResourceTool : ITool
 {
     private readonly ILogger<McpResourceTool> _logger;
     private readonly IMcpRegistry? _registry;
@@ -39,33 +50,7 @@ public sealed class McpResourceTool : ITool
     }
 
     /// <inheritdoc />
-    public ToolName Name => ToolName.Create("read_mcp_resource");
-
-    /// <inheritdoc />
     public ToolSafetyProfile SafetyProfile => ToolSafetyProfile.Opaque;
-
-    /// <inheritdoc />
-    public string DisplayName => "MCP Resource";
-
-    /// <inheritdoc />
-    public string Description =>
-        "Read a resource from a registered Model Context Protocol server by URI. " +
-        "List available URIs first with the mcp tool (method 'resources/list'). " +
-        "Returns the resource text contents.";
-
-    /// <inheritdoc />
-    public ExecutionMode ExecutionMode => ExecutionMode.Parallel;
-
-    /// <inheritdoc />
-    public string? PromptSnippet => "read_mcp_resource: Read an MCP server resource by URI";
-
-    /// <inheritdoc />
-    public IReadOnlyList<string> PromptGuidelines { get; } =
-    [
-        "Use `read_mcp_resource` for server-side data (docs, schemas, file views) exposed as MCP resources",
-        "Discover URIs with mcp {\"method\":\"resources/list\"} before reading",
-        "Binary (base64 blob) resources are rejected — ask for a text view instead",
-    ];
 
     /// <inheritdoc />
     public JsonDocument ParameterSchema { get; } = JsonDocument.Parse("""

@@ -25,7 +25,19 @@ namespace Harbor.Tools.Builtin;
 ///         never interrupted.
 ///     </para>
 /// </remarks>
-public sealed class SessionSteerTool : ITool
+[ToolInfo(
+    "session_steer",
+    "Session Steer",
+    "Send a directive to a peer session: message (share context or a result), redirect (change its task), or restart (ask it to re-run with the same context). Requires user approval. The directive lands in the peer's history for its next run; a live run is never interrupted.",
+    ExecutionMode = ExecutionMode.Sequential,
+    PromptSnippet = "session_steer: send a message, redirect, or restart directive to a peer session (needs approval)",
+    PromptGuidelines = new[]
+    {
+        "read the peer with session_read first — steer only on stuck/failed verdict",
+        "message shares context, redirect changes its task, restart re-runs it",
+        "never steer your own supervisor (the session that steered you)"
+    })]
+public sealed partial class SessionSteerTool : ITool
 {
     private readonly ISessionStore _sessions;
     private readonly ILogger<SessionSteerTool> _logger;
@@ -36,29 +48,8 @@ public sealed class SessionSteerTool : ITool
         _logger = logger;
     }
 
-    public ToolName Name => ToolName.Create("session_steer");
-
     /// <inheritdoc />
     public ToolSafetyProfile SafetyProfile => ToolSafetyProfile.Opaque;
-
-    public string DisplayName => "Session Steer";
-
-    public string Description =>
-        "Send a directive to a peer session: message (share context or a result), " +
-        "redirect (change its task), or restart (ask it to re-run with the same context). " +
-        "Requires user approval. The directive lands in the peer's history for its next run; " +
-        "a live run is never interrupted.";
-
-    public ExecutionMode ExecutionMode => ExecutionMode.Sequential;
-
-    public string? PromptSnippet => "session_steer: send a message, redirect, or restart directive to a peer session (needs approval)";
-
-    public IReadOnlyList<string> PromptGuidelines { get; } =
-    [
-        "read the peer with session_read first — steer only on stuck/failed verdict",
-        "message shares context, redirect changes its task, restart re-runs it",
-        "never steer your own supervisor (the session that steered you)"
-    ];
 
     public JsonDocument ParameterSchema { get; } = JsonDocument.Parse("""
                                                                       {

@@ -12,7 +12,18 @@ namespace Harbor.Tools.Builtin;
 ///     hand-craft JSON-RPC params. (Native slash-command surfacing stays
 ///     future work — the tool output flows into the loop the same way.)
 /// </summary>
-public sealed class McpPromptTool : ITool
+[ToolInfo(
+    "mcp_prompt",
+    "MCP Prompt",
+    "Render a prompt from a registered Model Context Protocol server. List available prompts first with the mcp tool (method 'prompts/list'). Returns the prompt messages as plain text to follow.",
+    PromptSnippet = "mcp_prompt: Render an MCP server prompt by name",
+    PromptGuidelines = new[]
+    {
+        "Use `mcp_prompt` to expand a server-side prompt template (review checklist, commit message, …)",
+        "Discover prompt names with mcp {\"method\":\"prompts/list\"} before rendering",
+        "Pass template variables through `arguments` — check the prompt's required arguments first",
+    })]
+public sealed partial class McpPromptTool : ITool
 {
     private readonly ILogger<McpPromptTool> _logger;
     private readonly IMcpRegistry? _registry;
@@ -41,33 +52,7 @@ public sealed class McpPromptTool : ITool
     }
 
     /// <inheritdoc />
-    public ToolName Name => ToolName.Create("mcp_prompt");
-
-    /// <inheritdoc />
     public ToolSafetyProfile SafetyProfile => ToolSafetyProfile.Opaque;
-
-    /// <inheritdoc />
-    public string DisplayName => "MCP Prompt";
-
-    /// <inheritdoc />
-    public string Description =>
-        "Render a prompt from a registered Model Context Protocol server. " +
-        "List available prompts first with the mcp tool (method 'prompts/list'). " +
-        "Returns the prompt messages as plain text to follow.";
-
-    /// <inheritdoc />
-    public ExecutionMode ExecutionMode => ExecutionMode.Parallel;
-
-    /// <inheritdoc />
-    public string? PromptSnippet => "mcp_prompt: Render an MCP server prompt by name";
-
-    /// <inheritdoc />
-    public IReadOnlyList<string> PromptGuidelines { get; } =
-    [
-        "Use `mcp_prompt` to expand a server-side prompt template (review checklist, commit message, …)",
-        "Discover prompt names with mcp {\"method\":\"prompts/list\"} before rendering",
-        "Pass template variables through `arguments` — check the prompt's required arguments first",
-    ];
 
     /// <inheritdoc />
     public JsonDocument ParameterSchema { get; } = JsonDocument.Parse("""
