@@ -104,13 +104,31 @@
 //
 // NOT IN PARALLEL
 // ---------------
-// `[NotInParallel("alloc-tripwire")]` — the same key `StoreDispatchAllocTests`
-// and `StatusBarFitPerfTests` use, so this class serialises against both. It is
-// belt-and-braces rather than the load-bearing safety: the counter here is
-// `GC.GetAllocatedBytesForCurrentThread` and both measured windows are fully
-// synchronous with no `await` inside them, so nothing can be scheduled onto
-// this thread between the two reads. The key is kept so the three tripwires in
-// this assembly cannot contend for cores at the same time.
+// BARE `[NotInParallel]`, not the keyed form — and the difference is
+// load-bearing for the stopwatch, which is the half of this gate a key cannot
+// protect. `[NotInParallel("alloc-tripwire")]` excludes only the classes that
+// share the key (`StoreDispatchAllocTests`, `StatusBarFitPerfTests`); every
+// other test in this assembly — `ProjectorThreadSafetyTests` among them, four
+// threads times five hundred projections with no constraint at all — still
+// runs concurrently under TUnit's default parallel scheduling. The old comment
+// here called that harmless because the ALLOCATION counter is
+// `GC.GetAllocatedBytesForCurrentThread` and the windows are synchronous, so
+// nothing could be scheduled onto this thread between the two reads. True of
+// the counter, and the reason for the red it missed: wall-clock elapsed is NOT
+// thread-local. A neighbour burning cores slows the window, and under server
+// GC (`DOTNET_gcServer=1` in every CI job) its allocation triggers collections
+// that PAUSE this thread mid-stopwatch. The failure that forced the rewrite
+// printed exactly that split: run 38129838108 (PR #1285, commit b5db32e2)
+// measured time x3.10 against the x3.00 limit while the very same run measured
+// alloc x1.99 — textbook linear memory, inflated wall clock — on a store path
+// byte-identical to the tree that had passed the same 536-test binary forty
+// minutes earlier on `dev` (run 38128592312, commit 12ea0cff). Same code, same
+// test, different scheduling: the delta was the neighbour, not the code under
+// test. `StorePathSkipsMarkdownParseTests` documents the same rule for its
+// counter — a keyed attribute only excludes tests that share that key, so
+// exclusive execution is what makes the number a measurement — and the
+// `perf-gate` job pins `Harbor.Tui.PerfTests` with `taskset -c 1` for the same
+// reason. Exclusive execution here is the in-process form of that pinning.
 //
 // NON-VACUITY
 // -----------
@@ -152,7 +170,7 @@ namespace Harbor.Ui.Framework.Tests;
 ///     against a measurement taken in the same run, shape as counts. The file
 ///     header is the argument for why no absolute millisecond appears here.
 /// </summary>
-[NotInParallel("alloc-tripwire")]
+[NotInParallel]
 public sealed class StorePathScalingGates
 {
     /// <summary>Streaming messages in the scripted traffic.</summary>
@@ -197,9 +215,15 @@ public sealed class StorePathScalingGates
     ///     only inflate: a leg that was descheduled, that took a collection, or
     ///     that ran against a busy core is slower than the same leg on a quiet
     ///     one. Both operands use it, so a slowdown that happened to affect the
-    ///     whole round cancels in the ratio instead of deciding the gate.
+    ///     whole round cancels in the ratio instead of deciding the gate. Five,
+    ///     not three, because exclusive execution removes the neighbours but not
+    ///     every collection: the 2N window allocates ~2.5 MiB by itself, and a
+    ///     gen0 triggered by the window's OWN budget lands on one leg and not
+    ///     the other. A round costs ~10 ms, so the extra legs are free, and the
+    ///     probability that every 2N leg took a collection while no 1N leg did
+    ///     falls with each one added.
     /// </summary>
-    private const int Rounds = 3;
+    private const int Rounds = 5;
 
     /// <summary>
     ///     Deltas driven through the identical path before any measurement, and

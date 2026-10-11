@@ -154,3 +154,354 @@ public static class CellForgeDiffEncoder
         }
     }
 }
+
+/// <summary>
+///     One hunk after hunk virtualization (O5 steal, epic #1155, issue #1174 —
+///     port of opencode <c>util/diff.ts splitPatchHunks</c> + <c>patch-diff.tsx</c>).
+/// </summary>
+/// <param name="Header">
+///     The <c>@@</c> header this hunk renders under: the original header for the
+///     first segment, a synthesized one (with full-file line numbers and a
+///     <c>chunk k/n</c> marker) for every segment cut from it.
+/// </param>
+/// <param name="Lines">Raw unified-diff content lines (<c>+</c>/<c>-</c>/<c> </c> prefixes kept).</param>
+/// <param name="IsVirtualChunk">
+///     True when this hunk was cut out of a longer added-only run, rather than
+///     passed through.
+/// </param>
+/// <param name="ChunkIndex">One-based index within the source hunk (1 when passed through).</param>
+/// <param name="ChunkCount">How many hunks the source hunk became (1 when passed through).</param>
+/// <param name="OldStart">Old-file start line of this (chunk-)hunk.</param>
+/// <param name="NewStart">New-file start line of this (chunk-)hunk.</param>
+public sealed record VirtualHunk(
+    string Header,
+    IReadOnlyList<string> Lines,
+    bool IsVirtualChunk,
+    int ChunkIndex,
+    int ChunkCount,
+    int OldStart,
+    int NewStart);
+
+/// <summary>A patch after hunk virtualization.</summary>
+/// <param name="Preamble"><c>---</c>/<c>+++</c> lines above the first hunk (never cut).</param>
+/// <param name="Hunks">Hunks in diff order (chunked where cut).</param>
+/// <param name="TotalLines">Content lines across all hunks (chunking preserves the count).</param>
+/// <param name="MaxNewLine">
+///     Full-file maximum new-side line number — the gutter-width anchor. Taken
+///     over the whole patch, never per chunk, so chunk gutters never jitter.
+/// </param>
+/// <param name="WasChunked">True when at least one added-only run was cut.</param>
+public sealed record VirtualPatch(
+    IReadOnlyList<string> Preamble,
+    IReadOnlyList<VirtualHunk> Hunks,
+    int TotalLines,
+    int MaxNewLine,
+    bool WasChunked);
+
+/// <summary>
+///     Hunk-virtualized patch splitter (O5 steal, epic #1155, issue #1174):
+///     the <c>util/diff.ts splitPatchHunks</c> + <c>patch-diff.tsx</c> rules —
+///     virtualize at <see cref="VirtualMinLines"/>, cut only added-only runs
+///     into <see cref="VirtualChunkLines"/>-line chunks with their own
+///     <c>@@</c> headers, size the gutter from the full file, and pick
+///     split/unified automatically above <see cref="SplitWidthThreshold"/>.
+/// </summary>
+/// <remarks>
+///     Pure BCL, no <c>LineDiff</c> engine calls: this file stays outside the
+///     diff-surface projection perimeter by construction (see
+///     <c>DiffSurfaceNameCollisionRule</c>). CRLF is normalized up front, so a
+///     Windows-authored patch never diffs as fully rewritten (#570).
+/// </remarks>
+public static class HunkVirtualizer
+{
+    /// <summary>
+    ///     Below this many content lines a patch renders whole; at or above it
+    ///     the panel renders a head window with a virtualization marker
+    ///     (<c>patch-diff.tsx VIRTUAL_MIN_LINES</c>).
+    /// </summary>
+    public const int VirtualMinLines = 3000;
+
+    /// <summary>
+    ///     Added-only runs longer than this are cut into chunks of at most this
+    ///     many lines (<c>patch-diff.tsx VIRTUAL_CHUNK_LINES</c>). Runs with
+    ///     context or removed lines mixed in are never cut.
+    /// </summary>
+    public const int VirtualChunkLines = 128;
+
+    /// <summary>
+    ///     Above this width the diff renders split (side-by-side), at or below
+    ///     it unified (<c>patch-diff.tsx</c> split/unified auto rule).
+    /// </summary>
+    public const int SplitWidthThreshold = 120;
+
+    /// <summary>True when a body with this many lines must render virtualized.</summary>
+    public static bool NeedsVirtualization(int totalLines) => totalLines >= VirtualMinLines;
+
+    /// <summary>True when this width renders split, false for unified.</summary>
+    public static bool PreferSplit(int width) => width > SplitWidthThreshold;
+
+    /// <summary>Decimal width of a full-file line number (the stable gutter).</summary>
+    public static int GutterWidth(int maxLine)
+    {
+        int width = 1;
+        for (int n = Math.Max(0, maxLine); n >= 10; n /= 10)
+        {
+            width++;
+        }
+
+        return width;
+    }
+
+    /// <summary>
+    ///     Splits a unified patch into hunks, cutting only added-only runs
+    ///     longer than <see cref="VirtualChunkLines"/> into chunks with their
+    ///     own <c>@@</c> headers carrying full-file line numbers. Everything
+    ///     else — preamble, mixed hunks, short runs — passes through untouched.
+    /// </summary>
+    public static VirtualPatch SplitPatchHunks(string? patchText)
+    {
+        string normalized = (patchText ?? string.Empty)
+            .Replace("\r\n", "\n", StringComparison.Ordinal)
+            .Replace('\r', '\n');
+        string[] raw = normalized.Split('\n');
+        int count = raw.Length;
+        if (count > 0 && raw[count - 1].Length == 0)
+        {
+            count--;
+        }
+
+        var preamble = new List<string>();
+        var hunks = new List<VirtualHunk>();
+        List<string>? current = null;
+        string currentHeader = string.Empty;
+        int currentOld = 1;
+        int currentNew = 1;
+        int nextOld = 1;
+        int nextNew = 1;
+        int total = 0;
+        int maxNew = 1;
+        bool chunked = false;
+
+        void Flush()
+        {
+            if (current is null)
+            {
+                return;
+            }
+
+            FlushHunk(current, currentHeader, currentOld, currentNew, hunks, ref maxNew, ref chunked, out nextOld, out nextNew);
+            current = null;
+        }
+
+        for (int i = 0; i < count; i++)
+        {
+            string line = raw[i].Replace("\t", "  ", StringComparison.Ordinal);
+            if (line.StartsWith("@@", StringComparison.Ordinal))
+            {
+                Flush();
+                current = new List<string>();
+                currentHeader = line;
+                if (TryParseHunkHeader(line, out int oldStart, out int newStart))
+                {
+                    currentOld = oldStart;
+                    currentNew = newStart;
+                }
+                else
+                {
+                    currentOld = nextOld;
+                    currentNew = nextNew;
+                }
+
+                continue;
+            }
+
+            if (current is null)
+            {
+                preamble.Add(line);
+            }
+            else
+            {
+                current.Add(line);
+                total++;
+            }
+        }
+
+        Flush();
+
+        if (hunks.Count == 0 && total == 0 && preamble.Count > 0)
+        {
+            // Headerless body: the preamble IS the content (mirrors the
+            // DiffViewerOverlay single-synthesized-hunk fallback).
+            var single = new VirtualHunk(string.Empty, preamble.ToArray(), false, 1, 1, 1, 1);
+            return new VirtualPatch(Array.Empty<string>(), [single], preamble.Count, Math.Max(1, preamble.Count), false);
+        }
+
+        return new VirtualPatch(preamble.ToArray(), hunks.ToArray(), total, maxNew, chunked);
+    }
+
+    private static void FlushHunk(
+        List<string> lines,
+        string header,
+        int oldStart,
+        int newStart,
+        List<VirtualHunk> into,
+        ref int maxNew,
+        ref bool chunked,
+        out int endOld,
+        out int endNew)
+    {
+        int old = oldStart;
+        int nw = newStart;
+        var segment = new List<string>();
+        int segmentOld = old;
+        int segmentNew = nw;
+        bool first = true;
+
+        // A hunk that survives whole keeps its original header; any hunk that
+        // is cut synthesizes every header (even the leading remainder's — its
+        // counts no longer match the original).
+        bool whole = true;
+        for (int s = 0; s < lines.Count;)
+        {
+            int scan = AddedRunLength(lines, s);
+            if (scan > VirtualChunkLines)
+            {
+                whole = false;
+                break;
+            }
+
+            s += Math.Max(1, scan);
+        }
+
+        int i = 0;
+
+        void EmitSegment(bool isChunk, int chunkIndex, int chunkCount, int oldCount, int newCount)
+        {
+            string segmentHeader = first && whole
+                ? header
+                : SynthHeader(segmentOld, oldCount, segmentNew, newCount, chunkIndex, chunkCount);
+            into.Add(new VirtualHunk(
+                segmentHeader,
+                segment.ToArray(),
+                isChunk,
+                chunkCount > 1 ? chunkIndex : 1,
+                Math.Max(1, chunkCount),
+                segmentOld,
+                segmentNew));
+            first = false;
+        }
+
+        while (i < lines.Count)
+        {
+            int run = AddedRunLength(lines, i);
+            if (run > VirtualChunkLines)
+            {
+                if (segment.Count > 0)
+                {
+                    EmitSegment(isChunk: false, chunkIndex: 0, chunkCount: 1, old - segmentOld, nw - segmentNew);
+                    segment.Clear();
+                }
+
+                int chunks = (run + VirtualChunkLines - 1) / VirtualChunkLines;
+                for (int k = 0; k < chunks; k++)
+                {
+                    int take = Math.Min(VirtualChunkLines, run - (k * VirtualChunkLines));
+                    segment.AddRange(lines.GetRange(i + (k * VirtualChunkLines), take));
+                    EmitSegment(isChunk: true, chunkIndex: k + 1, chunkCount: chunks, oldCount: 0, newCount: take);
+                    segment.Clear();
+                    nw += take;
+                }
+
+                chunked = true;
+                segmentOld = old;
+                segmentNew = nw;
+                i += run;
+            }
+            else
+            {
+                string line = lines[i];
+                if (IsAdded(line))
+                {
+                    nw++;
+                }
+                else if (IsRemoved(line))
+                {
+                    old++;
+                }
+                else
+                {
+                    old++;
+                    nw++;
+                }
+
+                segment.Add(line);
+                i++;
+            }
+        }
+
+        if (segment.Count > 0)
+        {
+            EmitSegment(isChunk: false, chunkIndex: 0, chunkCount: 1, old - segmentOld, nw - segmentNew);
+        }
+
+        endOld = old;
+        endNew = nw;
+        if (lines.Count > 0)
+        {
+            maxNew = Math.Max(maxNew, Math.Max(newStart, nw - 1));
+        }
+        else
+        {
+            maxNew = Math.Max(maxNew, newStart);
+        }
+    }
+
+    private static string SynthHeader(int oldStart, int oldCount, int newStart, int newCount, int chunkIndex, int chunkCount)
+    {
+        string header = "@@ -" + oldStart + "," + oldCount + " +" + newStart + "," + newCount + " @@";
+        return chunkCount > 1 ? header + " chunk " + chunkIndex + "/" + chunkCount : header;
+    }
+
+    private static int AddedRunLength(List<string> lines, int start)
+    {
+        int run = 0;
+        while (start + run < lines.Count && IsAdded(lines[start + run]))
+        {
+            run++;
+        }
+
+        return run;
+    }
+
+    private static bool IsAdded(string line) => line.Length > 0 && line[0] == '+';
+
+    private static bool IsRemoved(string line) => line.Length > 0 && line[0] == '-';
+
+    private static bool TryParseHunkHeader(string line, out int oldStart, out int newStart)
+    {
+        oldStart = 1;
+        newStart = 1;
+        int dash = line.IndexOf('-');
+        int plus = line.IndexOf('+');
+        if (dash < 0 || plus < 0 || plus < dash)
+        {
+            return false;
+        }
+
+        return TryReadNumber(line, dash + 1, out oldStart) && TryReadNumber(line, plus + 1, out newStart);
+    }
+
+    private static bool TryReadNumber(string text, int index, out int value)
+    {
+        value = 0;
+        int digits = 0;
+        while (index < text.Length && text[index] >= '0' && text[index] <= '9')
+        {
+            value = (value * 10) + (text[index] - '0');
+            index++;
+            digits++;
+        }
+
+        return digits > 0;
+    }
+}
