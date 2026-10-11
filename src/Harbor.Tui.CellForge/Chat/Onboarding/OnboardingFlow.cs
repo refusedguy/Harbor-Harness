@@ -208,6 +208,41 @@ public sealed class OnboardingFlow
         return Dialog.HandleKey(key);
     }
 
+    /// <summary>
+    /// Route a decoded key to the flow (kitty-capable hosts). Same contract as
+    /// <see cref="HandleKey(ConsoleKeyInfo)"/>: Esc cancels from any step,
+    /// Enter commits the current step, anything else goes to the dialog.
+    /// A release applies nothing — the BCL vocabulary has no phase, this one does.
+    /// Returns false once the flow is finished or idle.
+    /// </summary>
+    public bool HandleKey(in KeyEvent key)
+    {
+        if (IsComplete || Step == OnboardingStep.Idle)
+        {
+            return false;
+        }
+        if (key.EventType == KeyEventType.Release)
+        {
+            return false;
+        }
+        if (key.Key == KeyCode.Escape)
+        {
+            Cancel();
+            return true;
+        }
+        if (key.Key == KeyCode.Enter)
+        {
+            if (Dialog.Kind == DialogKind.Prompt && IsCancelFocused())
+            {
+                Cancel();
+                return true;
+            }
+            CommitCurrentStep();
+            return true;
+        }
+        return Dialog.HandleKey(key);
+    }
+
     private bool IsCancelFocused()
     {
         var buttons = Dialog.Buttons;

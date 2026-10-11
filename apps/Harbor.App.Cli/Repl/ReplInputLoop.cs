@@ -359,6 +359,14 @@ internal sealed class ReplInputLoop(CellForgeReplRunner host)
             return;
         }
 
+        // Onboarding flow (issue #1248, slice 1): modal dialog — while it is
+        // up every key belongs to it, so typing never reaches the composer.
+        if (await host.Onboarding.HandleKeyAsync(key, ct).ConfigureAwait(false))
+        {
+            host._wake.Writer.TryWrite(null);
+            return;
+        }
+
         // Command palette: ctrl+p toggles; a visible palette claims keys first
         // so Enter/Esc/letters never leak into the approval gate or composer.
         if (key.Key == KeyCode.Char && key.Modifiers == KeyModifiers.Ctrl

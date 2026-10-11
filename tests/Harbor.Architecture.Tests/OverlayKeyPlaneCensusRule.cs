@@ -18,7 +18,7 @@
 //       REGISTERED + READS KEYS + CAN BE SHOWN (2)
 //         ImageViewerOverlayLayer     field _imageLayer, pushed at
 //                                    ChatScreenLayout.cs:875; opened at
-//                                    ReplInputLoop.cs:444; IsModal = true.
+//                                    ReplInputLoop.cs:452; IsModal = true.
 //         SetupChecklistOverlayLayer  field _setupLayer, pushed at :863;
 //                                    opened at SetupCommand.cs:27;
 // check-doc-cites: record-drift SetupCommand.cs:27 now="ambiguous:2" [2 tracked files share this basename, so the citation does not identify one] -->
@@ -265,7 +265,7 @@ public sealed class OverlayKeyPlaneCensusRule
     /// <summary>
     ///     The two registered layers whose keys <c>ReplInputLoop</c> reaches directly, at
     ///     <c>ReplInputLoop.cs:354</c> (<c>host.Images.HandleKey</c>) and
-    ///     <c>ReplInputLoop.cs:429</c> (<c>host.Setup.HandleKey</c>) — to the same overlay
+    ///     <c>ReplInputLoop.cs:437</c> (<c>host.Setup.HandleKey</c>) — to the same overlay
     ///     instances their layers wrap, so nothing about today's behaviour depends on the
     ///     stack being the router. Declared rather than derived because detecting the
     ///     hand-off needs the same receiver-to-type resolution limit 1 in the header names.
