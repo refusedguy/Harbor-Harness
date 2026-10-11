@@ -48,6 +48,14 @@ public sealed class ThemeFileWatcher : IDisposable
     private readonly Timer _timer;
     private DateTime _lastWriteUtc;
 
+    /// <summary>
+    /// Slot → variable bindings of the last applied document, for
+    /// <see cref="TryUpdateVariables" />. Empty until the first successful
+    /// reload, and kept across parse failures with the theme it describes.
+    /// </summary>
+    private IReadOnlyDictionary<string, string> _lastVariableSlots =
+        new Dictionary<string, string>();
+
     /// <summary>Poll interval (default 500 ms — imperceptible for theme edits).</summary>
     public static readonly TimeSpan Interval = TimeSpan.FromMilliseconds(500);
 
@@ -95,6 +103,7 @@ public sealed class ThemeFileWatcher : IDisposable
             if (result.IsSuccess)
             {
                 LastApplied = Maybe.From(result.Theme);
+                _lastVariableSlots = result.VariableSlots;
                 TerminalColorPalette.Apply(result.Theme);
                 _onApplied?.Invoke(result.Theme);
             }
@@ -107,6 +116,37 @@ public sealed class ThemeFileWatcher : IDisposable
         {
             _onError?.Invoke(ex.Message);
         }
+    }
+
+    /// <summary>
+    /// Live variable update (Textual <c>set_variables</c> shape): re-resolves the
+    /// last applied theme's <c>$var</c> slots against <paramref name="variables" />
+    /// with no stat and no store read — the file need not change on disk. Slots
+    /// whose variable is absent keep their color; bad hex reports through
+    /// <c>onError</c> and keeps the last theme, like a failed reload.
+    /// </summary>
+    /// <returns>
+    /// <c>false</c> when no theme was applied yet or a value was not hex —
+    /// nothing was applied either way.
+    /// </returns>
+    public bool TryUpdateVariables(IReadOnlyDictionary<string, string> variables)
+    {
+        ArgumentNullException.ThrowIfNull(variables);
+        if (LastApplied.HasNoValue)
+        {
+            return false;
+        }
+
+        if (!ThemeJson.TryRebind(LastApplied.Value, _lastVariableSlots, variables, out var patched, out var error))
+        {
+            _onError?.Invoke(error);
+            return false;
+        }
+
+        LastApplied = Maybe.From(patched);
+        TerminalColorPalette.Apply(patched);
+        _onApplied?.Invoke(patched);
+        return true;
     }
 
     public void Dispose() => _timer.Dispose();

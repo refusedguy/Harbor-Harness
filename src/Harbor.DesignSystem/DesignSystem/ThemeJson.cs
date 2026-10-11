@@ -25,12 +25,24 @@ public sealed record ThemeParseResult
     /// <summary>Non-fatal lint findings — the theme still loads.</summary>
     public IReadOnlyList<string> Warnings { get; init; } = [];
 
+    /// <summary>
+    /// Slots bound to <c>$variables</c> (slot → variable name, as written).
+    /// Empty when the document references none — it is what lets a watcher
+    /// re-resolve variables without re-reading the file.
+    /// </summary>
+    public IReadOnlyDictionary<string, string> VariableSlots { get; init; } =
+        new Dictionary<string, string>();
+
     /// <summary>Successful outcome.</summary>
-    public static ThemeParseResult Ok(HarborTheme theme, IReadOnlyList<string> warnings) => new()
+    public static ThemeParseResult Ok(
+        HarborTheme theme,
+        IReadOnlyList<string> warnings,
+        IReadOnlyDictionary<string, string>? variableSlots = null) => new()
     {
         IsSuccess = true,
         Theme = theme,
         Warnings = warnings,
+        VariableSlots = variableSlots ?? new Dictionary<string, string>(),
     };
 
     /// <summary>Failed outcome — <paramref name="errors" /> is joined into <see cref="Error" />.</summary>
@@ -43,7 +55,11 @@ public sealed record ThemeParseResult
     };
 }
 
-/// <summary>JSON shape of a theme file — camelCase, all slots optional.</summary>
+/// <summary>
+/// JSON shape of a theme file — camelCase, all slots optional.
+/// <c>Variables</c> declares the <c>$name</c> table a slot may reference
+/// (Textual <c>$primary</c> shape): values are hex-only, flat, no chaining.
+/// </summary>
 internal sealed record ThemeDto(
     string? Name,
     string? Accent,
@@ -59,7 +75,8 @@ internal sealed record ThemeDto(
     string? Surface2,
     string? Border,
     string? Muted,
-    string? Text);
+    string? Text,
+    Dictionary<string, string>? Variables);
 
 [JsonSourceGenerationOptions(
     PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase,
@@ -113,6 +130,7 @@ public static class ThemeJson
     private static readonly HashSet<string> KnownKeys =
     [
         "name",
+        "variables",
         .. Slots.Select(s => s.Key),
     ];
 
@@ -121,7 +139,16 @@ public static class ThemeJson
     /// Never throws — malformed input returns a failed
     /// <see cref="ThemeParseResult" /> carrying the reason.
     /// </summary>
-    public static ThemeParseResult Parse(string json, HarborTheme fallback)
+    /// <remarks>
+    /// A slot may hold <c>$name</c> instead of hex, resolved against the
+    /// document's <c>variables</c> table (case-insensitive, hex-only, flat).
+    /// <paramref name="variableOverrides" /> win over the document table, so a
+    /// caller holding the last text re-parses with new values and no disk read.
+    /// </remarks>
+    public static ThemeParseResult Parse(
+        string json,
+        HarborTheme fallback,
+        IReadOnlyDictionary<string, string>? variableOverrides = null)
     {
         ArgumentNullException.ThrowIfNull(fallback);
 
@@ -144,21 +171,65 @@ public static class ThemeJson
         }
 
         var errors = new List<string>();
+        var vars = new Dictionary<string, RgbColor>(StringComparer.OrdinalIgnoreCase);
+        void AddVariables(IEnumerable<KeyValuePair<string, string>> table)
+        {
+            foreach (var (name, value) in table)
+            {
+                if (string.IsNullOrWhiteSpace(name))
+                {
+                    errors.Add("invalid variable name: names must be non-empty");
+                }
+                else if (string.IsNullOrWhiteSpace(value) || !TryParseHex(value, out var color))
+                {
+                    errors.Add($"invalid hex for variable '{name}': {value}");
+                }
+                else
+                {
+                    vars[name.Trim()] = color;
+                }
+            }
+        }
+
+        if (dto.Variables is not null)
+        {
+            AddVariables(CaseFold(dto.Variables));
+        }
+
+        if (variableOverrides is not null)
+        {
+            AddVariables(CaseFold(variableOverrides));
+        }
+
         var values = new Dictionary<string, RgbColor>(StringComparer.Ordinal);
+        var slotVars = new Dictionary<string, string>(StringComparer.Ordinal);
         foreach (var (key, get) in Slots)
         {
-            string? hex = GetDtoSlot(dto, key);
-            if (string.IsNullOrWhiteSpace(hex))
+            string? raw = GetDtoSlot(dto, key);
+            if (string.IsNullOrWhiteSpace(raw))
             {
                 values[key] = get(fallback);
             }
-            else if (TryParseHex(hex, out var color))
+            else if (raw.Trim().StartsWith('$'))
+            {
+                string varName = raw.Trim()[1..].Trim();
+                if (vars.TryGetValue(varName, out var resolved))
+                {
+                    values[key] = resolved;
+                    slotVars[key] = varName;
+                }
+                else
+                {
+                    errors.Add($"unknown variable '${varName}' for '{key}'");
+                }
+            }
+            else if (TryParseHex(raw, out var color))
             {
                 values[key] = color;
             }
             else
             {
-                errors.Add($"invalid hex for '{key}': {hex}");
+                errors.Add($"invalid hex for '{key}': {raw}");
             }
         }
 
@@ -176,10 +247,56 @@ public static class ThemeJson
             values["border"], values["muted"], values["text"]);
 
         warnings = [.. warnings, .. LintContrast(theme)];
-        return ThemeParseResult.Ok(theme, warnings);
+        return ThemeParseResult.Ok(theme, warnings, slotVars);
+    }
+
+    /// <summary>
+    /// Re-resolves <paramref name="slotVariables" />-bound slots of
+    /// <paramref name="theme" /> against <paramref name="variables" /> — the
+    /// Textual <c>set_variables</c> shape: pure, no disk, no re-read. Slots
+    /// whose variable is absent keep their color; names nobody bound are
+    /// ignored. Never throws: bad hex comes back as <paramref name="error" />.
+    /// </summary>
+    public static bool TryRebind(
+        HarborTheme theme,
+        IReadOnlyDictionary<string, string> slotVariables,
+        IReadOnlyDictionary<string, string> variables,
+        out HarborTheme patched,
+        out string error)
+    {
+        ArgumentNullException.ThrowIfNull(theme);
+        ArgumentNullException.ThrowIfNull(slotVariables);
+        ArgumentNullException.ThrowIfNull(variables);
+
+        patched = theme;
+        var table = CaseFold(variables);
+        foreach (var (slot, name) in slotVariables)
+        {
+            if (name is null || !table.TryGetValue(name, out var hex))
+            {
+                continue;
+            }
+
+            if (string.IsNullOrWhiteSpace(hex) || !TryParseHex(hex, out var color))
+            {
+                error = $"invalid hex for variable '{name}': {hex}";
+                patched = theme;
+                return false;
+            }
+
+            patched = SetSlot(patched, slot, color);
+        }
+
+        error = string.Empty;
+        return true;
     }
 
     /// <summary>Serializes a theme to marketplace-format JSON (indented).</summary>
+    /// <remarks>
+    /// Writes resolved slot values only: a <c>$variable</c> binding is a
+    /// document concern and does not survive on the resolved
+    /// <see cref="HarborTheme" />, so <c>variables</c> is always absent here.
+    /// </remarks>
     public static string Write(HarborTheme theme)
     {
         ArgumentNullException.ThrowIfNull(theme);
@@ -188,7 +305,8 @@ public static class ThemeJson
             Hex(theme.Accent), Hex(theme.Success), Hex(theme.Warning), Hex(theme.Error),
             Hex(theme.Tool), Hex(theme.System), Hex(theme.User),
             Hex(theme.Background), Hex(theme.Panel), Hex(theme.Surface), Hex(theme.Surface2),
-            Hex(theme.Border), Hex(theme.Muted), Hex(theme.Text));
+            Hex(theme.Border), Hex(theme.Muted), Hex(theme.Text),
+            null);
         return JsonSerializer.Serialize(dto, ThemeJsonContext.Default.ThemeDto);
     }
 
@@ -247,6 +365,44 @@ public static class ThemeJson
         "text" => dto.Text,
         _ => throw new InvalidOperationException($"unknown theme slot: {key}"),
     };
+
+    private static HarborTheme SetSlot(HarborTheme theme, string slot, RgbColor color) => slot switch
+    {
+        "accent" => theme with { Accent = color },
+        "success" => theme with { Success = color },
+        "warning" => theme with { Warning = color },
+        "error" => theme with { Error = color },
+        "tool" => theme with { Tool = color },
+        "system" => theme with { System = color },
+        "user" => theme with { User = color },
+        "background" => theme with { Background = color },
+        "panel" => theme with { Panel = color },
+        "surface" => theme with { Surface = color },
+        "surface2" => theme with { Surface2 = color },
+        "border" => theme with { Border = color },
+        "muted" => theme with { Muted = color },
+        "text" => theme with { Text = color },
+        _ => theme,
+    };
+
+    /// <summary>
+    /// Case-insensitive copy of a variable table (last wins, null keys dropped),
+    /// so <c>$Primary</c> and <c>primary</c> are one variable however the caller
+    /// cased its dictionary.
+    /// </summary>
+    private static Dictionary<string, string> CaseFold(IReadOnlyDictionary<string, string> source)
+    {
+        var table = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var (key, value) in source)
+        {
+            if (key is not null)
+            {
+                table[key] = value;
+            }
+        }
+
+        return table;
+    }
 
     private static IReadOnlyList<string> LintUnknownKeys(JsonElement root)
     {
