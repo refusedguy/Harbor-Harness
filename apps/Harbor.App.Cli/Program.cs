@@ -104,13 +104,14 @@ public static class Program
             command = "demo"; // `harbor --demo` is the documented alias of `harbor demo`
         _logger.LogInformation("Command: {Command}", command);
 
+        // Slice A (#1144): StatusCommand names Client-assembly transports, so
+        // the file leaves the compile when the daemon is off (see the csproj
+        // Compile Remove); the registration below follows the same switch.
         var cliCommands = new ICommand[]
         {
             new LogsCommand(Console.Out, Console.Error),
             new DaemonCommand(Console.Out, Console.Error),
 #if HARBOR_WITH_DAEMON
-            // Slice A (#1144): StatusCommand names Client-assembly transports;
-            // the file leaves the compile when the daemon is off.
             new StatusCommand(Console.Out, Console.Error),
 #endif
             new PluginsCommand(Console.Out, Console.Error),
