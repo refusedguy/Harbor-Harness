@@ -107,6 +107,31 @@ public class JsonThemeLoaderTests
         await Assert.That(result.Value.Name).IsEqualTo("custom");
     }
 
+    [Test]
+    public async Task Parse_Variables_ResolveDollarReferences()
+    {
+        string json = """{ "variables": { "primary": "#39BAE6" }, "accent": "$primary", "user": "$primary" }""";
+
+        var result = JsonThemeLoader.Parse(json);
+
+        await Assert.That(result).IsSuccessful();
+        var expected = new RgbColor(0x39, 0xBA, 0xE6);
+        await Assert.That(result.Value.Accent).IsEqualTo(expected);
+        await Assert.That(result.Value.User).IsEqualTo(expected);
+    }
+
+    [Test]
+    public async Task Parse_VariableOverrides_WinOverDocument()
+    {
+        string json = """{ "variables": { "primary": "#111111" }, "accent": "$primary" }""";
+        var overrides = new Dictionary<string, string> { ["primary"] = "#222222" };
+
+        var result = JsonThemeLoader.Parse(json, TerminalColorPalette.Current, overrides);
+
+        await Assert.That(result).IsSuccessful();
+        await Assert.That(result.Value.Accent).IsEqualTo(new RgbColor(0x22, 0x22, 0x22));
+    }
+
     // The LoadFile half of this file moved to ThemeStoreTests: reading a theme
     // file is IThemeStore.LoadFile since #668, and that test belongs with the
     // type that owns the read rather than with the parser that used to

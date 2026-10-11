@@ -183,6 +183,76 @@ public class ThemeFileWatcherTests
             () => new ThemeFileWatcher("/x.json", store: null!)).Throws<ArgumentNullException>();
     }
 
+    // ---------------------------------------------------------------------
+    // Variable-level live reparse: no stat, no store read, no disk change.
+    // ---------------------------------------------------------------------
+
+    private static readonly DateTime Stamp2026 =
+        new(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+
+    private static readonly DateTime Stamp2026Next =
+        new(2026, 1, 2, 0, 0, 0, DateTimeKind.Utc);
+
+    private const string VarsThemeJson =
+        """{ "name": "vars", "variables": { "primary": "#111111" }, "accent": "$primary" }""";
+
+    private static ThemeFileWatcher WatchVarsTheme(
+        FakeThemeStore store,
+        List<string> applied,
+        List<string>? errors = null)
+    {
+        store.Stamps["/x.json"] = Stamp2026Next;
+        store.Seen = ThemeJson.Parse(VarsThemeJson, HarborTheme.HarborDark);
+        var watcher = new ThemeFileWatcher(
+            "/x.json", store,
+            onApplied: t => applied.Add(t.Name),
+            onError: e => errors?.Add(e));
+        watcher.Poll();
+        return watcher;
+    }
+
+    [Test]
+    public async Task TryUpdateVariables_Rebinds_Without_Store_Read()
+    {
+        var store = new FakeThemeStore { Stamps = { ["/x.json"] = Stamp2026 } };
+        var applied = new List<string>();
+        using var watcher = WatchVarsTheme(store, applied);
+        int reads = store.LoadCalls;
+
+        bool ok = watcher.TryUpdateVariables(new Dictionary<string, string> { ["primary"] = "#222222" });
+
+        await Assert.That(ok).IsTrue();
+        await Assert.That(store.LoadCalls).IsEqualTo(reads); // no file reload
+        await Assert.That(watcher.LastApplied.Value.Accent).IsEqualTo(new RgbColor(0x22, 0x22, 0x22));
+        await Assert.That(applied).IsEquivalentTo(["vars", "vars"]);
+    }
+
+    [Test]
+    public async Task TryUpdateVariables_InvalidHex_KeepsLastTheme_ReportsError()
+    {
+        var store = new FakeThemeStore { Stamps = { ["/x.json"] = Stamp2026 } };
+        var errors = new List<string>();
+        using var watcher = WatchVarsTheme(store, new List<string>(), errors);
+
+        bool ok = watcher.TryUpdateVariables(new Dictionary<string, string> { ["primary"] = "zzz" });
+
+        await Assert.That(ok).IsFalse();
+        await Assert.That(errors).Any(e => e.Contains("primary"));
+        await Assert.That(watcher.LastApplied.Value.Accent).IsEqualTo(new RgbColor(0x11, 0x11, 0x11));
+    }
+
+    [Test]
+    public async Task TryUpdateVariables_BeforeFirstApply_ReturnsFalse()
+    {
+        var store = new FakeThemeStore();
+        using var watcher = new ThemeFileWatcher("/missing.json", store);
+
+        bool ok = watcher.TryUpdateVariables(new Dictionary<string, string> { ["primary"] = "#222222" });
+
+        await Assert.That(ok).IsFalse();
+        await Assert.That(watcher.LastApplied.HasNoValue).IsTrue();
+    }
+
     /// <summary>
     ///     An in-memory <see cref="IThemeStore" />. Lives in a test assembly on
     ///     purpose: ThemeStoreSeamRules counts production implementers only, and

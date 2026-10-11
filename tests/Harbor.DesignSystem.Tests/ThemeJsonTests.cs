@@ -164,4 +164,89 @@ public class ThemeJsonTests
     {
         await Assert.That(ThemeJson.Hex(new RgbColor(0x39, 0xBA, 0xE6))).IsEqualTo("#39BAE6");
     }
+
+    [Test]
+    public async Task Parse_VariableReferences_ResolveAcrossSlots()
+    {
+        string json = """
+            {
+              "name": "branded",
+              "variables": { "primary": "#39BAE6" },
+              "accent": "$primary",
+              "user": "$primary"
+            }
+            """;
+
+        var result = ThemeJson.Parse(json, HarborTheme.HarborDark);
+
+        await Assert.That(result.IsSuccess).IsTrue();
+        var expected = new RgbColor(0x39, 0xBA, 0xE6);
+        await Assert.That(result.Theme.Accent).IsEqualTo(expected);
+        await Assert.That(result.Theme.User).IsEqualTo(expected);
+        await Assert.That(result.VariableSlots["accent"]).IsEqualTo("primary");
+        await Assert.That(result.VariableSlots["user"]).IsEqualTo("primary");
+    }
+
+    [Test]
+    public async Task Parse_UnknownVariable_FailsNamingSlot()
+    {
+        var result = ThemeJson.Parse("""{ "accent": "$nope" }""", HarborTheme.HarborDark);
+
+        await Assert.That(result.IsSuccess).IsFalse();
+        await Assert.That(result.Error).Contains("nope");
+        await Assert.That(result.Error).Contains("accent");
+    }
+
+    [Test]
+    public async Task Parse_VariableOverrides_ReparseWithoutReload()
+    {
+        string json = """{ "variables": { "primary": "#111111" }, "accent": "$primary" }""";
+        var overrides = new Dictionary<string, string> { ["primary"] = "#222222" };
+
+        var first = ThemeJson.Parse(json, HarborTheme.HarborDark);
+        var second = ThemeJson.Parse(json, HarborTheme.HarborDark, overrides);
+
+        await Assert.That(first.IsSuccess).IsTrue();
+        await Assert.That(second.IsSuccess).IsTrue();
+        await Assert.That(first.Theme.Accent).IsEqualTo(new RgbColor(0x11, 0x11, 0x11));
+        await Assert.That(second.Theme.Accent).IsEqualTo(new RgbColor(0x22, 0x22, 0x22));
+    }
+
+    [Test]
+    public async Task TryRebind_UnboundSlots_KeepColors()
+    {
+        var parsed = ThemeJson.Parse(
+            """{ "variables": { "primary": "#111111" }, "accent": "$primary" }""",
+            HarborTheme.HarborDark);
+
+        bool ok = ThemeJson.TryRebind(
+            parsed.Theme,
+            parsed.VariableSlots,
+            new Dictionary<string, string> { ["other"] = "#EEEEEE" },
+            out var patched,
+            out var error);
+
+        await Assert.That(ok).IsTrue();
+        await Assert.That(error).IsEqualTo(string.Empty);
+        await Assert.That(patched.Accent).IsEqualTo(new RgbColor(0x11, 0x11, 0x11));
+    }
+
+    [Test]
+    public async Task TryRebind_InvalidHex_FailsWithoutThrowing()
+    {
+        var parsed = ThemeJson.Parse(
+            """{ "variables": { "primary": "#111111" }, "accent": "$primary" }""",
+            HarborTheme.HarborDark);
+
+        bool ok = ThemeJson.TryRebind(
+            parsed.Theme,
+            parsed.VariableSlots,
+            new Dictionary<string, string> { ["primary"] = "zzz" },
+            out var patched,
+            out var error);
+
+        await Assert.That(ok).IsFalse();
+        await Assert.That(error).Contains("primary");
+        await Assert.That(patched).IsEqualTo(parsed.Theme);
+    }
 }
