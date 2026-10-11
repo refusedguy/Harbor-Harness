@@ -99,6 +99,15 @@ public static class TargetCatalog
             [new TargetOutput("file", "artifacts/archives/*.tar.gz + GitHub assets")],
             ["./build.sh Release --release-tag v0.7.0"],
             ["requires clean git tree in practice; AOT variant added only when flags are AOT-compatible"]),
+        new("Pack",
+            "dotnet pack the solution into artifacts/packages (tag versions it when given).",
+            ["Compile"], [],
+            [
+                new TargetParam("--release-tag", "string", "(none)", "git tag (vX.Y.Z) overriding the package Version")
+            ],
+            [new TargetOutput("dir", "artifacts/packages/*.nupkg")],
+            ["./build.sh Pack", "./build.sh Pack --release-tag v0.7.0"],
+            ["packs every project with IsPackable=true; CI validates with tools/pack-validate.py"]),
         new("PublishIpcServer",
             "Publish the CLI as ipc-server host (HarborMode=ipc-server) into artifacts/ipc-server.",
             ["Compile"], [],

@@ -18,7 +18,7 @@ namespace Harbor.Build;
 ///     <para>
 ///         <b>Targets</b> (run via <c>./build.sh &lt;Target&gt;</c>): Clean,
 ///         Restore, Compile (default), Test, ArchitectureTests, Publish,
-///         PublishArchive, Release, PublishIpcServer, PublishIpcClient — plus
+///         PublishArchive, Release, Pack, PublishIpcServer, PublishIpcClient — plus
 ///         the meta commands List, Help, Doctor, What (machine-readable
 ///         catalog, environment checks, change-impact mapping).
 ///     </para>
@@ -39,7 +39,7 @@ internal class Build : NukeBuild
     [Parameter("Configuration: Debug or Release")] private readonly BuildConfiguration Configuration = BuildConfiguration.Release;
     [Parameter("Minimal build — shorthand for all of the above = false")] private readonly bool Minimal;
     [Parameter("GitHub repo (owner/name) for the Release target")] private readonly string ReleaseRepo = "harbor-sh/harbor";
-    [Parameter("Release tag (e.g. v0.7.0) for the Release target")] private readonly string ReleaseTag = string.Empty;
+    [Parameter("Release tag (e.g. v0.7.0) for the Release/Pack targets")] private readonly string ReleaseTag = string.Empty;
     [Parameter("Runtime identifier (default linux-x64)")] private readonly string Runtime = "linux-x64";
 
     // ── Solution / paths ────────────────────────────────────────────────────
@@ -230,6 +230,17 @@ internal class Build : NukeBuild
                 Resolver, VariantBuilder, Archiver, Uploader,
                 AppName, variants, Flags, Settings, ReleaseTag, ReleaseRepo, Output);
         }));
+
+    /// <summary>
+    ///     Pack every <c>IsPackable</c> library into
+    ///     <c>artifacts/packages/</c> as <c>.nupkg</c>. When
+    ///     <c>--release-tag vX.Y.Z</c> is passed, the tag versions the
+    ///     packages; otherwise the version from
+    ///     <c>Directory.Build.props</c> applies.
+    /// </summary>
+    private Target Pack => _ => _.DependsOn(Compile)
+        .Executes(() => Run("Pack", () =>
+            PackTarget.Execute(Resolver, Solution, Settings, ReleaseTag, Output)));
 
     /// <summary>
     ///     Publish the <c>ipc-server</c> variant of the CLI. The resulting
