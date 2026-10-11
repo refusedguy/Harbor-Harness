@@ -176,19 +176,14 @@ Includes the app DLL + all NuGet deps + runtime deps. **This is what `dotnet pub
 
 ### 3.3 NativeAOT
 
-**Status: not yet supported.** Harbor CLI cannot be NativeAOT-published today because of:
-- `Spectre.Console` reflection usage (optional Spectre renderers referenced via the `HARBOR_WITH_SPECTRE_TUI` build flag; contrib projects)
-- `Microsoft.CodeAnalysis.CSharp` (Roslyn) — not AOT-compatible
-- In-process CS-source plugin compilation: `src/Harbor.Plugins.Compilation/RoslynPluginCompiler.cs`
+**Status: publishable on the `fulltree` recipe since #1055s3** (record: `.github/aot-warning-baseline.txt`, gate: #413; measured binary + workload in §4.4). What unblocked it: the in-process CS-source plugin pipeline (`Harbor.Plugins.{Compilation,Instantiation,Registration,Storage}`) left the CLI process — the default route is the out-of-process host — so Roslyn (`Microsoft.CodeAnalysis.CSharp`) is no longer in the trim graph. No suppression was added. Still true: the `minimal` recipe (`HARBOR_MINIMAL=true`, the stripped profile) does not compile (11 x CS0234, see the baseline file), and the contrib Spectre renderers stay out of the AOT graph via build flags.
 
-**Roadmap:** out-of-process plugin host skeleton already exists (`Harbor.Plugins.Host` exe, MCP stdio); finishing the split (planned v0.9 two-process milestone) plus dropping in-process Roslyn and Spectre reflection unlocks AOT for the main process. Expected AOT binary size: ~14-20 MB (typical for .NET 10 AOT console apps with similar deps).
+**Roadmap remainder:** the `minimal` profile plus dropping in-process Roslyn and Spectre reflection for the main process was the v0.9 two-process milestone — the Roslyn half of that landed via #1055. Measured AOT binary size: 29 MB self-contained (§4.4), against the 14–20 MB estimate below.
 
-If you still want to try AOT today:
+To reproduce the measured publish today (needs the AOT toolchain: `clang`, `lld`, `binutils`, `zlib1g-dev`):
 ```bash
-dotnet workload install native-aot
-cd apps/Harbor.App.Cli
-dotnet publish -c Release -r linux-x64 -p:PublishAot=true
-# Expected: IL2026 warnings from Spectre + Roslyn, runtime crash on first plugin compile
+dotnet publish apps/Harbor.App.Cli -c Release -r linux-x64 --self-contained true -p:HarborWithAot=true
+# Green in CI (the `aot-publish` job); the published binary runs version/help/providers. Full recipe in tools/measure-aot-workload.sh.
 ```
 
 ### 3.4 Framework-dependent vs Self-contained
@@ -199,7 +194,7 @@ dotnet publish -c Release -r linux-x64 -p:PublishAot=true
 | Self-contained `--self-contained` | ~85 MB + ~75 MB runtime = **160 MB** | End users without .NET |
 | Self-contained + `PublishSingleFile` | ~85 MB single binary + ~75 MB runtime files | Distribution |
 | Self-contained + `PublishTrimmed` | ~50 MB | Experimental — breaks Spectre.Console reflection |
-| NativeAOT (when supported) | ~14-20 MB | Production target |
+| NativeAOT (`fulltree`, measured §4.4) | 29 MB self-contained | Production target |
 
 ## 4. Runtime metrics
 
@@ -240,11 +235,11 @@ Estimates based on .NET 10 baseline + Harbor deps:
 
 Not yet measured with `dotnet-counters`. The `InMemoryEventBus`, `UiStore` (now lock-free CAS), and `AgentLoop` (uses `StringBuilderPool`, `ArrayPool`) are designed for low allocation. BenchmarkDotNet microbenchmarks below quantify the hot paths.
 
-### 4.4 JIT vs NativeAOT scripted workload (#411) — JIT half measured, AOT half blocked
+### 4.4 JIT vs NativeAOT scripted workload (#411) — both halves measured
 
-Harness: `tools/measure-jit-workload.sh` (offline CLI verbs `--version` / `--help` / `providers`, N=7, median + spread — never a single number); CI runner `.github/workflows/meas-jit-aot.yml` (measurement only, not a gate). Full log is the `jit-workload-log` artifact of the run linked below.
+Harness: `tools/measure-jit-workload.sh` + `tools/measure-aot-workload.sh` (offline CLI verbs `--version` / `--help` / `providers`, N=7, median + spread — never a single number; same verbs, same N, same table shape); CI runner `.github/workflows/meas-jit-aot.yml` (measurement only, not a gate). Full logs are the `jit-workload-log` / `aot-workload-log` artifacts of the runs linked below.
 
-Measured — run [37935894413](https://github.com/refusedguy/Harbor-Harness/actions/runs/37935894413), 2026-10-09, commit `eebc9be3`, AMD EPYC 7763 (4 vCPU, x86_64), Ubuntu 24.04.5 LTS, .NET SDK 10.0.401, framework-dependent Release, apphost-driven (no `dotnet` muxer in path).
+Measured (JIT) — run [37935894413](https://github.com/refusedguy/Harbor-Harness/actions/runs/37935894413), 2026-10-09, commit `eebc9be3`, AMD EPYC 7763 (4 vCPU, x86_64), Ubuntu 24.04.5 LTS, .NET SDK 10.0.401, framework-dependent Release, apphost-driven (no `dotnet` muxer in path).
 
 | Verb | Median | Min | Max | Spread | RSS peak (median) | RSS peak (max) |
 |---|---:|---:|---:|---:|---:|---:|
@@ -252,11 +247,19 @@ Measured — run [37935894413](https://github.com/refusedguy/Harbor-Harness/acti
 | `--help` | 134 ms | 131 ms | 143 ms | 1.09x | 43 336 KB | 43 336 KB |
 | `providers` | 459 ms | 454 ms | 533 ms | 1.17x | 96 440 KB | 96 448 KB |
 
-Wall = process spawn-to-exit per verb; RSS = `ru_maxrss` peak (KB). Publish dir: 51 MB (53 159 039 bytes); apphost binary: 40 MB (framework-dependent). The `providers` verb is the DI-heavy one (full `HostBuilder` + provider registry) and the closest proxy here to real startup: ~459 ms JIT, ~94 MB RSS peak.
+Wall = process spawn-to-exit per verb; RSS = `ru_maxrss` peak (KB). Publish dir: 51 MB (53 159 039 bytes); apphost binary: 40 MB (framework-dependent — needs an installed .NET runtime). The `providers` verb is the DI-heavy one (full `HostBuilder` + provider registry) and the closest proxy here to real startup: ~459 ms JIT, ~94 MB RSS peak.
 
-AOT side: **publishable since #1055s3, not yet measured.** The NativeAOT publish of this tree completes (`HARBOR_AOT_PUBLISH_DONE … status=published`; record: `.github/aot-warning-baseline.txt`, gate: #413 — the IL3000/IL2072/IL2070 errors left with the in-process plugin pipeline). The same workload has not yet been driven against the AOT artifact; the day it is, the AOT column lands here unchanged in shape.
+Measured (AOT) — run [38110959202](https://github.com/refusedguy/Harbor-Harness/actions/runs/38110959202), 2026-10-11, commit `1ef2e522` (PR #1151 head; delta vs dev is harness files only, no production code), same machine class — AMD EPYC 7763 (4 vCPU, x86_64), Ubuntu 24.04.5 LTS, .NET SDK 10.0.401 — self-contained linux-x64, verbatim #413 recipe (`-p:HarborWithAot=true`; record: `.github/aot-warning-baseline.txt`, status=published).
 
-Answer to the #411 decision question, quantified as far as the evidence goes: the JIT baseline to beat is **~459 ms / ~94 MB** on the DI-heavy verb and **~135 ms / ~43 MB** on the light verbs (shared-runner spread up to 1.46x — medians above are the honest numbers). The §4.1 AOT target (<100 ms cold start, 10x) stays a prediction, not a measurement. Whether AOT buys enough to justify dropping in-process Roslyn plugins cannot be answered until the AOT column exists — this table is the JIT half of it.
+| Verb | Median | Min | Max | Spread | RSS peak (median) | RSS peak (max) |
+|---|---:|---:|---:|---:|---:|---:|
+| `--version` | 18 ms | 17 ms | 25 ms | 1.48x | 29 220 KB | 29 220 KB |
+| `--help` | 19 ms | 17 ms | 24 ms | 1.38x | 29 220 KB | 29 220 KB |
+| `providers` | 58 ms | 55 ms | 62 ms | 1.12x | 35 544 KB | 35 544 KB |
+
+Wall and RSS as above. Publish dir: 41 MB (41 868 731 bytes); binary: 29 MB, self-contained (no shared framework needed). Comparability note: JIT and AOT columns come from different days but the same machine class, OS, and SDK; the same dispatch re-ran the JIT leg and its wall-clock medians (139 / 133 / 420 ms) reproduce the committed JIT column within spread.
+
+Answer to the #411 decision question, quantified: AOT buys **7.7x / 7.1x / 7.9x** spawn-to-exit on `--version` / `--help` / `providers`, **1.5x** RSS on the light verbs (43 → 29 MB) and **2.7x** on the DI-heavy verb (94 → 35 MB), with a 29 MB self-contained binary replacing a 40 MB framework-dependent apphost. The §4.1 target (<100 ms cold start) is met as a measurement on all three verbs (18 / 19 / 58 ms). On this workload the trade of #48 answers **yes**: the startup win is measured, and the thing given up for it — in-process Roslyn plugin compile — already has its default out-of-process route (#1055, 0.021 ms mean loopback dispatch). What this table still does not cover, for either mode: time-to-first-frame, steady-state allocs/op, and input-latency p50/p95 from the #411 criteria — spawn-to-exit plus RSS peak is the evidence that exists.
 
 ## 5. Microbenchmarks (BenchmarkDotNet)
 
@@ -1083,8 +1086,8 @@ dotnet run --project tests/Harbor.Registries.Tests -c Release --no-build -- --tr
 | Build | ✅ green | 0 warnings, 0 errors |
 | Tests | ✅ ~493 pass | All non-E2E tests pass |
 | Binary | 109 MB publish | Roslyn + Spectre dominate |
-| AOT | ❌ not supported | Spectre reflection + Roslyn dynamic |
-| Cold start | 966 ms | Target: <100 ms with AOT |
+| AOT | ✅ publishes (`fulltree`) | 29 MB self-contained binary, §4.4 |
+| Cold start | 18 ms AOT / 138 ms JIT (`--version`) | Measured §4.4 |
 
 ### 8.2 Avalonia (`apps/Harbor.App.Avalonia`)
 
@@ -1129,10 +1132,10 @@ dotnet run --project tests/Harbor.Registries.Tests -c Release --no-build -- --tr
 
 ### What's actually slow / bloated
 
-- **Cold start 966 ms**: dominated by `dotnet` host + assembly load. NativeAOT would fix this (target <100 ms).
+- **Cold start 966 ms** (old `dotnet`-host number): measured 18 ms AOT / 138 ms JIT on `--version` (§4.4) — the <100 ms target is met as a measurement.
 - **Publish folder 109 MB**: Roslyn (30+ MB for plugin compilation) is the elephant. Moving plugin host out-of-process would cut ~30 MB.
 - **`JsonlSessionStore.GetMessages`**: 850 µs for 100 messages, 28 KB allocated — measured before the `Utf8JsonReader` span rewrite (`JsonlLineParser`); current behavior locked by #186 tripwires, re-measure before quoting.
-- **No AOT**: Spectre.Console reflection + Roslyn dynamic compilation block NativeAOT today.
+- **AOT on `fulltree`: done** — publishes since #1055s3, 18 ms cold start measured (§4.4). Remaining AOT work is the `minimal` profile, not the main binary.
 
 ### What was misleading in old benchmarks
 
@@ -1143,10 +1146,10 @@ dotnet run --project tests/Harbor.Registries.Tests -c Release --no-build -- --tr
 
 ### Roadmap to actually hit "fast" targets
 
-1. **Move Roslyn plugin host out-of-process** (v0.7) — cuts ~30 MB from CLI publish, enables AOT for the main process.
+1. **Move Roslyn plugin host out-of-process** — DONE via #1055 (default out-of-proc route; the AOT publish completes, §4.4).
 2. **Replace Spectre.Console with Spectre.TUI source-gen** — removes reflection, enables AOT.
 3. **`Utf8JsonReader` rewrite for `JsonlSessionStore`** — 5x faster, 80% less allocation.
-4. **NativeAOT publish for CLI** — target: 14-20 MB binary, <100 ms cold start, ~30 MB RSS idle.
+4. **NativeAOT publish for CLI** — DONE on `fulltree`: 29 MB binary, 18 ms cold start, ~29 MB RSS idle (§4.4). Open: the `minimal` profile.
 5. **Self-contained + `PublishSingleFile` + trimmed** for desktop apps — Avalonia target: ~50 MB single .exe.
 
 ## 10. How to reproduce
