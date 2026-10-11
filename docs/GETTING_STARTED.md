@@ -422,7 +422,7 @@ The Avalonia desktop host registers the smaller `Standard10` set (without
 export OPENROUTER_API_KEY=sk-or-...
 export HARBOR_MODEL=openrouter/anthropic/claude-3.5-sonnet
 # Switch models easily:
-harbor  # then /models openrouter
+harbor  # then /model list openrouter
 ```
 
 ### Use Ollama for offline/local
