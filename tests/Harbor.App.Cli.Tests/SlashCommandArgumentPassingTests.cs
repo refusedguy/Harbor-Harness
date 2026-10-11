@@ -56,6 +56,7 @@
 
 using System.Text.Json;
 using CSharpFunctionalExtensions;
+using Harbor.Abstractions.Agents;
 using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Abstractions.Permissions;
@@ -320,7 +321,7 @@ public class SlashCommandArgumentPassingTests
             // agent is not a special case: it is what a host without an
             // initialised agent hands over, and `ModelCommand` prints
             // "(no active session …)" rather than throwing.
-            agent: null!, agentRegistry: new FakeAgentRegistry(),
+            agent: null!, agentRegistry: new FakeAgentRegistry(AgentDefinition.PlanDefault("test-model", "test")),
             configStore: config, authStore: new AuthStore(config),
             providers: new OfflineProviderRegistry(),
             session: Session.Create("/harbor-650", "code", "test-provider", "test-model"));
