@@ -236,7 +236,11 @@ and are aggregated into `SessionMetadata`.
 ### Default model
 
 ```bash
-# Kilocode free model — recommended for getting started (no credit card)
+# Kilocode free model — recommended for getting started (no credit card).
+# This matches the embedded provider default (`providers/kilocode.json`
+# `defaultModel`). Automated live evals instead pin `kilocode/kilo-auto/free`
+# (see EVALS.md); both are free-tier ids — if the gateway 404s one, export
+# the other explicitly. Background: docs/notes/kilocode-default-model-probe.md.
 export HARBOR_MODEL=kilocode/tencent/hy3:free
 
 # Anthropic
@@ -261,7 +265,8 @@ export HARBOR_TUI=ansi
 # No colors — for pipes, CI, accessibility
 export HARBOR_TUI=plain
 
-# Rich interactive shell (contrib renderers are compiled into the CLI by default)
+# Rich interactive shell — only in builds with HarborWithSpectreTui=true
+# (plain `dotnet build` falls back to `plain`; see ALTERNATIVE_UIS.md)
 export HARBOR_TUI=spectre
 
 # Second interactive shell (raw mode, cell-diff output) — opt-in
