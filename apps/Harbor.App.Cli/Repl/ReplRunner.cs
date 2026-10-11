@@ -1,4 +1,3 @@
-using System.Runtime.InteropServices;
 using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Agents;
 using Harbor.Abstractions.Events;
@@ -325,15 +324,17 @@ internal sealed class ReplRunner
     /// </summary>
     private async Task<Result<int>> RunCellForgeAsync(HarborConfig config, CancellationToken ct)
     {
-        // PX3 slice 1 (#1249): Windows raw mode is opt-in behind
-        // HARBOR_CELLFORGE_WINDOWS. Without it CellForge stays on the legacy
-        // fallback even though the Win32 controller exists — the probe below
-        // is never reached, so the default on Windows is unchanged.
+        // #1249 bring-up slice 2: Windows is a first-class CellForge platform,
+        // so the only platform gate left is the opt-out below. The legacy
+        // fallback that survives is the capability one — a Windows run whose
+        // raw-mode probe genuinely fails (redirected stdin, a console that
+        // refuses SetConsoleMode) is reported by the probe block below and
+        // turned into the logged fallback, never a crash.
         if (TuiMode.IsCellForgeBlockedOnThisOs())
         {
             return Result.Failure<int>(
-                "CellForge on Windows is opt-in (PX3 bring-up): set HARBOR_CELLFORGE_WINDOWS=1 "
-                + "to try the Windows VT raw-mode controller.");
+                "CellForge on Windows is opted out (HARBOR_CELLFORGE_WINDOWS=0) — "
+                + "unset it to use the Windows VT raw-mode controller.");
         }
 
         var modeController = CreateModeController();
@@ -412,10 +413,15 @@ internal sealed class ReplRunner
         return Result.Success(exitCode);
     }
 
+    /// <summary>
+    ///     The platform's raw-mode controller. The selection itself lives in
+    ///     <c>TerminalModeControllers</c> (#1249 slice 2) so every OS — the
+    ///     Linux CI runners included — can assert which controller it is
+    ///     handed; the composition root stays the only place that constructs
+    ///     one.
+    /// </summary>
     private static ITerminalModeController CreateModeController() =>
-        RuntimeInformation.IsOSPlatform(OSPlatform.Windows)
-            ? new WindowsVtModeController()
-            : new UnixTermiosModeController();
+        TerminalModeControllers.CreateForCurrentPlatform();
 
     /// <summary>
     ///     The agent this run should use: the one <paramref name="config" /> names,
