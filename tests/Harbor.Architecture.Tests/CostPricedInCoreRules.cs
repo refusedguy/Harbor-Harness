@@ -95,6 +95,32 @@
 // still red, and `EveryLineExemption_StillMatchesALineThatStillNamesTheType`
 // keeps the entry from outliving its reason.
 
+// MECHANISM (#1086, step 2, conveyor)
+// -----------------------------------
+// The presentation-layer ban below is a ScanRule: the four `Rule` rows as
+// `Forbidden` (same ids, same patterns, same Instead text — the row is built
+// from the row, not a copy), the line-precise exemption inside the parser, ten
+// planted controls, a discovery floor. Enumeration and the control/discovery
+// verdicts are ScanRunner's; this file keeps the issue prose and the test names.
+//
+// Three deliberate carries, not re-decisions:
+//   * The verdict runs through `ParsePresentationPricing`, which is `FindSites`
+//     verbatim: the `IsCommentOnly` line filter (blank/`//`/`/*`/`*` prefixes
+//     dropped — NOT the shared stripper), the line-precise `IsExempt`, and one
+//     report per line on the FIRST matching shape. A tabular line scan would
+//     report a `Pricing.CalculateCost` line twice and cannot express a
+//     line-precise exemption, so the rule carries its loop.
+//   * The scope is the presentation prefixes (`Harbor.Ui.Framework*`,
+//     `Harbor.Tui.*`, all of `apps/`) as an `InScope` prefix filter — a new
+//     presentation project joins the rule the way the old directory walk
+//     admitted it.
+//   * Outside a checkout the old tests threw (`RequireRepoRoot`); the ban now
+//     passes vacuously there and the discovery floor fails instead — the same
+//     direction (red without a root), one test over rather than an exception.
+// The single-home half (`TheSingleHome_StillExists`) and the exemption
+// occupancy (`EveryLineExemption_StillMatchesExactlyOneLine`) are not
+// forbidden-shape scans and stay handwritten.
+
 using System.Text.RegularExpressions;
 using TUnit.Assertions;
 
@@ -194,20 +220,87 @@ public sealed class CostPricedInCoreRules
             + "does not choose, and names no rate. Naming a parameter is not pricing."),
     ];
 
+    /// <summary>The presentation-layer ban as data: the four shapes, planted controls, a floor.</summary>
+    private static readonly ScanRule CostRule = new()
+    {
+        Id = "CostPricedInCore",
+        Trees = ["src", "apps"],
+        InScope = path =>
+            path.StartsWith("apps/", StringComparison.Ordinal)
+            || path.StartsWith("src/Harbor.Ui.Framework", StringComparison.Ordinal)
+            || path.StartsWith("src/Harbor.Tui.", StringComparison.Ordinal),
+        Forbidden =
+        [
+            .. Rules.Select(static rule => new ScanForbidden(
+                rule.Id,
+                new Regex(rule.Pattern, RegexOptions.Compiled | RegexOptions.CultureInvariant),
+                rule.Instead)),
+        ],
+        Controls =
+        [
+            new ScanControl("Planted/Call.cs", "    cost += pricing.CalculateCost(usage);", "PRESENTATION-MUST-NOT-CALL-CALCULATECOST"),
+            new ScanControl("Planted/Rate.cs", "    private const decimal InputPricePerMillion = 3m;", "PRESENTATION-MUST-NOT-NAME-A-RATE-TABLE"),
+            new ScanControl("Planted/Read.cs", "        InputPerMillion = p.InputPerMillion;", "PRESENTATION-MUST-NOT-NAME-A-RATE-TABLE"),
+            new ScanControl("Planted/Estimate.cs", "    private static decimal EstimateCost(int i, int o) => 0m;", "PRESENTATION-MUST-NOT-NAME-A-RATE-TABLE"),
+            new ScanControl("Planted/Arithmetic.cs", "    return i / 1_000_000m * 3m;", "PRESENTATION-MUST-NOT-DO-PER-MILLION-ARITHMETIC"),
+            // An INT token-count threshold is abbreviation, not pricing.
+            new ScanControl("NearMiss/IntThreshold.cs", "    if (tokens < 1_000_000) return \"1M\";", null),
+            // A DOUBLE token-count divisor is abbreviation, not pricing.
+            new ScanControl("NearMiss/DoubleDivisor.cs", "    return (v / 1_000_000.0).ToString(\"0.#\") + \"M\";", null),
+            // A JSON config sample inside a string literal is a payload, not a
+            // price computation (the rate-name lookbehind sees the quote).
+            new ScanControl(
+                "NearMiss/JsonSample.cs",
+                "              \"pricing\": { \"inputPerMillion\": 0, \"outputPerMillion\": 0 },",
+                null),
+            // Comment prose is not a second implementation.
+            new ScanControl("NearMiss/Comment.cs", "    // 61.6k tokens cost 1_000_000m per million under Pricing", null),
+            new ScanControl("NearMiss/Doc.cs", "    /// <see cref=\"Pricing\"/> is a core concept.", null),
+        ],
+        MinHits = 100,
+        MustContain = OffenderFiles,
+        CustomParse = ParsePresentationPricing,
+    };
+
+    /// <summary>
+    ///     The custom parser: `FindSites` verbatim over one file's raw source —
+    ///     the comment-line filter, the line-precise exemption, one report per
+    ///     line on the first matching shape.
+    /// </summary>
+    private static IEnumerable<ScanHit> ParsePresentationPricing(string displayPath, string rawSource)
+    {
+        string[] lines = rawSource.Replace("\r\n", "\n", StringComparison.Ordinal).Split('\n');
+        for (int i = 0; i < lines.Length; i++)
+        {
+            string text = lines[i];
+            if (IsCommentOnly(text) || IsExempt(displayPath, text))
+            {
+                continue;
+            }
+
+            foreach (Rule rule in Rules)
+            {
+                if (Regex.IsMatch(text, rule.Pattern, RegexOptions.CultureInvariant))
+                {
+                    yield return new ScanHit(rule.Id, displayPath, i + 1, text.Trim());
+                    break;
+                }
+            }
+        }
+    }
+
     /// <summary>A file, a 1-based line number, the rule it tripped and the line.</summary>
     private sealed record Site(string RelativePath, int Line, string RuleId, string Text);
 
     [Test]
     public async Task Presentation_DoesNotPriceTheCost()
     {
-        string root = RequireRepoRoot();
-        IReadOnlyList<string> files = EnumeratePresentationFiles(root);
-        List<Site> sites = [.. files.SelectMany(f => FindSites(root, f))];
+        List<string> violations = ScanRunner.Evaluate(CostRule);
 
-        await Assert.That(sites.Count).IsEqualTo(0)
+        await Assert.That(violations).IsEmpty()
             .Because(
                 "the presentation layer is re-deriving the price of a session at "
-                + Describe(sites)
+                + (violations.Count == 0 ? "(none)" : string.Join(", ", violations))
                 + ". " + string.Join(" | ", Rules.Select(r => r.Id + " → " + r.Instead))
                 + " Exemptions (a decision, not an oversight): " + DescribeExemptions()
                 + " See issue #653.");
@@ -215,7 +308,7 @@ public sealed class CostPricedInCoreRules
         // The rule is about the presentation layer, so the core's own copy must
         // not be able to satisfy it by accident: a hit on the file that
         // legitimately owns the formula would mean the trees are wrong.
-        await Assert.That(files.Contains(CorePriceHomeRelativePath)).IsFalse()
+        await Assert.That(ScanRunner.ScopeFiles(CostRule).Contains(CorePriceHomeRelativePath)).IsFalse()
             .Because(CorePriceHomeRelativePath + " is the CORE price home — it must not be inside "
                      + "the scanned presentation trees, or this rule polices the wrong layer.");
     }
@@ -228,16 +321,13 @@ public sealed class CostPricedInCoreRules
     [Test]
     public async Task Discovery_FindsARealFileSet_ContainingBothOffenderProjects()
     {
-        IReadOnlyList<string> files = EnumeratePresentationFiles(RequireRepoRoot());
+        List<string> discovery = ScanRunner.CheckDiscovery(CostRule);
 
-        await Assert.That(files.Count).IsGreaterThan(100)
-            .Because("the Ui.Framework + Tui projects plus apps/ hold far more than 100 C# files; "
-                     + "a smaller count means the tree filter broke.");
-        foreach (string offender in OffenderFiles)
-        {
-            await Assert.That(files.Contains(offender)).IsTrue()
-                .Because(offender + " must be inside the scanned set, or the rule polices nothing.");
-        }
+        await Assert.That(discovery).IsEmpty()
+            .Because("the Ui.Framework + Tui projects plus apps/ hold far more than 100 C# files, "
+                     + "including both projects the defect lived in; "
+                     + "a smaller count means the tree filter broke. "
+                     + string.Join("; ", discovery));
     }
 
     /// <summary>
@@ -250,39 +340,18 @@ public sealed class CostPricedInCoreRules
     [Test]
     public async Task Matcher_FiresOnPlantedPricing_AndStaysSilentOnTokenFormatting()
     {
-        await Assert.That(FindIn(["    cost += pricing.CalculateCost(usage);"]).Count)
-            .IsGreaterThan(0)
-            .Because("a planted CalculateCost call must be detected, or the rule is blind");
-        await Assert.That(FindIn(["    private const decimal InputPricePerMillion = 3m;"]).Count)
-            .IsGreaterThan(0)
-            .Because("a planted rate constant must be detected, or the rule is blind");
-        await Assert.That(FindIn(["        InputPerMillion = p.InputPerMillion;"]).Count)
-            .IsGreaterThan(0)
-            .Because("a planted rate read through a member access must be detected, or the rule is blind");
-        await Assert.That(FindIn(["    private static decimal EstimateCost(int i, int o) => 0m;"]).Count)
-            .IsGreaterThan(0)
-            .Because("a planted EstimateCost must be detected, or the rule is blind");
-        await Assert.That(FindIn(["    return i / 1_000_000m * 3m;"]).Count)
-            .IsGreaterThan(0)
-            .Because("a planted per-million decimal divisor must be detected, or the rule is blind");
+        // The SAME parser the rule runs, driven by the planted lines and the
+        // real near-miss lines that now live on the rule as data. This is what
+        // separates "the guard is green" from "the guard is looking at nothing".
+        List<string> failures = ScanRunner.CheckControls(CostRule);
 
-        // …and the near-misses, each of which is a real line that exists in the
-        // presentation layer today.
-        await Assert.That(FindIn(["    if (tokens < 1_000_000) return \"1M\";"]).Count)
-            .IsEqualTo(0)
-            .Because("an INT token-count threshold is abbreviation, not pricing");
-        await Assert.That(FindIn(["    return (v / 1_000_000.0).ToString(\"0.#\") + \"M\";"]).Count)
-            .IsEqualTo(0)
-            .Because("a DOUBLE token-count divisor is abbreviation, not pricing");
-        await Assert.That(FindIn(["              \"pricing\": { \"inputPerMillion\": 0, \"outputPerMillion\": 0 },"]).Count)
-            .IsEqualTo(0)
-            .Because("a JSON config sample inside a string literal is a payload, not a price computation");
-        await Assert.That(FindIn(["    // 61.6k tokens cost 1_000_000m per million under Pricing"]).Count)
-            .IsEqualTo(0)
-            .Because("comment prose is not a second implementation");
-        await Assert.That(FindIn(["    /// <see cref=\"Pricing\"/> is a core concept."]).Count)
-            .IsEqualTo(0)
-            .Because("doc-comment prose is not a second implementation");
+        await Assert.That(failures).IsEmpty()
+            .Because(
+                "a planted CalculateCost call, rate constant, member-access read, EstimateCost "
+                + "or per-million decimal divisor must be detected, or the rule is blind — and "
+                + "an INT/DOUBLE token-count abbreviation, a JSON payload sample, or comment "
+                + "prose must stay silent. "
+                + string.Join("; ", failures));
     }
 
     /// <summary>
@@ -341,7 +410,7 @@ public sealed class CostPricedInCoreRules
     public async Task EveryLineExemption_StillMatchesExactlyOneLine()
     {
         string root = RequireRepoRoot();
-        IReadOnlyList<string> files = EnumeratePresentationFiles(root);
+        IReadOnlyList<string> files = ScanRunner.ScopeFiles(CostRule);
 
         foreach (LineExemption exemption in LineExemptions)
         {
@@ -374,41 +443,6 @@ public sealed class CostPricedInCoreRules
         return root ?? throw new InvalidOperationException(
             "Harbor.slnx not found above " + AppContext.BaseDirectory
             + " — this guard walks the repository and cannot run from a published test host.");
-    }
-
-    /// <summary>Every C# file of the presentation layer, sorted for stable messages.</summary>
-    private static IReadOnlyList<string> EnumeratePresentationFiles(string root)
-    {
-        var files = new List<string>();
-
-        string src = Path.Combine(root, "src");
-        if (Directory.Exists(src))
-        {
-            foreach (string dir in Directory.GetDirectories(src))
-            {
-                string name = Path.GetFileName(dir) ?? string.Empty;
-                bool isPresentation = PresentationProjectPrefixes.Any(
-                    p => name.StartsWith(p, StringComparison.Ordinal));
-                if (!isPresentation)
-                {
-                    continue;
-                }
-
-                files.AddRange(EnumerateCsFilesUnder(root, dir));
-            }
-        }
-
-        // apps/ is the composition root of the same layer: a cost invented in a
-        // command handler reaches the user's screen exactly as one invented in a
-        // reducer does.
-        string apps = Path.Combine(root, "apps");
-        if (Directory.Exists(apps))
-        {
-            files.AddRange(EnumerateCsFilesUnder(root, apps));
-        }
-
-        files.Sort(StringComparer.Ordinal);
-        return files;
     }
 
     /// <summary>Every C# file of the product tree (<c>src/</c> + <c>apps/</c>).</summary>
@@ -449,28 +483,7 @@ public sealed class CostPricedInCoreRules
                || normalized.Contains("/bin/", StringComparison.Ordinal);
     }
 
-    private static IReadOnlyList<Site> FindSites(string root, string relativePath)
-    {
-        var sites = new List<Site>();
-        foreach ((int line, string text) in ReadAllLines(Path.Combine(root, relativePath)))
-        {
-            if (IsCommentOnly(text) || IsExempt(relativePath, text))
-            {
-                continue;
-            }
 
-            foreach (Rule rule in Rules)
-            {
-                if (Regex.IsMatch(text, rule.Pattern, RegexOptions.CultureInvariant))
-                {
-                    sites.Add(new Site(relativePath, line, rule.Id, text));
-                    break;
-                }
-            }
-        }
-
-        return sites;
-    }
 
     private static bool IsExempt(string relativePath, string line)
     {
@@ -491,24 +504,7 @@ public sealed class CostPricedInCoreRules
     ///     Shared by the real scan and the planted controls, so the control proves
     ///     the SAME matcher the rule runs.
     /// </summary>
-    private static IReadOnlyList<string> FindIn(IReadOnlyList<string> lines)
-    {
-        var hits = new List<string>();
-        for (int i = 0; i < lines.Count; i++)
-        {
-            if (IsCommentOnly(lines[i]))
-            {
-                continue;
-            }
 
-            if (Rules.Any(r => Regex.IsMatch(lines[i], r.Pattern, RegexOptions.CultureInvariant)))
-            {
-                hits.Add(lines[i]);
-            }
-        }
-
-        return hits;
-    }
 
     private static bool IsCommentOnly(string line)
     {
