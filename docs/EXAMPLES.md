@@ -734,6 +734,77 @@ the Avalonia composition root). It used to carry a hand-written second copy, whi
 drifted until a desktop fork set no lineage, persisted no title and regenerated
 every copied message id — issue #670, closed by deleting the copy.
 
+### 28a. Orchestrate agents: `task` spawn + `session_read` + `session_steer`
+
+Two different relations — do not mix them. `task` is parent→child: the sub-agent
+(`explore`, `plan`, …) runs in an isolated session with no visibility into yours
+and only its final report comes back. `session_read` / `session_steer` are
+peer-to-peer supervision (#165): parallel sessions inspecting each other and
+delivering directives. Rule of thumb: fan out with `task`, check with
+`session_read`, intervene with `session_steer`. Full arg reference:
+[`task`](./TOOLS_CATALOG.md#task) and the `session_read` / `session_steer`
+entries in the [per-tool reference](./TOOLS_CATALOG.md#2-per-tool-reference).
+
+Sketch 1 — background fan-out, keep working while the children run:
+
+```jsonc
+// Turn 1 — two independent recon passes, detached. Each returns immediately:
+// "[sub-agent 'explore' started in background as task_1 — continue other work;
+//  its final report will arrive as a follow-up message]"
+{"agent": "explore", "prompt": "Map every ITool implementation under src/Harbor.Tools.Builtin/Tools/ — one line per tool: name + what it does.", "background": true}
+{"agent": "explore", "prompt": "List every place that calls .Result on a Task under src/ — file:line per hit.", "background": true}
+```
+
+```jsonc
+// Turn N — a background child is quiet; check the peer WITHOUT pulling its transcript.
+{"id": "<peer-session-id>", "include_transcript": false}
+```
+
+Background reports need no polling — they arrive as a follow-up message. `session_read`
+is for the cases the report does not cover: a peer spawned by someone else, or a
+verdict check before you steer. The peer id comes from the `task` finish envelope
+(`[sub-agent '…' finished — session <id>, …]`) or from `sessions`.
+
+Sketch 2 — verdict first, steer only when needed:
+
+```jsonc
+// Status + last 10 transcript lines. Outcome is succeeded / stopped / failed / unknown;
+// "steered by:" lists who already steered this session.
+{"id": "<peer-session-id>", "limit": 10}
+```
+
+```jsonc
+// Stuck peer went down the wrong path — change its task (approval-gated, Ask by default).
+{"id": "<peer-session-id>", "operation": "redirect", "instruction": "Stop refactoring; just report the failing tests."}
+
+// Finished peer, refined brief — re-run re-uses its context, nothing was aborted.
+{"id": "<peer-session-id>", "operation": "restart", "instruction": "Same audit, but only under src/Harbor.Storage."}
+
+// Default operation is message: share context or a result, no task change.
+{"id": "<peer-session-id>", "instruction": "Also check the retry paths — my pass found none under src/Harbor.Storage."}
+```
+
+Guards that bite if you skip them:
+
+- `prompt` must be fully self-contained (paths, constraints, what to report back) —
+  the child sees none of your context, and nesting is refused: a sub-agent that
+  calls `task` gets an error, not a grandchild.
+- `session_read` is a point-in-time snapshot (`revision` = message count): a `working`
+  session keeps streaming while you read, so re-read before acting. Tail is capped
+  (default 20, max 50 entries; 1200 chars per entry).
+- `session_steer` never steers your own session and never your supervisor (the session
+  that steered you — tracked via the `[steer-from:]` trailer, depth-1). Delivery is
+  durable: the directive is appended to the peer's history and picked up on its next
+  run — a live run is never interrupted.
+
+Related work: parent-mediated steering exists elsewhere — Codex has it
+(`spawn_agent` / `followup_task` / `send_message` in codex-rs, `/agent` threads),
+so top-down delegation is not the novelty here. The difference is the level:
+`session_read` / `session_steer` are tools in the agents' own hands — a peer agent
+itself decides to inspect a neighbor and steer it, plus the supervision protocol
+around it (verdicts, provenance trailer, depth-1 guard). A shared event bus on the
+Codex side is still an open feature request (#21027).
+
 ---
 
 ## Permissions
