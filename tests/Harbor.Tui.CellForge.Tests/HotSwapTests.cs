@@ -3,7 +3,6 @@ using Harbor.DesignSystem;
 using Harbor.Tui.CellForge.Rendering;
 using Harbor.Tui.CellForge.Streaming;
 using TUnit.Core;
-using EngineCells = Harbor.Tui.CellForge.Rendering;
 
 namespace Harbor.Tui.CellForge.Tests;
 
