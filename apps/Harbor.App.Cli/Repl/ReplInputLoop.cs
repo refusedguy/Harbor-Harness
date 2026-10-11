@@ -763,7 +763,7 @@ internal sealed class ReplInputLoop(CellForgeReplRunner host)
             // #49 PR1: single cancellation ingress — the coordinator orders this
             // against any in-flight approval decision and unblocks its waiter.
             host.Coordinator.RequestCancel(host.Agent);
-            host.Pipeline.ClearQueue(); // abort drops queued prompts — never sent after a kill
+            host.Pipeline.AbortAndRestoreQueuedToComposer(); // abort drops the queue but returns the newest payload to the composer (O7 #1176) — never sent after a kill
             host.Bridge.AppendSystemLine("^C — прерываю текущий ход…");
             host._wake.Writer.TryWrite(null);
             return;
