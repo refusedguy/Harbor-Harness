@@ -37,8 +37,14 @@ jobs:
         uses: actions/setup-dotnet@v6
         with:
           dotnet-version: "10.0.x"
-          cache: true
-          cache-dependency-path: "Directory.Packages.props"
+          # No NuGet caching here on purpose. This workflow runs CodeQL with
+          # build-mode: none, so packages are restored into CodeQL's own
+          # working packages directory and ~/.nuget/packages is never created.
+          # With cache: true, a cold cache key makes the setup-dotnet post step
+          # fail the whole analyze job with "Cache folder path is retrieved for
+          # .NET CLI but doesn't exist on disk", even though the analysis itself
+          # succeeds. The workflows that actually build (ci.yml and friends) do
+          # use the global-packages folder and keep the cache there.
 
       - name: Initialize CodeQL
         uses: github/codeql-action/init@v4
