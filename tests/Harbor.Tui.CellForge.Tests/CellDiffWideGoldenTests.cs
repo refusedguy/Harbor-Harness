@@ -66,6 +66,9 @@ public class CellDiffWideGoldenTests
         // identical — only the force arm refreshes it. The message-level
         // assert is the pin (line art is style-blind, so it converges either
         // way); on a real terminal the missing message is a blue stain.
+        // Convergence is asserted at the cell level: line art is also
+        // tail-vs-blank-blind (an orphan WideTail collapses while a blank
+        // renders a space), so art cannot pin this shape.
         var prev = TestBackend.WithLines("中b");
         prev.Buffer.SetStyleAt(0, 0, BlueBg);
         var next = TestBackend.WithLines("中b");
@@ -84,7 +87,10 @@ public class CellDiffWideGoldenTests
             mirror.Buffer.At(change.X, change.Y) = change.NewCell;
         }
 
-        await mirror.AssertBufferLinesAsync(next.Lines());
+        for (int x = 0; x < next.Buffer.Cols; x++)
+        {
+            await Assert.That(mirror.Buffer.Get(x, 0)).IsEqualTo(next.Buffer.Get(x, 0));
+        }
     }
 
     [Test]
