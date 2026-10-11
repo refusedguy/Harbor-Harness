@@ -31,17 +31,19 @@ public enum FlexJustify : byte
 /// One child's size constraint along a <see cref="FlexLayout"/> main axis
 /// (ratatui <c>Constraint</c> analogue, content-agnostic: no content measuring,
 /// layout math only). Construct via the <c>Fixed</c> / <c>Percent</c> /
-/// <c>Fill</c> / <c>Min</c> / <c>Max</c> factories.
+/// <c>Fill</c> / <c>Min</c> / <c>Max</c> / <c>Auto</c> factories.
 /// </summary>
 public readonly record struct FlexTrack
 {
     private readonly byte _kind;
     private readonly float _amount;
+    private readonly int _extra;
 
-    private FlexTrack(byte kind, float amount)
+    private FlexTrack(byte kind, float amount, int extra = 0)
     {
         _kind = kind;
         _amount = amount;
+        _extra = extra;
     }
 
     /// <summary>Exact cell count, clamped at zero.</summary>
@@ -77,16 +79,31 @@ public readonly record struct FlexTrack
     /// </summary>
     public static FlexTrack Max(int cells) => new(4, Math.Max(0, cells));
 
-    internal bool IsFlex => _kind >= 2;
+    /// <summary>
+    /// Content-sized (Termina <c>Auto</c>): takes the caller-supplied intrinsic
+    /// extent (see the <c>intrinsic</c> span on the <see cref="FlexLayout.Arrange"/>
+    /// overload), clamped to <paramref name="min"/>..<paramref name="max"/>.
+    /// Resolved up-front like a fixed share — the <see cref="Fill(float)"/> /
+    /// <see cref="Min(int)"/> / <see cref="Max(int)"/> tracks split what is left.
+    /// Without an intrinsic span an <c>Auto</c> track degrades to its floor.
+    /// </summary>
+    public static FlexTrack Auto(int min = 0, int max = int.MaxValue)
+    {
+        int floor = Math.Max(0, min);
+        return new(5, floor, Math.Max(floor, max));
+    }
+
+    internal bool IsFlex => _kind is 2 or 3 or 4;
     internal bool IsFixedLike => _kind <= 1;
+    internal bool IsAuto => _kind == 5;
     internal bool IsPercent => _kind == 1;
     internal bool IsMin => _kind == 3;
     internal bool IsMax => _kind == 4;
     internal int FixedCells => (int)_amount;
     internal float Fraction => _amount;
     internal float FlexWeight => _kind == 2 ? _amount : 1f;
-    internal int FlexFloor => _kind == 3 ? (int)_amount : 0;
-    internal int FlexCap => _kind == 4 ? (int)_amount : int.MaxValue;
+    internal int FlexFloor => _kind is 3 or 5 ? (int)_amount : 0;
+    internal int FlexCap => _kind == 4 ? (int)_amount : _kind == 5 ? _extra : int.MaxValue;
 }
 
 /// <summary>
