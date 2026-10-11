@@ -58,6 +58,26 @@ public class HotSwapTests
     }
 
     [Test]
+    public async Task Rent_AfterReturn_ClearsDiffDirectives()
+    {
+        // R1 steal: pooled buffers carry the directive side-table — Rent must
+        // hand out a clean slate (Resize → BlankAll resets), or a stale Skip
+        // would hide the next frame's paint.
+        var chain = new BufferSwapChain();
+        var first = chain.Rent(10, 5);
+        first.SetDiffOption(3, 2, EngineCells.CellDiffOption.AlwaysUpdate);
+        first.SetDiffOption(4, 2, EngineCells.CellDiffOption.ForcedWidth, 3);
+        chain.Return(first);
+
+        var second = chain.Rent(10, 5);
+
+        await Assert.That(second).IsSameReferenceAs(first);
+        await Assert.That(second.GetDiffOption(3, 2)).IsEqualTo(EngineCells.CellDiffOption.None);
+        await Assert.That(second.GetDiffOption(4, 2)).IsEqualTo(EngineCells.CellDiffOption.None);
+        await Assert.That(second.GetForcedWidth(4, 2)).IsEqualTo((ushort)0);
+    }
+
+    [Test]
     public async Task Publish_Take_ReturnsSamePair_Once()
     {
         var chain = new BufferSwapChain();

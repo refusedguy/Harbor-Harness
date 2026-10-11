@@ -16,7 +16,7 @@ public sealed class Utf8ScenarioTests : CellForgePtyScenarioBase
     private const string MixedText = "привет 你好 🚀";
 
     [Test]
-    [Timeout(30_000)]
+    [Timeout(60_000)]
     public async Task MixedWidthUtf8_SplitAcrossWrites_RoundTripsToModel()
     {
         Server.SetResponse("test-model", "UTF8-OK");
@@ -33,14 +33,20 @@ public sealed class Utf8ScenarioTests : CellForgePtyScenarioBase
         Session.Write(bytes[13..]);
 
         // The user block renders the mixed-width text on the grid.
+        // CJK/emoji wide glyphs converge through the cell-diff a frame after
+        // the narrow prefix (trailing-pair repair + terminal advance), so each
+        // script waits on its own — a single 400ms snapshot flakes when the
+        // wide tail lands late (R1 #1156: BufferDiff wide/VS16). WaitForScreen
+        // also dumps the grid on timeout for the next diagnosis.
         _ = await WaitForScreenAsync(
             l => l.Any(x => x.Contains("привет", StringComparison.Ordinal)),
             TimeSpan.FromSeconds(10)).ConfigureAwait(false);
-        await Task.Delay(400).ConfigureAwait(false);
-
-        string[] lines = NormalizedLines();
-        await Assert.That(lines.Any(x => x.Contains("你好", StringComparison.Ordinal))).IsTrue();
-        await Assert.That(lines.Any(x => x.Contains("🚀", StringComparison.Ordinal))).IsTrue();
+        _ = await WaitForScreenAsync(
+            l => l.Any(x => x.Contains("你好", StringComparison.Ordinal)),
+            TimeSpan.FromSeconds(10)).ConfigureAwait(false);
+        _ = await WaitForScreenAsync(
+            l => l.Any(x => x.Contains("🚀", StringComparison.Ordinal)),
+            TimeSpan.FromSeconds(10)).ConfigureAwait(false);
 
         // Exact content reached the model (non-ASCII is \uXXXX-escaped on wire).
         // Signal on recorded chat-completions, not RequestCount — see the
