@@ -102,7 +102,7 @@ samples/plugins/                      — 4 DLL-based sample plugins (WebSearch,
 samples/plugins-cs/                   — CS-source sample plugins (HelloWorldPlugin.cs), compiled at startup
 samples/mcp/                          — sample MCP servers (node/python/rust/csharp-hello)
 providers/                            — 13 JSON LLM provider configs (embedded via <EmbedProviders>)
-docs/specs/                           — 19 design specification documents (top-level specs/ no longer exists)
+docs/specs/                           — 20 design specification documents (top-level specs/ no longer exists)
 docs/                                 — 71 top-level docs (architecture, tools catalog, roadmap, patterns, …)
                                         + adr/, specs/, standards/, ui/, themes/, notes/, .kilo-docs/ (archived sprint notes)
 tests/                                — 37 test/bench projects, one directory each
