@@ -21,7 +21,8 @@ public enum CellDiffOption : byte
     /// Painted out-of-band (image protocols, foreign overlays): never yielded,
     /// mirrored into FRONT silently. The engine assumes the terminal already
     /// shows the BACK content — marking a cell Skip that nothing painted is a
-    /// stuck-cell bug by contract, not a rendering one.
+    /// stuck-cell bug by contract, not a rendering one. Portable batches omit
+    /// these cells as well: every consumer paints them out-of-band.
     /// </summary>
     Skip = 1,
 
