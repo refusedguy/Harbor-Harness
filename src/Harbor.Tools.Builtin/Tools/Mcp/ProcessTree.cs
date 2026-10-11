@@ -12,7 +12,7 @@ namespace Harbor.Tools.Mcp;
 ///         group with <c>kill(-pid)</c>.
 ///     </para>
 /// </summary>
-internal static class ProcessTree
+internal static partial class ProcessTree
 {
     private const int SigKill = 9;
 
@@ -83,25 +83,28 @@ internal static class ProcessTree
         return job;
     }
 
-    [DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
-    private static extern SafeJobHandle CreateJobObject(IntPtr lpJobAttributes, string? lpName);
+    [LibraryImport("kernel32.dll", SetLastError = true, StringMarshalling = StringMarshalling.Utf16)]
+    private static partial SafeJobHandle CreateJobObject(IntPtr lpJobAttributes, string? lpName);
 
-    [DllImport("kernel32.dll", SetLastError = true)]
-    private static extern bool SetInformationJobObject(
+    [LibraryImport("kernel32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static partial bool SetInformationJobObject(
         SafeJobHandle hJob, JobObjectInfoClass infoClass,
         ref JobObjectExtendedLimitInformation lpJobObjectInfo, int cbJobObjectInfoLength);
 
-    [DllImport("kernel32.dll", SetLastError = true)]
-    private static extern bool AssignProcessToJobObject(SafeJobHandle hJob, IntPtr hProcess);
+    [LibraryImport("kernel32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static partial bool AssignProcessToJobObject(SafeJobHandle hJob, IntPtr hProcess);
 
-    [DllImport("kernel32.dll", SetLastError = true)]
-    internal static extern bool CloseHandle(IntPtr hObject);
+    [LibraryImport("kernel32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static partial bool CloseHandle(IntPtr hObject);
 
-    [DllImport("libc", SetLastError = true)]
-    private static extern int kill(int pid, int sig);
+    [LibraryImport("libc", SetLastError = true)]
+    private static partial int kill(int pid, int sig);
 
-    [DllImport("libc", SetLastError = true)]
-    private static extern int setpgid(int pid, int pgid);
+    [LibraryImport("libc", SetLastError = true)]
+    private static partial int setpgid(int pid, int pgid);
 
     [StructLayout(LayoutKind.Sequential)]
     private struct JobObjectBasicLimitInformation

@@ -114,7 +114,7 @@ public sealed record PtyStartSpec(
 `SearchPath: true` resolves `FileName` through `PATH` via `posix_spawnp`; set it
 to `false` to require an absolute path.
 
-`NativeMethods` is `internal` — the `DllImport("libc")` surface
+`NativeMethods` is `internal` — the `LibraryImport("libc")` surface
 (`posix_openpt`, `grantpt`, `unlockpt`, `ptsname_r`, `open`, `close`, `ioctl`,
 `waitpid`, `posix_spawn`) with the Darwin-vs-Linux constant forks
 (`O_NOCTTY`, `O_CLOEXEC`, `TIOCSWINSZ`, `POSIX_SPAWN_SETSID`).
@@ -195,7 +195,7 @@ duplication #672 removes.
 
 - **No Windows support.** `IsSupported` is `false` and ConPTY is unimplemented.
   The launcher reports this as a `Result.Failure` rather than throwing, so
-  callers get a message instead of a `DllImport` fault; code using `PtyProcess`
+  callers get a message instead of a P/Invoke load fault; code using `PtyProcess`
   directly must still check `IsSupported` first.
 - **No terminal emulation.** You get raw bytes; grid rendering, alternate-screen
   handling, bracketed paste and colour parsing are the consumer's job. This is
@@ -209,8 +209,9 @@ duplication #672 removes.
 - **Synchronous `DisposeAsync` sites must not be assumed safe.** `PtyProcess` is
   `IAsyncDisposable`; the desktop app bridges this explicitly at window/pane
   close.
-- Not marked `IsAotCompatible` — `DllImport` marshalling keeps it on the JIT
-  path.
+- Not marked `IsAotCompatible` — the `[LibraryImport]` marshalling is
+  source-generated and trim/AOT-safe (#1243); the compat marking itself is
+  still a follow-up.
 
 ## See also
 

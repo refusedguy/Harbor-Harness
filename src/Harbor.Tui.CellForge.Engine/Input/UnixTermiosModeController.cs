@@ -6,14 +6,12 @@ namespace Harbor.Tui.CellForge.Input;
 /// <summary>
 /// Raw mode via direct termios P/Invoke (design §5.2) — replaces the spec-07
 /// `stty`-spawn approach (process spawn per toggle, coreutils dependency,
-/// restore race). Classic [DllImport] with fully blittable signatures
-/// (AOT-safe, zero marshalling): the design doc prefers [LibraryImport], but
-/// its source generator requires AllowUnsafeBlocks=true which the repo
-/// forbids project-wide — same resolution as Mcp ProcessTree.cs.
+/// restore race). Source-generated [LibraryImport] with fully blittable
+/// signatures (AOT-safe, zero marshalling).
 /// Flag layout targets Linux (the CE-0 host platform); BSD/macOS share the
 /// core ICANON/ECHO/ISIG bits, exotic-bit tuning is a follow-up.
 /// </summary>
-public sealed class UnixTermiosModeController : ITerminalModeController
+public sealed partial class UnixTermiosModeController : ITerminalModeController
 {
     private const int StdinFd = 0;
     private const int Tcsanow = 0;
@@ -97,11 +95,11 @@ public sealed class UnixTermiosModeController : ITerminalModeController
         IsRaw = false;
     }
 
-    [DllImport("libc", SetLastError = true)]
-    private static extern int tcgetattr(int fileDescriptor, ref Termios termios);
+    [LibraryImport("libc", SetLastError = true)]
+    private static partial int tcgetattr(int fileDescriptor, ref Termios termios);
 
-    [DllImport("libc", SetLastError = true)]
-    private static extern int tcsetattr(int fileDescriptor, int optionalActions, ref Termios termios);
+    [LibraryImport("libc", SetLastError = true)]
+    private static partial int tcsetattr(int fileDescriptor, int optionalActions, ref Termios termios);
 
     [StructLayout(LayoutKind.Sequential)]
     private struct Termios
