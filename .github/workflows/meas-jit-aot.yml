@@ -3,9 +3,10 @@
 # WHY DISPATCH-ONLY: this is a measurement, not a gate (#413 owns the AOT
 # gate; #998 forbids absolute wall-clock thresholds on shared runners). It
 # runs only when a human asks for numbers, costs nothing on PRs, and uploads
-# the log so the table in docs/BENCHMARKS.md §4.4 is traceable to a CI run.
-# The workload itself lives in tools/measure-jit-workload.sh — this file only
-# provides the runner + SDK. Not in any required-checks list.
+# the logs so the table in docs/BENCHMARKS.md §4.4 is traceable to CI runs.
+# The workloads live in tools/measure-jit-workload.sh (JIT half) and
+# tools/measure-aot-workload.sh (AOT half, verbatim #413 recipe) — this file
+# only provides the runner + SDK. Not in any required-checks list.
 name: meas-jit-aot
 
 on:
@@ -44,11 +45,47 @@ jobs:
           DOTNET_SKIP_FIRST_TIME_EXPERIENCE: true
         run: bash tools/measure-jit-workload.sh "${{ inputs.runs }}"
 
-      - name: Upload measurement log
+      - name: Upload measurement log (JIT)
         if: always()
         uses: actions/upload-artifact@v7
         with:
           name: jit-workload-log
           path: meas/jit-workload.log
+          retention-days: 30
+          if-no-files-found: error
+
+  measure-aot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: recursive
+
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: "10.0.x"
+          cache: true
+          cache-dependency-path: "Directory.Packages.props"
+
+      - name: Install the AOT native toolchain
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq clang lld binutils zlib1g-dev
+
+      - name: Drive the scripted workload (AOT)
+        env:
+          DOTNET_NOLOGO: true
+          DOTNET_CLI_TELEMETRY_OPTOUT: true
+          DOTNET_SKIP_FIRST_TIME_EXPERIENCE: true
+        run: bash tools/measure-aot-workload.sh "${{ inputs.runs }}"
+
+      - name: Upload measurement log (AOT)
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: aot-workload-log
+          path: meas/aot-workload.log
           retention-days: 30
           if-no-files-found: error
