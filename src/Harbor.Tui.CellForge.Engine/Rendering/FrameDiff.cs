@@ -1,3 +1,4 @@
+using System.Text;
 
 namespace Harbor.Tui.CellForge.Rendering;
 
@@ -401,9 +402,13 @@ public ref struct FrameDiffEnumerator
                 continue;
             }
 
+            // A tail cell is undrawable (rune 0 would emit a NUL byte): paint
+            // a space carrying the tail's own style — what the column must
+            // show once cleared — while mirroring the true tail below, so
+            // FRONT == BACK still holds.
             X = j;
             Y = _y;
-            Target = t;
+            Target = t.Width == Cell.WSkip ? Cell.From(new Rune(t.Rune == 0 ? ' ' : t.Rune), t.Style) : t;
             Advance = jw;
             IsForcedWidth = false;
             _front.At(j, _y) = t;
