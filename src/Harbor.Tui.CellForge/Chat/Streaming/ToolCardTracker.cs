@@ -190,7 +190,10 @@ internal sealed class ToolCardTracker
         ICollapsibleChatBlock errorCard = card.Block;
         errorCard.SetExpanded(false);
         _cards.Remove(id);
-        _panel.Timeline.MarkLastDirty();
+        // #1137: the completed card is not necessarily the tail (an approval
+        // gate may follow it) — re-measure its own slot, not the last one.
+        _panel.Timeline.MarkDirty(card.Block);
+        _panel.Timeline.MarkViewportWide();
     }
 
     /// <summary>
@@ -214,6 +217,9 @@ internal sealed class ToolCardTracker
 
             card.Block.Stop(terminal, reason);
             stopped++;
+            // #1137: a stopped card is not necessarily the tail — re-measure
+            // its own slot (heights), the viewport-wide pass below repaints.
+            _panel.Timeline.MarkDirty(card.Block);
 
             // [UX5] #265: a task card carries its transcript + tally in the
             // suffix; clearing it stops the header from claiming live progress
@@ -229,7 +235,7 @@ internal sealed class ToolCardTracker
 
         if (stopped > 0)
         {
-            _panel.Timeline.MarkLastDirty();
+            _panel.Timeline.MarkViewportWide();
         }
 
         return stopped;
@@ -270,7 +276,12 @@ internal sealed class ToolCardTracker
             }
         }
 
-        _panel.Timeline.MarkLastDirty();
+        // #1137: the completed card is not necessarily the tail (an approval
+        // gate may follow it) — re-measure its own slot, not the last one.
+        // Complete() grows the card from 1 row to header + body; without this
+        // the layout keeps the pre-body measurement and the body never paints.
+        _panel.Timeline.MarkDirty(card.Block);
+        _panel.Timeline.MarkViewportWide();
     }
 
     public void AppendImageCard(string path, string mime, long sizeBytes, byte[]? data)
@@ -446,7 +457,10 @@ internal sealed class ToolCardTracker
         taskCard.SetExpanded(false);
         _cards.Remove(taskId);
         _tasks.Remove(taskId);
-        _panel.Timeline.MarkLastDirty();
+        // #1137: same as CompleteCard — the finished task card is not
+        // necessarily the tail, so re-measure its own slot.
+        _panel.Timeline.MarkDirty(card.Block);
+        _panel.Timeline.MarkViewportWide();
     }
 
     private void RefreshTaskSuffix(string taskId, TaskState ts)
