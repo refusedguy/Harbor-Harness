@@ -13,9 +13,13 @@ namespace Harbor.Tui.CellForge.PtyTests;
 ///     switches the mock to a plain text response so follow-up turns settle
 ///     instead of re-executing the canned call (the mock re-serves per
 ///     request and the home-config <c>maxSteps</c> budget does not end the
-///     run — see #1118). The approved call executes and fails: its error
-///     ("File not found") streams to the timeline, the run goes idle, and
-///     nothing appears on disk. Only tests; the product is untouched.
+///     run — see #1118). The approved call executes and fails: the card
+///     completes in the error state (glyph <c>✖</c>, symmetric to the
+///     <c>✔</c> success header asserted by #1122), the run goes idle, and
+///     nothing appears on disk. The error BODY ("File not found: …") is
+///     deliberately not asserted: like the success bodies in #1122, it does
+///     not paint on the settled timeline (stale 1-row layout when the card
+///     is not last — see #1137). Only tests; the product is untouched.
 /// </summary>
 [NotInParallel("pty")]
 public sealed class ToolErrorScenarioTests : CellForgePtyScenarioBase
@@ -80,10 +84,18 @@ public sealed class ToolErrorScenarioTests : CellForgePtyScenarioBase
             l => l.Any(x => x.Contains("idle", StringComparison.Ordinal) || x.Contains("○ idle", StringComparison.Ordinal)),
             TimeSpan.FromSeconds(15)).ConfigureAwait(false);
 
-        // The failed call executed for real: the read error streamed through
-        // the PTY wire (cumulative raw stream keeps it after scroll-off).
-        await Assert.That(Session.RawText.Contains("File not found", StringComparison.Ordinal)).IsTrue().Because("tool error card must stream the read failure");
+        // The failed call completed as an error: the card header repainted to
+        // the error glyph (the result body itself does not paint on the
+        // settled timeline — same stale-layout note as #1137/#1122 — so the
+        // header glyph plus the args reference are the stable surface).
+        await Assert.That(Session.RawText.Contains("✖", StringComparison.Ordinal)).IsTrue().Because("tool card must complete in the error state");
         await Assert.That(Session.RawText.Contains("pty-toolerr-probe-423b", StringComparison.Ordinal)).IsTrue().Because("tool card args must reference the probe file");
+
+        // The approval trail survived on the settled timeline (same marker
+        // as the #1122 diff trio), next to the errored read card.
+        string[] settled = NormalizedLines();
+        await Assert.That(settled.Any(x => x.Contains("✓ approved (always)", StringComparison.Ordinal))).IsTrue().Because($"screen:\n{ScreenText}");
+        await Assert.That(settled.Any(x => x.Contains("read", StringComparison.Ordinal))).IsTrue().Because($"screen:\n{ScreenText}");
 
         // ...and nothing was created on disk by the failed read.
         await Assert.That(File.Exists(probe)).IsFalse().Because("failed read must not create the probe file");

@@ -12,7 +12,13 @@ namespace Harbor.Tui.CellForge.PtyTests;
 ///     settles at idle after the mock is switched to a plain text response
 ///     (the mock re-serves the canned call per request and the home-config
 ///     <c>maxSteps</c> budget does not end the run — see #1118 — so without
-///     the switch the deny loop never settles). Same prompt-driving pattern
+///     the switch the deny loop never settles). The denial streams as an
+///     error-state card (glyph <c>✖</c>) next to the <c>✗ denied</c>
+///     approval trail (the symmetric counterpart of the <c>✓ approved</c>
+///     trail asserted by #1122). The denial BODY ("Permission denied") is
+///     deliberately not asserted: like the success bodies in #1122, it does
+///     not paint on the settled timeline (stale 1-row layout when the card
+///     is not last — see #1137). Same prompt-driving pattern
 ///     as <c>ToolCallStreamingScenarioTests</c> (#1056) and the diff trio
 ///     (#1122). Only tests; the product is untouched.
 /// </summary>
@@ -81,8 +87,14 @@ public sealed class PermissionDenyScenarioTests : CellForgePtyScenarioBase
             l => l.Any(x => x.Contains("idle", StringComparison.Ordinal) || x.Contains("○ idle", StringComparison.Ordinal)),
             TimeSpan.FromSeconds(15)).ConfigureAwait(false);
 
-        // The denial streamed through the PTY wire as the tool result.
-        await Assert.That(Session.RawText.Contains("Permission denied", StringComparison.Ordinal)).IsTrue().Because("denied tool call must stream its denial result");
+        // The denial completed the card as an error (header glyph), next to
+        // the deny trail on the settled timeline. The denial body itself is
+        // not asserted (stale-layout note as in #1137/#1122).
+        await Assert.That(Session.RawText.Contains("✖", StringComparison.Ordinal)).IsTrue().Because("denied tool call must complete its card in the error state");
+        await Assert.That(Session.RawText.Contains("pty-deny-probe-423b", StringComparison.Ordinal)).IsTrue().Because("tool card args must reference the probe file");
+        string[] settled = NormalizedLines();
+        await Assert.That(settled.Any(x => x.Contains("✗ denied", StringComparison.Ordinal))).IsTrue().Because($"screen:\n{ScreenText}");
+        await Assert.That(settled.Any(x => x.Contains("read", StringComparison.Ordinal))).IsTrue().Because($"screen:\n{ScreenText}");
 
         // ...and the denied read never touched the probe on disk.
         string onDisk = await File.ReadAllTextAsync(probe).ConfigureAwait(false);
