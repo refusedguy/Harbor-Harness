@@ -272,7 +272,7 @@ public static class ThemeJson
         var table = CaseFold(variables);
         foreach (var (slot, name) in slotVariables)
         {
-            if (!table.TryGetValue(name, out var hex))
+            if (name is null || !table.TryGetValue(name, out var hex))
             {
                 continue;
             }
