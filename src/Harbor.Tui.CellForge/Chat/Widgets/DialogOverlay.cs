@@ -410,6 +410,40 @@ public sealed class DialogOverlay
         Visible = false;
     }
 
+    /// <summary>
+    /// Copies another overlay's full state into this one (issue #1248, slice 1):
+    /// the onboarding flow owns its dialog while the host paints the screen's
+    /// one, so every key the flow consumes is followed by this copy. Field copy,
+    /// not a <c>Show*</c> call — input text and button focus survive it.
+    /// </summary>
+    public void SyncFrom(DialogOverlay source)
+    {
+        ArgumentNullException.ThrowIfNull(source);
+        if (ReferenceEquals(this, source))
+        {
+            return;
+        }
+
+        _kind = source._kind;
+        _title = source._title;
+        _message = source._message;
+        _input = source._input;
+        _editor.SetText(source._editor.Text);
+        _select.SetItems(source._select.Items);
+        _select.MoveTo(source._select.SelectedIndex);
+        _radio.SetOptions(source._radio.Options, source._radio.SelectedIndex);
+        _approvalTool = source._approvalTool;
+        _approvalFile = source._approvalFile;
+        _approvalDiff.Clear();
+        _approvalDiff.AddRange(source._approvalDiff);
+        _buttons.Clear();
+        _buttons.AddRange(source._buttons);
+        _focusedButton = source._buttons.Count == 0
+            ? 0
+            : Math.Clamp(source._focusedButton, 0, source._buttons.Count - 1);
+        Visible = source.Visible;
+    }
+
     public void Tick()
     {
         // Reserved for future spinner/animation integration.

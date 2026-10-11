@@ -218,6 +218,15 @@ internal sealed class CellForgeReplRunner(
         this,
         new SetupChecklistDetector(core.ConfigStore, core.AuthStore, optional.HealthCheck));
 
+    private CellForgeOnboardingController? _onboarding;
+
+    /// <summary>
+    /// Interactive setup flow (issue #1248, slice 1): the
+    /// <c>/setup</c> overlay (provider → key → model) over
+    /// <see cref="Screen.Dialog"/>, persisted to the config/auth stores.
+    /// </summary>
+    internal CellForgeOnboardingController Onboarding => _onboarding ??= new CellForgeOnboardingController(this);
+
     // ── Internal accessors for the collaborators (G2 split seam): captured
     // ctor parameters are invisible outside this class, so the input loop,
     // command host and lifecycle reach them through these. IReplHost stays
