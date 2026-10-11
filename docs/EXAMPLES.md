@@ -797,6 +797,14 @@ Guards that bite if you skip them:
   durable: the directive is appended to the peer's history and picked up on its next
   run — a live run is never interrupted.
 
+Related work: parent-mediated steering exists elsewhere — Codex has it
+(`spawn_agent` / `followup_task` / `send_message` in codex-rs, `/agent` threads),
+so top-down delegation is not the novelty here. The difference is the level:
+`session_read` / `session_steer` are tools in the agents' own hands — a peer agent
+itself decides to inspect a neighbor and steer it, plus the supervision protocol
+around it (verdicts, provenance trailer, depth-1 guard). A shared event bus on the
+Codex side is still an open feature request (#21027).
+
 ---
 
 ## Permissions
