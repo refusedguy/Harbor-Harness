@@ -41,7 +41,7 @@
 // The full measured inventory — this is the deliverable of the issue:
 //
 //   BUFFER (a rune can reach a buffer; Shift types, Ctrl/Meta/Alt refuse)
-//     src/Harbor.Tui.CellForge/Chat/Rendering/ComposerController.cs:193 == 0            (kitty)
+//     src/Harbor.Tui.CellForge/Chat/Rendering/ComposerController.cs:281 == 0            (kitty)
 //     DialogOverlay.cs:649                    != 0            (kitty)
 //     DialogOverlay.cs:718                    == 0 && !IsControl   (legacy ConsoleKeyInfo)
 //     QuestionFormView.cs:571                 != 0            (custom row only)
