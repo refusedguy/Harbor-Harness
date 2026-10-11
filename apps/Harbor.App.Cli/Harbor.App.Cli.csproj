@@ -379,6 +379,15 @@
   <ItemGroup>
     <PackageReference Include="Microsoft.Extensions.Hosting"/>
     <PackageReference Include="Microsoft.Extensions.Http"/>
+    <!--
+      LB2 pilot (#1235): sourcegen-only CLI parser (AOT-first). No runtime
+      assembly ships — analyzer + generated code only, per the upstream
+      consumption guidance (PrivateAssets=all).
+    -->
+    <PackageReference Include="ConsoleAppFramework">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers</IncludeAssets>
+    </PackageReference>
   </ItemGroup>
 
 </Project>
