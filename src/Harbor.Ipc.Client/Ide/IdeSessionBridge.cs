@@ -41,7 +41,7 @@ public sealed record IdeSessionBridgeOptions
 ///         -32602 instead of silently rerouting the host's agent.
 ///     </para>
 /// </remarks>
-public sealed class IdeSessionBridge : IAsyncDisposable
+public sealed class IdeSessionBridge : IIdeSessionBridge
 {
     private readonly IHarborClient _client;
     private readonly IdeJsonRpcServer _server;
