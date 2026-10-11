@@ -1,6 +1,7 @@
 using Harbor.DesignSystem;
 using Harbor.Hosting.Themes;
 using Harbor.Tui.CellForge.Widgets;
+using Harbor.Ui.Framework.Projection;
 
 namespace Harbor.Tui.CellForge.Tests;
 
