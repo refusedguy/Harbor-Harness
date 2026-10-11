@@ -98,6 +98,12 @@ public class JsonlCheckpointsTests
             await store.AppendMessageAsync(session.Id, Msg(session.Id, 99));
             var after = await store.GetMessagesAsync(session.Id);
             await Assert.That(after.Value.Count).IsEqualTo(3);
+
+            // The restored checkpoint survived, so rewinding there twice works.
+            var rewoundAgain = await store.RewindToCheckpointAsync(session.Id, checkpoint.Id);
+            await Assert.That(rewoundAgain.IsSuccess).IsTrue();
+            await Assert.That(rewoundAgain.Value.Removed).IsEqualTo(1);
+            await Assert.That(rewoundAgain.Value.Remaining).IsEqualTo(2);
         }
         finally
         {

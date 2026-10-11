@@ -198,6 +198,8 @@ internal sealed class DropMessagePlan : SessionRewritePlan
 ///     and non-message records survive wherever they are — except checkpoint
 ///     markers past the anchor (#1247 slice 1): a checkpoint pointing into
 ///     the dropped future is stale and goes with the messages it indexes.
+///     The marker over the anchor itself survives — checkpoints are appended
+///     when taken, so it always sits past the anchor in file order.
 ///
 ///     One pass, and it needs to be one: file order IS insertion order for this
 ///     store (append-only plus rewrite-in-place), so the first id match is the
@@ -209,12 +211,19 @@ internal sealed class DeleteAfterAnchorPlan : SessionRewritePlan
 {
     private readonly string _messageId;
     private readonly byte[] _idNeedle;
+    private readonly byte[] _anchorNeedle;
     private bool _pastAnchor;
 
     internal DeleteAfterAnchorPlan(string messageId)
     {
         _messageId = messageId;
         _idNeedle = Encoding.UTF8.GetBytes($"\"id\":\"{messageId}\"");
+        // Checkpoint lines carry the anchor in "messageId", not "id" (their
+        // own "id" is the checkpoint id) — this is the probe that tells a
+        // marker OVER the anchor from one over the dropped future. The
+        // closing quote rules out prefix collisions ("m1" vs "m1x"), the
+        // same reason _idNeedle is quoted.
+        _anchorNeedle = Encoding.UTF8.GetBytes($"\"messageId\":\"{messageId}\"");
     }
 
     /// <summary>Message records dropped after the anchor.</summary>
@@ -254,15 +263,20 @@ internal sealed class DeleteAfterAnchorPlan : SessionRewritePlan
             return LineAction.Drop;
         }
 
-        // #1247 slice 1: a checkpoint past the anchor indexes the dropped
-        // future, so it goes too. Pre-anchor checkpoints never reach here.
-        // Dropped checkpoints do not count toward Removed — that number
-        // reports messages, matching DeleteMessagesAfterAsync's contract —
-        // and do not flip Changed: a rewind to the tail message stays a
-        // no-op even when a checkpoint line sits after it.
+        // #1247 slice 1: a checkpoint past the anchor goes with the dropped
+        // future — UNLESS it marks the anchor itself. A checkpoint is
+        // appended when taken, so the restored checkpoint always sits AFTER
+        // its anchor in file order; dropping it would unmark the very point
+        // just rewound to (and break rewinding there twice). Dropped
+        // checkpoints do not count toward Removed — that number reports
+        // messages, matching DeleteMessagesAfterAsync's contract — and do
+        // not flip Changed: a rewind to the tail message stays a no-op even
+        // when a checkpoint line sits after it.
         if (SessionFileReader.IsCheckpointLine(record))
         {
-            return LineAction.Drop;
+            return record.IndexOf((ReadOnlySpan<byte>)_anchorNeedle) >= 0
+                ? LineAction.Keep
+                : LineAction.Drop;
         }
 
         return LineAction.Keep;
