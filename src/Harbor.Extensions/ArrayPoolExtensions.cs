@@ -319,6 +319,7 @@ public static class StringBuilderPool
 ///     </para>
 /// </remarks>
 public static class DictionaryPool<TKey, TValue>
+    where TKey : notnull
 {
     /// <summary>Entry band a rent below it is served from.</summary>
     private const int MinRetainEntries = 8;
@@ -455,6 +456,7 @@ public static class DictionaryPool<TKey, TValue>
 ///     </para>
 /// </remarks>
 public readonly struct PooledDictionary<TKey, TValue> : IDisposable
+    where TKey : notnull
 {
     /// <summary>
     ///     The underlying <see cref="Dictionary{TKey, TValue}" />. Mutate this in place.
