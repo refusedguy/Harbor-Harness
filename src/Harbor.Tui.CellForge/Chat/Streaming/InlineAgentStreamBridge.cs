@@ -61,6 +61,14 @@ public sealed class InlineAgentStreamBridge : IDisposable
                 _stream?.AppendDelta(delta.Delta);
                 break;
 
+            case MessageUpdateEvent update when update.LlmEvent is ThinkingDeltaEvent thinking:
+                _stream?.AppendThinking(thinking.Delta);
+                break;
+
+            case MessageUpdateEvent update when update.LlmEvent is ThinkingEndEvent:
+                _stream?.CompleteThinking();
+                break;
+
             case MessageEndEvent:
                 FinishStream();
                 break;
@@ -120,8 +128,9 @@ public sealed class InlineAgentStreamBridge : IDisposable
     // ── Painting ───────────────────────────────────────────────────────────
 
     /// <summary>
-    /// Repaints the live region: revealed stream lines + partial tail above,
-    /// composer below. Returns rows occupied (also recorded in the session).
+    /// Repaints the live region: collapsed reasoning line (while thinking
+    /// streams) + revealed stream lines + partial tail above, composer below.
+    /// Returns rows occupied (also recorded in the session).
     /// The terminal cursor ends at the prompt caret — inline mode parks it by
     /// construction, no absolute addressing needed.
     /// </summary>
@@ -129,6 +138,16 @@ public sealed class InlineAgentStreamBridge : IDisposable
     {
         _session.EraseLiveRegion();
         _session.SetLiveLines(0);
+
+        // Reasoning folds to one dim line while it streams (#1171); the
+        // transcript layer owns the finished text, so the line hides on
+        // ThinkingEnd/Complete instead of lingering.
+        string thinking = _stream?.LiveThinkingLabel() ?? string.Empty;
+        if (thinking.Length > 0)
+        {
+            _writer.WriteStyledText(thinking, new EngineCells.CellStyle(attrs: EngineCells.StyleAttr.Dim));
+            _writer.WriteLineBreak();
+        }
 
         var text = BuildStreamText();
         var lines = new List<string>(64);
@@ -145,7 +164,7 @@ public sealed class InlineAgentStreamBridge : IDisposable
 
         int promptColumn = PromptRenderer.Render(_writer, _composer.Buffer, Width, placeholder);
 
-        int totalRows = lines.Count + Math.Max(1, CountPromptLines());
+        int totalRows = lines.Count + (thinking.Length > 0 ? 1 : 0) + Math.Max(1, CountPromptLines());
         _session.SetLiveLines(totalRows);
         return totalRows;
     }
