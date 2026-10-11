@@ -90,8 +90,7 @@ public sealed class McpSseTransport : IMcpRemoteTransport
                     // cannot travel inside it (Failure is a string).
                     if (!once.Retryable || attempt >= TransientFailurePolicy.DefaultMaxAttempts)
                         return Fail<Maybe<JsonDocument>>(sw, attempt, once.Outcome.Error);
-                    _logger?.LogWarning("MCP SSE round-trip to {Endpoint} failed (attempt {Attempt}/{Max}): {Cause}; reconnecting",
-                        _endpoint, attempt, TransientFailurePolicy.DefaultMaxAttempts, once.Outcome.Error);
+                    if (_logger is not null) McpSseTransportLog.RoundTripFailed(_logger, _endpoint, attempt, TransientFailurePolicy.DefaultMaxAttempts, once.Outcome.Error);
                     await BackoffAsync(attempt, cancellationToken).ConfigureAwait(false);
                     attempt++;
                     continue;
@@ -111,8 +110,7 @@ public sealed class McpSseTransport : IMcpRemoteTransport
             catch (Exception ex) when (TransientFailurePolicy.ShouldRetry(ex)
                                        && attempt < TransientFailurePolicy.DefaultMaxAttempts)
             {
-                _logger?.LogWarning(ex, "MCP SSE round-trip to {Endpoint} failed (attempt {Attempt}/{Max}); reconnecting",
-                    _endpoint, attempt, TransientFailurePolicy.DefaultMaxAttempts);
+                if (_logger is not null) McpSseTransportLog.RoundTripFailedRetrying(_logger, ex, _endpoint, attempt, TransientFailurePolicy.DefaultMaxAttempts);
                 await BackoffAsync(attempt, cancellationToken).ConfigureAwait(false);
                 attempt++;
             }
@@ -351,7 +349,7 @@ public sealed class McpSseTransport : IMcpRemoteTransport
     private Result<T> Fail<T>(Stopwatch sw, int attempts, string cause)
     {
         string error = $"SSE {_endpoint} failed after {attempts} attempt(s) in {sw.Elapsed.TotalMilliseconds:0}ms: {cause}";
-        _logger?.LogError("MCP SSE transport failure: {Error}", error);
+        if (_logger is not null) McpSseTransportLog.TransportFailure(_logger, error);
         return Result.Failure<T>(error);
     }
 
@@ -375,4 +373,21 @@ public sealed class McpSseTransport : IMcpRemoteTransport
         _client = client;
         return client;
     }
+}
+
+/// <summary>
+///     SG1: BCL <c>[LoggerMessage]</c> delegates for <see cref="McpSseTransport" />.
+///     Templates, levels and operands are 1-to-1 with the former <c>LogX</c> calls
+///     (including the skip-when-null semantics of the optional logger).
+/// </summary>
+internal static partial class McpSseTransportLog
+{
+    [LoggerMessage(EventId = 1, Level = LogLevel.Warning, Message = "MCP SSE round-trip to {Endpoint} failed (attempt {Attempt}/{Max}): {Cause}; reconnecting")]
+    public static partial void RoundTripFailed(ILogger logger, Uri endpoint, int attempt, int max, string cause);
+
+    [LoggerMessage(EventId = 2, Level = LogLevel.Warning, Message = "MCP SSE round-trip to {Endpoint} failed (attempt {Attempt}/{Max}); reconnecting")]
+    public static partial void RoundTripFailedRetrying(ILogger logger, Exception ex, Uri endpoint, int attempt, int max);
+
+    [LoggerMessage(EventId = 3, Level = LogLevel.Error, Message = "MCP SSE transport failure: {Error}")]
+    public static partial void TransportFailure(ILogger logger, string error);
 }

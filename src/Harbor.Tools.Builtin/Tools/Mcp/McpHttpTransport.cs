@@ -128,8 +128,7 @@ public sealed class McpHttpTransport : IMcpRemoteTransport
                     string cause = $"server returned {(int)httpResponse.StatusCode}";
                     if (attempt >= TransientFailurePolicy.DefaultMaxAttempts)
                         return Fail<Maybe<JsonDocument>>(sw, attempt, cause);
-                    _logger?.LogWarning("MCP HTTP request to {Endpoint} failed (attempt {Attempt}/{Max}): {Cause}; retrying",
-                        _endpoint, attempt, TransientFailurePolicy.DefaultMaxAttempts, cause);
+                    if (_logger is not null) McpHttpTransportLog.RequestFailed(_logger, _endpoint, attempt, TransientFailurePolicy.DefaultMaxAttempts, cause);
                     await BackoffAsync(attempt, cancellationToken).ConfigureAwait(false);
                     attempt++;
                     continue;
@@ -159,8 +158,7 @@ public sealed class McpHttpTransport : IMcpRemoteTransport
             catch (Exception ex) when (TransientFailurePolicy.ShouldRetry(ex)
                                        && attempt < TransientFailurePolicy.DefaultMaxAttempts)
             {
-                _logger?.LogWarning(ex, "MCP HTTP request to {Endpoint} failed (attempt {Attempt}/{Max}); retrying",
-                    _endpoint, attempt, TransientFailurePolicy.DefaultMaxAttempts);
+                if (_logger is not null) McpHttpTransportLog.RequestFailedRetrying(_logger, ex, _endpoint, attempt, TransientFailurePolicy.DefaultMaxAttempts);
                 await BackoffAsync(attempt, cancellationToken).ConfigureAwait(false);
                 attempt++;
             }
@@ -254,7 +252,7 @@ public sealed class McpHttpTransport : IMcpRemoteTransport
             && values.FirstOrDefault() is { Length: > 0 } sessionId)
         {
             _sessionId = sessionId;
-            _logger?.LogDebug("MCP HTTP session captured: {SessionId}", sessionId);
+            if (_logger is not null) McpHttpTransportLog.SessionCaptured(_logger, sessionId);
         }
     }
 
@@ -353,7 +351,7 @@ public sealed class McpHttpTransport : IMcpRemoteTransport
     private Result<T> Fail<T>(Stopwatch sw, int attempts, string cause)
     {
         string error = $"HTTP {_endpoint} failed after {attempts} attempt(s) in {sw.Elapsed.TotalMilliseconds:0}ms: {cause}";
-        _logger?.LogError("MCP HTTP transport failure: {Error}", error);
+        if (_logger is not null) McpHttpTransportLog.TransportFailure(_logger, error);
         return Result.Failure<T>(error);
     }
 
@@ -374,4 +372,24 @@ public sealed class McpHttpTransport : IMcpRemoteTransport
         _client = client;
         return client;
     }
+}
+
+/// <summary>
+///     SG1: BCL <c>[LoggerMessage]</c> delegates for <see cref="McpHttpTransport" />.
+///     Templates, levels and operands are 1-to-1 with the former <c>LogX</c> calls
+///     (including the skip-when-null semantics of the optional logger).
+/// </summary>
+internal static partial class McpHttpTransportLog
+{
+    [LoggerMessage(EventId = 1, Level = LogLevel.Warning, Message = "MCP HTTP request to {Endpoint} failed (attempt {Attempt}/{Max}): {Cause}; retrying")]
+    public static partial void RequestFailed(ILogger logger, Uri endpoint, int attempt, int max, string cause);
+
+    [LoggerMessage(EventId = 2, Level = LogLevel.Warning, Message = "MCP HTTP request to {Endpoint} failed (attempt {Attempt}/{Max}); retrying")]
+    public static partial void RequestFailedRetrying(ILogger logger, Exception ex, Uri endpoint, int attempt, int max);
+
+    [LoggerMessage(EventId = 3, Level = LogLevel.Debug, Message = "MCP HTTP session captured: {SessionId}")]
+    public static partial void SessionCaptured(ILogger logger, string sessionId);
+
+    [LoggerMessage(EventId = 4, Level = LogLevel.Error, Message = "MCP HTTP transport failure: {Error}")]
+    public static partial void TransportFailure(ILogger logger, string error);
 }
