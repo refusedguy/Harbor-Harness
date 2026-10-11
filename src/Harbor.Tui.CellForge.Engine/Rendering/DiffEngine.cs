@@ -137,8 +137,21 @@ public sealed class DiffEngine
             }
 
             writer.SetStyle(target.Style);
-            writer.PutRune(new Rune(target.Rune));
-            lastX = x;
+            if (cursor.IsForcedWidth)
+            {
+                // Explicit advance (R1 steal, CellDiffOption.ForcedWidth): the
+                // widget armed the terminal truth (image payloads), so the pen
+                // really lands at x + advance — bookkeep it, or the next
+                // adjacency elision inherits a wrong column.
+                writer.PutRuneWidth(new Rune(target.Rune), cursor.Advance);
+                lastX = x + cursor.Advance - 1;
+            }
+            else
+            {
+                writer.PutRune(new Rune(target.Rune));
+                lastX = x;
+            }
+
             lastY = y;
         }
 
