@@ -16,6 +16,9 @@ namespace Harbor.CodeGen;
 [Generator]
 public sealed class ToolGlueGenerator : IIncrementalGenerator
 {
+    // Matched by metadata name (not by type reference) so this Roslyn
+    // component needs no project reference. Must track the attribute in
+    // src/Harbor.Abstractions/Tools/ToolInfoAttribute.cs.
     private const string AttributeName = "ToolInfoAttribute";
 
     public void Initialize(IncrementalGeneratorInitializationContext context)
