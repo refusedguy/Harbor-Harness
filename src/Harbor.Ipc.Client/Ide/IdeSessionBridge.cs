@@ -87,7 +87,7 @@ public sealed class IdeSessionBridge : IIdeSessionBridge
     ///     Serve requests until the editor closes stdin. Returns the framing
     ///     server's completion; in-flight runs are cancelled by <see cref="DisposeAsync"/>.
     /// </summary>
-    public Task RunAsync(CancellationToken ct) => _server.RunAsync(ct);
+    public Task RunAsync(CancellationToken ct = default) => _server.RunAsync(ct);
 
     // ── Request dispatch ───────────────────────────────────────────────────
 
