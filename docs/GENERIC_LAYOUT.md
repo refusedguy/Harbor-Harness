@@ -43,8 +43,11 @@ Leaf and container bases share one vocabulary (`Rect`, `Size`, `SplitDir`,
   implement the three phases by delegating to the pure solvers.
 - `FlexSplitNode` — n-ary Row (`SplitDir.Horizontal`) / Column
   (`SplitDir.Vertical`) over `FlexLayout.Arrange`. One `FlexTrack` per child
-  (`Fixed` / `Percent` / `Fill` / `Min` / `Max`); gap and `FlexJustify`
-  behave exactly as in `FlexLayout`.
+  (`Fixed` / `Percent` / `Fill` / `Min` / `Max` / `Auto` — the public
+  `SizeConstraint` vocabulary maps onto these via `ToFlexTrack`); gap and
+  `FlexJustify` behave exactly as in `FlexLayout`. `Auto` tracks take the
+  child's measured main extent (clamped to min/max); `Fill` weights split the
+  remainder that is left.
 - `ZStackNode` — full-area overlap stack over `StackLayout.Arrange`: every
   child takes the whole rect, painted in index order (lower first).
 

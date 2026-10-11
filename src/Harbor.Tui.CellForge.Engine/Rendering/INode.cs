@@ -13,7 +13,7 @@ namespace Harbor.Tui.CellForge.Rendering;
 /// upper bounds; negative counts as zero (parents clamp defensively, so a
 /// node MUST also clamp — never trust the input).
 /// There is no unbounded axis: flexibility is declared with
-/// <see cref="FlexTrack"/> (<c>Fill</c> / <c>Min</c> / <c>Max</c>) and
+/// <see cref="FlexTrack"/> (<c>Fill</c> / <c>Min</c> / <c>Max</c> / <c>Auto</c>) and
 /// resolved by the parent's arrange phase, never by measuring into infinity.
 /// </summary>
 public readonly record struct Constraints(int MaxWidth, int MaxHeight)

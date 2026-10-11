@@ -31,17 +31,19 @@ public enum FlexJustify : byte
 /// One child's size constraint along a <see cref="FlexLayout"/> main axis
 /// (ratatui <c>Constraint</c> analogue, content-agnostic: no content measuring,
 /// layout math only). Construct via the <c>Fixed</c> / <c>Percent</c> /
-/// <c>Fill</c> / <c>Min</c> / <c>Max</c> factories.
+/// <c>Fill</c> / <c>Min</c> / <c>Max</c> / <c>Auto</c> factories.
 /// </summary>
 public readonly record struct FlexTrack
 {
     private readonly byte _kind;
     private readonly float _amount;
+    private readonly int _extra;
 
-    private FlexTrack(byte kind, float amount)
+    private FlexTrack(byte kind, float amount, int extra = 0)
     {
         _kind = kind;
         _amount = amount;
+        _extra = extra;
     }
 
     /// <summary>Exact cell count, clamped at zero.</summary>
@@ -77,16 +79,31 @@ public readonly record struct FlexTrack
     /// </summary>
     public static FlexTrack Max(int cells) => new(4, Math.Max(0, cells));
 
-    internal bool IsFlex => _kind >= 2;
+    /// <summary>
+    /// Content-sized (Termina <c>Auto</c>): takes the caller-supplied intrinsic
+    /// extent (see the <c>intrinsic</c> span on the <see cref="FlexLayout.Arrange"/>
+    /// overload), clamped to <paramref name="min"/>..<paramref name="max"/>.
+    /// Resolved up-front like a fixed share — the <see cref="Fill(float)"/> /
+    /// <see cref="Min(int)"/> / <see cref="Max(int)"/> tracks split what is left.
+    /// Without an intrinsic span an <c>Auto</c> track degrades to its floor.
+    /// </summary>
+    public static FlexTrack Auto(int min = 0, int max = int.MaxValue)
+    {
+        int floor = Math.Max(0, min);
+        return new(5, floor, Math.Max(floor, max));
+    }
+
+    internal bool IsFlex => _kind is 2 or 3 or 4;
     internal bool IsFixedLike => _kind <= 1;
+    internal bool IsAuto => _kind == 5;
     internal bool IsPercent => _kind == 1;
     internal bool IsMin => _kind == 3;
     internal bool IsMax => _kind == 4;
     internal int FixedCells => (int)_amount;
     internal float Fraction => _amount;
     internal float FlexWeight => _kind == 2 ? _amount : 1f;
-    internal int FlexFloor => _kind == 3 ? (int)_amount : 0;
-    internal int FlexCap => _kind == 4 ? (int)_amount : int.MaxValue;
+    internal int FlexFloor => _kind is 3 or 5 ? (int)_amount : 0;
+    internal int FlexCap => _kind == 4 ? (int)_amount : _kind == 5 ? _extra : int.MaxValue;
 }
 
 /// <summary>
@@ -97,7 +114,7 @@ public readonly record struct FlexTrack
 /// Fill body + Fixed footer) and dialog frames consume this;
 /// <see cref="LayoutTree"/> keeps owning the collapse-priority solver.
 /// Children take the full cross extent; the main axis is water-filled honoring
-/// fixed sizes, percent shares, fill weights and min/max clamps.
+/// fixed sizes, percent shares, auto intrinsics, fill weights and min/max clamps.
 /// Not thread-safe: arrange on the render thread only.
 /// </summary>
 public static class FlexLayout
@@ -126,6 +143,37 @@ public static class FlexLayout
         ReadOnlySpan<FlexTrack> tracks,
         Span<Rect> into,
         int gap = 0,
+        FlexJustify justify = FlexJustify.Start) =>
+        Arrange(dir, avail, tracks, ReadOnlySpan<int>.Empty, into, gap, justify);
+
+    /// <summary>
+    /// Arranges <paramref name="tracks"/> inside <paramref name="avail"/> along
+    /// <paramref name="dir"/>, writing one <see cref="Rect"/> per track into
+    /// <paramref name="into"/> in track order. Zero-allocation steady-state path.
+    /// </summary>
+    /// <param name="dir">Main axis: <see cref="SplitDir.Horizontal"/> lays
+    /// children side-by-side (Row), <see cref="SplitDir.Vertical"/> stacks them
+    /// top-to-bottom (Column).</param>
+    /// <param name="avail">Available area. Negative extents count as zero.</param>
+    /// <param name="tracks">One constraint per child.</param>
+    /// <param name="intrinsic">Content-measured main-axis extent per track;
+    /// read only for <c>Auto</c> tracks (missing entries count as zero, so an
+    /// <c>Auto</c> track without intrinsic degrades to its floor).</param>
+    /// <param name="into">Destination span; must hold at least
+    /// <c>tracks.Length</c> rects.</param>
+    /// <param name="gap">Base cells between adjacent tracks; collapses to zero
+    /// when the gaps alone exceed the extent (all tracks then read zero-size).</param>
+    /// <param name="justify">Placement of leftover space when the run underfills.</param>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="gap"/> is negative.</exception>
+    /// <exception cref="ArgumentException"><paramref name="into"/> is shorter than
+    /// <paramref name="tracks"/>.</exception>
+    public static void Arrange(
+        SplitDir dir,
+        Rect avail,
+        ReadOnlySpan<FlexTrack> tracks,
+        ReadOnlySpan<int> intrinsic,
+        Span<Rect> into,
+        int gap = 0,
         FlexJustify justify = FlexJustify.Start)
     {
         ArgumentOutOfRangeException.ThrowIfNegative(gap);
@@ -152,7 +200,7 @@ public static class FlexLayout
 
         // Solver scratch: stack for sane child counts, heap past the threshold.
         Span<int> sizes = n <= 256 ? stackalloc int[n] : new int[n];
-        Measure(tracks, content, sizes);
+        Measure(tracks, content, intrinsic, sizes);
 
         int used = effGap * (n - 1);
         for (int i = 0; i < n; i++)
@@ -260,6 +308,33 @@ public static class FlexLayout
         return rects;
     }
 
+    /// <summary>
+    /// Allocating convenience over the <c>intrinsic</c> <see cref="Arrange"/>
+    /// overload for cold paths (dialog frames, tests).
+    /// </summary>
+    /// <param name="dir">Main axis (Row = <see cref="SplitDir.Horizontal"/>,
+    /// Column = <see cref="SplitDir.Vertical"/>).</param>
+    /// <param name="avail">Available area.</param>
+    /// <param name="tracks">One constraint per child.</param>
+    /// <param name="intrinsic">Content-measured main-axis extent per track
+    /// (<c>Auto</c> tracks only; missing entries count as zero).</param>
+    /// <param name="gap">Base cells between adjacent tracks.</param>
+    /// <param name="justify">Placement of leftover space.</param>
+    public static Rect[] Solve(
+        SplitDir dir,
+        Rect avail,
+        FlexTrack[] tracks,
+        int[] intrinsic,
+        int gap = 0,
+        FlexJustify justify = FlexJustify.Start)
+    {
+        ArgumentNullException.ThrowIfNull(tracks);
+        ArgumentNullException.ThrowIfNull(intrinsic);
+        var rects = new Rect[tracks.Length];
+        Arrange(dir, avail, tracks, intrinsic, rects, gap, justify);
+        return rects;
+    }
+
     private static void Emit(bool horizontal, Span<Rect> into, int i, int pos, int crossOrigin, int cross, int size)
     {
         into[i] = horizontal
@@ -267,7 +342,7 @@ public static class FlexLayout
             : new Rect(crossOrigin, pos, cross, size);
     }
 
-    private static void Measure(ReadOnlySpan<FlexTrack> tracks, int content, Span<int> sizes)
+    private static void Measure(ReadOnlySpan<FlexTrack> tracks, int content, ReadOnlySpan<int> intrinsic, Span<int> sizes)
     {
         int n = tracks.Length;
         int fixedSum = 0;
@@ -280,6 +355,13 @@ public static class FlexLayout
             {
                 flexCount++;
                 weightTotal += t.FlexWeight;
+            }
+            else if (t.IsAuto)
+            {
+                int want = intrinsic.Length > i ? Math.Max(0, intrinsic[i]) : 0;
+                int size = Math.Min(Math.Max(want, t.FlexFloor), t.FlexCap);
+                sizes[i] = size;
+                fixedSum += size;
             }
             else if (t.IsPercent)
             {
@@ -418,7 +500,7 @@ public static class FlexLayout
         int running = sum;
         for (int i = 0; i < n; i++)
         {
-            if (!tracks[i].IsFixedLike)
+            if (!tracks[i].IsFixedLike && !tracks[i].IsAuto)
             {
                 continue;
             }
@@ -432,7 +514,7 @@ public static class FlexLayout
 
         for (int i = 0; i < n && remaining > 0; i++)
         {
-            if (tracks[i].IsFixedLike)
+            if (tracks[i].IsFixedLike || tracks[i].IsAuto)
             {
                 sizes[i]++;
                 remaining--;

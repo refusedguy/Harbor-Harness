@@ -34,7 +34,9 @@ public abstract class ContainerNode : INode
 /// N-ary Row (<see cref="SplitDir.Horizontal"/>) / Column
 /// (<see cref="SplitDir.Vertical"/>) over <see cref="FlexLayout.Arrange"/> —
 /// the generic-composition seat of the PRIM8 #303 flex solver. One
-/// <see cref="FlexTrack"/> per child; gap and justify behave exactly as in
+/// <see cref="FlexTrack"/> per child
+/// (<c>Fixed</c> / <c>Percent</c> / <c>Fill</c> / <c>Min</c> / <c>Max</c> /
+/// <c>Auto</c>); gap and justify behave exactly as in
 /// <see cref="FlexLayout"/>.
 /// <see cref="Add(INode, FlexTrack)"/> / <see cref="Remove"/> are setup-time;
 /// the steady-state frame path (<see cref="Measure"/>, <see cref="Arrange"/>,
@@ -98,10 +100,12 @@ public sealed class FlexSplitNode : ContainerNode
     }
 
     /// <summary>
-    /// Desired size: fixed/percent shares plus <c>Min</c> floors summed along
-    /// the main axis (flexible tracks otherwise want zero — they absorb the
-    /// remainder at arrange time), gaps included, clamped to the bounds;
-    /// cross axis takes the clamped max of the children's desired extents.
+    /// Desired size: fixed/percent shares, <c>Auto</c> intrinsics (the child's
+    /// own desired main extent clamped to the track bounds) plus <c>Min</c>
+    /// floors summed along the main axis (other flexible tracks want zero —
+    /// they absorb the remainder at arrange time), gaps included, clamped to
+    /// the bounds; cross axis takes the clamped max of the children's desired
+    /// extents.
     /// </summary>
     public override Size Measure(Constraints constraints)
     {
@@ -114,13 +118,18 @@ public sealed class FlexSplitNode : ContainerNode
         for (int i = 0; i < _children.Count; i++)
         {
             var track = _tracks[i];
+            Size want = _children[i].Measure(constraints);
+            int childMain = horizontal
+                ? Math.Max(0, want.Width)
+                : Math.Max(0, want.Height);
             main += track.IsFlex
                 ? track.FlexFloor
-                : track.IsPercent
-                    ? (int)(mainMax * track.Fraction)
-                    : track.FixedCells;
+                : track.IsAuto
+                    ? Math.Min(Math.Max(childMain, track.FlexFloor), track.FlexCap)
+                    : track.IsPercent
+                        ? (int)(mainMax * track.Fraction)
+                        : track.FixedCells;
 
-            Size want = _children[i].Measure(constraints);
             int childCross = horizontal
                 ? Math.Max(0, want.Height)
                 : Math.Max(0, want.Width);
@@ -142,7 +151,9 @@ public sealed class FlexSplitNode : ContainerNode
 
     /// <summary>
     /// Deals one frame per child through <see cref="FlexLayout.Arrange"/> and
-    /// forwards it. Zero-allocation: the frame scratch is reused across frames.
+    /// forwards it. Zero-allocation: the frame scratch is reused across frames
+    /// (<c>Auto</c> tracks read their child's measured main extent as the
+    /// intrinsic — the same two-pass discipline as Termina's render).
     /// </summary>
     public override void Arrange(Rect rect)
     {
@@ -153,10 +164,25 @@ public sealed class FlexSplitNode : ContainerNode
             return;
         }
 
+        bool horizontal = Direction == SplitDir.Horizontal;
+        Span<int> intrinsic = n <= 256 ? stackalloc int[n] : new int[n];
+        var bounds = new Constraints(Arranged.Width, Arranged.Height);
+        for (int i = 0; i < n; i++)
+        {
+            if (!_tracks[i].IsAuto)
+            {
+                continue;
+            }
+
+            Size want = _children[i].Measure(bounds);
+            intrinsic[i] = horizontal ? want.Width : want.Height;
+        }
+
         FlexLayout.Arrange(
             Direction,
             Arranged,
             CollectionsMarshal.AsSpan(_tracks),
+            intrinsic,
             CollectionsMarshal.AsSpan(_frames),
             Gap,
             Justify);
