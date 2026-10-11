@@ -117,8 +117,7 @@ public sealed class McpOAuthHandler
         var endpoints = await McpOAuthFlow.DiscoverAsync(_httpFactory(), _serverUrl, _config, ct).ConfigureAwait(false);
         if (endpoints.TokenEndpoint is null)
         {
-            _logger?.LogDebug(
-                "MCP OAuth refresh for '{Server}' skipped: no token endpoint discovered", _server);
+            if (_logger is not null) McpOAuthHandlerLog.RefreshSkippedNoTokenEndpoint(_logger, _server);
             return Result.Success(Maybe<string>.None);
         }
 
@@ -127,7 +126,7 @@ public sealed class McpOAuthHandler
             _httpFactory(), endpoints.TokenEndpoint, clientId, _config.ClientSecret, refreshToken, ct).ConfigureAwait(false);
         if (result.IsFailure)
         {
-            _logger?.LogWarning("MCP OAuth refresh failed for '{Server}': {Error}", _server, result.Error);
+            if (_logger is not null) McpOAuthHandlerLog.RefreshFailed(_logger, _server, result.Error);
             return Result.Failure<Maybe<string>>($"MCP OAuth refresh failed for '{_server}': {result.Error}");
         }
 
@@ -163,7 +162,7 @@ public sealed class McpOAuthHandler
             if (!string.IsNullOrEmpty(registered))
             {
                 clientId = registered;
-                _logger?.LogInformation("MCP OAuth dynamic registration for '{Server}' yielded a client id", _server);
+                if (_logger is not null) McpOAuthHandlerLog.DynamicRegistrationYieldedClientId(_logger, _server);
             }
         }
 
@@ -243,7 +242,7 @@ public sealed class McpOAuthHandler
         }
         catch (Exception ex)
         {
-            _logger?.LogWarning(ex, "Could not open browser for MCP OAuth login; visit {Url} manually", url);
+            if (_logger is not null) McpOAuthHandlerLog.OpenBrowserFailed(_logger, ex, url);
             return Result.Failure($"could not open a browser automatically; visit this URL manually: {url}");
         }
     }
@@ -342,4 +341,24 @@ public sealed class McpLoopbackListener : IAsyncDisposable
         _listener.Stop();
         return ValueTask.CompletedTask;
     }
+}
+
+/// <summary>
+///     SG1: BCL <c>[LoggerMessage]</c> delegates for <see cref="McpOAuthHandler" />.
+///     Templates, levels and operands are 1-to-1 with the former <c>LogX</c> calls
+///     (including the skip-when-null semantics of the optional logger).
+/// </summary>
+internal static partial class McpOAuthHandlerLog
+{
+    [LoggerMessage(EventId = 1, Level = LogLevel.Debug, Message = "MCP OAuth refresh for '{Server}' skipped: no token endpoint discovered")]
+    public static partial void RefreshSkippedNoTokenEndpoint(ILogger logger, string server);
+
+    [LoggerMessage(EventId = 2, Level = LogLevel.Warning, Message = "MCP OAuth refresh failed for '{Server}': {Error}")]
+    public static partial void RefreshFailed(ILogger logger, string server, string error);
+
+    [LoggerMessage(EventId = 3, Level = LogLevel.Information, Message = "MCP OAuth dynamic registration for '{Server}' yielded a client id")]
+    public static partial void DynamicRegistrationYieldedClientId(ILogger logger, string server);
+
+    [LoggerMessage(EventId = 4, Level = LogLevel.Warning, Message = "Could not open browser for MCP OAuth login; visit {Url} manually")]
+    public static partial void OpenBrowserFailed(ILogger logger, Exception ex, string url);
 }
