@@ -79,4 +79,39 @@ public sealed class GlowEffect : IPostEffect
             _intensity * PeakStrength);
         return EngineCells.Cell.FromRaw(cell.Rune, glow.Value, cell.Bg, cell.Flags, cell.Width);
     }
+
+    // ── tab-marker settle (#1173, opencode steal) ────────────────────────────
+    //
+    // opencode's tab-pulse is a per-frame Renderable animation (running sweep
+    // + unread glow + completion flash, shaped by smootherstep envelopes).
+    // That clock does not exist on a cell-diff surface — there is no
+    // requestRender loop, only frames the store produces — so the sweep is
+    // deliberately NOT ported. What survives is its steady state: a static
+    // unread marker at full intensity while unread, plus a short settle fade
+    // when the marker clears (a frame-counted smootherstep drain, no clock).
+    // The panel owns the frame counting; these are the pure shapes.
+
+    /// <summary>
+    ///     The smootherstep shaping curve opencode's pulse envelopes are built
+    ///     on, kept for the settle drain below (not the sweep — see above).
+    /// </summary>
+    public static double Smootherstep(double value)
+    {
+        double t = Math.Clamp(value, 0.0, 1.0);
+        return t * t * t * (t * (t * 6.0 - 15.0) + 10.0);
+    }
+
+    /// <summary>
+    ///     Settle level of a just-cleared tab marker, <c>1 → 0</c> over
+    ///     <paramref name="fadeTicks" /> painted frames (#1173). The panel
+    ///     counts the frames; this only shapes them, so the fade survives
+    ///     without a Renderable clock.
+    /// </summary>
+    /// <param name="ticksLeft">Frames remaining (inclusive): full fade length at clear time, 0 when done.</param>
+    /// <param name="fadeTicks">Total fade length in frames. Non-positive reads as already settled.</param>
+    /// <returns>Marker intensity in <c>[0 .. 1]</c>: 1 while <paramref name="ticksLeft" /> covers the whole fade, 0 at 0.</returns>
+    public static double TabMarkerFade(int ticksLeft, int fadeTicks) =>
+        fadeTicks <= 0 || ticksLeft <= 0
+            ? 0.0
+            : 1.0 - Smootherstep(1.0 - Math.Clamp((double)ticksLeft / fadeTicks, 0.0, 1.0));
 }
