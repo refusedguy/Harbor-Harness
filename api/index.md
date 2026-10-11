@@ -2,8 +2,9 @@
 
 > **Status:** landing page for the DocFX API section (issue #431, slice D2).
 > The generated member pages (`api/*.yml`) are produced by `docfx build` from
-> the metadata lane in `docfx.json` — a later slice. Until then this page
-> names the surface the lane covers and points at the hand-written sources.
+> the metadata lane in `docfx.json` — CI-proven by the `docfx-build` lane in
+> `.github/workflows/docs-site.yml` (slice D4). This page names the surface
+> the lane covers and points at the hand-written sources.
 
 ## Covered assemblies
 
