@@ -94,6 +94,14 @@ public sealed class ChatKeyMap
         new(ChatAction.MoveTabRight, "move tab right",
             new Binding(UiKeyCode.Right, KeyModifierSet.Alt)) { Guard = TabStripGuard },
 
+        // ── which-key (opencode steal O6, #1175) ─────────────────────────
+        // Ctrl+Alt+K — toggle the which-key bindings panel. Listed BEFORE the
+        // coarse Alt+char slot entry below: subset matching would otherwise let
+        // TogglePanelSlot (Alt, any char) swallow it, the same reason '?' sits
+        // above that entry. Exact-char pin keeps Ctrl+K / Alt+K elsewhere.
+        new(ChatAction.WhichKey, "which-key",
+            new Binding(UiKeyCode.Char, KeyModifierSet.Ctrl | KeyModifierSet.Alt, 'k')),
+
         // ── panel hotkeys ────────────────────────────────────────────────
         // Alt+1..Alt+9 — toggle the Nth registered panel. Slot comes from the key's Character.
         new(ChatAction.TogglePanelSlot, "panel 1", new Binding(UiKeyCode.Char, KeyModifierSet.Alt)),

@@ -442,6 +442,11 @@ public static class AppReducer
                 return ReduceResult.NoOp(ResizeFocusedPanel(state, -1));
             case ChatAction.HelpPanel:
                 return ReduceResult.NoOp(TogglePanel(state, "help"));
+            case ChatAction.WhichKey:
+                // Hosts register a "whichkey" panel rendering the leader +
+                // which-key bindings; noop until one exists (TogglePanel
+                // ignores unknown ids) so the key is safe on every renderer.
+                return ReduceResult.NoOp(TogglePanel(state, "whichkey"));
             case ChatAction.ToggleLogsPanel:
                 return ReduceResult.NoOp(TogglePanel(state, "logs"));
             case ChatAction.JumpPalette:
