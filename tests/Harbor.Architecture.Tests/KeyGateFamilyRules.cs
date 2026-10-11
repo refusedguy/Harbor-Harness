@@ -274,6 +274,10 @@ public class KeyGateFamilyRules
         new("FilePickerView", KeyGateFamily.Buffer, "src/Harbor.Tui.CellForge/Chat/Widgets/FilePickerView.cs"),
         new("CommandPaletteView", KeyGateFamily.Buffer, "src/Harbor.Tui.CellForge/Chat/Widgets/CommandPaletteView.cs"),
         new("CellForgeJumpPalettePanel", KeyGateFamily.Buffer, "src/Harbor.Tui.CellForge/Chat/Panels/CellForgeJumpPalettePanel.cs"),
+        // AutocompleteTriggerScan (#1172) feeds the composer's query buffer:
+        // Shift types (AcceptsTypedChar admits Shift) and Ctrl/Alt chords fall
+        // through to the host — the buffer gate, not the command one.
+        new("AutocompleteTriggerScan", KeyGateFamily.Buffer, "src/Harbor.Tui.CellForge/Chat/Widgets/AutocompleteTrigger.cs"),
         new("ReplInputLoop(slash)", KeyGateFamily.Buffer, "apps/Harbor.App.Cli/Repl/ReplInputLoop.cs"),
 
         // The host key map, found by the coverage grep and NOT on the issue's
