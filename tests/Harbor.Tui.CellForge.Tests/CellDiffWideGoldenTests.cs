@@ -7,8 +7,9 @@ namespace Harbor.Tui.CellForge.Tests;
 // TestBackend harness (R2, #1194) — the per-line assert idiom. Encoding goes
 // through the portable RowHashDiffEncoder against TestBackend buffers;
 // applying every message to a mirror of the previous frame must converge it
-// to the next frame's lines. A missing force-refresh shows up as a line
-// mismatch here, not as a silent terminal stain.
+// to the next frame's lines. Ordering (trailing-before-lead) and
+// force-emitted messages are pinned at the message level; line asserts pin
+// convergence under the harness idiom.
 public class CellDiffWideGoldenTests
 {
     private static readonly CellStyle BlueBg = new(bg: PackedColor.Indexed(4));
