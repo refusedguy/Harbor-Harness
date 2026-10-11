@@ -3,6 +3,7 @@ using Harbor.DesignSystem;
 using Harbor.Tui.CellForge.Rendering;
 using Harbor.Tui.CellForge.Streaming;
 using TUnit.Core;
+using EngineCells = Harbor.Tui.CellForge.Rendering;
 
 namespace Harbor.Tui.CellForge.Tests;
 
@@ -65,15 +66,15 @@ public class HotSwapTests
         // would hide the next frame's paint.
         var chain = new BufferSwapChain();
         var first = chain.Rent(10, 5);
-        first.SetDiffOption(3, 2, CellDiffOption.AlwaysUpdate);
-        first.SetDiffOption(4, 2, CellDiffOption.ForcedWidth, 3);
+        first.SetDiffOption(3, 2, EngineCells.CellDiffOption.AlwaysUpdate);
+        first.SetDiffOption(4, 2, EngineCells.CellDiffOption.ForcedWidth, 3);
         chain.Return(first);
 
         var second = chain.Rent(10, 5);
 
         await Assert.That(second).IsSameReferenceAs(first);
-        await Assert.That(second.GetDiffOption(3, 2)).IsEqualTo(CellDiffOption.None);
-        await Assert.That(second.GetDiffOption(4, 2)).IsEqualTo(CellDiffOption.None);
+        await Assert.That(second.GetDiffOption(3, 2)).IsEqualTo(EngineCells.CellDiffOption.None);
+        await Assert.That(second.GetDiffOption(4, 2)).IsEqualTo(EngineCells.CellDiffOption.None);
         await Assert.That(second.GetForcedWidth(4, 2)).IsEqualTo((ushort)0);
     }
 
