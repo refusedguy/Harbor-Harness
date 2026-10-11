@@ -25,7 +25,7 @@ namespace Harbor.Tui.CellForge.Tests;
 ///   vote (y/n/a). Shift changes nothing a user could want here.
 ///     - <c>ApprovalGateView.cs:254</c>    y/n/a + Enter/Escape
 // check-doc-cites: record-drift ApprovalGateView.cs:254 now="if (!key.Modifiers.IsUnmodified())" [#947: written over `if (key.Modifiers != KeyModifiers.None)`; repair deferred to the owner's symbol-rename decision] -->
-///     - <c>TreeView.cs:269</c>, <c>Tabs.cs:143</c>, <c>ToolCardTracker.cs:707</c>
+///     - <c>TreeView.cs:269</c>, <c>Tabs.cs:143</c>, <c>ToolCardTracker.cs:721</c>
 ///     - <c>DiffViewerOverlay.cs:210</c>, <c>ImageViewerOverlay.cs:124</c>
 // check-doc-cites: record-drift ImageViewerOverlay.cs:124 now="case KeyCode.Left:" [#947: written over `if ((key.Modifiers & (KeyModifiers.Ctrl `; repair deferred to the owner's symbol-rename decision] -->
 // check-doc-cites: record-drift DiffViewerOverlay.cs:210 now="if (key.Modifiers.IsCommandModifier())" [#947: written over `if ((key.Modifiers & (ConsoleModifiers.C`; repair deferred to the owner's symbol-rename decision] -->
