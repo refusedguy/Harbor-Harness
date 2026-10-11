@@ -139,20 +139,26 @@ public sealed class FileTreeLoader : IFileTreeLoader, IDisposable
             return;
         }
 
+        // Already settled for this exact directory: nothing to do, ever again
+        // until something invalidates it. Evaluated BEFORE the gate (#1136
+        // slice 2): store.State is a volatile lock-free read (UiStore
+        // confinement) and FileTreeFor is a pure function of that immutable
+        // snapshot, so taking _gate first would serialize the render thread
+        // behind in-flight map churn for a check that needs no shared state
+        // at all. The residual race (a settle landing between this read and
+        // the map insert) is benign: the walk re-publishes an identical
+        // listing, and Publish/Release still arbitrate by reference identity.
+        if (store.State.Ui.FileTreeFor(panelId, directory).Status is AsyncStatus.Success or AsyncStatus.Error)
+        {
+            return;
+        }
+
         CancellationTokenSource? superseded = null;
         InFlight? started = null;
 
         lock (_gate)
         {
             if (_disposed)
-            {
-                return;
-            }
-
-            // Already settled for this exact directory: nothing to do, ever again
-            // until something invalidates it.
-            FileTreeSnapshot current = store.State.Ui.FileTreeFor(panelId, directory);
-            if (current.Status is AsyncStatus.Success or AsyncStatus.Error)
             {
                 return;
             }
