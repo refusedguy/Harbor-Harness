@@ -319,6 +319,17 @@ internal sealed class ReplRunner
     /// </summary>
     private async Task<Result<int>> RunCellForgeAsync(HarborConfig config, CancellationToken ct)
     {
+        // PX3 slice 1 (#1249): Windows raw mode is opt-in behind
+        // HARBOR_CELLFORGE_WINDOWS. Without it CellForge stays on the legacy
+        // fallback even though the Win32 controller exists — the probe below
+        // is never reached, so the default on Windows is unchanged.
+        if (TuiMode.IsCellForgeBlockedOnThisOs())
+        {
+            return Result.Failure<int>(
+                "CellForge on Windows is opt-in (PX3 bring-up): set HARBOR_CELLFORGE_WINDOWS=1 "
+                + "to try the Windows VT raw-mode controller.");
+        }
+
         var modeController = CreateModeController();
         // Deferred: screens/stdin resolve only on the CellForge path so the
         // legacy path never pays for (or disturbs) stdin ownership.
