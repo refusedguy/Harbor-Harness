@@ -10,30 +10,35 @@ namespace Harbor.App.Cli.Commands;
 /// </summary>
 /// <remarks>
 ///     <para>
-///         Each entry point builds a single-command CAF app over the args
-///         <em>after</em> the verb (global <c>--script</c>/<c>--loglevel</c>
-///         stripping in <c>Program.Main</c> runs first, unchanged), so
-///         <c>-h|--help</c> and flag parsing come from the framework.
-///         Handlers delegate to <see cref="HelpVerbs" /> — the output text
-///         stays byte-for-byte identical to the manual path.
+///         There is deliberately ONE <c>RunAsync</c> call site in this
+///         assembly: the generator keys its emitted file
+///         (<c>ConsoleApp.Run.g.cs</c>) without a per-site disambiguator, so
+///         two single-command <c>ConsoleApp.RunAsync</c> sites collide with
+///         CS8785 (duplicate hintName). One builder app registering both
+///         verbs avoids that.
+///     </para>
+///     <para>
+///         <c>Program</c> dispatches the verb first (global
+///         <c>--script</c>/<c>--loglevel</c> stripping in
+///         <c>Program.Main</c> runs unchanged), then re-attaches the verb so
+///         the builder routes it; <c>-h|--help</c> and flag parsing come from
+///         the framework. Handlers delegate to <see cref="HelpVerbs" /> — the
+///         output text stays byte-for-byte identical to the manual path.
 ///     </para>
 ///     <para>
 ///         Exit code: CAF sets <see cref="Environment.ExitCode" /> from the
 ///         handler's <c>int</c> return (1 on parse/validation failure); the
-///         entry points thread that value back to the caller.
+///         entry point threads that value back to the caller.
 ///     </para>
 /// </remarks>
 internal static class CafPilotVerbs
 {
-    internal static async Task<int> RunVersionAsync(string[] rest)
+    internal static async Task<int> RunAsync(string verb, string[] rest)
     {
-        await ConsoleApp.RunAsync(rest, CafPilotCommands.Version).ConfigureAwait(false);
-        return Environment.ExitCode;
-    }
-
-    internal static async Task<int> RunStorageAsync(string[] rest)
-    {
-        await ConsoleApp.RunAsync(rest, CafPilotCommands.Storage).ConfigureAwait(false);
+        var app = ConsoleApp.Create();
+        app.Add("version", CafPilotCommands.Version);
+        app.Add("storage", CafPilotCommands.Storage);
+        await app.RunAsync([verb, ..rest]).ConfigureAwait(false);
         return Environment.ExitCode;
     }
 }
