@@ -167,7 +167,7 @@ public sealed class RipGrepTool : ITool
         process.OutputDataReceived += OnStdout;
         process.ErrorDataReceived += OnStderr;
 
-        _logger.LogDebug("rg {Args}", string.Join(' ', psi.ArgumentList));
+        RipGrepToolLog.Running(_logger, string.Join(' ', psi.ArgumentList));
 
         // ROP-A Z1 п.14: Start() guarded like BashTool — a missing binary
         // surfaces as a tool error instead of a raw Win32Exception.
@@ -243,7 +243,7 @@ public sealed class RipGrepTool : ITool
             }
             catch (TimeoutException ex)
             {
-                _logger.LogWarning(ex, "Timed out waiting for rg output drains; continuing with output so far");
+                RipGrepToolLog.OutputDrainTimeout(_logger, ex);
             }
         }
 
@@ -305,4 +305,17 @@ public sealed class RipGrepTool : ITool
         }
         return string.Empty;
     }
+}
+
+/// <summary>
+///     SG1: BCL <c>[LoggerMessage]</c> delegates for <see cref="RipGrepTool" />.
+///     Templates, levels and operands are 1-to-1 with the former <c>LogX</c> calls.
+/// </summary>
+internal static partial class RipGrepToolLog
+{
+    [LoggerMessage(EventId = 1, Level = LogLevel.Debug, Message = "rg {Args}")]
+    public static partial void Running(ILogger logger, string args);
+
+    [LoggerMessage(EventId = 2, Level = LogLevel.Warning, Message = "Timed out waiting for rg output drains; continuing with output so far")]
+    public static partial void OutputDrainTimeout(ILogger logger, Exception ex);
 }

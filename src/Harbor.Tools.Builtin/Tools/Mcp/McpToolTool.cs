@@ -141,7 +141,7 @@ public sealed class McpToolTool : ITool
                 "and calls registry.Register(name, stdioCmd) for each MCP server.");
         }
 
-        _logger.LogDebug("MCP call: server={Server} method={Method}", server, method);
+        McpToolToolLog.Calling(_logger, server, method);
 
         // ROP-A Z1 п.17: boundary Match — the layer-edge deployment of a
         // Result into the tool's ToolResult contract.
@@ -155,4 +155,14 @@ public sealed class McpToolTool : ITool
                     new { server, method }))
             .ConfigureAwait(false);
     }
+}
+
+/// <summary>
+///     SG1: BCL <c>[LoggerMessage]</c> delegates for <see cref="McpToolTool" />.
+///     Templates, levels and operands are 1-to-1 with the former <c>LogX</c> calls.
+/// </summary>
+internal static partial class McpToolToolLog
+{
+    [LoggerMessage(EventId = 1, Level = LogLevel.Debug, Message = "MCP call: server={Server} method={Method}")]
+    public static partial void Calling(ILogger logger, string server, string method);
 }
