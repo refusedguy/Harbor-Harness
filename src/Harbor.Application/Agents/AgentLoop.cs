@@ -2,6 +2,7 @@ using System.Globalization;
 using Harbor.Diagnostics;
 using Harbor.Abstractions.Sessions;
 using Harbor.Application.Agents.Pipeline;
+using Harbor.Application.Hooks;
 using Harbor.Application.Resilience;
 using Harbor.Application.Resources;
 using Harbor.Application.Sessions;
@@ -59,6 +60,7 @@ public sealed class AgentLoop : IAgentLoop
     // the turn boundary, deliberately NOT a CancelAfter on the run token.
     private readonly TimeProvider _clock;
     private readonly TimeSpan? _runTimeout;
+    private readonly IHookRunner? _hooks;
 
     /// <summary>
     ///     Construct an <see cref="AgentLoop" /> wired to the supplied services.
@@ -98,7 +100,11 @@ public sealed class AgentLoop : IAgentLoop
         // elapsed check at the turn boundary — NOT by CancelAfter on the run
         // token, which would read as a user cancel.
         TimeProvider? timeProvider = null,
-        TimeSpan? runTimeout = null)
+        TimeSpan? runTimeout = null,
+        // PX4: user SessionEnd hooks. Optional so every direct-construction
+        // caller keeps compiling unchanged; null keeps the hooks-free path.
+        // Forwarded to the fallback dispatcher below for Pre/PostToolUse.
+        IHookRunner? hookRunner = null)
     {
         _providers = providers;
         _tools = tools;
@@ -118,12 +124,13 @@ public sealed class AgentLoop : IAgentLoop
         _tracer = tracer ?? NullTracer.Instance;
         _clock = timeProvider ?? TimeProvider.System;
         _runTimeout = runTimeout;
+        _hooks = hookRunner;
         // ROP-C П.5: the dispatcher is injected via DI when composed by the host,
         // while tests and benchmarks fall back to a locally built one. That
         // fallback uses a NullLogger because the loop's own typed logger must
         // not be lent out under a foreign category (S6672).
         _toolDispatcher = toolDispatcher
-            ?? new ToolDispatcher(tools, permissions, eventBus, NullLogger<ToolDispatcher>.Instance, coordinator);
+            ?? new ToolDispatcher(tools, permissions, eventBus, NullLogger<ToolDispatcher>.Instance, coordinator, hookRunner: hookRunner);
         // §3.5 pipeline: run-level cross-cutting concerns are middleware over the
         // whole run; per-turn behaviors (compaction, steering, max steps) are
         // extracted classes the core loop calls each turn. The list is the
@@ -302,6 +309,7 @@ public sealed class AgentLoop : IAgentLoop
                 _backgroundTasks?.CancelSession(session.Session.Id);
                 await _eventBus.PublishAsync(
                     new AgentEndEvent(SnapshotMessages(session.Messages), Cancelled: true), CancellationToken.None).ConfigureAwait(false);
+                await RunSessionEndHooksAsync(session.Session.Id).ConfigureAwait(false);
 
                 return Result.Failure("Agent run was cancelled.");
             }
@@ -312,6 +320,7 @@ public sealed class AgentLoop : IAgentLoop
             // the read-model, so without it the fact stops here.
             await _eventBus.PublishAsync(
                 new AgentEndEvent(SnapshotMessages(session.Messages), Limit: limit), ct).ConfigureAwait(false);
+            await RunSessionEndHooksAsync(session.Session.Id).ConfigureAwait(false);
 
             return Result.Success();
         }
@@ -324,6 +333,23 @@ public sealed class AgentLoop : IAgentLoop
             await _eventBus.PublishAsync(new AgentErrorEvent(ex.Message, ex.ToString()), CancellationToken.None).ConfigureAwait(false);
             return Result.Failure(ex.Message);
         }
+    }
+
+    /// <summary>
+    ///     Run user SessionEnd hooks after the terminal event. Advisory: the
+    ///     runner logs hook failures and never throws on its own (except on a
+    ///     cancelled token, which cannot happen here — the token is
+    ///     <see cref="CancellationToken.None" /> and the run is already over),
+    ///     so a hook can neither fail the run nor rewrite its outcome.
+    /// </summary>
+    private async Task RunSessionEndHooksAsync(string sessionId)
+    {
+        if (_hooks is null)
+        {
+            return;
+        }
+
+        await _hooks.RunSessionEndAsync(sessionId, CancellationToken.None).ConfigureAwait(false);
     }
 
     /// <summary>
