@@ -50,6 +50,13 @@ internal sealed class AnsiTerminalBuffer
     private readonly int _height;
     private readonly TerminalCell[,] _grid;
 
+    // R2 steal (epic #1155, ratatui TestBackend::scrollback): lines scrolled
+    // off the top are retained (oldest first) so virtualized-лента asserts are
+    // possible. Clears (ED2 / alt-screen) never feed it — like ratatui clear(),
+    // only ScrollUp appends. Copy out via GetScrollbackLines (the PTY pump
+    // holds the caller's lock around Write, so take yours around the read).
+    private readonly List<string> _scrollback = [];
+
     private int _cursorRow;
     private int _cursorCol;
 
@@ -211,6 +218,14 @@ internal sealed class AnsiTerminalBuffer
 
     private void ScrollUp(int lines)
     {
+        lines = Math.Clamp(lines, 0, _height);
+        for (int r = 0; r < lines; r++)
+        {
+            _scrollback.Add(RowText(r).TrimEnd());
+        }
+
+        DrainScrollbackCap();
+
         for (int r = 0; r < _height - lines; r++)
         {
             for (int c = 0; c < _width; c++)
@@ -226,6 +241,36 @@ internal sealed class AnsiTerminalBuffer
                 _grid[r, c] = new TerminalCell(' ', DefaultFg, DefaultBg);
             }
         }
+    }
+
+    /// <summary>
+    /// Scrollback lines scrolled off the top (oldest first), one
+    /// trailing-trimmed string per row — the same normalization as
+    /// <see cref="GetVisibleText"/> rows, so <c>PtyBufferAsserts</c> compares
+    /// both sides with one idiom. Returns a copy.
+    /// </summary>
+    internal string[] GetScrollbackLines() => [.. _scrollback];
+
+    private void DrainScrollbackCap()
+    {
+        const int MaxScrollbackLines = 65535; // ratatui TestBackend parity (u16::MAX)
+        int overflow = _scrollback.Count - MaxScrollbackLines;
+        if (overflow > 0)
+        {
+            _scrollback.RemoveRange(0, overflow);
+        }
+    }
+
+    private string RowText(int row)
+    {
+        var rowSb = new StringBuilder(_width);
+        for (int c = 0; c < _width; c++)
+        {
+            char ch = _grid[row, c].Character;
+            rowSb.Append(ch == '\0' ? ' ' : ch);
+        }
+
+        return rowSb.ToString();
     }
 
     private void ClearEntireScreen()
