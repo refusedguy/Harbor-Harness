@@ -62,14 +62,14 @@ public sealed class CellForgeDiffPreviewPanel : CellForgePanelBase
         {
             for (int i = 0; i < changes.Count; i++)
             {
-                AppendChange(rows, changes[i], ctx.Width, split);
+                AppendChange(rows, changes[i], ctx.Width);
             }
         }
 
         return PanelText.Clip(rows, ctx.Width, ctx.Height);
     }
 
-    private static void AppendChange(List<string> rows, PanelFileChange change, int width, bool split)
+    private static void AppendChange(List<string> rows, PanelFileChange change, int width)
     {
         string icon = change.Glyph.Length > 0 ? change.Glyph : "·";
         string ok = change.IsError ? "✗" : "✓";
@@ -133,9 +133,6 @@ public sealed class CellForgeDiffPreviewPanel : CellForgePanelBase
                     }
                 }
 
-                // In split mode the gutter still anchors the new-side number;
-                // the row stays unified text (see remarks).
-                _ = split;
                 string line = gutterText + " " + raw.TrimEnd('\r');
                 rows.Add("  " + PanelText.Truncate(line, bodyBudget));
                 shown++;
