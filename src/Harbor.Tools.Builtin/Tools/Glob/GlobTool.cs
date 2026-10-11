@@ -1,12 +1,14 @@
 using System.Text;
-using System.Text.RegularExpressions;
+using Microsoft.Extensions.FileSystemGlobbing;
+using Microsoft.Extensions.FileSystemGlobbing.Abstractions;
 using Microsoft.Extensions.Logging;
 using Result = CSharpFunctionalExtensions.Result;
 
 namespace Harbor.Tools.Builtin;
 /// <summary>
-///     Find files by glob. Supports **, *, ?, and simple *.{a,b} braces.
-///     Prunes heavy dirs (not a full .gitignore parser).
+///     Find files by glob. Matching is delegated to <see cref="Matcher" />
+///     (Microsoft.Extensions.FileSystemGlobbing); simple *.{a,b} braces are
+///     pre-expanded. Prunes heavy dirs (not a full .gitignore parser).
 /// </summary>
 public sealed class GlobTool : ITool
 {
@@ -144,8 +146,9 @@ public sealed class GlobTool : ITool
         foreach (string pat in patterns)
         {
             ct.ThrowIfCancellationRequested();
-            foreach (string file in EnumerateGlob(basePath, pat, options.Prune, ct))
+            foreach (string file in ExecuteMatcher(basePath, pat, options.Prune))
             {
+                ct.ThrowIfCancellationRequested();
                 matches.Add(file);
                 if (matches.Count >= options.MaxResults)
                 {
@@ -192,153 +195,55 @@ public sealed class GlobTool : ITool
     }
 
     /// <summary>
-    ///     Walk segments. "**" = zero or more directories (recursive), with prune.
+    ///     Runs one brace-expanded pattern through <see cref="Matcher" /> and
+    ///     returns absolute paths. Only files are returned: the legacy walker
+    ///     yielded <c>EnumerateFiles</c> hits, so directory hits are dropped.
     /// </summary>
-    private static IEnumerable<string> EnumerateGlob(
+    private static List<string> ExecuteMatcher(
         string basePath,
         string pattern,
-        bool prune,
-        CancellationToken ct)
+        bool prune)
     {
         pattern = pattern.Replace('\\', '/').Trim('/');
         if (pattern.Length == 0)
-            yield break;
-
+            return [];
+        // Legacy parity: a trailing "**" never matched — the walker spent it on
+        // directory traversal with no file segment left to yield. Matcher would
+        // list every file instead, so keep the old answer.
         string[] segments = pattern.Split('/', StringSplitOptions.RemoveEmptyEntries);
-        // BFS: set of directories that match the prefix so far
-        var dirs = new List<string> { basePath };
+        if (segments[^1] == "**")
+            return [];
 
-        for (int si = 0; si < segments.Length; si++)
+        var matcher = new Matcher(StringComparison.OrdinalIgnoreCase);
+        matcher.AddInclude(pattern);
+        if (prune)
         {
-            ct.ThrowIfCancellationRequested();
-            string segment = segments[si];
-            bool isLast = si == segments.Length - 1;
-            var nextDirs = new List<string>();
-
-            if (segment == "**")
-            {
-                CollectDoubleStarDirs(dirs, nextDirs, prune, ct);
-                // de-dupe dirs
-                dirs = nextDirs.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
-                continue;
-            }
-
-            var rx = SegmentToRegex(segment);
-
-            foreach (string dir in dirs)
-            {
-                ct.ThrowIfCancellationRequested();
-
-                if (!isLast)
-                {
-                    // must be directories
-                    CollectMatchingSubdirs(dir, rx, prune, nextDirs);
-                }
-                else
-                {
-                    // last segment: files (and optionally dirs if pattern ends without file — we want files)
-                    foreach (string file in SafeEnumerateFiles(dir))
-                    {
-                        string name = Path.GetFileName(file);
-                        if (rx.IsMatch(name))
-                            yield return file;
-                    }
-                }
-            }
-
-            if (!isLast)
-                dirs = nextDirs;
+            // Same set the walker skipped while descending. Excludes win over
+            // includes, so even an explicit "bin/*.cs" stays empty — the legacy
+            // walk refused pruned names even when named directly.
+            foreach (string dir in PrunedDirNames)
+                matcher.AddExclude("**/" + dir + "/**");
         }
-    }
 
-    /// <summary>Collects every directory under each current dir (including itself).</summary>
-    private static void CollectDoubleStarDirs(
-        List<string> dirs,
-        List<string> nextDirs,
-        bool prune,
-        CancellationToken ct)
-    {
-        // All dirs under each current dir (including itself)
-        foreach (string dir in dirs)
+        var files = new List<string>();
+        try
         {
-            ct.ThrowIfCancellationRequested();
-            foreach (string d in EnumerateDirsRecursive(dir, prune, ct))
-                nextDirs.Add(d);
-        }
-    }
-
-    /// <summary>Collects subdirectories of <paramref name="dir" /> matching the segment regex.</summary>
-    private static void CollectMatchingSubdirs(
-        string dir,
-        Regex rx,
-        bool prune,
-        List<string> nextDirs)
-    {
-        foreach (string sub in SafeEnumerateDirectories(dir))
-        {
-            string name = Path.GetFileName(sub);
-            if (prune && PrunedDirNames.Contains(name))
-                continue;
-            if (rx.IsMatch(name))
-                nextDirs.Add(sub);
-        }
-    }
-
-    private static IEnumerable<string> EnumerateDirsRecursive(
-        string root,
-        bool prune,
-        CancellationToken ct)
-    {
-        var stack = new Stack<string>();
-        stack.Push(root);
-        while (stack.Count > 0)
-        {
-            ct.ThrowIfCancellationRequested();
-            string dir = stack.Pop();
-            yield return dir;
-
-            foreach (string sub in SafeEnumerateDirectories(dir))
+            PatternMatchingResult result = matcher.Execute(
+                new DirectoryInfoWrapper(new DirectoryInfo(basePath)));
+            foreach (FilePatternMatch match in result.Files)
             {
-                string name = Path.GetFileName(sub);
-                if (prune && PrunedDirNames.Contains(name))
-                    continue;
-                stack.Push(sub);
+                string absolute = Path.GetFullPath(Path.Combine(basePath, match.Path));
+                if (!Directory.Exists(absolute))
+                    files.Add(absolute);
             }
         }
-    }
-
-    private static IEnumerable<string> SafeEnumerateDirectories(string path)
-    {
-        try { return Directory.EnumerateDirectories(path); }
-        catch { return Array.Empty<string>(); }
-    }
-
-    private static IEnumerable<string> SafeEnumerateFiles(string path)
-    {
-        try { return Directory.EnumerateFiles(path); }
-        catch { return Array.Empty<string>(); }
-    }
-
-    /// <summary>Glob segment → regex. * ? only; braces already expanded.</summary>
-    private static Regex SegmentToRegex(string segment)
-    {
-        var sb = new StringBuilder(segment.Length * 2);
-        sb.Append('^');
-        foreach (char ch in segment)
+        catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            switch (ch)
-            {
-                case '*': sb.Append(".*"); break;
-                case '?': sb.Append('.'); break;
-                default:
-                    sb.Append(Regex.Escape(ch.ToString()));
-                    break;
-            }
+            // Legacy parity: the walker swallowed per-directory IO faults and
+            // yielded what it could, so keep the partial list, not the fault.
         }
-        sb.Append('$');
-        return new Regex(sb.ToString(),
-            RegexOptions.IgnoreCase | RegexOptions.CultureInvariant,
-            TimeSpan.FromSeconds(1));
+
+        return files;
     }
 
     /// <summary>Very small brace expand: one `{a,b}` group per pattern.</summary>
