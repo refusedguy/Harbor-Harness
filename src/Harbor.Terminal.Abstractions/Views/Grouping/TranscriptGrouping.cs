@@ -336,6 +336,7 @@ public static class TranscriptGrouping
             }
 
             if (IsToolEntry(entry, out string? toolName)
+                && !string.IsNullOrEmpty(toolName)
                 && ToolCategories.TryClassify(toolName, out ToolCategory category))
             {
                 // A call and its result are one item: the result entry only

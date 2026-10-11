@@ -103,7 +103,7 @@ public sealed class ChatHistoryView : TuiViewBase<ChatHistoryViewModel>
 
         for (int i = start; i < rows.Count; i++)
         {
-            RenderRow(context, rows[i], 0);
+            RenderRow(context, rows[i], 0, Verbosity, CollapsedGroups);
         }
 
         // Render the live streaming text (if any) as a trailing assistant entry. This is
@@ -131,7 +131,12 @@ public sealed class ChatHistoryView : TuiViewBase<ChatHistoryViewModel>
         return Task.CompletedTask;
     }
 
-    private void RenderRow(ITuiRenderContext context, TranscriptRow row, int level)
+    private static void RenderRow(
+        ITuiRenderContext context,
+        TranscriptRow row,
+        int level,
+        TranscriptVerbosity verbosity,
+        ISet<string> collapsed)
     {
         if (row is TranscriptRow.Single single)
         {
@@ -141,14 +146,14 @@ public sealed class ChatHistoryView : TuiViewBase<ChatHistoryViewModel>
 
         var group = (TranscriptRow.Group)row;
         string key = TranscriptMountBudget.GroupKey(group, level);
-        bool expanded = !CollapsedGroups.Contains(key)
-            && !(Verbosity == TranscriptVerbosity.Low && group.Kind == TranscriptGroupKind.Activity);
+        bool expanded = !collapsed.Contains(key)
+            && !(verbosity == TranscriptVerbosity.Low && group.Kind == TranscriptGroupKind.Activity);
 
         RenderHeader(context, group);
 
         if (expanded)
         {
-            RenderChildren(context, group, level);
+            RenderChildren(context, group, level, verbosity, collapsed);
         }
         else
         {
@@ -165,7 +170,12 @@ public sealed class ChatHistoryView : TuiViewBase<ChatHistoryViewModel>
         }
     }
 
-    private void RenderChildren(ITuiRenderContext context, TranscriptRow.Group group, int level)
+    private static void RenderChildren(
+        ITuiRenderContext context,
+        TranscriptRow.Group group,
+        int level,
+        TranscriptVerbosity verbosity,
+        ISet<string> collapsed)
     {
         foreach (GroupNode<ChatEntry, TranscriptGroupKind> child in group.Children)
         {
@@ -177,12 +187,12 @@ public sealed class ChatHistoryView : TuiViewBase<ChatHistoryViewModel>
             {
                 RenderRow(context, new TranscriptRow.Group(
                     nested.Kind, nested.Children, nested.Size,
-                    Completed: group.Completed, PendingToolCallIds: group.PendingToolCallIds), level + 1);
+                    Completed: group.Completed, PendingToolCallIds: group.PendingToolCallIds), level + 1, verbosity, collapsed);
             }
         }
     }
 
-    private void RenderHeader(ITuiRenderContext context, TranscriptRow.Group group)
+    private static void RenderHeader(ITuiRenderContext context, TranscriptRow.Group group)
     {
         string prefix = group.Kind switch
         {

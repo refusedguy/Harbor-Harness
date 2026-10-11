@@ -28,7 +28,7 @@ public abstract record GroupNode<TEntry, TKind>(int Size)
 
     /// <summary>
     ///     Adjacent entries sharing one path segment. <see cref="Size"/> is the
-    ///     descendant leaf count, <em>not</em> <see cref="Children"/> length.
+    ///     descendant leaf count, not <see cref="Children"/> length.
     /// </summary>
     public sealed record Group(
         TKind Kind,
