@@ -270,8 +270,33 @@ public static class DiffPreview
         return sb.ToString().TrimEnd();
     }
 
-    private static string[] SplitLines(string text) =>
-        text.Replace("\r\n", "\n", StringComparison.Ordinal)
-            .Replace('\r', '\n')
-            .Split('\n');
+    /// <summary>Span-based line split: one pass with <c>\r\n</c> folded as a
+    /// single break. Drops the two full-text <c>Replace</c> copies the old
+    /// chain needed — same accounting as the PatchTool/HunkParser twins
+    /// (#1134 slice 1), including the trailing <c>""</c> Split numbering
+    /// relies on. A lone <c>\r</c> is a break here exactly as the old second
+    /// Replace made it.</summary>
+    private static string[] SplitLines(string text)
+    {
+        var lines = new List<string>();
+        ReadOnlySpan<char> rest = text.AsSpan();
+        while (true)
+        {
+            int nl = rest.IndexOfAny('\r', '\n');
+            if (nl < 0)
+            {
+                lines.Add(rest.ToString());
+                return lines.ToArray();
+            }
+
+            lines.Add(rest.Slice(0, nl).ToString());
+            int next = nl + 1;
+            if (rest[nl] == '\r' && next < rest.Length && rest[next] == '\n')
+            {
+                next++;
+            }
+
+            rest = rest.Slice(next);
+        }
+    }
 }
