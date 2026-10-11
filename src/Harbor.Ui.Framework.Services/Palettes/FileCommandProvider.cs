@@ -93,7 +93,7 @@ public sealed class FileCommandProvider : ICommandProvider
             for (int i = 0; i < take; i++)
             {
                 string path = _index[i];
-                discovery.Add(CommandHit.Discovery(ProviderId, path, Path.GetFileName(path), path, GroupFiles));
+                discovery.Add(CommandHit.Discovery(ProviderId, path, Path.GetFileName(path) ?? path, path, GroupFiles));
             }
 
             return CommandHits.From(discovery);
@@ -105,12 +105,13 @@ public sealed class FileCommandProvider : ICommandProvider
         {
             cancellationToken.ThrowIfCancellationRequested();
             string path = _index[i];
+            string name = Path.GetFileName(path) ?? path;
             int score = Math.Max(
-                CommandMatcher.Score(Path.GetFileName(path), q),
+                CommandMatcher.Score(name, q),
                 CommandMatcher.Score(path, q));
             if (score >= 0)
             {
-                scored.Add(CommandHit.Scored(ProviderId, path, Path.GetFileName(path), path, GroupFiles, score));
+                scored.Add(CommandHit.Scored(ProviderId, path, name, path, GroupFiles, score));
             }
         }
 
