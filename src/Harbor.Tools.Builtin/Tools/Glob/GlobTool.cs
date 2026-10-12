@@ -1,4 +1,5 @@
 using System.Text;
+using AutoCtor;
 using Microsoft.Extensions.FileSystemGlobbing;
 using Microsoft.Extensions.FileSystemGlobbing.Abstractions;
 using Microsoft.Extensions.Logging;
@@ -10,7 +11,21 @@ namespace Harbor.Tools.Builtin;
 ///     (Microsoft.Extensions.FileSystemGlobbing); simple *.{a,b} braces are
 ///     pre-expanded. Prunes heavy dirs (not a full .gitignore parser).
 /// </summary>
-public sealed class GlobTool : ITool
+[ToolInfo(
+    "glob",
+    "Glob",
+    "Find files matching a glob (e.g. **/*.cs, src/**/*.ts). Returns relative paths. Prunes VCS/build folders by default (not a full .gitignore implementation).",
+    Glyph = "🌐",
+    PromptSnippet = "glob: Find files by pattern",
+    PromptGuidelines = new[]
+    {
+        "Use `glob` to find files by name pattern before read/grep",
+        "Patterns: `**/*.cs`, `src/**/*.ts`, `*.json`",
+        "Simple braces work: `*.{cs,ts}`",
+        "Set ignoreGitignore=true to also search node_modules/bin/obj/etc."
+    })]
+[AutoConstruct]
+public sealed partial class GlobTool : ITool
 {
 
     private const int DefaultMaxResults = 1000;
@@ -25,32 +40,8 @@ public sealed class GlobTool : ITool
     };
     private readonly ILogger<GlobTool> _logger;
 
-    public GlobTool(ILogger<GlobTool> logger) { _logger = logger; }
-
-    public ToolName Name => ToolName.Create("glob");
-
     /// <inheritdoc />
     public ToolSafetyProfile SafetyProfile => ToolSafetyProfile.Path();
-
-    public string DisplayName => "Glob";
-
-    /// <summary>Glyph beside the tool name in every UI surface (#680).</summary>
-    public string Glyph => "🌐";
-
-    public string Description =>
-        "Find files matching a glob (e.g. **/*.cs, src/**/*.ts). " +
-        "Returns relative paths. Prunes VCS/build folders by default " +
-        "(not a full .gitignore implementation).";
-    public ExecutionMode ExecutionMode => ExecutionMode.Parallel;
-    public string? PromptSnippet => "glob: Find files by pattern";
-
-    public IReadOnlyList<string> PromptGuidelines { get; } =
-    [
-        "Use `glob` to find files by name pattern before read/grep",
-        "Patterns: `**/*.cs`, `src/**/*.ts`, `*.json`",
-        "Simple braces work: `*.{cs,ts}`",
-        "Set ignoreGitignore=true to also search node_modules/bin/obj/etc."
-    ];
 
     public JsonDocument ParameterSchema { get; } = JsonDocument.Parse("""
                                                                       {

@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Text;
+using AutoCtor;
 using Harbor.Abstractions.Extensions;
 using Harbor.Abstractions.Results;
 using Microsoft.Extensions.Logging;
@@ -11,7 +12,20 @@ namespace Harbor.Tools.Builtin;
 ///     available; otherwise falls back to a built-in heavy-dir prune list. Caps depth and
 ///     entry count to keep output bounded.
 /// </summary>
-public sealed class TreeTool : ITool
+[ToolInfo(
+    "tree",
+    "Tree",
+    "Render an ASCII directory tree. Respects .gitignore when git is available (else prunes common build/VCS dirs). Caps depth (default 3) and entries (default 1000).",
+    PromptSnippet = "tree: ASCII directory tree (respects .gitignore)",
+    PromptGuidelines = new[]
+    {
+        "Use `tree` to get a quick mental model of a project layout",
+        "Default depth=3 — raise for deeper trees, lower for an overview",
+        "Set gitignore=false to include node_modules/bin/obj/.git/etc.",
+        "Use `ls` for one-level directory listing with sizes and mtimes"
+    })]
+[AutoConstruct]
+public sealed partial class TreeTool : ITool
 {
     private const int DefaultMaxDepth = 3;
     private const int HardMaxDepth = 10;
@@ -29,40 +43,8 @@ public sealed class TreeTool : ITool
 
     private readonly ILogger<TreeTool> _logger;
 
-    /// <summary>
-    ///     Construct a <see cref="TreeTool" />.
-    /// </summary>
-    /// <param name="logger">Logger for diagnostics.</param>
-    public TreeTool(ILogger<TreeTool> logger) { _logger = logger; }
-
-    /// <inheritdoc />
-    public ToolName Name => ToolName.Create("tree");
-
     /// <inheritdoc />
     public ToolSafetyProfile SafetyProfile => ToolSafetyProfile.Path();
-
-    /// <inheritdoc />
-    public string DisplayName => "Tree";
-
-    /// <inheritdoc />
-    public string Description =>
-        "Render an ASCII directory tree. Respects .gitignore when git is available " +
-        "(else prunes common build/VCS dirs). Caps depth (default 3) and entries (default 1000).";
-
-    /// <inheritdoc />
-    public ExecutionMode ExecutionMode => ExecutionMode.Parallel;
-
-    /// <inheritdoc />
-    public string? PromptSnippet => "tree: ASCII directory tree (respects .gitignore)";
-
-    /// <inheritdoc />
-    public IReadOnlyList<string> PromptGuidelines { get; } =
-    [
-        "Use `tree` to get a quick mental model of a project layout",
-        "Default depth=3 — raise for deeper trees, lower for an overview",
-        "Set gitignore=false to include node_modules/bin/obj/.git/etc.",
-        "Use `ls` for one-level directory listing with sizes and mtimes"
-    ];
 
     /// <inheritdoc />
     public JsonDocument ParameterSchema { get; } = JsonDocument.Parse("""

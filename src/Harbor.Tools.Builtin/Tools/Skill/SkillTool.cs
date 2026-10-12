@@ -12,7 +12,18 @@ namespace Harbor.Tools.Builtin;
 ///     Accepts a skill NAME only (never a path): the resolved file must live
 ///     under a known skills root, so a crafted name can never escape them.
 /// </summary>
-public sealed class SkillTool : ITool
+[ToolInfo(
+    "skill",
+    "Skill",
+    "Load a SKILL.md skill body by name. Skills come from .harbor/skills/ (project) and ~/.harbor/skills/ (global); the available names are listed in the system prompt. Use this to follow a skill's workflow before doing the task it describes.",
+    PromptSnippet = "skill: Load a SKILL.md skill body by name",
+    PromptGuidelines = new[]
+    {
+        "Use `skill` to load the full workflow for a named skill from <available_skills>",
+        "Project skills shadow same-named global skills",
+        "The result is Markdown — follow its steps, do not paste it back verbatim",
+    })]
+public sealed partial class SkillTool : ITool
 {
     /// <summary>Skills directory name under the project and harbor-home roots.</summary>
     internal const string SkillsDirName = "skills";
@@ -73,33 +84,7 @@ public sealed class SkillTool : ITool
     }
 
     /// <inheritdoc />
-    public ToolName Name => ToolName.Create("skill");
-
-    /// <inheritdoc />
     public ToolSafetyProfile SafetyProfile => ToolSafetyProfile.Opaque;
-
-    /// <inheritdoc />
-    public string DisplayName => "Skill";
-
-    /// <inheritdoc />
-    public string Description =>
-        "Load a SKILL.md skill body by name. Skills come from .harbor/skills/ (project) "
-        + "and ~/.harbor/skills/ (global); the available names are listed in the system prompt. "
-        + "Use this to follow a skill's workflow before doing the task it describes.";
-
-    /// <inheritdoc />
-    public ExecutionMode ExecutionMode => ExecutionMode.Parallel;
-
-    /// <inheritdoc />
-    public string? PromptSnippet => "skill: Load a SKILL.md skill body by name";
-
-    /// <inheritdoc />
-    public IReadOnlyList<string> PromptGuidelines { get; } =
-    [
-        "Use `skill` to load the full workflow for a named skill from <available_skills>",
-        "Project skills shadow same-named global skills",
-        "The result is Markdown — follow its steps, do not paste it back verbatim",
-    ];
 
     /// <inheritdoc />
     public JsonDocument ParameterSchema { get; } = JsonDocument.Parse("""

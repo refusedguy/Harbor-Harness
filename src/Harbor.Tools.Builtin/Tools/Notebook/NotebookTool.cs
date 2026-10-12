@@ -9,7 +9,21 @@ namespace Harbor.Tools.Builtin;
 ///     are stored as JSON in <c>~/.harbor/notes/&lt;sessionId&gt;.json</c> and can be
 ///     surfaced into the next turn's system prompt by the host.
 /// </summary>
-public sealed class NotebookTool : ITool
+[ToolInfo(
+    "notebook",
+    "Notebook",
+    "Persistent markdown notes keyed by string. Actions: get/set/add/clear/list. Stored per session at ~/.harbor/notes/<sessionId>.json. Use for decisions, file lists, intermediate findings across long tasks.",
+    ExecutionMode = ExecutionMode.Sequential,
+    PromptSnippet = "notebook: Persistent per-session notes (get/set/add/clear/list)",
+    PromptGuidelines = new[]
+    {
+        "Use `notebook` to remember things across many turns — file lists, decisions, TODOs",
+        "set replaces a key; add appends to a key's existing content",
+        "list returns all keys with the first line of each note",
+        "clear removes a single key (or all if no key given)",
+        "Notes are scoped to the current session id — they don't leak across sessions"
+    })]
+public sealed partial class NotebookTool : ITool
 {
     private readonly ILogger<NotebookTool> _logger;
     private readonly NoteStore _store;
@@ -44,35 +58,7 @@ public sealed class NotebookTool : ITool
     }
 
     /// <inheritdoc />
-    public ToolName Name => ToolName.Create("notebook");
-
-    /// <inheritdoc />
     public ToolSafetyProfile SafetyProfile => ToolSafetyProfile.Path();
-
-    /// <inheritdoc />
-    public string DisplayName => "Notebook";
-
-    /// <inheritdoc />
-    public string Description =>
-        "Persistent markdown notes keyed by string. Actions: get/set/add/clear/list. " +
-        "Stored per session at ~/.harbor/notes/<sessionId>.json. " +
-        "Use for decisions, file lists, intermediate findings across long tasks.";
-
-    /// <inheritdoc />
-    public ExecutionMode ExecutionMode => ExecutionMode.Sequential;
-
-    /// <inheritdoc />
-    public string? PromptSnippet => "notebook: Persistent per-session notes (get/set/add/clear/list)";
-
-    /// <inheritdoc />
-    public IReadOnlyList<string> PromptGuidelines { get; } =
-    [
-        "Use `notebook` to remember things across many turns — file lists, decisions, TODOs",
-        "set replaces a key; add appends to a key's existing content",
-        "list returns all keys with the first line of each note",
-        "clear removes a single key (or all if no key given)",
-        "Notes are scoped to the current session id — they don't leak across sessions"
-    ];
 
     /// <inheritdoc />
     public JsonDocument ParameterSchema { get; } = JsonDocument.Parse("""

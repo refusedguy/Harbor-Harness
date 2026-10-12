@@ -37,7 +37,7 @@ public sealed class WhichKeyHelpOverlay
     public const int MinWidth = 20;
     public const int MaxWidth = 72;
     public const int MinHeight = 5;
-    public const int MaxHeight = 24;
+    public const int MaxHeight = 30;
     private const int Padding = 1;
     private const int Chrome = 2 + (Padding * 2);
 

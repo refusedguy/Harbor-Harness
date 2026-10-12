@@ -1,35 +1,31 @@
 using System.Diagnostics;
+using AutoCtor;
 using Harbor.Abstractions.Extensions;
 using Microsoft.Extensions.Logging;
 namespace Harbor.Tools.Builtin;
 /// <summary>
 ///     Executes shell commands. Captures stdout/stderr/exit code.
 /// </summary>
-public sealed class BashTool : ITool
-{
-    private readonly ILogger<BashTool> _logger;
-
-    public BashTool(ILogger<BashTool> logger) { _logger = logger; }
-
-    public ToolName Name => ToolName.Create("bash");
-
-    /// <inheritdoc />
-    public ToolSafetyProfile SafetyProfile => ToolSafetyProfile.Command();
-
-    public string DisplayName => "Bash";
-
-    /// <summary>Glyph beside the tool name in every UI surface (#680).</summary>
-    public string Glyph => "$";
-
-    public string Description => "Execute a shell command. Output is captured and returned. Commands run in the current working directory. Use `cwd` to override.";
-    public ExecutionMode ExecutionMode => ExecutionMode.Sequential;
-    public string? PromptSnippet => "bash: Execute shell commands";
-    public IReadOnlyList<string> PromptGuidelines { get; } = new[]
+[ToolInfo(
+    "bash",
+    "Bash",
+    "Execute a shell command. Output is captured and returned. Commands run in the current working directory. Use `cwd` to override.",
+    Glyph = "$",
+    ExecutionMode = ExecutionMode.Sequential,
+    PromptSnippet = "bash: Execute shell commands",
+    PromptGuidelines = new[]
     {
         "Prefer dedicated tools (read, edit, glob, grep) for file operations",
         "Use `bash` for compilation, testing, git, and other shell tasks",
         "Specify `timeout` for long-running commands (default: 30s)"
-    };
+    })]
+[AutoConstruct]
+public sealed partial class BashTool : ITool
+{
+    private readonly ILogger<BashTool> _logger;
+
+    /// <inheritdoc />
+    public ToolSafetyProfile SafetyProfile => ToolSafetyProfile.Command();
 
     public JsonDocument ParameterSchema { get; } = JsonDocument.Parse("""
                                                                       {

@@ -1,4 +1,5 @@
 using System.Text;
+using AutoCtor;
 using Microsoft.Extensions.Logging;
 using Result = CSharpFunctionalExtensions.Result;
 
@@ -6,35 +7,28 @@ namespace Harbor.Tools.Builtin;
 /// <summary>
 ///     Writes/overwrites a text file. Sequential. Creates parent dirs by default.
 /// </summary>
-public sealed class WriteTool : ITool
+[ToolInfo(
+    "write",
+    "Write",
+    "Write content to a file (create or overwrite). Creates parent directories by default.",
+    Glyph = "✚",
+    ExecutionMode = ExecutionMode.Sequential,
+    PromptSnippet = "write: Write file contents",
+    PromptGuidelines = new[]
+    {
+        "Use `write` to create new files or fully replace existing ones",
+        "For small changes prefer `edit` after `read`",
+        "Paths are absolute or relative to the working directory"
+    })]
+[AutoConstruct]
+public sealed partial class WriteTool : ITool
 {
 
     private const int MaxContentChars = 5_000_000; // hard safety vs runaway model output
     private readonly ILogger<WriteTool> _logger;
 
-    public WriteTool(ILogger<WriteTool> logger) { _logger = logger; }
-
-    public ToolName Name => ToolName.Create("write");
-
     /// <inheritdoc />
     public ToolSafetyProfile SafetyProfile => ToolSafetyProfile.Path();
-
-    public string DisplayName => "Write";
-
-    /// <summary>Glyph beside the tool name in every UI surface (#680).</summary>
-    public string Glyph => "✚";
-
-    public string Description =>
-        "Write content to a file (create or overwrite). Creates parent directories by default.";
-    public ExecutionMode ExecutionMode => ExecutionMode.Sequential;
-    public string? PromptSnippet => "write: Write file contents";
-
-    public IReadOnlyList<string> PromptGuidelines { get; } =
-    [
-        "Use `write` to create new files or fully replace existing ones",
-        "For small changes prefer `edit` after `read`",
-        "Paths are absolute or relative to the working directory"
-    ];
 
     public JsonDocument ParameterSchema { get; } = JsonDocument.Parse("""
                                                                       {

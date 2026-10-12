@@ -195,6 +195,9 @@
     <PackageVersion Include="ConsoleAppFramework" Version="5.7.13" />
     <!-- ── Source generators (PrivateAssets="all" at consumption site) ───── -->
     <PackageVersion Include="Termina.Generators" Version="0.15.0" />
+    <!-- SG3 spike (issue 1244): ctor(ILogger) generation on 3 tools. Pinned 3.1.1,
+         not 4.0.0 — the 4.x ServiceProvider generator is out of spike scope. -->
+    <PackageVersion Include="AutoCtor" Version="3.1.1" />
     <!-- ── NUKE build system (consumed by build/_build.csproj only) ─────── -->
     <!--
       NUKE is pinned to 9.0.4 — the latest stable as of 2026-Q1. The build/

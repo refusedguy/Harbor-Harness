@@ -9,7 +9,21 @@ namespace Harbor.Tools.Builtin;
 ///     Surgical string replace. oldString must be unique unless replaceAll.
 ///     Multi-edit applies in order on the updated buffer.
 /// </summary>
-public sealed class EditTool : ITool
+[ToolInfo(
+    "edit",
+    "Edit",
+    "Replace text in a file. Single: oldString→newString. Multi: edits[]. oldString must be unique unless replaceAll=true.",
+    Glyph = "✎",
+    ExecutionMode = ExecutionMode.Sequential,
+    PromptSnippet = "edit: String replacement in a file",
+    PromptGuidelines = new[]
+    {
+        "Prefer `edit` over `write` for existing files",
+        "Make oldString unique (include surrounding context)",
+        "Use edits[] for several replacements in one file",
+        "Set replaceAll=true only when every occurrence should change"
+    })]
+public sealed partial class EditTool : ITool
 {
 
     private const int MaxFileChars = 5_000_000;
@@ -34,29 +48,8 @@ public sealed class EditTool : ITool
         _lsp = lsp;
     }
 
-    public ToolName Name => ToolName.Create("edit");
-
     /// <inheritdoc />
     public ToolSafetyProfile SafetyProfile => ToolSafetyProfile.Path();
-
-    public string DisplayName => "Edit";
-
-    /// <summary>Glyph beside the tool name in every UI surface (#680).</summary>
-    public string Glyph => "✎";
-
-    public string Description =>
-        "Replace text in a file. Single: oldString→newString. Multi: edits[]. " +
-        "oldString must be unique unless replaceAll=true.";
-    public ExecutionMode ExecutionMode => ExecutionMode.Sequential;
-    public string? PromptSnippet => "edit: String replacement in a file";
-
-    public IReadOnlyList<string> PromptGuidelines { get; } =
-    [
-        "Prefer `edit` over `write` for existing files",
-        "Make oldString unique (include surrounding context)",
-        "Use edits[] for several replacements in one file",
-        "Set replaceAll=true only when every occurrence should change"
-    ];
 
     public JsonDocument ParameterSchema { get; } = JsonDocument.Parse("""
                                                                       {

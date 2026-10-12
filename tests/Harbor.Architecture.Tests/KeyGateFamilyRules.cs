@@ -57,7 +57,7 @@
 //     TreeView.cs:269                         != None
 //     Tabs.cs:143                             != None
 //     ToolCardTracker.cs:721 + :764           != None
-//     LeaderKeyRouter.cs:94                   != None  (consume-and-disarm)
+//     LeaderKeyRouter.cs:134                  != None  (consume-and-disarm)
 //     src/Harbor.Tui.CellForge/Chat/Rendering/VimComposerMode.cs:37 == None  (NORMAL MODE ONLY)
 //
 //   BUFFER, BUT NOT A TEXT BUFFER — the taxonomy's sharpest edge, and the
@@ -79,7 +79,7 @@
 //   SetupChecklistController.HandleKey, so Ctrl+q closed the setup guide AND was
 //   consumed — the chord never reached the composer behind it.
 //     SetupChecklistOverlay.cs:95     product input loop — LIVE
-//     WhichKeyHelpOverlay.cs:122      '?', legacy ConsoleKeyInfo
+//     WhichKeyHelpOverlay.cs:178      '?', legacy ConsoleKeyInfo
 //     CellForgeHelpPanel.cs:79        mounted panel
 //     CellForgeFileTreePanel.cs:135   mounted panel
 //     CellForgeDiagnosticsPanel.cs:57 mounted panel
@@ -99,7 +99,7 @@
 //   #824's guard enumerates three sites by hand and therefore cannot see any
 //   of these.
 //
-//   ChatKeyMap.cs:234 is a site the issue does not list at all: an unmatched
+//   ChatKeyMap.cs:242 is a site the issue does not list at all: an unmatched
 //   printable rune becomes ChatAction.Char, which is the tree deciding "this
 //   is text" in a sixth vocabulary position.
 //
@@ -281,7 +281,7 @@ public class KeyGateFamilyRules
         new("ReplInputLoop(slash)", KeyGateFamily.Buffer, "apps/Harbor.App.Cli/Repl/ReplInputLoop.cs"),
 
         // The host key map, found by the coverage grep and NOT on the issue's
-        // list: ChatKeyMap.cs:234 turns an unmatched printable rune into
+        // list: ChatKeyMap.cs:242 turns an unmatched printable rune into
         // ChatAction.Char, i.e. it is the place the tree decides "this is
         // text". It is a buffer site by the same test as the composer.
         new("ChatKeyMap", KeyGateFamily.Buffer, "src/Harbor.Ui.Framework.State/State/ChatKeyMap.cs"),

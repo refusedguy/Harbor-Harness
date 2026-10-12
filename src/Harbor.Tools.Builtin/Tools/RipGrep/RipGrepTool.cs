@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using AutoCtor;
 using Harbor.Abstractions.Extensions;
 using Microsoft.Extensions.Logging;
 using Result = CSharpFunctionalExtensions.Result;
@@ -8,7 +9,20 @@ namespace Harbor.Tools.Builtin;
 ///     Wraps the <c>rg</c> (ripgrep) binary for fast content search. Falls back to
 ///     <see cref="GrepTool" /> semantics (returns a hint) when <c>rg</c> is not on PATH.
 /// </summary>
-public sealed class RipGrepTool : ITool
+[ToolInfo(
+    "ripgrep",
+    "RipGrep",
+    "Fast recursive content search via the `rg` binary. Returns file:line: match content. Respects .gitignore automatically. Falls back to an error message hinting at `grep` if `rg` is not installed.",
+    PromptSnippet = "ripgrep: Fast content search via ripgrep (rg)",
+    PromptGuidelines = new[]
+    {
+        "Use `ripgrep` (rg) for large-repo searches — much faster than `grep`",
+        "Pattern is a regex by default; set regex=false for fixed-string",
+        "Pass glob='*.cs' or glob='*.{cs,ts}' to limit file types",
+        "Respects .gitignore automatically (use the `grep` tool for raw searches)"
+    })]
+[AutoConstruct]
+public sealed partial class RipGrepTool : ITool
 {
     private const int DefaultMaxResults = 100;
     private const int HardMaxResults = 10_000;
@@ -19,41 +33,8 @@ public sealed class RipGrepTool : ITool
 
     private readonly ILogger<RipGrepTool> _logger;
 
-    /// <summary>
-    ///     Construct a <see cref="RipGrepTool" />.
-    /// </summary>
-    /// <param name="logger">Logger for diagnostics.</param>
-    public RipGrepTool(ILogger<RipGrepTool> logger) { _logger = logger; }
-
-    /// <inheritdoc />
-    public ToolName Name => ToolName.Create("ripgrep");
-
     /// <inheritdoc />
     public ToolSafetyProfile SafetyProfile => ToolSafetyProfile.Path();
-
-    /// <inheritdoc />
-    public string DisplayName => "RipGrep";
-
-    /// <inheritdoc />
-    public string Description =>
-        "Fast recursive content search via the `rg` binary. Returns file:line: match content. " +
-        "Respects .gitignore automatically. Falls back to an error message hinting at `grep` " +
-        "if `rg` is not installed.";
-
-    /// <inheritdoc />
-    public ExecutionMode ExecutionMode => ExecutionMode.Parallel;
-
-    /// <inheritdoc />
-    public string? PromptSnippet => "ripgrep: Fast content search via ripgrep (rg)";
-
-    /// <inheritdoc />
-    public IReadOnlyList<string> PromptGuidelines { get; } =
-    [
-        "Use `ripgrep` (rg) for large-repo searches — much faster than `grep`",
-        "Pattern is a regex by default; set regex=false for fixed-string",
-        "Pass glob='*.cs' or glob='*.{cs,ts}' to limit file types",
-        "Respects .gitignore automatically (use the `grep` tool for raw searches)"
-    ];
 
     /// <inheritdoc />
     public JsonDocument ParameterSchema { get; } = JsonDocument.Parse("""

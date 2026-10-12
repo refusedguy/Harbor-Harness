@@ -1,4 +1,5 @@
 using System.Text;
+using AutoCtor;
 using Microsoft.Extensions.Logging;
 using Result = CSharpFunctionalExtensions.Result;
 
@@ -6,7 +7,21 @@ namespace Harbor.Tools.Builtin;
 /// <summary>
 ///     Lists directory contents (type, size, mtime). Caps output; prunes heavy dirs when recursive.
 /// </summary>
-public sealed class LsTool : ITool
+[ToolInfo(
+    "ls",
+    "List",
+    "List directory contents. Entries: [dir]/[file] with size and modified time for files. Recursive mode prunes VCS/build folders and caps total entries.",
+    Glyph = "📁",
+    PromptSnippet = "ls: List directory contents",
+    PromptGuidelines = new[]
+    {
+        "Use `ls` to explore directory structure before reading files",
+        "Prefer non-recursive first; use recursive only when needed",
+        "Set `all=true` to include hidden files (default: false)",
+        "Use `path` for a specific directory; default is the working directory"
+    })]
+[AutoConstruct]
+public sealed partial class LsTool : ITool
 {
 
     private const int DefaultMaxEntries = 500;
@@ -22,31 +37,8 @@ public sealed class LsTool : ITool
     };
     private readonly ILogger<LsTool> _logger;
 
-    public LsTool(ILogger<LsTool> logger) { _logger = logger; }
-
-    public ToolName Name => ToolName.Create("ls");
-
     /// <inheritdoc />
     public ToolSafetyProfile SafetyProfile => ToolSafetyProfile.Path();
-
-    public string DisplayName => "List";
-
-    /// <summary>Glyph beside the tool name in every UI surface (#680).</summary>
-    public string Glyph => "📁";
-
-    public string Description =>
-        "List directory contents. Entries: [dir]/[file] with size and modified time for files. " +
-        "Recursive mode prunes VCS/build folders and caps total entries.";
-    public ExecutionMode ExecutionMode => ExecutionMode.Parallel;
-    public string? PromptSnippet => "ls: List directory contents";
-
-    public IReadOnlyList<string> PromptGuidelines { get; } =
-    [
-        "Use `ls` to explore directory structure before reading files",
-        "Prefer non-recursive first; use recursive only when needed",
-        "Set `all=true` to include hidden files (default: false)",
-        "Use `path` for a specific directory; default is the working directory"
-    ];
 
     public JsonDocument ParameterSchema { get; } = JsonDocument.Parse("""
                                                                       {

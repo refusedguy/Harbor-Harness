@@ -19,7 +19,20 @@ namespace Harbor.Tools.Builtin;
 ///     <c>open</c> (or when an editor opened the file first). A missing server
 ///     binary degrades to an explanatory ToolResult — never an exception.
 /// </remarks>
-public sealed class LspTool : ITool
+[ToolInfo(
+    "lsp",
+    "LSP",
+    "Language-server intelligence for TypeScript, Python, Go, Rust, C#, C/C++, Java, HTML, CSS, JSON and Lua files. Actions: 'diagnostics' (errors/warnings for a file), 'definition' (go-to-definition), 'references' (find all usages). Lines are 1-based (matching read tool output), columns 0-based. A file should be opened (read) first so the language server sees its content.",
+    ExecutionMode = ExecutionMode.Sequential,
+    PromptSnippet = "lsp: diagnostics / definition / references via language servers",
+    PromptGuidelines = new[]
+    {
+        "Use `lsp` with action 'diagnostics' after editing a file to see compiler-level errors",
+        "Use action 'definition' to jump to where a symbol is declared, 'references' to find usages",
+        "Pass the file path plus 1-based line and 0-based column of the symbol",
+        "Results degrade gracefully: an absent language server binary returns an explanatory message"
+    })]
+public sealed partial class LspTool : ITool
 {
     private readonly ILogger<LspTool> _logger;
     private readonly ILspService? _lsp;
@@ -35,35 +48,7 @@ public sealed class LspTool : ITool
     public LspTool(ILogger<LspTool> logger) => _logger = logger;
 
     /// <inheritdoc />
-    public ToolName Name => ToolName.Create("lsp");
-
-    /// <inheritdoc />
     public ToolSafetyProfile SafetyProfile => ToolSafetyProfile.Path();
-
-    /// <inheritdoc />
-    public string DisplayName => "LSP";
-
-    /// <inheritdoc />
-    public string Description =>
-        "Language-server intelligence for TypeScript, Python, Go, Rust, C#, C/C++, Java, HTML, CSS, JSON and Lua files. " +
-        "Actions: 'diagnostics' (errors/warnings for a file), 'definition' (go-to-definition), " +
-        "'references' (find all usages). Lines are 1-based (matching read tool output), columns 0-based. " +
-        "A file should be opened (read) first so the language server sees its content.";
-
-    /// <inheritdoc />
-    public ExecutionMode ExecutionMode => ExecutionMode.Sequential;
-
-    /// <inheritdoc />
-    public string? PromptSnippet => "lsp: diagnostics / definition / references via language servers";
-
-    /// <inheritdoc />
-    public IReadOnlyList<string> PromptGuidelines { get; } =
-    [
-        "Use `lsp` with action 'diagnostics' after editing a file to see compiler-level errors",
-        "Use action 'definition' to jump to where a symbol is declared, 'references' to find usages",
-        "Pass the file path plus 1-based line and 0-based column of the symbol",
-        "Results degrade gracefully: an absent language server binary returns an explanatory message"
-    ];
 
     /// <inheritdoc />
     public JsonDocument ParameterSchema { get; } = JsonDocument.Parse("""

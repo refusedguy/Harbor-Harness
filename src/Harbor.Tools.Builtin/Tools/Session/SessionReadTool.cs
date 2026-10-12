@@ -14,7 +14,18 @@ namespace Harbor.Tools.Builtin;
 ///     <c>revision</c>): a <c>working</c> session keeps streaming while the
 ///     snapshot is rendered, so re-read before acting on one.
 /// </remarks>
-public sealed class SessionReadTool : ITool
+[ToolInfo(
+    "session_read",
+    "Session Read",
+    "Inspect a peer session: its status, terminal run outcome, and recent transcript. Use it to check whether a neighboring session is ok, stuck, or failed before steering it. Read-only: never mutates the target session.",
+    PromptSnippet = "session_read: inspect a peer session's status, outcome and recent transcript",
+    PromptGuidelines = new[]
+    {
+        "pass a peer session id (see /sessions); never your own",
+        "reads are point-in-time snapshots — re-read a working session before acting",
+        "verdict first (ok/stuck/failed), steer only when needed"
+    })]
+public sealed partial class SessionReadTool : ITool
 {
     private readonly ISessionStore _sessions;
     private readonly ILogger<SessionReadTool> _logger;
@@ -25,28 +36,8 @@ public sealed class SessionReadTool : ITool
         _logger = logger;
     }
 
-    public ToolName Name => ToolName.Create("session_read");
-
     /// <inheritdoc />
     public ToolSafetyProfile SafetyProfile => ToolSafetyProfile.Opaque;
-
-    public string DisplayName => "Session Read";
-
-    public string Description =>
-        "Inspect a peer session: its status, terminal run outcome, and recent transcript. " +
-        "Use it to check whether a neighboring session is ok, stuck, or failed before steering it. " +
-        "Read-only: never mutates the target session.";
-
-    public ExecutionMode ExecutionMode => ExecutionMode.Parallel;
-
-    public string? PromptSnippet => "session_read: inspect a peer session's status, outcome and recent transcript";
-
-    public IReadOnlyList<string> PromptGuidelines { get; } =
-    [
-        "pass a peer session id (see /sessions); never your own",
-        "reads are point-in-time snapshots — re-read a working session before acting",
-        "verdict first (ok/stuck/failed), steer only when needed"
-    ];
 
     public JsonDocument ParameterSchema { get; } = JsonDocument.Parse("""
                                                                       {
