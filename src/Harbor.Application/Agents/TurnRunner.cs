@@ -113,7 +113,11 @@ internal sealed class TurnRunner(
         RunBudgetTracker? budget = null)
     {
         TurnRunnerLog.TurnStart(logger, turn, agent.Name.Value, agent.Model);
-        await eventBus.PublishAsync(new TurnStartEvent(turn, session.Session.Id), ct).ConfigureAwait(false);
+        // #1103: the turn boundary is a fact, not work — it rides None so a
+        // cancel landing on the publish cannot throw OCE into the run and read
+        // as a provider error. Cancellation is still honored at every await
+        // below; only the record of the boundary is unconditional.
+        await eventBus.PublishAsync(new TurnStartEvent(turn, session.Session.Id), CancellationToken.None).ConfigureAwait(false);
 
         // The compacted view of the history, not the raw append-only
         // list: after a summary was produced, ShouldCompact and the

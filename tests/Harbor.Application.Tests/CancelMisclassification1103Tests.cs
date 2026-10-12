@@ -117,4 +117,29 @@ public class CancelMisclassification1103Tests
         var end = bus.Events.OfType<AgentEndEvent>().Single();
         await Assert.That(end.Cancelled).IsTrue();
     }
+
+    [Test]
+    public async Task RunAsync_CancelAtTurnStart_BoundaryRecorded_NoErrorEvent()
+    {
+        // #1103 TurnRunner:116 — the TurnStart publish rode the run token, so a
+        // cancel during publish threw OCE into the run and read as a provider
+        // error. The boundary is a fact and rides None; the cancel is still
+        // honored at the next await.
+        var client = new ScriptedLlmClient([
+            new TextDeltaEvent("t", "never reached"), new StepFinishEvent(0, "stop", new Usage(1, 1))]);
+        var bus = new CancelHonoringBus();
+        var agent = TestAgents.AllowAll();
+        var loop = LoopWithBus(client, bus, agent);
+
+        using var cts = new CancellationTokenSource();
+        await cts.CancelAsync();
+
+        var result = await loop.RunAsync(NewSession(), agent, cts.Token);
+
+        await Assert.That(result.IsFailure).IsTrue();
+        await Assert.That(bus.Events.OfType<TurnStartEvent>().Count()).IsEqualTo(1);
+        await Assert.That(bus.Events.OfType<AgentErrorEvent>().Count()).IsEqualTo(0);
+        var end = bus.Events.OfType<AgentEndEvent>().Single();
+        await Assert.That(end.Cancelled).IsTrue();
+    }
 }
