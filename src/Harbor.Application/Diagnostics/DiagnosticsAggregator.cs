@@ -250,7 +250,7 @@ public sealed class DiagnosticsAggregator : IDisposable
         // awaited — blocking here would stall the socket.
         TaskFireAndForget.Forget(
             RefreshLanguageServerAsync(_lsp, args.FilePath, CancellationToken.None),
-            ex => if (_logger is not null) DiagnosticsAggregatorLog.LspRefreshFailed(_logger, ex, args.FilePath));
+            ex => { if (_logger is not null) DiagnosticsAggregatorLog.LspRefreshFailed(_logger, ex, args.FilePath); });
     }
 
     private async Task RefreshLanguageServerAsync(ILspService lsp, string filePath, CancellationToken ct)

@@ -160,7 +160,7 @@ public sealed class JsonConfigStore : IConfigStore
             // throws is reported the same way an IO failure is.
             return Task.FromResult(config.Validate()
                 .Bind(_ => Result.Try(() => SaveCore(config), ResultErrors.Message))
-                .TapError(error => if (_logger is not null) JsonConfigStoreLog.SaveConfigFailed(_logger, error)));
+                .TapError(error => { if (_logger is not null) JsonConfigStoreLog.SaveConfigFailed(_logger, error); }));
         }
     }
 
