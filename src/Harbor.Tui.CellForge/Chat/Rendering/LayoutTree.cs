@@ -32,6 +32,26 @@ public abstract class Panel
     public Size Min { get; }
     public int Priority { get; }
 
+    /// <summary>
+    /// Spectre <c>Layout.IsVisible</c> analogue (SC2 #1210): hidden panels are
+    /// excluded from the split — the visible sibling takes the full extent and
+    /// this panel reads a default <see cref="Rect"/>. Toggling must go through
+    /// <see cref="LayoutTree.SetVisible(string, bool)"/> so the geometry cache
+    /// is invalidated; setting this directly mid-frame takes effect on the next
+    /// <see cref="LayoutTree.Solve(int, int)"/> after any tree mutation bumps
+    /// the version (direct sets do not bump it themselves).
+    /// </summary>
+    public bool IsVisible { get; set; } = true;
+
+    /// <summary>
+    /// Spectre <c>Layout.Size</c> analogue (SC2 #1210): fixed cells along the
+    /// parent split axis. When set, Size wins over the owning split's ratio;
+    /// the sibling takes the remainder. Still clamped to the
+    /// <see cref="Min"/> floor (MinimumSize) and to what fits. Null (default)
+    /// means ratio-driven. Set via <see cref="LayoutTree.SetFixedSize(string, int?)"/>.
+    /// </summary>
+    public int? FixedSize { get; set; }
+
     /// <summary>Set by the layout solver each frame; read by painters/routing.</summary>
     public UIR.Rect Rect { get; internal set; }
 
@@ -95,11 +115,67 @@ internal sealed class SplitNode
 }
 
 /// <summary>
+/// Binary analogue of Spectre <c>Internal/Ratio.cs</c> Resolve (SC2 #1210):
+/// turns a ratio share into integer cells honoring fixed sizes (Size wins over
+/// ratio) and minimum floors (MinimumSize). The rounding remainder smears onto
+/// B (DivMod-style) so <c>a + b == usable</c> exactly — no unit dust. The
+/// caller guarantees <c>usable &gt;= minA + minB</c> (the collapse path owns
+/// the over-constrained case); negative inputs are floored at 0 and a
+/// non-finite ratio falls back to an even split.
+/// </summary>
+internal static class SplitRatio
+{
+    internal static void Resolve(
+        int usable,
+        float ratio,
+        int? fixedA,
+        int? fixedB,
+        int minA,
+        int minB,
+        out int a,
+        out int b)
+    {
+        float r = float.IsFinite(ratio) ? ratio : 0.5f;
+        int floorA = Math.Max(0, minA);
+        int floorB = Math.Max(0, minB);
+        int ceilA = Math.Max(floorA, usable - floorB);
+
+        int sizeA;
+        if (fixedA.HasValue && fixedB.HasValue)
+        {
+            // Both fixed and over-constrained: A wins, B takes the rest.
+            sizeA = Math.Clamp(fixedA.Value, floorA, ceilA);
+        }
+        else if (fixedA.HasValue)
+        {
+            sizeA = Math.Clamp(fixedA.Value, floorA, ceilA);
+        }
+        else if (fixedB.HasValue)
+        {
+            int ceilB = Math.Max(floorB, usable - floorA);
+            sizeA = usable - Math.Clamp(fixedB.Value, floorB, ceilB);
+        }
+        else
+        {
+            sizeA = Math.Clamp((int)MathF.Round(usable * r), floorA, ceilA);
+        }
+
+        a = sizeA;
+        b = usable - sizeA;
+    }
+}
+
+/// <summary>
 /// Binary split tree with water-filling solver honoring per-panel minimums
 /// and priority-based collapse (celldiff §5.1). Solved results are cached by
 /// (width, height, capsVer) in an LRU capped at <see cref="MaxCachedLayouts"/>
 /// entries (ENG3 #274, Ratatui lesson) — repeated frames at the same geometry
-/// replay in O(panels); any tree mutation bumps capsVer.</summary>
+/// replay in O(panels); any tree mutation bumps capsVer.
+/// Named access (<c>tree[id]</c>, <see cref="LayoutTree.GetPanel(string)"/>),
+/// in-place leaf replace (<see cref="LayoutTree.Update(string, Panel)"/>),
+/// fixed sizes (<see cref="LayoutTree.SetFixedSize(string, int?)"/>) and
+/// visibility (<see cref="LayoutTree.SetVisible(string, bool)"/>) follow the
+/// Spectre <c>Layout</c> composition seam (SC2 #1210).</summary>
 public sealed class LayoutTree
 {
     /// <summary>Maximum cached (layout, area) results (ENG3 #274).</summary>
@@ -142,10 +218,103 @@ public sealed class LayoutTree
     {
         foreach (var panel in _panels.Values)
         {
+            if (!panel.IsVisible)
+            {
+                continue;
+            }
+
             panel.Paint(buffer);
         }
 
         Overlays.PaintOver(buffer);
+    }
+
+    /// <summary>
+    /// Spectre <c>layout[name]</c> indexer analogue (SC2 #1210): named access
+    /// to any registered panel. Dict-backed (O(1)) rather than Spectre's DFS —
+    /// the tree shape never carries panels the registry does not know.
+    /// </summary>
+    /// <exception cref="KeyNotFoundException"><paramref name="id"/> is unknown.</exception>
+    public Panel this[string id] => GetPanel(id);
+
+    /// <summary>
+    /// Spectre <c>GetLayout(name)</c> analogue (SC2 #1210). See <see cref="this[string]"/>.
+    /// </summary>
+    /// <exception cref="KeyNotFoundException"><paramref name="id"/> is unknown.</exception>
+    public Panel GetPanel(string id) =>
+        _panels.TryGetValue(id, out var panel)
+            ? panel
+            : throw new KeyNotFoundException($"panel '{id}' not found");
+
+    /// <summary>Tries named access without throwing (SC2 #1210).</summary>
+    public bool TryGetPanel(string id, out Panel? panel) => _panels.TryGetValue(id, out panel);
+
+    /// <summary>
+    /// Spectre <c>Layout.Update(renderable)</c> analogue (SC2 #1210): swaps the
+    /// leaf panel object in place, keeping the tree shape, split ratios, gaps
+    /// and sibling links. The replacement must carry the same id. Frame
+    /// continuity (<see cref="Panel.Rect"/>, focus) carries over; sizing state
+    /// (<see cref="Panel.FixedSize"/>, <see cref="Panel.IsVisible"/>) comes
+    /// from the replacement. Unlocks recompose-by-name instead of one-shot
+    /// <c>Build()</c>.
+    /// </summary>
+    /// <exception cref="KeyNotFoundException"><paramref name="panelId"/> is unknown.</exception>
+    /// <exception cref="ArgumentException">Replacement id differs.</exception>
+    public void Update(string panelId, Panel replacement)
+    {
+        ArgumentNullException.ThrowIfNull(replacement);
+        if (!string.Equals(replacement.Id, panelId, StringComparison.Ordinal))
+        {
+            throw new ArgumentException($"Replacement id '{replacement.Id}' differs from '{panelId}'.", nameof(replacement));
+        }
+
+        var node = FindAndWrap(_root, panelId) ?? throw new KeyNotFoundException($"panel '{panelId}' not found");
+        var old = node.Leaf!;
+        replacement.Rect = old.Rect;
+        replacement.Focused = old.Focused;
+        node.Leaf = replacement;
+        _panels[panelId] = replacement;
+        _capsVer++;
+    }
+
+    /// <summary>
+    /// Toggles <see cref="Panel.IsVisible"/> (SC2 #1210) and invalidates the
+    /// geometry cache — hidden panels are excluded from the next solve.
+    /// </summary>
+    /// <exception cref="KeyNotFoundException"><paramref name="panelId"/> is unknown.</exception>
+    public void SetVisible(string panelId, bool visible)
+    {
+        var panel = GetPanel(panelId);
+        if (panel.IsVisible == visible)
+        {
+            return;
+        }
+
+        panel.IsVisible = visible;
+        _capsVer++;
+    }
+
+    /// <summary>
+    /// Sets <see cref="Panel.FixedSize"/> (SC2 #1210, Spectre Size wins) and
+    /// invalidates the geometry cache. Null clears back to ratio-driven.
+    /// </summary>
+    /// <exception cref="KeyNotFoundException"><paramref name="panelId"/> is unknown.</exception>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="size"/> is negative.</exception>
+    public void SetFixedSize(string panelId, int? size)
+    {
+        if (size.HasValue)
+        {
+            ArgumentOutOfRangeException.ThrowIfNegative(size.Value);
+        }
+
+        var panel = GetPanel(panelId);
+        if (panel.FixedSize == size)
+        {
+            return;
+        }
+
+        panel.FixedSize = size;
+        _capsVer++;
     }
 
     public void AddRoot(Panel panel)
@@ -484,24 +653,105 @@ public sealed class LayoutTree
     /// the spring position replaces the panel's immutable base width while an
     /// entry exists (settled at the base value it is a no-op). Split subtrees
     /// keep their summed static minimum — springs target direct leaves only.
+    /// Invisible leaves read 0 (SC2 #1210): they are excluded from the split,
+    /// so they must not reserve space through a visible ancestor's minimum.
     /// </summary>
     private int EffectiveMinAlong(SplitNode node, SplitDir dir)
     {
+        if (!SubtreeVisible(node))
+        {
+            return 0;
+        }
+
         if (dir == SplitDir.Horizontal && node.Leaf is not null
             && _minWidthSprings.TryGetValue(node.Leaf.Id, out var spring))
         {
             return Math.Max(0, (int)Math.Round(spring.Position));
         }
 
-        return node.MinAlong(dir);
+        return VisibleMinAlong(node, dir);
     }
+
+    /// <summary>
+    /// Minimum extent along <paramref name="dir"/> counting visible leaves
+    /// only (SC2 #1210): a fully hidden side contributes 0 and no gap, so a
+    /// lone visible sibling measures exactly what it needs.
+    /// </summary>
+    private static int VisibleMinAlong(SplitNode node, SplitDir dir)
+    {
+        if (node.Leaf is not null)
+        {
+            return node.Leaf.IsVisible ? node.Leaf.MinAlong(dir) : 0;
+        }
+
+        bool visA = node.A is not null && SubtreeVisible(node.A);
+        bool visB = node.B is not null && SubtreeVisible(node.B);
+        if (visA && visB)
+        {
+            return dir == node.Dir
+                ? VisibleMinAlong(node.A!, dir) + VisibleMinAlong(node.B!, dir) + node.GapSize
+                : Math.Max(VisibleMinAlong(node.A!, dir), VisibleMinAlong(node.B!, dir));
+        }
+
+        if (visA)
+        {
+            return VisibleMinAlong(node.A!, dir);
+        }
+
+        return node.B is not null ? VisibleMinAlong(node.B, dir) : 0;
+    }
+
+    /// <summary>True when the node holds at least one visible leaf (SC2 #1210).</summary>
+    private static bool SubtreeVisible(SplitNode node)
+    {
+        if (node.Leaf is not null)
+        {
+            return node.Leaf.IsVisible;
+        }
+
+        return (node.A is not null && SubtreeVisible(node.A))
+            || (node.B is not null && SubtreeVisible(node.B));
+    }
+
+    /// <summary>
+    /// Fixed size carried by a direct leaf child (SC2 #1210, Spectre Size):
+    /// subtrees never carry one — chrome with exact rows/columns (tab strip,
+    /// status bar) is always a leaf.
+    /// </summary>
+    private static int? FixedOf(SplitNode node) => node.Leaf?.FixedSize;
 
     private UIR.Rect SolveNode(SplitNode node, UIR.Rect avail)
     {
         if (node.Leaf is not null)
         {
-            node.Leaf.Rect = avail;
+            // Single-panel tree (or recursion base): a hidden root owns no cells.
+            node.Leaf.Rect = node.Leaf.IsVisible ? avail : default;
             return avail;
+        }
+
+        SplitNode childA = node.A!;
+        SplitNode childB = node.B!;
+
+        // Visibility filter (SC2 #1210, Spectre IsVisible): the visible sibling
+        // takes the full extent with no gap; hidden subtrees read default rects.
+        bool visA = SubtreeVisible(childA);
+        bool visB = SubtreeVisible(childB);
+        if (!visA && !visB)
+        {
+            CollapseAll(node);
+            return avail;
+        }
+
+        if (!visA)
+        {
+            CollapseAll(childA);
+            return SolveNode(childB, avail);
+        }
+
+        if (!visB)
+        {
+            CollapseAll(childB);
+            return SolveNode(childA, avail);
         }
 
         bool horizontal = node.Dir == SplitDir.Horizontal;
@@ -509,8 +759,6 @@ public sealed class LayoutTree
         int gap = Math.Min(node.GapSize, total);
         int usable = total - gap;
 
-        SplitNode childA = node.A!;
-        SplitNode childB = node.B!;
         int minA = EffectiveMinAlong(childA, node.Dir);
         int minB = EffectiveMinAlong(childB, node.Dir);
 
@@ -523,20 +771,18 @@ public sealed class LayoutTree
             return SolveNode(winner, avail);
         }
 
-        int rawA = (int)MathF.Round(usable * node.Ratio);
-        int clampedA = Math.Clamp(rawA, minA, usable - minB);
-        int clampedB = usable - clampedA;
+        SplitRatio.Resolve(usable, node.Ratio, FixedOf(childA), FixedOf(childB), minA, minB, out int sizeA, out int sizeB);
 
         UIR.Rect rectA, rectB;
         if (horizontal)
         {
-            rectA = new UIR.Rect(avail.X, avail.Y, clampedA, avail.Height);
-            rectB = new UIR.Rect(avail.X + clampedA + gap, avail.Y, clampedB, avail.Height);
+            rectA = new UIR.Rect(avail.X, avail.Y, sizeA, avail.Height);
+            rectB = new UIR.Rect(avail.X + sizeA + gap, avail.Y, sizeB, avail.Height);
         }
         else
         {
-            rectA = new UIR.Rect(avail.X, avail.Y, avail.Width, clampedA);
-            rectB = new UIR.Rect(avail.X, avail.Y + clampedA + gap, avail.Width, clampedB);
+            rectA = new UIR.Rect(avail.X, avail.Y, avail.Width, sizeA);
+            rectB = new UIR.Rect(avail.X, avail.Y + sizeA + gap, avail.Width, sizeB);
         }
 
         _ = SolveNode(node.A!, rectA);
