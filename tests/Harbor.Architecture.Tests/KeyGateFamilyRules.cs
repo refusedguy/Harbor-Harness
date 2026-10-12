@@ -56,7 +56,7 @@
 //     ApprovalGateView.cs:254                 != None
 //     TreeView.cs:269                         != None
 //     Tabs.cs:143                             != None
-//     ToolCardTracker.cs:721 + :764           != None
+//     ToolCardTracker.cs:730 + :773           != None
 //     LeaderKeyRouter.cs:134                  != None  (consume-and-disarm)
 //     src/Harbor.Tui.CellForge/Chat/Rendering/VimComposerMode.cs:37 == None  (NORMAL MODE ONLY)
 //
