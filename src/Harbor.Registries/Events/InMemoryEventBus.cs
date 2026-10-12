@@ -417,8 +417,12 @@ public sealed class InMemoryEventBus : IEventBus, IEventBusQueueMetrics
             // read may still observe a STALE array on ARM (weak memory
             // model) — a just-subscribed handler then silently skips an
             // event. Subscribe publishes via ImmutableInterlocked (full
-            // fence on write); this Volatile read is the matching acquire.
-            var snapshot = Volatile.Read(ref _subscriptions);
+            // fence on write); the full fence below is the matching acquire
+            // (Volatile.Read<T> is class-constrained, so it rejects this
+            // struct field with CS0452; a fence + plain read is equivalent
+            // and allocates nothing).
+            Thread.MemoryBarrier();
+            var snapshot = _subscriptions;
             if (snapshot.IsEmpty)
             {
                 // Nothing can observe this publish: no subscriber, nothing to
@@ -539,9 +543,10 @@ public sealed class InMemoryEventBus : IEventBus, IEventBusQueueMetrics
             AppendScrollback(@event);
 
             // 2. Lock-free snapshot — no List copy, no lock contention.
-            // #1108: Volatile read — same ARM-stale reasoning as the fast
+            // #1108: fenced read — same ARM-stale reasoning as the fast
             // path above; a stale snapshot here drops a live subscriber.
-            var snapshot = Volatile.Read(ref _subscriptions);
+            Thread.MemoryBarrier();
+            var snapshot = _subscriptions;
             if (snapshot.IsEmpty)
             {
                 // IsEnabled guard (#47): this is THE benchmarked path
