@@ -84,6 +84,14 @@ public sealed class VirtualizedChatTimeline
     /// <summary>Byte budget for resident history; oldest blocks evict first.</summary>
     public long BudgetBytes { get; set; } = TimelineRing.DefaultBudgetBytes;
 
+    /// <summary>First-class scrollback cap (#1190, textual max_lines sliding
+    /// window): max resident blocks retained; oldest evict first once crossed,
+    /// the newest block is always admitted. <see cref="int.MaxValue"/> (default)
+    /// is unbounded — byte-budget eviction alone applies, so existing hosts and
+    /// goldens stay byte-identical. Set before/without concurrent paints, like
+    /// the other render flags.</summary>
+    public int MaxLines { get; set; } = int.MaxValue;
+
     /// <summary>Running sum of resident block budgets — O(1) append bookkeeping
     /// instead of a per-append O(n) rescan; kept exact on append/replace/evict.</summary>
     private long _budgetUsed;
@@ -145,6 +153,15 @@ public sealed class VirtualizedChatTimeline
 
     public long TotalHeight => _cache.TotalHeight;
 
+    /// <summary>Virtual size contract (#1190, textual virtual_size): the widget
+    /// reports its full virtual extent — <c>(last measured width, settled total
+    /// height)</c> — and the engine/compositor clips the visible region out of
+    /// it. <see cref="Paint"/> still clips defensively to <paramref name="rect"/>
+    /// (same rows the engine would hand it), so exposing this is behaviour-neutral;
+    /// moving clipping fully into the engine is the M-sized follow-up, not this slice.
+    /// Width reads 0 before the first <see cref="PrepareFrame"/>.</summary>
+    public (int Width, long Height) VirtualSize => (Math.Max(0, _lastWidth), TotalHeight);
+
     /// <summary>Top row of the viewport in virtual space.</summary>
     public long ScrollY { get; private set; }
 
@@ -187,9 +204,18 @@ public sealed class VirtualizedChatTimeline
 
     public IChatBlock BlockAt(int index) => _cache.BlockAt(index);
 
-    public void Append(IChatBlock block)
+    public void Append(IChatBlock block, bool? scrollEnd = null)
     {
         ArgumentNullException.ThrowIfNull(block);
+
+        // Per-write scroll_end override (#1190, textual write(scroll_end=…)):
+        // null honours the global FollowTail; true yanks an unpinned view to
+        // the tail (explicit write still yanks); false leaves a pinned view
+        // behind so a background append never steals the user's reading position.
+        if (scrollEnd.HasValue)
+        {
+            FollowTail = scrollEnd.Value;
+        }
 
         _cache.Append(block);
         MarkEntrance(block);
@@ -198,6 +224,7 @@ public sealed class VirtualizedChatTimeline
         _broadDamage = true;
 
         EvictOverBudget();
+        EvictOverMaxLines();
         MarkLastDirty();
     }
 
@@ -216,13 +243,34 @@ public sealed class VirtualizedChatTimeline
         long lowWater = budget - (budget >> 2);
         while (_cache.Count > 1 && _budgetUsed > lowWater)
         {
-            var evicted = _cache.BlockAt(0);
-            _budgetUsed -= Math.Min(_budgetUsed, Math.Max(0, evicted.BudgetBytes));
-            _ = _cache.EvictFirst();
-            _ = _entranceStarts.Remove(evicted);
-            _dirtyGeometry = true;
-            _broadDamage = true;
+            EvictOldest();
         }
+    }
+
+    /// <summary>Sliding-window cap (#1190, textual max_lines + _start_line shift):
+    /// drops oldest blocks while over <see cref="MaxLines"/>, newest always
+    /// survives (a cap below 1 still admits the live tail). Runs after
+    /// <see cref="EvictOverBudget"/> so both caps hold simultaneously.</summary>
+    private void EvictOverMaxLines()
+    {
+        int cap = MaxLines < 1 ? 1 : MaxLines;
+        while (_cache.Count > cap)
+        {
+            EvictOldest();
+        }
+    }
+
+    /// <summary>Single shared evict-one step: drops the oldest block, keeps the
+    /// O(1) budget ledger exact, and flags geometry/damage like every other
+    /// structural change.</summary>
+    private void EvictOldest()
+    {
+        var evicted = _cache.BlockAt(0);
+        _budgetUsed -= Math.Min(_budgetUsed, Math.Max(0, evicted.BudgetBytes));
+        _ = _cache.EvictFirst();
+        _ = _entranceStarts.Remove(evicted);
+        _dirtyGeometry = true;
+        _broadDamage = true;
     }
 
     /// <summary>Swaps the live-stream placeholder for its committed form.</summary>
