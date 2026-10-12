@@ -236,6 +236,216 @@ public static class CheckRunner
         return Result.Success(report);
     }
 
+    /// <summary>
+    ///     Load the recorded check evidence for <paramref name="runIdValue" />
+    ///     (epic #42, slice S5 remainder, #379): <c>checks.json</c> as the
+    ///     runner wrote it, including the zero-checks <c>"checks": "none"</c>
+    ///     form. No process is started — the report (S5) renders the recorded
+    ///     artifact. A missing file or a structurally invalid one is a
+    ///     <c>Result.Failure</c> naming the checks stage, never an empty
+    ///     report.
+    /// </summary>
+    /// <param name="runIdValue">Run id (validated like everywhere else: no path separators).</param>
+    public static Result<CheckReport> TryLoad(string? runIdValue)
+    {
+        Result<string> id = ValidateRunId(runIdValue);
+        if (id.IsFailure)
+            return id.ConvertFailure<CheckReport>();
+        string runId = id.Value;
+
+        string path = Path.Combine(RunDir(runId), "checks.json");
+        byte[] bytes;
+        try
+        {
+            bytes = File.ReadAllBytes(path);
+        }
+        catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException || ex is DirectoryNotFoundException || ex is FileNotFoundException)
+        {
+            return Result.Failure<CheckReport>(
+                $"Run '{runId}' has no recorded checks at '{path}': " +
+                "stage 'checks' (S4, #378) has not produced them. " +
+                $"({ex.Message})");
+        }
+
+        JsonDocument doc;
+        try
+        {
+            doc = JsonDocument.Parse(bytes);
+        }
+        catch (JsonException ex)
+        {
+            return Result.Failure<CheckReport>(
+                $"Recorded checks at '{path}' are not valid JSON: {ex.Message}");
+        }
+        using (doc)
+        {
+            return ReadCheckReport(runId, path, doc.RootElement);
+        }
+    }
+
+    private static Result<CheckReport> ReadCheckReport(string runId, string path, JsonElement root)
+    {
+        if (root.ValueKind != JsonValueKind.Object)
+            return Corrupt<CheckReport>(path, "is not a JSON object.");
+        if (!TryGetIntField(root, "version", out int version) || version != 1)
+            return Corrupt<CheckReport>(path, "has an invalid 'version' (expected 1).");
+        string? fileRunId = GetStringField(root, "runId");
+        string? baseRevision = GetStringField(root, "baseRevision");
+        string? headRevision = GetStringField(root, "headRevision");
+        if (string.IsNullOrWhiteSpace(fileRunId)
+            || string.IsNullOrWhiteSpace(baseRevision)
+            || string.IsNullOrWhiteSpace(headRevision))
+            return Corrupt<CheckReport>(path, "is missing 'runId', 'baseRevision' or 'headRevision'.");
+        if (!fileRunId.Equals(runId, StringComparison.Ordinal))
+            return Corrupt<CheckReport>(path,
+                $"directory says '{runId}' but the artifact says '{fileRunId}'.");
+        if (!root.TryGetProperty("checks", out JsonElement checksEl))
+            return Corrupt<CheckReport>(path, "is missing 'checks'.");
+        if (checksEl.ValueKind == JsonValueKind.String)
+        {
+            if (!"none".Equals(checksEl.GetString(), StringComparison.Ordinal))
+                return Corrupt<CheckReport>(path, "has an invalid 'checks' marker (expected \"none\").");
+            return Result.Success(new CheckReport(runId, baseRevision, headRevision, Array.Empty<CheckResult>()));
+        }
+        if (checksEl.ValueKind != JsonValueKind.Array)
+            return Corrupt<CheckReport>(path, "has an invalid 'checks' (expected an array or \"none\").");
+
+        var results = new List<CheckResult>(checksEl.GetArrayLength());
+        int index = 0;
+        foreach (JsonElement el in checksEl.EnumerateArray())
+        {
+            Result<CheckResult> entry = ReadCheckResult(path, index, el);
+            if (entry.IsFailure)
+                return entry.ConvertFailure<CheckReport>();
+            results.Add(entry.Value);
+            index++;
+        }
+        return Result.Success(new CheckReport(runId, baseRevision, headRevision, results));
+    }
+
+    private static Result<CheckResult> ReadCheckResult(string path, int index, JsonElement el)
+    {
+        if (el.ValueKind != JsonValueKind.Object)
+            return Corrupt<CheckResult>(path, $"entry #{index} is not a JSON object.");
+        string? name = GetStringField(el, "name");
+        string? commandLine = GetStringField(el, "commandLine");
+        string? workingDirectory = GetStringField(el, "workingDirectory");
+        string? baseRevision = GetStringField(el, "baseRevision");
+        string? headRevision = GetStringField(el, "headRevision");
+        string? output = GetStringField(el, "output", allowEmpty: true);
+        string? errorOutput = GetStringField(el, "errorOutput", allowEmpty: true);
+        if (string.IsNullOrWhiteSpace(name)
+            || string.IsNullOrWhiteSpace(commandLine)
+            || string.IsNullOrWhiteSpace(workingDirectory)
+            || string.IsNullOrWhiteSpace(baseRevision)
+            || string.IsNullOrWhiteSpace(headRevision)
+            || output is null
+            || errorOutput is null)
+            return Corrupt<CheckResult>(path, $"entry #{index} is missing required fields.");
+        int? exitCode = GetNullableIntField(el, "exitCode");
+        if (el.TryGetProperty("exitCode", out JsonElement exitEl)
+            && exitEl.ValueKind != JsonValueKind.Number
+            && exitEl.ValueKind != JsonValueKind.Null)
+            return Corrupt<CheckResult>(path, $"entry #{index} has an invalid 'exitCode'.");
+        string? outcomeRaw = GetStringField(el, "outcome");
+        if (string.IsNullOrWhiteSpace(outcomeRaw)
+            || !Enum.TryParse<CheckOutcome>(outcomeRaw, ignoreCase: false, out CheckOutcome outcome)
+            || !Enum.IsDefined(outcome))
+            return Corrupt<CheckResult>(path, $"entry #{index} has an unknown 'outcome'.");
+        if (!TryGetLongField(el, "durationMs", out long durationMs) || durationMs < 0)
+            return Corrupt<CheckResult>(path, $"entry #{index} has an invalid 'durationMs'.");
+        Result<IReadOnlyList<string>> keys = ReadEnvKeys(path, index, el);
+        if (keys.IsFailure)
+            return keys.ConvertFailure<CheckResult>();
+        if (!TryGetBoolField(el, "truncated", out bool truncated)
+            || !TryGetBoolField(el, "viaShell", out bool viaShell))
+            return Corrupt<CheckResult>(path, $"entry #{index} has an invalid 'truncated' or 'viaShell'.");
+        return Result.Success(new CheckResult(
+            name, commandLine, workingDirectory, exitCode, outcome,
+            TimeSpan.FromMilliseconds(durationMs), baseRevision, headRevision,
+            keys.Value, output, errorOutput, truncated, viaShell));
+    }
+
+    private static Result<IReadOnlyList<string>> ReadEnvKeys(string path, int index, JsonElement el)
+    {
+        if (!el.TryGetProperty("envKeys", out JsonElement keysEl)
+            || keysEl.ValueKind != JsonValueKind.Array)
+            return Corrupt<IReadOnlyList<string>>(path, $"entry #{index} has an invalid 'envKeys'.");
+        var keys = new List<string>(keysEl.GetArrayLength());
+        foreach (JsonElement keyEl in keysEl.EnumerateArray())
+        {
+            if (keyEl.ValueKind != JsonValueKind.String || string.IsNullOrWhiteSpace(keyEl.GetString()))
+                return Corrupt<IReadOnlyList<string>>(path, $"entry #{index} has a blank environment key.");
+            keys.Add(keyEl.GetString()!);
+        }
+        return Result.Success<IReadOnlyList<string>>(keys);
+    }
+
+    private static Result<T> Corrupt<T>(string path, string detail) =>
+        Result.Failure<T>($"Recorded checks at '{path}' are corrupt: {detail}");
+
+    private static string? GetStringField(JsonElement root, string name, bool allowEmpty = false)
+    {
+        if (!root.TryGetProperty(name, out JsonElement el))
+            return null;
+        if (el.ValueKind != JsonValueKind.String)
+            return null;
+        string? value = el.GetString();
+        if (value is null)
+            return null;
+        if (!allowEmpty && value.Length == 0)
+            return null;
+        return value;
+    }
+
+    private static int? GetNullableIntField(JsonElement root, string name)
+    {
+        if (!root.TryGetProperty(name, out JsonElement el))
+            return null;
+        if (el.ValueKind == JsonValueKind.Number && el.TryGetInt32(out int n))
+            return n;
+        return null;
+    }
+
+    private static bool TryGetIntField(JsonElement root, string name, out int value)
+    {
+        value = 0;
+        if (!root.TryGetProperty(name, out JsonElement el))
+            return false;
+        if (el.ValueKind == JsonValueKind.Number && el.TryGetInt32(out int n))
+        {
+            value = n;
+            return true;
+        }
+        return false;
+    }
+
+    private static bool TryGetLongField(JsonElement root, string name, out long value)
+    {
+        value = 0;
+        if (!root.TryGetProperty(name, out JsonElement el))
+            return false;
+        if (el.ValueKind == JsonValueKind.Number && el.TryGetInt64(out long n))
+        {
+            value = n;
+            return true;
+        }
+        return false;
+    }
+
+    private static bool TryGetBoolField(JsonElement root, string name, out bool value)
+    {
+        value = false;
+        if (!root.TryGetProperty(name, out JsonElement el))
+            return false;
+        if (el.ValueKind is JsonValueKind.True or JsonValueKind.False)
+        {
+            value = el.ValueKind == JsonValueKind.True;
+            return true;
+        }
+        return false;
+    }
+
     private static async Task<CheckResult> RunOneAsync(
         CheckSpec spec,
         string worktreePath,

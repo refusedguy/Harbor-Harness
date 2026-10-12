@@ -266,6 +266,34 @@ public static class ChangeSetFreezer
         return await FreezeIsolatedAsync(manifest, workspace, patchByteCapBytes, maxEntries, ct).ConfigureAwait(false);
     }
 
+    /// <summary>
+    ///     Load the recorded frozen change set for <paramref name="runIdValue" />
+    ///     (epic #42, slice S5 remainder, #379): <c>changeset.json</c> plus the
+    ///     <c>change.patch</c> path. No worktree access, no head comparison —
+    ///     the report (S5) renders the recorded artifact, including the case
+    ///     where the worktree holds post-freeze state (that dirt is a
+    ///     <c>KnownRisks</c> entry, not a reason to refuse the read). A missing
+    ///     patch or inventory is a <c>Result.Failure</c> naming the freeze
+    ///     stage, never an empty set.
+    /// </summary>
+    /// <param name="runIdValue">Run id (validated like everywhere else: no path separators).</param>
+    public static Result<FrozenChangeSet> TryLoad(string? runIdValue)
+    {
+        Result<string> id = ValidateRunId(runIdValue);
+        if (id.IsFailure)
+            return id.ConvertFailure<FrozenChangeSet>();
+        string runId = id.Value;
+
+        string runDir = WorkspaceMaterializer.RunDir(runId);
+        string patchPath = Path.Combine(runDir, "change.patch");
+        string changesetPath = Path.Combine(runDir, "changeset.json");
+        if (!File.Exists(patchPath) || !File.Exists(changesetPath))
+            return Result.Failure<FrozenChangeSet>(
+                $"Run '{runId}' has no frozen change set ('{patchPath}', '{changesetPath}'): " +
+                "stage 'freeze' (S3, #377) has not produced it — refusing to invent a change set.");
+        return ReadChangesetJson(changesetPath, patchPath);
+    }
+
     private static async Task<Result<FrozenChangeSet>> FreezeIsolatedAsync(
         RunManifest manifest,
         IsolatedWorkspace workspace,
@@ -964,6 +992,15 @@ public static class ChangeSetFreezer
         if (el.ValueKind == JsonValueKind.Number && el.TryGetInt32(out int n) && n >= 0)
             return n;
         return null;
+    }
+
+    private static Result<string> ValidateRunId(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return Result.Failure<string>("Run ID cannot be empty.");
+        if (value != Path.GetFileName(value) || value is "." or "..")
+            return Result.Failure<string>($"Invalid run id '{value}': path separators are not allowed.");
+        return Result.Success(value);
     }
 
     private static void DeleteQuiet(string path)

@@ -22,12 +22,15 @@ harbor run change agent=<name> "<task>" [--checks <file>] [--dry-run] [--repo <p
 
 ## Status
 
-Pin, isolate, freeze, checks, and the accept-gate are implemented. The command runs pin,
-isolate, freeze, and checks and then stops fail-closed: the run is left honestly at `Checked`,
-exit code 4 names the missing `report` stage, and `harbor run list` shows the run with
-its last completed transition. Nothing is faked past `Checked`. Accept
-(`harbor run accept`) applies a frozen `change.patch` once the earlier slices
-produce one; until then it refuses with the missing stage named.
+Pin, isolate, freeze, checks, report, and the accept-gate are implemented.
+The command runs pin, isolate, freeze, checks, and report: the run advances
+`Pinned -> Isolated -> Changed -> Checked -> Reported`, exit code 0 means
+reported with all checks passed and exit code 1 means reported with at
+least one check failed, and `harbor run list` shows the run with its last
+completed transition. A failed check still produces a report (it never
+skips to "success"), and a failed pre-flight never leaves a worktree
+registered. Accept (`harbor run accept`) applies the frozen `change.patch`
+behind the base-unchanged gate; `--reverify` still refuses naming S4/S5.
 
 | Slice | Stage | State |
 |---|---|---|
@@ -35,11 +38,11 @@ produce one; until then it refuses with the missing stage named.
 | S2 | worktree + manifest | landed |
 | S3 | frozen change set | landed (#377) |
 | S4 | checks | landed (#378) |
-| S5 | verification report | in progress (#379, slice 1: pure renderer, no verb yet) |
+| S5 | verification report | landed (#379: pure renderer + `run report` verb + `report.json`/`report.txt` persistence) |
 | S6 | accept | slice 1 landed (#382): gate + apply + dry-run + at-most-once + `accept.log`; `--reverify` fail-closed pending the S5 report (#379) |
 | S7 | reject | slice 1 landed (#385): verb + `--all-effects` (exit 5); `--patch`/`--worktree`/`--undo-apply` pending |
 | S8 | owner report | landed (#392: format slice + persistence/verb slice) |
-| S9 | end-to-end driver | in progress (#397, this slice) |
+| S9 | end-to-end driver | landed (#397: `run change` drives pin through report; e2e chain tests) |
 
 ## Run directory layout
 
@@ -51,16 +54,20 @@ Each run owns one directory, minted id, never user input:
   worktree/       detached git worktree at the pinned revision
   change.patch    frozen binary diff base..head (S3); accept reads only this file
   changeset.json  frozen inventory: per-path status + counts (S3)
+  checks.json     recorded check evidence: command, revisions, exit, env keys (S4)
+  report.json     machine rendering of the verification report (S5)
+  report.txt      plain-text rendering of the verification report, 80 columns (S5)
   accept.log      append-only audit trail: one line per accept attempt
 ```
 
-`change.patch` and `changeset.json` (both S3), `checks.json` (S4), and
-`accept.log` (S6 slice 1) already exist; `report.json` and `owner-report.md`
-arrive with their slices. The manifest is written atomically (temp + rename), so a
-killed process leaves either the previous state or the new one, never a
-half-written file. `report.json` is rendered by slice S5-1
-(`src/Harbor.Application/Sessions/ChangeReport.cs`) from the frozen set
-and the recorded checks; see Report format below.
+`change.patch` and `changeset.json` (both S3), `checks.json` (S4),
+`report.json` + `report.txt` (S5), `accept.log` (S6 slice 1), and
+`owner-report.md` (S8) all live beside the manifest. Every artifact is
+written atomically (temp + rename), so a killed process leaves either the
+previous state or the new one, never a half-written file. `report.json` is
+rendered by `src/Harbor.Application/Sessions/ChangeReport.cs` from the
+frozen set and the recorded checks, persisted by
+`src/Harbor.Application/Sessions/RunReporter.cs`; see Report format below.
 
 ## State machine
 
@@ -86,11 +93,11 @@ names the stage:
 
 | Code | Meaning |
 |---|---|
-| 0 | dry-run plan printed (`--dry-run` writes nothing); applied, all pre-flights passed |
-| 1 | reported, at least one check failed (reserved for S4/S5) |
-| 2 | bad usage (missing agent, missing task, missing checks file, missing run id, unknown option, unknown run) |
+| 0 | dry-run plan printed (`--dry-run` writes nothing); reported, all checks passed (zero declared checks is legal); applied |
+| 1 | reported, at least one check failed, timed out, or never ran |
+| 2 | bad usage (missing agent, missing task, missing checks file, missing run id, unknown option, unknown run) or the report cannot be produced (missing or corrupt artifact, illegal state) |
 | 3 | pre-flight conflict: dirty workspace, moved base, or not a repository |
-| 4 | internal failure at a named stage (`isolate`, `freeze`, `checks`, the not-yet-wired `report`, accept before `Reported`, second accept on an `Accepted` run, unavailable `--reverify`, failed apply) |
+| 4 | internal failure at a named stage (`isolate`, `freeze`, `checks`, `report`, accept before `Reported`, second accept on an `Accepted` run, unavailable `--reverify`, failed apply) |
 | 5 | out-of-reach inventory (`--all-effects`): read-only, nothing written |
 
 `--dry-run` performs the pin pre-flight and prints the plan, then stops
@@ -143,8 +150,9 @@ over-limit files are failures naming the cap, never silent cuts.
 After the checks record lands, the manifest moves `Changed -> Checked`
 through `RunChangeTransitions`. A failed check still records its evidence
 and still advances to `Checked`: the run reports what was proven, it never
-skips to "success", and the command stops with exit 4 naming the
-not-yet-wired `report` stage.
+skips to "success". Then the report (S5) renders from the frozen set and
+the checks and the manifest moves `Checked -> Reported`; the command exits
+with the report's code (0 all passed, 1 a check failed).
 
 ## Accept (S6 slice 1)
 
@@ -178,11 +186,22 @@ passed, the applier attempts `git apply --reverse`; a failed rollback is
 exact recovery commands, not a lifecycle state: the S9 map gains no new
 axis for a half-applied tree and the manifest stays `Reported`.
 
-## Report format (S5 slice 1)
+## Report format (S5)
 
-Slice 1 is the pure renderer: `ChangeReport.Create` takes the frozen set
-(S3) and the recorded checks (S4) as hand-built inputs and derives the
-rest. No disk reads, no git, no new lifecycle state.
+The pure renderer is `ChangeReport.Create`: it takes the frozen set (S3)
+and the recorded checks (S4) as inputs and derives the rest. No git, no
+clock, deterministic. The verb is `harbor run report <RunId>`
+(`RunReportVerb` -> `RunReporter.ReportAsync` in
+`src/Harbor.Application/Sessions/RunReporter.cs`): it loads
+`changeset.json` (`ChangeSetFreezer.TryLoad`) and `checks.json`
+(`CheckRunner.TryLoad`), refuses on a missing/corrupt artifact or a
+run-id/base/head mismatch across the three, probes the worktree for
+post-freeze dirt, persists `report.json` (machine) + `report.txt` (plain
+text) atomically, and moves the manifest `Checked -> Reported`. Reporting
+an already-`Reported` run is idempotent: the artifacts rebuild and the
+stored text returns only when the rebuild is byte-identical, otherwise the
+verb refuses naming the drift and the stored `report.json` stays the
+record.
 
 Six blocks, always in this order, never omitted — an empty block prints
 `(none)`:
@@ -211,13 +230,16 @@ Six blocks, always in this order, never omitted — an empty block prints
 - Plain text fits 80 columns and contains no ANSI escapes.
 - Exit codes: `0` all declared checks passed (zero declared checks is legal
   and exits `0` with the explicit entry), `1` at least one check failed,
-  timed out, or never ran, `2` the report cannot be produced (reserved for
-  the future `harbor run report` verb: missing or corrupt artifact).
+  timed out, or never ran, `2` the report cannot be produced (missing or
+  corrupt artifact, illegal state).
 
-Deferred to later slices: the `harbor run report <RunId>` verb reading
-`changeset.json` / `checks.json` from the run directory (needs S3/S4
-formats to land first), and the release-then-reread byte-identity test
-(needs the S3 release path).
+`harbor run report` prints the stored plain text to stdout (safe to pipe)
+and a one-line summary to stderr. The report is self-contained: it renders
+from the recorded artifacts, and a missing worktree probes as clean rather
+than failing. Re-reporting a `Reported` run rebuilds from the same
+artifacts and returns the stored text when the rebuild is byte-identical;
+drift is refused with the stage named and the stored `report.json` stays
+the record.
 
 ## Reject modes (S7)
 Rejection is three separately invocable operations, never one blurred action:

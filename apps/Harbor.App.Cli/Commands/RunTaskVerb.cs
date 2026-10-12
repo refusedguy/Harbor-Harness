@@ -8,14 +8,16 @@ namespace Harbor.App.Cli.Commands;
 ///     runner directly (same isolation path as the <c>task</c> tool) without a
 ///     parent agent turn. Extracted from <c>Program</c> (#176), 1:1 behavior.
 ///     <c>harbor run list</c> (S2, #376) prints the persisted run manifests.
-///     <c>harbor run change</c> (S9 slice 1, #397) pins and isolates one
-///     verified-change run, then stops fail-closed past <c>Isolated</c>.
+///     <c>harbor run change</c> (S9, #397) drives one verified-change run
+///     from pin through report (<c>Pinned -&gt; Reported</c>).
 ///     <c>harbor run accept</c> (S6 slice 1, #382) applies the frozen patch
 ///     behind the base-unchanged gate.
 ///     <c>harbor run reject</c> (S7 slice 1, #385) routes the three reject
 ///     modes; only <c>--all-effects</c> is implemented yet.
 ///     <c>harbor run owner-report</c> (S8 remainder, #392) prints the persisted
 ///     owner report as plain text (80 columns, no ANSI).
+///     <c>harbor run report</c> (S5 remainder, #379) renders the verification
+///     report from recorded artifacts and advances <c>Checked -&gt; Reported</c>.
 /// </summary>
 internal static class RunTaskVerb
 {
@@ -30,6 +32,8 @@ internal static class RunTaskVerb
             return RunRejectVerb.Run(args.Skip(1).ToArray());
         if (sub == "owner-report")
             return RunOwnerReportVerb.Run(args.Skip(1).ToArray());
+        if (sub == "report")
+            return await RunReportVerb.RunAsync(args.Skip(1).ToArray()).ConfigureAwait(false);
         if (sub == "change")
             return await RunChangeVerb.RunAsync(args.Skip(1).ToArray()).ConfigureAwait(false);
         if (sub != "task")
@@ -41,6 +45,7 @@ internal static class RunTaskVerb
                                       harbor run accept <RunId> [--dry-run] [--reverify]
                                       harbor run reject <RunId> (--patch | --worktree | --all-effects) [--force]
                                       harbor run owner-report <RunId>
+                                      harbor run report <RunId>
                                       harbor run list
                                     """);
             return sub.Length == 0 ? 2 : 1;
