@@ -544,10 +544,10 @@ public sealed class HookRunner : IHookRunner
 internal static partial class HookRunnerLog
 {
     [LoggerMessage(EventId = 1, Level = LogLevel.Warning, Message = "{EventName} hook '{Command}' failed; failing closed to Deny: {Error}")]
-    public static partial void HookFailedDeny(ILogger logger, string eventName, string command, string error);
+    public static partial void HookFailedDeny(ILogger logger, string eventName, string command, string? error);
 
     [LoggerMessage(EventId = 2, Level = LogLevel.Information, Message = "{EventName} hook '{Command}' denied the call: {Reason}")]
-    public static partial void HookDeniedCall(ILogger logger, string eventName, string command, string reason);
+    public static partial void HookDeniedCall(ILogger logger, string eventName, string command, string? reason);
 
     [LoggerMessage(EventId = 3, Level = LogLevel.Debug, Message = "{EventName} hooks skipped: run cancelled")]
     public static partial void HooksSkippedCancelled(ILogger logger, Exception ex, string eventName);

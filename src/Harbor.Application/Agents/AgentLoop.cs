@@ -470,7 +470,7 @@ public sealed class AgentLoop : IAgentLoop
 internal static partial class AgentLoopLog
 {
     [LoggerMessage(EventId = 1, Level = LogLevel.Information, Message = "User hook denied the prompt for session={SessionId} agent={Agent}: {Reason}")]
-    public static partial void UserHookDeniedPrompt(ILogger logger, string sessionId, string agent, string reason);
+    public static partial void UserHookDeniedPrompt(ILogger logger, string sessionId, string agent, string? reason);
 
     [LoggerMessage(EventId = 2, Level = LogLevel.Information, Message = "Agent run hit wall-clock budget ({Budget}): session={SessionId} agent={Agent}")]
     public static partial void WallClockBudgetHit(ILogger logger, TimeSpan budget, string sessionId, string agent);

@@ -410,7 +410,7 @@ internal static partial class PermissionServiceLog
     public static partial void LoadPersistedFailed(ILogger logger, string error);
 
     [LoggerMessage(EventId = 3, Level = LogLevel.Information, Message = "Loaded {Count} persisted permission rule(s) for {AgentCount} agent(s)")]
-    public static partial void PersistedRulesLoaded(ILogger logger, int count, string agentCount);
+    public static partial void PersistedRulesLoaded(ILogger logger, int count, int agentCount);
 
     [LoggerMessage(EventId = 4, Level = LogLevel.Warning, Message = "Failed to save persisted permissions: {Error}")]
     public static partial void SavePersistedFailed(ILogger logger, string error);
