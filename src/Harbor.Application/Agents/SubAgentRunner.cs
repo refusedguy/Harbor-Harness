@@ -200,7 +200,12 @@ public sealed class SubAgentRunner(
                 request.Prompt,
                 agent.Name.Value,
                 agent.Model);
-            await context.AppendMessageAsync(userMessage, ct).ConfigureAwait(false);
+            // #1103: the parent's task is setup, not work — it persists with
+            // None so a cancel racing the spawn cannot throw OCE past
+            // MarkStatusAsync and leave the session Working forever. The
+            // cancel is still honored: loop.RunAsync below observes it and
+            // returns the cancelled failure, which marks the session Aborted.
+            await context.AppendMessageAsync(userMessage, CancellationToken.None).ConfigureAwait(false);
 
             var run = await loop.RunAsync(context, agent, ct).ConfigureAwait(false);
             if (run.IsFailure)

@@ -305,4 +305,102 @@ public class CancelMisclassification1103Tests
 
         return new PermissionResponse(PermissionAction.Deny, false);
     }
+
+    /// <summary>
+    ///     Store that presses Stop as the sub-run's setup persist lands, then
+    ///     honors the passed token like a real store. Replicates a cancel
+    ///     racing the spawn.
+    /// </summary>
+    private sealed class CancelOnSubSpawnStore : ISessionStore
+    {
+        private readonly FakeSessionStore _inner;
+        private readonly CancellationTokenSource _cts;
+        private int _appends;
+
+        public CancelOnSubSpawnStore(Session session, CancellationTokenSource cts)
+        {
+            _inner = new FakeSessionStore(session);
+            _cts = cts;
+        }
+
+        public List<SessionStatus> StatusMarks { get; } = [];
+
+        public Task<Result<Session>> CreateAsync(string directory, string agentName, string providerId, string modelId, CancellationToken ct = default) =>
+            _inner.CreateAsync(directory, agentName, providerId, modelId, ct);
+
+        public Task<Result<Session>> GetAsync(string sessionId, CancellationToken ct = default) =>
+            _inner.GetAsync(sessionId, ct);
+
+        public Task<Result<IReadOnlyList<Session>>> ListAsync(string? projectId = null, CancellationToken ct = default) =>
+            _inner.ListAsync(projectId, ct);
+
+        public Task<Result> AppendMessageAsync(string sessionId, AgentMessage message, CancellationToken ct = default)
+        {
+            if (Interlocked.Increment(ref _appends) == 1)
+                _cts.Cancel();
+            ct.ThrowIfCancellationRequested();
+            return _inner.AppendMessageAsync(sessionId, message, ct);
+        }
+
+        public Task<Result> UpdateMessageAsync(string sessionId, AgentMessage message, CancellationToken ct = default) =>
+            _inner.UpdateMessageAsync(sessionId, message, ct);
+
+        public Task<Result<IReadOnlyList<AgentMessage>>> GetMessagesAsync(string sessionId, CancellationToken ct = default) =>
+            _inner.GetMessagesAsync(sessionId, ct);
+
+        public Task<Result> DeleteAsync(string sessionId, CancellationToken ct = default) =>
+            _inner.DeleteAsync(sessionId, ct);
+
+        public Task<Result> UpdateAsync(Session session, CancellationToken ct = default)
+        {
+            StatusMarks.Add(session.Status);
+            return _inner.UpdateAsync(session, ct);
+        }
+
+        public Task<Result<SessionMetadata>> GetStatsAsync(string sessionId, CancellationToken ct = default) =>
+            _inner.GetStatsAsync(sessionId, ct);
+
+        public Task<Result> UpdateStatsAsync(string sessionId, SessionMetadata metadata, CancellationToken ct = default) =>
+            _inner.UpdateStatsAsync(sessionId, metadata, ct);
+
+        public Task<Result<int>> DeleteMessagesAfterAsync(string sessionId, string messageId, CancellationToken ct = default) =>
+            _inner.DeleteMessagesAfterAsync(sessionId, messageId, ct);
+    }
+
+    /// <summary>Loop fake that reports the run as cancelled, like the real loop does under a fired token.</summary>
+    private sealed class CancelledLoop : IAgentLoop
+    {
+        public Task<Result> RunAsync(ISessionContext session, AgentDefinition agent, CancellationToken ct = default) =>
+            Task.FromResult(Result.Failure("Sub-agent run was cancelled."));
+    }
+
+    [Test]
+    public async Task RunAsync_CancelAtSubSpawnSetup_SessionAborted_NoOrphan()
+    {
+        // #1103 SubAgentRunner:165 — the setup persist rode the run token, so
+        // a cancel racing the spawn threw OCE past MarkStatusAsync and left
+        // the session Working forever. The setup now rides None; the cancel
+        // still ends the run as Aborted with the resumable trailer.
+        using var cts = new CancellationTokenSource();
+        var store = new CancelOnSubSpawnStore(
+            Session.Create("/tmp/harbor-1103-cancel", "explore", "test", "test-model"), cts);
+        var runner = new SubAgentRunner(store, new CancelledLoop(), NullLogger<SubAgentRunner>.Instance);
+        var agent = new AgentDefinition(
+            AgentName.Create("explore"),
+            "explore",
+            "explore",
+            "test-model",
+            "test",
+            PermissionRuleset.Empty,
+            20,
+            IsSubAgent: true);
+
+        var result = await runner.RunAsync(
+            agent, new SubAgentRunRequest("find the todos", ParentSessionId: "parent-1"), cts.Token);
+
+        await Assert.That(result.IsFailure).IsTrue();
+        await Assert.That(result.Error).Contains("cancelled");
+        await Assert.That(store.StatusMarks.Count).IsGreaterThanOrEqualTo(1);
+        await Assert.That(store.StatusMarks[^1]).IsEqualTo(SessionStatus.Aborted);
+    }
 }
