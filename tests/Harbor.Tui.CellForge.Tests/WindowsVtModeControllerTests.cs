@@ -14,6 +14,42 @@ public class WindowsVtModeControllerTests
     [DllImport("kernel32", SetLastError = true)]
     private static extern uint GetConsoleOutputCP();
 
+    // WinBase.h handle ids + WinCon.h mode bits, mirrored here so this test
+    // reads what the Console API actually holds rather than what the
+    // controller's own constants say it wrote. The two sets agree by
+    // construction; if the controller's flags change, this test changes with
+    // it or fails, which is the point.
+    private const int TestStdInputHandle = -10;
+    private const int TestStdOutputHandle = -11;
+    private const uint TestEnableProcessedInput = 0x0001;
+    private const uint TestEnableLineInput = 0x0002;
+    private const uint TestEnableEchoInput = 0x0004;
+    private const uint TestEnableVirtualTerminalInput = 0x0200;
+    private const uint TestEnableVirtualTerminalProcessing = 0x0004;
+
+    [DllImport("kernel32", SetLastError = true)]
+    private static extern IntPtr GetStdHandle(int nStdHandle);
+
+    [DllImport("kernel32", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool GetConsoleMode(IntPtr hConsoleHandle, out uint lpMode);
+
+    /// <summary>
+    ///     Reads the live console mode for <paramref name="handleId" />, or
+    ///     <see langword="null" /> when this host has no such console (a
+    ///     redirected handle under CI).
+    /// </summary>
+    private static uint? TryReadConsoleMode(int handleId)
+    {
+        IntPtr handle = GetStdHandle(handleId);
+        if (handle == IntPtr.Zero || handle == new IntPtr(-1))
+        {
+            return null;
+        }
+
+        return GetConsoleMode(handle, out uint mode) ? mode : null;
+    }
+
     [Test]
     public async Task InitialState_IsRaw_False()
     {
@@ -247,6 +283,79 @@ public class WindowsVtModeControllerTests
                 }
             }
             catch { }
+        }
+    }
+
+    [Test]
+    public async Task Enter_OnWindows_RequestsVtInputAndRestoresTheOriginalModes()
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        uint? inputBefore = TryReadConsoleMode(TestStdInputHandle);
+        uint? outputBefore = TryReadConsoleMode(TestStdOutputHandle);
+
+        var controller = new WindowsVtModeController();
+        bool entered;
+        try
+        {
+            controller.Enter();
+            entered = controller.IsRaw;
+        }
+        catch (InvalidOperationException)
+        {
+            // No console on stdin — the Windows leg cannot run here at all.
+            await Assert.That(controller.IsRaw).IsFalse();
+            return;
+        }
+
+        if (!entered)
+        {
+            return;
+        }
+
+        try
+        {
+            uint? inputDuring = TryReadConsoleMode(TestStdInputHandle);
+            if (inputBefore is { } beforeInput && inputDuring is { } duringInput)
+            {
+                await Assert.That(duringInput & TestEnableVirtualTerminalInput).IsNotEqualTo(0u)
+                    .Because("raw input on Windows arrives as VT sequences — ENABLE_VIRTUAL_TERMINAL_INPUT is what makes that true.");
+                await Assert.That(duringInput & (TestEnableEchoInput | TestEnableLineInput | TestEnableProcessedInput)).IsEqualTo(0u)
+                    .Because("echo, line editing and processed input must all be off: the parser owns the bytes, and Ctrl+C must reach it as 0x03.");
+            }
+
+            uint? outputDuring = TryReadConsoleMode(TestStdOutputHandle);
+            if (outputBefore is not null && outputDuring is { } duringOutput)
+            {
+                await Assert.That(duringOutput & TestEnableVirtualTerminalProcessing).IsNotEqualTo(0u)
+                    .Because("the diff renderer writes VT sequences — ENABLE_VIRTUAL_TERMINAL_PROCESSING is what makes conhost interpret them.");
+            }
+        }
+        finally
+        {
+            try { controller.Restore(); } catch { }
+        }
+
+        await Assert.That(controller.IsRaw).IsFalse();
+
+        // Restore must put both handles back exactly as they were found,
+        // otherwise a crashed or exited session leaves the user's console in
+        // raw mode.
+        uint? inputAfter = TryReadConsoleMode(TestStdInputHandle);
+        if (inputBefore is { } before && inputAfter is { } after)
+        {
+            await Assert.That(after).IsEqualTo(before)
+                .Because("Restore must hand the input handle back its original mode.");
+        }
+
+        uint? outputAfter = TryReadConsoleMode(TestStdOutputHandle);
+        if (outputBefore is { } beforeOut && outputAfter is { } afterOut)
+        {
+            await Assert.That(afterOut).IsEqualTo(beforeOut)
+                .Because("Restore must hand the output handle back its original mode.");
         }
     }
 

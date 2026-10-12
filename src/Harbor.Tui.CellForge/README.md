@@ -54,10 +54,14 @@ Kill-switch в `~/.harbor/config.json` (приоритет выше выбора
 - onboarding-мастер (`/setup`) требует legacy-рендер; если он не завершён,
   CellForge откладывается до следующего запуска;
 - `/setup` внутри CellForge печатает подсказку вместо интерактивного ввода;
-- Windows: raw-режим opt-in за флагом `HARBOR_CELLFORGE_WINDOWS=1`
-  (PX3 slice 1, issue #1249) — без него автоматический откат на legacy,
-  с ним `HARBOR_TUI=cellforge` использует `WindowsVtModeController`
-  (Win32 Console API: `SetConsoleMode` + `VIRTUAL_TERMINAL_INPUT`);
+- Windows: `HARBOR_TUI=cellforge` использует `WindowsVtModeController`
+  по умолчанию (issue #1249, bring-up slice 2: Win32 Console API —
+  `SetConsoleMode` + `VIRTUAL_TERMINAL_INPUT`/`VIRTUAL_TERMINAL_PROCESSING`,
+  CP 65001 + UTF-8). Откат на legacy остаётся только capability-откатом:
+  raw-mode проба не удалась (перенаправленный stdin, консоль отказала
+  `SetConsoleMode`) — отказ пишется в лог, не в молчаливый фолбэк.
+  `HARBOR_CELLFORGE_WINDOWS=0` — явный opt-out на legacy (до slice 2 эта
+  переменная была opt-in: `=1` включал bring-up);
 - kitty-протокол не пушится (консервативный legacy-энкодинг); Shift+Enter /
   Ctrl-комбинации, неразличимые без kitty, деградируют явно.
 
@@ -96,8 +100,8 @@ GNOME Terminal, Windows Terminal*). Деградация явная: без 256 
 спиннер и статусы остаются читаемыми, но упрощаются. Внутри tmux/screen kitty
 не пушится по дизайну (§2.5 design-doc).
 
-\* Windows: bring-up идёт по issue #1249; slice 1 — opt-in флаг
-`HARBOR_CELLFORGE_WINDOWS=1` (дефолт — откат на legacy, как было).
+\* Windows: bring-up идёт по issue #1249; slice 2 — raw-режим по умолчанию
+(`WindowsVtModeController`), opt-out через `HARBOR_CELLFORGE_WINDOWS=0`.
 
 ## Разработка
 

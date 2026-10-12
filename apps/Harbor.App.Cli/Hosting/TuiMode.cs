@@ -208,25 +208,33 @@ internal static class TuiMode
     }
 
     /// <summary>
-    ///     Opt-in variable for CellForge raw mode on Windows (issue #1249,
-    ///     PX3 slice 1): <c>HARBOR_CELLFORGE_WINDOWS=1</c> (or <c>true</c>,
-    ///     case-insensitive — the same shape as
-    ///     <c>HARBOR_TUI_RUNTIME_SWAP</c>). Without it, <c>HARBOR_TUI=cellforge</c>
-    ///     on Windows falls back to the legacy renderer; the Windows VT
-    ///     controller behind the flag is bring-up code, not yet the default.
+    ///     Opt-out variable for CellForge raw mode on Windows (issue #1249,
+    ///     bring-up slice 2). Slices 1 used this same name as an OPT-IN
+    ///     (<c>=1</c> enabled a bring-up controller that was not the default);
+    ///     slice 2 makes the Win32 controller the Windows default and flips the
+    ///     variable to an opt-OUT — <c>HARBOR_CELLFORGE_WINDOWS=0</c> (or
+    ///     <c>false</c>, case-insensitive) keeps the legacy renderer on Windows.
+    ///     Every other value, unset included, runs CellForge there.
     /// </summary>
-    public const string WindowsCellForgeOptInVariable = "HARBOR_CELLFORGE_WINDOWS";
+    /// <remarks>
+    ///     The flip is deliberately in place rather than under a new name: no
+    ///     value a user can have set changes meaning in the direction that
+    ///     surprises them (<c>1</c> meant CellForge and still does, <c>0</c>
+    ///     meant legacy and still does), and the only state that moves is the
+    ///     one the issue asks to move — the unset default.
+    /// </remarks>
+    public const string WindowsCellForgeOptOutVariable = "HARBOR_CELLFORGE_WINDOWS";
 
     /// <summary>
-    ///     True when the Windows opt-in above is set. Platform-independent
+    ///     True when the Windows opt-out above is set. Platform-independent
     ///     parsing — the OS half of the gate lives in
-    ///     <see cref="IsCellForgeBlockedOnThisOs" />.
+    ///     <see cref="IsCellForgeBlocked" />.
     /// </summary>
-    public static bool IsWindowsCellForgeOptedIn()
+    public static bool IsWindowsCellForgeOptedOut()
     {
-        string? raw = Environment.GetEnvironmentVariable(WindowsCellForgeOptInVariable)?.Trim();
-        return string.Equals(raw, "1", StringComparison.OrdinalIgnoreCase)
-            || string.Equals(raw, "true", StringComparison.OrdinalIgnoreCase);
+        string? raw = Environment.GetEnvironmentVariable(WindowsCellForgeOptOutVariable)?.Trim();
+        return string.Equals(raw, "0", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(raw, "false", StringComparison.OrdinalIgnoreCase);
     }
 
     /// <summary>
@@ -251,15 +259,24 @@ internal static class TuiMode
     }
 
     /// <summary>
-    ///     True when CellForge must stay off this OS: Windows without the
-    ///     opt-in above. Everywhere else the platform raw-mode controller is
-    ///     established, so the gate never fires. Checked by
-    ///     <c>ReplRunner.RunCellForgeAsync</c> before the raw-mode probe —
-    ///     a blocked run returns a failure the caller already turns into the
-    ///     logged legacy fallback.
+    ///     Whether CellForge must stay off the named platform. Pure in the
+    ///     platform bit so the rule — Windows by default, opt-out on request,
+    ///     never blocked elsewhere — is testable on every OS the CI matrix
+    ///     runs. Checked by <c>ReplRunner.RunCellForgeAsync</c> before the
+    ///     raw-mode probe: a blocked run returns a failure the caller already
+    ///     turns into the logged legacy fallback.
+    /// </summary>
+    public static bool IsCellForgeBlocked(bool platformIsWindows) =>
+        platformIsWindows && IsWindowsCellForgeOptedOut();
+
+    /// <summary>
+    ///     <see cref="IsCellForgeBlocked" /> for the platform this process runs on.
+    ///     Off Windows the platform raw-mode controller is established (Windows
+    ///     and Unix alike — see <c>TerminalModeControllers</c>), so the gate
+    ///     never fires there.
     /// </summary>
     public static bool IsCellForgeBlockedOnThisOs() =>
-        OperatingSystem.IsWindows() && !IsWindowsCellForgeOptedIn();
+        IsCellForgeBlocked(OperatingSystem.IsWindows());
 
     /// <summary>
     ///     The first-run gate (issue #1248, slice 2): CellForge serves the run
