@@ -279,6 +279,10 @@ public class KeyGateFamilyRules
         // through to the host — the buffer gate, not the command one.
         new("AutocompleteTriggerScan", KeyGateFamily.Buffer, "src/Harbor.Tui.CellForge/Chat/Widgets/AutocompleteTrigger.cs"),
         new("ReplInputLoop(slash)", KeyGateFamily.Buffer, "apps/Harbor.App.Cli/Repl/ReplInputLoop.cs"),
+        // GenericTextField (#1225, epic #1195): the neutral single-line input.
+        // A rune reaches the buffer via Insert; AcceptsTypedChar admits Shift
+        // (capitals) and refuses Ctrl/Alt/Meta chords — the buffer gate.
+        new("GenericTextField", KeyGateFamily.Buffer, "src/Harbor.Tui.CellForge/Generic/Widgets/GenericTextField.cs"),
 
         // The host key map, found by the coverage grep and NOT on the issue's
         // list: ChatKeyMap.cs:242 turns an unmatched printable rune into
