@@ -33,7 +33,11 @@ public class EventBusSlowSubscriberBudgetTests
         bus.Subscribe((_, _) =>
         {
             Interlocked.Increment(ref calls);
-            throw new OperationCanceledException("budget probe");
+            // An already-canceled ValueTask, NOT a synchronous throw: a throw
+            // at invocation time never becomes a dispatch — it escapes to the
+            // fan-out's catch and evicts immediately. Only a completed
+            // (faulted/canceled) dispatch travels the shortcut below.
+            return new ValueTask(Task.FromCanceled(new CancellationToken(canceled: true)));
         });
 
         using var cts = new CancellationTokenSource();
