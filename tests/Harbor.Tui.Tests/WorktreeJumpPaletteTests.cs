@@ -7,7 +7,7 @@ namespace Harbor.Tui.Tests;
 /// <summary>
 ///     Tests for <see cref="WorktreeJumpPaletteModel" /> — the pure jump-palette
 ///     model (KILLER_FEATURES §2.7 Feature 3). Verifies open/close, substring +
-///     fuzzy filtering across title/path/branch, ↑↓ selection clamping and the
+///     fuzzy filtering across title/path/branch, ↑↓ selection wrapping and the
 ///     Enter-confirm contract. Deterministic — pure state transitions only.
 /// </summary>
 public class WorktreeJumpPaletteTests
@@ -131,24 +131,31 @@ public class WorktreeJumpPaletteTests
 
     /// <summary>
     ///     <see cref="WorktreeJumpPaletteModel.MoveDown" /> /
-    ///     <see cref="WorktreeJumpPaletteModel.MoveUp" /> clamp at the bounds
-    ///     instead of wrapping or throwing.
+    ///     <see cref="WorktreeJumpPaletteModel.MoveUp" /> wrap at the bounds
+    ///     (O8 #1177: opencode select-controller wrap policy) instead of
+    ///     clamping or throwing.
     /// </summary>
     [Test]
-    public async Task MoveDown_MoveUp_ClampAtBounds()
+    public async Task MoveDown_MoveUp_WrapsAtBounds()
     {
         var palette = Open();
 
         palette.MoveUp();
+        await Assert.That(palette.SelectedIndex).IsEqualTo(2);
+
+        palette.MoveDown();
         await Assert.That(palette.SelectedIndex).IsEqualTo(0);
 
         palette.MoveDown();
         palette.MoveDown();
         palette.MoveDown();
-        await Assert.That(palette.SelectedIndex).IsEqualTo(2);
+        await Assert.That(palette.SelectedIndex).IsEqualTo(0);
+
+        palette.MoveDown();
+        await Assert.That(palette.SelectedIndex).IsEqualTo(1);
 
         palette.MoveUp();
-        await Assert.That(palette.SelectedIndex).IsEqualTo(1);
+        await Assert.That(palette.SelectedIndex).IsEqualTo(0);
     }
 
     /// <summary>
