@@ -11,7 +11,7 @@
 //   src/Harbor.Tui.CellForge/Chat/Rendering/OverlayStack.cs:188
 //       `if (layer.OnKey(in key))` — inside `OverlayStack.RouteKey`, which no
 //       product method calls. (#812)
-//   src/Harbor.Tui.CellForge/Chat/Panels/CellForgePanelAdapter.cs:63
+//   src/Harbor.Tui.CellForge/Chat/Panels/CellForgePanelAdapter.cs:96
 //       `return provider.OnKey(key, ctx);` — inside
 //       `CellForgePanelAdapter.RouteKey`, whose only caller in the whole tree is
 //       `ChatScreenLayout.cs:1513`.

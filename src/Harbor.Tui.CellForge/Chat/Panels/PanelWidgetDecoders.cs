@@ -65,22 +65,22 @@ public static class PanelWidgetDecoders
     {
         public int Priority => 100;
 
-        public bool TryDecode(object widget, PanelContext ctx, out IReadOnlyList<string>? result)
+        public bool TryDecode(object widget, PanelContext ctx, out IReadOnlyList<string>? rows)
         {
             if (widget is not PanelTable t)
             {
-                result = null;
+                rows = null;
                 return false;
             }
 
-            var rows = new List<string>(t.Rows.Count + 2) { string.Join(" | ", t.Headers) };
-            rows.Add(new string('-', Math.Max(rows[0].Length, 3)));
+            var list = new List<string>(t.Rows.Count + 2) { string.Join(" | ", t.Headers) };
+            list.Add(new string('-', Math.Max(list[0].Length, 3)));
             foreach (var r in t.Rows)
             {
-                rows.Add(string.Join(" | ", r));
+                list.Add(string.Join(" | ", r));
             }
 
-            result = rows;
+            rows = list;
             return true;
         }
     }
@@ -106,21 +106,21 @@ public static class PanelWidgetDecoders
     {
         public int Priority => 100;
 
-        public bool TryDecode(object widget, PanelContext ctx, out IReadOnlyList<string>? result)
+        public bool TryDecode(object widget, PanelContext ctx, out IReadOnlyList<string>? rows)
         {
             if (widget is not PanelForm f)
             {
-                result = null;
+                rows = null;
                 return false;
             }
 
-            var rows = new List<string>(f.Fields.Count + 1) { f.Title };
+            var list = new List<string>(f.Fields.Count + 1) { f.Title };
             foreach (var field in f.Fields)
             {
-                rows.Add($"{field.Name}: {field.Value}");
+                list.Add($"{field.Name}: {field.Value}");
             }
 
-            result = rows;
+            rows = list;
             return true;
         }
     }
