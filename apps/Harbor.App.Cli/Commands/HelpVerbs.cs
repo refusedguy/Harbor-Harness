@@ -130,4 +130,31 @@ internal static class HelpVerbs
     /// </remarks>
     internal static async Task<int> RunMcpCommand(string[] args) =>
         await McpLoginRunner.RunAsync(Console.Out, Console.Error, args).ConfigureAwait(false);
+
+    /// <summary>
+    ///     <c>harbor tui</c> — attach to a live daemon and stream its events.
+    /// </summary>
+    /// <remarks>
+    ///     Retained for parity with the former <c>Program</c> dispatch:
+    ///     live dispatch reaches <c>tui</c> through the ConsoleAppFramework
+    ///     builder in <c>CafPilotVerbs</c> (CAF-E, #1290), not through this
+    ///     helper.
+    /// </remarks>
+    internal static async Task<int> RunTuiCommand(string[] args) =>
+        await TuiAttachVerb.RunAsync(args).ConfigureAwait(false);
+
+    /// <summary>
+    ///     <c>harbor demo</c> — scripted showcase with an in-process mock LLM.
+    /// </summary>
+    /// <remarks>
+    ///     Retained for parity with the former <c>Program</c> dispatch:
+    ///     live dispatch reaches <c>demo</c> through the ConsoleAppFramework
+    ///     builder in <c>CafPilotVerbs</c> (CAF-E, #1290), not through this
+    ///     helper.
+    /// </remarks>
+    internal static async Task<int> RunDemoCommand(string[] args)
+    {
+        var cmd = new DemoCommand(Console.Out, Console.Error);
+        return await cmd.ExecuteAsync(args).ConfigureAwait(false);
+    }
 }

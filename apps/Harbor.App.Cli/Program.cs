@@ -113,7 +113,6 @@ public static class Program
             new LogsCommand(Console.Out, Console.Error),
             new PluginsCommand(Console.Out, Console.Error),
             new SkillsCommand(Console.Out, Console.Error),
-            new DemoCommand(Console.Out, Console.Error),
         };
         if (await SlashCommandDispatcherStatic.TryHandleAsync(command, args.Skip(1).ToArray(), cliCommands).ConfigureAwait(false) is int exitCode)
             return exitCode;
@@ -146,10 +145,11 @@ public static class Program
 #endif
             "mcp" => await CafPilotVerbs.RunAsync("mcp", args.Skip(1).ToArray()),
             "serve" => await CafPilotVerbs.RunAsync("serve", args.Skip(1).ToArray()),
-            "tui" => await TuiAttachVerb.RunAsync(args.Skip(1).ToArray()),
+            "tui" => await CafPilotVerbs.RunAsync("tui", args.Skip(1).ToArray()),
             "events" => await EventsVerb.RunAsync(args.Skip(1).ToArray()),
             "storage" => await CafPilotVerbs.RunAsync("storage", args.Skip(1).ToArray()),
-            "setup" => await SetupVerb.RunAsync(_logger),
+            "setup" => await CafPilotVerbs.RunAsync("setup", args.Skip(1).ToArray()),
+            "demo" => await CafPilotVerbs.RunAsync("demo", args.Skip(1).ToArray()),
             "auth" => await CafPilotVerbs.RunAsync("auth", args.Skip(1).ToArray()),
             "config" => await CafPilotVerbs.RunAsync("config", args.Skip(1).ToArray()),
             "help" or "--help" or "-h" => HelpVerbs.PrintHelp(),
