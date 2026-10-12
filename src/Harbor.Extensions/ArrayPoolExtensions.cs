@@ -357,7 +357,7 @@ public static class DictionaryPool<TKey, TValue>
     /// <param name="comparer">The comparer the dictionary must use, or <c>null</c> for the default one.</param>
     /// <param name="capacity">Number of entries the caller intends to hold.</param>
     /// <returns>A <see cref="PooledDictionary{TKey, TValue}" /> that returns the dictionary to the pool on dispose.</returns>
-    public static PooledDictionary<TKey, TValue> Rent(IEqualityComparer<TKey>? comparer, int capacity = 0)
+    public static PooledDictionary<TKey, TValue> Rent(IEqualityComparer<TKey>? comparer = null, int capacity = 0)
     {
         int requested = capacity < 0 ? 0 : capacity;
 
