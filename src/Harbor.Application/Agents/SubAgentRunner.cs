@@ -105,14 +105,33 @@ public sealed class SubAgentRunner(
         }
     }
 
+    /// <summary>
+    ///     Resolve the spawned session's working directory (#1105): an explicit
+    ///     request wins; otherwise inherit the PARENT session's directory, so
+    ///     the child starts where its caller works instead of wherever the
+    ///     process ambient directory happens to point. The process directory
+    ///     is only the last resort (no parent, or the parent is unreadable).
+    /// </summary>
+    private async Task<string> ResolveChildDirectoryAsync(SubAgentRunRequest request, CancellationToken ct)
+    {
+        if (!string.IsNullOrWhiteSpace(request.WorkingDirectory))
+            return request.WorkingDirectory!;
+        if (string.IsNullOrEmpty(request.ParentSessionId))
+            return Environment.CurrentDirectory;
+        var parent = await store.GetAsync(request.ParentSessionId, ct).ConfigureAwait(false);
+        if (parent.IsFailure)
+            return Environment.CurrentDirectory;
+        return string.IsNullOrWhiteSpace(parent.Value.Directory)
+            ? Environment.CurrentDirectory
+            : parent.Value.Directory;
+    }
+
     private async Task<Result<SubAgentRunResult>> RunCoreAsync(
         AgentDefinition agent,
         SubAgentRunRequest request,
         CancellationToken ct)
     {
-        var directory = string.IsNullOrWhiteSpace(request.WorkingDirectory)
-            ? Environment.CurrentDirectory
-            : request.WorkingDirectory!;
+        var directory = await ResolveChildDirectoryAsync(request, ct).ConfigureAwait(false);
         var title = BuildTitle(agent, request.Prompt);
 
         var created = await store.CreateAsync(directory, agent.Name.Value, agent.ProviderId, agent.Model, ct)

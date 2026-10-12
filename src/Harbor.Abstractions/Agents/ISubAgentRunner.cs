@@ -14,7 +14,7 @@ namespace Harbor.Abstractions.Agents;
 /// </param>
 /// <param name="WorkingDirectory">
 ///     Working directory bound to the spawned session. Falls back to the
-///     process working directory when omitted.
+///     parent session's directory, then the process working directory.
 /// </param>
 /// <param name="ParentMessageId">
 ///     Id of the parent assistant message that issued the <c>task</c> call.

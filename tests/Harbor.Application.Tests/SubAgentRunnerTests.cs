@@ -446,6 +446,21 @@ public class SubAgentRunnerTests
     }
 
     [Test]
+    public async Task RunAsync_NoWorkingDirectory_InheritsParentSessionDirectory()
+    {
+        var parent = Session.Create(
+            Harbor.TestKit.TestTempDirs.NewDirectory("harbor-parent-dir"), "code", "test", "test-model");
+        var store = new FakeSessionStore(parent);
+        var loop = new ScriptedLoop(replies: Assistant("ok"));
+        var runner = new SubAgentRunner(store, loop, NullLogger<SubAgentRunner>.Instance);
+
+        var result = await runner.RunAsync(SubAgent(), new SubAgentRunRequest("go", ParentSessionId: parent.Id));
+
+        await Assert.That(result.IsSuccess).IsTrue();
+        await Assert.That(store.LastCreatedDirectory).IsEqualTo(parent.Directory);
+    }
+
+    [Test]
     public async Task RunAsync_EmptyWorkingDirectory_FallsBackToProcessCwd()
     {
         var store = new FakeSessionStore(NewSession());
