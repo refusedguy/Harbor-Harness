@@ -41,6 +41,15 @@ internal sealed class ToolCardTracker
     internal static bool IsTaskTool(string toolName) =>
         string.Equals(toolName, TaskToolName, StringComparison.Ordinal);
 
+    /// <summary>Shell tools collapse to the output tail (O11 #1180, opencode
+    /// <c>collapseShellOutput</c>): 2 lines for the command, tail for the
+    /// output via <c>collapseTail</c>. The card owns the geometry
+    /// (<see cref="Widgets.ToolCallBlock"/>) — this is the tracker-side
+    /// routing predicate so completion paths can tell a tail card apart from
+    /// a head card without reaching into the widget.</summary>
+    internal static bool IsShellCollapseTool(string toolName) =>
+        Widgets.ToolCallBlock.IsShellTool(toolName);
+
     private const int MaxTranscriptChars = 8000;
     private const int MaxTranscriptLines = 200;
     private const string TranscriptTruncatedMarker = "…[transcript truncated]";
