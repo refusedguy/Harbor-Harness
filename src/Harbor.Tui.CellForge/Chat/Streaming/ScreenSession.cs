@@ -25,6 +25,11 @@ public sealed class ScreenSession
     private readonly Func<(int Cols, int Rows)>? _sizeSource;
     private bool _eraseBeforeNextFrame;
 
+    // R6 frame contract (ratatui draw order): cursor requested for the
+    // in-flight frame — placed after the diff, before the backend write.
+    // Per-frame state: emitted once by the next flush, dropped on abort.
+    private (int X, int Y)? _pendingCursor;
+
     /// <summary>
     /// Painter-side BACK buffer (#436: the engine is a standalone leaf, so the
     /// painters and the differ no longer share a grid type). Panels, overlays
@@ -86,6 +91,37 @@ public sealed class ScreenSession
 
     public int CurrentCols { get; private set; }
     public int CurrentRows { get; private set; }
+
+    /// <summary>
+    /// R6 frame contract (ratatui root rule): the frame's root area is ALWAYS
+    /// the full screen — painters must derive every rect from here and never
+    /// assume a (0,0) origin of their own.
+    /// </summary>
+    public Rect FrameArea => new(0, 0, CurrentCols, CurrentRows);
+
+    /// <summary>Cursor requested for the in-flight frame, if any.</summary>
+    public (int X, int Y)? CursorPosition => _pendingCursor;
+
+    /// <summary>
+    /// R6 frame contract: ratatui places the cursor after the diff and before
+    /// the backend write. The position is clamped into
+    /// <see cref="FrameArea"/>, emitted once by the next flush (after the
+    /// cells, before EndFrame) and then cleared; an aborted frame drops it.
+    /// </summary>
+    public void SetCursor(int x, int y) =>
+        _pendingCursor = (
+            Math.Clamp(x, 0, Math.Max(0, CurrentCols - 1)),
+            Math.Clamp(y, 0, Math.Max(0, CurrentRows - 1)));
+
+    /// <summary>R6 frame-contract hook (ratatui <c>CompletedFrame</c>): what a
+    /// shipped frame covered and where it left the cursor.</summary>
+    public readonly record struct CompletedFrame(Rect Area, (int X, int Y)? Cursor, bool Shipped);
+
+    /// <summary>
+    /// R6 frame-contract hook: describes the last shipped frame. Updated only
+    /// by shipped flushes; aborted frames leave it untouched.
+    /// </summary>
+    public CompletedFrame LastFrame { get; private set; } = new(new Rect(0, 0, 0, 0), null, false);
 
     /// <summary>
     /// Inline-image placements for the current frame (KILLER_FEATURES §2.7
@@ -255,6 +291,10 @@ public sealed class ScreenSession
 
     private void BeginFrameCore()
     {
+        // R6 frame contract (ratatui draw order): autoresize is the first step
+        // of every frame — the render tick is the single point of truth about
+        // terminal size, ahead of swap adoption and painting.
+        CheckAutoSize();
         AdoptPendingSwap();
         ChatPalette.PinFrame();
         Images.BeginFrame();
@@ -284,6 +324,10 @@ public sealed class ScreenSession
             _back.InvalidateAll();
             _engine.Front.InvalidateAll();
             _engine.ClearHints();
+
+            // R6 frame contract: a frame that never shipped leaves no cursor
+            // behind — the next frame positions it from its own paint.
+            _pendingCursor = null;
 
             // #387: an unshipped frame's inline-image escape sequences never
             // reached the terminal, so the next frame must re-send every
@@ -329,7 +373,11 @@ public sealed class ScreenSession
             // they leave through the same single backend call and never enter
             // dirty-rect accounting.
             Images.Emit(_writer);
+            // R6 frame contract (ratatui order): cursor after the diff, before
+            // the backend write — same single write as the cells above.
+            var cursor = EmitPendingCursor();
             await _writer.EndFrameAsync(cancellationToken).ConfigureAwait(false);
+            LastFrame = new CompletedFrame(FrameArea, cursor, true);
             shipped = true;
         }
         finally
@@ -369,7 +417,11 @@ public sealed class ScreenSession
             CopyPaintToBack();
             _engine.Flush(_back, _writer);
             Images.Emit(_writer);
+            // R6 frame contract (ratatui order): cursor after the diff, before
+            // the backend write — same single write as the cells above.
+            var cursor = EmitPendingCursor();
             _writer.EndFrame();
+            LastFrame = new CompletedFrame(FrameArea, cursor, true);
             shipped = true;
         }
         finally
@@ -383,6 +435,23 @@ public sealed class ScreenSession
     /// (zero perf regression on non-effect frames).</summary>
     private void ArmEffects() =>
         _engine.Effects = Effects.Count > 0 ? Effects : null;
+
+    /// <summary>
+    /// R6 frame contract: cursor placement between the diff and the backend
+    /// write (ratatui order). Appends the pending MoveTo to the frame buffer
+    /// and clears the request. Returns the emitted position, if any.
+    /// </summary>
+    private (int X, int Y)? EmitPendingCursor()
+    {
+        var cursor = _pendingCursor;
+        _pendingCursor = null;
+        if (cursor is { } c)
+        {
+            _writer.MoveTo(c.X, c.Y);
+        }
+
+        return cursor;
+    }
 
     /// <summary>
     /// Copies the painter-side grid into the engine staging buffer (#436:
