@@ -103,9 +103,7 @@ public sealed class CompactionService(
     /// <summary>Log the fallback once per unresolved attempt and return null.</summary>
     private ResolvedSecondary? LogSecondaryFallback(ModelInfo primaryModel)
     {
-        logger.LogWarning(
-            "Secondary compaction model '{Secondary}' could not be resolved; falling back to primary model '{Primary}'",
-            _secondaryRef, primaryModel.Id);
+        CompactionServiceLog.SecondaryModelUnresolved(logger, _secondaryRef, primaryModel.Id);
         return null;
     }
 
@@ -228,7 +226,7 @@ public sealed class CompactionService(
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Compaction failed for session {SessionId}", sessionId);
+            CompactionServiceLog.CompactionExecuteFailed(logger, ex, sessionId);
             return Result.Failure<CompactionResult>($"Compaction failed: {ex.Message}");
         }
     }
@@ -265,9 +263,7 @@ public sealed class CompactionService(
             // compressed history and the model silently lost all memory of it.
             if (summary.Length == 0)
             {
-                logger.LogWarning(
-                    "Summarization produced an empty summary for session {SessionId}; refusing to persist an empty anchor",
-                    sessionId);
+                CompactionServiceLog.EmptySummaryRefused(logger, sessionId);
                 return Result.Failure<CompactionResult>("Compaction produced an empty summary.");
             }
 
@@ -303,13 +299,13 @@ public sealed class CompactionService(
             // session into destructive truncation fallback and report a spurious
             // error — the run is simply ending.
             stopwatch.Stop();
-            logger.LogInformation(ex, "Compaction cancelled for session {SessionId}", sessionId);
+            CompactionServiceLog.CompactionCancelled(logger, ex, sessionId);
             return Result.Failure<CompactionResult>("Compaction cancelled.");
         }
         catch (Exception ex)
         {
             stopwatch.Stop();
-            logger.LogError(ex, "Compaction failed for session {SessionId}", sessionId);
+            CompactionServiceLog.CompactionRunFailed(logger, ex, sessionId);
             return Result.Failure<CompactionResult>($"Compaction failed: {ex.Message}");
         }
     }
@@ -575,4 +571,27 @@ public sealed class CompactionService(
         /// </summary>
         public override FormattedPartVisitor Visit(FilePart part) => this;
     }
+}
+
+/// <summary>
+///     SG2: BCL <c>[LoggerMessage]</c> delegates for <see cref="CompactionService" />.
+///     Templates, levels and operands are 1-to-1 with the former <c>LogX</c> calls.
+/// </summary>
+internal static partial class CompactionServiceLog
+{
+    [LoggerMessage(EventId = 1, Level = LogLevel.Warning, Message = "Secondary compaction model '{Secondary}' could not be resolved; falling back to primary model '{Primary}'")]
+    public static partial void SecondaryModelUnresolved(ILogger logger, ModelRef? secondary, string primary);
+
+    [LoggerMessage(EventId = 2, Level = LogLevel.Error, Message = "Compaction failed for session {SessionId}")]
+    public static partial void CompactionExecuteFailed(ILogger logger, Exception ex, string sessionId);
+
+    [LoggerMessage(EventId = 3, Level = LogLevel.Warning, Message = "Summarization produced an empty summary for session {SessionId}; refusing to persist an empty anchor")]
+    public static partial void EmptySummaryRefused(ILogger logger, string sessionId);
+
+    [LoggerMessage(EventId = 4, Level = LogLevel.Information, Message = "Compaction cancelled for session {SessionId}")]
+    public static partial void CompactionCancelled(ILogger logger, Exception ex, string sessionId);
+
+    [LoggerMessage(EventId = 5, Level = LogLevel.Error, Message = "Compaction failed for session {SessionId}")]
+    public static partial void CompactionRunFailed(ILogger logger, Exception ex, string sessionId);
+
 }

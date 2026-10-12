@@ -75,7 +75,7 @@ public sealed class ImageAttachmentReader
         }
         catch (Exception ex) when (ex is ArgumentException or NotSupportedException or PathTooLongException)
         {
-            _logger.LogDebug(ex, "Rejected image path {Path}", path);
+            ImageAttachmentReaderLog.ImagePathRejected(_logger, ex, path);
             return Result.Failure<ImageAttachment>($"Invalid image path: {path}");
         }
 
@@ -117,7 +117,7 @@ public sealed class ImageAttachmentReader
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            _logger.LogWarning(ex, "Failed to read image {Path}", path);
+            ImageAttachmentReaderLog.ReadImageFailed(_logger, ex, path);
             return Result.Failure<ImageAttachment>($"Cannot read image {path}: {ex.Message}");
         }
 
@@ -142,9 +142,7 @@ public sealed class ImageAttachmentReader
         if (visionCheck.IsFailure)
             return visionCheck.ConvertFailure<ImageAttachment>();
 
-        _logger.LogDebug(
-            "Attached {Path} as {MimeType} ({Width}×{Height}, {Bytes} bytes)",
-            path, mimeType, width, height, bytes.Length);
+        ImageAttachmentReaderLog.ImageAttached(_logger, path, mimeType, width, height, bytes.Length);
 
         return Result.Success(new ImageAttachment(fullPath, mimeType, width, height, bytes));
     }
@@ -167,9 +165,7 @@ public sealed class ImageAttachmentReader
         var models = await _providers.GetModelsCachedAsync(parsed.Value, ct).ConfigureAwait(false);
         if (models.IsFailure)
         {
-            _logger.LogDebug(
-                "Vision check skipped for {Provider}/{Model}: catalog unavailable ({Error})",
-                providerId, modelId, models.Error);
+            ImageAttachmentReaderLog.VisionCheckSkipped(_logger, providerId, modelId, models.Error);
             return Result.Success();
         }
 
@@ -205,4 +201,24 @@ public sealed class ImageAttachmentReader
     private static string DescribeSize(long bytes) => bytes >= 1024 * 1024
         ? $"{bytes / (1024 * 1024)} MB"
         : $"{Math.Max(1, bytes / 1024)} KB";
+}
+
+/// <summary>
+///     SG2: BCL <c>[LoggerMessage]</c> delegates for <see cref="ImageAttachmentReader" />.
+///     Templates, levels and operands are 1-to-1 with the former <c>LogX</c> calls.
+/// </summary>
+internal static partial class ImageAttachmentReaderLog
+{
+    [LoggerMessage(EventId = 1, Level = LogLevel.Debug, Message = "Rejected image path {Path}")]
+    public static partial void ImagePathRejected(ILogger logger, Exception ex, string path);
+
+    [LoggerMessage(EventId = 2, Level = LogLevel.Warning, Message = "Failed to read image {Path}")]
+    public static partial void ReadImageFailed(ILogger logger, Exception ex, string path);
+
+    [LoggerMessage(EventId = 3, Level = LogLevel.Debug, Message = "Attached {Path} as {MimeType} ({Width}×{Height}, {Bytes} bytes)")]
+    public static partial void ImageAttached(ILogger logger, string path, string mimeType, int width, int height, int bytes);
+
+    [LoggerMessage(EventId = 4, Level = LogLevel.Debug, Message = "Vision check skipped for {Provider}/{Model}: catalog unavailable ({Error})")]
+    public static partial void VisionCheckSkipped(ILogger logger, string provider, string model, string error);
+
 }

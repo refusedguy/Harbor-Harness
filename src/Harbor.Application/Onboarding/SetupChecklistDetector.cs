@@ -102,7 +102,7 @@ public sealed class SetupChecklistDetector
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException)
         {
-            _logger?.LogDebug(ex, "Setup checklist: config file probe failed — treating as absent");
+            if (_logger is not null) SetupChecklistDetectorLog.ConfigProbeFailed(_logger, ex);
             return false;
         }
     }
@@ -118,7 +118,7 @@ public sealed class SetupChecklistDetector
         Result<HarborConfig> loaded = await _configStore.LoadAsync(ct).ConfigureAwait(false);
         if (loaded.IsFailure)
         {
-            _logger?.LogDebug("Setup checklist: config load failed ({Error}) — treating setup as incomplete", loaded.Error);
+            if (_logger is not null) SetupChecklistDetectorLog.ConfigLoadFailed(_logger, loaded.Error);
             return false;
         }
 
@@ -164,7 +164,7 @@ public sealed class SetupChecklistDetector
         }
         catch (Exception ex)
         {
-            _logger?.LogDebug(ex, "Setup checklist: provider health probe failed — task stays pending");
+            if (_logger is not null) SetupChecklistDetectorLog.HealthProbeFailed(_logger, ex);
             return false;
         }
     }
@@ -195,7 +195,7 @@ public sealed class SetupChecklistDetector
         }
         catch (Exception ex)
         {
-            _logger?.LogDebug(ex, "Setup checklist: key probe failed — task stays pending");
+            if (_logger is not null) SetupChecklistDetectorLog.KeyProbeFailed(_logger, ex);
             return false;
         }
     }
@@ -212,4 +212,24 @@ public sealed class SetupChecklistDetector
             return null;
         }
     }
+}
+
+/// <summary>
+///     SG2: BCL <c>[LoggerMessage]</c> delegates for <see cref="SetupChecklistDetector" />.
+///     Templates, levels and operands are 1-to-1 with the former <c>LogX</c> calls.
+/// </summary>
+internal static partial class SetupChecklistDetectorLog
+{
+    [LoggerMessage(EventId = 1, Level = LogLevel.Debug, Message = "Setup checklist: config file probe failed — treating as absent")]
+    public static partial void ConfigProbeFailed(ILogger logger, Exception ex);
+
+    [LoggerMessage(EventId = 2, Level = LogLevel.Debug, Message = "Setup checklist: config load failed ({Error}) — treating setup as incomplete")]
+    public static partial void ConfigLoadFailed(ILogger logger, string error);
+
+    [LoggerMessage(EventId = 3, Level = LogLevel.Debug, Message = "Setup checklist: provider health probe failed — task stays pending")]
+    public static partial void HealthProbeFailed(ILogger logger, Exception ex);
+
+    [LoggerMessage(EventId = 4, Level = LogLevel.Debug, Message = "Setup checklist: key probe failed — task stays pending")]
+    public static partial void KeyProbeFailed(ILogger logger, Exception ex);
+
 }

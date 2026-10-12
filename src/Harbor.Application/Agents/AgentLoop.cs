@@ -252,9 +252,7 @@ public sealed class AgentLoop : IAgentLoop
                 // published for it — AgentStartEvent above already happened,
                 // and a turn/agent end pair for a run with no turns would lie
                 // about what occurred.
-                _logger.LogInformation(
-                    "User hook denied the prompt for session={SessionId} agent={Agent}: {Reason}",
-                    session.Session.Id, agent.Name.Value, promptVerdict.Reason);
+                AgentLoopLog.UserHookDeniedPrompt(_logger, session.Session.Id, agent.Name.Value, promptVerdict.Reason);
                 return Result.Failure(promptVerdict.Reason ?? "A user hook denied this prompt.");
             }
 
@@ -298,7 +296,7 @@ public sealed class AgentLoop : IAgentLoop
                 // in-flight calls alone the same way).
                 if (_runTimeout is { } budget && _clock.GetUtcNow() - startedAt >= budget)
                 {
-                    _logger.LogInformation("Agent run hit wall-clock budget ({Budget}): session={SessionId} agent={Agent}", budget, session.Session.Id, agent.Name.Value);
+                    AgentLoopLog.WallClockBudgetHit(_logger, budget, session.Session.Id, agent.Name.Value);
                     limit = RunLimitKind.Timeout;
                     break;
                 }
@@ -328,7 +326,7 @@ public sealed class AgentLoop : IAgentLoop
                 // (and WaitForIdleAsync consumers) can distinguish it from normal
                 // completion. The AgentEndEvent carries Cancelled=true so renderers
                 // can reflect the aborted state instead of a clean finish.
-                _logger.LogInformation("Agent run cancelled: session={SessionId} agent={Agent}", session.Session.Id, agent.Name.Value);
+                AgentLoopLog.RunCancelled(_logger, session.Session.Id, agent.Name.Value);
                 // #407: a cancelled parent takes its detached children with it.
                 // The registry owns a linked CTS per background run, so this
                 // reaches children even when the launching turn's token is gone.
@@ -341,7 +339,7 @@ public sealed class AgentLoop : IAgentLoop
                 return Result.Failure("Agent run was cancelled.");
             }
 
-            _logger.LogInformation("Agent loop completed: session={SessionId} agent={Agent}", session.Session.Id, agent.Name.Value);
+            AgentLoopLog.LoopCompleted(_logger, session.Session.Id, agent.Name.Value);
             // #403: `Limit` rides the terminal event so every reader gets the
             // reason, not only `RunOutcome`. Renderers read this event and NOT
             // the read-model, so without it the fact stops here.
@@ -356,7 +354,7 @@ public sealed class AgentLoop : IAgentLoop
             activity?.AddException(ex);
             // O1: keep the localized message AND the correlation key in one record.
             string failure = string.Format(CultureInfo.InvariantCulture, CoreResources.GetError("AgentFailed"), ex.Message);
-            _logger.LogError(ex, "Agent run failed: session={SessionId} error={Error}", session.Session.Id, failure);
+            AgentLoopLog.RunFailed(_logger, ex, session.Session.Id, failure);
             await _eventBus.PublishAsync(new AgentErrorEvent(ex.Message, ex.ToString()), CancellationToken.None).ConfigureAwait(false);
             return Result.Failure(ex.Message);
         }
@@ -423,9 +421,7 @@ public sealed class AgentLoop : IAgentLoop
             // here is a hooks-subsystem failure, which fails closed to deny
             // exactly like the permission-subsystem failure (§G3) rather than
             // silently letting the prompt through.
-            _logger.LogWarning(
-                ex, "UserPromptSubmit hooks failed for session={SessionId}; failing closed to Deny",
-                session.Session.Id);
+            AgentLoopLog.UserPromptSubmitHooksFailed(_logger, ex, session.Session.Id);
             return new HookVerdict(HookDecision.Deny, $"Hook execution failed: {ex.Message}", null);
         }
     }
@@ -465,4 +461,30 @@ public sealed class AgentLoop : IAgentLoop
         }
         return snapshot;
     }
+}
+
+/// <summary>
+///     SG2: BCL <c>[LoggerMessage]</c> delegates for <see cref="AgentLoop" />.
+///     Templates, levels and operands are 1-to-1 with the former <c>LogX</c> calls.
+/// </summary>
+internal static partial class AgentLoopLog
+{
+    [LoggerMessage(EventId = 1, Level = LogLevel.Information, Message = "User hook denied the prompt for session={SessionId} agent={Agent}: {Reason}")]
+    public static partial void UserHookDeniedPrompt(ILogger logger, string sessionId, string agent, string? reason);
+
+    [LoggerMessage(EventId = 2, Level = LogLevel.Information, Message = "Agent run hit wall-clock budget ({Budget}): session={SessionId} agent={Agent}")]
+    public static partial void WallClockBudgetHit(ILogger logger, TimeSpan budget, string sessionId, string agent);
+
+    [LoggerMessage(EventId = 3, Level = LogLevel.Information, Message = "Agent run cancelled: session={SessionId} agent={Agent}")]
+    public static partial void RunCancelled(ILogger logger, string sessionId, string agent);
+
+    [LoggerMessage(EventId = 4, Level = LogLevel.Information, Message = "Agent loop completed: session={SessionId} agent={Agent}")]
+    public static partial void LoopCompleted(ILogger logger, string sessionId, string agent);
+
+    [LoggerMessage(EventId = 5, Level = LogLevel.Error, Message = "Agent run failed: session={SessionId} error={Error}")]
+    public static partial void RunFailed(ILogger logger, Exception ex, string sessionId, string error);
+
+    [LoggerMessage(EventId = 6, Level = LogLevel.Warning, Message = "UserPromptSubmit hooks failed for session={SessionId}; failing closed to Deny")]
+    public static partial void UserPromptSubmitHooksFailed(ILogger logger, Exception ex, string sessionId);
+
 }

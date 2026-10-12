@@ -13,7 +13,7 @@ public sealed class LoggingBehavior(ILogger logger) : IPipelineBehavior
     public async Task<CSharpFunctionalExtensions.Result> HandleAsync(
         PromptRequest request, PipelineNext next, CancellationToken ct)
     {
-        logger.LogInformation(CoreResources.GetLog("AgentLoopStarting"), request.Agent.Name.Value);
+        LoggingBehaviorLog.AgentLoopStarting(logger, request.Agent.Name.Value);
         long start = Stopwatch.GetTimestamp();
         try
         {
@@ -22,11 +22,21 @@ public sealed class LoggingBehavior(ILogger logger) : IPipelineBehavior
         finally
         {
             // GetElapsedTime avoids allocating a Stopwatch per run on the hot path.
-            logger.LogDebug(
-                "Agent run settled: session={SessionId} agent={Agent} elapsed={ElapsedMs}ms",
-                request.Session.Session.Id,
-                request.Agent.Name.Value,
-                Stopwatch.GetElapsedTime(start).TotalMilliseconds);
+            LoggingBehaviorLog.AgentRunSettled(logger, request.Session.Session.Id, request.Agent.Name.Value, Stopwatch.GetElapsedTime(start).TotalMilliseconds);
         }
     }
+}
+
+/// <summary>
+///     SG2: BCL <c>[LoggerMessage]</c> delegates for <see cref="LoggingBehavior" />.
+///     Templates, levels and operands are 1-to-1 with the former <c>LogX</c> calls.
+/// </summary>
+internal static partial class LoggingBehaviorLog
+{
+    [LoggerMessage(EventId = 1, Level = LogLevel.Information, Message = "Agent loop starting: agent={Agent}")]
+    public static partial void AgentLoopStarting(ILogger logger, string agent);
+
+    [LoggerMessage(EventId = 2, Level = LogLevel.Debug, Message = "Agent run settled: session={SessionId} agent={Agent} elapsed={ElapsedMs}ms")]
+    public static partial void AgentRunSettled(ILogger logger, string sessionId, string agent, double elapsedMs);
+
 }

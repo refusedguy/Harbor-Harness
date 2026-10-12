@@ -85,7 +85,7 @@ public sealed class SystemTextFileStore : ITextFileStore
                 }
                 catch (Exception ex) when (ex is ArgumentException or NotSupportedException or PathTooLongException)
                 {
-                    _logger.LogDebug(ex, "Text file probe failed for {Path}", target);
+                    SystemTextFileStoreLog.TextFileProbeFailed(_logger, ex, target);
                     return Result.Failure<bool>($"Cannot probe '{target}': {ex.Message}");
                 }
             },
@@ -115,7 +115,7 @@ public sealed class SystemTextFileStore : ITextFileStore
                 }
                 catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
                 {
-                    _logger.LogDebug(ex, "Text file read failed for {Path}", target);
+                    SystemTextFileStoreLog.TextFileReadFailed(_logger, ex, target);
                     return Result.Failure<string>($"Cannot read '{target}': {ex.Message}");
                 }
             },
@@ -141,7 +141,7 @@ public sealed class SystemTextFileStore : ITextFileStore
                 }
                 catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
                 {
-                    _logger.LogError(ex, "Text file write failed for {Path}", target);
+                    SystemTextFileStoreLog.TextFileWriteFailed(_logger, ex, target);
                     return Result.Failure($"Cannot write '{target}': {ex.Message}");
                 }
             },
@@ -155,4 +155,21 @@ public sealed class SystemTextFileStore : ITextFileStore
     /// </summary>
     private static string Resolve(string path) =>
         string.IsNullOrEmpty(path) ? Environment.CurrentDirectory : path;
+}
+
+/// <summary>
+///     SG2: BCL <c>[LoggerMessage]</c> delegates for <see cref="SystemTextFileStore" />.
+///     Templates, levels and operands are 1-to-1 with the former <c>LogX</c> calls.
+/// </summary>
+internal static partial class SystemTextFileStoreLog
+{
+    [LoggerMessage(EventId = 1, Level = LogLevel.Debug, Message = "Text file probe failed for {Path}")]
+    public static partial void TextFileProbeFailed(ILogger logger, Exception ex, string path);
+
+    [LoggerMessage(EventId = 2, Level = LogLevel.Debug, Message = "Text file read failed for {Path}")]
+    public static partial void TextFileReadFailed(ILogger logger, Exception ex, string path);
+
+    [LoggerMessage(EventId = 3, Level = LogLevel.Error, Message = "Text file write failed for {Path}")]
+    public static partial void TextFileWriteFailed(ILogger logger, Exception ex, string path);
+
 }

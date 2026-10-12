@@ -186,17 +186,13 @@ public sealed class ApprovalCoordinator(ILogger<ApprovalCoordinator> logger) : I
         switch (mismatch.Kind)
         {
             case TupleMismatchKind.UnknownGate:
-                logger.LogDebug("Approval 4-tuple for unknown gate '{GateId}' rejected as stale", gateId);
+                ApprovalCoordinatorLog.UnknownGateRejected(logger, gateId);
                 break;
             case TupleMismatchKind.Invocation:
-                logger.LogWarning(
-                    "Approval 4-tuple invocation mismatch on gate '{GateId}': expected '{ExpectedInvocation}', got '{ActualInvocation}' — rejected, gate untouched",
-                    gateId, mismatch.ExpectedInvocation ?? "<unbound>", invocationId);
+                ApprovalCoordinatorLog.InvocationMismatch(logger, gateId, mismatch.ExpectedInvocation ?? "<unbound>", invocationId);
                 break;
             default:
-                logger.LogWarning(
-                    "Approval 4-tuple generation mismatch on gate '{GateId}' invocation '{InvocationId}': expected {ExpectedGeneration}, got {ActualGeneration} — rejected, gate untouched",
-                    gateId, invocationId, mismatch.ExpectedGeneration, generation);
+                ApprovalCoordinatorLog.GenerationMismatch(logger, gateId, invocationId, mismatch.ExpectedGeneration, generation);
                 break;
         }
     }
@@ -345,7 +341,7 @@ public sealed class ApprovalCoordinator(ILogger<ApprovalCoordinator> logger) : I
         }
         catch (ObjectDisposedException ex)
         {
-            logger.LogDebug(ex, "Abort source already disposed during coordinated cancel");
+            ApprovalCoordinatorLog.AbortSourceDisposed(logger, ex);
         }
 
         foreach (var tcs in swept)
@@ -353,7 +349,7 @@ public sealed class ApprovalCoordinator(ILogger<ApprovalCoordinator> logger) : I
             tcs.TrySetResult(null);
         }
 
-        logger.LogDebug("Coordinated cancel swept {GateCount} pending gate(s)", swept.Count);
+        ApprovalCoordinatorLog.CoordinatedCancelSwept(logger, swept.Count);
     }
 
     private void ForgetGate(string gateId, GateSlot slot)
@@ -368,4 +364,27 @@ public sealed class ApprovalCoordinator(ILogger<ApprovalCoordinator> logger) : I
             }
         }
     }
+}
+
+/// <summary>
+///     SG2: BCL <c>[LoggerMessage]</c> delegates for <see cref="ApprovalCoordinator" />.
+///     Templates, levels and operands are 1-to-1 with the former <c>LogX</c> calls.
+/// </summary>
+internal static partial class ApprovalCoordinatorLog
+{
+    [LoggerMessage(EventId = 1, Level = LogLevel.Debug, Message = "Approval 4-tuple for unknown gate '{GateId}' rejected as stale")]
+    public static partial void UnknownGateRejected(ILogger logger, string gateId);
+
+    [LoggerMessage(EventId = 2, Level = LogLevel.Warning, Message = "Approval 4-tuple invocation mismatch on gate '{GateId}': expected '{ExpectedInvocation}', got '{ActualInvocation}' — rejected, gate untouched")]
+    public static partial void InvocationMismatch(ILogger logger, string gateId, string expectedInvocation, string actualInvocation);
+
+    [LoggerMessage(EventId = 3, Level = LogLevel.Warning, Message = "Approval 4-tuple generation mismatch on gate '{GateId}' invocation '{InvocationId}': expected {ExpectedGeneration}, got {ActualGeneration} — rejected, gate untouched")]
+    public static partial void GenerationMismatch(ILogger logger, string gateId, string invocationId, int expectedGeneration, int actualGeneration);
+
+    [LoggerMessage(EventId = 4, Level = LogLevel.Debug, Message = "Abort source already disposed during coordinated cancel")]
+    public static partial void AbortSourceDisposed(ILogger logger, Exception ex);
+
+    [LoggerMessage(EventId = 5, Level = LogLevel.Debug, Message = "Coordinated cancel swept {GateCount} pending gate(s)")]
+    public static partial void CoordinatedCancelSwept(ILogger logger, int gateCount);
+
 }

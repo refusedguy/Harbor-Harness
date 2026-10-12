@@ -58,7 +58,7 @@ public sealed class AuthStore
         if (string.IsNullOrEmpty(value))
             return Result.Failure<string>($"{name} not set");
 
-        _logger?.LogDebug("Using API key from preset env var {Name}", name);
+        if (_logger is not null) AuthStoreLog.ApiKeyFromPresetEnv(_logger, name);
         return Result.Success(value);
     }
 
@@ -69,7 +69,7 @@ public sealed class AuthStore
         if (string.IsNullOrEmpty(value))
             return Result.Failure<string>($"{name} not set");
 
-        _logger?.LogDebug("Using API key from env var {Name}", name);
+        if (_logger is not null) AuthStoreLog.ApiKeyFromEnv(_logger, name);
         return Result.Success(value);
     }
 
@@ -151,4 +151,18 @@ public sealed class AuthStore
             return Result.Success<IReadOnlyDictionary<string, bool>>(result);
         });
     }
+}
+
+/// <summary>
+///     SG2: BCL <c>[LoggerMessage]</c> delegates for <see cref="AuthStore" />.
+///     Templates, levels and operands are 1-to-1 with the former <c>LogX</c> calls.
+/// </summary>
+internal static partial class AuthStoreLog
+{
+    [LoggerMessage(EventId = 1, Level = LogLevel.Debug, Message = "Using API key from preset env var {Name}")]
+    public static partial void ApiKeyFromPresetEnv(ILogger logger, string name);
+
+    [LoggerMessage(EventId = 2, Level = LogLevel.Debug, Message = "Using API key from env var {Name}")]
+    public static partial void ApiKeyFromEnv(ILogger logger, string name);
+
 }

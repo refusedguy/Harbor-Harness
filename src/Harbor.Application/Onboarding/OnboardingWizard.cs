@@ -321,7 +321,7 @@ public sealed class OnboardingWizard
         }
         catch (Exception ex)
         {
-            _logger?.LogWarning(ex, "Live model list fetch failed for {Provider}", provider.Id);
+            if (_logger is not null) OnboardingWizardLog.LiveModelListFetchFailed(_logger, ex, provider.Id);
             writer($"  ⚠ Model list unavailable ({ex.Message.TrimEnd('.')}) — manual entry.");
             return null;
         }
@@ -520,4 +520,15 @@ public sealed class OnboardingWizard
     /// <summary>The name the picker lands on when the answer is empty or unusable.</summary>
     private static string DefaultAgentName(IReadOnlyList<AgentDefinition> agents)
         => agents.Count > 0 ? agents[0].Name.Value : AgentName.Fallback;
+}
+
+/// <summary>
+///     SG2: BCL <c>[LoggerMessage]</c> delegates for <see cref="OnboardingWizard" />.
+///     Templates, levels and operands are 1-to-1 with the former <c>LogX</c> calls.
+/// </summary>
+internal static partial class OnboardingWizardLog
+{
+    [LoggerMessage(EventId = 1, Level = LogLevel.Warning, Message = "Live model list fetch failed for {Provider}")]
+    public static partial void LiveModelListFetchFailed(ILogger logger, Exception ex, string provider);
+
 }

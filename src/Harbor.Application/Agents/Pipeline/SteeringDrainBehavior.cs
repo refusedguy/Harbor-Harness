@@ -24,9 +24,7 @@ public sealed class SteeringDrainBehavior(
             // session's id.
             if (!string.Equals(steerMsg.SessionId, session.Session.Id, StringComparison.Ordinal))
             {
-                logger.LogWarning(
-                    "Dropped steering message {MessageId} authored for session {MessageSession} while agent is bound to {Session}",
-                    steerMsg.Id, steerMsg.SessionId, session.Session.Id);
+                SteeringDrainBehaviorLog.SteeringMessageDropped(logger, steerMsg.Id, steerMsg.SessionId, session.Session.Id);
                 continue;
             }
 
@@ -34,4 +32,15 @@ public sealed class SteeringDrainBehavior(
             tokenTracker.RecordAppendedMessage(steerMsg);
         }
     }
+}
+
+/// <summary>
+///     SG2: BCL <c>[LoggerMessage]</c> delegates for <see cref="SteeringDrainBehavior" />.
+///     Templates, levels and operands are 1-to-1 with the former <c>LogX</c> calls.
+/// </summary>
+internal static partial class SteeringDrainBehaviorLog
+{
+    [LoggerMessage(EventId = 1, Level = LogLevel.Warning, Message = "Dropped steering message {MessageId} authored for session {MessageSession} while agent is bound to {Session}")]
+    public static partial void SteeringMessageDropped(ILogger logger, string messageId, string messageSession, string session);
+
 }

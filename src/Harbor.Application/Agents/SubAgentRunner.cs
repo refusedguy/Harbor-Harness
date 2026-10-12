@@ -161,11 +161,9 @@ public sealed class SubAgentRunner(
         // title in listings.
         var linked = await store.UpdateAsync(session, ct).ConfigureAwait(false);
         if (linked.IsFailure)
-            logger.LogWarning("Failed to persist sub-session metadata {SessionId}: {Error}", session.Id, linked.Error);
+            SubAgentRunnerLog.PersistMetadataFailed(logger, session.Id, linked.Error);
 
-        logger.LogInformation(
-            "Sub-agent starting: agent={Agent} session={SessionId} parent={ParentSessionId}",
-            agent.Name.Value, session.Id, request.ParentSessionId ?? "-");
+        SubAgentRunnerLog.SubAgentStarting(logger, agent.Name.Value, session.Id, request.ParentSessionId ?? "-");
 
         var messages = await store.GetMessagesAsync(session.Id, ct).ConfigureAwait(false);
         if (messages.IsFailure) // §4.6-ok: fresh session should always be readable; treat total store breakage as terminal.
@@ -213,9 +211,7 @@ public sealed class SubAgentRunner(
                 // its spend debit down with it. A cancelled child is Stopped
                 // (Aborted), never Error: nothing malfunctioned.
                 bool wasCancelled = ct.IsCancellationRequested;
-                logger.LogWarning(
-                    "Sub-agent run ended abnormally: agent={Agent} session={SessionId} error={Error}",
-                    agent.Name.Value, session.Id, run.Error);
+                SubAgentRunnerLog.RunEndedAbnormally(logger, agent.Name.Value, session.Id, run.Error);
                 await MarkStatusAsync(
                     session,
                     wasCancelled ? SessionStatus.Aborted : SessionStatus.Error,
@@ -271,9 +267,7 @@ public sealed class SubAgentRunner(
                         $"Sub-agent '{agent.Name.Value}' finished without producing a final assistant message (session {session.Id}).",
                         session.Id));
 
-            logger.LogInformation(
-                "Sub-agent finished: agent={Agent} session={SessionId} messages={Count} outputChars={Length}",
-                agent.Name.Value, session.Id, history.Value.Count, finalOutput.Length);
+            SubAgentRunnerLog.SubAgentFinished(logger, agent.Name.Value, session.Id, history.Value.Count, finalOutput.Length);
             await MarkStatusAsync(session, SessionStatus.Done, CancellationToken.None).ConfigureAwait(false);
 
             // [UX6] #266: fold the child's token delta into the parent message
@@ -307,7 +301,7 @@ public sealed class SubAgentRunner(
         var marked = await store.UpdateAsync(
             session with { Status = status, UpdatedAt = DateTimeOffset.UtcNow }, ct).ConfigureAwait(false);
         if (marked.IsFailure)
-            logger.LogWarning("Failed to persist sub-session status {SessionId}: {Error}", session.Id, marked.Error);
+            SubAgentRunnerLog.PersistStatusFailed(logger, session.Id, marked.Error);
     }
 
     /// <summary>
@@ -344,7 +338,7 @@ public sealed class SubAgentRunner(
         }
         catch (Exception ex)
         {
-            logger.LogDebug(ex, "Failed to extract degraded sub-agent output for session {SessionId}", sessionId);
+            SubAgentRunnerLog.DegradedOutputExtractFailed(logger, ex, sessionId);
             return string.Empty;
         }
     }
@@ -438,7 +432,7 @@ public sealed class SubAgentRunner(
         }
         catch (Exception ex)
         {
-            logger.LogDebug(ex, "Failed to aggregate sub-agent usage for session {SessionId}", sessionId);
+            SubAgentRunnerLog.UsageAggregateFailed(logger, ex, sessionId);
             return new Usage(0, 0);
         }
     }
@@ -487,9 +481,7 @@ public sealed class SubAgentRunner(
                 var messages = await store.GetMessagesAsync(parentSessionId, ct).ConfigureAwait(false);
                 if (messages.IsFailure)
                 {
-                    logger.LogWarning(
-                        "Failed to read parent session {SessionId} for sub-agent cost propagation: {Error}",
-                        parentSessionId, messages.Error);
+                    SubAgentRunnerLog.ReadParentSessionFailed(logger, parentSessionId, messages.Error);
                 }
                 else
                 {
@@ -512,18 +504,14 @@ public sealed class SubAgentRunner(
 
                     if (parent is null)
                     {
-                        logger.LogDebug(
-                            "Parent message {MessageId} not found in session {SessionId}; propagating sub-agent cost to stats only",
-                            parentMessageId, parentSessionId);
+                        SubAgentRunnerLog.ParentMessageNotFound(logger, parentMessageId, parentSessionId);
                     }
                     else
                     {
                         var merged = parent with { Usage = AddUsage(parent.Usage, childUsage) };
                         var rewritten = await store.UpdateMessageAsync(parentSessionId, merged, ct).ConfigureAwait(false);
                         if (rewritten.IsFailure)
-                            logger.LogWarning(
-                                "Failed to propagate sub-agent cost into parent message {MessageId} (session {SessionId}): {Error}",
-                                parentMessageId, parentSessionId, rewritten.Error);
+                            SubAgentRunnerLog.PropagateToParentMessageFailed(logger, parentMessageId, parentSessionId, rewritten.Error);
                     }
                 }
             }
@@ -531,9 +519,7 @@ public sealed class SubAgentRunner(
             var stats = await store.GetStatsAsync(parentSessionId, ct).ConfigureAwait(false);
             if (stats.IsFailure)
             {
-                logger.LogWarning(
-                    "Failed to read parent stats for sub-agent cost propagation (session {SessionId}): {Error}",
-                    parentSessionId, stats.Error);
+                SubAgentRunnerLog.ReadParentStatsFailed(logger, parentSessionId, stats.Error);
                 return;
             }
 
@@ -553,9 +539,7 @@ public sealed class SubAgentRunner(
                     ct)
                 .ConfigureAwait(false);
             if (stored.IsFailure)
-                logger.LogWarning(
-                    "Failed to store propagated sub-agent cost (session {SessionId}): {Error}",
-                    parentSessionId, stored.Error);
+                SubAgentRunnerLog.StorePropagatedCostFailed(logger, parentSessionId, stored.Error);
         }
         catch (OperationCanceledException)
         {
@@ -563,7 +547,7 @@ public sealed class SubAgentRunner(
         }
         catch (Exception ex)
         {
-            logger.LogWarning(ex, "Failed to propagate sub-agent cost into parent session {SessionId}", parentSessionId);
+            SubAgentRunnerLog.PropagateCostFailed(logger, ex, parentSessionId);
         }
     }
 
@@ -675,4 +659,51 @@ public sealed class DeferredSubAgentRunner : ISubAgentRunner
             : Task.FromResult(Result.Failure<SubAgentRunResult>(
                 "Sub-agent runtime is not initialized yet (host composition incomplete)."));
     }
+}
+
+/// <summary>
+///     SG2: BCL <c>[LoggerMessage]</c> delegates for <see cref="SubAgentRunner" />.
+///     Templates, levels and operands are 1-to-1 with the former <c>LogX</c> calls.
+/// </summary>
+internal static partial class SubAgentRunnerLog
+{
+    [LoggerMessage(EventId = 1, Level = LogLevel.Warning, Message = "Failed to persist sub-session metadata {SessionId}: {Error}")]
+    public static partial void PersistMetadataFailed(ILogger logger, string sessionId, string error);
+
+    [LoggerMessage(EventId = 2, Level = LogLevel.Information, Message = "Sub-agent starting: agent={Agent} session={SessionId} parent={ParentSessionId}")]
+    public static partial void SubAgentStarting(ILogger logger, string agent, string sessionId, string parentSessionId);
+
+    [LoggerMessage(EventId = 3, Level = LogLevel.Warning, Message = "Sub-agent run ended abnormally: agent={Agent} session={SessionId} error={Error}")]
+    public static partial void RunEndedAbnormally(ILogger logger, string agent, string sessionId, string error);
+
+    [LoggerMessage(EventId = 4, Level = LogLevel.Information, Message = "Sub-agent finished: agent={Agent} session={SessionId} messages={Count} outputChars={Length}")]
+    public static partial void SubAgentFinished(ILogger logger, string agent, string sessionId, int count, int length);
+
+    [LoggerMessage(EventId = 5, Level = LogLevel.Warning, Message = "Failed to persist sub-session status {SessionId}: {Error}")]
+    public static partial void PersistStatusFailed(ILogger logger, string sessionId, string error);
+
+    [LoggerMessage(EventId = 6, Level = LogLevel.Debug, Message = "Failed to extract degraded sub-agent output for session {SessionId}")]
+    public static partial void DegradedOutputExtractFailed(ILogger logger, Exception ex, string sessionId);
+
+    [LoggerMessage(EventId = 7, Level = LogLevel.Debug, Message = "Failed to aggregate sub-agent usage for session {SessionId}")]
+    public static partial void UsageAggregateFailed(ILogger logger, Exception ex, string sessionId);
+
+    [LoggerMessage(EventId = 8, Level = LogLevel.Warning, Message = "Failed to read parent session {SessionId} for sub-agent cost propagation: {Error}")]
+    public static partial void ReadParentSessionFailed(ILogger logger, string sessionId, string error);
+
+    [LoggerMessage(EventId = 9, Level = LogLevel.Debug, Message = "Parent message {MessageId} not found in session {SessionId}; propagating sub-agent cost to stats only")]
+    public static partial void ParentMessageNotFound(ILogger logger, string messageId, string sessionId);
+
+    [LoggerMessage(EventId = 10, Level = LogLevel.Warning, Message = "Failed to propagate sub-agent cost into parent message {MessageId} (session {SessionId}): {Error}")]
+    public static partial void PropagateToParentMessageFailed(ILogger logger, string messageId, string sessionId, string error);
+
+    [LoggerMessage(EventId = 11, Level = LogLevel.Warning, Message = "Failed to read parent stats for sub-agent cost propagation (session {SessionId}): {Error}")]
+    public static partial void ReadParentStatsFailed(ILogger logger, string sessionId, string error);
+
+    [LoggerMessage(EventId = 12, Level = LogLevel.Warning, Message = "Failed to store propagated sub-agent cost (session {SessionId}): {Error}")]
+    public static partial void StorePropagatedCostFailed(ILogger logger, string sessionId, string error);
+
+    [LoggerMessage(EventId = 13, Level = LogLevel.Warning, Message = "Failed to propagate sub-agent cost into parent session {SessionId}")]
+    public static partial void PropagateCostFailed(ILogger logger, Exception ex, string sessionId);
+
 }

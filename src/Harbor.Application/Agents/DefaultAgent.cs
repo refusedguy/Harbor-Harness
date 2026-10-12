@@ -319,9 +319,7 @@ public sealed class DefaultAgent : IAgent
             // started after that snapshot is the whole point of this re-check.
             if (BoundState.IsRunning)
             {
-                _logger.LogInformation(
-                    "Agent {Agent} is running; prompt routed to steering queue",
-                    state.Agent.Name.Value);
+                DefaultAgentLog.PromptRoutedToSteering(_logger, state.Agent.Name.Value);
                 Steer(message);
                 return Result.Success();
             }
@@ -356,9 +354,7 @@ public sealed class DefaultAgent : IAgent
                 .ConfigureAwait(false);
             if (persisted.IsFailure) // §4.6-ok: F14-политика — специфичный лог + текст провала, одиночный шаг.
             {
-                _logger.LogError(
-                    "Failed to persist user message {MessageId} for session {SessionId}: {Error}",
-                    message.Id, state.SessionId, persisted.Error);
+                DefaultAgentLog.PersistUserMessageFailed(_logger, message.Id, state.SessionId, persisted.Error);
                 return persisted.MapError(static e => $"Failed to persist prompt: {e}");
             }
 
@@ -398,7 +394,7 @@ public sealed class DefaultAgent : IAgent
             catch (Exception ex)
             {
                 BoundState = BoundState with { IsRunning = false, LastActivityAt = DateTimeOffset.UtcNow };
-                _logger.LogError(ex, "Agent run failed: session={SessionId}", state.SessionId);
+                DefaultAgentLog.AgentRunFailed(_logger, ex, state.SessionId);
                 var failed = Result.Failure(ex.Message);
                 completion.TrySetException(ex);
                 return failed;
@@ -476,9 +472,7 @@ public sealed class DefaultAgent : IAgent
 
             if (dropped > 0)
             {
-                _logger.LogWarning(
-                    "Dropped {Count} stale steering message(s) while rebinding agent from session {OldSession} to {NewSession}",
-                    dropped, current.SessionId, session.Id);
+                DefaultAgentLog.StaleSteeringDropped(_logger, dropped, current.SessionId, session.Id);
             }
         }
 
@@ -638,9 +632,7 @@ internal sealed class DefaultSessionContext : ISessionContext
         {
             // §4.6-ok: a store that cannot answer must not fail a prompt the user
             // already sent. The run starts from zero and the loss is logged.
-            (logger ?? NullLogger.Instance).LogError(
-                "Failed to read session stats for {SessionId}; usage totals start at zero: {Error}",
-                sessionId, stats.Error);
+            DefaultSessionContextLog.SessionSeedReadFailed((logger ?? NullLogger.Instance), sessionId, stats.Error);
             return SessionMetadata.Empty;
         }
 
@@ -665,9 +657,7 @@ internal sealed class DefaultSessionContext : ISessionContext
         Result persisted = await _store.AppendMessageAsync(Session.Id, message, ct).ConfigureAwait(false);
         if (persisted.IsFailure) // §4.6-ok: best-effort persist, ветка только логирует (F14 detail).
         {
-            _logger.LogError(
-                "Failed to persist message {MessageId} for session {SessionId}: {Error}",
-                message.Id, Session.Id, persisted.Error);
+            DefaultSessionContextLog.PersistMessageFailed(_logger, message.Id, Session.Id, persisted.Error);
         }
     }
 
@@ -701,7 +691,7 @@ internal sealed class DefaultSessionContext : ISessionContext
                 // §4.6-ok + rop-final-mile N3: best-effort usage update — store
                 // closed / IO failure loses this delta; log instead of the old
                 // no-op discard so the loss is observable.
-                _logger.LogError("Failed to read session stats for {SessionId}: {Error}", Session.Id, stats.Error);
+                DefaultSessionContextLog.SessionStatsReadFailed(_logger, Session.Id, stats.Error);
                 return;
             }
 
@@ -713,4 +703,41 @@ internal sealed class DefaultSessionContext : ISessionContext
             gate.Release();
         }
     }
+}
+
+/// <summary>
+///     SG2: BCL <c>[LoggerMessage]</c> delegates for <see cref="DefaultAgent" />.
+///     Templates, levels and operands are 1-to-1 with the former <c>LogX</c> calls.
+/// </summary>
+internal static partial class DefaultAgentLog
+{
+    [LoggerMessage(EventId = 1, Level = LogLevel.Information, Message = "Agent {Agent} is running; prompt routed to steering queue")]
+    public static partial void PromptRoutedToSteering(ILogger logger, string agent);
+
+    [LoggerMessage(EventId = 2, Level = LogLevel.Error, Message = "Failed to persist user message {MessageId} for session {SessionId}: {Error}")]
+    public static partial void PersistUserMessageFailed(ILogger logger, string messageId, string sessionId, string error);
+
+    [LoggerMessage(EventId = 3, Level = LogLevel.Error, Message = "Agent run failed: session={SessionId}")]
+    public static partial void AgentRunFailed(ILogger logger, Exception ex, string sessionId);
+
+    [LoggerMessage(EventId = 4, Level = LogLevel.Warning, Message = "Dropped {Count} stale steering message(s) while rebinding agent from session {OldSession} to {NewSession}")]
+    public static partial void StaleSteeringDropped(ILogger logger, int count, string oldSession, string newSession);
+
+}
+
+/// <summary>
+///     SG2: BCL <c>[LoggerMessage]</c> delegates for <see cref="DefaultSessionContext" />.
+///     Templates, levels and operands are 1-to-1 with the former <c>LogX</c> calls.
+/// </summary>
+internal static partial class DefaultSessionContextLog
+{
+    [LoggerMessage(EventId = 1, Level = LogLevel.Error, Message = "Failed to read session stats for {SessionId}; usage totals start at zero: {Error}")]
+    public static partial void SessionSeedReadFailed(ILogger logger, string sessionId, string error);
+
+    [LoggerMessage(EventId = 2, Level = LogLevel.Error, Message = "Failed to persist message {MessageId} for session {SessionId}: {Error}")]
+    public static partial void PersistMessageFailed(ILogger logger, string messageId, string sessionId, string error);
+
+    [LoggerMessage(EventId = 3, Level = LogLevel.Error, Message = "Failed to read session stats for {SessionId}: {Error}")]
+    public static partial void SessionStatsReadFailed(ILogger logger, string sessionId, string error);
+
 }

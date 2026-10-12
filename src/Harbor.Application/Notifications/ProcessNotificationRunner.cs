@@ -55,7 +55,7 @@ public sealed class ProcessNotificationRunner(ILogger<ProcessNotificationRunner>
         {
             // The renderer is shutting down. Not an error, and not worth a
             // warning: there is nobody left to notify.
-            logger.LogDebug("Not launching {FileName}: the caller was cancelled.", fileName);
+            ProcessNotificationRunnerLog.NotLaunchingCallerCancelled(logger, fileName);
             return;
         }
 
@@ -74,7 +74,7 @@ public sealed class ProcessNotificationRunner(ILogger<ProcessNotificationRunner>
             using Process? process = Process.Start(psi);
             if (process is null)
             {
-                logger.LogDebug("Not launching {FileName}: the OS started no process.", fileName);
+                ProcessNotificationRunnerLog.NotLaunchingNoProcess(logger, fileName);
                 return;
             }
 
@@ -93,14 +93,14 @@ public sealed class ProcessNotificationRunner(ILogger<ProcessNotificationRunner>
                 {
                     // The wait ended because the child was killed, not because it
                     // finished. Same shutdown as the pre-check above, one step later.
-                    logger.LogDebug("Stopped waiting for {FileName}: the caller was cancelled.", fileName);
+                    ProcessNotificationRunnerLog.StoppedWaitingCancelled(logger, fileName);
                 }
 
                 return;
             }
 
             TryKill(process, fileName);
-            logger.LogDebug("{FileName} did not exit within {TimeoutMs}ms; killed.", fileName, TimeoutMs);
+            ProcessNotificationRunnerLog.DidNotExitKilled(logger, fileName, TimeoutMs);
         }
         catch (OperationCanceledException ex)
         {
@@ -109,7 +109,7 @@ public sealed class ProcessNotificationRunner(ILogger<ProcessNotificationRunner>
             // "cancellation is handled today, by an implementation detail of a
             // BCL overload". The exception is passed along because a catch clause
             // that logs without it is a diagnostic that cannot be acted on (S6667).
-            logger.LogDebug(ex, "Stopped waiting for {FileName}: the caller was cancelled.", fileName);
+            ProcessNotificationRunnerLog.StoppedWaitingCancelRaced(logger, ex, fileName);
         }
         catch (Exception ex)
         {
@@ -117,7 +117,7 @@ public sealed class ProcessNotificationRunner(ILogger<ProcessNotificationRunner>
             // start. Expected on a machine without libnotify / without a
             // notification daemon — never surfaced to the caller, because a
             // missing toast must not fail the run it was announcing.
-            logger.LogWarning(ex, "Desktop notifier {FileName} failed; is it installed?", fileName);
+            ProcessNotificationRunnerLog.DesktopNotifierFailed(logger, ex, fileName);
         }
     }
 
@@ -131,7 +131,36 @@ public sealed class ProcessNotificationRunner(ILogger<ProcessNotificationRunner>
         {
             // Already gone, or we are not allowed to signal it. Nothing to do
             // either way — the caller's next action is unaffected.
-            logger.LogDebug(ex, "Could not kill the timed-out {FileName} notifier.", fileName);
+            ProcessNotificationRunnerLog.KillTimedOutFailed(logger, ex, fileName);
         }
     }
+}
+
+/// <summary>
+///     SG2: BCL <c>[LoggerMessage]</c> delegates for <see cref="ProcessNotificationRunner" />.
+///     Templates, levels and operands are 1-to-1 with the former <c>LogX</c> calls.
+/// </summary>
+internal static partial class ProcessNotificationRunnerLog
+{
+    [LoggerMessage(EventId = 1, Level = LogLevel.Debug, Message = "Not launching {FileName}: the caller was cancelled.")]
+    public static partial void NotLaunchingCallerCancelled(ILogger logger, string fileName);
+
+    [LoggerMessage(EventId = 2, Level = LogLevel.Debug, Message = "Not launching {FileName}: the OS started no process.")]
+    public static partial void NotLaunchingNoProcess(ILogger logger, string fileName);
+
+    [LoggerMessage(EventId = 3, Level = LogLevel.Debug, Message = "Stopped waiting for {FileName}: the caller was cancelled.")]
+    public static partial void StoppedWaitingCancelled(ILogger logger, string fileName);
+
+    [LoggerMessage(EventId = 4, Level = LogLevel.Debug, Message = "{FileName} did not exit within {TimeoutMs}ms; killed.")]
+    public static partial void DidNotExitKilled(ILogger logger, string fileName, int timeoutMs);
+
+    [LoggerMessage(EventId = 5, Level = LogLevel.Debug, Message = "Stopped waiting for {FileName}: the caller was cancelled.")]
+    public static partial void StoppedWaitingCancelRaced(ILogger logger, Exception ex, string fileName);
+
+    [LoggerMessage(EventId = 6, Level = LogLevel.Warning, Message = "Desktop notifier {FileName} failed; is it installed?")]
+    public static partial void DesktopNotifierFailed(ILogger logger, Exception ex, string fileName);
+
+    [LoggerMessage(EventId = 7, Level = LogLevel.Debug, Message = "Could not kill the timed-out {FileName} notifier.")]
+    public static partial void KillTimedOutFailed(ILogger logger, Exception ex, string fileName);
+
 }

@@ -58,7 +58,7 @@ public sealed class CompactionBehavior(
         }
 
         using var activity = HarborTelemetry.Source.StartActivity("Compaction");
-        logger.LogInformation("Compaction triggered for session {SessionId}", session.Session.Id);
+        CompactionBehaviorLog.CompactionTriggered(logger, session.Session.Id);
         // PX4 slice 2: advisory notification before the history is summarized.
         // Runs first so a hook that observes the shrink sees the pre-summary
         // world; it cannot veto, delay or rewrite the compaction itself.
@@ -80,7 +80,7 @@ public sealed class CompactionBehavior(
             {
                 // The runner is contracted never to throw on its own; a
                 // hooks-subsystem failure must not stop compaction.
-                logger.LogWarning(ex, "PreCompact hooks failed for session {SessionId}", session.Session.Id);
+                CompactionBehaviorLog.PreCompactHooksFailed(logger, ex, session.Session.Id);
             }
         }
 
@@ -128,9 +128,7 @@ public sealed class CompactionBehavior(
                 // degrade the session on a plain Esc.
                 if (ct.IsCancellationRequested)
                 {
-                    logger.LogInformation(
-                        "Compaction cancelled for session {SessionId}; no fallback",
-                        session.Session.Id);
+                    CompactionBehaviorLog.CompactionCancelled(logger, session.Session.Id);
                     return Task.FromResult(new CompactionOutcome(turnMessages, truncationFallback));
                 }
 
@@ -138,7 +136,7 @@ public sealed class CompactionBehavior(
                 // (overfull) context: publish the failure and
                 // switch to strict tail truncation for this and
                 // all subsequent requests.
-                logger.LogWarning("Compaction failed: {Error}. Falling back to truncation.", error);
+                CompactionBehaviorLog.CompactionFailed(logger, error);
                 return PublishFailureAsync(session.Session.Id, error, turnMessages);
             }).ConfigureAwait(false);
     }
@@ -157,3 +155,23 @@ public sealed class CompactionBehavior(
 /// <param name="TurnMessages">The message view the turn's request is built from.</param>
 /// <param name="TruncationFallback">Whether strict truncation is engaged for the rest of the run.</param>
 public sealed record CompactionOutcome(IReadOnlyList<AgentMessage> TurnMessages, bool TruncationFallback);
+
+/// <summary>
+///     SG2: BCL <c>[LoggerMessage]</c> delegates for <see cref="CompactionBehavior" />.
+///     Templates, levels and operands are 1-to-1 with the former <c>LogX</c> calls.
+/// </summary>
+internal static partial class CompactionBehaviorLog
+{
+    [LoggerMessage(EventId = 1, Level = LogLevel.Information, Message = "Compaction triggered for session {SessionId}")]
+    public static partial void CompactionTriggered(ILogger logger, string sessionId);
+
+    [LoggerMessage(EventId = 2, Level = LogLevel.Warning, Message = "PreCompact hooks failed for session {SessionId}")]
+    public static partial void PreCompactHooksFailed(ILogger logger, Exception ex, string sessionId);
+
+    [LoggerMessage(EventId = 3, Level = LogLevel.Information, Message = "Compaction cancelled for session {SessionId}; no fallback")]
+    public static partial void CompactionCancelled(ILogger logger, string sessionId);
+
+    [LoggerMessage(EventId = 4, Level = LogLevel.Warning, Message = "Compaction failed: {Error}. Falling back to truncation.")]
+    public static partial void CompactionFailed(ILogger logger, string error);
+
+}

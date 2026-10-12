@@ -78,12 +78,7 @@ public sealed class BackgroundTaskRegistry : IBackgroundTaskRegistry
         _runs[id] = task;
         _sources[id] = cts;
         _meta[id] = (agentName, sessionId);
-        _logger.LogInformation(
-            "Background task started: id={Id} agent={Agent} session={Session}",
-            id,
-            agentName,
-            sessionId
-        );
+        BackgroundTaskRegistryLog.BackgroundTaskStarted(_logger, id, agentName, sessionId);
         return Result.Success(id);
     }
 
@@ -104,16 +99,13 @@ public sealed class BackgroundTaskRegistry : IBackgroundTaskRegistry
             {
                 // Raced with DrainCompleted dropping this run's source —
                 // the run is already observed, nothing left to stop.
-                _logger.LogDebug(ex, "Background task source already drained: id={Id}", id);
+                BackgroundTaskRegistryLog.BackgroundTaskSourceDrained(_logger, ex, id);
             }
         }
 
         if (cancelled > 0)
         {
-            _logger.LogInformation(
-                "Background tasks cancelled: session={Session} count={Count}",
-                sessionId,
-                cancelled);
+            BackgroundTaskRegistryLog.BackgroundTasksCancelled(_logger, sessionId, cancelled);
         }
 
         return cancelled;
@@ -162,4 +154,21 @@ public sealed class BackgroundTaskRegistry : IBackgroundTaskRegistry
         string detail = task.Exception?.GetBaseException().Message ?? "unknown crash";
         return Result.Failure<SubAgentRunResult>($"Background run crashed: {detail}");
     }
+}
+
+/// <summary>
+///     SG2: BCL <c>[LoggerMessage]</c> delegates for <see cref="BackgroundTaskRegistry" />.
+///     Templates, levels and operands are 1-to-1 with the former <c>LogX</c> calls.
+/// </summary>
+internal static partial class BackgroundTaskRegistryLog
+{
+    [LoggerMessage(EventId = 1, Level = LogLevel.Information, Message = "Background task started: id={Id} agent={Agent} session={Session}")]
+    public static partial void BackgroundTaskStarted(ILogger logger, string id, string agent, string session);
+
+    [LoggerMessage(EventId = 2, Level = LogLevel.Debug, Message = "Background task source already drained: id={Id}")]
+    public static partial void BackgroundTaskSourceDrained(ILogger logger, Exception ex, string id);
+
+    [LoggerMessage(EventId = 3, Level = LogLevel.Information, Message = "Background tasks cancelled: session={Session} count={Count}")]
+    public static partial void BackgroundTasksCancelled(ILogger logger, string session, int count);
+
 }

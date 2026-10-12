@@ -16,13 +16,22 @@ public sealed class PermissionCheckBehavior(ILogger logger) : IPipelineBehavior
     {
         if (request.Agent.Permission is null)
         {
-            logger.LogError(
-                "Refusing to run agent {Agent}: definition carries no permission ruleset",
-                request.Agent.Name.Value);
+            PermissionCheckBehaviorLog.RefusingNoRuleset(logger, request.Agent.Name.Value);
             return Task.FromResult(CSharpFunctionalExtensions.Result.Failure(
                 $"Agent '{request.Agent.Name.Value}' has no permission ruleset; refusing to run."));
         }
 
         return next(request, ct);
     }
+}
+
+/// <summary>
+///     SG2: BCL <c>[LoggerMessage]</c> delegates for <see cref="PermissionCheckBehavior" />.
+///     Templates, levels and operands are 1-to-1 with the former <c>LogX</c> calls.
+/// </summary>
+internal static partial class PermissionCheckBehaviorLog
+{
+    [LoggerMessage(EventId = 1, Level = LogLevel.Error, Message = "Refusing to run agent {Agent}: definition carries no permission ruleset")]
+    public static partial void RefusingNoRuleset(ILogger logger, string agent);
+
 }

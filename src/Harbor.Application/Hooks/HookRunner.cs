@@ -115,9 +115,7 @@ public sealed class HookRunner : IHookRunner
             {
                 // Fail-closed: a hook that timed out, failed to start, or
                 // printed garbage denies the work it was asked about.
-                _logger.LogWarning(
-                    "{EventName} hook '{Command}' failed; failing closed to Deny: {Error}",
-                    eventName, entry.Command, attempt.Error);
+                HookRunnerLog.HookFailedDeny(_logger, eventName, entry.Command, attempt.Error);
                 return new HookVerdict(HookDecision.Deny, attempt.Error, null);
             }
 
@@ -133,9 +131,7 @@ public sealed class HookRunner : IHookRunner
             switch (verdict.Decision)
             {
                 case HookDecision.Deny:
-                    _logger.LogInformation(
-                        "{EventName} hook '{Command}' denied the call: {Reason}",
-                        eventName, entry.Command, verdict.Reason);
+                    HookRunnerLog.HookDeniedCall(_logger, eventName, entry.Command, verdict.Reason);
                     return new HookVerdict(HookDecision.Deny, verdict.Reason, null);
                 case HookDecision.Ask:
                     askReason ??= verdict.Reason ?? $"Hook '{entry.Command}' requested confirmation.";
@@ -243,12 +239,12 @@ public sealed class HookRunner : IHookRunner
         }
         catch (OperationCanceledException ex) when (ct.IsCancellationRequested)
         {
-            _logger.LogDebug(ex, "{EventName} hooks skipped: run cancelled", eventName);
+            HookRunnerLog.HooksSkippedCancelled(_logger, ex, eventName);
         }
         catch (Exception ex)
         {
             // Advisory by contract: a hook failure must never fail the run.
-            _logger.LogWarning(ex, "{EventName} hooks failed", eventName);
+            HookRunnerLog.HooksFailed(_logger, ex, eventName);
         }
     }
 
@@ -259,7 +255,7 @@ public sealed class HookRunner : IHookRunner
         if (loadError is not null && loadError != _lastLoadErrorLogged)
         {
             _lastLoadErrorLogged = loadError;
-            _logger.LogWarning("Hook config ignored: {Error}", loadError);
+            HookRunnerLog.HookConfigIgnored(_logger, loadError);
         }
 
         return matches;
@@ -273,17 +269,13 @@ public sealed class HookRunner : IHookRunner
     {
         if (attempt.Error is not null)
         {
-            _logger.LogWarning(
-                "{EventName} hook '{Command}' failed (tool {ToolName}): {Error}",
-                eventName, entry.Command, toolName ?? "(none)", attempt.Error);
+            HookRunnerLog.ToolHookFailed(_logger, eventName, entry.Command, toolName ?? "(none)", attempt.Error);
             return;
         }
 
         if (attempt.Stdout.Length > 0 && _logger.IsEnabled(LogLevel.Debug))
         {
-            _logger.LogDebug(
-                "{EventName} hook '{Command}' output (tool {ToolName}): {Output}",
-                eventName, entry.Command, toolName ?? "(none)", attempt.Stdout);
+            HookRunnerLog.ToolHookOutput(_logger, eventName, entry.Command, toolName ?? "(none)", attempt.Stdout);
         }
     }
 
@@ -367,7 +359,7 @@ public sealed class HookRunner : IHookRunner
             // the write lands — EPIPE then describes the race, not a failure.
             // Fall through to drain whatever it printed; the verdict parse
             // stays the gate (silence is still fail-closed deny).
-            _logger.LogDebug(ex, "Hook '{Command}' exited before the stdin write landed; draining output", entry.Command);
+            HookRunnerLog.HookStdinDrainRace(_logger, ex, entry.Command);
         }
 
         try
@@ -543,4 +535,36 @@ public sealed class HookRunner : IHookRunner
         public static HookAttempt Failed(string error, string stdout, string stderr) =>
             new(null, error, stdout, stderr);
     }
+}
+
+/// <summary>
+///     SG2: BCL <c>[LoggerMessage]</c> delegates for <see cref="HookRunner" />.
+///     Templates, levels and operands are 1-to-1 with the former <c>LogX</c> calls.
+/// </summary>
+internal static partial class HookRunnerLog
+{
+    [LoggerMessage(EventId = 1, Level = LogLevel.Warning, Message = "{EventName} hook '{Command}' failed; failing closed to Deny: {Error}")]
+    public static partial void HookFailedDeny(ILogger logger, string eventName, string command, string? error);
+
+    [LoggerMessage(EventId = 2, Level = LogLevel.Information, Message = "{EventName} hook '{Command}' denied the call: {Reason}")]
+    public static partial void HookDeniedCall(ILogger logger, string eventName, string command, string? reason);
+
+    [LoggerMessage(EventId = 3, Level = LogLevel.Debug, Message = "{EventName} hooks skipped: run cancelled")]
+    public static partial void HooksSkippedCancelled(ILogger logger, Exception ex, string eventName);
+
+    [LoggerMessage(EventId = 4, Level = LogLevel.Warning, Message = "{EventName} hooks failed")]
+    public static partial void HooksFailed(ILogger logger, Exception ex, string eventName);
+
+    [LoggerMessage(EventId = 5, Level = LogLevel.Warning, Message = "Hook config ignored: {Error}")]
+    public static partial void HookConfigIgnored(ILogger logger, string error);
+
+    [LoggerMessage(EventId = 6, Level = LogLevel.Warning, Message = "{EventName} hook '{Command}' failed (tool {ToolName}): {Error}")]
+    public static partial void ToolHookFailed(ILogger logger, string eventName, string command, string toolName, string error);
+
+    [LoggerMessage(EventId = 7, Level = LogLevel.Debug, Message = "{EventName} hook '{Command}' output (tool {ToolName}): {Output}")]
+    public static partial void ToolHookOutput(ILogger logger, string eventName, string command, string toolName, string output);
+
+    [LoggerMessage(EventId = 8, Level = LogLevel.Debug, Message = "Hook '{Command}' exited before the stdin write landed; draining output")]
+    public static partial void HookStdinDrainRace(ILogger logger, Exception ex, string command);
+
 }

@@ -284,9 +284,7 @@ public sealed class ToolDispatcher(
     /// </remarks>
     private ToolResultEntry NotStartedBecauseStopped(ToolCallPart toolCall)
     {
-        logger.LogInformation(
-            "Tool {ToolName} (call {CallId}) not started — a stop was accepted before dispatch",
-            toolCall.ToolName, toolCall.Id);
+        ToolDispatcherLog.ToolNotStartedStopAccepted(logger, toolCall.ToolName, toolCall.Id);
         return ToolResultEntry.From(
             toolCall.Id,
             toolCall.ToolName,
@@ -341,9 +339,7 @@ public sealed class ToolDispatcher(
             return pending.Result;
         }
 
-        logger.LogInformation(
-            "Stop accepted ({Reason}); awaiting in-flight tool call {CallId} for {GraceMs:0}ms before abandoning",
-            AcceptedStopReason, toolCall.Id, _abandonGrace.TotalMilliseconds);
+        ToolDispatcherLog.StopAcceptedAwaitingOne(logger, AcceptedStopReason, toolCall.Id, _abandonGrace.TotalMilliseconds);
         await Task.WhenAny(pending, Task.Delay(_abandonGrace, _clock)).ConfigureAwait(false);
 
         return pending.IsCompletedSuccessfully
@@ -381,9 +377,7 @@ public sealed class ToolDispatcher(
             return all.Result;
         }
 
-        logger.LogInformation(
-            "Stop accepted ({Reason}); awaiting {Count} in-flight tool call(s) for {GraceMs:0}ms before abandoning",
-            AcceptedStopReason, count, _abandonGrace.TotalMilliseconds);
+        ToolDispatcherLog.StopAcceptedAwaitingMany(logger, AcceptedStopReason, count, _abandonGrace.TotalMilliseconds);
         await Task.WhenAny(all, Task.Delay(_abandonGrace, _clock)).ConfigureAwait(false);
 
         var resolved = new ToolResultEntry[count];
@@ -406,10 +400,7 @@ public sealed class ToolDispatcher(
     private async Task<ToolResultEntry> AbandonLeftoverAsync(Task pending, ToolCallPart toolCall)
     {
         _ = pending.ContinueWith(
-            t => logger.LogWarning(
-                t.Exception,
-                "Abandoned tool {ToolName} (call {CallId}) faulted after abandonment",
-                toolCall.ToolName, toolCall.Id),
+            t => ToolDispatcherLog.AbandonedToolFaulted(logger, t.Exception!, toolCall.ToolName, toolCall.Id),
             CancellationToken.None,
             TaskContinuationOptions.OnlyOnFaulted,
             TaskScheduler.Default);
@@ -467,7 +458,7 @@ public sealed class ToolDispatcher(
         await eventBus.PublishAsync(
             new ToolExecutionStartEvent(toolCall.Id, toolCall.ToolName, toolCall.Args, tool.Glyph),
             ct).ConfigureAwait(false);
-        logger.LogDebug("Tool execution start: {ToolName} (call {CallId})", toolCall.ToolName, toolCall.Id);
+        ToolDispatcherLog.ToolExecutionStart(logger, toolCall.ToolName, toolCall.Id);
 
         // A9: arm the per-call deadline (if configured). The linked token is
         // passed to permission check AND execution so a hanging tool's awaits
@@ -570,7 +561,7 @@ public sealed class ToolDispatcher(
             string message = toolExecutionTimeout is { } t
                 ? $"Tool '{toolCall.ToolName}' timed out after {t.TotalSeconds:0.#}s."
                 : "Tool execution was cancelled.";
-            logger.LogWarning(oce, "Tool {ToolName} (call {CallId}) hit its execution deadline", toolCall.ToolName, toolCall.Id);
+            ToolDispatcherLog.ToolExecutionDeadlineHit(logger, oce, toolCall.ToolName, toolCall.Id);
             var timeout = ToolResult.Error(message);
             await eventBus.PublishAsync(new ToolExecutionEndEvent(
                 toolCall.Id, timeout, true), TerminalEventToken).ConfigureAwait(false);
@@ -580,7 +571,7 @@ public sealed class ToolDispatcher(
         {
             activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
             activity?.AddException(ex);
-            logger.LogError(ex, "Tool {ToolName} failed", toolCall.ToolName);
+            ToolDispatcherLog.ToolFailed(logger, ex, toolCall.ToolName);
             // Attempt count is reported only when retries actually happened —
             // the single-attempt message stays byte-identical (log/LLM stability).
             string errorMessage = attempts.Value > 1
@@ -705,7 +696,7 @@ public sealed class ToolDispatcher(
             // The runner is contracted never to throw on its own; a failure
             // here is a hooks-subsystem failure, which fails closed to deny
             // exactly like the permission-subsystem failure (§G3).
-            logger.LogWarning(ex, "PreToolUse hooks failed for {ToolName}; failing closed to Deny", toolCall.ToolName);
+            ToolDispatcherLog.PreToolUseHooksFailed(logger, ex, toolCall.ToolName);
             verdict = new HookVerdict(HookDecision.Deny, $"Hook execution failed: {ex.Message}", null);
         }
 
@@ -767,8 +758,7 @@ public sealed class ToolDispatcher(
     private async Task<HookGate> RefuseHook(ToolCallPart toolCall, string reason, Activity? activity)
     {
         activity?.SetStatus(ActivityStatusCode.Error, "Hook denied");
-        logger.LogInformation("Tool {ToolName} (call {CallId}) refused by user hook: {Reason}",
-            toolCall.ToolName, toolCall.Id, reason);
+        ToolDispatcherLog.ToolRefusedByHook(logger, toolCall.ToolName, toolCall.Id, reason);
         var refused = ToolResult.Error(reason);
         await eventBus.PublishAsync(new ToolExecutionEndEvent(
             toolCall.Id, refused, true), TerminalEventToken).ConfigureAwait(false);
@@ -793,7 +783,7 @@ public sealed class ToolDispatcher(
         // common production case).
         if (logger.IsEnabled(LogLevel.Debug))
         {
-            logger.LogDebug("Executing tool {ToolName} (call {CallId}) args={Args}", toolCall.ToolName, toolCall.Id, toolCall.Args.GetRawText());
+            ToolDispatcherLog.ExecutingTool(logger, toolCall.ToolName, toolCall.Id, toolCall.Args.GetRawText());
         }
 
         return new ToolContext(
@@ -818,7 +808,7 @@ public sealed class ToolDispatcher(
                 }
                 catch (Exception ex)
                 {
-                    logger.LogWarning(ex, "Tool progress publish failed for {ToolCallId}", toolCall.Id);
+                    ToolDispatcherLog.ToolProgressPublishFailed(logger, ex, toolCall.Id);
                 }
             },
             // #201 B1: the Ask callback rides the AskUserAsync railway (checked,
@@ -829,8 +819,7 @@ public sealed class ToolDispatcher(
                 Result<PermissionResponse> asked = await permissions.AskUserAsync(req, c).ConfigureAwait(false);
                 if (asked.IsFailure)
                 {
-                    logger.LogWarning("Permission ask failed for {Permission} (call {CallId}); failing closed to Deny: {Error}",
-                        req.Permission, toolCall.Id, asked.Error);
+                    ToolDispatcherLog.PermissionAskFailed(logger, req.Permission, toolCall.Id, asked.Error);
                     return new PermissionResponse(PermissionAction.Deny, false);
                 }
 
@@ -914,8 +903,7 @@ public sealed class ToolDispatcher(
                     // the delay below can only throw on a raced cancel — which
                     // the same dedicated catches classify honestly.
                     TimeSpan backoff = RetryPolicy.ComputeDelay(retryDecider.Options, attempts.Value);
-                    logger.LogWarning(ex, "Tool {ToolName} (call {CallId}) attempt {Attempt} transient, retrying in {BackoffMs:0}ms",
-                        toolCall.ToolName, toolCall.Id, attempts.Value, backoff.TotalMilliseconds);
+                    ToolDispatcherLog.ToolAttemptTransient(logger, ex, toolCall.ToolName, toolCall.Id, attempts.Value, backoff.TotalMilliseconds);
                     // #76: retry-projection feed (render-only). The UI mirrors
                     // attempt/max/backoff from these fields; the Task.Delay below
                     // stays the only scheduling authority — the UI never triggers.
@@ -929,7 +917,7 @@ public sealed class ToolDispatcher(
                 }
             }
 
-            logger.LogDebug("Tool execution end: {ToolName} (call {CallId}) isError={IsError}", toolCall.ToolName, toolCall.Id, result.IsError);
+            ToolDispatcherLog.ToolExecutionEnd(logger, toolCall.ToolName, toolCall.Id, result.IsError);
             await eventBus.PublishAsync(new ToolExecutionEndEvent(
                 toolCall.Id, result, result.IsError), TerminalEventToken).ConfigureAwait(false);
 
@@ -943,4 +931,54 @@ public sealed class ToolDispatcher(
             }
         }
     }
+}
+
+/// <summary>
+///     SG2: BCL <c>[LoggerMessage]</c> delegates for <see cref="ToolDispatcher" />.
+///     Templates, levels and operands are 1-to-1 with the former <c>LogX</c> calls.
+/// </summary>
+internal static partial class ToolDispatcherLog
+{
+    [LoggerMessage(EventId = 1, Level = LogLevel.Information, Message = "Tool {ToolName} (call {CallId}) not started — a stop was accepted before dispatch")]
+    public static partial void ToolNotStartedStopAccepted(ILogger logger, string toolName, string callId);
+
+    [LoggerMessage(EventId = 2, Level = LogLevel.Information, Message = "Stop accepted ({Reason}); awaiting in-flight tool call {CallId} for {GraceMs:0}ms before abandoning")]
+    public static partial void StopAcceptedAwaitingOne(ILogger logger, string reason, string callId, double graceMs);
+
+    [LoggerMessage(EventId = 3, Level = LogLevel.Information, Message = "Stop accepted ({Reason}); awaiting {Count} in-flight tool call(s) for {GraceMs:0}ms before abandoning")]
+    public static partial void StopAcceptedAwaitingMany(ILogger logger, string reason, int count, double graceMs);
+
+    [LoggerMessage(EventId = 4, Level = LogLevel.Warning, Message = "Abandoned tool {ToolName} (call {CallId}) faulted after abandonment")]
+    public static partial void AbandonedToolFaulted(ILogger logger, Exception ex, string toolName, string callId);
+
+    [LoggerMessage(EventId = 5, Level = LogLevel.Debug, Message = "Tool execution start: {ToolName} (call {CallId})")]
+    public static partial void ToolExecutionStart(ILogger logger, string toolName, string callId);
+
+    [LoggerMessage(EventId = 6, Level = LogLevel.Warning, Message = "Tool {ToolName} (call {CallId}) hit its execution deadline")]
+    public static partial void ToolExecutionDeadlineHit(ILogger logger, Exception ex, string toolName, string callId);
+
+    [LoggerMessage(EventId = 7, Level = LogLevel.Error, Message = "Tool {ToolName} failed")]
+    public static partial void ToolFailed(ILogger logger, Exception ex, string toolName);
+
+    [LoggerMessage(EventId = 8, Level = LogLevel.Warning, Message = "PreToolUse hooks failed for {ToolName}; failing closed to Deny")]
+    public static partial void PreToolUseHooksFailed(ILogger logger, Exception ex, string toolName);
+
+    [LoggerMessage(EventId = 9, Level = LogLevel.Information, Message = "Tool {ToolName} (call {CallId}) refused by user hook: {Reason}")]
+    public static partial void ToolRefusedByHook(ILogger logger, string toolName, string callId, string reason);
+
+    [LoggerMessage(EventId = 10, Level = LogLevel.Debug, Message = "Executing tool {ToolName} (call {CallId}) args={Args}")]
+    public static partial void ExecutingTool(ILogger logger, string toolName, string callId, string args);
+
+    [LoggerMessage(EventId = 11, Level = LogLevel.Warning, Message = "Tool progress publish failed for {ToolCallId}")]
+    public static partial void ToolProgressPublishFailed(ILogger logger, Exception ex, string toolCallId);
+
+    [LoggerMessage(EventId = 12, Level = LogLevel.Warning, Message = "Permission ask failed for {Permission} (call {CallId}); failing closed to Deny: {Error}")]
+    public static partial void PermissionAskFailed(ILogger logger, string permission, string callId, string error);
+
+    [LoggerMessage(EventId = 13, Level = LogLevel.Warning, Message = "Tool {ToolName} (call {CallId}) attempt {Attempt} transient, retrying in {BackoffMs:0}ms")]
+    public static partial void ToolAttemptTransient(ILogger logger, Exception ex, string toolName, string callId, int attempt, double backoffMs);
+
+    [LoggerMessage(EventId = 14, Level = LogLevel.Debug, Message = "Tool execution end: {ToolName} (call {CallId}) isError={IsError}")]
+    public static partial void ToolExecutionEnd(ILogger logger, string toolName, string callId, bool isError);
+
 }
