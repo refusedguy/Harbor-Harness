@@ -233,7 +233,11 @@ internal sealed class TurnRunner(
         Usage? finalUsage = streamed.FinalUsage;
         var stopReason = streamed.StopReason;
 
-        await session.AppendMessageAsync(partial, ct).ConfigureAwait(false);
+        // #1103: the streamed output is already-produced work — it persists with
+        // None so a cancel between stream and persist cannot throw OCE into the
+        // run and read as a provider error. Cancellation is honored explicitly
+        // right below: no tool runs for a cancelled run.
+        await session.AppendMessageAsync(partial, CancellationToken.None).ConfigureAwait(false);
         // B3: feed the running token-estimate cache so ShouldCompact stays O(1).
         tokenTracker.RecordAppendedMessage(partial);
         if (finalUsage != null)
@@ -243,7 +247,19 @@ internal sealed class TurnRunner(
             // knows what it cost, so its own rate table rides along with the
             // usage. The context folds and publishes the total; no renderer
             // prices anything (CostPricedInCoreRules).
-            await session.UpdateStatsAsync(finalUsage, model.Pricing, ct).ConfigureAwait(false);
+            await session.UpdateStatsAsync(finalUsage, model.Pricing, CancellationToken.None).ConfigureAwait(false);
+        }
+
+        if (ct.IsCancellationRequested)
+        {
+            // #1103: the stop landed after the stream; the partial is persisted
+            // above. Close the turn and end the run — the loop's cancel path
+            // then publishes the Cancelled terminal event, and no tool executes
+            // after the stop.
+            logger.LogDebug("Turn {Turn} end (cancelled after stream)", turn);
+            await eventBus.PublishAsync(
+                new TurnEndEvent(partial, Array.Empty<ToolResultMessage>(), session.Session.Id), CancellationToken.None).ConfigureAwait(false);
+            return new TurnStepResult(truncationFallback, EndRun: true);
         }
 
         if (budget is not null)

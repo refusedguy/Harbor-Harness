@@ -9,6 +9,7 @@ using Harbor.Application.Sessions;
 using Harbor.Application.Tests.Fakes;
 using Harbor.TestKit;
 using Microsoft.Extensions.Logging.Abstractions;
+using System.Threading.Channels;
 using TestSessionContext = Harbor.Application.Tests.Fakes.TestSessionContext;
 using TUnit.Assertions;
 
@@ -114,6 +115,72 @@ public class CancelMisclassification1103Tests
         await Assert.That(result.IsFailure).IsTrue();
         await Assert.That(result.Error).Contains("cancelled");
         await Assert.That(bus.Events.OfType<AgentErrorEvent>().Count()).IsEqualTo(0);
+        var end = bus.Events.OfType<AgentEndEvent>().Single();
+        await Assert.That(end.Cancelled).IsTrue();
+    }
+
+    /// <summary>
+    ///     Context that presses Stop as the first persist lands, then honors
+    ///     the passed token like a real store. Replicates a cancel between
+    ///     stream and persist.
+    /// </summary>
+    private sealed class CancelOnFirstAppendContext : ISessionContext
+    {
+        private readonly TestSessionContext _inner;
+        private readonly CancellationTokenSource _cts;
+        private int _appends;
+
+        public CancelOnFirstAppendContext(Session session, CancellationTokenSource cts)
+        {
+            _inner = new TestSessionContext(session);
+            _cts = cts;
+        }
+
+        public Session Session => _inner.Session;
+
+        public IReadOnlyList<AgentMessage> Messages => _inner.Messages;
+
+        public Channel<AgentMessage> SteeringQueue => _inner.SteeringQueue;
+
+        public Task AppendMessageAsync(AgentMessage message, CancellationToken ct = default)
+        {
+            if (Interlocked.Increment(ref _appends) == 1)
+                _cts.Cancel();
+            ct.ThrowIfCancellationRequested();
+            return _inner.AppendMessageAsync(message, ct);
+        }
+
+        public Task UpdateStatsAsync(Usage usage, Pricing pricing, CancellationToken ct = default)
+        {
+            ct.ThrowIfCancellationRequested();
+            return _inner.UpdateStatsAsync(usage, pricing, ct);
+        }
+    }
+
+    [Test]
+    public async Task RunAsync_CancelBetweenStreamAndPersist_PartialKept_NoErrorEvent()
+    {
+        // #1103 TurnRunner:234,244 — the post-stream persist rode the run token,
+        // so a cancel between stream and persist threw OCE into the run and read
+        // as a provider error (and the streamed output was lost). The persist
+        // now rides None; the cancel still ends the run without tool execution.
+        var client = new ScriptedLlmClient([
+            new TextDeltaEvent("t", "hello"), new StepFinishEvent(0, "stop", new Usage(1, 1))]);
+        var bus = new FakeEventBus();
+        var agent = TestAgents.AllowAll();
+        var loop = LoopWithBus(client, bus, agent);
+
+        using var cts = new CancellationTokenSource();
+        var session = new CancelOnFirstAppendContext(
+            Session.Create("/tmp/harbor-1103-cancel", "code", "test", "test-model"), cts);
+
+        var result = await loop.RunAsync(session, agent, cts.Token);
+
+        await Assert.That(result.IsFailure).IsTrue();
+        await Assert.That(bus.Events.OfType<AgentErrorEvent>().Count()).IsEqualTo(0);
+        // The already-streamed output survived the cancel.
+        await Assert.That(session.Messages.OfType<AssistantMessage>().Count()).IsEqualTo(1);
+        await Assert.That(bus.Events.OfType<TurnEndEvent>().Count()).IsEqualTo(1);
         var end = bus.Events.OfType<AgentEndEvent>().Single();
         await Assert.That(end.Cancelled).IsTrue();
     }
