@@ -54,7 +54,7 @@ public class CancelMisclassification1103Tests
 
         public IReadOnlyList<AgentEvent> GetScrollback(int maxEvents) => [];
 
-        private sealed class NullDisposable : IDisposable
+        internal sealed class NullDisposable : IDisposable
         {
             public static readonly NullDisposable Instance = new();
 
@@ -195,17 +195,15 @@ public class CancelMisclassification1103Tests
     public async Task RunAsync_CancelAtTurnStart_BoundaryRecorded_NoErrorEvent()
     {
         // #1103 TurnRunner:120 — the TurnStart publish rode the run token, so a
-        // cancel during publish threw OCE into the run and read as a provider
-        // error. The boundary is a fact and rides None; the cancel is still
-        // honored at the next await.
+        // cancel landing on the boundary threw OCE into the run and the turn
+        // card never recorded. The boundary is a fact and rides None; the
+        // cancel is still honored at the next await, with no Error event.
         var client = new ScriptedLlmClient([
-            new TextDeltaEvent("t", "never reached"), new StepFinishEvent(0, "stop", new Usage(1, 1))]);
-        var bus = new CancelHonoringBus();
+            new TextDeltaEvent("t", "hello after stop"), new StepFinishEvent(0, "stop", new Usage(1, 1))]);
+        using var cts = new CancellationTokenSource();
+        var bus = new CancelOnTurnStartBus(cts);
         var agent = TestAgents.AllowAll();
         var loop = LoopWithBus(client, bus, agent);
-
-        using var cts = new CancellationTokenSource();
-        await cts.CancelAsync();
 
         var result = await loop.RunAsync(NewSession(), agent, cts.Token);
 
@@ -213,6 +211,37 @@ public class CancelMisclassification1103Tests
         await Assert.That(bus.Events.OfType<TurnStartEvent>().Count()).IsEqualTo(1);
         await Assert.That(bus.Events.OfType<AgentErrorEvent>().Count()).IsEqualTo(0);
         var end = bus.Events.OfType<AgentEndEvent>().Single();
+        await Assert.That(end.Cancelled).IsTrue();
+    }
+
+    /// <summary>
+    ///     Bus that presses Stop as the turn boundary lands, then honors the
+    ///     passed token like the production bus. Replicates a cancel racing
+    ///     the TurnStart publish.
+    /// </summary>
+    private sealed class CancelOnTurnStartBus(CancellationTokenSource cts) : IEventBus
+    {
+        public List<AgentEvent> Events { get; } = [];
+
+        public Task PublishAsync(AgentEvent @event, CancellationToken ct = default)
+        {
+            if (@event is TurnStartEvent)
+                cts.Cancel();
+            ct.ThrowIfCancellationRequested();
+            Events.Add(@event);
+            return Task.CompletedTask;
+        }
+
+        public IDisposable Subscribe(Func<AgentEvent, CancellationToken, ValueTask> handler) =>
+            CancelHonoringBus.NullDisposable.Instance;
+
+        public IDisposable Subscribe<TEvent>(Func<TEvent, CancellationToken, ValueTask> handler)
+            where TEvent : AgentEvent =>
+            CancelHonoringBus.NullDisposable.Instance;
+
+        public IReadOnlyList<AgentEvent> GetScrollback(int maxEvents) => [];
+    }
+}
         await Assert.That(end.Cancelled).IsTrue();
     }
 
