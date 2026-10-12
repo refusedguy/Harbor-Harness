@@ -304,10 +304,11 @@ public sealed class ChatScreenBridge : IDisposable
             //
             // NOT a duplicate of #839. That fix added a ChatRole.System line to
             // UiState.Chat.Lines, and this timeline never reads it:
-            // CellForgeTuiRenderer.ProjectScreen hands the store's UiState to
-            // Status.ProjectedState and the sidebar and nothing else. The store
-            // projection feeds the desktop app's transcript; this ring is what
-            // HARBOR_TUI=cellforge paints.
+            // ChatScreenProjector (issue #1202; reached via
+            // CellForgeTuiRenderer.ProjectStateIntoWidgets) hands the store's
+            // UiState to Status.ProjectedState and the sidebar and nothing
+            // else. The store projection feeds the desktop app's transcript;
+            // this ring is what HARBOR_TUI=cellforge paints.
             case CompactionFailedEvent cf:
                 AppendSystem(CompactionLifecycleLines.Failed(cf.Error));
                 _status.Mode = StatusBarMode.Running;

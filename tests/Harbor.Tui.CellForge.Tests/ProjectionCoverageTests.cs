@@ -10,8 +10,9 @@ using Microsoft.Extensions.Logging.Abstractions;
 namespace Harbor.Tui.CellForge.Tests;
 
 /// <summary>
-/// Covers the private <c>CellForgeTuiRenderer.ProjectStateIntoWidgets</c>
-/// projection: every test drives a real <see cref="UiStore"/> fold through
+/// Covers the <c>CellForgeTuiRenderer.ProjectStateIntoWidgets</c>
+/// projection (issue #1202: routed through the registered
+/// <c>ChatScreenProjector</c>): every test drives a real <see cref="UiStore"/> fold through
 /// <c>renderer.RenderAsync</c> with real <see cref="AgentEvent"/>s and asserts
 /// on freshly injected VMs. Fresh VMs in the ctor are required — the base
 /// <c>RenderAsync</c> fan-out would otherwise apply token deltas twice

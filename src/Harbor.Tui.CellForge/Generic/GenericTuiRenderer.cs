@@ -23,12 +23,21 @@ public sealed class GenericTuiRenderer : IDisposable
     {
         _store = store ?? new UiStore();
         Screen = screen ?? GenericScreen.Build([new GenericNodeSpec { Id = "generic.root", Title = "generic" }]);
+        Projectors = new ScreenProjectorRegistry();
+        Projectors.Register(new GenericScreenProjector(() => Screen));
         _ui = _store.State.Ui;
         _store.Changed += OnStoreChanged;
     }
 
     /// <summary>Screen this renderer solves plus paints.</summary>
     public GenericScreen Screen { get; set; }
+
+    /// <summary>
+    /// Per-screen projectors (epic #1195, issue #1202): focus mirroring runs
+    /// through the registered <see cref="GenericScreenProjector"/> so the
+    /// render path never names a state slice directly.
+    /// </summary>
+    public ScreenProjectorRegistry Projectors { get; }
 
     /// <summary>Latest generic snapshot (the <c>Ui</c> half only).</summary>
     public TerminalUiState UiSnapshot => _ui;
@@ -124,16 +133,11 @@ public sealed class GenericTuiRenderer : IDisposable
     /// <summary>
     /// Mirrors store focus into the screen so the painted marker follows the
     /// TEA snapshot (the screen owns the marker; the store owns the truth).
+    /// Runs through <see cref="Projectors"/> — the renderer names no slice.
     /// </summary>
     private void SyncFocusFromStore()
     {
-        string? id = _ui.FocusedPanelId;
-        if (id is null)
-        {
-            return;
-        }
-
-        Screen.SetFocus(id);
+        _ = Projectors.Project(GenericScreenProjector.GenericScreenId, _store.State);
     }
 
     public void Dispose()
