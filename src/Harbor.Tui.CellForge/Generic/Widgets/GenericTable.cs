@@ -176,7 +176,7 @@ public sealed class GenericTable
             return;
         }
 
-        PaintRow(buffer, rect.X, y, widths, _headers, headerStyle, borderStyle, isHeader: true);
+        PaintRow(buffer, rect.X, y, widths, _headers, headerStyle, borderStyle);
         y++;
         if (y >= rect.Y + rect.Height)
         {
@@ -190,7 +190,7 @@ public sealed class GenericTable
         {
             var cells = new List<string>(_rows[r]);
             bool selected = r == SelectedRow;
-            PaintRow(buffer, rect.X, y, widths, cells, selected ? selectedStyle : bodyStyle, borderStyle, isHeader: false);
+            PaintRow(buffer, rect.X, y, widths, cells, selected ? selectedStyle : bodyStyle, borderStyle);
         }
 
         if (y < rect.Y + rect.Height)
@@ -214,9 +214,8 @@ public sealed class GenericTable
 
     private void PaintRow(
         ScreenBuffer buffer, int x, int y, int[] widths,
-        IReadOnlyList<string> cells, CellStyle style, CellStyle borderStyle, bool isHeader)
+        IReadOnlyList<string> cells, CellStyle style, CellStyle borderStyle)
     {
-        // Mid junctions reuse the horizontal rule so the frame stays continuous.
         var sb = new System.Text.StringBuilder();
         sb.Append(V);
         for (int c = 0; c < widths.Length; c++)
@@ -240,11 +239,6 @@ public sealed class GenericTable
             cx += widths[c] + 2;
             buffer.SetStyleAt(cx, y, borderStyle);
             cx++;
-        }
-
-        if (isHeader)
-        {
-            return;
         }
     }
 
