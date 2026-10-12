@@ -13,7 +13,7 @@ namespace Harbor.Tui.CellForge.Generic;
 public sealed class GenericTuiRenderer : IDisposable
 {
     private readonly UiStore _store;
-    private TerminalUiState _ui = TerminalUiState.Empty;
+    private TerminalUiState _ui;
     private bool _disposed;
 
     /// <summary>Creates a renderer over <paramref name="store"/> plus <paramref name="screen"/>.</summary>
