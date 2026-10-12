@@ -551,10 +551,15 @@ public sealed class SqliteSessionStore : ISessionStore, ISessionCheckpointStore
         // the same line with its !IsRewindTrail filter). Absence rides the
         // Maybe rail until it becomes the shared CheckpointNotFound text,
         // the same ToResult idiom GetAsync uses for a missing session.
-        return await ReadCheckpointRowAsync(sessionId, checkpointId, ct).ConfigureAwait(false)
-            .Bind(checkpoint => checkpoint
-                .ToResult(SessionStoreErrors.CheckpointNotFound(sessionId, checkpointId))
-                .Bind(cp => RewindToAnchorAsync(sessionId, cp, ct)));
+        var checkpointRow = await ReadCheckpointRowAsync(sessionId, checkpointId, ct).ConfigureAwait(false);
+        if (checkpointRow.IsFailure)
+            return checkpointRow.ConvertFailure<SessionRewindOutcome>();
+        // guarded: .Value only read after the failure check.
+        var checkpointResult = checkpointRow.Value.ToResult(
+            SessionStoreErrors.CheckpointNotFound(sessionId, checkpointId));
+        if (checkpointResult.IsFailure)
+            return Result.Failure<SessionRewindOutcome>(checkpointResult.Error);
+        return await RewindToAnchorAsync(sessionId, checkpointResult.Value, ct).ConfigureAwait(false);
     }
 
     /// <summary>
