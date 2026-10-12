@@ -688,17 +688,29 @@ internal sealed class DefaultSessionContext : ISessionContext
         //    read-modify-write against the store's snapshot rather than a write of
         //    `_stats`, so a concurrent sub-agent cost propagation
         //    (SubAgentRunner) landing between two turns is not rolled back.
-        var stats = await _store.GetStatsAsync(Session.Id, ct).ConfigureAwait(false);
-        if (stats.IsFailure)
+        //    #1105: that read-modify-write is shared with the propagation, so
+        //    it runs under the same per-session stats gate — otherwise a turn
+        //    debit landing mid-propagation (or vice versa) is silently lost.
+        var gate = SubAgentRunner.StatsGateFor(Session.Id);
+        await gate.WaitAsync(ct).ConfigureAwait(false);
+        try
         {
-            // §4.6-ok + rop-final-mile N3: best-effort usage update — store
-            // closed / IO failure loses this delta; log instead of the old
-            // no-op discard so the loss is observable.
-            _logger.LogError("Failed to read session stats for {SessionId}: {Error}", Session.Id, stats.Error);
-            return;
-        }
+            var stats = await _store.GetStatsAsync(Session.Id, ct).ConfigureAwait(false);
+            if (stats.IsFailure)
+            {
+                // §4.6-ok + rop-final-mile N3: best-effort usage update — store
+                // closed / IO failure loses this delta; log instead of the old
+                // no-op discard so the loss is observable.
+                _logger.LogError("Failed to read session stats for {SessionId}: {Error}", Session.Id, stats.Error);
+                return;
+            }
 
-        var updated = stats.Value.AddUsage(usage, pricing);
-        await _store.UpdateStatsAsync(Session.Id, updated, ct).ConfigureAwait(false);
+            var updated = stats.Value.AddUsage(usage, pricing);
+            await _store.UpdateStatsAsync(Session.Id, updated, ct).ConfigureAwait(false);
+        }
+        finally
+        {
+            gate.Release();
+        }
     }
 }

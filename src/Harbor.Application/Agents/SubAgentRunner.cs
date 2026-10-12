@@ -70,6 +70,15 @@ public sealed class SubAgentRunner(
     private static SemaphoreSlim GateFor(string parentSessionId) =>
         ParentCostGates[(uint)parentSessionId.GetHashCode() % (uint)ParentCostGates.Length];
 
+    /// <summary>
+    ///     Shared serialization for one session's stats read-modify-write
+    ///     (#1105): the turn path (<c>DefaultSessionContext.UpdateStatsAsync</c>)
+    ///     and child-cost propagation both fold through
+    ///     <c>GetStatsAsync → AddUsage → UpdateStatsAsync</c> — without a
+    ///     common gate a turn debit landing mid-propagation is silently lost.
+    /// </summary>
+    internal static SemaphoreSlim StatsGateFor(string sessionId) => GateFor(sessionId);
+
     /// <inheritdoc />
     public bool CanSpawn => Depth.Value == 0;
 
