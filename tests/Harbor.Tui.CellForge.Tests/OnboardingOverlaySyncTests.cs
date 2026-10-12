@@ -108,7 +108,8 @@ public class OnboardingOverlaySyncTests
         flow.HandleKey(KeyEvent.Simple(KeyCode.Enter));
         Type(flow, "2");
         flow.HandleKey(KeyEvent.Simple(KeyCode.Enter)); // local skips auth → model
-        flow.HandleKey(KeyEvent.Simple(KeyCode.Enter)); // default model → done
+        flow.HandleKey(KeyEvent.Simple(KeyCode.Enter)); // default model → agent
+        flow.HandleKey(KeyEvent.Simple(KeyCode.Enter)); // default agent → done
         flow.HandleKey(KeyEvent.Simple(KeyCode.Enter)); // done → finished
 
         await Assert.That(flow.IsComplete).IsTrue();

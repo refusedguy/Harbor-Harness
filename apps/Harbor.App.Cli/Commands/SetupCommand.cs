@@ -10,7 +10,7 @@ namespace Harbor.App.Cli.Commands;
 public sealed class SetupCommand(OnboardingWizard wizard, Func<string, Task<string>> reader, Action<string> writer) : ISlashCommand
 {
     public string Name => "setup";
-    public string Description => "Run setup wizard (provider, API key, model)";
+    public string Description => "Run setup wizard (provider, API key, model, agent)";
     public string Usage => "/setup";
     public IReadOnlyList<string> Aliases => Array.Empty<string>();
     public IReadOnlyList<string>? ArgSuggestions => null;

@@ -4,7 +4,7 @@ namespace Harbor.App.Cli.Repl.Commands;
 
 /// <summary>
 /// Setup entry (issue #1248, slice 1): <c>/setup</c> opens the interactive
-/// onboarding flow (provider → key → model) as a CellForge dialog overlay,
+/// onboarding flow (provider → key → model → agent) as a CellForge dialog overlay,
 /// persisted to the config/auth stores. <c>/checklist</c> keeps the read-only
 /// setup-guide progress surface (issue #383).
 /// </summary>
@@ -13,7 +13,7 @@ internal sealed class SetupCommand : IReplCommand
     public string Id => "setup";
     public IReadOnlyList<string> Aliases => ["checklist"];
     public string Title => "Setup";
-    public string Description => "interactive setup (provider, key, model)";
+    public string Description => "interactive setup (provider, key, model, agent)";
     public string Group => "Config";
 
     public Task ExecuteAsync(ReplCommandContext ctx, CancellationToken ct)

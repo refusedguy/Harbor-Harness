@@ -1,3 +1,5 @@
+using Harbor.Abstractions.Models.Identifiers;
+using Harbor.Abstractions.Providers;
 using Harbor.Application.Configuration;
 using Harbor.App.Cli.Repl.Commands;
 using Harbor.Tui.CellForge.Onboarding;
@@ -7,11 +9,19 @@ namespace Harbor.App.Cli.Repl;
 
 /// <summary>
 /// Interactive setup flow inside CellForge (issue #1248, slice 1): owns one
-/// <see cref="OnboardingFlow"/> (provider → key → model), mirrors its dialog
+/// <see cref="OnboardingFlow"/> (provider → key → model → agent), mirrors its dialog
 /// into <c>Screen.Dialog</c> for painting, and persists the outcome to the
 /// config/auth stores. No legacy renderer and no line reader — keys arrive
 /// from the input loop, answers leave through the stores.
 /// </summary>
+/// <remarks>
+/// Slice 3: the model step is live where reachable — the host reads each
+/// preset's catalog through the provider registry cache (the same catalog
+/// whose entries come from that provider's <c>modelsUrl</c> in
+/// <c>providers/*.json</c>) and hands the id lists to the flow; unreachable providers degrade to the preset-default free text,
+/// the same explicit degradation the console wizard uses. The agent step is
+/// projected from the agent registry (fallback first), also persisted.
+/// </remarks>
 internal sealed class CellForgeOnboardingController
 {
     private readonly CellForgeReplRunner _host;
@@ -56,7 +66,7 @@ internal sealed class CellForgeOnboardingController
                 configured.Add(preset.Id);
             }
 
-            _flow = new OnboardingFlow(catalogue, configured);
+            _flow = new OnboardingFlow(catalogue, configured, await FetchLiveModelsAsync(host, catalogue, ct).ConfigureAwait(false), SelectableAgents(host));
             _flow.Start();
             if (_flow.IsComplete)
             {
@@ -75,6 +85,127 @@ internal sealed class CellForgeOnboardingController
             _flow = null;
             SyncDialog();
         }
+    }
+
+    /// <summary>
+    /// Best-effort live model lists for the flow's model step: one
+    /// <c>GetModelsCachedAsync</c> per preset, bounded by a single shared budget so
+    /// opening setup never blocks on a dead endpoint. A provider that fails
+    /// (no key yet, offline, unknown) is simply absent — the flow degrades
+    /// that provider to the preset-default free text.
+    /// </summary>
+    private static async Task<IReadOnlyDictionary<string, IReadOnlyList<string>>> FetchLiveModelsAsync(
+        IReplHost host,
+        IReadOnlyList<OnboardingProvider> catalogue,
+        CancellationToken ct)
+    {
+        using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        cts.CancelAfter(IProviderHealthCheck.DefaultTimeout);
+        var token = cts.Token;
+
+        var tasks = new Task<(string Id, IReadOnlyList<string>? Models)>[catalogue.Count];
+        for (int i = 0; i < catalogue.Count; i++)
+        {
+            string id = catalogue[i].Id;
+            tasks[i] = FetchOneAsync(host, id, token);
+        }
+
+        var live = new Dictionary<string, IReadOnlyList<string>>(StringComparer.OrdinalIgnoreCase);
+        var results = await Task.WhenAll(tasks).ConfigureAwait(false);
+        for (int i = 0; i < results.Length; i++)
+        {
+            if (results[i].Models is { Count: > 0 } models)
+            {
+                live[results[i].Id] = models;
+            }
+        }
+        return live;
+    }
+
+    private static async Task<(string Id, IReadOnlyList<string>? Models)> FetchOneAsync(
+        IReplHost host,
+        string providerId,
+        CancellationToken ct)
+    {
+        try
+        {
+            var pid = ProviderId.TryCreate(providerId);
+            if (pid.IsFailure)
+            {
+                return (providerId, null);
+            }
+            var models = await host.ProviderRegistry.GetModelsCachedAsync(pid.Value, ct).ConfigureAwait(false);
+            if (models.IsFailure)
+            {
+                return (providerId, null);
+            }
+            var list = models.Value;
+            if (list.Count == 0)
+            {
+                return (providerId, null);
+            }
+            var ids = new List<string>(list.Count);
+            for (int i = 0; i < list.Count && ids.Count < OnboardingFlow.MaxListedEntries * 5; i++)
+            {
+                string id = list[i].Id;
+                if (!string.IsNullOrWhiteSpace(id))
+                {
+                    ids.Add(id);
+                }
+            }
+            return (providerId, ids.Count > 0 ? ids : null);
+        }
+        catch (OperationCanceledException)
+        {
+            return (providerId, null);
+        }
+        catch (Exception)
+        {
+            // Best-effort probe: any transport fault degrades to free text.
+            return (providerId, null);
+        }
+    }
+
+    /// <summary>
+    /// Agent catalogue for the flow's agent step, fallback first then ordinal
+    /// by name — the same set-ordering the console wizard states rather than
+    /// inherits, so the numbered menu is stable across runs.
+    /// </summary>
+    private static IReadOnlyList<OnboardingAgent> SelectableAgents(IReplHost host)
+    {
+        var registered = host.AgentRegistry.GetAllAgents();
+        if (registered.Count == 0)
+        {
+            return Array.Empty<OnboardingAgent>();
+        }
+        string? fallbackDisplay = null;
+        var rest = new List<OnboardingAgent>(registered.Count);
+        for (int i = 0; i < registered.Count; i++)
+        {
+            var agent = new OnboardingAgent(registered[i].Name.Value, registered[i].Description);
+            if (string.Equals(agent.Id, AgentName.Fallback, StringComparison.OrdinalIgnoreCase))
+            {
+                fallbackDisplay = agent.DisplayName;
+            }
+            else
+            {
+                rest.Add(agent);
+            }
+        }
+        rest.Sort(static (a, b) => string.CompareOrdinal(a.Id, b.Id));
+        var ordered = new List<OnboardingAgent>(rest.Count + 1)
+        {
+            new(fallbackDisplay is null && rest.Count > 0 ? rest[0].Id : AgentName.Fallback,
+                fallbackDisplay ?? (rest.Count > 0 ? rest[0].DisplayName : AgentName.Fallback)),
+        };
+        for (int i = 0; i < rest.Count; i++)
+        {
+            if (!string.Equals(rest[i].Id, ordered[0].Id, StringComparison.OrdinalIgnoreCase))
+            {
+                ordered.Add(rest[i]);
+            }
+        }
+        return ordered;
     }
 
     /// <summary>
@@ -137,6 +268,7 @@ internal sealed class CellForgeOnboardingController
             {
                 c.Provider = providerId;
                 c.Model = model;
+                c.Agent = result.Agent;
                 c.Onboarded = true;
                 return c;
             }, ct).ConfigureAwait(false);
@@ -146,7 +278,7 @@ internal sealed class CellForgeOnboardingController
                 return;
             }
 
-            _host.Bridge.AppendSystemLine($"Setup complete: {providerId} / {model}.");
+            _host.Bridge.AppendSystemLine($"Setup complete: {providerId} / {model} / {result.Agent}.");
         }
         finally
         {

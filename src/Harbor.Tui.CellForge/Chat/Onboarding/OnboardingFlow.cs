@@ -9,7 +9,7 @@ namespace Harbor.Tui.CellForge.Onboarding;
 /// <summary>
 /// First-run onboarding step of <see cref="OnboardingFlow"/>.
 /// Linear: Welcome → Provider → Auth (skipped for local/already-configured
-/// providers) → Model → Done. Any step can transition to
+/// providers) → Model → Agent → Done. Any step can transition to
 /// <see cref="OnboardingStep.Finished"/> via Esc.
 /// </summary>
 public enum OnboardingStep
@@ -19,6 +19,7 @@ public enum OnboardingStep
     Provider,
     Auth,
     Model,
+    Agent,
     Done,
     Finished,
 }
@@ -44,22 +45,36 @@ public sealed record OnboardingProvider(
     string? SetupHint);
 
 /// <summary>
+/// Agent catalogue entry for the onboarding picker.
+/// Plain data injected by the host (projected from <c>IAgentRegistry</c>),
+/// same boundary rule as <see cref="OnboardingProvider"/>: the presentation
+/// layer never reads the registry itself.
+/// </summary>
+/// <param name="Id">Stable lowercase agent id (e.g. <c>"code"</c>).</param>
+/// <param name="DisplayName">Human-readable name shown in the picker.</param>
+public sealed record OnboardingAgent(
+    string Id,
+    string DisplayName);
+
+/// <summary>
 /// Terminal outcome of <see cref="OnboardingFlow"/>.
 /// <c>Completed</c> is false when the user cancelled (Esc) — the host then
 /// keeps its previous/default config. The flow never persists anything
-/// itself: saving provider/model/key is the host's (policy/wiring) job.
+/// itself: saving provider/model/agent/key is the host's (policy/wiring) job.
 /// </summary>
 /// <param name="Completed">True when the user walked through to Done.</param>
 /// <param name="ProviderId">Selected provider id (empty when cancelled).</param>
 /// <param name="Model">Selected model as <c>provider/model</c> (empty when cancelled).</param>
 /// <param name="ApiKey">Entered API key; null for local providers, already-configured providers, or cancellation.</param>
 /// <param name="KeyAlreadyConfigured">True when the auth step was skipped because the provider already had a key.</param>
+/// <param name="Agent">Selected agent id (empty when cancelled).</param>
 public sealed record OnboardingResult(
     bool Completed,
     string ProviderId,
     string Model,
     string? ApiKey,
-    bool KeyAlreadyConfigured);
+    bool KeyAlreadyConfigured,
+    string Agent);
 
 /// <summary>
 /// First-run onboarding wizard ([UX8], epic #260) built on the existing
@@ -79,8 +94,8 @@ public sealed record OnboardingResult(
 /// Step semantics mirror the console
 /// <c>Harbor.Application.Onboarding.OnboardingWizard</c> (number-or-id
 /// provider pick, auth skipped for local providers, empty model input keeps
-/// the default, <c>provider/</c> prefix added unless present) minus the
-/// agent pick — init/auth/model only, per issue #268.
+/// the default, <c>provider/</c> prefix added unless present, agent pick
+/// projected from the registry with the fallback as entry 1).
 /// </para>
 /// </remarks>
 public sealed class OnboardingFlow
@@ -96,11 +111,13 @@ public sealed class OnboardingFlow
     private const string CancelButtonId = "cancel";
 
     private readonly IReadOnlyList<OnboardingProvider> _providers;
+    private readonly IReadOnlyList<OnboardingAgent> _agents;
     private readonly Dictionary<string, IReadOnlyList<string>> _liveModels;
     private readonly HashSet<string> _configured;
 
     private OnboardingProvider? _selected;
     private string _model = string.Empty;
+    private string _agent = string.Empty;
 
     /// <summary>What the model prompt was prefilled with (preset default, or empty for live lists).</summary>
     private string _modelPrefill = string.Empty;
@@ -121,13 +138,21 @@ public sealed class OnboardingFlow
     /// provider, the model step shows a numbered list; otherwise it degrades
     /// to free text with the preset default prefilled.
     /// </param>
+    /// <param name="agents">
+    /// Optional agent catalogue for the agent step (projected from the agent
+    /// registry, fallback-first order). When empty, the step still runs as
+    /// free text defaulting to the fallback agent — the same explicit
+    /// degradation the console wizard uses rather than a silent default.
+    /// </param>
     public OnboardingFlow(
         IReadOnlyList<OnboardingProvider> providers,
         IReadOnlyCollection<string>? configuredProviderIds = null,
-        IReadOnlyDictionary<string, IReadOnlyList<string>>? liveModels = null)
+        IReadOnlyDictionary<string, IReadOnlyList<string>>? liveModels = null,
+        IReadOnlyList<OnboardingAgent>? agents = null)
     {
         ArgumentNullException.ThrowIfNull(providers);
         _providers = providers;
+        _agents = agents ?? Array.Empty<OnboardingAgent>();
         _configured = configuredProviderIds is null
             ? new HashSet<string>(StringComparer.OrdinalIgnoreCase)
             : new HashSet<string>(configuredProviderIds, StringComparer.OrdinalIgnoreCase);
@@ -269,6 +294,9 @@ public sealed class OnboardingFlow
                 break;
             case OnboardingStep.Model:
                 TryCommitModel(Dialog.Input);
+                break;
+            case OnboardingStep.Agent:
+                TryCommitAgent(Dialog.Input);
                 break;
             case OnboardingStep.Done:
                 FinishCompleted();
@@ -509,6 +537,71 @@ public sealed class OnboardingFlow
     private void FinishModel(string model)
     {
         _model = model;
+        ShowAgent(null);
+    }
+
+    private void ShowAgent(string? error)
+    {
+        Step = OnboardingStep.Agent;
+        var sb = new StringBuilder();
+        if (!string.IsNullOrEmpty(error))
+        {
+            sb.Append(error).Append('\n');
+        }
+        if (_agents.Count == 0)
+        {
+            sb.Append("No agents registered.\n");
+        }
+        else
+        {
+            int shown = Math.Min(_agents.Count, MaxListedEntries);
+            for (int i = 0; i < shown; i++)
+            {
+                var a = _agents[i];
+                string tag = string.Equals(a.Id, AgentName.Fallback, StringComparison.OrdinalIgnoreCase)
+                    ? " (default)"
+                    : string.Empty;
+                sb.Append("  [").Append(i + 1).Append("] ").Append(a.Id).Append(" — ").Append(a.DisplayName).Append(tag).Append('\n');
+            }
+            if (shown < _agents.Count)
+            {
+                sb.Append("  …and ").Append(_agents.Count - shown).Append(" more (type the id)\n");
+            }
+        }
+        sb.Append("Type a number or id, Enter for ").Append(DefaultAgentName()).Append(" (Esc to cancel).");
+        Dialog.ShowPrompt("Pick a default agent", sb.ToString(), string.Empty, "Done", "Cancel");
+    }
+
+    private void TryCommitAgent(string rawInput)
+    {
+        string input = rawInput.Trim();
+        if (input.Length == 0)
+        {
+            FinishAgent(DefaultAgentName());
+            return;
+        }
+        if (int.TryParse(input, out int idx) && idx >= 1 && idx <= _agents.Count)
+        {
+            FinishAgent(_agents[idx - 1].Id);
+            return;
+        }
+        for (int i = 0; i < _agents.Count; i++)
+        {
+            if (string.Equals(_agents[i].Id, input, StringComparison.OrdinalIgnoreCase))
+            {
+                FinishAgent(_agents[i].Id);
+                return;
+            }
+        }
+        ShowAgent($"Unknown agent '{input}'. Type a number or id.");
+    }
+
+    private string DefaultAgentName() =>
+        _agents.Count > 0 ? _agents[0].Id : AgentName.Fallback;
+
+    private void FinishAgent(string agent)
+    {
+        _agent = agent;
         Step = OnboardingStep.Done;
         string keyLine = _selected is not null && !_selected.RequiresApiKey
             ? "API key: not needed (local)"
@@ -517,7 +610,7 @@ public sealed class OnboardingFlow
                 : "API key: saved";
         Dialog.ShowAlert(
             "Setup complete!",
-            $"Provider: {_selected?.Id}\nModel: {model}\n{keyLine}\nPress Enter to start.",
+            $"Provider: {_selected?.Id}\nModel: {_model}\nAgent: {_agent}\n{keyLine}\nPress Enter to start.",
             "Start");
     }
 
@@ -528,14 +621,15 @@ public sealed class OnboardingFlow
             _selected?.Id ?? string.Empty,
             _model,
             _apiKey,
-            _keyAlreadyConfigured));
+            _keyAlreadyConfigured,
+            _agent));
         Step = OnboardingStep.Finished;
         Dialog.Dismiss();
     }
 
     private void Cancel()
     {
-        Result = Maybe.From(new OnboardingResult(false, string.Empty, string.Empty, null, false));
+        Result = Maybe.From(new OnboardingResult(false, string.Empty, string.Empty, null, false, string.Empty));
         Step = OnboardingStep.Finished;
         Dialog.Dismiss();
     }
