@@ -106,14 +106,11 @@ public static class Program
 
         // Slice A (#1144): StatusCommand names Client-assembly transports, so
         // the file leaves the compile when the daemon is off (see the csproj
-        // Compile Remove); the registration below follows the same switch.
+        // Compile Remove); the CAF-D (#1289) handler + registration follow the
+        // same gate. DaemonCommand is always compiled and rides CAF ungated.
         var cliCommands = new ICommand[]
         {
             new LogsCommand(Console.Out, Console.Error),
-            new DaemonCommand(Console.Out, Console.Error),
-#if HARBOR_WITH_DAEMON
-            new StatusCommand(Console.Out, Console.Error),
-#endif
             new PluginsCommand(Console.Out, Console.Error),
             new SkillsCommand(Console.Out, Console.Error),
             new DemoCommand(Console.Out, Console.Error),
@@ -143,8 +140,12 @@ public static class Program
             "providers" or "--providers" => await CafPilotVerbs.RunAsync("providers", args.Skip(1).ToArray()),
             "models" => await CafPilotVerbs.RunAsync("models", args.Skip(1).ToArray()),
             "sessions" => await CafPilotVerbs.RunAsync("sessions", args.Skip(1).ToArray()),
-            "mcp" => await McpLoginRunner.RunAsync(Console.Out, Console.Error, args.Skip(1).ToArray()),
-            "serve" => await ServeVerb.RunAsync(_logger, args.Skip(1).ToArray()),
+            "daemon" => await CafPilotVerbs.RunAsync("daemon", args.Skip(1).ToArray()),
+#if HARBOR_WITH_DAEMON
+            "status" => await CafPilotVerbs.RunAsync("status", args.Skip(1).ToArray()),
+#endif
+            "mcp" => await CafPilotVerbs.RunAsync("mcp", args.Skip(1).ToArray()),
+            "serve" => await CafPilotVerbs.RunAsync("serve", args.Skip(1).ToArray()),
             "tui" => await TuiAttachVerb.RunAsync(args.Skip(1).ToArray()),
             "events" => await EventsVerb.RunAsync(args.Skip(1).ToArray()),
             "storage" => await CafPilotVerbs.RunAsync("storage", args.Skip(1).ToArray()),

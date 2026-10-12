@@ -82,4 +82,50 @@ internal static class HelpVerbs
         var cmd = new LogsCommand(Console.Out, Console.Error);
         return await cmd.ExecuteAsync(args).ConfigureAwait(false);
     }
+
+    /// <summary>
+    ///     <c>harbor daemon</c> — manage the background daemon
+    ///     (<c>start</c>/<c>stop</c>/<c>status</c>).
+    /// </summary>
+    /// <remarks>
+    ///     Retained for parity with the former <c>Program</c> dispatch:
+    ///     live dispatch reaches <c>daemon</c> through the ConsoleAppFramework
+    ///     builder in <c>CafPilotVerbs</c> (CAF-D, #1289), not through this
+    ///     helper.
+    /// </remarks>
+    internal static async Task<int> RunDaemonCommand(string[] args)
+    {
+        var cmd = new DaemonCommand(Console.Out, Console.Error);
+        return await cmd.ExecuteAsync(args).ConfigureAwait(false);
+    }
+
+#if HARBOR_WITH_DAEMON
+    /// <summary>
+    ///     <c>harbor status</c> — discovery lite over the IPC layer.
+    /// </summary>
+    /// <remarks>
+    ///     Retained for parity with the former <c>Program</c> dispatch:
+    ///     live dispatch reaches <c>status</c> through the ConsoleAppFramework
+    ///     builder in <c>CafPilotVerbs</c> (CAF-D, #1289), not through this
+    ///     helper. Daemon-gated like the registration (Slice A, #1144).
+    /// </remarks>
+    internal static async Task<int> RunStatusCommand(string[] args)
+    {
+        var cmd = new StatusCommand(Console.Out, Console.Error);
+        return await cmd.ExecuteAsync(args).ConfigureAwait(false);
+    }
+#endif
+
+    /// <summary>
+    ///     <c>harbor mcp</c> — remote MCP server OAuth
+    ///     (<c>list</c>/<c>login</c>/<c>logout</c>).
+    /// </summary>
+    /// <remarks>
+    ///     Retained for parity with the former <c>Program</c> dispatch:
+    ///     live dispatch reaches <c>mcp</c> through the ConsoleAppFramework
+    ///     builder in <c>CafPilotVerbs</c> (CAF-D, #1289), not through this
+    ///     helper.
+    /// </remarks>
+    internal static async Task<int> RunMcpCommand(string[] args) =>
+        await McpLoginRunner.RunAsync(Console.Out, Console.Error, args).ConfigureAwait(false);
 }
