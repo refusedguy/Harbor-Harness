@@ -97,6 +97,15 @@ public sealed class TableBlock : ICollapsibleChatBlock
     /// <summary>Flips <see cref="IsExpanded"/> (feed Enter/click/space path).</summary>
     public void ToggleExpanded() => IsExpanded = !IsExpanded;
 
+    /// <summary>
+    /// Opt-in expand-to-fill (SC4 #1212): when the desired widths fit the paint
+    /// width, distribute the surplus across columns via
+    /// <see cref="TableMeasurer.DistributeWidths" /> instead of leaving the
+    /// table shrink-to-fit. Defaults to <c>false</c> so existing goldens stay
+    /// byte-identical; hosts that own the full row width can enable it.
+    /// </summary>
+    public bool ExpandToFill { get; set; }
+
     /// <summary>Sets <see cref="IsExpanded"/> explicitly (host-driven focus path).</summary>
     public void SetExpanded(bool expanded) => IsExpanded = expanded;
 
@@ -310,6 +319,11 @@ public sealed class TableBlock : ICollapsibleChatBlock
 
     private int[] ColumnWidths(int maxWidth)
     {
+        // SC4 #1212: desired widths measured here (cell-space UnicodeWidth),
+        // collapse/distribute resolved by the shared TableMeasurer — same
+        // greedy tallest-first order as the inlined ShrinkToFit before it,
+        // so default output is byte-identical; ExpandToFill opts into
+        // DistributeWidths instead of shrink-to-fit.
         int cols = Columns;
         var widths = new int[cols];
         for (int c = 0; c < cols; c++)
@@ -326,41 +340,24 @@ public sealed class TableBlock : ICollapsibleChatBlock
 
         if (maxWidth > 4)
         {
-            int decor = cols + 1 + (2 * cols);
-            ShrinkToFit(widths, maxWidth - decor);
+            int budget = maxWidth - TableMeasurer.GetNonColumnWidth(cols);
+            int total = 0;
+            for (int c = 0; c < cols; c++)
+            {
+                total += widths[c];
+            }
+
+            if (total > budget)
+            {
+                TableMeasurer.CollapseWidths(widths, budget);
+            }
+            else if (ExpandToFill)
+            {
+                TableMeasurer.DistributeWidths(widths, budget);
+            }
         }
 
         return widths;
-    }
-
-    private static void ShrinkToFit(int[] widths, int budget)
-    {
-        int total = 0;
-        for (int c = 0; c < widths.Length; c++)
-        {
-            total += widths[c];
-        }
-
-        while (total > budget)
-        {
-            int idx = -1;
-            for (int c = 0; c < widths.Length; c++)
-            {
-                if (widths[c] > MinCell && (idx < 0 || widths[c] > widths[idx]))
-                {
-                    idx = c;
-                }
-            }
-
-            if (idx < 0)
-            {
-                break;
-            }
-
-            int cut = Math.Min(widths[idx] - MinCell, Math.Max(1, total - budget));
-            widths[idx] -= cut;
-            total -= cut;
-        }
     }
 
     /// <summary>Rule string builder (cache-fill only — Paint slices the cached rules).</summary>
