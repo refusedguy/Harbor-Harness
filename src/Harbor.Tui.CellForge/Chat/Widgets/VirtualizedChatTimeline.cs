@@ -84,12 +84,12 @@ public sealed class VirtualizedChatTimeline
     /// <summary>Byte budget for resident history; oldest blocks evict first.</summary>
     public long BudgetBytes { get; set; } = TimelineRing.DefaultBudgetBytes;
 
-    /// <summary>First-class scrollback cap (#1190, textual max_lines sliding
-    /// window): max resident blocks retained; oldest evict first once crossed,
-    /// the newest block is always admitted. <see cref="int.MaxValue"/> (default)
-    /// is unbounded — byte-budget eviction alone applies, so existing hosts and
-    /// goldens stay byte-identical. Set before/without concurrent paints, like
-    /// the other render flags.</summary>
+    /// <summary>Scrollback cap as a first-order setting (#1190, textual
+    /// max_lines sliding window): max resident blocks retained; oldest evict
+    /// first once crossed, the newest block is always admitted. <see cref="int.MaxValue"/>
+    /// (default) is unbounded — byte-budget eviction alone applies, so existing
+    /// hosts and goldens stay byte-identical. Set before/without concurrent
+    /// paints, like the other render flags.</summary>
     public int MaxLines { get; set; } = int.MaxValue;
 
     /// <summary>Running sum of resident block budgets — O(1) append bookkeeping
