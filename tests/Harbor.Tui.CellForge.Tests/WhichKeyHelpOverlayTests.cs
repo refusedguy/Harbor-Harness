@@ -204,9 +204,9 @@ public sealed class WhichKeyHelpOverlayTests
             new LeaderEntry("panel", 'p', "toggle panel"),
         ]);
         overlay.Show();
-        var buffer = new ScreenBuffer(80, 24);
+        var buffer = new ScreenBuffer(80, 32);
 
-        overlay.Paint(buffer, new Rect(0, 0, 80, 24));
+        overlay.Paint(buffer, new Rect(0, 0, 80, 32));
 
         string art = GridDump.Art(buffer);
         await Assert.That(art).Contains("Leader");
