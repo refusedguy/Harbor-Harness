@@ -2,7 +2,7 @@
 //
 // ConsoleEx-side single parser straight to cells: no ANSI roundtrip, Unicode-aware
 // (wide/CJK/combining/emoji via UnicodeWidth + ScreenBuffer wide-pair rules).
-// Ours: this file. Full Markdown stays in the chat layer (Chat/Rendering);
+// Ours: this file. Full Markdown stays in the chat layer.
 // here only the three neutral tags generic screens need: bold for emphasis,
 // dim for de-emphasis, and link (with an optional equals-url target) for
 // underlined runs whose target travels out-of-band on the run.
@@ -24,6 +24,7 @@ public readonly record struct MarkupRun(string Text, CellStyle Style, string? Li
 
 /// <summary>Link span in cell coordinates, as painted by <see cref="MarkupCells.Paint"/>.</summary>
 /// <param name="X">Start column (inclusive).</param>
+/// <param name="Y">Row (zero-based).</param>
 /// <param name="Length">Span width in cells (wide runes count 2, combining 0).</param>
 /// <param name="Target">Link URL (empty when the tag carried none).</param>
 public readonly record struct MarkupLinkRange(int X, int Y, int Length, string Target);
