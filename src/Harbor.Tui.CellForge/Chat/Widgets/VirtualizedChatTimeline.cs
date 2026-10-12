@@ -156,7 +156,7 @@ public sealed class VirtualizedChatTimeline
     /// <summary>Virtual size contract (#1190, textual virtual_size): the widget
     /// reports its full virtual extent — <c>(last measured width, settled total
     /// height)</c> — and the engine/compositor clips the visible region out of
-    /// it. <see cref="Paint"/> still clips defensively to <paramref name="rect"/>
+    /// it. <see cref="Paint"/> still clips defensively to its <c>rect</c>
     /// (same rows the engine would hand it), so exposing this is behaviour-neutral;
     /// moving clipping fully into the engine is the M-sized follow-up, not this slice.
     /// Width reads 0 before the first <see cref="PrepareFrame"/>.</summary>
