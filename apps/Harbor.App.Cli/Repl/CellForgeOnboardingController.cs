@@ -139,14 +139,15 @@ internal sealed class CellForgeOnboardingController
             {
                 return (providerId, null);
             }
-            if (models.Value.Count == 0)
+            var list = models.Value;
+            if (list.Count == 0)
             {
                 return (providerId, null);
             }
-            var ids = new List<string>(models.Value.Count);
-            for (int i = 0; i < models.Value.Count && ids.Count < OnboardingFlow.MaxListedEntries * 5; i++)
+            var ids = new List<string>(list.Count);
+            for (int i = 0; i < list.Count && ids.Count < OnboardingFlow.MaxListedEntries * 5; i++)
             {
-                string id = models.Value[i].Id;
+                string id = list[i].Id;
                 if (!string.IsNullOrWhiteSpace(id))
                 {
                     ids.Add(id);
