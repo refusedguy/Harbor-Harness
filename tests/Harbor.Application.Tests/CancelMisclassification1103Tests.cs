@@ -16,6 +16,7 @@ using Harbor.TestKit;
 using Microsoft.Extensions.Logging.Abstractions;
 using System.Threading.Channels;
 using TestSessionContext = Harbor.Application.Tests.Fakes.TestSessionContext;
+using FakeSessionStore = Harbor.Application.Tests.Fakes.FakeSessionStore;
 using TUnit.Assertions;
 
 namespace Harbor.Application.Tests;
@@ -323,7 +324,7 @@ public class CancelMisclassification1103Tests
             _cts = cts;
         }
 
-        public List<SessionStatus> StatusMarks { get; } = [];
+        public IReadOnlyList<Session> UpdatedSessions => _inner.UpdatedSessions;
 
         public Task<Result<Session>> CreateAsync(string directory, string agentName, string providerId, string modelId, CancellationToken ct = default) =>
             _inner.CreateAsync(directory, agentName, providerId, modelId, ct);
@@ -351,11 +352,8 @@ public class CancelMisclassification1103Tests
         public Task<Result> DeleteAsync(string sessionId, CancellationToken ct = default) =>
             _inner.DeleteAsync(sessionId, ct);
 
-        public Task<Result> UpdateAsync(Session session, CancellationToken ct = default)
-        {
-            StatusMarks.Add(session.Status);
-            return _inner.UpdateAsync(session, ct);
-        }
+        public Task<Result> UpdateAsync(Session session, CancellationToken ct = default) =>
+            _inner.UpdateAsync(session, ct);
 
         public Task<Result<SessionMetadata>> GetStatsAsync(string sessionId, CancellationToken ct = default) =>
             _inner.GetStatsAsync(sessionId, ct);
@@ -365,13 +363,6 @@ public class CancelMisclassification1103Tests
 
         public Task<Result<int>> DeleteMessagesAfterAsync(string sessionId, string messageId, CancellationToken ct = default) =>
             _inner.DeleteMessagesAfterAsync(sessionId, messageId, ct);
-    }
-
-    /// <summary>Loop fake that reports the run as cancelled, like the real loop does under a fired token.</summary>
-    private sealed class CancelledLoop : IAgentLoop
-    {
-        public Task<Result> RunAsync(ISessionContext session, AgentDefinition agent, CancellationToken ct = default) =>
-            Task.FromResult(Result.Failure("Sub-agent run was cancelled."));
     }
 
     [Test]
@@ -384,7 +375,10 @@ public class CancelMisclassification1103Tests
         using var cts = new CancellationTokenSource();
         var store = new CancelOnSubSpawnStore(
             Session.Create("/tmp/harbor-1103-cancel", "explore", "test", "test-model"), cts);
-        var runner = new SubAgentRunner(store, new CancelledLoop(), NullLogger<SubAgentRunner>.Instance);
+        var runner = new SubAgentRunner(
+            store,
+            new FakeAgentLoop(Result.Failure("Sub-agent run was cancelled.")),
+            NullLogger<SubAgentRunner>.Instance);
         var agent = new AgentDefinition(
             AgentName.Create("explore"),
             "explore",
@@ -400,7 +394,7 @@ public class CancelMisclassification1103Tests
 
         await Assert.That(result.IsFailure).IsTrue();
         await Assert.That(result.Error).Contains("cancelled");
-        await Assert.That(store.StatusMarks.Count).IsGreaterThanOrEqualTo(1);
-        await Assert.That(store.StatusMarks[^1]).IsEqualTo(SessionStatus.Aborted);
+        await Assert.That(store.UpdatedSessions.Count).IsGreaterThanOrEqualTo(1);
+        await Assert.That(store.UpdatedSessions[^1].Status).IsEqualTo(SessionStatus.Aborted);
     }
 }
