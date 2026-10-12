@@ -135,7 +135,11 @@ internal sealed class CellForgeOnboardingController
                 return (providerId, null);
             }
             var models = await host.ProviderRegistry.GetModelsCachedAsync(pid.Value, ct).ConfigureAwait(false);
-            if (models.IsFailure || models.Value.Count == 0)
+            if (models.IsFailure)
+            {
+                return (providerId, null);
+            }
+            if (models.Value.Count == 0)
             {
                 return (providerId, null);
             }
