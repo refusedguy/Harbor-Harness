@@ -431,20 +431,27 @@ public sealed class FileClaim : IDisposable
     internal static bool TryParse(string content, out int pid, out string token, out DateTime stampedUtc)
     {
         var fields = new ClaimFields();
-        foreach (var part in content.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        ReadOnlySpan<char> rest = content.AsSpan();
+        while (true)
         {
-            int eq = part.IndexOf('=');
-            if (eq <= 0)
+            int sc = rest.IndexOf(';');
+            ReadOnlySpan<char> part = (sc < 0 ? rest : rest.Slice(0, sc)).Trim();
+            if (part.Length > 0)
             {
-                continue;
+                int eq = part.IndexOf('=');
+                if (eq > 0)
+                {
+                    string key = part.Slice(0, eq).ToString();
+                    string value = part.Slice(eq + 1).ToString();
+                    if (FieldParsers.TryGetValue(key, out var parse))
+                    {
+                        parse(fields, value);
+                    }
+                }
             }
-
-            string key = part[..eq];
-            string value = part[(eq + 1)..];
-            if (FieldParsers.TryGetValue(key, out var parse))
-            {
-                parse(fields, value);
-            }
+            if (sc < 0)
+                break;
+            rest = rest.Slice(sc + 1);
         }
 
         pid = fields.Pid;
