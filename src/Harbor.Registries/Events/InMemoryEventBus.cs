@@ -412,10 +412,13 @@ public sealed class InMemoryEventBus : IEventBus, IEventBusQueueMetrics
         // the first GetScrollback call, so a reader still pays the full price.
         if (!_hasMandatorySink && !_retentionArmed)
         {
-            // Volatile-free read of the snapshot: ImmutableArray<T> is
-            // reference-sized, and the existing slow path reads the same field
-            // the same way (no torn reads are possible for a single reference).
-            var snapshot = _subscriptions;
+            // #1108: acquire-fenced read of the snapshot. ImmutableArray<T>
+            // is reference-sized so a torn read is impossible, but a plain
+            // read may still observe a STALE array on ARM (weak memory
+            // model) — a just-subscribed handler then silently skips an
+            // event. Subscribe publishes via ImmutableInterlocked (full
+            // fence on write); this Volatile read is the matching acquire.
+            var snapshot = Volatile.Read(ref _subscriptions);
             if (snapshot.IsEmpty)
             {
                 // Nothing can observe this publish: no subscriber, nothing to
@@ -535,8 +538,10 @@ public sealed class InMemoryEventBus : IEventBus, IEventBusQueueMetrics
             // 1. Append to scrollback ring buffer (in-place overwrite, short lock).
             AppendScrollback(@event);
 
-            // 2. Lock-free snapshot — no List copy, no lock contention
-            var snapshot = _subscriptions;
+            // 2. Lock-free snapshot — no List copy, no lock contention.
+            // #1108: Volatile read — same ARM-stale reasoning as the fast
+            // path above; a stale snapshot here drops a live subscriber.
+            var snapshot = Volatile.Read(ref _subscriptions);
             if (snapshot.IsEmpty)
             {
                 // IsEnabled guard (#47): this is THE benchmarked path
