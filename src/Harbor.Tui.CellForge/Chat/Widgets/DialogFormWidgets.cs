@@ -8,34 +8,35 @@ namespace Harbor.Tui.CellForge.Widgets;
 /// list with palette-style keyboard navigation (Up/Down/PageUp/PageDown/
 /// Home/End, clamped — the <see cref="CommandPaletteView"/> list behavior
 /// minus the fuzzy query; dialog option sets are enumerated, not searched).
-/// Scroll state lives in <see cref="ScrollableViewport"/>; the host syncs it
-/// to the painted rows via <see cref="SyncViewport"/> (the same
+/// Navigation state lives in a <see cref="ListPromptState{T}"/> (SC7, #1215:
+/// Single mode, no wrap, no search — this widget is the engine's clamp
+/// special case). Scroll state lives in <see cref="ScrollableViewport"/>; the
+/// host syncs it to the painted rows via <see cref="SyncViewport"/> (the same
 /// Configure+EnsureVisible pattern the palette uses since [PRIM3c]) and paints
 /// a <see cref="Scrollbar"/> overlay while overflowing. UI-only state —
 /// rendering stays in <see cref="DialogOverlay"/>.
 /// </summary>
 public sealed class DialogSelectList
 {
-    private readonly List<string> _items = new();
+    private readonly List<string> _values = new();
+    private ListPromptState<string> _state = ListPromptState<string>.FromValues([]);
     private readonly ScrollableViewport _viewport = new();
-    private int _selected;
 
     /// <summary>Options in host order (defensive copy).</summary>
-    public IReadOnlyList<string> Items => _items;
+    public IReadOnlyList<string> Items => _values;
 
     /// <summary>Number of options.</summary>
-    public int Count => _items.Count;
+    public int Count => _values.Count;
 
     /// <summary>Selected index (clamped; -1 when empty).</summary>
-    public int SelectedIndex => _items.Count == 0 ? -1 : Math.Clamp(_selected, 0, _items.Count - 1);
+    public int SelectedIndex => _state.Index;
 
     /// <summary>Selected option (empty when none).</summary>
     public string SelectedItem
     {
         get
         {
-            int i = SelectedIndex;
-            return i < 0 ? string.Empty : _items[i];
+            return _state.TryGetCurrent(out string? item) && item is not null ? item : string.Empty;
         }
     }
 
@@ -46,35 +47,35 @@ public sealed class DialogSelectList
     public void SetItems(IReadOnlyList<string> items)
     {
         ArgumentNullException.ThrowIfNull(items);
-        _items.Clear();
+        _values.Clear();
         for (int i = 0; i < items.Count; i++)
         {
-            _items.Add(items[i] ?? string.Empty);
+            _values.Add(items[i] ?? string.Empty);
         }
-        _selected = 0;
-        _viewport.SetTotal(_items.Count);
+        _state = ListPromptState<string>.FromValues(_values);
+        _viewport.SetTotal(_values.Count);
         _viewport.SetOffset(0);
     }
 
     /// <summary>Selects an index (clamped). No-op when empty.</summary>
     public void MoveTo(int index)
     {
-        if (_items.Count == 0)
+        if (_values.Count == 0)
         {
             return;
         }
-        _selected = Math.Clamp(index, 0, _items.Count - 1);
+        _ = _state.MoveTo(index);
         EnsureVisible();
     }
 
     /// <summary>Moves the selection by a signed delta (clamped, palette-style — no wrap).</summary>
     public void Move(int delta)
     {
-        if (_items.Count == 0 || delta == 0)
+        if (_values.Count == 0 || delta == 0)
         {
             return;
         }
-        _selected = Math.Clamp(_selected + delta, 0, _items.Count - 1);
+        _ = _state.MoveBy(delta);
         EnsureVisible();
     }
 
@@ -84,17 +85,17 @@ public sealed class DialogSelectList
     /// </summary>
     public void SyncViewport(int visibleRows)
     {
-        _viewport.Configure(_items.Count, Math.Max(0, visibleRows));
+        _viewport.Configure(_values.Count, Math.Max(0, visibleRows));
         EnsureVisible();
     }
 
     private void EnsureVisible()
     {
-        if (_items.Count == 0 || _viewport.ViewportH <= 0)
+        if (_values.Count == 0 || _viewport.ViewportH <= 0)
         {
             return;
         }
-        int target = Math.Clamp(_selected, 0, _items.Count - 1);
+        int target = Math.Clamp(_state.Index, 0, _values.Count - 1);
         if (target < _viewport.Offset)
         {
             _viewport.SetOffset(target);

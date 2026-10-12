@@ -16,7 +16,7 @@
 //
 // THE LINE, AND WHY IT IS A LIST AND NOT AN AUTOMATIC RULE
 // -------------------------------------------------------
-// Sixteen nullable public properties in the same namespaces are NOT widget state.
+// Seventeen nullable public properties in the same namespaces are NOT widget state.
 // They are host-supplied hooks (a callback the host may not wire, a store it may
 // not inject) or data fields of a value that is already present (`DiffText` on a
 // result body means "this tool produced no diff"). Both have a working default, so
@@ -37,7 +37,7 @@
 // -----------
 // Discovery returning nothing would make every rule below pass. The classification
 // must stay non-trivial AND the discovery must still find reference-type nullables —
-// currently sixteen — so a broken glob or a namespace rename goes red instead of
+// currently seventeen — so a broken glob or a namespace rename goes red instead of
 // quietly enforcing nothing.
 
 using System.Text.RegularExpressions;
@@ -87,6 +87,7 @@ public sealed class CellForgeWidgetStateRules
     ///         <item><description>Detected pixel dimensions of a present image; null = not detected yet.</description></item>
     ///         <item><description>Placeholder text; null draws the default prompt.</description></item>
     ///         <item><description>Settable one-shot status suffix; empty draws nothing.</description></item>
+    ///         <item><description>Tree-structure link; null means root node, non-null means child of that group.</description></item>
     ///     </list>
     ///     <para><b>Deferred to a different form</b>:</para>
     ///     <list type="bullet">
@@ -102,6 +103,7 @@ public sealed class CellForgeWidgetStateRules
         ["FilePickerView.OnCommit"] = "host callback — nothing to branch on, only to invoke",
         ["ImageBlock.Dimensions"] = "detected dimensions of a present image; null = not detected yet",
         ["LeaderKeyRouter.PendingMsg"] = "converted with the TakePendingMsg() method return — a different form",
+        ["ListPromptItem.Parent"] = "tree-structure link; null means root node, non-null means child of that group",
         ["SessionTabStripPanel.Dispatch"] = "host callback — nothing to branch on, only to invoke",
         ["SideBarPanel.Slots"] = "plugin-contributed slots; null means no plugin contributed any",
         ["StatusPanel.AnimationClock"] = "host-injected clock driving transitions",

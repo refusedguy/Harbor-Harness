@@ -283,6 +283,12 @@ public class KeyGateFamilyRules
         // A rune reaches the buffer via Insert; AcceptsTypedChar admits Shift
         // (capitals) and refuses Ctrl/Alt/Meta chords — the buffer gate.
         new("GenericTextField", KeyGateFamily.Buffer, "src/Harbor.Tui.CellForge/Generic/Widgets/GenericTextField.cs"),
+        // ListPromptEngine (#1215, epic #1195): the Spectre List-prompt port
+        // behind the palette/file-picker query lists. Char keys extend the
+        // search text through AcceptsTypedChar (admits Shift, refuses
+        // Ctrl/Alt/Meta) and vim keys navigate when search is off — the
+        // buffer gate, not the command one.
+        new("ListPromptEngine", KeyGateFamily.Buffer, "src/Harbor.Tui.CellForge/Chat/Widgets/ListPromptEngine.cs"),
 
         // The host key map, found by the coverage grep and NOT on the issue's
         // list: ChatKeyMap.cs:242 turns an unmatched printable rune into
