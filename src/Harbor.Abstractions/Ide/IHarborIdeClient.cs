@@ -29,7 +29,7 @@ public interface IHarborIdeClient
     Task<Result<IReadOnlyList<string>>> GetOpenFilesAsync(CancellationToken ct = default);
 
     /// <summary>Get the currently active file path, if any.</summary>
-    Task<Result<string?>> GetCurrentFileAsync(CancellationToken ct = default);
+    Task<Result<Maybe<string>>> GetCurrentFileAsync(CancellationToken ct = default);
 
     /// <summary>Get the workspace root path (git root or project root).</summary>
     Task<Result<string>> GetWorkspaceRootAsync(CancellationToken ct = default);
