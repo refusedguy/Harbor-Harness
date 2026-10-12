@@ -359,14 +359,14 @@ public sealed class AgentLoop : IAgentLoop
 
             return Result.Success();
         }
-        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        catch (OperationCanceledException oce) when (ct.IsCancellationRequested)
         {
             // #1103: a cancel landing inside a turn (event publish, persist)
             // used to surface as AgentErrorEvent — a user-pressed stop read as
             // a malfunction. Cancellation is not an error: close the run as
             // cancelled with no Error event, on the same path as the boundary
             // check above.
-            _logger.LogInformation("Agent run cancelled: session={SessionId} agent={Agent}", session.Session.Id, agent.Name.Value);
+            _logger.LogInformation(oce, "Agent run cancelled: session={SessionId} agent={Agent}", session.Session.Id, agent.Name.Value);
             _backgroundTasks?.CancelSession(session.Session.Id);
             await _eventBus.PublishAsync(
                 new AgentEndEvent(SnapshotMessages(session.Messages), Cancelled: true), CancellationToken.None).ConfigureAwait(false);
