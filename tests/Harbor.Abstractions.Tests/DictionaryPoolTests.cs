@@ -121,25 +121,34 @@ public class DictionaryPoolTests
     [Test]
     public async Task ConcurrentRents_NeverShareOneDictionary()
     {
-        var handedOut = new HashSet<Dictionary<string, int>>();
-        var duplicates = new List<string>();
-
+        // Every rent is HELD until the loop ends: releasing inside the iteration
+        // would let a later iteration legally reuse the instance — that is
+        // pooling, not sharing. The assertion is about concurrent holders: no
+        // two live rents may alias one dictionary.
+        var rented = new PooledDictionary<string, int>[64];
         Parallel.For(0, 64, i =>
         {
-            using var rented = DictionaryPool<string, int>.Rent(8);
-            Dictionary<string, int> dictionary = rented.Dictionary;
-            lock (handedOut)
-            {
-                if (!handedOut.Add(dictionary))
-                {
-                    duplicates.Add(i.ToString());
-                }
-            }
-
-            dictionary[$"key-{i}"] = i;
+            var r = DictionaryPool<string, int>.Rent(8);
+            r.Dictionary[$"key-{i}"] = i;
+            rented[i] = r;
         });
 
-        await Assert.That(duplicates).IsEmpty();
-        await Assert.That(handedOut.Count).IsGreaterThan(0);
+        try
+        {
+            var distinct = new HashSet<Dictionary<string, int>>();
+            foreach (var r in rented)
+            {
+                distinct.Add(r.Dictionary);
+            }
+
+            await Assert.That(distinct.Count).IsEqualTo(64);
+        }
+        finally
+        {
+            foreach (var r in rented)
+            {
+                r.Dispose();
+            }
+        }
     }
 }

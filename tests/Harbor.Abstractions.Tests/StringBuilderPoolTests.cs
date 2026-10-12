@@ -126,25 +126,33 @@ public class StringBuilderPoolTests
         // ConcurrentBag hands each renter a distinct instance; the pool must not
         // corrupt that under contention (#29: a non-thread-safe pool is worse
         // than no pool — two renters would append into one builder).
-        var handedOut = new HashSet<StringBuilder>();
-        var duplicates = new List<string>();
-
+        // Every rent is HELD until the loop ends: releasing inside the iteration
+        // would let a later iteration legally reuse the instance — that is
+        // pooling, not sharing. The assertion is about concurrent holders.
+        var rented = new StringBuilderPool.PooledStringBuilder[64];
         Parallel.For(0, 64, i =>
         {
-            using var rented = StringBuilderPool.Rent(128);
-            StringBuilder builder = rented.Builder;
-            lock (handedOut)
-            {
-                if (!handedOut.Add(builder))
-                {
-                    duplicates.Add(i.ToString());
-                }
-            }
-
-            builder.Append("payload-").Append(i);
+            var r = StringBuilderPool.Rent(128);
+            r.Builder.Append("payload-").Append(i);
+            rented[i] = r;
         });
 
-        await Assert.That(duplicates).IsEmpty();
-        await Assert.That(handedOut.Count).IsGreaterThan(0);
+        try
+        {
+            var distinct = new HashSet<StringBuilder>();
+            foreach (var r in rented)
+            {
+                distinct.Add(r.Builder);
+            }
+
+            await Assert.That(distinct.Count).IsEqualTo(64);
+        }
+        finally
+        {
+            foreach (var r in rented)
+            {
+                r.Dispose();
+            }
+        }
     }
 }

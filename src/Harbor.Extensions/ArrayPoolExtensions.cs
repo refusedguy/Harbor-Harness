@@ -297,9 +297,12 @@ public static class StringBuilderPool
 ///         <b>#1239.</b> Sized the same way <see cref="StringBuilderPool" /> is: one
 ///         <c>ConcurrentBag</c> per power-of-two entry band (8, 16 … 1024 entries), at
 ///         most <c>MaxRetainedPerBucket</c> dictionaries per band, and anything that
-///         outgrew the largest band dropped on return instead of retained. The band a
-///         rent is filed under is the entry count it held when it was returned, so a
-///         recycled instance is never smaller than it was when last used.
+///         outgrew the largest band dropped on return instead of retained. A rent is
+///         filed back under the band it came from, or higher if the caller grew it
+///         past that band — so a recycled instance is never smaller than the band
+///         a future rent asks for. (A <see cref="Dictionary{TKey, TValue}" /> does
+///         not expose its capacity, so the wrapper carries the rented band; filing
+///         by <c>Count</c> alone broke same-band reuse.)
 ///     </para>
 ///     <para>
 ///         <b>Comparers are not pooled.</b> A dictionary's comparer is fixed at
@@ -366,10 +369,10 @@ public static class DictionaryPool<TKey, TValue>
             int bucket = BucketIndexFor(requested);
             if (Buckets[bucket].TryTake(out var reused))
             {
-                return new PooledDictionary<TKey, TValue>(reused);
+                return new PooledDictionary<TKey, TValue>(reused, bucket);
             }
 
-            return new PooledDictionary<TKey, TValue>(new Dictionary<TKey, TValue>(BandEntries(bucket)));
+            return new PooledDictionary<TKey, TValue>(new Dictionary<TKey, TValue>(BandEntries(bucket)), bucket);
         }
 
         // Custom comparer, or a size the pool does not retain: allocate, and Return drops it.
@@ -381,8 +384,15 @@ public static class DictionaryPool<TKey, TValue>
     ///     <see cref="PooledDictionary{TKey, TValue}.Dispose" />.
     /// </summary>
     /// <param name="dictionary">The dictionary being returned. Cleared before it is stored.</param>
-    internal static void Return(Dictionary<TKey, TValue> dictionary)
+    /// <param name="band">The band the dictionary was rented from, or -1 when it never belonged to the pool.</param>
+    internal static void Return(Dictionary<TKey, TValue> dictionary, int band)
     {
+        // Never pooled (custom comparer or oversized rent): drop it.
+        if (band < 0)
+        {
+            return;
+        }
+
         int entries = dictionary.Count;
 
         // Outgrew the largest retained band: drop it rather than hold it.
@@ -399,14 +409,26 @@ public static class DictionaryPool<TKey, TValue>
             return;
         }
 
-        ConcurrentBag<Dictionary<TKey, TValue>> bucket = Buckets[BucketIndexFor(entries)];
-        if (bucket.Count >= MaxRetainedPerBucket)
+        // File under the band the rent came from, or higher if the caller grew
+        // the dictionary past it — a recycled instance must never be smaller
+        // than the band a future rent asks for. Filing by Count alone broke
+        // same-band reuse: a rent(16) holding 1 entry at return landed in band
+        // 8 and the next rent(16) missed it.
+        int bucket = band;
+        int grown = BucketIndexFor(entries);
+        if (grown > bucket)
+        {
+            bucket = grown;
+        }
+
+        ConcurrentBag<Dictionary<TKey, TValue>> bucketBag = Buckets[bucket];
+        if (bucketBag.Count >= MaxRetainedPerBucket)
         {
             return;
         }
 
         dictionary.Clear();
-        bucket.Add(dictionary);
+        bucketBag.Add(dictionary);
     }
 
     private static ConcurrentBag<Dictionary<TKey, TValue>>[] CreateBuckets()
@@ -464,18 +486,30 @@ public readonly struct PooledDictionary<TKey, TValue> : IDisposable
     public Dictionary<TKey, TValue> Dictionary { get; }
 
     /// <summary>
+    ///     The entry band the dictionary was rented from, or -1 when the instance
+    ///     never belonged to the pool (custom comparer, oversized rent, or a
+    ///     caller-supplied dictionary). <see cref="Dispose" /> files a pooled
+    ///     instance back under this band (or higher if the caller grew it) and
+    ///     drops an unpooled one.
+    /// </summary>
+    private readonly int _band;
+
+    /// <summary>
     ///     Construct a wrapper around a pre-existing <see cref="Dictionary{TKey, TValue}" />.
     /// </summary>
     /// <param name="dictionary">The dictionary to wrap.</param>
-    public PooledDictionary(Dictionary<TKey, TValue> dictionary)
+    /// <param name="band">The entry band the dictionary was rented from, or -1 when it never belonged to the pool.</param>
+    public PooledDictionary(Dictionary<TKey, TValue> dictionary, int band = -1)
     {
         Dictionary = dictionary;
+        _band = band;
     }
 
     /// <summary>
     ///     Return the underlying dictionary to the pool. Dictionaries that outgrew the
-    ///     largest retained band, or whose comparer is not the default one, are dropped.
-    ///     Dispose exactly once; do not touch <see cref="Dictionary" /> afterwards.
+    ///     largest retained band, that were never pooled, or whose comparer is not
+    ///     the default one, are dropped. Dispose exactly once; do not touch
+    ///     <see cref="Dictionary" /> afterwards.
     /// </summary>
-    public void Dispose() => DictionaryPool<TKey, TValue>.Return(Dictionary);
+    public void Dispose() => DictionaryPool<TKey, TValue>.Return(Dictionary, _band);
 }
