@@ -144,6 +144,15 @@ public sealed class ProviderRegistry : IProviderRegistry
             for (int i = 0; i < providerCount; i++)
             {
                 var pid = providers[i];
+                // #1108: started WITHOUT the outer token. Passing it to
+                // Task.Run means a pre-start cancellation lands a cancelled
+                // task in the WhenAll below, whose await then throws OCE and
+                // discards every healthy provider's catalog. Each dispatch
+                // still observes the outer token through its linked per-
+                // provider CTS (5 s budget ∪ outer cancellation), and its
+                // catch converts that into one more "id: reason" line — a
+                // cancelled fan-out degrades to partial results, never to a
+                // throw.
                 tasksArray[i] = Task.Run(async () =>
                 {
                     try
@@ -192,7 +201,7 @@ public sealed class ProviderRegistry : IProviderRegistry
                         ProviderRegistryLog.GetModelsFailed(_logger, ex, pid);
                         return Result.Failure<IReadOnlyList<ModelInfo>>(Describe(ex));
                     }
-                }, cancellationToken);
+                });
             }
 
             // Copy the active range into a Task[] for Task.WhenAll (it requires IEnumerable<Task>).
