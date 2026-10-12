@@ -1194,6 +1194,31 @@ public sealed class InMemoryEventBus : IEventBus, IEventBusQueueMetrics
             }
         }
 
+        if (handlerTask.IsCompleted && !ct.IsCancellationRequested)
+        {
+            // #1108: the handler finished between the budget-arm above and
+            // this point — a synchronously faulted/cancelled dispatch never
+            // arms the timer, so it always lands here. Awaiting it directly
+            // is exactly equivalent to the WhenAny race below (the infinite
+            // Delay, fed by a live token, could only lose) and skips its
+            // Timer + Task allocation — the same shape as the
+            // !ct.CanBeCanceled branch above, which fixed only the
+            // non-cancellable half. The IsCancellationRequested guard keeps
+            // the racy corner (publisher tore down while the handler just
+            // finished) on the old path, where teardown wins the race.
+            try
+            {
+                await handlerTask.ConfigureAwait(false);
+                return (DispatchOutcome.Completed, null);
+            }
+            catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+            {
+                // The handler hit the budget cancellation from INSIDE
+                // its own body — an over-budget strike, not a death.
+                return (DispatchOutcome.Slow, Task.CompletedTask);
+            }
+        }
+
         Task winner = await Task.WhenAny(handlerTask, Task.Delay(Timeout.InfiniteTimeSpan, ct))
             .ConfigureAwait(false);
         if (winner != handlerTask)
