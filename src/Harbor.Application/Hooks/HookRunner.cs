@@ -109,7 +109,7 @@ public sealed class HookRunner : IHookRunner
         {
             ct.ThrowIfCancellationRequested();
             HookEntry entry = matches[i];
-            HookAttempt attempt = await RunOneAsync(entry, current, ct).ConfigureAwait(false);
+            HookAttempt attempt = await RunOneAsync(entry, current, allowEdits, ct).ConfigureAwait(false);
 
             if (attempt.Verdict is null)
             {
@@ -237,7 +237,7 @@ public sealed class HookRunner : IHookRunner
             for (int i = 0; i < matches.Count; i++)
             {
                 HookEntry entry = matches[i];
-                HookAttempt attempt = await RunOneAsync(entry, payload, ct).ConfigureAwait(false);
+                HookAttempt attempt = await RunOneAsync(entry, payload, allowEdits: false, ct).ConfigureAwait(false);
                 LogAdvisory(eventName, entry, toolName, attempt);
             }
         }
@@ -288,7 +288,7 @@ public sealed class HookRunner : IHookRunner
     }
 
     /// <summary>One hook process execution: spawn, pipe, wait, parse.</summary>
-    private async Task<HookAttempt> RunOneAsync(HookEntry entry, HookPayload payload, CancellationToken ct)
+    private async Task<HookAttempt> RunOneAsync(HookEntry entry, HookPayload payload, bool allowEdits, CancellationToken ct)
     {
         string fileName = OperatingSystem.IsWindows() ? "cmd.exe" : "/bin/sh";
         var psi = new ProcessStartInfo(fileName)
@@ -411,7 +411,7 @@ public sealed class HookRunner : IHookRunner
         await proc.WaitForExitAsync(CancellationToken.None).ConfigureAwait(false);
         string stdout = await stdoutTask.ConfigureAwait(false);
         string stderr = await stderrTask.ConfigureAwait(false);
-        return ParseVerdict(entry, stdout, stderr, proc.ExitCode);
+        return ParseVerdict(entry, stdout, stderr, proc.ExitCode, allowEdits);
     }
 
     private TimeSpan ResolveTimeout(HookEntry entry)
@@ -425,7 +425,7 @@ public sealed class HookRunner : IHookRunner
         return _defaultTimeout.TotalSeconds <= 0 ? DefaultHookTimeout : _defaultTimeout;
     }
 
-    private static HookAttempt ParseVerdict(HookEntry entry, string stdout, string stderr, int exitCode)
+    private static HookAttempt ParseVerdict(HookEntry entry, string stdout, string stderr, int exitCode, bool allowEdits)
     {
         if (string.IsNullOrWhiteSpace(stdout))
         {
@@ -488,6 +488,14 @@ public sealed class HookRunner : IHookRunner
 
         if (decision.Equals("edit", StringComparison.OrdinalIgnoreCase))
         {
+            if (!allowEdits)
+            {
+                // A prompt-submit hook has no args to rewrite: answering
+                // `edit` means "reviewed, may proceed" — read as allow, never
+                // fail-closed (IHookRunner.RunUserPromptSubmitAsync contract).
+                return new HookAttempt(new HookVerdict(HookDecision.Allow, null, null), null, stdout, stderr);
+            }
+
             // "edit" without an args object is malformed — fail closed rather
             // than silently running the unedited call.
             return editedArgs is not null
