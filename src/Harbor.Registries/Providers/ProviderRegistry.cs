@@ -24,13 +24,16 @@ public sealed class ProviderRegistry : IProviderRegistry
     // see ToolRegistry.cs for the full rationale.
     private readonly ConcurrentDictionary<ProviderId, Lazy<ILlmClient>> _clients = new();
     private readonly ILogger<ProviderRegistry> _logger;
-    private readonly ConcurrentDictionary<ProviderId, IReadOnlyList<ModelInfo>> _modelCache = new();
 
     // ROP-C П.7: shared short-TTL catalog cache keyed by provider id.
     // GetModelsAsync is a real HTTP round-trip on some providers (Ollama),
     // yet the catalog rarely changes within minutes. The registry owns the
     // entry so every consumer shares one round-trip budget instead of each
     // AgentLoop instance keeping its own map. Failures are never cached.
+    // #1108: this is the ONLY model cache. GetAllModelsAsync used to keep a
+    // second, TTL-free map (_modelCache) next to it, so the fan-out served
+    // forever-stale catalogs while GetModelsCachedAsync re-fetched every
+    // 5 minutes — one dataset, one freshness story now.
     private readonly ConcurrentDictionary<ProviderId, CatalogEntry> _catalogCache = new();
 
     private static readonly TimeSpan ModelCatalogTtl = TimeSpan.FromMinutes(5);
@@ -145,9 +148,12 @@ public sealed class ProviderRegistry : IProviderRegistry
                 {
                     try
                     {
-                        if (_modelCache.TryGetValue(pid, out var cached))
+                        // #1108: the fan-out reads the same TTL catalog cache
+                        // as GetModelsCachedAsync — no second freshness story.
+                        if (_catalogCache.TryGetValue(pid, out var cached)
+                            && cached.ExpiresAt > DateTimeOffset.UtcNow)
                         {
-                            return Result.Success<IReadOnlyList<ModelInfo>>(cached);
+                            return Result.Success<IReadOnlyList<ModelInfo>>(cached.Models);
                         }
 
                         var client = GetClient(pid);
@@ -170,7 +176,9 @@ public sealed class ProviderRegistry : IProviderRegistry
                         // The cache write stays AFTER the early return rather than inside
                         // an `if (models.IsSuccess)` block: early-return is the guard shape
                         // CFE0001 models, and a read inside a branch is what it reports.
-                        _modelCache[pid] = models.Value;
+                        // #1108: written to the shared TTL cache, so a later
+                        // GetModelsCachedAsync (or fan-out) reuses it until expiry.
+                        _catalogCache[pid] = new CatalogEntry(models.Value, DateTimeOffset.UtcNow.Add(ModelCatalogTtl));
                         return models;
                     }
                     catch (OperationCanceledException ex)
@@ -286,7 +294,6 @@ public sealed class ProviderRegistry : IProviderRegistry
     {
         var lazy = new Lazy<ILlmClient>(() => factory(), LazyThreadSafetyMode.ExecutionAndPublication);
         _clients[providerId] = lazy;
-        _modelCache.TryRemove(providerId, out _);
         _catalogCache.TryRemove(providerId, out _);
         InvalidateFrozenSnapshot();
     }
@@ -296,7 +303,6 @@ public sealed class ProviderRegistry : IProviderRegistry
     {
         if (_clients.TryRemove(providerId, out _))
         {
-            _modelCache.TryRemove(providerId, out _);
             _catalogCache.TryRemove(providerId, out _);
             InvalidateFrozenSnapshot();
             return Result.Success();
@@ -307,12 +313,13 @@ public sealed class ProviderRegistry : IProviderRegistry
 
     /// <summary>
     ///     Invalidate the model cache for a specific provider. The next call to
-    ///     <see cref="GetAllModelsAsync" /> will re-fetch the model list from the provider.
+    ///     <see cref="GetAllModelsAsync" /> or <see cref="GetModelsCachedAsync" />
+    ///     will re-fetch the model list from the provider (#1108: one shared
+    ///     TTL cache serves both readers, so one invalidation covers both).
     /// </summary>
     /// <param name="providerId">The provider whose model cache to invalidate.</param>
     public void InvalidateModelCache(ProviderId providerId)
     {
-        _modelCache.TryRemove(providerId, out _);
         _catalogCache.TryRemove(providerId, out _);
     }
 
