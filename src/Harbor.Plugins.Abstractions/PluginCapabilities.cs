@@ -55,11 +55,21 @@ public static class PluginCapabilities
             return Result.Success<IReadOnlySet<PluginCapability>>(FrozenEmpty);
 
         var result = new HashSet<PluginCapability>();
-        foreach (var raw in csv.Split([',', ' ', ';'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        ReadOnlySpan<char> rest = csv.AsSpan();
+        while (true)
         {
-            if (!TryParseSingle(raw, out var capability))
-                return Result.Failure<IReadOnlySet<PluginCapability>>($"Unknown plugin capability '{raw}'.");
-            result.Add(capability);
+            int sep = rest.IndexOfAny(',', ' ', ';');
+            ReadOnlySpan<char> token = (sep < 0 ? rest : rest.Slice(0, sep)).Trim();
+            if (token.Length > 0)
+            {
+                string name = token.ToString();
+                if (!TryParseSingle(name, out var capability))
+                    return Result.Failure<IReadOnlySet<PluginCapability>>($"Unknown plugin capability '{name}'.");
+                result.Add(capability);
+            }
+            if (sep < 0)
+                break;
+            rest = rest.Slice(sep + 1);
         }
 
         return Result.Success<IReadOnlySet<PluginCapability>>(result);
