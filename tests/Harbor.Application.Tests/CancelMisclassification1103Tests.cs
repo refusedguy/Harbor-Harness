@@ -165,7 +165,7 @@ public class CancelMisclassification1103Tests
     [Test]
     public async Task RunAsync_CancelBetweenStreamAndPersist_PartialKept_NoErrorEvent()
     {
-        // #1103 TurnRunner:234,244 — the post-stream persist rode the run token,
+        // #1103 TurnRunner:242,252 — the post-stream persist rode the run token,
         // so a cancel between stream and persist threw OCE into the run and read
         // as a provider error (and the streamed output was lost). The persist
         // now rides None; the cancel still ends the run without tool execution.
@@ -193,7 +193,7 @@ public class CancelMisclassification1103Tests
     [Test]
     public async Task RunAsync_CancelAtTurnStart_BoundaryRecorded_NoErrorEvent()
     {
-        // #1103 TurnRunner:116 — the TurnStart publish rode the run token, so a
+        // #1103 TurnRunner:120 — the TurnStart publish rode the run token, so a
         // cancel during publish threw OCE into the run and read as a provider
         // error. The boundary is a fact and rides None; the cancel is still
         // honored at the next await.
