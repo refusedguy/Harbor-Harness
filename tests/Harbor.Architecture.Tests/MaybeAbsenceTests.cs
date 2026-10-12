@@ -208,9 +208,6 @@ public class MaybeAbsenceTests
     /// </summary>
     private static readonly Dictionary<string, string> FirstOrDefaultExemptions = new(StringComparer.Ordinal)
     {
-        ["apps/Harbor.App.Cli/Program.cs"] =
-            "args.Skip(1).FirstOrDefault() is handed to RunListModelsAsync as a provider "
-            + "name; the absence of an argument is the SAME absence as an empty one there.",
         ["apps/Harbor.App.Cli/Commands/SkillsCommand.cs"] =
             "Convention 2: `FirstOrDefault(a => !a.StartsWith('-'))` + IsNullOrWhiteSpace "
             + "distinguishes \"no such argument\" from \"empty argument\". Collapsing to "

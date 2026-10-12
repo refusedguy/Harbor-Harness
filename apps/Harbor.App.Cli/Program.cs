@@ -140,8 +140,8 @@ public static class Program
 #endif
             "--headless" or "headless" => await HeadlessVerb.RunAsync(_logger, args.Skip(1).ToArray()),
             "run" => await CafPilotVerbs.RunAsync("run", args.Skip(1).ToArray()),
-            "providers" or "--providers" => await ProviderVerbs.RunListProvidersAsync(_logger),
-            "models" => await ProviderVerbs.RunListModelsAsync(_logger, args.Skip(1).FirstOrDefault()),
+            "providers" or "--providers" => await CafPilotVerbs.RunAsync("providers", args.Skip(1).ToArray()),
+            "models" => await CafPilotVerbs.RunAsync("models", args.Skip(1).ToArray()),
             "sessions" => await CafPilotVerbs.RunAsync("sessions", args.Skip(1).ToArray()),
             "mcp" => await McpLoginRunner.RunAsync(Console.Out, Console.Error, args.Skip(1).ToArray()),
             "serve" => await ServeVerb.RunAsync(_logger, args.Skip(1).ToArray()),
@@ -149,8 +149,8 @@ public static class Program
             "events" => await EventsVerb.RunAsync(args.Skip(1).ToArray()),
             "storage" => await CafPilotVerbs.RunAsync("storage", args.Skip(1).ToArray()),
             "setup" => await SetupVerb.RunAsync(_logger),
-            "auth" => await AuthVerb.RunAsync(_logger, args.Skip(1).ToArray()),
-            "config" => await ConfigVerb.RunAsync(_logger, args.Skip(1).ToArray()),
+            "auth" => await CafPilotVerbs.RunAsync("auth", args.Skip(1).ToArray()),
+            "config" => await CafPilotVerbs.RunAsync("config", args.Skip(1).ToArray()),
             "help" or "--help" or "-h" => HelpVerbs.PrintHelp(),
             "version" or "--version" or "-v" => await CafPilotVerbs.RunAsync("version", args.Skip(1).ToArray()),
             _ => await InteractiveVerb.RunAsync(_logger, Array.Empty<string>(), scriptPath)

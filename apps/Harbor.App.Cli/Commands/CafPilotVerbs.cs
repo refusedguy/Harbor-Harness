@@ -3,9 +3,11 @@ using ConsoleAppFramework;
 namespace Harbor.App.Cli.Commands;
 
 /// <summary>
-///     LB2 pilot (#1235) + CAF-A (#1286): ConsoleAppFramework (incremental source
-///     generator, AOT-first) on <c>version</c>, <c>storage</c>, <c>sessions</c> and
-///     <c>run</c>. Everything else keeps the manual dispatcher in <c>Program</c>;
+///     LB2 pilot (#1235) + CAF-A (#1286) + CAF-B (#1287): ConsoleAppFramework
+///     (incremental source generator, AOT-first) on <c>version</c>,
+///     <c>storage</c>, <c>sessions</c>, <c>run</c>, <c>providers</c>,
+///     <c>models</c>, <c>auth</c> and <c>config</c>. Everything else keeps the
+///     manual dispatcher in <c>Program</c>;
 ///     Spectre.Console.Cli / System.CommandLine stay forbidden.
 /// </summary>
 /// <remarks>
@@ -24,7 +26,8 @@ namespace Harbor.App.Cli.Commands;
 ///         the builder routes it; <c>-h|--help</c> and flag parsing come from
 ///         the framework. Handlers delegate to <see cref="HelpVerbs" /> — the
 ///         output text stays byte-for-byte identical to the manual path
-///         (pilot handlers cover version/storage; CAF-A adds sessions/run).
+///         (pilot handlers cover version/storage; CAF-A adds sessions/run;
+///         CAF-B adds providers/models/auth/config).
 ///     </para>
 ///     <para>
 ///         Exit code: CAF sets <see cref="Environment.ExitCode" /> from the
@@ -41,6 +44,10 @@ internal static class CafPilotVerbs
         app.Add("storage", CafPilotCommands.Storage);
         app.Add("sessions", CafSessionCommands.Sessions);
         app.Add("run", CafRunCommands.Run);
+        app.Add("providers", CafProviderCommands.Providers);
+        app.Add("models", CafProviderCommands.Models);
+        app.Add("auth", CafAuthCommands.Auth);
+        app.Add("config", CafConfigCommands.Config);
         await app.RunAsync([verb, ..rest]).ConfigureAwait(false);
         return Environment.ExitCode;
     }
