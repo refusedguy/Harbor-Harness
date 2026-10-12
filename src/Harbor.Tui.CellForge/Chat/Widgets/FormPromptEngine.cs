@@ -46,7 +46,14 @@ public sealed class FormValueConverter<T> where T : notnull
     {
         ArgumentNullException.ThrowIfNull(tryConvert);
         _tryConvert = tryConvert;
-        _toDisplay = toDisplay ?? static (v, _) => v.ToString() ?? string.Empty;
+        if (toDisplay is null)
+        {
+            _toDisplay = static (v, _) => v.ToString() ?? string.Empty;
+        }
+        else
+        {
+            _toDisplay = toDisplay;
+        }
     }
 
     /// <summary>Converts raw text; failure carries the message the prompt shows.</summary>
