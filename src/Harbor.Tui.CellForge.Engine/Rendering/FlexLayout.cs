@@ -25,6 +25,17 @@ public enum FlexJustify : byte
     /// <summary>Even space around every track: edges take a half share, gaps a
     /// full share. Integer remainders distribute leading-to-trailing.</summary>
     SpaceAround = 4,
+
+    /// <summary>ratatui <c>Flex::Legacy</c> analogue (#1159): excess goes to
+    /// the last lowest-priority track — the last <c>Fill</c> when present
+    /// (Fill is weakest), else the last flexible track, else the last track.
+    /// Applies only when tracks plus gaps underfill the extent.</summary>
+    Legacy = 5,
+
+    /// <summary>ratatui <c>Flex::SpaceEvenly</c> analogue (#1159): excess
+    /// spreads evenly over the n+1 slots (before the first, between tracks,
+    /// after the last). Integer remainders distribute leading-to-trailing.</summary>
+    SpaceEvenly = 6,
 }
 
 /// <summary>
@@ -94,6 +105,7 @@ public readonly record struct FlexTrack
     }
 
     internal bool IsFlex => _kind is 2 or 3 or 4;
+    internal bool IsFill => _kind == 2;
     internal bool IsFixedLike => _kind <= 1;
     internal bool IsAuto => _kind == 5;
     internal bool IsPercent => _kind == 1;
@@ -268,6 +280,60 @@ public static class FlexLayout
                     }
 
                     return;
+                }
+
+                case FlexJustify.SpaceEvenly:
+                {
+                    int slots = n + 1;
+                    int q = leftover / slots;
+                    int r = leftover % slots;
+                    pos = origin + q + (r > 0 ? 1 : 0);
+                    int slot = 1;
+                    for (int i = 0; i < n; i++)
+                    {
+                        Emit(horizontal, into, i, pos, crossOrigin, cross, sizes[i]);
+                        pos += sizes[i];
+                        if (i < n - 1)
+                        {
+                            pos += effGap + q + (slot < r ? 1 : 0);
+                            slot++;
+                        }
+                    }
+
+                    return;
+                }
+
+                case FlexJustify.Legacy:
+                {
+                    int idx = -1;
+                    for (int i = n - 1; i >= 0; i--)
+                    {
+                        if (tracks[i].IsFill)
+                        {
+                            idx = i;
+                            break;
+                        }
+                    }
+
+                    if (idx < 0)
+                    {
+                        for (int i = n - 1; i >= 0; i--)
+                        {
+                            if (tracks[i].IsFlex)
+                            {
+                                idx = i;
+                                break;
+                            }
+                        }
+                    }
+
+                    if (idx < 0)
+                    {
+                        idx = n - 1;
+                    }
+
+                    sizes[idx] += leftover;
+                    break;
                 }
 
                 default:

@@ -133,6 +133,51 @@ public sealed class FlexLayoutTests
     }
 
     [Test]
+    public async Task Legacy_AllFixed_ExcessGoesToLast()
+    {
+        var rects = FlexLayout.Solve(
+            SplitDir.Horizontal,
+            new EngineCells.Rect(0, 0, 20, 4),
+            [FlexTrack.Fixed(6), FlexTrack.Fixed(4)],
+            justify: FlexJustify.Legacy);
+
+        await Assert.That(rects).IsEquivalentTo([
+            new EngineCells.Rect(0, 0, 6, 4),
+            new EngineCells.Rect(6, 0, 14, 4),
+        ]);
+    }
+
+    [Test]
+    public async Task Legacy_FillWeakest_AbsorbsMaxCapHeadroom()
+    {
+        var rects = FlexLayout.Solve(
+            SplitDir.Horizontal,
+            new EngineCells.Rect(0, 0, 20, 4),
+            [FlexTrack.Max(6), FlexTrack.Fill(1)],
+            justify: FlexJustify.Legacy);
+
+        await Assert.That(rects).IsEquivalentTo([
+            new EngineCells.Rect(0, 0, 6, 4),
+            new EngineCells.Rect(6, 0, 14, 4),
+        ]);
+    }
+
+    [Test]
+    public async Task SpaceEvenly_SlotsIncludingEdges()
+    {
+        var rects = FlexLayout.Solve(
+            SplitDir.Horizontal,
+            new EngineCells.Rect(0, 0, 20, 4),
+            [FlexTrack.Fixed(6), FlexTrack.Fixed(4)],
+            justify: FlexJustify.SpaceEvenly);
+
+        await Assert.That(rects).IsEquivalentTo([
+            new EngineCells.Rect(4, 0, 6, 4),
+            new EngineCells.Rect(13, 0, 4, 4),
+        ]);
+    }
+
+    [Test]
     public async Task MinFloor_Honored_TrailingFlexAbsorbsOverflow()
     {
         var rects = FlexLayout.Solve(
