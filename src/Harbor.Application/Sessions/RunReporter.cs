@@ -168,13 +168,16 @@ public static class RunReporter
         Result<CheckReport> checks = CheckRunner.TryLoad(manifest.RunId);
         if (checks.IsFailure)
             return checks.ConvertFailure<BuiltReport>();
-        Result<string> coherent = CheckCoherence(manifest, frozen.Value, checks.Value);
+        FrozenChangeSet frozenSet = frozen.Value;
+        CheckReport checkReport = checks.Value;
+        Result<string> coherent = CheckCoherence(manifest, frozenSet, checkReport);
         if (coherent.IsFailure)
             return coherent.ConvertFailure<BuiltReport>();
 
         Result<bool> dirty = await ProbeWorktreeDirtyAsync(manifest.WorktreePath, ct).ConfigureAwait(false);
         if (dirty.IsFailure)
             return dirty.ConvertFailure<BuiltReport>();
+        bool isDirty = dirty.Value;
 
         ChangeReport report;
         try
@@ -182,13 +185,13 @@ public static class RunReporter
             report = ChangeReport.Create(
                 manifest.RunId,
                 manifest.BaseRevision,
-                frozen.Value.HeadRevision,
-                ToChanged(frozen.Value.Entries),
-                ToRecorded(checks.Value.Checks),
-                frozen.Value.IgnoredPathCount,
+                frozenSet.HeadRevision,
+                ToChanged(frozenSet.Entries),
+                ToRecorded(checkReport.Checks),
+                frozenSet.IgnoredPathCount,
                 manifest.TimeoutSeconds,
                 manifest.MaxSteps,
-                dirty.Value);
+                isDirty);
         }
         catch (ArgumentException ex)
         {
