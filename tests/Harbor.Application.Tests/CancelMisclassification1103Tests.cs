@@ -1,7 +1,12 @@
+using System.Text.Json;
+using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Agents;
 using Harbor.Abstractions.Events;
 using Harbor.Abstractions.Models;
+using Harbor.Abstractions.Models.Identifiers;
+using Harbor.Abstractions.Permissions;
 using Harbor.Abstractions.Sessions;
+using Harbor.Abstractions.Tools;
 using Harbor.Application.Agents;
 using Harbor.Application.Permissions;
 using Harbor.Application.Resilience;
@@ -208,5 +213,96 @@ public class CancelMisclassification1103Tests
         await Assert.That(bus.Events.OfType<AgentErrorEvent>().Count()).IsEqualTo(0);
         var end = bus.Events.OfType<AgentEndEvent>().Single();
         await Assert.That(end.Cancelled).IsTrue();
+    }
+
+    /// <summary>Probe tool: records whether the gate ever let it execute.</summary>
+    private sealed class GateProbeTool : ITool
+    {
+        public bool Executed;
+
+        public ToolName Name => ToolName.Create("gateprobe");
+
+        /// <inheritdoc />
+        public ToolSafetyProfile SafetyProfile => ToolSafetyProfile.Opaque;
+
+        public string DisplayName => "GateProbe";
+        public string Description => "Probe.";
+        public ExecutionMode ExecutionMode => ExecutionMode.Parallel;
+        public string? PromptSnippet => null;
+        public IReadOnlyList<string> PromptGuidelines => [];
+        public JsonDocument ParameterSchema { get; } = JsonDocument.Parse("""{"type":"object"}""");
+        public Result ValidateArguments(JsonElement args) => Result.Success();
+
+        public Task<ToolResult> ExecuteAsync(JsonElement args, ToolContext context, CancellationToken cancellationToken = default)
+        {
+            Executed = true;
+            return Task.FromResult(ToolResult.Success("probe"));
+        }
+    }
+
+    [Test]
+    public async Task ExecuteAsync_TimeoutDuringPermissionGate_ReadsAsTimeout()
+    {
+        // #1103 ToolDispatcher: CheckPermissionAsync read the run token, not
+        // the effective (deadline-linked) one: when the per-call deadline
+        // fired while an asker that resolves instead of throwing was still
+        // waiting, the Deny it returned read as a policy deny. A deadline hit
+        // is a timeout — the loop keeps going — and never a cancel.
+        var agent = new AgentDefinition(
+            AgentName.Create("code"),
+            "Code",
+            "gate-timeout harness",
+            "test-model",
+            "test",
+            new PermissionRuleset(new PermissionRule[] { new("*", "*", PermissionAction.Ask) }),
+            MaxSteps: 10);
+        var agents = new FakeAgentRegistry(agent);
+        Task<PermissionResponse> HangingAsker(PermissionRequest request, CancellationToken ct) =>
+            HangingDenyAsync(ct);
+
+        var permissions = new PermissionService(
+            agents, NullLogger<PermissionService>.Instance, HangingAsker);
+        var tool = new GateProbeTool();
+        var dispatcher = new ToolDispatcher(
+            new FakeToolRegistry(tool),
+            permissions,
+            new FakeEventBus(),
+            NullLogger<ToolDispatcher>.Instance);
+        using var args = JsonDocument.Parse("""{}""");
+
+        ToolResultMessage message = await dispatcher
+            .ExecuteAsync(
+                [new ToolCallPart("tc1", "gateprobe", args.RootElement)],
+                NewSession(),
+                AssistantMessage.Empty("s", "m"),
+                agent,
+                CancellationToken.None,
+                toolExecutionTimeout: TimeSpan.FromMilliseconds(200))
+            .WaitAsync(TimeSpan.FromSeconds(10))
+            .ConfigureAwait(false);
+
+        await Assert.That(message.Results[0].IsError).IsTrue();
+        await Assert.That(message.Results[0].Output).Contains("timed out");
+        await Assert.That(message.Results[0].Output).DoesNotContain("Permission denied");
+        await Assert.That(message.Results[0].Output).DoesNotContain("cancelled");
+        await Assert.That(tool.Executed).IsFalse();
+    }
+
+    /// <summary>
+    ///     Asker that waits forever but resolves (Deny) instead of throwing
+    ///     when its token fires — the shape that misreported a deadline hit
+    ///     as a policy deny.
+    /// </summary>
+    private static async Task<PermissionResponse> HangingDenyAsync(CancellationToken ct)
+    {
+        try
+        {
+            await Task.Delay(Timeout.Infinite, ct).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+        }
+
+        return new PermissionResponse(PermissionAction.Deny, false);
     }
 }
