@@ -375,4 +375,30 @@ public class SubAgentCostPropagationTests
         await Assert.That(stats.Value.TokensInput).IsEqualTo(10 * children);
         await Assert.That(stats.Value.TokensOutput).IsEqualTo(5 * children);
     }
+
+    [Test]
+    public async Task RunAsync_ManyDistinctParents_GateStorageStaysBounded()
+    {
+        var store = new CostFakeStore();
+        var loop = new CostLoop(null, AssistantWithUsage("done", new Usage(10, 5)));
+        var runner = new SubAgentRunner(store, loop, NullLogger<SubAgentRunner>.Instance);
+
+        const int parents = 48;
+        for (int i = 0; i < parents; i++)
+        {
+            var parent = Session.Create(
+                Harbor.TestKit.TestTempDirs.NewDirectory("harbor-gate-" + i), "code", "test", "test-model");
+            store.Seed(parent);
+            var outcome = await runner.RunAsync(SubAgent(), new SubAgentRunRequest("go", ParentSessionId: parent.Id));
+            await Assert.That(outcome.IsSuccess).IsTrue();
+        }
+
+        // #1105: gate storage must be fixed stripes, not one entry per parent session.
+        var field = typeof(SubAgentRunner).GetField(
+            "ParentCostGates",
+            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
+        await Assert.That(field).IsNotNull();
+        var gates = (System.Threading.SemaphoreSlim[])field!.GetValue(null)!;
+        await Assert.That(gates.Length).IsLessThan(17);
+    }
 }

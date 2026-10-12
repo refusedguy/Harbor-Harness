@@ -1,4 +1,3 @@
-using System.Collections.Concurrent;
 using System.Threading.Channels;
 using Harbor.Abstractions.Sessions;
 using Microsoft.Extensions.Logging;
@@ -53,10 +52,23 @@ public sealed class SubAgentRunner(
     ///     share one <see cref="ISessionStore" /> whose stats/message updates
     ///     are read-modify-write: without the gate two completions can
     ///     interleave GetStats→AddUsage→UpdateStats and lose one delta.
-    ///     Entries are never removed (a session id + slim per parent is
-    ///     negligible); removal would race waiters.
+    ///     Fixed stripes (#1105), not per-parent entries: the old per-session-id
+    ///     dictionary grew forever — one entry per parent, never removed
+    ///     (removal would race waiters).
     /// </summary>
-    private static readonly ConcurrentDictionary<string, SemaphoreSlim> ParentCostLocks = new();
+    private const int ParentCostStripes = 16;
+    private static readonly SemaphoreSlim[] ParentCostGates = CreateParentCostGates();
+
+    private static SemaphoreSlim[] CreateParentCostGates()
+    {
+        var gates = new SemaphoreSlim[ParentCostStripes];
+        for (int i = 0; i < gates.Length; i++)
+            gates[i] = new SemaphoreSlim(1, 1);
+        return gates;
+    }
+
+    private static SemaphoreSlim GateFor(string parentSessionId) =>
+        ParentCostGates[(uint)parentSessionId.GetHashCode() % (uint)ParentCostGates.Length];
 
     /// <inheritdoc />
     public bool CanSpawn => Depth.Value == 0;
@@ -420,7 +432,7 @@ public sealed class SubAgentRunner(
     {
         if (string.IsNullOrEmpty(parentSessionId) || IsZeroUsage(childUsage))
             return;
-        var gate = ParentCostLocks.GetOrAdd(parentSessionId, static _ => new SemaphoreSlim(1, 1));
+        var gate = GateFor(parentSessionId);
         await gate.WaitAsync(ct).ConfigureAwait(false);
         try
         {
