@@ -1,4 +1,5 @@
 using System.Collections.Immutable;
+using System.Text;
 using Harbor.Tui.CellForge.Generic;
 using Harbor.Tui.CellForge.Generic.Widgets;
 using Harbor.Ui.Framework.Panels;
