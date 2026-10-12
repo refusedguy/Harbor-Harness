@@ -610,7 +610,7 @@ public sealed class OnboardingFlow
                 : "API key: saved";
         Dialog.ShowAlert(
             "Setup complete!",
-            $"Provider: {_selected?.Id}\nModel: {model}\nAgent: {_agent}\n{keyLine}\nPress Enter to start.",
+            $"Provider: {_selected?.Id}\nModel: {_model}\nAgent: {_agent}\n{keyLine}\nPress Enter to start.",
             "Start");
     }
 
