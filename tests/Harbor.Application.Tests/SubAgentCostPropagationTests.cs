@@ -66,6 +66,34 @@ public class SubAgentCostPropagationTests
     }
 
     /// <summary>
+    ///     Loop fake that prices the child run the way the real turn path does:
+    ///     appends the replies, then folds their usage into the child session's
+    ///     own stats record with real rates (TurnRunner passes the resolved
+    ///     model's pricing to UpdateStatsAsync).
+    /// </summary>
+    private sealed class PricingLoop : IAgentLoop
+    {
+        private readonly Usage _usage;
+        private readonly Pricing _pricing;
+        private readonly AgentMessage[] _replies;
+
+        public PricingLoop(Usage usage, Pricing pricing, params AgentMessage[] replies)
+        {
+            _usage = usage;
+            _pricing = pricing;
+            _replies = replies;
+        }
+
+        public async Task<Result> RunAsync(ISessionContext session, AgentDefinition agent, CancellationToken ct = default)
+        {
+            foreach (AgentMessage message in _replies)
+                await session.AppendMessageAsync(message, ct).ConfigureAwait(false);
+            await session.UpdateStatsAsync(_usage, _pricing, ct).ConfigureAwait(false);
+            return Result.Success();
+        }
+    }
+
+    /// <summary>
     ///     Multi-session store fake: per-id message lists, persisted stats and
     ///     applied message updates, with call recording for assertions.
     /// </summary>
@@ -271,6 +299,30 @@ public class SubAgentCostPropagationTests
         await Assert.That(store.UpdatedStats[0].Metadata.TokensInput).IsEqualTo(100);
         await Assert.That(store.UpdatedStats[0].Metadata.TokensOutput).IsEqualTo(50);
         await Assert.That(store.UpdatedStats[0].Metadata.TokensReasoning).IsEqualTo(3);
+    }
+
+    [Test]
+    public async Task RunAsync_Success_PropagatesChildPricedCost()
+    {
+        var parent = NewParent();
+        var store = new CostFakeStore();
+        store.Seed(parent);
+        var childUsage = new Usage(100, 50);
+        var pricing = new Pricing(2m, 8m);
+        var loop = new PricingLoop(childUsage, pricing, AssistantWithUsage("done", childUsage));
+        var runner = new SubAgentRunner(store, loop, NullLogger<SubAgentRunner>.Instance);
+
+        var result = await runner.RunAsync(SubAgent(), new SubAgentRunRequest("go", ParentSessionId: parent.Id));
+
+        await Assert.That(result.IsSuccess).IsTrue();
+        var stats = await store.GetStatsAsync(parent.Id);
+        await Assert.That(stats.IsSuccess).IsTrue();
+        // #1105: the child's priced total crosses into the parent — the old
+        // Pricing.Unknown fold left Cost 0 with IsCostKnown=false.
+        await Assert.That(stats.Value.Cost).IsEqualTo(pricing.CalculateCost(childUsage));
+        await Assert.That(stats.Value.IsCostKnown).IsTrue();
+        await Assert.That(stats.Value.TokensInput).IsEqualTo(100);
+        await Assert.That(stats.Value.TokensOutput).IsEqualTo(50);
     }
 
     [Test]

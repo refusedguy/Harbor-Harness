@@ -215,7 +215,7 @@ public sealed class SubAgentRunner(
                 // propagate the partial delta so the parent totals stay honest.
                 Usage failedUsage = await TryAggregateChildUsageAsync(session.Id, CancellationToken.None).ConfigureAwait(false);
                 await PropagateChildCostAsync(
-                    request.ParentSessionId, request.ParentMessageId, failedUsage, CancellationToken.None).ConfigureAwait(false);
+                    request.ParentSessionId, request.ParentMessageId, session.Id, failedUsage, CancellationToken.None).ConfigureAwait(false);
                 // #270: degrade — surface whatever the sub-run produced before
                 // failing, so the parent receives partial output, not just a
                 // session id to go look at.
@@ -272,7 +272,7 @@ public sealed class SubAgentRunner(
             // envelope so the parent side can render the cost.
             Usage childUsage = AggregateUsage(history.Value);
             await PropagateChildCostAsync(
-                request.ParentSessionId, request.ParentMessageId, childUsage, CancellationToken.None).ConfigureAwait(false);
+                request.ParentSessionId, request.ParentMessageId, session.Id, childUsage, CancellationToken.None).ConfigureAwait(false);
 
             return new SubAgentRunResult(session.Id, agent.Name.Value, Truncate(finalOutput), history.Value.Count, childUsage);
         }
@@ -446,6 +446,7 @@ public sealed class SubAgentRunner(
     private async Task PropagateChildCostAsync(
         string? parentSessionId,
         string? parentMessageId,
+        string childSessionId,
         Usage childUsage,
         CancellationToken ct)
     {
@@ -455,7 +456,7 @@ public sealed class SubAgentRunner(
         await gate.WaitAsync(ct).ConfigureAwait(false);
         try
         {
-            await PropagateUnderLockAsync(parentSessionId, parentMessageId, childUsage, ct).ConfigureAwait(false);
+            await PropagateUnderLockAsync(parentSessionId, parentMessageId, childSessionId, childUsage, ct).ConfigureAwait(false);
         }
         finally
         {
@@ -466,6 +467,7 @@ public sealed class SubAgentRunner(
     private async Task PropagateUnderLockAsync(
         string parentSessionId,
         string? parentMessageId,
+        string childSessionId,
         Usage childUsage,
         CancellationToken ct)
     {
@@ -526,16 +528,19 @@ public sealed class SubAgentRunner(
                 return;
             }
 
-            // #653: the child's model is NOT resolved here — this class holds no
-            // provider catalogue, only the store, the loop and a logger. So the
-            // delta is folded unpriced (Pricing.Unknown) and the parent's record
-            // says so via IsCostKnown=false, instead of borrowing a rate that
-            // belongs to some other model. The token counters still land in full;
-            // only the money is a floor, and the status bar reports "unknown"
-            // rather than quoting a number.
+            // #1105: the child's model is NOT resolved here — this class holds
+            // no provider catalogue, only the store, the loop and a logger. But
+            // the child's own store record was written by the core turn path
+            // with the child model's real rates, so that priced total is
+            // carried across instead of re-pricing with Pricing.Unknown (which
+            // floors the money to zero and flips IsCostKnown=false). A store
+            // that derives stats from messages (JSONL) reports cost 0/unknown,
+            // and the fold below degrades to that floor — tokens stay exact.
+            SessionMetadata propagated = await FoldChildCostAsync(
+                    stats.Value, childSessionId, childUsage, ct).ConfigureAwait(false);
             var stored = await store.UpdateStatsAsync(
                     parentSessionId,
-                    stats.Value.AddUsage(childUsage, Pricing.Unknown),
+                    propagated,
                     ct)
                 .ConfigureAwait(false);
             if (stored.IsFailure)
@@ -551,6 +556,30 @@ public sealed class SubAgentRunner(
         {
             logger.LogWarning(ex, "Failed to propagate sub-agent cost into parent session {SessionId}", parentSessionId);
         }
+    }
+
+    /// <summary>
+    ///     Fold a child's token delta into the parent stats record (#1105),
+    ///     carrying the cost the child's own store record already priced. A
+    ///     child whose stats are unreadable degrades to the old unpriced floor
+    ///     so the tokens still land; the loss is logged, not silent.
+    /// </summary>
+    private async Task<SessionMetadata> FoldChildCostAsync(
+        SessionMetadata parentStats,
+        string childSessionId,
+        Usage childUsage,
+        CancellationToken ct)
+    {
+        var childStats = await store.GetStatsAsync(childSessionId, ct).ConfigureAwait(false);
+        if (childStats.IsFailure)
+        {
+            logger.LogWarning(
+                "Failed to read sub-agent stats for cost propagation (session {SessionId}): {Error}",
+                childSessionId, childStats.Error);
+            return parentStats.AddUsage(childUsage, Pricing.Unknown);
+        }
+
+        return parentStats.AddExternalCost(childUsage, childStats.Value.Cost, childStats.Value.IsCostKnown);
     }
 
     /// <summary>
