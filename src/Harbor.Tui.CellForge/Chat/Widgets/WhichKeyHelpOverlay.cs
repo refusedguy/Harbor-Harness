@@ -254,9 +254,54 @@ public sealed class WhichKeyHelpOverlay
         int innerW = box.Width - Chrome;
         var lines = BuildLines(innerW);
         int rows = Math.Min(lines.Count, box.Height - 2);
-        for (int i = 0; i < rows; i++)
+        List<string> visible = lines;
+        if (lines.Count > rows)
         {
-            buffer.SetText(box.X + 2, box.Y + 1 + i, lines[i], StyleFor(i, lines[i]));
+            // O6 (#1175) added grouped leader rows below the hotkey table, so a
+            // populated overlay no longer fits an 80x24 frame: the old head-cut
+            // dropped the trailing "Press ? to close." first. The dismiss hint
+            // and the leader/context/pending tail are the overlay's point; the
+            // truncatable middle is the hotkey table (BuildLines order: title,
+            // separator, "Hotkeys", hotkey rows, then the tail). Drop hotkey
+            // rows first and pin the tail.
+            const int HotStart = 3;
+            int hotEnd = HotStart;
+            while (hotEnd < lines.Count && lines[hotEnd].Length > 0)
+            {
+                hotEnd++;
+            }
+
+            int tailCount = lines.Count - hotEnd;
+            int keepHot = rows - HotStart - tailCount;
+            if (hotEnd < lines.Count && keepHot >= 0)
+            {
+                visible = new List<string>(rows);
+                for (int i = 0; i < HotStart + keepHot; i++)
+                {
+                    visible.Add(lines[i]);
+                }
+
+                for (int i = hotEnd; i < lines.Count; i++)
+                {
+                    visible.Add(lines[i]);
+                }
+            }
+            else
+            {
+                // Even the tail does not fit: pin the footer, show the head.
+                visible = new List<string>(rows);
+                for (int i = 0; i < rows - 1; i++)
+                {
+                    visible.Add(lines[i]);
+                }
+
+                visible.Add(lines[^1]);
+            }
+        }
+
+        for (int i = 0; i < visible.Count; i++)
+        {
+            buffer.SetText(box.X + 2, box.Y + 1 + i, visible[i], StyleFor(i, visible[i]));
         }
     }
 
