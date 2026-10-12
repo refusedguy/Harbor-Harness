@@ -131,7 +131,7 @@ public class FormPromptEngineTests
         var prompt = new FormPromptState<string>(FormConverters.String()) { IsSecret = true, MaskChar = '*' };
         prompt.SetText("s3cr3t");
 
-        await Assert.That(prompt.MaskedText()).IsEqualTo("*******");
+        await Assert.That(prompt.MaskedText()).IsEqualTo("******");
         await Assert.That(prompt.Text).IsEqualTo("s3cr3t");
     }
 
