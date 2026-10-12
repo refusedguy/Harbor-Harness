@@ -308,8 +308,15 @@ public sealed class AgentLoop : IAgentLoop
                 truncationFallback = step.TruncationFallback;
                 if (step.RunFailure is { } runFailure)
                 {
-                    // Terminal provider error — same as the pre-extraction inline
-                    // early-return: fail the run without turn/agent end events.
+                    // #1103: a terminal provider error must still close the run.
+                    // Without the terminal event the turn card hangs and the IPC
+                    // projection never learns the run ended. The error itself was
+                    // already published as AgentErrorEvent by the turn, so only
+                    // the terminal fact is missing here. Published with None: the
+                    // terminal record must not depend on the run token.
+                    await _eventBus.PublishAsync(
+                        new AgentEndEvent(SnapshotMessages(session.Messages)), CancellationToken.None).ConfigureAwait(false);
+                    await RunSessionEndHooksAsync(session.Session.Id).ConfigureAwait(false);
                     return Result.Failure(runFailure);
                 }
 
@@ -343,11 +350,28 @@ public sealed class AgentLoop : IAgentLoop
             // #403: `Limit` rides the terminal event so every reader gets the
             // reason, not only `RunOutcome`. Renderers read this event and NOT
             // the read-model, so without it the fact stops here.
+            // #1103: published with None — the terminal record of a finished run
+            // must not depend on the run token (a cancel racing the finish would
+            // otherwise turn the terminal event into an error).
             await _eventBus.PublishAsync(
-                new AgentEndEvent(SnapshotMessages(session.Messages), Limit: limit), ct).ConfigureAwait(false);
+                new AgentEndEvent(SnapshotMessages(session.Messages), Limit: limit), CancellationToken.None).ConfigureAwait(false);
             await RunSessionEndHooksAsync(session.Session.Id).ConfigureAwait(false);
 
             return Result.Success();
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            // #1103: a cancel landing inside a turn (event publish, persist)
+            // used to surface as AgentErrorEvent — a user-pressed stop read as
+            // a malfunction. Cancellation is not an error: close the run as
+            // cancelled with no Error event, on the same path as the boundary
+            // check above.
+            _logger.LogInformation("Agent run cancelled: session={SessionId} agent={Agent}", session.Session.Id, agent.Name.Value);
+            _backgroundTasks?.CancelSession(session.Session.Id);
+            await _eventBus.PublishAsync(
+                new AgentEndEvent(SnapshotMessages(session.Messages), Cancelled: true), CancellationToken.None).ConfigureAwait(false);
+            await RunSessionEndHooksAsync(session.Session.Id).ConfigureAwait(false);
+            return Result.Failure("Agent run was cancelled.");
         }
         catch (Exception ex)
         {
