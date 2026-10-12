@@ -1,4 +1,5 @@
 using ConsoleAppFramework;
+using CSharpFunctionalExtensions;
 using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Harbor.App.Cli.Commands;
@@ -29,7 +30,7 @@ internal static class CafProviderCommands
 
     /// <summary>List models, optionally filtered to one provider.</summary>
     public static async Task<int> Models([Argument]params string[] args) =>
-        await ProviderVerbs.RunListModelsAsync(NullLogger.Instance, args.FirstOrDefault()).ConfigureAwait(false);
+        await ProviderVerbs.RunListModelsAsync(NullLogger.Instance, args.TryFirst().GetValueOrDefault()).ConfigureAwait(false);
 }
 
 /// <summary>
