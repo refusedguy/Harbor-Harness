@@ -301,6 +301,16 @@ public class KeyGateFamilyRules
         new("ToolCardTracker(image)", KeyGateFamily.Command, "src/Harbor.Tui.CellForge/Chat/Streaming/ToolCardTracker.cs"),
         new("LeaderKeyRouter", KeyGateFamily.Command, "src/Harbor.Tui.CellForge/Chat/Widgets/LeaderKeyRouter.cs"),
 
+        // KeyBindings capture table (TR4, #1223, epic #1195): the page-level
+        // gesture-to-action map behind InputRouting's capture phase. No buffer
+        // anywhere on this path — a rune selects an action id (a vote) — and
+        // the match is EXACT-modifier, so an unbound Shift is refused the way
+        // the command gate refuses it. A host CAN bind a shifted gesture
+        // explicitly (Shift+G fires only when bound as Shift+G), but that
+        // binding is host config, not this table's nature: empty, it admits
+        // nothing, Shift included — so Command, not Buffer.
+        new("KeyBindings(capture)", KeyGateFamily.Command, "src/Harbor.Tui.CellForge.Engine/Input/KeyBindings.cs"),
+
         // ChatAppReducer.ActivateSlotFromKey (#1173): the Ctrl+digit
         // quick-slot path judges the pressed rune (1-9 focus the Nth tab).
         // No buffer anywhere on this path — the rune navigates — so Command.
