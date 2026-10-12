@@ -15,7 +15,9 @@ namespace Harbor.Ui.Framework.Panels;
 ///         any TUI-framework dependency, but the signature is <b>not</b> an invitation
 ///         to return a framework widget. The only renderer with a panel path is
 ///         CellForge, and its decoder
-///         (<c>CellForgePanelAdapter.WidgetToRows</c>) matches exactly three shapes —
+///         (<c>CellForgePanelAdapter</c> + the priority-ordered
+///         <c>IPanelWidgetDecoder</c> list, #1224) tries decoders first, then
+///         matches exactly three legacy shapes —
 ///         <see cref="string" />, an <c>IReadOnlyList&lt;string&gt;</c> and an
 ///         <c>IEnumerable&lt;string&gt;</c> — and flattens each into rows. <b>Anything
 ///         else falls through to <c>widget.ToString()</c>, so a returned widget object

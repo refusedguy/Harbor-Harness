@@ -27,6 +27,39 @@ namespace Harbor.Tui.CellForge.Panels;
 /// </remarks>
 public static class CellForgePanelAdapter
 {
+    private static readonly object _decoderGate = new();
+    private static IReadOnlyList<IPanelWidgetDecoder> _decoders = Defaults();
+
+    private static IReadOnlyList<IPanelWidgetDecoder> Defaults() =>
+    [
+        new PanelWidgetDecoders.Progress(),
+        new PanelWidgetDecoders.Table(),
+        new PanelWidgetDecoders.Tree(),
+        new PanelWidgetDecoders.Form(),
+    ];
+
+    /// <summary>
+    ///     Register an <see cref="IPanelWidgetDecoder" /> (re-sorted by
+    ///     descending <c>Priority</c>). Highest priority decodes first.
+    /// </summary>
+    public static void RegisterDecoder(IPanelWidgetDecoder decoder)
+    {
+        ArgumentNullException.ThrowIfNull(decoder);
+        lock (_decoderGate)
+        {
+            _decoders = _decoders.Append(decoder).OrderByDescending(d => d.Priority).ToArray();
+        }
+    }
+
+    /// <summary>Restore the four sample decoders (test hook).</summary>
+    public static void ResetDecoders()
+    {
+        lock (_decoderGate)
+        {
+            _decoders = Defaults();
+        }
+    }
+
     /// <summary>
     ///     Build the provider's widget for the given state/geometry and flatten
     ///     it to text rows. Returns an empty list when the provider returns
@@ -52,7 +85,7 @@ public static class CellForgePanelAdapter
     {
         ArgumentNullException.ThrowIfNull(provider);
         ArgumentNullException.ThrowIfNull(ctx);
-        return WidgetToRows(provider.Build(ctx));
+        return WidgetToRows(provider.Build(ctx), ctx);
     }
 
     /// <summary>Route a key to the focused panel's <see cref="IPanelProvider.OnKey" />.</summary>
@@ -63,14 +96,28 @@ public static class CellForgePanelAdapter
         return provider.OnKey(key, ctx);
     }
 
-    private static IReadOnlyList<string> WidgetToRows(object? widget) => widget switch
+    private static IReadOnlyList<string> WidgetToRows(object? widget, PanelContext ctx)
     {
-        null => Array.Empty<string>(),
-        string s => SplitLines(s),
-        IReadOnlyList<string> rows => rows,
-        IEnumerable<string> lines => lines.Select(l => l ?? string.Empty).ToArray(),
-        _ => SplitLines(widget.ToString() ?? string.Empty),
-    };
+        if (widget is not null)
+        {
+            foreach (var decoder in _decoders)
+            {
+                if (decoder.TryDecode(widget, ctx, out var rows) && rows is not null)
+                {
+                    return rows;
+                }
+            }
+        }
+
+        return widget switch
+        {
+            null => Array.Empty<string>(),
+            string s => SplitLines(s),
+            IReadOnlyList<string> rows => rows,
+            IEnumerable<string> lines => lines.Select(l => l ?? string.Empty).ToArray(),
+            _ => SplitLines(widget.ToString() ?? string.Empty),
+        };
+    }
 
     private static IReadOnlyList<string> SplitLines(string text) =>
         text.Split(["\r\n", "\r", "\n"], StringSplitOptions.None);
