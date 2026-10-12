@@ -73,9 +73,10 @@ internal static class HelpVerbs
     ///     <c>--clean</c> (delete all log files).
     /// </summary>
     /// <remarks>
-    ///     Retained for parity with the former <c>Program.RunLogsCommand</c>:
-    ///     live dispatch reaches <c>logs</c> through the <c>ICommand</c> array
-    ///     in <c>Program.Main</c>, not through this helper.
+    ///     Retained for parity with the former <c>Program</c> dispatch:
+    ///     live dispatch reaches <c>logs</c> through the ConsoleAppFramework
+    ///     builder in <c>CafPilotVerbs</c> (CAF-C, #1288), not through this
+    ///     helper.
     /// </remarks>
     internal static async Task<int> RunLogsCommand(string[] args)
     {

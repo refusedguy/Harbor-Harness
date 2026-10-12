@@ -109,7 +109,6 @@ public static class Program
         // Compile Remove); the registration below follows the same switch.
         var cliCommands = new ICommand[]
         {
-            new LogsCommand(Console.Out, Console.Error),
             new DaemonCommand(Console.Out, Console.Error),
 #if HARBOR_WITH_DAEMON
             new StatusCommand(Console.Out, Console.Error),
@@ -147,6 +146,7 @@ public static class Program
             "serve" => await ServeVerb.RunAsync(_logger, args.Skip(1).ToArray()),
             "tui" => await TuiAttachVerb.RunAsync(args.Skip(1).ToArray()),
             "events" => await EventsVerb.RunAsync(args.Skip(1).ToArray()),
+            "logs" => await CafPilotVerbs.RunAsync("logs", args.Skip(1).ToArray()),
             "storage" => await CafPilotVerbs.RunAsync("storage", args.Skip(1).ToArray()),
             "setup" => await SetupVerb.RunAsync(_logger),
             "auth" => await CafPilotVerbs.RunAsync("auth", args.Skip(1).ToArray()),

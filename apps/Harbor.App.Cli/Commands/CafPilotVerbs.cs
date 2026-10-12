@@ -3,11 +3,12 @@ using ConsoleAppFramework;
 namespace Harbor.App.Cli.Commands;
 
 /// <summary>
-///     LB2 pilot (#1235) + CAF-A (#1286) + CAF-B (#1287): ConsoleAppFramework
-///     (incremental source generator, AOT-first) on <c>version</c>,
-///     <c>storage</c>, <c>sessions</c>, <c>run</c>, <c>providers</c>,
-///     <c>models</c>, <c>auth</c> and <c>config</c>. Everything else keeps the
-///     manual dispatcher in <c>Program</c>;
+///     LB2 pilot (#1235) + CAF-A (#1286) + CAF-B (#1287) + CAF-C (#1288):
+///     ConsoleAppFramework (incremental source generator, AOT-first) on
+///     <c>version</c>, <c>storage</c>, <c>sessions</c>, <c>run</c>,
+///     <c>providers</c>, <c>models</c>, <c>auth</c>, <c>config</c> and
+///     <c>logs</c>. Everything else keeps the manual dispatcher in
+///     <c>Program</c>;
 ///     Spectre.Console.Cli / System.CommandLine stay forbidden.
 /// </summary>
 /// <remarks>
@@ -27,7 +28,8 @@ namespace Harbor.App.Cli.Commands;
 ///         the framework. Handlers delegate to <see cref="HelpVerbs" /> — the
 ///         output text stays byte-for-byte identical to the manual path
 ///         (pilot handlers cover version/storage; CAF-A adds sessions/run;
-///         CAF-B adds providers/models/auth/config).
+///         CAF-B adds providers/models/auth/config; CAF-C adds logs — with
+///         typed flags, since the verb IS flags).
 ///     </para>
 ///     <para>
 ///         Exit code: CAF sets <see cref="Environment.ExitCode" /> from the
@@ -48,6 +50,7 @@ internal static class CafPilotVerbs
         app.Add("models", CafProviderCommands.Models);
         app.Add("auth", CafAuthCommands.Auth);
         app.Add("config", CafConfigCommands.Config);
+        app.Add("logs", CafLogsCommands.Logs);
         await app.RunAsync([verb, ..rest]).ConfigureAwait(false);
         return Environment.ExitCode;
     }
