@@ -3,16 +3,15 @@
 // ConsoleEx-side single parser straight to cells: no ANSI roundtrip, Unicode-aware
 // (wide/CJK/combining/emoji via UnicodeWidth + ScreenBuffer wide-pair rules).
 // Ours: this file. Full Markdown stays in the chat layer (Chat/Rendering);
-// here only the three neutral tags generic screens need:
-//
-//   [bold]…[/]  → CellStyle + Bold
-//   [dim]…[/]   → CellStyle + Dim
-//   [link]…[/] / [link=url]…[/] → CellStyle + Underline, run carries LinkTarget
+// here only the three neutral tags generic screens need: bold for emphasis,
+// dim for de-emphasis, and link (with an optional equals-url target) for
+// underlined runs whose target travels out-of-band on the run.
 //
 // Spectre-compatible subset: tag names case-insensitive, [[ escapes a literal [,
 // unknown tags and a missing [/] degrade to literal text (never throw).
 // BCL-only, AOT-compatible: no regex, no reflection, no Harbor imports.
 
+using System.Buffers;
 using System.Text;
 
 namespace Harbor.Tui.CellForge.Rendering;
