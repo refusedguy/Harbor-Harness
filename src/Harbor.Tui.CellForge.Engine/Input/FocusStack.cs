@@ -1,5 +1,5 @@
 // TR4 (#1223, epic #1195): modal focus stack over IFocusable —
-// Push/Pop/MoveToTop with blur-then-focus notifications, CanFocus-skipping,
+// Push, Pop and MoveToTop with blur-then-focus notifications, CanFocus-skipping,
 // render-thread owned. The SIBLING of FocusRouter, not its replacement:
 // FocusRouter is the flat Tab-order list (lazygit style, wrap-around);
 // this is the overlay/modal stack (Termina focus-stack analogue: a pushed

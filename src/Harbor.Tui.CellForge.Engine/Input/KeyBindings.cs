@@ -115,7 +115,7 @@ public sealed class KeyBindings
 /// focused bubble -> ViewModel.Input remainder</c>, ConsoleEx tunnel-then-
 /// bubble, over <see cref="FocusStack"/> instead of a visual tree):
 /// <list type="number">
-///   <item><description>Capture: <paramref name="capture"/> table first — a hit
+///   <item><description>Capture: <c>capture</c> table first — a hit
 ///     reports <see cref="InputDisposition.CaptureHandled"/> with the action id;
 ///     the stack is never consulted (global chords preempt focus).</description></item>
 ///   <item><description>Preview tunnel: stack bottom-up (oldest to focused),
@@ -123,7 +123,7 @@ public sealed class KeyBindings
 ///     in place (dynamic flip — the seat is the stack's business).</description></item>
 ///   <item><description>Bubble: stack top-down from the focused entry, first
 ///     <c>true</c> wins.</description></item>
-///   <item><description>Remainder: <paramref name="remainder"/> runs (when
+///   <item><description>Remainder: <c>remainder</c> runs (when
 ///     provided) and the verdict is <see cref="InputDisposition.Unhandled"/>.
 ///     Termina's <c>ViewModel.Input</c> remainder minus R3 — a plain action,
 ///     null means drop.</description></item>

@@ -84,6 +84,7 @@ public interface IFocusable : IFocusTarget, IInputHandler
 /// </summary>
 public abstract class FocusableBase : IFocusable
 {
+    /// <summary>Creates an entry with the given stable id.</summary>
     /// <param name="id">Stable id (same uniqueness rule as
     /// <see cref="FocusRouter"/> entries).</param>
     protected FocusableBase(string id)
