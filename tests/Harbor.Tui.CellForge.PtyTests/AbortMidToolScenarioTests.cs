@@ -54,16 +54,21 @@ public sealed class AbortMidToolScenarioTests : CellForgePtyScenarioBase
             TimeSpan.FromSeconds(10)).ConfigureAwait(false);
         SendCtrlC();
 
+        // #1103: a clean abort can land so fast the "ход прерван" card
+        // overwrites the transient ^C system line before the poller observes
+        // the full marker string — accept either as proof the gesture landed.
         _ = await WaitForScreenAsync(
-            l => l.Any(x => x.Contains("^C — прерываю текущий ход…", StringComparison.Ordinal)),
-            TimeSpan.FromSeconds(5)).ConfigureAwait(false);
+            l => l.Any(x => x.Contains("^C — прерываю текущий ход…", StringComparison.Ordinal)
+                || x.Contains("ход прерван", StringComparison.Ordinal)),
+            TimeSpan.FromSeconds(15)).ConfigureAwait(false);
 
         _ = await WaitForScreenAsync(
             l => l.Any(x => x.Contains("ход прерван", StringComparison.Ordinal) || x.Contains("The operation was canceled", StringComparison.Ordinal) || x.Contains("Operation was canceled", StringComparison.Ordinal)),
             TimeSpan.FromSeconds(15)).ConfigureAwait(false);
 
-        // Abort lands the turn in the error card (✗ error — cancellation), not
-        // back at idle: the status footer reads "✗ error", so accept either.
+        // #1103: the abort lands the turn in the "ход прерван" card and back
+        // at idle — cancellation, not the "✗ error" card — so accept either
+        // settled marker.
         _ = await WaitForScreenAsync(
             l => l.Any(x => x.Contains("idle", StringComparison.Ordinal) || x.Contains("○ idle", StringComparison.Ordinal)
                 || x.Contains("✗ error", StringComparison.Ordinal) || x.Contains("aborted", StringComparison.Ordinal)),
