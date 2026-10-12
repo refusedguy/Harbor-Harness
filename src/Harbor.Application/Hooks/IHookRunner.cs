@@ -132,6 +132,7 @@ public interface IHookRunner
     /// <param name="sessionId">Owning session id.</param>
     /// <param name="agent">Agent name driving the run; rides the payload as <c>agent</c>.</param>
     /// <param name="model">Resolved model id; rides the payload as <c>model</c>.</param>
+    /// <param name="ct">Cancellation token.</param>
     Task RunSessionStartAsync(
         string sessionId, string? agent = null, string? model = null, CancellationToken ct = default);
 
@@ -145,6 +146,7 @@ public interface IHookRunner
     /// <param name="prompt">The user's prompt text.</param>
     /// <param name="agent">Agent name the prompt was addressed to.</param>
     /// <param name="model">Resolved model id.</param>
+    /// <param name="ct">Cancellation token.</param>
     Task<HookVerdict> RunUserPromptSubmitAsync(
         string sessionId, string prompt, string? agent = null, string? model = null,
         CancellationToken ct = default);
@@ -157,6 +159,7 @@ public interface IHookRunner
     /// <param name="sessionId">Owning session id.</param>
     /// <param name="agent">Agent name driving the run.</param>
     /// <param name="model">Resolved model id whose context window triggered the pass.</param>
+    /// <param name="ct">Cancellation token.</param>
     Task RunPreCompactAsync(
         string sessionId, string? agent = null, string? model = null, CancellationToken ct = default);
 }
