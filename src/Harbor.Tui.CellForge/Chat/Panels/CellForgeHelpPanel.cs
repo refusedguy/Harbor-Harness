@@ -7,7 +7,8 @@ namespace Harbor.Tui.CellForge.Panels;
 /// <summary>
 ///     Cell-native help panel: shared <see cref="HelpKeymap"/> hotkey rows plus one
 ///     row per registered panel (from <see cref="IPanelRegistry"/> on
-///     <see cref="PanelServices"/>) plus the slash command list. <c>?</c> while
+///     <see cref="PanelServices"/>) plus the slash command list plus the jump
+///     palette's action hints. <c>?</c> while
 ///     focused
 ///     dispatches <c>AppMsg.TogglePanel("help")</c>.
 /// </summary>
@@ -67,6 +68,14 @@ public sealed class CellForgeHelpPanel : CellForgePanelBase
         {
             rows.Add($"  {cmd}");
         }
+
+        // O8 steal (#1177, epic #1155 — the opencode DialogSelect footer-hints
+        // analog): the jump palette's action hints, projected from the panel's
+        // own footer text so the two cannot drift. HelpKeymap stays untouched
+        // (its row count is pinned) — this is palette gestures, not hotkeys.
+        rows.Add(string.Empty);
+        rows.Add("Jump palette");
+        rows.Add($"  Ctrl+J toggle · {CellForgeJumpPalettePanel.HintFooter}");
 
         rows.Add(string.Empty);
         rows.Add("Press ? to close this panel.");
