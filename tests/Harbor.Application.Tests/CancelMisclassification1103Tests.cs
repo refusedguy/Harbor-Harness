@@ -241,9 +241,6 @@ public class CancelMisclassification1103Tests
 
         public IReadOnlyList<AgentEvent> GetScrollback(int maxEvents) => [];
     }
-}
-        await Assert.That(end.Cancelled).IsTrue();
-    }
 
     /// <summary>Probe tool: records whether the gate ever let it execute.</summary>
     private sealed class GateProbeTool : ITool
