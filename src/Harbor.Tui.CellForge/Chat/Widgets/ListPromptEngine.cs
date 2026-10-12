@@ -19,9 +19,10 @@ public enum ListSelectionMode
     /// leaf-index table (the palette section-header idiom).</summary>
     Leaf = 1,
 
-    /// <summary>Like <see cref="Leaf"/>, plus toggle with parent recount:
-    /// toggling a group flips its whole subtree, and an ancestor is selected
-    /// exactly when all of its children are.</summary>
+    /// <summary>Headers are navigable stops (unlike <see cref="Leaf"/>),
+    /// plus toggle with parent recount: toggling a group flips its whole
+    /// subtree, and an ancestor is selected exactly when all of its
+    /// children are.</summary>
     Multiple = 2,
 }
 
@@ -254,7 +255,7 @@ public sealed class ListPromptState<T> where T : notnull
             return;
         }
 
-        if (mode == ListSelectionMode.Single)
+        if (mode != ListSelectionMode.Leaf)
         {
             Index = Math.Clamp(initialIndex, 0, Items.Count - 1);
             return;
@@ -316,7 +317,7 @@ public sealed class ListPromptState<T> where T : notnull
             return false;
         }
 
-        if (Mode == ListSelectionMode.Single)
+        if (Mode != ListSelectionMode.Leaf)
         {
             return SetFlatIndex(WrapAround ? Wrap(Index + delta, Items.Count) : Math.Clamp(Index + delta, 0, Items.Count - 1));
         }
@@ -336,7 +337,8 @@ public sealed class ListPromptState<T> where T : notnull
         return SetFlatIndex(_leafIndexes[next]);
     }
 
-    /// <summary>Parks the cursor on a flat row (nearest leaf at-or-after, else before, in Leaf/Multiple).</summary>
+    /// <summary>Parks the cursor on a flat row (nearest leaf at-or-after, else before, in Leaf mode;
+    /// Multiple parks on headers too, so groups stay toggleable).</summary>
     public bool MoveTo(int flatIndex)
     {
         if (Items.Count == 0 || Index < 0)
@@ -345,7 +347,7 @@ public sealed class ListPromptState<T> where T : notnull
         }
 
         int target = Math.Clamp(flatIndex, 0, Items.Count - 1);
-        if (Mode != ListSelectionMode.Single && Items[target].IsGroup)
+        if (Mode == ListSelectionMode.Leaf && Items[target].IsGroup)
         {
             target = NearestLeaf(target);
             if (target < 0)
@@ -424,6 +426,7 @@ public sealed class ListPromptState<T> where T : notnull
         {
             bool target = !SubtreeSelected(node);
             SetSubtree(node, target);
+            node.IsSelected = target; // the group recounts to the same target its subtree just took
         }
         else
         {
@@ -489,7 +492,7 @@ public sealed class ListPromptState<T> where T : notnull
 
     private bool MoveToLeafOrFlat(int flatIndex, bool fromStart)
     {
-        if (Mode == ListSelectionMode.Single)
+        if (Mode != ListSelectionMode.Leaf)
         {
             return SetFlatIndex(Math.Clamp(flatIndex, 0, Items.Count - 1));
         }
