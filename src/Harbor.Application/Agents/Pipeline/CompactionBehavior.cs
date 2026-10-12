@@ -1,6 +1,7 @@
 using Harbor.Abstractions.Events;
 using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Sessions;
+using Harbor.Application.Hooks;
 using Harbor.Application.Sessions;
 using Harbor.Application.Telemetry;
 using Harbor.Diagnostics;
@@ -18,13 +19,19 @@ namespace Harbor.Application.Agents.Pipeline;
 ///     <c>truncationFallback</c> flag for the run and feeds it back in each turn.
 ///     Once the flag is set the behavior never retries compaction — the current
 ///     and every subsequent turn build their request from a strictly reduced tail.
+///     <para>
+///         PX4 slice 2: an optional <see cref="IHookRunner" /> fires the
+///         advisory <c>PreCompact</c> event before the summarizer runs. Null
+///         (tests, direct construction) keeps the hooks-free path byte-for-byte.
+///     </para>
 /// </remarks>
 public sealed class CompactionBehavior(
     ICompactionService compaction,
     ITokenTracker tokenTracker,
     IEventBus eventBus,
     IMetrics metrics,
-    ILogger logger)
+    ILogger logger,
+    IHookRunner? hookRunner = null)
 {
     /// <summary>
     ///     Run the pre-turn compaction pass for one turn.
@@ -52,6 +59,31 @@ public sealed class CompactionBehavior(
 
         using var activity = HarborTelemetry.Source.StartActivity("Compaction");
         logger.LogInformation("Compaction triggered for session {SessionId}", session.Session.Id);
+        // PX4 slice 2: advisory notification before the history is summarized.
+        // Runs first so a hook that observes the shrink sees the pre-summary
+        // world; it cannot veto, delay or rewrite the compaction itself.
+        if (hookRunner is not null)
+        {
+            try
+            {
+                // The session record names the agent that owns it — the
+                // behavior has no AgentDefinition of its own, and inventing a
+                // second source for that name would drift from the session.
+                await hookRunner.RunPreCompactAsync(
+                    session.Session.Id, session.Session.Agent, model.Id, ct).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                // The runner is contracted never to throw on its own; a
+                // hooks-subsystem failure must not stop compaction.
+                logger.LogWarning(ex, "PreCompact hooks failed for session {SessionId}", session.Session.Id);
+            }
+        }
+
         await eventBus.PublishAsync(new CompactionStartedEvent(session.Session.Id), ct).ConfigureAwait(false);
         // O9/T.6: record the PRE-compaction context size so the drop
         // is observable per transformation, not just via TokensSaved.

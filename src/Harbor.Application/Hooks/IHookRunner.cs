@@ -1,7 +1,8 @@
 namespace Harbor.Application.Hooks;
 
 /// <summary>
-///     A hook command's decision for one tool call.
+///     A hook command's decision for the work it was asked about (a tool call
+///     or a prompt).
 /// </summary>
 public enum HookDecision
 {
@@ -38,12 +39,39 @@ public sealed record HookVerdict(HookDecision Decision, string? Reason, JsonElem
 /// <param name="Args">Raw tool-call args; null for SessionEnd.</param>
 /// <param name="Result">Tool output text (PostToolUse only); null otherwise.</param>
 /// <param name="SessionId">Owning session id.</param>
+/// <remarks>
+///     <para>
+///         The three trailing members were added by slice 2 for the session
+///         and prompt events, and are null on every slice-1 event — so a hook
+///         written against slice 1 keeps working, and one written against
+///         slice 2 reads them by name (never by position).
+///     </para>
+///     <para>
+///         They are <c>init</c> properties rather than positional parameters
+///         deliberately: a positional record's parameters are order-bound, and
+///         appending three to the tail would silently re-map any construction
+///         that passed fewer.
+///     </para>
+/// </remarks>
 public sealed record HookPayload(
     [property: JsonPropertyName("event")] string Event,
     [property: JsonPropertyName("tool")] string? Tool,
     [property: JsonPropertyName("args")] JsonElement? Args,
     [property: JsonPropertyName("result")] string? Result,
-    [property: JsonPropertyName("sessionId")] string SessionId);
+    [property: JsonPropertyName("sessionId")] string SessionId)
+{
+    /// <summary>Agent name driving the run (SessionStart / UserPromptSubmit / PreCompact); null elsewhere.</summary>
+    [JsonPropertyName("agent")]
+    public string? Agent { get; init; }
+
+    /// <summary>Resolved model id for the run; null on slice-1 events and when unresolved.</summary>
+    [JsonPropertyName("model")]
+    public string? Model { get; init; }
+
+    /// <summary>The user's prompt text (<see cref="HookEvents.UserPromptSubmit" /> only); null elsewhere.</summary>
+    [JsonPropertyName("prompt")]
+    public string? Prompt { get; init; }
+}
 
 /// <summary>
 ///     Verdict a hook command prints on stdout as JSON.
@@ -61,16 +89,17 @@ public sealed record HookVerdictDto(
     [property: JsonPropertyName("editedArgs")] JsonElement? EditedArgs);
 
 /// <summary>
-///     Runs user hook commands (PX4, slice 1). Plain shell commands from
+///     Runs user hook commands (PX4, slices 1–2). Plain shell commands from
 ///     <c>~/.harbor/hooks.json</c> — no plugin machinery, no Roslyn, no
 ///     <c>Assembly.Load</c>.
 /// </summary>
 /// <remarks>
-///     Fail-closed where it matters: <c>PreToolUse</c> denies when a hook
-///     times out, cannot start, prints invalid JSON, or names an unknown
-///     decision. <c>PostToolUse</c>/<c>SessionEnd</c> are advisory — hook
-///     failures are logged and never fail the run. No method here throws
-///     except on a cancelled <see cref="CancellationToken" />.
+///     Fail-closed where it matters: <c>PreToolUse</c> and
+///     <c>UserPromptSubmit</c> deny when a hook times out, cannot start,
+///     prints invalid JSON, or names an unknown decision.
+///     <c>PostToolUse</c>/<c>SessionStart</c>/<c>PreCompact</c>/<c>SessionEnd</c>
+///     are advisory — hook failures are logged and never fail the run. No
+///     method here throws except on a cancelled <see cref="CancellationToken" />.
 /// </remarks>
 public interface IHookRunner
 {
@@ -95,4 +124,42 @@ public interface IHookRunner
     ///     <see cref="RunPostToolUseAsync" />.
     /// </summary>
     Task RunSessionEndAsync(string sessionId, CancellationToken ct = default);
+
+    /// <summary>
+    ///     Run every <c>SessionStart</c> hook once, after the run's start
+    ///     event. Advisory, same contract as <see cref="RunPostToolUseAsync" />.
+    /// </summary>
+    /// <param name="sessionId">Owning session id.</param>
+    /// <param name="agent">Agent name driving the run; rides the payload as <c>agent</c>.</param>
+    /// <param name="model">Resolved model id; rides the payload as <c>model</c>.</param>
+    /// <param name="ct">Cancellation token.</param>
+    Task RunSessionStartAsync(
+        string sessionId, string? agent = null, string? model = null, CancellationToken ct = default);
+
+    /// <summary>
+    ///     Run every <c>UserPromptSubmit</c> hook for one prompt. A gate,
+    ///     fail-closed on the same terms as <see cref="RunPreToolUseAsync" /> —
+    ///     but there are no args to edit, so <c>edit</c>/<c>editedArgs</c> are
+    ///     ignored here by design (an unedited verdict still means allow).
+    /// </summary>
+    /// <param name="sessionId">Owning session id.</param>
+    /// <param name="prompt">The user's prompt text.</param>
+    /// <param name="agent">Agent name the prompt was addressed to.</param>
+    /// <param name="model">Resolved model id.</param>
+    /// <param name="ct">Cancellation token.</param>
+    Task<HookVerdict> RunUserPromptSubmitAsync(
+        string sessionId, string prompt, string? agent = null, string? model = null,
+        CancellationToken ct = default);
+
+    /// <summary>
+    ///     Run every <c>PreCompact</c> hook once, before compaction summarizes
+    ///     history. Advisory, same contract as <see cref="RunPostToolUseAsync" />:
+    ///     a hook observes the shrink, it cannot veto or delay it.
+    /// </summary>
+    /// <param name="sessionId">Owning session id.</param>
+    /// <param name="agent">Agent name driving the run.</param>
+    /// <param name="model">Resolved model id whose context window triggered the pass.</param>
+    /// <param name="ct">Cancellation token.</param>
+    Task RunPreCompactAsync(
+        string sessionId, string? agent = null, string? model = null, CancellationToken ct = default);
 }
