@@ -303,6 +303,14 @@ public sealed class WhichKeyHelpOverlay
         {
             buffer.SetText(box.X + 2, box.Y + 1 + i, visible[i], StyleFor(i, visible[i]));
         }
+
+        if (lines.Count > rows && rows > 0)
+        {
+            // The box is capped at MaxHeight, so a long hotkey table plus leader
+            // rows can overflow it — and the clipped line is the dismiss footer,
+            // the one line that must stay reachable. It takes the last row.
+            buffer.SetText(box.X + 2, box.Y + 1 + rows - 1, lines[^1], StyleFor(rows - 1, lines[^1]));
+        }
     }
 
     internal List<string> BuildLines(int innerWidth)
