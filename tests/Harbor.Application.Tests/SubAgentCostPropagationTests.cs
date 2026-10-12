@@ -5,6 +5,7 @@ using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Abstractions.Permissions;
 using Harbor.Abstractions.Sessions;
 using Harbor.Application.Agents;
+using Harbor.TestKit;
 using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Harbor.Application.Tests;
@@ -62,6 +63,34 @@ public class SubAgentCostPropagationTests
             foreach (AgentMessage message in _replies)
                 await session.AppendMessageAsync(message, ct).ConfigureAwait(false);
             return _outcome ?? Result.Success();
+        }
+    }
+
+    /// <summary>
+    ///     Loop fake that prices the child run the way the real turn path does:
+    ///     appends the replies, then folds their usage into the child session's
+    ///     own stats record with real rates (TurnRunner passes the resolved
+    ///     model's pricing to UpdateStatsAsync).
+    /// </summary>
+    private sealed class PricingLoop : IAgentLoop
+    {
+        private readonly Usage _usage;
+        private readonly Pricing _pricing;
+        private readonly AgentMessage[] _replies;
+
+        public PricingLoop(Usage usage, Pricing pricing, params AgentMessage[] replies)
+        {
+            _usage = usage;
+            _pricing = pricing;
+            _replies = replies;
+        }
+
+        public async Task<Result> RunAsync(ISessionContext session, AgentDefinition agent, CancellationToken ct = default)
+        {
+            foreach (AgentMessage message in _replies)
+                await session.AppendMessageAsync(message, ct).ConfigureAwait(false);
+            await session.UpdateStatsAsync(_usage, _pricing, ct).ConfigureAwait(false);
+            return Result.Success();
         }
     }
 
@@ -178,12 +207,30 @@ public class SubAgentCostPropagationTests
 
         public Task<Result<SessionMetadata>> GetStatsAsync(string sessionId, CancellationToken ct = default)
         {
+            return GetStatsSnapshotAsync(sessionId, ct);
+        }
+
+        /// <summary>
+        ///     Optional delay before a stats read resolves (#1105): the
+        ///     snapshot is taken up-front and served stale after the delay, so
+        ///     two overlapping read-modify-write cycles deterministically fold
+        ///     from the same base and one delta is lost without serialization.
+        /// </summary>
+        public TimeSpan StatsReadDelay { get; set; }
+
+        private async Task<Result<SessionMetadata>> GetStatsSnapshotAsync(string sessionId, CancellationToken ct)
+        {
+            Result<SessionMetadata> snapshot;
             lock (_lock)
             {
-                return Task.FromResult(_stats.TryGetValue(sessionId, out var metadata)
+                snapshot = _stats.TryGetValue(sessionId, out var metadata)
                     ? Result.Success(metadata)
-                    : Result.Failure<SessionMetadata>($"Session '{sessionId}' was not found."));
+                    : Result.Failure<SessionMetadata>($"Session '{sessionId}' was not found.");
             }
+
+            if (StatsReadDelay > TimeSpan.Zero)
+                await Task.Delay(StatsReadDelay, ct).ConfigureAwait(false);
+            return snapshot;
         }
 
         public Task<Result> UpdateStatsAsync(string sessionId, SessionMetadata metadata, CancellationToken ct = default)
@@ -271,6 +318,30 @@ public class SubAgentCostPropagationTests
         await Assert.That(store.UpdatedStats[0].Metadata.TokensInput).IsEqualTo(100);
         await Assert.That(store.UpdatedStats[0].Metadata.TokensOutput).IsEqualTo(50);
         await Assert.That(store.UpdatedStats[0].Metadata.TokensReasoning).IsEqualTo(3);
+    }
+
+    [Test]
+    public async Task RunAsync_Success_PropagatesChildPricedCost()
+    {
+        var parent = NewParent();
+        var store = new CostFakeStore();
+        store.Seed(parent);
+        var childUsage = new Usage(100, 50);
+        var pricing = new Pricing(2m, 8m);
+        var loop = new PricingLoop(childUsage, pricing, AssistantWithUsage("done", childUsage));
+        var runner = new SubAgentRunner(store, loop, NullLogger<SubAgentRunner>.Instance);
+
+        var result = await runner.RunAsync(SubAgent(), new SubAgentRunRequest("go", ParentSessionId: parent.Id));
+
+        await Assert.That(result.IsSuccess).IsTrue();
+        var stats = await store.GetStatsAsync(parent.Id);
+        await Assert.That(stats.IsSuccess).IsTrue();
+        // #1105: the child's priced total crosses into the parent — the old
+        // Pricing.Unknown fold left Cost 0 with IsCostKnown=false.
+        await Assert.That(stats.Value.Cost).IsEqualTo(pricing.CalculateCost(childUsage));
+        await Assert.That(stats.Value.IsCostKnown).IsTrue();
+        await Assert.That(stats.Value.TokensInput).IsEqualTo(100);
+        await Assert.That(stats.Value.TokensOutput).IsEqualTo(50);
     }
 
     [Test]
@@ -374,5 +445,76 @@ public class SubAgentCostPropagationTests
         var stats = await store.GetStatsAsync(parent.Id);
         await Assert.That(stats.Value.TokensInput).IsEqualTo(10 * children);
         await Assert.That(stats.Value.TokensOutput).IsEqualTo(5 * children);
+    }
+
+    /// <summary>
+    ///     Loop fake that captures the live session context so the test can
+    ///     issue a turn debit against the same session a propagation targets.
+    /// </summary>
+    private sealed class ContextCapturingLoop : IAgentLoop
+    {
+        public ISessionContext? Captured;
+
+        public Task<Result> RunAsync(ISessionContext session, AgentDefinition agent, CancellationToken ct = default)
+        {
+            Captured = session;
+            return Task.FromResult(Result.Success());
+        }
+    }
+
+    [Test]
+    public async Task TurnUpdate_RacingChildPropagation_LosesNoDebit()
+    {
+        var parent = NewParent();
+        // Stats-only propagation (no ParentMessageId): the race is purely the
+        // stats read-modify-write, so no parent message seeding is needed.
+        var store = new CostFakeStore { StatsReadDelay = TimeSpan.FromMilliseconds(200) };
+        store.Seed(parent);
+        var capture = new ContextCapturingLoop();
+        using var agent = new DefaultAgent(
+            store, capture, new FakeEventBus(), NullLogger<DefaultAgent>.Instance);
+        agent.Initialize(parent, TestAgents.AllowAll());
+        var prompt = await agent.PromptAsync("go");
+        await Assert.That(prompt.IsSuccess).IsTrue();
+        ISessionContext? parentContext = capture.Captured;
+        await Assert.That(parentContext).IsNotNull();
+
+        var loop = new CostLoop(null, AssistantWithUsage("done", new Usage(100, 50)));
+        var runner = new SubAgentRunner(store, loop, NullLogger<SubAgentRunner>.Instance);
+
+        // A turn debit racing a child-cost completion: without the shared
+        // gate (#1105) both fold from the same stale base and one delta is lost.
+        var turn = parentContext!.UpdateStatsAsync(new Usage(7, 3), Pricing.Unknown);
+        var propagation = runner.RunAsync(SubAgent(), new SubAgentRunRequest("go", ParentSessionId: parent.Id));
+        await Task.WhenAll(turn, propagation);
+        await Assert.That(propagation.Result.IsSuccess).IsTrue();
+        var stats = await store.GetStatsAsync(parent.Id);
+        await Assert.That(stats.Value.TokensInput).IsEqualTo(107);
+        await Assert.That(stats.Value.TokensOutput).IsEqualTo(53);
+    }
+
+    [Test]
+    public async Task RunAsync_ManyDistinctParents_GateStorageStaysBounded()    {
+        var store = new CostFakeStore();
+        var loop = new CostLoop(null, AssistantWithUsage("done", new Usage(10, 5)));
+        var runner = new SubAgentRunner(store, loop, NullLogger<SubAgentRunner>.Instance);
+
+        const int parents = 48;
+        for (int i = 0; i < parents; i++)
+        {
+            var parent = Session.Create(
+                Harbor.TestKit.TestTempDirs.NewDirectory("harbor-gate-" + i), "code", "test", "test-model");
+            store.Seed(parent);
+            var outcome = await runner.RunAsync(SubAgent(), new SubAgentRunRequest("go", ParentSessionId: parent.Id));
+            await Assert.That(outcome.IsSuccess).IsTrue();
+        }
+
+        // #1105: gate storage must be fixed stripes, not one entry per parent session.
+        var field = typeof(SubAgentRunner).GetField(
+            "ParentCostGates",
+            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
+        await Assert.That(field).IsNotNull();
+        var gates = (System.Threading.SemaphoreSlim[])field!.GetValue(null)!;
+        await Assert.That(gates.Length).IsLessThan(17);
     }
 }

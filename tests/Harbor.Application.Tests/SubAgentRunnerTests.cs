@@ -215,6 +215,51 @@ public class SubAgentRunnerTests
     }
 
     [Test]
+    public async Task BackgroundTask_DetachedFromSubRun_StartsFreshNestingChain()
+    {
+        var store = new FakeSessionStore(NewSession());
+        var innerRunner = new SubAgentRunner(
+            store, new ScriptedLoop(replies: Assistant("bg done")), NullLogger<SubAgentRunner>.Instance);
+        bool? canSpawnInBackground = null;
+        Result<SubAgentRunResult>? bgOutcome = null;
+
+        var outerLoop = new ScriptedLoop(replies: Assistant("outer"))
+        {
+            MidRun = async () =>
+            {
+                // Launched from inside a sub-run (depth=1): the detached run
+                // must not inherit the launcher's AsyncLocal depth (#1105).
+                var registry = new BackgroundTaskRegistry();
+                var started = registry.Start("explore", "parent-1", ct =>
+                {
+                    canSpawnInBackground = innerRunner.CanSpawn;
+                    return innerRunner.RunAsync(SubAgent(), new SubAgentRunRequest("bg task"), ct);
+                }, CancellationToken.None);
+                await Assert.That(started.IsSuccess).IsTrue();
+
+                using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+                while (bgOutcome is null && !timeout.IsCancellationRequested)
+                {
+                    var done = registry.DrainCompleted("parent-1");
+                    if (done.Count > 0)
+                        bgOutcome = done[0].Result;
+                    else
+                        await Task.Delay(20).ConfigureAwait(false);
+                }
+            }
+        };
+        var outer = new SubAgentRunner(store, outerLoop, NullLogger<SubAgentRunner>.Instance);
+
+        var result = await outer.RunAsync(SubAgent(), new SubAgentRunRequest("outer task"));
+
+        await Assert.That(result.IsSuccess).IsTrue();
+        await Assert.That(canSpawnInBackground).IsTrue();
+        await Assert.That(bgOutcome).IsNotNull();
+        await Assert.That(bgOutcome!.Value.IsSuccess).IsTrue();
+        await Assert.That(bgOutcome.Value.Value.FinalOutput).IsEqualTo("bg done");
+    }
+
+    [Test]
     public async Task CanSpawn_TrueAtTopLevel()
     {
         var store = new FakeSessionStore(NewSession());
@@ -398,6 +443,21 @@ public class SubAgentRunnerTests
         await runner.RunAsync(SubAgent(), new SubAgentRunRequest("go", WorkingDirectory: workdir));
 
         await Assert.That(store.LastCreatedDirectory).IsEqualTo(workdir);
+    }
+
+    [Test]
+    public async Task RunAsync_NoWorkingDirectory_InheritsParentSessionDirectory()
+    {
+        var parent = Session.Create(
+            Harbor.TestKit.TestTempDirs.NewDirectory("harbor-parent-dir"), "code", "test", "test-model");
+        var store = new FakeSessionStore(parent);
+        var loop = new ScriptedLoop(replies: Assistant("ok"));
+        var runner = new SubAgentRunner(store, loop, NullLogger<SubAgentRunner>.Instance);
+
+        var result = await runner.RunAsync(SubAgent(), new SubAgentRunRequest("go", ParentSessionId: parent.Id));
+
+        await Assert.That(result.IsSuccess).IsTrue();
+        await Assert.That(store.LastCreatedDirectory).IsEqualTo(parent.Directory);
     }
 
     [Test]

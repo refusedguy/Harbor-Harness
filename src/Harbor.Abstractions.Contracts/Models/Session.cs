@@ -183,6 +183,35 @@ public sealed partial record SessionMetadata(
             MessageCount = MessageCount + 1
         };
     }
+
+    /// <summary>
+    ///     Returns a copy of this metadata with a sub-agent run's token delta
+    ///     folded in, carrying the cost the child's own store record already
+    ///     priced (#1105). That record is written by the core turn path with
+    ///     the child model's real rates, so re-pricing the tokens here (with
+    ///     <see cref="Pricing.Unknown" />, the only rate that layer holds)
+    ///     would silently floor the money to zero. The known-flag is AND-ed:
+    ///     one unpriced leg keeps the total unknown instead of quoting a
+    ///     partial sum as measured.
+    /// </summary>
+    /// <param name="usage">The child's aggregated token delta.</param>
+    /// <param name="childCost">The child's stored total cost for that delta.</param>
+    /// <param name="childCostKnown">The child's stored cost-known flag.</param>
+    /// <returns>A new <see cref="SessionMetadata" /> with the delta folded in.</returns>
+    public SessionMetadata AddExternalCost(Usage usage, decimal childCost, bool childCostKnown)
+    {
+        return this with
+        {
+            Cost = Cost + childCost,
+            IsCostKnown = IsCostKnown && childCostKnown,
+            TokensInput = TokensInput + usage.InputTokens,
+            TokensOutput = TokensOutput + usage.OutputTokens,
+            TokensReasoning = TokensReasoning + (usage.ReasoningTokens ?? 0),
+            TokensCacheRead = TokensCacheRead + (usage.CacheReadTokens ?? 0),
+            TokensCacheWrite = TokensCacheWrite + (usage.CacheWriteTokens ?? 0),
+            MessageCount = MessageCount + 1
+        };
+    }
 }
 
 /// <summary>

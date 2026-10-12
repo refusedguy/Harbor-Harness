@@ -61,7 +61,20 @@ public sealed class BackgroundTaskRegistry : IBackgroundTaskRegistry
         // turn boundaries leave it alive — and CancelSession can fire the
         // owned source even after the launcher's token is gone.
         var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-        var task = Task.Run(() => run(cts.Token), CancellationToken.None);
+        // #1105: a detached run is a NEW logical chain — suppress the
+        // ExecutionContext flow so it does not inherit the launcher's
+        // AsyncLocal SubAgentRunner depth (a background launch from inside a
+        // sub-run would otherwise trip the nesting guard, or vice versa).
+        Task<Result<SubAgentRunResult>> task;
+        AsyncFlowControl flow = ExecutionContext.SuppressFlow();
+        try
+        {
+            task = Task.Run(() => run(cts.Token), CancellationToken.None);
+        }
+        finally
+        {
+            flow.Undo();
+        }
         _runs[id] = task;
         _sources[id] = cts;
         _meta[id] = (agentName, sessionId);
