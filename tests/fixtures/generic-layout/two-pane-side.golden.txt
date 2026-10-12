@@ -1,0 +1,9 @@
+# golden: two-pane-side (36x8)
+› Left             Right
+west               east
+
+
+
+
+
+

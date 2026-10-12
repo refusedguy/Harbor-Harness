@@ -1,0 +1,13 @@
+# golden: three-pane (40x12)
+› One
+first
+
+
+Three
+third
+
+
+
+Two
+second
+

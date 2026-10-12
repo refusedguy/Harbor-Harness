@@ -1,0 +1,10 @@
+# golden: list-basic (30x9)
+› Pick one
+  alpha
+> beta
+  gamma
+
+
+
+
+
