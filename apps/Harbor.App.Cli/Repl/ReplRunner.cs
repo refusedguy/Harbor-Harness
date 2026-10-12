@@ -173,26 +173,31 @@ internal sealed class ReplRunner
         // failure already returned above. It exists to satisfy the analyzer, NOT
         // to paper over a failed load.
         HarborConfig config = configResult.IsSuccess ? configResult.Value : HarborConfig.Default;
-        if (TuiMode.IsCellForgeSelected())
+        // PX2 slice 2 (issue #1248): first-run (!Onboarded) enters CellForge
+        // with the setup overlay up. The legacy diversion survives only behind
+        // HARBOR_LEGACY_SETUP=1 — see TuiMode.ShouldEnterCellForge.
+        if (TuiMode.ShouldEnterCellForge(config.Ui.CellForge.Enabled, config.Onboarded))
         {
-            if (!config.Ui.CellForge.Enabled)
+            if (!config.Onboarded)
             {
-                _logger.LogWarning("CellForge выбран (tui/env), но ui.consoleEx.enabled=false — используется legacy-рендер");
+                _logger.LogInformation("CellForge first-run: onboarding не завершён — вход с setup-оверлеем");
             }
-            else if (!config.Onboarded)
-            {
-                _logger.LogInformation("CellForge отложен: onboarding не завершён — мастер требует legacy-рендер");
-            }
-            else
-            {
-                var consoleResult = await RunCellForgeAsync(config, ct).ConfigureAwait(false);
-                if (consoleResult.IsSuccess)
-                {
-                    return consoleResult.Value;
-                }
 
-                _logger.LogWarning("CellForge недоступен ({Reason}) — откат на legacy-рендер", consoleResult.Error);
+            var consoleResult = await RunCellForgeAsync(config, ct).ConfigureAwait(false);
+            if (consoleResult.IsSuccess)
+            {
+                return consoleResult.Value;
             }
+
+            _logger.LogWarning("CellForge недоступен ({Reason}) — откат на legacy-рендер", consoleResult.Error);
+        }
+        else if (TuiMode.IsCellForgeSelected() && !config.Ui.CellForge.Enabled)
+        {
+            _logger.LogWarning("CellForge выбран (tui/env), но ui.consoleEx.enabled=false — используется legacy-рендер");
+        }
+        else if (TuiMode.IsCellForgeSelected() && !config.Onboarded)
+        {
+            _logger.LogInformation("CellForge отложен: onboarding не завершён и HARBOR_LEGACY_SETUP=1 — мастер требует legacy-рендер");
         }
 
         _logger.LogInformation("Interactive REPL starting — renderer={RendererType}", _renderer.GetType().Name);

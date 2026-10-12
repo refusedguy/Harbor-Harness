@@ -1,6 +1,7 @@
 using System.Text;
 using Harbor.Abstractions.Events;
 using Harbor.Abstractions.Models.Identifiers;
+using Harbor.Application.Configuration;
 using Harbor.DesignSystem;
 using Harbor.Hosting.Themes;
 using Harbor.Tui.CellForge.Capabilities;
@@ -108,6 +109,36 @@ internal sealed class ReplLifecycle(CellForgeReplRunner host)
         // The provider probe it starts runs off-thread; a detection failure
         // leaves the checklist empty and never blocks the first frame.
         await host.Setup.InitializeAsync(ct).ConfigureAwait(false);
+
+        // PX2 slice 2 (issue #1248): first-run enters CellForge with the setup
+        // overlay up — the legacy wizard survives only behind
+        // HARBOR_LEGACY_SETUP=1 (gated in ReplRunner). An unloadable config
+        // counts as "never completed", mirroring HasCompletedSetupAsync. The
+        // checklist above may have opened too; the input loop offers keys to
+        // the onboarding flow first, so the dialog owns the keyboard while it
+        // is up. Never throws: setup is a convenience surface, not startup.
+        try
+        {
+            // IsSuccess ternary, not a bare `.Value` — the guarded shape
+            // RunInteractiveAsync uses above. The default arm doubles as the
+            // unloadable-config rule: HarborConfig.Default is !Onboarded, so a
+            // config that cannot be read counts as "never completed",
+            // mirroring HasCompletedSetupAsync.
+            var firstRunConfig = await host.ConfigStore.LoadAsync(ct).ConfigureAwait(false);
+            HarborConfig firstRun = firstRunConfig.IsSuccess ? firstRunConfig.Value : HarborConfig.Default;
+            if (!firstRun.Onboarded && !host.Onboarding.Active)
+            {
+                await host.Onboarding.OpenAsync(ct).ConfigureAwait(false);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // REPL is shutting down — nothing to set up.
+        }
+        catch (Exception ex)
+        {
+            host.Log.LogWarning(ex, "First-run setup overlay failed to open — continuing without it");
+        }
 
         // #170: the heartbeat must outlive Idle while a mascot reaction/latch
         // still owes motion — the bridge polls both directors every frame.

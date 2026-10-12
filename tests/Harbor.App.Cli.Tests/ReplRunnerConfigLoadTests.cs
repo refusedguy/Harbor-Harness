@@ -38,6 +38,7 @@ using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Agents;
 using Harbor.Abstractions.Events;
 using Harbor.Abstractions.Models;
+using Harbor.App.Cli.Hosting;
 using Harbor.App.Cli.Repl;
 using Harbor.Application.Configuration;
 using Harbor.Application.Onboarding;
@@ -328,12 +329,192 @@ public class ReplRunnerConfigLoadTests
 
     // ── Harness ──────────────────────────────────────────────────────────────
 
+    /// <summary>
+    ///     PX2 slice 2 (issue #1248): the explicit legacy-fallback flag.
+    ///     <c>HARBOR_LEGACY_SETUP=1</c>/<c>true</c> (case-insensitive) opts a
+    ///     first run back into the legacy line-reader wizard; anything else —
+    ///     unset included — enters CellForge with the setup overlay up.
+    /// </summary>
+    [Test]
+    public async Task LegacySetupFlag_ParsesOptInValues()
+    {
+        (string? Raw, bool Expected)[] cases =
+        [
+            (null, false),
+            ("1", true),
+            ("true", true),
+            ("True", true),
+            (" 1 ", true),
+            ("0", false),
+            ("false", false),
+            ("yes", false),
+            (string.Empty, false),
+        ];
+
+        string? previous = Environment.GetEnvironmentVariable("HARBOR_LEGACY_SETUP");
+        try
+        {
+            foreach ((string? raw, bool expected) in cases)
+            {
+                Environment.SetEnvironmentVariable("HARBOR_LEGACY_SETUP", raw);
+                await Assert.That(TuiMode.IsLegacySetupRequested()).IsEqualTo(expected)
+                    .Because($"HARBOR_LEGACY_SETUP={raw ?? "<unset>"} must parse to {expected}");
+            }
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("HARBOR_LEGACY_SETUP", previous);
+        }
+    }
+
+    /// <summary>
+    ///     PX2 slice 2 (issue #1248): the gate truth table. First-run without
+    ///     the flag is the overlay entry; the flag diverts first-run to
+    ///     legacy; onboarded runs and the kill-switch are unchanged.
+    /// </summary>
+    [Test]
+    public async Task ShouldEnterCellForge_FirstRunEntersWithoutFlagAndDivertsWithIt()
+    {
+        string? previousTui = Environment.GetEnvironmentVariable("HARBOR_TUI");
+        string? previousLegacy = Environment.GetEnvironmentVariable("HARBOR_LEGACY_SETUP");
+        Environment.SetEnvironmentVariable("HARBOR_TUI", "cellforge");
+        try
+        {
+            Environment.SetEnvironmentVariable("HARBOR_LEGACY_SETUP", null);
+            await Assert.That(TuiMode.ShouldEnterCellForge(uiCellForgeEnabled: true, onboarded: false)).IsTrue()
+                .Because("first run without the flag is the setup-overlay entry, not the legacy diversion");
+            await Assert.That(TuiMode.ShouldEnterCellForge(uiCellForgeEnabled: true, onboarded: true)).IsTrue()
+                .Because("an onboarded CellForge run is unchanged by the slice");
+
+            Environment.SetEnvironmentVariable("HARBOR_LEGACY_SETUP", "1");
+            await Assert.That(TuiMode.ShouldEnterCellForge(uiCellForgeEnabled: true, onboarded: false)).IsFalse()
+                .Because("the explicit flag keeps the legacy diversion for first-run");
+            await Assert.That(TuiMode.ShouldEnterCellForge(uiCellForgeEnabled: true, onboarded: true)).IsTrue()
+                .Because("the flag diverts first-run only, never an onboarded session");
+            await Assert.That(TuiMode.ShouldEnterCellForge(uiCellForgeEnabled: false, onboarded: true)).IsFalse()
+                .Because("the ui.consoleEx kill-switch still wins over everything");
+
+            Environment.SetEnvironmentVariable("HARBOR_TUI", "plain");
+            Environment.SetEnvironmentVariable("HARBOR_LEGACY_SETUP", null);
+            await Assert.That(TuiMode.ShouldEnterCellForge(uiCellForgeEnabled: true, onboarded: false)).IsFalse()
+                .Because("a non-CellForge renderer never enters, flag or no flag");
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("HARBOR_TUI", previousTui);
+            Environment.SetEnvironmentVariable("HARBOR_LEGACY_SETUP", previousLegacy);
+        }
+    }
+
+    /// <summary>
+    ///     PX2 slice 2 (issue #1248): first-run without the flag attempts the
+    ///     CellForge path instead of diverting to the legacy wizard. The
+    ///     screens factory throwing a sentinel is the tripwire — it fires
+    ///     only on the CellForge path, before any raw-mode probe — and the
+    ///     renderer staying silent proves the legacy wizard never ran.
+    /// </summary>
+    [Test]
+    public async Task RunInteractiveAsync_FirstRunWithoutLegacyFlag_AttemptsCellForgeEntry()
+    {
+        string? previousTui = Environment.GetEnvironmentVariable("HARBOR_TUI");
+        string? previousLegacy = Environment.GetEnvironmentVariable("HARBOR_LEGACY_SETUP");
+        Environment.SetEnvironmentVariable("HARBOR_TUI", "cellforge");
+        Environment.SetEnvironmentVariable("HARBOR_LEGACY_SETUP", null);
+        try
+        {
+            var store = new ScriptedConfigStore(
+                Result.Success(Configured(onboarded: false)),
+                Result.Success(Configured()));
+            var renderer = new CapturingRenderer();
+            var agent = new RecordingAgent();
+            bool screensResolved = false;
+            ReplRunner runner = CreateRunner(
+                renderer,
+                agent,
+                new FakeAgentRegistry(TestAgents.AllowAll()),
+                store,
+                cellForgeScreens: () =>
+                {
+                    screensResolved = true;
+                    throw new InvalidOperationException("sentinel: CellForge entry attempted");
+                });
+
+            await Assert.ThrowsAsync<InvalidOperationException>(async () =>
+            {
+                await runner.RunInteractiveAsync().ConfigureAwait(false);
+            });
+
+            await Assert.That(screensResolved).IsTrue()
+                .Because("the sentinel escapes only from the CellForge path — the gate must attempt it on first run");
+            await Assert.That(renderer.Lines).IsEmpty()
+                .Because("the legacy wizard writes through the renderer; silence means it never ran");
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("HARBOR_TUI", previousTui);
+            Environment.SetEnvironmentVariable("HARBOR_LEGACY_SETUP", previousLegacy);
+        }
+    }
+
+    /// <summary>
+    ///     PX2 slice 2 (issue #1248): <c>HARBOR_LEGACY_SETUP=1</c> keeps the
+    ///     old behavior — first-run diverts to the legacy line-reader wizard
+    ///     and never resolves the CellForge screen graph. Wizard answers mirror
+    ///     the post-wizard reload test above (ollama needs no key).
+    /// </summary>
+    [Test]
+    public async Task RunInteractiveAsync_FirstRunWithLegacyFlag_StaysOnLegacyWizard()
+    {
+        string? previousTui = Environment.GetEnvironmentVariable("HARBOR_TUI");
+        string? previousLegacy = Environment.GetEnvironmentVariable("HARBOR_LEGACY_SETUP");
+        Environment.SetEnvironmentVariable("HARBOR_TUI", "cellforge");
+        Environment.SetEnvironmentVariable("HARBOR_LEGACY_SETUP", "1");
+        string? previousOllamaKey = Environment.GetEnvironmentVariable("OLLAMA_API_KEY");
+        Environment.SetEnvironmentVariable("OLLAMA_API_KEY", null);
+        try
+        {
+            var store = new ScriptedConfigStore(
+                Result.Success(Configured(onboarded: false)),
+                Result.Success(Configured()));
+            var renderer = new CapturingRenderer(
+                Maybe.From("ollama"),
+                Maybe.From(string.Empty),
+                Maybe.From("1"));
+            var agent = new RecordingAgent();
+            bool screensResolved = false;
+            ReplRunner runner = CreateRunner(
+                renderer,
+                agent,
+                new FakeAgentRegistry(TestAgents.AllowAll()),
+                store,
+                cellForgeScreens: () =>
+                {
+                    screensResolved = true;
+                    throw new InvalidOperationException("sentinel: CellForge entry must not happen under the flag");
+                });
+
+            int exitCode = await runner.RunInteractiveAsync().ConfigureAwait(false);
+
+            await Assert.That(screensResolved).IsFalse()
+                .Because("the explicit legacy flag must keep first-run off the CellForge path entirely");
+            await Assert.That(exitCode).IsEqualTo(0)
+                .Because("the legacy wizard completes on the scripted answers and the line REPL exits on closed stdin");
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("HARBOR_TUI", previousTui);
+            Environment.SetEnvironmentVariable("HARBOR_LEGACY_SETUP", previousLegacy);
+            Environment.SetEnvironmentVariable("OLLAMA_API_KEY", previousOllamaKey);
+        }
+    }
+
     private static ReplRunner CreateRunner(
         ITuiRenderer renderer,
         IAgent agent,
         IAgentRegistry agentRegistry,
         IConfigStore configStore,
-        RecordingLogger? logger = null)
+        RecordingLogger? logger = null,
+        Func<CellForgeScreens>? cellForgeScreens = null)
     {
         var authStore = new AuthStore(configStore);
         var wizard = new OnboardingWizard(configStore, authStore);
@@ -372,10 +553,11 @@ public class ReplRunnerConfigLoadTests
             rendererPipeline: null,
             tokens: null,
             // The CellForge screen graph is only built on the CellForge path, and
-            // every test here runs with the default TUI mode. A throwing stub is
-            // the honest assertion that it is not.
-            cellForgeScreens: static () => throw new InvalidOperationException(
-                "This test must not resolve the CellForge screen graph."),
+            // most tests here run with the default TUI mode. A throwing stub is
+            // the honest default assertion that it is not; the first-run gate
+            // tests pass their own factory to observe the attempt instead.
+            cellForgeScreens: cellForgeScreens ?? (static () => throw new InvalidOperationException(
+                "This test must not resolve the CellForge screen graph.")),
             rendererHost: new EmptyServiceProvider());
     }
 
