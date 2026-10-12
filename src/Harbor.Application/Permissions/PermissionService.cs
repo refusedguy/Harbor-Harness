@@ -243,7 +243,7 @@ public sealed class PermissionService : IPermissionService
             // a Deny verdict that would let the run continue.
             if (ct.IsCancellationRequested)
                 throw;
-            _logger.LogError(ex, CoreResources.GetError("PermissionDenied"), request.Permission, request.Pattern);
+            PermissionServiceLog.PermissionDenied(_logger, ex, request.Permission, request.Pattern);
             return Result.Success(new PermissionResponse(PermissionAction.Deny, false));
         }
     }
@@ -291,7 +291,7 @@ public sealed class PermissionService : IPermissionService
         var loadResult = await _configStore.LoadAsync().ConfigureAwait(false);
         if (loadResult.IsFailure)
         {
-            _logger.LogWarning("Failed to load persisted permissions: {Error}", loadResult.Error);
+            PermissionServiceLog.LoadPersistedFailed(_logger, loadResult.Error);
             return;
         }
 
@@ -309,8 +309,7 @@ public sealed class PermissionService : IPermissionService
             _persisted[agentKey] = byRule;
         }
 
-        _logger.LogInformation("Loaded {Count} persisted permission rule(s) for {AgentCount} agent(s)",
-            config.Permissions.Values.Sum(list => list.Count), config.Permissions.Count);
+        PermissionServiceLog.PersistedRulesLoaded(_logger, config.Permissions.Values.Sum(list => list.Count), config.Permissions.Count);
     }
 
     /// <summary>
@@ -345,7 +344,7 @@ public sealed class PermissionService : IPermissionService
         }, ct).ConfigureAwait(false);
         if (updateResult.IsFailure)
         {
-            _logger.LogWarning("Failed to save persisted permissions: {Error}", updateResult.Error);
+            PermissionServiceLog.SavePersistedFailed(_logger, updateResult.Error);
         }
         return updateResult;
     }
@@ -396,4 +395,24 @@ public sealed class PermissionService : IPermissionService
         // legacy wildcard for hand-composed lists without it.
         return new PathExtraction("*", false);
     }
+}
+
+/// <summary>
+///     SG2: BCL <c>[LoggerMessage]</c> delegates for <see cref="PermissionService" />.
+///     Templates, levels and operands are 1-to-1 with the former <c>LogX</c> calls.
+/// </summary>
+internal static partial class PermissionServiceLog
+{
+    [LoggerMessage(EventId = 1, Level = LogLevel.Error, Message = "Permission denied for tool '{Tool}' on agent '{Agent}'.")]
+    public static partial void PermissionDenied(ILogger logger, Exception ex, string tool, string agent);
+
+    [LoggerMessage(EventId = 2, Level = LogLevel.Warning, Message = "Failed to load persisted permissions: {Error}")]
+    public static partial void LoadPersistedFailed(ILogger logger, string error);
+
+    [LoggerMessage(EventId = 3, Level = LogLevel.Information, Message = "Loaded {Count} persisted permission rule(s) for {AgentCount} agent(s)")]
+    public static partial void PersistedRulesLoaded(ILogger logger, int count, string agentCount);
+
+    [LoggerMessage(EventId = 4, Level = LogLevel.Warning, Message = "Failed to save persisted permissions: {Error}")]
+    public static partial void SavePersistedFailed(ILogger logger, string error);
+
 }

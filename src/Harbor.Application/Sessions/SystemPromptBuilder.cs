@@ -250,12 +250,7 @@ public sealed class SystemPromptBuilder : ISystemPromptBuilder
             builder.AppendLine();
         }
 
-        _logger.LogDebug(
-            "System prompt built: {Length} chars, {ToolCount} tools, {SkillCount} skills, {FileCount} files",
-            builder.Length,
-            context.Tools.Count,
-            context.Skills.Count,
-            context.ContextFiles.Count);
+        SystemPromptBuilderLog.SystemPromptBuilt(_logger, builder.Length, context.Tools.Count, context.Skills.Count, context.ContextFiles.Count);
 
         return Task.FromResult(builder.ToString());
     }
@@ -463,4 +458,15 @@ public sealed class SystemPromptBuilder : ISystemPromptBuilder
         if (OperatingSystem.IsLinux()) return "linux";
         return RuntimeInformation.OSDescription;
     }
+}
+
+/// <summary>
+///     SG2: BCL <c>[LoggerMessage]</c> delegates for <see cref="SystemPromptBuilder" />.
+///     Templates, levels and operands are 1-to-1 with the former <c>LogX</c> calls.
+/// </summary>
+internal static partial class SystemPromptBuilderLog
+{
+    [LoggerMessage(EventId = 1, Level = LogLevel.Debug, Message = "System prompt built: {Length} chars, {ToolCount} tools, {SkillCount} skills, {FileCount} files")]
+    public static partial void SystemPromptBuilt(ILogger logger, int length, int toolCount, int skillCount, int fileCount);
+
 }

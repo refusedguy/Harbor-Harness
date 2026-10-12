@@ -102,10 +102,7 @@ public sealed class TokenTracker : ITokenTracker
         // true on EVERY turn. Refuse instead of compacting blindly.
         if (model.ContextWindow <= ReserveTokens)
         {
-            _logger.LogDebug(
-                "Skipping compaction check: context window {ContextWindow} does not exceed reserve {ReserveTokens}",
-                model.ContextWindow,
-                ReserveTokens);
+            TokenTrackerLog.SkippingCompactionCheck(_logger, model.ContextWindow, ReserveTokens);
             return false;
         }
 
@@ -151,4 +148,15 @@ public sealed class TokenTracker : ITokenTracker
     /// <param name="Estimate">Cached token estimate.</param>
     /// <param name="Count">History length the estimate covers.</param>
     private sealed record SessionEstimate(int Estimate, int Count);
+}
+
+/// <summary>
+///     SG2: BCL <c>[LoggerMessage]</c> delegates for <see cref="TokenTracker" />.
+///     Templates, levels and operands are 1-to-1 with the former <c>LogX</c> calls.
+/// </summary>
+internal static partial class TokenTrackerLog
+{
+    [LoggerMessage(EventId = 1, Level = LogLevel.Debug, Message = "Skipping compaction check: context window {ContextWindow} does not exceed reserve {ReserveTokens}")]
+    public static partial void SkippingCompactionCheck(ILogger logger, int contextWindow, int reserveTokens);
+
 }

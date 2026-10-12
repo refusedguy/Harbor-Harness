@@ -41,7 +41,7 @@ internal sealed class BackgroundDrain(
                 run => ($"[background sub-agent '{completion.AgentName}' finished — session {run.SessionId}, {run.NewMessages} message(s)]\n\n{run.FinalOutput}", false),
                 err => ($"[background sub-agent '{completion.AgentName}' failed: {err}]", true));
             entries.Add(new ToolResultEntry(completion.Id, "task", output, isError));
-            logger.LogInformation("Background task drained: id={Id} agent={Agent}", completion.Id, completion.AgentName);
+            BackgroundDrainLog.BackgroundTaskDrained(logger, completion.Id, completion.AgentName);
         }
 
         var message = new ToolResultMessage(
@@ -49,4 +49,15 @@ internal sealed class BackgroundDrain(
         await session.AppendMessageAsync(message, ct).ConfigureAwait(false);
         tokenTracker.RecordAppendedMessage(message);
     }
+}
+
+/// <summary>
+///     SG2: BCL <c>[LoggerMessage]</c> delegates for <see cref="BackgroundDrain" />.
+///     Templates, levels and operands are 1-to-1 with the former <c>LogX</c> calls.
+/// </summary>
+internal static partial class BackgroundDrainLog
+{
+    [LoggerMessage(EventId = 1, Level = LogLevel.Information, Message = "Background task drained: id={Id} agent={Agent}")]
+    public static partial void BackgroundTaskDrained(ILogger logger, string id, string agent);
+
 }

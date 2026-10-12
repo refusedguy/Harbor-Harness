@@ -78,7 +78,7 @@ public sealed class JsonConfigStore : IConfigStore
         {
             Result<HarborConfig> loaded = LoadCore();
             if (loaded.IsFailure) // §4.6-ok: единая точка лога провала загрузки (rop-final-mile B2).
-                _logger?.LogError("Failed to load config: {Error}", loaded.Error);
+                if (_logger is not null) JsonConfigStoreLog.LoadConfigFailed(_logger, loaded.Error);
             return Task.FromResult(loaded);
         }
     }
@@ -92,7 +92,7 @@ public sealed class JsonConfigStore : IConfigStore
     {
         if (!File.Exists(_configPath))
         {
-            _logger?.LogInformation("Config file not found, using defaults");
+            if (_logger is not null) JsonConfigStoreLog.ConfigFileNotFound(_logger);
             return Result.Success(HarborConfig.Default);
         }
 
@@ -160,7 +160,7 @@ public sealed class JsonConfigStore : IConfigStore
             // throws is reported the same way an IO failure is.
             return Task.FromResult(config.Validate()
                 .Bind(_ => Result.Try(() => SaveCore(config), ResultErrors.Message))
-                .TapError(error => _logger?.LogError("Failed to save config: {Error}", error)));
+                .TapError(error => if (_logger is not null) JsonConfigStoreLog.SaveConfigFailed(_logger, error)));
         }
     }
 
@@ -174,7 +174,7 @@ public sealed class JsonConfigStore : IConfigStore
         // so a reload reads the same fields back via RawConfigDto.
         string json = JsonSerializer.Serialize(config.ToRaw()!, ConfigJsonContext.Default.RawConfigDto);
         File.WriteAllText(_configPath, json);
-        _logger?.LogDebug("Config saved to {Path}", _configPath);
+        if (_logger is not null) JsonConfigStoreLog.ConfigSaved(_logger, _configPath);
     }
 
     /// <inheritdoc />
@@ -207,4 +207,24 @@ public sealed class JsonConfigStore : IConfigStore
         string harborDir = Path.Combine(home, ".harbor");
         return Path.Combine(harborDir, "config.json");
     }
+}
+
+/// <summary>
+///     SG2: BCL <c>[LoggerMessage]</c> delegates for <see cref="JsonConfigStore" />.
+///     Templates, levels and operands are 1-to-1 with the former <c>LogX</c> calls.
+/// </summary>
+internal static partial class JsonConfigStoreLog
+{
+    [LoggerMessage(EventId = 1, Level = LogLevel.Error, Message = "Failed to load config: {Error}")]
+    public static partial void LoadConfigFailed(ILogger logger, string error);
+
+    [LoggerMessage(EventId = 2, Level = LogLevel.Information, Message = "Config file not found, using defaults")]
+    public static partial void ConfigFileNotFound(ILogger logger);
+
+    [LoggerMessage(EventId = 3, Level = LogLevel.Error, Message = "Failed to save config: {Error}")]
+    public static partial void SaveConfigFailed(ILogger logger, string error);
+
+    [LoggerMessage(EventId = 4, Level = LogLevel.Debug, Message = "Config saved to {Path}")]
+    public static partial void ConfigSaved(ILogger logger, string path);
+
 }

@@ -134,7 +134,7 @@ public static class ProviderPresetCatalog
             // This runs from a static field initializer, so letting anything escape would
             // turn an unreadable config directory into a TypeInitializationException in
             // every consumer. An empty catalogue degrades the picker; it must not crash.
-            logger?.LogError(ex, "Failed to read providers/*.json — the provider picker will be empty.");
+            if (logger is not null) ProviderPresetCatalogLog.ReadProvidersFailed(logger, ex);
             return Array.Empty<ProviderPresets.Preset>();
         }
     }
@@ -156,7 +156,7 @@ public static class ProviderPresetCatalog
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
             {
                 // §4.6-ok: discovery resilience — an unreadable directory is skipped, not fatal.
-                logger?.LogWarning(ex, "Skipping provider presets from '{Dir}': {Error}", dir, ex.Message);
+                if (logger is not null) ProviderPresetCatalogLog.SkippingPresetsDir(logger, ex, dir, ex.Message);
                 continue;
             }
 
@@ -195,7 +195,7 @@ public static class ProviderPresetCatalog
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            logger?.LogWarning(ex, "Skipping provider preset config '{Path}': {Error}", path, ex.Message);
+            if (logger is not null) ProviderPresetCatalogLog.SkippingPresetConfig(logger, ex, path, ex.Message);
             return null;
         }
     }
@@ -250,4 +250,21 @@ public static class ProviderPresetCatalog
             && value.TryGetInt32(out int number)
             ? number
             : null;
+}
+
+/// <summary>
+///     SG2: BCL <c>[LoggerMessage]</c> delegates for <see cref="ProviderPresetCatalog" />.
+///     Templates, levels and operands are 1-to-1 with the former <c>LogX</c> calls.
+/// </summary>
+internal static partial class ProviderPresetCatalogLog
+{
+    [LoggerMessage(EventId = 1, Level = LogLevel.Error, Message = "Failed to read providers/*.json — the provider picker will be empty.")]
+    public static partial void ReadProvidersFailed(ILogger logger, Exception ex);
+
+    [LoggerMessage(EventId = 2, Level = LogLevel.Warning, Message = "Skipping provider presets from '{Dir}': {Error}")]
+    public static partial void SkippingPresetsDir(ILogger logger, Exception ex, string dir, string error);
+
+    [LoggerMessage(EventId = 3, Level = LogLevel.Warning, Message = "Skipping provider preset config '{Path}': {Error}")]
+    public static partial void SkippingPresetConfig(ILogger logger, Exception ex, string path, string error);
+
 }

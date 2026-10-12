@@ -112,7 +112,7 @@ internal sealed class TurnRunner(
         CancellationToken ct,
         RunBudgetTracker? budget = null)
     {
-        logger.LogDebug("Turn {Turn} start: agent={Agent} model={Model}", turn, agent.Name.Value, agent.Model);
+        TurnRunnerLog.TurnStart(logger, turn, agent.Name.Value, agent.Model);
         await eventBus.PublishAsync(new TurnStartEvent(turn, session.Session.Id), ct).ConfigureAwait(false);
 
         // The compacted view of the history, not the raw append-only
@@ -190,8 +190,7 @@ internal sealed class TurnRunner(
             streamed = await retryPolicy.ExecuteAsync(
                 attemptCt => ConsumeTurnStreamAsync(client, request, session, model, turn, attemptCt, reportPartial: m => lastPartial = m, budget: budget),
                 StreamRetryOptions,
-                (ex, attempt) => logger.LogWarning(
-                    ex, "Transient LLM stream failure on attempt {Attempt}; retrying", attempt),
+                (ex, attempt) => TurnRunnerLog.TransientStreamFailure(logger, ex, attempt),
                 ct).ConfigureAwait(false);
         }
         catch (LlmStreamErrorException lex) when (RetryPolicy.IsTransient(lex, out _))
@@ -201,8 +200,7 @@ internal sealed class TurnRunner(
             // before the failure and end the run gracefully, so the session
             // stays resumable and (sub-)callers receive partial output.
             AssistantMessage degraded = lastPartial ?? AssistantMessage.Empty(session.Session.Id, model.Id);
-            logger.LogWarning(
-                lex, "LLM stream budget exhausted on turn {Turn}; degrading with partial output ({Parts} parts)", turn, degraded.Parts.Count);
+            TurnRunnerLog.StreamBudgetExhausted(logger, lex, turn, degraded.Parts.Count);
             if (degraded.Parts.Count > 0)
             {
                 await session.AppendMessageAsync(degraded, ct).ConfigureAwait(false);
@@ -259,10 +257,10 @@ internal sealed class TurnRunner(
         // 7. Turn-end decision. A run ends when the turn produced no
         // tool activity, or the stream was aborted mid-flight (never
         // execute tools for a cancelled run).
-        logger.LogDebug("Turn {Turn}: toolCalls={ToolCalls} malformed={Malformed} stopReason={StopReason}", turn, toolCalls.Count, malformedCalls.Count, stopReason);
+        TurnRunnerLog.TurnStats(logger, turn, toolCalls.Count, malformedCalls.Count, stopReason);
         if ((toolCalls.Count == 0 && malformedCalls.Count == 0) || stopReason == StopReason.Aborted)
         {
-            logger.LogDebug("Turn {Turn} end (no tool calls)", turn);
+            TurnRunnerLog.TurnEndNoToolCalls(logger, turn);
             await eventBus.PublishAsync(
                 new TurnEndEvent(partial, Array.Empty<ToolResultMessage>(), session.Session.Id), ct).ConfigureAwait(false);
             // #404: a capped text-only turn is a limit stop, not a finish
@@ -301,7 +299,7 @@ internal sealed class TurnRunner(
         // already carries the steering, not just the next turn.
         await steering.DrainAsync(session, ct).ConfigureAwait(false);
 
-        logger.LogDebug("Turn {Turn} end (with tool results)", turn);
+        TurnRunnerLog.TurnEndWithResults(logger, turn);
         await eventBus.PublishAsync(
             new TurnEndEvent(partial, new[] { toolResults }, session.Session.Id), ct).ConfigureAwait(false);
 
@@ -318,14 +316,14 @@ internal sealed class TurnRunner(
         // specific bound — so this check comes first.
         if (budget is not null && budget.CheckCap() is { } budgetHit)
         {
-            logger.LogInformation("Agent hit budget cap ({Limit})", budgetHit);
+            TurnRunnerLog.BudgetCapHit(logger, budgetHit);
             return new TurnStepResult(truncationFallback, EndRun: true, Limit: budgetHit);
         }
 
         // 11. Max steps — also honoured after a terminal stop reason.
         if (MaxStepsBehavior.IsExhausted(turn, agent))
         {
-            logger.LogInformation("Agent reached max steps ({MaxSteps})", agent.MaxSteps);
+            TurnRunnerLog.MaxStepsReached(logger, agent.MaxSteps);
             // #403: EndRun alone cannot say WHY. Without this the loop published
             // the same terminal event as a run that finished its work, and
             // `SessionStatus.Done` was the user's answer for a run that was cut
@@ -336,7 +334,7 @@ internal sealed class TurnRunner(
 
         if (runEndsAfterExecution)
         {
-            logger.LogDebug("Turn {Turn}: terminal stop reason ({StopReason}) with executed tool calls — ending run", turn, stopReason);
+            TurnRunnerLog.TerminalStopWithTools(logger, turn, stopReason);
             return new TurnStepResult(truncationFallback, EndRun: true);
         }
 
@@ -371,7 +369,7 @@ internal sealed class TurnRunner(
         RunBudgetTracker? budget = null)
     {
         var partial = AssistantMessage.Empty(session.Session.Id, model.Id);
-        logger.LogDebug("Message start: turn={Turn}", turn);
+        TurnRunnerLog.MessageStart(logger, turn);
         await eventBus.PublishAsync(new MessageStartEvent(partial), ct).ConfigureAwait(false);
 
         // Pre-size to typical tool-call count to avoid List resizes.
@@ -401,7 +399,7 @@ internal sealed class TurnRunner(
                 // LogTrace incurs even when trace logging is off.
                 if (logger.IsEnabled(LogLevel.Trace))
                 {
-                    logger.LogTrace("Stream event: {EventType}", evt.GetType().Name);
+                    TurnRunnerLog.StreamEvent(logger, evt.GetType().Name);
                 }
                 switch (evt)
                 {
@@ -430,7 +428,7 @@ internal sealed class TurnRunner(
                     case ToolCallDeltaEvent tcd:
                         if (logger.IsEnabled(LogLevel.Trace))
                         {
-                            logger.LogTrace("ToolCallDelta id={Id} argsDelta={Args}", tcd.Id, tcd.ArgsDelta);
+                            TurnRunnerLog.ToolCallDelta(logger, tcd.Id, tcd.ArgsDelta);
                         }
                         coalescer.AppendToolCallDelta(tcd.Id, tcd.ArgsDelta);
                         await PublishUpdateAsync(evt, partial, ct).ConfigureAwait(false);
@@ -501,7 +499,7 @@ internal sealed class TurnRunner(
 
         partial = AppendMalformedPlaceholders(partial, malformedCalls);
 
-        logger.LogDebug("Message end: turn={Turn} stopReason={StopReason}", turn, stopReason);
+        TurnRunnerLog.MessageEnd(logger, turn, stopReason);
         await eventBus.PublishAsync(new MessageEndEvent(partial), ct).ConfigureAwait(false);
 
         return new TurnStreamResult(partial, toolCalls, malformedCalls, finalUsage, stopReason);
@@ -576,9 +574,7 @@ internal sealed class TurnRunner(
         for (int i = 0; i < malformedCalls.Count; i++)
         {
             var malformed = malformedCalls[i];
-            logger.LogWarning(
-                "Malformed JSON arguments for tool call {CallId} ({ToolName}); raw tail: {ArgsTail}",
-                malformed.Id, malformed.ToolName, malformed.RawArgsTail);
+            TurnRunnerLog.MalformedArgs(logger, malformed.Id, malformed.ToolName, malformed.RawArgsTail);
             partial = partial.AppendToolCall(new ToolCallPart(malformed.Id, malformed.ToolName, EmptyJsonArgs()));
         }
 
@@ -656,7 +652,7 @@ internal sealed class TurnRunner(
 
         if (abandoned > 0)
         {
-            logger.LogDebug("Turn carried {Abandoned} abandoned tool call(s) after the accepted stop", abandoned);
+            TurnRunnerLog.TurnCarriedAbandoned(logger, abandoned);
         }
 
         return new ToolResultMessage(
@@ -698,4 +694,57 @@ internal sealed class TurnRunner(
         }
         return null;
     }
+}
+
+/// <summary>
+///     SG2: BCL <c>[LoggerMessage]</c> delegates for <see cref="TurnRunner" />.
+///     Templates, levels and operands are 1-to-1 with the former <c>LogX</c> calls.
+/// </summary>
+internal static partial class TurnRunnerLog
+{
+    [LoggerMessage(EventId = 1, Level = LogLevel.Debug, Message = "Turn {Turn} start: agent={Agent} model={Model}")]
+    public static partial void TurnStart(ILogger logger, int turn, string agent, string model);
+
+    [LoggerMessage(EventId = 2, Level = LogLevel.Warning, Message = "Transient LLM stream failure on attempt {Attempt}; retrying")]
+    public static partial void TransientStreamFailure(ILogger logger, Exception ex, int attempt);
+
+    [LoggerMessage(EventId = 3, Level = LogLevel.Warning, Message = "LLM stream budget exhausted on turn {Turn}; degrading with partial output ({Parts} parts)")]
+    public static partial void StreamBudgetExhausted(ILogger logger, Exception ex, int turn, int parts);
+
+    [LoggerMessage(EventId = 4, Level = LogLevel.Debug, Message = "Turn {Turn}: toolCalls={ToolCalls} malformed={Malformed} stopReason={StopReason}")]
+    public static partial void TurnStats(ILogger logger, int turn, int toolCalls, int malformed, StopReason stopReason);
+
+    [LoggerMessage(EventId = 5, Level = LogLevel.Debug, Message = "Turn {Turn} end (no tool calls)")]
+    public static partial void TurnEndNoToolCalls(ILogger logger, int turn);
+
+    [LoggerMessage(EventId = 6, Level = LogLevel.Debug, Message = "Turn {Turn} end (with tool results)")]
+    public static partial void TurnEndWithResults(ILogger logger, int turn);
+
+    [LoggerMessage(EventId = 7, Level = LogLevel.Information, Message = "Agent hit budget cap ({Limit})")]
+    public static partial void BudgetCapHit(ILogger logger, RunLimitKind limit);
+
+    [LoggerMessage(EventId = 8, Level = LogLevel.Information, Message = "Agent reached max steps ({MaxSteps})")]
+    public static partial void MaxStepsReached(ILogger logger, int maxSteps);
+
+    [LoggerMessage(EventId = 9, Level = LogLevel.Debug, Message = "Turn {Turn}: terminal stop reason ({StopReason}) with executed tool calls — ending run")]
+    public static partial void TerminalStopWithTools(ILogger logger, int turn, StopReason stopReason);
+
+    [LoggerMessage(EventId = 10, Level = LogLevel.Debug, Message = "Message start: turn={Turn}")]
+    public static partial void MessageStart(ILogger logger, int turn);
+
+    [LoggerMessage(EventId = 11, Level = LogLevel.Trace, Message = "Stream event: {EventType}")]
+    public static partial void StreamEvent(ILogger logger, string eventType);
+
+    [LoggerMessage(EventId = 12, Level = LogLevel.Trace, Message = "ToolCallDelta id={Id} argsDelta={Args}")]
+    public static partial void ToolCallDelta(ILogger logger, string id, string args);
+
+    [LoggerMessage(EventId = 13, Level = LogLevel.Debug, Message = "Message end: turn={Turn} stopReason={StopReason}")]
+    public static partial void MessageEnd(ILogger logger, int turn, StopReason stopReason);
+
+    [LoggerMessage(EventId = 14, Level = LogLevel.Warning, Message = "Malformed JSON arguments for tool call {CallId} ({ToolName}); raw tail: {ArgsTail}")]
+    public static partial void MalformedArgs(ILogger logger, string callId, string toolName, string argsTail);
+
+    [LoggerMessage(EventId = 15, Level = LogLevel.Debug, Message = "Turn carried {Abandoned} abandoned tool call(s) after the accepted stop")]
+    public static partial void TurnCarriedAbandoned(ILogger logger, int abandoned);
+
 }

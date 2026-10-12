@@ -250,7 +250,7 @@ public sealed class DiagnosticsAggregator : IDisposable
         // awaited — blocking here would stall the socket.
         TaskFireAndForget.Forget(
             RefreshLanguageServerAsync(_lsp, args.FilePath, CancellationToken.None),
-            ex => _logger?.LogWarning(ex, "Diagnostics: LSP refresh for {File} failed", args.FilePath));
+            ex => if (_logger is not null) DiagnosticsAggregatorLog.LspRefreshFailed(_logger, ex, args.FilePath));
     }
 
     private async Task RefreshLanguageServerAsync(ILspService lsp, string filePath, CancellationToken ct)
@@ -346,4 +346,15 @@ public sealed class DiagnosticsAggregator : IDisposable
         composed.AddRange(_toolOutput);
         return composed;
     }
+}
+
+/// <summary>
+///     SG2: BCL <c>[LoggerMessage]</c> delegates for <see cref="DiagnosticsAggregator" />.
+///     Templates, levels and operands are 1-to-1 with the former <c>LogX</c> calls.
+/// </summary>
+internal static partial class DiagnosticsAggregatorLog
+{
+    [LoggerMessage(EventId = 1, Level = LogLevel.Warning, Message = "Diagnostics: LSP refresh for {File} failed")]
+    public static partial void LspRefreshFailed(ILogger logger, Exception ex, string file);
+
 }

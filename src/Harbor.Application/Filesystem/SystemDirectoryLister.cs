@@ -139,7 +139,7 @@ public sealed class SystemDirectoryLister : IDirectoryLister
             // all expected outcomes for a view that follows the user around the
             // filesystem. They are results, not exceptions: the panel has to
             // render something either way.
-            _logger.LogDebug(ex, "Directory listing failed for {Dir}", dir);
+            SystemDirectoryListerLog.DirectoryListingFailed(_logger, ex, dir);
             return Result.Failure<DirectoryListing>(
                 $"Cannot list '{dir}': {ex.Message}");
         }
@@ -194,4 +194,15 @@ public sealed class SystemDirectoryLister : IDirectoryLister
             return false;
         }
     }
+}
+
+/// <summary>
+///     SG2: BCL <c>[LoggerMessage]</c> delegates for <see cref="SystemDirectoryLister" />.
+///     Templates, levels and operands are 1-to-1 with the former <c>LogX</c> calls.
+/// </summary>
+internal static partial class SystemDirectoryListerLog
+{
+    [LoggerMessage(EventId = 1, Level = LogLevel.Debug, Message = "Directory listing failed for {Dir}")]
+    public static partial void DirectoryListingFailed(ILogger logger, Exception ex, string dir);
+
 }

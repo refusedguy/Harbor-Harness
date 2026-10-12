@@ -56,8 +56,7 @@ public sealed class ProviderHealthCheck : IProviderHealthCheck
             if (result.Value.Count == 0)
                 return Result.Failure<ProviderHealth>("Provider responded but exposes no models.");
 
-            _logger.LogDebug("Health check {Provider}: {Count} models in {Ms} ms",
-                providerId.Value, result.Value.Count, sw.ElapsedMilliseconds);
+            ProviderHealthCheckLog.HealthCheckResult(_logger, providerId.Value, result.Value.Count, sw.ElapsedMilliseconds);
             return Result.Success(new ProviderHealth((int)sw.ElapsedMilliseconds, result.Value.Count));
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
@@ -116,4 +115,15 @@ public sealed class ProviderHealthCheck : IProviderHealthCheck
 
         return rawError.EndsWith(".", StringComparison.Ordinal) ? rawError : rawError + ".";
     }
+}
+
+/// <summary>
+///     SG2: BCL <c>[LoggerMessage]</c> delegates for <see cref="ProviderHealthCheck" />.
+///     Templates, levels and operands are 1-to-1 with the former <c>LogX</c> calls.
+/// </summary>
+internal static partial class ProviderHealthCheckLog
+{
+    [LoggerMessage(EventId = 1, Level = LogLevel.Debug, Message = "Health check {Provider}: {Count} models in {Ms} ms")]
+    public static partial void HealthCheckResult(ILogger logger, string provider, int count, long ms);
+
 }

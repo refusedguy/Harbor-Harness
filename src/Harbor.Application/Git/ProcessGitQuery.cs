@@ -103,7 +103,7 @@ public sealed class ProcessGitQuery(ILogger<ProcessGitQuery> logger) : IGitQuery
         {
             // Not a repository, git missing from PATH, or a timeout: all expected
             // outcomes for a UI badge, not exceptions for the caller to handle.
-            logger.LogDebug(ex, "Git status failed for {Dir}", directory);
+            ProcessGitQueryLog.GitStatusFailed(logger, ex, directory);
             return GitWorkspaceStatus.None;
         }
     }
@@ -129,7 +129,7 @@ public sealed class ProcessGitQuery(ILogger<ProcessGitQuery> logger) : IGitQuery
             // expected outcomes GetStatus absorbs, and the same reason a jump
             // palette showing no worktree rows is a correct state rather than an
             // error the user needs to see.
-            logger.LogDebug(ex, "Git worktree list failed for {Dir}", directory);
+            ProcessGitQueryLog.GitWorktreeListFailed(logger, ex, directory);
             return Array.Empty<GitWorktreeInfo>();
         }
     }
@@ -265,8 +265,25 @@ public sealed class ProcessGitQuery(ILogger<ProcessGitQuery> logger) : IGitQuery
         {
             if (e.Data is { } line)
             {
-                logger.LogDebug("git {Arguments} wrote to stderr: {Line}", string.Join(' ', args), line);
+                ProcessGitQueryLog.GitStderrLine(logger, string.Join(' ', args), line);
             }
         }
     }
+}
+
+/// <summary>
+///     SG2: BCL <c>[LoggerMessage]</c> delegates for <see cref="ProcessGitQuery" />.
+///     Templates, levels and operands are 1-to-1 with the former <c>LogX</c> calls.
+/// </summary>
+internal static partial class ProcessGitQueryLog
+{
+    [LoggerMessage(EventId = 1, Level = LogLevel.Debug, Message = "Git status failed for {Dir}")]
+    public static partial void GitStatusFailed(ILogger logger, Exception ex, string dir);
+
+    [LoggerMessage(EventId = 2, Level = LogLevel.Debug, Message = "Git worktree list failed for {Dir}")]
+    public static partial void GitWorktreeListFailed(ILogger logger, Exception ex, string dir);
+
+    [LoggerMessage(EventId = 3, Level = LogLevel.Debug, Message = "git {Arguments} wrote to stderr: {Line}")]
+    public static partial void GitStderrLine(ILogger logger, string arguments, string line);
+
 }

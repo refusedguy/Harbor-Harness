@@ -67,7 +67,7 @@ internal sealed class ListenerRegistry
             }
             catch (Exception ex)
             {
-                logger.LogError(ex, "Listener failed: session={SessionId}", sessionId.GetValueOrDefault("unbound"));
+                ListenerRegistryLog.ListenerFailed(logger, ex, sessionId.GetValueOrDefault("unbound"));
             }
         }
     }
@@ -85,4 +85,15 @@ internal sealed class ListenerRegistry
             _action = null;
         }
     }
+}
+
+/// <summary>
+///     SG2: BCL <c>[LoggerMessage]</c> delegates for <see cref="ListenerRegistry" />.
+///     Templates, levels and operands are 1-to-1 with the former <c>LogX</c> calls.
+/// </summary>
+internal static partial class ListenerRegistryLog
+{
+    [LoggerMessage(EventId = 1, Level = LogLevel.Error, Message = "Listener failed: session={SessionId}")]
+    public static partial void ListenerFailed(ILogger logger, Exception ex, string sessionId);
+
 }
