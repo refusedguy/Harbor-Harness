@@ -10,9 +10,10 @@ using Harbor.Ui.Framework.Rendering.Markdown;
 /// </summary>
 /// <remarks>
 ///     <para>
-///         <b>The three enforceable ceilings</b> (enforced by
+///         <b>The enforceable ceilings</b> (enforced by
 ///         <see cref="MarkdownRenderPerformanceGate.Validate"/> and by the
-///         renderer perf suite in CI):
+///         renderer perf suite in CI; the tail-render row is diagnostic
+///         since #1304 — see <see cref="TailRenderBudget"/>):
 ///     </para>
 ///     <list type="number">
 ///         <item><description><see cref="FrozenRestoreBudget"/> — restoring a
@@ -40,6 +41,11 @@ public sealed record MarkdownRenderPerformanceContract
     public TimeSpan FrozenRestoreBudget { get; init; } = TimeSpan.FromMilliseconds(1);
 
     /// <summary>Budget for re-rendering a document whose tail is the only live block.</summary>
+    /// <remarks>
+    ///     Diagnostic only since #1304: shared-runner noise spans ~3x on this
+    ///     column, so the perf gate prints it without asserting; enforcement is
+    ///     the relative tail-render scaling gate (the #996 transfer, #1025).
+    /// </remarks>
     public TimeSpan TailRenderBudget { get; init; } = TimeSpan.FromMilliseconds(2);
 
     /// <summary>Frozen-cache capacity ceiling (LRU eviction beyond this).</summary>
