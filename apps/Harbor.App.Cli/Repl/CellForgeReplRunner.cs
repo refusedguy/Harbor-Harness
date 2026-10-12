@@ -222,7 +222,7 @@ internal sealed class CellForgeReplRunner(
 
     /// <summary>
     /// Interactive setup flow (issue #1248, slice 1): the
-    /// <c>/setup</c> overlay (provider → key → model) over
+    /// <c>/setup</c> overlay (provider → key → model → agent) over
     /// <see cref="Screen.Dialog"/>, persisted to the config/auth stores.
     /// </summary>
     internal CellForgeOnboardingController Onboarding => _onboarding ??= new CellForgeOnboardingController(this);

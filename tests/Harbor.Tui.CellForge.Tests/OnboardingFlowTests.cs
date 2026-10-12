@@ -19,14 +19,18 @@ public class OnboardingFlowTests
     private static readonly OnboardingProvider Anthropic =
         new("anthropic", "Anthropic (Claude)", "claude-sonnet-4-20250514", true, "Get a key at https://console.anthropic.com");
 
+    private static readonly OnboardingAgent Code = new("code", "Coding agent");
+    private static readonly OnboardingAgent Plan = new("plan", "Planning agent");
+
     private static readonly ConsoleKeyInfo EnterKey = new('\r', ConsoleKey.Enter, false, false, false);
     private static readonly ConsoleKeyInfo EscKey = new('\x1b', ConsoleKey.Escape, false, false, false);
     private static readonly ConsoleKeyInfo TabKey = new('\t', ConsoleKey.Tab, false, false, false);
 
     private static OnboardingFlow NewFlow(
         IReadOnlyCollection<string>? configured = null,
-        IReadOnlyDictionary<string, IReadOnlyList<string>>? liveModels = null) =>
-        new([Kilo, Ollama, Anthropic], configured, liveModels);
+        IReadOnlyDictionary<string, IReadOnlyList<string>>? liveModels = null,
+        IReadOnlyList<OnboardingAgent>? agents = null) =>
+        new([Kilo, Ollama, Anthropic], configured, liveModels, agents ?? [Code, Plan]);
 
     // DialogOverlay prompt editing only inspects Key for Enter/Backspace —
     // any other Key value types KeyChar verbatim.
@@ -163,13 +167,17 @@ public class OnboardingFlowTests
 
         await Assert.That(flow.Step).IsEqualTo(OnboardingStep.Model);
 
-        flow.HandleKey(EnterKey); // default model
-        flow.HandleKey(EnterKey); // done
+        flow.HandleKey(EnterKey); // default model → agent
+        await Assert.That(flow.Step).IsEqualTo(OnboardingStep.Agent);
+
+        flow.HandleKey(EnterKey); // default agent → done
+        flow.HandleKey(EnterKey); // done → finished
 
         await Assert.That(flow.IsComplete).IsTrue();
         await Assert.That(flow.Result.Value.KeyAlreadyConfigured).IsTrue();
         await Assert.That(flow.Result.Value.ApiKey).IsNull();
         await Assert.That(flow.Result.Value.Model).IsEqualTo("anthropic/claude-sonnet-4-20250514");
+        await Assert.That(flow.Result.Value.Agent).IsEqualTo("code");
     }
 
     [Test]
@@ -181,10 +189,15 @@ public class OnboardingFlowTests
         flow.HandleKey(EnterKey);
 
         await Assert.That(flow.Step).IsEqualTo(OnboardingStep.Model);
-        flow.HandleKey(EnterKey); // accept default
+        flow.HandleKey(EnterKey); // accept default → agent
+
+        await Assert.That(flow.Step).IsEqualTo(OnboardingStep.Agent);
+        await Assert.That(flow.Dialog.Message.Contains("code")).IsTrue();
+        flow.HandleKey(EnterKey); // accept default agent → done
 
         await Assert.That(flow.Step).IsEqualTo(OnboardingStep.Done);
         await Assert.That(flow.Dialog.Kind).IsEqualTo(DialogKind.Alert);
+        await Assert.That(flow.Dialog.Message.Contains("Agent: code")).IsTrue();
         flow.HandleKey(EnterKey);
 
         await Assert.That(flow.IsComplete).IsTrue();
@@ -194,6 +207,7 @@ public class OnboardingFlowTests
         await Assert.That(flow.Result.Value.Model).IsEqualTo("ollama/llama3.2");
         await Assert.That(flow.Result.Value.ApiKey).IsNull();
         await Assert.That(flow.Result.Value.KeyAlreadyConfigured).IsFalse();
+        await Assert.That(flow.Result.Value.Agent).IsEqualTo("code");
     }
 
     [Test]
@@ -208,12 +222,15 @@ public class OnboardingFlowTests
 
         Type(flow, "my-model");
         flow.HandleKey(EnterKey);
+        Type(flow, "plan");
+        flow.HandleKey(EnterKey);
         flow.HandleKey(EnterKey);
 
         await Assert.That(flow.Result.Value.Completed).IsTrue();
         await Assert.That(flow.Result.Value.ProviderId).IsEqualTo("kilocode");
         await Assert.That(flow.Result.Value.Model).IsEqualTo("kilocode/my-model");
         await Assert.That(flow.Result.Value.ApiKey).IsEqualTo("klo_123");
+        await Assert.That(flow.Result.Value.Agent).IsEqualTo("plan");
     }
 
     [Test]
@@ -226,9 +243,11 @@ public class OnboardingFlowTests
 
         Type(flow, "otherprov/some-model");
         flow.HandleKey(EnterKey);
-        flow.HandleKey(EnterKey);
+        flow.HandleKey(EnterKey); // default agent → done
+        flow.HandleKey(EnterKey); // done → finished
 
         await Assert.That(flow.Result.Value.Model).IsEqualTo("otherprov/some-model");
+        await Assert.That(flow.Result.Value.Agent).IsEqualTo("code");
     }
 
     [Test]
@@ -248,9 +267,80 @@ public class OnboardingFlowTests
 
         Type(flow, "2");
         flow.HandleKey(EnterKey);
-        flow.HandleKey(EnterKey);
+        flow.HandleKey(EnterKey); // default agent → done
+        flow.HandleKey(EnterKey); // done → finished
 
         await Assert.That(flow.Result.Value.Model).IsEqualTo("kilocode/beta");
+        await Assert.That(flow.Result.Value.Agent).IsEqualTo("code");
+    }
+
+    [Test]
+    public async Task Agent_ByNumber_Selects()
+    {
+        var flow = NewFlow();
+        AdvanceToProvider(flow);
+        Type(flow, "2");
+        flow.HandleKey(EnterKey);
+
+        flow.HandleKey(EnterKey); // default model → agent
+        await Assert.That(flow.Step).IsEqualTo(OnboardingStep.Agent);
+        await Assert.That(flow.Dialog.Message.Contains("[1] code")).IsTrue();
+        await Assert.That(flow.Dialog.Message.Contains("[2] plan")).IsTrue();
+
+        Type(flow, "2");
+        flow.HandleKey(EnterKey);
+        flow.HandleKey(EnterKey);
+
+        await Assert.That(flow.Result.Value.Agent).IsEqualTo("plan");
+    }
+
+    [Test]
+    public async Task Agent_ById_CaseInsensitive()
+    {
+        var flow = NewFlow();
+        AdvanceToProvider(flow);
+        Type(flow, "2");
+        flow.HandleKey(EnterKey);
+
+        flow.HandleKey(EnterKey); // default model → agent
+        Type(flow, "PLAN");
+        flow.HandleKey(EnterKey);
+        flow.HandleKey(EnterKey);
+
+        await Assert.That(flow.Result.Value.Agent).IsEqualTo("plan");
+    }
+
+    [Test]
+    public async Task Agent_UnknownInput_StaysWithError()
+    {
+        var flow = NewFlow();
+        AdvanceToProvider(flow);
+        Type(flow, "2");
+        flow.HandleKey(EnterKey);
+
+        flow.HandleKey(EnterKey); // default model → agent
+        Type(flow, "nope");
+        flow.HandleKey(EnterKey);
+
+        await Assert.That(flow.Step).IsEqualTo(OnboardingStep.Agent);
+        await Assert.That(flow.Dialog.Message.Contains("Unknown agent")).IsTrue();
+    }
+
+    [Test]
+    public async Task Agent_EmptyCatalogue_CompletesWithFallback()
+    {
+        var flow = NewFlow(agents: []);
+        AdvanceToProvider(flow);
+        Type(flow, "2");
+        flow.HandleKey(EnterKey);
+
+        flow.HandleKey(EnterKey); // default model → agent
+        await Assert.That(flow.Dialog.Message.Contains("No agents registered")).IsTrue();
+        flow.HandleKey(EnterKey); // default agent → done
+        flow.HandleKey(EnterKey); // done → finished
+
+        await Assert.That(flow.Result.Value.Completed).IsTrue();
+        await Assert.That(flow.Result.Value.Agent).IsEqualTo("code");
     }
 
     [Test]
@@ -287,7 +377,8 @@ public class OnboardingFlowTests
         AdvanceToProvider(flow);
         Type(flow, "2");
         flow.HandleKey(EnterKey);
-        flow.HandleKey(EnterKey);
+        flow.HandleKey(EnterKey); // default model → agent
+        flow.HandleKey(EnterKey); // default agent → done
 
         await Assert.That(flow.Step).IsEqualTo(OnboardingStep.Done);
         flow.HandleKey(EscKey);

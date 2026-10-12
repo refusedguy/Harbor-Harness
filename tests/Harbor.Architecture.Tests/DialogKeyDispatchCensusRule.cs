@@ -677,7 +677,7 @@ public sealed class DialogKeyDispatchCensusRule
             + "ChatScreenLayout seats on the overlay stack. Measured: " + Describe(alert));
 
         await Assert.That(Distinct(prompt).ToArray()).IsEquivalentTo(new[] { "src/Harbor.Tui.CellForge/Chat/Onboarding/OnboardingFlow.cs" }).Because(
-            "ShowPrompt is the other half, same file. Four call sites, all onboarding. "
+            "ShowPrompt is the other half, same file. Five call sites, all onboarding. "
             + "Measured: " + Describe(prompt));
 
         await Assert.That(confirm).IsEmpty().Because(
