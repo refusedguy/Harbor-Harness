@@ -3,9 +3,9 @@ using ConsoleAppFramework;
 namespace Harbor.App.Cli.Commands;
 
 /// <summary>
-///     LB2 pilot (#1235): ConsoleAppFramework (incremental source generator,
-///     AOT-first) on exactly two verbs — <c>version</c> and <c>storage</c>.
-///     Everything else keeps the manual dispatcher in <c>Program</c>;
+///     LB2 pilot (#1235) + CAF-A (#1286): ConsoleAppFramework (incremental source
+///     generator, AOT-first) on <c>version</c>, <c>storage</c>, <c>sessions</c> and
+///     <c>run</c>. Everything else keeps the manual dispatcher in <c>Program</c>;
 ///     Spectre.Console.Cli / System.CommandLine stay forbidden.
 /// </summary>
 /// <remarks>
@@ -14,7 +14,7 @@ namespace Harbor.App.Cli.Commands;
 ///         assembly: the generator keys its emitted file
 ///         (<c>ConsoleApp.Run.g.cs</c>) without a per-site disambiguator, so
 ///         two single-command <c>ConsoleApp.RunAsync</c> sites collide with
-///         CS8785 (duplicate hintName). One builder app registering both
+///         CS8785 (duplicate hintName). One builder app registering all
 ///         verbs avoids that.
 ///     </para>
 ///     <para>
@@ -23,7 +23,8 @@ namespace Harbor.App.Cli.Commands;
 ///         <c>Program.Main</c> runs unchanged), then re-attaches the verb so
 ///         the builder routes it; <c>-h|--help</c> and flag parsing come from
 ///         the framework. Handlers delegate to <see cref="HelpVerbs" /> — the
-///         output text stays byte-for-byte identical to the manual path.
+///         output text stays byte-for-byte identical to the manual path
+///         (pilot handlers cover version/storage; CAF-A adds sessions/run).
 ///     </para>
 ///     <para>
 ///         Exit code: CAF sets <see cref="Environment.ExitCode" /> from the
@@ -38,6 +39,8 @@ internal static class CafPilotVerbs
         var app = ConsoleApp.Create();
         app.Add("version", CafPilotCommands.Version);
         app.Add("storage", CafPilotCommands.Storage);
+        app.Add("sessions", CafSessionCommands.Sessions);
+        app.Add("run", CafRunCommands.Run);
         await app.RunAsync([verb, ..rest]).ConfigureAwait(false);
         return Environment.ExitCode;
     }

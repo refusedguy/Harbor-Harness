@@ -139,10 +139,10 @@ public static class Program
             "ide" => await IdeVerb.RunAsync(_logger, args.Skip(1).ToArray()),
 #endif
             "--headless" or "headless" => await HeadlessVerb.RunAsync(_logger, args.Skip(1).ToArray()),
-            "run" => await RunTaskVerb.RunAsync(args.Skip(1).ToArray()),
+            "run" => await CafPilotVerbs.RunAsync("run", args.Skip(1).ToArray()),
             "providers" or "--providers" => await ProviderVerbs.RunListProvidersAsync(_logger),
             "models" => await ProviderVerbs.RunListModelsAsync(_logger, args.Skip(1).FirstOrDefault()),
-            "sessions" => await SessionsVerb.RunAsync(_logger, args.Skip(1).ToArray()),
+            "sessions" => await CafPilotVerbs.RunAsync("sessions", args.Skip(1).ToArray()),
             "mcp" => await McpLoginRunner.RunAsync(Console.Out, Console.Error, args.Skip(1).ToArray()),
             "serve" => await ServeVerb.RunAsync(_logger, args.Skip(1).ToArray()),
             "tui" => await TuiAttachVerb.RunAsync(args.Skip(1).ToArray()),
