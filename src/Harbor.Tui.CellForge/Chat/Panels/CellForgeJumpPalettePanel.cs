@@ -16,12 +16,15 @@ namespace Harbor.Tui.CellForge.Panels;
 ///     lists <see cref="WorktreeJumpEntry.RowText" /> rows from
 ///     <see cref="WorktreeJumpPaletteModel" /> with the selected row marked
 ///     <c>▸</c> (same row-list idiom as the sibling builtin panels).
-///     <c>Up</c>/<c>Down</c> move the selection, printable keys feed
+///     <c>Up</c>/<c>Down</c> move the selection (wrapping around),
+///     printable keys feed
 ///     <see cref="WorktreeJumpPaletteModel.SetQuery" /> (the fuzzy filter was
 ///     dead code until #381), <c>Backspace</c> trims the query,
 ///     <c>Enter</c> switches to the selected session via the existing
 ///     <see cref="IPanelSessionGateway.OpenPanelSessionAsync" /> (no new switching
 ///     mechanics), <c>Esc</c> closes and clears the query, <c>r</c> re-seeds.
+///     On an empty query, working/dirty sessions lead under a
+///     <c>Suggested</c> header (O8 steal #1177).
 /// </summary>
 /// <remarks>
 ///     <para>
@@ -75,6 +78,15 @@ namespace Harbor.Tui.CellForge.Panels;
 /// </remarks>
 public sealed class CellForgeJumpPalettePanel : IPanelProvider
 {
+    /// <summary>
+    ///     Action hints for the jump palette (O8 steal #1177, epic #1155 — the
+    ///     opencode <c>DialogSelect</c> footer-hints analog). Single source for
+    ///     the footer this panel paints and the row
+    ///     <see cref="CellForgeHelpPanel" /> lists, so the two cannot drift.
+    /// </summary>
+    internal const string HintFooter =
+        "type to filter · ⌫ erase · ↑↓ move · Enter switch · Esc close · r refresh";
+
     private readonly object _gate = new();
     private readonly WorktreeJumpPaletteModel _model;
 
@@ -129,6 +141,7 @@ public sealed class CellForgeJumpPalettePanel : IPanelProvider
         List<WorktreeJumpEntry> snapshot;
         int selected;
         string query;
+        int suggested;
         lock (_gate)
         {
             if (!_model.Visible)
@@ -139,9 +152,10 @@ public sealed class CellForgeJumpPalettePanel : IPanelProvider
             snapshot = new List<WorktreeJumpEntry>(_model.Results);
             selected = _model.SelectedIndex;
             query = _model.Query;
+            suggested = _model.SuggestedCount;
         }
 
-        var rows = new List<string>(snapshot.Count + 4);
+        var rows = new List<string>(snapshot.Count + 6);
         // The query is part of the header so the fuzzy filter is visible (#381)
         // — an empty query keeps the pre-#381 "Jump (N)" shape byte-identical.
         rows.Add(query.Length == 0 ? $"Jump ({snapshot.Count})" : $"Jump: {query} ({snapshot.Count})");
@@ -151,19 +165,39 @@ public sealed class CellForgeJumpPalettePanel : IPanelProvider
             rows.Add(query.Length == 0 ? "No worktrees or sessions." : "No match.");
             rows.Add("Open a session to jump between worktrees.");
         }
+        else if (query.Length == 0 && suggested > 0)
+        {
+            // O8 steal (#1177): Suggested section on an empty filter — the
+            // marked rows lead under their header, then the full list follows
+            // (the same duplication opencode's command palette renders).
+            rows.Add("Suggested");
+            int i = 0;
+            for (; i < suggested; i++)
+            {
+                rows.Add(Row(snapshot[i], i == selected));
+            }
+
+            rows.Add("All");
+            for (; i < snapshot.Count; i++)
+            {
+                rows.Add(Row(snapshot[i], i == selected));
+            }
+        }
         else
         {
             for (int i = 0; i < snapshot.Count; i++)
             {
-                string marker = i == selected ? "▸" : " ";
-                rows.Add($"{marker} {snapshot[i].RowText}");
+                rows.Add(Row(snapshot[i], i == selected));
             }
         }
 
         rows.Add(PanelText.Separator);
-        rows.Add("type to filter · ⌫ erase · ↑↓ move · Enter switch · Esc close · r refresh");
+        rows.Add(HintFooter);
         return PanelText.Clip(rows, ctx.Width, ctx.Height);
     }
+
+    private static string Row(WorktreeJumpEntry entry, bool isSelected) =>
+        $"{(isSelected ? "▸" : " ")} {entry.RowText}";
 
     /// <inheritdoc />
     public bool OnKey(UiKey key, PanelContext ctx)
@@ -297,7 +331,8 @@ public sealed class CellForgeJumpPalettePanel : IPanelProvider
     {
         var sessions = ctx.Deps.Sessions;
         IReadOnlyList<GitWorktreeInfo> worktrees = ReadWorktrees(ctx);
-        _model.Show(WorktreeJumpSeeder.BuildEntries(SessionSeeds(ctx, sessions), worktrees));
+        var seeds = SessionSeeds(ctx, sessions);
+        _model.Show(WorktreeJumpSeeder.BuildEntries(seeds, worktrees), SuggestedIds(seeds));
     }
 
     /// <summary>
@@ -332,17 +367,51 @@ public sealed class CellForgeJumpPalettePanel : IPanelProvider
     /// <summary>
     ///     Explicit <c>r</c> refresh: re-read worktrees + live sessions while
     ///     keeping the typed filter, so a refresh never throws away the query.
-    ///     Call only under <c>_gate</c>.
+    ///     The selection follows its entry by identity when it survives
+    ///     (opencode <c>preserveSelection</c>). Call only under <c>_gate</c>.
     /// </summary>
     private void ReseedLocked(PanelContext ctx)
     {
-        string query = _model.Query;
-        SeedLocked(ctx);
-        if (query.Length > 0)
-        {
-            _model.SetQuery(query);
-        }
+        var sessions = ctx.Deps.Sessions;
+        IReadOnlyList<GitWorktreeInfo> worktrees = ReadWorktrees(ctx);
+        var seeds = SessionSeeds(ctx, sessions);
+        _model.Reseed(WorktreeJumpSeeder.BuildEntries(seeds, worktrees), SuggestedIds(seeds));
     }
+
+    /// <summary>
+    ///     Suggested rows (O8 steal #1177): sessions that need attention —
+    ///     running ones and dirty trees — lead the empty-filter palette under
+    ///     the <c>"Suggested"</c> header. Session-less worktree rows are never
+    ///     suggested (there is no session to switch to).
+    /// </summary>
+    private static IReadOnlySet<string> SuggestedIds(List<SessionSeed> seeds)
+    {
+        HashSet<string>? set = null;
+        for (int i = 0; i < seeds.Count; i++)
+        {
+            var seed = seeds[i];
+            if (seed.SessionId.Length == 0 || seed.IsSubagent)
+            {
+                continue;
+            }
+
+            if (seed.IsDirty || IsWorkingStatus(seed.StatusText))
+            {
+                set ??= new HashSet<string>(StringComparer.Ordinal);
+                set.Add(seed.SessionId);
+            }
+        }
+
+        if (set is null)
+        {
+            return new HashSet<string>(StringComparer.Ordinal);
+        }
+
+        return set;
+    }
+
+    private static bool IsWorkingStatus(string statusText) =>
+        statusText.Contains("working", StringComparison.OrdinalIgnoreCase);
 
     // #470: the flat gateway calls below reproduce the exact precedence the
     // panel used to spell out against the session-context and cached-git
