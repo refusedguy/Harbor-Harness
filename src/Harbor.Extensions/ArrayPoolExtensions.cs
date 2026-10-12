@@ -343,9 +343,9 @@ public static class DictionaryPool<TKey, TValue>
     /// <param name="capacity">Number of entries the caller intends to hold.</param>
     /// <returns>A <see cref="PooledDictionary{TKey, TValue}" /> that returns the dictionary to the pool on dispose.</returns>
     /// <remarks>
-    ///     Deliberately not defaulted: <c>Rent()</c> with no arguments must resolve to
-    ///     the comparer overload, whose two optional parameters would otherwise make
-    ///     both candidates applicable and the call ambiguous (CS0121).
+    ///     <c>Rent()</c> with no arguments resolves to the comparer overload below:
+    ///     this overload requires its <c>capacity</c> argument, so a zero-argument
+    ///     call is never ambiguous (no CS0121).
     /// </remarks>
     public static PooledDictionary<TKey, TValue> Rent(int capacity) => Rent(null, capacity);
 

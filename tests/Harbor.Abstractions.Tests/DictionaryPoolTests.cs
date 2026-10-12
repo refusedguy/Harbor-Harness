@@ -86,7 +86,7 @@ public class DictionaryPoolTests
     {
         // Past MaxRetainEntries (1024) a dictionary is dropped on return rather
         // than retained — the pool must not hold it for the next renter.
-        var big = new DictionaryPool<string, int>.PooledDictionary(
+        var big = new PooledDictionary<string, int>(
             new Dictionary<string, int>(2 * 1024));
         for (int i = 0; i < 2 * 1024; i++)
         {
