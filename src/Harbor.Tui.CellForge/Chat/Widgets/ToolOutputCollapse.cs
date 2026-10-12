@@ -191,13 +191,15 @@ internal static class ToolOutputCollapse
     internal static int CountRunes(string text)
     {
         int count = 0;
-        for (int i = 0; i < text.Length; i++)
+        int i = 0;
+        while (i < text.Length)
         {
             if (char.IsHighSurrogate(text[i]) && i + 1 < text.Length && char.IsLowSurrogate(text[i + 1]))
             {
                 i++;
             }
 
+            i++;
             count++;
         }
 
