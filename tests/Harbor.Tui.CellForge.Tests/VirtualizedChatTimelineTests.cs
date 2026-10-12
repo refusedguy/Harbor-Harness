@@ -151,4 +151,68 @@ public class VirtualizedChatTimelineTests
         await Assert.That(tl.TotalHeight).IsEqualTo(2);
         await Assert.That(tl.BlockAt(0).Kind).IsEqualTo("assistant");
     }
+
+    [Test]
+    public async Task MaxLines_EvictsOldestKeepsNewest()
+    {
+        var tl = new VirtualizedChatTimeline { MaxLines = 5 };
+        for (int i = 0; i < 12; i++)
+        {
+            tl.Append(new SystemBlock($"line {i}"));
+        }
+
+        await Assert.That(tl.Count).IsEqualTo(5);
+        await Assert.That(tl.BlockAt(0).RawText()).IsEqualTo("line 7");
+        await Assert.That(tl.BlockAt(tl.Count - 1).RawText()).IsEqualTo("line 11");
+    }
+
+    [Test]
+    public async Task Append_ScrollEndTrue_YanksUnpinnedView()
+    {
+        var tl = new VirtualizedChatTimeline();
+        for (int i = 0; i < 20; i++)
+        {
+            tl.Append(new SystemBlock($"line {i}"));
+        }
+
+        _ = tl.PrepareFrame(40, 5);
+        tl.ScrollUp(7);
+        await Assert.That(tl.FollowTail).IsFalse();
+
+        tl.Append(new SystemBlock("explicit yank"), scrollEnd: true);
+        _ = tl.PrepareFrame(40, 5);
+        await Assert.That(tl.FollowTail).IsTrue();
+        await Assert.That(tl.ScrollY).IsEqualTo(tl.TotalHeight - 5);
+    }
+
+    [Test]
+    public async Task Append_ScrollEndFalse_KeepsPinnedViewUnpinned()
+    {
+        var tl = new VirtualizedChatTimeline();
+        for (int i = 0; i < 20; i++)
+        {
+            tl.Append(new SystemBlock($"line {i}"));
+        }
+
+        _ = tl.PrepareFrame(40, 5);
+        await Assert.That(tl.FollowTail).IsTrue();
+
+        tl.Append(new SystemBlock("background arrival"), scrollEnd: false);
+        await Assert.That(tl.FollowTail).IsFalse();
+    }
+
+    [Test]
+    public async Task VirtualSize_ReportsWidthAndSettledHeight()
+    {
+        var tl = new VirtualizedChatTimeline();
+        await Assert.That(tl.VirtualSize.Width).IsEqualTo(0);
+        for (int i = 0; i < 6; i++)
+        {
+            tl.Append(new SystemBlock($"line {i}"));
+        }
+
+        _ = tl.PrepareFrame(40, 5);
+        await Assert.That(tl.VirtualSize.Width).IsEqualTo(40);
+        await Assert.That(tl.VirtualSize.Height).IsEqualTo(tl.TotalHeight);
+    }
 }
