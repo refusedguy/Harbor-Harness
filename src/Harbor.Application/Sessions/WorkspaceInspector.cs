@@ -75,21 +75,28 @@ public static class WorkspaceInspector
 
         var tracked = new List<string>();
         bool untracked = false;
-        foreach (string rawLine in statusRes.Value.Stdout.Split('\n'))
+        ReadOnlySpan<char> rest = statusRes.Value.Stdout.AsSpan();
+        while (true)
         {
-            string line = rawLine.EndsWith('\r') ? rawLine[..^1] : rawLine;
-            if (line.Length == 0)
-                continue;
-            if (line.StartsWith("??", StringComparison.Ordinal))
+            int nl = rest.IndexOf('\n');
+            ReadOnlySpan<char> raw = nl < 0 ? rest : rest.Slice(0, nl);
+            ReadOnlySpan<char> line = raw.Length > 0 && raw[raw.Length - 1] == '\r'
+                ? raw.Slice(0, raw.Length - 1)
+                : raw;
+            if (line.Length > 0)
             {
-                untracked = true;
-                continue;
+                if (line.StartsWith("??", StringComparison.Ordinal))
+                    untracked = true;
+                else if (!line.StartsWith("!!", StringComparison.Ordinal))
+                {
+                    ReadOnlySpan<char> path = line.Length > 3 ? line.Slice(3).Trim() : line;
+                    if (path.Length > 0)
+                        tracked.Add(path.ToString());
+                }
             }
-            if (line.StartsWith("!!", StringComparison.Ordinal))
-                continue;
-            string path = line.Length > 3 ? line[3..].Trim() : line;
-            if (path.Length > 0)
-                tracked.Add(path);
+            if (nl < 0)
+                break;
+            rest = rest.Slice(nl + 1);
         }
 
         if (tracked.Count > 0)

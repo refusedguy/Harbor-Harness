@@ -329,13 +329,19 @@ public static class SkillUpdater
             return "no error output";
         }
 
-        foreach (string line in stderr.Split('\n'))
+        ReadOnlySpan<char> rest = stderr.AsSpan();
+        while (true)
         {
-            string trimmed = line.Trim();
+            int nl = rest.IndexOf('\n');
+            ReadOnlySpan<char> raw = nl < 0 ? rest : rest.Slice(0, nl);
+            ReadOnlySpan<char> trimmed = raw.Trim();
             if (trimmed.Length > 0)
             {
-                return trimmed;
+                return trimmed.ToString();
             }
+            if (nl < 0)
+                break;
+            rest = rest.Slice(nl + 1);
         }
 
         return stderr.Trim();

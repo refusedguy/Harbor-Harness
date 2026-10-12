@@ -334,9 +334,16 @@ public sealed class OwnerReport
 
     private static void AppendWrappedBody(StringBuilder sb, string body)
     {
-        string[] lines = body.Split('\n');
-        for (int i = 0; i < lines.Length; i++)
-            AppendWrappedLine(sb, lines[i]);
+        ReadOnlySpan<char> rest = body.AsSpan();
+        while (true)
+        {
+            int nl = rest.IndexOf('\n');
+            ReadOnlySpan<char> line = nl < 0 ? rest : rest.Slice(0, nl);
+            AppendWrappedLine(sb, line.ToString());
+            if (nl < 0)
+                break;
+            rest = rest.Slice(nl + 1);
+        }
     }
 
     private static void AppendWrappedLine(StringBuilder sb, string line)
@@ -611,24 +618,30 @@ public static class OwnerReportFormat
 
         if (!string.Equals(rulesBody.Trim(), NoneMarker, StringComparison.Ordinal))
         {
-            string[] lines = rulesBody.Split('\n');
+            ReadOnlySpan<char> rest = rulesBody.AsSpan();
             bool seen = false;
             bool seenRule = false;
-            for (int i = 0; i < lines.Length; i++)
+            while (true)
             {
-                if (lines[i].Trim().Length == 0)
-                    continue;
-                seen = true;
-                if (lines[i].Contains(RuleArrow, StringComparison.Ordinal))
+                int nl = rest.IndexOf('\n');
+                ReadOnlySpan<char> line = nl < 0 ? rest : rest.Slice(0, nl);
+                if (line.Trim().Length != 0)
                 {
-                    seenRule = true;
-                    continue;
+                    seen = true;
+                    if (line.IndexOf(RuleArrow.AsSpan()) >= 0)
+                    {
+                        seenRule = true;
+                    }
+                    // A wrapped rule line folds onto an indented continuation;
+                    // it belongs to the rule above, not to a new entry.
+                    else if (!(seenRule && line.Length > 0 && char.IsWhiteSpace(line[0])))
+                    {
+                        return Result.Failure("Rule changes block lists each changed rule on one line as 'before → after'.");
+                    }
                 }
-                // A wrapped rule line folds onto an indented continuation;
-                // it belongs to the rule above, not to a new entry.
-                if (seenRule && char.IsWhiteSpace(lines[i][0]))
-                    continue;
-                return Result.Failure("Rule changes block lists each changed rule on one line as 'before → after'.");
+                if (nl < 0)
+                    break;
+                rest = rest.Slice(nl + 1);
             }
 
             if (!seen)
@@ -656,12 +669,17 @@ public static class OwnerReportFormat
 
     private static string? FindLineValue(string body, string label)
     {
-        string[] lines = body.Split('\n');
-        for (int i = 0; i < lines.Length; i++)
+        ReadOnlySpan<char> rest = body.AsSpan();
+        while (true)
         {
-            string line = lines[i].Trim();
-            if (line.StartsWith(label, StringComparison.Ordinal))
-                return line.Substring(label.Length);
+            int nl = rest.IndexOf('\n');
+            ReadOnlySpan<char> line = nl < 0 ? rest : rest.Slice(0, nl);
+            ReadOnlySpan<char> trimmed = line.Trim();
+            if (trimmed.StartsWith(label.AsSpan()))
+                return trimmed.Slice(label.Length).ToString();
+            if (nl < 0)
+                break;
+            rest = rest.Slice(nl + 1);
         }
 
         return null;
