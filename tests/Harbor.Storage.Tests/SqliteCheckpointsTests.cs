@@ -288,7 +288,7 @@ public class SqliteCheckpointsTests
 
             // Last anchor: a rewind of zero — the whole history is kept.
             var last = (await store.CreateCheckpointAsync(session.Id, ids[2])).Value;
-            await Assert.That(last.Value.MessageIndex).IsEqualTo(2);
+            await Assert.That(last.MessageIndex).IsEqualTo(2);
             var zero = await store.RewindToCheckpointAsync(session.Id, last.Id);
             await Assert.That(zero.IsSuccess).IsTrue();
             await Assert.That(zero.Value.Removed).IsEqualTo(0);
@@ -296,7 +296,7 @@ public class SqliteCheckpointsTests
 
             // First anchor: everything after the head is dropped.
             var first = (await store.CreateCheckpointAsync(session.Id, ids[0], "head")).Value;
-            await Assert.That(first.Value.MessageIndex).IsEqualTo(0);
+            await Assert.That(first.MessageIndex).IsEqualTo(0);
             var one = await store.RewindToCheckpointAsync(session.Id, first.Id);
             await Assert.That(one.IsSuccess).IsTrue();
             await Assert.That(one.Value.Removed).IsEqualTo(2);

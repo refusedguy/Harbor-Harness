@@ -558,7 +558,7 @@ public sealed class SqliteSessionStore : ISessionStore, ISessionCheckpointStore
         var checkpointResult = checkpointRow.Value.ToResult(
             SessionStoreErrors.CheckpointNotFound(sessionId, checkpointId));
         if (checkpointResult.IsFailure)
-            return Result.Failure<SessionRewindOutcome>(checkpointResult.Error);
+            return checkpointResult.ConvertFailure<SessionRewindOutcome>();
         return await RewindToAnchorAsync(sessionId, checkpointResult.Value, ct).ConfigureAwait(false);
     }
 
