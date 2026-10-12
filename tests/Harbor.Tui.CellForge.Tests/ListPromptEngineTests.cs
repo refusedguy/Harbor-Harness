@@ -22,8 +22,8 @@ public class ListPromptEngineTests
         bool wrapAround = false,
         ListSelectionMode mode = ListSelectionMode.Single,
         bool searchEnabled = false,
-        params string[] values) =>
-        ListPromptState<string>.FromValues(values, pageSize: pageSize, wrapAround: wrapAround, mode: mode, searchEnabled: searchEnabled);
+        string[]? values = null) =>
+        ListPromptState<string>.FromValues(values ?? [], pageSize: pageSize, wrapAround: wrapAround, mode: mode, searchEnabled: searchEnabled);
 
     private static ListPromptState<string> Grouped(ListSelectionMode mode)
     {
