@@ -31,7 +31,7 @@ namespace Harbor.Registries.Tests;
 ///         <b>2. Nothing on the synchronous path suspends, so nothing boxes.</b> For a
 ///         subscriber that returns an already-completed <c>ValueTask</c> — the common
 ///         real case — <c>DispatchToOneAsync</c> takes its
-///         <c>dispatch.IsCompletedSuccessfully</c> branch (<c>InMemoryEventBus.cs:1133</c>)
+///         <c>dispatch.IsCompletedSuccessfully</c> branch (<c>InMemoryEventBus.cs:1147</c>)
 ///         and returns without awaiting a real suspension. An <c>async Task</c> method
 ///         that completes without ever suspending stays a struct on the stack and
 ///         returns the builder's cached completed task. This is what these tests pin,
@@ -45,7 +45,7 @@ namespace Harbor.Registries.Tests;
 ///         residue on the 1-subscriber path is <b>200 B/publish</b>, attributed
 ///         exhaustively in <c>docs/BENCHMARKS.md</c> §5.4.3: 80 B from
 ///         <c>Task&lt;ValueTuple&lt;bool, AgentEvent&gt;&gt;</c>
-///         (<c>RunMiddlewareAsync</c>, <c>InMemoryEventBus.cs:925</c>), 80 B
+///         (<c>RunMiddlewareAsync</c>, <c>InMemoryEventBus.cs:936</c>), 80 B
 ///         <i>per subscriber</i> from
 ///         <c>Task&lt;ValueTuple&lt;DispatchOutcome, Task?&gt;&gt;</c>
 ///         (<c>DispatchToOneAsync</c>, :1122), and 40 B from the fan-out method's own
@@ -76,7 +76,7 @@ public class EventBusPublishShapeTests
 
     /// <summary>
     ///     Fast path (no subscriber, no sink, unarmed ring): the return is the
-    ///     <c>Task.CompletedTask</c> literal at <c>InMemoryEventBus.cs:437</c>, so two
+    ///     <c>Task.CompletedTask</c> literal at <c>InMemoryEventBus.cs:444</c>, so two
     ///     publishes hand back the <em>same</em> instance — proof that the call
     ///     allocates no task of its own.
     /// </summary>
