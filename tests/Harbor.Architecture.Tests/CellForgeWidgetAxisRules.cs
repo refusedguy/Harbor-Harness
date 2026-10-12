@@ -594,15 +594,35 @@ public sealed class CellForgeWidgetAxisRules
     internal const string ViewSeamStatus = "Closed";
 
     /// <summary>
-    ///     Where the shipped <c>LayoutTree</c> is allowed to be built. Exactly one
-    ///     entry, because the widget axis being closed is the claim this file
-    ///     exists to keep true: a second construction site in product code is a
-    ///     second home for chrome, and the layout the renderer paints is decided
-    ///     by the static factory's parameters rather than by anything a plugin
-    ///     supplies.
+    ///     Where a <c>LayoutTree</c> is allowed to be built in product code.
+    ///     Two recorded entries, each with its decision below — a construction
+    ///     site outside this set is a second home for chrome, and the layout a
+    ///     renderer paints is decided by the static factories' parameters
+    ///     rather than by anything a plugin supplies.
     /// </summary>
+    /// <remarks>
+    ///     <para>
+    ///         Entry 1 is the shipped chrome: <c>ChatScreenLayout.cs</c> builds
+    ///         the one tree the chat renderer paints.
+    ///     </para>
+    ///     <para>
+    ///         Entry 2 is the generic composition path (TR7, issue #1226, epic
+    ///         #1195): <c>GenericScreen.Build</c> constructs a tree from neutral
+    ///         in-tree specs (<c>GenericNodeSpec</c>/<c>GenericSplitSpec</c> —
+    ///         ids, minimums, static lines or an in-tree form field). It takes
+    ///         no plugin type, is handed to no plugin, and is painted by no
+    ///         shipped renderer — the chat renderer and its tree stay alongside
+    ///         untouched — so it is a second construction site without a second
+    ///         home for the shipped chrome, recorded here instead of smuggled
+    ///         past the rule.
+    ///     </para>
+    /// </remarks>
     internal static readonly FrozenSet<string> AllowedTreeBuilders =
-        new[] { "src/Harbor.Tui.CellForge/Chat/Widgets/ChatScreenLayout.cs" }.ToFrozenSet(StringComparer.Ordinal);
+        new[]
+        {
+            "src/Harbor.Tui.CellForge/Chat/Widgets/ChatScreenLayout.cs",
+            "src/Harbor.Tui.CellForge/Generic/GenericScreen.cs",
+        }.ToFrozenSet(StringComparer.Ordinal);
 
     /// <summary>
     ///     The documents that TEACH the view seam — the recipe a plugin author
@@ -742,7 +762,7 @@ public sealed class CellForgeWidgetAxisRules
                 + "factory ChatScreen.Build(...) whose parameters are all in-tree, and no plugin is ever "
                 + "handed a tree, a ChatScreen or a Panel. That is the correct design — the defect #564 "
                 + "found is the documents, not the closure. A `new LayoutTree(` in product code OUTSIDE "
-                + "ChatScreenLayout.cs means a second home for the chrome, which is either a widget axis "
+                + "the recorded AllowedTreeBuilders set means a second home for the chrome, which is either a widget axis "
                 + "opening without a decision or a build that paints nothing. Allowed builders: "
                 + string.Join(", ", AllowedTreeBuilders) + ". Offenders: "
                 + (outside.Count == 0 ? "(none)" : string.Join(", ", outside)));
