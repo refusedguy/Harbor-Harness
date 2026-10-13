@@ -71,4 +71,23 @@ public interface IBackgroundTaskRegistry
     ///     completions — a stuck run never blocks the registry).
     /// </summary>
     public IReadOnlyList<BackgroundTaskCompletion> DrainCompleted(string sessionId);
+
+    /// <summary>
+    ///     Deterministic test-wait pairing for detached runs (textual
+    ///     <c>wait_for_idle</c> steal, #1192): resolves when every tracked run
+    ///     is finished — running or not — instead of sleeping a fixed delay.
+    ///     Finished-but-not-drained runs count as idle; draining stays a
+    ///     separate step via <see cref="DrainCompleted" />.
+    /// </summary>
+    /// <param name="sessionId">
+    ///     When set, only runs launched from this session gate idleness; other
+    ///     sessions' runs are ignored. When <c>null</c>, every tracked run gates.
+    /// </param>
+    /// <param name="timeout">How long to wait before giving up (default 5 seconds).</param>
+    /// <param name="ct">Cancels the wait (does not touch the tracked runs).</param>
+    /// <returns><c>true</c> when idle, <c>false</c> on timeout.</returns>
+    public Task<bool> WaitForIdleAsync(
+        string? sessionId = null,
+        TimeSpan? timeout = null,
+        CancellationToken ct = default);
 }
