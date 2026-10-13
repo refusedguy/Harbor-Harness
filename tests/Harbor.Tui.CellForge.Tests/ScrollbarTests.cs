@@ -1,3 +1,4 @@
+using Harbor.DesignSystem;
 using Harbor.Tui.CellForge.Generic.Widgets;
 using Harbor.Tui.CellForge.Widgets;
 
@@ -186,5 +187,134 @@ public class ScrollbarTests
         // Shared indicator paints on the rightmost column; content stays put.
         await Assert.That(buffer.Get(9, 0).Rune == (int)'█' || buffer.Get(9, 0).Rune == (int)'│').IsTrue();
         await Assert.That(buffer.Get(0, 0).Rune).IsEqualTo((int)'>');
+    }
+
+    [Test]
+    public async Task SymbolPresets_MatchRatatuiCodepoints()
+    {
+        await Assert.That(ScrollbarSymbols.DoubleVertical).IsEqualTo(new ScrollbarSymbols('║', '█', '▲', '▼'));
+        await Assert.That(ScrollbarSymbols.DoubleHorizontal).IsEqualTo(new ScrollbarSymbols('═', '█', '◄', '►'));
+        await Assert.That(ScrollbarSymbols.SingleVertical).IsEqualTo(new ScrollbarSymbols('│', '█', '↑', '↓'));
+        await Assert.That(ScrollbarSymbols.SingleHorizontal).IsEqualTo(new ScrollbarSymbols('─', '█', '←', '→'));
+        await Assert.That(ScrollbarSymbols.Default).IsEqualTo(new ScrollbarSymbols('│', '█', null, null));
+    }
+
+    [Test]
+    public async Task Orientation_IsVerticalMatchesRatatuiAxes()
+    {
+        await Assert.That(ScrollbarOrientation.VerticalRight.IsVertical()).IsTrue();
+        await Assert.That(ScrollbarOrientation.VerticalLeft.IsVertical()).IsTrue();
+        await Assert.That(ScrollbarOrientation.HorizontalBottom.IsHorizontal()).IsTrue();
+        await Assert.That(ScrollbarOrientation.HorizontalTop.IsHorizontal()).IsTrue();
+        await Assert.That(ScrollbarOrientation.VerticalRight.IsHorizontal()).IsFalse();
+    }
+
+    [Test]
+    public async Task TrackLengthExcludingEnds_SubtractsArrowHeads()
+    {
+        await Assert.That(Scrollbar.TrackLengthExcludingEnds(10, ScrollbarSymbols.Default)).IsEqualTo(10);
+        await Assert.That(Scrollbar.TrackLengthExcludingEnds(10, ScrollbarSymbols.DoubleVertical)).IsEqualTo(8);
+        await Assert.That(Scrollbar.TrackLengthExcludingEnds(1, ScrollbarSymbols.DoubleVertical)).IsEqualTo(0);
+        await Assert.That(Scrollbar.TrackLengthExcludingEnds(10, new ScrollbarSymbols('│', '█', '↑', null))).IsEqualTo(9);
+    }
+
+    [Test]
+    public async Task VerticalLeft_UsesLeftColumn()
+    {
+        var buffer = new ScreenBuffer(3, 10);
+        bool painted = Scrollbar.TryPaint(
+            buffer, new Rect(0, 0, 3, 10), 20, 0, 10,
+            ScrollbarOrientation.VerticalLeft);
+
+        await Assert.That(painted).IsTrue();
+        await Assert.That(buffer.Get(0, 0).Rune).IsEqualTo((int)'█');
+        await Assert.That(buffer.Get(0, 9).Rune).IsEqualTo((int)'│');
+        await Assert.That(buffer.Get(2, 0)).IsEqualTo(Cell.Blank);
+    }
+
+    [Test]
+    public async Task HorizontalBottom_PaintsThumbOverTrack()
+    {
+        var buffer = new ScreenBuffer(10, 3);
+        bool painted = Scrollbar.TryPaint(
+            buffer, new Rect(0, 0, 10, 3), 20, 0, 10,
+            ScrollbarOrientation.HorizontalBottom);
+
+        await Assert.That(painted).IsTrue();
+        // total=20, viewport=10, track=10 → 5-cell thumb cols 0..4, track cols 5..9.
+        await Assert.That(buffer.Get(0, 2).Rune).IsEqualTo((int)'█');
+        await Assert.That(buffer.Get(4, 2).Rune).IsEqualTo((int)'█');
+        await Assert.That(buffer.Get(5, 2).Rune).IsEqualTo((int)'│');
+        await Assert.That(buffer.Get(9, 2).Rune).IsEqualTo((int)'│');
+        await Assert.That(buffer.Get(0, 0)).IsEqualTo(Cell.Blank);
+        await Assert.That(buffer.Get(5, 1)).IsEqualTo(Cell.Blank);
+    }
+
+    [Test]
+    public async Task HorizontalTop_UsesTopRow()
+    {
+        var buffer = new ScreenBuffer(10, 3);
+        bool painted = Scrollbar.TryPaint(
+            buffer, new Rect(0, 0, 10, 3), 20, 0, 10,
+            ScrollbarOrientation.HorizontalTop);
+
+        await Assert.That(painted).IsTrue();
+        await Assert.That(buffer.Get(0, 0).Rune).IsEqualTo((int)'█');
+        await Assert.That(buffer.Get(9, 0).Rune).IsEqualTo((int)'│');
+        await Assert.That(buffer.Get(0, 2)).IsEqualTo(Cell.Blank);
+    }
+
+    [Test]
+    public async Task BeginEnd_ReserveCellsAndUseOwnStyles()
+    {
+        var beginStyle = new CellStyle(ChatPalette.Accent);
+        var endStyle = new CellStyle(ChatPalette.Warning);
+        var buffer = new ScreenBuffer(1, 10);
+        bool painted = Scrollbar.TryPaint(
+            buffer, new Rect(0, 0, 1, 10), 20, 0, 10,
+            ScrollbarOrientation.VerticalRight, ScrollbarSymbols.DoubleVertical,
+            beginStyle: beginStyle, endStyle: endStyle);
+
+        await Assert.That(painted).IsTrue();
+        // Arrow heads pin the first/last cells with their own styles; the
+        // 8-cell inner track carries the thumb at the top (offset 0).
+        await Assert.That(buffer.Get(0, 0).Rune).IsEqualTo((int)'▲');
+        await Assert.That(buffer.Get(0, 0).Style).IsEqualTo(beginStyle);
+        await Assert.That(buffer.Get(0, 9).Rune).IsEqualTo((int)'▼');
+        await Assert.That(buffer.Get(0, 9).Style).IsEqualTo(endStyle);
+        await Assert.That(buffer.Get(0, 1).Rune).IsEqualTo((int)'█');
+        await Assert.That(buffer.Get(0, 8).Rune).IsEqualTo((int)'║');
+    }
+
+    [Test]
+    public async Task LargeThumb_AtEnd_KeepsEndSymbol()
+    {
+        // Ratatui #2582 parity: a large thumb at the end must not overrun the
+        // track and push the end arrow out of the painted area.
+        // total=31, viewport=24 → maxOffset=7; stale offset 8 clamps to 7;
+        // 22-cell inner track → 17-cell thumb rows 6..22, ▲ at 0, ▼ at 23.
+        var buffer = new ScreenBuffer(1, 24);
+        bool painted = Scrollbar.TryPaint(
+            buffer, new Rect(0, 0, 1, 24), 31, 8, 24,
+            ScrollbarOrientation.VerticalRight, ScrollbarSymbols.DoubleVertical);
+
+        await Assert.That(painted).IsTrue();
+        await Assert.That(buffer.Get(0, 0).Rune).IsEqualTo((int)'▲');
+        await Assert.That(buffer.Get(0, 5).Rune).IsEqualTo((int)'║');
+        await Assert.That(buffer.Get(0, 6).Rune).IsEqualTo((int)'█');
+        await Assert.That(buffer.Get(0, 22).Rune).IsEqualTo((int)'█');
+        await Assert.That(buffer.Get(0, 23).Rune).IsEqualTo((int)'▼');
+    }
+
+    [Test]
+    public async Task ScrollDirection_ExtensionMovesViewport()
+    {
+        var viewport = new ScrollableViewport();
+        viewport.Configure(20, 10);
+
+        await Assert.That(viewport.Scroll(ScrollDirection.Forward, 3)).IsEqualTo(3);
+        await Assert.That(viewport.Scroll(ScrollDirection.Backward, 2)).IsEqualTo(1);
+        await Assert.That(viewport.Scroll(ScrollDirection.Backward, 100)).IsEqualTo(0);
+        await Assert.That(viewport.Scroll(ScrollDirection.Forward, 100)).IsEqualTo(10);
     }
 }
