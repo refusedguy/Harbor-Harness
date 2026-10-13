@@ -40,6 +40,15 @@ public sealed class ComposerPanel : Panel
     /// </summary>
     public bool ShowChrome { get; set; }
 
+    /// <summary>
+    /// Content area inside the chrome (ratatui <c>Block::inner</c>): chromed
+    /// and tall enough ⇒ the top title-rule row and bottom rule row are
+    /// reserved. <see cref="Paint"/> derives text/caret geometry from this,
+    /// never from <see cref="Panel.Rect"/> plus hand-rolled pads.
+    /// </summary>
+    public override Rect ContentRect =>
+        ShowChrome && Rect.Height >= 4 ? PanelChrome.Inset(Rect, 0, 1, 0, 1) : Rect;
+
     public override void Paint(ScreenBuffer buffer)
     {
         if (Rect.Width <= 0 || Rect.Height <= 0)
@@ -47,13 +56,13 @@ public sealed class ComposerPanel : Panel
             return;
         }
 
-        // Chrome reserves the outer rows; rects too short to keep 2 text
-        // rows fall back to legacy (a 3-row composer would otherwise show
+        // Chrome discipline (#1203): chrome paints on the outer rows; the
+        // text/caret below live in ContentRect — rects too short to keep 2
+        // text rows fall back to legacy (a 3-row composer would otherwise show
         // only 1 text row and hide multiline input — KittyShiftEnter etc).
-        int topPad = ShowChrome && Rect.Height >= 4 ? 1 : 0;
-        int bottomPad = topPad;
+        var content = ContentRect;
 
-        if (topPad > 0)
+        if (content.Height != Rect.Height)
         {
             PanelChrome.FillPanelBackground(buffer, new Rect(Rect.X, Rect.Y, Rect.Width, 1));
             PanelChrome.PaintTitleRow(buffer, Rect.X, Rect.Y, Rect.Width, PanelChrome.ComposerTitle);
@@ -67,7 +76,7 @@ public sealed class ComposerPanel : Panel
         ReadOnlySpan<char> snapshot = Composer.Buffer.AsSpan();
         int caret = Composer.Buffer.Cursor;
 
-        int textRows = Rect.Height - topPad - bottomPad;
+        int textRows = content.Height;
 
         // Locate the caret row/col inside the logical lines.
         int caretRow = 0, caretCol = 0, seen = 0;
@@ -96,7 +105,7 @@ public sealed class ComposerPanel : Panel
         // persists across frames and SetText("") is a no-op, so any shrink
         // (Ctrl+C clear, Ctrl+U/K kill, backspace, shorter history recall)
         // would otherwise leave ghost characters on the emulated grid.
-        buffer.Fill(new Rect(Rect.X, Rect.Y + topPad, Rect.Width, Math.Max(0, textRows)), Harbor.Ui.Framework.Rendering.Cell.Blank);
+        buffer.Fill(new Rect(content.X, content.Y, content.Width, Math.Max(0, textRows)), Harbor.Ui.Framework.Rendering.Cell.Blank);
 
         int rowStart = 0;
         for (int row = 0; row < textRows; row++)
@@ -104,11 +113,11 @@ public sealed class ComposerPanel : Panel
             int newline = snapshot[rowStart..].IndexOf('\n');
             int lineLen = newline < 0 ? snapshot.Length - rowStart : newline;
             var text = snapshot.Slice(rowStart, lineLen);
-            buffer.SetText(Rect.X, Rect.Y + topPad + row, text, CellStyle.Plain);
+            buffer.SetText(content.X, content.Y + row, text, CellStyle.Plain);
 
             if (text.Length == 0 && snapshot.Length == 0 && !string.IsNullOrEmpty(Placeholder))
             {
-                buffer.SetText(Rect.X, Rect.Y + topPad, Placeholder, PlaceholderStyle);
+                buffer.SetText(content.X, content.Y, Placeholder, PlaceholderStyle);
             }
 
             if (newline < 0)
@@ -119,9 +128,9 @@ public sealed class ComposerPanel : Panel
             rowStart += newline + 1;
         }
 
-        if (caretRow < textRows && textRows > 0 && caretCol <= Rect.Width)
+        if (caretRow < textRows && textRows > 0 && caretCol <= content.Width)
         {
-            buffer.SetStyleAt(Math.Min(Rect.X + caretCol, Rect.Right - 1), Rect.Y + topPad + caretRow, CaretStyle);
+            buffer.SetStyleAt(Math.Min(content.X + caretCol, content.Right - 1), content.Y + caretRow, CaretStyle);
         }
     }
 }
@@ -576,6 +585,13 @@ public sealed class StatusPanel : Panel
     /// </summary>
     public bool ShowChrome { get; set; }
 
+    /// <summary>
+    /// The status chrome is background-only (single-row footer), so the
+    /// content is the whole rect — stated explicitly so a future frame that
+    /// reserves cells must update this contract, not its callers.
+    /// </summary>
+    public override Rect ContentRect => Rect;
+
     public override void Paint(ScreenBuffer buffer)
     {
         // ENG5: a background AnimationClock (when attached) owns the tick, so
@@ -725,6 +741,14 @@ public sealed class SideBarPanel : Panel
 
     /// <summary>Plugin-contributed slots painted below the built-in sections.</summary>
     public IReadOnlyList<SideBarSlot>? Slots { get; set; }
+
+    /// <summary>
+    /// Content area inside the sidebar chrome (ratatui <c>Block::inner</c>):
+    /// the left <c>│</c> hairline + 1 padding column, the <c>CONTEXT</c> title
+    /// row and the 1-cell right margin stay outside — sections start at
+    /// (<c>X+2, Y+1</c>) with width <c>W-3</c> (see <see cref="SideBarView"/>).
+    /// </summary>
+    public override Rect ContentRect => PanelChrome.Inset(Rect, 2, 1, 1, 0);
 
     public override void Paint(ScreenBuffer buffer)
     {
@@ -1116,6 +1140,14 @@ public sealed class CellForgeDockPanel : Panel
     /// </summary>
     public PanelServices? Services { get; set; }
 
+    /// <summary>
+    /// No decor today — the leaf is pure host surface, so the content is the
+    /// whole rect. Slice math below still routes through this (never
+    /// <see cref="Panel.Rect"/>) so a future frame cannot silently shift the
+    /// hosted providers.
+    /// </summary>
+    public override Rect ContentRect => Rect;
+
     public override void Paint(ScreenBuffer buffer)
     {
         if (Rect.Width <= 0 || Rect.Height <= 0 || Providers.Count == 0)
@@ -1146,8 +1178,11 @@ public sealed class CellForgeDockPanel : Panel
     /// </summary>
     private void PaintSide(ScreenBuffer buffer)
     {
-        int y = Rect.Y;
-        int remaining = Rect.Height;
+        // #1203: hosted providers derive geometry from ContentRect, never
+        // from the outer rect — a future dock frame must not shift slices.
+        var content = ContentRect;
+        int y = content.Y;
+        int remaining = content.Height;
         // ENG12 #284 (TGui snapshot pattern): Providers is replaced wholesale
         // on visibility changes — pin the reference for this draw pass.
         var providers = Providers;
@@ -1156,8 +1191,8 @@ public sealed class CellForgeDockPanel : Panel
             int left = providers.Count - i;
             int h = Math.Max(1, remaining / left);
             h = Math.Min(h, remaining);
-            var rows = CellForgePanelAdapter.RenderToRows(providers[i], State, Rect.Width, h, Services);
-            Blit(buffer, Rect.X, y, Rect.Width, rows, h);
+            var rows = CellForgePanelAdapter.RenderToRows(providers[i], State, content.Width, h, Services);
+            Blit(buffer, content.X, y, content.Width, rows, h);
             y += h;
             remaining -= h;
         }
@@ -1171,15 +1206,17 @@ public sealed class CellForgeDockPanel : Panel
     /// </summary>
     private void PaintStacked(ScreenBuffer buffer)
     {
-        int y = Rect.Y;
-        int remaining = Rect.Height;
+        // #1203: see PaintSide — provider slices come from ContentRect.
+        var content = ContentRect;
+        int y = content.Y;
+        int remaining = content.Height;
         // ENG12 #284 (TGui snapshot pattern): see PaintSide.
         var providers = Providers;
         for (int i = 0; i < providers.Count && remaining > 0; i++)
         {
             int h = Math.Min(ChatScreenPanelDock.SizeOf(View, providers[i]), remaining);
-            var rows = CellForgePanelAdapter.RenderToRows(providers[i], State, Rect.Width, h, Services);
-            Blit(buffer, Rect.X, y, Rect.Width, rows, h);
+            var rows = CellForgePanelAdapter.RenderToRows(providers[i], State, content.Width, h, Services);
+            Blit(buffer, content.X, y, content.Width, rows, h);
             y += h;
             remaining -= h;
         }

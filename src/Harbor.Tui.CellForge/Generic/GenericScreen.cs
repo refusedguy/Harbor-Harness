@@ -89,6 +89,17 @@ public sealed class GenericContentPanel : Panel
     /// <summary>Static lines (empty when a field is hosted).</summary>
     public IReadOnlyList<string> Lines { get; }
 
+    /// <summary>
+    /// Content area below the title row (ratatui <c>Block::inner</c>): the
+    /// first row is container chrome when <see cref="Title"/> is set. The
+    /// hosted field / static lines start at this origin, never at
+    /// <c>Rect.Y + 1</c> recomputed by hand (<see cref="Paint"/> seeds its
+    /// cursor from here).
+    /// </summary>
+    public override Rect ContentRect => Title.Length > 0
+        ? new Rect(Rect.X, Rect.Y + 1, Rect.Width, Math.Max(0, Rect.Height - 1))
+        : Rect;
+
     public override void Paint(ScreenBuffer buffer)
     {
         ArgumentNullException.ThrowIfNull(buffer);
@@ -99,8 +110,10 @@ public sealed class GenericContentPanel : Panel
 
         buffer.Fill(Rect, Cell.Blank);
 
+        // Title row is container chrome; children paint from ContentRect.
+        var content = ContentRect;
         int y = Rect.Y;
-        int bottom = Rect.Y + Rect.Height;
+        int bottom = content.Bottom;
         if (Title.Length > 0 && y < bottom)
         {
             string marker = Focused ? "› " : string.Empty;
@@ -114,7 +127,7 @@ public sealed class GenericContentPanel : Panel
             int h = Math.Max(0, bottom - y);
             if (h > 0)
             {
-                Field.Paint(buffer, new Rect(Rect.X, y, Rect.Width, h));
+                Field.Paint(buffer, new Rect(content.X, y, content.Width, h));
             }
 
             return;
@@ -128,7 +141,7 @@ public sealed class GenericContentPanel : Panel
                 continue;
             }
 
-            buffer.SetText(Rect.X, y, line.AsSpan(0, Math.Min(line.Length, Rect.Width)), BodyStyle);
+            buffer.SetText(content.X, y, line.AsSpan(0, Math.Min(line.Length, content.Width)), BodyStyle);
         }
     }
 }
