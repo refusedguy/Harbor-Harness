@@ -1,3 +1,5 @@
+using System.Text;
+
 namespace Harbor.Tui.CellForge.Widgets;
 
 /// <summary>
@@ -169,7 +171,8 @@ public sealed class CalendarView
         _cachedMonth = Month;
         _daysInMonth = DaysIn(Month, Year);
         // Monday-first column: .NET DayOfWeek is Sunday-first.
-        int dow = (int)new DateTime(Year, Month, 1).DayOfWeek;
+        // Unspecified kind: a calendar grid is a civil date, not an instant (S6562).
+        int dow = (int)new DateTime(Year, Month, 1, 0, 0, 0, DateTimeKind.Unspecified).DayOfWeek;
         _startColumn = ((dow + 6) % Columns);
     }
 

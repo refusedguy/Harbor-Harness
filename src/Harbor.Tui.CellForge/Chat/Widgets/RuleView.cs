@@ -1,3 +1,5 @@
+using System.Text;
+
 namespace Harbor.Tui.CellForge.Widgets;
 
 /// <summary>Title placement on a <see cref="RuleView" /> row.</summary>
