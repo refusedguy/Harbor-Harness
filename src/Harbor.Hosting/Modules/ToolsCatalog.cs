@@ -89,7 +89,7 @@ internal static class ToolsCatalog
                 var remote = entry.Remote;
                 var registered = mcpRegistry.Register(entry.Name, remote.Url, remote.Transport, remote.Headers, remote.OAuth);
                 if (registered.IsFailure)
-                    ctx.Logger.LogWarning("Skipping MCP server '{Name}': {Error}", entry.Name, registered.Error);
+                    ToolsCatalogLog.SkippingMcpServer(ctx.Logger, entry.Name, registered.Error);
             }
             else if (entry.StartInfo is not null)
             {
@@ -132,9 +132,9 @@ internal static class ToolsCatalog
             PluginMcpServerName,
             new McpServerStartInfo { Command = hostPath });
         if (registered.IsFailure)
-            ctx.Logger.LogWarning("Skipping out-of-proc plugin route '{Name}': {Error}", PluginMcpServerName, registered.Error);
+            ToolsCatalogLog.SkippingPluginRoute(ctx.Logger, PluginMcpServerName, registered.Error);
         else
-            ctx.Logger.LogInformation("MCP server '{Name}' registered from {Path} (out-of-proc plugin route)", PluginMcpServerName, hostPath);
+            ToolsCatalogLog.PluginRouteRegistered(ctx.Logger, PluginMcpServerName, hostPath);
     }
 #endif
 
@@ -195,7 +195,26 @@ internal static class ToolsCatalog
         }
 
         registry.Freeze();
-        ctx.Logger.LogInformation("Registered {Count} tools", registry.GetAllTools().Count);
+        ToolsCatalogLog.ToolsRegistered(ctx.Logger, registry.GetAllTools().Count);
         return registry;
     }
+}
+
+/// <summary>
+///     SG4: BCL <c>[LoggerMessage]</c> delegates for <see cref="ToolsCatalog" />.
+///     Templates, levels and operands are 1-to-1 with the former <c>LogX</c> calls.
+/// </summary>
+internal static partial class ToolsCatalogLog
+{
+    [LoggerMessage(EventId = 1, Level = LogLevel.Warning, Message = "Skipping MCP server '{Name}': {Error}")]
+    public static partial void SkippingMcpServer(ILogger logger, string name, string error);
+
+    [LoggerMessage(EventId = 2, Level = LogLevel.Warning, Message = "Skipping out-of-proc plugin route '{Name}': {Error}")]
+    public static partial void SkippingPluginRoute(ILogger logger, string name, string error);
+
+    [LoggerMessage(EventId = 3, Level = LogLevel.Information, Message = "MCP server '{Name}' registered from {Path} (out-of-proc plugin route)")]
+    public static partial void PluginRouteRegistered(ILogger logger, string name, string path);
+
+    [LoggerMessage(EventId = 4, Level = LogLevel.Information, Message = "Registered {Count} tools")]
+    public static partial void ToolsRegistered(ILogger logger, int count);
 }
