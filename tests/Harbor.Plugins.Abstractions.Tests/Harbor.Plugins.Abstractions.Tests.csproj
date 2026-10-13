@@ -17,7 +17,7 @@
 
   <ItemGroup>
     <PackageReference Include="Microsoft.Extensions.Configuration"/>
-    <PackageReference Include="Microsoft.Extensions.Configuration.Abstractions"/>
+    <!-- #957: Microsoft.Extensions.Configuration.Abstractions removed — project uses only ConfigurationBuilder (Configuration package types). -->
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions"/>
   </ItemGroup>
 
