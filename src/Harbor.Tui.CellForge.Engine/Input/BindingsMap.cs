@@ -237,7 +237,11 @@ public interface IBindingScope
 /// <summary>
 /// One scope's binding table (textual <c>BindingsMap</c> analogue): bindings
 /// keyed by stable id, matched by gesture, overridden by id. Last bind wins
-/// per id; same-gesture ties resolve by <see cref="Binding.Priority"/>.
+/// per id; same-gesture ties resolve by <see cref="Binding.Priority"/>, and
+/// equal-priority ties by recency — the most recently bound or overridden
+/// entry wins — so an override wins the clash it reports, and <c>Merge</c>
+/// (which keeps the last-iterated contender) agrees with <see cref="TryMatch"/>
+/// on ties instead of contradicting it.
 /// Not thread-safe — render thread only, like <see cref="FocusStack"/>.
 /// </summary>
 public sealed class BindingsMap
@@ -247,12 +251,17 @@ public sealed class BindingsMap
     /// <summary>Bound binding count.</summary>
     public int Count => _byId.Count;
 
-    /// <summary>Binds (or replaces) <paramref name="binding"/> by its id.</summary>
+    /// <summary>
+    /// Binds (or replaces) <paramref name="binding"/> by its id. A rebind
+    /// re-seats the entry last, so it wins the next equal-priority gesture
+    /// tie in <see cref="TryMatch"/>.
+    /// </summary>
     public void Bind(Binding binding)
     {
         ArgumentNullException.ThrowIfNull(binding);
         ArgumentException.ThrowIfNullOrWhiteSpace(binding.Id);
         ArgumentException.ThrowIfNullOrWhiteSpace(binding.Action);
+        _ = _byId.Remove(binding.Id);
         _byId[binding.Id] = binding;
     }
 
@@ -268,7 +277,8 @@ public sealed class BindingsMap
     /// <summary>
     /// Best-match lookup: every binding whose gesture fires on
     /// <paramref name="key"/> contends, highest <see cref="Binding.Priority"/>
-    /// wins. Gesture match stays case-EXACT (see <see cref="KeyGesture"/>).
+    /// wins, equal-priority ties go to the most recently bound or overridden
+    /// entry. Gesture match stays case-EXACT (see <see cref="KeyGesture"/>).
     /// </summary>
     public bool TryMatch(KeyEvent key, out Binding? hit)
     {
@@ -280,7 +290,7 @@ public sealed class BindingsMap
                 continue;
             }
 
-            if (hit is null || candidate.Priority > hit.Priority)
+            if (hit is null || candidate.Priority >= hit.Priority)
             {
                 hit = candidate;
             }
@@ -365,6 +375,10 @@ public sealed class BindingsMap
             }
         }
 
+        // Re-seat last: the rebound entry must win the equal-priority tie
+        // against the binding it just clashed with (see TryMatch), so the
+        // override takes effect instead of losing to the displaced entry.
+        _ = _byId.Remove(id);
         _byId[id] = current with { Gesture = gesture };
         return true;
     }
