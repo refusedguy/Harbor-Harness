@@ -19,7 +19,7 @@ namespace Harbor.Tui.CellForge.Rendering;
 ///     the tracked pen position already matches.</description></item>
 /// </list>
 /// </summary>
-public sealed class AnsiWriter
+public sealed class AnsiWriter : ITerminalControlBackend
 {
     // Attribute on/off code pairs (§3.2). Bold and dim share the off code 22,
     // which is why turning one of them off may re-emit the other's on code.
@@ -427,6 +427,79 @@ public sealed class AnsiWriter
     public void HideCursor() => AppendAscii("\x1B[?25l");
 
     public void ShowCursor() => AppendAscii("\x1B[?25h");
+
+    /// <summary>Slim-trait cursor positioning (issue #1160): 0-based CUP via <see cref="MoveTo"/>.</summary>
+    public void SetCursorPosition(int x, int y) => MoveTo(x, y);
+
+    /// <summary>
+    /// Slim-trait cursor save (issue #1160 audit): DECSC (<c>ESC 7</c>),
+    /// emit-only — never a terminal query (ratatui #2691 race lesson).
+    /// </summary>
+    public void SaveCursor()
+    {
+        FlushPendingSgr();
+        EnsureCapacity(2);
+        _buf[_len++] = Esc;
+        _buf[_len++] = (byte)'7';
+    }
+
+    /// <summary>
+    /// Slim-trait cursor restore (issue #1160 audit): DECRC (<c>ESC 8</c>),
+    /// emit-only — never a terminal query (ratatui #2691 race lesson).
+    /// </summary>
+    public void RestoreCursor()
+    {
+        FlushPendingSgr();
+        EnsureCapacity(2);
+        _buf[_len++] = Esc;
+        _buf[_len++] = (byte)'8';
+    }
+
+    /// <summary>Slim-trait whole-screen erase (issue #1160): ED 2, pen unchanged.</summary>
+    public void ClearScreen() => EmitEraseInDisplay(2);
+
+    /// <summary>Slim-trait scroll-region set (issue #1160): DECSTBM, not a <c>Raw</c> escape insert.</summary>
+    public void SetScrollRegion(int topRow, int bottomRow)
+    {
+        FlushPendingSgr();
+        EnsureCapacity(16);
+        AppendCsi();
+        AppendDigits(Math.Max(0, topRow) + 1);
+        _buf[_len++] = (byte)';';
+        AppendDigits(Math.Max(Math.Max(0, topRow) + 1, bottomRow + 1));
+        _buf[_len++] = (byte)'r';
+        InvalidateCursorPosition();
+    }
+
+    /// <summary>Slim-trait scroll-region reset (issue #1160): full screen, not a <c>Raw</c> escape insert.</summary>
+    public void ResetScrollRegion()
+    {
+        FlushPendingSgr();
+        AppendAscii("\x1B[r");
+        InvalidateCursorPosition();
+    }
+
+    /// <summary>Slim-trait scroll-region up (issue #1160): SU, not a <c>Raw</c> escape insert.</summary>
+    public void ScrollRegionUp(int lines)
+    {
+        FlushPendingSgr();
+        EnsureCapacity(12);
+        AppendCsi();
+        AppendDigits(Math.Max(1, lines));
+        _buf[_len++] = (byte)'S';
+        InvalidateCursorPosition();
+    }
+
+    /// <summary>Slim-trait scroll-region down (issue #1160): SD, not a <c>Raw</c> escape insert.</summary>
+    public void ScrollRegionDown(int lines)
+    {
+        FlushPendingSgr();
+        EnsureCapacity(12);
+        AppendCsi();
+        AppendDigits(Math.Max(1, lines));
+        _buf[_len++] = (byte)'T';
+        InvalidateCursorPosition();
+    }
 
     /// <summary>Marks the tracked position unknown (after external cursor motion).</summary>
     public void InvalidateCursorPosition()
