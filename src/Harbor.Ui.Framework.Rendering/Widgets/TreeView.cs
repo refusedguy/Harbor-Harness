@@ -456,10 +456,20 @@ public sealed class TreeView : IChatBlock, IFocusTarget
         }
     }
 
+    /// <summary>
+    /// Deepest nesting level <see cref="Append" /> descends to. Nodes are
+    /// immutable snapshots so a true reference cycle cannot be constructed
+    /// through <see cref="TreeNode" />, but a shared subtree re-mounted at
+    /// depth (or a pathological 10k-deep chain) would still recurse without
+    /// bound — the cap keeps the visible walk total while deeper rows stay
+    /// hidden behind their parent.
+    /// </summary>
+    public const int MaxDepth = 64;
+
     private void Append(TreeNode node, int depth)
     {
         _visible.Add(new TreeRow(node, depth));
-        if (node.IsExpanded)
+        if (node.IsExpanded && depth < MaxDepth)
         {
             for (int i = 0; i < node.Children.Count; i++)
             {
