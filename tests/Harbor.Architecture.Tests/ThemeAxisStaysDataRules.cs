@@ -55,8 +55,8 @@
 //   2. The theme axis is not merely "additive in principle" — it is REACHABLE from
 //      a product. `ThemeDirectoryWatcher` existing in a library that nothing calls
 //      is not an extension axis; it is dead code with good manners. A shipped app
-//      must construct it, or "drop a file in the directory" changes nothing a user
-//      can observe. (This is the half of the claim that was NOT true on dev when
+//      must construct it, or "drop a file in the directory" changes what a user
+//      actually sees. (This is the half of the claim that was NOT true on dev when
 //      this guard was written — see the RED note on rule 2.)
 //   3. The theme axis is SEALED against a theme SOURCE. The freeze's own words are
 //      "a new theme source", and that half still holds and is still wanted: this
@@ -107,6 +107,26 @@
 // The lesson generalises past this file: a rule that cannot fail is not a guard,
 // and a rule whose failure modes are indistinguishable from "the rule is broken"
 // teaches the next reader to delete it.
+//
+// MECHANISM (#1086, step 2, conveyor e1)
+// -------------------------------------
+// Rule 1 below is a ScanRule: one banned shape (the theme-name-table regex), no
+// baseline, four planted controls, a discovery floor. Enumeration, matching and
+// the control/discovery verdicts are ScanRunner's; this file keeps the issue
+// prose and the test names.
+//
+// The verdict is `ParseThemeNameTables` through the Func-overload, carrying the
+// file's own `SourceCommentStripper.StripAll` line scan verbatim rather than
+// silently adopting the runner's stripper: the two strippers have divergent
+// contracts (see ScanRule.cs: the shared one is regex-based, this path is the
+// state machine every other scanner in this file already used), and the
+// prose/near-miss controls pin THIS one. The scope is the four sealed homes,
+// not a tree walk — a registry anywhere else is some other rule's question —
+// so `InScope` names them and `MustContain` pins them: the old probe reported
+// an unreadable home as a violation, and a vanished home must fail here rather
+// than pass by leaving the scope. Rule 2 (the liveness claim — a product must
+// construct the watcher) stays handwritten with its probe: the engine grades
+// bans, and "at least one construction exists" is not a ban.
 
 using System.Text.RegularExpressions;
 
@@ -139,10 +159,8 @@ public sealed class ThemeAxisStaysDataRules
     // EMPTY allowed-reference set and could not keep the disk half. The freeze
     // did not move with the files and must not: sealing the axis is about WHAT
     // the discovery path does, not where the file sits. A stale path here is not
-    // a harmless leftover either — `FindThemeNameTables` reports an unreadable
-    // file as a VIOLATION, so leaving one would redden
-    // `Theme_Discovery_Path_Holds_No_Registry_Of_Theme_Names` with "the guard
-    // cannot grade a file it cannot read", which is the file's design working.
+    // a harmless leftover either — the scope check below reports it, so leaving
+    // one reddens the discovery test, which is the file's design working.
     private static readonly string[] SealedThemeSourceHomes =
     [
         "src/Harbor.Hosting/Themes/ThemeStore.cs",
@@ -150,6 +168,9 @@ public sealed class ThemeAxisStaysDataRules
         "src/Harbor.Tui.CellForge/Chat/Widgets/ThemeFileWatcher.cs",
         "src/Harbor.Tui.CellForge/Chat/Widgets/JsonThemeLoader.cs",
     ];
+
+    /// <summary>The discovery-path ban as data; the grading is <see cref="ParseThemeNameTables" />.</summary>
+    private const string NoRegistry = "THEME-NAME-REGISTRY";
 
     /// <summary>
     ///     Discovery must be structural — enumerate a directory, parse a document —
@@ -189,12 +210,56 @@ public sealed class ThemeAxisStaysDataRules
         @"\bnew\s+(?:[A-Za-z0-9_.]+\.)?ThemeDirectoryWatcher\s*\(",
         RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
+    /// <summary>
+    ///     Rule 1 as data: one banned shape over the four sealed homes, no
+    ///     baseline, four planted controls, the homes themselves as the floor.
+    /// </summary>
+    private static readonly ScanRule NoRegistryRule = new()
+    {
+        Id = "ThemeAxisStaysData.NoRegistry",
+        Trees = ["src"],
+        InScope = static p => SealedThemeSourceHomes.Contains(p, StringComparer.Ordinal),
+        Forbidden =
+        [
+            new ScanForbidden(
+                NoRegistry,
+                ThemeNameTable,
+                "keep discovery structural: enumerate the directory, merge the document. A collection "
+                + "of theme names in the discovery path turns the data axis back into a code axis, "
+                + "and the #622 exception is unjustified. See issue #622."),
+        ],
+        Controls =
+        [
+            // A hand-typed name table: the shape the rule exists to forbid.
+            new ScanControl("Table.cs", """
+                private static readonly IReadOnlyList<string> ThemeNames = ["harbor-dark", "harbor-light"];
+                """, NoRegistry),
+            // HarborTheme.BuiltIn is exactly the shape the rule forbids in the
+            // discovery path and deliberately permits in the product's own
+            // curated catalog — the control that caught the name-based regex.
+            new ScanControl("BuiltIn.cs", """
+                public static readonly IReadOnlyList<HarborTheme> BuiltIn = [.. LoadBuiltIns()];
+                """, NoRegistry),
+            // A single string passed through is a caller's name, not a registry.
+            new ScanControl("CallSite.cs", """
+                public void Apply(string themeName) => _store.Apply(themeName);
+                """, null),
+            // Prose naming a registry to explain the rule is not a registry.
+            new ScanControl("Prose.cs", """
+                // the discovery path holds no IReadOnlyList<string> registry of theme names.
+                """, null),
+        ],
+        MinHits = 4,
+        MustContain = [.. SealedThemeSourceHomes],
+        CustomParse = ParseThemeNameTables,
+    };
+
     [Test]
     public async Task Theme_Discovery_Path_Holds_No_Registry_Of_Theme_Names()
     {
-        IReadOnlyList<string> offenders = FindThemeNameTables(SealedThemeSourceHomes);
+        List<string> violations = ScanRunner.Evaluate(NoRegistryRule);
 
-        await Assert.That(offenders.Count).IsEqualTo(0).Because(
+        await Assert.That(violations).IsEmpty().Because(
             "A collection of theme NAMES in the discovery path is what turns the theme "
             + "axis from data into code — and it is the whole reason #622 carves themes "
             + "out of the #555 freeze in the first place. With a name table, a user adding "
@@ -202,8 +267,8 @@ public sealed class ThemeAxisStaysDataRules
             + "freeze's premise ('every new axis is one more hand-maintained list') becomes "
             + "true of themes too — at which point the exception is unjustified and themes "
             + "should be frozen like every other axis. Keep discovery structural: "
-            + "enumerate the directory, merge the document. Found: "
-            + (offenders.Count == 0 ? "(none)" : string.Join("\n", offenders)));
+            + "enumerate the directory, merge the document. Found:"
+            + Environment.NewLine + string.Join(Environment.NewLine, violations));
     }
 
     /// <summary>
@@ -245,8 +310,25 @@ public sealed class ThemeAxisStaysDataRules
     }
 
     /// <summary>
+    ///     The sealed scope really yields the four homes: the walk finds them, so
+    ///     "no registry" means "no registry in the discovery path" rather than
+    ///     "the scope moved and the rule grades nothing".
+    /// </summary>
+    [Test]
+    public async Task Scanner_SeesTheSealedHomes()
+    {
+        List<string> discovery = ScanRunner.CheckDiscovery(NoRegistryRule);
+
+        await Assert.That(discovery).IsEmpty()
+            .Because(
+                "the scope must yield exactly the four sealed theme-source homes; a smaller count "
+                + "means a home moved without the freeze boundary moving with it, and the rule "
+                + "above is grading a narrowed set. " + string.Join("; ", discovery));
+    }
+
+    /// <summary>
     ///     Non-vacuity for <see cref="Theme_Discovery_Path_Holds_No_Registry_Of_Theme_Names" />.
-    ///     The same scanner must still find a name table where one legitimately exists,
+    ///     The same parser must still find a name table where one legitimately exists,
     ///     or "no violations" is indistinguishable from "the regex reads nothing".
     /// </summary>
     [Test]
@@ -254,21 +336,18 @@ public sealed class ThemeAxisStaysDataRules
     {
         // HarborTheme.BuiltIn is exactly the shape the rule forbids in the DISCOVERY
         // path and deliberately permits in the product's own curated catalog — which
-        // makes it the right control: a real hit, in a real file, that the rule's
-        // scope deliberately excludes.
-        string[] control =
-        [
-            "src/Harbor.DesignSystem/DesignSystem/HarborTheme.cs",
-        ];
+        // makes it the right control: a real hit, in the real shape, that the rule's
+        // scope deliberately excludes. The BuiltIn.cs control on the rule carries it,
+        // driven here through the same verdict the rule runs.
+        List<string> failures = ScanRunner.CheckControls(NoRegistryRule);
 
-        IReadOnlyList<string> hits = FindThemeNameTables(control);
-
-        await Assert.That(hits.Count).IsGreaterThan(0).Because(
-            "The scanner in Theme_Discovery_Path_Holds_No_Registry_Of_Theme_Names must be "
-            + "able to fail. If it reports nothing even on HarborTheme.BuiltIn — a real "
-            + "hand-written theme-name list in a real file — it is reporting nothing "
-            + "everywhere, and the discovery path's pass is meaningless. If this control "
-            + "ever goes red, the fix is the REGEX, not the BuiltIn catalog.");
+        await Assert.That(failures).IsEmpty()
+            .Because(
+                "The parser behind Theme_Discovery_Path_Holds_No_Registry_Of_Theme_Names must be "
+                + "able to fail on the BuiltIn shape — a real hand-written theme-name list. If it "
+                + "reports nothing on that control, it is reporting nothing everywhere, and the "
+                + "discovery path's pass is meaningless. If this goes red, the fix is the REGEX, "
+                + "not the BuiltIn catalog. " + string.Join("; ", failures));
     }
 
     /// <summary>
@@ -323,42 +402,54 @@ public sealed class ThemeAxisStaysDataRules
             + "discovery rule must not depend on it.");
     }
 
+    /// <summary>
+    ///     Every baseline row states why it is tolerated, in the row itself. Vacuous
+    ///     while the table is empty, and deliberately so: it is wired from the first
+    ///     row so the first row cannot skip the argument.
+    /// </summary>
+    [Test]
+    public async Task Baseline_Rows_AllHaveReasons()
+    {
+        List<string> failures = ScanRunner.CheckReasons(NoRegistryRule);
+
+        await Assert.That(failures).IsEmpty().Because(string.Join("\n", failures));
+    }
+
+    /// <summary>
+    ///     Every baseline row must still correspond to a real hit, so the table
+    ///     cannot rot into a blanket permission: fix the code without deleting the
+    ///     row and this fails.
+    /// </summary>
+    [Test]
+    public async Task Baseline_Rows_Are_Not_Stale()
+    {
+        List<string> stale = ScanRunner.StaleBaselineKeys(
+            NoRegistryRule, ScanRunner.ReadSources(ScanRunner.ScopeFiles(NoRegistryRule)));
+
+        await Assert.That(stale).IsEmpty()
+            .Because("a baseline row with no violation behind it is a permission for a "
+                + "problem that no longer exists: " + string.Join(", ", stale));
+    }
+
     // ── Probes ───────────────────────────────────────────────────────────────
 
     /// <summary>
-    ///     Theme-name tables in the named repo-relative files, as
-    ///     <c>path:line  declaration</c>. Comments are stripped first, so prose that
-    ///     NAMES a registry to explain a past defect does not read as code.
+    ///     The custom parser: the registry verdict over one sealed home's raw
+    ///     source. Same <c>StripAll</c> line scan, same collection-type regex as
+    ///     the probe has always used — the planted controls grade this parser,
+    ///     so "it can fail" means something.
     /// </summary>
-    private static IReadOnlyList<string> FindThemeNameTables(IReadOnlyList<string> relativePaths)
+    private static IEnumerable<ScanHit> ParseThemeNameTables(string displayPath, string rawSource)
     {
-        if (RepoPaths.RepoRoot is not { } root)
+        string[] lines = SourceCommentStripper.StripAll(rawSource.Split('\n'));
+        for (int i = 0; i < lines.Length; i++)
         {
-            return [];
-        }
-
-        var hits = new List<string>();
-        foreach (string relative in relativePaths)
-        {
-            string path = Path.Combine(root, relative);
-            if (!File.Exists(path))
+            Match match = ThemeNameTable.Match(lines[i]);
+            if (match.Success)
             {
-                hits.Add($"{relative}  (file is missing — the guard cannot grade a file it cannot read)");
-                continue;
-            }
-
-            string[] lines = SourceCommentStripper.StripAll(File.ReadLines(path));
-            for (int i = 0; i < lines.Length; i++)
-            {
-                Match match = ThemeNameTable.Match(lines[i]);
-                if (match.Success)
-                {
-                    hits.Add($"{relative}:{i + 1}  {match.Value.Trim()}");
-                }
+                yield return new ScanHit(NoRegistry, displayPath, i + 1, match.Value.Trim());
             }
         }
-
-        return hits;
     }
 
     /// <summary>
