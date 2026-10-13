@@ -97,7 +97,7 @@ public sealed class TcpServerTransport : IIpcServerTransport
 
         _acceptLoopTask = AcceptLoopAsync(_cts.Token);
         BoundPort = ((IPEndPoint)_listener.LocalEndPoint!).Port;
-        _logger.LogInformation("TCP transport listening on {Endpoint}", Endpoint);
+        TcpServerTransportLog.ListeningOn(_logger, Endpoint);
         return _acceptChannel.Reader;
     }
 
@@ -114,7 +114,7 @@ public sealed class TcpServerTransport : IIpcServerTransport
         {
             try { await _acceptLoopTask.ConfigureAwait(false); }
             catch (OperationCanceledException) { /* expected on shutdown */ }
-            catch (Exception ex) { _logger.LogWarning(ex, "Accept loop ended with error"); }
+            catch (Exception ex) { TcpServerTransportLog.AcceptLoopEndedWithError(_logger, ex); }
         }
 
         await DisposeListenerAsync().ConfigureAwait(false);
@@ -139,9 +139,7 @@ public sealed class TcpServerTransport : IIpcServerTransport
             {
                 consecutiveFailures++;
                 TimeSpan delay = ServerPipeTransport.ComputeAcceptBackoff(consecutiveFailures);
-                _logger.LogWarning(
-                    ex, "AcceptAsync failed ({Count} consecutive); backing off {Delay}ms",
-                    consecutiveFailures, delay.TotalMilliseconds);
+                TcpServerTransportLog.AcceptBackoff(_logger, ex, consecutiveFailures, delay.TotalMilliseconds);
                 try { await Task.Delay(delay, ct).ConfigureAwait(false); }
                 catch (OperationCanceledException) { return; }
                 continue;
@@ -169,8 +167,27 @@ public sealed class TcpServerTransport : IIpcServerTransport
     {
         if (_listener is null) return;
         try { _listener.Dispose(); }
-        catch (Exception ex) { _logger.LogDebug(ex, "Suppress listener dispose error"); }
+        catch (Exception ex) { TcpServerTransportLog.SuppressListenerDisposeError(_logger, ex); }
         _listener = null;
         await Task.CompletedTask.ConfigureAwait(false);
     }
+}
+
+/// <summary>
+///     SG5: BCL <c>[LoggerMessage]</c> delegates for <see cref="TcpServerTransport" />.
+///     Templates, levels and operands are 1-to-1 with the former <c>LogX</c> calls.
+/// </summary>
+internal static partial class TcpServerTransportLog
+{
+    [LoggerMessage(EventId = 1, Level = LogLevel.Information, Message = "TCP transport listening on {Endpoint}")]
+    public static partial void ListeningOn(ILogger logger, string endpoint);
+
+    [LoggerMessage(EventId = 2, Level = LogLevel.Warning, Message = "Accept loop ended with error")]
+    public static partial void AcceptLoopEndedWithError(ILogger logger, Exception ex);
+
+    [LoggerMessage(EventId = 3, Level = LogLevel.Warning, Message = "AcceptAsync failed ({Count} consecutive); backing off {Delay}ms")]
+    public static partial void AcceptBackoff(ILogger logger, Exception ex, int count, double delay);
+
+    [LoggerMessage(EventId = 4, Level = LogLevel.Debug, Message = "Suppress listener dispose error")]
+    public static partial void SuppressListenerDisposeError(ILogger logger, Exception ex);
 }
