@@ -39,13 +39,15 @@ public class LayoutTreeRowColumnTests
         var c = P("c");
         tree.AddRoot(a);
         tree.AddStack("a", SplitDir.Horizontal, [b, c],
-            [FlexTrack.Fixed(10), FlexTrack.Fill(1), FlexTrack.Fill(1)]);
+            [FlexTrack.Fixed(8), FlexTrack.Fill(1)]);
 
         tree.Solve(30, 10);
 
+        // Content 30-2 gaps = 28, minus the fixed 8: the anchor's default
+        // Min share and the Fill split the remaining 20 evenly.
         await Assert.That(a.Rect).IsEqualTo(new Rect(0, 0, 10, 10));
-        await Assert.That(b.Rect).IsEqualTo(new Rect(11, 0, 9, 10));
-        await Assert.That(c.Rect).IsEqualTo(new Rect(21, 0, 9, 10));
+        await Assert.That(b.Rect).IsEqualTo(new Rect(11, 0, 8, 10));
+        await Assert.That(c.Rect).IsEqualTo(new Rect(20, 0, 10, 10));
     }
 
     [Test]
@@ -79,11 +81,11 @@ public class LayoutTreeRowColumnTests
 
         tree.Solve(30, 10);
 
-        // Row: two equal shares of 28 → 14 each; b's column splits 9 usable
-        // rows by ratio into 4 + 1 gap + 5.
+        // Row of two: one gap, content 29 → shares [14,15], dust absorbed
+        // last. b's column splits 9 usable rows by ratio into 4 + 1 gap + 5.
         await Assert.That(a.Rect).IsEqualTo(new Rect(0, 0, 14, 10));
-        await Assert.That(b.Rect).IsEqualTo(new Rect(15, 0, 14, 4));
-        await Assert.That(d.Rect).IsEqualTo(new Rect(15, 5, 14, 5));
+        await Assert.That(b.Rect).IsEqualTo(new Rect(15, 0, 15, 4));
+        await Assert.That(d.Rect).IsEqualTo(new Rect(15, 5, 15, 5));
     }
 
     [Test]
