@@ -83,6 +83,16 @@ public sealed class FlexSplitNode : ContainerNode
         _frames.Add(default);
     }
 
+    /// <summary>
+    /// Setup-time: appends <paramref name="child"/> seated from the cell
+    /// Measure/Render contract (#1209, epic #1195): the
+    /// <paramref name="measure"/> + <paramref name="expand"/> pair maps
+    /// through <see cref="WidgetMeasure.ToTrack"/> (expand absorbs the
+    /// remainder with the measured floor; fixed takes the measured fit).
+    /// </summary>
+    public void Add(INode child, Measurement measure, bool expand) =>
+        Add(child, WidgetMeasure.ToTrack(measure, expand));
+
     /// <summary>Setup-time: removes <paramref name="child"/> and its track/frame.</summary>
     public bool Remove(INode child)
     {
