@@ -33,7 +33,7 @@ internal static partial class HostBuilder
 
         _loggerFactory = builder.Services.BuildServiceProvider().GetRequiredService<ILoggerFactory>();
         _logger = _loggerFactory.CreateLogger(typeof(HostBuilder).FullName ?? "HostBuilder");
-        _logger.LogInformation("Building host");
+        HostBuilderLog.BuildingHost(_logger);
 
         builder.Services.AddCliConfiguration(_loggerFactory, out var cliConfig);
 
@@ -163,4 +163,14 @@ internal static partial class HostBuilder
         Directory.CreateDirectory(Path.Combine(harborDir, "cache"));
         return harborDir;
     }
+}
+
+/// <summary>
+///     SG6: BCL <c>[LoggerMessage]</c> delegates for <see cref="HostBuilder" /> (<c>HostBuilder.cs</c>).
+///     Templates, levels and operands are 1-to-1 with the former <c>LogX</c> calls.
+/// </summary>
+internal static partial class HostBuilderLog
+{
+    [LoggerMessage(EventId = 1, Level = LogLevel.Information, Message = "Building host")]
+    public static partial void BuildingHost(ILogger logger);
 }

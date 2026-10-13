@@ -39,7 +39,7 @@ internal static partial class HostBuilder
         var result = store.LoadAsync().GetAwaiter().GetResult();
         if (result.IsFailure)
         {
-            _logger.LogWarning("Failed to load CliConfig, using defaults: {Error}", result.Error);
+            HostBuilderCliConfigLog.CliConfigLoadFailed(_logger, result.Error);
             cliConfig = new CliConfig();
         }
         else
@@ -64,4 +64,14 @@ internal static partial class HostBuilder
                 sp.GetRequiredService<CliConfig>()));
         return services;
     }
+}
+
+/// <summary>
+///     SG6: BCL <c>[LoggerMessage]</c> delegates for <see cref="HostBuilder" /> (<c>HostBuilder.CliConfig.cs</c>).
+///     Templates, levels and operands are 1-to-1 with the former <c>LogX</c> calls.
+/// </summary>
+internal static partial class HostBuilderCliConfigLog
+{
+    [LoggerMessage(EventId = 1, Level = LogLevel.Warning, Message = "Failed to load CliConfig, using defaults: {Error}")]
+    public static partial void CliConfigLoadFailed(ILogger logger, string error);
 }
