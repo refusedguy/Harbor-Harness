@@ -172,6 +172,46 @@ public sealed class ToolCallBlock : ICollapsibleChatBlock
     public const int ExpandedBodyLines = 20;
 
     /// <summary>
+    /// Shell tools render the collapsed output as a <b>tail</b> (O11 #1180,
+    /// opencode <c>collapseShellOutput</c>): the command keeps a 2-line
+    /// budget, the output keeps the last lines behind a
+    /// <c>"(N earlier lines)"</c> label so the exit stays visible. All other
+    /// tools keep the head preview.
+    /// </summary>
+    public static bool IsShellTool(string toolName) =>
+        string.Equals(toolName, "bash", StringComparison.Ordinal);
+
+    /// <summary>Command line budget inside the shell collapse (opencode: 2).</summary>
+    public const int ShellCommandLines = 2;
+
+    /// <summary>
+    /// Char budget for a line budget at <paramref name="width"/> columns
+    /// (opencode: <c>lines * max(20, width - 6)</c>).
+    /// </summary>
+    public static int MaxCharsFor(int lines, int width) =>
+        Math.Max(1, lines) * Math.Max(20, Math.Max(1, width) - 6);
+
+    /// <summary>
+    /// Two-budget overflow at <paramref name="width"/>: either the line or
+    /// the char budget is exceeded (opencode <c>overflow</c> flag). Drives the
+    /// expand affordance — Enter/click reveals the full body.
+    /// </summary>
+    public bool HasOverflowAtWidth(int width) =>
+        _body.HasValue && ToolOutputCollapse.Collapse(
+            _body.Value.Output.TrimEnd('\n'),
+            IsExpanded ? ExpandedBodyLines : Math.Max(0, MaxBodyLines),
+            IsExpanded ? MaxCharsFor(ExpandedBodyLines, width) : MaxCharsFor(Math.Max(0, MaxBodyLines), width))
+        .Overflow;
+
+    /// <summary>Whether this card paints the collapsed shell tail at <paramref name="width"/> (O11 #1180).</summary>
+    public bool UsesShellTailAtWidth(int width) => !IsExpanded && _body.HasValue && IsShellTool(Info.ToolName)
+        && ToolOutputCollapse.Collapse(
+            _body.Value.Output.TrimEnd('\n'),
+            Math.Max(0, MaxBodyLines),
+            MaxCharsFor(Math.Max(0, MaxBodyLines), width))
+        .Overflow;
+
+    /// <summary>
     /// Whether the card is expanded (feed Enter/click toggles via
     /// <see cref="ToggleExpanded"/>). Satisfies the <c>ICollapsibleChatBlock</c>
     /// mixin contract; collapsed paint stays byte-identical to
@@ -314,7 +354,7 @@ public sealed class ToolCallBlock : ICollapsibleChatBlock
             }
             else
             {
-                lines += IsExpanded ? ExpandedBodyLineCount() : BodyLineCount();
+                lines += IsExpanded ? ExpandedBodyLineCount(width) : BodyLineCount(width);
             }
         }
 
@@ -337,7 +377,7 @@ public sealed class ToolCallBlock : ICollapsibleChatBlock
             }
             else
             {
-                lines += IsExpanded ? ExpandedBodyLineCount() : BodyLineCount();
+                lines += IsExpanded ? ExpandedBodyLineCount(width) : BodyLineCount(width);
             }
         }
 
@@ -400,7 +440,7 @@ public sealed class ToolCallBlock : ICollapsibleChatBlock
             return;
         }
 
-        PaintOutputBody(buffer, ctx.Rect.X, y, rows, IsExpanded ? ExpandedBodyLines : MaxBodyLines);
+        PaintOutputBody(buffer, ctx.Rect.X, y, rows, IsExpanded ? ExpandedBodyLines : MaxBodyLines, Math.Max(1, ctx.Rect.Width));
     }
 
     private void PaintHeader(ScreenBuffer buffer, int x, int y, int width)
@@ -510,8 +550,11 @@ public sealed class ToolCallBlock : ICollapsibleChatBlock
     /// (PRIM1a #291): geometry in <c>PaintBodyLines</c> (incl. the
     /// [UX5] #265 zero-budget law), colors caller-side.
     /// Byte-identical to the pre-mixin loop.
+    /// O11 #1180: collapsed <c>bash</c> cards paint the output <b>tail</b>
+    /// (label + last lines) instead of the head, so the exit stays visible;
+    /// the char budget only forces the overflow marker, never reshapes lines.
     /// </summary>
-    private void PaintOutputBody(ScreenBuffer buffer, int x, int y, int rows, int maxLines)
+    private void PaintOutputBody(ScreenBuffer buffer, int x, int y, int rows, int maxLines, int width)
     {
         // Narrow explicitly instead of `_body!`. Every current caller has already
         // returned early on absence, so this branch is unreachable today — which is
@@ -525,7 +568,60 @@ public sealed class ToolCallBlock : ICollapsibleChatBlock
 
         ToolResultBody body = _body.Value;
         var style = body.IsError ? ChatPalette.ToolError : ChatPalette.ToolBody;
+        if (!IsExpanded && IsShellTool(Info.ToolName) && UsesShellTailAtWidth(Math.Max(1, width)))
+        {
+            string tail = ToolOutputCollapse.CollapseTail(
+                body.Output.TrimEnd('\n'), Math.Max(0, maxLines), MaxCharsFor(Math.Max(0, maxLines), width));
+            PaintTailLines(buffer, x, y, rows, tail, style);
+            return;
+        }
+
         ICollapsibleChatBlock.PaintBodyLines(buffer, x, y, rows, body.Output, maxLines, style, ChatPalette.Dim);
+        // Char-only overflow (lines fit, chars bust): PaintBodyLines paints no
+        // marker (nothing was line-cut), so append the "…" affordance row here
+        // to match BodyLineCount's logical + 1. Line overflow already carries
+        // its marker inside PaintBodyLines.
+        string trimmed = body.Output.TrimEnd('\n');
+        if (trimmed.Length > 0 && maxLines > 0)
+        {
+            int logical = ICollapsibleChatBlock.CountLogicalLines(trimmed.AsSpan());
+            if (logical <= maxLines
+                && ToolOutputCollapse.Collapse(trimmed, maxLines, MaxCharsFor(maxLines, width)).Overflow
+                && logical < rows)
+            {
+                buffer.SetText(x, y + logical, "…", ChatPalette.Dim);
+            }
+        }
+    }
+
+    private static void PaintTailLines(
+        ScreenBuffer buffer, int x, int y, int rows, string tail, CellStyle bodyStyle)
+    {
+        if (rows <= 0 || tail.Length == 0)
+        {
+            return;
+        }
+
+        var rest = tail.AsSpan();
+        int cursorY = y;
+        int shown = 0;
+        while (!rest.IsEmpty && shown < rows)
+        {
+            int nl = rest.IndexOf('\n');
+            var line = nl < 0 ? rest : rest[..nl];
+            rest = nl < 0 ? default : rest[(nl + 1)..];
+
+            int avail = Math.Max(0, buffer.Cols - x);
+            if (line.Length > avail)
+            {
+                line = line[..avail];
+            }
+
+            // First row is the "(N earlier lines)" label — dim; tail rows body.
+            buffer.SetText(x, cursorY, line, shown == 0 ? ChatPalette.Dim : bodyStyle);
+            cursorY++;
+            shown++;
+        }
     }
 
     /// <summary>
@@ -533,27 +629,71 @@ public sealed class ToolCallBlock : ICollapsibleChatBlock
     /// (PRIM1d #294): the [UX5] #265 zero-budget law for task cards
     /// (<c>MaxBodyLines == 0</c> → pure one-liner, not even a marker) lives
     /// in <c>ClampedBodyLineCount</c> — no local guard, byte-identical.
+    /// O11 #1180: the char budget joins the line budget — a single long line
+    /// that busts <c>MaxCharsFor</c> still earns the overflow marker row, and
+    /// collapsed <c>bash</c> overflow paints the tail (label + last lines,
+    /// exactly <c>MaxBodyLines</c> rows, no extra marker — the label IS the
+    /// affordance).
     /// </summary>
-    private int BodyLineCount()
+    private int BodyLineCount(int width)
     {
         if (!_body.HasValue)
         {
             return 0;
         }
 
-        var output = _body.Value.Output.AsSpan().TrimEnd('\n');
-        return ICollapsibleChatBlock.ClampedBodyLineCount(output, MaxBodyLines);
+        string trimmed = _body.Value.Output.TrimEnd('\n');
+        var output = trimmed.AsSpan();
+        int budget = Math.Max(0, MaxBodyLines);
+        bool overflow = ToolOutputCollapse.Collapse(
+            trimmed, budget, MaxCharsFor(budget, width)).Overflow;
+        if (!overflow)
+        {
+            return ICollapsibleChatBlock.ClampedBodyLineCount(output, MaxBodyLines);
+        }
+
+        if (!IsExpanded && IsShellTool(Info.ToolName) && budget > 0)
+        {
+            return budget;
+        }
+
+        int clamped = ICollapsibleChatBlock.ClampedBodyLineCount(output, MaxBodyLines);
+        if (clamped == 0)
+        {
+            return 0;
+        }
+
+        // Line overflow already carries its marker row inside Clamped; a
+        // char-only overflow (lines fit, chars bust) still earns one.
+        int logical = output.IsEmpty ? 0 : ICollapsibleChatBlock.CountLogicalLines(output);
+        return logical > budget ? clamped : logical + 1;
     }
 
-    private int ExpandedBodyLineCount()
+    private int ExpandedBodyLineCount(int width)
     {
         if (!_body.HasValue)
         {
             return 0;
         }
 
-        var output = _body.Value.Output.AsSpan().TrimEnd('\n');
-        return ICollapsibleChatBlock.ClampedBodyLineCount(output, ExpandedBodyLines);
+        string trimmed = _body.Value.Output.TrimEnd('\n');
+        var output = trimmed.AsSpan();
+        // Expanded keeps the head preview; the char budget only forces the
+        // marker row via the shared overflow flag (line geometry unchanged).
+        bool overflow = ToolOutputCollapse.Collapse(trimmed, ExpandedBodyLines, MaxCharsFor(ExpandedBodyLines, width)).Overflow;
+        int clamped = ICollapsibleChatBlock.ClampedBodyLineCount(output, ExpandedBodyLines);
+        if (!overflow)
+        {
+            return clamped;
+        }
+
+        if (clamped == 0)
+        {
+            return 0;
+        }
+
+        int logical = output.IsEmpty ? 0 : ICollapsibleChatBlock.CountLogicalLines(output);
+        return logical > ExpandedBodyLines ? clamped : logical + 1;
     }
 
     private int DiffLineCount()
