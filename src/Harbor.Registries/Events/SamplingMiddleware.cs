@@ -50,10 +50,20 @@ public sealed class SamplingMiddleware : IEventBusMiddleware
         {
             if (_rnd.NextDouble() > _rate)
             {
-                _logger.LogTrace("Sampled out MessageUpdateEvent");
+                SamplingMiddlewareLog.MessageUpdateSampledOut(_logger);
                 return ValueTask.FromResult(false);
             }
         }
         return ValueTask.FromResult(true);
     }
+}
+
+/// <summary>
+///     SG3: BCL <c>[LoggerMessage]</c> delegates for <see cref="SamplingMiddleware" />.
+///     Templates, levels and operands are 1-to-1 with the former <c>LogX</c> calls.
+/// </summary>
+internal static partial class SamplingMiddlewareLog
+{
+    [LoggerMessage(EventId = 1, Level = LogLevel.Trace, Message = "Sampled out MessageUpdateEvent")]
+    public static partial void MessageUpdateSampledOut(ILogger logger);
 }

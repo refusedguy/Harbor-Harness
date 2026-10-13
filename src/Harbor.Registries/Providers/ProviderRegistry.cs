@@ -90,7 +90,7 @@ public sealed class ProviderRegistry : IProviderRegistry
             return Instantiate(lazyClient, providerId);
         }
 
-        _logger.LogDebug("Provider not registered: {ProviderId}", providerId);
+        ProviderRegistryLog.ProviderNotRegistered(_logger, providerId);
         return Result.Failure<ILlmClient>($"Provider '{providerId}' is not registered.");
     }
 
@@ -99,8 +99,7 @@ public sealed class ProviderRegistry : IProviderRegistry
         Result.Success(lazy)
             .MapTry(static l => l.Value,
                 ex => $"Failed to instantiate provider '{providerId}': {ex.Message}")
-            .TapError(e => _logger.LogWarning(
-                "Provider instantiation failed: {ProviderId}: {Error}", providerId, e));
+            .TapError(e => ProviderRegistryLog.InstantiationFailed(_logger, providerId, e));
 
     /// <inheritdoc />
     public async Task<Result<IReadOnlyList<ModelInfo>>> GetModelsCachedAsync(ProviderId providerId, CancellationToken cancellationToken = default)
@@ -176,13 +175,13 @@ public sealed class ProviderRegistry : IProviderRegistry
                     }
                     catch (OperationCanceledException ex)
                     {
-                        _logger.LogWarning(ex, "Model fetch timed out for provider: {ProviderId}", pid);
+                        ProviderRegistryLog.ModelFetchTimedOut(_logger, ex, pid);
                         return Result.Failure<IReadOnlyList<ModelInfo>>(
                             $"timed out after {PerProviderTimeoutMs} ms: {Describe(ex)}");
                     }
                     catch (Exception ex)
                     {
-                        _logger.LogWarning(ex, "Failed to get models for provider: {ProviderId}", pid);
+                        ProviderRegistryLog.GetModelsFailed(_logger, ex, pid);
                         return Result.Failure<IReadOnlyList<ModelInfo>>(Describe(ex));
                     }
                 }, cancellationToken);
@@ -418,4 +417,23 @@ public sealed class ProviderRegistryBuilder : IProviderRegistryBuilder
         var pid = factory.ProviderId;
         _registry.Register(pid, () => factory.CreateClient(_loggerFactory));
     }
+}
+
+/// <summary>
+///     SG3: BCL <c>[LoggerMessage]</c> delegates for <see cref="ProviderRegistry" />.
+///     Templates, levels and operands are 1-to-1 with the former <c>LogX</c> calls.
+/// </summary>
+internal static partial class ProviderRegistryLog
+{
+    [LoggerMessage(EventId = 1, Level = LogLevel.Debug, Message = "Provider not registered: {ProviderId}")]
+    public static partial void ProviderNotRegistered(ILogger logger, ProviderId providerId);
+
+    [LoggerMessage(EventId = 2, Level = LogLevel.Warning, Message = "Provider instantiation failed: {ProviderId}: {Error}")]
+    public static partial void InstantiationFailed(ILogger logger, ProviderId providerId, string error);
+
+    [LoggerMessage(EventId = 3, Level = LogLevel.Warning, Message = "Model fetch timed out for provider: {ProviderId}")]
+    public static partial void ModelFetchTimedOut(ILogger logger, Exception ex, ProviderId providerId);
+
+    [LoggerMessage(EventId = 4, Level = LogLevel.Warning, Message = "Failed to get models for provider: {ProviderId}")]
+    public static partial void GetModelsFailed(ILogger logger, Exception ex, ProviderId providerId);
 }

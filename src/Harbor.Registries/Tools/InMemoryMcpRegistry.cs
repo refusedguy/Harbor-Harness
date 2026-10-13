@@ -36,7 +36,7 @@ public sealed class InMemoryMcpRegistry : IMcpRegistry
         if (!_servers.TryAdd(name, stdioCommand))
             return Result.Failure($"MCP server '{name}' is already registered.");
 
-        _logger.LogInformation("Registered MCP server {Name}", name);
+        InMemoryMcpRegistryLog.McpServerRegistered(_logger, name);
         return Result.Success();
     }
 
@@ -85,12 +85,23 @@ public sealed class InMemoryMcpRegistry : IMcpRegistry
                 $"MCP server '{server}' is not registered. Available: {available}"));
         }
 
-        _logger.LogWarning(
-            "InMemoryMcpRegistry cannot actually invoke MCP methods — register a real IMcpRegistry implementation. " +
-            "Server={Server} Method={Method}", server, method);
+        InMemoryMcpRegistryLog.InvokeNotSupported(_logger, server, method);
 
         return Task.FromResult(Result.Failure<string>(
             $"MCP server '{server}' is registered but no transport is wired. " +
             "Register a real IMcpRegistry implementation (e.g. stdio JSON-RPC client) to enable calls."));
     }
+}
+
+/// <summary>
+///     SG3: BCL <c>[LoggerMessage]</c> delegates for <see cref="InMemoryMcpRegistry" />.
+///     Templates, levels and operands are 1-to-1 with the former <c>LogX</c> calls.
+/// </summary>
+internal static partial class InMemoryMcpRegistryLog
+{
+    [LoggerMessage(EventId = 1, Level = LogLevel.Information, Message = "Registered MCP server {Name}")]
+    public static partial void McpServerRegistered(ILogger logger, string name);
+
+    [LoggerMessage(EventId = 2, Level = LogLevel.Warning, Message = "InMemoryMcpRegistry cannot actually invoke MCP methods — register a real IMcpRegistry implementation. Server={Server} Method={Method}")]
+    public static partial void InvokeNotSupported(ILogger logger, string server, string method);
 }
