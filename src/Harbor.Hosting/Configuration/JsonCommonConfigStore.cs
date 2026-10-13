@@ -105,7 +105,7 @@ public sealed class JsonCommonConfigStore : ICommonConfigStore
             string path = _default.ConfigFilePath;
             if (!File.Exists(path))
             {
-                _logger.LogInformation("Common config file not found at {Path}, using defaults", path);
+                JsonCommonConfigStoreLog.ConfigFileNotFound(_logger, path);
                 return Result.Success(_default);
             }
 
@@ -113,7 +113,7 @@ public sealed class JsonCommonConfigStore : ICommonConfigStore
             var config = DeserializeMergedWithDefaults(json);
             if (config is null)
             {
-                _logger.LogWarning("Common config at {Path} deserialized to null, using defaults", path);
+                JsonCommonConfigStoreLog.ConfigNullUsingDefaults(_logger, path);
                 return Result.Success(_default);
             }
 
@@ -129,12 +129,12 @@ public sealed class JsonCommonConfigStore : ICommonConfigStore
         }
         catch (JsonException ex)
         {
-            _logger.LogError(ex, "Failed to parse common config JSON at {Path}", _default.ConfigFilePath);
+            JsonCommonConfigStoreLog.ParseFailed(_logger, ex, _default.ConfigFilePath);
             return Result.Failure<CommonConfig>($"Common config at {_default.ConfigFilePath} is corrupt: {ex.Message}");
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to load common config from {Path}", _default.ConfigFilePath);
+            JsonCommonConfigStoreLog.LoadFailed(_logger, ex, _default.ConfigFilePath);
             return Result.Failure<CommonConfig>(ex.Message);
         }
         finally
@@ -267,12 +267,12 @@ public sealed class JsonCommonConfigStore : ICommonConfigStore
             }
             File.Move(tempPath, path);
 
-            _logger.LogDebug("Common config saved to {Path}", path);
+            JsonCommonConfigStoreLog.ConfigSaved(_logger, path);
             return Result.Success();
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to save common config to {Path}", config.ConfigFilePath);
+            JsonCommonConfigStoreLog.SaveFailed(_logger, ex, config.ConfigFilePath);
             return Result.Failure(ex.Message);
         }
         finally
@@ -370,4 +370,29 @@ internal sealed class ImmutableDictionaryConverter<TKey, TValue> : JsonConverter
         }
         writer.WriteEndObject();
     }
+}
+
+/// <summary>
+///     SG4: BCL <c>[LoggerMessage]</c> delegates for <see cref="JsonCommonConfigStore" />.
+///     Templates, levels and operands are 1-to-1 with the former <c>LogX</c> calls.
+/// </summary>
+internal static partial class JsonCommonConfigStoreLog
+{
+    [LoggerMessage(EventId = 1, Level = LogLevel.Information, Message = "Common config file not found at {Path}, using defaults")]
+    public static partial void ConfigFileNotFound(ILogger logger, string path);
+
+    [LoggerMessage(EventId = 2, Level = LogLevel.Warning, Message = "Common config at {Path} deserialized to null, using defaults")]
+    public static partial void ConfigNullUsingDefaults(ILogger logger, string path);
+
+    [LoggerMessage(EventId = 3, Level = LogLevel.Error, Message = "Failed to parse common config JSON at {Path}")]
+    public static partial void ParseFailed(ILogger logger, Exception ex, string path);
+
+    [LoggerMessage(EventId = 4, Level = LogLevel.Error, Message = "Failed to load common config from {Path}")]
+    public static partial void LoadFailed(ILogger logger, Exception ex, string path);
+
+    [LoggerMessage(EventId = 5, Level = LogLevel.Debug, Message = "Common config saved to {Path}")]
+    public static partial void ConfigSaved(ILogger logger, string path);
+
+    [LoggerMessage(EventId = 6, Level = LogLevel.Error, Message = "Failed to save common config to {Path}")]
+    public static partial void SaveFailed(ILogger logger, Exception ex, string path);
 }
