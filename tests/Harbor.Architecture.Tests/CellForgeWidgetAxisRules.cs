@@ -616,12 +616,24 @@ public sealed class CellForgeWidgetAxisRules
     ///         home for the shipped chrome, recorded here instead of smuggled
     ///         past the rule.
     ///     </para>
+    ///     <para>
+    ///         Entry 3 is the declarative screen builder (#1201, epic #1195):
+    ///         <c>ScreenBuilder.Build</c> constructs a tree from in-tree leaf
+    ///         specs (id, <c>FlexTrack</c>, leaf factory) plus splits, and
+    ///         <c>ScreenBuilder.AttachLeaf</c> is the single home for the dock
+    ///         reservation math <c>ChatScreenPanelDock</c> delegates to. The
+    ///         factories are in-tree panel constructors, the tree is solved and
+    ///         painted by the same in-tree host, and no plugin is handed a tree —
+    ///         so it is a third construction site without a second home for the
+    ///         shipped chrome, recorded here instead of smuggled past the rule.
+    ///     </para>
     /// </remarks>
     internal static readonly FrozenSet<string> AllowedTreeBuilders =
         new[]
         {
             "src/Harbor.Tui.CellForge/Chat/Widgets/ChatScreenLayout.cs",
             "src/Harbor.Tui.CellForge/Generic/GenericScreen.cs",
+            "src/Harbor.Tui.CellForge/Chat/Rendering/ScreenBuilder.cs",
         }.ToFrozenSet(StringComparer.Ordinal);
 
     /// <summary>
