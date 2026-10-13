@@ -41,7 +41,7 @@ public sealed class PluginAutoReloader : IDisposable
 
         if (!autoReloadEnabled)
         {
-            _logger.LogInformation("Plugin auto-reload disabled via tooling.autoReloadPlugins — use /plugins reload");
+            PluginAutoReloaderLog.AutoReloadDisabled(_logger);
             return;
         }
 
@@ -54,7 +54,7 @@ public sealed class PluginAutoReloader : IDisposable
         _watcher.ChangesReady += OnChange;
 
         var watched = string.Join(", ", _watcher.WatchedDirectories);
-        _logger.LogInformation("Plugin auto-reload watching: {Dirs}", watched.Length == 0 ? "(none)" : watched);
+        PluginAutoReloaderLog.AutoReloadWatching(_logger, watched.Length == 0 ? "(none)" : watched);
     }
 
     private void OnChange(object? sender, PluginSourceChangeEventArgs e)
@@ -63,7 +63,7 @@ public sealed class PluginAutoReloader : IDisposable
         // skipped events are harmless — every pass re-reads disk state wholesale.
         if (Interlocked.CompareExchange(ref _inFlight, 1, 0) != 0)
         {
-            _logger.LogDebug("Change to {Path} arrived during a running reload pass — will be covered next time", e.Path);
+            PluginAutoReloaderLog.ChangeDuringReload(_logger, e.Path);
             return;
         }
 
@@ -76,18 +76,15 @@ public sealed class PluginAutoReloader : IDisposable
         try
         {
             var summary = await _reload.ReloadAsync().ConfigureAwait(false);
-            _logger.LogInformation(
-                "Auto-reloaded plugins after {Path}: {Loaded} loaded",
-                changedPath,
-                summary.Loaded);
+            PluginAutoReloaderLog.AutoReloaded(_logger, changedPath, summary.Loaded);
         }
         catch (OperationCanceledException ocex)
         {
-            _logger.LogInformation(ocex, "Auto-reload cancelled after {Path}", changedPath);
+            PluginAutoReloaderLog.AutoReloadCancelled(_logger, ocex, changedPath);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Auto-reload failed after {Path} — keep using /plugins reload manually", changedPath);
+            PluginAutoReloaderLog.AutoReloadFailed(_logger, ex, changedPath);
         }
         finally
         {
@@ -97,5 +94,30 @@ public sealed class PluginAutoReloader : IDisposable
 
     /// <inheritdoc />
     public void Dispose() => _watcher?.Dispose();
+}
+
+/// <summary>
+///     SG4: BCL <c>[LoggerMessage]</c> delegates for <see cref="PluginAutoReloader" />.
+///     Templates, levels and operands are 1-to-1 with the former <c>LogX</c> calls.
+/// </summary>
+internal static partial class PluginAutoReloaderLog
+{
+    [LoggerMessage(EventId = 1, Level = LogLevel.Information, Message = "Plugin auto-reload disabled via tooling.autoReloadPlugins — use /plugins reload")]
+    public static partial void AutoReloadDisabled(ILogger logger);
+
+    [LoggerMessage(EventId = 2, Level = LogLevel.Information, Message = "Plugin auto-reload watching: {Dirs}")]
+    public static partial void AutoReloadWatching(ILogger logger, string dirs);
+
+    [LoggerMessage(EventId = 3, Level = LogLevel.Debug, Message = "Change to {Path} arrived during a running reload pass — will be covered next time")]
+    public static partial void ChangeDuringReload(ILogger logger, string path);
+
+    [LoggerMessage(EventId = 4, Level = LogLevel.Information, Message = "Auto-reloaded plugins after {Path}: {Loaded} loaded")]
+    public static partial void AutoReloaded(ILogger logger, string path, int loaded);
+
+    [LoggerMessage(EventId = 5, Level = LogLevel.Information, Message = "Auto-reload cancelled after {Path}")]
+    public static partial void AutoReloadCancelled(ILogger logger, Exception ex, string path);
+
+    [LoggerMessage(EventId = 6, Level = LogLevel.Error, Message = "Auto-reload failed after {Path} — keep using /plugins reload manually")]
+    public static partial void AutoReloadFailed(ILogger logger, Exception ex, string path);
 }
 #endif

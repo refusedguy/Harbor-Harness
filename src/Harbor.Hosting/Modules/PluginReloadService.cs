@@ -163,12 +163,20 @@ public sealed class PluginReloadService
     public Task<PluginReloadSummary> ReloadAsync(CancellationToken ct = default)
     {
         _ = ct;
-        _logger.LogInformation(
-            "Plugin reload is served out-of-process by harbor-plugins-host (#1055s3): "
-            + "restart the host to pick up changed scripts; nothing registered in-process.");
+        PluginReloadServiceLog.ReloadOutOfProc(_logger);
         return Task.FromResult(new PluginReloadSummary(
             0,
             ["plugins are served out-of-process by harbor-plugins-host — restart it to pick up changed scripts"]));
     }
+}
+
+/// <summary>
+///     SG4: BCL <c>[LoggerMessage]</c> delegates for <see cref="PluginReloadService" />.
+///     Templates, levels and operands are 1-to-1 with the former <c>LogX</c> calls.
+/// </summary>
+internal static partial class PluginReloadServiceLog
+{
+    [LoggerMessage(EventId = 1, Level = LogLevel.Information, Message = "Plugin reload is served out-of-process by harbor-plugins-host (#1055s3): restart the host to pick up changed scripts; nothing registered in-process.")]
+    public static partial void ReloadOutOfProc(ILogger logger);
 }
 #endif
