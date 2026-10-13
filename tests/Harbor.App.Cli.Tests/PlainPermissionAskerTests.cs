@@ -111,7 +111,7 @@ public class PlainPermissionAskerTests
     [Test]
     public async Task Eof_DeniesFailClosed()
     {
-        var renderer = new ScriptedRenderer(null);
+        var renderer = new ScriptedRenderer(new string?[] { null });
         var asker = new PlainPermissionAsker(renderer);
 
         var response = await asker.AskAsync(Request("bash", "{\"command\":\"make build\"}"), CancellationToken.None);
