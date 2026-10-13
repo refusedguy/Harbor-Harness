@@ -1,3 +1,5 @@
+using Harbor.Terminal.Abstractions;
+
 namespace Harbor.Tui.CellForge.Panels;
 
 /// <summary>
@@ -150,6 +152,29 @@ public static class PermissionPresentation
         }
 
         return new PermissionPresentationInfo(title, body.ToArray(), hint);
+    }
+
+    /// <summary>
+    ///     Mini footer density ([steal/opencode] #1182, epic #1155): the same
+    ///     gate as <see cref="Build"/> with <see cref="PermissionDensity.Compact"/>,
+    ///     collapsed into one footer line via <c>PermissionMiniLine</c>.
+    ///     opencode's <c>compact()</c> footer (zero padding, short hint) plus
+    ///     the mono fallback (<c>permissionInfo(..., mono)</c>): a diff is
+    ///     inlined as its <c>"diff {path}: N lines"</c> text instead of a
+    ///     widget, so pipes and narrow terminals still see what changed.
+    ///     For <c>HARBOR_TUI=plain</c> pass <c>mono: true</c>.
+    /// </summary>
+    public static string BuildMiniLine(
+        string? toolName,
+        string? detail,
+        string? diffText = null,
+        string? filePath = null,
+        int maxWidth = PermissionMiniLine.DefaultMaxWidth,
+        bool mono = false)
+    {
+        var info = Build(toolName, detail, diffText, filePath, PermissionDensity.Compact);
+        string? snippet = info.Body.Count > 0 ? info.Body[0] : null;
+        return PermissionMiniLine.Format(info.Title, snippet, maxWidth, mono);
     }
 
     /// <summary>

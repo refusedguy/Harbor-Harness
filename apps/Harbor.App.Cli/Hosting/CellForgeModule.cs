@@ -3,6 +3,7 @@ using Harbor.Abstractions.Permissions;
 using Harbor.Application.Configuration;
 using Harbor.Application.Permissions;
 using Harbor.App.Cli.Repl;
+using Harbor.Terminal.Abstractions;
 using Harbor.Tui.CellForge.Input;
 using Harbor.Tui.CellForge.Rendering;
 using Harbor.Tui.CellForge.Streaming;
@@ -121,6 +122,8 @@ internal static class CellForgeModule
             services.AddSingleton(sp => new CellForgePermissionAsker(
                 () => sp.GetRequiredService<ChatScreenBridge>(),
                 sp.GetRequiredService<IApprovalCoordinator>()));
+            services.AddSingleton(sp => new Repl.PlainPermissionAsker(
+                sp.GetRequiredService<ITuiRenderer>()));
             services.AddSingleton<IPermissionService>(sp => CreatePermissionService(sp));
         }
 
@@ -139,13 +142,29 @@ internal static class CellForgeModule
     ///     тест дотягивался до фабрики напрямую: env-гейт
     ///     <see cref="IsApprovalPromptAvailable" /> в CI недоступен.
     /// </summary>
-    internal static PermissionService CreatePermissionService(IServiceProvider sp) => new(
-        sp.GetRequiredService<Harbor.Abstractions.Agents.IAgentRegistry>(),
-        sp.GetRequiredService<Microsoft.Extensions.Logging.ILogger<
-            Harbor.Application.Permissions.PermissionService>>(),
-        sp.GetRequiredService<Repl.CellForgePermissionAsker>().AskAsync,
-        workspaceRoot: Directory.GetCurrentDirectory(),
-        configStore: sp.GetService<IConfigStore>());
+    internal static PermissionService CreatePermissionService(IServiceProvider sp)
+    {
+        // [steal/opencode] #1182 (epic #1155): density dispatch, snapshotted
+        // once — env/config are process-static, and per-ask resolution would
+        // do config-file IO on the tool-execution thread. The gate card needs
+        // the CellForge frame loop (key routing + render-thread drain); under
+        // any other renderer the posted gate would wait forever, so ask the
+        // same machine's mini one-liner through the active renderer instead.
+        // No PlainPermissionAsker registered (direct factory tests) keeps the
+        // card path whatever the env says.
+        bool mini = !TuiMode.IsCellForgeSelected()
+            && sp.GetService<Repl.PlainPermissionAsker>() is not null;
+        Func<PermissionRequest, CancellationToken, Task<PermissionResponse>> asker = mini
+            ? sp.GetRequiredService<Repl.PlainPermissionAsker>().AskAsync
+            : sp.GetRequiredService<Repl.CellForgePermissionAsker>().AskAsync;
+        return new(
+            sp.GetRequiredService<Harbor.Abstractions.Agents.IAgentRegistry>(),
+            sp.GetRequiredService<Microsoft.Extensions.Logging.ILogger<
+                Harbor.Application.Permissions.PermissionService>>(),
+            asker,
+            workspaceRoot: Directory.GetCurrentDirectory(),
+            configStore: sp.GetService<IConfigStore>());
+    }
 
     /// <summary>
     ///     Есть ли кому отвечать на approval-карточку (#52). Аппрувер — живой

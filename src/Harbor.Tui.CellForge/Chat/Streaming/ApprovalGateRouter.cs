@@ -1,7 +1,9 @@
 using System.Collections.Concurrent;
 using System.Collections.Frozen;
 using Harbor.Abstractions.Permissions;
+using Harbor.Terminal.Abstractions;
 using Harbor.Terminal.Abstractions.ViewModels;
+using Harbor.Tui.CellForge.Panels;
 using Harbor.Tui.CellForge.Widgets;
 using Harbor.Ui.Framework.Rendering.Widgets;
 using Harbor.Ui.Framework.State;
@@ -99,6 +101,21 @@ public sealed class ApprovalGateRouter(ChatTimelinePanel panel, StatusViewModel 
     /// </summary>
     public static string SanitizeGateDetail(string? detail, bool isStreaming) =>
         isStreaming ? string.Empty : (detail ?? string.Empty).Trim();
+
+    /// <summary>
+    ///     Mini one-line footer density ([steal/opencode] #1182, epic #1155):
+    ///     the same machine's gate as a single footer line
+    ///     (<see cref="PermissionPresentation.BuildMiniLine"/>) — fullscreen
+    ///     card and footer share one presentation, only the budget differs.
+    ///     Pass <c>mono: true</c> for <c>HARBOR_TUI=plain</c>/narrow pipes
+    ///     (ASCII mark, diff inlined as text, no widget).
+    /// </summary>
+    public static string DescribeMiniLine(
+        string? toolName,
+        string? detail,
+        int maxWidth = PermissionMiniLine.DefaultMaxWidth,
+        bool mono = false) =>
+        PermissionPresentation.BuildMiniLine(toolName, detail, maxWidth: maxWidth, mono: mono);
 
     /// <summary>Current 3-stage position of <paramref name="gateId"/> (fresh gates sit at <see cref="PermissionStage.Permission"/>).</summary>
     public PermissionStage GateStage(string gateId) => MachineFor(gateId).Stage;
