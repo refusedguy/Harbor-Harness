@@ -190,6 +190,24 @@
 // a pair of identically-broken watchers would compare equal and report a green
 // that meant nothing. Both apply unconditionally now.
 //
+// MECHANISM (#1086, step 2, conveyor f2)
+// -------------------------------------
+// The two filesystem-call bans below are ScanRules: the widget ban and the
+// directory-watcher ban over their named-file scopes, no baselines, planted
+// controls, the scopes themselves as the floors. Enumeration, matching and
+// the control/discovery verdicts are ScanRunner's; this file keeps the issue
+// prose and the test names.
+//
+// The verdicts are `FindCalls`' line scan through the Func-overload, carrying
+// the file's own `SourceCommentStripper.StripAll` projection verbatim rather
+// than silently adopting the runner's stripper (see ScanRule.cs: divergent
+// contracts migrate with their stripper inside). A vanished gated file fails
+// here through MustContain rather than passing by leaving the scope — the
+// same design the old probe's missing-file-as-violation gave it. The port
+// rules (reflection), the LoadFile/Parse existence halves and the port-naming
+// probe stay handwritten with their probes: the engine grades bans, and
+// "exactly one implementer" / "names the port and calls LoadFile" are not
+// bans.
 
 using System.Text.RegularExpressions;
 
@@ -287,6 +305,126 @@ public sealed class ThemeStoreSeamRules
         @"(?:\bFile\s*\.\s*[A-Za-z_])|\bnew\s+FileInfo\s*\(",
         RegexOptions.CultureInvariant);
 
+    /// <summary>The widget ban as data; the grading is <see cref="ParseWidgetFilesystemCalls" />.</summary>
+    private const string WidgetFilesystemCall = "WIDGET-FS-CALL";
+
+    /// <summary>The directory-watcher ban as data; the grading is <see cref="ParseWatcherFileCalls" />.</summary>
+    private const string WatcherFileCall = "WATCHER-FILE-CALL";
+
+    /// <summary>
+    ///     The gated widgets as data: no filesystem call in either file, no
+    ///     baseline, four planted controls, the two files themselves as the floor.
+    /// </summary>
+    private static readonly ScanRule WidgetRule = new()
+    {
+        Id = "ThemeStoreSeam.Widgets",
+        Trees = ["src"],
+        InScope = static p => GatedWidgets.Contains(p, StringComparer.Ordinal),
+        Forbidden =
+        [
+            new ScanForbidden(
+                WidgetFilesystemCall,
+                FilesystemCall,
+                "read through IThemeStore: a theme widget that calls File.* cannot be given the shared "
+                + "store, so the duplicate survives and the fix never lands. See issue #668."),
+        ],
+        Controls =
+        [
+            // A widget reading a theme file itself — the #668 shape.
+            new ScanControl("WidgetBad.cs", """
+                string json = File.ReadAllText(path);
+                """, WidgetFilesystemCall),
+            // A directory enumeration in a widget is the same private-copy shape.
+            new ScanControl("WidgetDirBad.cs", """
+                foreach (string file in Directory.EnumerateFiles(dir, "*.json"))
+                """, WidgetFilesystemCall),
+            // Pure path manipulation is not a syscall and stays legal — the
+            // widgets legitimately have a path to name.
+            new ScanControl("WidgetPath.cs", """
+                string full = Path.Combine(dir, name + ".json");
+                """, null),
+            // Prose naming the old File.Exists to explain the rule is not code.
+            new ScanControl("WidgetProse.cs", """
+                // the widgets used to call File.Exists here; now they read through the port.
+                """, null),
+        ],
+        MinHits = 2,
+        MustContain = [.. GatedWidgets],
+        CustomParse = ParseWidgetFilesystemCalls,
+    };
+
+    /// <summary>
+    ///     The directory watcher as data: no <c>File.*</c> call in the file, no
+    ///     baseline, three planted controls, the file itself as the floor.
+    /// </summary>
+    private static readonly ScanRule WatcherRule = new()
+    {
+        Id = "ThemeStoreSeam.DirectoryWatcher",
+        Trees = ["src"],
+        InScope = static p => GatedDirectoryWatcher.Contains(p, StringComparer.Ordinal),
+        Forbidden =
+        [
+            new ScanForbidden(
+                WatcherFileCall,
+                FileCall,
+                "the stamp and the read-and-parse are both port members (TryGetLastWriteUtc, LoadFile): "
+                + "a File.* call in a type that holds the port is a private copy of a member it was "
+                + "handed. See issues #668/#720."),
+        ],
+        Controls =
+        [
+            // The watcher stat-ing a theme file itself — the #479-A6 shape.
+            new ScanControl("WatcherBad.cs", """
+                DateTime stamp = File.GetLastWriteTimeUtc(path);
+                """, WatcherFileCall),
+            // Enumerating the directory is the watcher's job and stays legal:
+            // the port never answers "which themes exist".
+            new ScanControl("WatcherEnum.cs", """
+                foreach (string file in Directory.EnumerateFiles(dir, "*.json"))
+                """, null),
+            // Prose about the old read is not a read.
+            new ScanControl("WatcherProse.cs", """
+                // the watcher used to call File.ReadAllText here; now it calls _store.LoadFile.
+                """, null),
+        ],
+        MinHits = 1,
+        MustContain = [.. GatedDirectoryWatcher],
+        CustomParse = ParseWatcherFileCalls,
+    };
+
+    /// <summary>
+    ///     The custom parsers: the file's own line scan over one file's raw
+    ///     source. The same <c>SourceCommentStripper.StripAll</c> projection and
+    ///     the same one-match-per-line verdict as <see cref="FindCalls" /> — the
+    ///     planted controls grade these parsers, so "they can fail" means something.
+    /// </summary>
+    private static IEnumerable<ScanHit> ParseWidgetFilesystemCalls(string displayPath, string rawSource) =>
+        ParseGatedCalls(displayPath, rawSource, FilesystemCall, WidgetFilesystemCall);
+
+    /// <summary>
+    ///     The directory-watcher verdict over one file's raw source; see
+    ///     <see cref="ParseWidgetFilesystemCalls" /> for the shared shape.
+    /// </summary>
+    private static IEnumerable<ScanHit> ParseWatcherFileCalls(string displayPath, string rawSource) =>
+        ParseGatedCalls(displayPath, rawSource, FileCall, WatcherFileCall);
+
+    private static IEnumerable<ScanHit> ParseGatedCalls(
+        string displayPath, string rawSource, Regex pattern, string subId)
+    {
+        // Split after normalising line endings, so a line number indexes the
+        // real source the way File.ReadLines did for the old probe.
+        string[] lines = SourceCommentStripper.StripAll(
+            rawSource.Replace("\r\n", "\n", StringComparison.Ordinal).Replace('\r', '\n').Split('\n'));
+        for (int i = 0; i < lines.Length; i++)
+        {
+            Match match = pattern.Match(lines[i]);
+            if (match.Success)
+            {
+                yield return new ScanHit(subId, displayPath, i + 1, match.Value.Trim());
+            }
+        }
+    }
+
 
     [Test]
     public async Task ThemeStore_Port_Is_Public_And_Lives_In_DesignSystem()
@@ -342,7 +480,7 @@ public sealed class ThemeStoreSeamRules
     [Test]
     public async Task CellForge_Theme_Widgets_Read_Through_The_Port_Not_The_Filesystem()
     {
-        var hits = FindFilesystemCalls(GatedWidgets);
+        List<string> hits = ScanRunner.Evaluate(WidgetRule);
 
         // `.Count`, not IsEmpty(): TUnit routes IsEmpty/IsNotEmpty by the STATIC
         // collection type, and IReadOnlyList is not one of the shapes it names.
@@ -404,7 +542,7 @@ public sealed class ThemeStoreSeamRules
     [Test]
     public async Task ThemeDirectoryWatcher_Does_Not_Touch_The_File_Api()
     {
-        var hits = FindCalls(GatedDirectoryWatcher, FileCall);
+        List<string> hits = ScanRunner.Evaluate(WatcherRule);
 
         await Assert.That(hits.Count).IsEqualTo(0).Because(
             "The port already offers this watcher both halves of what it would call here: "
@@ -490,6 +628,90 @@ public sealed class ThemeStoreSeamRules
             "The scanner in CellForge_Theme_Widgets_Read_Through_The_Port_Not_The_"
             + "Filesystem must be able to fail. If it reports nothing even here, it is "
             + "reporting nothing everywhere and the widgets' pass is meaningless.");
+    }
+
+    /// <summary>
+    ///     The planted controls — every filesystem shape and every legal
+    ///     neighbour — drive the REAL parsers: offenders reported under their
+    ///     sub-id, path handling / enumeration / prose silent.
+    /// </summary>
+    [Test]
+    public async Task Detector_ControlsDriveTheRealParsers()
+    {
+        List<string> failures =
+        [
+            .. ScanRunner.CheckControls(WidgetRule),
+            .. ScanRunner.CheckControls(WatcherRule),
+        ];
+
+        await Assert.That(failures).IsEmpty()
+            .Because(
+                "the seven planted controls must agree with the file's scanner cases through the "
+                + "rules' own parsers — otherwise the rules guard nothing, or forbid the watcher's "
+                + "enumeration. " + string.Join("; ", failures));
+    }
+
+    /// <summary>
+    ///     The rules' own scopes really yield the three gated files, so "no
+    ///     filesystem calls" means "nobody writes the shape" rather than "the
+    ///     scope moved and the rules grade nothing".
+    /// </summary>
+    [Test]
+    public async Task Scanner_SeesTheGatedFiles()
+    {
+        List<string> discovery =
+        [
+            .. ScanRunner.CheckDiscovery(WidgetRule),
+            .. ScanRunner.CheckDiscovery(WatcherRule),
+        ];
+
+        await Assert.That(discovery).IsEmpty()
+            .Because(
+                "the scopes must yield exactly the two gated widgets and the directory watcher; a "
+                + "smaller count means a file moved without the seam moving with it, and the rules "
+                + "above are grading a narrowed set. " + string.Join("; ", discovery));
+    }
+
+    /// <summary>
+    ///     Every baseline row states why it is tolerated, in the row itself. Vacuous
+    ///     while the tables are empty, and deliberately so: wired from the first
+    ///     row so the first row cannot skip the argument.
+    /// </summary>
+    [Test]
+    public async Task Baseline_Rows_AllHaveReasons()
+    {
+        List<string> failures =
+        [
+            .. ScanRunner.CheckReasons(WidgetRule),
+            .. ScanRunner.CheckReasons(WatcherRule),
+        ];
+
+        await Assert.That(failures).IsEmpty().Because(string.Join("\n", failures));
+    }
+
+    /// <summary>
+    ///     Every baseline row must still correspond to a real hit, so the tables
+    ///     cannot rot into blanket permissions: fix the code without deleting the
+    ///     row and this fails.
+    /// </summary>
+    [Test]
+    public async Task Baseline_Rows_Are_Not_Stale()
+    {
+        List<(string DisplayPath, string Source)> widgetSources =
+            ScanRunner.ReadSources(ScanRunner.ScopeFiles(WidgetRule));
+        List<(string DisplayPath, string Source)> watcherSources =
+            ScanRunner.ReadSources(ScanRunner.ScopeFiles(WatcherRule));
+        List<string> stale =
+        [
+            .. ScanRunner.StaleBaselineKeys(WidgetRule, widgetSources),
+            .. ScanRunner.StaleBaselineKeys(WatcherRule, watcherSources),
+        ];
+
+        await Assert.That(stale).IsEmpty()
+            .Because(
+                "A baseline row that no longer matches reality is a lie: the site was fixed (or the file "
+                + "left the scope), the row grandfathers nothing and hides the next real violation. "
+                + Environment.NewLine + string.Join(Environment.NewLine, stale));
     }
 
     // ---------------------------------------------------------------------
