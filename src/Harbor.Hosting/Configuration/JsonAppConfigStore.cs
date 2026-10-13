@@ -160,8 +160,7 @@ public sealed class JsonAppConfigStore<T> : IAppConfigStore<T> where T : AppConf
             string path = _default.ConfigFilePath;
             if (!File.Exists(path))
             {
-                _logger.LogInformation("App config file not found at {Path}, using defaults (appId={AppId})",
-                    path, _default.AppId);
+                JsonAppConfigStoreLog.ConfigFileNotFound(_logger, path, _default.AppId);
                 return Result.Success(_default);
             }
 
@@ -171,19 +170,19 @@ public sealed class JsonAppConfigStore<T> : IAppConfigStore<T> where T : AppConf
             var config = JsonSerializer.Deserialize(json, _jsonTypeInfo);
             if (config is null)
             {
-                _logger.LogWarning("App config at {Path} deserialized to null, using defaults", path);
+                JsonAppConfigStoreLog.ConfigNullUsingDefaults(_logger, path);
                 return Result.Success(_default);
             }
             return Result.Success(config);
         }
         catch (JsonException ex)
         {
-            _logger.LogError(ex, "Failed to parse app config JSON at {Path}", _default.ConfigFilePath);
+            JsonAppConfigStoreLog.ParseFailed(_logger, ex, _default.ConfigFilePath);
             return Result.Failure<T>($"App config at {_default.ConfigFilePath} is corrupt: {ex.Message}");
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to load app config from {Path}", _default.ConfigFilePath);
+            JsonAppConfigStoreLog.LoadFailed(_logger, ex, _default.ConfigFilePath);
             return Result.Failure<T>(ex.Message);
         }
         finally
@@ -221,12 +220,12 @@ public sealed class JsonAppConfigStore<T> : IAppConfigStore<T> where T : AppConf
             }
             File.Move(tempPath, path);
 
-            _logger.LogDebug("App config saved to {Path} (appId={AppId})", path, config.AppId);
+            JsonAppConfigStoreLog.ConfigSaved(_logger, path, config.AppId);
             return Result.Success();
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to save app config to {Path}", config.ConfigFilePath);
+            JsonAppConfigStoreLog.SaveFailed(_logger, ex, config.ConfigFilePath);
             return Result.Failure(ex.Message);
         }
         finally
@@ -305,4 +304,29 @@ internal sealed class ImmutableListConverter<T> : JsonConverter<ImmutableList<T>
         }
         writer.WriteEndArray();
     }
+}
+
+/// <summary>
+///     SG4: BCL <c>[LoggerMessage]</c> delegates for <see cref="JsonAppConfigStore{T}" />.
+///     Templates, levels and operands are 1-to-1 with the former <c>LogX</c> calls.
+/// </summary>
+internal static partial class JsonAppConfigStoreLog
+{
+    [LoggerMessage(EventId = 1, Level = LogLevel.Information, Message = "App config file not found at {Path}, using defaults (appId={AppId})")]
+    public static partial void ConfigFileNotFound(ILogger logger, string path, string appId);
+
+    [LoggerMessage(EventId = 2, Level = LogLevel.Warning, Message = "App config at {Path} deserialized to null, using defaults")]
+    public static partial void ConfigNullUsingDefaults(ILogger logger, string path);
+
+    [LoggerMessage(EventId = 3, Level = LogLevel.Error, Message = "Failed to parse app config JSON at {Path}")]
+    public static partial void ParseFailed(ILogger logger, Exception ex, string path);
+
+    [LoggerMessage(EventId = 4, Level = LogLevel.Error, Message = "Failed to load app config from {Path}")]
+    public static partial void LoadFailed(ILogger logger, Exception ex, string path);
+
+    [LoggerMessage(EventId = 5, Level = LogLevel.Debug, Message = "App config saved to {Path} (appId={AppId})")]
+    public static partial void ConfigSaved(ILogger logger, string path, string appId);
+
+    [LoggerMessage(EventId = 6, Level = LogLevel.Error, Message = "Failed to save app config to {Path}")]
+    public static partial void SaveFailed(ILogger logger, Exception ex, string path);
 }
