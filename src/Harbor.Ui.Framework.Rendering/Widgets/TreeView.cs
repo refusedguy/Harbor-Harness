@@ -27,7 +27,7 @@ public sealed class TreeNode
     /// The owning <see cref="TreeView" /> subscribes at construction; hosts
     /// holding node references directly may observe it too.
     /// </summary>
-    internal event Action? ExpansionChanged;
+    internal event EventHandler? ExpansionChanged;
 
     /// <summary>Single-line display text (trimmed, never empty).</summary>
     public string Label { get; }
@@ -47,7 +47,7 @@ public sealed class TreeNode
         if (HasChildren && !IsExpanded)
         {
             IsExpanded = true;
-            ExpansionChanged?.Invoke();
+            ExpansionChanged?.Invoke(this, EventArgs.Empty);
         }
     }
 
@@ -57,7 +57,7 @@ public sealed class TreeNode
         if (HasChildren && IsExpanded)
         {
             IsExpanded = false;
-            ExpansionChanged?.Invoke();
+            ExpansionChanged?.Invoke(this, EventArgs.Empty);
         }
     }
 
@@ -70,7 +70,7 @@ public sealed class TreeNode
         }
 
         IsExpanded = !IsExpanded;
-        ExpansionChanged?.Invoke();
+        ExpansionChanged?.Invoke(this, EventArgs.Empty);
         return IsExpanded;
     }
 }
@@ -563,7 +563,7 @@ public sealed class TreeView : IChatBlock, IFocusTarget
     /// visible-row cache and nudge the host (tree-driven flips raise
     /// <see cref="Changed" /> themselves — see <see cref="_forwardingNodeMutation" />).
     /// </summary>
-    private void OnNodeExpansionChanged()
+    private void OnNodeExpansionChanged(object? sender, EventArgs e)
     {
         _dirty = true;
         if (!_forwardingNodeMutation)
