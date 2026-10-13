@@ -482,7 +482,7 @@ public sealed class LayoutTree
             throw new InvalidOperationException($"panel '{panelId}' is already a container; stacks only wrap leaves.");
         foreach (var p in panels)
         {
-            ArgumentNullException.ThrowIfNull(p, nameof(panels));
+            ArgumentNullException.ThrowIfNull(p);
             if (p.Id == panelId || _panels.ContainsKey(p.Id))
                 throw new ArgumentException($"panel '{p.Id}' is already in the tree.", nameof(panels));
         }
