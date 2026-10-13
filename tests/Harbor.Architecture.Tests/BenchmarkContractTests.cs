@@ -144,6 +144,7 @@ public class BenchmarkContractTests
             "JsonlParseBenchmark",
             "StringBuilderPoolBenchmark",
             "BodyLinesBenchmark",
+            "DictionaryPoolBenchmark",
             "WorkspaceContextSourceBenchmark",
             "CachingPromptBenchmark"
         ];
