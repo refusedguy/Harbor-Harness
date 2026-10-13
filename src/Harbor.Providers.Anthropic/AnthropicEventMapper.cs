@@ -56,8 +56,7 @@ internal static class AnthropicEventMapper
         catch (Exception ex)
         {
             state.CountMalformed();
-            logger.LogWarning(ex, "Failed to parse Anthropic event #{Count}: {Data}",
-                state.MalformedChunks, data);
+            AnthropicEventMapperLog.FailedToParseEvent(logger, ex, state.MalformedChunks, data);
             return;
         }
 
@@ -490,4 +489,14 @@ internal static class AnthropicEventMapper
 
         return null;
     }
+}
+
+/// <summary>
+///     SG7: BCL <c>[LoggerMessage]</c> delegates for <see cref="AnthropicEventMapper" />.
+///     Templates, levels and operands are 1-to-1 with the former <c>LogX</c> calls.
+/// </summary>
+internal static partial class AnthropicEventMapperLog
+{
+    [LoggerMessage(EventId = 1, Level = LogLevel.Warning, Message = "Failed to parse Anthropic event #{Count}: {Data}")]
+    public static partial void FailedToParseEvent(ILogger logger, Exception ex, int count, string data);
 }

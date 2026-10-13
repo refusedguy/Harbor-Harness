@@ -90,9 +90,8 @@ public sealed class AnthropicLlmClient : ILlmClient
                         // #203: stream-health summary (only when noteworthy).
                         if (chunkState.MalformedChunks > 0 || chunkState.RemappedToolCalls > 0)
                         {
-                            _logger.LogInformation(
-                                "Anthropic stream completed: {Malformed} malformed event(s) skipped, {Remaps} positional tool-call id fallback(s)",
-                                chunkState.MalformedChunks, chunkState.RemappedToolCalls);
+                            AnthropicLlmClientLog.StreamCompleted(
+                                _logger, chunkState.MalformedChunks, chunkState.RemappedToolCalls);
                         }
                     }).ConfigureAwait(false);
             }
@@ -104,7 +103,7 @@ public sealed class AnthropicLlmClient : ILlmClient
             {
                 // #203 E5: fire-and-forget pump task must log inside the
                 // lambda — the ErrorEvent alone is invisible in traces.
-                _logger.LogWarning(ex, "Anthropic stream task failed: {Message}", ex.Message);
+                AnthropicLlmClientLog.StreamTaskFailed(_logger, ex, ex.Message);
                 await writer.WriteAsync(new ErrorEvent(
                     $"Stream failed: {ex.Message}", ex.ToString(),
                     ProviderErrors.FromException(ex, cancellationToken)), cancellationToken).ConfigureAwait(false);
@@ -127,6 +126,19 @@ public sealed class AnthropicLlmClient : ILlmClient
         var models = AnthropicModels.All;
         return Task.FromResult(Result.Success(models));
     }
+}
+
+/// <summary>
+///     SG7: BCL <c>[LoggerMessage]</c> delegates for <see cref="AnthropicLlmClient" />.
+///     Templates, levels and operands are 1-to-1 with the former <c>LogX</c> calls.
+/// </summary>
+internal static partial class AnthropicLlmClientLog
+{
+    [LoggerMessage(EventId = 1, Level = LogLevel.Information, Message = "Anthropic stream completed: {Malformed} malformed event(s) skipped, {Remaps} positional tool-call id fallback(s)")]
+    public static partial void StreamCompleted(ILogger logger, int malformed, int remaps);
+
+    [LoggerMessage(EventId = 2, Level = LogLevel.Warning, Message = "Anthropic stream task failed: {Message}")]
+    public static partial void StreamTaskFailed(ILogger logger, Exception ex, string message);
 }
 
 /// <summary>
