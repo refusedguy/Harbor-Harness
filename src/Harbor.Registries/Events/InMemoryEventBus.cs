@@ -412,9 +412,16 @@ public sealed class InMemoryEventBus : IEventBus, IEventBusQueueMetrics
         // the first GetScrollback call, so a reader still pays the full price.
         if (!_hasMandatorySink && !_retentionArmed)
         {
-            // Volatile-free read of the snapshot: ImmutableArray<T> is
-            // reference-sized, and the existing slow path reads the same field
-            // the same way (no torn reads are possible for a single reference).
+            // #1108: acquire-fenced read of the snapshot. ImmutableArray<T>
+            // is reference-sized so a torn read is impossible, but a plain
+            // read may still observe a STALE array on ARM (weak memory
+            // model) — a just-subscribed handler then silently skips an
+            // event. Subscribe publishes via ImmutableInterlocked (full
+            // fence on write); the full fence below is the matching acquire
+            // (Volatile.Read<T> is class-constrained, so it rejects this
+            // struct field with CS0452; a fence + plain read is equivalent
+            // and allocates nothing).
+            Thread.MemoryBarrier();
             var snapshot = _subscriptions;
             if (snapshot.IsEmpty)
             {
@@ -535,7 +542,10 @@ public sealed class InMemoryEventBus : IEventBus, IEventBusQueueMetrics
             // 1. Append to scrollback ring buffer (in-place overwrite, short lock).
             AppendScrollback(@event);
 
-            // 2. Lock-free snapshot — no List copy, no lock contention
+            // 2. Lock-free snapshot — no List copy, no lock contention.
+            // #1108: fenced read — same ARM-stale reasoning as the fast
+            // path above; a stale snapshot here drops a live subscriber.
+            Thread.MemoryBarrier();
             var snapshot = _subscriptions;
             if (snapshot.IsEmpty)
             {
@@ -1176,6 +1186,31 @@ public sealed class InMemoryEventBus : IEventBus, IEventBusQueueMetrics
             // the handler directly is exactly equivalent — and
             // skips a Timer + Task allocation per async-incomplete
             // dispatch (#47).
+            try
+            {
+                await handlerTask.ConfigureAwait(false);
+                return (DispatchOutcome.Completed, null);
+            }
+            catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+            {
+                // The handler hit the budget cancellation from INSIDE
+                // its own body — an over-budget strike, not a death.
+                return (DispatchOutcome.Slow, Task.CompletedTask);
+            }
+        }
+
+        if (handlerTask.IsCompleted && !ct.IsCancellationRequested)
+        {
+            // #1108: the handler finished between the budget-arm above and
+            // this point — a synchronously faulted/cancelled dispatch never
+            // arms the timer, so it always lands here. Awaiting it directly
+            // is exactly equivalent to the WhenAny race below (the infinite
+            // Delay, fed by a live token, could only lose) and skips its
+            // Timer + Task allocation — the same shape as the
+            // !ct.CanBeCanceled branch above, which fixed only the
+            // non-cancellable half. The IsCancellationRequested guard keeps
+            // the racy corner (publisher tore down while the handler just
+            // finished) on the old path, where teardown wins the race.
             try
             {
                 await handlerTask.ConfigureAwait(false);
