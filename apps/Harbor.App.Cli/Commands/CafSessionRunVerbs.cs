@@ -30,7 +30,7 @@ internal static class CafSessionCommands
 
 /// <summary>
 ///     CAF-A (#1286): <c>run</c> verb handlers (task/list/accept/reject/
-///     owner-report/change). See the remarks on <see cref="CafSessionCommands" />
+///     owner-report/report/change). See the remarks on <see cref="CafSessionCommands" />
 ///     for the single-builder rule and the <c>--flag</c> deferral.
 /// </summary>
 internal static class CafRunCommands

@@ -8,13 +8,13 @@ namespace Harbor.App.Cli.Commands;
 ///     <c>harbor run change agent=&lt;name&gt; "&lt;task&gt;" [--checks &lt;file&gt;] [--dry-run] [--repo &lt;path&gt;]</c>
 ///     (epic #42, slice S9, #397): one command driving the verified-change
 ///     chain end to end. This slice implements pin (S1), isolate (S2),
-///     freeze (S3, #377) and checks (S4, #378) and then stops fail-closed:
-///     report (S5) through owner report (S8) are not wired into this command
-///     yet, so the run is left honestly at <c>Checked</c> and the command
-///     exits 4 naming the stage. Nothing is faked, no step is skipped to
-///     "success", and <c>harbor run list</c> shows the run with its last
-///     completed transition.
-///     Exit codes: 0 dry-run plan printed; 2 bad usage; 3 pre-flight
+///     freeze (S3, #377), checks (S4, #378) and report (S5, #379): the run
+///     advances <c>Pinned -&gt; Isolated -&gt; Changed -&gt; Checked -&gt;
+///     Reported</c> and the command exits with the report's code. Accept
+///     (S6), reject (S7) and the owner report (S8) stay operator actions —
+///     the agent does not accept its own work.
+///     Exit codes: 0 reported and all checks passed (or none declared);
+///     1 reported, at least one check failed; 2 bad usage; 3 pre-flight
 ///     conflict (dirty workspace, moved base, not a repo); 4 internal
 ///     failure at a named stage.
 /// </summary>
@@ -183,10 +183,14 @@ internal static class RunChangeVerb
             return 4;
         }
 
-        Console.Error.WriteLine(
-            "Stage 'report' (S5, #379) is not wired into this command yet: the run stays at Checked, " +
-            $"`harbor run list` shows it honestly. Resume this run when the report wiring lands.");
-        return 4;
+        ReportResult reported = await RunReporter.ReportAsync(set.RunId).ConfigureAwait(false);
+        if (reported.Outcome == ReportOutcome.Refused)
+        {
+            Console.Error.WriteLine($"Internal failure at stage 'report': {reported.Message}");
+            return 4;
+        }
+        Console.Error.WriteLine(reported.Message);
+        return reported.ExitCode;
     }
 
     private static void PrintUsage()
