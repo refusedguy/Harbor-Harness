@@ -91,7 +91,17 @@ public sealed class TypeFilterMiddleware : IEventBusMiddleware
                 return ValueTask.FromResult(true);
         }
 
-        _logger.LogTrace("Filtered out event type {Type}", @event.GetType().Name);
+        TypeFilterMiddlewareLog.EventTypeFilteredOut(_logger, @event.GetType().Name);
         return ValueTask.FromResult(false);
     }
+}
+
+/// <summary>
+///     SG3: BCL <c>[LoggerMessage]</c> delegates for <see cref="TypeFilterMiddleware" />.
+///     Templates, levels and operands are 1-to-1 with the former <c>LogX</c> calls.
+/// </summary>
+internal static partial class TypeFilterMiddlewareLog
+{
+    [LoggerMessage(EventId = 1, Level = LogLevel.Trace, Message = "Filtered out event type {Type}")]
+    public static partial void EventTypeFilteredOut(ILogger logger, string type);
 }

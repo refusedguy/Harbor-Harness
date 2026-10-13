@@ -479,8 +479,7 @@ public sealed class InMemoryEventBus : IEventBus, IEventBusQueueMetrics
                     // Trace is off.
                     if (_logger.IsEnabled(LogLevel.Trace))
                     {
-                        _logger.LogTrace("Event {EventType} dropped by optional sink {Middleware}",
-                            @event.GetType().Name, sink.Name);
+                        InMemoryEventBusLog.OptionalSinkDropped(_logger, @event.GetType().Name, sink.Name);
                     }
 
                     return;
@@ -489,7 +488,7 @@ public sealed class InMemoryEventBus : IEventBus, IEventBusQueueMetrics
             catch (Exception ex)
             {
                 Interlocked.Increment(ref _optionalSinkDropCount);
-                _logger.LogWarning(ex, "Middleware {Middleware} threw — event dropped", sink.Name);
+                InMemoryEventBusLog.OptionalSinkThrew(_logger, ex, sink.Name);
                 return;
             }
         }
@@ -520,7 +519,7 @@ public sealed class InMemoryEventBus : IEventBus, IEventBusQueueMetrics
             // avoids the params-array + GetType().Name allocation when Debug is off.
             if (_logger.IsEnabled(LogLevel.Debug))
             {
-                _logger.LogDebug("Publishing event: {EventType}", @event.GetType().Name);
+                InMemoryEventBusLog.PublishingEvent(_logger, @event.GetType().Name);
             }
 
             // ── Middleware pipeline (BEFORE scrollback + fan-out) ──
@@ -546,7 +545,7 @@ public sealed class InMemoryEventBus : IEventBus, IEventBusQueueMetrics
                 // + the GetType().Name string even when Trace is off.
                 if (_logger.IsEnabled(LogLevel.Trace))
                 {
-                    _logger.LogTrace("No subscribers for event {EventType}", @event.GetType().Name);
+                    InMemoryEventBusLog.NoSubscribers(_logger, @event.GetType().Name);
                 }
 
                 return;
@@ -556,7 +555,7 @@ public sealed class InMemoryEventBus : IEventBus, IEventBusQueueMetrics
             // saving as the empty-snapshot branch above.
             if (_logger.IsEnabled(LogLevel.Trace))
             {
-                _logger.LogTrace("Publishing to {SubscriberCount} subscribers", snapshot.Length);
+                InMemoryEventBusLog.PublishingToSubscribers(_logger, snapshot.Length);
             }
 
             // 3. Fan-out to subscribers under the A4 per-handler budget: a handler
@@ -940,8 +939,7 @@ public sealed class InMemoryEventBus : IEventBus, IEventBusQueueMetrics
                         // #97 Debug log above.
                         if (_logger.IsEnabled(LogLevel.Trace))
                         {
-                            _logger.LogTrace("Event {EventType} dropped by middleware {Middleware}",
-                                @event.GetType().Name, mw.Name);
+                            InMemoryEventBusLog.MiddlewareDropped(_logger, @event.GetType().Name, mw.Name);
                         }
 
                         return (false, @event);
@@ -949,7 +947,7 @@ public sealed class InMemoryEventBus : IEventBus, IEventBusQueueMetrics
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogWarning(ex, "Middleware {Middleware} threw — event dropped", mw.Name);
+                    InMemoryEventBusLog.MiddlewareThrew(_logger, ex, mw.Name);
                     return (false, @event);
                 }
             }
@@ -1014,9 +1012,7 @@ public sealed class InMemoryEventBus : IEventBus, IEventBusQueueMetrics
             async ValueTask RecordSlowStrikeAsync(Subscription sub, Task handlerTask)
             {
                 int strikes = sub.Strike();
-                _logger.LogWarning(
-                    "Subscriber exceeded its {Budget}ms dispatch budget ({Strikes}/{Max} strikes) — continuing without it",
-                    _handlerBudget.TotalMilliseconds, strikes, MaxSlowStrikes);
+                InMemoryEventBusLog.SlowSubscriberStrike(_logger, _handlerBudget.TotalMilliseconds, strikes, MaxSlowStrikes);
                 if (strikes >= MaxSlowStrikes)
                 {
                     MarkDead(sub);
@@ -1045,7 +1041,7 @@ public sealed class InMemoryEventBus : IEventBus, IEventBusQueueMetrics
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogWarning(ex, "Subscriber threw exception — removing dead subscriber");
+                    InMemoryEventBusLog.SubscriberThrew(_logger, ex);
                     MarkDead(sub);
                 }
             }
@@ -1221,11 +1217,11 @@ public sealed class InMemoryEventBus : IEventBus, IEventBusQueueMetrics
         try { await handlerTask.ConfigureAwait(false); }
         catch (OperationCanceledException oce)
         {
-            _logger.LogDebug(oce, "Orphaned slow-subscriber handler cancelled with its slice");
+            InMemoryEventBusLog.OrphanCancelled(_logger, oce);
         }
         catch (Exception ex)
         {
-            _logger.LogDebug(ex, "Orphaned slow-subscriber handler faulted");
+            InMemoryEventBusLog.OrphanFaulted(_logger, ex);
         }
     }
 
@@ -1264,4 +1260,44 @@ public sealed class InMemoryEventBus : IEventBus, IEventBusQueueMetrics
             _action = null;
         }
     }
+}
+
+/// <summary>
+///     SG3: BCL <c>[LoggerMessage]</c> delegates for <see cref="InMemoryEventBus" />.
+///     Templates, levels and operands are 1-to-1 with the former <c>LogX</c> calls.
+/// </summary>
+internal static partial class InMemoryEventBusLog
+{
+    [LoggerMessage(EventId = 1, Level = LogLevel.Trace, Message = "Event {EventType} dropped by optional sink {Middleware}")]
+    public static partial void OptionalSinkDropped(ILogger logger, string eventType, string middleware);
+
+    [LoggerMessage(EventId = 2, Level = LogLevel.Warning, Message = "Middleware {Middleware} threw — event dropped")]
+    public static partial void OptionalSinkThrew(ILogger logger, Exception ex, string middleware);
+
+    [LoggerMessage(EventId = 3, Level = LogLevel.Debug, Message = "Publishing event: {EventType}")]
+    public static partial void PublishingEvent(ILogger logger, string eventType);
+
+    [LoggerMessage(EventId = 4, Level = LogLevel.Trace, Message = "No subscribers for event {EventType}")]
+    public static partial void NoSubscribers(ILogger logger, string eventType);
+
+    [LoggerMessage(EventId = 5, Level = LogLevel.Trace, Message = "Publishing to {SubscriberCount} subscribers")]
+    public static partial void PublishingToSubscribers(ILogger logger, int subscriberCount);
+
+    [LoggerMessage(EventId = 6, Level = LogLevel.Trace, Message = "Event {EventType} dropped by middleware {Middleware}")]
+    public static partial void MiddlewareDropped(ILogger logger, string eventType, string middleware);
+
+    [LoggerMessage(EventId = 7, Level = LogLevel.Warning, Message = "Middleware {Middleware} threw — event dropped")]
+    public static partial void MiddlewareThrew(ILogger logger, Exception ex, string middleware);
+
+    [LoggerMessage(EventId = 8, Level = LogLevel.Warning, Message = "Subscriber exceeded its {Budget}ms dispatch budget ({Strikes}/{Max} strikes) — continuing without it")]
+    public static partial void SlowSubscriberStrike(ILogger logger, double budget, int strikes, int max);
+
+    [LoggerMessage(EventId = 9, Level = LogLevel.Warning, Message = "Subscriber threw exception — removing dead subscriber")]
+    public static partial void SubscriberThrew(ILogger logger, Exception ex);
+
+    [LoggerMessage(EventId = 10, Level = LogLevel.Debug, Message = "Orphaned slow-subscriber handler cancelled with its slice")]
+    public static partial void OrphanCancelled(ILogger logger, Exception ex);
+
+    [LoggerMessage(EventId = 11, Level = LogLevel.Debug, Message = "Orphaned slow-subscriber handler faulted")]
+    public static partial void OrphanFaulted(ILogger logger, Exception ex);
 }

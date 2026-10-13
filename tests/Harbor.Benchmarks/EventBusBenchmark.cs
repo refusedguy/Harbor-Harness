@@ -171,8 +171,7 @@ public class EventBusBenchmark
     ///         (<c>Stopwatch.GetTimestamp</c> + 3 <c>Interlocked</c> ops, no
     ///         allocation), <c>RunMiddlewareAsync</c>'s
     ///         <c>Task&lt;ValueTuple&lt;bool, AgentEvent&gt;&gt;</c>
-    ///         (InMemoryEventBus.cs:661) and the ring append are all strictly below
-    // check-doc-cites: record-drift InMemoryEventBus.cs:661 now="lock (_scrollbackLock)" [#947: written over `private async Task<(bool Continue, Agent`; repair deferred to the owner's symbol-rename decision] -->
+    ///         (InMemoryEventBus.cs:660) and the ring append are all strictly below
     ///         the return, which is the whole point of the case. The #186 tripwire
     ///         <c>PublishAsync_ZeroSubscribers_IsAllocationFree</c> pins the same
     ///         claim merge-gated.
@@ -202,8 +201,7 @@ public class EventBusBenchmark
     ///         Allocation attribution: <b>non-zero</b> and to grow if this case is ever
     ///         changed to await a real suspension. The resident allocation is the
     ///         <c>Task&lt;ValueTuple&lt;bool, AgentEvent&gt;&gt;</c> produced by
-    ///         <c>RunMiddlewareAsync</c> (InMemoryEventBus.cs:661, result set at :693) —
-    // check-doc-cites: record-drift InMemoryEventBus.cs:661 now="lock (_scrollbackLock)" [#947: written over `private async Task<(bool Continue, Agent`; repair deferred to the owner's symbol-rename decision] -->
+    ///         <c>RunMiddlewareAsync</c> (InMemoryEventBus.cs:660, result set at :692) —
     ///         <c>Task.FromResult</c> does not cache non-primitive result types, so one
     ///         task escapes per publish. The pre-ring scrollback copy (1024 refs × 8 B ≈
     ///         8 KB) is gone with 2f9debf: <c>AppendScrollback</c> now overwrites a fixed
@@ -227,24 +225,19 @@ public class EventBusBenchmark
     ///     <para>
     ///         Await semantics: synchronous throughout
     ///         (<c>DispatchToOneAsync</c> takes the <c>IsCompletedSuccessfully</c>
-    ///         branch, InMemoryEventBus.cs:865); nothing suspends.
-    // check-doc-cites: record-drift InMemoryEventBus.cs:865 now="" [#947: written over `{`; repair deferred to the owner's symbol-rename decision] -->
-    // check-doc-cites: record-drift InMemoryEventBus.cs:865 now="" [#947: cited line is blank; repair deferred to the owner's decision] -->
+    ///         branch, InMemoryEventBus.cs:1133); nothing suspends.
     ///     </para>
     ///     <para>
     ///         Allocation attribution: one <c>Task&lt;ValueTuple&lt;bool,
     ///         AgentEvent&gt;&gt;</c> from <c>RunMiddlewareAsync</c>
-    ///         (InMemoryEventBus.cs:661, result set at :693) plus one
-    // check-doc-cites: record-drift InMemoryEventBus.cs:661 now="lock (_scrollbackLock)" [#947: written over `private async Task<(bool Continue, Agent`; repair deferred to the owner's symbol-rename decision] -->
+    ///         (InMemoryEventBus.cs:660, result set at :692) plus one
     ///         <c>Task&lt;ValueTuple&lt;DispatchOutcome, Task?&gt;&gt;</c> from
-    ///         <c>DispatchToOneAsync</c> (InMemoryEventBus.cs:850, result set at :874)
+    ///         <c>DispatchToOneAsync</c> (InMemoryEventBus.cs:849, result set at :873)
     ///         plus the fan-out method's own <c>Task</c>
-    ///         (<c>DispatchToSubscribersAsync</c>, InMemoryEventBus.cs:708) — the
-    // check-doc-cites: record-drift InMemoryEventBus.cs:708 now="/// number #47/S3 asks for instead of an estimate." [#947: written over `private async Task DispatchToSubscribers`; repair deferred to the owner's symbol-rename decision] -->
+    ///         (<c>DispatchToSubscribersAsync</c>, InMemoryEventBus.cs:707) — the
     ///         <c>Task</c> state machines themselves are structs and never box because
     ///         nothing suspends. The handler budget CTS is rented from the <c>#249</c>
-    ///         single-slot pool (InMemoryEventBus.cs:823) and returned at :834, and since
-    // check-doc-cites: record-drift InMemoryEventBus.cs:823 now="}" [#947: written over `/// and free of a pending budget timer —`; repair deferred to the owner's symbol-rename decision] -->
+    ///         single-slot pool (InMemoryEventBus.cs:822) and returned at :833, and since
     ///         #507 this row arms no <c>CancelAfter</c> on it at all, so the pool recycles
     ///         one instance and the CTS adds <b>0 B</b>. An earlier revision of this
     ///         comment blamed the 40 B on <c>TryReset</c> refusing that instance (#513);
@@ -289,23 +282,18 @@ public class EventBusBenchmark
     ///     separate "the awaited work was already done" from "the await cost a real
     ///     suspension". This is the only case here that enters
     ///     <c>DispatchToOneAsync</c>'s <c>!IsCompletedSuccessfully</c> branch
-    ///     (InMemoryEventBus.cs:865) and its <c>dispatch.AsTask()</c> conversion.
-    // check-doc-cites: record-drift InMemoryEventBus.cs:865 now="" [#947: written over `{`; repair deferred to the owner's symbol-rename decision] -->
-    // check-doc-cites: record-drift InMemoryEventBus.cs:865 now="" [#947: cited line is blank; repair deferred to the owner's decision] -->
+    ///     (InMemoryEventBus.cs:1158) and its <c>dispatch.AsTask()</c> conversion.
     ///     <para>
     ///         Await semantics: one real suspension + thread-pool resumption per
     ///         publish. The drain is still fully awaited before
     ///         <see cref="InMemoryEventBus.PublishAsync" /> returns (the
     ///         <c>ct.CanBeCanceled == false</c> direct-await branch,
-    ///         InMemoryEventBus.cs:891) — no handler outlives the measured region,
-    // check-doc-cites: record-drift InMemoryEventBus.cs:891 now="" [#947: written over `// It buys no bytes: docs/BENCHMARKS.md `; repair deferred to the owner's symbol-rename decision] -->
-    // check-doc-cites: record-drift InMemoryEventBus.cs:891 now="" [#947: cited line is blank; repair deferred to the owner's decision] -->
+    ///         InMemoryEventBus.cs:1172) — no handler outlives the measured region,
     ///         so the next iteration cannot overlap the previous one.
     ///     </para>
     ///     <para>
     ///         Allocation attribution: adds the <c>Task</c> materialised by
-    ///         <c>ValueTask.AsTask()</c> (InMemoryEventBus.cs:877) on top of the
-    // check-doc-cites: record-drift InMemoryEventBus.cs:877 now="{" [#947: written over `// A pristine source is what lets Return`; repair deferred to the owner's symbol-rename decision] -->
+    ///         <c>ValueTask.AsTask()</c> (InMemoryEventBus.cs:876) on top of the
     ///         <see cref="PublishAsync_1Sub" /> attribution. This row is the input
     ///         #47/S4 needs for the <c>ValueTask</c>-shape question; do not read it as
     ///         a regression against the synchronous rows. Measured 2026-09-28 in CI
@@ -386,8 +374,7 @@ public class EventBusBenchmark
 ///         <c>AllocAttribution</c> and #513 for why the CTS is not the fan-out residual.
 ///         The dead-subscriber buffer is
 ///         <c>ArrayPool</c>-rented and only taken when a subscriber actually dies
-///         (<c>MarkDead</c>, <c>InMemoryEventBus.cs:739</c>), and
-// check-doc-cites: record-drift InMemoryEventBus.cs:739 now="public TimeSpan OldestPendingAge" [#947: written over `void MarkDead(Subscription sub)`; repair deferred to the owner's symbol-rename decision] -->
+///         (<c>MarkDead</c>, <c>InMemoryEventBus.cs:738</c>), and
 ///         <c>DispatchToSubscribersAsync</c>'s local functions are struct
 ///         closures, so neither contributes here. Measured values: <c>docs/BENCHMARKS.md</c> §5.4.</item>
 ///     </list>
@@ -457,13 +444,11 @@ public class EventBusBenchmarkFanout
     ///         <c>Task&lt;ValueTuple&lt;DispatchOutcome, Task?&gt;&gt;</c> per
     ///         subscriber (<c>DispatchToOneAsync</c>) plus the fan-out method's own
     ///         40 B <c>Task</c> (<c>DispatchToSubscribersAsync</c>,
-    ///         InMemoryEventBus.cs:708) — i.e. the expected column
-    // check-doc-cites: record-drift InMemoryEventBus.cs:708 now="/// number #47/S3 asks for instead of an estimate." [#947: written over `private async Task DispatchToSubscribers`; repair deferred to the owner's symbol-rename decision] -->
+    ///         InMemoryEventBus.cs:707) — i.e. the expected column
     ///         scales with <see cref="SubscriberCount" />, not with a fixed 8 KB. The
     ///         dead-subscriber buffer is <c>ArrayPool</c>-rented and only taken when a
     ///         subscriber actually dies
-    ///         (<c>MarkDead</c>, InMemoryEventBus.cs:739), and
-    // check-doc-cites: record-drift InMemoryEventBus.cs:739 now="public TimeSpan OldestPendingAge" [#947: written over `void MarkDead(Subscription sub)`; repair deferred to the owner's symbol-rename decision] -->
+    ///         (<c>MarkDead</c>, InMemoryEventBus.cs:738), and
     ///         <c>DispatchToSubscribersAsync</c>'s own local functions are struct
     ///         closures, so neither contributes here. The pooled budget CTS adds 0 B
     ///         on this row (#513: it was never the residual — see the class contract).
