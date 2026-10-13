@@ -1,6 +1,7 @@
 using System.Text;
 using CSharpFunctionalExtensions;
 using Harbor.Terminal.Abstractions.Rendering;
+using Harbor.Tui.CellForge.Generic.Widgets;
 
 namespace Harbor.Tui.CellForge.Widgets;
 
@@ -38,8 +39,17 @@ public enum TableHighlightSpacing
 /// frame survives the cut; shorter tables paint fully, so the
 /// default-collapsed state stays byte-identical to the pre-collapse layout.
 /// Feed Enter/click/space toggles via <see cref="ToggleExpanded"/>.
+///
+/// Row selection lives outside the widget (#1158, ratatui
+/// <c>StatefulWidget</c> analog, same recipe as <c>GenericTable</c> #1371):
+/// <see cref="RowState"/> survives frames and owns the row axis, while this
+/// type owns content and geometry. <see cref="Paint(BlockPaintContext,
+/// GenericNavState)"/> renders with any count-compatible state, so two blocks
+/// can share one. The legacy selection API + <see cref="Paint(BlockPaintContext)"/> path is unchanged (no selection by default, host
+/// <c>SkipRows</c> still owns the viewport — no scroll offset here, unlike the
+/// generic table). The column axis stays widget-local (out of slice).
 /// </summary>
-public sealed class TableBlock : ICollapsibleChatBlock
+public sealed class TableBlock : ICollapsibleChatBlock, IStatefulGenericWidget<GenericNavState>
 {
     private const int MinCell = 3;
     private const int Pad = 1;
@@ -57,6 +67,7 @@ public sealed class TableBlock : ICollapsibleChatBlock
 
     private readonly GfmTable _table;
     private readonly int _budgetBytes;
+    private readonly GenericNavState _rowState = new();
 
     // ENG10 #282: one-shot layout cache (width-keyed, same discipline as
     // AssistantMarkdownBlock._lines). Table content is immutable once parsed,
@@ -77,6 +88,7 @@ public sealed class TableBlock : ICollapsibleChatBlock
         }
 
         _table = table;
+        _rowState.SetContent(table.Rows.Count);
         int bytes = 64;
         bytes += CellsBytes(table.Headers);
         foreach (var row in table.Rows)
@@ -163,14 +175,28 @@ public sealed class TableBlock : ICollapsibleChatBlock
     public int BodyRows => _table.Rows.Count;
 
     /// <summary>
+    /// External row-navigation state (selection on the row axis), count-synced
+    /// with <see cref="BodyRows"/> at construction (content is immutable, so no
+    /// re-sync is needed later). Mutating it directly (e.g. <see
+    /// cref="GenericNavState.SelectNext"/>) drives the <see cref="Paint(BlockPaintContext,
+    /// GenericNavState)"/> overload. The legacy <see
+    /// cref="Paint(BlockPaintContext)"/> path ignores it, so display-only
+    /// hosts stay byte-identical.
+    /// </summary>
+    public GenericNavState RowState => _rowState;
+
+    /// <summary>
     /// Whether the selection highlight paints right now: <see cref="HighlightSpacing"/>
     /// decides against the current selection (ratatui <c>should_add</c> parity).
     /// </summary>
     public bool ShouldHighlight =>
-        HighlightSpacing switch
+        ShouldPaintHighlight(HighlightSpacing, SelectedRow.HasValue, SelectedColumn.HasValue);
+
+    private static bool ShouldPaintHighlight(TableHighlightSpacing spacing, bool hasRow, bool hasColumn) =>
+        spacing switch
         {
             TableHighlightSpacing.Always => true,
-            TableHighlightSpacing.WhenSelected => SelectedRow.HasValue || SelectedColumn.HasValue,
+            TableHighlightSpacing.WhenSelected => hasRow || hasColumn,
             _ => false,
         };
 
@@ -368,7 +394,36 @@ public sealed class TableBlock : ICollapsibleChatBlock
         return total;
     }
 
-    public void Paint(in BlockPaintContext ctx)
+    /// <summary>
+    /// Paints the frame, header and body rows into <paramref name="ctx"/>.
+    /// Legacy path: highlights the widget-local <see cref="SelectedRow"/> /
+    /// <see cref="SelectedColumn"/>; the viewport stays host-owned via
+    /// <c>SkipRows</c>.
+    /// </summary>
+    public void Paint(in BlockPaintContext ctx) => PaintCore(ctx, SelectedRow);
+
+    /// <summary>
+    /// Paints with an external row-navigation state (#1158): when <paramref
+    /// name="rowState"/> is count-compatible (<c>Count == BodyRows</c>) the row
+    /// highlight comes from <c>rowState.Selected</c> (-1 = none), so one state
+    /// object can drive two blocks; otherwise falls back to the widget-local
+    /// <see cref="SelectedRow"/>. The column axis stays widget-local. No
+    /// scrolling: the host <c>SkipRows</c> still owns the viewport.
+    /// </summary>
+    public void Paint(in BlockPaintContext ctx, GenericNavState rowState)
+    {
+        ArgumentNullException.ThrowIfNull(rowState);
+        Maybe<int> row = rowState.Count == BodyRows && rowState.Selected >= 0
+            ? Maybe<int>.From(rowState.Selected)
+            : SelectedRow;
+        PaintCore(ctx, row);
+    }
+
+    /// <inheritdoc />
+    public void Paint(ScreenBuffer buffer, Rect rect, GenericNavState rowState) =>
+        Paint(new BlockPaintContext(buffer, rect, 0), rowState);
+
+    private void PaintCore(in BlockPaintContext ctx, Maybe<int> rowSelection)
     {
         _lastPaintRect = ctx.Rect;
         _lastSkipRows = ctx.SkipRows;
@@ -387,7 +442,7 @@ public sealed class TableBlock : ICollapsibleChatBlock
         var border = ChatPalette.Dim;
         var headerStyle = new CellStyle(ChatPalette.Accent, attrs: StyleAttr.Bold);
         var selectedStyle = new CellStyle(ChatPalette.Text, attrs: StyleAttr.Reverse);
-        bool highlight = ShouldHighlight;
+        bool highlight = ShouldPaintHighlight(HighlightSpacing, rowSelection.HasValue, SelectedColumn.HasValue);
 
         int total = 4 + _table.Rows.Count;
         bool overflow = !IsExpanded && MaxBodyLines > 0 && total > MaxBodyLines;
@@ -431,7 +486,7 @@ public sealed class TableBlock : ICollapsibleChatBlock
                     break;
                 case 1:
                     PaintDataRow(buffer, ctx.Rect.X, y, _layoutCells!, 0, widths, width, headerStyle,
-                        -1, SelectedRow, SelectedColumn, selectedStyle, highlight);
+                        -1, rowSelection, SelectedColumn, selectedStyle, highlight);
                     break;
                 case 2:
                     buffer.SetText(ctx.Rect.X, y, rules[1], border);
@@ -442,7 +497,7 @@ public sealed class TableBlock : ICollapsibleChatBlock
                 default:
                     int bodyRow = row - 3;
                     PaintDataRow(buffer, ctx.Rect.X, y, _layoutCells!, (1 + bodyRow) * Columns, widths, width, CellStyle.Plain,
-                        bodyRow, SelectedRow, SelectedColumn, selectedStyle, highlight);
+                        bodyRow, rowSelection, SelectedColumn, selectedStyle, highlight);
                     break;
             }
         }
