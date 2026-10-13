@@ -61,7 +61,7 @@ public sealed class TcpClientTransport : IIpcClientTransport
         }
 
         _stream = new NetworkStream(socket, ownsSocket: true);
-        _logger.LogInformation("Connected to {Endpoint}", Endpoint);
+        TcpClientTransportLog.ConnectedTo(_logger, Endpoint);
         return _stream;
     }
 
@@ -70,7 +70,20 @@ public sealed class TcpClientTransport : IIpcClientTransport
     {
         if (_stream is null) return;
         try { await _stream.DisposeAsync().ConfigureAwait(false); }
-        catch (Exception ex) { _logger.LogDebug(ex, "Suppress disconnect error"); }
+        catch (Exception ex) { TcpClientTransportLog.SuppressDisconnectError(_logger, ex); }
         _stream = null;
     }
+}
+
+/// <summary>
+///     SG5: BCL <c>[LoggerMessage]</c> delegates for <see cref="TcpClientTransport" />.
+///     Templates, levels and operands are 1-to-1 with the former <c>LogX</c> calls.
+/// </summary>
+internal static partial class TcpClientTransportLog
+{
+    [LoggerMessage(EventId = 1, Level = LogLevel.Information, Message = "Connected to {Endpoint}")]
+    public static partial void ConnectedTo(ILogger logger, string endpoint);
+
+    [LoggerMessage(EventId = 2, Level = LogLevel.Debug, Message = "Suppress disconnect error")]
+    public static partial void SuppressDisconnectError(ILogger logger, Exception ex);
 }
