@@ -82,7 +82,7 @@ internal sealed class DemoApprovalGate(IServiceProvider services, ILogger<DemoAp
             args = args[..(MaxArgsChars - 1)] + "…";
         }
 
-        logger.LogInformation("Demo approval gate: {Tool} {Pattern}", request.Permission, request.Pattern);
+        DemoApprovalGateLog.ApprovalGate(logger, request.Permission, request.Pattern);
         await renderer.WriteLineAsync("┌─ approval gate ────────────────────────────────").ConfigureAwait(false);
         await renderer.WriteLineAsync("│ tool: " + request.Permission + "   args: " + args).ConfigureAwait(false);
         await renderer.WriteLineAsync("│ [y] allow   [n] deny   [a] always").ConfigureAwait(false);
@@ -92,4 +92,14 @@ internal sealed class DemoApprovalGate(IServiceProvider services, ILogger<DemoAp
 
         return new PermissionResponse(PermissionAction.Allow, PersistDecision: false);
     }
+}
+
+/// <summary>
+///     SG6: BCL <c>[LoggerMessage]</c> delegates for <see cref="DemoApprovalGate" />.
+///     Templates, levels and operands are 1-to-1 with the former <c>LogX</c> calls.
+/// </summary>
+internal static partial class DemoApprovalGateLog
+{
+    [LoggerMessage(EventId = 1, Level = LogLevel.Information, Message = "Demo approval gate: {Tool} {Pattern}")]
+    public static partial void ApprovalGate(ILogger logger, string tool, string pattern);
 }
