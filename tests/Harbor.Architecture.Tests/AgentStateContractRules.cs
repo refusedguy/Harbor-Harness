@@ -58,6 +58,24 @@
 // spelling, and a doc comment that mentions BOTH words (so the "comments are ignored"
 // claim is proved rather than accidentally satisfied); and discovery must reach a
 // non-trivial number of `AgentState` declarations.
+//
+// MECHANISM (#1086, step 2, conveyor f1)
+// -------------------------------------
+// Rule 2 below is a ScanRule: the fabrication pair as one documented shape,
+// no baseline, three planted controls, a discovery floor. Enumeration, matching
+// and the control/discovery verdicts are ScanRunner's; this file keeps the
+// issue prose and the test names.
+//
+// The verdict is `ScanSource` through the Func-overload, UNCHANGED — the
+// shared `SourceScan.StripComments` projection and the shared
+// `SourceNullabilityScan.NullForgivingOnNull` verdict move with it, so the
+// rule cannot drift from the two gates already built on that scanner (see
+// "REUSE, NOT A SECOND SCANNER" above). The scope is `ProductionTrees`
+// verbatim: no nested tests/ or contrib/ directory exists under src/ or
+// apps/, so the runner's walk yields the same set the old file walk did.
+// Rule 1 (the Maybe shape — a property of the compiled type) stays
+// handwritten with its controls: the engine grades bans, and "declares
+// State as Maybe<AgentState>" is not a ban.
 
 using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Agents;
@@ -73,6 +91,77 @@ public sealed class AgentStateContractRules
 {
     /// <summary>Repo-relative trees that may declare an <c>IAgent</c> implementation.</summary>
     private static readonly string[] ProductionTrees = ["src", "apps"];
+
+    /// <summary>The fabrication pair as data; the grading is <see cref="ScanSource" />.</summary>
+    private const string Fabrication = "FABRICATED-AGENTSTATE";
+
+    /// <summary>
+    ///     Rule 2 as data: the null-forgiving <c>AgentState</c> pair over
+    ///     <see cref="ProductionTrees" />, no baseline, three planted controls,
+    ///     the scope itself as the floor.
+    /// </summary>
+    private static readonly ScanRule FabricationRule = new()
+    {
+        Id = "AgentStateContract.Fabrication",
+        Trees = ProductionTrees,
+        Forbidden =
+        [
+            new ScanForbidden(
+                Fabrication,
+                SourceNullabilityScan.NullForgivingOnNull,
+                "absence is Maybe<AgentState>: the signature promises a value the constructor has not "
+                + "produced yet, and the only defences are ad-hoc null guards that get bypassed a few "
+                + "lines later. The AgentState half of the pair is graded by the parser. "
+                + "See issue #559."),
+        ],
+        Controls =
+        [
+            // Verbatim DefaultAgent.cs:119 as it shipped — the #559 spelling.
+            new ScanControl("Shipped.cs", """
+                /// <summary>
+                ///     Current agent state snapshot. null until Initialize is called.
+                /// </summary>
+                public AgentState State { get; private set; } = null!;
+                """, Fabrication),
+            // The fixed spelling: a nullable field plus a Maybe projection —
+            // no null-forgiving operator anywhere, so no pair.
+            new ScanControl("Fixed.cs", """
+                private AgentState? _state;
+                public Maybe<AgentState> State => _state is { } bound ? Maybe.From(bound) : Maybe<AgentState>.None;
+                """, null),
+            // A doc comment documenting the old spelling is prose, not a pair:
+            // both words on one comment line, so the silence below is earned by
+            // the comment stripper rather than by an accidental absence.
+            new ScanControl("Documented.cs", """
+                /// Current AgentState snapshot: the field was `null!` until Initialize is called (#559).
+                private AgentState? _state;
+                public Maybe<AgentState> State => _state is { } bound ? Maybe.From(bound) : Maybe<AgentState>.None;
+                """, null),
+        ],
+        MinHits = 200,
+        MustContain =
+        [
+            "src/Harbor.Abstractions/Agents/IAgent.cs",
+            "src/Harbor.Application/Agents/DefaultAgent.cs",
+            "src/Harbor.Telemetry.Core/TracingAgentProxy.cs",
+        ],
+        CustomParse = ParseFabrications,
+    };
+
+    /// <summary>
+    ///     The custom parser: the fabrication verdict over one file's raw source.
+    ///     A thin adapter over the unchanged <see cref="ScanSource" /> — the probe
+    ///     keeps the shared <c>SourceScan.StripComments</c> projection and the
+    ///     shared nullability verdict, and the planted controls grade identically
+    ///     to product files because they drive this same path.
+    /// </summary>
+    private static IEnumerable<ScanHit> ParseFabrications(string displayPath, string rawSource)
+    {
+        foreach ((int line, string text) in ScanSource(rawSource))
+        {
+            yield return new ScanHit(Fabrication, displayPath, line, text);
+        }
+    }
 
     // ── Rule 1: shape ────────────────────────────────────────────────────────
 
@@ -104,34 +193,14 @@ public sealed class AgentStateContractRules
     [Test]
     public async Task NoProductionFile_PairsAgentStateWithNullForgivingNull()
     {
-        var violations = new List<string>();
-        string? root = RepoPaths.RepoRoot;
-
-        foreach (string file in EnumerateProductionSources())
-        {
-            string source;
-            try
-            {
-                source = File.ReadAllText(file);
-            }
-            catch (IOException)
-            {
-                continue;
-            }
-
-            foreach ((int line, string text) in ScanSource(source))
-            {
-                string rel = root is null ? file : Path.GetRelativePath(root, file);
-                violations.Add($"{rel}({line}): {text}");
-            }
-        }
+        List<string> violations = ScanRunner.Evaluate(FabricationRule);
 
         await Assert.That(violations).IsEmpty()
             .Because(
                 "An `AgentState` initialised with `null!` is the lie #559 is about: the signature promises "
                 + "a value the constructor has not produced yet, and the only defences are the ad-hoc "
                 + "`State is null` guards that then get bypassed a few lines later. Use Maybe<AgentState>. "
-                + $"Violations: {(violations.Count == 0 ? "(none)" : string.Join(", ", violations))}");
+                + Environment.NewLine + string.Join(Environment.NewLine, violations));
     }
 
     [Test]
@@ -210,6 +279,71 @@ public sealed class AgentStateContractRules
                 "Non-vacuity for the source rule: the scan must actually reach the IAgent implementations. "
                 + "Expected at least DefaultAgent, TracingAgentProxy and the interface itself; found "
                 + $"{declarations}.");
+    }
+
+    /// <summary>
+    ///     The planted controls — the shipped spelling and both fixed ones — drive
+    ///     the REAL parser: the offender reported under its sub-id, the fixes silent.
+    /// </summary>
+    [Test]
+    public async Task Detector_ControlsDriveTheRealParser()
+    {
+        List<string> failures = ScanRunner.CheckControls(FabricationRule);
+
+        await Assert.That(failures).IsEmpty()
+            .Because(
+                "the three planted controls must agree with the three FabricationScan cases above through "
+                + "the rule's own parser — otherwise the rule guards nothing, or forbids the fix. "
+                + string.Join("; ", failures));
+    }
+
+    /// <summary>
+    ///     The rule's own scope really yields the production tree: hundreds of files
+    ///     including the three AgentState homes, so "no fabrication" means "nobody
+    ///     writes the pair" rather than "the walk saw nothing".
+    /// </summary>
+    [Test]
+    public async Task Scanner_SeesProductionSources()
+    {
+        List<string> discovery = ScanRunner.CheckDiscovery(FabricationRule);
+
+        await Assert.That(discovery).IsEmpty()
+            .Because(
+                "src/ + apps/ is over a thousand .cs files including IAgent, DefaultAgent and "
+                + "TracingAgentProxy. A count this low — or a scope that stopped seeing one of those "
+                + "files — means the tree walk broke and the rule above would be reporting 'clean' "
+                + "about nothing. " + string.Join("; ", discovery));
+    }
+
+    /// <summary>
+    ///     Every baseline row states why it is tolerated, in the row itself. Vacuous
+    ///     while the table is empty, and deliberately so: it is wired from the first
+    ///     row so the first row cannot skip the argument.
+    /// </summary>
+    [Test]
+    public async Task Baseline_Rows_AllHaveReasons()
+    {
+        List<string> failures = ScanRunner.CheckReasons(FabricationRule);
+
+        await Assert.That(failures).IsEmpty().Because(string.Join("\n", failures));
+    }
+
+    /// <summary>
+    ///     Every baseline row must still correspond to a real hit, so the table
+    ///     cannot rot into a blanket permission: fix the code without deleting the
+    ///     row and this fails.
+    /// </summary>
+    [Test]
+    public async Task Baseline_Rows_Are_Not_Stale()
+    {
+        List<string> stale = ScanRunner.StaleBaselineKeys(
+            FabricationRule, ScanRunner.ReadSources(ScanRunner.ScopeFiles(FabricationRule)));
+
+        await Assert.That(stale).IsEmpty()
+            .Because(
+                "A baseline row that no longer matches reality is a lie: the site was fixed (or the file "
+                + "left the scope), the row grandfathers nothing and hides the next real violation. "
+                + Environment.NewLine + string.Join(Environment.NewLine, stale));
     }
 
     // ── Helpers ──────────────────────────────────────────────────────────────
