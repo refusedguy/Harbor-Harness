@@ -16,8 +16,7 @@ public static class Registration
     {
         var ctx = services.AddHarborConfiguration(options);
 
-        ctx.Logger.LogInformation("Feature flags: plugins={Plugins}, spectre-tui={SpectreTui}, all-providers={AllProviders}",
-            ctx.Options.Features.Plugins, ctx.Options.Features.SpectreTui, ctx.Options.Features.AllProviders);
+        RegistrationLog.FeatureFlags(ctx.Logger, ctx.Options.Features.Plugins, ctx.Options.Features.SpectreTui, ctx.Options.Features.AllProviders);
 
         services.AddHarborTelemetry(ctx)
                 .AddHarborCore(ctx)
@@ -38,4 +37,14 @@ public static class Registration
 
         return ctx;
     }
+}
+
+/// <summary>
+///     SG4: BCL <c>[LoggerMessage]</c> delegates for <see cref="Registration" />.
+///     Templates, levels and operands are 1-to-1 with the former <c>LogX</c> calls.
+/// </summary>
+internal static partial class RegistrationLog
+{
+    [LoggerMessage(EventId = 1, Level = LogLevel.Information, Message = "Feature flags: plugins={Plugins}, spectre-tui={SpectreTui}, all-providers={AllProviders}")]
+    public static partial void FeatureFlags(ILogger logger, bool plugins, bool spectreTui, bool allProviders);
 }

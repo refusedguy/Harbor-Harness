@@ -91,7 +91,17 @@ internal static class ConfigurationModule
     {
         Result<T> result = load();
         if (result.IsFailure) // §4.6-ok: единственная проверка формы load→default.
-            ctx.Logger.LogWarning("Failed to load {Name}, using defaults: {Error}", name, result.Error);
+            ConfigurationModuleLog.LoadFailedUsingDefaults(ctx.Logger, name, result.Error);
         return result.IsSuccess ? result.Value : fallback;
     }
+}
+
+/// <summary>
+///     SG4: BCL <c>[LoggerMessage]</c> delegates for <see cref="ConfigurationModule" />.
+///     Templates, levels and operands are 1-to-1 with the former <c>LogX</c> calls.
+/// </summary>
+internal static partial class ConfigurationModuleLog
+{
+    [LoggerMessage(EventId = 1, Level = LogLevel.Warning, Message = "Failed to load {Name}, using defaults: {Error}")]
+    public static partial void LoadFailedUsingDefaults(ILogger logger, string name, string error);
 }
