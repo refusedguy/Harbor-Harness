@@ -1,3 +1,5 @@
+using Harbor.Tui.CellForge.Widgets;
+
 namespace Harbor.Tui.CellForge.Generic.Widgets;
 
 /// <summary>
@@ -13,7 +15,7 @@ namespace Harbor.Tui.CellForge.Generic.Widgets;
 /// <see cref="Paint(ScreenBuffer, Rect, GenericNavState)"/> renders with any
 /// compatible state, so two widgets can share one.
 /// </summary>
-public sealed class GenericSelectionList : IGenericFormField, IStatefulGenericWidget<GenericNavState>
+public sealed class GenericSelectionList : IGenericFormField, IStatefulGenericWidget<GenericNavState>, IScrollInfoProvider
 {
     private readonly List<string> _items = new();
     private readonly GenericNavState _state = new();
@@ -116,6 +118,9 @@ public sealed class GenericSelectionList : IGenericFormField, IStatefulGenericWi
     /// <summary>First visible row (for tests and scrollbar sync).</summary>
     public int Offset => _state.Offset;
 
+    /// <inheritdoc />
+    public ScrollInfo GetScrollInfo() => new(_items.Count, Offset, DesiredHeight);
+
     /// <summary>Paints up to <see cref="DesiredHeight"/> rows; selected row is reversed.</summary>
     public void Paint(ScreenBuffer buffer, Rect rect) => Paint(buffer, rect, _state);
 
@@ -159,26 +164,11 @@ public sealed class GenericSelectionList : IGenericFormField, IStatefulGenericWi
             }
         }
 
-        if (scrollable && rect.Width >= 2)
+        if (rect.Width >= 2)
         {
-            PaintScrollbar(buffer, new Rect(rect.X + rect.Width - 1, rect.Y, 1, rows), rows, offset);
-        }
-    }
-
-    private void PaintScrollbar(ScreenBuffer buffer, Rect rect, int visibleRows, int offset)
-    {
-        int total = _items.Count;
-        int maxOffset = Math.Max(1, total - visibleRows);
-        int thumbLen = Math.Max(1, (int)Math.Round((double)visibleRows * rect.Height / total, MidpointRounding.AwayFromZero));
-        thumbLen = Math.Min(thumbLen, rect.Height);
-        int thumbStart = (int)Math.Round((double)offset * (rect.Height - thumbLen) / maxOffset, MidpointRounding.AwayFromZero);
-        var trackStyle = new CellStyle(ChatPalette.Border);
-        var thumbStyle = new CellStyle(ChatPalette.Muted);
-
-        for (int r = 0; r < rect.Height; r++)
-        {
-            bool thumb = r >= thumbStart && r < thumbStart + thumbLen;
-            buffer.SetText(rect.X, rect.Y + r, thumb ? "█" : "│", thumb ? thumbStyle : trackStyle);
+            // Detachable indicator (#1206): the list yields (total, offset,
+            // viewport), the shared Scrollbar paints on top — no local math.
+            Scrollbar.TryPaint(buffer, new Rect(rect.X + rect.Width - 1, rect.Y, 1, rows), _items.Count, offset, rows);
         }
     }
 }

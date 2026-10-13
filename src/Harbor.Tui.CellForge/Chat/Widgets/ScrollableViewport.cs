@@ -12,7 +12,7 @@ namespace Harbor.Tui.CellForge.Widgets;
 /// layout (estimates, measure/settle, anchors) stays in
 /// <see cref="TimelineLayoutCache"/>. Allocation-free and AOT-safe.
 /// </summary>
-public sealed class ScrollableViewport
+public sealed class ScrollableViewport : IScrollInfoProvider
 {
     private long _totalContent;
     private int _viewportH;
@@ -109,4 +109,7 @@ public sealed class ScrollableViewport
             return last - first;
         }
     }
+
+    /// <inheritdoc />
+    public ScrollInfo GetScrollInfo() => new(_totalContent, _offset, _viewportH);
 }

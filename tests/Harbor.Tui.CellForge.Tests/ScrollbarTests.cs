@@ -1,3 +1,4 @@
+using Harbor.Tui.CellForge.Generic.Widgets;
 using Harbor.Tui.CellForge.Widgets;
 
 namespace Harbor.Tui.CellForge.Tests;
@@ -132,5 +133,58 @@ public class ScrollbarTests
         {
             await Assert.That(buffer.Get(0, y)).IsEqualTo(Cell.Blank);
         }
+    }
+
+    [Test]
+    public async Task Detachable_ScrollInfoOverload_MatchesTriple()
+    {
+        var info = new ScrollInfo(20, 10, 10);
+        await Assert.That(Scrollbar.IsVisible(info)).IsTrue();
+        await Assert.That(info.IsScrollable).IsTrue();
+        await Assert.That(Scrollbar.ThumbGeometry(info, 10)).IsEqualTo(Scrollbar.ThumbGeometry(20, 10, 10, 10));
+
+        var a = new ScreenBuffer(1, 10);
+        var b = new ScreenBuffer(1, 10);
+        bool pa = Scrollbar.TryPaint(a, new Rect(0, 0, 1, 10), info);
+        bool pb = Scrollbar.TryPaint(b, new Rect(0, 0, 1, 10), 20, 10, 10);
+
+        await Assert.That(pa).IsEqualTo(pb);
+        for (int y = 0; y < 10; y++)
+        {
+            await Assert.That(a.Get(0, y)).IsEqualTo(b.Get(0, y));
+        }
+    }
+
+    [Test]
+    public async Task Detachable_ViewportYieldsTriple()
+    {
+        var viewport = new ScrollableViewport();
+        viewport.Configure(20, 10);
+        viewport.SetOffset(4);
+
+        ScrollInfo info = ((IScrollInfoProvider)viewport).GetScrollInfo();
+        await Assert.That((info.Total, info.Offset, info.Viewport)).IsEqualTo((20L, 4L, 10));
+
+        var buffer = new ScreenBuffer(1, 10);
+        await Assert.That(Scrollbar.TryPaint(buffer, new Rect(0, 0, 1, 10), info)).IsTrue();
+    }
+
+    [Test]
+    public async Task Detachable_SelectionListUsesSharedIndicator()
+    {
+        var list = new GenericSelectionList();
+        list.SetItems(["a", "b", "c", "d", "e", "f", "g", "h", "i", "j"]);
+        list.MaxVisibleRows = 4;
+
+        ScrollInfo info = list.GetScrollInfo();
+        await Assert.That(info.Total).IsEqualTo(10);
+        await Assert.That(info.Viewport).IsEqualTo(4);
+
+        var buffer = new ScreenBuffer(10, 4);
+        list.Paint(buffer, new Rect(0, 0, 10, 4));
+
+        // Shared indicator paints on the rightmost column; content stays put.
+        await Assert.That(buffer.Get(9, 0).Rune == (int)'█' || buffer.Get(9, 0).Rune == (int)'│').IsTrue();
+        await Assert.That(buffer.Get(0, 0).Rune).IsEqualTo((int)'>');
     }
 }
