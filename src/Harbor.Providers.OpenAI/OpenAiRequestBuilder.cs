@@ -218,9 +218,7 @@ internal static class OpenAiRequestBuilder
                     break;
 
                 default:
-                    logger.LogWarning(
-                        "Dropping unsupported content block(s) of type {BlockType} for openai",
-                        user.Content[i].Type);
+                    OpenAiRequestBuilderLog.DroppingUnsupportedChatBlock(logger, user.Content[i].Type);
                     break;
             }
         }
@@ -451,9 +449,7 @@ internal static class OpenAiRequestBuilder
                     break;
 
                 default:
-                    logger.LogWarning(
-                        "Dropping unsupported content block(s) of type {BlockType} for openai responses",
-                        user.Content[i].Type);
+                    OpenAiRequestBuilderLog.DroppingUnsupportedResponsesBlock(logger, user.Content[i].Type);
                     break;
             }
         }
@@ -515,4 +511,17 @@ internal static class OpenAiRequestBuilder
 
         return null;
     }
+}
+
+/// <summary>
+///     SG7: BCL <c>[LoggerMessage]</c> delegates for <see cref="OpenAiRequestBuilder" />.
+///     Templates, levels and operands are 1-to-1 with the former <c>LogX</c> calls.
+/// </summary>
+internal static partial class OpenAiRequestBuilderLog
+{
+    [LoggerMessage(EventId = 1, Level = LogLevel.Warning, Message = "Dropping unsupported content block(s) of type {BlockType} for openai")]
+    public static partial void DroppingUnsupportedChatBlock(ILogger logger, string blockType);
+
+    [LoggerMessage(EventId = 2, Level = LogLevel.Warning, Message = "Dropping unsupported content block(s) of type {BlockType} for openai responses")]
+    public static partial void DroppingUnsupportedResponsesBlock(ILogger logger, string blockType);
 }

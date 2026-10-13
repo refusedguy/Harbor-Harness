@@ -58,8 +58,7 @@ internal static class OpenAiResponsesMapper
         catch (Exception ex)
         {
             state.CountMalformed();
-            logger.LogWarning(ex, "Failed to parse OpenAI Responses chunk #{Count}: {Data}",
-                state.MalformedChunks, data);
+            OpenAiResponsesMapperLog.FailedToParseChunk(logger, ex, state.MalformedChunks, data);
             return;
         }
 
@@ -484,4 +483,14 @@ internal static class OpenAiResponsesMapper
 
         return null;
     }
+}
+
+/// <summary>
+///     SG7: BCL <c>[LoggerMessage]</c> delegates for <see cref="OpenAiResponsesMapper" />.
+///     Templates, levels and operands are 1-to-1 with the former <c>LogX</c> calls.
+/// </summary>
+internal static partial class OpenAiResponsesMapperLog
+{
+    [LoggerMessage(EventId = 1, Level = LogLevel.Warning, Message = "Failed to parse OpenAI Responses chunk #{Count}: {Data}")]
+    public static partial void FailedToParseChunk(ILogger logger, Exception ex, int count, string data);
 }

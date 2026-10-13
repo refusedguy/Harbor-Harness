@@ -97,9 +97,8 @@ public sealed class OpenAILlmClient : ILlmClient
                         // #203: stream-health summary (only when noteworthy).
                         if (chunkState.MalformedChunks > 0 || chunkState.RemappedToolCalls > 0 || chunkState.DroppedUsageChunks > 0)
                         {
-                            _logger.LogInformation(
-                                "OpenAI stream completed: {Malformed} malformed chunk(s) skipped, {Remaps} positional tool-call id fallback(s), {Dropped} duplicate usage chunk(s) dropped",
-                                chunkState.MalformedChunks, chunkState.RemappedToolCalls, chunkState.DroppedUsageChunks);
+                            OpenAILlmClientLog.StreamCompleted(
+                                _logger, chunkState.MalformedChunks, chunkState.RemappedToolCalls, chunkState.DroppedUsageChunks);
                         }
                     }).ConfigureAwait(false);
             }
@@ -111,7 +110,7 @@ public sealed class OpenAILlmClient : ILlmClient
             {
                 // #203 E5: fire-and-forget pump task must log inside the
                 // lambda — the ErrorEvent alone is invisible in traces.
-                _logger.LogWarning(ex, "OpenAI stream task failed: {Message}", ex.Message);
+                OpenAILlmClientLog.StreamTaskFailed(_logger, ex, ex.Message);
                 await writer.WriteAsync(new ErrorEvent(
                     $"Stream failed: {ex.Message}", ex.ToString(),
                     ProviderErrors.FromException(ex, cancellationToken)), cancellationToken).ConfigureAwait(false);
@@ -148,6 +147,19 @@ public sealed class OpenAILlmClient : ILlmClient
             await writer.WriteAsync(evt, ct).ConfigureAwait(false);
         }
     }
+}
+
+/// <summary>
+///     SG7: BCL <c>[LoggerMessage]</c> delegates for <see cref="OpenAILlmClient" />.
+///     Templates, levels and operands are 1-to-1 with the former <c>LogX</c> calls.
+/// </summary>
+internal static partial class OpenAILlmClientLog
+{
+    [LoggerMessage(EventId = 1, Level = LogLevel.Information, Message = "OpenAI stream completed: {Malformed} malformed chunk(s) skipped, {Remaps} positional tool-call id fallback(s), {Dropped} duplicate usage chunk(s) dropped")]
+    public static partial void StreamCompleted(ILogger logger, int malformed, int remaps, int dropped);
+
+    [LoggerMessage(EventId = 2, Level = LogLevel.Warning, Message = "OpenAI stream task failed: {Message}")]
+    public static partial void StreamTaskFailed(ILogger logger, Exception ex, string message);
 }
 
 public sealed class OpenAIConfig
