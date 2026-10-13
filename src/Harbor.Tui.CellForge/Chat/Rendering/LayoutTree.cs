@@ -52,6 +52,34 @@ public abstract class Panel
     /// </summary>
     public int? FixedSize { get; set; }
 
+    /// <summary>
+    /// Cell Measure/Render contract (#1209, epic #1195): content width range
+    /// at <paramref name="width"/> (Spectre <c>Measurement</c> analogue).
+    /// Default is fixed at <see cref="Min"/>: existing panels behave exactly
+    /// as the collapse-priority solver treats them today. Chrome-owning
+    /// panels override <see cref="Padding"/> and report content here
+    /// (outer minus padding). Pure: no buffer writes, no state mutations.
+    /// </summary>
+    public virtual Measurement Measure(int width)
+    {
+        int fit = Math.Min(Math.Max(0, Min.Width), Math.Max(0, width));
+        return Measurement.Exact(fit);
+    }
+
+    /// <summary>
+    /// Spectre <c>IExpandable</c> analogue: when true the panel absorbs the
+    /// parent's remainder (seated via <see cref="WidgetMeasure.ToTrack"/>).
+    /// Default false — fixed panels keep their measured fit.
+    /// </summary>
+    public virtual bool Expand => false;
+
+    /// <summary>
+    /// Spectre <c>IPaddable</c> analogue: chrome insets around the content.
+    /// Default <see cref="Padding.Zero"/> — border/shadow panels report
+    /// their frame here so <see cref="Measure"/> stays content-only.
+    /// </summary>
+    public virtual Padding Padding => Padding.Zero;
+
     /// <summary>Set by the layout solver each frame; read by painters/routing.</summary>
     public UIR.Rect Rect { get; internal set; }
 

@@ -50,6 +50,13 @@ Leaf and container bases share one vocabulary (`Rect`, `Size`, `SplitDir`,
   remainder that is left.
 - `ZStackNode` — full-area overlap stack over `StackLayout.Arrange`: every
   child takes the whole rect, painted in index order (lower first).
+- `Measurement` / `Padding` / `WidgetMeasure.ToTrack` (#1209) — the cell
+  Measure/Render contract (Spectre `Measurement` / `Padder` / `IExpandable`
+  analogues): content width range at one available width, chrome insets with
+  `Deflate`, and the Expand seating onto solver tracks (expand absorbs the
+  remainder with the measured floor, fixed takes the measured fit).
+  `LayoutTree.Panel` exposes the same three members (`Measure` / `Expand` /
+  `Padding`) with behavior-preserving defaults.
 
 ```csharp
 var root = new FlexSplitNode(SplitDir.Vertical);
