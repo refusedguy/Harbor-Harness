@@ -338,14 +338,6 @@ public static class SideBarView
                         Y = ValueLine(buffer, rect, labelX + 2, Y, innerW - 2, session.MetaLine.AsSpan(), labelStyle);
                     }
                 }
-            }
-        }
-
-                    if (Y < rect.Bottom - 1 && !string.IsNullOrEmpty(session.MetaLine))
-                    {
-                        Y = ValueLine(buffer, rect, labelX + 2, Y, innerW - 2, session.MetaLine.AsSpan(), labelStyle);
-                    }
-                }
 
                 Clipped += sessions.Count - sessionRows;
             }
