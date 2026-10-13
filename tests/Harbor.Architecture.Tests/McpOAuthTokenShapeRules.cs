@@ -56,6 +56,23 @@
 // source scan that matches nothing is indistinguishable from a source scan
 // that is broken, and a broken guard is believed. See `Matcher_...` below.
 // Rule 1 carries its own: zero found methods is a failure, not a pass.
+//
+// MECHANISM (#1086, step 2, conveyor e2)
+// -------------------------------------
+// Rule 4 below is a ScanRule: one banned shape (the outcome-prefix protocol),
+// no baseline, four planted controls, a discovery floor. Enumeration,
+// stripping, matching and the control/discovery verdicts are ScanRunner's;
+// this file keeps the issue prose and the test names.
+//
+// The verdict is `ParseOutcomeProtocol` through the Func-overload, carrying
+// the file's own `//`-split strip verbatim rather than silently adopting the
+// shared stripper: the shared one understands strings and block comments,
+// this one deliberately understands only `//` (a `//` inside a string literal
+// cannot produce a match here, because the match must open with a quote —
+// stated on the helper, not assumed). `MatchOutcomePrefix` delegates to the
+// same parser, so the `Matcher_...` tests pin the REAL verdict rather than a
+// second implementation of it. Rules 1–3 are reflection and stay handwritten:
+// they are not forbidden-shape scans and the engine has no flavor for them.
 
 using System.Text.RegularExpressions;
 using CSharpFunctionalExtensions;
@@ -107,6 +124,53 @@ public sealed class McpOAuthTokenShapeRules
 
     /// <summary>Transport constructors whose token-supplier parameter is pinned.</summary>
     private static readonly Type[] TransportTypes = [typeof(McpHttpTransport), typeof(McpSseTransport)];
+
+    /// <summary>The string-protocol ban as data; the grading is <see cref="ParseOutcomeProtocol" />.</summary>
+    private const string OutcomeProtocol = "OUTCOME-IN-ERROR-STRING";
+
+    /// <summary>
+    ///     Rule 4 as data: one banned shape, no baseline, four planted controls,
+    ///     a discovery floor. The scope is the MCP tool tree — the only place
+    ///     the protocol ever lived.
+    /// </summary>
+    private static readonly ScanRule StringProtocolRule = new()
+    {
+        Id = "McpOAuthTokenShape.StringProtocol",
+        Trees = ["src/Harbor.Tools.Builtin/Tools/Mcp"],
+        Forbidden =
+        [
+            new ScanForbidden(
+                OutcomeProtocol,
+                OutcomePrefixProtocol,
+                "an outcome smuggled through an error string has to be re-parsed by the same file "
+                + "('refreshed.Error.StartsWith(\"RefreshFailed:\")'), which is what the Maybe is for. "
+                + "No token exists -> Success(Maybe.None). Grant rejected -> Result.Failure. "
+                + "See issue #566."),
+        ],
+        Controls =
+        [
+            new ScanControl("Producer.cs", """
+                return Result.Failure<string>($"LoginRequired: MCP server '{_server}' needs OAuth login.");
+                """, OutcomeProtocol),
+            new ScanControl("Consumer.cs", """
+                if (refreshed.Error.StartsWith("RefreshFailed:", StringComparison.Ordinal))
+                """, OutcomeProtocol),
+            new ScanControl("Fixed.cs", """
+                return Result.Success(Maybe<string>.None);
+                """, null),
+            new ScanControl("Mention.cs", """
+                ///     The old Failure("LoginRequired: …") is gone.
+                // LoginRequired: not here.
+                var reasoning = nameof(LoginRequired);
+                """, null),
+        ],
+        MinHits = 10,
+        MustContain =
+        [
+            "src/Harbor.Tools.Builtin/Tools/Mcp/McpOAuthHandler.cs",
+        ],
+        CustomParse = ParseOutcomeProtocol,
+    };
 
     // ── Rule 1: exactly one public shape ─────────────────────────────────────
 
@@ -224,22 +288,7 @@ public sealed class McpOAuthTokenShapeRules
     [Test]
     public async Task TokenLookup_DoesNotEncodeOutcomesInPrefixedErrorStrings()
     {
-        (string File, IReadOnlyList<string> Hits)[] scanned = ScanMcpSources();
-        string[] files = [.. scanned.Select(s => s.File)];
-
-        await Assert.That(files.Length).IsGreaterThanOrEqualTo(10)
-            .Because(
-                $"Non-vacuity: the scan must reach the MCP sources. It saw {files.Length} — the " +
-                "path or the glob is wrong, and every assertion below is vacuous.");
-
-        List<string> violations = [];
-        foreach ((string file, IReadOnlyList<string> hits) in scanned)
-        {
-            foreach (string hit in hits)
-            {
-                violations.Add($"{file}: {hit}");
-            }
-        }
+        List<string> violations = ScanRunner.Evaluate(StringProtocolRule);
 
         await Assert.That(violations).IsEmpty()
             .Because(
@@ -250,6 +299,37 @@ public sealed class McpOAuthTokenShapeRules
     }
 
     // ── Non-vacuity of the source matcher ────────────────────────────────────
+
+    [Test]
+    public async Task Scanner_SeesTheMcpTree()
+    {
+        // The walk must really reach the MCP sources — ten or more files
+        // including the handler — or the rule above polices nothing.
+        List<string> discovery = ScanRunner.CheckDiscovery(StringProtocolRule);
+
+        await Assert.That(discovery).IsEmpty()
+            .Because(
+                "the scan must reach the MCP sources (ten or more files, handler included); a smaller "
+                + "count means the path or the glob is wrong and the rule below is vacuous. "
+                + string.Join("; ", discovery));
+    }
+
+    [Test]
+    public async Task Detector_FiresOnBothHalvesOfTheStringProtocol()
+    {
+        // Producing the prefixed failure is half the #566 protocol and
+        // re-parsing it is the other half — the half that actually shipped. A
+        // guard that only watched the producer would have stayed green through
+        // the whole bug. The snippets live on the rule, so the control drives
+        // the REAL parser rather than a second implementation of it.
+        List<string> failures = ScanRunner.CheckControls(StringProtocolRule);
+
+        await Assert.That(failures).IsEmpty()
+            .Because(
+                "both halves of the #566 string protocol must be detected, and the fixed spelling "
+                + "plus a mere mention of the old markers must stay quiet, or the rule guards "
+                + "nothing (or forbids the fix). " + string.Join("; ", failures));
+    }
 
     [Test]
     public async Task Matcher_FlagsBothHalvesOfTheStringProtocol()
@@ -298,55 +378,46 @@ public sealed class McpOAuthTokenShapeRules
                 "explanatory comment in this file family would cry wolf and the rule would be deleted.");
     }
 
-    // ── Discovery helpers ────────────────────────────────────────────────────
-
-    /// <summary>Repo-relative MCP source files, with the outcome-marker hits in each.</summary>
-    private static (string File, IReadOnlyList<string> Hits)[] ScanMcpSources()
+    /// <summary>
+    ///     Every baseline row states why it is tolerated, in the row itself. Vacuous
+    ///     while the table is empty, and deliberately so: it is wired from the first
+    ///     row so the first row cannot skip the argument.
+    /// </summary>
+    [Test]
+    public async Task Baseline_Rows_AllHaveReasons()
     {
-        if (RepoPaths.RepoRoot is not { } root)
-        {
-            return [];
-        }
+        List<string> failures = ScanRunner.CheckReasons(StringProtocolRule);
 
-        string dir = Path.Combine(root, "src", "Harbor.Tools.Builtin", "Tools", "Mcp");
-        if (!Directory.Exists(dir))
-        {
-            return [];
-        }
-
-        List<(string, IReadOnlyList<string>)> scanned = [];
-        foreach (string file in Directory.EnumerateFiles(dir, "*.cs", SearchOption.AllDirectories))
-        {
-            if (file.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}", StringComparison.Ordinal) ||
-                file.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}", StringComparison.Ordinal))
-            {
-                continue;
-            }
-
-            scanned.Add((Path.GetRelativePath(root, file).Replace('\\', '/'), MatchOutcomePrefix(File.ReadAllText(file))));
-        }
-
-        // Element names, not tuple names: `scanned` holds unnamed tuples, so the
-        // sort key has to be read positionally.
-        return [.. scanned.OrderBy(static s => s.Item1, StringComparer.Ordinal)];
+        await Assert.That(failures).IsEmpty().Because(string.Join("\n", failures));
     }
 
     /// <summary>
-    ///     One hit per line that carries an outcome marker inside a string
-    ///     literal, with the line text so a CI failure is actionable.
-    ///     <para>
-    ///     Line comments are stripped first, exactly as
-    ///     <c>ResultMaybeSignatureTests</c> does. The fixed code is *supposed* to
-    ///     be able to say what it used to do — a doc comment reading
-    ///     <c>/// was Result.Failure("LoginRequired: …")</c> is documentation, not a
-    ///     reintroduction — and a guard that cannot tell those apart gets deleted
-    ///     the first time somebody writes an honest sentence about the bug.
-    ///     </para>
+    ///     Every baseline row must still correspond to a real hit, so the table
+    ///     cannot rot into a blanket permission: fix the code without deleting the
+    ///     row and this fails.
     /// </summary>
-    private static IReadOnlyList<string> MatchOutcomePrefix(string text)
+    [Test]
+    public async Task Baseline_Rows_Are_Not_Stale()
     {
-        List<string> hits = [];
-        string[] lines = text.Split('\n');
+        List<string> stale = ScanRunner.StaleBaselineKeys(
+            StringProtocolRule, ScanRunner.ReadSources(ScanRunner.ScopeFiles(StringProtocolRule)));
+
+        await Assert.That(stale).IsEmpty()
+            .Because("a baseline row with no violation behind it is a permission for a "
+                + "problem that no longer exists: " + string.Join(", ", stale));
+    }
+
+    // ── Rule 4 machinery ─────────────────────────────────────────────────────
+
+    /// <summary>
+    ///     The custom parser: the outcome-protocol verdict over one file's raw
+    ///     source. Same naive <c>//</c> split, same quote-anchored regex as the
+    ///     matcher has always used — the planted controls grade this parser, so
+    ///     "it can fail" means something.
+    /// </summary>
+    private static IEnumerable<ScanHit> ParseOutcomeProtocol(string displayPath, string rawSource)
+    {
+        string[] lines = rawSource.Split('\n');
         for (int i = 0; i < lines.Length; i++)
         {
             // Safe to split naively for this pattern: a "//" inside a string
@@ -361,12 +432,25 @@ public sealed class McpOAuthTokenShapeRules
 
             if (OutcomePrefixProtocol.IsMatch(code))
             {
-                hits.Add($"L{i + 1}: {lines[i].Trim()}");
+                yield return new ScanHit(OutcomeProtocol, displayPath, i + 1, lines[i].Trim());
             }
         }
-
-        return hits;
     }
+
+    /// <summary>
+    ///     One hit per line that carries an outcome marker inside a string
+    ///     literal, with the line text so a CI failure is actionable.
+    ///     <para>
+    ///     Line comments are stripped first, exactly as
+    ///     <c>ResultMaybeSignatureTests</c> does. The fixed code is *supposed* to
+    ///     be able to say what it used to do — a doc comment reading
+    ///     <c>/// was Result.Failure("LoginRequired: …")</c> is documentation, not a
+    ///     reintroduction — and a guard that cannot tell those apart gets deleted
+    ///     the first time somebody writes an honest sentence about the bug.
+    ///     </para>
+    /// </summary>
+    private static IReadOnlyList<string> MatchOutcomePrefix(string text) =>
+        [.. ParseOutcomeProtocol("synthetic", text).Select(h => $"L{h.Line}: {h.Text}")];
 
     /// <summary>Readable method list for failure messages.</summary>
     private static string Describe(IEnumerable<MethodInfo> methods)
