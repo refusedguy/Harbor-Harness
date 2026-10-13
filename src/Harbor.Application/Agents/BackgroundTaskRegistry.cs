@@ -137,6 +137,39 @@ public sealed class BackgroundTaskRegistry : IBackgroundTaskRegistry
         return done;
     }
 
+    /// <inheritdoc />
+    public async Task<bool> WaitForIdleAsync(
+        string? sessionId = null,
+        TimeSpan? timeout = null,
+        CancellationToken ct = default)
+    {
+        TimeSpan deadline = timeout ?? TimeSpan.FromSeconds(5);
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        while (true)
+        {
+            if (IsIdle(sessionId))
+                return true;
+            if (sw.Elapsed >= deadline)
+                return false;
+            await Task.Delay(5, ct).ConfigureAwait(false);
+        }
+    }
+
+    private bool IsIdle(string? sessionId)
+    {
+        foreach (var (id, task) in _runs)
+        {
+            if (task.IsCompleted)
+                continue;
+            if (sessionId is null)
+                return false;
+            if (_meta.TryGetValue(id, out var meta) && meta.SessionId == sessionId)
+                return false;
+        }
+
+        return true;
+    }
+
     // Observe without throwing: faulted/cancelled runs surface as error
     // completions (reading .Exception observes the task).
     private static Result<SubAgentRunResult> Observe(Task<Result<SubAgentRunResult>> task)

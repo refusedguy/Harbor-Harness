@@ -286,6 +286,11 @@ public class ExecutionTreeTests
 
         public IReadOnlyList<BackgroundTaskCompletion> DrainCompleted(string sessionId) => [];
 
+        public Task<bool> WaitForIdleAsync(
+            string? sessionId = null,
+            TimeSpan? timeout = null,
+            CancellationToken ct = default) => Task.FromResult(true);
+
         public int CancelSession(string sessionId)
         {
             CancelledSessions.Add(sessionId);
