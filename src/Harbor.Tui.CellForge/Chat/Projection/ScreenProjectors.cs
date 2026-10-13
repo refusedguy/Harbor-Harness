@@ -21,7 +21,7 @@ namespace Harbor.Tui.CellForge;
 /// names a slice; each screen brings the projector that knows its own.
 /// </summary>
 /// <typeparam name="TState">Snapshot type (today always <see cref="UiState"/>).</typeparam>
-public interface IProjector<TState>
+public interface IProjector<in TState>
 {
     /// <summary>Screen (or panel group) this projector serves; the registry key.</summary>
     string ScreenId { get; }
