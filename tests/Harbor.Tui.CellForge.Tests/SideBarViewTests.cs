@@ -298,7 +298,16 @@ public class SideBarViewTests
 
         await Assert.That(dump.Contains("FOOT-B")).IsTrue();
         await Assert.That(dump.Contains("FOOT-A")).IsFalse();
-        await Assert.That(LastNonEmptyLine(dump).Contains("2.0")).IsTrue();
+        int valueRow = LastLineContaining(dump, "2.0");
+        await Assert.That(valueRow).IsGreaterThan(-1);
+        // Pinned: below the footer value only the sidebar hairline (which
+        // marks every row including the reserved last one) may leave a mark.
+        string[] rows = dump.Split('\n');
+        for (int i = valueRow + 1; i < rows.Length; i++)
+        {
+            string trimmed = rows[i].Trim();
+            await Assert.That(trimmed.Length == 0 || trimmed == "│").IsTrue();
+        }
     }
 
     [Test]
@@ -315,7 +324,9 @@ public class SideBarViewTests
     [Test]
     public async Task Paint_ClippedContent_PaintsOverlayScrollbarOverMargin()
     {
-        var (buffer, rect) = MakeBuffer(cols: 80, rows: 12);
+        // Rect.Bottom is inclusive: 14 rows leave room for exactly two file
+        // rows, so 30 files clip and the scrollbar must appear.
+        var (buffer, rect) = MakeBuffer(cols: 80, rows: 14);
         var files = new System.Collections.Generic.List<string>();
         for (int i = 0; i < 30; i++)
         {
@@ -361,18 +372,18 @@ public class SideBarViewTests
         await Assert.That(markSeen).IsFalse();
     }
 
-    private static string LastNonEmptyLine(string dump)
+    private static int LastLineContaining(string dump, string needle)
     {
         string[] rows = dump.Split('\n');
         for (int i = rows.Length - 1; i >= 0; i--)
         {
-            if (rows[i].Trim().Length > 0)
+            if (rows[i].Contains(needle))
             {
-                return rows[i];
+                return i;
             }
         }
 
-        return string.Empty;
+        return -1;
     }
 
     private static string Dump(ScreenBuffer buffer, Rect rect)
