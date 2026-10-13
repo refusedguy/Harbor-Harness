@@ -98,6 +98,11 @@ public class CafSetupTuiDemoTests
         var (exit, output, _) = await RunCafAsync("tui", ["--help"]);
         await Assert.That(exit).IsEqualTo(0);
         await Assert.That(output).Contains("Usage");
+        // #1290: the renderer list lives under --help by contract (038f17a9),
+        // pinned end-to-end by CliE2ETests.TuiCommand_ListsAllRenderers — the
+        // framework help carries it in the command summary.
+        await Assert.That(output).Contains("spectre-tui");
+        await Assert.That(output).Contains("termina");
     }
 
     [Test]

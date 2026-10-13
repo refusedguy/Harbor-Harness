@@ -36,7 +36,12 @@ namespace Harbor.App.Cli.Commands;
 ///         is ignored exactly like the manual dispatch, and only the
 ///         framework <c>--help</c> check is pinned (the wizard builds the
 ///         host, so it has no host-free parity path — same as <c>serve</c> in
-///         CAF-D). The old dispatcher stays until the follow-up removes it
+///         CAF-D). <c>tui --help</c> is framework-generated (it no longer
+///         prints the manual <c>PrintUsage</c> + <c>PrintTuiOptions</c>
+///         text), but the renderer list stays in the <c>tui</c> command
+///         summary — that list lives under <c>--help</c> by contract
+///         (038f17a9), pinned by <c>CliE2ETests.TuiCommand_ListsAllRenderers</c>.
+///         The old dispatcher stays until the follow-up removes it
 ///         (remaining manual verbs: ask/ide/headless/events/logs/plugins/skills
 ///         — see #1290).
 ///     </para>
@@ -55,7 +60,7 @@ internal static class CafSetupCommands
 /// </summary>
 internal static class CafTuiCommands
 {
-    /// <summary>Attach to a live daemon and stream its events.</summary>
+    /// <summary>Attach to a live daemon and stream its events. TUI renderers (HARBOR_TUI): ansi, plain, spectre, fullscreen, spectre-tui, terminal-gui, termina, razor, sixel.</summary>
     /// <param name="session">-s, Bind the agent loop to this session before streaming.</param>
     /// <param name="since">Replay envelopes newer than this server sequence before going live.</param>
     /// <param name="args">Positional tail (unknown subcommands).</param>
