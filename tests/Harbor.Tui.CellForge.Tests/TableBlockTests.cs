@@ -210,4 +210,168 @@ public class TableBlockTests
         await Assert.That(first.StartsWith("┌")).IsTrue();
         await Assert.That(first.EndsWith("┐")).IsTrue();
     }
+
+    private static ScreenBuffer PaintToBuffer(TableBlock block, int width = 40)
+    {
+        var buffer = new ScreenBuffer(width, block.Measure(width).MinLines);
+        block.Paint(new BlockPaintContext(buffer, new Rect(0, 0, width, block.Measure(width).MinLines), 0));
+        return buffer;
+    }
+
+    [Test]
+    public async Task Selection_DefaultsToNone()
+    {
+        var block = ParseSample();
+        await Assert.That(block.SelectedRow.HasValue).IsFalse();
+        await Assert.That(block.SelectedColumn.HasValue).IsFalse();
+        await Assert.That(block.SelectedCell.HasValue).IsFalse();
+        await Assert.That(block.HighlightSpacing).IsEqualTo(TableHighlightSpacing.WhenSelected);
+        await Assert.That(block.ShouldHighlight).IsFalse();
+        await Assert.That(block.BodyRows).IsEqualTo(2);
+    }
+
+    [Test]
+    public async Task SelectRow_ClampsAndClears()
+    {
+        var block = ParseSample();
+        block.SelectRow(99);
+        await Assert.That(block.SelectedRow.Value).IsEqualTo(1);
+        block.SelectRow(-5);
+        await Assert.That(block.SelectedRow.Value).IsEqualTo(0);
+        block.SelectRow(null);
+        await Assert.That(block.SelectedRow.HasValue).IsFalse();
+    }
+
+    [Test]
+    public async Task SelectColumn_ClampsAndClears()
+    {
+        var block = ParseSample(); // 2 columns
+        block.SelectColumn(99);
+        await Assert.That(block.SelectedColumn.Value).IsEqualTo(1);
+        block.SelectColumn(-5);
+        await Assert.That(block.SelectedColumn.Value).IsEqualTo(0);
+        block.SelectColumn(null);
+        await Assert.That(block.SelectedColumn.HasValue).IsFalse();
+    }
+
+    [Test]
+    public async Task SelectCell_SetsBothAxes_AndNullClears()
+    {
+        var block = ParseSample();
+        block.SelectCell((1, 0));
+        await Assert.That(block.SelectedCell.Value).IsEqualTo((1, 0));
+        await Assert.That(block.SelectedRow.Value).IsEqualTo(1);
+        await Assert.That(block.SelectedColumn.Value).IsEqualTo(0);
+        block.SelectCell(null);
+        await Assert.That(block.SelectedCell.HasValue).IsFalse();
+        await Assert.That(block.SelectedRow.HasValue).IsFalse();
+        await Assert.That(block.SelectedColumn.HasValue).IsFalse();
+    }
+
+    [Test]
+    public async Task RowNavigation_NextPreviousFirstLast()
+    {
+        var block = ParseSample(); // 2 body rows
+        block.SelectNext();
+        await Assert.That(block.SelectedRow.Value).IsEqualTo(0);
+        block.SelectNext();
+        await Assert.That(block.SelectedRow.Value).IsEqualTo(1);
+        block.SelectNext(); // saturates, no wrap
+        await Assert.That(block.SelectedRow.Value).IsEqualTo(1);
+        block.SelectPrevious();
+        await Assert.That(block.SelectedRow.Value).IsEqualTo(0);
+        block.SelectPrevious(); // saturates at first
+        await Assert.That(block.SelectedRow.Value).IsEqualTo(0);
+
+        var fresh = ParseSample();
+        fresh.SelectPrevious(); // None → last
+        await Assert.That(fresh.SelectedRow.Value).IsEqualTo(1);
+        fresh.SelectFirst();
+        await Assert.That(fresh.SelectedRow.Value).IsEqualTo(0);
+        fresh.SelectLast();
+        await Assert.That(fresh.SelectedRow.Value).IsEqualTo(1);
+        fresh.ClearSelection();
+        await Assert.That(fresh.SelectedRow.HasValue).IsFalse();
+        await Assert.That(fresh.SelectedCell.HasValue).IsFalse();
+    }
+
+    [Test]
+    public async Task ColumnNavigation_NextPreviousFirstLast()
+    {
+        var block = ParseSample(); // 2 columns
+        block.SelectNextColumn();
+        await Assert.That(block.SelectedColumn.Value).IsEqualTo(0);
+        block.SelectNextColumn();
+        await Assert.That(block.SelectedColumn.Value).IsEqualTo(1);
+        block.SelectNextColumn(); // saturates, no wrap
+        await Assert.That(block.SelectedColumn.Value).IsEqualTo(1);
+
+        var fresh = ParseSample();
+        fresh.SelectPreviousColumn(); // None → last
+        await Assert.That(fresh.SelectedColumn.Value).IsEqualTo(1);
+        fresh.SelectFirstColumn();
+        await Assert.That(fresh.SelectedColumn.Value).IsEqualTo(0);
+        fresh.SelectLastColumn();
+        await Assert.That(fresh.SelectedColumn.Value).IsEqualTo(1);
+    }
+
+    [Test]
+    public async Task ScrollBy_SaturatesBothAxes()
+    {
+        var block = ParseSample();
+        block.ScrollDownBy(99);
+        await Assert.That(block.SelectedRow.Value).IsEqualTo(1);
+        block.ScrollUpBy(99);
+        await Assert.That(block.SelectedRow.Value).IsEqualTo(0);
+        block.ScrollRightBy(99);
+        await Assert.That(block.SelectedColumn.Value).IsEqualTo(1);
+        block.ScrollLeftBy(99);
+        await Assert.That(block.SelectedColumn.Value).IsEqualTo(0);
+        block.SelectRow(0);
+        block.ScrollDownBy(1);
+        await Assert.That(block.SelectedRow.Value).IsEqualTo(1);
+    }
+
+    [Test]
+    public async Task HighlightSpacing_GatesPaint()
+    {
+        var block = ParseSample();
+        block.SelectRow(0);
+        await Assert.That(block.ShouldHighlight).IsTrue();
+        var buffer = PaintToBuffer(block);
+        await Assert.That(buffer.Get(2, 3).Style.Attrs.HasFlag(StyleAttr.Reverse)).IsTrue();
+        await Assert.That(buffer.Get(2, 4).Style.Attrs.HasFlag(StyleAttr.Reverse)).IsFalse();
+
+        block.HighlightSpacing = TableHighlightSpacing.Never;
+        await Assert.That(block.ShouldHighlight).IsFalse();
+        var muted = PaintToBuffer(block);
+        await Assert.That(muted.Get(2, 3).Style.Attrs.HasFlag(StyleAttr.Reverse)).IsFalse();
+
+        var plain = ParseSample();
+        var plainBuffer = PaintToBuffer(plain);
+        await Assert.That(plainBuffer.Get(2, 3).Style.Attrs.HasFlag(StyleAttr.Reverse)).IsFalse();
+    }
+
+    [Test]
+    public async Task Paint_CellSelection_HighlightsSingleCell()
+    {
+        var block = ParseSample();
+        block.SelectCell((1, 0)); // "grace" row, "name" column
+        var buffer = PaintToBuffer(block);
+        await Assert.That(buffer.Get(2, 4).Style.Attrs.HasFlag(StyleAttr.Reverse)).IsTrue();
+        await Assert.That(buffer.Get(10, 4).Style.Attrs.HasFlag(StyleAttr.Reverse)).IsFalse();
+        await Assert.That(buffer.Get(2, 3).Style.Attrs.HasFlag(StyleAttr.Reverse)).IsFalse();
+    }
+
+    [Test]
+    public async Task Paint_ColumnSelection_HighlightsColumnIncludingHeader()
+    {
+        var block = ParseSample();
+        block.SelectColumn(1); // "age" column
+        var buffer = PaintToBuffer(block);
+        await Assert.That(buffer.Get(10, 1).Style.Attrs.HasFlag(StyleAttr.Reverse)).IsTrue();
+        await Assert.That(buffer.Get(10, 3).Style.Attrs.HasFlag(StyleAttr.Reverse)).IsTrue();
+        await Assert.That(buffer.Get(2, 1).Style.Attrs.HasFlag(StyleAttr.Reverse)).IsFalse();
+        await Assert.That(buffer.Get(2, 3).Style.Attrs.HasFlag(StyleAttr.Reverse)).IsFalse();
+    }
 }
