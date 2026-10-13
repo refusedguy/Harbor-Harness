@@ -1,16 +1,17 @@
 using Harbor.App.Cli.Commands;
 using Harbor.App.Cli.Hosting;
 using Harbor.App.Cli.Logging;
-using Harbor.App.Cli.Repl;
 using Harbor.Ui.Framework.Diagnostics;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Console;
 
 namespace Harbor.App.Cli;
 /// <summary>
-///     Entry point — thin dispatcher. All logic delegated to the
-///     <c>Commands/</c> verb runners, HostBuilder, ReplRunner and
-///     SlashCommandDispatcher.
+///     Entry point — thin composition root. Global <c>--script</c>/
+///     <c>--loglevel</c> stripping, logging and the interactive-TUI routing
+///     live here; every CLI verb rides the single ConsoleAppFramework builder
+///     in <c>CafPilotVerbs</c> (see <c>Commands/</c>), while bare/unknown
+///     invocations fall through to the interactive REPL.
 /// </summary>
 public static class Program
 {
@@ -102,21 +103,14 @@ public static class Program
         string command = args[0].ToLowerInvariant();
         if (command == "--demo")
             command = "demo"; // `harbor --demo` is the documented alias of `harbor demo`
+        if (command == "--headless")
+            command = "headless"; // `harbor --headless` is the documented alias of `harbor headless`
         _logger.LogInformation("Command: {Command}", command);
 
         // Slice A (#1144): StatusCommand names Client-assembly transports, so
         // the file leaves the compile when the daemon is off (see the csproj
         // Compile Remove); the CAF-D (#1289) handler + registration follow the
         // same gate. DaemonCommand is always compiled and rides CAF ungated.
-        var cliCommands = new ICommand[]
-        {
-            new LogsCommand(Console.Out, Console.Error),
-            new PluginsCommand(Console.Out, Console.Error),
-            new SkillsCommand(Console.Out, Console.Error),
-        };
-        if (await SlashCommandDispatcherStatic.TryHandleAsync(command, args.Skip(1).ToArray(), cliCommands).ConfigureAwait(false) is int exitCode)
-            return exitCode;
-
 #if !HARBOR_WITH_DAEMON
         // Slice A (#1144): without the daemon there is no IPC Client assembly,
         // so `status` (daemon probing) and `ide` (daemon attach) cannot run.
@@ -128,32 +122,41 @@ public static class Program
             return 1;
         }
 #endif
+        // CAF-E slice 2 (#1290): every verb rides the single
+        // ConsoleAppFramework builder in CafPilotVerbs (one RunAsync per
+        // assembly, CS8785 rule) — the hand-rolled ICommand array + per-verb
+        // switch are gone. Unknown commands fall through to the interactive
+        // REPL, as before.
+        string[] tail = args.Skip(1).ToArray();
         return command switch
         {
-            "ask" => await AskVerb.RunAsync(_logger, args.Skip(1).ToArray(), scriptPath),
+            "ask" => await CafPilotVerbs.RunAsync("ask", scriptPath is null ? tail : ["--script", scriptPath, ..tail]),
 #if HARBOR_WITH_DAEMON
-            "ide" => await IdeVerb.RunAsync(_logger, args.Skip(1).ToArray()),
+            "ide" => await CafPilotVerbs.RunAsync("ide", tail),
 #endif
-            "--headless" or "headless" => await HeadlessVerb.RunAsync(_logger, args.Skip(1).ToArray()),
-            "run" => await CafPilotVerbs.RunAsync("run", args.Skip(1).ToArray()),
-            "providers" or "--providers" => await CafPilotVerbs.RunAsync("providers", args.Skip(1).ToArray()),
-            "models" => await CafPilotVerbs.RunAsync("models", args.Skip(1).ToArray()),
-            "sessions" => await CafPilotVerbs.RunAsync("sessions", args.Skip(1).ToArray()),
-            "daemon" => await CafPilotVerbs.RunAsync("daemon", args.Skip(1).ToArray()),
+            "headless" => await CafPilotVerbs.RunAsync("headless", tail),
+            "run" => await CafPilotVerbs.RunAsync("run", tail),
+            "providers" or "--providers" => await CafPilotVerbs.RunAsync("providers", tail),
+            "models" => await CafPilotVerbs.RunAsync("models", tail),
+            "sessions" => await CafPilotVerbs.RunAsync("sessions", tail),
+            "daemon" => await CafPilotVerbs.RunAsync("daemon", tail),
 #if HARBOR_WITH_DAEMON
-            "status" => await CafPilotVerbs.RunAsync("status", args.Skip(1).ToArray()),
+            "status" => await CafPilotVerbs.RunAsync("status", tail),
 #endif
-            "mcp" => await CafPilotVerbs.RunAsync("mcp", args.Skip(1).ToArray()),
-            "serve" => await CafPilotVerbs.RunAsync("serve", args.Skip(1).ToArray()),
-            "tui" => await CafPilotVerbs.RunAsync("tui", args.Skip(1).ToArray()),
-            "events" => await EventsVerb.RunAsync(args.Skip(1).ToArray()),
-            "storage" => await CafPilotVerbs.RunAsync("storage", args.Skip(1).ToArray()),
-            "setup" => await CafPilotVerbs.RunAsync("setup", args.Skip(1).ToArray()),
-            "demo" => await CafPilotVerbs.RunAsync("demo", args.Skip(1).ToArray()),
-            "auth" => await CafPilotVerbs.RunAsync("auth", args.Skip(1).ToArray()),
-            "config" => await CafPilotVerbs.RunAsync("config", args.Skip(1).ToArray()),
-            "help" or "--help" or "-h" => HelpVerbs.PrintHelp(),
-            "version" or "--version" or "-v" => await CafPilotVerbs.RunAsync("version", args.Skip(1).ToArray()),
+            "mcp" => await CafPilotVerbs.RunAsync("mcp", tail),
+            "serve" => await CafPilotVerbs.RunAsync("serve", tail),
+            "tui" => await CafPilotVerbs.RunAsync("tui", tail),
+            "events" => await CafPilotVerbs.RunAsync("events", tail),
+            "storage" => await CafPilotVerbs.RunAsync("storage", tail),
+            "setup" => await CafPilotVerbs.RunAsync("setup", tail),
+            "demo" => await CafPilotVerbs.RunAsync("demo", tail),
+            "logs" => await CafPilotVerbs.RunAsync("logs", tail),
+            "plugin" => await CafPilotVerbs.RunAsync("plugin", tail),
+            "skill" => await CafPilotVerbs.RunAsync("skill", tail),
+            "auth" => await CafPilotVerbs.RunAsync("auth", tail),
+            "config" => await CafPilotVerbs.RunAsync("config", tail),
+            "help" or "--help" or "-h" => await CafPilotVerbs.RunAsync("help", tail),
+            "version" or "--version" or "-v" => await CafPilotVerbs.RunAsync("version", tail),
             _ => await InteractiveVerb.RunAsync(_logger, Array.Empty<string>(), scriptPath)
         };
         }
