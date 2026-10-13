@@ -299,7 +299,7 @@ public sealed class EventBroadcaster : IAsyncDisposable
         {
             if (!alive[i])
             {
-                _logger.LogDebug("Evicting client whose outbound queue is full");
+                EventBroadcasterLog.EvictingFullClient(_logger);
                 await EvictAsync(snapshot[i]).ConfigureAwait(false);
             }
         }
@@ -348,9 +348,7 @@ public sealed class EventBroadcaster : IAsyncDisposable
     private void ReportUnmappedEvent(AgentEvent evt)
     {
         Interlocked.Increment(ref _unmappedEventCount);
-        _logger.LogError(
-            "No AgentEvent -> HarborEvent mapping for {EventType}; event NOT delivered. Add a case to AgentEventProjector (Harbor.Ipc.Abstractions).",
-            evt.GetType().FullName);
+        EventBroadcasterLog.UnmappedEvent(_logger, evt.GetType().FullName);
     }
 
     private async Task EvictAsync(ClientRegistration dead)
@@ -376,7 +374,7 @@ public sealed class EventBroadcaster : IAsyncDisposable
             // read loop) instead of silently losing the subscription — this
             // is what makes reconnect possible at all.
             try { await dead.Stream.DisposeAsync().ConfigureAwait(false); }
-            catch (Exception ex) { _logger.LogDebug(ex, "Suppress evicted-stream dispose error"); }
+            catch (Exception ex) { EventBroadcasterLog.SuppressEvictedStreamDisposeError(_logger, ex); }
         }
     }
 
@@ -555,7 +553,7 @@ public sealed class EventBroadcaster : IAsyncDisposable
             {
                 // Broken pipe / timeout: tear THIS client down loudly — the
                 // stream close gives the client a clean reconnect signal.
-                logger.LogDebug(ex, "Client writer failed; closing stream");
+                EventBroadcasterLog.ClientWriterFailed(logger, ex);
                 await EvictSelfAsync(logger).ConfigureAwait(false);
             }
         }
@@ -563,7 +561,29 @@ public sealed class EventBroadcaster : IAsyncDisposable
         private async Task EvictSelfAsync(ILogger logger)
         {
             try { await Stream.DisposeAsync().ConfigureAwait(false); }
-            catch (Exception ex) { logger.LogDebug(ex, "Supress stream dispose during eviction"); }
+            catch (Exception ex) { EventBroadcasterLog.SuppressStreamDisposeDuringEviction(logger, ex); }
         }
     }
+}
+
+/// <summary>
+///     SG5: BCL <c>[LoggerMessage]</c> delegates for <see cref="EventBroadcaster" />.
+///     Templates, levels and operands are 1-to-1 with the former <c>LogX</c> calls.
+/// </summary>
+internal static partial class EventBroadcasterLog
+{
+    [LoggerMessage(EventId = 1, Level = LogLevel.Debug, Message = "Evicting client whose outbound queue is full")]
+    public static partial void EvictingFullClient(ILogger logger);
+
+    [LoggerMessage(EventId = 2, Level = LogLevel.Error, Message = "No AgentEvent -> HarborEvent mapping for {EventType}; event NOT delivered. Add a case to AgentEventProjector (Harbor.Ipc.Abstractions).")]
+    public static partial void UnmappedEvent(ILogger logger, string? eventType);
+
+    [LoggerMessage(EventId = 3, Level = LogLevel.Debug, Message = "Suppress evicted-stream dispose error")]
+    public static partial void SuppressEvictedStreamDisposeError(ILogger logger, Exception ex);
+
+    [LoggerMessage(EventId = 4, Level = LogLevel.Debug, Message = "Client writer failed; closing stream")]
+    public static partial void ClientWriterFailed(ILogger logger, Exception ex);
+
+    [LoggerMessage(EventId = 5, Level = LogLevel.Debug, Message = "Supress stream dispose during eviction")]
+    public static partial void SuppressStreamDisposeDuringEviction(ILogger logger, Exception ex);
 }

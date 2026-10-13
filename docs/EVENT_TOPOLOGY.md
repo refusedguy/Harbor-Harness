@@ -66,7 +66,7 @@ there is nothing left off it.
 
 | Channel | Location | Role |
 |---|---|---|
-| Per-client outbound queue, bounded 4096, `SingleReader = true` | `src/Harbor.Ipc.Server/Protocol/EventBroadcaster.cs:448-453` | replay-before-live per client; writer never silently drops |
+| Per-client outbound queue, bounded 4096, `SingleReader = true` | `src/Harbor.Ipc.Server/Protocol/EventBroadcaster.cs:446-451` | replay-before-live per client; writer never silently drops |
 | RPC client frame queue, bounded 4096, `DropOldest` | `src/Harbor.Ipc.Client/Protocol/MessagePackRpcClient.cs:36-41` | wire frames arriving from the server; not a bus subscriber |
 | In-process client queue, bounded 1024, `DropOldest` | `src/Harbor.Ipc.InProcess/InProcessHarborClient.cs:97-102` | latest-events-visible TUI semantics |
 | CellForge REPL event pump, unbounded, `SingleReader = true` | declared `apps/Harbor.App.Cli/Repl/CellForgeReplRunner.cs:103`, written `apps/Harbor.App.Cli/Repl/ReplLifecycle.cs:98-103`, drained `apps/Harbor.App.Cli/Repl/ReplLifecycle.cs:205` | marshals bus events onto the frame-loop thread. The only `Channel<AgentEvent>` in the repo, and it is **downstream of** `Subscribe`, not inside the bus |

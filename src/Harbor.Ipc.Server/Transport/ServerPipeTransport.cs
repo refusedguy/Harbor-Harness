@@ -115,7 +115,7 @@ public sealed class ServerPipeTransport : IIpcServerTransport
             _acceptLoopTask = AcceptLoopWindowsAsync(_cts.Token);
         }
 
-        _logger.LogInformation("Transport bound to {Endpoint}", Endpoint);
+        ServerPipeTransportLog.TransportBound(_logger, Endpoint);
         return _acceptChannel.Reader;
     }
 
@@ -136,13 +136,13 @@ public sealed class ServerPipeTransport : IIpcServerTransport
             catch (OperationCanceledException)
             { /* expected on shutdown */
             }
-            catch (Exception ex) { _logger.LogWarning(ex, "Accept loop ended with error"); }
+            catch (Exception ex) { ServerPipeTransportLog.AcceptLoopEndedWithError(_logger, ex); }
         }
 
         if (_unixSocket is not null)
         {
             try { _unixSocket.Dispose(); }
-            catch (Exception disposeEx) { _logger.LogDebug(disposeEx, "Suppress socket dispose error"); }
+            catch (Exception disposeEx) { ServerPipeTransportLog.SuppressSocketDisposeError(_logger, disposeEx); }
             _unixSocket = null;
         }
 
@@ -150,7 +150,7 @@ public sealed class ServerPipeTransport : IIpcServerTransport
         if (!OperatingSystem.IsWindows() && File.Exists(Endpoint))
         {
             try { File.Delete(Endpoint); }
-            catch (Exception ex) { _logger.LogWarning(ex, "Failed to delete socket file {Path}", Endpoint); }
+            catch (Exception ex) { ServerPipeTransportLog.FailedToDeleteSocketFile(_logger, ex, Endpoint); }
         }
     }
 
@@ -176,18 +176,16 @@ public sealed class ServerPipeTransport : IIpcServerTransport
             catch (OperationCanceledException)
             {
                 try { await server.DisposeAsync().ConfigureAwait(false); }
-                catch (Exception disposeEx) { _logger.LogDebug(disposeEx, "Suppress dispose error"); }
+                catch (Exception disposeEx) { ServerPipeTransportLog.SuppressDisposeError(_logger, disposeEx); }
                 return;
             }
             catch (Exception ex)
             {
                 consecutiveFailures++;
                 TimeSpan delay = ComputeAcceptBackoff(consecutiveFailures);
-                _logger.LogWarning(
-                    ex, "WaitForConnectionAsync failed ({Count} consecutive); backing off {Delay}ms",
-                    consecutiveFailures, delay.TotalMilliseconds);
+                ServerPipeTransportLog.WaitForConnectionBackoff(_logger, ex, consecutiveFailures, delay.TotalMilliseconds);
                 try { await server.DisposeAsync().ConfigureAwait(false); }
-                catch (Exception disposeEx) { _logger.LogDebug(disposeEx, "Suppress dispose error"); }
+                catch (Exception disposeEx) { ServerPipeTransportLog.SuppressDisposeError(_logger, disposeEx); }
                 try { await Task.Delay(delay, ct).ConfigureAwait(false); }
                 catch (OperationCanceledException) { return; }
                 continue;
@@ -227,7 +225,7 @@ public sealed class ServerPipeTransport : IIpcServerTransport
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Failed to restrict socket file mode on {Endpoint}", Endpoint);
+            ServerPipeTransportLog.FailedToRestrictSocketFileMode(_logger, ex, Endpoint);
         }
 
         _unixSocket.Listen(16);
@@ -252,9 +250,7 @@ public sealed class ServerPipeTransport : IIpcServerTransport
             {
                 consecutiveFailures++;
                 TimeSpan delay = ComputeAcceptBackoff(consecutiveFailures);
-                _logger.LogWarning(
-                    ex, "AcceptAsync failed ({Count} consecutive); backing off {Delay}ms",
-                    consecutiveFailures, delay.TotalMilliseconds);
+                ServerPipeTransportLog.AcceptBackoff(_logger, ex, consecutiveFailures, delay.TotalMilliseconds);
                 try { await Task.Delay(delay, ct).ConfigureAwait(false); }
                 catch (OperationCanceledException) { return; }
                 continue;
@@ -283,7 +279,7 @@ public sealed class ServerPipeTransport : IIpcServerTransport
         }
 
         try { File.Delete(Endpoint); }
-        catch (Exception ex) { _logger.LogWarning(ex, "Failed to delete stale socket file {Endpoint}", Endpoint); }
+        catch (Exception ex) { ServerPipeTransportLog.FailedToDeleteStaleSocketFile(_logger, ex, Endpoint); }
     }
 
     /// <summary>
@@ -307,8 +303,45 @@ public sealed class ServerPipeTransport : IIpcServerTransport
         }
         catch (Exception ex)
         {
-            _logger.LogDebug(ex, "Probe connect to {Endpoint} failed — socket file is stale", Endpoint);
+            ServerPipeTransportLog.ProbeConnectStale(_logger, ex, Endpoint);
             return false;
         }
     }
+}
+
+/// <summary>
+///     SG5: BCL <c>[LoggerMessage]</c> delegates for <see cref="ServerPipeTransport" />.
+///     Templates, levels and operands are 1-to-1 with the former <c>LogX</c> calls.
+/// </summary>
+internal static partial class ServerPipeTransportLog
+{
+    [LoggerMessage(EventId = 1, Level = LogLevel.Information, Message = "Transport bound to {Endpoint}")]
+    public static partial void TransportBound(ILogger logger, string endpoint);
+
+    [LoggerMessage(EventId = 2, Level = LogLevel.Warning, Message = "Accept loop ended with error")]
+    public static partial void AcceptLoopEndedWithError(ILogger logger, Exception ex);
+
+    [LoggerMessage(EventId = 3, Level = LogLevel.Debug, Message = "Suppress socket dispose error")]
+    public static partial void SuppressSocketDisposeError(ILogger logger, Exception ex);
+
+    [LoggerMessage(EventId = 4, Level = LogLevel.Warning, Message = "Failed to delete socket file {Path}")]
+    public static partial void FailedToDeleteSocketFile(ILogger logger, Exception ex, string path);
+
+    [LoggerMessage(EventId = 5, Level = LogLevel.Debug, Message = "Suppress dispose error")]
+    public static partial void SuppressDisposeError(ILogger logger, Exception ex);
+
+    [LoggerMessage(EventId = 6, Level = LogLevel.Warning, Message = "WaitForConnectionAsync failed ({Count} consecutive); backing off {Delay}ms")]
+    public static partial void WaitForConnectionBackoff(ILogger logger, Exception ex, int count, double delay);
+
+    [LoggerMessage(EventId = 7, Level = LogLevel.Warning, Message = "Failed to restrict socket file mode on {Endpoint}")]
+    public static partial void FailedToRestrictSocketFileMode(ILogger logger, Exception ex, string endpoint);
+
+    [LoggerMessage(EventId = 8, Level = LogLevel.Warning, Message = "AcceptAsync failed ({Count} consecutive); backing off {Delay}ms")]
+    public static partial void AcceptBackoff(ILogger logger, Exception ex, int count, double delay);
+
+    [LoggerMessage(EventId = 9, Level = LogLevel.Warning, Message = "Failed to delete stale socket file {Endpoint}")]
+    public static partial void FailedToDeleteStaleSocketFile(ILogger logger, Exception ex, string endpoint);
+
+    [LoggerMessage(EventId = 10, Level = LogLevel.Debug, Message = "Probe connect to {Endpoint} failed — socket file is stale")]
+    public static partial void ProbeConnectStale(ILogger logger, Exception ex, string endpoint);
 }

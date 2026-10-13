@@ -142,7 +142,7 @@ public sealed class InProcessHarborClient : IHarborClient
             return sessionResult.ConvertFailure();
 
         _agent.Initialize(sessionResult.Value, agentDefResult.Value);
-        _logger.LogInformation("Agent started: session={SessionId} agent={Agent}", sessionId, agentName);
+        InProcessHarborClientLog.AgentStarted(_logger, sessionId, agentName);
         return Result.Success();
     }
 
@@ -292,8 +292,19 @@ public sealed class InProcessHarborClient : IHarborClient
     private void ReportUnmappedEvent(AgentEvent evt)
     {
         Interlocked.Increment(ref _unmappedEventCount);
-        _logger.LogError(
-            "No AgentEvent -> HarborEvent mapping for {EventType}; event NOT delivered. Add a case to AgentEventProjector (Harbor.Ipc.Abstractions).",
-            evt.GetType().FullName);
+        InProcessHarborClientLog.UnmappedEvent(_logger, evt.GetType().FullName);
     }
+}
+
+/// <summary>
+///     SG5: BCL <c>[LoggerMessage]</c> delegates for <see cref="InProcessHarborClient" />.
+///     Templates, levels and operands are 1-to-1 with the former <c>LogX</c> calls.
+/// </summary>
+internal static partial class InProcessHarborClientLog
+{
+    [LoggerMessage(EventId = 1, Level = LogLevel.Information, Message = "Agent started: session={SessionId} agent={Agent}")]
+    public static partial void AgentStarted(ILogger logger, string sessionId, string agent);
+
+    [LoggerMessage(EventId = 2, Level = LogLevel.Error, Message = "No AgentEvent -> HarborEvent mapping for {EventType}; event NOT delivered. Add a case to AgentEventProjector (Harbor.Ipc.Abstractions).")]
+    public static partial void UnmappedEvent(ILogger logger, string? eventType);
 }

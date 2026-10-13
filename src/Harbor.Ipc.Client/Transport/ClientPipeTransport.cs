@@ -64,7 +64,7 @@ public sealed class ClientPipeTransport : IIpcClientTransport
             ? await ConnectWindowsAsync(ct).ConfigureAwait(false)
             : await ConnectUnixAsync(ct).ConfigureAwait(false);
 
-        _logger.LogInformation("Connected to {Endpoint}", Endpoint);
+        ClientPipeTransportLog.ConnectedTo(_logger, Endpoint);
         return _stream;
     }
 
@@ -76,7 +76,7 @@ public sealed class ClientPipeTransport : IIpcClientTransport
     {
         if (_stream is null) return;
         try { await _stream.DisposeAsync().ConfigureAwait(false); }
-        catch (Exception ex) { _logger.LogDebug(ex, "Suppress disconnect error"); }
+        catch (Exception ex) { ClientPipeTransportLog.SuppressDisconnectError(_logger, ex); }
         _stream = null;
     }
 
@@ -100,4 +100,17 @@ public sealed class ClientPipeTransport : IIpcClientTransport
         await socket.ConnectAsync(endpoint, ct).ConfigureAwait(false);
         return new NetworkStream(socket, true);
     }
+}
+
+/// <summary>
+///     SG5: BCL <c>[LoggerMessage]</c> delegates for <see cref="ClientPipeTransport" />.
+///     Templates, levels and operands are 1-to-1 with the former <c>LogX</c> calls.
+/// </summary>
+internal static partial class ClientPipeTransportLog
+{
+    [LoggerMessage(EventId = 1, Level = LogLevel.Information, Message = "Connected to {Endpoint}")]
+    public static partial void ConnectedTo(ILogger logger, string endpoint);
+
+    [LoggerMessage(EventId = 2, Level = LogLevel.Debug, Message = "Suppress disconnect error")]
+    public static partial void SuppressDisconnectError(ILogger logger, Exception ex);
 }

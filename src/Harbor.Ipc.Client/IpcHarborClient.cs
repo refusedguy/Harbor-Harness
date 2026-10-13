@@ -92,7 +92,7 @@ public sealed class IpcHarborClient : IHarborClient
     {
         if (Interlocked.Exchange(ref _connected, 0) == 0) return;
         try { await _rpc.SendAsync(new DisconnectRequest(), ct).ConfigureAwait(false); }
-        catch (Exception ex) { _logger.LogDebug(ex, "Disconnect handshake failed"); }
+        catch (Exception ex) { IpcHarborClientLog.DisconnectHandshakeFailed(_logger, ex); }
         await _transport.DisconnectAsync(ct).ConfigureAwait(false);
     }
 
@@ -227,7 +227,7 @@ public sealed class IpcHarborClient : IHarborClient
         var resp = await _rpc.SendAsync(new SubscribeToEventsRequest(sinceSequence), ct).ConfigureAwait(false);
         if (resp is ErrorResponse err)
         {
-            _logger.LogWarning("Event subscription rejected: {Error}", err.Message);
+            IpcHarborClientLog.EventSubscriptionRejected(_logger, err.Message);
             yield break;
         }
 
@@ -257,4 +257,17 @@ internal static class HarborResponseExtensions
         => response as OkResponse
            ?? throw new InvalidOperationException(
                $"Expected OkResponse, got {response.GetType().Name}");
+}
+
+/// <summary>
+///     SG5: BCL <c>[LoggerMessage]</c> delegates for <see cref="IpcHarborClient" />.
+///     Templates, levels and operands are 1-to-1 with the former <c>LogX</c> calls.
+/// </summary>
+internal static partial class IpcHarborClientLog
+{
+    [LoggerMessage(EventId = 1, Level = LogLevel.Debug, Message = "Disconnect handshake failed")]
+    public static partial void DisconnectHandshakeFailed(ILogger logger, Exception ex);
+
+    [LoggerMessage(EventId = 2, Level = LogLevel.Warning, Message = "Event subscription rejected: {Error}")]
+    public static partial void EventSubscriptionRejected(ILogger logger, string error);
 }

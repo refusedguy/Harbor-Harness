@@ -118,7 +118,7 @@ public sealed class MessagePackRpcServer : IAsyncDisposable
             catch (OperationCanceledException)
             { /* expected on shutdown */
             }
-            catch (Exception ex) { _logger.LogWarning(ex, "Accept loop ended with error"); }
+            catch (Exception ex) { MessagePackRpcServerLog.AcceptLoopEndedWithError(_logger, ex); }
         }
 
         await _transport.UnbindAsync(ct).ConfigureAwait(false);
@@ -150,7 +150,7 @@ public sealed class MessagePackRpcServer : IAsyncDisposable
 
         try
         {
-            _logger.LogInformation("Client connected");
+            MessagePackRpcServerLog.ClientConnected(_logger);
             while (!session.ConnectionCts.IsCancellationRequested)
             {
                 FrameReadResult? readOpt = await ReadRequestAsync(session).ConfigureAwait(false);
@@ -193,7 +193,7 @@ public sealed class MessagePackRpcServer : IAsyncDisposable
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Unexpected client-handler failure; connection closed gracefully");
+            MessagePackRpcServerLog.UnexpectedClientHandlerFailure(_logger, ex);
         }
         finally
         {
@@ -256,7 +256,7 @@ public sealed class MessagePackRpcServer : IAsyncDisposable
         catch (OperationCanceledException) { return null; }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Stream read failed; closing client connection");
+            MessagePackRpcServerLog.StreamReadFailed(_logger, ex);
             return null;
         }
     }
@@ -269,20 +269,19 @@ public sealed class MessagePackRpcServer : IAsyncDisposable
             case FrameReadOutcome.Request:
                 return FrameDecision.Dispatch;
             case FrameReadOutcome.StreamEnded:
-                _logger.LogDebug("Client stream ended");
+                MessagePackRpcServerLog.ClientStreamEnded(_logger);
                 return FrameDecision.Close;
             case FrameReadOutcome.EmptyFrame:
-                _logger.LogDebug("Skipping zero-length frame; keeping connection alive");
+                MessagePackRpcServerLog.SkippingZeroLengthFrame(_logger);
                 return FrameDecision.Skip;
             case FrameReadOutcome.UndecodableFrame:
-                _logger.LogWarning(read.Error, "Skipping undecodable frame; keeping connection alive");
+                MessagePackRpcServerLog.SkippingUndecodableFrame(_logger, read.Error);
                 return FrameDecision.Skip;
             case FrameReadOutcome.OversizedFrame:
-                _logger.LogWarning(
-                    read.Error, "Incoming frame violates the size/buffer budget; closing client connection");
+                MessagePackRpcServerLog.FrameBudgetViolated(_logger, read.Error);
                 return FrameDecision.Close;
             default:
-                _logger.LogWarning("Unknown frame outcome {Outcome}; closing client connection", read.Outcome);
+                MessagePackRpcServerLog.UnknownFrameOutcome(_logger, read.Outcome);
                 return FrameDecision.Close;
         }
     }
@@ -304,7 +303,7 @@ public sealed class MessagePackRpcServer : IAsyncDisposable
         {
             if (!PskStore.Matches(pskRequest.Psk, _expectedPsk!))
             {
-                _logger.LogWarning("PSK auth failed; closing connection");
+                MessagePackRpcServerLog.PskAuthFailed(_logger);
                 await TryWriteErrorResponse(
                     session.Stream, session.WriteLock, pskRequest.RequestId, "PSK_AUTH_FAILED", session.ConnectionCt)
                     .ConfigureAwait(false);
@@ -312,7 +311,7 @@ public sealed class MessagePackRpcServer : IAsyncDisposable
             }
 
             session.Authenticated = true;
-            _logger.LogInformation("PSK auth succeeded");
+            MessagePackRpcServerLog.PskAuthSucceeded(_logger);
             await WriteResponseAsync(
                 session.Stream, session.WriteLock, new OkResponse { RequestId = pskRequest.RequestId }, session.ConnectionCt)
                 .ConfigureAwait(false);
@@ -382,7 +381,7 @@ public sealed class MessagePackRpcServer : IAsyncDisposable
         catch (OperationCanceledException) { return false; }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Request processing failed; closing client connection");
+            MessagePackRpcServerLog.RequestProcessingFailed(_logger, ex);
             return false;
         }
     }
@@ -417,7 +416,7 @@ public sealed class MessagePackRpcServer : IAsyncDisposable
             catch (OperationCanceledException) { /* cancelled by the drain above */ }
             catch (Exception drainEx)
             {
-                _logger.LogDebug(drainEx, "Suppressed fault from prompt task during connection drain");
+                MessagePackRpcServerLog.SuppressedPromptTaskFault(_logger, drainEx);
             }
         }
 
@@ -426,9 +425,9 @@ public sealed class MessagePackRpcServer : IAsyncDisposable
         _dispatcher.ReleaseClientLeases(session.ClientId);
         await _broadcaster.UnregisterAsync(session.Stream).ConfigureAwait(false);
         try { await session.Stream.DisposeAsync().ConfigureAwait(false); }
-        catch (Exception disposeEx) { _logger.LogDebug(disposeEx, "Suppress stream dispose error"); }
+        catch (Exception disposeEx) { MessagePackRpcServerLog.SuppressStreamDisposeError(_logger, disposeEx); }
         session.WriteLock.Dispose();
-        _logger.LogInformation("Client disconnected");
+        MessagePackRpcServerLog.ClientDisconnected(_logger);
     }
 
     // ── Background prompt dispatch (D1) ────────────────────────────────────
@@ -476,7 +475,7 @@ public sealed class MessagePackRpcServer : IAsyncDisposable
                     // so reaching this point means the connection is broken or a
                     // bug surfaced. Tell the client once, then tear the connection
                     // down via the shared token so the read loop exits cleanly.
-                    _logger.LogError(ex, "Background prompt dispatch failed");
+                    MessagePackRpcServerLog.BackgroundPromptDispatchFailed(_logger, ex);
                     await TryWriteErrorResponse(stream, writeLock, requestId, ex.Message, connectionCt).ConfigureAwait(false);
                     connectionCts.Cancel();
                 }
@@ -532,7 +531,7 @@ public sealed class MessagePackRpcServer : IAsyncDisposable
         }
         catch (Exception writeEx)
         {
-            _logger.LogDebug(writeEx, "Could not deliver error response; connection likely broken");
+            MessagePackRpcServerLog.CouldNotDeliverErrorResponse(_logger, writeEx);
         }
     }
 
@@ -542,4 +541,62 @@ public sealed class MessagePackRpcServer : IAsyncDisposable
     ///     connection cleanup).
     /// </summary>
     private sealed record PromptRun(CancellationTokenSource Cts, Task Worker);
+}
+
+/// <summary>
+///     SG5: BCL <c>[LoggerMessage]</c> delegates for <see cref="MessagePackRpcServer" />.
+///     Templates, levels and operands are 1-to-1 with the former <c>LogX</c> calls.
+/// </summary>
+internal static partial class MessagePackRpcServerLog
+{
+    [LoggerMessage(EventId = 1, Level = LogLevel.Warning, Message = "Accept loop ended with error")]
+    public static partial void AcceptLoopEndedWithError(ILogger logger, Exception ex);
+
+    [LoggerMessage(EventId = 2, Level = LogLevel.Information, Message = "Client connected")]
+    public static partial void ClientConnected(ILogger logger);
+
+    [LoggerMessage(EventId = 3, Level = LogLevel.Error, Message = "Unexpected client-handler failure; connection closed gracefully")]
+    public static partial void UnexpectedClientHandlerFailure(ILogger logger, Exception ex);
+
+    [LoggerMessage(EventId = 4, Level = LogLevel.Warning, Message = "Stream read failed; closing client connection")]
+    public static partial void StreamReadFailed(ILogger logger, Exception ex);
+
+    [LoggerMessage(EventId = 5, Level = LogLevel.Debug, Message = "Client stream ended")]
+    public static partial void ClientStreamEnded(ILogger logger);
+
+    [LoggerMessage(EventId = 6, Level = LogLevel.Debug, Message = "Skipping zero-length frame; keeping connection alive")]
+    public static partial void SkippingZeroLengthFrame(ILogger logger);
+
+    [LoggerMessage(EventId = 7, Level = LogLevel.Warning, Message = "Skipping undecodable frame; keeping connection alive")]
+    public static partial void SkippingUndecodableFrame(ILogger logger, Exception? ex);
+
+    [LoggerMessage(EventId = 8, Level = LogLevel.Warning, Message = "Incoming frame violates the size/buffer budget; closing client connection")]
+    public static partial void FrameBudgetViolated(ILogger logger, Exception? ex);
+
+    [LoggerMessage(EventId = 9, Level = LogLevel.Warning, Message = "Unknown frame outcome {Outcome}; closing client connection")]
+    public static partial void UnknownFrameOutcome(ILogger logger, FrameReadOutcome outcome);
+
+    [LoggerMessage(EventId = 10, Level = LogLevel.Warning, Message = "PSK auth failed; closing connection")]
+    public static partial void PskAuthFailed(ILogger logger);
+
+    [LoggerMessage(EventId = 11, Level = LogLevel.Information, Message = "PSK auth succeeded")]
+    public static partial void PskAuthSucceeded(ILogger logger);
+
+    [LoggerMessage(EventId = 12, Level = LogLevel.Error, Message = "Request processing failed; closing client connection")]
+    public static partial void RequestProcessingFailed(ILogger logger, Exception ex);
+
+    [LoggerMessage(EventId = 13, Level = LogLevel.Debug, Message = "Suppressed fault from prompt task during connection drain")]
+    public static partial void SuppressedPromptTaskFault(ILogger logger, Exception ex);
+
+    [LoggerMessage(EventId = 14, Level = LogLevel.Debug, Message = "Suppress stream dispose error")]
+    public static partial void SuppressStreamDisposeError(ILogger logger, Exception ex);
+
+    [LoggerMessage(EventId = 15, Level = LogLevel.Information, Message = "Client disconnected")]
+    public static partial void ClientDisconnected(ILogger logger);
+
+    [LoggerMessage(EventId = 16, Level = LogLevel.Error, Message = "Background prompt dispatch failed")]
+    public static partial void BackgroundPromptDispatchFailed(ILogger logger, Exception ex);
+
+    [LoggerMessage(EventId = 17, Level = LogLevel.Debug, Message = "Could not deliver error response; connection likely broken")]
+    public static partial void CouldNotDeliverErrorResponse(ILogger logger, Exception ex);
 }
