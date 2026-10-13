@@ -31,9 +31,7 @@ internal static class ProviderPayload
         {
             if (content[i] is not LlmTextBlock)
             {
-                logger.LogWarning(
-                    "Dropping non-text content block(s): {Provider} does not support vision yet",
-                    providerId);
+                SsePumpLog.DroppingNonTextContent(logger, providerId);
                 break;
             }
         }
@@ -166,10 +164,7 @@ internal static class SsePump
         if (state.RemappedToolCalls > remapsBefore && !state.RemapWarned)
         {
             state.MarkRemapWarned();
-            logger.LogWarning(
-                "Tool-call chunk(s) arrived without a wire id; fell back to positional ids " +
-                "(remaps={Remaps}). Out-of-order deltas may desync agent/store tool_call_id.",
-                state.RemappedToolCalls);
+            SsePumpLog.ToolCallIdFallback(logger, state.RemappedToolCalls);
         }
     }
 
@@ -250,8 +245,7 @@ internal static class SsePump
                     // full body rides on Exception for diagnostics.
                     string bounded = ProviderErrors.BuildProviderErrorMessage(
                         apiErrorLabel, (int)response.StatusCode, errorBody);
-                    logger.LogWarning(
-                        "{Label} error {Status}: {Snippet}", apiErrorLabel, (int)response.StatusCode, bounded);
+                    SsePumpLog.ProviderError(logger, apiErrorLabel, (int)response.StatusCode, bounded);
                     await writer.WriteAsync(new ErrorEvent(
                         bounded,
                         errorBody.Length > ProviderErrors.MaxProviderErrorBodyChars ? errorBody : null,
@@ -288,7 +282,7 @@ internal static class SsePump
             // #203 E5: the pump task is fire-and-forget from the client's
             // perspective — the terminal ErrorEvent reaches the consumer,
             // but without a log line the failure is invisible in traces.
-            logger.LogWarning(ex, "{Label} stream failed: {Message}", apiErrorLabel, ex.Message);
+            SsePumpLog.StreamFailed(logger, ex, apiErrorLabel, ex.Message);
             await writer.WriteAsync(new ErrorEvent(
                 $"Stream failed: {ex.Message}", ex.ToString(),
                 ProviderErrors.FromException(ex, ct)), ct).ConfigureAwait(false);
@@ -434,4 +428,24 @@ internal static class SsePump
             return true;
         }
     }
+}
+
+/// <summary>
+///     SG7: BCL <c>[LoggerMessage]</c> delegates for the shared SSE pump (<see cref="SsePump" />)
+///     and payload helpers (<see cref="ProviderPayload" />).
+///     Templates, levels and operands are 1-to-1 with the former <c>LogX</c> calls.
+/// </summary>
+internal static partial class SsePumpLog
+{
+    [LoggerMessage(EventId = 1, Level = LogLevel.Warning, Message = "Dropping non-text content block(s): {Provider} does not support vision yet")]
+    public static partial void DroppingNonTextContent(ILogger logger, string provider);
+
+    [LoggerMessage(EventId = 2, Level = LogLevel.Warning, Message = "Tool-call chunk(s) arrived without a wire id; fell back to positional ids (remaps={Remaps}). Out-of-order deltas may desync agent/store tool_call_id.")]
+    public static partial void ToolCallIdFallback(ILogger logger, int remaps);
+
+    [LoggerMessage(EventId = 3, Level = LogLevel.Warning, Message = "{Label} error {Status}: {Snippet}")]
+    public static partial void ProviderError(ILogger logger, string label, int status, string snippet);
+
+    [LoggerMessage(EventId = 4, Level = LogLevel.Warning, Message = "{Label} stream failed: {Message}")]
+    public static partial void StreamFailed(ILogger logger, Exception ex, string label, string message);
 }
