@@ -15,10 +15,21 @@ public enum GenericColumnAlign
 /// markdown primitive; this is the neutral container future generic screens
 /// (diagnostics, model lists, eval reports) paint without touching chat.
 /// Height is width-independent: columns truncate with an ellipsis, never wrap.
+///
+/// Row selection lives outside the widget (#1158, ratatui
+/// <c>StatefulWidget</c> analog): <see cref="State"/> survives frames and owns
+/// selection + scroll, while this type owns content and geometry.
+/// <see cref="Paint(ScreenBuffer, Rect, GenericNavState)"/> renders with any
+/// compatible state, so two tables can share one. The legacy
+/// <see cref="SelectedRow"/> + <see cref="Paint(ScreenBuffer, Rect)"/> path is
+/// unchanged (no scroll, explicit -1 = none).
 /// </summary>
-public sealed class GenericTable
+public sealed class GenericTable : IStatefulGenericWidget<GenericNavState>
 {
     private const int MinCell = 3;
+
+    /// <summary>Frame lines around the body: top rule, header, mid rule, bottom rule.</summary>
+    private const int FrameH = 4;
 
     private const char H = '─';
     private const char V = '│';
@@ -35,6 +46,15 @@ public sealed class GenericTable
     private readonly List<string> _headers = new();
     private readonly List<string[]> _rows = new();
     private List<GenericColumnAlign> _aligns = new();
+    private readonly GenericNavState _state = new();
+
+    /// <summary>
+    /// External navigation state (selection + scroll), count-synced with
+    /// <see cref="Rows"/> on every <see cref="AddRow"/>/<see cref="ClearRows"/>.
+    /// Mutating it directly (e.g. <see cref="GenericNavState.SelectNext"/>) drives
+    /// the <see cref="Paint(ScreenBuffer, Rect, GenericNavState)"/> overload.
+    /// </summary>
+    public GenericNavState State => _state;
 
     /// <summary>Headers in column order.</summary>
     public IReadOnlyList<string> Headers => _headers;
@@ -46,6 +66,11 @@ public sealed class GenericTable
     public int Columns => _headers.Count;
 
     /// <summary>Selected body row (-1 = none); painted reversed when set.</summary>
+    /// <remarks>
+    /// Legacy path for <see cref="Paint(ScreenBuffer, Rect)"/> only — kept so a
+    /// display table can express "no selection". Hosts that want shared/scrolling
+    /// selection use <see cref="State"/> + the stateful <c>Paint</c> overload.
+    /// </remarks>
     public int SelectedRow { get; set; } = -1;
 
     /// <summary>Replaces the headers (copied; null entries coerce to empty).</summary>
@@ -76,13 +101,18 @@ public sealed class GenericTable
         }
 
         _rows.Add(row);
+        _state.SetContent(_rows.Count);
     }
 
     /// <summary>Clears body rows (headers survive).</summary>
-    public void ClearRows() => _rows.Clear();
+    public void ClearRows()
+    {
+        _rows.Clear();
+        _state.SetContent(0);
+    }
 
     /// <summary>Painted height for <paramref name="rowCount"/> body rows: frame + header + rows.</summary>
-    public static int HeightFor(int rowCount) => Math.Max(0, rowCount) + 4;
+    public static int HeightFor(int rowCount) => Math.Max(0, rowCount) + FrameH;
 
     /// <summary>Total painted height for the current rows.</summary>
     public int DesiredHeight => HeightFor(_rows.Count);
@@ -154,7 +184,22 @@ public sealed class GenericTable
     }
 
     /// <summary>Paints the frame, header and body rows at <paramref name="rect"/>.</summary>
-    public void Paint(ScreenBuffer buffer, Rect rect)
+    /// <remarks>Legacy path: highlights <see cref="SelectedRow"/>, no scrolling.</remarks>
+    public void Paint(ScreenBuffer buffer, Rect rect) => PaintCore(buffer, rect, SelectedRow, 0);
+
+    /// <inheritdoc />
+    public void Paint(ScreenBuffer buffer, Rect rect, GenericNavState state)
+    {
+        ArgumentNullException.ThrowIfNull(state);
+        int capacity = Math.Max(0, rect.Height - FrameH);
+        state.Sync(Math.Max(1, capacity));
+        bool shared = state.Count == _rows.Count;
+        int selected = shared ? state.Selected : SelectedRow;
+        int offset = shared ? state.Offset : 0;
+        PaintCore(buffer, rect, selected, offset);
+    }
+
+    private void PaintCore(ScreenBuffer buffer, Rect rect, int selected, int offset)
     {
         ArgumentNullException.ThrowIfNull(buffer);
         if (rect.Width <= 0 || rect.Height <= 0 || _headers.Count == 0)
@@ -186,11 +231,11 @@ public sealed class GenericTable
         PaintRule(buffer, rect.X, y, widths, Lt, Rt, Md, borderStyle);
         y++;
 
-        for (int r = 0; r < _rows.Count && y < rect.Y + rect.Height - 1; r++, y++)
+        for (int r = Math.Max(0, offset); r < _rows.Count && y < rect.Y + rect.Height - 1; r++, y++)
         {
             var cells = new List<string>(_rows[r]);
-            bool selected = r == SelectedRow;
-            PaintRow(buffer, rect.X, y, widths, cells, selected ? selectedStyle : bodyStyle, borderStyle);
+            bool isSelected = r == selected;
+            PaintRow(buffer, rect.X, y, widths, cells, isSelected ? selectedStyle : bodyStyle, borderStyle);
         }
 
         if (y < rect.Y + rect.Height)
