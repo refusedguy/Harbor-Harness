@@ -16,7 +16,7 @@ internal static class ConfigVerb
 {
     internal static async Task<int> RunAsync(ILogger logger, string[] args)
     {
-        logger.LogInformation("Starting config command");
+        ConfigVerbLog.StartingConfig(logger);
         using var host = HostBuilder.Build(args);
         var configStore = host.Services.GetRequiredService<IConfigStore>();
         var writer = (Action<string>)Console.WriteLine;
@@ -30,4 +30,14 @@ internal static class ConfigVerb
         var configResult = await cmd.ExecuteAsync(args, ctx).ConfigureAwait(false);
         return configResult.IsSuccess ? 0 : 1;
     }
+}
+
+/// <summary>
+///     SG6: BCL <c>[LoggerMessage]</c> delegates for <see cref="ConfigVerb" />.
+///     Templates, levels and operands are 1-to-1 with the former <c>LogX</c> calls.
+/// </summary>
+internal static partial class ConfigVerbLog
+{
+    [LoggerMessage(EventId = 1, Level = LogLevel.Information, Message = "Starting config command")]
+    public static partial void StartingConfig(ILogger logger);
 }

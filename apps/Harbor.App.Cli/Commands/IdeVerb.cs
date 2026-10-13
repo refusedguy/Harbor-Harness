@@ -20,8 +20,18 @@ internal static class IdeVerb
         if (string.IsNullOrEmpty(Environment.GetEnvironmentVariable("HARBOR_MODE")))
             Environment.SetEnvironmentVariable("HARBOR_MODE", "ipc-client");
 
-        logger.LogInformation("Starting IDE bridge (attach mode)");
+        IdeVerbLog.StartingIdeBridge(logger);
         using var host = HostBuilder.Build(args);
         return await IdeBridgeRunner.RunAsync(host.Services, args).ConfigureAwait(false);
     }
+}
+
+/// <summary>
+///     SG6: BCL <c>[LoggerMessage]</c> delegates for <see cref="IdeVerb" />.
+///     Templates, levels and operands are 1-to-1 with the former <c>LogX</c> calls.
+/// </summary>
+internal static partial class IdeVerbLog
+{
+    [LoggerMessage(EventId = 1, Level = LogLevel.Information, Message = "Starting IDE bridge (attach mode)")]
+    public static partial void StartingIdeBridge(ILogger logger);
 }
