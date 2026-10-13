@@ -9,7 +9,7 @@ internal static class HttpClientsModule
         this IServiceCollection services,
         HarborCompositionContext ctx)
     {
-        ctx.Logger.LogInformation("Registering HTTP clients");
+        HttpClientsModuleLog.RegisteringHttpClients(ctx.Logger);
         services.AddHttpClient("ollama");
         if (ctx.Options.Features.AllProviders)
         {
@@ -20,8 +20,21 @@ internal static class HttpClientsModule
         }
         else
         {
-            ctx.Logger.LogInformation("HARBOR_WITH_ALL_PROVIDERS=false — registered only the ollama HTTP client");
+            HttpClientsModuleLog.OllamaOnlyHttpClients(ctx.Logger);
         }
         return services;
     }
+}
+
+/// <summary>
+///     SG4: BCL <c>[LoggerMessage]</c> delegates for <see cref="HttpClientsModule" />.
+///     Templates, levels and operands are 1-to-1 with the former <c>LogX</c> calls.
+/// </summary>
+internal static partial class HttpClientsModuleLog
+{
+    [LoggerMessage(EventId = 1, Level = LogLevel.Information, Message = "Registering HTTP clients")]
+    public static partial void RegisteringHttpClients(ILogger logger);
+
+    [LoggerMessage(EventId = 2, Level = LogLevel.Information, Message = "HARBOR_WITH_ALL_PROVIDERS=false — registered only the ollama HTTP client")]
+    public static partial void OllamaOnlyHttpClients(ILogger logger);
 }

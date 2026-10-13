@@ -231,7 +231,7 @@ single**. If you add a fourth registry, copy `SessionStoreRegistry`, not
 **The convention.** Cross-cutting policy is a decorator registered **at the DI
 boundary**, wrapping the concrete instance. Three sites, same shape:
 
-- `src/Harbor.Hosting/Modules/RegistriesModule.cs:115-121`:
+- `src/Harbor.Hosting/Modules/RegistriesModule.cs:102-105`:
   ```csharp
   // sprint3-C C1: instrument at the DI boundary. Plugins keep mutating the
   // RAW registries (ctx.Registries) before Freeze; consumers resolving the

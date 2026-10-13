@@ -86,11 +86,21 @@ public sealed class RuntimeRendererSwapMiddleware
             return false;
         }
 
-        _logger.LogDebug("Runtime swap to {Backend} resolved", backendId);
+        RuntimeRendererSwapMiddlewareLog.SwapResolved(_logger, backendId);
         return true;
     }
 
     private static HashSet<string> ParseList(string csv) =>
         [.. csv.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
             .Select(static s => s.ToLowerInvariant())];
+}
+
+/// <summary>
+///     SG4: BCL <c>[LoggerMessage]</c> delegates for <see cref="RuntimeRendererSwapMiddleware" />.
+///     Templates, levels and operands are 1-to-1 with the former <c>LogX</c> calls.
+/// </summary>
+internal static partial class RuntimeRendererSwapMiddlewareLog
+{
+    [LoggerMessage(EventId = 1, Level = LogLevel.Debug, Message = "Runtime swap to {Backend} resolved")]
+    public static partial void SwapResolved(ILogger logger, string backend);
 }

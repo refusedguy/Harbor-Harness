@@ -26,7 +26,7 @@ internal static class CoreModule
         this IServiceCollection services,
         HarborCompositionContext ctx)
     {
-        ctx.Logger.LogInformation("Registering core services");
+        CoreModuleLog.RegisteringCoreServices(ctx.Logger);
 
         services.AddSingleton<AuthStore>();
         // #582: the agent step of the wizard is a PROJECTION of the agent registry.
@@ -116,4 +116,14 @@ internal static class CoreModule
 
         return services;
     }
+}
+
+/// <summary>
+///     SG4: BCL <c>[LoggerMessage]</c> delegates for <see cref="CoreModule" />.
+///     Templates, levels and operands are 1-to-1 with the former <c>LogX</c> calls.
+/// </summary>
+internal static partial class CoreModuleLog
+{
+    [LoggerMessage(EventId = 1, Level = LogLevel.Information, Message = "Registering core services")]
+    public static partial void RegisteringCoreServices(ILogger logger);
 }

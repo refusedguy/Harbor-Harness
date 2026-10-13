@@ -89,7 +89,7 @@ public sealed class RendererPipeline : IRendererPipeline
 
         if (string.Equals(published.BackendId, backendId, StringComparison.OrdinalIgnoreCase))
         {
-            _logger.LogDebug("Swap to {Backend} skipped: already active", backendId);
+            RendererPipelineLog.SwapSkippedAlreadyActive(_logger, backendId);
             return true;
         }
 
@@ -101,7 +101,7 @@ public sealed class RendererPipeline : IRendererPipeline
 
         if (factory is null)
         {
-            _logger.LogWarning("Swap to {Backend} refused: backend not registered", backendId);
+            RendererPipelineLog.SwapRefusedNotRegistered(_logger, backendId);
             return false;
         }
 
@@ -109,7 +109,7 @@ public sealed class RendererPipeline : IRendererPipeline
         // blocking lock. A concurrent swap fails fast — the caller can retry.
         if (Interlocked.CompareExchange(ref _swapGate, 1, 0) != 0)
         {
-            _logger.LogWarning("Swap to {Backend} refused: another swap in flight", backendId);
+            RendererPipelineLog.SwapRefusedInFlight(_logger, backendId);
             return false;
         }
 
@@ -119,7 +119,7 @@ public sealed class RendererPipeline : IRendererPipeline
             RendererSwapping?.Invoke(this, swapping);
             if (swapping.Cancel)
             {
-                _logger.LogInformation("Swap to {Backend} cancelled by a RendererSwapping handler", backendId);
+                RendererPipelineLog.SwapCancelledByHandler(_logger, backendId);
                 return false;
             }
 
@@ -127,7 +127,7 @@ public sealed class RendererPipeline : IRendererPipeline
             Result init = await next.InitializeAsync(ct).ConfigureAwait(false);
             if (init.IsFailure)
             {
-                _logger.LogError("Swap to {Backend} aborted: initialization failed ({Error})", backendId, init.Error);
+                RendererPipelineLog.SwapAbortedInitFailed(_logger, backendId, init.Error);
                 next.Dispose();
                 return false;
             }
@@ -144,7 +144,7 @@ public sealed class RendererPipeline : IRendererPipeline
             // Dispose the old renderer exactly once, after publication.
             published.Renderer.Dispose();
 
-            _logger.LogInformation("Renderer swapped: {From} → {To}", published.BackendId, backendId);
+            RendererPipelineLog.RendererSwapped(_logger, published.BackendId, backendId);
             return true;
         }
         finally
@@ -174,7 +174,7 @@ public sealed class RendererPipeline : IRendererPipeline
             {
                 // A failed line write is logged, not thrown — a partial
                 // restore beats aborting an already-published swap.
-                _logger.LogWarning("State restore line failed: {Error}", written.Error);
+                RendererPipelineLog.StateRestoreLineFailed(_logger, written.Error);
             }
         }
     }
@@ -188,4 +188,32 @@ public sealed class RendererPipeline : IRendererPipeline
         published?.Renderer.Dispose();
         _current = null;
     }
+}
+
+/// <summary>
+///     SG4: BCL <c>[LoggerMessage]</c> delegates for <see cref="RendererPipeline" />.
+///     Templates, levels and operands are 1-to-1 with the former <c>LogX</c> calls.
+/// </summary>
+internal static partial class RendererPipelineLog
+{
+    [LoggerMessage(EventId = 1, Level = LogLevel.Debug, Message = "Swap to {Backend} skipped: already active")]
+    public static partial void SwapSkippedAlreadyActive(ILogger logger, string backend);
+
+    [LoggerMessage(EventId = 2, Level = LogLevel.Warning, Message = "Swap to {Backend} refused: backend not registered")]
+    public static partial void SwapRefusedNotRegistered(ILogger logger, string backend);
+
+    [LoggerMessage(EventId = 3, Level = LogLevel.Warning, Message = "Swap to {Backend} refused: another swap in flight")]
+    public static partial void SwapRefusedInFlight(ILogger logger, string backend);
+
+    [LoggerMessage(EventId = 4, Level = LogLevel.Information, Message = "Swap to {Backend} cancelled by a RendererSwapping handler")]
+    public static partial void SwapCancelledByHandler(ILogger logger, string backend);
+
+    [LoggerMessage(EventId = 5, Level = LogLevel.Error, Message = "Swap to {Backend} aborted: initialization failed ({Error})")]
+    public static partial void SwapAbortedInitFailed(ILogger logger, string backend, string error);
+
+    [LoggerMessage(EventId = 6, Level = LogLevel.Information, Message = "Renderer swapped: {From} → {To}")]
+    public static partial void RendererSwapped(ILogger logger, string from, string to);
+
+    [LoggerMessage(EventId = 7, Level = LogLevel.Warning, Message = "State restore line failed: {Error}")]
+    public static partial void StateRestoreLineFailed(ILogger logger, string error);
 }

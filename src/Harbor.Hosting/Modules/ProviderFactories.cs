@@ -68,7 +68,7 @@ internal static class ProviderFactories
         }
 
         registry.Freeze();
-        ctx.Logger.LogInformation("Registered providers: {Count}", registry.GetRegisteredProviderIds().Count);
+        ProviderFactoriesLog.ProvidersRegistered(ctx.Logger, registry.GetRegisteredProviderIds().Count);
         return registry;
     }
 }
@@ -148,4 +148,14 @@ internal sealed class DesktopOllamaProviderFactory : IProviderFactory
         _httpClient,
         new OllamaConfig(),
         loggerFactory.CreateLogger<OllamaLlmClient>());
+}
+
+/// <summary>
+///     SG4: BCL <c>[LoggerMessage]</c> delegates for <see cref="ProviderFactories" />.
+///     Templates, levels and operands are 1-to-1 with the former <c>LogX</c> calls.
+/// </summary>
+internal static partial class ProviderFactoriesLog
+{
+    [LoggerMessage(EventId = 1, Level = LogLevel.Information, Message = "Registered providers: {Count}")]
+    public static partial void ProvidersRegistered(ILogger logger, int count);
 }

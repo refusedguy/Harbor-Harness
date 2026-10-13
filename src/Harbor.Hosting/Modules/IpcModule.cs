@@ -29,7 +29,7 @@ internal static class IpcModule
         HarborCompositionContext ctx)
     {
         string mode = Environment.GetEnvironmentVariable("HARBOR_MODE") ?? "inprocess";
-        ctx.Logger.LogInformation("HARBOR_MODE = {Mode}", mode);
+        IpcModuleLog.HarborMode(ctx.Logger, mode);
 
         string pipeName = Environment.GetEnvironmentVariable("HARBOR_IPC_PIPE") ?? "harbor-ipc";
 
@@ -91,8 +91,7 @@ internal static class IpcModule
         }
 
         string bindText = bindAddress.Value.ToString();
-        ctx.Logger.LogInformation(
-            "Networked IPC listener: {ListenOn} → {Address}:{Port} (PSK-gated)", listenOn, bindText, port);
+        IpcModuleLog.NetworkedListener(ctx.Logger, listenOn, bindText, port);
 
         services.AddSingleton<IHarborServer>(sp =>
         {
@@ -116,4 +115,17 @@ internal static class IpcModule
         services.AddSingleton(new DaemonPairingInfo(advertiseHost, port, psk.Value));
     }
 #endif
+}
+
+/// <summary>
+///     SG4: BCL <c>[LoggerMessage]</c> delegates for <see cref="IpcModule" />.
+///     Templates, levels and operands are 1-to-1 with the former <c>LogX</c> calls.
+/// </summary>
+internal static partial class IpcModuleLog
+{
+    [LoggerMessage(EventId = 1, Level = LogLevel.Information, Message = "HARBOR_MODE = {Mode}")]
+    public static partial void HarborMode(ILogger logger, string mode);
+
+    [LoggerMessage(EventId = 2, Level = LogLevel.Information, Message = "Networked IPC listener: {ListenOn} → {Address}:{Port} (PSK-gated)")]
+    public static partial void NetworkedListener(ILogger logger, string? listenOn, string address, int port);
 }

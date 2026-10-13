@@ -63,7 +63,7 @@ internal static class JsonProviderDiscovery
                     var result = Harbor.Providers.OpenAiCompatible.ProviderConfig.LoadFromFile(file);
                     if (result.IsFailure) // §4.6-ok: discovery-резильенс — skip-and-log, битый файл не валид discovery.
                     {
-                        logger.LogWarning("Skipping provider config '{File}': {Error}", file, result.Error);
+                        JsonProviderDiscoveryLog.SkippingProviderConfig(logger, file, result.Error);
                         continue;
                     }
                     #pragma warning disable CFE0001
@@ -73,13 +73,12 @@ internal static class JsonProviderDiscovery
                     #pragma warning restore CFE0001
                     if (config.ApiType != "openai-compatible")
                     {
-                        logger.LogDebug("Skipping provider '{Id}' (apiType={Type}, not openai-compatible)",
-                            config.Id, config.ApiType);
+                        JsonProviderDiscoveryLog.SkippingNonCompatProvider(logger, config.Id, config.ApiType);
                         continue;
                     }
                     if (!seenIds.Add(config.Id))
                     {
-                        logger.LogDebug("Skipping duplicate provider '{Id}' from '{File}'", config.Id, file);
+                        JsonProviderDiscoveryLog.SkippingDuplicateProvider(logger, config.Id, file);
                         continue;
                     }
 
@@ -89,11 +88,11 @@ internal static class JsonProviderDiscovery
                     pb.AddProvider(config.Id, () => new Harbor.Providers.OpenAiCompatible.OpenAiCompatibleLlmClient(
                         http, configRef, authResolver, modelCatalog,
                         loggerFactory.CreateLogger<Harbor.Providers.OpenAiCompatible.OpenAiCompatibleLlmClient>()));
-                    logger.LogInformation("Registered OpenAI-compatible provider '{Id}' from '{File}'", config.Id, file);
+                    JsonProviderDiscoveryLog.ProviderRegistered(logger, config.Id, file);
                 }
                 catch (Exception ex)
                 {
-                    logger.LogError(ex, "Failed to load provider config '{File}'", file);
+                    JsonProviderDiscoveryLog.LoadProviderConfigFailed(logger, ex, file);
                 }
             }
         }
@@ -197,4 +196,26 @@ public static void RegisterJsonProviders(
             Console.Error.WriteLine($"Failed to register provider: {ex.Message}");
         }
     }
+}
+
+/// <summary>
+///     SG4: BCL <c>[LoggerMessage]</c> delegates for <see cref="JsonProviderDiscovery" />.
+///     Templates, levels and operands are 1-to-1 with the former <c>LogX</c> calls.
+/// </summary>
+internal static partial class JsonProviderDiscoveryLog
+{
+    [LoggerMessage(EventId = 1, Level = LogLevel.Warning, Message = "Skipping provider config '{File}': {Error}")]
+    public static partial void SkippingProviderConfig(ILogger logger, string file, string error);
+
+    [LoggerMessage(EventId = 2, Level = LogLevel.Debug, Message = "Skipping provider '{Id}' (apiType={Type}, not openai-compatible)")]
+    public static partial void SkippingNonCompatProvider(ILogger logger, string id, string type);
+
+    [LoggerMessage(EventId = 3, Level = LogLevel.Debug, Message = "Skipping duplicate provider '{Id}' from '{File}'")]
+    public static partial void SkippingDuplicateProvider(ILogger logger, string id, string file);
+
+    [LoggerMessage(EventId = 4, Level = LogLevel.Information, Message = "Registered OpenAI-compatible provider '{Id}' from '{File}'")]
+    public static partial void ProviderRegistered(ILogger logger, string id, string file);
+
+    [LoggerMessage(EventId = 5, Level = LogLevel.Error, Message = "Failed to load provider config '{File}'")]
+    public static partial void LoadProviderConfigFailed(ILogger logger, Exception ex, string file);
 }

@@ -46,7 +46,7 @@ internal static class StorageModule
                 $"Unknown HARBOR_STORAGE: '{requested}'. Expected one of: {string.Join(", ", registry.Keys.Order(StringComparer.Ordinal))}.");
         }
 
-        ctx.Logger.LogInformation("Storage backend: {Storage}", factory.Value.BackendId);
+        StorageModuleLog.StorageBackend(ctx.Logger, factory.Value.BackendId);
 
         services.AddSingleton<ISessionStore>(sp => factory.Value.Create(sp, sessionsDir, sqlitePath));
         // Session import/export works over ANY registered backend: the porter reads via
@@ -54,4 +54,14 @@ internal static class StorageModule
         services.AddSingleton<ISessionPorter, JsonlSessionPorter>();
         return services;
     }
+}
+
+/// <summary>
+///     SG4: BCL <c>[LoggerMessage]</c> delegates for <see cref="StorageModule" />.
+///     Templates, levels and operands are 1-to-1 with the former <c>LogX</c> calls.
+/// </summary>
+internal static partial class StorageModuleLog
+{
+    [LoggerMessage(EventId = 1, Level = LogLevel.Information, Message = "Storage backend: {Storage}")]
+    public static partial void StorageBackend(ILogger logger, string storage);
 }
