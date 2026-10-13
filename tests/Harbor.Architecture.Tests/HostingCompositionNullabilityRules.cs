@@ -36,6 +36,20 @@
 // Runs as part of the build via the HarborArchitectureGate target in
 // Directory.Build.props, so a re-introduced `null!` fails CI without anyone
 // remembering to run this project.
+//
+// MECHANISM (#1086, step 2, conveyor g2)
+// -------------------------------------
+// The ban below is a ScanRule: the shared `SourceNullabilityScan.NullForgivingOnNull`
+// verdict as one documented shape, no baseline, three planted controls, a discovery
+// floor. Enumeration, matching and the control/discovery verdicts are ScanRunner's;
+// this file keeps the issue prose and the test names.
+//
+// No Func-overload: the tabular line scan IS the old scanner — `Collect` strips
+// with the shared `SourceScan.StripComments` and matches the shared verdict per
+// line, which is byte-for-byte what `SourceNullabilityScan.FindNullForgivingNull`
+// did. The scope is `src/Harbor.Hosting` verbatim: no nested tests/ or contrib/
+// directory exists under it, so the runner's walk yields the same set the old
+// slice walk did.
 
 namespace Harbor.Architecture.Tests;
 
@@ -47,6 +61,58 @@ public class HostingCompositionNullabilityRules
 {
     /// <summary>The slice this gate covers — <c>src/&lt;name&gt;</c>.</summary>
     private const string Slice = "Harbor.Hosting";
+
+    /// <summary>Repo-relative trees for the rule's scope — the slice verbatim.</summary>
+    private static readonly string[] SliceTrees = ["src/Harbor.Hosting"];
+
+    /// <summary>The one banned shape, as data; the grading is the shared verdict.</summary>
+    private const string NullForgiving = "NULL-FORGIVING-NULL";
+
+    /// <summary>
+    ///     The ban as data: the shared null-forgiving verdict over the composition
+    ///     root, no baseline, three planted controls, the slice itself as the floor.
+    /// </summary>
+    private static readonly ScanRule NullRule = new()
+    {
+        Id = "HostingCompositionNullability.NoNullForgivingNull",
+        Trees = SliceTrees,
+        Forbidden =
+        [
+            new ScanForbidden(
+                NullForgiving,
+                SourceNullabilityScan.NullForgivingOnNull,
+                "a `null!` in the composition root is a wrong module order waiting to happen: "
+                + "a value assigned by one AddHarbor module and read by another is not checked by "
+                + "the compiler. Assign such a member through a set-once setter that throws by name, "
+                + "or take it as a constructor argument. See issue #562."),
+        ],
+        Controls =
+        [
+            // Verbatim HarborCompositionContext.cs as it shipped — the #562 spelling.
+            new ScanControl("Shipped.cs", """
+                public IEventBus EventBus { get; internal set; } = null!;
+                """, NullForgiving),
+            // The fixed spelling: a get-only member assigned once in the constructor.
+            new ScanControl("Fixed.cs", """
+                public HarborRegistries Registries { get; }
+                public HarborCompositionContext(HarborRegistries registries) { Registries = registries; }
+                """, null),
+            // A comment documenting the old spelling is prose, not a violation: the
+            // operator sits on a comment line, so the silence below is earned by the
+            // comment stripper rather than by an accidental absence.
+            new ScanControl("Documented.cs", """
+                // Was `= null!` before the registries became constructor arguments (#562).
+                public HarborRegistries Registries { get; }
+                """, null),
+        ],
+        // Mirrors Assert_HostingSliceIsDiscoverable below (`> 0`): the floor is
+        // deliberately low — the point is that the scan RAN, not how much it covered.
+        MinHits = 1,
+        MustContain =
+        [
+            "src/Harbor.Hosting/HarborCompositionContext.cs",
+        ],
+    };
 
     /// <summary>
     ///     The five members #562 removed, spelled out so the failure message
@@ -66,10 +132,7 @@ public class HostingCompositionNullabilityRules
     [Test]
     public async Task Assert_NoNullForgivingNullInHostingCompositionRoot()
     {
-        List<string> violations =
-        [
-            .. SourceNullabilityScan.FindNullForgivingNull(SourceNullabilityScan.EnumerateSources(Slice)),
-        ];
+        List<string> violations = ScanRunner.Evaluate(NullRule);
 
         await Assert.That(violations).IsEmpty()
             .Because(
@@ -97,5 +160,120 @@ public class HostingCompositionNullabilityRules
             .Because("Harbor.slnx must sit above the test host, or the null-forgiving gate checks nothing.");
         await Assert.That(sources.Count).IsGreaterThan(0)
             .Because($"expected the composition root slice (src/{Slice}); found {sources.Count}.");
+    }
+
+    /// <summary>
+    ///     The shared verdict flags the shipped spelling through the rule's own
+    ///     matcher: a miss means the rule is inert and its passing means nothing.
+    /// </summary>
+    [Test]
+    public async Task Matcher_FlagsTheNullForgivingSpelling()
+    {
+        const string Shipped = "public IEventBus EventBus { get; internal set; } = null!;";
+
+        await Assert.That(ScanRunner.Collect(NullRule, [("probe.cs", Shipped)]).Count).IsGreaterThan(0)
+            .Because("the `= null!` spelling is a real positive control; a miss means the rule is inert.");
+    }
+
+    /// <summary>
+    ///     The fixed spelling must not be flagged, or the guard cannot be adopted.
+    /// </summary>
+    [Test]
+    public async Task Matcher_AcceptsTheConstructorAssignedSpelling()
+    {
+        const string Fixed = "public HarborRegistries Registries { get; }";
+
+        await Assert.That(ScanRunner.Collect(NullRule, [("probe.cs", Fixed)]).Count).IsEqualTo(0)
+            .Because("a get-only member assigned in the constructor is the fix; flagging it would make the rule unsatisfiable.");
+    }
+
+    /// <summary>
+    ///     A comment documenting the old spelling is prose, not a violation — and the
+    ///     second assertion proves the silence is earned by the comment stripper.
+    /// </summary>
+    [Test]
+    public async Task Matcher_IgnoresTheCommentDocumentingTheOldSpelling()
+    {
+        const string DocLine = "// Was `= null!` before the registries became constructor arguments (#562).";
+        const string Documented = """
+            // Was `= null!` before the registries became constructor arguments (#562).
+            public HarborRegistries Registries { get; }
+            """;
+
+        await Assert.That(ScanRunner.Collect(NullRule, [("probe.cs", Documented)]).Count).IsEqualTo(0)
+            .Because(
+                "StripComments runs before this matcher, so a contributor documenting WHY the member is no "
+                + "longer null-forgiving must not fail the gate.");
+
+        await Assert.That(SourceNullabilityScan.NullForgivingOnNull.IsMatch(DocLine)).IsTrue()
+            .Because(
+                "Positive control for the assertion above: with the comment stripper out of the path this "
+                + "line is a violation, which is exactly the false positive the stripper exists to remove. "
+                + "If this ever goes false the assertion above stops proving anything.");
+    }
+
+    /// <summary>
+    ///     The planted controls — the shipped spelling and both fixed ones — drive
+    ///     the REAL matcher: the offender reported under its sub-id, the fixes silent.
+    /// </summary>
+    [Test]
+    public async Task Detector_ControlsDriveTheRealParser()
+    {
+        List<string> failures = ScanRunner.CheckControls(NullRule);
+
+        await Assert.That(failures).IsEmpty()
+            .Because(
+                "the three planted controls must agree with the three Matcher cases above through "
+                + "the rule's own parser — otherwise the rule guards nothing, or forbids the fix. "
+                + string.Join("; ", failures));
+    }
+
+    /// <summary>
+    ///     The rule's own scope really yields the composition root including
+    ///     HarborCompositionContext, so "no `null!`" means "nobody writes it"
+    ///     rather than "the walk saw nothing".
+    /// </summary>
+    [Test]
+    public async Task Scanner_SeesHostingSources()
+    {
+        List<string> discovery = ScanRunner.CheckDiscovery(NullRule);
+
+        await Assert.That(discovery).IsEmpty()
+            .Because(
+                "src/Harbor.Hosting holds the composition root including HarborCompositionContext. "
+                + "An empty scope — or one that stopped seeing that file — means the tree walk broke "
+                + "and the rule above would be reporting 'clean' about nothing. "
+                + string.Join("; ", discovery));
+    }
+
+    /// <summary>
+    ///     Every baseline row states why it is tolerated, in the row itself. Vacuous
+    ///     while the table is empty, and deliberately so: it is wired from the first
+    ///     row so the first row cannot skip the argument.
+    /// </summary>
+    [Test]
+    public async Task Baseline_Rows_AllHaveReasons()
+    {
+        List<string> failures = ScanRunner.CheckReasons(NullRule);
+
+        await Assert.That(failures).IsEmpty().Because(string.Join("\n", failures));
+    }
+
+    /// <summary>
+    ///     Every baseline row must still correspond to a real hit, so the table
+    ///     cannot rot into a blanket permission: fix the code without deleting the
+    ///     row and this fails.
+    /// </summary>
+    [Test]
+    public async Task Baseline_Rows_Are_Not_Stale()
+    {
+        List<string> stale = ScanRunner.StaleBaselineKeys(
+            NullRule, ScanRunner.ReadSources(ScanRunner.ScopeFiles(NullRule)));
+
+        await Assert.That(stale).IsEmpty()
+            .Because(
+                "A baseline row that no longer matches reality is a lie: the site was fixed (or the file "
+                + "left the scope), the row grandfathers nothing and hides the next real violation. "
+                + Environment.NewLine + string.Join(Environment.NewLine, stale));
     }
 }
