@@ -134,22 +134,66 @@ internal sealed class SplitNode
     public SplitNode? B { get; set; }
 
     /// <summary>
+    /// N-ary Row/Column children (#1211): when non-null this node is a stack
+    /// container solved by seating <see cref="FlexLayout.Arrange"/> inside
+    /// <c>SolveNode</c> (the solver exists; ownership was missing). Null means
+    /// binary/leaf. Parallel to <see cref="Tracks"/> (one track per child).
+    /// </summary>
+    public List<SplitNode>? Children { get; set; }
+
+    /// <summary>One <see cref="FlexTrack"/> per entry in <see cref="Children"/>.</summary>
+    public List<FlexTrack>? Tracks { get; set; }
+
+    /// <summary>True while this node is an n-ary Row/Column container.</summary>
+    public bool IsStack => Children is not null;
+
+    /// <summary>
     /// Minimum extent along a split axis. Along the node's own axis children
     /// stack (sum + gap); along the cross axis they share the extent (max) —
     /// this is what lets a horizontal mascot split nest inside the vertical
     /// composer⇄status split without inflating the tree's row minimum.
+    /// Stacks sum/max over all children with a gap between each pair.
     /// </summary>
-    public int MinAlong(SplitDir dir) => Leaf is not null
-        ? Leaf.MinAlong(dir)
-        : dir == Dir
+    public int MinAlong(SplitDir dir)
+    {
+        if (Leaf is not null)
+            return Leaf.MinAlong(dir);
+        if (Children is not null)
+        {
+            if (Children.Count == 0)
+                return 0;
+            if (dir == Dir)
+            {
+                int sum = 0;
+                foreach (var c in Children)
+                    sum += c.MinAlong(dir);
+                return sum + GapSize * (Children.Count - 1);
+            }
+
+            int max = 0;
+            foreach (var c in Children)
+                max = Math.Max(max, c.MinAlong(dir));
+            return max;
+        }
+
+        return dir == Dir
             ? A!.MinAlong(dir) + B!.MinAlong(dir) + GapSize
             : Math.Max(A!.MinAlong(dir), B!.MinAlong(dir));
+    }
 
     public IEnumerable<Panel> Panels()
     {
         if (Leaf is not null)
         {
             yield return Leaf;
+            yield break;
+        }
+
+        if (Children is not null)
+        {
+            foreach (var c in Children)
+                foreach (var p in c.Panels())
+                    yield return p;
             yield break;
         }
 
@@ -217,8 +261,10 @@ internal static class SplitRatio
 }
 
 /// <summary>
-/// Binary split tree with water-filling solver honoring per-panel minimums
-/// and priority-based collapse (celldiff §5.1). Solved results are cached by
+/// Split tree with water-filling solver honoring per-panel minimums
+/// and priority-based collapse (celldiff §5.1). Binary splits divide two
+/// children by ratio (SC2 #1210 <see cref="SplitRatio"/>); n-ary Row/Column stacks (#1211) seat
+/// <see cref="FlexLayout.Arrange"/> for 3+ children. Solved results are cached by
 /// (width, height, capsVer) in an LRU capped at <see cref="MaxCachedLayouts"/>
 /// entries (ENG3 #274, Ratatui lesson) — repeated frames at the same geometry
 /// replay in O(panels); any tree mutation bumps capsVer.
@@ -387,6 +433,76 @@ public sealed class LayoutTree
         target.B = new SplitNode(newPanel);
         target.Leaf = null;
         Register(newPanel);
+        _capsVer++;
+    }
+
+    /// <summary>
+    /// N-ary Row (#1211): wraps the leaf <paramref name="panelId"/> into a
+    /// horizontal stack with the anchor kept as the first child and
+    /// <paramref name="panels"/> appended. Each child defaults to an equal
+    /// flexible share floored at its minimum. Unblocks 3+ column screens
+    /// (dialog button rows) past the binary tree.
+    /// </summary>
+    public void AddRow(string panelId, IReadOnlyList<Panel> panels, byte gap = 1) =>
+        AddStack(panelId, SplitDir.Horizontal, panels, tracks: null, gap);
+
+    /// <summary>
+    /// N-ary Column (#1211): vertical analogue of <see cref="AddRow"/> for 3+
+    /// stacked rows (dialog frames: header + body + footer).
+    /// </summary>
+    public void AddColumn(string panelId, IReadOnlyList<Panel> panels, byte gap = 1) =>
+        AddStack(panelId, SplitDir.Vertical, panels, tracks: null, gap);
+
+    /// <summary>
+    /// N-ary Row/Column with explicit per-child constraints (#1211): seats
+    /// <see cref="FlexLayout.Arrange"/> inside <c>SolveNode</c> — the solver
+    /// exists, ownership was missing. <paramref name="tracks"/> holds one
+    /// entry per panel in <paramref name="panels"/> (the anchor keeps an
+    /// equal flexible share floored at its minimum).
+    /// </summary>
+    /// <exception cref="ArgumentException"><paramref name="panels"/> is empty,
+    /// a panel id is duplicated or already in the tree, or the track count
+    /// does not match the panel count.</exception>
+    /// <exception cref="KeyNotFoundException">No leaf holds
+    /// <paramref name="panelId"/>.</exception>
+    public void AddStack(
+        string panelId,
+        SplitDir dir,
+        IReadOnlyList<Panel> panels,
+        IReadOnlyList<FlexTrack>? tracks = null,
+        byte gap = 1)
+    {
+        ArgumentNullException.ThrowIfNull(panels);
+        if (panels.Count == 0)
+            throw new ArgumentException("At least one panel is required.", nameof(panels));
+        if (tracks is not null && tracks.Count != panels.Count)
+            throw new ArgumentException("Track count must match panel count.", nameof(tracks));
+        var target = FindAndWrap(_root, panelId) ?? throw new KeyNotFoundException($"panel '{panelId}' not found");
+        if (target.Leaf is null)
+            throw new InvalidOperationException($"panel '{panelId}' is already a container; stacks only wrap leaves.");
+        foreach (var p in panels)
+        {
+            ArgumentNullException.ThrowIfNull(p);
+            if (p.Id == panelId || _panels.ContainsKey(p.Id))
+                throw new ArgumentException($"panel '{p.Id}' is already in the tree.", nameof(panels));
+        }
+
+        var children = new List<SplitNode>(panels.Count + 1) { new SplitNode(target.Leaf) };
+        var built = new List<FlexTrack>(panels.Count + 1) { FlexTrack.Min(target.Leaf.MinAlong(dir)) };
+        for (int i = 0; i < panels.Count; i++)
+        {
+            children.Add(new SplitNode(panels[i]));
+            built.Add(tracks is not null ? tracks[i] : FlexTrack.Min(panels[i].MinAlong(dir)));
+            Register(panels[i]);
+        }
+
+        target.Leaf = null;
+        target.A = null;
+        target.B = null;
+        target.Dir = dir;
+        target.GapSize = gap;
+        target.Children = children;
+        target.Tracks = built;
         _capsVer++;
     }
 
@@ -606,6 +722,13 @@ public sealed class LayoutTree
             return;
         }
 
+        if (node.Children is not null)
+        {
+            foreach (var c in node.Children)
+                Collect(c, into);
+            return;
+        }
+
         if (node.A is not null)
         {
             Collect(node.A, into);
@@ -678,6 +801,20 @@ public sealed class LayoutTree
         if (node is null || node.Leaf is not null)
             return null;
 
+        // Stack membership is not a binary split (no Ratio to retarget): only
+        // descend looking for a binary node below the stack.
+        if (node.Children is not null)
+        {
+            foreach (var c in node.Children)
+            {
+                var hit = FindOwningSplit(c, id);
+                if (hit is not null)
+                    return hit;
+            }
+
+            return null;
+        }
+
         if (node.A?.Leaf?.Id == id || node.B?.Leaf?.Id == id)
             return node;
 
@@ -688,6 +825,20 @@ public sealed class LayoutTree
     {
         if (node is null || node.Leaf is not null)
         {
+            return null;
+        }
+
+        // Ratio springs are binary-only: descend through stacks without
+        // claiming their members.
+        if (node.Children is not null)
+        {
+            foreach (var c in node.Children)
+            {
+                var hit = FindSplitWithAChild(c, id);
+                if (hit is not null)
+                    return hit;
+            }
+
             return null;
         }
 
@@ -780,6 +931,29 @@ public sealed class LayoutTree
             return avail;
         }
 
+        // N-ary Row/Column (#1211): the solver exists in FlexLayout — seat it.
+        // Bare Rect here is the engine vocabulary (same namespace); UIR.Rect
+        // is the Rendering twin with the identical shape, converted fieldwise.
+        if (node.Children is not null)
+        {
+            var children = node.Children;
+            int n = children.Count;
+            if (n == 0)
+                return avail;
+            Span<FlexTrack> tracks = n <= 256 ? stackalloc FlexTrack[n] : new FlexTrack[n];
+            for (int i = 0; i < n; i++)
+                tracks[i] = node.Tracks![i];
+            Span<Rect> rects = n <= 256 ? stackalloc Rect[n] : new Rect[n];
+            FlexLayout.Arrange(node.Dir, new Rect(avail.X, avail.Y, avail.Width, avail.Height), tracks, rects, gap: node.GapSize);
+            for (int i = 0; i < n; i++)
+            {
+                var r = rects[i];
+                _ = SolveNode(children[i], new UIR.Rect(r.X, r.Y, r.Width, r.Height));
+            }
+
+            return avail;
+        }
+
         SplitNode childA = node.A!;
         SplitNode childB = node.B!;
 
@@ -844,13 +1018,35 @@ public sealed class LayoutTree
     private static SplitNode PickWinner(SplitNode node) =>
         PriorityOf(node.A!) >= PriorityOf(node.B!) ? node.A! : node.B!;
 
-    private static int PriorityOf(SplitNode n) => n.Leaf is not null ? n.Leaf.Priority : int.MinValue;
+    private static int PriorityOf(SplitNode n)
+    {
+        if (n.Leaf is not null)
+            return n.Leaf.Priority;
+        if (n.Children is not null)
+        {
+            // A stack defends as its strongest member (a group holding a
+            // status bar survives like one); empty stacks collapse first.
+            int max = int.MinValue;
+            foreach (var c in n.Children)
+                max = Math.Max(max, PriorityOf(c));
+            return max;
+        }
+
+        return int.MinValue;
+    }
 
     private static void CollapseAll(SplitNode node)
     {
         if (node.Leaf is not null)
         {
             node.Leaf.Rect = default;
+            return;
+        }
+
+        if (node.Children is not null)
+        {
+            foreach (var c in node.Children)
+                CollapseAll(c);
             return;
         }
 
@@ -870,6 +1066,19 @@ public sealed class LayoutTree
             return node;
         }
 
+        // Split/Stack target leaves nested inside a Row/Column.
+        if (node.Children is not null)
+        {
+            foreach (var c in node.Children)
+            {
+                var hit = FindAndWrap(c, id);
+                if (hit is not null)
+                    return hit;
+            }
+
+            return null;
+        }
+
         return FindAndWrap(node.A, id) ?? FindAndWrap(node.B, id);
     }
 
@@ -877,6 +1086,45 @@ public sealed class LayoutTree
     {
         if (node is null || node.Leaf is not null)
         {
+            return false;
+        }
+
+        if (node.Children is not null)
+        {
+            for (int i = 0; i < node.Children.Count; i++)
+            {
+                if (node.Children[i].Leaf?.Id == id)
+                {
+                    node.Children.RemoveAt(i);
+                    node.Tracks!.RemoveAt(i);
+                    _panels.Remove(id);
+                    if (node.Children.Count == 1)
+                    {
+                        // A lone survivor needs no container: splice it in.
+                        var survivor = node.Children[0];
+                        node.Leaf = survivor.Leaf;
+                        node.A = survivor.A;
+                        node.B = survivor.B;
+                        node.Children = survivor.Children;
+                        node.Tracks = survivor.Tracks;
+                        if (survivor.Leaf is null)
+                        {
+                            node.Dir = survivor.Dir;
+                            node.Ratio = survivor.Ratio;
+                            node.GapSize = survivor.GapSize;
+                        }
+                    }
+
+                    return true;
+                }
+            }
+
+            foreach (var c in node.Children)
+            {
+                if (RemoveFrom(c, id))
+                    return true;
+            }
+
             return false;
         }
 
@@ -905,6 +1153,8 @@ public sealed class LayoutTree
             node.Leaf = survivor.Leaf;
             node.A = null;
             node.B = null;
+            node.Children = null;
+            node.Tracks = null;
         }
         else
         {
@@ -913,6 +1163,8 @@ public sealed class LayoutTree
             node.GapSize = survivor.GapSize;
             node.A = survivor.A;
             node.B = survivor.B;
+            node.Children = survivor.Children;
+            node.Tracks = survivor.Tracks;
         }
     }
 
