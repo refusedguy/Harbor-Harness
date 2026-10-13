@@ -143,12 +143,11 @@ public sealed class GenericNavState
 
 /// <summary>
 /// Ratatui <c>StatefulWidget</c> analog (<c>stateful_widget.rs:124</c>, #1198):
-/// an immutable widget painted with an external, frame-surviving
-/// <typeparamref name="TState"/>. The widget owns content and geometry;
-/// selection + scroll live in <paramref name="state"/>.
+/// an immutable widget painted with an external, frame-surviving state.
+/// The widget owns content and geometry; selection + scroll live in the state.
 /// </summary>
 /// <typeparam name="TState">External navigation state (e.g. <see cref="GenericNavState"/>).</typeparam>
-public interface IStatefulGenericWidget<TState>
+public interface IStatefulGenericWidget<in TState>
 {
     /// <summary>Paints within <paramref name="rect"/> using <paramref name="state"/> for position.</summary>
     void Paint(ScreenBuffer buffer, Rect rect, TState state);
