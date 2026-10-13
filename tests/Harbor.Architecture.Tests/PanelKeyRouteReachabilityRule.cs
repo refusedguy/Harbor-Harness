@@ -14,7 +14,7 @@
 //   src/Harbor.Tui.CellForge/Chat/Panels/CellForgePanelAdapter.cs:96
 //       `return provider.OnKey(key, ctx);` — inside
 //       `CellForgePanelAdapter.RouteKey`, whose only caller in the whole tree is
-//       `ChatScreenLayout.cs:1513`.
+//       `ChatScreenLayout.cs:1550`.
 //   src/Harbor.Tui.CellForge/Chat/Panels/CellForgeJumpPaletteOverlayLayer.cs:170
 // check-doc-cites: record-drift src/Harbor.Tui.CellForge/Chat/Panels/CellForgeJumpPaletteOverlayLayer.cs:170 now="/// sees it." [#947: written over `return _panel.OnKey(`; repair deferred to the owner's symbol-rename decision] -->
 //       `return _panel.OnKey(` — inside that layer's own `OnKey`, and the layer
@@ -44,7 +44,7 @@
 //     capability the global keymap does not already have — plus
 //     `CellForgeJumpPalettePanel`, which is keyed AND unpainted, because
 //     `DefaultPlacement => Center` sends the dock home early
-//     (`ChatScreenLayout.cs:1316-1322`) and the `IOverlayLayer` meant to paint it
+//     (`ChatScreenLayout.cs:1353-1359`) and the `IOverlayLayer` meant to paint it
 //     is constructed by nothing but a test.
 //
 // So the honest count is "three panels with unreachable input, one hotkey that
@@ -60,7 +60,7 @@
 //     in the chain above is skipped by construction;
 //   * it dispatches `AppMsg.FocusPanel("logs")` by hand first, because
 //     `RoutePanelKey` returns early unless the panel is `Focused`
-//     (`ChatScreenLayout.cs:1485-1488`) and the product's F12 path only ever
+//     (`ChatScreenLayout.cs:1522-1525`) and the product's F12 path only ever
 //     reaches `Visible` — `AppReducer.TogglePanel` (`:172-187`) toggles
 //     Hidden↔Visible and never sets `FocusedPanelId`. NO product host dispatches
 //     `AppMsg.FocusPanel` with a non-null id; the one non-test dispatch is
