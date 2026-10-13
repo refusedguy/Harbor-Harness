@@ -265,6 +265,15 @@ public sealed class OverlayStack
 
             for (int f = 0; f < frags.Count; f++)
             {
+                // #1204 (compose popup primitive): Ratatui Clear as a pipeline
+                // step, not a widget — an opaque floater blanks its visible
+                // fragments before content paints, so sparse popovers (border
+                // + a few rows) never leak panel cells through.
+                if (layer.Opaque)
+                {
+                    OverlayPopup.Clear(buffer, frags[f]);
+                }
+
                 layer.Paint(buffer, frags[f]);
             }
         }
