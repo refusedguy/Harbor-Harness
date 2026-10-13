@@ -9,7 +9,8 @@ namespace Harbor.Tui.CellForge.Tests;
 /// <summary>
 /// #489 — the composer buffer materialised on every state sync.
 ///
-/// <c>CellForgeTuiRenderer.SyncInputFromState</c> runs on every store change
+/// <c>ChatScreenProjector</c> (issue #1202; reached via
+/// <c>CellForgeTuiRenderer.ProjectStateIntoWidgets</c>) runs on every store change
 /// (i.e. per keystroke AND per streamed token) and asked
 /// <c>_composer.Buffer.SnapshotText() != text</c>. <c>SnapshotText()</c> is
 /// <c>new(_buf, 0, _length)</c>: a fresh string for the whole draft, built

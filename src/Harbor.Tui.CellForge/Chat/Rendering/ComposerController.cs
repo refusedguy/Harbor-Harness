@@ -36,8 +36,9 @@ public enum ComposerAction : byte
 /// this engine names the direction as <see cref="HistoryStep"/> rather than the
 /// store's marker records, which is what let #435 delete the State edge.
 /// Text and cursor stay store-owned: the sync mirrors
-/// <c>CellForgeTuiRenderer.SyncInputFromState</c> read-only (text change pins
-/// the caret to the end of the text); the renderer itself is untouched.
+/// <c>ChatScreenProjector</c> (issue #1202; reached via
+/// <c>CellForgeTuiRenderer.ProjectStateIntoWidgets</c>) read-only (text change
+/// pins the caret to the end of the text); the renderer itself is untouched.
 /// </summary>
 public sealed class ComposerController
 {
@@ -454,7 +455,7 @@ public sealed class ComposerController
         Buffer.Clear();
         _ = Buffer.InsertText(text);
         // Cursor-from-store contract (CF-B-005): mirrors
-        // CellForgeTuiRenderer.SyncInputFromState read-only — a text change
+        // ChatScreenProjector (issue #1202) read-only — a text change
         // pins the caret to the end of the text, and the composer follows via
         // MoveTo. End-of-text keeps composer and store caret coherent; the
         // renderer itself is untouched.
