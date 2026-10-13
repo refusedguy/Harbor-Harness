@@ -57,6 +57,29 @@ public abstract class Panel
 
     public bool Focused { get; internal set; }
 
+    /// <summary>
+    /// Content area inside this panel's chrome (ratatui <c>Block::inner</c>
+    /// canon: <c>block.render(area)</c>, then the child renders into
+    /// <c>block.inner(area)</c>). The default is the whole <see cref="Rect"/>
+    /// (no decor); decorated containers override it to subtract their
+    /// borders/title/chrome rows. Children paint from this rect and never
+    /// recompute a parent's decor by hand.
+    /// </summary>
+    public virtual UIR.Rect ContentRect => Rect;
+
+    /// <summary>
+    /// Shared subtraction primitive behind <see cref="ContentRect"/>: shrinks
+    /// <paramref name="outer"/> by the given chrome cells per side. Pure and
+    /// allocation-free; over-insetting yields an empty rect, never a negative
+    /// one. (Widget-layer twin: <c>PanelChrome.Inset</c> — the dual Rect
+    /// vocabulary of #436 keeps one helper per layer.)
+    /// </summary>
+    protected static UIR.Rect InsetContent(UIR.Rect outer, int left, int top, int right, int bottom) =>
+        new(outer.X + left,
+            outer.Y + top,
+            Math.Max(0, outer.Width - left - right),
+            Math.Max(0, outer.Height - top - bottom));
+
     public abstract void Paint(UIR.ScreenBuffer buffer);
 
     /// <summary>Minimum extent along a split direction.</summary>
@@ -909,6 +932,13 @@ public class BorderPanel : Panel
 
     /// <summary>One-cell drop shadow (right + bottom), clipped to the buffer.</summary>
     public bool Shadow { get; set; }
+
+    /// <summary>
+    /// Content area inside the 1-cell frame (ratatui <c>Block::inner</c>): the
+    /// title sits on the top border and the shadow paints outside
+    /// <see cref="Panel.Rect"/>, so neither takes an extra inset.
+    /// </summary>
+    public override UIR.Rect ContentRect => InsetContent(Rect, 1, 1, 1, 1);
 
     public override void Paint(UIR.ScreenBuffer buffer)
     {

@@ -224,6 +224,21 @@ public static class PanelChrome
     }
 
     /// <summary>
+    /// Shared chrome subtraction (ratatui <c>Block::inner</c> analogue):
+    /// shrinks <paramref name="outer"/> by the given chrome cells per side.
+    /// Pure and allocation-free; over-insetting yields an empty rect, never a
+    /// negative one. Decorated containers expose this as their
+    /// <c>ContentRect</c> so children paint from the inset without knowing
+    /// the parent's decor. (Rendering-layer twin: <c>Panel.InsetContent</c> —
+    /// the dual Rect vocabulary of #436 keeps one helper per layer.)
+    /// </summary>
+    public static Rect Inset(Rect outer, int left, int top, int right, int bottom) =>
+        new(outer.X + left,
+            outer.Y + top,
+            Math.Max(0, outer.Width - left - right),
+            Math.Max(0, outer.Height - top - bottom));
+
+    /// <summary>
     /// Paints the panel box <paramref name="rect"/>: <see cref="BoxStyle.RoundedPanel"/>
     /// blanks the interior and frames it with the rounded <c>╭╮╰╯</c> set in
     /// <see cref="BorderStyle"/>. Single owner of the dialog frame since #553 —
