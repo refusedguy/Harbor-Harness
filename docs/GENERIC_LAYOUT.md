@@ -151,3 +151,22 @@ rule. Explicitly out of scope here: the widget catalog (forms, inputs,
 tables, trees, charts), styling/theming, the focus chain and key-message
 routing, and the test harness. Those follow as separate TRs under #1195 —
 this contract is the foundation they build on, not a placeholder for them.
+
+## 6. Screen-mode convention (#1207)
+
+Every non-chat screen owns a local mode enum with an explicit terminal value
+— never a flag smeared across `UiState`, the reducer and routers. Sources:
+input-form `AppState{Running,Cancelled,Submitted}` (the form result is the
+exit value) and demo2 `Mode{Running,Destroy,Quit}` (the overlay is a mode,
+not flags). `GenericScreenMode` beside `GenericScreen` is the skeleton every
+new screen copies.
+
+Rules:
+
+- The enum lives next to its screen; each new screen declares its own with
+  its own terminal values (`Running` is the only non-terminal value).
+- Construction starts at `Running`; completion moves one way through
+  `Complete(terminal)` — `Running` is rejected and a terminal screen stays
+  terminal (first result wins).
+- The host reads `screen.Mode` as the exit value; the global `UiState` is
+  never touched for screen lifetime.

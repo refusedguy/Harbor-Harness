@@ -113,4 +113,39 @@ public class GenericScreenTests
         _ = renderer.Quit();
         await Assert.That(renderer.ShouldQuit).IsTrue();
     }
+
+    [Test]
+    public async Task Mode_DefaultsToRunning()
+    {
+        var screen = GenericScreen.Build([
+            new GenericNodeSpec { Id = "a", Title = "mode" },
+        ]);
+        await Assert.That(screen.Mode).IsEqualTo(GenericScreenMode.Running);
+        await Assert.That(screen.IsTerminal).IsFalse();
+    }
+
+    [Test]
+    public async Task HandleKey_Escape_CompletesCancelled()
+    {
+        var screen = GenericScreen.Build([
+            new GenericNodeSpec { Id = "a", Title = "mode" },
+        ]);
+        await Assert.That(screen.HandleKey(KeyEvent.Simple(KeyCode.Escape))).IsTrue();
+        await Assert.That(screen.Mode).IsEqualTo(GenericScreenMode.Cancelled);
+        await Assert.That(screen.IsTerminal).IsTrue();
+    }
+
+    [Test]
+    public async Task Complete_Done_SetsTerminal_AndRunningIsRejected()
+    {
+        var screen = GenericScreen.Build([
+            new GenericNodeSpec { Id = "a", Title = "mode" },
+        ]);
+        screen.Complete(GenericScreenMode.Done);
+        await Assert.That(screen.Mode).IsEqualTo(GenericScreenMode.Done);
+        await Assert.That(screen.IsTerminal).IsTrue();
+        screen.Complete(GenericScreenMode.Cancelled);
+        await Assert.That(screen.Mode).IsEqualTo(GenericScreenMode.Done);
+        await Assert.That(() => screen.Complete(GenericScreenMode.Running)).Throws<ArgumentOutOfRangeException>();
+    }
 }

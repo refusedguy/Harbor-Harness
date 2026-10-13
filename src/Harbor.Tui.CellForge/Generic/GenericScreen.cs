@@ -134,6 +134,27 @@ public sealed class GenericContentPanel : Panel
 }
 
 /// <summary>
+/// Local screen mode (epic #1195, part of #1207): every non-chat screen owns
+/// its mode enum with an explicit terminal value instead of smearing modes
+/// across <c>UiState</c>, the reducer and routers. Sources: input-form
+/// <c>AppState{Running,Cancelled,Submitted}</c> (the form result is the exit
+/// value) and demo2 <c>Mode{Running,Destroy,Quit}</c> (the overlay is a mode,
+/// not flags). New screens copy this shape with their own terminal values and
+/// never touch the global <c>UiState</c> for screen lifetime.
+/// </summary>
+public enum GenericScreenMode
+{
+    /// <summary>Screen is live; keys route to focus motion and hosted fields.</summary>
+    Running,
+
+    /// <summary>Terminal: accepted or completed — the screen's exit value is ready.</summary>
+    Done,
+
+    /// <summary>Terminal: dismissed without a result (Escape).</summary>
+    Cancelled,
+}
+
+/// <summary>
 /// Assembled generic screen (epic #1195, part of #1226): a <see cref="LayoutTree"/>
 /// built from <see cref="GenericNodeSpec"/> plus <see cref="GenericSplitSpec"/>,
 /// run on the generic TEA half (<c>UiState.Ui</c>) with zero chat knowledge.
@@ -161,6 +182,30 @@ public sealed class GenericScreen
 
     /// <summary>Focused panel id (null when empty).</summary>
     public string? FocusedId { get; private set; }
+
+    /// <summary>Local screen mode (starts <see cref="GenericScreenMode.Running"/>).</summary>
+    public GenericScreenMode Mode { get; private set; } = GenericScreenMode.Running;
+
+    /// <summary>True once <see cref="Mode"/> reaches a terminal value.</summary>
+    public bool IsTerminal => Mode is GenericScreenMode.Done or GenericScreenMode.Cancelled;
+
+    /// <summary>
+    /// Moves <see cref="Mode"/> to a terminal value (first result wins: a
+    /// terminal screen stays terminal).
+    /// </summary>
+    /// <param name="terminal">Only terminal values (<c>Done</c>, <c>Cancelled</c>).</param>
+    public void Complete(GenericScreenMode terminal)
+    {
+        if (terminal != GenericScreenMode.Done && terminal != GenericScreenMode.Cancelled)
+        {
+            throw new ArgumentOutOfRangeException(nameof(terminal), terminal, "Only terminal values (Done, Cancelled) complete a screen.");
+        }
+
+        if (!IsTerminal)
+        {
+            Mode = terminal;
+        }
+    }
 
     /// <summary>
     /// Builds the screen from nodes plus splits. The first node is the root;
@@ -323,6 +368,7 @@ public sealed class GenericScreen
                 MoveFocus(shift ? -1 : 1);
                 return true;
             case KeyCode.Escape:
+                Complete(GenericScreenMode.Cancelled);
                 return true;
             case KeyCode.Up when shift:
                 MoveFocus(-1);
