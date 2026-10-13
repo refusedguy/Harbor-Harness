@@ -18,7 +18,7 @@ internal static class HeadlessVerb
 {
     internal static async Task<int> RunAsync(ILogger logger, string[] args)
     {
-        logger.LogInformation("Starting headless daemon mode");
+        HeadlessVerbLog.StartingHeadless(logger);
 
         // A headless host without a transport serves nobody: default to
         // ipc-server unless the operator pinned another mode explicitly.
@@ -31,9 +31,7 @@ internal static class HeadlessVerb
         var server = host.Services.GetService<IHarborServer>();
         if (server is null)
         {
-            logger.LogError(
-                "Headless mode requires an IPC server, but no IHarborServer is registered (HARBOR_MODE={Mode})",
-                Environment.GetEnvironmentVariable("HARBOR_MODE"));
+            HeadlessVerbLog.HeadlessRequiresIpcServer(logger, Environment.GetEnvironmentVariable("HARBOR_MODE"));
             Console.Error.WriteLine("daemon: IPC server unavailable — cannot run headless.");
             return 1;
         }
@@ -41,7 +39,7 @@ internal static class HeadlessVerb
         await CliInfrastructure.StartIpcAsync(host.Services, logger).ConfigureAwait(false);
         Console.WriteLine($"harbor daemon listening on '{server.Endpoint}'");
         CliInfrastructure.PrintPairingBlock(host.Services, logger);
-        logger.LogInformation("Daemon ready on {Endpoint} — waiting for clients or shutdown signal", server.Endpoint);
+        HeadlessVerbLog.DaemonReady(logger, server.Endpoint);
 
         using var shutdownCts = new CancellationTokenSource();
 
@@ -63,11 +61,11 @@ internal static class HeadlessVerb
         }
         catch (PlatformNotSupportedException ex)
         {
-            logger.LogWarning(ex, "POSIX signal handling unavailable — falling back to SIGINT only");
+            HeadlessVerbLog.PosixSignalUnavailable(logger, ex);
             await WaitForShutdownAsync(shutdownCts.Token).ConfigureAwait(false);
         }
 
-        logger.LogInformation("Shutdown requested — stopping IPC server");
+        HeadlessVerbLog.ShutdownRequested(logger);
         await CliInfrastructure.StopIpcAsync(host.Services, logger).ConfigureAwait(false);
         return 0;
     }
@@ -87,4 +85,26 @@ internal static class HeadlessVerb
             // Expected shutdown path — the token is cancelled by SIGINT/SIGTERM.
         }
     }
+}
+
+/// <summary>
+///     SG6: BCL <c>[LoggerMessage]</c> delegates for <see cref="HeadlessVerb" />.
+///     Templates, levels and operands are 1-to-1 with the former <c>LogX</c> calls.
+/// </summary>
+internal static partial class HeadlessVerbLog
+{
+    [LoggerMessage(EventId = 1, Level = LogLevel.Information, Message = "Starting headless daemon mode")]
+    public static partial void StartingHeadless(ILogger logger);
+
+    [LoggerMessage(EventId = 2, Level = LogLevel.Error, Message = "Headless mode requires an IPC server, but no IHarborServer is registered (HARBOR_MODE={Mode})")]
+    public static partial void HeadlessRequiresIpcServer(ILogger logger, string? mode);
+
+    [LoggerMessage(EventId = 3, Level = LogLevel.Information, Message = "Daemon ready on {Endpoint} — waiting for clients or shutdown signal")]
+    public static partial void DaemonReady(ILogger logger, string endpoint);
+
+    [LoggerMessage(EventId = 4, Level = LogLevel.Warning, Message = "POSIX signal handling unavailable — falling back to SIGINT only")]
+    public static partial void PosixSignalUnavailable(ILogger logger, Exception ex);
+
+    [LoggerMessage(EventId = 5, Level = LogLevel.Information, Message = "Shutdown requested — stopping IPC server")]
+    public static partial void ShutdownRequested(ILogger logger);
 }
