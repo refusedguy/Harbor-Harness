@@ -317,6 +317,16 @@ public class KeyGateFamilyRules
         // nothing, Shift included — so Command, not Buffer.
         new("KeyBindings(capture)", KeyGateFamily.Command, "src/Harbor.Tui.CellForge.Engine/Input/KeyBindings.cs"),
 
+        // BindingsMap per-scope table (T6, #1188, epic #1155): the scope-level
+        // gesture-to-action map behind BindingsChain's focus-to-app merge.
+        // Same shape as KeyBindings above — no buffer anywhere on this path,
+        // a rune selects an action id (a vote), and the match is EXACT-modifier
+        // via KeyGesture.Matches, so an unbound Shift is refused the way the
+        // command gate refuses it. A scope CAN bind a shifted gesture
+        // explicitly, but that binding is scope config, not this table's
+        // nature: empty, it admits nothing — so Command, not Buffer.
+        new("BindingsMap(scope)", KeyGateFamily.Command, "src/Harbor.Tui.CellForge.Engine/Input/BindingsMap.cs"),
+
         // ChatAppReducer.ActivateSlotFromKey (#1173): the Ctrl+digit
         // quick-slot path judges the pressed rune (1-9 focus the Nth tab).
         // No buffer anywhere on this path — the rune navigates — so Command.
