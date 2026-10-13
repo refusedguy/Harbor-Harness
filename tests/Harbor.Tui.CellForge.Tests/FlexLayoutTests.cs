@@ -317,4 +317,85 @@ public sealed class FlexLayoutTests
         await Assert.That(() => StackLayout.Solve(new EngineCells.Rect(0, 0, 10, 5), -1))
             .Throws<ArgumentOutOfRangeException>();
     }
+
+    [Test]
+    public async Task Ratio_Halves_ShareGapSubtractedExtent()
+    {
+        var rects = FlexLayout.Solve(
+            SplitDir.Horizontal,
+            new EngineCells.Rect(0, 0, 20, 4),
+            [FlexTrack.Ratio(1, 2), FlexTrack.Ratio(1, 2)]);
+
+        await Assert.That(rects).IsEquivalentTo([
+            new EngineCells.Rect(0, 0, 10, 4),
+            new EngineCells.Rect(10, 0, 10, 4),
+        ]);
+    }
+
+    [Test]
+    public async Task Ratio_Overflow_ScalesDownProportionally()
+    {
+        var rects = FlexLayout.Solve(
+            SplitDir.Horizontal,
+            new EngineCells.Rect(0, 0, 20, 4),
+            [FlexTrack.Ratio(3, 4), FlexTrack.Ratio(3, 4)]);
+
+        await Assert.That(rects).IsEquivalentTo([
+            new EngineCells.Rect(0, 0, 10, 4),
+            new EngineCells.Rect(10, 0, 10, 4),
+        ]);
+    }
+
+    [Test]
+    public async Task Ratio_Degenerate_ZeroDen_And_ClampedOverflow()
+    {
+        var rects = FlexLayout.Solve(
+            SplitDir.Horizontal,
+            new EngineCells.Rect(0, 0, 20, 4),
+            [FlexTrack.Ratio(1, 0), FlexTrack.Ratio(5, 2)]);
+
+        await Assert.That(rects).IsEquivalentTo([
+            new EngineCells.Rect(0, 0, 0, 4),
+            new EngineCells.Rect(0, 0, 20, 4),
+        ]);
+    }
+
+    [Test]
+    public async Task FlexTracks_FromHelpers_MapElementwise()
+    {
+        var lengths = FlexLayout.Solve(
+            SplitDir.Horizontal,
+            new EngineCells.Rect(0, 0, 20, 4),
+            FlexTracks.FromLengths(6, 4));
+
+        await Assert.That(lengths).IsEquivalentTo([
+            new EngineCells.Rect(0, 0, 6, 4),
+            new EngineCells.Rect(6, 0, 4, 4),
+        ]);
+
+        var ratios = FlexLayout.Solve(
+            SplitDir.Horizontal,
+            new EngineCells.Rect(0, 0, 20, 4),
+            FlexTracks.FromRatios((1, 2), (1, 2)));
+
+        await Assert.That(ratios).IsEquivalentTo([
+            new EngineCells.Rect(0, 0, 10, 4),
+            new EngineCells.Rect(10, 0, 10, 4),
+        ]);
+
+        var fills = FlexLayout.Solve(
+            SplitDir.Horizontal,
+            new EngineCells.Rect(0, 0, 20, 4),
+            FlexTracks.FromFills(1f, 2f));
+
+        await Assert.That(fills).IsEquivalentTo([
+            new EngineCells.Rect(0, 0, 6, 4),
+            new EngineCells.Rect(6, 0, 14, 4),
+        ]);
+
+        await Assert.That(FlexTracks.FromMins(3, 5).Length).IsEqualTo(2);
+        await Assert.That(FlexTracks.FromMaxes(3, 5).Length).IsEqualTo(2);
+        await Assert.That(FlexTracks.FromPercentages(0.25f, 0.75f).Length).IsEqualTo(2);
+        await Assert.That(() => FlexTracks.FromLengths(null!)).Throws<ArgumentNullException>();
+    }
 }

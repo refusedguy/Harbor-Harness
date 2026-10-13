@@ -153,6 +153,29 @@ public sealed class SizeConstraintTests
     }
 
     [Test]
+    public async Task Ratio_OfAvailable_Clamped()
+    {
+        await Assert.That(SizeConstraint.RatioOf(1, 2).Compute(20, 0, 0)).IsEqualTo(10);
+        await Assert.That(SizeConstraint.RatioOf(5, 2).Compute(20, 0, 0)).IsEqualTo(20);
+        await Assert.That(SizeConstraint.RatioOf(1, 0).Compute(20, 0, 0)).IsEqualTo(0);
+        await Assert.That(SizeConstraint.RatioOf(-1, 2).Compute(20, 0, 0)).IsEqualTo(0);
+    }
+
+    [Test]
+    public async Task Ratio_ToFlexTrack_RoundTripsThroughSolver()
+    {
+        var rects = FlexLayout.Solve(
+            SplitDir.Horizontal,
+            new EngineCells.Rect(0, 0, 20, 4),
+            [SizeConstraint.RatioOf(1, 2).ToFlexTrack(), SizeConstraint.RatioOf(1, 2).ToFlexTrack()]);
+
+        await Assert.That(rects).IsEquivalentTo([
+            new EngineCells.Rect(0, 0, 10, 4),
+            new EngineCells.Rect(10, 0, 10, 4),
+        ]);
+    }
+
+    [Test]
     public async Task FlexSplitNode_AutoChild_KeepsIntrinsic_FillTakesRest()
     {
         var split = new FlexSplitNode(SplitDir.Horizontal);
