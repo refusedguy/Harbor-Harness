@@ -646,14 +646,30 @@ public sealed class ToolDispatcher(
         activity?.SetStatus(ActivityStatusCode.Error, "Permission denied");
         // Honest strings (#49 PR2): a deny produced by a cancelled wait
         // is a cancellation, not a policy decision.
-        bool cancelled = ct.IsCancellationRequested;
-        string reason = permResponse.IsFailure
-            ? $"Permission check failed: {permResponse.Error}"
-            : cancelled ? "Tool execution was cancelled before start."
-            : "Permission denied";
-        if (cancelled)
+        // #1103: read the EFFECTIVE token, not the run token. The gate runs
+        // under the per-call deadline: when the deadline fires, the linked
+        // token cancels while the run token stays live, and the old run-token
+        // read reported the deadline hit as a policy deny. A deadline hit is
+        // a timeout (the loop keeps going); only a cancelled run token is a
+        // user cancel.
+        bool runCancelled = ct.IsCancellationRequested;
+        bool timedOut = !runCancelled && effectiveCt.IsCancellationRequested;
+        string reason;
+        if (runCancelled)
         {
             activity?.SetStatus(ActivityStatusCode.Error, "cancelled before start");
+            reason = "Tool execution was cancelled before start.";
+        }
+        else if (timedOut)
+        {
+            activity?.SetStatus(ActivityStatusCode.Error, "tool timed out");
+            reason = $"Tool '{toolCall.ToolName}' timed out during permission check.";
+        }
+        else
+        {
+            reason = permResponse.IsFailure
+                ? $"Permission check failed: {permResponse.Error}"
+                : "Permission denied";
         }
 
         var denied = ToolResult.Error(reason);
