@@ -6,35 +6,44 @@ namespace Harbor.Tui.CellForge.Rendering;
 /// row/column (ratatui <c>Flex</c> analogue, Textual align analogue).
 /// Applies only when tracks plus gaps underfill the available extent —
 /// overflow always shrinks tracks instead (flexible first, then fixed).
+/// Diagrams below use <see cref="FlexLayoutExplorer"/> glyphs
+/// (track <c>i</c> = <c>'A' + i</c>, <c>' '</c> = gap/leftover).
 /// </summary>
 public enum FlexJustify : byte
 {
-    /// <summary>Pack from the leading edge; leftover trails at the far end.</summary>
+    /// <summary>Pack from the leading edge; leftover trails at the far end.
+    /// <c>[Fixed(6), Fixed(4)]</c>, gap 2, extent 20 → <c>[AAAAAA  BBBB        ]</c>.</summary>
     Start = 0,
 
-    /// <summary>Center the packed run; leftover splits evenly on both sides.</summary>
+    /// <summary>Center the packed run; leftover splits evenly on both sides.
+    /// <c>[Fixed(6), Fixed(4)]</c>, gap 2, extent 20 → <c>[    AAAAAA  BBBB    ]</c>.</summary>
     Center = 1,
 
-    /// <summary>Pack against the far edge; leftover leads at the start.</summary>
+    /// <summary>Pack against the far edge; leftover leads at the start.
+    /// <c>[Fixed(6), Fixed(4)]</c>, gap 2, extent 20 → <c>[        AAAAAA  BBBB]</c>.</summary>
     End = 2,
 
     /// <summary>Pin first/last track to the edges; leftover spreads evenly over
-    /// the inter-item gaps. A single track packs at the leading edge.</summary>
+    /// the inter-item gaps. A single track packs at the leading edge.
+    /// <c>[Fixed(6), Fixed(4), Fixed(2)]</c>, extent 20 → <c>[AAAAAA    BBBB    CC]</c>.</summary>
     SpaceBetween = 3,
 
     /// <summary>Even space around every track: edges take a half share, gaps a
-    /// full share. Integer remainders distribute leading-to-trailing.</summary>
+    /// full share. Integer remainders distribute leading-to-trailing.
+    /// <c>[Fixed(4), Fixed(4)]</c>, extent 20 → <c>[   AAAA      BBBB   ]</c>.</summary>
     SpaceAround = 4,
 
     /// <summary>ratatui <c>Flex::Legacy</c> analogue (#1159): excess goes to
     /// the last lowest-priority track — the last <c>Fill</c> when present
     /// (Fill is weakest), else the last flexible track, else the last track.
-    /// Applies only when tracks plus gaps underfill the extent.</summary>
+    /// Applies only when tracks plus gaps underfill the extent.
+    /// <c>[Fixed(6), Fixed(4)]</c>, extent 20 → <c>[AAAAAABBBBBBBBBBBBBB]</c>.</summary>
     Legacy = 5,
 
     /// <summary>ratatui <c>Flex::SpaceEvenly</c> analogue (#1159): excess
     /// spreads evenly over the n+1 slots (before the first, between tracks,
-    /// after the last). Integer remainders distribute leading-to-trailing.</summary>
+    /// after the last). Integer remainders distribute leading-to-trailing.
+    /// <c>[Fixed(6), Fixed(4)]</c>, extent 20 → <c>[    AAAAAA   BBBB   ]</c>.</summary>
     SpaceEvenly = 6,
 }
 
@@ -128,6 +137,11 @@ public readonly record struct FlexTrack
 /// Children take the full cross extent; the main axis is water-filled honoring
 /// fixed sizes, percent shares, auto intrinsics, fill weights and min/max clamps.
 /// Not thread-safe: arrange on the render thread only.
+/// <example>
+/// Canonical row (<see cref="FlexLayoutExplorer"/> spec):
+/// <c>[Fixed(10), Fill(1), Fixed(6)]</c>, gap 1, extent 40 →
+/// <c>[AAAAAAAAAA BBBBBBBBBBBBBBBBBBBBBB CCCCCC]</c>.
+/// </example>
 /// </summary>
 public static class FlexLayout
 {
@@ -135,6 +149,13 @@ public static class FlexLayout
     /// Arranges <paramref name="tracks"/> inside <paramref name="avail"/> along
     /// <paramref name="dir"/>, writing one <see cref="Rect"/> per track into
     /// <paramref name="into"/> in track order. Zero-allocation steady-state path.
+    /// <example>
+    /// <code>
+    /// FlexLayout.Arrange(SplitDir.Horizontal, new Rect(0, 0, 40, 10),
+    ///     [FlexTrack.Fixed(10), FlexTrack.Fill(1), FlexTrack.Fixed(6)], rects, gap: 1);
+    /// // rects: (0,0,10,10) (11,0,22,10) (34,0,6,10) — see FlexLayoutExplorer.
+    /// </code>
+    /// </example>
     /// </summary>
     /// <param name="dir">Main axis: <see cref="SplitDir.Horizontal"/> lays
     /// children side-by-side (Row), <see cref="SplitDir.Vertical"/> stacks them
