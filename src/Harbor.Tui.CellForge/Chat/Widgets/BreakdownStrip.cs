@@ -10,7 +10,7 @@ public readonly record struct BreakdownSegment(string Label, double Value);
 /// <summary>
 /// Cell-native stacked 0–100% strip (Spectre <c>BreakdownChart</c> pattern):
 /// a single-row run partitioned across segments proportionally to their
-/// weights, filling <paramref name="width" /> exactly via largest-remainder
+/// weights, filling the rect width exactly via largest-remainder
 /// rounding. The per-segment fill uses <see cref="GaugeBar.Filled" /> so the
 /// strip reads as one bar; per-segment styles default to a five-way palette
 /// cycle (accent/success/warning/error/tool) when the host passes none.
