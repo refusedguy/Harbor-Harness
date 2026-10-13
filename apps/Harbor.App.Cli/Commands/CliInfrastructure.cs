@@ -137,7 +137,7 @@ internal static class CliInfrastructure
             // — when HARBOR_LISTEN is configured — the networked TCP one.
             foreach (var server in services.GetServices<IHarborServer>())
             {
-                logger.LogInformation("Starting IPC server at {Endpoint}", server.Endpoint);
+                CliInfrastructureLog.StartingIpcServer(logger, server.Endpoint);
                 await server.StartAsync().ConfigureAwait(false);
             }
         }
@@ -146,7 +146,7 @@ internal static class CliInfrastructure
             var client = services.GetService<IHarborClient>();
             if (client is not null)
             {
-                logger.LogInformation("Connecting IPC client");
+                CliInfrastructureLog.ConnectingIpcClient(logger);
                 await client.ConnectAsync().ConfigureAwait(false);
             }
         }
@@ -163,7 +163,7 @@ internal static class CliInfrastructure
             var server = services.GetService<IHarborServer>();
             if (server is not null)
             {
-                logger.LogInformation("Stopping IPC server");
+                CliInfrastructureLog.StoppingIpcServer(logger);
                 await server.StopAsync().ConfigureAwait(false);
             }
         }
@@ -172,7 +172,7 @@ internal static class CliInfrastructure
             var client = services.GetService<IHarborClient>();
             if (client is not null)
             {
-                logger.LogInformation("Disconnecting IPC client");
+                CliInfrastructureLog.DisconnectingIpcClient(logger);
                 await client.DisconnectAsync().ConfigureAwait(false);
             }
         }
@@ -194,7 +194,7 @@ internal static class CliInfrastructure
         // longer ships Harbor.Scripting.*. --script is reported as unsupported
         // rather than silently ignored.
         _ = services;
-        logger.LogWarning("--script flag ignored: scripting lives in contrib/scripting and is not part of the main CLI build");
+        CliInfrastructureLog.ScriptFlagIgnored(logger);
         return CSharpFunctionalExtensions.Result.Failure(
             "Scripting is not available in this build. Build contrib/Contrib.slnx for the scripting-enabled projects.");
     }
@@ -221,7 +221,32 @@ internal static class CliInfrastructure
         }
         catch (Exception ex)
         {
-            logger.LogWarning(ex, "QR rendering failed; the text pairing code above remains authoritative");
+            CliInfrastructureLog.QrRenderingFailed(logger, ex);
         }
     }
+}
+
+/// <summary>
+///     SG6: BCL <c>[LoggerMessage]</c> delegates for <see cref="CliInfrastructure" />.
+///     Templates, levels and operands are 1-to-1 with the former <c>LogX</c> calls.
+/// </summary>
+internal static partial class CliInfrastructureLog
+{
+    [LoggerMessage(EventId = 1, Level = LogLevel.Information, Message = "Starting IPC server at {Endpoint}")]
+    public static partial void StartingIpcServer(ILogger logger, string endpoint);
+
+    [LoggerMessage(EventId = 2, Level = LogLevel.Information, Message = "Connecting IPC client")]
+    public static partial void ConnectingIpcClient(ILogger logger);
+
+    [LoggerMessage(EventId = 3, Level = LogLevel.Information, Message = "Stopping IPC server")]
+    public static partial void StoppingIpcServer(ILogger logger);
+
+    [LoggerMessage(EventId = 4, Level = LogLevel.Information, Message = "Disconnecting IPC client")]
+    public static partial void DisconnectingIpcClient(ILogger logger);
+
+    [LoggerMessage(EventId = 5, Level = LogLevel.Warning, Message = "--script flag ignored: scripting lives in contrib/scripting and is not part of the main CLI build")]
+    public static partial void ScriptFlagIgnored(ILogger logger);
+
+    [LoggerMessage(EventId = 6, Level = LogLevel.Warning, Message = "QR rendering failed; the text pairing code above remains authoritative")]
+    public static partial void QrRenderingFailed(ILogger logger, Exception ex);
 }
