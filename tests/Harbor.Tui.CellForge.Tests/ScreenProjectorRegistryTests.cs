@@ -2,6 +2,7 @@ using System.Collections.Immutable;
 using Harbor.Terminal.Abstractions.ViewModels;
 using Harbor.Tui.CellForge;
 using Harbor.Tui.CellForge.Generic;
+using Harbor.Ui.Framework.Panels;
 using Harbor.Ui.Framework.State;
 using Microsoft.Extensions.Logging.Abstractions;
 
@@ -143,6 +144,16 @@ public class ScreenProjectorRegistryTests
 
         await Assert.That(renderer.Projectors.Count).IsEqualTo(1);
 
+        // The store only focuses registered panels (AppReducer.FocusPanel
+        // ignores unknown ids), so the panels must be seeded first —
+        // otherwise the projection reads a null focus and the screen keeps
+        // its initial marker on every OS.
+        _ = renderer.SeedPanels(
+            ["one", "two"],
+            ImmutableDictionary<string, TuiPanelState>.Empty
+                .Add("one", TuiPanelState.Visible)
+                .Add("two", TuiPanelState.Visible),
+            ImmutableDictionary<string, int>.Empty);
         _ = renderer.FocusPanel("two");
         _ = renderer.Render(40, 10);
 
