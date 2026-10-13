@@ -123,9 +123,11 @@ internal static class CafPluginCommands
         bool force = false,
         [Argument]params string[] args)
     {
-        string[] flagTail = project
-            ? ["--project", ..(force ? ["--force"] : [])]
-            : force ? ["--force"] : [];
+        string[] flagTail = [];
+        if (project)
+            flagTail = ["--project"];
+        if (force)
+            flagTail = [..flagTail, "--force"];
         return await new PluginsCommand(Console.Out, Console.Error).ExecuteAsync([..args, ..flagTail]).ConfigureAwait(false);
     }
 }
@@ -146,9 +148,11 @@ internal static class CafSkillCommands
         bool force = false,
         [Argument]params string[] args)
     {
-        string[] flagTail = project
-            ? ["--project", ..(force ? ["--force"] : [])]
-            : force ? ["--force"] : [];
+        string[] flagTail = [];
+        if (project)
+            flagTail = ["--project"];
+        if (force)
+            flagTail = [..flagTail, "--force"];
         return await new SkillsCommand(Console.Out, Console.Error).ExecuteAsync([..args, ..flagTail]).ConfigureAwait(false);
     }
 }
