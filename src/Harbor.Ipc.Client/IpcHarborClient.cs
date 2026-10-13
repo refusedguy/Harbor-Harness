@@ -271,4 +271,3 @@ internal static partial class IpcHarborClientLog
     [LoggerMessage(EventId = 2, Level = LogLevel.Warning, Message = "Event subscription rejected: {Error}")]
     public static partial void EventSubscriptionRejected(ILogger logger, string error);
 }
-}
