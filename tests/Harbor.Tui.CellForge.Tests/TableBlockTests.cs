@@ -187,4 +187,27 @@ public class TableBlockTests
         var empty = new Harbor.Terminal.Abstractions.Rendering.GfmTable([], [], []);
         await Assert.That(() => new TableBlock(empty)).Throws<ArgumentException>();
     }
+
+    [Test]
+    public async Task ShrinkToFit_Preserved_ByDefault_SC1212()
+    {
+        // SC4 #1212: the shared TableMeasurer must keep default paint
+        // shrink-to-fit — desired [5,3] + decor 7 = 15 visible cells.
+        var block = ParseSample();
+        string first = ArtLines(block, 40)[0].TrimEnd();
+        await Assert.That(first.Length).IsEqualTo(15);
+        await Assert.That(first.StartsWith("┌")).IsTrue();
+        await Assert.That(first.EndsWith("┐")).IsTrue();
+    }
+
+    [Test]
+    public async Task ExpandToFill_StretchesRuleToWidth_SC1212()
+    {
+        var block = ParseSample();
+        block.ExpandToFill = true;
+        string first = ArtLines(block, 40)[0].TrimEnd();
+        await Assert.That(first.Length).IsEqualTo(40);
+        await Assert.That(first.StartsWith("┌")).IsTrue();
+        await Assert.That(first.EndsWith("┐")).IsTrue();
+    }
 }
