@@ -36,12 +36,39 @@ public sealed record WorktreeJumpEntry(
 ///     owns session switching (<c>ISessionManager.OpenSessionAsync</c> with
 ///     <see cref="WorktreeJumpEntry.SessionId" /> from <see cref="Confirm" />).
 /// </summary>
+/// <remarks>
+///     <para>
+///         <b>O8 steal (#1177, epic #1155):</b> selection math runs through
+///         <see cref="PaletteSelectController" /> (the opencode
+///         <c>select-controller.ts</c> port): ↑↓ wrap around instead of
+///         clamping, and <see cref="Reseed" /> preserves the selection by
+///         entry identity across re-seeds (opencode <c>preserveSelection</c>) —
+///         a refresh keeps the cursor where it was instead of jumping to the
+///         top. Typing a new filter still resets to the top hit (opencode
+///         resets on filter change; only the <em>options</em> change preserves).
+///     </para>
+///     <para>
+///         <b>Suggested section</b> (opencode <c>command-palette.tsx</c>): the
+///         host hands entry ids that deserve attention
+///         (<see cref="Show(IReadOnlyList{WorktreeJumpEntry}, IReadOnlySet{string})" /> —
+///         the panel passes working/dirty sessions). On an empty query those
+///         rows lead <see cref="Results" /> as <see cref="SuggestedCount" />
+///         duplicates under the host's <c>"Suggested"</c> header, then the full
+///         list follows — the same duplication opencode renders (suggested
+///         copies plus every option). A non-empty query filters flat with no
+///         Suggested block, exactly like the source.
+///     </para>
+/// </remarks>
 public sealed class WorktreeJumpPaletteModel
 {
+    private static readonly HashSet<string> NoSuggested = new(StringComparer.Ordinal);
+
     private readonly List<WorktreeJumpEntry> _all = new();
     private List<WorktreeJumpEntry> _results = new();
+    private IReadOnlySet<string> _suggested = NoSuggested;
     private string _query = string.Empty;
     private int _selected = -1;
+    private int _suggestedCount;
 
     /// <summary>Whether the palette is open.</summary>
     public bool Visible { get; private set; }
@@ -51,6 +78,13 @@ public sealed class WorktreeJumpPaletteModel
 
     /// <summary>Filtered/ranked rows (all entries when the query is empty).</summary>
     public IReadOnlyList<WorktreeJumpEntry> Results => _results;
+
+    /// <summary>
+    ///     Leading <see cref="Results" /> rows rendered under the host's
+    ///     <c>"Suggested"</c> header (<c>0</c> when the query is non-empty or
+    ///     nothing was marked suggested).
+    /// </summary>
+    public int SuggestedCount => _suggestedCount;
 
     /// <summary>Index into <see cref="Results" /> (<c>-1</c> when empty).</summary>
     public int SelectedIndex => _selected;
@@ -62,12 +96,40 @@ public sealed class WorktreeJumpPaletteModel
     /// <summary>Open the palette over <paramref name="entries" /> (resets query + selection).</summary>
     public void Show(IReadOnlyList<WorktreeJumpEntry> entries)
     {
+        Show(entries, null);
+    }
+
+    /// <summary>
+    ///     Open the palette over <paramref name="entries" /> (resets query +
+    ///     selection). <paramref name="suggestedSessionIds" /> marks the rows
+    ///     that lead <see cref="Results" /> under the <c>"Suggested"</c> header
+    ///     while the query is empty (entries with an empty session id are never
+    ///     suggested — there is no session to switch to).
+    /// </summary>
+    public void Show(IReadOnlyList<WorktreeJumpEntry> entries, IReadOnlySet<string>? suggestedSessionIds)
+    {
         ArgumentNullException.ThrowIfNull(entries);
         _all.Clear();
         _all.AddRange(entries);
+        _suggested = suggestedSessionIds ?? NoSuggested;
         _query = string.Empty;
         Visible = true;
-        Refilter();
+        Refilter(preserveSelection: false);
+    }
+
+    /// <summary>
+    ///     Replace the backing entries without touching the query (the
+    ///     <c>r</c> refresh path): the selection follows its entry by identity
+    ///     when it survives, else reconciles into range — an empty list still
+    ///     parks at <c>-1</c>.
+    /// </summary>
+    public void Reseed(IReadOnlyList<WorktreeJumpEntry> entries, IReadOnlySet<string>? suggestedSessionIds = null)
+    {
+        ArgumentNullException.ThrowIfNull(entries);
+        _all.Clear();
+        _all.AddRange(entries);
+        _suggested = suggestedSessionIds ?? NoSuggested;
+        Refilter(preserveSelection: true);
     }
 
     /// <summary>Close the palette (drops entries, query and selection).</summary>
@@ -75,8 +137,10 @@ public sealed class WorktreeJumpPaletteModel
     {
         _all.Clear();
         _results = new();
+        _suggested = NoSuggested;
         _query = string.Empty;
         _selected = -1;
+        _suggestedCount = 0;
         Visible = false;
     }
 
@@ -84,39 +148,77 @@ public sealed class WorktreeJumpPaletteModel
     public void SetQuery(string? query)
     {
         _query = query ?? string.Empty;
-        Refilter();
+        Refilter(preserveSelection: false);
     }
 
-    /// <summary>Move selection one row up (clamped).</summary>
+    /// <summary>Move selection one row up (wraps to the bottom).</summary>
     public void MoveUp()
     {
-        if (_selected > 0)
+        if (_results.Count == 0)
         {
-            _selected--;
+            return;
         }
+
+        _selected = PaletteSelectController.MoveSelection(
+            _selected, _results.Count, -1, PaletteSelectController.MovePolicy.Wrap);
     }
 
-    /// <summary>Move selection one row down (clamped).</summary>
+    /// <summary>Move selection one row down (wraps to the top).</summary>
     public void MoveDown()
     {
-        if (_selected >= 0 && _selected < _results.Count - 1)
+        if (_results.Count == 0)
         {
-            _selected++;
+            return;
         }
+
+        _selected = PaletteSelectController.MoveSelection(
+            _selected, _results.Count, 1, PaletteSelectController.MovePolicy.Wrap);
     }
 
     /// <summary>Enter-confirm: the selected row, or null when hidden or empty.</summary>
     public WorktreeJumpEntry? Confirm() => Selected;
 
-    private void Refilter()
+    private void Refilter(bool preserveSelection)
     {
+        string? keepSession = null;
+        string? keepPath = null;
+        int previous = _selected;
+        if (preserveSelection && previous >= 0 && previous < _results.Count)
+        {
+            keepSession = _results[previous].SessionId;
+            keepPath = _results[previous].Path;
+        }
+
         string q = _query.Trim().ToLowerInvariant();
         if (q.Length == 0)
         {
-            _results = new List<WorktreeJumpEntry>(_all);
+            if (_suggested.Count > 0)
+            {
+                var merged = new List<WorktreeJumpEntry>(_all.Count + _suggested.Count);
+                int leading = 0;
+                for (int i = 0; i < _all.Count; i++)
+                {
+                    var entry = _all[i];
+                    if (entry.SessionId.Length > 0 && _suggested.Contains(entry.SessionId))
+                    {
+                        merged.Add(entry);
+                        leading++;
+                    }
+                }
+
+                _suggestedCount = leading;
+                merged.AddRange(_all);
+                _results = merged;
+            }
+            else
+            {
+                _suggestedCount = 0;
+                _results = new List<WorktreeJumpEntry>(_all);
+            }
         }
         else
         {
+            _suggestedCount = 0;
             _results = _all
                 .Select(e => (Entry: e, Score: BestScore(e, q)))
                 .Where(p => p.Score >= 0)
@@ -125,7 +227,28 @@ public sealed class WorktreeJumpPaletteModel
                 .ToList();
         }
 
-        _selected = _results.Count > 0 ? 0 : -1;
+        if (_results.Count == 0)
+        {
+            _selected = -1;
+            return;
+        }
+
+        if (preserveSelection && keepSession is not null)
+        {
+            for (int i = 0; i < _results.Count; i++)
+            {
+                if (_results[i].SessionId == keepSession && _results[i].Path == keepPath)
+                {
+                    _selected = i;
+                    return;
+                }
+            }
+
+            _selected = PaletteSelectController.ReconcileSelection(previous, _results.Count);
+            return;
+        }
+
+        _selected = 0;
     }
 
     private static int BestScore(WorktreeJumpEntry entry, string query)

@@ -47,8 +47,7 @@
 //     QuestionFormView.cs:571                 != 0            (custom row only)
 //     FilePickerView.cs:153                   is None or Shift
 //     CommandPaletteView.cs:255               is None or Shift
-//     CellForgeJumpPalettePanel.cs:216        is None or Shift && !IsControl
-// check-doc-cites: record-drift CellForgeJumpPalettePanel.cs:216 now="ReseedLocked(ctx);" [#947: written over `}`; repair deferred to the owner's symbol-rename decision] -->
+//     CellForgeJumpPalettePanel.cs:250        is None or Shift && !IsControl
 //     ReplInputLoop.cs:461                    is None or Shift
 //
 //   COMMAND (no buffer; runes are h/j/k/l or a y/n/a vote; Shift refused)
@@ -80,7 +79,7 @@
 //   consumed — the chord never reached the composer behind it.
 //     SetupChecklistOverlay.cs:95     product input loop — LIVE
 //     WhichKeyHelpOverlay.cs:178      '?', legacy ConsoleKeyInfo
-//     CellForgeHelpPanel.cs:79        mounted panel
+//     CellForgeHelpPanel.cs:88        mounted panel
 //     CellForgeFileTreePanel.cs:135   mounted panel
 //     CellForgeDiagnosticsPanel.cs:57 mounted panel
 //     CellForgeSubagentsPanel.cs:164  mounted panel
