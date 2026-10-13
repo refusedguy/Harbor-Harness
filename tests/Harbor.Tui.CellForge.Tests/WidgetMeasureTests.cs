@@ -27,9 +27,13 @@ public sealed class WidgetMeasureTests
         }
     }
 
-    private sealed class PaddedPanel(string id, Size min) : TestPanel(id, min)
+    private sealed class PaddedPanel(string id, Size min) : Panel(id, min, 0)
     {
         public override Padding Padding => Padding.Uniform(1);
+
+        public override void Paint(Harbor.Ui.Framework.Rendering.ScreenBuffer buffer)
+        {
+        }
     }
 
     [Test]
