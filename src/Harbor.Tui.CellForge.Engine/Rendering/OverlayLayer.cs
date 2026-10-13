@@ -307,6 +307,15 @@ public sealed class OverlayLayer : ContainerNode
 
             for (int f = 0; f < frags.Count; f++)
             {
+                // #1204 (compose popup primitive): Ratatui Clear as a pipeline
+                // step, not a widget — an opaque floater blanks its visible
+                // fragments before content paints, so sparse popovers (border
+                // + a few rows) never leak base-layout cells through.
+                if (layer.Opaque)
+                {
+                    OverlayGeometry.Clear(buffer, frags[f]);
+                }
+
                 layer.Content.Paint(buffer, frags[f]);
             }
         }

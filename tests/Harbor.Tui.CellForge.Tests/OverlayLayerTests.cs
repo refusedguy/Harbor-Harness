@@ -33,6 +33,26 @@ public sealed class OverlayLayerTests
         }
     }
 
+    /// <summary>
+    /// #1204: sparse popover — paints a single dot, leaves the rest of its
+    /// footprint untouched (like a dialog that draws border + a few rows).
+    /// Proves the pipeline Clear blanks the footprint first.
+    /// </summary>
+    private sealed class SparseNode(char glyph) : EngineCells.INode
+    {
+        public EngineCells.Rect Arranged { get; private set; }
+
+        public EngineCells.Size Measure(EngineCells.Constraints constraints) =>
+            new(Math.Min(4, constraints.Width), Math.Min(2, constraints.Height));
+
+        public void Arrange(EngineCells.Rect rect) => Arranged = rect;
+
+        public void Paint(EngineCells.ScreenBuffer buffer, EngineCells.Rect clip)
+        {
+            buffer.SetRune(clip.X, clip.Y, new Rune(glyph), EngineCells.CellStyle.Plain);
+        }
+    }
+
     private static EngineCells.ZLayer Layer(
         string id,
         EngineCells.Rect bounds,
@@ -244,5 +264,66 @@ public sealed class OverlayLayerTests
 
         await Assert.That(buffer.Get(5, 2).Rune).IsEqualTo((int)' ');
         await Assert.That(buffer.Get(0, 0).Rune).IsEqualTo((int)'a');
+    }
+
+    [Test]
+    public async Task Opaque_SparseContent_ClearsFootprintBeforePaint()
+    {
+        // Production order: base layout already painted into the buffer,
+        // then the overlay floats over it. Pre-fill with 'a' so a missing
+        // Clear leaks visibly.
+        var buffer = new EngineCells.ScreenBuffer(10, 4);
+        for (int y = 0; y < 4; y++)
+        {
+            for (int x = 0; x < 10; x++)
+            {
+                buffer.SetRune(x, y, new Rune('a'), EngineCells.CellStyle.Plain);
+            }
+        }
+
+        var overlays = new EngineCells.OverlayLayer();
+        overlays.Push(new EngineCells.ZLayer(
+            "popup",
+            new SparseNode('b'),
+            new EngineCells.Rect(4, 1, 6, 2),
+            z: 1));
+        overlays.Arrange(new EngineCells.Rect(0, 0, 10, 4));
+        overlays.Paint(buffer, new EngineCells.Rect(0, 0, 10, 4));
+
+        // Painted dot wins; the rest of the opaque footprint is blanked,
+        // not leaked from the base layer.
+        await Assert.That(buffer.Get(4, 1).Rune).IsEqualTo((int)'b');
+        await Assert.That(buffer.Get(5, 1).Rune).IsEqualTo((int)' ');
+        await Assert.That(buffer.Get(5, 2).Rune).IsEqualTo((int)' ');
+        await Assert.That(buffer.Get(0, 0).Rune).IsEqualTo((int)'a');
+    }
+
+    [Test]
+    public async Task Transparent_SparseContent_PreservesBase()
+    {
+        var buffer = new EngineCells.ScreenBuffer(10, 4);
+        for (int y = 0; y < 4; y++)
+        {
+            for (int x = 0; x < 10; x++)
+            {
+                buffer.SetRune(x, y, new Rune('a'), EngineCells.CellStyle.Plain);
+            }
+        }
+
+        var overlays = new EngineCells.OverlayLayer();
+        overlays.Push(new EngineCells.ZLayer(
+            "toast",
+            new SparseNode('t'),
+            new EngineCells.Rect(4, 1, 6, 2),
+            z: 1)
+        {
+            Opaque = false,
+            HitTransparent = true,
+        });
+        overlays.Arrange(new EngineCells.Rect(0, 0, 10, 4));
+        overlays.Paint(buffer, new EngineCells.Rect(0, 0, 10, 4));
+
+        await Assert.That(buffer.Get(4, 1).Rune).IsEqualTo((int)'t');
+        await Assert.That(buffer.Get(5, 1).Rune).IsEqualTo((int)'a');
     }
 }

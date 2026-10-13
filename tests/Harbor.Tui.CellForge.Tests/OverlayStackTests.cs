@@ -35,6 +35,28 @@ public sealed class OverlayStackTests
         }
     }
 
+    /// <summary>
+    /// #1204: sparse popover — paints a single dot, leaves the rest of its
+    /// footprint untouched. Proves the pipeline Clear blanks it first.
+    /// </summary>
+    private sealed class SparseLayer(
+        string id,
+        Rect bounds,
+        char glyph,
+        bool opaque = true) : IOverlayLayer
+    {
+        public string Id { get; } = id;
+        public Rect Bounds { get; } = bounds;
+        public bool Visible => true;
+        public bool Opaque { get; } = opaque;
+        public bool HitTransparent => !opaque;
+
+        public void Paint(ScreenBuffer buffer, Rect clip)
+        {
+            buffer.SetRune(clip.X, clip.Y, new Rune(glyph), CellStyle.Plain);
+        }
+    }
+
     [Test]
     public async Task EmptyStack_PaintOver_LeavesBufferUntouched()
     {
@@ -226,5 +248,30 @@ public sealed class OverlayStackTests
 
         stack.Clear();
         await Assert.That(stack.IsEmpty).IsTrue();
+    }
+
+    [Test]
+    public async Task Opaque_SparseLayer_ClearsFootprintBeforePaint()
+    {
+        // Production order: LayoutTree panels already painted into the
+        // buffer, then PaintOver floats over it. Pre-fill with 'a' so a
+        // missing Clear leaks visibly.
+        var buffer = new ScreenBuffer(10, 4);
+        for (int y = 0; y < 4; y++)
+        {
+            for (int x = 0; x < 10; x++)
+            {
+                buffer.SetRune(x, y, new Rune('a'), CellStyle.Plain);
+            }
+        }
+
+        var stack = new OverlayStack();
+        stack.Push(new SparseLayer("popup", new Rect(4, 1, 6, 2), 'b'));
+        stack.PaintOver(buffer);
+
+        await Assert.That(buffer.Get(4, 1).Rune).IsEqualTo((int)'b');
+        await Assert.That(buffer.Get(5, 1).Rune).IsEqualTo((int)' ');
+        await Assert.That(buffer.Get(5, 2).Rune).IsEqualTo((int)' ');
+        await Assert.That(buffer.Get(0, 0).Rune).IsEqualTo((int)'a');
     }
 }
