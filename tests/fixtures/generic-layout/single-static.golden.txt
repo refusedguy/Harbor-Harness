@@ -1,0 +1,8 @@
+# golden: single-static (36x7)
+› Welcome
+Pick a layout below.
+Tab moves focus.
+
+
+
+

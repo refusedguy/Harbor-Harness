@@ -1,0 +1,11 @@
+# golden: focus-cycle (36x10)
+Top
+upper pane
+
+
+
+› Bottom
+lower pane
+
+
+
