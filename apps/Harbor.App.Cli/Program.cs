@@ -89,14 +89,13 @@ public static class Program
         });
         _logger = loggerFactory.CreateLogger(typeof(Program).FullName ?? "Program");
 
-        _logger.LogInformation("Starting Harbor CLI with {ArgCount} args: {Args}", args.Length, string.Join(' ', args));
-        _logger.LogInformation("Console log level: {ConsoleLevel}; file log: {FilePath}; interactive-tui: {InteractiveTui}",
-            consoleLevel, fileProvider.FilePath, interactiveTui);
+        ProgramLog.StartingCli(_logger, args.Length, string.Join(' ', args));
+        ProgramLog.ConsoleLogLevel(_logger, consoleLevel, fileProvider.FilePath, interactiveTui);
         try
         {
             if (args.Length == 0)
             {
-                _logger.LogInformation("No args provided — entering interactive mode");
+                ProgramLog.NoArgsInteractive(_logger);
                 return await InteractiveVerb.RunAsync(_logger, args, scriptPath);
             }
 
@@ -105,7 +104,7 @@ public static class Program
             command = "demo"; // `harbor --demo` is the documented alias of `harbor demo`
         if (command == "--headless")
             command = "headless"; // `harbor --headless` is the documented alias of `harbor headless`
-        _logger.LogInformation("Command: {Command}", command);
+        ProgramLog.DispatchingCommand(_logger, command);
 
         // Slice A (#1144): StatusCommand names Client-assembly transports, so
         // the file leaves the compile when the daemon is off (see the csproj
@@ -162,7 +161,7 @@ public static class Program
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Unhandled exception in CLI entry point");
+            ProgramLog.UnhandledException(_logger, ex);
             Console.Error.WriteLine(ex.Message);
             return 1;
         }
@@ -187,4 +186,26 @@ public static class Program
 
     internal static string? ExtractScriptArg(string[] args, out string[] remaining) =>
         CliArgs.ExtractScriptArg(args, out remaining);
+}
+
+/// <summary>
+///     SG6: BCL <c>[LoggerMessage]</c> delegates for <see cref="Program" />.
+///     Templates, levels and operands are 1-to-1 with the former <c>LogX</c> calls.
+/// </summary>
+internal static partial class ProgramLog
+{
+    [LoggerMessage(EventId = 1, Level = LogLevel.Information, Message = "Starting Harbor CLI with {ArgCount} args: {Args}")]
+    public static partial void StartingCli(ILogger logger, int argCount, string args);
+
+    [LoggerMessage(EventId = 2, Level = LogLevel.Information, Message = "Console log level: {ConsoleLevel}; file log: {FilePath}; interactive-tui: {InteractiveTui}")]
+    public static partial void ConsoleLogLevel(ILogger logger, LogLevel consoleLevel, string filePath, bool interactiveTui);
+
+    [LoggerMessage(EventId = 3, Level = LogLevel.Information, Message = "No args provided — entering interactive mode")]
+    public static partial void NoArgsInteractive(ILogger logger);
+
+    [LoggerMessage(EventId = 4, Level = LogLevel.Information, Message = "Command: {Command}")]
+    public static partial void DispatchingCommand(ILogger logger, string command);
+
+    [LoggerMessage(EventId = 5, Level = LogLevel.Error, Message = "Unhandled exception in CLI entry point")]
+    public static partial void UnhandledException(ILogger logger, Exception ex);
 }
