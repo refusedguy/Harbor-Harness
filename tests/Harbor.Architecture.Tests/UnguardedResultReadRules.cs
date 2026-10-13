@@ -69,6 +69,29 @@
 // Raw string literals for the patterns, deliberately (same reason as
 // TuiReadLineContractRules): a verbatim @"…" forces every double quote in a regex
 // to be doubled, and the pattern IS the specification.
+//
+// MECHANISM (#1086, step 2, conveyor e3)
+// -------------------------------------
+// The three bans below are one ScanRule with three sub-ids, one planted control
+// per positive/negative matcher case, the allow-list as the baseline, and a
+// discovery floor. Enumeration, matching and the control/discovery verdicts are
+// ScanRunner's; this file keeps the issue prose, the patterns, the stripper, the
+// allow-list, and the test names.
+//
+// The verdict is `ParseResultReads` through the Func-overload, carrying the
+// file's own `StripComments` state machine verbatim rather than silently
+// adopting the shared stripper: the trailing-comment and URL-in-a-literal
+// controls pin THIS stripper's contract (blank to end-of-line, track the
+// string), and the shared regex stripper answers a different question. Both
+// measurements drive the whole rule and the `[SubId]` tag names the shape, so a
+// failure still points at the right rule. The baseline derives from the single
+// `AllowList` row (`Take(1)` + `AllowList_CountIsPinned`, so growth and
+// shrinkage both fail loudly); the row excuses the GETRESULT-VALUE sub-id in
+// that file, which is the shape the live site carries. One deliberate
+// strictness gain, stated: the old occupancy check matched the patterns against
+// the RAW source, so commenting the violation out kept the row "real"; the
+// stale-keys check grades the stripped verdict, so a commented-out violation
+// correctly expires its row.
 
 using System.Text.RegularExpressions;
 
@@ -90,6 +113,15 @@ public sealed class UnguardedResultReadRules
 {
     /// <summary>Repo-relative trees that ship. <c>tests/</c> and <c>contrib/</c> are excluded by design.</summary>
     private static readonly string[] ShippedTrees = ["src", "apps"];
+
+    /// <summary><c>(await …).Value</c> — the CFE0001 blind spot (#602).</summary>
+    private const string AwaitValue = "AWAIT-VALUE";
+
+    /// <summary><c>…GetResult().Value</c> — the same blind spot, sync spelling.</summary>
+    private const string GetResultValue = "GETRESULT-VALUE";
+
+    /// <summary><c>GetAllAgents()[0]</c> — the empty-registry crash, no analyzer covers it.</summary>
+    private const string RegistryZeroIndexId = "REGISTRY-ZERO-INDEX";
 
     // ── Rule 1: `.Value` off an await expression ─────────────────────────────
     //
@@ -143,28 +175,123 @@ public sealed class UnguardedResultReadRules
             + "is honest about what it is not covering."),
     ];
 
+    /// <summary>
+    ///     The three bans as data: one row per blind-spot shape, the allow-list
+    ///     as the baseline, nine planted controls, a discovery floor.
+    /// </summary>
+    private static readonly ScanRule Rule = new()
+    {
+        Id = "UnguardedResultRead",
+        Trees = ShippedTrees,
+        Forbidden =
+        [
+            new ScanForbidden(
+                AwaitValue,
+                ValueOffAwait,
+                "guard it, bind it, or apply an explicit default — read it through a local you have "
+                + "checked, not through `(await …).Value`. See issue #602."),
+            new ScanForbidden(
+                GetResultValue,
+                ValueOffGetResult,
+                "guard it, bind it, or apply an explicit default — read it through a local you have "
+                + "checked, not through `…GetResult().Value`. See issue #602."),
+            new ScanForbidden(
+                RegistryZeroIndexId,
+                RegistryZeroIndex,
+                "resolve the agent through Maybe<AgentDefinition> and treat None as a reported "
+                + "failure — `[0]` throws on an empty registry. See issue #602."),
+        ],
+        Baseline =
+        [
+            // The single AllowList row excuses the shape the live site carries
+            // (the blocked-GetResult read); any other shape in that file is a new
+            // violation, not an excused one.
+            .. AllowList.Take(1).Select(static row => new ScanBaseline(
+                GetResultValue + " " + row.File,
+                IsPrefix: false,
+                row.Why)),
+        ],
+        Controls =
+        [
+            // Verbatim from ReplRunner.RunAskAsync as it shipped.
+            new ScanControl("AwaitBad.cs", """
+                var config = (await _configStore.LoadAsync().ConfigureAwait(false)).Value;
+                """, AwaitValue),
+            new ScanControl("GetResultBad.cs", """
+                _common = _commonStore.LoadAsync().GetAwaiter().GetResult().Value;
+                """, GetResultValue),
+            new ScanControl("RegistryBad.cs", """
+                .Match<AgentDefinition, AgentDefinition>(matched => matched, () => _agentRegistry.GetAllAgents()[0]);
+                """, RegistryZeroIndexId),
+            // Writing the fix's "this used to be …" comment tripped the rule on
+            // its own fix. A guard that flags the explanation of a bug is a guard
+            // whose allow-list starts growing on day one.
+            new ScanControl("Commented.cs", """
+                // #602: this was `(await store.LoadAsync()).Value`, which THROWS.
+                // The empty-registry fallback was `GetAllAgents()[0]`, and it threw too.
+                /* block form: (await store.LoadAsync().ConfigureAwait(false)).Value */
+                /// doc form: GetAllAgents()[0]
+                var loaded = await store.LoadAsync().ConfigureAwait(false);
+                if (loaded.IsFailure)
+                {
+                    return 1;
+                }
+
+                HarborConfig config = loaded.IsSuccess ? loaded.Value : HarborConfig.Default;
+                """, null),
+            // Blanking to end-of-line must not blank the CODE that precedes the
+            // comment, or the stripper is a loophole.
+            new ScanControl("Trailing.cs", """
+                var config = (await _configStore.LoadAsync().ConfigureAwait(false)).Value; // the #602 crash
+                """, AwaitValue),
+            // `//` inside a string is not a comment. Blank to the first `//` and
+            // this violation disappears next to a log message.
+            new ScanControl("Url.cs", """
+                _logger.LogError("corrupt at https://example.invalid/config.json"); var n = (await s.LoadAsync()).Value;
+                """, AwaitValue),
+            // The shape the #602 fix introduces: the load lands in a local, the
+            // failure is handled, and the value is read inside an IsSuccess ternary.
+            new ScanControl("AwaitFixed.cs", """
+                var loaded = await _configStore.LoadAsync().ConfigureAwait(false);
+                if (loaded.IsFailure)
+                {
+                    Console.Error.WriteLine($"Failed: {loaded.Error}");
+                    return 1;
+                }
+
+                HarborConfig config = loaded.IsSuccess ? loaded.Value : HarborConfig.Default;
+                """, null),
+            new ScanControl("GetResultFixed.cs", """
+                Result<HarborConfig> loaded = store.LoadAsync().GetAwaiter().GetResult();
+                if (loaded.IsFailure)
+                {
+                    return Result.Failure<HarborConfig>(loaded.Error);
+                }
+
+                return loaded;
+                """, null),
+            // Absence is Maybe<T>, not an index that throws.
+            new ScanControl("RegistryFixed.cs", """
+                var agents = _agentRegistry.GetAllAgents();
+                Maybe<AgentDefinition> agent = agents
+                    .TryFirst(a => a.Name.Value == config.Agent)
+                    .Or(agents.TryFirst());
+                """, null),
+        ],
+        MinHits = 200,
+        MustContain =
+        [
+            "apps/Harbor.App.Avalonia/ViewModels/SettingsViewModel.cs",
+        ],
+        CustomParse = ParseResultReads,
+    };
+
     // ── Rule 1 + 2: `.Value` across an await / GetResult boundary ────────────
 
     [Test]
     public async Task ShippedCode_ReadsNoResultValueAcrossAnAwaitOrGetResultBoundary()
     {
-        IReadOnlyList<string> files = EnumerateShippedFiles();
-
-        await Assert.That(files.Count).IsGreaterThan(200)
-            .Because(
-                "Non-vacuity for the scan: src/ + apps/ is several hundred .cs files. A count this "
-                + "low means the tree walk or the extension filter stopped matching, and every "
-                + "assertion below would be reporting 'clean' about nothing.");
-
-        var violations = new List<string>();
-        foreach (string file in files)
-        {
-            string source = File.ReadAllText(file);
-            violations.AddRange(Matches(file, source, ValueOffAwait));
-            violations.AddRange(Matches(file, source, ValueOffGetResult));
-        }
-
-        violations.RemoveAll(v => IsAllowlisted(v));
+        List<string> violations = ScanRunner.Evaluate(Rule);
 
         await Assert.That(violations).IsEmpty()
             .Because(
@@ -173,7 +300,8 @@ public sealed class UnguardedResultReadRules
                 + "CFE0001 resolves no Result symbol and skips the node: this is the exact hole "
                 + "that let a corrupt config.json kill `harbor ask` with an unhandled exception "
                 + "(#602). Guard it, bind it, or apply an explicit default — but read it through a "
-                + "local you have checked.");
+                + "local you have checked."
+                + Environment.NewLine + string.Join(Environment.NewLine, violations));
     }
 
     // ── Rule 3: no `[0]` into a registry snapshot ────────────────────────────
@@ -181,13 +309,7 @@ public sealed class UnguardedResultReadRules
     [Test]
     public async Task ShippedCode_NeverIndexesZeroIntoTheAgentRegistry()
     {
-        IReadOnlyList<string> files = EnumerateShippedFiles();
-
-        var violations = new List<string>();
-        foreach (string file in files)
-        {
-            violations.AddRange(Matches(file, File.ReadAllText(file), RegistryZeroIndex));
-        }
+        List<string> violations = ScanRunner.Evaluate(Rule);
 
         await Assert.That(violations).IsEmpty()
             .Because(
@@ -195,7 +317,8 @@ public sealed class UnguardedResultReadRules
                 + "ArgumentOutOfRangeException. An empty registry is the state of a fresh install "
                 + "and of a failed plugin-load pass, and this spelling sat on every CLI entry "
                 + "point (#602). Resolve the agent through Maybe<AgentDefinition> and treat None as "
-                + "a reported failure.");
+                + "a reported failure."
+                + Environment.NewLine + string.Join(Environment.NewLine, violations));
     }
 
     // ── Non-vacuity of the discovery step ────────────────────────────────────
@@ -220,6 +343,24 @@ public sealed class UnguardedResultReadRules
         await Assert.That(files.Any(f => f.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}", StringComparison.Ordinal)
                                      || f.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}", StringComparison.Ordinal))).IsFalse()
             .Because("bin/ and obj/ are not source");
+    }
+
+    /// <summary>
+    ///     The rule's own scope really yields the shipped tree: hundreds of files
+    ///     including the allow-listed one, so "no offenders" means "nobody writes
+    ///     the shape" rather than "the walk saw nothing".
+    /// </summary>
+    [Test]
+    public async Task Scanner_SeesTheShippedTrees()
+    {
+        List<string> discovery = ScanRunner.CheckDiscovery(Rule);
+
+        await Assert.That(discovery).IsEmpty()
+            .Because(
+                "src/ + apps/ is several hundred .cs files including the allow-listed SettingsViewModel. "
+                + "A count this low — or a scope that stopped seeing that file — means the tree walk "
+                + "broke and every assertion below would be reporting 'clean' about nothing. "
+                + string.Join("; ", discovery));
     }
 
     // ── Non-vacuity of the matchers themselves: three positive controls ──────
@@ -356,7 +497,7 @@ public sealed class UnguardedResultReadRules
             Result<HarborConfig> loaded = store.LoadAsync().GetAwaiter().GetResult();
             if (loaded.IsFailure)
             {
-                return Result.Failure<HarborConfig>(loaded.Error);
+                return loaded;
             }
 
             return loaded;
@@ -380,62 +521,38 @@ public sealed class UnguardedResultReadRules
             .Because("absence is Maybe<T>, not an index that throws");
     }
 
+    /// <summary>
+    ///     The planted controls — every bad spelling and every fixed one — drive
+    ///     the REAL parser: offenders reported under their sub-id, fixes silent.
+    /// </summary>
+    [Test]
+    public async Task Detector_ControlsDriveTheRealParser()
+    {
+        List<string> failures = ScanRunner.CheckControls(Rule);
+
+        await Assert.That(failures).IsEmpty()
+            .Because(
+                "the nine planted controls must agree with the nine matcher cases above through the "
+                + "rule's own parser — otherwise the rule guards nothing, or forbids the fix. "
+                + string.Join("; ", failures));
+    }
+
     // ── The allow-list cannot rot ────────────────────────────────────────────
 
     [Test]
     public async Task AllowList_RowsAreAllStillReal()
     {
-        IReadOnlyList<string> files = EnumerateShippedFiles();
-        var failures = new List<string>();
+        // The row must still excuse a real hit: the file in scope, the shape
+        // behind it. The reason itself is graded by Baseline_Rows_AllHaveReasons.
+        List<string> stale = ScanRunner.StaleBaselineKeys(
+            Rule, ScanRunner.ReadSources(ScanRunner.ScopeFiles(Rule)));
 
-        foreach (ResultReadExemption row in AllowList)
-        {
-            if (RepoPaths.RepoRoot is null)
-            {
-                throw new InvalidOperationException("[#602] repository root not found; nothing to check.");
-            }
-
-            string path = Path.Combine(RepoPaths.RepoRoot, row.File);
-            if (!File.Exists(path))
-            {
-                failures.Add($"{row.File}: allow-listed file no longer exists — delete the row");
-                continue;
-            }
-
-            string source = File.ReadAllText(path);
-            bool stillMatches = ValueOffGetResult.IsMatch(source)
-                                || ValueOffAwait.IsMatch(source)
-                                || RegistryZeroIndex.IsMatch(source);
-
-            if (!stillMatches)
-            {
-                failures.Add(
-                    $"{row.File}: the pattern this row excuses is gone — the site was fixed, so the "
-                    + "row grandfathers nothing and hides the next real violation. Delete it and "
-                    + "lower the pinned count.");
-            }
-
-            if (string.IsNullOrWhiteSpace(row.Why))
-            {
-                failures.Add($"{row.File}: row states no reason; a row without a reason is one nobody deletes");
-            }
-        }
-
-        // A row for a file the scan never visits is dead weight dressed as an
-        // exception, and it is the classic way an allow-list becomes a blanket.
-        foreach (ResultReadExemption row in AllowList)
-        {
-            if (!files.Any(f => f.EndsWith(row.File.Replace('/', Path.DirectorySeparatorChar), StringComparison.Ordinal)))
-            {
-                failures.Add($"{row.File}: allow-listed path is not in the scanned set — the row is unreachable");
-            }
-        }
-
-        await Assert.That(failures).IsEmpty()
+        await Assert.That(stale).IsEmpty()
             .Because(
-                "An allow-list row that no longer matches reality is a lie: it excuses nothing today "
-                + "and hides the next violation tomorrow." + Environment.NewLine
-                + string.Join(Environment.NewLine, failures));
+                "An allow-list row that no longer matches reality is a lie: the site was fixed (or the "
+                + "file left the scope), the row grandfathers nothing and hides the next real violation. "
+                + "Delete it and lower the pinned count." + Environment.NewLine
+                + string.Join(Environment.NewLine, stale));
     }
 
     [Test]
@@ -447,6 +564,18 @@ public sealed class UnguardedResultReadRules
                 + "already carries as a known real defect awaiting a product decision. It may only "
                 + "shrink. A second row is a second site this rule is choosing not to catch, and it "
                 + "must be justified in review rather than added to make a build green.");
+    }
+
+    /// <summary>
+    ///     Every baseline row states why it is tolerated, in the row itself — the
+    ///     allow-list's reason, through the rule.
+    /// </summary>
+    [Test]
+    public async Task Baseline_Rows_AllHaveReasons()
+    {
+        List<string> failures = ScanRunner.CheckReasons(Rule);
+
+        await Assert.That(failures).IsEmpty().Because(string.Join("\n", failures));
     }
 
     // ── Discovery + match helpers ────────────────────────────────────────────
@@ -485,28 +614,37 @@ public sealed class UnguardedResultReadRules
         return found;
     }
 
-    /// <summary>Repo-relative <c>path:line</c> for each match, for a failure a human can act on.</summary>
-    private static IEnumerable<string> Matches(string absolutePath, string source, Regex pattern)
+    /// <summary>
+    ///     The custom parser: the three blind-spot verdicts over one file's raw
+    ///     source. Same comment-stripped projection, same per-line regexes, same
+    ///     original-text reporting as the probe has always used — the planted
+    ///     controls grade this parser, so "it can fail" means something.
+    /// </summary>
+    private static IEnumerable<ScanHit> ParseResultReads(string displayPath, string rawSource)
     {
-        if (RepoPaths.RepoRoot is not { } root)
-        {
-            yield break;
-        }
-
-        string relative = Path.GetRelativePath(root, absolutePath).Replace('\\', '/');
-        string[] raw = source.Split('\n');
+        string[] raw = rawSource.Split('\n');
         // Match against the COMMENT-STRIPPED projection, report the original text.
         // A guard that flags the prose explaining the bug is a guard that gets
         // deleted: this file's own header quotes the crash, and so does the fix's
         // "this used to be …" comment. A rule which cannot tell code from
         // commentary trains reviewers to reach for the allow-list.
-        string[] code = StripComments(source).Split('\n');
+        string[] code = StripComments(rawSource).Split('\n');
 
         for (int i = 0; i < code.Length && i < raw.Length; i++)
         {
-            if (pattern.IsMatch(code[i]))
+            if (ValueOffAwait.IsMatch(code[i]))
             {
-                yield return $"{relative}:{i + 1}: {raw[i].Trim()}";
+                yield return new ScanHit(AwaitValue, displayPath, i + 1, raw[i].Trim());
+            }
+
+            if (ValueOffGetResult.IsMatch(code[i]))
+            {
+                yield return new ScanHit(GetResultValue, displayPath, i + 1, raw[i].Trim());
+            }
+
+            if (RegistryZeroIndex.IsMatch(code[i]))
+            {
+                yield return new ScanHit(RegistryZeroIndexId, displayPath, i + 1, raw[i].Trim());
             }
         }
     }
@@ -646,14 +784,5 @@ public sealed class UnguardedResultReadRules
         }
 
         return blanked.ToString();
-    }
-
-    /// <summary>Whether a violation line names an allow-listed file.</summary>
-    private static bool IsAllowlisted(string violation)
-    {
-        int colon = violation.IndexOf(':', StringComparison.Ordinal);
-        string file = colon < 0 ? violation : violation[..colon];
-
-        return AllowList.Any(row => string.Equals(row.File, file, StringComparison.Ordinal));
     }
 }
