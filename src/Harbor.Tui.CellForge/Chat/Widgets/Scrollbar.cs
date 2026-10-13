@@ -50,9 +50,25 @@ public static class Scrollbar
     /// <summary>
     /// True when a scrollbar is warranted: the content overflows the viewport
     /// (<c>ScrollableViewport.MaxOffsetFor(totalContent, viewportH) &gt; 0</c>).
+    /// Detachable overload: any widget's <see cref="ScrollInfo"/> triple.
+    /// </summary>
+    public static bool IsVisible(ScrollInfo info) =>
+        IsVisible(info.Total, info.Viewport);
+
+    /// <summary>
+    /// True when a scrollbar is warranted: the content overflows the viewport
+    /// (<c>ScrollableViewport.MaxOffsetFor(totalContent, viewportH) &gt; 0</c>).
     /// </summary>
     public static bool IsVisible(long totalContent, int viewportH) =>
         ScrollableViewport.MaxOffsetFor(totalContent, viewportH) > 0;
+
+    /// <summary>
+    /// Thumb window for a detachable <see cref="ScrollInfo"/> triple.
+    /// Same math as the <c>(total, offset, viewport)</c> overload.
+    /// </summary>
+    public static (int ThumbStart, int ThumbLength, int TrackEnd) ThumbGeometry(
+        ScrollInfo info, int trackH) =>
+        ThumbGeometry(info.Total, info.Offset, info.Viewport, trackH);
 
     /// <summary>
     /// Thumb window inside a <paramref name="trackH"/>-tall column, in track
@@ -100,6 +116,18 @@ public static class Scrollbar
         ArgumentNullException.ThrowIfNull(buffer);
         ArgumentNullException.ThrowIfNull(viewport);
         return TryPaint(buffer, rect, viewport.TotalContent, viewport.Offset, viewport.ViewportH);
+    }
+
+    /// <summary>
+    /// Paints the scrollbar for a detachable <see cref="ScrollInfo"/> triple
+    /// into the rightmost column of <paramref name="rect"/> (#1206: any
+    /// scrollable widget yields the triple, this shared indicator renders on
+    /// top, no scroll ownership). Same hidden contract as the
+    /// <c>(totalContent, offset, viewportH)</c> overload.
+    /// </summary>
+    public static bool TryPaint(ScreenBuffer buffer, Rect rect, ScrollInfo info)
+    {
+        return TryPaint(buffer, rect, info.Total, info.Offset, info.Viewport);
     }
 
     /// <summary>
