@@ -573,7 +573,13 @@ public sealed class CellForgeRenderContext : ITuiRenderContext
 
     public void ExitAlternateScreen()
     {
-        _writer.Raw(TerminalQueries.MouseDisable + "\x1B[?25h\x1B[?1049l");
+        // #1160 cursor-save audit: the cursor-show rides the slim trait
+        // (ShowCursor), not an escape insert — byte-identical (same buffer
+        // order), but the ?25h shape stays owned by AnsiWriter. Alt-screen +
+        // mouse remain Raw: mode switches, not cursor/scroll primitives.
+        _writer.Raw(TerminalQueries.MouseDisable);
+        _writer.ShowCursor();
+        _writer.Raw("\x1B[?1049l");
         Flush();
     }
 
