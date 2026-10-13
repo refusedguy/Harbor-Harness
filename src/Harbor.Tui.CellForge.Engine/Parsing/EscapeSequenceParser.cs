@@ -628,7 +628,14 @@ public sealed class EscapeSequenceParser
                 DecodeLegacyTilde(parameters);
                 return;
             case (byte)'u':
-                DecodeKittyKey(parameters);
+                if (KittyKeyDecoder.TryDecode(parameters, out var kittyKey))
+                {
+                    Enqueue(InputEvent.FromKey(kittyKey));
+                }
+                else
+                {
+                    IgnoredSequenceCount++;
+                }
                 return;
             case (byte)'R':
                 // Cursor position report: CSI row ; col R (probe-routable).
@@ -646,97 +653,6 @@ public sealed class EscapeSequenceParser
                 return;
         }
     }
-
-    /// <summary>
-    /// Kitty keyboard protocol key decoding (design §2.3):
-    /// CSI unicode-key-code : shifted : base-layout ; modifiers : event-type ; text-codepoints u
-    /// Modifier bits follow the CellForge design contract: shift=1, ctrl=2,
-    /// alt=4 (super/hyper/meta collapse to the Meta bit); modifier value is 1-based.
-    /// </summary>
-    private void DecodeKittyKey(ReadOnlySpan<byte> parameters)
-    {
-        var primary = IntSubParamAt(parameters, 0, 0);
-        if (primary < 0)
-        {
-            IgnoredSequenceCount++;
-            return;
-        }
-
-        var shifted = IntSubParamAt(parameters, 0, 1);
-        var text = IntSubParamAt(parameters, 2, 0);
-        var modValue = Math.Max(1, IntParamAt(parameters, 1));
-        var eventTypeValue = IntSubParamAt(parameters, 1, 1);
-
-        var bits = modValue - 1;
-        var mods = KeyModifiers.None;
-        if ((bits & 0x01) != 0)
-        {
-            mods |= KeyModifiers.Shift;
-        }
-        if ((bits & 0x02) != 0)
-        {
-            mods |= KeyModifiers.Ctrl;
-        }
-        if ((bits & 0x04) != 0)
-        {
-            mods |= KeyModifiers.Alt;
-        }
-        if ((bits & 0x08) != 0 || (bits & 0x10) != 0 || (bits & 0x20) != 0)
-        {
-            mods |= KeyModifiers.Meta; // super/hyper/meta collapse (design §2.3, sprint bits 1–4)
-        }
-
-        var eventType = eventTypeValue switch
-        {
-            2 => KeyEventType.Repeat,
-            3 => KeyEventType.Release,
-            _ => KeyEventType.Press,
-        };
-
-        KeyCode key;
-        var character = default(Rune);
-        uint codepoint = 0;
-        switch (primary)
-        {
-            case 13:
-                key = KeyCode.Enter;
-                break;
-            case 9:
-                key = KeyCode.Tab;
-                break;
-            case 27:
-                key = KeyCode.Escape;
-                break;
-            case 127:
-                key = KeyCode.Backspace;
-                break;
-            case >= 32 and not 127 when primary is < 57344 or > 63743:
-                // Printable (excluding the Unicode private-use area where
-                // kitty parks its functional keys).
-                var scalar = text > 0 ? text : shifted > 0 ? shifted : primary;
-                if (IsValidScalar(scalar))
-                {
-                    key = KeyCode.Char;
-                    character = new Rune(scalar);
-                }
-                else
-                {
-                    key = KeyCode.Unknown;
-                    codepoint = (uint)primary;
-                }
-                break;
-            default:
-                // Functional/unmapped codepoints stay lossless.
-                key = KeyCode.Unknown;
-                codepoint = (uint)primary;
-                break;
-        }
-
-        Enqueue(InputEvent.FromKey(new KeyEvent(key, character, mods, eventType, isKittyEncoded: true, codepoint)));
-    }
-
-    private static bool IsValidScalar(int scalar) =>
-        scalar <= 0xD7FF || scalar is >= 0xE000 and <= 0x10FFFF;
 
     /// <summary>
     /// SGR mouse decoding (design §3.2): CSI &lt; button ; column ; row M|m.
@@ -1126,60 +1042,10 @@ public sealed class EscapeSequenceParser
 
     private static int FirstIntParam(ReadOnlySpan<byte> parameters) => IntParamAt(parameters, 0);
 
-    /// <summary>Returns the sub-parameter at (group, sub) of the ';'/':'
-    /// parameter matrix — e.g. kitty CSI unicode:shifted ; mods:event u —
-    /// or −1 when absent.</summary>
-    private static int IntSubParamAt(ReadOnlySpan<byte> parameters, int groupIndex, int subIndex)
-    {
-        var group = 0;
-        var sub = 0;
-        var value = 0;
-        var digits = 0;
-        foreach (var b in parameters)
-        {
-            if (b == (byte)';')
-            {
-                if (group == groupIndex && sub == subIndex)
-                {
-                    return digits > 0 ? value : -1;
-                }
-                group++;
-                sub = 0;
-                value = 0;
-                digits = 0;
-                continue;
-            }
-            if (b == (byte)':')
-            {
-                if (group == groupIndex && sub == subIndex)
-                {
-                    return digits > 0 ? value : -1;
-                }
-                if (group > groupIndex)
-                {
-                    break;
-                }
-                sub++;
-                value = 0;
-                digits = 0;
-                continue;
-            }
-            if (b is >= (byte)'0' and <= (byte)'9')
-            {
-                checked
-                {
-                    value = value * 10 + (b - (byte)'0');
-                }
-                digits++;
-            }
-        }
-
-        return group == groupIndex && sub == subIndex && digits > 0 ? value : -1;
-    }
-
     /// <summary>Returns the <paramref name="index"/>-th ';'-separated parameter
-    /// (sub-parameters ':' are ignored), or −1 when absent.</summary>
-    private static int IntParamAt(ReadOnlySpan<byte> parameters, int index)
+    /// (sub-parameters ':' are ignored), or −1 when absent. Shared with
+    /// <see cref="KittyKeyDecoder"/> (kitty modifier group).</summary>
+    internal static int IntParamAt(ReadOnlySpan<byte> parameters, int index)
     {
         var group = 0;
         var value = 0;
