@@ -227,25 +227,19 @@ internal static class SessionFileReader
 
         if (errors.Total > 0)
         {
-            logger.LogWarning("Encountered {ErrorCount} malformed line(s) reading session {SessionId}: {Errors}",
-                errors.Total, sessionId, errors.Summary());
+            SessionFileReaderLog.MalformedLinesEncountered(logger, errors.Total, sessionId, errors.Summary());
         }
 
         if (sawOversized)
         {
-            logger.LogWarning(
-                "Session {SessionId} holds a record over the {MaxBytes} byte ceiling; " +
-                "it was skipped and the rest of the session was read.",
-                sessionId, ChunkedLineReader.MaxRecordBytes);
+            SessionFileReaderLog.OversizedRecordSkipped(logger, sessionId, ChunkedLineReader.MaxRecordBytes);
         }
 
         if (!stable)
         {
             // Loud, because the caller is deliberately NOT caching this and
             // the next read will re-parse.
-            logger.LogWarning(
-                "Session {SessionId} was being appended to while it was read; returning {MessageCount} message(s) from a partial snapshot (not cached).",
-                sessionId, messages.Count);
+            SessionFileReaderLog.PartialSnapshotReturned(logger, sessionId, messages.Count);
         }
 
         var ordered = messages.Values.OrderBy(m => m.CreatedAt).ToList();
@@ -412,4 +406,20 @@ internal static class SessionFileReader
                 : Result.Failure<SessionHeaderEntry>(
                     $"Session '{sessionId}' is corrupt (header deserialized to null): {path}."));
     }
+}
+
+/// <summary>
+///     SG8: BCL <c>[LoggerMessage]</c> delegates for <see cref="SessionFileReader" />.
+///     Templates, levels and operands are 1-to-1 with the former <c>LogX</c> calls.
+/// </summary>
+internal static partial class SessionFileReaderLog
+{
+    [LoggerMessage(EventId = 1, Level = LogLevel.Warning, Message = "Encountered {ErrorCount} malformed line(s) reading session {SessionId}: {Errors}")]
+    public static partial void MalformedLinesEncountered(ILogger logger, int errorCount, string sessionId, string errors);
+
+    [LoggerMessage(EventId = 2, Level = LogLevel.Warning, Message = "Session {SessionId} holds a record over the {MaxBytes} byte ceiling; it was skipped and the rest of the session was read.")]
+    public static partial void OversizedRecordSkipped(ILogger logger, string sessionId, long maxBytes);
+
+    [LoggerMessage(EventId = 3, Level = LogLevel.Warning, Message = "Session {SessionId} was being appended to while it was read; returning {MessageCount} message(s) from a partial snapshot (not cached).")]
+    public static partial void PartialSnapshotReturned(ILogger logger, string sessionId, int messageCount);
 }
