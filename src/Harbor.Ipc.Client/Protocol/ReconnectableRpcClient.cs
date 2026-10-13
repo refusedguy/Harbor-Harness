@@ -169,7 +169,7 @@ public sealed class ReconnectableRpcClient : IAsyncDisposable
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
-                _logger.LogWarning(ex, "Subscribe failed; reconnecting");
+                ReconnectableRpcClientLog.SubscribeFailed(_logger, ex);
                 await DropConnectionAsync().ConfigureAwait(false);
                 await DelayBackoffAsync(ct).ConfigureAwait(false);
                 continue;
@@ -327,7 +327,7 @@ public sealed class ReconnectableRpcClient : IAsyncDisposable
     private async Task DelayBackoffAsync(CancellationToken ct)
     {
         TimeSpan delay = NextBackoffDelay();
-        _logger.LogInformation("Reconnecting in {Delay}ms", delay.TotalMilliseconds);
+        ReconnectableRpcClientLog.ReconnectingIn(_logger, delay.TotalMilliseconds);
         try
         {
             await Task.Delay(delay, ct).ConfigureAwait(false);
@@ -368,4 +368,17 @@ public sealed class ReconnectableRpcClient : IAsyncDisposable
 
         public void Dispose() => _inner.ConnectionLost -= Handler;
     }
+}
+
+/// <summary>
+///     SG5: BCL <c>[LoggerMessage]</c> delegates for <see cref="ReconnectableRpcClient" />.
+///     Templates, levels and operands are 1-to-1 with the former <c>LogX</c> calls.
+/// </summary>
+internal static partial class ReconnectableRpcClientLog
+{
+    [LoggerMessage(EventId = 1, Level = LogLevel.Warning, Message = "Subscribe failed; reconnecting")]
+    public static partial void SubscribeFailed(ILogger logger, Exception ex);
+
+    [LoggerMessage(EventId = 2, Level = LogLevel.Information, Message = "Reconnecting in {Delay}ms")]
+    public static partial void ReconnectingIn(ILogger logger, double delay);
 }

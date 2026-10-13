@@ -89,7 +89,7 @@ public sealed class MessagePackRpcClient : IRpcClient
             catch (OperationCanceledException)
             { /* expected on shutdown */
             }
-            catch (Exception ex) { _logger.LogDebug(ex, "Read loop ended with error during dispose"); }
+            catch (Exception ex) { MessagePackRpcClientLog.ReadLoopEndedWithError(_logger, ex); }
         }
 
         // Cancel any pending request TCSs so their awaiters don't hang.
@@ -190,7 +190,7 @@ public sealed class MessagePackRpcClient : IRpcClient
             catch (EndOfStreamException) { break; }
             catch (Exception ex)
             {
-                _logger.LogWarning(ex, "Read failed; closing client");
+                MessagePackRpcClientLog.ReadFailed(_logger, ex);
                 break;
             }
 
@@ -238,7 +238,7 @@ public sealed class MessagePackRpcClient : IRpcClient
 
         _stream = null;
         try { await _transport.DisconnectAsync(CancellationToken.None).ConfigureAwait(false); }
-        catch (Exception ex) { _logger.LogDebug(ex, "Suppress transport disconnect after read-loop death"); }
+        catch (Exception ex) { MessagePackRpcClientLog.SuppressTransportDisconnect(_logger, ex); }
 
         if (Volatile.Read(ref _disposed) == 0)
         {
@@ -261,7 +261,26 @@ public sealed class MessagePackRpcClient : IRpcClient
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Failed to deserialize event envelope");
+            MessagePackRpcClientLog.FailedToDeserializeEventEnvelope(_logger, ex);
         }
     }
+}
+
+/// <summary>
+///     SG5: BCL <c>[LoggerMessage]</c> delegates for <see cref="MessagePackRpcClient" />.
+///     Templates, levels and operands are 1-to-1 with the former <c>LogX</c> calls.
+/// </summary>
+internal static partial class MessagePackRpcClientLog
+{
+    [LoggerMessage(EventId = 1, Level = LogLevel.Debug, Message = "Read loop ended with error during dispose")]
+    public static partial void ReadLoopEndedWithError(ILogger logger, Exception ex);
+
+    [LoggerMessage(EventId = 2, Level = LogLevel.Warning, Message = "Read failed; closing client")]
+    public static partial void ReadFailed(ILogger logger, Exception ex);
+
+    [LoggerMessage(EventId = 3, Level = LogLevel.Debug, Message = "Suppress transport disconnect after read-loop death")]
+    public static partial void SuppressTransportDisconnect(ILogger logger, Exception ex);
+
+    [LoggerMessage(EventId = 4, Level = LogLevel.Warning, Message = "Failed to deserialize event envelope")]
+    public static partial void FailedToDeserializeEventEnvelope(ILogger logger, Exception ex);
 }
