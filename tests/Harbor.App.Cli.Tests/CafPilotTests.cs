@@ -91,6 +91,11 @@ public class CafPilotTests
     private static async Task<(int Exit, string Output)> RunCafAsync(
         string verb, string[] rest)
     {
+        // #1290: CAF --help leaves Environment.ExitCode untouched, so a stale
+        // 1/2 from a neighbouring parse-failure test leaks into this result
+        // (e2e shard: Version_Help/Storage_Help red with exit 1). All newer
+        // CAF test classes already reset — the pilot is the only one missing it.
+        Environment.ExitCode = 0;
         var original = Console.Out;
         try
         {
