@@ -230,6 +230,50 @@ public class TreeViewTests
     }
 
     [Test]
+    public async Task DirectNodeToggle_InvalidatesCacheAndFiresChanged()
+    {
+        var root = new TreeNode("src", [new TreeNode("app.cs")], expanded: true);
+        var tree = new TreeView([root]);
+        await Assert.That(tree.VisibleCount).IsEqualTo(2);
+
+        int fired = 0;
+        tree.Changed += (_, _) => fired++;
+
+        root.Collapse(); // direct mutation, bypassing TreeView
+        await Assert.That(tree.VisibleCount).IsEqualTo(1);
+        await Assert.That(fired).IsEqualTo(1);
+
+        root.Expand();
+        await Assert.That(tree.VisibleCount).IsEqualTo(2);
+        await Assert.That(fired).IsEqualTo(2);
+    }
+
+    [Test]
+    public async Task DirectNodeMutate_NoOpFlipFiresNothing()
+    {
+        var root = new TreeNode("src", [new TreeNode("app.cs")], expanded: true);
+        var tree = new TreeView([root]);
+        int fired = 0;
+        tree.Changed += (_, _) => fired++;
+
+        root.Expand(); // already expanded — no flip, no event
+        await Assert.That(fired).IsEqualTo(0);
+        await Assert.That(tree.VisibleCount).IsEqualTo(2);
+    }
+
+    [Test]
+    public async Task TreeDrivenToggle_FiresChangedOnce()
+    {
+        var tree = Sample();
+        int fired = 0;
+        tree.Changed += (_, _) => fired++;
+
+        _ = tree.HandleKey(KeyEvent.Simple(KeyCode.Enter)); // collapse src
+        await Assert.That(tree.VisibleCount).IsEqualTo(2);
+        await Assert.That(fired).IsEqualTo(1);
+    }
+
+    [Test]
     public async Task ExpandAll_CollapseAll_CoverForest()
     {
         var tree = Sample();

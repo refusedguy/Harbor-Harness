@@ -7,7 +7,10 @@ namespace Harbor.Ui.Framework.Rendering.Widgets;
 /// One node of a <see cref="TreeView" />: an immutable label plus an ordered
 /// child list. Expansion is the only mutable bit (a mutable card like the
 /// tool-call block: the host marks the timeline slot dirty after a toggle —
-/// here via <see cref="TreeView.Changed" />).
+/// here via <see cref="TreeView.Changed" />). Nodes report expansion flips
+/// through <see cref="ExpansionChanged" /> so the owning tree can invalidate
+/// its visible-row cache even on direct mutation (the
+/// collection-with-dirty-callback discipline).
 /// </summary>
 public sealed class TreeNode
 {
@@ -17,6 +20,14 @@ public sealed class TreeNode
         Children = children is null ? [] : [.. children];
         IsExpanded = expanded;
     }
+
+    /// <summary>
+    /// Raised when <see cref="IsExpanded" /> flips through <see cref="Expand" />,
+    /// <see cref="Collapse" /> or <see cref="Toggle" /> (no-op sets stay silent).
+    /// The owning <see cref="TreeView" /> subscribes at construction; hosts
+    /// holding node references directly may observe it too.
+    /// </summary>
+    internal event EventHandler? ExpansionChanged;
 
     /// <summary>Single-line display text (trimmed, never empty).</summary>
     public string Label { get; }
@@ -30,21 +41,23 @@ public sealed class TreeNode
     /// <summary>True when children participate in the visible row list.</summary>
     public bool IsExpanded { get; private set; }
 
-    /// <summary>Show children (no-op for leaves).</summary>
+    /// <summary>Show children (no-op for leaves and already-expanded nodes).</summary>
     public void Expand()
     {
-        if (HasChildren)
+        if (HasChildren && !IsExpanded)
         {
             IsExpanded = true;
+            ExpansionChanged?.Invoke(this, EventArgs.Empty);
         }
     }
 
-    /// <summary>Hide children (no-op for leaves).</summary>
+    /// <summary>Hide children (no-op for leaves and already-collapsed nodes).</summary>
     public void Collapse()
     {
-        if (HasChildren)
+        if (HasChildren && IsExpanded)
         {
             IsExpanded = false;
+            ExpansionChanged?.Invoke(this, EventArgs.Empty);
         }
     }
 
@@ -57,6 +70,7 @@ public sealed class TreeNode
         }
 
         IsExpanded = !IsExpanded;
+        ExpansionChanged?.Invoke(this, EventArgs.Empty);
         return IsExpanded;
     }
 }
@@ -91,12 +105,21 @@ public sealed class TreeView : IChatBlock, IFocusTarget
     private int _cursor;
     private int _lastHeight = 1;
 
+    /// <summary>
+    /// True while a <see cref="TreeView" /> method mutates nodes itself. Node
+    /// callbacks then only re-mark <see cref="_dirty" /> — the method raises
+    /// <see cref="Changed" /> once, so tree-driven ops keep their single-fire
+    /// cardinality while direct mutations still notify.
+    /// </summary>
+    private bool _forwardingNodeMutation;
+
     /// <summary>Screen-space clip rect from the last <see cref="Paint" /> pass.</summary>
     internal Rect? LastPaintRect { get; private set; }
 
     public TreeView(IEnumerable<TreeNode>? roots = null)
     {
         _roots = roots is null ? [] : [.. roots];
+        Subscribe(_roots);
         int bytes = 64;
         for (int i = 0; i < _roots.Count; i++)
         {
@@ -153,7 +176,11 @@ public sealed class TreeView : IChatBlock, IFocusTarget
         }
     }
 
-    /// <summary>Raised on cursor moves and expand/collapse so the host can mark the slot dirty.</summary>
+    /// <summary>
+    /// Raised on cursor moves and expand/collapse so the host can mark the slot
+    /// dirty — including expansion flips made directly on a <see cref="TreeNode" />
+    /// (nodes report back through their dirty callback).
+    /// </summary>
     public event EventHandler? Changed;
 
     public BlockMeasure Measure(int width)
@@ -308,9 +335,17 @@ public sealed class TreeView : IChatBlock, IFocusTarget
     public void ExpandAll()
     {
         bool changed = false;
-        for (int i = 0; i < _roots.Count; i++)
+        _forwardingNodeMutation = true;
+        try
         {
-            changed |= ExpandDeep(_roots[i]);
+            for (int i = 0; i < _roots.Count; i++)
+            {
+                changed |= ExpandDeep(_roots[i]);
+            }
+        }
+        finally
+        {
+            _forwardingNodeMutation = false;
         }
 
         if (changed)
@@ -324,9 +359,17 @@ public sealed class TreeView : IChatBlock, IFocusTarget
     public void CollapseAll()
     {
         bool changed = false;
-        for (int i = 0; i < _roots.Count; i++)
+        _forwardingNodeMutation = true;
+        try
         {
-            changed |= CollapseDeep(_roots[i]);
+            for (int i = 0; i < _roots.Count; i++)
+            {
+                changed |= CollapseDeep(_roots[i]);
+            }
+        }
+        finally
+        {
+            _forwardingNodeMutation = false;
         }
 
         if (changed)
@@ -388,7 +431,16 @@ public sealed class TreeView : IChatBlock, IFocusTarget
             return false; // leaves don't toggle — the host owns Enter/Space there
         }
 
-        node.Toggle();
+        _forwardingNodeMutation = true;
+        try
+        {
+            node.Toggle();
+        }
+        finally
+        {
+            _forwardingNodeMutation = false;
+        }
+
         _dirty = true;
         Changed?.Invoke(this, EventArgs.Empty);
         return true;
@@ -404,7 +456,16 @@ public sealed class TreeView : IChatBlock, IFocusTarget
 
         if (!node.IsExpanded)
         {
-            node.Expand();
+            _forwardingNodeMutation = true;
+            try
+            {
+                node.Expand();
+            }
+            finally
+            {
+                _forwardingNodeMutation = false;
+            }
+
             _dirty = true;
             Changed?.Invoke(this, EventArgs.Empty);
             return true;
@@ -418,7 +479,16 @@ public sealed class TreeView : IChatBlock, IFocusTarget
         var (node, depth) = _visible[CursorIndex];
         if (node.HasChildren && node.IsExpanded)
         {
-            node.Collapse();
+            _forwardingNodeMutation = true;
+            try
+            {
+                node.Collapse();
+            }
+            finally
+            {
+                _forwardingNodeMutation = false;
+            }
+
             _dirty = true;
             Changed?.Invoke(this, EventArgs.Empty);
             return true;
@@ -453,6 +523,52 @@ public sealed class TreeView : IChatBlock, IFocusTarget
         if (_cursor >= _visible.Count)
         {
             _cursor = Math.Max(0, _visible.Count - 1);
+        }
+    }
+
+    /// <summary>
+    /// Wires every forest node's dirty callback to <see cref="OnNodeExpansionChanged" />.
+    /// The forest is fixed at construction, so one setup-time walk covers all
+    /// future flips; the walk is iterative (a 10k-deep chain must not overflow
+    /// the stack) and a shared subtree re-mounted at two places subscribes once.
+    /// </summary>
+    private void Subscribe(IReadOnlyList<TreeNode> roots)
+    {
+        var seen = new HashSet<TreeNode>();
+        var stack = new Stack<TreeNode>();
+        for (int i = roots.Count - 1; i >= 0; i--)
+        {
+            stack.Push(roots[i]);
+        }
+
+        while (stack.Count > 0)
+        {
+            var node = stack.Pop();
+            if (!seen.Add(node))
+            {
+                continue;
+            }
+
+            node.ExpansionChanged += OnNodeExpansionChanged;
+            var children = node.Children;
+            for (int i = children.Count - 1; i >= 0; i--)
+            {
+                stack.Push(children[i]);
+            }
+        }
+    }
+
+    /// <summary>
+    /// A node flipped outside a <see cref="TreeView" /> method: re-mark the
+    /// visible-row cache and nudge the host (tree-driven flips raise
+    /// <see cref="Changed" /> themselves — see <see cref="_forwardingNodeMutation" />).
+    /// </summary>
+    private void OnNodeExpansionChanged(object? sender, EventArgs e)
+    {
+        _dirty = true;
+        if (!_forwardingNodeMutation)
+        {
+            Changed?.Invoke(this, EventArgs.Empty);
         }
     }
 

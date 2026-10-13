@@ -54,7 +54,7 @@
 //   COMMAND (no buffer; runes are h/j/k/l or a y/n/a vote; Shift refused)
 //     QuestionFormView.cs:512 + :576          != None / == None  (option rows)
 //     ApprovalGateView.cs:254                 != None
-//     TreeView.cs:269                         != None
+//     TreeView.cs:296                         != None
 //     Tabs.cs:143                             != None
 //     ToolCardTracker.cs:730 + :773           != None
 //     LeaderKeyRouter.cs:134                  != None  (consume-and-disarm)
