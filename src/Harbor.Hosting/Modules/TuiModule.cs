@@ -47,18 +47,18 @@ internal static class TuiModule
         {
             // #581: the "available" set is `registry.Keys` — the same source the
             // swap table and the resolution above read. There is no second list.
-            ctx.Logger.LogWarning(
-                "Unknown HARBOR_TUI '{Requested}'; falling back to '{Fallback}' (the single fallback rule). Available: {Available}",
+            TuiModuleLog.UnknownTuiFallback(
+                ctx.Logger,
                 requested,
                 tui,
                 string.Join(", ", registry.Keys.Order(StringComparer.Ordinal)));
         }
 #if HARBOR_WITH_SPECTRE_TUI
-        ctx.Logger.LogInformation("TUI renderer: {Tui}", tui);
+        TuiModuleLog.TuiRenderer(ctx.Logger, tui);
 #elif HARBOR_WITH_NICK_CONSOLE_EX
-        ctx.Logger.LogInformation("TUI renderer: {Tui} (Spectre off, CellForge always enabled)", tui);
+        TuiModuleLog.TuiRendererSpectreOff(ctx.Logger, tui);
 #else
-        ctx.Logger.LogInformation("TUI renderer: {Tui} (CellForge always enabled, Spectre off)", tui);
+        TuiModuleLog.TuiRendererCellForge(ctx.Logger, tui);
 #endif
         services.AddSingleton<ITuiRenderer>(sp => backend.Create(sp));
 
@@ -135,4 +135,23 @@ internal static class TuiModule
 
         return services;
     }
+}
+
+/// <summary>
+///     SG4: BCL <c>[LoggerMessage]</c> delegates for <see cref="TuiModule" />.
+///     Templates, levels and operands are 1-to-1 with the former <c>LogX</c> calls.
+/// </summary>
+internal static partial class TuiModuleLog
+{
+    [LoggerMessage(EventId = 1, Level = LogLevel.Warning, Message = "Unknown HARBOR_TUI '{Requested}'; falling back to '{Fallback}' (the single fallback rule). Available: {Available}")]
+    public static partial void UnknownTuiFallback(ILogger logger, string requested, string fallback, string available);
+
+    [LoggerMessage(EventId = 2, Level = LogLevel.Information, Message = "TUI renderer: {Tui}")]
+    public static partial void TuiRenderer(ILogger logger, string tui);
+
+    [LoggerMessage(EventId = 3, Level = LogLevel.Information, Message = "TUI renderer: {Tui} (Spectre off, CellForge always enabled)")]
+    public static partial void TuiRendererSpectreOff(ILogger logger, string tui);
+
+    [LoggerMessage(EventId = 4, Level = LogLevel.Information, Message = "TUI renderer: {Tui} (CellForge always enabled, Spectre off)")]
+    public static partial void TuiRendererCellForge(ILogger logger, string tui);
 }

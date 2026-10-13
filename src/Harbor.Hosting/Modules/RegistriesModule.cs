@@ -28,7 +28,7 @@ internal static class RegistriesModule
         this IServiceCollection services,
         HarborCompositionContext ctx)
     {
-        ctx.Logger.LogInformation("Registering agents, tools, providers");
+        RegistriesModuleLog.RegisteringAgentsToolsProviders(ctx.Logger);
 
         var agentRegistry = ToolsCatalog.CreateAgentRegistry(ctx);
 
@@ -41,8 +41,7 @@ internal static class RegistriesModule
         foreach (IMcpTransportFactory mcpTransport in mcpTransports.Factories)
             services.AddSingleton<IMcpTransportFactory>(mcpTransport);
         services.AddSingleton(mcpTransports);
-        ctx.Logger.LogInformation(
-            "MCP transports registered: {Names}", string.Join(", ", mcpTransports.SupportedNames));
+        RegistriesModuleLog.McpTransportsRegistered(ctx.Logger, string.Join(", ", mcpTransports.SupportedNames));
 
         var mcpRegistry = ToolsCatalog.CreateMcpRegistry(ctx, mcpTransports);
         // Sub-agent runner: TaskTool is built EAGERLY here, but its real dependencies
@@ -94,7 +93,7 @@ internal static class RegistriesModule
 #if HARBOR_WITH_PLUGINS
         StartupPluginLoad startupLoad = LoadPlugins(ctx);
 #else
-        ctx.Logger.LogInformation("Plugin runtime disabled (HarborWithPlugins=false)");
+        RegistriesModuleLog.PluginRuntimeDisabled(ctx.Logger);
 #endif
 
         toolRegistry.Freeze();
@@ -163,13 +162,9 @@ internal static class RegistriesModule
         // compile them — the in-process Roslyn path is removed, not kept as
         // a fallback — so skip with one honest line either way.
         if (PluginHostLocator.IsHostAvailable())
-            ctx.Logger.LogInformation(
-                "plugins: via host (out-of-proc, {Count} script(s) — tools arrive over MCP 'harbor-csharp-plugins')",
-                scriptCount);
+            RegistriesModuleLog.PluginsViaHost(ctx.Logger, scriptCount);
         else
-            ctx.Logger.LogWarning(
-                "plugins: {Count} script(s) need harbor-plugins-host (missing) — out-of-proc route unavailable, in-process compile removed (#1055s3), skipping",
-                scriptCount);
+            RegistriesModuleLog.PluginsHostMissing(ctx.Logger, scriptCount);
         return StartupPluginLoad.Empty();
     }
 
@@ -183,8 +178,10 @@ internal static class RegistriesModule
     {
         // The binary ships next to the CLI; when it is missing too, "no host" is
         // the honest reason. When it is present, the host is simply idle.
-        ctx.Logger.LogInformation(
-            PluginHostLocator.IsHostAvailable() ? "plugins: off (no scripts)" : "plugins: off (no host)");
+        if (PluginHostLocator.IsHostAvailable())
+            RegistriesModuleLog.PluginsOffNoScripts(ctx.Logger);
+        else
+            RegistriesModuleLog.PluginsOffNoHost(ctx.Logger);
         return StartupPluginLoad.Empty();
     }
 
@@ -201,4 +198,32 @@ internal static class RegistriesModule
         }
     }
 #endif
+}
+
+/// <summary>
+///     SG4: BCL <c>[LoggerMessage]</c> delegates for <see cref="RegistriesModule" />.
+///     Templates, levels and operands are 1-to-1 with the former <c>LogX</c> calls.
+/// </summary>
+internal static partial class RegistriesModuleLog
+{
+    [LoggerMessage(EventId = 1, Level = LogLevel.Information, Message = "Registering agents, tools, providers")]
+    public static partial void RegisteringAgentsToolsProviders(ILogger logger);
+
+    [LoggerMessage(EventId = 2, Level = LogLevel.Information, Message = "MCP transports registered: {Names}")]
+    public static partial void McpTransportsRegistered(ILogger logger, string names);
+
+    [LoggerMessage(EventId = 3, Level = LogLevel.Information, Message = "Plugin runtime disabled (HarborWithPlugins=false)")]
+    public static partial void PluginRuntimeDisabled(ILogger logger);
+
+    [LoggerMessage(EventId = 4, Level = LogLevel.Information, Message = "plugins: via host (out-of-proc, {Count} script(s) — tools arrive over MCP 'harbor-csharp-plugins')")]
+    public static partial void PluginsViaHost(ILogger logger, int count);
+
+    [LoggerMessage(EventId = 5, Level = LogLevel.Warning, Message = "plugins: {Count} script(s) need harbor-plugins-host (missing) — out-of-proc route unavailable, in-process compile removed (#1055s3), skipping")]
+    public static partial void PluginsHostMissing(ILogger logger, int count);
+
+    [LoggerMessage(EventId = 6, Level = LogLevel.Information, Message = "plugins: off (no scripts)")]
+    public static partial void PluginsOffNoScripts(ILogger logger);
+
+    [LoggerMessage(EventId = 7, Level = LogLevel.Information, Message = "plugins: off (no host)")]
+    public static partial void PluginsOffNoHost(ILogger logger);
 }
