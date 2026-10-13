@@ -155,13 +155,7 @@ public sealed class RequestDispatcher
         Interlocked.Increment(ref _unhandledRequests);
 
         string requestType = request.GetType().Name;
-        _logger.LogError(
-            "No IPC request handler is registered for {RequestType}. It is not a member of the "
-            + "tagged {HarborRequest} union, so no handler can be registered for it; the server "
-            + "declined it rather than answering with a placeholder. This should be unreachable — "
-            + "if it fires, the wire union and HarborRequestTypes.All have drifted apart.",
-            requestType,
-            nameof(HarborRequest));
+        RequestDispatcherLog.NoHandlerRegistered(_logger, requestType, nameof(HarborRequest));
 
         return new ErrorResponse
         {
@@ -171,4 +165,14 @@ public sealed class RequestDispatcher
                       + "request type the server implements (see HarborRequestTypes.All for the union)."
         };
     }
+}
+
+/// <summary>
+///     SG5: BCL <c>[LoggerMessage]</c> delegates for <see cref="RequestDispatcher" />.
+///     Templates, levels and operands are 1-to-1 with the former <c>LogX</c> calls.
+/// </summary>
+internal static partial class RequestDispatcherLog
+{
+    [LoggerMessage(EventId = 1, Level = LogLevel.Error, Message = "No IPC request handler is registered for {RequestType}. It is not a member of the tagged {HarborRequest} union, so no handler can be registered for it; the server declined it rather than answering with a placeholder. This should be unreachable — if it fires, the wire union and HarborRequestTypes.All have drifted apart.")]
+    public static partial void NoHandlerRegistered(ILogger logger, string requestType, string harborRequest);
 }
