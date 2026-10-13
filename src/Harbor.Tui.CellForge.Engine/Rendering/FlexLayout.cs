@@ -42,7 +42,7 @@ public enum FlexJustify : byte
 /// One child's size constraint along a <see cref="FlexLayout"/> main axis
 /// (ratatui <c>Constraint</c> analogue, content-agnostic: no content measuring,
 /// layout math only). Construct via the <c>Fixed</c> / <c>Percent</c> /
-/// <c>Fill</c> / <c>Min</c> / <c>Max</c> / <c>Auto</c> factories.
+/// <c>Ratio</c> / <c>Fill</c> / <c>Min</c> / <c>Max</c> / <c>Auto</c> factories.
 /// </summary>
 public readonly record struct FlexTrack
 {
@@ -104,11 +104,22 @@ public readonly record struct FlexTrack
         return new(5, floor, Math.Max(floor, max));
     }
 
+    /// <summary>
+    /// Proportional share as a numerator/denominator pair (ratatui
+    /// <c>Constraint::Ratio</c>). Resolved up-front like <see cref="Percent(float)"/>
+    /// with fraction <c>num/den</c> clamped to 0..1; non-positive denominators
+    /// (or numerators) count as zero. Truncation remainders stay in the leftover
+    /// pool for <see cref="FlexJustify"/> to place.
+    /// </summary>
+    public static FlexTrack Ratio(int numerator, int denominator) =>
+        new(6, denominator <= 0 ? 0f : Math.Clamp(numerator / (float)denominator, 0f, 1f));
+
     internal bool IsFlex => _kind is 2 or 3 or 4;
     internal bool IsFill => _kind == 2;
-    internal bool IsFixedLike => _kind <= 1;
+    internal bool IsFixedLike => _kind is 0 or 1 or 6;
     internal bool IsAuto => _kind == 5;
     internal bool IsPercent => _kind == 1;
+    internal bool IsRatio => _kind == 6;
     internal bool IsMin => _kind == 3;
     internal bool IsMax => _kind == 4;
     internal int FixedCells => (int)_amount;
@@ -116,6 +127,93 @@ public readonly record struct FlexTrack
     internal float FlexWeight => _kind == 2 ? _amount : 1f;
     internal int FlexFloor => _kind is 3 or 5 ? (int)_amount : 0;
     internal int FlexCap => _kind == 4 ? (int)_amount : _kind == 5 ? _extra : int.MaxValue;
+}
+
+/// <summary>
+/// Track-array constructors (ratatui <c>Constraint::from_*</c> analogues):
+/// one <see cref="FlexTrack"/> per element, for cold setup paths (dialog
+/// frames, tests). Steady-state frames should reuse a buffer via
+/// <see cref="FlexLayout.Arrange"/>.
+/// </summary>
+public static class FlexTracks
+{
+    /// <summary>One <see cref="FlexTrack.Fixed"/> per length.</summary>
+    public static FlexTrack[] FromLengths(params int[] lengths)
+    {
+        ArgumentNullException.ThrowIfNull(lengths);
+        var tracks = new FlexTrack[lengths.Length];
+        for (int i = 0; i < lengths.Length; i++)
+        {
+            tracks[i] = FlexTrack.Fixed(lengths[i]);
+        }
+
+        return tracks;
+    }
+
+    /// <summary>One <see cref="FlexTrack.Percent"/> per 0..1 fraction.</summary>
+    public static FlexTrack[] FromPercentages(params float[] fractions)
+    {
+        ArgumentNullException.ThrowIfNull(fractions);
+        var tracks = new FlexTrack[fractions.Length];
+        for (int i = 0; i < fractions.Length; i++)
+        {
+            tracks[i] = FlexTrack.Percent(fractions[i]);
+        }
+
+        return tracks;
+    }
+
+    /// <summary>One <see cref="FlexTrack.Ratio"/> per (numerator, denominator) pair.</summary>
+    public static FlexTrack[] FromRatios(params (int Numerator, int Denominator)[] ratios)
+    {
+        ArgumentNullException.ThrowIfNull(ratios);
+        var tracks = new FlexTrack[ratios.Length];
+        for (int i = 0; i < ratios.Length; i++)
+        {
+            tracks[i] = FlexTrack.Ratio(ratios[i].Numerator, ratios[i].Denominator);
+        }
+
+        return tracks;
+    }
+
+    /// <summary>One <see cref="FlexTrack.Fill"/> per weight.</summary>
+    public static FlexTrack[] FromFills(params float[] weights)
+    {
+        ArgumentNullException.ThrowIfNull(weights);
+        var tracks = new FlexTrack[weights.Length];
+        for (int i = 0; i < weights.Length; i++)
+        {
+            tracks[i] = FlexTrack.Fill(weights[i]);
+        }
+
+        return tracks;
+    }
+
+    /// <summary>One <see cref="FlexTrack.Min"/> per floor.</summary>
+    public static FlexTrack[] FromMins(params int[] cells)
+    {
+        ArgumentNullException.ThrowIfNull(cells);
+        var tracks = new FlexTrack[cells.Length];
+        for (int i = 0; i < cells.Length; i++)
+        {
+            tracks[i] = FlexTrack.Min(cells[i]);
+        }
+
+        return tracks;
+    }
+
+    /// <summary>One <see cref="FlexTrack.Max"/> per cap.</summary>
+    public static FlexTrack[] FromMaxes(params int[] cells)
+    {
+        ArgumentNullException.ThrowIfNull(cells);
+        var tracks = new FlexTrack[cells.Length];
+        for (int i = 0; i < cells.Length; i++)
+        {
+            tracks[i] = FlexTrack.Max(cells[i]);
+        }
+
+        return tracks;
+    }
 }
 
 /// <summary>
@@ -429,7 +527,7 @@ public static class FlexLayout
                 sizes[i] = size;
                 fixedSum += size;
             }
-            else if (t.IsPercent)
+            else if (t.IsPercent || t.IsRatio)
             {
                 int size = (int)(content * t.Fraction);
                 sizes[i] = size;

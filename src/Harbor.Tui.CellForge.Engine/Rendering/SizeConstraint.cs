@@ -1,5 +1,5 @@
 // TR2 (#1221, epic #1195): public size-constraint vocabulary —
-// Fixed / Fill(+weight) / Auto / Percent over one axis.
+// Fixed / Fill(+weight) / Auto / Percent / Ratio over one axis.
 // Engine-owned port of Termina's SizeConstraint (same four shapes, same
 // Compute contract, same factory names); the solver half stays in
 // FlexLayout/FlexTrack, reached through ToFlexTrack (Auto maps to
@@ -14,7 +14,7 @@ namespace Harbor.Tui.CellForge.Rendering;
 /// every node carries a height and a width constraint; containers resolve
 /// them in two passes — fixed/auto first, fill splits the remainder by
 /// weight). Construct via <see cref="Exactly"/> / <see cref="FillRemaining"/>
-/// / <see cref="AutoSize"/> / <see cref="Percentage"/>.
+/// / <see cref="AutoSize"/> / <see cref="Percentage"/> / <see cref="RatioOf"/>.
 /// </summary>
 public abstract record SizeConstraint
 {
@@ -99,6 +99,26 @@ public abstract record SizeConstraint
         public override FlexTrack ToFlexTrack() => FlexTrack.Percent(Value / 100f);
     }
 
+    /// <summary>Proportional share as numerator/denominator (ratatui Ratio).</summary>
+    public sealed record Ratio(int Numerator, int Denominator) : SizeConstraint
+    {
+        /// <inheritdoc />
+        public override int Compute(int available, int contentSize, int remaining)
+        {
+            int avail = Math.Max(0, available);
+            if (Denominator <= 0 || Numerator <= 0)
+            {
+                return 0;
+            }
+
+            int num = Math.Min(Numerator, Denominator);
+            return (int)((long)avail * num / Denominator);
+        }
+
+        /// <inheritdoc />
+        public override FlexTrack ToFlexTrack() => FlexTrack.Ratio(Numerator, Denominator);
+    }
+
     /// <summary>Fixed size in cells (columns or rows).</summary>
     public static SizeConstraint Exactly(int value) => new Fixed(value);
 
@@ -114,4 +134,7 @@ public abstract record SizeConstraint
 
     /// <summary>Percentage of the available space, 0..100.</summary>
     public static SizeConstraint Percentage(int value) => new Percent(value);
+
+    /// <summary>Proportional share as numerator/denominator, clamped to 0..1.</summary>
+    public static SizeConstraint RatioOf(int numerator, int denominator) => new Ratio(numerator, denominator);
 }

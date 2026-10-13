@@ -100,7 +100,7 @@ public sealed class FlexSplitNode : ContainerNode
     }
 
     /// <summary>
-    /// Desired size: fixed/percent shares, <c>Auto</c> intrinsics (the child's
+    /// Desired size: fixed/percent/ratio shares, <c>Auto</c> intrinsics (the child's
     /// own desired main extent clamped to the track bounds) plus <c>Min</c>
     /// floors summed along the main axis (other flexible tracks want zero —
     /// they absorb the remainder at arrange time), gaps included, clamped to
@@ -126,7 +126,7 @@ public sealed class FlexSplitNode : ContainerNode
                 ? track.FlexFloor
                 : track.IsAuto
                     ? Math.Min(Math.Max(childMain, track.FlexFloor), track.FlexCap)
-                    : track.IsPercent
+                    : (track.IsPercent || track.IsRatio)
                         ? (int)(mainMax * track.Fraction)
                         : track.FixedCells;
 
