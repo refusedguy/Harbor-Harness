@@ -110,13 +110,13 @@ public sealed class IdeJsonRpcServer : IAsyncDisposable
             }
             catch (Exception ex)
             {
-                _logger.LogWarning(ex, "IDE bridge stdin read failed — closing");
+                IdeJsonRpcServerLog.StdinReadFailed(_logger, ex);
                 break;
             }
 
             if (line is null)
             {
-                _logger.LogDebug("IDE bridge stdin closed by editor (EOF)");
+                IdeJsonRpcServerLog.StdinClosedByEditor(_logger);
                 StdioClosed.Invoke(this, EventArgs.Empty);
                 break;
             }
@@ -188,7 +188,7 @@ public sealed class IdeJsonRpcServer : IAsyncDisposable
             }
             catch (Exception ex)
             {
-                _logger.LogDebug(ex, "IDE bridge in-flight requests did not drain within the grace window");
+                IdeJsonRpcServerLog.InFlightRequestsDidNotDrain(_logger, ex);
             }
         }
 
@@ -212,7 +212,7 @@ public sealed class IdeJsonRpcServer : IAsyncDisposable
                     .ConfigureAwait(false);
                 return;
             case EnvelopeScan.Notification:
-                _logger.LogDebug("IDE bridge ignored editor notification: {Line}", line);
+                IdeJsonRpcServerLog.IgnoredEditorNotification(_logger, line);
                 return;
             case EnvelopeScan.Request:
             case EnvelopeScan.Malformed:
@@ -226,7 +226,7 @@ public sealed class IdeJsonRpcServer : IAsyncDisposable
         }
         catch (JsonException ex)
         {
-            _logger.LogDebug(ex, "IDE bridge received malformed JSON line");
+            IdeJsonRpcServerLog.ReceivedMalformedJsonLine(_logger, ex);
             // No id available — respond with a null id so the editor's
             // demux surfaces the parse failure instead of hanging.
             await WriteErrorAsync(default, IdeRpcException.InvalidRequest, ex.Message).ConfigureAwait(false);
@@ -246,7 +246,7 @@ public sealed class IdeJsonRpcServer : IAsyncDisposable
             // Notifications (no id) from the editor are accepted and ignored.
             if (!root.TryGetProperty("id", out JsonElement id))
             {
-                _logger.LogDebug("IDE bridge ignored editor notification: {Line}", line);
+                IdeJsonRpcServerLog.IgnoredEditorNotification(_logger, line);
                 return;
             }
 
@@ -381,7 +381,7 @@ public sealed class IdeJsonRpcServer : IAsyncDisposable
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "IDE bridge handler '{Method}' failed", method);
+                IdeJsonRpcServerLog.HandlerFailed(_logger, ex, method);
                 await WriteErrorAsync(id, IdeRpcException.HandlerError, ex.Message).ConfigureAwait(false);
             }
 
@@ -407,7 +407,7 @@ public sealed class IdeJsonRpcServer : IAsyncDisposable
         }
         catch (Exception ex)
         {
-            _logger.LogDebug(ex, "IDE bridge abandoned handler faulted after its response was already sent");
+            IdeJsonRpcServerLog.AbandonedHandlerFaulted(_logger, ex);
         }
     }
 
@@ -492,4 +492,32 @@ public sealed class IdeJsonRpcServer : IAsyncDisposable
             _writeLock.Release();
         }
     }
+}
+
+/// <summary>
+///     SG5: BCL <c>[LoggerMessage]</c> delegates for <see cref="IdeJsonRpcServer" />.
+///     Templates, levels and operands are 1-to-1 with the former <c>LogX</c> calls.
+/// </summary>
+internal static partial class IdeJsonRpcServerLog
+{
+    [LoggerMessage(EventId = 1, Level = LogLevel.Warning, Message = "IDE bridge stdin read failed — closing")]
+    public static partial void StdinReadFailed(ILogger logger, Exception ex);
+
+    [LoggerMessage(EventId = 2, Level = LogLevel.Debug, Message = "IDE bridge stdin closed by editor (EOF)")]
+    public static partial void StdinClosedByEditor(ILogger logger);
+
+    [LoggerMessage(EventId = 3, Level = LogLevel.Debug, Message = "IDE bridge in-flight requests did not drain within the grace window")]
+    public static partial void InFlightRequestsDidNotDrain(ILogger logger, Exception ex);
+
+    [LoggerMessage(EventId = 4, Level = LogLevel.Debug, Message = "IDE bridge ignored editor notification: {Line}")]
+    public static partial void IgnoredEditorNotification(ILogger logger, string line);
+
+    [LoggerMessage(EventId = 5, Level = LogLevel.Debug, Message = "IDE bridge received malformed JSON line")]
+    public static partial void ReceivedMalformedJsonLine(ILogger logger, Exception ex);
+
+    [LoggerMessage(EventId = 6, Level = LogLevel.Error, Message = "IDE bridge handler '{Method}' failed")]
+    public static partial void HandlerFailed(ILogger logger, Exception ex, string method);
+
+    [LoggerMessage(EventId = 7, Level = LogLevel.Debug, Message = "IDE bridge abandoned handler faulted after its response was already sent")]
+    public static partial void AbandonedHandlerFaulted(ILogger logger, Exception ex);
 }

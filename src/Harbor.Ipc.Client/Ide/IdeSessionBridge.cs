@@ -145,14 +145,14 @@ public sealed class IdeSessionBridge : IIdeSessionBridge
     {
         Volatile.Write(ref _streamSubscribed, 1);
         EnsurePumpStarted();
-        _logger.LogDebug("IDE bridge: editor subscribed to the stream for session {SessionId}", SessionId);
+        IdeSessionBridgeLog.EditorSubscribed(_logger, SessionId);
         return JsonSerializer.SerializeToElement(new IdeReadStreamResult(Subscribed: true), IdeJsonContext.Default.IdeReadStreamResult);
     }
 
     private JsonElement? StopStream()
     {
         Volatile.Write(ref _streamSubscribed, 0);
-        _logger.LogDebug("IDE bridge: editor unsubscribed from the stream");
+        IdeSessionBridgeLog.EditorUnsubscribed(_logger);
         return JsonSerializer.SerializeToElement(new IdeReadStreamResult(Subscribed: false), IdeJsonContext.Default.IdeReadStreamResult);
     }
 
@@ -192,7 +192,7 @@ public sealed class IdeSessionBridge : IIdeSessionBridge
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "IDE bridge: prompt run failed");
+            IdeSessionBridgeLog.PromptRunFailed(_logger, ex);
             result = Result.Failure(ex.Message);
         }
 
@@ -248,7 +248,7 @@ public sealed class IdeSessionBridge : IIdeSessionBridge
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "IDE bridge event pump stopped unexpectedly");
+            IdeSessionBridgeLog.EventPumpStopped(_logger, ex);
         }
     }
 
@@ -291,7 +291,7 @@ public sealed class IdeSessionBridge : IIdeSessionBridge
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            _logger.LogDebug(ex, "IDE bridge: failed to push '{Method}' notification", method);
+            IdeSessionBridgeLog.FailedToPushNotification(_logger, ex, method);
         }
     }
 
@@ -336,11 +336,36 @@ public sealed class IdeSessionBridge : IIdeSessionBridge
             }
             catch (Exception ex)
             {
-                _logger.LogDebug(ex, "IDE bridge: in-flight work did not drain within the grace window");
+                IdeSessionBridgeLog.InFlightWorkDidNotDrain(_logger, ex);
             }
         }
 
         _lifetimeCts.Dispose();
         await _server.DisposeAsync().ConfigureAwait(false);
     }
+}
+
+/// <summary>
+///     SG5: BCL <c>[LoggerMessage]</c> delegates for <see cref="IdeSessionBridge" />.
+///     Templates, levels and operands are 1-to-1 with the former <c>LogX</c> calls.
+/// </summary>
+internal static partial class IdeSessionBridgeLog
+{
+    [LoggerMessage(EventId = 1, Level = LogLevel.Debug, Message = "IDE bridge: editor subscribed to the stream for session {SessionId}")]
+    public static partial void EditorSubscribed(ILogger logger, string? sessionId);
+
+    [LoggerMessage(EventId = 2, Level = LogLevel.Debug, Message = "IDE bridge: editor unsubscribed from the stream")]
+    public static partial void EditorUnsubscribed(ILogger logger);
+
+    [LoggerMessage(EventId = 3, Level = LogLevel.Error, Message = "IDE bridge: prompt run failed")]
+    public static partial void PromptRunFailed(ILogger logger, Exception ex);
+
+    [LoggerMessage(EventId = 4, Level = LogLevel.Warning, Message = "IDE bridge event pump stopped unexpectedly")]
+    public static partial void EventPumpStopped(ILogger logger, Exception ex);
+
+    [LoggerMessage(EventId = 5, Level = LogLevel.Debug, Message = "IDE bridge: failed to push '{Method}' notification")]
+    public static partial void FailedToPushNotification(ILogger logger, Exception ex, string method);
+
+    [LoggerMessage(EventId = 6, Level = LogLevel.Debug, Message = "IDE bridge: in-flight work did not drain within the grace window")]
+    public static partial void InFlightWorkDidNotDrain(ILogger logger, Exception ex);
 }
