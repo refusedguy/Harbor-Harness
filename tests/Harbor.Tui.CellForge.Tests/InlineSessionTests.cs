@@ -38,6 +38,35 @@ public class TextWrapTests
     }
 
     [Test]
+    public async Task Wrap_NbspGluesWords_NoBreakBeforeNbsp()
+    {
+        // ratatui reflow parity (#1162): NBSP is not a word boundary
+        // (StyledGrapheme::is_whitespace excludes U+00A0), so the wrap backs
+        // off to the earlier space instead of breaking before the NBSP.
+        var lines = new List<string>();
+        TextWrap.WrapTo("AB CD\u00A0EF GH", 5, lines);
+        await Assert.That(lines).IsEquivalentTo(["AB", "CD\u00A0EF", "GH"]);
+    }
+
+    [Test]
+    public async Task Wrap_CjkNbspGluesWords()
+    {
+        // 日(2) 本(2) fit; NBSP(1) 語(2) glue to 本 — no break before NBSP.
+        var lines = new List<string>();
+        TextWrap.WrapTo("日 本\u00A0語", 5, lines);
+        await Assert.That(lines).IsEquivalentTo(["日", "本\u00A0語"]);
+    }
+
+    [Test]
+    public async Task Wrap_EmojiNbspGluesWords()
+    {
+        // 😀(2) 😀(2) fit; NBSP(1) glues the second pair — same rule, wide runes.
+        var lines = new List<string>();
+        TextWrap.WrapTo("😀 😀\u00A0😀", 5, lines);
+        await Assert.That(lines).IsEquivalentTo(["😀", "😀\u00A0😀"]);
+    }
+
+    [Test]
     public async Task WrapDocument_PreservesEmptyLines()
     {
         var lines = new List<string>();
