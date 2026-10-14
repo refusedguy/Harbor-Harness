@@ -290,7 +290,7 @@ internal static partial class ThemeServiceLog
     public static partial void HdsSwitched(ILogger logger, string theme);
 
     [LoggerMessage(EventId = 3, Level = LogLevel.Information, Message = "Theme '{Theme}' requested — leaving default dark theme active")]
-    public static partial void UnknownThemeDefaultDark(ILogger logger, string theme);
+    public static partial void UnknownThemeDefaultDark(ILogger logger, string? theme);
 
     [LoggerMessage(EventId = 4, Level = LogLevel.Information, Message = "HDS palette {Palette} applied ({Variant})")]
     public static partial void PaletteApplied(ILogger logger, string palette, string variant);
