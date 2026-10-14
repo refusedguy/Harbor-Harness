@@ -1016,6 +1016,11 @@ public class KeyGateFamilyRules
         "src/Harbor.Tui.CellForge.Engine/Input/KeyEventType.cs",
         "src/Harbor.Tui.CellForge.Engine/Input/KeyModifiers.cs",
         "src/Harbor.Tui.CellForge.Engine/Input/UiKeyDto.cs",
+        // KittyKeyDecoder (#95 extract): a CSI-bytes → KeyEvent mapper. It
+        // decodes unconditionally and never consumes or refuses — the same
+        // non-gating shape as KeyEventMapper/KeyEventAdapter above — so it is
+        // vocabulary, not a site, and declaring a family for it would be false.
+        "src/Harbor.Tui.CellForge.Engine/Parsing/KittyKeyDecoder.cs",
     };
 
     /// <summary>
