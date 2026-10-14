@@ -48,29 +48,25 @@ internal sealed class McpPluginLoadHost : IPluginLoadHost
 
     public Result RegisterProvider(ProviderId providerId, Func<ILlmClient> factory)
     {
-        LoggerFactory.CreateLogger<McpPluginLoadHost>()
-            .LogInformation("Plugin provider '{Id}' is not exposed over MCP; ignoring.", providerId);
+        McpPluginLoadHostLog.ProviderIgnored(LoggerFactory.CreateLogger<McpPluginLoadHost>(), providerId);
         return Result.Success();
     }
 
     public Result RegisterAgent(AgentDefinition agent)
     {
-        LoggerFactory.CreateLogger<McpPluginLoadHost>()
-            .LogInformation("Plugin agent '{Name}' is not exposed over MCP; ignoring.", agent.Name);
+        McpPluginLoadHostLog.AgentIgnored(LoggerFactory.CreateLogger<McpPluginLoadHost>(), agent.Name);
         return Result.Success();
     }
 
     public Result RegisterTuiPlugin(ITuiPlugin plugin)
     {
-        LoggerFactory.CreateLogger<McpPluginLoadHost>()
-            .LogInformation("Plugin TUI '{Name}' is not exposed over MCP; ignoring.", plugin.Name);
+        McpPluginLoadHostLog.TuiIgnored(LoggerFactory.CreateLogger<McpPluginLoadHost>(), plugin.Name);
         return Result.Success();
     }
 
     public Result RegisterPanelProvider(IPanelProvider panel)
     {
-        LoggerFactory.CreateLogger<McpPluginLoadHost>()
-            .LogInformation("Plugin panel '{Id}' is not exposed over MCP; ignoring.", panel.Id);
+        McpPluginLoadHostLog.PanelIgnored(LoggerFactory.CreateLogger<McpPluginLoadHost>(), panel.Id);
         return Result.Success();
     }
 
@@ -79,15 +75,38 @@ internal sealed class McpPluginLoadHost : IPluginLoadHost
     // gets a loud "not exposed" log instead of a compile error against a sealed seam.
     public Result RegisterSessionStore(string backendId, Func<ISessionStore> factory)
     {
-        LoggerFactory.CreateLogger<McpPluginLoadHost>()
-            .LogInformation("Plugin session store '{Id}' is not exposed over MCP; ignoring.", backendId);
+        McpPluginLoadHostLog.SessionStoreIgnored(LoggerFactory.CreateLogger<McpPluginLoadHost>(), backendId);
         return Result.Success();
     }
 
     public Result RegisterTuiBackend(string backendId, IReadOnlyList<string>? aliases, Func<ITuiRenderer> factory)
     {
-        LoggerFactory.CreateLogger<McpPluginLoadHost>()
-            .LogInformation("Plugin TUI backend '{Id}' is not exposed over MCP; ignoring.", backendId);
+        McpPluginLoadHostLog.TuiBackendIgnored(LoggerFactory.CreateLogger<McpPluginLoadHost>(), backendId);
         return Result.Success();
     }
+}
+
+/// <summary>
+///     SG10: BCL <c>[LoggerMessage]</c> delegates for <see cref="McpPluginLoadHost" />.
+///     Templates, levels and operands are 1-to-1 with the former <c>LogX</c> calls.
+/// </summary>
+internal static partial class McpPluginLoadHostLog
+{
+    [LoggerMessage(EventId = 1, Level = LogLevel.Information, Message = "Plugin provider '{Id}' is not exposed over MCP; ignoring.")]
+    public static partial void ProviderIgnored(ILogger logger, string id);
+
+    [LoggerMessage(EventId = 2, Level = LogLevel.Information, Message = "Plugin agent '{Name}' is not exposed over MCP; ignoring.")]
+    public static partial void AgentIgnored(ILogger logger, string name);
+
+    [LoggerMessage(EventId = 3, Level = LogLevel.Information, Message = "Plugin TUI '{Name}' is not exposed over MCP; ignoring.")]
+    public static partial void TuiIgnored(ILogger logger, string name);
+
+    [LoggerMessage(EventId = 4, Level = LogLevel.Information, Message = "Plugin panel '{Id}' is not exposed over MCP; ignoring.")]
+    public static partial void PanelIgnored(ILogger logger, string id);
+
+    [LoggerMessage(EventId = 5, Level = LogLevel.Information, Message = "Plugin session store '{Id}' is not exposed over MCP; ignoring.")]
+    public static partial void SessionStoreIgnored(ILogger logger, string id);
+
+    [LoggerMessage(EventId = 6, Level = LogLevel.Information, Message = "Plugin TUI backend '{Id}' is not exposed over MCP; ignoring.")]
+    public static partial void TuiBackendIgnored(ILogger logger, string id);
 }
