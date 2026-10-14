@@ -189,6 +189,99 @@ public sealed class DefaultAgentSingleSourceTests
                 + "must have the same answer. Two sites answering one question is what this issue is about.");
     }
 
+    /// <summary>The single banned shape's sub-id, shared by the rule data and the parser.</summary>
+    private const string HandSpelledSubId = "HAND-SPELLED-FALLBACK-AGENT";
+
+    // MECHANISM (#1086, step 2, conveyor batch 10)
+    // --------------------------------------------
+    // The ban below is a ScanRule: the QuotedLiteral shape as a Forbidden row
+    // carrying the existing Regex object directly, five planted controls, the
+    // two governed files as the MustContain floor, a discovery floor.
+    // Enumeration, matching and the control/discovery verdicts are ScanRunner's;
+    // this file keeps the issue prose, the patterns, the behaviour halves, and
+    // the test names.
+    //
+    // The verdict is ParseAgentLiterals through the Func-overload, carrying the
+    // original line scan verbatim — FindLiteralLines over the raw source lines,
+    // the //-line skip and the quoted-literal Contains filter untouched — with
+    // no hatch and an empty baseline: the name's home (AgentName.Fallback)
+    // lives in a different project, so zero hits in this slice is the whole
+    // rule. A file-wide baseline row would excuse a second copy in the same
+    // file, and a second copy anywhere in this slice is exactly the defect
+    // #683 reported. The planted controls grade this parser, so "it can fail"
+    // means something.
+    //
+    // The rule is built per test from the LIVE value
+    // (BuildRule(IdentityConfig.FallbackAgent)), not stored as static data: the
+    // guard is value-agnostic on purpose, and static data would pin a stale
+    // string the day the fallback rolls over. Scope parity is exact:
+    // Trees ["src/Harbor.Ui.Framework.Sessions"] walks what
+    // EnumerateProjectCsFiles walks — no *.cs path under that project carries
+    // a /tests/, /contrib/ or /.worktrees/ segment, and both sides drop /obj/
+    // + /bin/.
+
+    /// <summary>The hand-spelled-copy ban as data: one shape, five planted controls, a floor.</summary>
+    private static ScanRule BuildRule(string fallbackAgent) => new()
+    {
+        Id = "DefaultAgentSingleSource",
+        Trees = ["src/" + SessionsProjectDir],
+        Forbidden =
+        [
+            new ScanForbidden(
+                HandSpelledSubId,
+                QuotedLiteral,
+                "read AgentName.Fallback instead, and decide WHICH agent is the default in exactly "
+                + "one place — SessionFactory.ResolveDefaultAgentDefinition. See issue #683."),
+        ],
+        Controls =
+        [
+            new ScanControl(
+                "Planted/Literal.cs",
+                "        var def = _agents.GetAllAgents().FirstOrDefault(a => a.Name.Value == \"" + fallbackAgent + "\");",
+                HandSpelledSubId),
+            new ScanControl(
+                "Planted/TrailingComment.cs",
+                "        var s = \"" + fallbackAgent + "\"; // trailing comment",
+                HandSpelledSubId),
+            new ScanControl(
+                "NearMiss/DifferentAgent.cs",
+                "        var def = _agents.GetAllAgents().FirstOrDefault(a => a.Name.Value == \"plan\");",
+                null),
+            new ScanControl(
+                "NearMiss/LineComment.cs",
+                "// the default agent is \"" + fallbackAgent + "\" in prose",
+                null),
+            new ScanControl(
+                "NearMiss/DocComment.cs",
+                "/// <param name=\"agentName\">Optional override (defaults to \"" + fallbackAgent + "\").</param>",
+                null),
+        ],
+        // Mirrors Discovery_FindsTheSlicesItClaimsToGovern below (`> 5`): the
+        // floor fails exactly when the old assertion would — five or fewer
+        // files means the walk broke rather than the slice is clean.
+        MinHits = 6,
+        MustContain =
+        [
+            "src/" + SessionsProjectDir + "/Sessions/SessionFactory.cs",
+            "src/" + SessionsProjectDir + "/Sessions/SessionLifecycleService.cs",
+        ],
+        CustomParse = (displayPath, rawSource) => ParseAgentLiterals(displayPath, rawSource, fallbackAgent),
+    };
+
+    /// <summary>
+    ///     The custom parser: the original literal scan over one file's raw source —
+    ///     the comment-line skip and the quoted-literal filter verbatim (via
+    ///     <see cref="FindLiteralLines" />), one report per line.
+    /// </summary>
+    private static IEnumerable<ScanHit> ParseAgentLiterals(string displayPath, string rawSource, string fallbackAgent)
+    {
+        string[] lines = rawSource.Split('\n');
+        foreach (int index in FindLiteralLines(lines, fallbackAgent))
+        {
+            yield return new ScanHit(HandSpelledSubId, displayPath, index + 1, lines[index].Trim());
+        }
+    }
+
     // ── 2. Source: the policy has one home ───────────────────────────────────
 
     /// <summary>
@@ -200,6 +293,12 @@ public sealed class DefaultAgentSingleSourceTests
     {
         string root = RequireRepoRoot();
         string fallback = IdentityConfig.FallbackAgent;
+
+        // The ScanRule half: every hit in the slice. No baseline rows and no
+        // file hatch — the name's home (AgentName.Fallback) lives in a
+        // different project, so zero hits here is the whole rule (see the
+        // MECHANISM note above).
+        List<string> illegal = ScanRunner.Evaluate(BuildRule(fallback));
 
         IReadOnlyList<string> files = EnumerateProjectCsFiles(root, SessionsProjectDir);
         List<string> sites = [];
@@ -223,6 +322,14 @@ public sealed class DefaultAgentSingleSourceTests
                 }
             }
         }
+
+        await Assert.That(illegal.Count).IsEqualTo(0)
+            .Because(
+                "the default agent's name (" + fallback + ") is hand-spelled in " + string.Join(", ", illegal)
+                + " inside " + SessionsProjectDir + ". Read AgentName.Fallback instead, and decide WHICH "
+                + "agent is the default in exactly one place — SessionFactory.ResolveDefaultAgentDefinition. "
+                + "Every extra spelling is a place where registration order can quietly become the policy. "
+                + "See issue #683.");
 
         await Assert.That(sites.Count).IsEqualTo(0)
             .Because(
@@ -270,18 +377,33 @@ public sealed class DefaultAgentSingleSourceTests
     [Test]
     public async Task Discovery_FindsTheSlicesItClaimsToGovern()
     {
-        IReadOnlyList<string> files = EnumerateProjectCsFiles(RequireRepoRoot(), SessionsProjectDir);
+        string fallback = IdentityConfig.FallbackAgent;
+        List<string> discovery = ScanRunner.CheckDiscovery(BuildRule(fallback));
 
-        await Assert.That(files.Count).IsGreaterThan(5)
+        await Assert.That(discovery).IsEmpty()
             .Because(
-                SessionsProjectDir + " holds well over five C# files; a smaller count means the project "
-                + "directory was renamed or the walk stopped matching, and SessionsSlice_NeverSpellsThe "
-                + "FallbackAgentName becomes vacuous.");
+                SessionsProjectDir + " holds well over five C# files, including SessionFactory.cs and "
+                + "SessionLifecycleService.cs; a smaller count — or a scope that stopped seeing those "
+                + "files — means the project directory was renamed or the walk stopped matching, and "
+                + "SessionsSlice_NeverSpellsTheFallbackAgentName becomes vacuous. "
+                + string.Join("; ", discovery));
+    }
 
-        await Assert.That(files.Any(f => f.EndsWith("SessionFactory.cs", StringComparison.Ordinal))).IsTrue()
-            .Because("SessionFactory.cs is one of the two files the rule exists for; it must be in the set.");
-        await Assert.That(files.Any(f => f.EndsWith("SessionLifecycleService.cs", StringComparison.Ordinal))).IsTrue()
-            .Because("SessionLifecycleService.cs is the other one.");
+    /// <summary>
+    ///     The planted controls — every literal shape and every near-miss — drive
+    ///     the REAL parser: offenders reported under their sub-id, near-misses silent.
+    /// </summary>
+    [Test]
+    public async Task Detector_ControlsDriveTheRealParser()
+    {
+        string fallback = IdentityConfig.FallbackAgent;
+        List<string> failures = ScanRunner.CheckControls(BuildRule(fallback));
+
+        await Assert.That(failures).IsEmpty()
+            .Because(
+                "the five planted controls must agree with the five matcher cases above through "
+                + "the rule's own parser — otherwise the rule guards nothing, or forbids the fix. "
+                + string.Join("; ", failures));
     }
 
     /// <summary>
