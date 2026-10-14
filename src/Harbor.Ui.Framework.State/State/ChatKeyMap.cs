@@ -14,9 +14,11 @@ public sealed class ChatKeyMap
     private readonly Entry[] _entries =
     [
         new(ChatAction.Quit, "quit", new Binding(UiKeyCode.Escape)),
+        // Abort is Ctrl+C only: Escape resolves to Quit above (first-match-wins),
+        // and the reducer maps Quit-while-busy to abort (see OnKeyInput), so
+        // Escape-during-a-run still aborts without a duplicate binding here.
         // Ctrl+C — reported by most frameworks as a character, not a key code.
         new(ChatAction.Abort, "abort",
-            new Binding(UiKeyCode.Escape),
             new Binding(UiKeyCode.Char, KeyModifierSet.Ctrl, 'c')),
         new(ChatAction.Submit, "send", new Binding(UiKeyCode.Enter)),
         // Shift+Enter / Alt+Enter — newline, not submit (kitty disambiguate
