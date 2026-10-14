@@ -60,19 +60,19 @@ internal sealed class ReplLifecycle(CellForgeReplRunner host)
     /// </summary>
     internal async Task<int> RunAsync(CancellationToken ct = default)
     {
-        host.Log.LogInformation("CellForge REPL starting — composer-driven frames over DiffEngine");
+        ReplLifecycleLog.ReplStarting(host.Log);
         try
         {
             host.ModeController.Enter();
         }
         catch (PlatformNotSupportedException ex)
         {
-            host.Log.LogWarning(ex, "CellForge unavailable on this terminal/platform");
+            ReplLifecycleLog.UnavailableOnTerminal(host.Log, ex);
             return 1;
         }
         catch (InvalidOperationException ex)
         {
-            host.Log.LogWarning(ex, "CellForge requires a real tty");
+            ReplLifecycleLog.RequiresTty(host.Log, ex);
             return 1;
         }
         await host.Backend.WriteAsync(Utf8(CellForgeReplRunner.SeqEnterAltScreen), ct).ConfigureAwait(false);
@@ -100,8 +100,8 @@ internal sealed class ReplLifecycle(CellForgeReplRunner host)
         // for byte.
         host.ScreenSession.Images.Kind = host._inlineImage;
         host.Screen.Timeline.Timeline.InlineImages = host.ScreenSession.Images;
-        host.Log.LogInformation(
-            "Inline image protocol: {Kind} (image blocks render {Mode})",
+        ReplLifecycleLog.InlineImageProtocol(
+            host.Log,
             host._inlineImage,
             host._inlineImage == InlineImageKind.None ? "text cards only" : "inline graphics");
 
@@ -137,7 +137,7 @@ internal sealed class ReplLifecycle(CellForgeReplRunner host)
         }
         catch (Exception ex)
         {
-            host.Log.LogWarning(ex, "First-run setup overlay failed to open — continuing without it");
+            ReplLifecycleLog.SetupOverlayFailed(host.Log, ex);
         }
 
         // #170: the heartbeat must outlive Idle while a mascot reaction/latch
@@ -194,14 +194,14 @@ internal sealed class ReplLifecycle(CellForgeReplRunner host)
                 // Terminal may already be gone (kill, closed pipe). The mode
                 // restore below must still run — a skipped Restore() leaves
                 // Windows consoles stuck in raw/VT mode after exit.
-                host.Log.LogWarning(ex, "Leave-alt-screen write failed — restoring console mode anyway");
+                ReplLifecycleLog.LeaveAltScreenWriteFailed(host.Log, ex);
             }
 
             host.ModeController.Restore();
             host.InputSource.Dispose();
         }
 
-        host.Log.LogInformation("CellForge REPL ended (quit={Quit}, slashExit={SlashExit})", host._quitRequested, host._slashExitCode);
+        ReplLifecycleLog.ReplEnded(host.Log, host._quitRequested, host._slashExitCode);
         return host._slashExitCode ?? 0;
     }
 
@@ -348,7 +348,7 @@ internal sealed class ReplLifecycle(CellForgeReplRunner host)
 
             if (inputClosed && !host.Pipeline.IsBusy)
             {
-                host.Log.LogInformation("stdin EOF and agent idle — CellForge REPL exiting");
+                ReplLifecycleLog.StdinEofExiting(host.Log);
                 break;
             }
         }
@@ -979,4 +979,35 @@ internal sealed class ReplLifecycle(CellForgeReplRunner host)
     }
 
     internal static ReadOnlyMemory<byte> Utf8(string s) => Encoding.UTF8.GetBytes(s);
+}
+
+/// <summary>
+///     SG9: BCL <c>[LoggerMessage]</c> delegates for <see cref="ReplLifecycle" />.
+///     Templates, levels and operands are 1-to-1 with the former <c>LogX</c> calls.
+/// </summary>
+internal static partial class ReplLifecycleLog
+{
+    [LoggerMessage(EventId = 1, Level = LogLevel.Information, Message = "CellForge REPL starting — composer-driven frames over DiffEngine")]
+    public static partial void ReplStarting(ILogger logger);
+
+    [LoggerMessage(EventId = 2, Level = LogLevel.Warning, Message = "CellForge unavailable on this terminal/platform")]
+    public static partial void UnavailableOnTerminal(ILogger logger, Exception ex);
+
+    [LoggerMessage(EventId = 3, Level = LogLevel.Warning, Message = "CellForge requires a real tty")]
+    public static partial void RequiresTty(ILogger logger, Exception ex);
+
+    [LoggerMessage(EventId = 4, Level = LogLevel.Information, Message = "Inline image protocol: {Kind} (image blocks render {Mode})")]
+    public static partial void InlineImageProtocol(ILogger logger, InlineImageKind kind, string mode);
+
+    [LoggerMessage(EventId = 5, Level = LogLevel.Warning, Message = "First-run setup overlay failed to open — continuing without it")]
+    public static partial void SetupOverlayFailed(ILogger logger, Exception ex);
+
+    [LoggerMessage(EventId = 6, Level = LogLevel.Warning, Message = "Leave-alt-screen write failed — restoring console mode anyway")]
+    public static partial void LeaveAltScreenWriteFailed(ILogger logger, Exception ex);
+
+    [LoggerMessage(EventId = 7, Level = LogLevel.Information, Message = "CellForge REPL ended (quit={Quit}, slashExit={SlashExit})")]
+    public static partial void ReplEnded(ILogger logger, bool quit, int? slashExit);
+
+    [LoggerMessage(EventId = 8, Level = LogLevel.Information, Message = "stdin EOF and agent idle — CellForge REPL exiting")]
+    public static partial void StdinEofExiting(ILogger logger);
 }
