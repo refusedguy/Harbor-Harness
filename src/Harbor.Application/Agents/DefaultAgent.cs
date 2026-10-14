@@ -396,7 +396,11 @@ public sealed class DefaultAgent : IAgent
                 BoundState = BoundState with { IsRunning = false, LastActivityAt = DateTimeOffset.UtcNow };
                 DefaultAgentLog.AgentRunFailed(_logger, ex, state.SessionId);
                 var failed = Result.Failure(ex.Message);
-                completion.TrySetException(ex);
+                // #1105: waiters hold a non-generic Task — they cannot observe
+                // a Result value, only completion vs fault. Success and cancel
+                // complete quietly, so the fault path must too; the failure
+                // itself travels via PromptAsync's own return.
+                completion.TrySetResult(failed);
                 return failed;
             }
             finally
