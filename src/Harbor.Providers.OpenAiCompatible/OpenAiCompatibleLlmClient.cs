@@ -153,7 +153,9 @@ public sealed class OpenAiCompatibleLlmClient : ILlmClient
 
     public async Task<Result<IReadOnlyList<ModelInfo>>> GetModelsAsync(CancellationToken cancellationToken = default) => await _modelCatalog.GetModelsAsync(_config, cancellationToken).ConfigureAwait(false);
 
-    private HttpRequestMessage BuildRequest(LlmRequest request, string apiKey)
+    // #1100: internal so the wire/scaling tests can drive the serializer
+    // directly (InternalsVisibleTo covers Harbor.Providers.Tests).
+    internal HttpRequestMessage BuildRequest(LlmRequest request, string apiKey)
     {
         string url = $"{_config.BaseUrl.TrimEnd('/')}/chat/completions";
 
@@ -314,15 +316,35 @@ public sealed class OpenAiCompatibleLlmClient : ILlmClient
                 writer.WriteStartObject();
                 writer.WriteString("role", "assistant");
 
-                var textBlock = a.Content.OfType<LlmTextBlock>().Select(b => b.Text).FirstOrDefault();
-                if (textBlock is not null)
+                // #1100: one indexed pass per role instead of two OfType +
+                // Select iterator chains per assistant message. The writer
+                // order (content, then tool_calls) still needs the text
+                // before the array, so this is two allocation-free for-loops
+                // over the same list, not two LINQ enumerables.
+                string? firstText = null;
+                var blocks = a.Content;
+                for (int i = 0; i < blocks.Count; i++)
                 {
-                    writer.WriteString("content", textBlock);
+                    if (blocks[i] is LlmTextBlock tb)
+                    {
+                        firstText = tb.Text;
+                        break;
+                    }
+                }
+
+                if (firstText is not null)
+                {
+                    writer.WriteString("content", firstText);
                 }
 
                 writer.WriteStartArray("tool_calls");
-                foreach (var tc in a.Content.OfType<LlmToolCallBlock>())
+                for (int i = 0; i < blocks.Count; i++)
                 {
+                    if (blocks[i] is not LlmToolCallBlock tc)
+                    {
+                        continue;
+                    }
+
                     writer.WriteStartObject();
                     writer.WriteString("id", tc.Id);
                     writer.WriteString("type", "function");
