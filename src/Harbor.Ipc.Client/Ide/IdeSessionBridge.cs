@@ -176,7 +176,15 @@ public sealed class IdeSessionBridge : IIdeSessionBridge
             _runs.Add((run, runCts));
         }
 
-        _ = AwaitRunAsync(run, runCts); // RunPromptAsync is catch-all — the task never faults
+        // RunPromptAsync catches host failures, but the post-run editor notify
+        // rides outside that net — a broken editor pipe faults the run with OCE.
+        // The OnlyOnFaulted continuation is the §FP-006 backstop: the fault is
+        // logged, never parked unobserved (#1099).
+        _ = AwaitRunAsync(run, runCts).ContinueWith(
+            t => IdeSessionBridgeLog.PromptRunFailed(_logger, t.Exception?.InnerException ?? t.Exception!),
+            CancellationToken.None,
+            TaskContinuationOptions.OnlyOnFaulted,
+            TaskScheduler.Default);
     }
 
     private async Task RunPromptAsync(string prompt, CancellationTokenSource runCts)
