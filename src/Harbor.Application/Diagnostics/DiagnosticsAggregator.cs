@@ -77,7 +77,11 @@ public sealed class DiagnosticsAggregator : IDisposable
     private readonly IDisposable[] _subscriptions;
     private readonly ILspService? _lsp;
     private readonly ILogger<DiagnosticsAggregator>? _logger;
-    private IReadOnlyList<DiagnosticIssue> _snapshot = [];
+    // #1095: published once per Publish(), never mutated after publish — readers
+    // share the instance, so Snapshot is a lock-free volatile read (acquire load
+    // pairing with the publish inside the lock). Same discipline as
+    // FileTrustPolicy._entries / RendererPipeline._current / UiStore._state.
+    private volatile IReadOnlyList<DiagnosticIssue> _snapshot = [];
     private bool _disposed;
 
     /// <summary>
@@ -119,16 +123,13 @@ public sealed class DiagnosticsAggregator : IDisposable
     ///     file) then tool-output rows in arrival order. The order is stable so a
     ///     renderer can diff two snapshots.
     /// </summary>
-    public IReadOnlyList<DiagnosticIssue> Snapshot
-    {
-        get
-        {
-            lock (_sync)
-            {
-                return _snapshot;
-            }
-        }
-    }
+    /// <remarks>
+    ///     Lock-free (#1095): the snapshot reference is immutable after publish,
+    ///     so a volatile read sees either the old or the new snapshot, never a
+    ///     torn state. Mutations of the underlying halves stay under
+    ///     <c>_sync</c>; only this reader left the lock.
+    /// </remarks>
+    public IReadOnlyList<DiagnosticIssue> Snapshot => _snapshot;
 
     /// <summary>
     ///     Drop everything — both halves. Called when the host switches session,
