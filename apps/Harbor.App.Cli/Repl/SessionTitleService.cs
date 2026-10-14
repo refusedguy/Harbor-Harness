@@ -124,7 +124,7 @@ internal sealed class SessionTitleService(IReplHost host, ILogger logger)
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
             // Heuristic title already applied — AI upgrade is best-effort.
-            logger.LogDebug(ex, "AI title upgrade failed");
+            SessionTitleServiceLog.AiTitleUpgradeFailed(logger, ex);
         }
     }
 
@@ -171,4 +171,14 @@ internal sealed class SessionTitleService(IReplHost host, ILogger logger)
     /// <summary>Default stamp from <c>Session.Create</c> (<c>Session yyyy-MM-dd HH:mm</c>).</summary>
     private static bool IsDefaultTitle(string title) =>
         title.Length == 24 && title.StartsWith("Session 2", StringComparison.Ordinal);
+}
+
+/// <summary>
+///     SG9: BCL <c>[LoggerMessage]</c> delegates for <see cref="SessionTitleService" />.
+///     Templates, levels and operands are 1-to-1 with the former <c>LogX</c> calls.
+/// </summary>
+internal static partial class SessionTitleServiceLog
+{
+    [LoggerMessage(EventId = 1, Level = LogLevel.Debug, Message = "AI title upgrade failed")]
+    public static partial void AiTitleUpgradeFailed(ILogger logger, Exception ex);
 }

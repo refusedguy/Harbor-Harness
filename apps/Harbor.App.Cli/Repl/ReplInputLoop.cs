@@ -780,7 +780,7 @@ internal sealed class ReplInputLoop(CellForgeReplRunner host)
         long now = Environment.TickCount64;
         if (now - host._lastIdleAbortMs <= QuitGestureWindowMs)
         {
-            host.Log.LogInformation("Second idle Ctrl+C — quitting CellForge REPL");
+            ReplInputLoopLog.SecondIdleAbortQuitting(host.Log);
             host._quitRequested = true;
             host._wake.Writer.TryWrite(null);
             return;
@@ -812,4 +812,14 @@ internal sealed class ReplInputLoop(CellForgeReplRunner host)
         host._selection.Clear();
         host._wake.Writer.TryWrite(null);
     }
+}
+
+/// <summary>
+///     SG9: BCL <c>[LoggerMessage]</c> delegates for <see cref="ReplInputLoop" />.
+///     Templates, levels and operands are 1-to-1 with the former <c>LogX</c> calls.
+/// </summary>
+internal static partial class ReplInputLoopLog
+{
+    [LoggerMessage(EventId = 1, Level = LogLevel.Information, Message = "Second idle Ctrl+C — quitting CellForge REPL")]
+    public static partial void SecondIdleAbortQuitting(ILogger logger);
 }

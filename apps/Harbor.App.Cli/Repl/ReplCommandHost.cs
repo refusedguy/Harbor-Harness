@@ -202,9 +202,19 @@ internal sealed class ReplCommandHost(CellForgeReplRunner host)
         }
         catch (Exception ex)
         {
-            host.Log.LogError(ex, "Palette command /{Id} failed", item.Id);
+            ReplCommandHostLog.PaletteCommandFailed(host.Log, ex, item.Id);
             host.Bridge.AppendSystemLine($"! {ex.Message}");
             host._wake.Writer.TryWrite(null);
         }
     }
+}
+
+/// <summary>
+///     SG9: BCL <c>[LoggerMessage]</c> delegates for <see cref="ReplCommandHost" />.
+///     Templates, levels and operands are 1-to-1 with the former <c>LogX</c> calls.
+/// </summary>
+internal static partial class ReplCommandHostLog
+{
+    [LoggerMessage(EventId = 1, Level = LogLevel.Error, Message = "Palette command /{Id} failed")]
+    public static partial void PaletteCommandFailed(ILogger logger, Exception ex, string id);
 }
