@@ -98,8 +98,7 @@ public sealed class AvaloniaContentHost : IContentHost
 
         if (target is null)
         {
-            _logger.LogWarning("Unknown route '{Route}'. Available routes: {Routes}",
-                route, string.Join(", ", AvailableRoutes));
+            AvaloniaContentHostLog.UnknownRoute(_logger, route, string.Join(", ", AvailableRoutes));
             return false;
         }
 
@@ -112,4 +111,14 @@ public sealed class AvaloniaContentHost : IContentHost
     {
         TryNavigate(route);
     }
+}
+
+/// <summary>
+///     SG12: BCL <c>[LoggerMessage]</c> delegates for <see cref="AvaloniaContentHost" />.
+///     Templates, levels and operands are 1-to-1 with the former <c>LogX</c> calls.
+/// </summary>
+internal static partial class AvaloniaContentHostLog
+{
+    [LoggerMessage(EventId = 1, Level = LogLevel.Warning, Message = "Unknown route '{Route}'. Available routes: {Routes}")]
+    public static partial void UnknownRoute(ILogger logger, string route, string routes);
 }

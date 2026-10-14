@@ -52,7 +52,7 @@ public sealed class ThemeService : IThemeService
         int hdsSlot = 1;
         if (hdsSlot >= merged.Count)
         {
-            _logger.LogWarning("HDS theme slot not found in MergedDictionaries — could not switch to {Theme}", normalized);
+            ThemeServiceLog.HdsSlotNotFound(_logger, normalized);
             return;
         }
 
@@ -62,7 +62,7 @@ public sealed class ThemeService : IThemeService
         {
             Source = HdsThemeCatalog.PaletteUri(normalized)
         };
-        _logger.LogInformation("HDS theme switched to {Theme}", normalized);
+        ThemeServiceLog.HdsSwitched(_logger, normalized);
     }
 
     /// <summary>
@@ -127,7 +127,7 @@ public sealed class ThemeService : IThemeService
         }
 
         ApplyDark();
-        _logger.LogInformation("Theme '{Theme}' requested — leaving default dark theme active", theme);
+        ThemeServiceLog.UnknownThemeDefaultDark(_logger, theme);
     }
 
     /// <summary>
@@ -165,7 +165,7 @@ public sealed class ThemeService : IThemeService
 
         _app.RequestedThemeVariant = palette.IsDark ? ThemeVariant.Dark : ThemeVariant.Light;
         IsDark = palette.IsDark;
-        _logger.LogInformation("HDS palette {Palette} applied ({Variant})", palette.Name, IsDark ? "dark" : "light");
+        ThemeServiceLog.PaletteApplied(_logger, palette.Name, IsDark ? "dark" : "light");
         return true;
     }
 
@@ -175,7 +175,7 @@ public sealed class ThemeService : IThemeService
         ApplyHds("CatppuccinMocha");
         _app.RequestedThemeVariant = ThemeVariant.Dark;
         IsDark = true;
-        _logger.LogInformation("Theme switched to dark");
+        ThemeServiceLog.SwitchedToDark(_logger);
     }
 
     public void ApplyLight()
@@ -184,7 +184,7 @@ public sealed class ThemeService : IThemeService
         ApplyHds("Lumen");
         _app.RequestedThemeVariant = ThemeVariant.Light;
         IsDark = false;
-        _logger.LogInformation("Theme switched to light");
+        ThemeServiceLog.SwitchedToLight(_logger);
     }
 
     public void Toggle()
@@ -198,7 +198,7 @@ public sealed class ThemeService : IThemeService
         if (_app is null) return;
         _app.RequestedThemeVariant = isDark ? ThemeVariant.Dark : ThemeVariant.Light;
         IsDark = isDark;
-        _logger.LogInformation("Theme variant set to {Variant}", isDark ? "dark" : "light");
+        ThemeServiceLog.VariantSet(_logger, isDark ? "dark" : "light");
     }
 
     public event EventHandler<string>? ThemeJsonApplied;
@@ -227,7 +227,7 @@ public sealed class ThemeService : IThemeService
         if (string.IsNullOrWhiteSpace(json))
             return Result.Failure("theme json is empty");
         ThemeJsonApplied?.Invoke(this, json);
-        _logger.LogInformation("Theme JSON applied ({Length} chars)", json.Length);
+        ThemeServiceLog.JsonApplied(_logger, json.Length);
         return Result.Success();
     }
 
@@ -275,6 +275,36 @@ public sealed class ThemeService : IThemeService
     {
         public void Dispose() { }
     }
+}
 
+/// <summary>
+///     SG12: BCL <c>[LoggerMessage]</c> delegates for <see cref="ThemeService" />.
+///     Templates, levels and operands are 1-to-1 with the former <c>LogX</c> calls.
+/// </summary>
+internal static partial class ThemeServiceLog
+{
+    [LoggerMessage(EventId = 1, Level = LogLevel.Warning, Message = "HDS theme slot not found in MergedDictionaries — could not switch to {Theme}")]
+    public static partial void HdsSlotNotFound(ILogger logger, string theme);
+
+    [LoggerMessage(EventId = 2, Level = LogLevel.Information, Message = "HDS theme switched to {Theme}")]
+    public static partial void HdsSwitched(ILogger logger, string theme);
+
+    [LoggerMessage(EventId = 3, Level = LogLevel.Information, Message = "Theme '{Theme}' requested — leaving default dark theme active")]
+    public static partial void UnknownThemeDefaultDark(ILogger logger, string? theme);
+
+    [LoggerMessage(EventId = 4, Level = LogLevel.Information, Message = "HDS palette {Palette} applied ({Variant})")]
+    public static partial void PaletteApplied(ILogger logger, string palette, string variant);
+
+    [LoggerMessage(EventId = 5, Level = LogLevel.Information, Message = "Theme switched to dark")]
+    public static partial void SwitchedToDark(ILogger logger);
+
+    [LoggerMessage(EventId = 6, Level = LogLevel.Information, Message = "Theme switched to light")]
+    public static partial void SwitchedToLight(ILogger logger);
+
+    [LoggerMessage(EventId = 7, Level = LogLevel.Information, Message = "Theme variant set to {Variant}")]
+    public static partial void VariantSet(ILogger logger, string variant);
+
+    [LoggerMessage(EventId = 8, Level = LogLevel.Information, Message = "Theme JSON applied ({Length} chars)")]
+    public static partial void JsonApplied(ILogger logger, int length);
 }
 

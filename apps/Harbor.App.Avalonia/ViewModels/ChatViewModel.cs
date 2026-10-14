@@ -77,7 +77,7 @@ public sealed partial class ChatViewModel : ChatViewModelBase
     {
         Dispatcher.Post(() =>
         {
-            Logger.LogDebug("OnAfterSelectorsApplied: lines={Lines}, streaming={Streaming}, agentRunning={Running}, textBufLen={TextBufLen}",
+            ChatViewModelLog.SelectorsApplied(Logger,
                 state.Chat.Lines.Length, state.Chat.IsStreaming, state.Chat.IsAgentRunning, state.Chat.Active.TextBuffer?.Length ?? 0);
 
             _pendingRenderState = state;
@@ -167,7 +167,7 @@ public sealed partial class ChatViewModel : ChatViewModelBase
         string text = (InputText ?? string.Empty).TrimEnd('\r', '\n');
         if (string.IsNullOrWhiteSpace(text)) return;
 
-        Logger.LogInformation("Submitting prompt, length={Length}", text.Length);
+        ChatViewModelLog.SubmittingPrompt(Logger, text.Length);
         InputText = string.Empty;
         SendCommand.NotifyCanExecuteChanged();
 
@@ -284,7 +284,7 @@ public sealed partial class ChatViewModel : ChatViewModelBase
         }
         catch (Exception ex)
         {
-            Logger.LogError(ex, "Failed to load older messages");
+            ChatViewModelLog.LoadOlderFailed(Logger, ex);
             _toasts.Show("Failed to load older messages", ToastKind.Error);
         }
         finally
@@ -397,4 +397,20 @@ public sealed partial class ChatViewModel : ChatViewModelBase
             });
         }
     }
+}
+
+/// <summary>
+///     SG12: BCL <c>[LoggerMessage]</c> delegates for <see cref="ChatViewModel" />.
+///     Templates, levels and operands are 1-to-1 with the former <c>LogX</c> calls.
+/// </summary>
+internal static partial class ChatViewModelLog
+{
+    [LoggerMessage(EventId = 1, Level = LogLevel.Debug, Message = "OnAfterSelectorsApplied: lines={Lines}, streaming={Streaming}, agentRunning={Running}, textBufLen={TextBufLen}")]
+    public static partial void SelectorsApplied(ILogger logger, int lines, bool streaming, bool running, int textBufLen);
+
+    [LoggerMessage(EventId = 2, Level = LogLevel.Information, Message = "Submitting prompt, length={Length}")]
+    public static partial void SubmittingPrompt(ILogger logger, int length);
+
+    [LoggerMessage(EventId = 3, Level = LogLevel.Error, Message = "Failed to load older messages")]
+    public static partial void LoadOlderFailed(ILogger logger, Exception ex);
 }

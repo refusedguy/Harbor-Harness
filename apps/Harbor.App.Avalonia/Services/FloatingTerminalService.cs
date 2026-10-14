@@ -66,7 +66,7 @@ public sealed class FloatingTerminalService : IFloatingTerminals
                 window.Show();
             }
 
-            _logger.LogInformation("Floating terminal window opened (cwd={Cwd})", workingDirectory ?? vm.Panes[0].WorkingDirectory);
+            FloatingTerminalServiceLog.WindowOpened(_logger, workingDirectory ?? vm.Panes[0].WorkingDirectory);
         });
 
     /// <inheritdoc />
@@ -86,4 +86,14 @@ public sealed class FloatingTerminalService : IFloatingTerminals
             ShowPane(null);
         }
     }
+}
+
+/// <summary>
+///     SG12: BCL <c>[LoggerMessage]</c> delegates for <see cref="FloatingTerminalService" />.
+///     Templates, levels and operands are 1-to-1 with the former <c>LogX</c> calls.
+/// </summary>
+internal static partial class FloatingTerminalServiceLog
+{
+    [LoggerMessage(EventId = 1, Level = LogLevel.Information, Message = "Floating terminal window opened (cwd={Cwd})")]
+    public static partial void WindowOpened(ILogger logger, string cwd);
 }

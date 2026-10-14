@@ -32,7 +32,7 @@ internal sealed class AvaloniaShellChrome : IShellChrome
 
     public void ToggleSidebar()
     {
-        _logger.LogDebug("ToggleSidebar requested — no port wired yet.");
+        AvaloniaShellChromeLog.ToggleSidebarRequested(_logger);
     }
 
     public void OpenOverlay(string id)
@@ -54,4 +54,14 @@ internal sealed class AvaloniaShellChrome : IShellChrome
     {
         _theme.Toggle();
     }
+}
+
+/// <summary>
+///     SG12: BCL <c>[LoggerMessage]</c> delegates for <see cref="AvaloniaShellChrome" />.
+///     Templates, levels and operands are 1-to-1 with the former <c>LogX</c> calls.
+/// </summary>
+internal static partial class AvaloniaShellChromeLog
+{
+    [LoggerMessage(EventId = 1, Level = LogLevel.Debug, Message = "ToggleSidebar requested — no port wired yet.")]
+    public static partial void ToggleSidebarRequested(ILogger logger);
 }

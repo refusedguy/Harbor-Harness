@@ -204,10 +204,7 @@ public sealed class ProjectFileTreeScanner
         {
             // Warning, not Debug: this is the one case where the tree on screen is
             // a strict prefix of the project, and the user is entitled to know it.
-            _logger.LogWarning(
-                "File-tree scan of {Dir} stopped at the {MaxNodes}-node budget — the tree is a prefix of the project",
-                directory,
-                _maxNodes);
+            ProjectFileTreeScannerLog.ScanTruncated(_logger, directory, _maxNodes);
         }
 
         return Result.Success(rootNode);
@@ -310,10 +307,7 @@ public sealed class ProjectFileTreeScanner
             return listing.Value;
         }
 
-        _logger.LogDebug(
-            "File-tree scan skipped '{Path}': {Reason}",
-            child.FullPath,
-            listing.Error);
+        ProjectFileTreeScannerLog.DirectorySkipped(_logger, child.FullPath, listing.Error);
 
         return DirectoryListing.Empty(child.FullPath);
     }
@@ -374,4 +368,17 @@ public sealed class ProjectFileTreeScanner
             return true;
         }
     }
+}
+
+/// <summary>
+///     SG12: BCL <c>[LoggerMessage]</c> delegates for <see cref="ProjectFileTreeScanner" />.
+///     Templates, levels and operands are 1-to-1 with the former <c>LogX</c> calls.
+/// </summary>
+internal static partial class ProjectFileTreeScannerLog
+{
+    [LoggerMessage(EventId = 1, Level = LogLevel.Warning, Message = "File-tree scan of {Dir} stopped at the {MaxNodes}-node budget — the tree is a prefix of the project")]
+    public static partial void ScanTruncated(ILogger logger, string dir, int maxNodes);
+
+    [LoggerMessage(EventId = 2, Level = LogLevel.Debug, Message = "File-tree scan skipped '{Path}': {Reason}")]
+    public static partial void DirectorySkipped(ILogger logger, string path, string reason);
 }

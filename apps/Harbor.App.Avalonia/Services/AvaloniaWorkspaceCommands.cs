@@ -55,14 +55,27 @@ internal sealed class AvaloniaWorkspaceCommands : IWorkspaceCommands
 
     public void BranchSession() => TaskFireAndForget.Forget(
         _sessions.BranchCommand.ExecuteAsync(null),
-        ex => _logger.LogError(ex, "Branch session failed"));
+        ex => AvaloniaWorkspaceCommandsLog.BranchSessionFailed(_logger, ex));
 
     public void RefreshSessions() => TaskFireAndForget.Forget(
         _sessions.RefreshCommand.ExecuteAsync(null),
-        ex => _logger.LogError(ex, "Refresh sessions failed"));
+        ex => AvaloniaWorkspaceCommandsLog.RefreshSessionsFailed(_logger, ex));
 
     public async System.Threading.Tasks.Task OpenFileAsync() => await _codeEditor.OpenFileCommand.ExecuteAsync(null);
     public async System.Threading.Tasks.Task SaveFileAsync() => await _codeEditor.SaveCommand.ExecuteAsync(null);
     public void StopAgent() => _chat.StopCommand.Execute(null);
     public void ClearChat() => _chat.ClearCommand.Execute(null);
+}
+
+/// <summary>
+///     SG12: BCL <c>[LoggerMessage]</c> delegates for <see cref="AvaloniaWorkspaceCommands" />.
+///     Templates, levels and operands are 1-to-1 with the former <c>LogX</c> calls.
+/// </summary>
+internal static partial class AvaloniaWorkspaceCommandsLog
+{
+    [LoggerMessage(EventId = 1, Level = LogLevel.Error, Message = "Branch session failed")]
+    public static partial void BranchSessionFailed(ILogger logger, Exception ex);
+
+    [LoggerMessage(EventId = 2, Level = LogLevel.Error, Message = "Refresh sessions failed")]
+    public static partial void RefreshSessionsFailed(ILogger logger, Exception ex);
 }

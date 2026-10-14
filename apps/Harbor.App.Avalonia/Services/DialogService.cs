@@ -108,7 +108,7 @@ public sealed class DialogService : IDialogService
         buttons.Children.Add(ok);
         dialog.Content = new StackPanel { Margin = new Thickness(0), Children = { text, buttons } };
         await dialog.ShowDialog(window);
-        _logger.LogDebug("Confirm '{Title}' → {Result}", title, result);
+        DialogServiceLog.ConfirmResult(_logger, title, result);
         return result;
     }
 
@@ -141,7 +141,7 @@ public sealed class DialogService : IDialogService
         panel.Children.Add(buttons);
         dialog.Content = panel;
         string? result = await dialog.ShowDialog<string?>(window);
-        _logger.LogDebug("Prompt '{Title}' → '{Result}'", title, result);
+        DialogServiceLog.PromptResult(_logger, title, result);
         return result;
     }
 
@@ -166,7 +166,7 @@ public sealed class DialogService : IDialogService
         var panel = new StackPanel { Margin = new Thickness(0), Children = { text, ok } };
         dialog.Content = panel;
         await dialog.ShowDialog(window);
-        _logger.LogDebug("Alert '{Title}'", title);
+        DialogServiceLog.AlertShown(_logger, title);
     }
 }
 
@@ -197,7 +197,33 @@ public sealed class ToastService : IToastService
     public void Show(string message, ToastKind kind = ToastKind.Info)
     {
         var toast = new ToastNotification(message, kind);
-        _logger.LogInformation("Toast [{Kind}]: {Message}", kind, message);
+        ToastServiceLog.ToastShown(_logger, kind, message);
         ToastAdded?.Invoke(this, toast);
     }
+}
+
+/// <summary>
+///     SG12: BCL <c>[LoggerMessage]</c> delegates for <see cref="DialogService" />.
+///     Templates, levels and operands are 1-to-1 with the former <c>LogX</c> calls.
+/// </summary>
+internal static partial class DialogServiceLog
+{
+    [LoggerMessage(EventId = 1, Level = LogLevel.Debug, Message = "Confirm '{Title}' → {Result}")]
+    public static partial void ConfirmResult(ILogger logger, string title, bool result);
+
+    [LoggerMessage(EventId = 2, Level = LogLevel.Debug, Message = "Prompt '{Title}' → '{Result}'")]
+    public static partial void PromptResult(ILogger logger, string title, string? result);
+
+    [LoggerMessage(EventId = 3, Level = LogLevel.Debug, Message = "Alert '{Title}'")]
+    public static partial void AlertShown(ILogger logger, string title);
+}
+
+/// <summary>
+///     SG12: BCL <c>[LoggerMessage]</c> delegates for <see cref="ToastService" />.
+///     Templates, levels and operands are 1-to-1 with the former <c>LogX</c> calls.
+/// </summary>
+internal static partial class ToastServiceLog
+{
+    [LoggerMessage(EventId = 1, Level = LogLevel.Information, Message = "Toast [{Kind}]: {Message}")]
+    public static partial void ToastShown(ILogger logger, ToastKind kind, string message);
 }
