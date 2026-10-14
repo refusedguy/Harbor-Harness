@@ -167,13 +167,13 @@ internal sealed class SlashCommandDispatcher
 
         if (SlashCommandCatalog.Find(cmd) is { QuitsLoop: true })
         {
-            _logger.LogInformation("Quit requested via /{Command}", cmd);
+            SlashCommandDispatcherLog.QuitRequested(_logger, cmd);
             return Task.FromResult(SlashCommandOutcome.Quit(0));
         }
 
         if (!_byName.TryGetValue(cmd, out var reg))
         {
-            _logger.LogWarning("Unknown command: /{Command}", cmd);
+            SlashCommandDispatcherLog.UnknownCommand(_logger, cmd);
             writer($"Unknown: /{cmd}. /help for commands.");
             return Task.FromResult(SlashCommandOutcome.Continue);
         }
@@ -213,7 +213,7 @@ internal sealed class SlashCommandDispatcher
     {
         try
         {
-            _logger.LogInformation("Slash command: /{Command} args={ArgCount}", reg.Definition.Name, args.Count);
+            SlashCommandDispatcherLog.DispatchingCommand(_logger, reg.Definition.Name, args.Count);
 
             // #603: the handler's Result used to be assigned here and never read.
             // `SlashCommandOutcome` carries only ShouldQuit/ExitCode and all three
@@ -230,18 +230,18 @@ internal sealed class SlashCommandDispatcher
                 // A command error is not a crash: the REPL keeps running. Log it
                 // at Warning so `harbor logs` still shows what the user saw (or,
                 // for a handler that forgot to write, did not see).
-                _logger.LogWarning("Command /{Command} failed: {Error}", reg.Definition.Name, result.Error);
+                SlashCommandDispatcherLog.CommandFailed(_logger, reg.Definition.Name, result.Error);
             }
             else
             {
-                _logger.LogDebug("Command /{Command} completed", reg.Definition.Name);
+                SlashCommandDispatcherLog.CommandCompleted(_logger, reg.Definition.Name);
             }
 
             return SlashCommandOutcome.Continue;
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error dispatching command /{Command}", reg.Definition.Name);
+            SlashCommandDispatcherLog.DispatchFailed(_logger, ex, reg.Definition.Name);
             ctx.Writer($"Error: {ex.Message}");
             return SlashCommandOutcome.Continue;
         }
@@ -689,4 +689,29 @@ internal static class SlashCommandDispatcherStatic
 
         return await command.Value.ExecuteAsync(args, ct).ConfigureAwait(false);
     }
+}
+
+/// <summary>
+///     SG9: BCL <c>[LoggerMessage]</c> delegates for <see cref="SlashCommandDispatcher" />.
+///     Templates, levels and operands are 1-to-1 with the former <c>LogX</c> calls.
+/// </summary>
+internal static partial class SlashCommandDispatcherLog
+{
+    [LoggerMessage(EventId = 1, Level = LogLevel.Information, Message = "Quit requested via /{Command}")]
+    public static partial void QuitRequested(ILogger logger, string command);
+
+    [LoggerMessage(EventId = 2, Level = LogLevel.Warning, Message = "Unknown command: /{Command}")]
+    public static partial void UnknownCommand(ILogger logger, string command);
+
+    [LoggerMessage(EventId = 3, Level = LogLevel.Information, Message = "Slash command: /{Command} args={ArgCount}")]
+    public static partial void DispatchingCommand(ILogger logger, string command, int argCount);
+
+    [LoggerMessage(EventId = 4, Level = LogLevel.Warning, Message = "Command /{Command} failed: {Error}")]
+    public static partial void CommandFailed(ILogger logger, string command, string error);
+
+    [LoggerMessage(EventId = 5, Level = LogLevel.Debug, Message = "Command /{Command} completed")]
+    public static partial void CommandCompleted(ILogger logger, string command);
+
+    [LoggerMessage(EventId = 6, Level = LogLevel.Error, Message = "Error dispatching command /{Command}")]
+    public static partial void DispatchFailed(ILogger logger, Exception ex, string command);
 }
