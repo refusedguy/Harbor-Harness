@@ -141,7 +141,7 @@ public sealed class JsonlSessionStore : ISessionStore, ISessionCheckpointStore
             _messageCache.TryRemove(session.Id, out _);
             return session;
         }, ResultErrors.Message)
-            .TapError(e => _logger.LogError("Failed to create session: {Error}", e));
+            .TapError(e => JsonlSessionStoreLog.CreateSessionFailed(_logger, e));
     }
 
     /// <summary>
@@ -196,7 +196,7 @@ public sealed class JsonlSessionStore : ISessionStore, ISessionCheckpointStore
             };
         }, ResultErrors.Message).ConfigureAwait(false);
 
-        return loaded.TapError(e => _logger.LogError("Failed to read session {SessionId}: {Error}", sessionId, e));
+        return loaded.TapError(e => JsonlSessionStoreLog.ReadSessionFailed(_logger, sessionId, e));
     }
 
     public Task<Result<IReadOnlyList<Session>>> ListAsync(string? projectId = null, CancellationToken ct = default)
@@ -218,7 +218,7 @@ public sealed class JsonlSessionStore : ISessionStore, ISessionCheckpointStore
             sessions.Sort((a, b) => b.UpdatedAt.CompareTo(a.UpdatedAt));
             return (IReadOnlyList<Session>)sessions;
         }, ResultErrors.Message)
-            .TapError(e => _logger.LogError("Failed to list sessions: {Error}", e));
+            .TapError(e => JsonlSessionStoreLog.ListSessionsFailed(_logger, e));
     }
 
     /// <summary>
@@ -275,7 +275,7 @@ public sealed class JsonlSessionStore : ISessionStore, ISessionCheckpointStore
 
             _messageCache.TryRemove(sessionId, out _);
         }, ResultErrors.Message)
-            .TapError(e => _logger.LogError("Failed to append message to session {SessionId}: {Error}", sessionId, e));
+            .TapError(e => JsonlSessionStoreLog.AppendMessageFailed(_logger, sessionId, e));
     }
 
     /// <summary>
@@ -342,7 +342,7 @@ public sealed class JsonlSessionStore : ISessionStore, ISessionCheckpointStore
                 ? Result.Success()
                 : Result.Failure(SessionStoreErrors.MessageNotFound(sessionId, message.Id)))
             .Tap(() => _messageCache.TryRemove(sessionId, out _))
-            .TapError(e => _logger.LogError("Failed to update message in session {SessionId}: {Error}", sessionId, e));
+            .TapError(e => JsonlSessionStoreLog.UpdateMessageFailed(_logger, sessionId, e));
     }
 
     /// <summary>
@@ -427,7 +427,7 @@ public sealed class JsonlSessionStore : ISessionStore, ISessionCheckpointStore
             return Result.Success(snapshot.Messages);
         }, ResultErrors.Message)
             .Bind(x => x)
-            .TapError(e => _logger.LogError("Failed to read messages of session {SessionId}: {Error}", sessionId, e));
+            .TapError(e => JsonlSessionStoreLog.ReadMessagesFailed(_logger, sessionId, e));
     }
 
     /// <summary>
@@ -477,7 +477,7 @@ public sealed class JsonlSessionStore : ISessionStore, ISessionCheckpointStore
                 semaphore.Release();
             }
         }, ResultErrors.Message)
-            .TapError(e => _logger.LogError("Failed to delete session {SessionId}: {Error}", sessionId, e));
+            .TapError(e => JsonlSessionStoreLog.DeleteSessionFailed(_logger, sessionId, e));
     }
 
     /// <summary>
@@ -539,8 +539,7 @@ public sealed class JsonlSessionStore : ISessionStore, ISessionCheckpointStore
                 : Result.Failure<int>(SessionStoreErrors.MessageNotFound(sessionId, messageId)))
             // Always drop the parse cache on success — cheap and immune to mtime quirks.
             .Tap(() => _messageCache.TryRemove(sessionId, out _))
-            .TapError(e => _logger.LogError(
-                "Failed to truncate messages after {MessageId} in session {SessionId}: {Error}", messageId, sessionId, e));
+            .TapError(e => JsonlSessionStoreLog.TruncateMessagesFailed(_logger, messageId, sessionId, e));
     }
 
     /// <summary>
@@ -645,7 +644,7 @@ public sealed class JsonlSessionStore : ISessionStore, ISessionCheckpointStore
                 semaphore.Release();
             }
         }, ResultErrors.Message)
-            .TapError(e => _logger.LogError("Failed to list checkpoints of session {SessionId}: {Error}", sessionId, e));
+            .TapError(e => JsonlSessionStoreLog.ListCheckpointsFailed(_logger, sessionId, e));
     }
 
     /// <summary>
@@ -741,7 +740,7 @@ public sealed class JsonlSessionStore : ISessionStore, ISessionCheckpointStore
 
             _messageCache.TryRemove(sessionId, out _);
         }, ResultErrors.Message)
-            .TapError(e => _logger.LogError("Failed to append checkpoint to session {SessionId}: {Error}", sessionId, e));
+            .TapError(e => JsonlSessionStoreLog.AppendCheckpointFailed(_logger, sessionId, e));
     }
 
     /// <summary>
@@ -792,13 +791,13 @@ public sealed class JsonlSessionStore : ISessionStore, ISessionCheckpointStore
         }
         catch (JsonException ex)
         {
-            logger.LogWarning(ex, "Skipping malformed checkpoint line in session {SessionId}.", sessionId);
+            JsonlSessionStoreLog.SkippingMalformedCheckpointLine(logger, ex, sessionId);
             return;
         }
 
         if (entry is not { Type: "checkpoint", Id: { Length: > 0 }, MessageId: { Length: > 0 } })
         {
-            logger.LogWarning("Skipping malformed checkpoint line in session {SessionId}: missing id/messageId.", sessionId);
+            JsonlSessionStoreLog.CheckpointLineMissingIds(logger, sessionId);
             return;
         }
 
@@ -895,6 +894,52 @@ public sealed class JsonlSessionStore : ISessionStore, ISessionCheckpointStore
                 ? Result.Success()
                 : Result.Failure($"Session '{session.Id}' is empty: {sessionFile}."))
             .Tap(() => _messageCache.TryRemove(session.Id, out _))
-            .TapError(e => _logger.LogError("Failed to update session {SessionId}: {Error}", session.Id, e));
+            .TapError(e => JsonlSessionStoreLog.UpdateSessionFailed(_logger, session.Id, e));
     }
+}
+
+/// <summary>
+///     SG8: BCL <c>[LoggerMessage]</c> delegates for <see cref="JsonlSessionStore" />.
+///     Templates, levels and operands are 1-to-1 with the former <c>LogX</c> calls.
+/// </summary>
+internal static partial class JsonlSessionStoreLog
+{
+    [LoggerMessage(EventId = 1, Level = LogLevel.Error, Message = "Failed to create session: {Error}")]
+    public static partial void CreateSessionFailed(ILogger logger, string error);
+
+    [LoggerMessage(EventId = 2, Level = LogLevel.Error, Message = "Failed to read session {SessionId}: {Error}")]
+    public static partial void ReadSessionFailed(ILogger logger, string sessionId, string error);
+
+    [LoggerMessage(EventId = 3, Level = LogLevel.Error, Message = "Failed to list sessions: {Error}")]
+    public static partial void ListSessionsFailed(ILogger logger, string error);
+
+    [LoggerMessage(EventId = 4, Level = LogLevel.Error, Message = "Failed to append message to session {SessionId}: {Error}")]
+    public static partial void AppendMessageFailed(ILogger logger, string sessionId, string error);
+
+    [LoggerMessage(EventId = 5, Level = LogLevel.Error, Message = "Failed to update message in session {SessionId}: {Error}")]
+    public static partial void UpdateMessageFailed(ILogger logger, string sessionId, string error);
+
+    [LoggerMessage(EventId = 6, Level = LogLevel.Error, Message = "Failed to read messages of session {SessionId}: {Error}")]
+    public static partial void ReadMessagesFailed(ILogger logger, string sessionId, string error);
+
+    [LoggerMessage(EventId = 7, Level = LogLevel.Error, Message = "Failed to delete session {SessionId}: {Error}")]
+    public static partial void DeleteSessionFailed(ILogger logger, string sessionId, string error);
+
+    [LoggerMessage(EventId = 8, Level = LogLevel.Error, Message = "Failed to truncate messages after {MessageId} in session {SessionId}: {Error}")]
+    public static partial void TruncateMessagesFailed(ILogger logger, string messageId, string sessionId, string error);
+
+    [LoggerMessage(EventId = 9, Level = LogLevel.Error, Message = "Failed to list checkpoints of session {SessionId}: {Error}")]
+    public static partial void ListCheckpointsFailed(ILogger logger, string sessionId, string error);
+
+    [LoggerMessage(EventId = 10, Level = LogLevel.Error, Message = "Failed to append checkpoint to session {SessionId}: {Error}")]
+    public static partial void AppendCheckpointFailed(ILogger logger, string sessionId, string error);
+
+    [LoggerMessage(EventId = 11, Level = LogLevel.Warning, Message = "Skipping malformed checkpoint line in session {SessionId}.")]
+    public static partial void SkippingMalformedCheckpointLine(ILogger logger, Exception ex, string sessionId);
+
+    [LoggerMessage(EventId = 12, Level = LogLevel.Warning, Message = "Skipping malformed checkpoint line in session {SessionId}: missing id/messageId.")]
+    public static partial void CheckpointLineMissingIds(ILogger logger, string sessionId);
+
+    [LoggerMessage(EventId = 13, Level = LogLevel.Error, Message = "Failed to update session {SessionId}: {Error}")]
+    public static partial void UpdateSessionFailed(ILogger logger, string sessionId, string error);
 }

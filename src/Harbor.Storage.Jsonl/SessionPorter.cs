@@ -74,8 +74,7 @@ public sealed class JsonlSessionPorter : ISessionPorter
             await output.WriteLineAsync(JsonSerializer.Serialize(entry, JsonlCodecContext.Default.MessageEntry)).ConfigureAwait(false);
         }
 
-        _logger.LogInformation("Exported session {SessionId}: {Count} message(s)",
-            sessionId, messages.Value.Count);
+        JsonlSessionPorterLog.SessionExported(_logger, sessionId, messages.Value.Count);
         return Result.Success();
     }
 
@@ -133,8 +132,7 @@ public sealed class JsonlSessionPorter : ISessionPorter
         };
         var linkedResult = await store.UpdateAsync(target, ct).ConfigureAwait(false);
         if (linkedResult.IsFailure)
-            _logger.LogWarning("Imported history into {TargetId} but metadata linkage failed: {Error}",
-                target.Id, linkedResult.Error);
+            JsonlSessionPorterLog.MetadataLinkageFailed(_logger, target.Id, linkedResult.Error);
 
         int imported = 0, skipped = 0;
         string? line = await ReadBodyLineAsync(input).ConfigureAwait(false);
@@ -146,7 +144,7 @@ public sealed class JsonlSessionPorter : ISessionPorter
             if (decode.IsFailure)
             {
                 skipped++;
-                _logger.LogWarning("Skipped malformed exported message: {Error}", decode.Error);
+                JsonlSessionPorterLog.SkippedMalformedMessage(_logger, decode.Error);
             }
             else
             {
@@ -159,13 +157,15 @@ public sealed class JsonlSessionPorter : ISessionPorter
                 if (appended.IsFailure)
                 {
                     skipped++;
-                    _logger.LogWarning("Failed to persist imported message {MessageId}: {Error}",
+                    JsonlSessionPorterLog.PersistImportedMessageFailed(
+                        _logger,
                         #pragma warning disable CFE0001
                         // CFE0001: false positive — the IsFailure/IsSuccess guard is an early
                         // return or continue, a control-flow shape the analyzer does not model.
                         // The .Value is safe. Baseline: docs/ROP-API-INVENTORY.md §5.
-                        decode.Value.Id, appended.Error);
+                        decode.Value.Id,
                         #pragma warning restore CFE0001
+                        appended.Error);
                 }
                 else
                 {
@@ -180,12 +180,10 @@ public sealed class JsonlSessionPorter : ISessionPorter
         {
             var stats = await store.UpdateStatsAsync(target.Id, metadata, ct).ConfigureAwait(false);
             if (stats.IsFailure)
-                _logger.LogWarning("Imported session {SessionId} but stats were not restored: {Error}",
-                    target.Id, stats.Error);
+                JsonlSessionPorterLog.StatsNotRestored(_logger, target.Id, stats.Error);
         }
 
-        _logger.LogInformation("Imported session into new id {TargetId} from source {SourceId}: {Imported} message(s), {Skipped} skipped",
-            target.Id, source.Id, imported, skipped);
+        JsonlSessionPorterLog.SessionImported(_logger, target.Id, source.Id, imported, skipped);
         return Result.Success(target.Id);
     }
 
@@ -262,7 +260,7 @@ public sealed class JsonlSessionPorter : ISessionPorter
     {
         var result = await TryReadNonEmptyLineAsync(reader).ConfigureAwait(false);
         if (result.IsFailure)
-            _logger.LogWarning("Import stopped early: message section unreadable: {Error}", result.Error);
+            JsonlSessionPorterLog.ImportStoppedEarly(_logger, result.Error);
         Maybe<string> line = result.IsSuccess ? result.Value : Maybe<string>.None;
         return line.HasValue ? line.Value : null; // .Value guarded by HasNoValue above.
     }
@@ -274,3 +272,31 @@ internal sealed record ExportEnvelope(
     [property: JsonPropertyName("version")] int Version,
     [property: JsonPropertyName("session")] Session Session,
     [property: JsonPropertyName("metadata")] SessionMetadata? Metadata);
+
+/// <summary>
+///     SG8: BCL <c>[LoggerMessage]</c> delegates for <see cref="JsonlSessionPorter" />.
+///     Templates, levels and operands are 1-to-1 with the former <c>LogX</c> calls.
+/// </summary>
+internal static partial class JsonlSessionPorterLog
+{
+    [LoggerMessage(EventId = 1, Level = LogLevel.Information, Message = "Exported session {SessionId}: {Count} message(s)")]
+    public static partial void SessionExported(ILogger logger, string sessionId, int count);
+
+    [LoggerMessage(EventId = 2, Level = LogLevel.Warning, Message = "Imported history into {TargetId} but metadata linkage failed: {Error}")]
+    public static partial void MetadataLinkageFailed(ILogger logger, string targetId, string error);
+
+    [LoggerMessage(EventId = 3, Level = LogLevel.Warning, Message = "Skipped malformed exported message: {Error}")]
+    public static partial void SkippedMalformedMessage(ILogger logger, string error);
+
+    [LoggerMessage(EventId = 4, Level = LogLevel.Warning, Message = "Failed to persist imported message {MessageId}: {Error}")]
+    public static partial void PersistImportedMessageFailed(ILogger logger, string messageId, string error);
+
+    [LoggerMessage(EventId = 5, Level = LogLevel.Warning, Message = "Imported session {SessionId} but stats were not restored: {Error}")]
+    public static partial void StatsNotRestored(ILogger logger, string sessionId, string error);
+
+    [LoggerMessage(EventId = 6, Level = LogLevel.Information, Message = "Imported session into new id {TargetId} from source {SourceId}: {Imported} message(s), {Skipped} skipped")]
+    public static partial void SessionImported(ILogger logger, string targetId, string sourceId, int imported, int skipped);
+
+    [LoggerMessage(EventId = 7, Level = LogLevel.Warning, Message = "Import stopped early: message section unreadable: {Error}")]
+    public static partial void ImportStoppedEarly(ILogger logger, string error);
+}

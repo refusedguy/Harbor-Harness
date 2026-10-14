@@ -87,7 +87,7 @@ public sealed class SqliteSessionStore : ISessionStore, ISessionCheckpointStore
 
                 return session;
             }, ResultErrors.Message)
-            .TapError(e => _logger.LogError("Failed to create session: {Error}", e));
+            .TapError(e => SqliteSessionStoreLog.CreateSessionFailed(_logger, e));
         }
         finally
         {
@@ -194,7 +194,7 @@ public sealed class SqliteSessionStore : ISessionStore, ISessionCheckpointStore
 
                 tx.Commit();
             }, ResultErrors.Message)
-            .TapError(e => _logger.LogError("Failed to append message to session {SessionId}: {Error}", sessionId, e));
+            .TapError(e => SqliteSessionStoreLog.AppendMessageFailed(_logger, sessionId, e));
         }
         finally
         {
@@ -282,8 +282,7 @@ public sealed class SqliteSessionStore : ISessionStore, ISessionCheckpointStore
             }
 
             if (skipped.Count > 0)
-                _logger.LogWarning("Skipped {Count} unreadable message(s) in session {SessionId}: {Errors}",
-                    skipped.Count, sessionId, string.Join("; ", skipped));
+                SqliteSessionStoreLog.SkippedUnreadableMessages(_logger, skipped.Count, sessionId, string.Join("; ", skipped));
 
             return (IReadOnlyList<AgentMessage>)result;
         }, ResultErrors.Message).ConfigureAwait(false);
@@ -478,7 +477,7 @@ public sealed class SqliteSessionStore : ISessionStore, ISessionCheckpointStore
                 return Result.Success(checkpoint);
             }, ResultErrors.Message)
                 .Bind(x => x)
-                .TapError(e => _logger.LogError("Failed to record checkpoint in session {SessionId}: {Error}", sessionId, e));
+                .TapError(e => SqliteSessionStoreLog.RecordCheckpointFailed(_logger, sessionId, e));
         }
         finally
         {
@@ -628,7 +627,7 @@ public sealed class SqliteSessionStore : ISessionStore, ISessionCheckpointStore
                     checkpoint.Id, checkpoint.MessageId, removed, (int)remaining));
             }, ResultErrors.Message)
                 .Bind(x => x)
-                .TapError(e => _logger.LogError("Failed to record rewind in session {SessionId}: {Error}", sessionId, e));
+                .TapError(e => SqliteSessionStoreLog.RecordRewindFailed(_logger, sessionId, e));
         }
         finally
         {
@@ -710,7 +709,7 @@ public sealed class SqliteSessionStore : ISessionStore, ISessionCheckpointStore
                     cmd.Parameters.AddWithValue("@updated", DateTimeOffset.UtcNow.ToString("O"));
                     return cmd.ExecuteNonQuery();
                 }, ResultErrors.Message)
-                .TapError(e => _logger.LogError("Failed to update session {SessionId}: {Error}", session.Id, e))
+                .TapError(e => SqliteSessionStoreLog.UpdateSessionFailed(_logger, session.Id, e))
                 .Bind(rows => rows == 0
                     ? Result.Failure(SessionStoreErrors.SessionNotFound(session.Id))
                     : Result.Success());
@@ -816,4 +815,29 @@ public sealed class SqliteSessionStore : ISessionStore, ISessionCheckpointStore
 
         return conn;
     }
+}
+
+/// <summary>
+///     SG8: BCL <c>[LoggerMessage]</c> delegates for <see cref="SqliteSessionStore" />.
+///     Templates, levels and operands are 1-to-1 with the former <c>LogX</c> calls.
+/// </summary>
+internal static partial class SqliteSessionStoreLog
+{
+    [LoggerMessage(EventId = 1, Level = LogLevel.Error, Message = "Failed to create session: {Error}")]
+    public static partial void CreateSessionFailed(ILogger logger, string error);
+
+    [LoggerMessage(EventId = 2, Level = LogLevel.Error, Message = "Failed to append message to session {SessionId}: {Error}")]
+    public static partial void AppendMessageFailed(ILogger logger, string sessionId, string error);
+
+    [LoggerMessage(EventId = 3, Level = LogLevel.Warning, Message = "Skipped {Count} unreadable message(s) in session {SessionId}: {Errors}")]
+    public static partial void SkippedUnreadableMessages(ILogger logger, int count, string sessionId, string errors);
+
+    [LoggerMessage(EventId = 4, Level = LogLevel.Error, Message = "Failed to record checkpoint in session {SessionId}: {Error}")]
+    public static partial void RecordCheckpointFailed(ILogger logger, string sessionId, string error);
+
+    [LoggerMessage(EventId = 5, Level = LogLevel.Error, Message = "Failed to record rewind in session {SessionId}: {Error}")]
+    public static partial void RecordRewindFailed(ILogger logger, string sessionId, string error);
+
+    [LoggerMessage(EventId = 6, Level = LogLevel.Error, Message = "Failed to update session {SessionId}: {Error}")]
+    public static partial void UpdateSessionFailed(ILogger logger, string sessionId, string error);
 }
