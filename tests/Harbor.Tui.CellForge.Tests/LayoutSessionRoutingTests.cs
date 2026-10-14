@@ -332,6 +332,66 @@ public class FocusRouterTests
         await Assert.That(a.Focused).IsFalse();
         await Assert.That(b.Focused).IsTrue();
     }
+
+    [Test]
+    public async Task Remove_Unknown_ReturnsFalse()
+    {
+        var router = new FocusRouter();
+        router.Add(new Target("a"));
+        await Assert.That(router.Remove("missing")).IsFalse();
+        await Assert.That(router.Order.Count).IsEqualTo(1);
+    }
+
+    [Test]
+    public async Task Remove_Buried_KeepsCurrent()
+    {
+        var router = new FocusRouter();
+        var a = new Target("a");
+        var b = new Target("b");
+        var c = new Target("c");
+        router.Add(a);
+        router.Add(b);
+        router.Add(c);
+        _ = router.FocusById("c");
+        await Assert.That(router.Remove("a")).IsTrue();
+
+        await Assert.That(router.Current!.Id).IsEqualTo("c");
+        await Assert.That(c.Focused).IsTrue();
+        await Assert.That(router.Order.Count).IsEqualTo(2);
+    }
+
+    [Test]
+    public async Task Remove_Current_BlursAndLeavesUnfocused()
+    {
+        var router = new FocusRouter();
+        var a = new Target("a");
+        var b = new Target("b");
+        router.Add(a);
+        router.Add(b);
+        _ = router.FocusById("a");
+        await Assert.That(router.Remove("a")).IsTrue();
+
+        await Assert.That(a.Focused).IsFalse();
+        await Assert.That(router.Current).IsNull();
+        await Assert.That(router.FocusById("b")).IsTrue();
+        await Assert.That(b.Focused).IsTrue();
+    }
+
+    [Test]
+    public async Task Clear_BlursCurrentAndEmpties()
+    {
+        var router = new FocusRouter();
+        var a = new Target("a");
+        router.Add(a);
+        router.Add(new Target("b"));
+        _ = router.FocusById("a");
+        router.Clear();
+
+        await Assert.That(a.Focused).IsFalse();
+        await Assert.That(router.Current).IsNull();
+        await Assert.That(router.Order.Count).IsEqualTo(0);
+        await Assert.That(router.Next()).IsFalse();
+    }
 }
 
 public class MouseRouterTests
