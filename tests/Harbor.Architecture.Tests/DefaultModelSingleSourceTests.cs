@@ -117,6 +117,99 @@ public sealed class DefaultModelSingleSourceTests
     /// </summary>
     private sealed record LiteralSite(string RelativePath, int Line, string Text);
 
+    /// <summary>The single banned shape's sub-id, shared by the rule data and the parser.</summary>
+    private const string HandSpelledSubId = "HAND-SPELLED-DEFAULT-MODEL";
+
+    // MECHANISM (#1086, step 2, conveyor batch 8)
+    // -------------------------------------------
+    // The ban below is a ScanRule: the QuotedLiteral shape as a Forbidden row
+    // carrying the existing Regex object directly, five planted controls, the
+    // declaration file plus the documented exemption as the MustContain floor,
+    // a discovery floor. Enumeration, matching and the control/discovery
+    // verdicts are ScanRunner's; this file keeps the issue prose, the patterns,
+    // the exemption table, and the test names.
+    //
+    // The verdict is ParseLiterals through the Func-overload, carrying the
+    // original line scan verbatim -- FindLiteralLines over the raw source lines,
+    // the //-line skip and the quoted-literal Contains filter untouched --
+    // with the declaration file and the HandSpelledExemptions hatch as the
+    // rule's half. A file-wide baseline row would excuse a second copy in the
+    // same file, and a second copy inside the declaration file is exactly the
+    // defect #599 reported — so the baseline stays empty and the hatch stays a
+    // file filter inside the parser. The planted controls grade this parser,
+    // so "it can fail" means something.
+    //
+    // The rule is built per test from the LIVE value
+    // (BuildRule(ExtractModelIdHalf(ReadDeclaredModelId(root)))), not stored
+    // as static data: the guard is value-agnostic on purpose, and static data
+    // would pin a stale string the day the model rolls over. Scope parity is
+    // exact: Trees ["src", "apps"] walks what EnumerateProductCsFiles walks —
+    // no *.cs path under src/ or apps/ carries a /tests/, /contrib/ or
+    // /.worktrees/ segment, and both sides drop /obj/ + /bin/.
+
+    /// <summary>The hand-spelled-copy ban as data: one shape, five planted controls, a floor.</summary>
+    private static ScanRule BuildRule(string modelHalf) => new()
+    {
+        Id = "DefaultModelSingleSource",
+        Trees = ["src", "apps"],
+        Forbidden =
+        [
+            new ScanForbidden(
+                HandSpelledSubId,
+                QuotedLiteral,
+                "derive it from IdentityConfig.FallbackModelRef (typed) or from "
+                + "ProviderPresets.Find(id).DefaultModel (provider-declared) instead. "
+                + "See issue #599."),
+        ],
+        Controls =
+        [
+            new ScanControl(
+                "Planted/Literal.cs",
+                "internal static class Planted\n{\n    public const string Model = \"" + modelHalf + "\";\n}",
+                HandSpelledSubId),
+            new ScanControl(
+                "Planted/TrailingComment.cs",
+                "    var m = \"kilocode/" + modelHalf + "\"; // trailing comment",
+                HandSpelledSubId),
+            new ScanControl(
+                "NearMiss/DifferentModel.cs",
+                "internal static class Planted\n{\n    public const string Model = \"some/other-model\";\n}",
+                null),
+            new ScanControl(
+                "NearMiss/LineComment.cs",
+                "// prose mentioning \"" + modelHalf + "\" in a comment",
+                null),
+            new ScanControl(
+                "NearMiss/DocComment.cs",
+                "/// <c>" + modelHalf + "</c> in a doc comment.",
+                null),
+        ],
+        MinHits = 500,
+        MustContain = [DeclarationFileRelativePath, .. HandSpelledExemptions.Keys],
+        CustomParse = (displayPath, rawSource) => ParseLiterals(displayPath, rawSource, modelHalf),
+    };
+
+    /// <summary>
+    ///     The custom parser: the original literal scan over one file's raw source —
+    ///     the comment-line skip and the quoted-literal filter verbatim (via
+    ///     <see cref="FindLiteralLines" />), with the declaration file and the
+    ///     documented exemptions as the rule's hatch.
+    /// </summary>
+    private static IEnumerable<ScanHit> ParseLiterals(string displayPath, string rawSource, string modelHalf)
+    {
+        if (string.Equals(displayPath, DeclarationFileRelativePath, StringComparison.Ordinal)
+            || HandSpelledExemptions.ContainsKey(displayPath))
+        {
+            yield break;
+        }
+
+        string[] lines = rawSource.Split('\n');
+        foreach (int index in FindLiteralLines(lines, modelHalf))
+        {
+            yield return new ScanHit(HandSpelledSubId, displayPath, index + 1, lines[index].Trim());
+        }
+    }
+
     /// <summary>
     ///     The default model id is spelled in a string literal in exactly one product
     ///     file — the one declaring the constant — plus whatever a documented exemption
@@ -128,21 +221,17 @@ public sealed class DefaultModelSingleSourceTests
         string root = RequireRepoRoot();
         string modelId = ExtractModelIdHalf(ReadDeclaredModelId(root));
 
+        // The ScanRule half: every hit outside the declaration and the
+        // documented exemptions. Those two stay a file filter inside the
+        // parser rather than baseline rows (see the MECHANISM note above).
+        List<string> illegal = ScanRunner.Evaluate(BuildRule(modelId));
+
         IReadOnlyList<string> files = EnumerateProductCsFiles(root);
         List<LiteralSite> sites = [.. files.SelectMany(f => FindLiteralSites(root, f, modelId))];
 
-        // The declaration itself is a legal hit; outside it, only the documented
-        // exemptions may carry a second spelling. A hit in a file that is NOT on the
-        // list — including a brand-new file nobody thought about — is the failure.
-        List<LiteralSite> illegal =
-        [
-            .. sites.Where(s => s.RelativePath != DeclarationFileRelativePath
-                                && !HandSpelledExemptions.ContainsKey(s.RelativePath))
-        ];
-
         await Assert.That(illegal.Count).IsEqualTo(0)
             .Because(
-                "the default model id (" + modelId + ") is hand-spelled in " + Describe(illegal)
+                "the default model id (" + modelId + ") is hand-spelled in " + string.Join(", ", illegal)
                 + " — derive it from IdentityConfig.FallbackModelRef (typed) or from "
                 + "ProviderPresets.Find(id).DefaultModel (provider-declared) instead. "
                 + "If the file is genuinely a documented exception, add it to "
@@ -196,12 +285,35 @@ public sealed class DefaultModelSingleSourceTests
     [Test]
     public async Task Discovery_FindsARealFileSet_IncludingTheDeclaration()
     {
-        IReadOnlyList<string> files = EnumerateProductCsFiles(RequireRepoRoot());
+        string root = RequireRepoRoot();
+        string modelId = ExtractModelIdHalf(ReadDeclaredModelId(root));
+        List<string> discovery = ScanRunner.CheckDiscovery(BuildRule(modelId));
 
-        await Assert.That(files.Count).IsGreaterThan(200)
-            .Because("src/ + apps/ hold an order of magnitude more than 200 C# files; a smaller count means the glob broke.");
-        await Assert.That(files.Any(f => f == DeclarationFileRelativePath)).IsTrue()
-            .Because(DeclarationFileRelativePath + " must be inside the scanned set, or the guard polices nothing.");
+        await Assert.That(discovery).IsEmpty()
+            .Because(
+                "src/ + apps/ hold far more than 500 C# files, including the declaration file "
+                + "and the documented exemption. A smaller count -- or a scope that stopped seeing "
+                + "those files -- means the tree walk broke and the rule above would be "
+                + "reporting 'clean' about nothing. "
+                + string.Join("; ", discovery));
+    }
+
+    /// <summary>
+    ///     The planted controls -- every literal shape and every near-miss -- drive
+    ///     the REAL parser: offenders reported under their sub-id, near-misses silent.
+    /// </summary>
+    [Test]
+    public async Task Detector_ControlsDriveTheRealParser()
+    {
+        string root = RequireRepoRoot();
+        string modelId = ExtractModelIdHalf(ReadDeclaredModelId(root));
+        List<string> failures = ScanRunner.CheckControls(BuildRule(modelId));
+
+        await Assert.That(failures).IsEmpty()
+            .Because(
+                "the five planted controls must agree with the five matcher cases above through "
+                + "the rule's own parser -- otherwise the rule guards nothing, or forbids the fix. "
+                + string.Join("; ", failures));
     }
 
     /// <summary>

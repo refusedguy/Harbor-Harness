@@ -179,6 +179,95 @@ public sealed class ModelRefSingleParserTests
     /// </summary>
     private sealed record CutSite(string RelativePath, int Line, string Text);
 
+    /// <summary>The single banned shape's sub-id, shared by the rule data and the parser.</summary>
+    private const string AdHocCutSubId = "ADHOC-CUT";
+
+    // MECHANISM (#1086, step 2, conveyor batch 8)
+    // -------------------------------------------
+    // The repo-wide ban below is a ScanRule: the AdHocCut shape as a Forbidden
+    // row carrying the existing Regex object directly, twelve planted controls,
+    // the contract file plus both owned files as the MustContain floor, a
+    // discovery floor. Enumeration, matching and the control/discovery verdicts
+    // are ScanRunner's; this file keeps the issue prose, the patterns, the
+    // inventory, and the test names.
+    //
+    // The verdict is ParseCuts through the Func-overload, carrying the original
+    // Scan verbatim -- the comment-line skip and the AdHocCut match, one report
+    // per line -- by calling it, not by copying it. The KnownAdHocCutSites
+    // inventory plus the contract file become Baseline rows carrying their
+    // reasons (derived, not re-typed, so the two cannot drift); the owned files
+    // stay OUT of the baseline -- they are held to the strict rule, and a row
+    // excusing them would be a second place to keep in sync with that half.
+    // The planted controls grade this parser, so "it can fail" means something.
+    //
+    // Scope parity is exact: Trees ["src", "apps"] walks what
+    // EnumerateProductCsFiles walks -- no *.cs path under src/ or apps/
+    // carries a /tests/, /contrib/ or /.worktrees/ segment, and both sides
+    // drop /obj/ + /bin/. The owned-file, delegation, seam and liveness halves
+    // (rules 1-2) are not repo-wide bans and stay handwritten, the same way
+    // the ContractsArtifact probe stays its own test.
+
+    /// <summary>The ad-hoc-cut ban as data: one shape, twelve planted controls, a floor.</summary>
+    private static readonly ScanRule CutRule = new()
+    {
+        Id = "ModelRefSingleParser",
+        Trees = ["src", "apps"],
+        Forbidden =
+        [
+            new ScanForbidden(
+                AdHocCutSubId,
+                AdHocCut,
+                "ModelRef.TryParse / ModelRef.Qualify is the only function in the repo written "
+                + "to read one -- it splits with count 2 (multi-segment model ids survive), "
+                + "normalizes and validates the provider half, and cannot leave a raw string to "
+                + "reach a Session. See issue #678."),
+        ],
+        Baseline =
+        [
+            new ScanBaseline(
+                AdHocCutSubId + " " + TryParseFileRelativePath,
+                IsPrefix: false,
+                "The sanctioned read: ModelRef.TryParse cuts with count 2 inside the value object, "
+                + "which is the one place this rule lives. Rule 2 asserts it still cuts."),
+            .. KnownAdHocCutSites.Select(static kv => new ScanBaseline(
+                AdHocCutSubId + " " + kv.Key,
+                IsPrefix: false,
+                kv.Value)),
+        ],
+        Controls =
+        [
+            new ScanControl("Planted/Split.cs", "var p = model.Split('/', 2);", AdHocCutSubId),
+            new ScanControl("Planted/IndexOf.cs", "int i = raw.IndexOf('/');", AdHocCutSubId),
+            new ScanControl("Planted/Contains.cs", "if (!input.Contains('/')) return 1;", AdHocCutSubId),
+            new ScanControl("Planted/PrefixBuild.cs", "string prefix = provider + \"/\";", AdHocCutSubId),
+            new ScanControl("Planted/PrefixStrip.cs", "if (m.StartsWith(prefix)) return m;", AdHocCutSubId),
+            new ScanControl("Planted/TrailingComment.cs", "var p = m.Split('/', 2); // trailing comment", AdHocCutSubId),
+            new ScanControl("NearMiss/PipeSplit.cs", "string[] s = line.Split(\"|\", StringSplitOptions.None);", null),
+            new ScanControl("NearMiss/ContainsChar.cs", "if (name.Contains('x')) return true;", null),
+            new ScanControl("NearMiss/IndexOfDash.cs", "int i = raw.IndexOf('-');", null),
+            new ScanControl("NearMiss/StartsWithName.cs", "if (m.StartsWith(prefixName)) return m;", null),
+            new ScanControl("NearMiss/LineComment.cs", "// model.Split('/', 2) -- prose about the old code", null),
+            new ScanControl("NearMiss/DocComment.cs", "/// <c>value.Split('/')</c> in a doc comment.", null),
+        ],
+        MinHits = 500,
+        MustContain = [TryParseFileRelativePath, .. OwnedFiles],
+        CustomParse = ParseCuts,
+    };
+
+    /// <summary>
+    ///     The custom parser: the original cut scan over one file's raw source --
+    ///     the comment-line skip and the AdHocCut match verbatim (via
+    ///     <see cref="Scan" />), one report per line.
+    /// </summary>
+    private static IEnumerable<ScanHit> ParseCuts(string displayPath, string rawSource)
+    {
+        string[] lines = rawSource.Split('\n');
+        foreach (int index in Scan(lines))
+        {
+            yield return new ScanHit(AdHocCutSubId, displayPath, index + 1, lines[index].Trim());
+        }
+    }
+
     /// <summary>
     ///     Rule 1, negative half: the UI sites that used to re-derive the read
     ///     contain no ad-hoc cut of their own any more.
@@ -322,26 +411,15 @@ public sealed class ModelRefSingleParserTests
     [Test]
     public async Task EveryAdHocCut_IsEitherTheContractOrInventoryed()
     {
-        string root = RequireRepoRoot();
-        IReadOnlyList<string> files = EnumerateProductCsFiles(root);
-
-        var unexpected = new List<CutSite>();
-        foreach (string file in files)
-        {
-            if (file == TryParseFileRelativePath
-                || OwnedFiles.Contains(file)
-                || KnownAdHocCutSites.ContainsKey(file))
-            {
-                continue;
-            }
-
-            unexpected.AddRange(FindCutSites(root, file));
-        }
+        // The ScanRule half: every hit outside the contract and the inventory.
+        // The owned files stay in scope here (not baselined) -- they must be
+        // clean too, and OwnedFiles_ContainNoAdHocCut says so with its own message.
+        List<string> unexpected = ScanRunner.Evaluate(CutRule);
 
         await Assert.That(unexpected.Count).IsEqualTo(0)
             .Because(
                 "a new hand-rolled read of a slash-separated string appeared in "
-                + Describe(unexpected)
+                + string.Join(", ", unexpected)
                 + ". If it really is not a model reference, add the file to KnownAdHocCutSites "
                 + "WITH the reason; if it is one, call ModelRef. See issue #678.");
     }
@@ -397,17 +475,15 @@ public sealed class ModelRefSingleParserTests
     [Test]
     public async Task Discovery_FindsTheContractAndTheOwnedFiles()
     {
-        IReadOnlyList<string> files = EnumerateProductCsFiles(RequireRepoRoot());
+        List<string> discovery = ScanRunner.CheckDiscovery(CutRule);
 
-        await Assert.That(files.Count).IsGreaterThan(200)
-            .Because("src/ + apps/ hold an order of magnitude more than 200 C# files; a smaller count means the glob broke.");
-        await Assert.That(files.Contains(TryParseFileRelativePath)).IsTrue()
-            .Because(TryParseFileRelativePath + " must be inside the scanned set, or the guard polices nothing.");
-        foreach (string file in OwnedFiles)
-        {
-            await Assert.That(files.Contains(file)).IsTrue()
-                .Because(file + " must be inside the scanned set, or rule 1 is vacuous.");
-        }
+        await Assert.That(discovery).IsEmpty()
+            .Because(
+                "src/ + apps/ hold far more than 500 C# files, including the contract file "
+                + "and both owned files. A smaller count -- or a scope that stopped seeing "
+                + "those files -- means the tree walk broke and the rules above would be "
+                + "reporting 'clean' about nothing. "
+                + string.Join("; ", discovery));
     }
 
     /// <summary>
@@ -443,6 +519,22 @@ public sealed class ModelRefSingleParserTests
             .Because("doc-comment lines are prose, not a cut");
         await Assert.That(Scan(["    var p = m.Split('/', 2); // trailing comment"]).Count).IsGreaterThan(0)
             .Because("a code line with a trailing comment is still a code line");
+    }
+
+    /// <summary>
+    ///     The planted controls -- every cut spelling and every near-miss -- drive
+    ///     the REAL parser: offenders reported under their sub-id, near-misses silent.
+    /// </summary>
+    [Test]
+    public async Task Detector_ControlsDriveTheRealParser()
+    {
+        List<string> failures = ScanRunner.CheckControls(CutRule);
+
+        await Assert.That(failures).IsEmpty()
+            .Because(
+                "the twelve planted controls must agree with the matcher cases above through "
+                + "the rule's own parser -- otherwise the rule guards nothing, or forbids the fix. "
+                + string.Join("; ", failures));
     }
 
     /// <summary>
