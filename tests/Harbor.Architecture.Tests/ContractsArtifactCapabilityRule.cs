@@ -125,26 +125,151 @@ public sealed class ContractsArtifactCapabilityRule
         + @"|\bnew\s+(?:FileInfo|DirectoryInfo)\s*\(",
         RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
+    /// <summary>The write ban's sub-id, shared by the rule data and the parser.</summary>
+    private const string DomainLeafWriteSubId = "DOMAIN-LEAF-WRITE";
+
+    /// <summary>The read ban's sub-id, shared by the rule data and the parser.</summary>
+    private const string DomainLeafDiskCallSubId = "DOMAIN-LEAF-DISK-CALL";
+
+    // MECHANISM (#1086, step 2, conveyor h1)
+    // -------------------------------------
+    // The two bans below are ScanRules: the DiskWrite/DiskCall patterns as
+    // Forbidden rows carrying the existing Regex objects directly, planted
+    // controls (the six mutator spellings plus the doc-comment prose for the
+    // write half; the probe line plus the same prose for the read half), the
+    // probe file as the MustContain floor, a discovery floor. Enumeration,
+    // matching and the control/discovery verdicts are ScanRunner's; this file
+    // keeps the issue prose, the patterns, the exactly-one-site liveness test,
+    // and the test names.
+    //
+    // The verdicts are ParseDiskWrites/ParseDiskCalls through the Func-overload,
+    // carrying the original Find core verbatim — the stateful
+    // SourceCommentStripper.StripAll over the file's lines, one report per line
+    // on the first match. Scope parity is exact: the project links no outside
+    // sources (no Compile Include in its csproj), so Trees
+    // ["src/Harbor.Abstractions.Contracts"] walks precisely what
+    // RepoPaths.EnumerateCsFiles(AuditedProjectDir) walked. Both baselines stay
+    // empty: the write half is armed with zero tolerance, and the read half's
+    // one permitted site is asserted by its own exactly-one-site test — a
+    // file-wide baseline row would excuse a second disk call in the probe's
+    // own file. The planted controls grade these parsers, so "they can fail"
+    // means something.
+
+    /// <summary>The write ban as data: the mutator family, seven planted controls, a floor.</summary>
+    private static readonly ScanRule WriteRule = new()
+    {
+        Id = "ContractsArtifactNoWrite",
+        Trees = ["src/Harbor.Abstractions.Contracts"],
+        Forbidden =
+        [
+            new ScanForbidden(
+                DomainLeafWriteSubId,
+                DiskWrite,
+                "a persister in Layer.Domain is a storage engine nobody declared, in a project whose "
+                + "csproj calls itself \"pure data + rules\". #405 needed a read (does this artifact "
+                + "path exist?), and a read cannot be widened into a write by accident. "
+                + "See epic #41 slice B3.1 (#405)."),
+        ],
+        Controls =
+        [
+            // The armed half must be right about the whole family, not just File.Write*.
+            new ScanControl("Planted/WriteAllText.cs", """public void A() => File.WriteAllText("p", "x");""", DomainLeafWriteSubId),
+            new ScanControl("Planted/Delete.cs", """public void B() => File.Delete("p");""", DomainLeafWriteSubId),
+            new ScanControl("Planted/CreateDirectory.cs", """public void C() => Directory.CreateDirectory("d");""", DomainLeafWriteSubId),
+            new ScanControl("Planted/FileInfoDelete.cs", """public void D() => new FileInfo("p").Delete();""", DomainLeafWriteSubId),
+            new ScanControl("Planted/OpenWrite.cs", """public void E() => File.OpenWrite("p");""", DomainLeafWriteSubId),
+            new ScanControl("Planted/Enumerate.cs", """public void F() => Directory.EnumerateFileSystemEntries("d");""", DomainLeafWriteSubId),
+            // Prose that NAMES the calls must NOT be graded as code.
+            new ScanControl("NearMiss/DocProse.cs", """
+                /// <remarks>
+                ///     The existence probe is a deliberate read. A `File.WriteAllText` here
+                ///     would be the storage engine nobody declared; see the file header.
+                /// </remarks>
+                public sealed class Documented { }
+                """, null),
+        ],
+        MinHits = 10,
+        MustContain = [PermittedReadFile],
+        CustomParse = ParseDiskWrites,
+    };
+
+    /// <summary>The read ban as data: the disk-call shape, two planted controls, a floor.</summary>
+    private static readonly ScanRule ReadRule = new()
+    {
+        Id = "ContractsArtifactSingleProbe",
+        Trees = ["src/Harbor.Abstractions.Contracts"],
+        Forbidden =
+        [
+            new ScanForbidden(
+                DomainLeafDiskCallSubId,
+                DiskCall,
+                "the single filesystem capability #405 puts in this Domain leaf is the existence probe "
+                + "in RunArtifact.Create. A second call means the leaf's I/O is growing, and the "
+                + "decision to allow it belongs in a review of this file. See epic #41 slice B3.1 (#405)."),
+        ],
+        Controls =
+        [
+            new ScanControl("Planted/Probe.cs", """public static bool Probe(string path) => File.Exists(path);""", DomainLeafDiskCallSubId),
+            // The probe's own documentation names File.Exists — prose is not a call.
+            new ScanControl("NearMiss/DocProse.cs", """
+                /// <remarks>
+                ///     The existence probe is a deliberate read. A `File.WriteAllText` here
+                ///     would be the storage engine nobody declared; see the file header.
+                /// </remarks>
+                public sealed class Documented { }
+                """, null),
+        ],
+        MinHits = 10,
+        MustContain = [PermittedReadFile],
+        CustomParse = ParseDiskCalls,
+    };
+
+    /// <summary>
+    ///     The custom parsers: the original Find core over one file's raw source —
+    ///     the stateful comment stripper, one report per line on the first match.
+    /// </summary>
+    private static IEnumerable<ScanHit> ParseDiskWrites(string displayPath, string rawSource) =>
+        ParseWith(DiskWrite, DomainLeafWriteSubId, displayPath, rawSource);
+
+    /// <inheritdoc cref="ParseDiskWrites" />
+    private static IEnumerable<ScanHit> ParseDiskCalls(string displayPath, string rawSource) =>
+        ParseWith(DiskCall, DomainLeafDiskCallSubId, displayPath, rawSource);
+
+    private static IEnumerable<ScanHit> ParseWith(Regex pattern, string subId, string displayPath, string rawSource)
+    {
+        string[] lines = SourceCommentStripper.StripAll(rawSource.Split('\n').Select(l => l.TrimEnd('\r')));
+        for (int i = 0; i < lines.Length; i++)
+        {
+            Match match = pattern.Match(lines[i]);
+            if (match.Success)
+            {
+                yield return new ScanHit(subId, displayPath, i + 1, match.Value.Trim());
+            }
+        }
+    }
+
     [Test]
     public async Task Scan_IsLive()
     {
-        IReadOnlyList<string> files = RepoPaths.EnumerateCsFiles(AuditedProjectDir);
+        List<string> writeDiscovery = ScanRunner.CheckDiscovery(WriteRule);
+        List<string> readDiscovery = ScanRunner.CheckDiscovery(ReadRule);
 
-        await Assert.That(RepoPaths.RepoRoot).IsNotNull()
-            .Because("the scan needs a checkout; without one it reports zero disk calls in a Domain leaf "
-                   + "and every rule in this file is satisfied by having nothing to look at");
-
-        await Assert.That(files.Count).IsGreaterThan(0).Because(
-            "Outside a checkout, or if the project directory were renamed, EnumerateCsFiles returns "
+        await Assert.That(writeDiscovery).IsEmpty().Because(
+            "Outside a checkout, or if the project directory were renamed, the scope returns "
             + "nothing and the rules below pass because they read nothing. A rule that cannot see its "
-            + "subject is not a rule about its subject. Found " + files.Count + " .cs files under src/"
-            + AuditedProjectDir + ".");
+            + "subject is not a rule about its subject. "
+            + string.Join("; ", writeDiscovery));
+
+        await Assert.That(readDiscovery).IsEmpty().Because(
+            "The read half walks the same scope as the write half; if it stopped seeing the probe "
+            + "file, the exactly-one-site assertion below would be grading an empty set. "
+            + string.Join("; ", readDiscovery));
     }
 
     [Test]
     public async Task The_Domain_Leaf_Stores_Nothing()
     {
-        IReadOnlyList<string> hits = Find(DiskWrite, RepoPaths.EnumerateCsFiles(AuditedProjectDir));
+        List<string> hits = ScanRunner.Evaluate(WriteRule);
 
         await Assert.That(hits).IsEmpty().Because(
             "Harbor.Abstractions.Contracts is Layer.Domain (FullLayerMatrixTests) and every other layer "
@@ -240,6 +365,40 @@ public sealed class ContractsArtifactCapabilityRule
             + "there, and its own remarks discuss File.Exists and File.WriteAllText by name — a probe "
             + "that graded those would make the rule impossible to satisfy without deleting the "
             + "explanation, which is how a guard gets switched off. A name in prose is not a call.");
+    }
+
+    /// <summary>
+    ///     The planted controls — the six mutator spellings and the doc-comment
+    ///     prose — drive the REAL write parser: offenders reported under their
+    ///     sub-id, prose silent.
+    /// </summary>
+    [Test]
+    public async Task Detector_WriteControlsDriveTheRealParser()
+    {
+        List<string> failures = ScanRunner.CheckControls(WriteRule);
+
+        await Assert.That(failures).IsEmpty()
+            .Because(
+                "the seven planted controls must agree with the positive-control cases above through "
+                + "the rule's own parser — otherwise the armed half guards nothing. "
+                + string.Join("; ", failures));
+    }
+
+    /// <summary>
+    ///     The planted controls — the probe line and the doc-comment prose —
+    ///     drive the REAL read parser: the probe reported under its sub-id,
+    ///     prose silent.
+    /// </summary>
+    [Test]
+    public async Task Detector_ReadControlsDriveTheRealParser()
+    {
+        List<string> failures = ScanRunner.CheckControls(ReadRule);
+
+        await Assert.That(failures).IsEmpty()
+            .Because(
+                "the two planted controls must agree with the positive-control cases above through "
+                + "the rule's own parser — otherwise the read half guards nothing. "
+                + string.Join("; ", failures));
     }
 
     /// <summary>

@@ -121,6 +121,101 @@ public sealed class ToolGlyphTableRule
             $"{RelativePath}:{Line}  \"{ToolName}\" => \"{Glyph}\"";
     }
 
+    /// <summary>The single banned shape's sub-id, shared by the rule data and the parser.</summary>
+    private const string GlyphArmSubId = "TOOL-NAME-TO-GLYPH-ARM";
+
+    // MECHANISM (#1086, step 2, conveyor h1)
+    // -------------------------------------
+    // The ban below is a ScanRule: the ArmShape as a Forbidden row carrying the
+    // existing Regex object directly, four planted controls, the former
+    // catalogue file as the MustContain floor, a discovery floor. Enumeration,
+    // matching and the control/discovery verdicts are ScanRunner's; this file
+    // keeps the issue prose, the pattern, the exemption hatch, and the test names.
+    //
+    // The verdict is ParseGlyphArms through the Func-overload, carrying the
+    // original line scan verbatim — the //-* line skip, every shape match on a
+    // line, the ToolNameInventory filter as the rule's half (the matcher reports
+    // shapes, the inventory decides which shapes are tools), the empty
+    // GlyphExemptions hatch. A file-wide baseline row would excuse a second arm
+    // in the same file, and there is nothing to excuse today — the catalogue
+    // this replaced is gone — so the baseline stays empty and the hatch stays a
+    // line filter inside the parser. The planted controls grade this parser, so
+    // "it can fail" means something.
+
+    /// <summary>The glyph-table ban as data: one shape, four planted controls, a floor.</summary>
+    private static readonly ScanRule GlyphRule = new()
+    {
+        Id = "ToolGlyphTable",
+        Trees = ["src", "apps"],
+        Forbidden =
+        [
+            new ScanForbidden(
+                GlyphArmSubId,
+                ArmShape,
+                "the glyph is declared on the tool itself (ITool.Glyph, next to DisplayName) "
+                + "and travels with the tool-call event into the UI state, so adding a tool must "
+                + "not require editing a view-model, a projection or an app service. "
+                + "See issue #680."),
+        ],
+        Controls =
+        [
+            // Two arms of the right SHAPE, only one keyed by a tool name —
+            // the shape matcher must see both, the inventory keeps the tool one.
+            new ScanControl("Planted/TwoArms.cs", """
+                private static string Glyph(string toolName) => toolName switch
+                {
+                    "read" => "▸",
+                    "welcome" => "hi",
+                    _ => "?",
+                };
+                """, GlyphArmSubId),
+            // Same shape, keyed by STATUS names — the rule must not report it.
+            new ScanControl("NearMiss/StatusNames.cs", """
+                private static string Bar(string status) => status switch
+                {
+                    "running" => "▌",
+                    _ => "?",
+                };
+                """, null),
+            // Prose ABOUT the old catalogue — a rule that reads comments fails
+            // the moment someone documents the fix.
+            new ScanControl("NearMiss/Comment.cs", """
+                // "read" => "▸" is what the old catalogue looked like.
+                """, null),
+            // A block-comment continuation line is skipped like a // line.
+            new ScanControl("NearMiss/BlockComment.cs", """
+                * "read" => "▸" is what the old catalogue looked like.
+                """, null),
+        ],
+        MinHits = 500,
+        MustContain = [FormerCatalogueFileRelativePath],
+        CustomParse = ParseGlyphArms,
+    };
+
+    /// <summary>
+    ///     The custom parser: the original line scan over one file's raw source —
+    ///     the //-* skip verbatim, every shape match, the name inventory and the
+    ///     exemption hatch as the rule's half.
+    /// </summary>
+    private static IEnumerable<ScanHit> ParseGlyphArms(string displayPath, string rawSource)
+    {
+        FrozenSet<string> names = ToolNameInventory.Names;
+        foreach (GlyphArm arm in Scan([(displayPath, rawSource)]))
+        {
+            if (!names.Contains(arm.ToolName))
+            {
+                continue;
+            }
+
+            if (GlyphExemptions.ContainsKey(displayPath))
+            {
+                continue;
+            }
+
+            yield return new ScanHit(GlyphArmSubId, displayPath, arm.Line, $"\"{arm.ToolName}\" => \"{arm.Glyph}\"");
+        }
+    }
+
     // =====================================================================
     // 1. The rule.
     // =====================================================================
@@ -132,22 +227,16 @@ public sealed class ToolGlyphTableRule
     [Test]
     public async Task NoProductFile_MapsAToolNameToAGlyph()
     {
-        IReadOnlyList<GlyphArm> found = Scan(ReadProductFiles(ProductFiles()));
-        FrozenSet<string> names = ToolNameInventory.Names;
+        List<string> violations = ScanRunner.Evaluate(GlyphRule);
 
-        var offenders = found
-            .Where(arm => names.Contains(arm.ToolName))
-            .Where(arm => !GlyphExemptions.ContainsKey(arm.RelativePath))
-            .ToList();
-
-        await Assert.That(offenders).IsEmpty()
+        await Assert.That(violations).IsEmpty()
             .Because("these arms are rows of a tool-name-keyed glyph table. The glyph is declared on "
                    + "the tool itself (ITool.Glyph, next to DisplayName) and travels with the "
                    + "tool-call event into the UI state, so adding a tool must not require editing "
                    + "a view-model, a projection or an app service (#680, same shape as #595). "
                    + "Note that the catalogue this replaced keyed the web-fetch tool as \"web_fetch\" "
                    + "while the tool is \"webfetch\" — that arm was dead. Offenders: "
-                   + string.Join(", ", offenders));
+                   + (violations.Count == 0 ? "(none)" : string.Join("; ", violations)));
     }
 
     // =====================================================================
@@ -162,19 +251,14 @@ public sealed class ToolGlyphTableRule
     [Test]
     public async Task Discovery_FindsARealProductFileSet()
     {
-        IReadOnlyList<string> files = ProductFiles();
+        List<string> discovery = ScanRunner.CheckDiscovery(GlyphRule);
 
-        await Assert.That(files.Count).IsGreaterThan(100)
-            .Because("the scan found almost no .cs files under src/+apps/; the product trees are "
-                   + "wrong, and every rule in this file is then satisfied by an empty scan");
-
-        var relative = files
-            .Select(p => Path.GetRelativePath(RepoPaths.RepoRoot ?? ".", p).Replace('\\', '/'))
-            .ToHashSet(StringComparer.Ordinal);
-
-        await Assert.That(relative.Contains(FormerCatalogueFileRelativePath)).IsTrue()
-            .Because("this file is the one that used to hold the catalogue; if discovery cannot see "
-                   + "it, the scan is broken rather than clean");
+        await Assert.That(discovery).IsEmpty()
+            .Because("src/ + apps/ hold far more than 500 C# files, including the file that used to hold "
+                   + "one of the three catalogues. A smaller count — or a scope that stopped seeing "
+                   + "that file — means the tree walk broke and the rule above would be "
+                   + "reporting 'clean' about nothing. "
+                   + string.Join("; ", discovery));
 
         await Assert.That(ToolNameInventory.Names.Count).IsGreaterThan(10)
             .Because("the tool-name inventory is empty or nearly so, so the rule would accept any "
@@ -247,6 +331,23 @@ public sealed class ToolGlyphTableRule
                    + "would accept the very catalogue this file was written to remove");
     }
 
+    /// <summary>
+    ///     The planted controls — the tool arm and the three near-misses — drive
+    ///     the REAL parser: the offender reported under its sub-id, the
+    ///     near-misses silent.
+    /// </summary>
+    [Test]
+    public async Task Detector_ControlsDriveTheRealParser()
+    {
+        List<string> failures = ScanRunner.CheckControls(GlyphRule);
+
+        await Assert.That(failures).IsEmpty()
+            .Because(
+                "the four planted controls must agree with the matcher cases above through the "
+                + "rule's own parser — otherwise the rule guards nothing, or forbids the fix. "
+                + string.Join("; ", failures));
+    }
+
     // =====================================================================
     // 3. Plumbing.
     // =====================================================================
@@ -257,15 +358,6 @@ public sealed class ToolGlyphTableRule
     ///     every name a tool implementation actually declares — which is how a
     ///     plugin tool, absent from the builtin list, still gets hunted.
     /// </summary>
-    /// <summary>
-    ///     Every product <c>*.cs</c> under <c>src/</c> and <c>apps/</c>.
-    ///     Delegates to <see cref="SourceScan" /> so this gate and every other one
-    ///     agree on what counts as product code — the seven private copies of this
-    ///     filter had already drifted, one of them forgetting to exclude a sibling
-    ///     worktree and so reporting findings against code nobody was editing.
-    /// </summary>
-    private static IReadOnlyList<string> ProductFiles() => SourceScan.EnumerateProductCsFiles();
-
     /// <summary>
     ///     Every glyph-table-shaped arm in the supplied sources, keyed by file
     ///     name. Name filtering is the RULE's job, not the matcher's — the
@@ -303,24 +395,5 @@ public sealed class ToolGlyphTableRule
         }
 
         return arms;
-    }
-
-    /// <summary>
-    ///     Reads the product files, in the shape <see cref="Scan" /> consumes.
-    ///     A file that vanished between enumeration and read is not a rule
-    ///     failure; the discovery test is what keeps the set honest.
-    /// </summary>
-    private static List<(string, string)> ReadProductFiles(IReadOnlyList<string> files)
-    {
-        var sources = new List<(string, string)>(files.Count);
-        foreach (string file in files)
-        {
-            if (SourceScan.TryReadAllText(file) is { } source)
-            {
-                sources.Add((file, source));
-            }
-        }
-
-        return sources;
     }
 }
