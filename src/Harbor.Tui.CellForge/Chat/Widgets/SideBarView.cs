@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Text;
 using Harbor.Abstractions.Models.Identifiers;
@@ -49,11 +50,37 @@ public sealed record SideBarState(
 public sealed record SideBarLine(string Title, string Value);
 
 /// <summary>
+/// Named mount point for a sidebar slot (opencode sidebar parity, #1181):
+/// <see cref="Content" /> sections flow below the built-in sections (every
+/// contributor paints, ordered by <see cref="SideBarSlot.Order" />),
+/// <see cref="Footer" /> is single-winner (lowest order wins, registration
+/// order breaks ties) pinned to the bottom rows — the same contract as
+/// opencode's <c>sidebar_content</c> / <c>sidebar_footer</c> slots.
+/// </summary>
+public enum SideBarSlotPoint : byte
+{
+    /// <summary>Flowing section below the built-ins (multi-contributor).</summary>
+    Content = 0,
+
+    /// <summary>Pinned bottom block (single winner).</summary>
+    Footer = 1,
+}
+
+/// <summary>
 /// Plugin-extensible sidebar slot (widgets §3.x): a section title plus a
 /// pure line provider evaluated per paint. Providers must not allocate
 /// heavily — they run every paint frame while the sidebar is visible.
+/// <see cref="Point" /> selects the opencode-parity mount point
+/// (<c>sidebar_content</c> vs <c>sidebar_footer</c>); <see cref="Order" />
+/// sorts contributors (and picks the footer winner). Both default to the
+/// pre-#1181 behaviour (flowing content, order 100), so existing call sites
+/// — and their goldens — compile and paint unchanged.
 /// </summary>
-public sealed record SideBarSlot(string Title, Func<SideBarState, IReadOnlyList<SideBarLine>> Lines);
+public sealed record SideBarSlot(
+    string Title,
+    Func<SideBarState, IReadOnlyList<SideBarLine>> Lines,
+    SideBarSlotPoint Point = SideBarSlotPoint.Content,
+    int Order = 100);
 
 /// <summary>
 /// Right sidebar (OpenCode/Kilo pattern): a 42-column context panel shown
@@ -123,7 +150,16 @@ public static class SideBarView
 
         painter.PaintSessions(sessions);
 
-        painter.PaintPluginSlots(state, extraSlots);
+        // O12 steal (epic #1155, opencode sidebar.tsx): named slot points —
+        // content sections flow, the footer winner pins to the bottom, and an
+        // overlay scrollbar marks clipped content without shifting layout.
+        // With no slots and no clipping this is a no-op: the paint below is
+        // byte-identical to the pre-#1181 path.
+        int contentStart = rect.Y + 1;
+        painter.PaintContentSlots(state, extraSlots);
+        int contentEnd = painter.Y;
+        int footerTop = painter.PaintFooterSlot(state, extraSlots);
+        painter.PaintOverlayScrollbar(contentStart, contentEnd, footerTop);
     }
 
     /// <summary>Stateful section painter threading the row cursor through sidebar sections.</summary>
@@ -140,6 +176,15 @@ public static class SideBarView
         CellStyle headingStyle)
     {
         public int Y;
+
+        /// <summary>
+        /// List rows clipped away by caps this frame. Feeds the overlay
+        /// scrollbar total (<c>painted + clipped</c>); zero on a fitting
+        /// frame, so the scrollbar stays hidden and the buffer untouched.
+        /// Item-counted (not row-counted) — the scrollbar is a clipped-below
+        /// indicator, and its hidden-iff-fits signal is exact.
+        /// </summary>
+        public int Clipped;
 
         public void PaintSession(SideBarState state)
         {
@@ -219,6 +264,8 @@ public static class SideBarView
                 {
                     Y = ValueLine(buffer, rect, labelX, Y, innerW, files[i].AsSpan(), valueStyle);
                 }
+
+                Clipped += files.Count - fileRows;
             }
         }
 
@@ -267,6 +314,8 @@ public static class SideBarView
 
                     Y++;
                 }
+
+                Clipped += servers.Count - serverRows;
             }
         }
 
@@ -289,34 +338,158 @@ public static class SideBarView
                         Y = ValueLine(buffer, rect, labelX + 2, Y, innerW - 2, session.MetaLine.AsSpan(), labelStyle);
                     }
                 }
+
+                Clipped += sessions.Count - sessionRows;
             }
         }
 
-        public void PaintPluginSlots(SideBarState state, IReadOnlyList<SideBarSlot>? extraSlots)
+        public void PaintContentSlots(SideBarState state, IReadOnlyList<SideBarSlot>? extraSlots)
         {
-            // ── Plugin slots ───────────────────────────────────────────────────
-            if (extraSlots is not null)
+            // ── Plugin content slots (opencode sidebar_content) ──────────────
+            // Null fast path: no allocation, no paint — the steady-state frame
+            // never registers slots, so this must stay free.
+            if (extraSlots is null || extraSlots.Count == 0)
             {
-                for (int s = 0; s < extraSlots.Count; s++)
-                {
-                    var slot = extraSlots[s];
-                    if (slot is null || string.IsNullOrWhiteSpace(slot.Title) || slot.Lines is null)
-                    {
-                        continue;
-                    }
+                return;
+            }
 
-                    Y = Section(buffer, rect, labelX, Y, slot.Title, headingStyle);
-                    var lines = slot.Lines(state);
-                    int lineRows = Math.Min(lines.Count, Math.Max(0, rect.Bottom - 2 - Y));
-                    for (int i = 0; i < lineRows; i++)
-                    {
-                        var line = lines[i];
-                        Y = ValueLine(buffer, rect, labelX, Y, innerW, line.Title, valueStyle);
-                        ValueLine(buffer, rect, labelX, Y, innerW, line.Value, labelStyle);
-                        Y++;
-                    }
+            foreach (var slot in ContentSlotsInOrder(extraSlots))
+            {
+                PaintSlotSection(state, slot);
+            }
+        }
+
+        /// <summary>
+        /// Paints the footer winner pinned to the bottom rows (opencode
+        /// sidebar_footer, single-winner). Paints last among content so the
+        /// footer always wins its rows. Returns the first footer row, or
+        /// <c>rect.Bottom - 1</c> when no footer slot was contributed.
+        /// </summary>
+        public int PaintFooterSlot(SideBarState state, IReadOnlyList<SideBarSlot>? extraSlots)
+        {
+            int limit = rect.Bottom - 1;
+            if (extraSlots is null || extraSlots.Count == 0)
+            {
+                return limit;
+            }
+
+            var winner = FooterWinner(extraSlots);
+            if (winner is null)
+            {
+                return limit;
+            }
+
+            var lines = winner.Lines(state);
+            // Footer height is header + one title/value pair per line. Clamp
+            // the pair count so the block never covers the title row —
+            // a footer that cannot fit still paints its head, never content.
+            int avail = limit - (rect.Y + 1);
+            int shown = Math.Min(lines.Count, Math.Max(0, (avail - 1) / 2));
+            int footerTop = limit - 1 - (shown * 2);
+
+            int y = Section(buffer, rect, labelX, footerTop, winner.Title, headingStyle);
+            for (int i = 0; i < shown; i++)
+            {
+                var line = lines[i];
+                y = ValueLine(buffer, rect, labelX, y, innerW, line.Title, valueStyle);
+                ValueLine(buffer, rect, labelX, y, innerW, line.Value, labelStyle);
+                y++;
+            }
+
+            Clipped += lines.Count - shown;
+            return footerTop;
+        }
+
+        /// <summary>
+        /// Overlay scrollbar over the right-margin column (opencode absolute
+        /// scrollbar parity): covers, never shifts — the content width is
+        /// untouched, and a fitting frame paints nothing at all, so existing
+        /// goldens stay byte-identical. Spans the content region only; the
+        /// pinned footer (opencode: outside the scrollbox) is never covered.
+        /// </summary>
+        public void PaintOverlayScrollbar(int contentStart, int contentEnd, int footerTop)
+        {
+            int top = Math.Max(contentStart, rect.Y);
+            int bottom = Math.Min(footerTop, rect.Bottom - 1);
+            int height = bottom - top;
+            if (height <= 0)
+            {
+                return;
+            }
+
+            long painted = Math.Max(0, contentEnd - contentStart);
+            long total = painted + Math.Max(0, Clipped);
+            if (!Scrollbar.IsVisible(total, (int)painted))
+            {
+                return;
+            }
+
+            _ = Scrollbar.TryPaint(buffer, new Rect(rect.Right - 1, top, 1, height), total, 0, (int)painted);
+        }
+
+        private void PaintSlotSection(SideBarState state, SideBarSlot slot)
+        {
+            Y = Section(buffer, rect, labelX, Y, slot.Title, headingStyle);
+            var lines = slot.Lines(state);
+            int lineRows = Math.Min(lines.Count, Math.Max(0, rect.Bottom - 2 - Y));
+            Clipped += lines.Count - lineRows;
+            for (int i = 0; i < lineRows; i++)
+            {
+                var line = lines[i];
+                Y = ValueLine(buffer, rect, labelX, Y, innerW, line.Title, valueStyle);
+                ValueLine(buffer, rect, labelX, Y, innerW, line.Value, labelStyle);
+                Y++;
+            }
+        }
+
+        private static List<SideBarSlot> ContentSlotsInOrder(IReadOnlyList<SideBarSlot> slots)
+        {
+            // N is a handful: insertion by Order (strictly-greater shift keeps
+            // registration order on ties) beats sort + index bookkeeping, and
+            // keeps LINQ off the per-frame path.
+            var ordered = new List<SideBarSlot>(slots.Count);
+            for (int i = 0; i < slots.Count; i++)
+            {
+                var slot = slots[i];
+                if (slot is null || slot.Point != SideBarSlotPoint.Content
+                    || string.IsNullOrWhiteSpace(slot.Title) || slot.Lines is null)
+                {
+                    continue;
+                }
+
+                int at = ordered.Count;
+                while (at > 0 && ordered[at - 1].Order > slot.Order)
+                {
+                    at--;
+                }
+
+                ordered.Insert(at, slot);
+            }
+
+            return ordered;
+        }
+
+        private static SideBarSlot? FooterWinner(IReadOnlyList<SideBarSlot> slots)
+        {
+            // Single-winner (opencode mode="single_winner"): lowest Order
+            // wins, first registration breaks ties.
+            SideBarSlot? winner = null;
+            for (int i = 0; i < slots.Count; i++)
+            {
+                var slot = slots[i];
+                if (slot is null || slot.Point != SideBarSlotPoint.Footer
+                    || string.IsNullOrWhiteSpace(slot.Title) || slot.Lines is null)
+                {
+                    continue;
+                }
+
+                if (winner is null || slot.Order < winner.Order)
+                {
+                    winner = slot;
                 }
             }
+
+            return winner;
         }
         private static int Section(ScreenBuffer buffer, Rect rect, int x, int y, string title, CellStyle style)
         {

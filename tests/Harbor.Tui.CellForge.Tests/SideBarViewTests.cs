@@ -245,6 +245,147 @@ public class SideBarViewTests
                    + "every frame into a miss.");
     }
 
+    // ── O12 steal (#1181): named slot points + overlay scrollbar ────────
+
+    [Test]
+    public async Task Paint_ContentSlots_PaintInOrder()
+    {
+        var (buffer, rect) = MakeBuffer(cols: 80, rows: 30);
+        var slots = new SideBarSlot[]
+        {
+            new SideBarSlot("SECOND", _ => new[] { new SideBarLine("b", "2") }, Order: 200),
+            new SideBarSlot("FIRST", _ => new[] { new SideBarLine("a", "1") }, Order: 100),
+        };
+
+        SideBarView.Paint(buffer, rect, SideBarState.Empty, slots);
+        string dump = Dump(buffer, rect);
+
+        int first = dump.IndexOf("FIRST");
+        int second = dump.IndexOf("SECOND");
+        await Assert.That(first >= 0 && second >= 0 && first < second).IsTrue();
+    }
+
+    [Test]
+    public async Task Paint_ContentSlots_RegistrationOrderBreaksTies()
+    {
+        var (buffer, rect) = MakeBuffer(cols: 80, rows: 30);
+        var slots = new SideBarSlot[]
+        {
+            new SideBarSlot("AAA", _ => new[] { new SideBarLine("a", "1") }),
+            new SideBarSlot("BBB", _ => new[] { new SideBarLine("b", "2") }),
+        };
+
+        SideBarView.Paint(buffer, rect, SideBarState.Empty, slots);
+        string dump = Dump(buffer, rect);
+
+        int aaa = dump.IndexOf("AAA");
+        int bbb = dump.IndexOf("BBB");
+        await Assert.That(aaa >= 0 && bbb >= 0 && aaa < bbb).IsTrue();
+    }
+
+    [Test]
+    public async Task Paint_FooterSlot_SingleWinnerPinnedToBottom()
+    {
+        var (buffer, rect) = MakeBuffer(cols: 80, rows: 30);
+        var slots = new SideBarSlot[]
+        {
+            new SideBarSlot("FOOT-A", _ => new[] { new SideBarLine("ver", "1.0") }, Point: SideBarSlotPoint.Footer, Order: 200),
+            new SideBarSlot("FOOT-B", _ => new[] { new SideBarLine("ver", "2.0") }, Point: SideBarSlotPoint.Footer, Order: 100),
+        };
+
+        SideBarView.Paint(buffer, rect, SideBarState.Empty, slots);
+        string dump = Dump(buffer, rect);
+
+        await Assert.That(dump.Contains("FOOT-B")).IsTrue();
+        await Assert.That(dump.Contains("FOOT-A")).IsFalse();
+        int valueRow = LastLineContaining(dump, "2.0");
+        await Assert.That(valueRow).IsGreaterThan(-1);
+        // Pinned: below the footer value only the sidebar hairline (which
+        // marks every row including the reserved last one) may leave a mark.
+        string[] rows = dump.Split('\n');
+        for (int i = valueRow + 1; i < rows.Length; i++)
+        {
+            string trimmed = rows[i].Trim();
+            await Assert.That(trimmed.Length == 0 || trimmed == "│").IsTrue();
+        }
+    }
+
+    [Test]
+    public async Task Paint_NoSlots_NullAndEmptyPaintIdentical()
+    {
+        var (b1, r1) = MakeBuffer(cols: 80, rows: 30);
+        var (b2, r2) = MakeBuffer(cols: 80, rows: 30);
+        SideBarView.Paint(b1, r1, SideBarState.Empty, null);
+        SideBarView.Paint(b2, r2, SideBarState.Empty, System.Array.Empty<SideBarSlot>());
+
+        await Assert.That(Dump(b1, r1)).IsEqualTo(Dump(b2, r2));
+    }
+
+    [Test]
+    public async Task Paint_ClippedContent_PaintsOverlayScrollbarOverMargin()
+    {
+        // Rect.Bottom is inclusive: 14 rows leave room for exactly two file
+        // rows, so 30 files clip and the scrollbar must appear.
+        var (buffer, rect) = MakeBuffer(cols: 80, rows: 14);
+        var files = new System.Collections.Generic.List<string>();
+        for (int i = 0; i < 30; i++)
+        {
+            files.Add("src/File" + i + ".cs");
+        }
+
+        var state = SideBarState.Empty with { ModifiedFiles = files };
+        SideBarView.Paint(buffer, rect, state);
+
+        bool scrollbarSeen = false;
+        for (int y = rect.Y; y < System.Math.Min(rect.Bottom, buffer.Rows); y++)
+        {
+            char c = (char)buffer.Get(rect.Right - 1, y).Rune;
+            if (c == '█' || c == '│')
+            {
+                scrollbarSeen = true;
+                break;
+            }
+        }
+
+        await Assert.That(scrollbarSeen).IsTrue();
+        // Overlay covers the margin column only — content rows are unshifted.
+        await Assert.That(Dump(buffer, rect).Contains("src/File0.cs")).IsTrue();
+    }
+
+    [Test]
+    public async Task Paint_FittingContent_LeavesMarginColumnBlank()
+    {
+        var (buffer, rect) = MakeBuffer(cols: 80, rows: 30);
+        SideBarView.Paint(buffer, rect, SideBarState.Empty, null);
+
+        bool markSeen = false;
+        for (int y = rect.Y; y < System.Math.Min(rect.Bottom, buffer.Rows); y++)
+        {
+            char c = (char)buffer.Get(rect.Right - 1, y).Rune;
+            if (c == '█' || c == '│')
+            {
+                markSeen = true;
+                break;
+            }
+        }
+
+        await Assert.That(markSeen).IsFalse();
+    }
+
+    private static int LastLineContaining(string dump, string needle)
+    {
+        string[] rows = dump.Split('\n');
+        for (int i = rows.Length - 1; i >= 0; i--)
+        {
+            if (rows[i].Contains(needle))
+            {
+                return i;
+            }
+        }
+
+        return -1;
+    }
+
     private static string Dump(ScreenBuffer buffer, Rect rect)
     {
         var sb = new System.Text.StringBuilder();
