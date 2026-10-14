@@ -145,7 +145,7 @@ public sealed partial class CodeEditorViewModel : ObservableObject
             Result<bool> present = await _files.ExistsAsync(path).ConfigureAwait(false);
             if (present.IsFailure)
             {
-                _logger.LogWarning("Cannot probe {Path}: {Error}", path, present.Error);
+                CodeEditorViewModelLog.CannotProbe(_logger, path, present.Error);
                 _toasts.Show($"Failed to open {path}: {present.Error}", ToastKind.Error);
                 return;
             }
@@ -159,7 +159,7 @@ public sealed partial class CodeEditorViewModel : ObservableObject
             Result<string> read = await _files.ReadAsync(path).ConfigureAwait(false);
             if (read.IsFailure)
             {
-                _logger.LogWarning("Cannot read {Path}: {Error}", path, read.Error);
+                CodeEditorViewModelLog.CannotRead(_logger, path, read.Error);
                 _toasts.Show($"Failed to open {path}: {read.Error}", ToastKind.Error);
                 return;
             }
@@ -173,11 +173,11 @@ public sealed partial class CodeEditorViewModel : ObservableObject
                 Tabs.Add(tab);
                 ActiveTab = tab;
             });
-            _logger.LogInformation("Opened file: {Path} ({Size} chars)", path, content.Length);
+            CodeEditorViewModelLog.OpenedFile(_logger, path, content.Length);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to open {Path}", path);
+            CodeEditorViewModelLog.OpenFailed(_logger, ex, path);
             _toasts.Show($"Failed to open {path}: {ex.Message}", ToastKind.Error);
         }
     }
@@ -197,7 +197,7 @@ public sealed partial class CodeEditorViewModel : ObservableObject
             Result written = await _files.WriteAsync(tab.FilePath, tab.Content).ConfigureAwait(false);
             if (written.IsFailure)
             {
-                _logger.LogError("Save failed for {Path}: {Error}", tab.FilePath, written.Error);
+                CodeEditorViewModelLog.SaveFailed(_logger, tab.FilePath, written.Error);
                 _dispatcher.Post(() => _toasts.Show($"Save failed: {written.Error}", ToastKind.Error));
                 return;
             }
@@ -216,11 +216,11 @@ public sealed partial class CodeEditorViewModel : ObservableObject
 
                 _toasts.Show($"Saved: {tab.FileName}", ToastKind.Success);
             });
-            _logger.LogInformation("Saved {Path}", tab.FilePath);
+            CodeEditorViewModelLog.Saved(_logger, tab.FilePath);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Save failed");
+            CodeEditorViewModelLog.SaveThrew(_logger, ex);
             _dispatcher.Post(() => _toasts.Show($"Save failed: {ex.Message}", ToastKind.Error));
         }
     }
@@ -252,7 +252,7 @@ public sealed partial class CodeEditorViewModel : ObservableObject
             // internal catch, but a fault escaping it was unobservable.
             TaskFireAndForget.Forget(
                 CloseWithLspAsync(tab.FilePath),
-                ex => _logger.LogWarning(ex, "LSP close dropped for {Path}", tab.FilePath));
+                ex => CodeEditorViewModelLog.LspCloseDropped(_logger, ex, tab.FilePath));
         }
     }
 
@@ -270,7 +270,7 @@ public sealed partial class CodeEditorViewModel : ObservableObject
             // Same reasoning as the close above.
             TaskFireAndForget.Forget(
                 NotifyLspChangeAsync(tab.FilePath, tab.Content),
-                ex => _logger.LogWarning(ex, "LSP change notification dropped for {Path}", tab.FilePath));
+                ex => CodeEditorViewModelLog.LspChangeDropped(_logger, ex, tab.FilePath));
         }
     }
 
@@ -295,10 +295,10 @@ public sealed partial class CodeEditorViewModel : ObservableObject
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogWarning(ex, "LSP open failed for {Path}", filePath);
+                    CodeEditorViewModelLog.LspOpenFailed(_logger, ex, filePath);
                 }
             }),
-            ex => _logger.LogWarning(ex, "LSP open task faulted for {Path}", filePath));
+            ex => CodeEditorViewModelLog.LspOpenTaskFaulted(_logger, ex, filePath));
     }
 
     private async Task NotifyLspChangeAsync(string filePath, string content)
@@ -310,7 +310,7 @@ public sealed partial class CodeEditorViewModel : ObservableObject
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "LSP change notification failed for {Path}", filePath);
+            CodeEditorViewModelLog.LspChangeFailed(_logger, ex, filePath);
         }
     }
 
@@ -322,7 +322,7 @@ public sealed partial class CodeEditorViewModel : ObservableObject
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "LSP close failed for {Path}", filePath);
+            CodeEditorViewModelLog.LspCloseFailed(_logger, ex, filePath);
         }
     }
 
@@ -345,7 +345,7 @@ public sealed partial class CodeEditorViewModel : ObservableObject
         // raised outside that catch.
         TaskFireAndForget.Forget(
             ReadDiagnosticsAsync(tab.FilePath),
-            ex => _logger.LogWarning(ex, "LSP diagnostics read faulted for {Path}", tab.FilePath));
+            ex => CodeEditorViewModelLog.LspDiagnosticsReadFaulted(_logger, ex, tab.FilePath));
     }
 
     private void SetDiagnostics(IReadOnlyList<LspDiagnostic> diagnostics)
@@ -366,7 +366,7 @@ public sealed partial class CodeEditorViewModel : ObservableObject
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "LSP diagnostics read failed for {Path}", filePath);
+            CodeEditorViewModelLog.LspDiagnosticsReadFailed(_logger, ex, filePath);
         }
     }
 
@@ -385,7 +385,7 @@ public sealed partial class CodeEditorViewModel : ObservableObject
         InlineEditPrompt = string.Empty;
         InlineEditDiff = null;
         InlineEditVisible = true;
-        _logger.LogDebug("Inline edit opened: {Start}-{End} ({Length} chars)", selectionStart, selectionEnd, selectedText.Length);
+        CodeEditorViewModelLog.InlineEditOpened(_logger, selectionStart, selectionEnd, selectedText.Length);
     }
 
     /// <summary>
@@ -398,7 +398,7 @@ public sealed partial class CodeEditorViewModel : ObservableObject
         InlineEditPrompt = string.Empty;
         InlineEditDiff = null;
         _inlineEditSelectedText = string.Empty;
-        _logger.LogDebug("Inline edit rejected");
+        CodeEditorViewModelLog.InlineEditRejected(_logger);
     }
 
     /// <summary>
@@ -422,7 +422,7 @@ public sealed partial class CodeEditorViewModel : ObservableObject
                 InlineEditDiff.AsSpan(),
                 content.AsSpan(_inlineEditSelectionEnd));
             ActiveTab.Content = newContent;
-            _logger.LogInformation("Inline edit accepted: replaced {OldLen} chars with {NewLen} chars at {Start}-{End}",
+            CodeEditorViewModelLog.InlineEditAccepted(_logger,
                 _inlineEditSelectionEnd - _inlineEditSelectionStart,
                 InlineEditDiff.Length,
                 _inlineEditSelectionStart,
@@ -506,4 +506,65 @@ public sealed partial class EditorTabViewModel : Harbor.Desktop.Abstractions.Vie
         "sh" or "bash" => "Bash",
         _ => "C#"
     };
+}
+
+/// <summary>
+///     SG14: BCL <c>[LoggerMessage]</c> delegates for <see cref="CodeEditorViewModel" />.
+///     Templates, levels and operands are 1-to-1 with the former <c>LogX</c> calls.
+/// </summary>
+internal static partial class CodeEditorViewModelLog
+{
+    [LoggerMessage(EventId = 1, Level = LogLevel.Warning, Message = "Cannot probe {Path}: {Error}")]
+    public static partial void CannotProbe(ILogger logger, string path, string error);
+
+    [LoggerMessage(EventId = 2, Level = LogLevel.Warning, Message = "Cannot read {Path}: {Error}")]
+    public static partial void CannotRead(ILogger logger, string path, string error);
+
+    [LoggerMessage(EventId = 3, Level = LogLevel.Information, Message = "Opened file: {Path} ({Size} chars)")]
+    public static partial void OpenedFile(ILogger logger, string path, int size);
+
+    [LoggerMessage(EventId = 4, Level = LogLevel.Error, Message = "Failed to open {Path}")]
+    public static partial void OpenFailed(ILogger logger, Exception ex, string path);
+
+    [LoggerMessage(EventId = 5, Level = LogLevel.Error, Message = "Save failed for {Path}: {Error}")]
+    public static partial void SaveFailed(ILogger logger, string path, string error);
+
+    [LoggerMessage(EventId = 6, Level = LogLevel.Information, Message = "Saved {Path}")]
+    public static partial void Saved(ILogger logger, string path);
+
+    [LoggerMessage(EventId = 7, Level = LogLevel.Error, Message = "Save failed")]
+    public static partial void SaveThrew(ILogger logger, Exception ex);
+
+    [LoggerMessage(EventId = 8, Level = LogLevel.Warning, Message = "LSP close dropped for {Path}")]
+    public static partial void LspCloseDropped(ILogger logger, Exception ex, string path);
+
+    [LoggerMessage(EventId = 9, Level = LogLevel.Warning, Message = "LSP change notification dropped for {Path}")]
+    public static partial void LspChangeDropped(ILogger logger, Exception ex, string path);
+
+    [LoggerMessage(EventId = 10, Level = LogLevel.Warning, Message = "LSP open failed for {Path}")]
+    public static partial void LspOpenFailed(ILogger logger, Exception ex, string path);
+
+    [LoggerMessage(EventId = 11, Level = LogLevel.Warning, Message = "LSP open task faulted for {Path}")]
+    public static partial void LspOpenTaskFaulted(ILogger logger, Exception ex, string path);
+
+    [LoggerMessage(EventId = 12, Level = LogLevel.Warning, Message = "LSP change notification failed for {Path}")]
+    public static partial void LspChangeFailed(ILogger logger, Exception ex, string path);
+
+    [LoggerMessage(EventId = 13, Level = LogLevel.Warning, Message = "LSP close failed for {Path}")]
+    public static partial void LspCloseFailed(ILogger logger, Exception ex, string path);
+
+    [LoggerMessage(EventId = 14, Level = LogLevel.Warning, Message = "LSP diagnostics read faulted for {Path}")]
+    public static partial void LspDiagnosticsReadFaulted(ILogger logger, Exception ex, string path);
+
+    [LoggerMessage(EventId = 15, Level = LogLevel.Warning, Message = "LSP diagnostics read failed for {Path}")]
+    public static partial void LspDiagnosticsReadFailed(ILogger logger, Exception ex, string path);
+
+    [LoggerMessage(EventId = 16, Level = LogLevel.Debug, Message = "Inline edit opened: {Start}-{End} ({Length} chars)")]
+    public static partial void InlineEditOpened(ILogger logger, int start, int end, int length);
+
+    [LoggerMessage(EventId = 17, Level = LogLevel.Debug, Message = "Inline edit rejected")]
+    public static partial void InlineEditRejected(ILogger logger);
+
+    [LoggerMessage(EventId = 18, Level = LogLevel.Information, Message = "Inline edit accepted: replaced {OldLen} chars with {NewLen} chars at {Start}-{End}")]
+    public static partial void InlineEditAccepted(ILogger logger, int oldLen, int newLen, int start, int end);
 }

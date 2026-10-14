@@ -91,7 +91,7 @@ public sealed class DiagnosticsSquiggleRenderer : IBackgroundRenderer
         catch (Exception ex)
         {
             // Rendering must never take the editor down: skip unrealized/malformed ranges.
-            Logger.LogDebug(ex, "Squiggle draw skipped for {Path}:{Line}", diagnostic.FilePath, diagnostic.Line);
+            DiagnosticsSquiggleRendererLog.SquiggleDrawSkipped(Logger, ex, diagnostic.FilePath, diagnostic.Line);
         }
     }
 
@@ -137,4 +137,14 @@ public sealed class DiagnosticsSquiggleRenderer : IBackgroundRenderer
             _ => Brushes.DodgerBlue,
         };
     }
+}
+
+/// <summary>
+///     SG14: BCL <c>[LoggerMessage]</c> delegates for <see cref="DiagnosticsSquiggleRenderer" />.
+///     Templates, levels and operands are 1-to-1 with the former <c>LogX</c> calls.
+/// </summary>
+internal static partial class DiagnosticsSquiggleRendererLog
+{
+    [LoggerMessage(EventId = 1, Level = LogLevel.Debug, Message = "Squiggle draw skipped for {Path}:{Line}")]
+    public static partial void SquiggleDrawSkipped(ILogger logger, Exception ex, string path, int line);
 }
