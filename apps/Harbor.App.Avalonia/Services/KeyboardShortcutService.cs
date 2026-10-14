@@ -86,7 +86,7 @@ public sealed class KeyboardShortcutService
         {
             TaskFireAndForget.Forget(
                 _workspaceCommands.OpenFileAsync(),
-                ex => _logger.LogError(ex, "Ctrl+O open-file failed"));
+                ex => KeyboardShortcutServiceLog.CtrlOpenFailed(_logger, ex));
             return true;
         }
 
@@ -95,7 +95,7 @@ public sealed class KeyboardShortcutService
         {
             TaskFireAndForget.Forget(
                 _workspaceCommands.SaveFileAsync(),
-                ex => _logger.LogError(ex, "Ctrl+S save-file failed"));
+                ex => KeyboardShortcutServiceLog.CtrlSaveFailed(_logger, ex));
             return true;
         }
 
@@ -115,4 +115,17 @@ public sealed class KeyboardShortcutService
 
         return false;
     }
+}
+
+/// <summary>
+///     SG12: BCL <c>[LoggerMessage]</c> delegates for <see cref="KeyboardShortcutService" />.
+///     Templates, levels and operands are 1-to-1 with the former <c>LogX</c> calls.
+/// </summary>
+internal static partial class KeyboardShortcutServiceLog
+{
+    [LoggerMessage(EventId = 1, Level = LogLevel.Error, Message = "Ctrl+O open-file failed")]
+    public static partial void CtrlOpenFailed(ILogger logger, Exception ex);
+
+    [LoggerMessage(EventId = 2, Level = LogLevel.Error, Message = "Ctrl+S save-file failed")]
+    public static partial void CtrlSaveFailed(ILogger logger, Exception ex);
 }

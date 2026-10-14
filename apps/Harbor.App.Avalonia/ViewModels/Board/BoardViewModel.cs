@@ -50,7 +50,7 @@ public sealed partial class BoardViewModel : ObservableObject
             var result = await _sessionStore.ListAsync().ConfigureAwait(false);
             if (result.IsFailure)
             {
-                _logger.LogError("List sessions failed: {Error}", result.Error);
+                BoardViewModelLog.ListFailed(_logger, result.Error);
                 return;
             }
 
@@ -82,7 +82,7 @@ public sealed partial class BoardViewModel : ObservableObject
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Refresh sessions crashed");
+            BoardViewModelLog.RefreshCrashed(_logger, ex);
         }
     }
 
@@ -95,4 +95,17 @@ public sealed partial class BoardViewModel : ObservableObject
                 card.Status = status;
         });
     }
+}
+
+/// <summary>
+///     SG12: BCL <c>[LoggerMessage]</c> delegates for <see cref="BoardViewModel" />.
+///     Templates, levels and operands are 1-to-1 with the former <c>LogX</c> calls.
+/// </summary>
+internal static partial class BoardViewModelLog
+{
+    [LoggerMessage(EventId = 1, Level = LogLevel.Error, Message = "List sessions failed: {Error}")]
+    public static partial void ListFailed(ILogger logger, string error);
+
+    [LoggerMessage(EventId = 2, Level = LogLevel.Error, Message = "Refresh sessions crashed")]
+    public static partial void RefreshCrashed(ILogger logger, Exception ex);
 }

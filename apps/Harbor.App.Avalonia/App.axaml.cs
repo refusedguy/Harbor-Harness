@@ -135,8 +135,7 @@ public partial class App : global::Avalonia.Application
                 && ice.StackTrace is { } stack
                 && stack.Contains("XamlDynamicSetter", StringComparison.Ordinal))
             {
-                Services.GetRequiredService<ILogger<App>>()
-                    .LogError(ice, "XAML Style Setter type mismatch — check resource key type in ResourceDictionary");
+                AppLog.XamlStyleSetterMismatch(Services.GetRequiredService<ILogger<App>>(), ice);
             }
         };
 
@@ -151,7 +150,7 @@ public partial class App : global::Avalonia.Application
             desktop.ShutdownRequested += OnShutdownRequested;
 
             var logger = Services.GetRequiredService<ILogger<App>>();
-            logger.LogInformation("Harbor.App.Avalonia starting — building MainViewModel");
+            AppLog.StartingBuildingMainViewModel(logger);
 
             var themeService = Services.GetRequiredService<ThemeService>();
             themeService.Application = this;
@@ -174,8 +173,7 @@ public partial class App : global::Avalonia.Application
             bool needsOnboarding = !configExists || !commonConfig.OnboardingCompleted;
             if (needsOnboarding)
             {
-                logger.LogInformation("Onboarding required (configExists={Exists}, completed={Completed}) — showing wizard",
-                    configExists, commonConfig.OnboardingCompleted);
+                AppLog.OnboardingRequired(logger, configExists, commonConfig.OnboardingCompleted);
                 ShowOnboardingThenMain(desktop);
             }
             else
@@ -242,7 +240,8 @@ public partial class App : global::Avalonia.Application
                 }
                 catch (Exception ex)
                 {
-                    Services.GetService<ILogger<App>>()?.LogWarning(ex, "RebindFromCommonConfig after onboarding failed");
+                    if (Services.GetService<ILogger<App>>() is { } rebindLog)
+                        AppLog.RebindAfterOnboardingFailed(rebindLog, ex);
                 }
 
                 mainWindow.Show();
@@ -294,10 +293,15 @@ public partial class App : global::Avalonia.Application
                 }
                 catch (Exception ex)
                 {
-                    Services.GetService<ILogger<App>>()?.LogError(ex, "Session initialization failed");
+                    if (Services.GetService<ILogger<App>>() is { } sessionLog)
+                        AppLog.SessionInitializationFailed(sessionLog, ex);
                 }
             }),
-            ex => Services.GetService<ILogger<App>>()?.LogError(ex, "Startup session task faulted"));
+            ex =>
+            {
+                if (Services.GetService<ILogger<App>>() is { } startupLog)
+                    AppLog.StartupSessionTaskFaulted(startupLog, ex);
+            });
     }
 
     private void ShowGalleryView(IClassicDesktopStyleApplicationLifetime desktop)
@@ -337,4 +341,29 @@ public partial class App : global::Avalonia.Application
             Console.Error.WriteLine($"Harbor shutdown error: {ex}");
         }
     }
+}
+
+/// <summary>
+///     SG12: BCL <c>[LoggerMessage]</c> delegates for <see cref="App" />.
+///     Templates, levels and operands are 1-to-1 with the former <c>LogX</c> calls.
+/// </summary>
+internal static partial class AppLog
+{
+    [LoggerMessage(EventId = 1, Level = LogLevel.Error, Message = "XAML Style Setter type mismatch — check resource key type in ResourceDictionary")]
+    public static partial void XamlStyleSetterMismatch(ILogger logger, Exception ex);
+
+    [LoggerMessage(EventId = 2, Level = LogLevel.Information, Message = "Harbor.App.Avalonia starting — building MainViewModel")]
+    public static partial void StartingBuildingMainViewModel(ILogger logger);
+
+    [LoggerMessage(EventId = 3, Level = LogLevel.Information, Message = "Onboarding required (configExists={Exists}, completed={Completed}) — showing wizard")]
+    public static partial void OnboardingRequired(ILogger logger, bool exists, bool completed);
+
+    [LoggerMessage(EventId = 4, Level = LogLevel.Warning, Message = "RebindFromCommonConfig after onboarding failed")]
+    public static partial void RebindAfterOnboardingFailed(ILogger logger, Exception ex);
+
+    [LoggerMessage(EventId = 5, Level = LogLevel.Error, Message = "Session initialization failed")]
+    public static partial void SessionInitializationFailed(ILogger logger, Exception ex);
+
+    [LoggerMessage(EventId = 6, Level = LogLevel.Error, Message = "Startup session task faulted")]
+    public static partial void StartupSessionTaskFaulted(ILogger logger, Exception ex);
 }

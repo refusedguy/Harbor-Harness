@@ -75,13 +75,13 @@ public sealed class CommonConfigAuthResolver : IAuthResolver
         {
             if (loadResult.Value.ApiKeys.TryGetValue(providerId, out string? key) && !string.IsNullOrEmpty(key))
             {
-                _logger.LogDebug("Resolved API key for {Provider} from CommonConfig.ApiKeys", providerId);
+                CommonConfigAuthResolverLog.ResolvedFromCommonConfig(_logger, providerId);
                 return Result.Success(key);
             }
         }
         else
         {
-            _logger.LogWarning("Failed to load CommonConfig for auth lookup: {Error}", loadResult.Error);
+            CommonConfigAuthResolverLog.CommonConfigLoadFailed(_logger, loadResult.Error);
         }
 
         // 2. Preset env var (e.g. KILO_API_KEY for kilocode — NOT KILOCODE_API_KEY).
@@ -91,7 +91,7 @@ public sealed class CommonConfigAuthResolver : IAuthResolver
             string? presetEnv = Environment.GetEnvironmentVariable(preset.EnvVarName);
             if (!string.IsNullOrEmpty(presetEnv))
             {
-                _logger.LogDebug("Resolved API key for {Provider} from preset env var {Name}", providerId, preset.EnvVarName);
+                CommonConfigAuthResolverLog.ResolvedFromPresetEnv(_logger, providerId, preset.EnvVarName);
                 return Result.Success(presetEnv);
             }
         }
@@ -101,7 +101,7 @@ public sealed class CommonConfigAuthResolver : IAuthResolver
         string? envValue = Environment.GetEnvironmentVariable(conventional);
         if (!string.IsNullOrEmpty(envValue))
         {
-            _logger.LogDebug("Resolved API key for {Provider} from conventional env var {Name}", providerId, conventional);
+            CommonConfigAuthResolverLog.ResolvedFromConventionalEnv(_logger, providerId, conventional);
             return Result.Success(envValue);
         }
 
@@ -116,4 +116,23 @@ public sealed class CommonConfigAuthResolver : IAuthResolver
             $"No API key for '{providerId}'. Run the onboarding wizard, use Settings, " +
             $"or set one of: {envVars}.");
     }
+}
+
+/// <summary>
+///     SG12: BCL <c>[LoggerMessage]</c> delegates for <see cref="CommonConfigAuthResolver" />.
+///     Templates, levels and operands are 1-to-1 with the former <c>LogX</c> calls.
+/// </summary>
+internal static partial class CommonConfigAuthResolverLog
+{
+    [LoggerMessage(EventId = 1, Level = LogLevel.Debug, Message = "Resolved API key for {Provider} from CommonConfig.ApiKeys")]
+    public static partial void ResolvedFromCommonConfig(ILogger logger, string provider);
+
+    [LoggerMessage(EventId = 2, Level = LogLevel.Warning, Message = "Failed to load CommonConfig for auth lookup: {Error}")]
+    public static partial void CommonConfigLoadFailed(ILogger logger, string error);
+
+    [LoggerMessage(EventId = 3, Level = LogLevel.Debug, Message = "Resolved API key for {Provider} from preset env var {Name}")]
+    public static partial void ResolvedFromPresetEnv(ILogger logger, string provider, string name);
+
+    [LoggerMessage(EventId = 4, Level = LogLevel.Debug, Message = "Resolved API key for {Provider} from conventional env var {Name}")]
+    public static partial void ResolvedFromConventionalEnv(ILogger logger, string provider, string name);
 }
