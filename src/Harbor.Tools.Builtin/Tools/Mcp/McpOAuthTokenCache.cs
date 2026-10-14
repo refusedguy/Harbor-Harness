@@ -82,17 +82,18 @@ public sealed class McpOAuthTokenCache
             return Result.Failure<McpOAuthTokens>($"CacheMiss: no cached OAuth tokens for MCP server '{server}'.");
         try
         {
-            using var doc = JsonDocument.Parse(File.ReadAllText(path));
-            var root = doc.RootElement;
-            if (!root.TryGetProperty("access_token", out var at) || at.ValueKind != JsonValueKind.String)
+            // #1098 (single slice): source-gen read — the same
+            // McpOAuthJsonContext the Save path already writes with.
+            // Cold leg by design (one file read per OAuth flow, never
+            // per-turn/per-frame); no Utf8JsonReader rework needed here.
+            var persisted = JsonSerializer.Deserialize(
+                File.ReadAllText(path),
+                McpOAuthJsonContext.Default.McpPersistedTokens);
+            if (persisted is null || string.IsNullOrEmpty(persisted.AccessToken))
                 return Result.Failure<McpOAuthTokens>($"CacheCorrupt: cached OAuth tokens for MCP server '{server}' have no access_token.");
-            string? refresh = root.TryGetProperty("refresh_token", out var rt) && rt.ValueKind == JsonValueKind.String
-                ? rt.GetString()
-                : null;
-            if (!root.TryGetProperty("expires_at_utc", out var exp) || exp.ValueKind != JsonValueKind.String
-                || !DateTimeOffset.TryParse(exp.GetString(), out var expires))
+            if (persisted.ExpiresAtUtc == default)
                 return Result.Failure<McpOAuthTokens>($"CacheCorrupt: cached OAuth tokens for MCP server '{server}' have no usable expiry.");
-            return Result.Success(new McpOAuthTokens(at.GetString()!, refresh, expires));
+            return Result.Success(new McpOAuthTokens(persisted.AccessToken, persisted.RefreshToken, persisted.ExpiresAtUtc));
         }
         catch (JsonException ex)
         {
