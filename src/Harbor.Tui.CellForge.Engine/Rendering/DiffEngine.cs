@@ -211,22 +211,8 @@ public sealed class DiffEngine
     /// comparison is against the transformed look, not the raw paint.</summary>
     public bool FrontMatches(ScreenBuffer next)
     {
-        if (next.Cols != _front.Cols || next.Rows != _front.Rows)
-        {
-            return false;
-        }
-
-        for (int y = 0; y < next.Rows; y++)
-        {
-            for (int x = 0; x < next.Cols; x++)
-            {
-                if (_front.Get(x, y) != next.Get(x, y))
-                {
-                    return false;
-                }
-            }
-        }
-
-        return true;
+        // PF1 (#1237): vectorized content compare — same contract as the
+        // former per-cell Get loop, via ScreenBuffer.ContentEquals.
+        return _front.ContentEquals(next);
     }
 }

@@ -385,6 +385,30 @@ public sealed class ScreenBuffer
         _rowHashValid[y] = true;
     }
 
+    /// <summary>
+    /// Vectorized content equality (PF1, issue #1237): same contract as the
+    /// per-cell <c>Get(x,y) != Get(x,y)</c> loop in
+    /// <see cref="DiffEngine.FrontMatches"/>, over the dense
+    /// <c>Cols*Rows</c> prefix via <see cref="CellSimd"/>.
+    /// </summary>
+    internal bool ContentEquals(ScreenBuffer other)
+    {
+        if (Cols != other.Cols || Rows != other.Rows)
+        {
+            return false;
+        }
+
+        int count = Cols * Rows;
+        if (count == 0)
+        {
+            return true;
+        }
+
+        return CellSimd.SequenceEqual(
+            _cells.AsSpan(0, count),
+            other._cells.AsSpan(0, count));
+    }
+
     private void ComputeRowHash(int y)
     {
         int baseIndex = y * Cols;

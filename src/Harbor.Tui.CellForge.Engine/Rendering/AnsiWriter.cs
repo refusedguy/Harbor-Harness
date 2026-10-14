@@ -1,4 +1,6 @@
 using System.Buffers;
+using System.Numerics;
+using System.Runtime.InteropServices;
 using System.Text;
 
 namespace Harbor.Tui.CellForge.Rendering;
@@ -300,7 +302,9 @@ public sealed class AnsiWriter : ITerminalControlBackend
         // after emitting one the tracked pen is unknowable — mark it unknown
         // so the next MoveTo is always emitted instead of inheriting a drifted
         // column. Certain-width runs keep the tracked pen exactly as before.
-        bool uncertain = UnicodeWidth.HasUncertainWidth(text);
+        // PF1 (#1237): the VS16 probe is a vectorized '\uFE0F' scan (BCL
+        // Vector{ushort}), bit-identical to UnicodeWidth.HasUncertainWidth.
+        bool uncertain = ContainsVs16(text);
         var slice = text;
         while (!slice.IsEmpty)
         {
@@ -670,6 +674,44 @@ public sealed class AnsiWriter : ITerminalControlBackend
     {
         _buf[_len++] = Esc;
         _buf[_len++] = (byte)'[';
+    }
+
+    /// <summary>
+    /// Vectorized VS16 probe (PF1, #1237): true when <paramref name="text"/>
+    /// contains U+FE0F. Same result as
+    /// <see cref="UnicodeWidth.HasUncertainWidth"/> — VS16 is BMP, so a
+    /// UTF-16 code-unit scan is exact. BCL <c>Vector{ushort}</c> only.
+    /// </summary>
+    private static bool ContainsVs16(ReadOnlySpan<char> text)
+    {
+        if (text.IsEmpty)
+        {
+            return false;
+        }
+
+        ReadOnlySpan<ushort> units = MemoryMarshal.Cast<char, ushort>(text);
+        int width = Vector<ushort>.Count;
+        int limit = units.Length - (units.Length % width);
+        var target = new Vector<ushort>(0xFE0F);
+        int i = 0;
+        for (; i < limit; i += width)
+        {
+            var v = new Vector<ushort>(units.Slice(i, width));
+            if (Vector.EqualsAny(v, target))
+            {
+                return true;
+            }
+        }
+
+        for (; i < units.Length; i++)
+        {
+            if (units[i] == 0xFE0F)
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private void AppendAscii(string s)
