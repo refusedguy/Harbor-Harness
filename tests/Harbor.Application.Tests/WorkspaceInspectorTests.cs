@@ -99,6 +99,47 @@ public class WorkspaceInspectorTests
         }
     }
 
+    [Test]
+    public async Task Inspect_ManyTrackedModifications_TruncatesDirtListWithMoreSuffix()
+    {
+        // #1097: pins the JoinDirt truncation branch (over MaxDirtPathsInError
+        // paths) that the pooled rewrite must preserve byte-for-byte.
+        string dir = InitRepo();
+        try
+        {
+            for (int i = 0; i < 25; i++)
+                await File.WriteAllTextAsync(Path.Combine(dir, $"f{i:00}.txt"), "v1\n");
+            Git(dir, "add .");
+            Git(dir, "commit -m bulk");
+            for (int i = 0; i < 25; i++)
+                await File.AppendAllTextAsync(Path.Combine(dir, $"f{i:00}.txt"), "v2\n");
+
+            var result = await WorkspaceInspector.InspectAsync(dir);
+
+            await Assert.That(result.IsFailure).IsTrue();
+            await Assert.That(result.Error).Contains("Dirty");
+            await Assert.That(result.Error).Contains("more)");
+        }
+        finally
+        {
+            DeleteDir(dir);
+        }
+    }
+
+    [Test]
+    public async Task WorkspaceInspector_UsesPooledBuilder_RelativeGate()
+    {
+        // #1097 (relative gate, one site): WorkspaceInspector.cs must build its
+        // dirt list from StringBuilderPool — zero `new StringBuilder` in this
+        // file. Scoped to this file on purpose: the tree still has cold-path
+        // builders (TableBlock, OnboardingFlow, ...), each pooled on its own
+        // issue slice rather than under one absolute ban.
+        string path = FindRepoFile(Path.Combine("src", "Harbor.Application", "Sessions", "WorkspaceInspector.cs"));
+        string source = await File.ReadAllTextAsync(path);
+        await Assert.That(source.Contains("StringBuilderPool.Rent")).IsTrue();
+        await Assert.That(source.Contains("new StringBuilder")).IsFalse();
+    }
+
     /// <summary>Fresh repo on <c>s1-test</c> with one committed file.</summary>
     private static string InitRepo()
     {
@@ -132,6 +173,24 @@ public class WorkspaceInspectorTests
             // Test cleanup is best-effort.
             _ = ex;
         }
+    }
+
+    /// <summary>Locate a repo-relative source file by walking up from the test assembly directory.</summary>
+    private static string FindRepoFile(string relativePath)
+    {
+        string? dir = AppContext.BaseDirectory;
+        while (dir is not null)
+        {
+            string candidate = Path.Combine(dir, relativePath);
+            if (File.Exists(candidate))
+                return candidate;
+            string? parent = Path.GetDirectoryName(dir.TrimEnd(Path.DirectorySeparatorChar));
+            if (parent is null || parent == dir)
+                break;
+            dir = parent;
+        }
+        throw new InvalidOperationException(
+            $"Cannot locate '{relativePath}' above '{AppContext.BaseDirectory}'.");
     }
 
     internal static bool GitAvailable()
