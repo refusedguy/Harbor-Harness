@@ -129,7 +129,7 @@ internal static class SqliteMappers
     /// </summary>
     internal static Result<SessionMetadata> TryDeserializeMetadata(string json, string sessionId) =>
         Result.Try(
-                () => JsonSerializer.Deserialize<SessionMetadata>(json, JsonOptions),
+                () => JsonSerializer.Deserialize(json, SessionMetadataInfo),
                 ex => $"Session '{sessionId}' metadata is corrupt: {ex.Message}")
             .Bind(m => m is not null
                 ? Result.Success<SessionMetadata>(m)
@@ -139,9 +139,9 @@ internal static class SqliteMappers
     {
         return role switch
         {
-            "user" => JsonSerializer.Deserialize<UserMessage>(payload, JsonOptions),
-            "assistant" => JsonSerializer.Deserialize<AssistantMessage>(payload, JsonOptions),
-            "tool_result" => JsonSerializer.Deserialize<ToolResultMessage>(payload, JsonOptions),
+            "user" => JsonSerializer.Deserialize(payload, UserMessageInfo),
+            "assistant" => JsonSerializer.Deserialize(payload, AssistantMessageInfo),
+            "tool_result" => JsonSerializer.Deserialize(payload, ToolResultMessageInfo),
             _ => null
         };
     }
@@ -158,7 +158,7 @@ internal static class SqliteMappers
         var createdAt = DateTimeOffset.Parse(reader.GetString(reader.GetOrdinal("created_at")));
         var updatedAt = DateTimeOffset.Parse(reader.GetString(reader.GetOrdinal("updated_at")));
         string metaJson = reader.GetString(reader.GetOrdinal("metadata"));
-        var meta = JsonSerializer.Deserialize<SessionMetadata>(metaJson, JsonOptions) ?? SessionMetadata.Empty;
+        var meta = JsonSerializer.Deserialize(metaJson, SessionMetadataInfo) ?? SessionMetadata.Empty;
         // #1107: header parity with JsonlSessionStore — Status/Kind/
         // ParentSessionId round-trip through UpdateAsync. Every read funnels
         // through EnsureInitialized (which runs MigrateSessionsIfNeeded), so
@@ -298,7 +298,7 @@ internal static class SqliteMappers
         public override void Write(Utf8JsonWriter writer, ContentPart value, JsonSerializerOptions options)
         {
             writer.WriteStartObject();
-            new PartWriter(writer, options).Accept(value);
+            new PartWriter(writer).Accept(value);
             writer.WriteEndObject();
         }
 
@@ -307,7 +307,7 @@ internal static class SqliteMappers
         ///     names and the order the old switch wrote them in are the on-disk
         ///     contract — unchanged.
         /// </summary>
-        private sealed class PartWriter(Utf8JsonWriter writer, JsonSerializerOptions options)
+        private sealed class PartWriter(Utf8JsonWriter writer)
             : ContentPartVisitor<PartWriter>
         {
             public override PartWriter Visit(TextPart part)
@@ -330,7 +330,7 @@ internal static class SqliteMappers
                 writer.WriteString("id", part.Id);
                 writer.WriteString("toolName", part.ToolName);
                 writer.WritePropertyName("args");
-                JsonSerializer.Serialize(writer, part.Args, options);
+                JsonSerializer.Serialize(writer, part.Args, SqliteJsonContext.Default.JsonElement);
                 return this;
             }
 
