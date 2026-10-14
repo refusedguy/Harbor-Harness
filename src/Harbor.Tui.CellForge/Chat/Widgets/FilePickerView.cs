@@ -1,3 +1,4 @@
+using Harbor.Tui.CellForge.Generic.Widgets;
 using Harbor.Tui.CellForge.Input;
 using Harbor.Tui.CellForge.Rendering;
 
@@ -24,8 +25,16 @@ public sealed record FilePickerItem(
 /// Paint draws a bordered box; the host decides overlay placement by passing
 /// a <see cref="Rect" />. When the box is wide enough the right pane shows
 /// the selected entry preview, otherwise the list takes the full width.
+///
+/// Selection + scroll live outside the widget (#1158, ratatui
+/// <c>StatefulWidget</c> analog, same recipe as <c>GenericTable</c> #1371):
+/// <see cref="State"/> survives frames and owns the result-list axis, while
+/// this type owns content (files, query, filter) and geometry.
+/// <see cref="Paint(ScreenBuffer, Rect, GenericNavState)"/> renders with any
+/// count-compatible state, so two pickers can share one. The legacy
+/// selection API + <see cref="Paint(ScreenBuffer, Rect)"/> path is unchanged.
 /// </summary>
-public sealed class FilePickerView
+public sealed class FilePickerView : IStatefulGenericWidget<GenericNavState>
 {
     private const int PageRows = 5;
 
@@ -40,6 +49,15 @@ public sealed class FilePickerView
 
     /// <summary>Rows the last Paint actually showed — drives list scrolling on move.</summary>
     private int _lastRows = 8;
+    private readonly GenericNavState _navState = new();
+
+    /// <summary>
+    /// External navigation state (selection + scroll), count-synced with
+    /// <see cref="Results"/> on every <see cref="Refilter"/>/<see cref="Show"/>/<see cref="Hide"/>.
+    /// Mutating it directly (e.g. <see cref="GenericNavState.SelectNext"/>) drives
+    /// the <see cref="Paint(ScreenBuffer, Rect, GenericNavState)"/> overload.
+    /// </summary>
+    public GenericNavState State => _navState;
 
     /// <summary>Invoked with the chosen file on Enter; the picker hides itself first.</summary>
     public Action<FilePickerItem>? OnCommit { get; set; }
@@ -88,6 +106,7 @@ public sealed class FilePickerView
         _query = string.Empty;
         _selected = 0;
         _offset = 0;
+        _navState.SetContent(0);
     }
 
     /// <summary>
@@ -166,7 +185,23 @@ public sealed class FilePickerView
     /// pane when wide enough, and a hint footer. Pure over state — no layout
     /// side effects.
     /// </summary>
-    public void Paint(ScreenBuffer buffer, Rect rect)
+    /// <remarks>Legacy path: highlights the widget-local selection, scrolled by the widget-local offset.</remarks>
+    public void Paint(ScreenBuffer buffer, Rect rect) => PaintCore(buffer, rect, null);
+
+    /// <summary>
+    /// Paints with an external navigation state (#1158): when <paramref
+    /// name="navState"/> is count-compatible (<c>Count == Results.Count</c>)
+    /// the highlight and scroll come from it, so one state object can drive
+    /// two pickers; otherwise falls back to the widget-local selection. The
+    /// query/filter axis stays widget-local.
+    /// </summary>
+    public void Paint(ScreenBuffer buffer, Rect rect, GenericNavState navState)
+    {
+        ArgumentNullException.ThrowIfNull(navState);
+        PaintCore(buffer, rect, navState);
+    }
+
+    private void PaintCore(ScreenBuffer buffer, Rect rect, GenericNavState? navState)
     {
         if (!Visible || rect.Width < 8 || rect.Height < 4 || rect.X >= buffer.Cols || rect.Y >= buffer.Rows)
         {
@@ -182,8 +217,21 @@ public sealed class FilePickerView
 
         int listTop = rect.Y + 2;
         int availableRows = rect.Height - 3 - 1; // query row + hint footer
-        _lastRows = Math.Max(1, availableRows);
-        EnsureVisible();
+        int selIdx;
+        int visOff;
+        if (navState is not null && _results.Count > 0 && navState.Count == _results.Count)
+        {
+            navState.Sync(Math.Max(1, availableRows));
+            selIdx = navState.Selected;
+            visOff = navState.Offset;
+        }
+        else
+        {
+            _lastRows = Math.Max(1, availableRows);
+            EnsureVisible();
+            selIdx = _results.Count > 0 ? Math.Min(_selected, _results.Count - 1) : -1;
+            visOff = _offset;
+        }
 
         // Wide box → list | preview split; narrow box → list only.
         bool split = innerW >= 40 && availableRows >= 2;
@@ -200,23 +248,22 @@ public sealed class FilePickerView
         var selectedStyle = new CellStyle(ChatPalette.Accent, attrs: StyleAttr.Bold);
         var titleStyle = ChatPalette.ToolArgs;
         var detailStyle = ChatPalette.Dim;
-        int selectedRow = _results.Count > 0 ? Math.Min(_selected, _results.Count - 1) : -1;
 
         int painted = 0;
         for (int i = 0; i < _results.Count && painted < availableRows; i++)
         {
-            if (i < _offset)
+            if (i < visOff)
             {
                 continue;
             }
 
             var item = _results[i];
             int y = listTop + painted;
-            bool selected = i == selectedRow;
+            bool isPicked = i == selIdx;
             string glyph = item.IsDirectory ? "▸ " : "· ";
             string text = glyph + item.Path;
             int titleLen = Math.Min(text.Length, listW);
-            buffer.SetText(rect.X + 1, y, text.AsSpan(0, titleLen), selected ? selectedStyle : titleStyle);
+            buffer.SetText(rect.X + 1, y, text.AsSpan(0, titleLen), isPicked ? selectedStyle : titleStyle);
 
             if (!string.IsNullOrEmpty(item.Detail) && titleLen < listW)
             {
@@ -234,15 +281,18 @@ public sealed class FilePickerView
             const string empty = "(no matches)";
             buffer.SetText(rect.X + 1, listTop, empty.AsSpan(0, Math.Min(empty.Length, listW)), ChatPalette.Dim);
         }
-        else if (_results.Count - _offset > availableRows)
+        else if (_results.Count - visOff > availableRows)
         {
-            var more = $"… +{_results.Count - _offset - availableRows}";
+            var more = $"… +{_results.Count - visOff - availableRows}";
             buffer.SetText(rect.X + 1, rect.Bottom - 2, more.AsSpan(0, Math.Min(more.Length, listW)), detailStyle);
         }
 
         if (split)
         {
-            PaintPreview(buffer, previewX, listTop, previewW, availableRows);
+            Maybe<FilePickerItem> previewSel = selIdx >= 0 && selIdx < _results.Count
+                ? Maybe<FilePickerItem>.From(_results[selIdx])
+                : Maybe<FilePickerItem>.None;
+            PaintPreview(buffer, previewX, listTop, previewW, availableRows, previewSel);
         }
 
         const string hints = "↑↓ move · enter pick · esc close";
@@ -270,6 +320,7 @@ public sealed class FilePickerView
         _results = FuzzyMatcher.Filter(_query, _files, static f => f.Path + " " + f.Detail);
         _selected = 0;
         _offset = 0;
+        _navState.SetContent(_results.Count);
         EnsureVisible();
     }
 
@@ -299,15 +350,14 @@ public sealed class FilePickerView
         }
     }
 
-    private void PaintPreview(ScreenBuffer buffer, int x, int top, int width, int rows)
+    private void PaintPreview(ScreenBuffer buffer, int x, int top, int width, int rows, Maybe<FilePickerItem> previewSel)
     {
         if (width < 8 || rows < 2)
         {
             return;
         }
 
-        var selected = SelectedItem;
-        string header = selected.HasNoValue ? "(no preview)" : TruncateMiddle(selected.Value.Path, width);
+        string header = previewSel.HasNoValue ? "(no preview)" : TruncateMiddle(previewSel.Value.Path, width);
         buffer.SetText(x, top, header.AsSpan(0, Math.Min(header.Length, width)), ChatPalette.Dim);
 
         if (rows < 3)
@@ -318,7 +368,7 @@ public sealed class FilePickerView
         string rule = new string('─', Math.Min(width, 64));
         buffer.SetText(x, top + 1, rule.AsSpan(0, Math.Min(rule.Length, width)), new CellStyle(ChatPalette.Border));
 
-        var lines = ResolvePreview(selected);
+        var lines = ResolvePreview(previewSel);
         if (lines.Count == 0)
         {
             const string empty = "(no preview)";
