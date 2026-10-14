@@ -401,17 +401,224 @@ public sealed class TokenCellSingleHomeRules
         // reports' own callers, because those delegate rather than spell.
     ];
 
-    /// <summary>A file, a 1-based line number, the rule it tripped, and the line.</summary>
-    private sealed record Site(string RelativePath, int Line, string RuleId, string Text);
+    // MECHANISM (#1086, step 2, conveyor batch-9)
+    // ------------------------------------------
+    // The four bans below are two ScanRules: the three C# shapes as Forbidden
+    // rows over Glob "*.cs" and the XAML shape as one Forbidden row over Glob
+    // "*.axaml" — the first rule in the tree to exercise the markup Glob
+    // through ScanRunner. Enumeration, matching and the control/discovery
+    // verdicts are ScanRunner's; this file keeps the issue prose, the
+    // patterns, the homes, and the test names.
+    //
+    // The verdicts are ParseTokenCs/ParseTokenXaml through the Func-overload,
+    // each carrying the original line scan verbatim — the per-extension
+    // stripper (StripComments for .cs, StripMarkupComments for .axaml), the
+    // line-precise IsHome skip, first-match-wins. Every home line still trips
+    // its rule's pattern, so a file-wide baseline row would excuse a second
+    // writer in the same file: the homes stay a line filter inside the parsers
+    // rather than baseline rows, and both baselines stay empty. The planted
+    // controls grade these parsers, so "they can fail" means something. Scope
+    // parity is exact (Trees ["src", "apps"] == the product walk both
+    // enumerators share; both sides drop build output the same way).
+
+    /// <summary>The C# token-cell ban as data: the three code shapes, fifteen planted controls, a floor.</summary>
+    private static readonly ScanRule CsRule = new()
+    {
+        Id = "TokenCellSingleHomeCs",
+        Trees = ["src", "apps"],
+        Forbidden =
+        [
+            new ScanForbidden(
+                "TOKEN-CELL-SCALED-AND-SUFFIXED-BY-HAND",
+                new Regex(Rules[1].Pattern, RegexOptions.Compiled | RegexOptions.CultureInvariant),
+                Rules[1].Instead),
+            new ScanForbidden(
+                "TOKEN-CELL-ASSEMBLED-BY-HAND",
+                new Regex(Rules[2].Pattern, RegexOptions.Compiled | RegexOptions.CultureInvariant),
+                Rules[2].Instead),
+            new ScanForbidden(
+                "TOKEN-CELL-HAND-ROLLED-INTO-A-SPAN",
+                new Regex(Rules[3].Pattern, RegexOptions.Compiled | RegexOptions.CultureInvariant),
+                Rules[3].Instead),
+        ],
+        Controls =
+        [
+            new ScanControl("Planted/ScaledF1.cs", """
+                rows.Add($"in    {(n / 1000.0).ToString("F1", CultureInfo.InvariantCulture)}K");
+                """, "TOKEN-CELL-SCALED-AND-SUFFIXED-BY-HAND"),
+            new ScanControl("Planted/ScaledF2.cs", """
+                return $"{(tokens / 1_000_000.0).ToString("F2", CultureInfo.InvariantCulture)}M";
+                """, "TOKEN-CELL-SCALED-AND-SUFFIXED-BY-HAND"),
+            new ScanControl("Planted/Span.cs", """
+                private static int FormatTokensTo(long tokens, Span<char> into)
+                """, "TOKEN-CELL-HAND-ROLLED-INTO-A-SPAN"),
+            new ScanControl("Planted/Raw.cs", """
+                return $"{head} | {TokensIn}↑ {TokensOut}↓ | {Status}";
+                """, "TOKEN-CELL-ASSEMBLED-BY-HAND"),
+            // A millisecond figure is a duration, not a token cell.
+            new ScanControl("NearMiss/Millis.cs", """
+                long s = ms / 1000;
+                """, null),
+            // A frame interval divides by a thousand and is not a scaled token cell.
+            new ScanControl("NearMiss/Interval.cs", """
+                public static readonly TimeSpan MinInterval = TimeSpan.FromMilliseconds(1000.0 / MaxHertz);
+                """, null),
+            // A retry countdown is a duration in seconds, not a token cell.
+            new ScanControl("NearMiss/Retry.cs", """
+                int remaining = _retryTotalSec - (int)((Environment.TickCount64 - _retryErrorMs) / 1000);
+                """, null),
+            // A keymap hint uses the same arrows as the cell and names no token.
+            new ScanControl("NearMiss/KeyHint.cs", """
+                rows.Add("↑↓ move · Enter view · r refresh · Esc close");
+                """, null),
+            // A key binding is not a token cell.
+            new ScanControl("NearMiss/KeyBind.cs", """
+                new("Ctrl+↑/↓", "grow / shrink focused panel"),
+                """, null),
+            // A scroll hint is not a token cell.
+            new ScanControl("NearMiss/Scroll.cs", """
+                rows.Add("  ↑ more above");
+                """, null),
+            // The CellForge syntax tokenizer lexes SOURCE CODE, not token cells.
+            new ScanControl("NearMiss/Tokenizer.cs", """
+                private static List<CodeSpan> TokenizeLine(ReadOnlySpan<char> line, string? language, ref bool inBlockComment)
+                """, null),
+            // A diff header lexer is not a token cell either.
+            new ScanControl("NearMiss/DiffLexer.cs", """
+                private static bool ExpectToken(ReadOnlySpan<char> header, ref int i, string token)
+                """, null),
+            // CALLING a writer is legal from every layer; only spelling one is a second writer.
+            new ScanControl("NearMiss/HomeCall.cs", """
+                sb.Append(SideBarView.FormatTokens(_msgTokensIn));
+                """, null),
+            // Delegating the cell to the projection layer is the shape this guard asks for.
+            new ScanControl("NearMiss/Delegate.cs", """
+                Tokens = StatusBarText.TokensCell(tokensIn, tokensOut) ?? "";
+                """, null),
+            // Comment prose is not an implementation.
+            new ScanControl("NearMiss/Comment.cs", """
+                // rows.Add($"{TokensIn}↑ {TokensOut}↓");
+                """, null),
+        ],
+        MinHits = 500,
+        MustContain =
+        [
+            "src/Harbor.Ui.Framework.State/State/StatusBarText.cs",
+            "src/Harbor.Ui.Framework.Rendering/Widgets/StatusViewModel.cs",
+            "src/Harbor.Ui.Framework.Projection/Projection/PanelRows.cs",
+            "src/Harbor.Tui.CellForge/Chat/Widgets/SideBarView.cs",
+            "src/Harbor.Terminal.Abstractions/ViewModels/TuiViewModels.cs",
+            "src/Harbor.Tools.Builtin/Tools/Session/SessionReadTool.cs",
+            "src/Harbor.Tools.Builtin/Tools/Task/TaskTool.cs",
+        ],
+        CustomParse = ParseTokenCs,
+    };
+
+    /// <summary>The XAML token-cell ban as data: the markup shape, three planted controls, a floor.</summary>
+    private static readonly ScanRule XamlRule = new()
+    {
+        Id = "TokenCellSingleHomeXaml",
+        Trees = ["src", "apps"],
+        Glob = "*.axaml",
+        Forbidden =
+        [
+            new ScanForbidden(
+                "TOKEN-CELL-HAND-SPELLED-IN-XAML",
+                new Regex(Rules[0].Pattern, RegexOptions.Compiled | RegexOptions.CultureInvariant),
+                Rules[0].Instead),
+        ],
+        Controls =
+        [
+            new ScanControl("Planted/Cell.axaml", """
+                <TextBlock Text="{Binding TokensIn, StringFormat='↓ {0:N0}'}" />
+                """, "TOKEN-CELL-HAND-SPELLED-IN-XAML"),
+            // A message count is not a token cell, and its format is not `{0:N…}`.
+            new ScanControl("NearMiss/Msgs.axaml", """
+                <TextBlock Text="{Binding MessageCount, StringFormat='{}{0} msgs'}" />
+                """, null),
+            // #942 already moved this cell into the view model; a binding to an
+            // already-spelled property is the fix this rule asks for, not a violation.
+            new ScanControl("NearMiss/Cost.axaml", """
+                <TextBlock Text="{Binding CostText, StringFormat='${0:F2}'}" />
+                """, null),
+        ],
+        MinHits = 20,
+        MustContain =
+        [
+            "apps/Harbor.App.Avalonia/Views/Shell/StatusBarView.axaml",
+            "apps/Harbor.App.Avalonia/Views/TokenUsageView.axaml",
+        ],
+        CustomParse = ParseTokenXaml,
+    };
+
+    /// <summary>
+    ///     The custom parsers: the original line scan over one file's raw source —
+    ///     the per-extension comment stripper, the line-precise home skip, one
+    ///     report per line on the first matching shape.
+    /// </summary>
+    private static IEnumerable<ScanHit> ParseTokenCs(string displayPath, string rawSource)
+    {
+        string[] lines = SourceScan.StripComments(rawSource).Split('\n');
+        for (int i = 0; i < lines.Length; i++)
+        {
+            string line = lines[i].TrimEnd('\r');
+            if (IsHome(displayPath, line))
+            {
+                continue;
+            }
+
+            foreach (Rule rule in Rules)
+            {
+                if (rule.Markup != Markup.Code)
+                {
+                    continue;
+                }
+
+                if (Regex.IsMatch(line, rule.Pattern, RegexOptions.CultureInvariant))
+                {
+                    yield return new ScanHit(rule.Id, displayPath, i + 1, line.Trim());
+                    break;
+                }
+            }
+        }
+    }
+
+    /// <inheritdoc cref="ParseTokenCs" />
+    private static IEnumerable<ScanHit> ParseTokenXaml(string displayPath, string rawSource)
+    {
+        string[] lines = SourceScan.StripMarkupComments(rawSource).Split('\n');
+        for (int i = 0; i < lines.Length; i++)
+        {
+            string line = lines[i].TrimEnd('\r');
+            if (IsHome(displayPath, line))
+            {
+                continue;
+            }
+
+            foreach (Rule rule in Rules)
+            {
+                if (rule.Markup != Markup.Xaml)
+                {
+                    continue;
+                }
+
+                if (Regex.IsMatch(line, rule.Pattern, RegexOptions.CultureInvariant))
+                {
+                    yield return new ScanHit(rule.Id, displayPath, i + 1, line.Trim());
+                    break;
+                }
+            }
+        }
+    }
 
     [Test]
     public async Task NoSurface_WritesATokenCellByHand()
     {
-        List<Site> sites = [.. ScanAllSites()];
+        List<string> violations = [.. ScanRunner.Evaluate(CsRule), .. ScanRunner.Evaluate(XamlRule)];
 
-        await Assert.That(sites.Count).IsEqualTo(0)
+        await Assert.That(violations.Count).IsEqualTo(0)
             .Because(
-                "one session token spend is written by hand at " + Describe(sites)
+                "one session token spend is written by hand at " + (violations.Count == 0 ? "(none)" : string.Join("; ", violations))
                 + ". " + string.Join(" | ", Rules.Select(r => r.Id + " → " + r.Instead))
                 + " Declared homes (a decision, not an oversight): " + DescribeHomes()
                 + " See issue #788 and ADR-010.");
@@ -426,30 +633,21 @@ public sealed class TokenCellSingleHomeRules
     [Test]
     public async Task Discovery_ReachesARealFileSet_OverBothExtensions()
     {
-        var cs = SourceScan.EnumerateProductCsFiles();
-        var xaml = SourceScan.EnumerateProductXamlFiles();
+        List<string> csDiscovery = ScanRunner.CheckDiscovery(CsRule);
+        List<string> xamlDiscovery = ScanRunner.CheckDiscovery(XamlRule);
 
-        await Assert.That(cs.Count).IsGreaterThan(500)
-            .Because("src/ + apps/ hold far more than 500 C# files; a smaller count means the "
-                     + "tree filter broke and every rule in this file is reading nothing");
-        await Assert.That(xaml.Count).IsGreaterThan(20)
-            .Because("the Avalonia views hold more than 20 .axaml files; a smaller count means "
-                     + "RULE A — the rule that exists because a *.cs scan is blind to markup — "
-                     + "is reading nothing, which is the exact failure this file was written for");
-
-        var csPaths = cs.Select(SourceScan.Relative).ToHashSet(StringComparer.Ordinal);
-        var xamlPaths = xaml.Select(SourceScan.Relative).ToHashSet(StringComparer.Ordinal);
-
-        foreach (LineHome home in Homes)
-        {
-            var reachable = home.RelativePath.EndsWith(".axaml", StringComparison.Ordinal)
-                ? xamlPaths
-                : csPaths;
-
-            await Assert.That(reachable.Contains(home.RelativePath)).IsTrue()
-                .Because(home.RelativePath + " holds a declared home and must be inside the "
-                         + "scanned set, or the rule polices nothing");
-        }
+        await Assert.That(csDiscovery).IsEmpty()
+            .Because("src/ + apps/ hold far more than 500 C# files, including the seven files that "
+                     + "declare C# token-cell homes. A smaller count — or a scope that stopped seeing "
+                     + "those files — means the tree walk broke and the rule below would be "
+                     + "reporting 'clean' about nothing. "
+                     + string.Join("; ", csDiscovery));
+        await Assert.That(xamlDiscovery).IsEmpty()
+            .Because("the Avalonia views hold more than 20 .axaml files, including the two files that "
+                     + "declare XAML token-cell homes. A smaller count means RULE A — the rule that "
+                     + "exists because a *.cs scan is blind to markup — is reading nothing, which is "
+                     + "the exact failure this file was written for. "
+                     + string.Join("; ", xamlDiscovery));
     }
 
     /// <summary>
@@ -540,6 +738,40 @@ public sealed class TokenCellSingleHomeRules
     }
 
     /// <summary>
+    ///     The planted controls — every C# writer shape and every C# near-miss —
+    ///     drive the REAL C# parser: offenders reported under their sub-id,
+    ///     near-misses silent.
+    /// </summary>
+    [Test]
+    public async Task Detector_CsControlsDriveTheRealParser()
+    {
+        List<string> failures = ScanRunner.CheckControls(CsRule);
+
+        await Assert.That(failures).IsEmpty()
+            .Because(
+                "the fifteen planted C# controls must agree with the matcher cases above through "
+                + "the rule's own parser — otherwise the C# half guards nothing, or forbids the fix. "
+                + string.Join("; ", failures));
+    }
+
+    /// <summary>
+    ///     The planted controls — the XAML writer shape and its near-misses —
+    ///     drive the REAL markup parser: the offender reported under its sub-id,
+    ///     near-misses silent.
+    /// </summary>
+    [Test]
+    public async Task Detector_XamlControlsDriveTheRealParser()
+    {
+        List<string> failures = ScanRunner.CheckControls(XamlRule);
+
+        await Assert.That(failures).IsEmpty()
+            .Because(
+                "the three planted XAML controls must agree with the matcher cases above through "
+                + "the rule's own parser — otherwise the markup half guards nothing. "
+                + string.Join("; ", failures));
+    }
+
+    /// <summary>
     ///     Non-vacuity, part 3 — the home list stays honest in both directions. An
     ///     entry whose file is gone, or which no longer matches its lines, is dead
     ///     weight that would silently widen the rule the next time someone
@@ -591,52 +823,6 @@ public sealed class TokenCellSingleHomeRules
             "Harbor.slnx not found above " + AppContext.BaseDirectory
             + " — this guard walks the repository and cannot run from a published test host.");
 
-    private static IReadOnlyList<Site> ScanAllSites()
-    {
-        var sites = new List<Site>();
-
-        foreach (Rule rule in Rules)
-        {
-            var paths = rule.Markup == Markup.Xaml
-                ? SourceScan.EnumerateProductXamlFiles()
-                : SourceScan.EnumerateProductCsFiles();
-
-            foreach (string path in paths)
-            {
-                string? source = SourceScan.TryReadAllText(path);
-                if (source is null)
-                {
-                    continue;
-                }
-
-                // The markup stripper for XAML: the C# one eats the rest of any line
-                // holding a URL and does not know <!-- -->, so running it over markup
-                // would truncate real bindings and grade comment prose as a writer.
-                string stripped = rule.Markup == Markup.Xaml
-                    ? SourceScan.StripMarkupComments(source)
-                    : SourceScan.StripComments(source);
-
-                string relative = SourceScan.Relative(path);
-                string[] lines = stripped.Split('\n');
-                for (int i = 0; i < lines.Length; i++)
-                {
-                    string line = lines[i].TrimEnd('\r');
-                    if (IsHome(relative, line))
-                    {
-                        continue;
-                    }
-
-                    if (Regex.IsMatch(line, rule.Pattern, RegexOptions.CultureInvariant))
-                    {
-                        sites.Add(new Site(relative, i + 1, rule.Id, line));
-                    }
-                }
-            }
-        }
-
-        return sites;
-    }
-
     private static bool IsHome(string relativePath, string line)
     {
         foreach (LineHome home in Homes)
@@ -685,13 +871,6 @@ public sealed class TokenCellSingleHomeRules
 
         return hits;
     }
-
-    private static string Describe(IReadOnlyList<Site> sites) =>
-        sites.Count == 0
-            ? "(none)"
-            : string.Join(
-                "; ",
-                sites.Select(s => s.RelativePath + ":" + s.Line + " [" + s.RuleId + "] " + s.Text.Trim()));
 
     private static string DescribeHomes() =>
         Homes.Length == 0
