@@ -59,7 +59,7 @@ public sealed class LspManager : ILspService
         Result<LspServerSession> resolved = await GetOrCreateSessionAsync(filePath, ct).ConfigureAwait(false);
         if (resolved.IsFailure)
         {
-            _logger.LogDebug("LSP: open of {File} degraded ({Reason})", filePath, resolved.Error);
+            LspManagerLog.OpenDegraded(_logger, filePath, resolved.Error);
             return;
         }
 
@@ -75,14 +75,11 @@ public sealed class LspManager : ILspService
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(
-                ex,
-                "LSP: open of {File} on {Language} server failed ({Reason}) — degraded",
-                fullPath, session.Definition.Language, ex.Message);
+            LspManagerLog.OpenFailed(_logger, ex, fullPath, session.Definition.Language, ex.Message);
             return;
         }
 
-        _logger.LogDebug("LSP: opened {File} on {Language} server", fullPath, session.Definition.Language);
+        LspManagerLog.Opened(_logger, fullPath, session.Definition.Language);
     }
 
     /// <inheritdoc />
@@ -93,7 +90,7 @@ public sealed class LspManager : ILspService
         Result<LspServerSession> resolved = ResolveSession(filePath);
         if (resolved.IsFailure)
         {
-            _logger.LogDebug("LSP: change of {File} degraded ({Reason})", filePath, resolved.Error);
+            LspManagerLog.ChangeDegraded(_logger, filePath, resolved.Error);
             return;
         }
 
@@ -112,10 +109,7 @@ public sealed class LspManager : ILspService
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(
-                ex,
-                "LSP: change of {File} failed ({Reason}) — degraded",
-                filePath, ex.Message);
+            LspManagerLog.ChangeFailed(_logger, ex, filePath, ex.Message);
         }
     }
 
@@ -127,7 +121,7 @@ public sealed class LspManager : ILspService
         Result<LspServerSession> resolved = ResolveSession(filePath);
         if (resolved.IsFailure)
         {
-            _logger.LogDebug("LSP: close of {File} degraded ({Reason})", filePath, resolved.Error);
+            LspManagerLog.CloseDegraded(_logger, filePath, resolved.Error);
             return;
         }
 
@@ -142,10 +136,7 @@ public sealed class LspManager : ILspService
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(
-                ex,
-                "LSP: close of {File} failed ({Reason}) — degraded",
-                filePath, ex.Message);
+            LspManagerLog.CloseFailed(_logger, ex, filePath, ex.Message);
         }
     }
 
@@ -157,7 +148,7 @@ public sealed class LspManager : ILspService
         Result<LspServerSession> resolved = ResolveSession(filePath);
         if (resolved.IsFailure)
         {
-            _logger.LogDebug("LSP: diagnostics of {File} degraded ({Reason})", filePath, resolved.Error);
+            LspManagerLog.DiagnosticsDegraded(_logger, filePath, resolved.Error);
             return ValueTask.FromResult<IReadOnlyList<LspDiagnostic>>([]);
         }
 
@@ -173,7 +164,7 @@ public sealed class LspManager : ILspService
         Result<LspServerSession> resolved = ResolveSession(filePath);
         if (resolved.IsFailure)
         {
-            _logger.LogDebug("LSP: definition lookup for {File} degraded ({Reason})", filePath, resolved.Error);
+            LspManagerLog.DefinitionLookupDegraded(_logger, filePath, resolved.Error);
             return null;
         }
 
@@ -190,18 +181,12 @@ public sealed class LspManager : ILspService
         }
         catch (OperationCanceledException ex) when (!ct.IsCancellationRequested)
         {
-            _logger.LogWarning(
-                ex,
-                "LSP: definition lookup for {File} timed out after {Timeout} (lookup-timed-out) — degraded to no-result",
-                filePath, RequestTimeout);
+            LspManagerLog.DefinitionLookupTimedOut(_logger, ex, filePath, RequestTimeout);
             return null;
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            _logger.LogWarning(
-                ex,
-                "LSP: definition lookup for {File} failed (request-failed: {Reason}) — degraded to no-result",
-                filePath, ex.Message);
+            LspManagerLog.DefinitionLookupFailed(_logger, ex, filePath, ex.Message);
             return null;
         }
     }
@@ -214,7 +199,7 @@ public sealed class LspManager : ILspService
         Result<LspServerSession> resolved = ResolveSession(filePath);
         if (resolved.IsFailure)
         {
-            _logger.LogDebug("LSP: references lookup for {File} degraded ({Reason})", filePath, resolved.Error);
+            LspManagerLog.ReferencesLookupDegraded(_logger, filePath, resolved.Error);
             return [];
         }
 
@@ -231,18 +216,12 @@ public sealed class LspManager : ILspService
         }
         catch (OperationCanceledException ex) when (!ct.IsCancellationRequested)
         {
-            _logger.LogWarning(
-                ex,
-                "LSP: references lookup for {File} timed out after {Timeout} (lookup-timed-out) — degraded to empty",
-                filePath, RequestTimeout);
+            LspManagerLog.ReferencesLookupTimedOut(_logger, ex, filePath, RequestTimeout);
             return [];
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            _logger.LogWarning(
-                ex,
-                "LSP: references lookup for {File} failed (request-failed: {Reason}) — degraded to empty",
-                filePath, ex.Message);
+            LspManagerLog.ReferencesLookupFailed(_logger, ex, filePath, ex.Message);
             return [];
         }
     }
@@ -311,10 +290,7 @@ public sealed class LspManager : ILspService
                 _ = _unavailable.Add(definition.Id);
             }
 
-            _logger.LogWarning(
-                ex,
-                "LSP: {Language} server '{Command}' unavailable — diagnostics/definition disabled for this language",
-                definition.Language, definition.Command);
+            LspManagerLog.ServerUnavailable(_logger, ex, definition.Language, definition.Command);
             return Result.Failure<LspServerSession>($"server-start-failed ('{definition.Id}': {ex.Message})");
         }
 
@@ -330,10 +306,7 @@ public sealed class LspManager : ILspService
                     static (t, state) =>
                     {
                         var (logger, language) = ((ILogger<LspManager>, string))state!;
-                        logger.LogWarning(
-                            t.Exception,
-                            "LSP: dispose of superseded {Language} session failed",
-                            language);
+                        LspManagerLog.DisposeSupersededFailed(logger, t.Exception!, language);
                     },
                     (_logger, definition.Language),
                     CancellationToken.None,
@@ -388,4 +361,59 @@ public sealed class LspManager : ILspService
             await session.DisposeAsync().ConfigureAwait(false);
         }
     }
+}
+
+/// <summary>
+///     SG13: BCL <c>[LoggerMessage]</c> delegates for <see cref="LspManager" />.
+///     Templates, levels and operands are 1-to-1 with the former <c>LogX</c> calls.
+/// </summary>
+internal static partial class LspManagerLog
+{
+    [LoggerMessage(EventId = 1, Level = LogLevel.Debug, Message = "LSP: open of {File} degraded ({Reason})")]
+    public static partial void OpenDegraded(ILogger logger, string file, string reason);
+
+    [LoggerMessage(EventId = 2, Level = LogLevel.Warning, Message = "LSP: open of {File} on {Language} server failed ({Reason}) — degraded")]
+    public static partial void OpenFailed(ILogger logger, Exception ex, string file, string language, string reason);
+
+    [LoggerMessage(EventId = 3, Level = LogLevel.Debug, Message = "LSP: opened {File} on {Language} server")]
+    public static partial void Opened(ILogger logger, string file, string language);
+
+    [LoggerMessage(EventId = 4, Level = LogLevel.Debug, Message = "LSP: change of {File} degraded ({Reason})")]
+    public static partial void ChangeDegraded(ILogger logger, string file, string reason);
+
+    [LoggerMessage(EventId = 5, Level = LogLevel.Warning, Message = "LSP: change of {File} failed ({Reason}) — degraded")]
+    public static partial void ChangeFailed(ILogger logger, Exception ex, string file, string reason);
+
+    [LoggerMessage(EventId = 6, Level = LogLevel.Debug, Message = "LSP: close of {File} degraded ({Reason})")]
+    public static partial void CloseDegraded(ILogger logger, string file, string reason);
+
+    [LoggerMessage(EventId = 7, Level = LogLevel.Warning, Message = "LSP: close of {File} failed ({Reason}) — degraded")]
+    public static partial void CloseFailed(ILogger logger, Exception ex, string file, string reason);
+
+    [LoggerMessage(EventId = 8, Level = LogLevel.Debug, Message = "LSP: diagnostics of {File} degraded ({Reason})")]
+    public static partial void DiagnosticsDegraded(ILogger logger, string file, string reason);
+
+    [LoggerMessage(EventId = 9, Level = LogLevel.Debug, Message = "LSP: definition lookup for {File} degraded ({Reason})")]
+    public static partial void DefinitionLookupDegraded(ILogger logger, string file, string reason);
+
+    [LoggerMessage(EventId = 10, Level = LogLevel.Warning, Message = "LSP: definition lookup for {File} timed out after {Timeout} (lookup-timed-out) — degraded to no-result")]
+    public static partial void DefinitionLookupTimedOut(ILogger logger, Exception ex, string file, TimeSpan timeout);
+
+    [LoggerMessage(EventId = 11, Level = LogLevel.Warning, Message = "LSP: definition lookup for {File} failed (request-failed: {Reason}) — degraded to no-result")]
+    public static partial void DefinitionLookupFailed(ILogger logger, Exception ex, string file, string reason);
+
+    [LoggerMessage(EventId = 12, Level = LogLevel.Debug, Message = "LSP: references lookup for {File} degraded ({Reason})")]
+    public static partial void ReferencesLookupDegraded(ILogger logger, string file, string reason);
+
+    [LoggerMessage(EventId = 13, Level = LogLevel.Warning, Message = "LSP: references lookup for {File} timed out after {Timeout} (lookup-timed-out) — degraded to empty")]
+    public static partial void ReferencesLookupTimedOut(ILogger logger, Exception ex, string file, TimeSpan timeout);
+
+    [LoggerMessage(EventId = 14, Level = LogLevel.Warning, Message = "LSP: references lookup for {File} failed (request-failed: {Reason}) — degraded to empty")]
+    public static partial void ReferencesLookupFailed(ILogger logger, Exception ex, string file, string reason);
+
+    [LoggerMessage(EventId = 15, Level = LogLevel.Warning, Message = "LSP: {Language} server '{Command}' unavailable — diagnostics/definition disabled for this language")]
+    public static partial void ServerUnavailable(ILogger logger, Exception ex, string language, string command);
+
+    [LoggerMessage(EventId = 16, Level = LogLevel.Warning, Message = "LSP: dispose of superseded {Language} session failed")]
+    public static partial void DisposeSupersededFailed(ILogger logger, Exception ex, string language);
 }

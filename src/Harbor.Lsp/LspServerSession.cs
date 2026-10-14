@@ -132,14 +132,12 @@ public sealed class LspServerSession : IAsyncDisposable
         {
             if (e.Data is { Length: > 0 } line)
             {
-                logger.LogDebug("LSP: {Language} server stderr: {Line}", definition.Language, line);
+                LspServerSessionLog.ServerStderr(logger, definition.Language, line);
             }
         };
         process.BeginErrorReadLine();
 
-        logger.LogInformation(
-            "LSP: started {Language} server ({Command}) pid={Pid} root={Root}",
-            definition.Language, definition.Command, process.Id, workspaceRoot);
+        LspServerSessionLog.Started(logger, definition.Language, definition.Command, process.Id, workspaceRoot);
 
         var client = new LspClient(process.StandardOutput.BaseStream, process.StandardInput.BaseStream, logger);
         client.Start();
@@ -217,9 +215,7 @@ public sealed class LspServerSession : IAsyncDisposable
         Result<Maybe<LspLocation>> normalized = TryNormalizeFirstLocation(result, filePath);
         if (normalized.IsFailure)
         {
-            _logger.LogWarning(
-                "LSP: {Language} server returned a malformed definition payload ({Reason}) — degraded to no-result",
-                _definition.Language, normalized.Error);
+            LspServerSessionLog.MalformedDefinitionPayload(_logger, _definition.Language, normalized.Error);
             return null;
         }
 
@@ -243,9 +239,7 @@ public sealed class LspServerSession : IAsyncDisposable
         IReadOnlyList<LspLocation> locations = NormalizeAllLocations(result, filePath, out string? skippedReason);
         if (skippedReason is not null)
         {
-            _logger.LogDebug(
-                "LSP: {Language} server returned malformed references payloads ({Reason})",
-                _definition.Language, skippedReason);
+            LspServerSessionLog.MalformedReferencesPayloads(_logger, _definition.Language, skippedReason);
         }
 
         return locations;
@@ -298,7 +292,7 @@ public sealed class LspServerSession : IAsyncDisposable
         }
         catch (JsonException ex)
         {
-            _logger.LogDebug(ex, "LSP: malformed publishDiagnostics payload");
+            LspServerSessionLog.MalformedPublishDiagnostics(_logger, ex);
         }
     }
 
@@ -489,7 +483,7 @@ public sealed class LspServerSession : IAsyncDisposable
         }
         catch (Exception ex)
         {
-            _logger.LogDebug(ex, "LSP: graceful shutdown of {Language} server failed — killing", _definition.Language);
+            LspServerSessionLog.GracefulShutdownFailed(_logger, ex, _definition.Language);
         }
         finally
         {
@@ -503,7 +497,7 @@ public sealed class LspServerSession : IAsyncDisposable
             }
             catch (Exception ex)
             {
-                _logger.LogDebug(ex, "LSP: kill of {Language} server failed", _definition.Language);
+                LspServerSessionLog.KillFailed(_logger, ex, _definition.Language);
             }
 
             // Disposing the process closes the stderr pipe the reader `StartAsync` started,
@@ -512,4 +506,32 @@ public sealed class LspServerSession : IAsyncDisposable
             _process.Dispose();
         }
     }
+}
+
+/// <summary>
+///     SG13: BCL <c>[LoggerMessage]</c> delegates for <see cref="LspServerSession" />.
+///     Templates, levels and operands are 1-to-1 with the former <c>LogX</c> calls.
+/// </summary>
+internal static partial class LspServerSessionLog
+{
+    [LoggerMessage(EventId = 1, Level = LogLevel.Debug, Message = "LSP: {Language} server stderr: {Line}")]
+    public static partial void ServerStderr(ILogger logger, string language, string line);
+
+    [LoggerMessage(EventId = 2, Level = LogLevel.Information, Message = "LSP: started {Language} server ({Command}) pid={Pid} root={Root}")]
+    public static partial void Started(ILogger logger, string language, string command, int pid, string root);
+
+    [LoggerMessage(EventId = 3, Level = LogLevel.Warning, Message = "LSP: {Language} server returned a malformed definition payload ({Reason}) — degraded to no-result")]
+    public static partial void MalformedDefinitionPayload(ILogger logger, string language, string reason);
+
+    [LoggerMessage(EventId = 4, Level = LogLevel.Debug, Message = "LSP: {Language} server returned malformed references payloads ({Reason})")]
+    public static partial void MalformedReferencesPayloads(ILogger logger, string language, string reason);
+
+    [LoggerMessage(EventId = 5, Level = LogLevel.Debug, Message = "LSP: malformed publishDiagnostics payload")]
+    public static partial void MalformedPublishDiagnostics(ILogger logger, Exception ex);
+
+    [LoggerMessage(EventId = 6, Level = LogLevel.Debug, Message = "LSP: graceful shutdown of {Language} server failed — killing")]
+    public static partial void GracefulShutdownFailed(ILogger logger, Exception ex, string language);
+
+    [LoggerMessage(EventId = 7, Level = LogLevel.Debug, Message = "LSP: kill of {Language} server failed")]
+    public static partial void KillFailed(ILogger logger, Exception ex, string language);
 }
