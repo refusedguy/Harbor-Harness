@@ -16,7 +16,7 @@ namespace Harbor.Tui.CellForge.Tests;
 ///   TEXT BUFFER — a rune can be appended to something the user is filling in.
 ///     - <c>src/Harbor.Tui.CellForge/Chat/Rendering/ComposerController.cs:282</c>   composer body          (Ctrl|Meta|Alt)
 ///     - <c>DialogOverlay.cs:666</c>       reject reason, prompt, multiline (Ctrl|Meta|Alt)
-///     - <c>FilePickerView.cs:153</c>, <c>CommandPaletteView.cs:255</c>  (None or Shift)
+///     - <c>FilePickerView.cs:172</c>, <c>CommandPaletteView.cs:255</c>  (None or Shift)
 ///     - <c>QuestionFormView.cs:498</c>    custom answer         (!= None)  <-- the defect
 ///
 ///   COMMAND ONLY — no buffer; runes are navigation (h/j/k/l) or a 3-letter
