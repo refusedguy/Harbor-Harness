@@ -232,7 +232,7 @@ internal static partial class SessionStatusFrameProbe
     ///     decision site be reachable from outside itself.
     /// </summary>
     internal const string DecisionFile =
-        "src/Harbor.Ui.Framework.State/State/ChatAppReducer.cs";
+        "src/Harbor.Ui.Framework.State/Agent/AgentReducer.cs";
 
     /// <summary>Directory names never descended into during the scan.</summary>
     private static readonly string[] SkippedDirectories =

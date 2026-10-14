@@ -651,9 +651,9 @@ public sealed class ExhaustiveUnionSwitchRule
 
         // #578 rule 1, the reducers. The Store + reducer half of the
         // convention: every arm named, no default inventing an answer.
-        [new("src/Harbor.Ui.Framework.State/State/ChatAppReducer.cs", "AgentEvent")] =
+        [new("src/Harbor.Ui.Framework.State/Agent/AgentReducer.cs", "AgentEvent")] =
             "https://github.com/refusedguy/Harbor-Harness/issues/578",
-        [new("src/Harbor.Ui.Framework.State/State/ChatAppReducer.cs", "LlmEvent")] =
+        [new("src/Harbor.Ui.Framework.State/Agent/AgentReducer.cs", "LlmEvent")] =
             "https://github.com/refusedguy/Harbor-Harness/issues/578",
 
         // #556 — `ChatRole -> (label, markdown?)` written four times, all four
