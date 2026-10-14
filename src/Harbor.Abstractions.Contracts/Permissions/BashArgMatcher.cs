@@ -283,7 +283,10 @@ public static class BashArgMatcher
         bool escaped = false;
         bool hasContent = false;
 
-        void Flush()
+        // #97 per-call: static flush takes its state by ref — the previous
+        // capturing local allocated a display class per SplitArgv call
+        // (twice+ per bash Evaluate: SplitSegments + SplitArgv per segment).
+        static void Flush(List<string> tokens, StringBuilder sb, ref bool hasContent)
         {
             if (!hasContent) return;
             tokens.Add(sb.ToString());
@@ -334,7 +337,7 @@ public static class BashArgMatcher
                 case '\t':
                 case '\n':
                 case '\r':
-                    Flush();
+                    Flush(tokens, sb, ref hasContent);
                     break;
                 default:
                     sb.Append(c);
@@ -343,7 +346,7 @@ public static class BashArgMatcher
             }
         }
 
-        Flush();
+        Flush(tokens, sb, ref hasContent);
         return tokens;
     }
 
@@ -362,7 +365,8 @@ public static class BashArgMatcher
         bool inDouble = false;
         bool escaped = false;
 
-        void Flush()
+        // #97 per-call: static flush — same closure-avoidance as SplitArgv.
+        static void Flush(List<string> segments, StringBuilder sb)
         {
             if (sb.Length == 0) return;
             segments.Add(sb.ToString());
@@ -419,12 +423,12 @@ public static class BashArgMatcher
                 case ';':
                 case '\n':
                 case '\r':
-                    Flush();
+                    Flush(segments, sb);
                     break;
                 case '|':
                 case '&':
                     if (i + 1 < command.Length && command[i + 1] == c) i++;
-                    Flush();
+                    Flush(segments, sb);
                     break;
                 default:
                     sb.Append(c);
@@ -433,7 +437,7 @@ public static class BashArgMatcher
             i++;
         }
 
-        Flush();
+        Flush(segments, sb);
         return segments;
     }
 
