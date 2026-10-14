@@ -1,3 +1,8 @@
+extern alias CompatWire;
+
+using System.Buffers;
+using System.Net;
+using System.Text;
 using System.Text.Json;
 using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Providers;
@@ -5,6 +10,7 @@ using Harbor.Providers.Anthropic;
 using Harbor.Providers.Ollama;
 using Harbor.Providers.OpenAI;
 using Microsoft.Extensions.Logging.Abstractions;
+using CompatProviderArgs = CompatWire::Harbor.Providers.Internal.ProviderArguments;
 
 namespace Harbor.Providers.Tests;
 
@@ -448,5 +454,186 @@ public class ProviderPayloadWireTests
         string body = OllamaBody(Request(system: ""), new OllamaConfig { KeepAlive = "30m" });
 
         await Assert.That(body).Contains("\"keep_alive\":\"30m\"");
+    }
+
+    // =================================================================
+    // #1102 — request-build arguments without the string round-trip
+    // =================================================================
+
+    private static string ArgsJson(char pad, int count) =>
+        "{\"path\":\"a.txt\",\"pad\":\"" + new string(pad, count) + "\"}";
+
+    private static LlmRequest ToolCallRequest(JsonElement arguments) =>
+        Request(system: "", messages:
+        [
+            new LlmAssistantMessage([new LlmToolCallBlock("call_1", "read", arguments)])
+        ]);
+
+    private static string BuildToolCallBody(LlmRequest request) =>
+        Body(OpenAiRequestBuilder.BuildChatCompletionsRequest(
+            request, "https://api.openai.com/v1", NullLogger.Instance));
+
+    private static string ToolCallArgumentsOf(string body)
+    {
+        using JsonDocument parsed = JsonDocument.Parse(body);
+        return parsed.RootElement.GetProperty("messages")[0]
+            .GetProperty("tool_calls")[0]
+            .GetProperty("function").GetProperty("arguments").GetString()!;
+    }
+
+    private static HttpResponseMessage SseStop()
+    {
+        return new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent(
+                "data: {\"choices\":[{\"delta\":{},\"finish_reason\":\"stop\"}]}\n\n" + "data: [DONE]\n\n",
+                Encoding.UTF8,
+                "text/event-stream")
+        };
+    }
+
+    [Test]
+    public async Task OpenAi_ChatCompletions_LargeToolArgs_SingleCopyArguments()
+    {
+        // #1102 (one slice): request-build wrote tool arguments through a
+        // per-tool-call UTF-16 string — GetRawText() allocates the args text
+        // and WriteString re-encodes it (double-encode by string). The
+        // builder now transcodes the element into the thread-local scratch
+        // and escapes it into the payload.
+        // Identity pin (deterministic): the arguments string on the wire is
+        // byte-identical to the input for 1 KB and 8 KB args. The allocation
+        // gate lives in ProviderArguments_ScratchTranscode_DoesNotScale —
+        // whole-build slopes cannot discriminate here (fixed framing and
+        // buffer growth dominate both shapes; CI measured 4.15 B/char with
+        // the naive pooled version, over the 3.0 whole-build gate).
+        string smallJson = ArgsJson('s', 1024);
+        string largeJson = ArgsJson('l', 8192);
+
+        using var smallArgs = JsonDocument.Parse(smallJson);
+        using var largeArgs = JsonDocument.Parse(largeJson);
+        LlmRequest smallRequest = ToolCallRequest(smallArgs.RootElement);
+        LlmRequest largeRequest = ToolCallRequest(largeArgs.RootElement);
+
+        await Assert.That(ToolCallArgumentsOf(BuildToolCallBody(smallRequest))).IsEqualTo(smallJson)
+            .Because("arguments travel as a STRING on this API, byte-identical to the input");
+        await Assert.That(ToolCallArgumentsOf(BuildToolCallBody(largeRequest))).IsEqualTo(largeJson)
+            .Because("the scratch transcode must not damage a large payload either");
+    }
+
+    [Test]
+    public async Task OpenAiCompatible_ChatCompletions_LargeToolArgs_ArgumentsMatchInput()
+    {
+        // #1102 (one slice): the compat adapter's request-build carries the
+        // same arguments encoding as the native builder. Pin the wire shape
+        // for 1 KB and 8 KB args — a byte-identical STRING, no round-trip
+        // damage. The adapter's BuildRequest is private, so this goes
+        // through StreamAsync with a stub transport and reads the captured
+        // request back.
+        string[] payloads = [ArgsJson('s', 1024), ArgsJson('l', 8192)];
+
+        foreach (string argsJson in payloads)
+        {
+            using var arguments = JsonDocument.Parse(argsJson);
+            LlmRequest request = ToolCallRequest(arguments.RootElement);
+
+            var handler = new StubHttpHandler(_ => SseStop());
+            var client = new OpenAiCompatible.OpenAiCompatibleLlmClient(
+                new HttpClient(handler),
+                new OpenAiCompatible.ProviderConfig { Id = "stub", BaseUrl = "http://stub" },
+                StubAuthResolver.Instance,
+                StubModelCatalog.Instance,
+                NullLogger<OpenAiCompatible.OpenAiCompatibleLlmClient>.Instance);
+
+            int events = await client.StreamAsync(request).CountAsync();
+
+            await Assert.That(handler.CapturedRequests.Count).IsEqualTo(1);
+            string body = await handler.CapturedRequests[0].Content!.ReadAsStringAsync();
+            string wireArgs = ToolCallArgumentsOf(body);
+            await Assert.That(wireArgs).IsEqualTo(argsJson)
+                .Because("the compat adapter must emit the same arguments string as the native builder");
+            Console.WriteLine($"compatbuild-args: args={argsJson.Length} arguments={wireArgs.Length} events={events}");
+        }
+    }
+
+    private static long MeasureArgumentsDelta(
+        int iterations, JsonElement small, JsonElement large, Action<Utf8JsonWriter, JsonElement> write)
+    {
+        // One pre-grown output buffer per call (fixed 16 K rent — identical
+        // in both arms, so it cancels in the delta); what remains is the
+        // scaling part of the arguments step itself. Warmup alternates both
+        // sizes so the scratch settles at the large high-water mark and the
+        // JIT settles before the first measured call.
+        void WriteOnce(JsonElement arguments)
+        {
+            var output = new ArrayBufferWriter<byte>(16384);
+            using (var writer = new Utf8JsonWriter(output))
+            {
+                writer.WriteStartObject();
+                write(writer, arguments);
+                writer.WriteEndObject();
+            }
+        }
+
+        for (int i = 0; i < 25; i++)
+        {
+            WriteOnce(i % 2 == 0 ? small : large);
+        }
+
+        GC.WaitForPendingFinalizers();
+        long beforeSmall = GC.GetAllocatedBytesForCurrentThread();
+        for (int i = 0; i < iterations; i++)
+        {
+            WriteOnce(small);
+        }
+        long smallAllocated = GC.GetAllocatedBytesForCurrentThread() - beforeSmall;
+
+        GC.WaitForPendingFinalizers();
+        long beforeLarge = GC.GetAllocatedBytesForCurrentThread();
+        for (int i = 0; i < iterations; i++)
+        {
+            WriteOnce(large);
+        }
+        long largeAllocated = GC.GetAllocatedBytesForCurrentThread() - beforeLarge;
+
+        return largeAllocated - smallAllocated;
+    }
+
+    [Test]
+    public async Task ProviderArguments_ScratchTranscode_DoesNotScaleWithArgsSize()
+    {
+        // #1102 gate (relative, with sensitivity control): the arguments
+        // step must not scale with the args size. The old shape
+        // (GetRawText + WriteStringValue) allocates ~2 bytes per char; the
+        // scratch transcode settles at the high-water mark and allocates
+        // nothing steady-state. Both arms run the same harness — the old
+        // arm pins the sensitivity (if it ever stops scaling, the harness
+        // is blind and a green bound below would prove nothing), the new
+        // arm carries the bound.
+        string smallJson = ArgsJson('s', 1024);
+        string largeJson = ArgsJson('l', 8192);
+        using var smallArgs = JsonDocument.Parse(smallJson);
+        using var largeArgs = JsonDocument.Parse(largeJson);
+
+        const int iterations = 200;
+        long oldDelta = MeasureArgumentsDelta(
+            iterations, smallArgs.RootElement, largeArgs.RootElement,
+            static (writer, arguments) =>
+            {
+                writer.WritePropertyName("arguments");
+                writer.WriteStringValue(arguments.GetRawText());
+            });
+        long newDelta = MeasureArgumentsDelta(
+            iterations, smallArgs.RootElement, largeArgs.RootElement,
+            static (writer, arguments) => CompatProviderArgs.WriteArgumentsString(writer, "arguments", arguments));
+
+        Console.WriteLine($"providerargs-scratch: old={oldDelta}B new={newDelta}B over {iterations} calls (round-trip scales ~2B/char, scratch flat)");
+        await Assert.That(oldDelta).IsGreaterThanOrEqualTo(1_000_000)
+            .Because("sensitivity control: the UTF-16 round-trip allocates ~2 bytes per char "
+                   + "x 7168 chars x 200 calls (~2.9M); a smaller number means the harness "
+                   + "stopped seeing the scaling and the bound below is vacuous");
+        await Assert.That(newDelta).IsLessThanOrEqualTo(200_000)
+            .Because("past this the helper carries a per-call copy again (a fresh buffer "
+                   + "per call re-rents its growth chain on every large payload — CI caught "
+                   + "exactly that at whole-build slope 4.15 vs the 3.0 gate)");
     }
 }

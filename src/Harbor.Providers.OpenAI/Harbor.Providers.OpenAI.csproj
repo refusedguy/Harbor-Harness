@@ -12,6 +12,7 @@
     <Compile Include="..\Harbor.Providers.Shared\SsePump.cs" LinkBase="Shared" />
     <Compile Include="..\Harbor.Providers.Shared\OpenAiWire.cs" LinkBase="Shared" />
     <Compile Include="..\Harbor.Providers.Shared\OpenAiImageContent.cs" LinkBase="Shared" />
+    <Compile Include="..\Harbor.Providers.Shared\ProviderArguments.cs" LinkBase="Shared" />
   </ItemGroup>
 
   <ItemGroup>

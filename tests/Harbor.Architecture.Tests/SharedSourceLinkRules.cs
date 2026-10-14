@@ -5,7 +5,8 @@
 // Two `src/` folders hold shared source and produce no assembly: their files are
 // `<Compile Include>`-linked into consumer projects instead of being referenced.
 //
-//   src/Harbor.Providers.Shared/  SsePump.cs, OpenAiWire.cs, OpenAiImageContent.cs
+//   src/Harbor.Providers.Shared/  SsePump.cs, OpenAiWire.cs, OpenAiImageContent.cs,
+//                                  ProviderArguments.cs (#1102)
 //   src/Harbor.Storage.Shared/     SessionLockStrip.cs, SessionStoreErrors.cs,
 //                                  SessionStatsAggregator.cs
 //
@@ -206,15 +207,19 @@ public sealed class SharedSourceLinkRules
     {
         LinkItem[] links = EnumerateLinkItems();
 
-        await Assert.That(links.Length).IsEqualTo(14)
+        await Assert.That(links.Length).IsEqualTo(16)
             .Because(
-                "14 `<Compile Include>` link items: SsePump into four providers, OpenAiWire and "
-                + "OpenAiImageContent into OpenAI + OpenAiCompatible, and three files out of "
-                + "Harbor.Storage.Shared into the Jsonl and Sqlite stores plus one more into Memory. "
+                "16 `<Compile Include>` link items: SsePump into four providers, OpenAiWire, "
+                + "OpenAiImageContent and ProviderArguments into OpenAI + OpenAiCompatible, and three "
+                + "files out of Harbor.Storage.Shared into the Jsonl and Sqlite stores plus one more "
+                + "into Memory. "
                 + "A different count means a link was added or removed and R2 is judging a set that "
                 + "is not the build's. The fourteenth is #887's: Memory links SessionStoreErrors.cs "
                 + "alone, so all three stores share the failure texts while each store still links "
-                + "only what it has a use for — see The_Per_Project_File_Walk_Does_Not_Invent_Links.");
+                + "only what it has a use for — see The_Per_Project_File_Walk_Does_Not_Invent_Links. "
+                + "The fifteenth and sixteenth are #1102's: ProviderArguments.cs into OpenAI + "
+                + "OpenAiCompatible, the pooled arguments transcode both OpenAI-format request "
+                + "builders share (Anthropic and Ollama keep their own wire types).");
 
         string[] consumers = [.. links.Select(l => l.Consumer).Distinct(StringComparer.Ordinal)];
 
