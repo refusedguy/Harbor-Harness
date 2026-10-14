@@ -47,7 +47,7 @@ public sealed class AsyncFeed<T> : IDisposable
         }
         catch (Exception ex)
         {
-            _logger?.LogDebug(ex, "AsyncFeed refresh failed");
+            if (_logger is not null) AsyncFeedLog.RefreshFailed(_logger, ex);
             Publish(AsyncData<T>.Failed(ex.Message));
         }
     }
@@ -63,4 +63,14 @@ public sealed class AsyncFeed<T> : IDisposable
         _cts?.Cancel();
         _cts?.Dispose();
     }
+}
+
+/// <summary>
+///     SG11: BCL <c>[LoggerMessage]</c> delegates for <see cref="AsyncFeed{T}" />.
+///     Templates, levels and operands are 1-to-1 with the former <c>LogX</c> calls.
+/// </summary>
+internal static partial class AsyncFeedLog
+{
+    [LoggerMessage(EventId = 1, Level = LogLevel.Debug, Message = "AsyncFeed refresh failed")]
+    public static partial void RefreshFailed(ILogger logger, Exception ex);
 }
