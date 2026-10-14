@@ -33,7 +33,7 @@
 //      Live examples: DaemonBindPolicy.cs:233,253; HostsCatalog.cs:87,92;
 //      PluginScript.cs:124.
 //   3. More than one `catch` arm — a dispatch, not a single net. `Result.Try`
-//      has one handler. IdeSessionBridge.cs:186-197 routes cancellation and
+//      has one handler. IdeSessionBridge.cs:193-205 routes cancellation and
 //      general faults to DIFFERENT messages and must keep doing so.
 //
 // A fourth shape needs an explicit entry rather than a structural test: a try
