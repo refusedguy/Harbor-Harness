@@ -308,5 +308,3 @@ internal static partial class ThemeServiceLog
     public static partial void JsonApplied(ILogger logger, int length);
 }
 
-}
-
