@@ -72,11 +72,17 @@ public sealed class MouseRouter
         }
     }
 
-    /// <summary>Returns the owning target and its bound rect, or null.</summary>
+    /// <summary>
+    /// Returns the owning target and its bound rect, or null.
+    /// Later binds paint above earlier ones, so overlapping regions resolve
+    /// to the last-bound (topmost) match; <see cref="Rebind"/> moves its
+    /// target to the top for the same reason.
+    /// </summary>
     public (IPointerTarget Target, Rect Rect)? HitTest(int col, int row)
     {
-        foreach (var (target, rect) in _regions)
+        for (int i = _regions.Count - 1; i >= 0; i--)
         {
+            var (target, rect) = _regions[i];
             if (rect.Contains(col, row))
             {
                 return (target, rect);

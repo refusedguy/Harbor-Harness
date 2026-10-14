@@ -388,4 +388,35 @@ public class MouseRouterTests
         router.Wheel(1, 1, 3);
         await Assert.That(sink.Events).IsEquivalentTo(["wheel 1,1 3"]);
     }
+
+    [Test]
+    public async Task Overlap_RoutesToLastBound()
+    {
+        var router = new MouseRouter();
+        var bottom = new Sink("bottom");
+        var top = new Sink("top");
+        router.Bind(bottom, new EngineCells.Rect(0, 0, 10, 10));
+        router.Bind(top, new EngineCells.Rect(5, 5, 10, 10));
+
+        router.Press(7, 7); // inside both rects — topmost wins
+
+        await Assert.That(top.Events).IsEquivalentTo(["press 2,2"]);
+        await Assert.That(bottom.Events).IsEmpty();
+    }
+
+    [Test]
+    public async Task Rebind_MovesToTop()
+    {
+        var router = new MouseRouter();
+        var a = new Sink("a");
+        var b = new Sink("b");
+        router.Bind(a, new EngineCells.Rect(0, 0, 10, 10));
+        router.Bind(b, new EngineCells.Rect(0, 0, 10, 10));
+        router.Rebind(a, new EngineCells.Rect(0, 0, 10, 10)); // a back to top
+
+        router.Press(1, 1);
+
+        await Assert.That(a.Events).IsEquivalentTo(["press 1,1"]);
+        await Assert.That(b.Events).IsEmpty();
+    }
 }
