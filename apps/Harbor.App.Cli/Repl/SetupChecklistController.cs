@@ -92,7 +92,7 @@ internal sealed class SetupChecklistController
         {
             // Setup detection is a convenience surface: a failure must never
             // keep the REPL from starting.
-            _host.Log.LogWarning(ex, "Setup checklist detection failed — checklist stays empty");
+            SetupChecklistControllerLog.DetectionFailed(_host.Log, ex);
         }
     }
 
@@ -216,4 +216,14 @@ internal sealed class SetupChecklistController
         Interlocked.Increment(ref _host._frameDirtySeq);
         _host._wake.Writer.TryWrite(null);
     }
+}
+
+/// <summary>
+///     SG9: BCL <c>[LoggerMessage]</c> delegates for <see cref="SetupChecklistController" />.
+///     Templates, levels and operands are 1-to-1 with the former <c>LogX</c> calls.
+/// </summary>
+internal static partial class SetupChecklistControllerLog
+{
+    [LoggerMessage(EventId = 1, Level = LogLevel.Warning, Message = "Setup checklist detection failed — checklist stays empty")]
+    public static partial void DetectionFailed(ILogger logger, Exception ex);
 }
