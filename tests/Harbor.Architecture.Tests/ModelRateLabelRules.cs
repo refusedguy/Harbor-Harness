@@ -166,6 +166,12 @@ public sealed class ModelRateLabelRules
         + "input and output numbers alone is the defect this rule exists to stop — and the "
         + "shipped picker did exactly that, which is why it also got the cache-rate case wrong.";
 
+    /// <summary>A rate identifier spelled inside a user-facing string literal.</summary>
+    private const string RateSpelledIntoStringId = "RATE-SPELLED-INTO-A-STRING";
+
+    /// <summary>A rate identifier compared against a zero decimal literal.</summary>
+    private const string RateComparedToZeroId = "RATE-COMPARED-TO-ZERO";
+
     /// <summary>
     ///     One C# string literal on a line, quotes included. Rule 1 runs on the
     ///     matched SPAN rather than on the extracted contents so the lookbehind
@@ -205,7 +211,12 @@ public sealed class ModelRateLabelRules
     [Test]
     public async Task RateLabel_IsSpelledIntoAStringInExactlyOneProductLine()
     {
-        List<Site> sites = FindRateInStringSites();
+        List<Site> sites =
+        [
+            .. ScanRunner.Collect(RateRule, ScanRunner.ReadSources(ScanRunner.ScopeFiles(RateRule)))
+                .Where(static hit => hit.RuleId == RateSpelledIntoStringId)
+                .Select(static hit => new Site(hit.File, hit.Line, hit.Text)),
+        ];
 
         await Assert.That(sites.Count).IsEqualTo(1)
             .Because(
@@ -264,8 +275,11 @@ public sealed class ModelRateLabelRules
 
         List<Site> sites =
         [
-            .. FindRateZeroSites().Where(s => !(s.RelativePath == UnknownDeclarationRelativePath
-                                              && declared.Contains(s.LineNumber)))
+            .. ScanRunner.Collect(RateRule, ScanRunner.ReadSources(ScanRunner.ScopeFiles(RateRule)))
+                .Where(static hit => hit.RuleId == RateComparedToZeroId)
+                .Select(static hit => new Site(hit.File, hit.Line, hit.Text))
+                .Where(s => !(s.RelativePath == UnknownDeclarationRelativePath
+                              && declared.Contains(s.LineNumber)))
         ];
 
         await Assert.That(sites.Count).IsEqualTo(0)
@@ -313,14 +327,24 @@ public sealed class ModelRateLabelRules
     /// </summary>
     private static HashSet<int> DeclarationSpan()
     {
-        var span = new HashSet<int>();
         string path = Path.Combine(RepoPaths.RepoRoot ?? ".", UnknownDeclarationRelativePath);
         if (SourceScan.TryReadAllText(path) is not { } text)
         {
-            return span;
+            return new HashSet<int>();
         }
 
-        string[] lines = SourceScan.StripComments(text).Split('\n');
+        return DeclarationSpanLines(SourceScan.StripComments(text).Split('\n'));
+    }
+
+    /// <summary>
+    ///     The 1-based line numbers from the marker line to the first line ending
+    ///     the expression with <c>;</c>, over already-stripped lines. Shared by the
+    ///     exemption test and the rule parser, so both agree on which lines the
+    ///     core's own declaration occupies.
+    /// </summary>
+    private static HashSet<int> DeclarationSpanLines(string[] lines)
+    {
+        var span = new HashSet<int>();
         int start = Array.FindIndex(lines, l => l.Contains(UnknownDeclarationMarker, StringComparison.Ordinal));
         if (start < 0)
         {
@@ -347,22 +371,13 @@ public sealed class ModelRateLabelRules
     [Test]
     public async Task Discovery_FindsARealFileSet_ContainingBothOffenders()
     {
-        IReadOnlyList<string> files = SourceScan.EnumerateProductCsFiles();
+        List<string> discovery = ScanRunner.CheckDiscovery(RateRule);
 
-        await Assert.That(files.Count).IsGreaterThan(200)
-            .Because("src/ + apps/ hold an order of magnitude more than 200 C# files; a smaller "
-                     + "count means the tree filter broke.");
-
-        // EnumerateProductCsFiles hands back ABSOLUTE paths, so the comparison is
-        // made in the same shape the rule's own failures print (repo-relative),
-        // not against the raw list — a Contains() on the absolute path would be
-        // false for every file in the repository.
-        IReadOnlyList<string> relative = [.. files.Select(SourceScan.Relative)];
-        foreach (string offender in OffenderFiles)
-        {
-            await Assert.That(relative.Contains(offender)).IsTrue()
-                .Because(offender + " must be inside the scanned set, or the rule polices nothing.");
-        }
+        await Assert.That(discovery).IsEmpty()
+            .Because("src/ + apps/ hold an order of magnitude more than 200 C# files, including "
+                     + "both files the defect lived in; a smaller count — or a scope that stopped "
+                     + "seeing those files — means the tree filter broke. "
+                     + string.Join("; ", discovery));
     }
 
     /// <summary>
@@ -420,6 +435,22 @@ public sealed class ModelRateLabelRules
     }
 
     /// <summary>
+    ///     The planted controls — both banned shapes and every legitimate spelling —
+    ///     drive the REAL parser: offenders reported under their sub-id, the rest silent.
+    /// </summary>
+    [Test]
+    public async Task Detector_ControlsDriveTheRealParser()
+    {
+        List<string> failures = ScanRunner.CheckControls(RateRule);
+
+        await Assert.That(failures).IsEmpty()
+            .Because(
+                "the ten planted controls must agree with the ten matcher cases above through the "
+                + "rule's own parser — otherwise the rule guards nothing, or forbids the fix. "
+                + string.Join("; ", failures));
+    }
+
+    /// <summary>
     ///     The two files the defect was found in, named so the non-vacuity test can
     ///     assert the scan really reaches them. They live in
     ///     <c>src/Harbor.Desktop.Abstractions</c>, which is deliberately outside
@@ -431,6 +462,114 @@ public sealed class ModelRateLabelRules
         "src/Harbor.Desktop.Abstractions/ViewModels/ProviderModelPickerViewModel.cs",
         "src/Harbor.Desktop.Abstractions/ViewModels/ProviderBrowserViewModel.cs",
     ];
+
+    // MECHANISM (#1086, step 2, conveyor h2)
+    // -------------------------------------
+    // The two bans below are a ScanRule: the two matchers as Forbidden rows, ten
+    // planted controls, the two offender files as the MustContain floor, a
+    // discovery floor. Enumeration, matching and the control/discovery verdicts
+    // are ScanRunner's; this file keeps the issue prose, the matchers, the home,
+    // the exemption, and the test names.
+    //
+    // The verdict is ParseRateLabels through the Func-overload, driving the SAME
+    // line finders the rule has always run — the shared SourceScan.StripComments,
+    // the literal-scoped rate-in-string verdict, the declaration-span exemption
+    // for the core's own zero comparison. Rule 1 is not a single line regex (the
+    // verdict needs the literal span for its lookbehind), so its Forbidden row
+    // carries the rate-identifier fingerprint while the parser carries the
+    // verdict; the planted controls grade this parser, so "it can fail" means
+    // something. The baseline stays empty: the home is asserted by its own test,
+    // and the exemption is a span the baseline cannot name.
+
+    /// <summary>The rate-label ban as data: the two shapes, ten planted controls, a floor.</summary>
+    private static readonly ScanRule RateRule = new()
+    {
+        Id = "ModelRateLabel",
+        Trees = ["src", "apps"],
+        Forbidden =
+        [
+            new ScanForbidden(
+                RateSpelledIntoStringId,
+                RateIdentifier,
+                "build the sentence ONCE in the shared wording helper both model pickers project "
+                + "through. Carrying a rate and passing one stay fine; spelling it into a string "
+                + "a second time is the duplication. See issue #686."),
+            new ScanForbidden(
+                RateComparedToZeroId,
+                RateComparedToZero,
+                "read Pricing.IsUnknown instead of re-deriving \"no price\" from the rate numbers. "
+                + "See issue #686."),
+        ],
+        Controls =
+        [
+            new ScanControl("Planted/PascalLabel.cs", """
+                public string L => $"${InputPerMillion:F2} in / ${OutputPerMillion:F2} out per 1M";
+                """, RateSpelledIntoStringId),
+            new ScanControl("Planted/CamelLabel.cs", """
+                public string L => $"{inPerMillion:F2} in / {outPerMillion:F2} out per 1M";
+                """, RateSpelledIntoStringId),
+            // Passing a rate to the shared home is a hand-off, not a second label.
+            new ScanControl("NearMiss/HandOff.cs", """
+                m.Pricing.InputPerMillion, m.Pricing.OutputPerMillion))
+                """, null),
+            // A projection record may carry rates — the rule is about the SENTENCE, not the data.
+            new ScanControl("NearMiss/Record.cs", """
+                decimal InputPerMillion, decimal OutputPerMillion)
+                """, null),
+            // A JSON key inside a provider-config sample is a string payload, not code.
+            new ScanControl("NearMiss/Json.cs", """
+                "pricing": { "inputPerMillion": 0, "outputPerMillion": 0 },
+                """, null),
+            // Comment prose is not a second implementation.
+            new ScanControl("NearMiss/Comment.cs", """
+                // the label reads $"${InputPerMillion:F2} in / ${OutputPerMillion:F2} out per 1M"
+                """, null),
+            new ScanControl("Planted/ZeroGuess.cs", """
+                if (inputPerMillion == 0m && outputPerMillion == 0m)
+                """, RateComparedToZeroId),
+            new ScanControl("Planted/PascalZero.cs", """
+                if (InputPerMillion == 0m)
+                """, RateComparedToZeroId),
+            // Reading the core's bit is the fix, not a violation.
+            new ScanControl("NearMiss/BitRead.cs", """
+                if (Pricing.IsUnknown)
+                """, null),
+            // A plain constant is not a rate compared to zero.
+            new ScanControl("NearMiss/Const.cs", """
+                private const decimal Rate = 0m;
+                """, null),
+        ],
+        MinHits = 200,
+        MustContain = OffenderFiles,
+        CustomParse = ParseRateLabels,
+    };
+
+    /// <summary>
+    ///     The custom parser: both matchers over one file's raw source — the shared
+    ///     comment stripper, the literal-scoped rate-in-string verdict, the
+    ///     declaration-span exemption for the core's own zero comparison.
+    /// </summary>
+    private static IEnumerable<ScanHit> ParseRateLabels(string displayPath, string rawSource)
+    {
+        string stripped = SourceScan.StripComments(rawSource);
+        string[] lines = stripped.Split('\n');
+        HashSet<int> exempt = string.Equals(displayPath, UnknownDeclarationRelativePath, StringComparison.Ordinal)
+            ? DeclarationSpanLines(lines)
+            : new HashSet<int>();
+
+        foreach (int index in FindRateInStringLines(stripped))
+        {
+            yield return new ScanHit(RateSpelledIntoStringId, displayPath, index + 1, lines[index].Trim());
+        }
+
+        foreach (int index in FindRateZeroLines(stripped))
+        {
+            if (!exempt.Contains(index + 1))
+            {
+                yield return new ScanHit(RateComparedToZeroId, displayPath, index + 1, lines[index].Trim());
+            }
+        }
+    }
 
     /// <summary>Every product line that spells a rate identifier inside a string.</summary>
     private static List<Site> FindRateInStringSites() => FindSites(FindRateInStringLines);

@@ -211,17 +211,114 @@ public sealed class MoneyCellSingleHomeRules
             + "different readers, and neither reads the other."),
     ];
 
-    /// <summary>A file, a 1-based line number, the rule it tripped, and the line.</summary>
-    private sealed record Site(string RelativePath, int Line, string RuleId, string Text);
+    // MECHANISM (#1086, step 2, conveyor h1)
+    // -------------------------------------
+    // The two bans below are a ScanRule: the Rules table as Forbidden rows, nine
+    // planted controls, the four homes as the MustContain floor, a discovery
+    // floor. Enumeration, matching and the control/discovery verdicts are
+    // ScanRunner's; this file keeps the issue prose, the patterns, the homes,
+    // and the test names.
+    //
+    // The verdict is ParseMoneyCells through the Func-overload, carrying
+    // the original line scan verbatim — the shared SourceScan.StripComments,
+    // the line-precise IsHome skip, first-match-wins. Every home line still
+    // trips its rule's pattern, so a file-wide baseline row would excuse a
+    // second writer in the same file: the homes stay a line filter inside the
+    // parser rather than baseline rows, and the baseline stays empty. The
+    // planted controls grade this parser, so "it can fail" means something.
+
+    /// <summary>The money-cell ban as data: the two writer shapes, nine planted controls, a floor.</summary>
+    private static readonly ScanRule MoneyRule = new()
+    {
+        Id = "MoneyCellSingleHome",
+        Trees = ["src", "apps"],
+        Forbidden =
+        [
+            .. Rules.Select(static rule => new ScanForbidden(
+                rule.Id,
+                new Regex(rule.Pattern, RegexOptions.Compiled | RegexOptions.CultureInvariant),
+                rule.Instead)),
+        ],
+        Controls =
+        [
+            new ScanControl("Planted/Concat.cs", """
+                ? "$" + Cost.ToString("F4", CultureInfo.InvariantCulture)
+                """, "MONEY-CELL-FORMATTED-BY-HAND"),
+            new ScanControl("Planted/Interpolated.cs", """
+                rows.Add($"total {n}  ${cost.ToString("F4", CultureInfo.InvariantCulture)}");
+                """, "MONEY-CELL-FORMATTED-BY-HAND"),
+            new ScanControl("Planted/Span.cs", """
+                private static int FormatCostUsd(double cost, Span<char> into)
+                """, "MONEY-CELL-HAND-ROLLED-INTO-A-SPAN"),
+            // A per-million RATE row is a catalogue price, not a session cost cell.
+            new ScanControl("NearMiss/RateRow.cs", """
+                return $"${InputPerMillion:F2} in / ${OutputPerMillion:F2} out per 1M";
+                """, null),
+            // CALLING the home is the fix this guard asks for, not a violation of it.
+            new ScanControl("NearMiss/HomeCall.cs", """
+                Cost = StatusBarText.CostCell(cost.CostUsd, cost.IsCostUnpriced);
+                """, null),
+            // Delegating to the shared shape is legal from every layer.
+            new ScanControl("NearMiss/Delegate.cs", """
+                CostText => IsCostKnown ? UsdCell.ToUsd(Cost) : UsdCell.Unpriced;
+                """, null),
+            // An adapter that forwards a decimal writes no glyph and no decimals.
+            new ScanControl("NearMiss/Adapter.cs", """
+                public string CostText => StatusMappers.CostToUsd(CostUsd);
+                """, null),
+            // Comment prose is not a second implementation.
+            new ScanControl("NearMiss/Comment.cs", """
+                // Cost.ToString("F4") is prose about the rule, not a writer.
+                """, null),
+            // Doc-comment prose is not a second implementation.
+            new ScanControl("NearMiss/Doc.cs", """
+                /// <see cref="StatusBarText.CostToUsd"/> renders "$0.0123".
+                """, null),
+        ],
+        MinHits = 500,
+        MustContain =
+        [
+            .. Homes.Select(static home => home.RelativePath),
+        ],
+        CustomParse = ParseMoneyCells,
+    };
+
+    /// <summary>
+    ///     The custom parser: the original line scan over one file's raw source —
+    ///     the shared comment stripper, the line-precise home skip, one report per
+    ///     line on the first matching shape.
+    /// </summary>
+    private static IEnumerable<ScanHit> ParseMoneyCells(string displayPath, string rawSource)
+    {
+        string[] lines = SourceScan.StripComments(rawSource).Split('\n');
+        for (int i = 0; i < lines.Length; i++)
+        {
+            string line = lines[i].TrimEnd('\r');
+            if (IsHome(displayPath, line))
+            {
+                continue;
+            }
+
+            foreach (Rule rule in Rules)
+            {
+                if (Regex.IsMatch(line, rule.Pattern, RegexOptions.CultureInvariant))
+                {
+                    yield return new ScanHit(rule.Id, displayPath, i + 1, line.Trim());
+                    break;
+                }
+            }
+        }
+    }
 
     [Test]
     public async Task NoSurface_FormatsAMoneyCellByHand()
     {
-        List<Site> sites = [.. ScanAllSites()];
+        List<string> violations = ScanRunner.Evaluate(MoneyRule);
 
-        await Assert.That(sites.Count).IsEqualTo(0)
+        await Assert.That(violations).IsEmpty()
             .Because(
-                "a session's money cell has a second writer at " + Describe(sites)
+                "a session's money cell has a second writer at "
+                + (violations.Count == 0 ? "(none)" : string.Join("; ", violations))
                 + ". " + string.Join(" | ", Rules.Select(r => r.Id + " → " + r.Instead))
                 + " Declared homes (a decision, not an oversight): " + DescribeHomes()
                 + " See issue #682.");
@@ -235,20 +332,15 @@ public sealed class MoneyCellSingleHomeRules
     [Test]
     public async Task Discovery_FindsARealFileSet_HoldingEveryDeclaredHome()
     {
-        var files = SourceScan.EnumerateProductCsFiles();
+        List<string> discovery = ScanRunner.CheckDiscovery(MoneyRule);
 
-        await Assert.That(files.Count).IsGreaterThan(500)
+        await Assert.That(discovery).IsEmpty()
             .Because(
-                "src/ + apps/ hold far more than 500 C# files; a smaller count means the "
-                + "tree filter broke and every rule in this file is reading nothing.");
-
-        foreach (LineHome home in Homes)
-        {
-            await Assert.That(files.Any(f => SourceScan.Relative(f) == home.RelativePath))
-                .IsTrue()
-                .Because(home.RelativePath + " holds a declared home and must be inside the "
-                         + "scanned set, or the rule polices nothing.");
-        }
+                "src/ + apps/ hold far more than 500 C# files, including the four files that "
+                + "declare money-cell homes. A smaller count — or a scope that stopped seeing "
+                + "those files — means the tree walk broke and the rule below would be "
+                + "reporting 'clean' about nothing. "
+                + string.Join("; ", discovery));
     }
 
     /// <summary>
@@ -294,6 +386,22 @@ public sealed class MoneyCellSingleHomeRules
         await Assert.That(FindIn(["        /// <see cref=\"StatusBarText.CostToUsd\"/> renders \"$0.0123\"."]).Count)
             .IsEqualTo(0)
             .Because("doc-comment prose is not a second implementation");
+    }
+
+    /// <summary>
+    ///     The planted controls — every writer shape and every near-miss — drive
+    ///     the REAL parser: offenders reported under their sub-id, near-misses silent.
+    /// </summary>
+    [Test]
+    public async Task Detector_ControlsDriveTheRealParser()
+    {
+        List<string> failures = ScanRunner.CheckControls(MoneyRule);
+
+        await Assert.That(failures).IsEmpty()
+            .Because(
+                "the nine planted controls must agree with the nine matcher cases above through the "
+                + "rule's own parser — otherwise the rule guards nothing, or forbids the fix. "
+                + string.Join("; ", failures));
     }
 
     /// <summary>
@@ -395,49 +503,6 @@ public sealed class MoneyCellSingleHomeRules
         + "conventions below have no shared shape to agree on and this rule is protecting "
         + "nothing. See issue #682.";
 
-    private static IReadOnlyList<Site> ScanAllSites()
-    {
-        var sites = new List<Site>();
-        foreach (string path in SourceScan.EnumerateProductCsFiles())
-        {
-            sites.AddRange(FindInSource(path));
-        }
-
-        return sites;
-    }
-
-    private static IReadOnlyList<Site> FindInSource(string path)
-    {
-        string? source = SourceScan.TryReadAllText(path);
-        if (source is null)
-        {
-            return [];
-        }
-
-        string relative = SourceScan.Relative(path);
-        var sites = new List<Site>();
-        string[] lines = SourceScan.StripComments(source).Split('\n');
-        for (int i = 0; i < lines.Length; i++)
-        {
-            string line = lines[i].TrimEnd('\r');
-            if (IsHome(relative, line))
-            {
-                continue;
-            }
-
-            foreach (Rule rule in Rules)
-            {
-                if (Regex.IsMatch(line, rule.Pattern, RegexOptions.CultureInvariant))
-                {
-                    sites.Add(new Site(relative, i + 1, rule.Id, line));
-                    break;
-                }
-            }
-        }
-
-        return sites;
-    }
-
     private static bool IsHome(string relativePath, string line)
     {
         foreach (LineHome home in Homes)
@@ -453,12 +518,12 @@ public sealed class MoneyCellSingleHomeRules
     }
 
     /// <summary>
-    ///     The lines that trip at least one rule, from in-memory text. Shared by
-    ///     the real scan and the planted controls, so the control proves the SAME
-    ///     matcher the rule runs — a control that called a second, laxer helper
-    ///     would prove nothing about the guard. Comments are stripped exactly as
-    ///     the real scan strips them, otherwise a control claiming "prose is not
-    ///     an implementation" would pass for the wrong reason.
+    ///     The lines that trip at least one rule, from in-memory text. The planted
+    ///     matcher cases below run through this helper; the rule itself runs the
+    ///     same two patterns through ParseMoneyCells over comment-stripped lines,
+    ///     so a control proves the verdict the guard reports. Comments are stripped
+    ///     exactly as the real scan strips them, otherwise a control claiming "prose
+    ///     is not an implementation" would pass for the wrong reason.
     /// </summary>
     private static IReadOnlyList<string> FindIn(IReadOnlyList<string> lines)
     {
@@ -477,13 +542,6 @@ public sealed class MoneyCellSingleHomeRules
 
         return hits;
     }
-
-    private static string Describe(IReadOnlyList<Site> sites) =>
-        sites.Count == 0
-            ? "(none)"
-            : string.Join(
-                "; ",
-                sites.Select(s => s.RelativePath + ":" + s.Line + " [" + s.RuleId + "] " + s.Text.Trim()));
 
     private static string DescribeHomes() =>
         Homes.Length == 0
