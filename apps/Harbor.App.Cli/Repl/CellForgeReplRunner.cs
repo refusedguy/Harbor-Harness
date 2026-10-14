@@ -131,7 +131,7 @@ internal sealed class CellForgeReplRunner(
         // keyboard switch and a palette switch cannot drift apart.
         id => Sessions.SwitchToSessionAsync(id, CancellationToken.None),
         () => Sessions.OpenSessionsPalette(),
-        ex => core.Logger.LogError(ex, "Tab-strip effect failed"));
+        ex => CellForgeReplRunnerLog.TabStripEffectFailed(core.Logger, ex));
 
     // ── IReplHost (Command pattern seam; transitional, see IReplHost.cs) ──
     IAgent IReplHost.Agent => core.Agent;
@@ -374,4 +374,14 @@ internal sealed class CellForgeReplRunner(
     /// </summary>
     internal static bool ShouldKeepHeartbeat(StatusBarMode mode, bool mascotAnimating) =>
         ReplLifecycle.ShouldKeepHeartbeat(mode, mascotAnimating);
+}
+
+/// <summary>
+///     SG9: BCL <c>[LoggerMessage]</c> delegates for <see cref="CellForgeReplRunner" />.
+///     Templates, levels and operands are 1-to-1 with the former <c>LogX</c> calls.
+/// </summary>
+internal static partial class CellForgeReplRunnerLog
+{
+    [LoggerMessage(EventId = 1, Level = LogLevel.Error, Message = "Tab-strip effect failed")]
+    public static partial void TabStripEffectFailed(ILogger logger, Exception ex);
 }
