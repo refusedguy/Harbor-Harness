@@ -92,17 +92,17 @@ public sealed class TuiEffectHost : ITuiEffectRunner
             case TuiEffect.PromptAgent p:
                 TaskFireAndForget.Forget(
                     PromptAsync(p.Text),
-                    ex => _logger?.LogError(ex, "PromptAsync failed"));
+                    ex => { if (_logger is not null) TuiEffectHostLog.PromptEffectFailed(_logger, ex); });
                 break;
             case TuiEffect.RunSlash s:
                 TaskFireAndForget.Forget(
                     RunSlashAsync(s.Command),
-                    ex => _logger?.LogError(ex, "RunSlashAsync failed for {Command}", s.Command));
+                    ex => { if (_logger is not null) TuiEffectHostLog.RunSlashFailed(_logger, ex, s.Command); });
                 break;
             case TuiEffect.AbortAgent:
                 TaskFireAndForget.Forget(
                     AbortAsync(),
-                    ex => _logger?.LogError(ex, "AbortAsync failed"));
+                    ex => { if (_logger is not null) TuiEffectHostLog.AbortFailed(_logger, ex); });
                 break;
             case TuiEffect.QuitApp:
                 _store.Dispatch(new AppMsg.Quit());
@@ -114,12 +114,12 @@ public sealed class TuiEffectHost : ITuiEffectRunner
                 // it null and the tab focus is then a pure state change.
                 if (_activateSession is null)
                 {
-                    _logger?.LogDebug("ActivateSession({SessionId}) ignored: no activator wired", act.SessionId.Value);
+                    if (_logger is not null) TuiEffectHostLog.ActivateSessionIgnored(_logger, act.SessionId.Value);
                     break;
                 }
                 TaskFireAndForget.Forget(
                     _activateSession(act.SessionId.Value),
-                    ex => _logger?.LogError(ex, "ActivateSession failed for {SessionId}", act.SessionId.Value));
+                    ex => { if (_logger is not null) TuiEffectHostLog.ActivateSessionFailed(_logger, ex, act.SessionId.Value); });
                 break;
             case TuiEffect.RequestOpenSession:
                 // Opening a session from the strip (issue #389). Same delegate
@@ -128,12 +128,12 @@ public sealed class TuiEffectHost : ITuiEffectRunner
                 // stays harmless.
                 if (_openSession is null)
                 {
-                    _logger?.LogDebug("RequestOpenSession ignored: no session picker wired");
+                    if (_logger is not null) TuiEffectHostLog.RequestOpenSessionIgnored(_logger);
                     break;
                 }
                 TaskFireAndForget.Forget(
                     _openSession(),
-                    ex => _logger?.LogError(ex, "RequestOpenSession failed"));
+                    ex => { if (_logger is not null) TuiEffectHostLog.RequestOpenSessionFailed(_logger, ex); });
                 break;
         }
     }
@@ -171,7 +171,7 @@ public sealed class TuiEffectHost : ITuiEffectRunner
             // reset IsAgentRunning so the UI doesn't hang in "thinking" forever.
             if (result.IsFailure)
             {
-                _logger?.LogError("Agent failed: {Error}", result.Error);
+                if (_logger is not null) TuiEffectHostLog.AgentFailed(_logger, result.Error);
                 EndOnce(new ChatAppMsg.AgentEnded("error", result.Error));
             }
         }
@@ -187,7 +187,7 @@ public sealed class TuiEffectHost : ITuiEffectRunner
         }
         catch (Exception ex)
         {
-            _logger?.LogError(ex, "PromptAsync failed");
+            if (_logger is not null) TuiEffectHostLog.PromptFailed(_logger, ex);
             EndOnce(new ChatAppMsg.AgentEnded("error"));
         }
         finally
@@ -271,4 +271,38 @@ public sealed class TuiEffectHost : ITuiEffectRunner
 
         store.Dispatch(new ChatAppMsg.AgentEnded("idle"));
     }
+}
+
+/// <summary>
+///     SG11: BCL <c>[LoggerMessage]</c> delegates for <see cref="TuiEffectHost" />.
+///     Templates, levels and operands are 1-to-1 with the former <c>LogX</c> calls.
+/// </summary>
+internal static partial class TuiEffectHostLog
+{
+    [LoggerMessage(EventId = 1, Level = LogLevel.Error, Message = "PromptAsync failed")]
+    public static partial void PromptEffectFailed(ILogger logger, Exception ex);
+
+    [LoggerMessage(EventId = 2, Level = LogLevel.Error, Message = "RunSlashAsync failed for {Command}")]
+    public static partial void RunSlashFailed(ILogger logger, Exception ex, string command);
+
+    [LoggerMessage(EventId = 3, Level = LogLevel.Error, Message = "AbortAsync failed")]
+    public static partial void AbortFailed(ILogger logger, Exception ex);
+
+    [LoggerMessage(EventId = 4, Level = LogLevel.Debug, Message = "ActivateSession({SessionId}) ignored: no activator wired")]
+    public static partial void ActivateSessionIgnored(ILogger logger, string sessionId);
+
+    [LoggerMessage(EventId = 5, Level = LogLevel.Error, Message = "ActivateSession failed for {SessionId}")]
+    public static partial void ActivateSessionFailed(ILogger logger, Exception ex, string sessionId);
+
+    [LoggerMessage(EventId = 6, Level = LogLevel.Debug, Message = "RequestOpenSession ignored: no session picker wired")]
+    public static partial void RequestOpenSessionIgnored(ILogger logger);
+
+    [LoggerMessage(EventId = 7, Level = LogLevel.Error, Message = "RequestOpenSession failed")]
+    public static partial void RequestOpenSessionFailed(ILogger logger, Exception ex);
+
+    [LoggerMessage(EventId = 8, Level = LogLevel.Error, Message = "Agent failed: {Error}")]
+    public static partial void AgentFailed(ILogger logger, string error);
+
+    [LoggerMessage(EventId = 9, Level = LogLevel.Error, Message = "PromptAsync failed")]
+    public static partial void PromptFailed(ILogger logger, Exception ex);
 }
