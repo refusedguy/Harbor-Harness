@@ -192,37 +192,17 @@ public static class ChatAppReducer
     private static SessionStatus HostClosedRun(ChatDomainState chat, string? reportedStatus) =>
         AgentReducer.HostClosedRun(chat, reportedStatus);
 
-    // ── chat-owned message arms ────────────────────────────────────────────
+    // ── session hydration (lives in SessionReducer, #95) ───────────────────
+    //
+    // Thin forwarder: the transition lives in SessionReducer as a pure fold
+    // over Chat. This stays so every existing call site, test and doc reference
+    // keeps resolving with identical behaviour.
 
-    /// <summary>
-    ///     Atomic session hydration (#89). Folds Reset + session-chrome bind +
-    ///     history replay into one pure transition so the swap rides a single
-    ///     store CAS: a concurrent background event applies strictly before
-    ///     (superseded by the fresh state) or after (appended in order), never
-    ///     interleaved mid-history.
-    /// </summary>
-    private static UiState HydrateSession(UiState state, ChatAppMsg.HydrateSession h)
-    {
-        var next = new UiState
-        {
-            Chat = ChatDomainState.Empty with
-            {
-                Model = h.Model,
-                Provider = h.Provider,
-                AgentName = h.AgentName,
-                // The status the core persisted for this session, read rather
-                // than re-derived from the replayed lines (#687) — the switch
-                // path had the same defect the live path had.
-                SessionStatus = h.Status,
-                // The tab strip is workspace chrome, not transcript: hydrating a
-                // session (i.e. switching to it) must not close the open tabs.
-                TabStrip = state.Chat.TabStrip,
-            },
-        };
-        foreach (var line in h.Lines)
-            next = next.AddLine(line.Role, line.Text, line.ToolCallId);
-        return next;
-    }
+    /// <summary>Session hydration — implemented in <see cref="SessionReducer" />.</summary>
+    private static UiState HydrateSession(UiState state, ChatAppMsg.HydrateSession h) =>
+        SessionReducer.HydrateSession(state, h);
+
+    // ── chat-owned key arms ────────────────────────────────────────────────
 
     /// <summary>
     ///     The chat half of key handling. Returns <see langword="null" /> for
