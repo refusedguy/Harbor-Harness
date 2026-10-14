@@ -95,7 +95,17 @@ internal sealed class DiagnosticsSync : IDisposable
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Diagnostics: dispatching the snapshot failed");
+            DiagnosticsSyncLog.DispatchFailed(_logger, ex);
         }
     }
+}
+
+/// <summary>
+///     SG9: BCL <c>[LoggerMessage]</c> delegates for <see cref="DiagnosticsSync" />.
+///     Templates, levels and operands are 1-to-1 with the former <c>LogX</c> calls.
+/// </summary>
+internal static partial class DiagnosticsSyncLog
+{
+    [LoggerMessage(EventId = 1, Level = LogLevel.Error, Message = "Diagnostics: dispatching the snapshot failed")]
+    public static partial void DispatchFailed(ILogger logger, Exception ex);
 }
