@@ -336,14 +336,16 @@ public sealed class ToolDispatcher(
         {
             // Finished around the boundary: any post-Accepted success was
             // already converted to Abandoned inside ExecuteWithRetryAsync.
-            return pending.Result;
+            // #1099: async read — IsCompletedSuccessfully guards the wait,
+            // not a blocking take.
+            return await pending.ConfigureAwait(false);
         }
 
         ToolDispatcherLog.StopAcceptedAwaitingOne(logger, AcceptedStopReason, toolCall.Id, _abandonGrace.TotalMilliseconds);
         await Task.WhenAny(pending, Task.Delay(_abandonGrace, _clock)).ConfigureAwait(false);
 
         return pending.IsCompletedSuccessfully
-            ? pending.Result
+            ? await pending.ConfigureAwait(false)
             : await AbandonLeftoverAsync(pending, toolCall).ConfigureAwait(false);
     }
 
