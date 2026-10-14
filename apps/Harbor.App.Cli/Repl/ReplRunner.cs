@@ -158,7 +158,7 @@ internal sealed class ReplRunner
         var configResult = await _configStore.LoadAsync().ConfigureAwait(false);
         if (configResult.IsFailure)
         {
-            _logger.LogError("Config load failed: {Error}", configResult.Error);
+            ReplRunnerLog.ConfigLoadFailed(_logger, configResult.Error);
             await _renderer.InitializeAsync().ConfigureAwait(false);
             await _renderer.WriteLineAsync($"Failed: {configResult.Error}").ConfigureAwait(false);
             return 1;
@@ -179,7 +179,7 @@ internal sealed class ReplRunner
         {
             if (!config.Onboarded)
             {
-                _logger.LogInformation("CellForge first-run: onboarding не завершён — вход с setup-оверлеем");
+                ReplRunnerLog.CellForgeFirstRunSetupOverlay(_logger);
             }
 
             var consoleResult = await RunCellForgeAsync(config, ct).ConfigureAwait(false);
@@ -188,26 +188,26 @@ internal sealed class ReplRunner
                 return consoleResult.Value;
             }
 
-            _logger.LogWarning("CellForge недоступен ({Reason}) — откат на legacy-рендер", consoleResult.Error);
+            ReplRunnerLog.CellForgeUnavailableFallback(_logger, consoleResult.Error);
         }
         else if (TuiMode.IsCellForgeSelected() && !config.Ui.CellForge.Enabled)
         {
-            _logger.LogWarning("CellForge выбран (tui/env), но ui.consoleEx.enabled=false — используется legacy-рендер");
+            ReplRunnerLog.CellForgeSelectedButDisabled(_logger);
         }
         else if (TuiMode.IsCellForgeSelected() && !config.Onboarded)
         {
-            _logger.LogInformation("CellForge отложен: onboarding не завершён и HARBOR_LEGACY_SETUP=1 — мастер требует legacy-рендер");
+            ReplRunnerLog.CellForgeDeferredLegacySetup(_logger);
         }
 
-        _logger.LogInformation("Interactive REPL starting — renderer={RendererType}", _renderer.GetType().Name);
+        ReplRunnerLog.InteractiveReplStarting(_logger, _renderer.GetType().Name);
         await _renderer.InitializeAsync().ConfigureAwait(false);
 
-        _logger.LogInformation("Config loaded: provider={Provider}, model={Model}, agent={Agent}, onboarded={Onboarded}",
+        ReplRunnerLog.ConfigLoaded(_logger,
             config.EffectiveProvider, config.EffectiveModel, config.Agent, config.Onboarded);
 
         if (!config.Onboarded)
         {
-            _logger.LogInformation("Onboarding not complete — launching wizard");
+            ReplRunnerLog.OnboardingLaunchingWizard(_logger);
             var writer = (Action<string>)(msg => _ = _renderer.WriteLineAsync(msg));
             var reader = (Func<string, Task<string>>)(async prompt =>
             {
@@ -217,7 +217,7 @@ internal sealed class ReplRunner
             var wizardResult = await _wizard.RunAsync(reader, writer).ConfigureAwait(false);
             if (wizardResult.IsFailure)
             {
-                _logger.LogError("Onboarding wizard failed: {Error}", wizardResult.Error);
+                ReplRunnerLog.OnboardingWizardFailed(_logger, wizardResult.Error);
                 await _renderer.WriteLineAsync($"Setup failed: {wizardResult.Error}").ConfigureAwait(false);
                 return 1;
             }
@@ -231,18 +231,18 @@ internal sealed class ReplRunner
             var reloadResult = await _configStore.LoadAsync().ConfigureAwait(false);
             if (reloadResult.IsFailure)
             {
-                _logger.LogError("Config reload after onboarding failed: {Error}", reloadResult.Error);
+                ReplRunnerLog.ConfigReloadAfterOnboardingFailed(_logger, reloadResult.Error);
                 await _renderer.WriteLineAsync($"Setup failed: {reloadResult.Error}").ConfigureAwait(false);
                 return 1;
             }
 
             config = reloadResult.IsSuccess ? reloadResult.Value : HarborConfig.Default;
-            _logger.LogInformation("Onboarding completed, config reloaded");
+            ReplRunnerLog.OnboardingCompleted(_logger);
         }
 
         if (_renderer is not IInteractiveTuiRenderer)
         {
-            _logger.LogDebug("Non-interactive renderer — showing header text");
+            ReplRunnerLog.NonInteractiveShowingHeader(_logger);
             await _renderer.WriteLineAsync("Harbor — modular AI coding agent").ConfigureAwait(false);
             await _renderer.WriteLineAsync($"Provider: {config.EffectiveProvider} | Model: {config.EffectiveModel} | Agent: {config.Agent}").ConfigureAwait(false);
             await _renderer.WriteLineAsync("Type '/help' for commands, '/exit' to quit.").ConfigureAwait(false);
@@ -257,31 +257,31 @@ internal sealed class ReplRunner
         Maybe<AgentDefinition> resolvedAgent = FindRunAgent(config);
         if (resolvedAgent.HasNoValue)
         {
-            _logger.LogError("No agents are registered — nothing to run.");
+            ReplRunnerLog.NoAgentsRegistered(_logger);
             await _renderer.WriteLineAsync("No agents are registered — nothing to run.").ConfigureAwait(false);
             return 1;
         }
 
         AgentDefinition defaultAgent = resolvedAgent.Value;
         string[] parts = config.EffectiveModel.Split('/', 2);
-        _logger.LogInformation("Creating session: agent={Agent}, provider={Provider}, model={Model}",
+        ReplRunnerLog.CreatingSession(_logger,
             defaultAgent.Name.Value, parts[0], parts.Length > 1 ? parts[1] : config.EffectiveModel);
         var sessionResult = await _sessionStore.CreateAsync(
             Environment.CurrentDirectory, defaultAgent.Name.Value, parts[0],
             parts.Length > 1 ? parts[1] : config.EffectiveModel).ConfigureAwait(false);
         if (sessionResult.IsFailure)
         {
-            _logger.LogError("Session creation failed: {Error}", sessionResult.Error);
+            ReplRunnerLog.SessionCreationFailed(_logger, sessionResult.Error);
             await _renderer.WriteLineAsync($"Failed: {sessionResult.Error}").ConfigureAwait(false);
             return 1;
         }
         _agent.Initialize(sessionResult.Value, defaultAgent);
-        _logger.LogInformation("Agent initialized: session={SessionId}, agent={Agent}", sessionResult.Value.Id, defaultAgent.Name.Value);
+        ReplRunnerLog.AgentInitialized(_logger, sessionResult.Value.Id, defaultAgent.Name.Value);
         (_renderer as BaseTuiRenderer)?.SetActiveAgent(defaultAgent.Name.Value);
 
         if (_renderer is IInteractiveTuiRenderer interactive)
         {
-            _logger.LogInformation("Interactive renderer detected — entering interactive loop");
+            ReplRunnerLog.InteractiveRendererEnteringLoop(_logger);
             int? slashExitCode = null;
             interactive.SetSlashHandler(async raw =>
             {
@@ -301,19 +301,19 @@ internal sealed class ReplRunner
             int exitCode = await interactive.RunInteractiveAsync(_agent, _rendererHost).ConfigureAwait(false);
             if (slashExitCode is int quitCode)
             {
-                _logger.LogInformation("Interactive loop ended via /exit with code {ExitCode}", quitCode);
+                ReplRunnerLog.InteractiveLoopEndedViaExit(_logger, quitCode);
                 return quitCode;
             }
-            _logger.LogInformation("Interactive loop ended with exit code {ExitCode}", exitCode);
+            ReplRunnerLog.InteractiveLoopEnded(_logger, exitCode);
             return exitCode;
         }
 
-        _logger.LogDebug("Renderer initialized, subscribing to event bus");
+        ReplRunnerLog.RendererInitializedSubscribing(_logger);
         _eventBus.Subscribe(async (evt, c) => await _renderer.RenderAsync(evt, c).ConfigureAwait(false));
 
-        _logger.LogInformation("Non-interactive renderer — entering line REPL");
+        ReplRunnerLog.EnteringLineRepl(_logger);
         int lineExitCode = await RunLineReplAsync(sessionResult.Value).ConfigureAwait(false);
-        _logger.LogInformation("Line REPL ended with exit code {ExitCode}", lineExitCode);
+        ReplRunnerLog.LineReplEndedWithExitCode(_logger, lineExitCode);
         return lineExitCode;
     }
 
@@ -357,13 +357,13 @@ internal sealed class ReplRunner
         Maybe<AgentDefinition> resolvedAgent = FindRunAgent(config);
         if (resolvedAgent.HasNoValue)
         {
-            _logger.LogError("No agents are registered — CellForge session not created.");
+            ReplRunnerLog.NoAgentsCellForgeNotCreated(_logger);
             return Result.Failure<int>("no agents are registered");
         }
 
         AgentDefinition defaultAgent = resolvedAgent.Value;
         string[] parts = config.EffectiveModel.Split('/', 2);
-        _logger.LogInformation("CellForge: creating session agent={Agent}, provider={Provider}, model={Model}",
+        ReplRunnerLog.CellForgeCreatingSession(_logger,
             defaultAgent.Name.Value, parts[0], parts.Length > 1 ? parts[1] : config.EffectiveModel);
         var sessionResult = await _sessionStore.CreateAsync(
             Environment.CurrentDirectory, defaultAgent.Name.Value, parts[0],
@@ -445,7 +445,7 @@ internal sealed class ReplRunner
 
     public async Task<int> RunAskAsync(string prompt)
     {
-        _logger.LogInformation("Ask mode: prompt={Prompt}", prompt.Length > 80 ? prompt[..80] + "..." : prompt);
+        ReplRunnerLog.AskModePrompt(_logger, prompt.Length > 80 ? prompt[..80] + "..." : prompt);
 
         await _renderer.InitializeAsync().ConfigureAwait(false);
         _eventBus.Subscribe(async (evt, c) => await _renderer.RenderAsync(evt, c).ConfigureAwait(false));
@@ -459,7 +459,7 @@ internal sealed class ReplRunner
         var configResult = await _configStore.LoadAsync().ConfigureAwait(false);
         if (configResult.IsFailure)
         {
-            _logger.LogError("Config load failed: {Error}", configResult.Error);
+            ReplRunnerLog.AskConfigLoadFailed(_logger, configResult.Error);
             Console.Error.WriteLine($"Failed: {configResult.Error}");
             return 1;
         }
@@ -474,7 +474,7 @@ internal sealed class ReplRunner
         Maybe<AgentDefinition> resolvedAgent = FindRunAgent(config);
         if (resolvedAgent.HasNoValue)
         {
-            _logger.LogError("No agents are registered — nothing to run.");
+            ReplRunnerLog.AskNoAgentsRegistered(_logger);
             Console.Error.WriteLine("No agents are registered — nothing to run.");
             return 1;
         }
@@ -486,15 +486,15 @@ internal sealed class ReplRunner
             parts.Length > 1 ? parts[1] : config.EffectiveModel).ConfigureAwait(false);
         if (sessionResult.IsFailure)
         {
-            _logger.LogError("Session creation failed: {Error}", sessionResult.Error);
+            ReplRunnerLog.AskSessionCreationFailed(_logger, sessionResult.Error);
             Console.Error.WriteLine($"Failed: {sessionResult.Error}");
             return 1;
         }
         _agent.Initialize(sessionResult.Value, defaultAgent);
         (_renderer as BaseTuiRenderer)?.SetActiveAgent(defaultAgent.Name.Value);
-        _logger.LogInformation("Agent initialized, sending prompt");
+        ReplRunnerLog.AskAgentInitializedSendingPrompt(_logger);
         var result = await _agent.PromptAsync(prompt).ConfigureAwait(false);
-        _logger.LogInformation("Ask completed: success={Success}", result.IsSuccess);
+        ReplRunnerLog.AskCompleted(_logger, result.IsSuccess);
         return result.IsSuccess ? 0 : 1;
     }
 
@@ -508,7 +508,7 @@ internal sealed class ReplRunner
     /// </summary>
     internal async Task<int> RunLineReplAsync(Session session)
     {
-        _logger.LogInformation("Line REPL starting");
+        ReplRunnerLog.LineReplStarting(_logger);
         while (true)
         {
             var inputResult = await _renderer.ReadLineAsync("> ").ConfigureAwait(false);
@@ -520,7 +520,7 @@ internal sealed class ReplRunner
             // on a closed stdin (#589).
             if (inputResult.HasNoValue)
             {
-                _logger.LogInformation("End of input — line REPL exiting");
+                ReplRunnerLog.LineReplEndOfInput(_logger);
                 break;
             }
 
@@ -541,30 +541,30 @@ internal sealed class ReplRunner
             // rejecting the word the completion just offered was the inconsistency.
             if (Harbor.Ui.Framework.State.ChatCommands.ExitWords.Contains(trimmed))
             {
-                _logger.LogInformation("User requested exit");
+                ReplRunnerLog.LineReplUserRequestedExit(_logger);
                 break;
             }
 
             if (trimmed.StartsWith('/'))
             {
-                _logger.LogDebug("Slash command: {Command}", trimmed);
+                ReplRunnerLog.LineReplSlashCommand(_logger, trimmed);
                 SlashCommandOutcome outcome = await _slashes.HandleAsync(
                     trimmed, _renderer, _agent, _agentRegistry, _configStore, _authStore, _providers, session).ConfigureAwait(false);
                 if (outcome.ShouldQuit)
                 {
                     // Managed shutdown: returning the code lets Program run its
                     // normal cleanup (IPC stop, host dispose) before exiting.
-                    _logger.LogInformation("Quit requested via slash command — REPL exiting with code {ExitCode}", outcome.ExitCode);
+                    ReplRunnerLog.LineReplQuitViaSlash(_logger, outcome.ExitCode);
                     return outcome.ExitCode;
                 }
                 continue;
             }
 
-            _logger.LogDebug("User prompt ({Length} chars)", trimmed.Length);
+            ReplRunnerLog.LineReplUserPrompt(_logger, trimmed.Length);
             await _agent.PromptAsync(trimmed).ConfigureAwait(false);
         }
 
-        _logger.LogInformation("Line REPL ended");
+        ReplRunnerLog.LineReplEnded(_logger);
         return 0;
     }
 }
@@ -581,3 +581,121 @@ internal sealed record CellForgeScreens(
     TerminalInputSource Input,
     ITerminalBackend Backend,
     IApprovalCoordinator Coordinator);
+
+/// <summary>
+///     SG9: BCL <c>[LoggerMessage]</c> delegates for <see cref="ReplRunner" />.
+///     Templates, levels and operands are 1-to-1 with the former <c>LogX</c> calls.
+/// </summary>
+internal static partial class ReplRunnerLog
+{
+    [LoggerMessage(EventId = 1, Level = LogLevel.Error, Message = "Config load failed: {Error}")]
+    public static partial void ConfigLoadFailed(ILogger logger, string error);
+
+    [LoggerMessage(EventId = 2, Level = LogLevel.Information, Message = "CellForge first-run: onboarding не завершён — вход с setup-оверлеем")]
+    public static partial void CellForgeFirstRunSetupOverlay(ILogger logger);
+
+    [LoggerMessage(EventId = 3, Level = LogLevel.Warning, Message = "CellForge недоступен ({Reason}) — откат на legacy-рендер")]
+    public static partial void CellForgeUnavailableFallback(ILogger logger, string reason);
+
+    [LoggerMessage(EventId = 4, Level = LogLevel.Warning, Message = "CellForge выбран (tui/env), но ui.consoleEx.enabled=false — используется legacy-рендер")]
+    public static partial void CellForgeSelectedButDisabled(ILogger logger);
+
+    [LoggerMessage(EventId = 5, Level = LogLevel.Information, Message = "CellForge отложен: onboarding не завершён и HARBOR_LEGACY_SETUP=1 — мастер требует legacy-рендер")]
+    public static partial void CellForgeDeferredLegacySetup(ILogger logger);
+
+    [LoggerMessage(EventId = 6, Level = LogLevel.Information, Message = "Interactive REPL starting — renderer={RendererType}")]
+    public static partial void InteractiveReplStarting(ILogger logger, string rendererType);
+
+    [LoggerMessage(EventId = 7, Level = LogLevel.Information, Message = "Config loaded: provider={Provider}, model={Model}, agent={Agent}, onboarded={Onboarded}")]
+    public static partial void ConfigLoaded(ILogger logger, string provider, string model, string agent, bool onboarded);
+
+    [LoggerMessage(EventId = 8, Level = LogLevel.Information, Message = "Onboarding not complete — launching wizard")]
+    public static partial void OnboardingLaunchingWizard(ILogger logger);
+
+    [LoggerMessage(EventId = 9, Level = LogLevel.Error, Message = "Onboarding wizard failed: {Error}")]
+    public static partial void OnboardingWizardFailed(ILogger logger, string error);
+
+    [LoggerMessage(EventId = 10, Level = LogLevel.Error, Message = "Config reload after onboarding failed: {Error}")]
+    public static partial void ConfigReloadAfterOnboardingFailed(ILogger logger, string error);
+
+    [LoggerMessage(EventId = 11, Level = LogLevel.Information, Message = "Onboarding completed, config reloaded")]
+    public static partial void OnboardingCompleted(ILogger logger);
+
+    [LoggerMessage(EventId = 12, Level = LogLevel.Debug, Message = "Non-interactive renderer — showing header text")]
+    public static partial void NonInteractiveShowingHeader(ILogger logger);
+
+    [LoggerMessage(EventId = 13, Level = LogLevel.Error, Message = "No agents are registered — nothing to run.")]
+    public static partial void NoAgentsRegistered(ILogger logger);
+
+    [LoggerMessage(EventId = 14, Level = LogLevel.Information, Message = "Creating session: agent={Agent}, provider={Provider}, model={Model}")]
+    public static partial void CreatingSession(ILogger logger, string agent, string provider, string model);
+
+    [LoggerMessage(EventId = 15, Level = LogLevel.Error, Message = "Session creation failed: {Error}")]
+    public static partial void SessionCreationFailed(ILogger logger, string error);
+
+    [LoggerMessage(EventId = 16, Level = LogLevel.Information, Message = "Agent initialized: session={SessionId}, agent={Agent}")]
+    public static partial void AgentInitialized(ILogger logger, string sessionId, string agent);
+
+    [LoggerMessage(EventId = 17, Level = LogLevel.Information, Message = "Interactive renderer detected — entering interactive loop")]
+    public static partial void InteractiveRendererEnteringLoop(ILogger logger);
+
+    [LoggerMessage(EventId = 18, Level = LogLevel.Information, Message = "Interactive loop ended via /exit with code {ExitCode}")]
+    public static partial void InteractiveLoopEndedViaExit(ILogger logger, int exitCode);
+
+    [LoggerMessage(EventId = 19, Level = LogLevel.Information, Message = "Interactive loop ended with exit code {ExitCode}")]
+    public static partial void InteractiveLoopEnded(ILogger logger, int exitCode);
+
+    [LoggerMessage(EventId = 20, Level = LogLevel.Debug, Message = "Renderer initialized, subscribing to event bus")]
+    public static partial void RendererInitializedSubscribing(ILogger logger);
+
+    [LoggerMessage(EventId = 21, Level = LogLevel.Information, Message = "Non-interactive renderer — entering line REPL")]
+    public static partial void EnteringLineRepl(ILogger logger);
+
+    [LoggerMessage(EventId = 22, Level = LogLevel.Information, Message = "Line REPL ended with exit code {ExitCode}")]
+    public static partial void LineReplEndedWithExitCode(ILogger logger, int exitCode);
+
+    [LoggerMessage(EventId = 23, Level = LogLevel.Error, Message = "No agents are registered — CellForge session not created.")]
+    public static partial void NoAgentsCellForgeNotCreated(ILogger logger);
+
+    [LoggerMessage(EventId = 24, Level = LogLevel.Information, Message = "CellForge: creating session agent={Agent}, provider={Provider}, model={Model}")]
+    public static partial void CellForgeCreatingSession(ILogger logger, string agent, string provider, string model);
+
+    [LoggerMessage(EventId = 25, Level = LogLevel.Information, Message = "Ask mode: prompt={Prompt}")]
+    public static partial void AskModePrompt(ILogger logger, string prompt);
+
+    [LoggerMessage(EventId = 26, Level = LogLevel.Error, Message = "Config load failed: {Error}")]
+    public static partial void AskConfigLoadFailed(ILogger logger, string error);
+
+    [LoggerMessage(EventId = 27, Level = LogLevel.Error, Message = "No agents are registered — nothing to run.")]
+    public static partial void AskNoAgentsRegistered(ILogger logger);
+
+    [LoggerMessage(EventId = 28, Level = LogLevel.Error, Message = "Session creation failed: {Error}")]
+    public static partial void AskSessionCreationFailed(ILogger logger, string error);
+
+    [LoggerMessage(EventId = 29, Level = LogLevel.Information, Message = "Agent initialized, sending prompt")]
+    public static partial void AskAgentInitializedSendingPrompt(ILogger logger);
+
+    [LoggerMessage(EventId = 30, Level = LogLevel.Information, Message = "Ask completed: success={Success}")]
+    public static partial void AskCompleted(ILogger logger, bool success);
+
+    [LoggerMessage(EventId = 31, Level = LogLevel.Information, Message = "Line REPL starting")]
+    public static partial void LineReplStarting(ILogger logger);
+
+    [LoggerMessage(EventId = 32, Level = LogLevel.Information, Message = "End of input — line REPL exiting")]
+    public static partial void LineReplEndOfInput(ILogger logger);
+
+    [LoggerMessage(EventId = 33, Level = LogLevel.Information, Message = "User requested exit")]
+    public static partial void LineReplUserRequestedExit(ILogger logger);
+
+    [LoggerMessage(EventId = 34, Level = LogLevel.Debug, Message = "Slash command: {Command}")]
+    public static partial void LineReplSlashCommand(ILogger logger, string command);
+
+    [LoggerMessage(EventId = 35, Level = LogLevel.Information, Message = "Quit requested via slash command — REPL exiting with code {ExitCode}")]
+    public static partial void LineReplQuitViaSlash(ILogger logger, int exitCode);
+
+    [LoggerMessage(EventId = 36, Level = LogLevel.Debug, Message = "User prompt ({Length} chars)")]
+    public static partial void LineReplUserPrompt(ILogger logger, int length);
+
+    [LoggerMessage(EventId = 37, Level = LogLevel.Information, Message = "Line REPL ended")]
+    public static partial void LineReplEnded(ILogger logger);
+}
