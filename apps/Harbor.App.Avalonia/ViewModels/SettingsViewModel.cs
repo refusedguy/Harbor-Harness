@@ -243,7 +243,7 @@ public sealed partial class SettingsViewModel : ObservableObject
             }
             catch (Exception ex)
             {
-                _logger.LogDebug(ex, "Settings auth resolution threw for {Provider}", id);
+                SettingsViewModelLog.AuthResolutionThrew(_logger, ex, id);
             }
 
             ProviderConfigs.Add(new ProviderConfigViewModel(
@@ -309,15 +309,14 @@ public sealed partial class SettingsViewModel : ObservableObject
             ThemeSettings.Apply(ThemeSettings.PersistedTheme);
             // ollamaHost is logged for traceability only: it is a launch-time
             // input, not something this save can change.
-            _logger.LogInformation(
-                "Settings saved: theme={Theme}, provider={Provider}, model={Model}, storage={Storage}, log={LogLevel}, font={Font}, ollamaHost={OllamaHost}",
+            SettingsViewModelLog.SettingsSaved(_logger,
                 ThemeSettings.PersistedTheme, DefaultProvider, DefaultModel, StorageBackend, LogLevel, FontFamily, OllamaHost);
             _toasts.Show($"Settings saved — theme: {ThemeSettings.PersistedTheme}, model: {DefaultProvider}/{DefaultModel}.", ToastKind.Success);
         }
         else
         {
             string? error = commonResult.IsFailure ? commonResult.Error : appResult.Error;
-            _logger.LogError("Settings save failed: {Error}", error);
+            SettingsViewModelLog.SettingsSaveFailed(_logger, error);
             _toasts.Show($"Could not save settings: {error}", ToastKind.Error);
         }
     }
@@ -350,12 +349,34 @@ public sealed partial class SettingsViewModel : ObservableObject
         if (result.IsSuccess)
         {
             _toasts.Show("Onboarding reset — restart Harbor to run the wizard again.", ToastKind.Success);
-            _logger.LogInformation("Onboarding reset by user — restart required.");
+            SettingsViewModelLog.OnboardingReset(_logger);
         }
         else
         {
             _toasts.Show($"Could not reset onboarding: {result.Error}", ToastKind.Error);
-            _logger.LogError("Onboarding reset failed: {Error}", result.Error);
+            SettingsViewModelLog.OnboardingResetFailed(_logger, result.Error);
         }
     }
+}
+
+/// <summary>
+///     SG14: BCL <c>[LoggerMessage]</c> delegates for <see cref="SettingsViewModel" />.
+///     Templates, levels and operands are 1-to-1 with the former <c>LogX</c> calls.
+/// </summary>
+internal static partial class SettingsViewModelLog
+{
+    [LoggerMessage(EventId = 1, Level = LogLevel.Debug, Message = "Settings auth resolution threw for {Provider}")]
+    public static partial void AuthResolutionThrew(ILogger logger, Exception ex, string provider);
+
+    [LoggerMessage(EventId = 2, Level = LogLevel.Information, Message = "Settings saved: theme={Theme}, provider={Provider}, model={Model}, storage={Storage}, log={LogLevel}, font={Font}, ollamaHost={OllamaHost}")]
+    public static partial void SettingsSaved(ILogger logger, string theme, string provider, string model, string storage, string logLevel, string font, string ollamaHost);
+
+    [LoggerMessage(EventId = 3, Level = LogLevel.Error, Message = "Settings save failed: {Error}")]
+    public static partial void SettingsSaveFailed(ILogger logger, string? error);
+
+    [LoggerMessage(EventId = 4, Level = LogLevel.Information, Message = "Onboarding reset by user — restart required.")]
+    public static partial void OnboardingReset(ILogger logger);
+
+    [LoggerMessage(EventId = 5, Level = LogLevel.Error, Message = "Onboarding reset failed: {Error}")]
+    public static partial void OnboardingResetFailed(ILogger logger, string error);
 }

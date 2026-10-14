@@ -59,7 +59,7 @@ public partial class ProviderBrowserView : UserControl
             // discarded bare — anything raised outside that catch vanished.
             TaskFireAndForget.Forget(
                 vm.LoadProvidersCommand.ExecuteAsync(null),
-                ex => Logger.LogError(ex, "Provider-browser initial load failed"));
+                ex => ProviderBrowserViewLog.InitialLoadFailed(Logger, ex));
         }
     }
 
@@ -92,7 +92,20 @@ public partial class ProviderBrowserView : UserControl
             // #569: same synchronous-callback reasoning as the initial load.
             TaskFireAndForget.Forget(
                 vm.LoadModelsCommand.ExecuteAsync(vm.SelectedProvider),
-                ex => Logger.LogError(ex, "Provider-browser model load failed for {Provider}", vm.SelectedProvider.Id));
+                ex => ProviderBrowserViewLog.ModelLoadFailed(Logger, ex, vm.SelectedProvider.Id));
         }
     }
+}
+
+/// <summary>
+///     SG14: BCL <c>[LoggerMessage]</c> delegates for <see cref="ProviderBrowserView" />.
+///     Templates, levels and operands are 1-to-1 with the former <c>LogX</c> calls.
+/// </summary>
+internal static partial class ProviderBrowserViewLog
+{
+    [LoggerMessage(EventId = 1, Level = LogLevel.Error, Message = "Provider-browser initial load failed")]
+    public static partial void InitialLoadFailed(ILogger logger, Exception ex);
+
+    [LoggerMessage(EventId = 2, Level = LogLevel.Error, Message = "Provider-browser model load failed for {Provider}")]
+    public static partial void ModelLoadFailed(ILogger logger, Exception ex, string provider);
 }

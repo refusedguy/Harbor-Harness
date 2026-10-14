@@ -147,7 +147,7 @@ public partial class ActivityRailView : UserControl
         }
         catch (Exception ex)
         {
-            Logger.LogError(ex, "Failed to open file: {Path}", node.FullPath);
+            ActivityRailViewLog.OpenFileFailed(Logger, ex, node.FullPath);
         }
     }
 }
@@ -251,4 +251,14 @@ public sealed class FileTypeToGeometryConverter : IValueConverter
 
     public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture) =>
         throw new NotSupportedException();
+}
+
+/// <summary>
+///     SG14: BCL <c>[LoggerMessage]</c> delegates for <see cref="ActivityRailView" />.
+///     Templates, levels and operands are 1-to-1 with the former <c>LogX</c> calls.
+/// </summary>
+internal static partial class ActivityRailViewLog
+{
+    [LoggerMessage(EventId = 1, Level = LogLevel.Error, Message = "Failed to open file: {Path}")]
+    public static partial void OpenFileFailed(ILogger logger, Exception ex, string path);
 }

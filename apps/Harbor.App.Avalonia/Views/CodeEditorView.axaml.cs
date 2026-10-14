@@ -57,7 +57,7 @@ public partial class CodeEditorView : UserControl
         }
         catch (Exception ex)
         {
-            Logger.LogWarning(ex, "Diagnostics squiggle renderer unavailable");
+            CodeEditorViewLog.SquiggleRendererUnavailable(Logger, ex);
         }
     }
 
@@ -91,7 +91,7 @@ public partial class CodeEditorView : UserControl
         }
         catch (Exception ex)
         {
-            Logger.LogError(ex, "ApplyTab failed for {FileName}", tab.FileName);
+            CodeEditorViewLog.ApplyTabFailed(Logger, ex, tab.FileName);
         }
         finally
         {
@@ -151,7 +151,7 @@ public partial class CodeEditorView : UserControl
         // handler stays synchronous, so `e.Handled` is still set in time.
         TaskFireAndForget.Forget(
             PositionInlineEditOverlayAsync(caretTop),
-            ex => Logger.LogError(ex, "Positioning the inline-edit overlay failed"));
+            ex => CodeEditorViewLog.PositionOverlayFailed(Logger, ex));
     }
 
     private async Task PositionInlineEditOverlayAsync(double caretTop)
@@ -225,4 +225,20 @@ public sealed class ObjectNotNullConverter : IValueConverter
     /// <inheritdoc />
     public object? ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture)
         => throw new NotSupportedException();
+}
+
+/// <summary>
+///     SG14: BCL <c>[LoggerMessage]</c> delegates for <see cref="CodeEditorView" />.
+///     Templates, levels and operands are 1-to-1 with the former <c>LogX</c> calls.
+/// </summary>
+internal static partial class CodeEditorViewLog
+{
+    [LoggerMessage(EventId = 1, Level = LogLevel.Warning, Message = "Diagnostics squiggle renderer unavailable")]
+    public static partial void SquiggleRendererUnavailable(ILogger logger, Exception ex);
+
+    [LoggerMessage(EventId = 2, Level = LogLevel.Error, Message = "ApplyTab failed for {FileName}")]
+    public static partial void ApplyTabFailed(ILogger logger, Exception ex, string fileName);
+
+    [LoggerMessage(EventId = 3, Level = LogLevel.Error, Message = "Positioning the inline-edit overlay failed")]
+    public static partial void PositionOverlayFailed(ILogger logger, Exception ex);
 }

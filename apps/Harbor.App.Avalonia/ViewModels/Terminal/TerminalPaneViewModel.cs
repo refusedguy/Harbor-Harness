@@ -89,16 +89,14 @@ public sealed partial class TerminalPaneViewModel : ObservableObject, IDisposabl
         {
             IsClosed = true;
             OutputText = started.Error;
-            _logger.LogWarning("Terminal pane refused (cwd={Cwd}, shell={Shell}): {Reason}",
-                WorkingDirectory, Title, started.Error);
+            TerminalPaneViewModelLog.PaneRefused(_logger, WorkingDirectory, Title, started.Error);
             return;
         }
 
         _pane = started.Value;
         _pane.OutputReceived += OnOutputReceived;
         _pane.OutputClosed += OnOutputClosed;
-        _logger.LogInformation("PTY pane started: {Shell} pid={Pid} cwd={Cwd}",
-            Title, _pane.Pid, WorkingDirectory);
+        TerminalPaneViewModelLog.PtyPaneStarted(_logger, Title, _pane.Pid, WorkingDirectory);
     }
 
     /// <summary>Recent output history (bounded tail) — per-pane, never shared.</summary>
@@ -119,7 +117,7 @@ public sealed partial class TerminalPaneViewModel : ObservableObject, IDisposabl
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "PTY write failed (pid={Pid})", _pane.Pid);
+            TerminalPaneViewModelLog.PtyWriteFailed(_logger, ex, _pane.Pid);
         }
     }
 
@@ -182,7 +180,7 @@ public sealed partial class TerminalPaneViewModel : ObservableObject, IDisposabl
         // a contributor has to choose between correctly.
         TaskFireAndForget.Forget(
             _pane.DisposeAsync().AsTask(),
-            ex => _logger.LogWarning(ex, "PTY dispose failed"));
+            ex => TerminalPaneViewModelLog.PtyDisposeFailed(_logger, ex));
     }
 }
 
@@ -256,4 +254,23 @@ public static class Ansi
             return sb.ToString();
         }
     }
+}
+
+/// <summary>
+///     SG14: BCL <c>[LoggerMessage]</c> delegates for <see cref="TerminalPaneViewModel" />.
+///     Templates, levels and operands are 1-to-1 with the former <c>LogX</c> calls.
+/// </summary>
+internal static partial class TerminalPaneViewModelLog
+{
+    [LoggerMessage(EventId = 1, Level = LogLevel.Warning, Message = "Terminal pane refused (cwd={Cwd}, shell={Shell}): {Reason}")]
+    public static partial void PaneRefused(ILogger logger, string cwd, string shell, string reason);
+
+    [LoggerMessage(EventId = 2, Level = LogLevel.Information, Message = "PTY pane started: {Shell} pid={Pid} cwd={Cwd}")]
+    public static partial void PtyPaneStarted(ILogger logger, string shell, int pid, string cwd);
+
+    [LoggerMessage(EventId = 3, Level = LogLevel.Warning, Message = "PTY write failed (pid={Pid})")]
+    public static partial void PtyWriteFailed(ILogger logger, Exception ex, int pid);
+
+    [LoggerMessage(EventId = 4, Level = LogLevel.Warning, Message = "PTY dispose failed")]
+    public static partial void PtyDisposeFailed(ILogger logger, Exception ex);
 }

@@ -60,7 +60,7 @@ public sealed partial class FloatingTerminalViewModel : ObservableObject
             Layout = TerminalLayout.SplitHorizontal;
         }
 
-        _logger.LogInformation("Terminal pane added: {Count} pane(s), cwd={Cwd}", Panes.Count, workingDirectory);
+        FloatingTerminalViewModelLog.PaneAdded(_logger, Panes.Count, workingDirectory);
     }
 
     /// <summary>Split horizontally (side-by-side) — opens a second pane if needed.</summary>
@@ -106,4 +106,14 @@ public sealed partial class FloatingTerminalViewModel : ObservableObject
             ? Path.TrimEndingDirectorySeparator(Path.GetTempPath())
             : current;
     }
+}
+
+/// <summary>
+///     SG14: BCL <c>[LoggerMessage]</c> delegates for <see cref="FloatingTerminalViewModel" />.
+///     Templates, levels and operands are 1-to-1 with the former <c>LogX</c> calls.
+/// </summary>
+internal static partial class FloatingTerminalViewModelLog
+{
+    [LoggerMessage(EventId = 1, Level = LogLevel.Information, Message = "Terminal pane added: {Count} pane(s), cwd={Cwd}")]
+    public static partial void PaneAdded(ILogger logger, int count, string? cwd);
 }

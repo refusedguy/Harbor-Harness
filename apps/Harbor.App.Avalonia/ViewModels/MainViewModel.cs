@@ -291,7 +291,7 @@ public sealed partial class MainViewModel : StoreSubscriberViewModel
         // lands, exactly as before.
         TaskFireAndForget.Forget(
             RefreshFileTreeAsync(),
-            ex => _logger.LogError(ex, "Initial file-tree scan failed"));
+            ex => MainViewModelLog.InitialFileTreeScanFailed(_logger, ex));
     }
 
     public ChatViewModel Chat => _contentHost.Chat;
@@ -459,7 +459,7 @@ public sealed partial class MainViewModel : StoreSubscriberViewModel
             // refresh cannot be awaited. It was discarded bare.
             TaskFireAndForget.Forget(
                 _contentHost.Board.RefreshCommand.ExecuteAsync(null),
-                ex => _logger.LogError(ex, "Sessions-board refresh on tab switch failed"));
+                ex => MainViewModelLog.BoardRefreshOnTabSwitchFailed(_logger, ex));
         }
     }
 
@@ -488,7 +488,7 @@ public sealed partial class MainViewModel : StoreSubscriberViewModel
             // throw there faulted the ContinueWith task with nobody watching.
             TaskFireAndForget.Forget(
                 RemoveToastAfterDelayAsync(toast),
-                ex => _logger.LogError(ex, "Auto-dismiss timer faulted for toast {Message}", toast.Message));
+                ex => MainViewModelLog.AutoDismissTimerFaulted(_logger, ex, toast.Message));
         });
     }
 
@@ -597,9 +597,7 @@ public sealed partial class MainViewModel : StoreSubscriberViewModel
                 }
                 else
                 {
-                    Logger.LogDebug(
-                        "Discarding a file-tree scan of {Path} that arrived after a newer one",
-                        root);
+                    MainViewModelLog.DiscardingSupersededScan(Logger, root);
                 }
 
                 return;
@@ -607,7 +605,7 @@ public sealed partial class MainViewModel : StoreSubscriberViewModel
 
             // Nothing to draw and a reason to draw it. The previous tree stays:
             // replacing it with an empty collection is a lie about the project.
-            Logger.LogError("Failed to scan project root {Path}: {Reason}", root, scanned.Error);
+            MainViewModelLog.ScanProjectRootFailed(Logger, root, scanned.Error);
         }
         catch (OperationCanceledException ex)
         {
@@ -617,14 +615,14 @@ public sealed partial class MainViewModel : StoreSubscriberViewModel
             // still handed to the logger (S6667) because a cancellation that is
             // NOT this one — a token the view-model never owned, say — is worth
             // being able to find in a trace.
-            Logger.LogDebug(ex, "File-tree scan of {Path} was superseded", root);
+            MainViewModelLog.FileTreeScanSuperseded(Logger, ex, root);
         }
         catch (Exception ex)
         {
             // The port already turns expected failures into results, so anything
             // reaching here is a bug — but it is not allowed to take the shell
             // down, and the previous tree is still the best thing to show.
-            Logger.LogError(ex, "File-tree scan of {Path} threw", root);
+            MainViewModelLog.FileTreeScanThrew(Logger, ex, root);
         }
         finally
         {
@@ -688,4 +686,32 @@ public sealed partial class MainViewModel : StoreSubscriberViewModel
 
         base.Dispose();
     }
+}
+
+/// <summary>
+///     SG14: BCL <c>[LoggerMessage]</c> delegates for <see cref="MainViewModel" />.
+///     Templates, levels and operands are 1-to-1 with the former <c>LogX</c> calls.
+/// </summary>
+internal static partial class MainViewModelLog
+{
+    [LoggerMessage(EventId = 1, Level = LogLevel.Error, Message = "Initial file-tree scan failed")]
+    public static partial void InitialFileTreeScanFailed(ILogger logger, Exception ex);
+
+    [LoggerMessage(EventId = 2, Level = LogLevel.Error, Message = "Sessions-board refresh on tab switch failed")]
+    public static partial void BoardRefreshOnTabSwitchFailed(ILogger logger, Exception ex);
+
+    [LoggerMessage(EventId = 3, Level = LogLevel.Error, Message = "Auto-dismiss timer faulted for toast {Message}")]
+    public static partial void AutoDismissTimerFaulted(ILogger logger, Exception ex, string message);
+
+    [LoggerMessage(EventId = 4, Level = LogLevel.Debug, Message = "Discarding a file-tree scan of {Path} that arrived after a newer one")]
+    public static partial void DiscardingSupersededScan(ILogger logger, string path);
+
+    [LoggerMessage(EventId = 5, Level = LogLevel.Error, Message = "Failed to scan project root {Path}: {Reason}")]
+    public static partial void ScanProjectRootFailed(ILogger logger, string path, string reason);
+
+    [LoggerMessage(EventId = 6, Level = LogLevel.Debug, Message = "File-tree scan of {Path} was superseded")]
+    public static partial void FileTreeScanSuperseded(ILogger logger, Exception ex, string path);
+
+    [LoggerMessage(EventId = 7, Level = LogLevel.Error, Message = "File-tree scan of {Path} threw")]
+    public static partial void FileTreeScanThrew(ILogger logger, Exception ex, string path);
 }

@@ -96,10 +96,10 @@ public sealed partial class CommandPaletteViewModel : CommandPaletteViewModelBas
     // keeps the sync contract and still observes the fault.
     private void OpenFile() => TaskFireAndForget.Forget(
         _workspaceCommands.OpenFileAsync(),
-        ex => _logger.LogError(ex, "Palette open-file failed"));
+        ex => CommandPaletteViewModelLog.PaletteOpenFileFailed(_logger, ex));
     private void SaveFile() => TaskFireAndForget.Forget(
         _workspaceCommands.SaveFileAsync(),
-        ex => _logger.LogError(ex, "Palette save-file failed"));
+        ex => CommandPaletteViewModelLog.PaletteSaveFileFailed(_logger, ex));
 
     private void StopAgent() => _workspaceCommands.StopAgent();
     private void ClearChat() => _workspaceCommands.ClearChat();
@@ -110,4 +110,17 @@ public sealed partial class CommandPaletteViewModel : CommandPaletteViewModelBas
         _effects.Run(new TuiEffect.RunSlash(command));
         _shellChrome.CloseOverlay(OverlayIds.Palette);
     }
+}
+
+/// <summary>
+///     SG14: BCL <c>[LoggerMessage]</c> delegates for <see cref="CommandPaletteViewModel" />.
+///     Templates, levels and operands are 1-to-1 with the former <c>LogX</c> calls.
+/// </summary>
+internal static partial class CommandPaletteViewModelLog
+{
+    [LoggerMessage(EventId = 1, Level = LogLevel.Error, Message = "Palette open-file failed")]
+    public static partial void PaletteOpenFileFailed(ILogger logger, Exception ex);
+
+    [LoggerMessage(EventId = 2, Level = LogLevel.Error, Message = "Palette save-file failed")]
+    public static partial void PaletteSaveFileFailed(ILogger logger, Exception ex);
 }

@@ -61,7 +61,7 @@ public partial class ProviderModelPicker : UserControl
             // was discarded bare, so a fault outside that catch was lost.
             TaskFireAndForget.Forget(
                 vm.LoadCommand.ExecuteAsync(null),
-                ex => Logger.LogError(ex, "Model picker auto-load on attach failed"));
+                ex => ProviderModelPickerLog.AutoLoadOnAttachFailed(Logger, ex));
         }
     }
 
@@ -79,7 +79,20 @@ public partial class ProviderModelPicker : UserControl
             // #569: same synchronous-callback reasoning as the attach hook.
             TaskFireAndForget.Forget(
                 vm.LoadCommand.ExecuteAsync(null),
-                ex => Logger.LogError(ex, "Model picker auto-load on visibility failed"));
+                ex => ProviderModelPickerLog.AutoLoadOnVisibilityFailed(Logger, ex));
         }
     }
+}
+
+/// <summary>
+///     SG14: BCL <c>[LoggerMessage]</c> delegates for <see cref="ProviderModelPicker" />.
+///     Templates, levels and operands are 1-to-1 with the former <c>LogX</c> calls.
+/// </summary>
+internal static partial class ProviderModelPickerLog
+{
+    [LoggerMessage(EventId = 1, Level = LogLevel.Error, Message = "Model picker auto-load on attach failed")]
+    public static partial void AutoLoadOnAttachFailed(ILogger logger, Exception ex);
+
+    [LoggerMessage(EventId = 2, Level = LogLevel.Error, Message = "Model picker auto-load on visibility failed")]
+    public static partial void AutoLoadOnVisibilityFailed(ILogger logger, Exception ex);
 }

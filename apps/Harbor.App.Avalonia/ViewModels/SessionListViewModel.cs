@@ -36,7 +36,7 @@ public sealed partial class SessionListViewModel : ObservableObject
         // pipeline itself threw, the fault died at finalization unseen.
         TaskFireAndForget.Forget(
             OpenCommand.ExecuteAsync(value),
-            ex => _logger.LogError(ex, "Selecting session {SessionId} failed", value.Id));
+            ex => SessionListViewModelLog.SelectingSessionFailed(_logger, ex, value.Id));
     }
 
     /// <summary>Construct the session list view-model.</summary>
@@ -74,7 +74,7 @@ public sealed partial class SessionListViewModel : ObservableObject
         // The task itself is unchanged: nothing here blocks construction.
         TaskFireAndForget.Forget(
             RefreshAsync(),
-            ex => _logger.LogError(ex, "Initial session-list load failed"));
+            ex => SessionListViewModelLog.InitialLoadFailed(_logger, ex));
     }
 
     /// <summary>All sessions visible in the sidebar.</summary>
@@ -135,7 +135,7 @@ public sealed partial class SessionListViewModel : ObservableObject
             var result = await _sessionStore.ListAsync().ConfigureAwait(false);
             if (result.IsFailure)
             {
-                _logger.LogError("List sessions failed: {Error}", result.Error);
+                SessionListViewModelLog.ListSessionsFailed(_logger, result.Error);
                 return;
             }
             var filtered = string.IsNullOrWhiteSpace(SearchText)
@@ -164,7 +164,7 @@ public sealed partial class SessionListViewModel : ObservableObject
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Refresh sessions crashed");
+            SessionListViewModelLog.RefreshCrashed(_logger, ex);
             _toasts.Show($"Could not load sessions: {ex.Message}", ToastKind.Error);
         }
     }
@@ -198,7 +198,7 @@ public sealed partial class SessionListViewModel : ObservableObject
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "NewSession crashed");
+            SessionListViewModelLog.NewSessionCrashed(_logger, ex);
             _toasts.Show($"Failed to create session: {ex.Message}", ToastKind.Error);
         }
     }
@@ -225,7 +225,7 @@ public sealed partial class SessionListViewModel : ObservableObject
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Branch crashed");
+            SessionListViewModelLog.BranchCrashed(_logger, ex);
             _toasts.Show($"Branch failed: {ex.Message}", ToastKind.Error);
         }
     }
@@ -252,7 +252,7 @@ public sealed partial class SessionListViewModel : ObservableObject
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Open session crashed");
+            SessionListViewModelLog.OpenSessionCrashed(_logger, ex);
             _dispatcher.Post(() => _toasts.Show($"Could not open session: {ex.Message}", ToastKind.Error));
         }
     }
@@ -282,7 +282,7 @@ public sealed partial class SessionListViewModel : ObservableObject
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Delete session crashed");
+            SessionListViewModelLog.DeleteSessionCrashed(_logger, ex);
             _toasts.Show($"Could not delete session: {ex.Message}", ToastKind.Error);
         }
     }
@@ -311,8 +311,42 @@ public sealed partial class SessionListViewModel : ObservableObject
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Rename session crashed");
+            SessionListViewModelLog.RenameSessionCrashed(_logger, ex);
             _toasts.Show($"Rename failed: {ex.Message}", ToastKind.Error);
         }
     }
+}
+
+/// <summary>
+///     SG14: BCL <c>[LoggerMessage]</c> delegates for <see cref="SessionListViewModel" />.
+///     Templates, levels and operands are 1-to-1 with the former <c>LogX</c> calls.
+/// </summary>
+internal static partial class SessionListViewModelLog
+{
+    [LoggerMessage(EventId = 1, Level = LogLevel.Error, Message = "Selecting session {SessionId} failed")]
+    public static partial void SelectingSessionFailed(ILogger logger, Exception ex, string sessionId);
+
+    [LoggerMessage(EventId = 2, Level = LogLevel.Error, Message = "Initial session-list load failed")]
+    public static partial void InitialLoadFailed(ILogger logger, Exception ex);
+
+    [LoggerMessage(EventId = 3, Level = LogLevel.Error, Message = "List sessions failed: {Error}")]
+    public static partial void ListSessionsFailed(ILogger logger, string error);
+
+    [LoggerMessage(EventId = 4, Level = LogLevel.Error, Message = "Refresh sessions crashed")]
+    public static partial void RefreshCrashed(ILogger logger, Exception ex);
+
+    [LoggerMessage(EventId = 5, Level = LogLevel.Error, Message = "NewSession crashed")]
+    public static partial void NewSessionCrashed(ILogger logger, Exception ex);
+
+    [LoggerMessage(EventId = 6, Level = LogLevel.Error, Message = "Branch crashed")]
+    public static partial void BranchCrashed(ILogger logger, Exception ex);
+
+    [LoggerMessage(EventId = 7, Level = LogLevel.Error, Message = "Open session crashed")]
+    public static partial void OpenSessionCrashed(ILogger logger, Exception ex);
+
+    [LoggerMessage(EventId = 8, Level = LogLevel.Error, Message = "Delete session crashed")]
+    public static partial void DeleteSessionCrashed(ILogger logger, Exception ex);
+
+    [LoggerMessage(EventId = 9, Level = LogLevel.Error, Message = "Rename session crashed")]
+    public static partial void RenameSessionCrashed(ILogger logger, Exception ex);
 }
