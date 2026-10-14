@@ -64,7 +64,7 @@ public static class IdeBridgeRunner
             return 1;
         }
 
-        logger.LogInformation("IDE bridge attached to session {SessionId} (agent {Agent})", sessionId, sessionResult.Value.Agent);
+        IdeBridgeRunnerLog.BridgeAttached(logger, sessionId, sessionResult.Value.Agent);
 
         await using var bridge = new IdeSessionBridge(
             client,
@@ -75,7 +75,7 @@ public static class IdeBridgeRunner
 
         await bridge.RunAsync(CancellationToken.None).ConfigureAwait(false);
 
-        logger.LogInformation("Editor closed stdin — IDE bridge exiting");
+        IdeBridgeRunnerLog.BridgeExiting(logger);
         await client.DisconnectAsync().ConfigureAwait(false);
         return 0;
     }
@@ -96,4 +96,17 @@ public static class IdeBridgeRunner
 
         return null;
     }
+}
+
+/// <summary>
+///     SG6: BCL <c>[LoggerMessage]</c> delegates for <see cref="IdeBridgeRunner" />.
+///     Templates, levels and operands are 1-to-1 with the former <c>LogX</c> calls.
+/// </summary>
+internal static partial class IdeBridgeRunnerLog
+{
+    [LoggerMessage(EventId = 1, Level = LogLevel.Information, Message = "IDE bridge attached to session {SessionId} (agent {Agent})")]
+    public static partial void BridgeAttached(ILogger logger, string sessionId, string agent);
+
+    [LoggerMessage(EventId = 2, Level = LogLevel.Information, Message = "Editor closed stdin — IDE bridge exiting")]
+    public static partial void BridgeExiting(ILogger logger);
 }

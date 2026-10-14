@@ -19,7 +19,7 @@ internal static class AskVerb
             return 1;
         }
         string prompt = string.Join(' ', CliArgs.StripLogArgs(args));
-        logger.LogInformation("Starting ask command with prompt length {Length}", prompt.Length);
+        AskVerbLog.StartingAsk(logger, prompt.Length);
         CliArgs.MarkApproverless(); // #52: one-shot, frame loop не крутится
         using var host = HostBuilder.Build(args);
         await CliInfrastructure.StartIpcAsync(host.Services, logger).ConfigureAwait(false);
@@ -29,11 +29,24 @@ internal static class AskVerb
         var scriptResult = await CliInfrastructure.RunStartupScriptAsync(host.Services, scriptPath, logger).ConfigureAwait(false);
         if (scriptResult.IsFailure)
         {
-            logger.LogWarning("Startup script failed: {Error}", scriptResult.Error);
+            AskVerbLog.StartupScriptFailed(logger, scriptResult.Error);
         }
         var runner = CliInfrastructure.CreateRunner(host.Services);
         int exitCode = await runner.RunAskAsync(prompt).ConfigureAwait(false);
         await CliInfrastructure.StopIpcAsync(host.Services, logger).ConfigureAwait(false);
         return exitCode;
     }
+}
+
+/// <summary>
+///     SG6: BCL <c>[LoggerMessage]</c> delegates for <see cref="AskVerb" />.
+///     Templates, levels and operands are 1-to-1 with the former <c>LogX</c> calls.
+/// </summary>
+internal static partial class AskVerbLog
+{
+    [LoggerMessage(EventId = 1, Level = LogLevel.Information, Message = "Starting ask command with prompt length {Length}")]
+    public static partial void StartingAsk(ILogger logger, int length);
+
+    [LoggerMessage(EventId = 2, Level = LogLevel.Warning, Message = "Startup script failed: {Error}")]
+    public static partial void StartupScriptFailed(ILogger logger, string error);
 }

@@ -16,7 +16,7 @@ internal static class AuthVerb
 {
     internal static async Task<int> RunAsync(ILogger logger, string[] args)
     {
-        logger.LogInformation("Starting auth command");
+        AuthVerbLog.StartingAuth(logger);
         using var host = HostBuilder.Build(args);
         var authStore = host.Services.GetRequiredService<AuthStore>();
         var writer = (Action<string>)Console.WriteLine;
@@ -30,4 +30,14 @@ internal static class AuthVerb
         var authResult = await cmd.ExecuteAsync(args, ctx).ConfigureAwait(false);
         return authResult.IsSuccess ? 0 : 1;
     }
+}
+
+/// <summary>
+///     SG6: BCL <c>[LoggerMessage]</c> delegates for <see cref="AuthVerb" />.
+///     Templates, levels and operands are 1-to-1 with the former <c>LogX</c> calls.
+/// </summary>
+internal static partial class AuthVerbLog
+{
+    [LoggerMessage(EventId = 1, Level = LogLevel.Information, Message = "Starting auth command")]
+    public static partial void StartingAuth(ILogger logger);
 }

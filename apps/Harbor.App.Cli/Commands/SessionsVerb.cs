@@ -63,7 +63,7 @@ internal static class SessionsVerb
 
     internal static async Task<int> RunListSessionsAsync(ILogger logger)
     {
-        logger.LogInformation("Listing sessions");
+        SessionsVerbLog.ListingSessions(logger);
         using var host = HostBuilder.Build();
         var store = host.Services.GetRequiredService<ISessionStore>();
         var result = await store.ListAsync().ConfigureAwait(false);
@@ -74,12 +74,12 @@ internal static class SessionsVerb
             // unreadable store after printing nothing. A script wrapping it
             // would read that as "no sessions", which is a different and much
             // more expensive conclusion than "the store is broken".
-            logger.LogError("Cannot list sessions: {Error}", result.Error);
+            SessionsVerbLog.CannotListSessions(logger, result.Error);
             Console.Error.WriteLine($"Cannot list sessions: {result.Error}");
             return 1;
         }
 
-        logger.LogInformation("Found {Count} sessions", result.Value.Count);
+        SessionsVerbLog.FoundSessions(logger, result.Value.Count);
         foreach (var s in result.Value)
             Console.WriteLine($"  {s.Id} — {s.Title} [{s.ProviderId}/{s.Model}]");
         return 0;
@@ -108,7 +108,7 @@ internal static class SessionsVerb
         var loaded = await store.GetAsync(sessionId).ConfigureAwait(false);
         if (loaded.IsFailure)
         {
-            logger.LogError("Rename failed: {Error}", loaded.Error);
+            SessionsVerbLog.RenameFailed(logger, loaded.Error);
             Console.Error.WriteLine($"Cannot rename '{sessionId}': {loaded.Error}");
             return 1;
         }
@@ -117,7 +117,7 @@ internal static class SessionsVerb
         var saved = await store.UpdateAsync(renamed).ConfigureAwait(false);
         if (saved.IsFailure)
         {
-            logger.LogError("Rename persist failed: {Error}", saved.Error);
+            SessionsVerbLog.RenamePersistFailed(logger, saved.Error);
             Console.Error.WriteLine($"Cannot persist rename: {saved.Error}");
             return 1;
         }
@@ -144,7 +144,7 @@ internal static class SessionsVerb
             .ConfigureAwait(false);
         if (exported.IsFailure)
         {
-            logger.LogError("Export failed: {Error}", exported.Error);
+            SessionsVerbLog.ExportFailed(logger, exported.Error);
             Console.Error.WriteLine($"Export failed: {exported.Error}");
             return 1;
         }
@@ -177,7 +177,7 @@ internal static class SessionsVerb
             .ConfigureAwait(false);
         if (imported.IsFailure)
         {
-            logger.LogError("Import failed: {Error}", imported.Error);
+            SessionsVerbLog.ImportFailed(logger, imported.Error);
             Console.Error.WriteLine($"Import failed: {imported.Error}");
             return 1;
         }
@@ -251,7 +251,7 @@ internal static class SessionsVerb
         var reverted = await store.DeleteMessagesAfterAsync(sessionId, messageId).ConfigureAwait(false);
         if (reverted.IsFailure)
         {
-            logger.LogError("Revert failed: {Error}", reverted.Error);
+            SessionsVerbLog.RevertFailed(logger, reverted.Error);
             Console.Error.WriteLine($"Cannot revert '{sessionId}' to '{messageId}': {reverted.Error}");
             return 1;
         }
@@ -287,7 +287,7 @@ internal static class SessionsVerb
         var marked = await new SessionCheckpointRunner(store).CheckpointAsync(sessionId, messageId, label).ConfigureAwait(false);
         if (marked.IsFailure)
         {
-            logger.LogError("Checkpoint failed: {Error}", marked.Error);
+            SessionsVerbLog.CheckpointFailed(logger, marked.Error);
             Console.Error.WriteLine($"Cannot checkpoint '{sessionId}' at '{messageId}': {marked.Error}");
             return 1;
         }
@@ -319,7 +319,7 @@ internal static class SessionsVerb
         var listed = await new SessionCheckpointRunner(store).ListAsync(sessionId).ConfigureAwait(false);
         if (listed.IsFailure)
         {
-            logger.LogError("Cannot list checkpoints: {Error}", listed.Error);
+            SessionsVerbLog.CannotListCheckpoints(logger, listed.Error);
             Console.Error.WriteLine($"Cannot list checkpoints of '{sessionId}': {listed.Error}");
             return 1;
         }
@@ -362,7 +362,7 @@ internal static class SessionsVerb
         var rewound = await new SessionCheckpointRunner(store).RewindAsync(sessionId, checkpointId).ConfigureAwait(false);
         if (rewound.IsFailure)
         {
-            logger.LogError("Rewind failed: {Error}", rewound.Error);
+            SessionsVerbLog.RewindFailed(logger, rewound.Error);
             Console.Error.WriteLine($"Cannot rewind '{sessionId}' to '{checkpointId}': {rewound.Error}");
             return 1;
         }
@@ -397,7 +397,7 @@ internal static class SessionsVerb
         var forked = await runner.ForkAsync(sessionId, messageId).ConfigureAwait(false);
         if (forked.IsFailure)
         {
-            logger.LogError("Fork failed: {Error}", forked.Error);
+            SessionsVerbLog.ForkFailed(logger, forked.Error);
             Console.Error.WriteLine(forked.Error);
             return 1;
         }
@@ -405,4 +405,47 @@ internal static class SessionsVerb
         Console.WriteLine($"Forked session {sessionId} → {forked.Value.ForkId}: copied {forked.Value.Copied} message(s) up to '{messageId}'.");
         return 0;
     }
+}
+
+/// <summary>
+///     SG6: BCL <c>[LoggerMessage]</c> delegates for <see cref="SessionsVerb" />.
+///     Templates, levels and operands are 1-to-1 with the former <c>LogX</c> calls.
+/// </summary>
+internal static partial class SessionsVerbLog
+{
+    [LoggerMessage(EventId = 1, Level = LogLevel.Information, Message = "Listing sessions")]
+    public static partial void ListingSessions(ILogger logger);
+
+    [LoggerMessage(EventId = 2, Level = LogLevel.Error, Message = "Cannot list sessions: {Error}")]
+    public static partial void CannotListSessions(ILogger logger, string error);
+
+    [LoggerMessage(EventId = 3, Level = LogLevel.Information, Message = "Found {Count} sessions")]
+    public static partial void FoundSessions(ILogger logger, int count);
+
+    [LoggerMessage(EventId = 4, Level = LogLevel.Error, Message = "Rename failed: {Error}")]
+    public static partial void RenameFailed(ILogger logger, string error);
+
+    [LoggerMessage(EventId = 5, Level = LogLevel.Error, Message = "Rename persist failed: {Error}")]
+    public static partial void RenamePersistFailed(ILogger logger, string error);
+
+    [LoggerMessage(EventId = 6, Level = LogLevel.Error, Message = "Export failed: {Error}")]
+    public static partial void ExportFailed(ILogger logger, string error);
+
+    [LoggerMessage(EventId = 7, Level = LogLevel.Error, Message = "Import failed: {Error}")]
+    public static partial void ImportFailed(ILogger logger, string error);
+
+    [LoggerMessage(EventId = 8, Level = LogLevel.Error, Message = "Revert failed: {Error}")]
+    public static partial void RevertFailed(ILogger logger, string error);
+
+    [LoggerMessage(EventId = 9, Level = LogLevel.Error, Message = "Checkpoint failed: {Error}")]
+    public static partial void CheckpointFailed(ILogger logger, string error);
+
+    [LoggerMessage(EventId = 10, Level = LogLevel.Error, Message = "Cannot list checkpoints: {Error}")]
+    public static partial void CannotListCheckpoints(ILogger logger, string error);
+
+    [LoggerMessage(EventId = 11, Level = LogLevel.Error, Message = "Rewind failed: {Error}")]
+    public static partial void RewindFailed(ILogger logger, string error);
+
+    [LoggerMessage(EventId = 12, Level = LogLevel.Error, Message = "Fork failed: {Error}")]
+    public static partial void ForkFailed(ILogger logger, string error);
 }
