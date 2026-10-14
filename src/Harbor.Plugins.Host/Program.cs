@@ -32,9 +32,7 @@ public static class Program
         }));
 
         var logger = loggerFactory.CreateLogger("harbor-plugins-host");
-        logger.LogInformation(
-            "Starting harbor-plugins-host. plugin dirs: [{Dirs}]",
-            string.Join(", ", parsed.Dirs));
+        ProgramLog.Starting(logger, string.Join(", ", parsed.Dirs));
 
         var source = new FileSystemPluginSource(parsed.Dirs, loggerFactory.CreateLogger<FileSystemPluginSource>());
         var references = new PluginAssemblyReferences(loggerFactory.CreateLogger<PluginAssemblyReferences>());
@@ -59,8 +57,8 @@ public static class Program
         var loadResult = await host.LoadAllAsync(loadHost).ConfigureAwait(false);
 
         if (loadResult.IsFailure)
-            logger.LogError("Plugin load failed: {Error}", loadResult.Error);
-        logger.LogInformation("Exposed {Count} plugin tool(s) over MCP", loadHost.Tools.Count);
+            ProgramLog.PluginLoadFailed(logger, loadResult.Error);
+        ProgramLog.ExposedTools(logger, loadHost.Tools.Count);
 
         using var cts = new CancellationTokenSource();
         Console.CancelKeyPress += (_, e) =>
@@ -114,4 +112,20 @@ public static class Program
         var cacheDir = Path.Combine(global, "cache");
         return (dirs, global, cacheDir);
     }
+}
+
+/// <summary>
+///     SG10: BCL <c>[LoggerMessage]</c> delegates for <see cref="Program" />.
+///     Templates, levels and operands are 1-to-1 with the former <c>LogX</c> calls.
+/// </summary>
+internal static partial class ProgramLog
+{
+    [LoggerMessage(EventId = 1, Level = LogLevel.Information, Message = "Starting harbor-plugins-host. plugin dirs: [{Dirs}]")]
+    public static partial void Starting(ILogger logger, string dirs);
+
+    [LoggerMessage(EventId = 2, Level = LogLevel.Error, Message = "Plugin load failed: {Error}")]
+    public static partial void PluginLoadFailed(ILogger logger, string error);
+
+    [LoggerMessage(EventId = 3, Level = LogLevel.Information, Message = "Exposed {Count} plugin tool(s) over MCP")]
+    public static partial void ExposedTools(ILogger logger, int count);
 }

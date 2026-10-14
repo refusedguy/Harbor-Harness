@@ -57,7 +57,7 @@ internal sealed class McpStdioServer
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Failed to handle MCP message");
+                McpStdioServerLog.FailedToHandleMessage(_logger, ex);
             }
         }
     }
@@ -263,7 +263,7 @@ internal sealed class McpStdioServer
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Tool '{Tool}' threw", toolName);
+            McpStdioServerLog.ToolThrew(_logger, ex, toolName);
             await WriteToolResultAsync(stdout, idEl, $"Tool threw: {ex.Message}", isError: true, ct).ConfigureAwait(false);
         }
     }
@@ -347,4 +347,17 @@ internal sealed class McpStdioServer
         else
             w.WriteNull("id");
     }
+}
+
+/// <summary>
+///     SG10: BCL <c>[LoggerMessage]</c> delegates for <see cref="McpStdioServer" />.
+///     Templates, levels and operands are 1-to-1 with the former <c>LogX</c> calls.
+/// </summary>
+internal static partial class McpStdioServerLog
+{
+    [LoggerMessage(EventId = 1, Level = LogLevel.Error, Message = "Failed to handle MCP message")]
+    public static partial void FailedToHandleMessage(ILogger logger, Exception ex);
+
+    [LoggerMessage(EventId = 2, Level = LogLevel.Error, Message = "Tool '{Tool}' threw")]
+    public static partial void ToolThrew(ILogger logger, Exception ex, string tool);
 }
