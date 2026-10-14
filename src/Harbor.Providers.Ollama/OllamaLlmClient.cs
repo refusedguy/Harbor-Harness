@@ -89,9 +89,8 @@ public sealed class OllamaLlmClient : ILlmClient
                         // #203: stream-health summary (only when noteworthy).
                         if (chunkState.MalformedChunks > 0 || chunkState.RemappedToolCalls > 0)
                         {
-                            _logger.LogInformation(
-                                "Ollama stream completed: {Malformed} malformed line(s) skipped, {Remaps} positional tool-call id fallback(s)",
-                                chunkState.MalformedChunks, chunkState.RemappedToolCalls);
+                            OllamaLlmClientLog.StreamCompleted(
+                                _logger, chunkState.MalformedChunks, chunkState.RemappedToolCalls);
                         }
                     }).ConfigureAwait(false);
             }
@@ -103,7 +102,7 @@ public sealed class OllamaLlmClient : ILlmClient
             {
                 // #203 E5: fire-and-forget pump task must log inside the
                 // lambda — the ErrorEvent alone is invisible in traces.
-                _logger.LogWarning(ex, "Ollama stream task failed: {Message}", ex.Message);
+                OllamaLlmClientLog.StreamTaskFailed(_logger, ex, ex.Message);
                 await writer.WriteAsync(new ErrorEvent(
                     $"Stream failed: {ex.Message}", ex.ToString(),
                     ProviderErrors.FromException(ex, cancellationToken)), cancellationToken).ConfigureAwait(false);
@@ -385,8 +384,7 @@ public sealed class OllamaLlmClient : ILlmClient
         catch (Exception ex)
         {
             chunkState.CountMalformed();
-            _logger.LogWarning(ex, "Skipping malformed Ollama NDJSON line #{Count}: {Line}",
-                chunkState.MalformedChunks, line);
+            OllamaLlmClientLog.SkippingMalformedLine(_logger, ex, chunkState.MalformedChunks, line);
             return;
         }
 
@@ -784,4 +782,20 @@ public sealed class OllamaConfig
 {
     public string? BaseUrl { get; set; } = "http://localhost:11434";
     public string KeepAlive { get; set; } = "5m";
+}
+
+/// <summary>
+///     SG7: BCL <c>[LoggerMessage]</c> delegates for <see cref="OllamaLlmClient" />.
+///     Templates, levels and operands are 1-to-1 with the former <c>LogX</c> calls.
+/// </summary>
+internal static partial class OllamaLlmClientLog
+{
+    [LoggerMessage(EventId = 1, Level = LogLevel.Information, Message = "Ollama stream completed: {Malformed} malformed line(s) skipped, {Remaps} positional tool-call id fallback(s)")]
+    public static partial void StreamCompleted(ILogger logger, int malformed, int remaps);
+
+    [LoggerMessage(EventId = 2, Level = LogLevel.Warning, Message = "Ollama stream task failed: {Message}")]
+    public static partial void StreamTaskFailed(ILogger logger, Exception ex, string message);
+
+    [LoggerMessage(EventId = 3, Level = LogLevel.Warning, Message = "Skipping malformed Ollama NDJSON line #{Count}: {Line}")]
+    public static partial void SkippingMalformedLine(ILogger logger, Exception ex, int count, string line);
 }

@@ -361,7 +361,7 @@ public sealed class DynamicModelCatalog : IModelCatalog
                 },
                 ex =>
                 {
-                    _logger.LogWarning(ex, "Failed to fetch models for {Provider}, trying stale cache", config.Id);
+                    DynamicModelCatalogLog.FetchModelsFailed(_logger, ex, config.Id);
                     return ex.Message;
                 })
             .Bind(response => ParseModelsResponse(response, config))
@@ -437,7 +437,7 @@ public sealed class DynamicModelCatalog : IModelCatalog
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogWarning(ex, "Failed to parse model from response");
+                    DynamicModelCatalogLog.ParseModelFailed(_logger, ex);
                 }
             }
 
@@ -574,4 +574,17 @@ public sealed class DynamicModelCatalog : IModelCatalog
             _ => null
         };
     }
+}
+
+/// <summary>
+///     SG7: BCL <c>[LoggerMessage]</c> delegates for <see cref="DynamicModelCatalog" />.
+///     Templates, levels and operands are 1-to-1 with the former <c>LogX</c> calls.
+/// </summary>
+internal static partial class DynamicModelCatalogLog
+{
+    [LoggerMessage(EventId = 1, Level = LogLevel.Warning, Message = "Failed to fetch models for {Provider}, trying stale cache")]
+    public static partial void FetchModelsFailed(ILogger logger, Exception ex, string provider);
+
+    [LoggerMessage(EventId = 2, Level = LogLevel.Warning, Message = "Failed to parse model from response")]
+    public static partial void ParseModelFailed(ILogger logger, Exception ex);
 }

@@ -97,9 +97,7 @@ internal static class OpenAiImageContent
                     break;
 
                 default:
-                    logger.LogWarning(
-                        "Dropping unsupported content block(s) of type {BlockType} for {Provider}",
-                        content[i].Type, providerId);
+                    OpenAiImageContentLog.DroppingUnsupportedBlock(logger, content[i].Type, providerId);
                     break;
             }
         }
@@ -119,4 +117,14 @@ internal static class OpenAiImageContent
         writer.WriteEndObject();
         writer.WriteEndObject();
     }
+}
+
+/// <summary>
+///     SG7: BCL <c>[LoggerMessage]</c> delegates for <see cref="OpenAiImageContent" />.
+///     Templates, levels and operands are 1-to-1 with the former <c>LogX</c> calls.
+/// </summary>
+internal static partial class OpenAiImageContentLog
+{
+    [LoggerMessage(EventId = 1, Level = LogLevel.Warning, Message = "Dropping unsupported content block(s) of type {BlockType} for {Provider}")]
+    public static partial void DroppingUnsupportedBlock(ILogger logger, string blockType, string provider);
 }

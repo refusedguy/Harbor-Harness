@@ -119,9 +119,8 @@ public sealed class OpenAiCompatibleLlmClient : ILlmClient
                         // #203: stream-health summary (only when noteworthy).
                         if (chunkState.MalformedChunks > 0 || chunkState.RemappedToolCalls > 0 || chunkState.DroppedUsageChunks > 0)
                         {
-                            _logger.LogInformation(
-                                "Stream for {Provider} completed: {Malformed} malformed chunk(s) skipped, {Remaps} positional tool-call id fallback(s), {Dropped} duplicate usage chunk(s) dropped",
-                                ProviderId.Value, chunkState.MalformedChunks, chunkState.RemappedToolCalls, chunkState.DroppedUsageChunks);
+                            OpenAiCompatibleLlmClientLog.StreamCompleted(
+                                _logger, ProviderId.Value, chunkState.MalformedChunks, chunkState.RemappedToolCalls, chunkState.DroppedUsageChunks);
                         }
                     }).ConfigureAwait(false);
             }
@@ -135,7 +134,7 @@ public sealed class OpenAiCompatibleLlmClient : ILlmClient
                 activity?.AddException(ex);
                 // #203 E5: fire-and-forget pump task must log inside the
                 // lambda — the ErrorEvent alone is invisible in traces.
-                _logger.LogWarning(ex, "Stream task for {Provider} failed: {Message}", ProviderId.Value, ex.Message);
+                OpenAiCompatibleLlmClientLog.StreamTaskFailed(_logger, ex, ProviderId.Value, ex.Message);
                 await writer.WriteAsync(new ErrorEvent(
                     $"Stream failed: {ex.Message}", ex.ToString(),
                     ProviderErrors.FromException(ex, cancellationToken)), cancellationToken).ConfigureAwait(false);
@@ -250,9 +249,9 @@ public sealed class OpenAiCompatibleLlmClient : ILlmClient
 
         if (_logger.IsEnabled(LogLevel.Debug))
         {
-            _logger.LogDebug("BuildRequest: model={Model} tools={ToolCount} toolChoice={ToolChoice} messages={MsgCount}",
-                request.Model, request.Tools.Count, request.ToolChoice?.ToString() ?? "null", request.Messages.Count);
-            _logger.LogDebug("BuildRequest payload:\n{Payload}", Encoding.UTF8.GetString(body));
+            OpenAiCompatibleLlmClientLog.BuildRequestSummary(
+                _logger, request.Model, request.Tools.Count, request.ToolChoice?.ToString() ?? "null", request.Messages.Count);
+            OpenAiCompatibleLlmClientLog.BuildRequestPayload(_logger, Encoding.UTF8.GetString(body));
         }
 
         var msg = new HttpRequestMessage(HttpMethod.Post, url)
@@ -355,5 +354,24 @@ public sealed class OpenAiCompatibleLlmClient : ILlmClient
                 break;
         }
     }
+}
+
+/// <summary>
+///     SG7: BCL <c>[LoggerMessage]</c> delegates for <see cref="OpenAiCompatibleLlmClient" />.
+///     Templates, levels and operands are 1-to-1 with the former <c>LogX</c> calls.
+/// </summary>
+internal static partial class OpenAiCompatibleLlmClientLog
+{
+    [LoggerMessage(EventId = 1, Level = LogLevel.Information, Message = "Stream for {Provider} completed: {Malformed} malformed chunk(s) skipped, {Remaps} positional tool-call id fallback(s), {Dropped} duplicate usage chunk(s) dropped")]
+    public static partial void StreamCompleted(ILogger logger, string provider, int malformed, int remaps, int dropped);
+
+    [LoggerMessage(EventId = 2, Level = LogLevel.Warning, Message = "Stream task for {Provider} failed: {Message}")]
+    public static partial void StreamTaskFailed(ILogger logger, Exception ex, string provider, string message);
+
+    [LoggerMessage(EventId = 3, Level = LogLevel.Debug, Message = "BuildRequest: model={Model} tools={ToolCount} toolChoice={ToolChoice} messages={MsgCount}")]
+    public static partial void BuildRequestSummary(ILogger logger, string model, int toolCount, string toolChoice, int msgCount);
+
+    [LoggerMessage(EventId = 4, Level = LogLevel.Debug, Message = "BuildRequest payload:\n{Payload}")]
+    public static partial void BuildRequestPayload(ILogger logger, string payload);
 }
 

@@ -514,9 +514,18 @@ internal static class OpenAiWire
         catch (Exception ex)
         {
             state.CountMalformed();
-            logger.LogWarning(ex, "Skipping malformed chat-completions chunk #{Count}: {Data}",
-                state.MalformedChunks, data);
+            OpenAiWireLog.SkippingMalformedChunk(logger, ex, state.MalformedChunks, data);
             return Array.Empty<LlmEvent>();
         }
     }
+}
+
+/// <summary>
+///     SG7: BCL <c>[LoggerMessage]</c> delegates for <see cref="OpenAiWire" />.
+///     Templates, levels and operands are 1-to-1 with the former <c>LogX</c> calls.
+/// </summary>
+internal static partial class OpenAiWireLog
+{
+    [LoggerMessage(EventId = 1, Level = LogLevel.Warning, Message = "Skipping malformed chat-completions chunk #{Count}: {Data}")]
+    public static partial void SkippingMalformedChunk(ILogger logger, Exception ex, int count, string data);
 }
