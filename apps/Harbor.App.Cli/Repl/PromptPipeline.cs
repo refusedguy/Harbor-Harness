@@ -297,7 +297,7 @@ internal sealed class PromptPipeline(
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Prompt failed in CellForge REPL");
+            PromptPipelineLog.PromptFailed(logger, ex);
             host.Bridge.AppendSystemLine("! " + ex.Message);
         }
         finally
@@ -491,4 +491,14 @@ internal sealed class PromptPipeline(
         error.Contains("canceled", StringComparison.OrdinalIgnoreCase);
 
     public void Dispose() => _notifyTimer?.Dispose();
+}
+
+/// <summary>
+///     SG9: BCL <c>[LoggerMessage]</c> delegates for <see cref="PromptPipeline" />.
+///     Templates, levels and operands are 1-to-1 with the former <c>LogX</c> calls.
+/// </summary>
+internal static partial class PromptPipelineLog
+{
+    [LoggerMessage(EventId = 1, Level = LogLevel.Error, Message = "Prompt failed in CellForge REPL")]
+    public static partial void PromptFailed(ILogger logger, Exception ex);
 }
