@@ -413,10 +413,13 @@ public sealed class TableBlock : ICollapsibleChatBlock, IStatefulGenericWidget<G
     public void Paint(in BlockPaintContext ctx, GenericNavState rowState)
     {
         ArgumentNullException.ThrowIfNull(rowState);
-        Maybe<int> row = rowState.Count == BodyRows && rowState.Selected >= 0
+        // NOTE: named rowSel (not row) — CellForgeEngineAbsenceAxisTests collects
+        // Maybe-typed names per file, so a Maybe row local here would collide with
+        // ClampRow's nullable-int pattern below and trip the struct-unaware gate.
+        Maybe<int> rowSel = rowState.Count == BodyRows && rowState.Selected >= 0
             ? Maybe<int>.From(rowState.Selected)
             : SelectedRow;
-        PaintCore(ctx, row);
+        PaintCore(ctx, rowSel);
     }
 
     /// <inheritdoc />
