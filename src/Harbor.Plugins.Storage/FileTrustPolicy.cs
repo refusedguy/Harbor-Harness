@@ -26,7 +26,9 @@ namespace Harbor.Plugins.Storage;
 /// </remarks>
 public sealed class FileTrustPolicy : IPluginTrustPolicy
 {
-    private sealed record TrustEntry
+    // Internal (not private) so the source-generated context below can see it —
+    // same assembly, no API change. Wire shape unchanged (explicit JsonPropertyNames).
+    internal sealed record TrustEntry
     {
         [JsonPropertyName("path")]
         public string Path { get; set; } = string.Empty;
@@ -41,12 +43,6 @@ public sealed class FileTrustPolicy : IPluginTrustPolicy
         [JsonPropertyName("capabilities")]
         public List<string>? Capabilities { get; set; }
     }
-
-    private static readonly JsonSerializerOptions StoreOptions = new()
-    {
-        WriteIndented = true,
-        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
-    };
 
     private readonly ILogger<FileTrustPolicy> _logger;
     private readonly Func<PluginScript, Task<bool>>? _prompt;
@@ -242,7 +238,7 @@ public sealed class FileTrustPolicy : IPluginTrustPolicy
     private static List<TrustEntry> DeserializeList(JsonElement array) =>
         array.EnumerateArray()
             .Where(e => e.ValueKind == JsonValueKind.Object)
-            .Select(e => e.Deserialize<TrustEntry>(StoreOptions))
+            .Select(e => e.Deserialize(FileTrustPolicyJsonContext.Default.TrustEntry))
             .Where(e => e is not null && e!.Path.Length > 0 && e.Hash.Length > 0)
             .Cast<TrustEntry>()
             .ToList();
@@ -271,7 +267,11 @@ public sealed class FileTrustPolicy : IPluginTrustPolicy
         // `updated` list with no shared state. Only the file write + cache
         // publish below stay serialized — concurrent approvals are rare (one per
         // first-seen plugin), so this lock never sits on the hot path.
-        var json = JsonSerializer.Serialize(updated, StoreOptions);
+        // #1098 (single slice): source-gen write — same indented/ignore-null
+        // shape StoreOptions produced, trim-safe (arch-gate: Serialize carries
+        // FileTrustPolicyJsonContext.Default.*). Cold leg by design (one file
+        // write per first-seen plugin, never per-turn/per-frame).
+        var json = JsonSerializer.Serialize(updated, FileTrustPolicyJsonContext.Default.ListTrustEntry);
         lock (_sync)
         {
             try
@@ -297,4 +297,12 @@ public sealed class FileTrustPolicy : IPluginTrustPolicy
 
     private static readonly IReadOnlySet<PluginCapability> EmptyGranted =
         new HashSet<PluginCapability>();
+}
+
+/// <summary>Source-generated JSON metadata for the trust store (AOT-safe).</summary>
+[JsonSerializable(typeof(FileTrustPolicy.TrustEntry))]
+[JsonSerializable(typeof(List<FileTrustPolicy.TrustEntry>))]
+[JsonSourceGenerationOptions(WriteIndented = true, DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull)]
+internal sealed partial class FileTrustPolicyJsonContext : JsonSerializerContext
+{
 }
