@@ -1,4 +1,5 @@
 using System.Text;
+using Harbor.Tui.CellForge.Generic.Widgets;
 using Harbor.Tui.CellForge.Input;
 using Harbor.Tui.CellForge.Rendering;
 using Harbor.Ui.Framework.Navigation;
@@ -38,8 +39,17 @@ public sealed record PaletteFrame(
 ///     <see cref="Move" /> skip them. List scrolling is owned by
 ///     <see cref="ScrollableViewport" /> with a <see cref="Scrollbar" />
 ///     overlay painted over the list rows' border column.
+///
+///     Selection + scroll live outside the widget (#1158, ratatui
+///     <c>StatefulWidget</c> analog, same recipe as <c>FilePickerView</c>
+///     #1391): <see cref="State"/> survives frames and owns the selectable
+///     axis, while this type owns content (frames, query, filter) and
+///     geometry. <see cref="Paint(ScreenBuffer, Rect, GenericNavState)"/>
+///     renders with any count-compatible state, so two palettes can share
+///     one. The legacy selection API + <see cref="Paint(ScreenBuffer,
+///     Rect)"/> path is unchanged.
 /// </remarks>
-public sealed class CommandPaletteView
+public sealed class CommandPaletteView : IStatefulGenericWidget<GenericNavState>
 {
     private const int PageRows = 5;
 
@@ -57,6 +67,16 @@ public sealed class CommandPaletteView
     /// height. Replaces the hand-rolled offset/rows pair.
     /// </summary>
     private readonly ScrollableViewport _viewport = new();
+    private readonly GenericNavState _navState = new();
+
+    /// <summary>
+    /// External navigation state (selection + scroll over the selectable
+    /// subset), count-synced with the selectable count on every <see
+    /// cref="Refilter"/>/<see cref="Hide"/>. Mutating it directly (e.g. <see
+    /// cref="GenericNavState.SelectNext"/>) drives the <see
+    /// cref="Paint(ScreenBuffer, Rect, GenericNavState)"/> overload.
+    /// </summary>
+    public GenericNavState State => _navState;
 
     /// <summary>Invoked with the chosen item on Enter; the palette hides itself first.</summary>
     public Action<CommandItem>? OnCommit { get; set; }
@@ -123,6 +143,7 @@ public sealed class CommandPaletteView
         _query = string.Empty;
         _selected = 0;
         _viewport.SetTotal(0);
+        _navState.SetContent(0);
     }
 
     public void PushFrame(PaletteFrame frame)
@@ -302,6 +323,7 @@ public sealed class CommandPaletteView
         _selected = 0;
         _viewport.SetTotal(_flatView.Count);
         _viewport.SetOffset(0);
+        _navState.SetContent(_selectableIndices.Count);
         EnsureVisible();
     }
 
@@ -330,7 +352,24 @@ public sealed class CommandPaletteView
     /// Syncs <see cref="Viewport" /> to the list geometry first, so the
     /// selection is always in view.
     /// </summary>
-    public void Paint(ScreenBuffer buffer, Rect rect)
+    /// <remarks>Legacy path: highlights the widget-local selection, scrolled by the widget-local viewport.</remarks>
+    public void Paint(ScreenBuffer buffer, Rect rect) => PaintCore(buffer, rect, null);
+
+    /// <summary>
+    /// Paints with an external navigation state (#1158): when <paramref
+    /// name="navState"/> is count-compatible (<c>Count == selectable count</c>)
+    /// the highlight and scroll come from it, so one state object can drive
+    /// two palettes; otherwise falls back to the widget-local selection. The
+    /// frame/query/filter axis stays widget-local. Group headers never take
+    /// the selection — the state counts selectable entries only.
+    /// </summary>
+    public void Paint(ScreenBuffer buffer, Rect rect, GenericNavState navState)
+    {
+        ArgumentNullException.ThrowIfNull(navState);
+        PaintCore(buffer, rect, navState);
+    }
+
+    private void PaintCore(ScreenBuffer buffer, Rect rect, GenericNavState? navState)
     {
         if (!Visible || rect.Width < 8 || rect.Height < 4 || rect.X >= buffer.Cols || rect.Y >= buffer.Rows)
         {
@@ -372,20 +411,41 @@ public sealed class CommandPaletteView
 
         int listTop = rect.Y + 2;
         int availableRows = rect.Height - 3 - 1; // query row + hint footer
-        _viewport.Configure(_flatView.Count, Math.Max(1, availableRows));
-        EnsureVisible();
+        int selIdx;
+        int pickedVis;
+        int firstVis;
+        bool useExternal;
+        if (navState is not null && _selectableIndices.Count > 0 && navState.Count == _selectableIndices.Count)
+        {
+            navState.Sync(Math.Max(1, availableRows));
+            selIdx = navState.Selected;
+            pickedVis = selIdx >= 0 && selIdx < _selectableIndices.Count
+                ? _selectableIndices[selIdx]
+                : -1;
+            firstVis = _selectableIndices[Math.Clamp(navState.Offset, 0, _selectableIndices.Count - 1)];
+            if (firstVis > 0 && _flatView[firstVis - 1].IsHeader)
+            {
+                firstVis--;
+            }
 
-        int selectedVisualIndex = _selectableIndices.Count > 0
-            ? _selectableIndices[Math.Min(_selected, _selectableIndices.Count - 1)]
-            : -1;
+            useExternal = true;
+        }
+        else
+        {
+            _viewport.Configure(_flatView.Count, Math.Max(1, availableRows));
+            EnsureVisible();
+            selIdx = _selectableIndices.Count > 0 ? Math.Min(_selected, _selectableIndices.Count - 1) : -1;
+            pickedVis = selIdx >= 0 ? _selectableIndices[selIdx] : -1;
+            firstVis = (int)_viewport.Offset;
+            useExternal = false;
+        }
 
         var selectedStyle = new CellStyle(ChatPalette.Accent, attrs: StyleAttr.Bold);
         var titleStyle = ChatPalette.ToolArgs;
         var detailStyle = ChatPalette.Dim;
         var headerStyle = new CellStyle(ChatPalette.Muted, attrs: StyleAttr.Bold);
         int painted = 0;
-        int firstRow = (int)_viewport.Offset;
-        for (int i = firstRow; i < _flatView.Count && painted < availableRows; i++)
+        for (int i = firstVis; i < _flatView.Count && painted < availableRows; i++)
         {
             var (isHeader, text, detail) = _flatView[i];
             int y = listTop + painted;
@@ -395,9 +455,9 @@ public sealed class CommandPaletteView
             }
             else
             {
-                bool selected = i == selectedVisualIndex;
+                bool isPicked = i == pickedVis;
                 int titleLen = Math.Min(text.Length, innerW);
-                buffer.SetText(rect.X + 1, y, text.AsSpan(0, titleLen), selected ? selectedStyle : titleStyle);
+                buffer.SetText(rect.X + 1, y, text.AsSpan(0, titleLen), isPicked ? selectedStyle : titleStyle);
 
                 // Second plan: the item detail (short id, status, …) dimmed
                 // after the title when space remains. Empty details paint
@@ -417,8 +477,19 @@ public sealed class CommandPaletteView
         {
             // Scrollbar overlay on the border column of the list rows only —
             // hidden (buffer untouched) when the content fits, so small
-            // palettes paint byte-identical to before.
-            _ = Scrollbar.TryPaint(buffer, new Rect(rect.Right - 1, listTop, 1, availableRows), _viewport);
+            // palettes paint byte-identical to before. The stateful path
+            // reports the same visual triple without touching Viewport, so a
+            // stateful paint leaves the legacy scroll alone.
+            if (useExternal)
+            {
+                _ = Scrollbar.TryPaint(
+                    buffer, new Rect(rect.Right - 1, listTop, 1, availableRows),
+                    _flatView.Count, firstVis, availableRows);
+            }
+            else
+            {
+                _ = Scrollbar.TryPaint(buffer, new Rect(rect.Right - 1, listTop, 1, availableRows), _viewport);
+            }
         }
 
         int selectableCount = _selectableIndices.Count;
