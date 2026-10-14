@@ -3,6 +3,7 @@ using System.Text.Json;
 using System.Threading.Channels;
 using Harbor.Abstractions.Models;
 using Harbor.Ipc.Ide;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using TUnit.Assertions;
 using TUnit.Assertions.Extensions;
@@ -202,6 +203,151 @@ public class IdeBridgeTests
         await Assert.That(ex.Code).IsEqualTo(-32002);
 
         harness.Client.ReleaseListSessions();
+    }
+
+    [Test]
+    public async Task Abandoned_Handler_Fault_Is_Logged_After_Timeout_Response()
+    {
+        // #1099, second site: Dispatch abandons a handler that ignores its
+        // timeout token and observes it via ObserveAbandonedAsync. The editor
+        // already got its -32002 timeout error; a late fault must surface as
+        // AbandonedHandlerFaulted (EventId 7), not die unobserved. Deleting
+        // the `_ = ObserveAbandonedAsync(...)` detach removes the only
+        // observer — this test then times out waiting for the log entry.
+        var logger = new AbandonCapturingLogger();
+        var gate = new TaskCompletionSource<JsonElement?>(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        Task<JsonElement?> handler(string method, JsonElement? parameters, CancellationToken ct) => gate.Task;
+
+        var input = new BlockingLineReader();
+        var output = new SyncCapture();
+        await using var server = new IdeJsonRpcServer(
+            input, output, handler, logger,
+            new IdeJsonRpcServerOptions { RequestTimeout = TimeSpan.FromMilliseconds(50) });
+        Task serve = server.RunAsync(CancellationToken.None);
+
+        try
+        {
+            input.PushLine("""{"jsonrpc":"2.0","id":1,"method":"slow"}""");
+
+            // Non-vacuity anchor: the abandon path was actually taken — the
+            // editor got the timeout error while the handler was still stuck.
+            string timeoutLine = await WaitCaptureAsync(output, "\"id\":1", TimeSpan.FromSeconds(5));
+            await Assert.That(timeoutLine).Contains("-32002");
+
+            gate.TrySetException(new InvalidOperationException("late handler boom"));
+
+            string logged = await WaitAbandonLogAsync(logger, 7, TimeSpan.FromSeconds(5));
+            await Assert.That(logged).Contains("abandoned handler faulted");
+        }
+        finally
+        {
+            input.Close();
+            await serve.WaitAsync(TimeSpan.FromSeconds(5));
+        }
+    }
+
+    private static async Task<string> WaitCaptureAsync(
+        SyncCapture output, string fragment, TimeSpan timeout)
+    {
+        var deadline = DateTime.UtcNow + timeout;
+        while (DateTime.UtcNow < deadline)
+        {
+            string[] lines = output.Snapshot().Split('\n');
+            string? match = lines.FirstOrDefault(l => l.Contains(fragment, StringComparison.Ordinal));
+            if (match is not null) return match.TrimEnd('\r');
+            await Task.Delay(15).ConfigureAwait(false);
+        }
+
+        throw new TimeoutException($"No server line containing '{fragment}'. Captured: {output.Snapshot()}");
+    }
+
+    private static async Task<string> WaitAbandonLogAsync(
+        AbandonCapturingLogger logger, int eventId, TimeSpan timeout)
+    {
+        var deadline = DateTime.UtcNow + timeout;
+        while (DateTime.UtcNow < deadline)
+        {
+            string messages = logger.MessagesFor(eventId);
+            if (messages.Length > 0) return messages;
+            await Task.Delay(15).ConfigureAwait(false);
+        }
+
+        throw new TimeoutException($"No log entry with EventId {eventId} was recorded.");
+    }
+
+    /// <summary>Thread-safe <see cref="ILogger" /> capturing event ids + messages.</summary>
+    private sealed class AbandonCapturingLogger : ILogger
+    {
+        private readonly Lock _gate = new();
+        private readonly List<(int EventId, string Message)> _entries = [];
+
+        public IDisposable? BeginScope<TState>(TState state)
+            where TState : notnull => null;
+
+        public bool IsEnabled(LogLevel logLevel) => true;
+
+        public void Log<TState>(
+            LogLevel logLevel,
+            EventId eventId,
+            TState state,
+            Exception? exception,
+            Func<TState, Exception?, string> formatter)
+        {
+            lock (_gate) _entries.Add((eventId.Id, formatter(state, exception)));
+        }
+
+        public string MessagesFor(int eventId)
+        {
+            lock (_gate)
+            {
+                return string.Join(
+                    "\n", _entries.Where(e => e.EventId == eventId).Select(e => e.Message));
+            }
+        }
+    }
+
+    /// <summary>Lock-guarded writer: the server writes under its own semaphore
+    /// while the test thread polls, so capture and snapshot share one lock.</summary>
+    private sealed class SyncCapture : StringWriter
+    {
+        private readonly Lock _gate = new();
+
+        public string Snapshot()
+        {
+            lock (_gate) return GetStringBuilder().ToString();
+        }
+
+        public override void Write(char value)
+        {
+            lock (_gate) base.Write(value);
+        }
+
+        public override void Write(string? value)
+        {
+            lock (_gate) base.Write(value);
+        }
+
+        public override Task WriteLineAsync(string? value)
+        {
+            lock (_gate) base.WriteLine(value);
+            return Task.CompletedTask;
+        }
+
+        public override Task WriteLineAsync(ReadOnlyMemory<char> buffer, CancellationToken ct = default)
+        {
+            lock (_gate)
+            {
+                base.Write(buffer.Span);
+                base.WriteLine();
+            }
+
+            return Task.CompletedTask;
+        }
+
+        public override Task FlushAsync(CancellationToken ct = default) => Task.CompletedTask;
+
+        public override Encoding Encoding => Encoding.UTF8;
     }
 
     [Test]
