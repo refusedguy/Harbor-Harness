@@ -14,13 +14,13 @@
 //   src/Harbor.Tui.CellForge/Chat/Panels/CellForgePanelAdapter.cs:96
 //       `return provider.OnKey(key, ctx);` — inside
 //       `CellForgePanelAdapter.RouteKey`, whose only caller in the whole tree is
-//       `ChatScreenLayout.cs:1550`.
+//       `ChatScreenLayout.cs:1546`.
 //   src/Harbor.Tui.CellForge/Chat/Panels/CellForgeJumpPaletteOverlayLayer.cs:170
 // check-doc-cites: record-drift src/Harbor.Tui.CellForge/Chat/Panels/CellForgeJumpPaletteOverlayLayer.cs:170 now="/// sees it." [#947: written over `return _panel.OnKey(`; repair deferred to the owner's symbol-rename decision] -->
 //       `return _panel.OnKey(` — inside that layer's own `OnKey`, and the layer
 //       is never constructed outside tests.
 //
-// And `ChatScreenLayout.RoutePanelKey` (`:1467`), the caller at `:1513`, has NO
+// And `ChatScreenLayout.RoutePanelKey` (`:1500`), the caller at `:1546`, has NO
 // caller either. So the chain is two links long and both ends are in the air.
 //
 // WHY THE USER-VISIBLE PART IS SMALLER THAN "7 BROKEN PANELS"
@@ -60,7 +60,7 @@
 //     in the chain above is skipped by construction;
 //   * it dispatches `AppMsg.FocusPanel("logs")` by hand first, because
 //     `RoutePanelKey` returns early unless the panel is `Focused`
-//     (`ChatScreenLayout.cs:1522-1525`) and the product's F12 path only ever
+//     (`ChatScreenLayout.cs:1533-1536`) and the product's F12 path only ever
 //     reaches `Visible` — `AppReducer.TogglePanel` (`:172-187`) toggles
 //     Hidden↔Visible and never sets `FocusedPanelId`. NO product host dispatches
 //     `AppMsg.FocusPanel` with a non-null id; the one non-test dispatch is

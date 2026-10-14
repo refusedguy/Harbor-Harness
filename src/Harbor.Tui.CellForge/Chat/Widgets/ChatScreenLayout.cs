@@ -1394,9 +1394,9 @@ public static class ChatScreenPanelDock
             State = state,
             Services = services,
         };
-        int avail = Math.Max(1, screen.Timeline.Rect.Height);
-        float ratio = Math.Clamp((float)(avail - Math.Min(h, avail - 1)) / avail, 0.05f, 0.95f);
-        screen.Tree.Split(ChatScreen.TimelineId, SplitDir.Vertical, ratio, leaf, gap: 0);
+        // Ratio math lives in ScreenBuilder.AttachLeaf (#1201): the single
+        // home for the bottom/side reservation so both stay identical.
+        ScreenBuilder.AttachLeaf(screen.Tree, ChatScreen.TimelineId, SplitDir.Vertical, leaf, h, gap: 0);
         if (viewportWidth > 0 && viewportHeight > 0)
         {
             screen.Tree.Solve(viewportWidth, viewportHeight);
@@ -1414,8 +1414,6 @@ public static class ChatScreenPanelDock
         int viewportWidth,
         int viewportHeight)
     {
-        int w = Math.Max(1, SizeOf(view, active));
-
         var leaf = new CellForgeDockPanel(leafId, placement, CellForgeDockPanel.SidePriority)
         {
             Providers = new[] { active },
@@ -1423,11 +1421,9 @@ public static class ChatScreenPanelDock
             State = state,
             Services = services,
         };
-        int avail = Math.Max(1, screen.Timeline.Rect.Width);
-        const int gap = 1;
-        int usable = Math.Max(1, avail - gap);
-        float ratio = Math.Clamp((float)(usable - Math.Min(w, usable - 1)) / usable, 0.05f, 0.95f);
-        screen.Tree.Split(ChatScreen.TimelineId, SplitDir.Horizontal, ratio, leaf, gap: gap);
+        // Same single home as AttachBottom (#1201): columns with a 1-column gap.
+        int w = Math.Max(1, SizeOf(view, active));
+        ScreenBuilder.AttachLeaf(screen.Tree, ChatScreen.TimelineId, SplitDir.Horizontal, leaf, w, gap: 1);
         if (viewportWidth > 0 && viewportHeight > 0)
         {
             screen.Tree.Solve(viewportWidth, viewportHeight);
