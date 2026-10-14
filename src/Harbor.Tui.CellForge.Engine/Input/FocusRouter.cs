@@ -20,6 +20,46 @@ public sealed class FocusRouter
 
     public void Add(IFocusTarget target) => _order.Add(target);
 
+    /// <summary>
+    /// Removes the named entry wherever it sits. Removing the focused entry
+    /// blurs it and leaves the router unfocused (caller routes explicitly via
+    /// Next/Previous/FocusById); removing an entry before the focused one
+    /// shifts the index so Current stays put. False when the id is unknown.
+    /// </summary>
+    public bool Remove(string id)
+    {
+        for (int i = 0; i < _order.Count; i++)
+        {
+            if (_order[i].Id == id)
+            {
+                bool wasCurrent = i == _index;
+                IFocusTarget removed = _order[i];
+                _order.RemoveAt(i);
+                if (wasCurrent)
+                {
+                    removed.OnFocusChanged(false);
+                    _index = -1;
+                }
+                else if (i < _index)
+                {
+                    _index--;
+                }
+
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>Blurs the focused entry (when any) and drops every entry.</summary>
+    public void Clear()
+    {
+        Current?.OnFocusChanged(false);
+        _order.Clear();
+        _index = -1;
+    }
+
     public bool Next()
     {
         if (_order.Count == 0)
