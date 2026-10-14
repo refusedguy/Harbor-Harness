@@ -215,7 +215,11 @@ public class StatusBarFactsParityTests
     [Test]
     public async Task Layout_DoesNotRebuildTheCellsItWasGiven()
     {
-        string layout = ReadRepoFile("src", "Harbor.Tui.CellForge", "Chat", "Widgets", "ChatScreenLayout.cs");
+        // #95: the StatusProjectorPanel projector seam (segment mapping +
+        // BuildSegments + SortRow/Compare + Cell) moved to its own file, same
+        // namespace — the footer still reads the projected bar, from there.
+        string layout = ReadRepoFile("src", "Harbor.Tui.CellForge", "Chat", "Widgets", "ChatScreenLayout.cs")
+            + ReadRepoFile("src", "Harbor.Tui.CellForge", "Chat", "Widgets", "StatusProjectorPanel.cs");
         string projector = ReadRepoFile("src", "Harbor.Ui.Framework.Projection", "Projection", "StatusProjector.cs");
 
         // #488 was about a projection that was computed and thrown away: the
