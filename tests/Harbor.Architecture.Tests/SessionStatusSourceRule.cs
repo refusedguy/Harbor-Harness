@@ -149,7 +149,7 @@ internal static partial class SessionStatusSourceProbe
     ///     scanned, not trusted — see rule A.
     /// </summary>
     internal const string DecisionFile =
-        "src/Harbor.Ui.Framework.State/State/ChatAppReducer.cs";
+        "src/Harbor.Ui.Framework.State/Agent/AgentReducer.cs";
 
     /// <summary>
     ///     Every lifecycle outcome the decision site must be able to say. A run
