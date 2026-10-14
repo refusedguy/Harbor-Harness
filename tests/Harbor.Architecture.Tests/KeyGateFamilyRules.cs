@@ -326,10 +326,12 @@ public class KeyGateFamilyRules
         // nature: empty, it admits nothing — so Command, not Buffer.
         new("BindingsMap(scope)", KeyGateFamily.Command, "src/Harbor.Tui.CellForge.Engine/Input/BindingsMap.cs"),
 
-        // ChatAppReducer.ActivateSlotFromKey (#1173): the Ctrl+digit
-        // quick-slot path judges the pressed rune (1-9 focus the Nth tab).
-        // No buffer anywhere on this path — the rune navigates — so Command.
-        new("ChatAppReducer(slot digit)", KeyGateFamily.Command, "src/Harbor.Ui.Framework.State/State/ChatAppReducer.cs"),
+        // TabStripReducer.ActivateSlotFromKey (#1173, moved from ChatAppReducer
+        // by the #95 tab-strip extract — the forwarder left behind takes the
+        // key but no longer judges the rune): the Ctrl+digit quick-slot path
+        // judges the pressed rune (1-9 focus the Nth tab). No buffer anywhere
+        // on this path — the rune navigates — so Command.
+        new("TabStripReducer(slot digit)", KeyGateFamily.Command, "src/Harbor.Ui.Framework.State/Tabs/TabStripReducer.cs"),
 
         // ReplInputLoop's two palette chords (#857 added ctrl+j beside the
         // existing ctrl+p). Neither holds a text buffer and both require an
