@@ -1,3 +1,6 @@
+extern alias CompatWire;
+
+using System.Buffers;
 using System.Net;
 using System.Text;
 using System.Text.Json;
@@ -7,6 +10,7 @@ using Harbor.Providers.Anthropic;
 using Harbor.Providers.Ollama;
 using Harbor.Providers.OpenAI;
 using Microsoft.Extensions.Logging.Abstractions;
+using CompatProviderArgs = CompatWire::Harbor.Providers.Internal.ProviderArguments;
 
 namespace Harbor.Providers.Tests;
 
@@ -469,13 +473,6 @@ public class ProviderPayloadWireTests
         Body(OpenAiRequestBuilder.BuildChatCompletionsRequest(
             request, "https://api.openai.com/v1", NullLogger.Instance));
 
-    private static byte[] BuildToolCallBodyBytes(LlmRequest request)
-    {
-        using HttpRequestMessage message = OpenAiRequestBuilder.BuildChatCompletionsRequest(
-            request, "https://api.openai.com/v1", NullLogger.Instance);
-        return message.Content!.ReadAsByteArrayAsync().GetAwaiter().GetResult();
-    }
-
     private static string ToolCallArgumentsOf(string body)
     {
         using JsonDocument parsed = JsonDocument.Parse(body);
@@ -501,14 +498,14 @@ public class ProviderPayloadWireTests
         // #1102 (one slice): request-build wrote tool arguments through a
         // per-tool-call UTF-16 string — GetRawText() allocates the args text
         // and WriteString re-encodes it (double-encode by string). The
-        // builder now transcodes the element to pooled UTF-8 once and
-        // escapes it into the payload: a single copy.
-        // Relative gate: 1 KB vs 8 KB args. The arguments string on the wire
-        // is byte-identical to the input in both, while the allocated-bytes
-        // delta between the two builds tracks the payload growth ~2:1
-        // (body bytes + body copy) instead of ~4:1 (a UTF-16 round-trip on
-        // top of the body). The identity asserts below pass on the old code
-        // too — they pin behavior; the slope is what gates the optimization.
+        // builder now transcodes the element into the thread-local scratch
+        // and escapes it into the payload.
+        // Identity pin (deterministic): the arguments string on the wire is
+        // byte-identical to the input for 1 KB and 8 KB args. The allocation
+        // gate lives in ProviderArguments_ScratchTranscode_DoesNotScale —
+        // whole-build slopes cannot discriminate here (fixed framing and
+        // buffer growth dominate both shapes; CI measured 4.15 B/char with
+        // the naive pooled version, over the 3.0 whole-build gate).
         string smallJson = ArgsJson('s', 1024);
         string largeJson = ArgsJson('l', 8192);
 
@@ -520,37 +517,7 @@ public class ProviderPayloadWireTests
         await Assert.That(ToolCallArgumentsOf(BuildToolCallBody(smallRequest))).IsEqualTo(smallJson)
             .Because("arguments travel as a STRING on this API, byte-identical to the input");
         await Assert.That(ToolCallArgumentsOf(BuildToolCallBody(largeRequest))).IsEqualTo(largeJson)
-            .Because("the pooled transcode must not damage a large payload either");
-
-        const int warmup = 25;
-        const int iterations = 200;
-        for (int i = 0; i < warmup; i++)
-        {
-            BuildToolCallBodyBytes(smallRequest);
-            BuildToolCallBodyBytes(largeRequest);
-        }
-
-        GC.WaitForPendingFinalizers();
-        long beforeSmall = GC.GetAllocatedBytesForCurrentThread();
-        for (int i = 0; i < iterations; i++)
-        {
-            BuildToolCallBodyBytes(smallRequest);
-        }
-        long smallAllocated = GC.GetAllocatedBytesForCurrentThread() - beforeSmall;
-
-        GC.WaitForPendingFinalizers();
-        long beforeLarge = GC.GetAllocatedBytesForCurrentThread();
-        for (int i = 0; i < iterations; i++)
-        {
-            BuildToolCallBodyBytes(largeRequest);
-        }
-        long largeAllocated = GC.GetAllocatedBytesForCurrentThread() - beforeLarge;
-
-        double slope = (double)(largeAllocated - smallAllocated) / iterations / (largeJson.Length - smallJson.Length);
-        Console.WriteLine($"requestbuild-args: small={smallAllocated / iterations}B/build large={largeAllocated / iterations}B/build slope={slope:F2}B/char (single copy ~2, string round-trip ~4)");
-        await Assert.That(slope).IsLessThanOrEqualTo(3.0)
-            .Because("past 3 B/char the builds carry a second copy of the args (the UTF-16 "
-                   + "round-trip); a single copy tracks the body at ~2 B/char");
+            .Because("the scratch transcode must not damage a large payload either");
     }
 
     [Test]
@@ -586,5 +553,87 @@ public class ProviderPayloadWireTests
                 .Because("the compat adapter must emit the same arguments string as the native builder");
             Console.WriteLine($"compatbuild-args: args={argsJson.Length} arguments={wireArgs.Length} events={events}");
         }
+    }
+
+    private static long MeasureArgumentsDelta(
+        int iterations, JsonElement small, JsonElement large, Action<Utf8JsonWriter, JsonElement> write)
+    {
+        // One pre-grown output buffer per call (fixed 16 K rent — identical
+        // in both arms, so it cancels in the delta); what remains is the
+        // scaling part of the arguments step itself. Warmup alternates both
+        // sizes so the scratch settles at the large high-water mark and the
+        // JIT settles before the first measured call.
+        void WriteOnce(JsonElement arguments)
+        {
+            var output = new ArrayBufferWriter<byte>(16384);
+            using (var writer = new Utf8JsonWriter(output))
+            {
+                writer.WriteStartObject();
+                write(writer, arguments);
+                writer.WriteEndObject();
+            }
+        }
+
+        for (int i = 0; i < 25; i++)
+        {
+            WriteOnce(i % 2 == 0 ? small : large);
+        }
+
+        GC.WaitForPendingFinalizers();
+        long beforeSmall = GC.GetAllocatedBytesForCurrentThread();
+        for (int i = 0; i < iterations; i++)
+        {
+            WriteOnce(small);
+        }
+        long smallAllocated = GC.GetAllocatedBytesForCurrentThread() - beforeSmall;
+
+        GC.WaitForPendingFinalizers();
+        long beforeLarge = GC.GetAllocatedBytesForCurrentThread();
+        for (int i = 0; i < iterations; i++)
+        {
+            WriteOnce(large);
+        }
+        long largeAllocated = GC.GetAllocatedBytesForCurrentThread() - beforeLarge;
+
+        return largeAllocated - smallAllocated;
+    }
+
+    [Test]
+    public async Task ProviderArguments_ScratchTranscode_DoesNotScaleWithArgsSize()
+    {
+        // #1102 gate (relative, with sensitivity control): the arguments
+        // step must not scale with the args size. The old shape
+        // (GetRawText + WriteStringValue) allocates ~2 bytes per char; the
+        // scratch transcode settles at the high-water mark and allocates
+        // nothing steady-state. Both arms run the same harness — the old
+        // arm pins the sensitivity (if it ever stops scaling, the harness
+        // is blind and a green bound below would prove nothing), the new
+        // arm carries the bound.
+        string smallJson = ArgsJson('s', 1024);
+        string largeJson = ArgsJson('l', 8192);
+        using var smallArgs = JsonDocument.Parse(smallJson);
+        using var largeArgs = JsonDocument.Parse(largeJson);
+
+        const int iterations = 200;
+        long oldDelta = MeasureArgumentsDelta(
+            iterations, smallArgs.RootElement, largeArgs.RootElement,
+            static (writer, arguments) =>
+            {
+                writer.WritePropertyName("arguments");
+                writer.WriteStringValue(arguments.GetRawText());
+            });
+        long newDelta = MeasureArgumentsDelta(
+            iterations, smallArgs.RootElement, largeArgs.RootElement,
+            static (writer, arguments) => CompatProviderArgs.WriteArgumentsString(writer, "arguments", arguments));
+
+        Console.WriteLine($"providerargs-scratch: old={oldDelta}B new={newDelta}B over {iterations} calls (round-trip scales ~2B/char, scratch flat)");
+        await Assert.That(oldDelta).IsGreaterThanOrEqualTo(1_000_000)
+            .Because("sensitivity control: the UTF-16 round-trip allocates ~2 bytes per char "
+                   + "x 7168 chars x 200 calls (~2.9M); a smaller number means the harness "
+                   + "stopped seeing the scaling and the bound below is vacuous");
+        await Assert.That(newDelta).IsLessThanOrEqualTo(200_000)
+            .Because("past this the helper carries a per-call copy again (a fresh buffer "
+                   + "per call re-rents its growth chain on every large payload — CI caught "
+                   + "exactly that at whole-build slope 4.15 vs the 3.0 gate)");
     }
 }

@@ -329,8 +329,8 @@ public sealed class OpenAiCompatibleLlmClient : ILlmClient
                     writer.WriteStartObject("function");
                     writer.WriteString("name", tc.Name);
                     // #1102: no per-tool-call UTF-16 round-trip (GetRawText +
-                    // WriteStringValue double-encode by string) — pooled
-                    // UTF-8 transcode, single copy (ProviderArguments).
+                    // WriteStringValue double-encode by string) — scratch
+                    // transcode, no per-call string (ProviderArguments).
                     ProviderArguments.WriteArgumentsString(writer, "arguments", tc.Arguments);
                     writer.WriteEndObject();
                     writer.WriteEndObject();
