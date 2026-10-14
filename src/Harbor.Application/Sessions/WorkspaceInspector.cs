@@ -1,5 +1,5 @@
 using System.Diagnostics;
-using System.Text;
+using Harbor.Abstractions.Extensions;
 
 namespace Harbor.Application.Sessions;
 
@@ -187,15 +187,20 @@ public static class WorkspaceInspector
     private static string JoinDirt(List<string> tracked)
     {
         int show = Math.Min(tracked.Count, MaxDirtPathsInError);
-        var sb = new StringBuilder();
+        // §PERF-006 (#1097): per-call builder rented from
+        // StringBuilderPool instead of allocated. Safe: synchronous
+        // composition on the cold dirty-workspace error path, materialized
+        // via ToString() before the `using` returns it.
+        // Bounded by MaxDirtPathsInError (20).
+        using var sb = StringBuilderPool.Rent(1024);
         for (int i = 0; i < show; i++)
         {
             if (i > 0)
-                sb.Append(", ");
-            sb.Append(tracked[i]);
+                sb.Builder.Append(", ");
+            sb.Builder.Append(tracked[i]);
         }
         if (tracked.Count > show)
-            sb.Append(" (+").Append(tracked.Count - show).Append(" more)");
+            sb.Builder.Append(" (+").Append(tracked.Count - show).Append(" more)");
         return sb.ToString();
     }
 
