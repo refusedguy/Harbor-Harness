@@ -224,8 +224,9 @@ internal sealed class StreamingCoalescer : IDisposable
                 else
                 {
                     // Failure path only: materialize the diagnostics tail
-                    // BEFORE the builder goes back to the pool.
-                    rawTail = RawTail(builder.ToString());
+                    // BEFORE the builder goes back to the pool. Windowed
+                    // copy — never the whole builder for a 200-char tail.
+                    rawTail = RawTail(builder);
                     parsed = false;
                 }
             }
@@ -286,14 +287,20 @@ internal sealed class StreamingCoalescer : IDisposable
         }
     }
 
-    private static string RawTail(string jsonText)
+    /// <summary>
+    ///     Last <see cref="RawArgsTailLength" /> chars of the accumulated
+    ///     args, copied as a window (<c>ToString(start, length)</c> copies
+    ///     only the requested range) — the failure path never materializes
+    ///     the whole builder for a 200-char diagnostic tail.
+    /// </summary>
+    private static string RawTail(StringBuilder builder)
     {
-        if (jsonText.Length <= RawArgsTailLength)
+        if (builder.Length <= RawArgsTailLength)
         {
-            return jsonText;
+            return builder.ToString();
         }
 
-        return jsonText.Substring(jsonText.Length - RawArgsTailLength);
+        return builder.ToString(builder.Length - RawArgsTailLength, RawArgsTailLength);
     }
 
     /// <summary>

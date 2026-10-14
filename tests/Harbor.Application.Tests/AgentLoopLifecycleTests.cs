@@ -243,6 +243,58 @@ public class AgentLoopLifecycleTests
     }
 
     [Test]
+    public async Task RunAsync_MalformedLargeArgs_ErrorTailIsFixedWindowIndependentOfPayloadSize()
+    {
+        // #1102 (one slice): the malformed-args diagnostic tail is a fixed
+        // 200-char window of the accumulated args, independent of payload
+        // size — the failure path copies the window, never the whole
+        // builder. Relative gate: a 1 KB and an 8 KB payload both surface
+        // exactly the last 200 chars, so the error output stays bounded
+        // while the payload grows 8x.
+        const int tailLength = 200;
+        string[] payloads =
+        [
+            "{ broken " + new string('x', 1024),
+            "{ broken " + new string('y', 8192),
+        ];
+
+        foreach (string payload in payloads)
+        {
+            var counter = new CountingTool();
+            var client = new ScriptedLlmClient(
+            [
+                new LlmEvent[]
+                {
+                    new ToolCallStartEvent("call-1", "counter"),
+                    new ToolCallDeltaEvent("call-1", payload),
+                    new StepFinishEvent(0, "tool_use", new Usage(2, 1))
+                },
+                new LlmEvent[]
+                {
+                    new TextDeltaEvent("t", "recovered"),
+                    new StepFinishEvent(1, "stop", new Usage(1, 1))
+                }
+            ]);
+            var loop = TestLoops.Create(client, new FakeToolRegistry(counter), new FakeTokenTracker(), new FakeCompactionService(), new FakeEventBus());
+            var session = NewSession();
+
+            var result = await loop.RunAsync(session, TestAgents.AllowAll());
+
+            await Assert.That(result.IsSuccess).IsTrue();
+            await Assert.That(counter.Executions).IsEqualTo(0);
+            var toolResults = session.Messages.OfType<ToolResultMessage>().ToList();
+            await Assert.That(toolResults.Count).IsEqualTo(1);
+            var entry = toolResults[0].Results.Single(r => r.ToolCallId == "call-1");
+            await Assert.That(entry.IsError).IsTrue();
+            string expectedTail = payload.Substring(payload.Length - tailLength);
+            await Assert.That(entry.Output.EndsWith(expectedTail)).IsTrue();
+            await Assert.That(entry.Output.Length).IsLessThan(payload.Length);
+
+            Console.WriteLine($"coalescer-rawtail: payload={payload.Length} tail={tailLength} error-output={entry.Output.Length}");
+        }
+    }
+
+    [Test]
     public async Task RunAsync_CompactionFails_FallsBackAndContinuesWithTruncatedContext()
     {
         var session = NewSession();
