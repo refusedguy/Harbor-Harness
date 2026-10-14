@@ -45,7 +45,7 @@
 //     DialogOverlay.cs:683                    != 0            (kitty)
 //     DialogOverlay.cs:752                    == 0 && !IsControl   (legacy ConsoleKeyInfo)
 //     QuestionFormView.cs:571                 != 0            (custom row only)
-//     FilePickerView.cs:153                   is None or Shift
+//     FilePickerView.cs:172                   is None or Shift
 //     CommandPaletteView.cs:255               is None or Shift
 //     CellForgeJumpPalettePanel.cs:250        is None or Shift && !IsControl
 //     ReplInputLoop.cs:461                    is None or Shift
