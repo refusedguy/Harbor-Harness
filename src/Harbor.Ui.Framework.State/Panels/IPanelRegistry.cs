@@ -109,7 +109,7 @@ public sealed class PanelRegistry : IPanelRegistry
         {
             if (_providers.TryGetValue(panel.Id, out var existing))
             {
-                _logger?.LogWarning("Panel already registered, replacing: {Id}", panel.Id);
+                if (_logger is not null) PanelRegistryLog.PanelAlreadyRegistered(_logger, panel.Id);
                 // Preserve registration order: replace in-place at the existing slot
                 // so plugin-override of builtins keeps the original Alt+N hotkey slot.
                 int idx = _ordered.IndexOf(existing);
@@ -124,8 +124,7 @@ public sealed class PanelRegistry : IPanelRegistry
             }
 
             _providers[panel.Id] = panel;
-            _logger?.LogDebug("Registered panel {Id} ({Placement}, size={Size})",
-                panel.Id, panel.DefaultPlacement, panel.DefaultSize);
+            if (_logger is not null) PanelRegistryLog.PanelRegistered(_logger, panel.Id, panel.DefaultPlacement, panel.DefaultSize);
         }
 
         return Result.Success();
@@ -196,4 +195,17 @@ public interface IPanelRegistry
 
     /// <summary>Look up a provider by id.</summary>
     public IPanelProvider? Get(string id);
+}
+
+/// <summary>
+///     SG11: BCL <c>[LoggerMessage]</c> delegates for <see cref="PanelRegistry" />.
+///     Templates, levels and operands are 1-to-1 with the former <c>LogX</c> calls.
+/// </summary>
+internal static partial class PanelRegistryLog
+{
+    [LoggerMessage(EventId = 1, Level = LogLevel.Warning, Message = "Panel already registered, replacing: {Id}")]
+    public static partial void PanelAlreadyRegistered(ILogger logger, string id);
+
+    [LoggerMessage(EventId = 2, Level = LogLevel.Debug, Message = "Registered panel {Id} ({Placement}, size={Size})")]
+    public static partial void PanelRegistered(ILogger logger, string id, TuiPanelPlacement placement, int size);
 }
