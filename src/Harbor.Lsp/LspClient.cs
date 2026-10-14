@@ -1,5 +1,6 @@
 using System.Buffers;
 using System.Buffers.Text;
+using System.Collections.Concurrent;
 using System.Text;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
@@ -39,8 +40,13 @@ public sealed class LspClient : IAsyncDisposable
     private readonly Stream _output;
     private readonly ILogger _logger;
     private readonly SemaphoreSlim _writeLock = new(1, 1);
-    private readonly Dictionary<int, TaskCompletionSource<JsonElement>> _pending = [];
-    private readonly Lock _pendingLock = new();
+    // #1095: pending-request demux is on the LSP hot path — SendRequestAsync
+    // registers/unregisters per request, the reader loop looks up per response,
+    // Dispose cancels on shutdown. A ConcurrentDictionary keeps all four sites
+    // lock-free; ids are unique via Interlocked, TCS ops are thread-safe, and
+    // Dispose enumeration is a moment-in-time snapshot. Same discipline as
+    // DebouncedPluginWatcher._pending.
+    private readonly ConcurrentDictionary<int, TaskCompletionSource<JsonElement>> _pending = new();
     private readonly CancellationTokenSource _lifetimeCts = new();
     private readonly byte[] _oneByte = new byte[1]; // reused header probe — the read loop is the only reader
     private readonly byte[] _headerScratch = new byte[32]; // formatted + written under _writeLock, never shared
@@ -89,10 +95,7 @@ public sealed class LspClient : IAsyncDisposable
         await WriteFrameAsync(BuildFrame("2.0", id, method, parameters), ct).ConfigureAwait(false);
 
         var tcs = new TaskCompletionSource<JsonElement>(TaskCreationOptions.RunContinuationsAsynchronously);
-        lock (_pendingLock)
-        {
-            _pending[id] = tcs;
-        }
+        _pending[id] = tcs;
 
         try
         {
@@ -100,10 +103,7 @@ public sealed class LspClient : IAsyncDisposable
         }
         finally
         {
-            lock (_pendingLock)
-            {
-                _ = _pending.Remove(id);
-            }
+            _ = _pending.TryRemove(id, out _);
         }
     }
 
@@ -117,15 +117,12 @@ public sealed class LspClient : IAsyncDisposable
         if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
 
         await _lifetimeCts.CancelAsync().ConfigureAwait(false);
-        lock (_pendingLock)
+        foreach (var tcs in _pending.Values)
         {
-            foreach (var tcs in _pending.Values)
-            {
-                _ = tcs.TrySetCanceled();
-            }
-
-            _pending.Clear();
+            _ = tcs.TrySetCanceled();
         }
+
+        _pending.Clear();
 
         _lifetimeCts.Dispose();
         _writeLock.Dispose();
@@ -241,25 +238,22 @@ public sealed class LspClient : IAsyncDisposable
 
         if (root.TryGetProperty("id", out JsonElement idEl) && idEl.ValueKind == JsonValueKind.Number)
         {
-            lock (_pendingLock)
+            if (_pending.TryGetValue(idEl.GetInt32(), out var tcs))
             {
-                if (_pending.TryGetValue(idEl.GetInt32(), out var tcs))
+                if (root.TryGetProperty("result", out JsonElement result))
                 {
-                    if (root.TryGetProperty("result", out JsonElement result))
-                    {
-                        _ = tcs.TrySetResult(result.Clone());
-                    }
-                    else if (root.TryGetProperty("error", out JsonElement error))
-                    {
-                        string message = error.TryGetProperty("message", out JsonElement m) && m.ValueKind == JsonValueKind.String
-                            ? m.GetString()!
-                            : "LSP request failed";
-                        _ = tcs.TrySetException(new LspRequestException(message));
-                    }
-                    else
-                    {
-                        _ = tcs.TrySetResult(default);
-                    }
+                    _ = tcs.TrySetResult(result.Clone());
+                }
+                else if (root.TryGetProperty("error", out JsonElement error))
+                {
+                    string message = error.TryGetProperty("message", out JsonElement m) && m.ValueKind == JsonValueKind.String
+                        ? m.GetString()!
+                        : "LSP request failed";
+                    _ = tcs.TrySetException(new LspRequestException(message));
+                }
+                else
+                {
+                    _ = tcs.TrySetResult(default);
                 }
             }
         }
