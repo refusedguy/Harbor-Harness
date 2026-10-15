@@ -76,7 +76,7 @@ public sealed class LspClient : IAsyncDisposable
     {
         _readLoopTask = ReadLoopAsync(_lifetimeCts.Token);
         _ = _readLoopTask.ContinueWith(
-            static (t, state) => ((ILogger)state!).LogWarning(t.Exception, "LSP read loop faulted"),
+            static (t, state) => LspClientLog.ReadLoopFaulted((ILogger)state!, t.Exception!),
             _logger,
             CancellationToken.None,
             TaskContinuationOptions.OnlyOnFaulted,
@@ -219,10 +219,10 @@ public sealed class LspClient : IAsyncDisposable
         }
         catch (Exception ex)
         {
-            _logger.LogDebug(ex, "LSP read loop ended");
+            LspClientLog.ReadLoopEnded(_logger, ex);
         }
 
-        _logger.LogDebug("LSP read loop exited");
+        LspClientLog.ReadLoopExited(_logger);
         Disconnected?.Invoke(this, EventArgs.Empty);
     }
 
@@ -378,6 +378,22 @@ public sealed class LspClient : IAsyncDisposable
             total += read;
         }
     }
+}
+
+/// <summary>
+///     SG13: BCL <c>[LoggerMessage]</c> delegates for <see cref="LspClient" />.
+///     Templates, levels and operands are 1-to-1 with the former <c>LogX</c> calls.
+/// </summary>
+internal static partial class LspClientLog
+{
+    [LoggerMessage(EventId = 1, Level = LogLevel.Warning, Message = "LSP read loop faulted")]
+    public static partial void ReadLoopFaulted(ILogger logger, Exception ex);
+
+    [LoggerMessage(EventId = 2, Level = LogLevel.Debug, Message = "LSP read loop ended")]
+    public static partial void ReadLoopEnded(ILogger logger, Exception ex);
+
+    [LoggerMessage(EventId = 3, Level = LogLevel.Debug, Message = "LSP read loop exited")]
+    public static partial void ReadLoopExited(ILogger logger);
 }
 
 /// <summary>The language server answered a request with a JSON-RPC error.</summary>
