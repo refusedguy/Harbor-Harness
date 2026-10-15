@@ -28,18 +28,15 @@ internal sealed class FrozenToolView : IToolSource
 {
     private readonly FrozenDictionary<ToolName, ITool> _tools;
     private readonly ToolDescriptor[] _all;
-    private readonly Func<ITool, ToolDescriptor> _describe;
     private readonly Dictionary<PermissionRuleset, ToolDescriptor[]> _byPermission = new(ReferenceEqualityComparer.Instance);
     private readonly object _gate = new();
 
     private FrozenToolView(
         FrozenDictionary<ToolName, ITool> tools,
-        ToolDescriptor[] all,
-        Func<ITool, ToolDescriptor> describe)
+        ToolDescriptor[] all)
     {
         _tools = tools;
         _all = all;
-        _describe = describe;
     }
 
     /// <summary>
@@ -65,7 +62,7 @@ internal sealed class FrozenToolView : IToolSource
         }
 
         Array.Sort(all, CompareByName);
-        return new FrozenToolView(tools, all, describe);
+        return new FrozenToolView(tools, all);
     }
 
     private static int CompareByName(ToolDescriptor left, ToolDescriptor right) =>
@@ -84,6 +81,14 @@ internal sealed class FrozenToolView : IToolSource
     ///     <c>permission.Evaluate(name, "*")</c> allows it — evaluation semantics
     ///     are unchanged.
     /// </summary>
+    /// <remarks>
+    ///     #1100: describe-once — the filter reuses the prebuilt <c>_all</c>
+    ///     descriptor instances instead of re-describing each allowed tool, so a
+    ///     first-time filtered resolve pays N evaluates + one array, not N
+    ///     describes + a re-sort. Filtering a sorted array preserves the order,
+    ///     so no re-sort is needed. An allow-all ruleset shares the <c>_all</c>
+    ///     instance itself (callers treat snapshots as read-only).
+    /// </remarks>
     public IReadOnlyList<ToolDescriptor> Resolve(PermissionRuleset? permission)
     {
         if (permission is null)
@@ -101,14 +106,17 @@ internal sealed class FrozenToolView : IToolSource
 
         // Compute outside the lock: Evaluate is pure with respect to this snapshot,
         // and holding the gate across N evaluations would serialize concurrent
-        // first-time resolves.
-        var buf = new ToolDescriptor[_tools.Count];
+        // first-time resolves. Filter over the prebuilt descriptors — no
+        // re-describe, order preserved, no re-sort.
+        var all = _all;
+        var buf = new ToolDescriptor[all.Length];
         int n = 0;
-        foreach (var t in _tools.Values)
+        for (int i = 0; i < all.Length; i++)
         {
-            if (permission.Evaluate(t.Name.Value, "*") == PermissionAction.Allow)
+            var d = all[i];
+            if (permission.Evaluate(d.Name.Value, "*") == PermissionAction.Allow)
             {
-                buf[n++] = _describe(t);
+                buf[n++] = d;
             }
         }
 
@@ -119,19 +127,12 @@ internal sealed class FrozenToolView : IToolSource
         }
         else if (n == buf.Length)
         {
-            snapshot = buf;
+            snapshot = all;
         }
         else
         {
             snapshot = new ToolDescriptor[n];
             Array.Copy(buf, snapshot, n);
-        }
-
-        // #1240: keep the per-ruleset cache pre-sorted (ordinal by name), like
-        // the unfiltered array above — the per-turn consumer iterates as-is.
-        if (snapshot.Length > 1)
-        {
-            Array.Sort(snapshot, CompareByName);
         }
 
         lock (_gate)
