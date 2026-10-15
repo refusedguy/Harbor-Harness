@@ -30,7 +30,8 @@
 //                      #469 already did this split — the three role
 //                      aliases are registered in ServiceRegistration.cs and
 //                      every consumer depends on a role, not on the alias.
-//   ITokenTracker      7 declared members. The issue's number is right. Its
+//   ITokenTracker      8 declared members (7 when the issue was filed; the #1106
+//                      staleness slice added RecordUpdatedMessage). Its
 //                      split is already ratcheted by #752
 //                      (TokenTrackingRatchet.cs) and is blocked on a product
 //                      decision, not on missing work: the aggregate declares

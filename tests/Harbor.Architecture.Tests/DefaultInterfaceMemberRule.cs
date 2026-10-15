@@ -378,6 +378,9 @@ public sealed class DefaultInterfaceMemberRule
     ///     <list type="bullet">
     ///         <item><c>ITokenTracker.RecordAppendedMessage</c> — a documented no-op
     ///         added so existing implementors keep compiling.</item>
+    ///         <item><c>ITokenTracker.RecordUpdatedMessage</c> — the same no-op
+    ///         class, added by the #1106 staleness slice so an in-place rewrite
+    ///         can invalidate the running estimate.</item>
     ///         <item><c>ITuiRenderer.RunInteractiveAsync</c> — a line-buffered stub
     ///         that returns exit code 0.</item>
     ///         <item>The six <c>ICollapsibleChatBlock</c> members — statics and two
@@ -422,6 +425,14 @@ public sealed class DefaultInterfaceMemberRule
             DimDirection.Conservative,
             "Documented no-op added for source compatibility; a tracker that ignores an append "
             + "falls back to its own estimation on the next ShouldCompact, so the drift is visible.",
+            ""),
+        new(
+            "Harbor.Abstractions.Sessions.ITokenTracker",
+            "RecordUpdatedMessage",
+            DimDirection.Conservative,
+            "Documented no-op added for source compatibility (#1106 staleness slice); a tracker "
+            + "that ignores an in-place rewrite keeps answering from its pre-edit running "
+            + "estimate, so the staleness is visible the same way an ignored append is.",
             ""),
         new(
             "Harbor.Terminal.Abstractions.Views.ITuiView",

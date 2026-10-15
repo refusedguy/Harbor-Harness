@@ -20,8 +20,11 @@ public sealed class TokenTracker : ITokenTracker
     // exactly the leading Count messages of that session's history. Appends
     // reported through <see cref="RecordAppendedMessage" /> extend the entry
     // incrementally; any other change to the history (external append,
-    // compaction prune, truncation) desynchronizes the count and forces exactly
-    // one full rescan on the next ShouldCompact call before O(1) checks resume.
+    // compaction prune, truncation, or an in-place content rewrite reported
+    // through <see cref="RecordUpdatedMessage" />) desynchronizes the entry and
+    // forces exactly one full rescan on the next ShouldCompact call before O(1)
+    // checks resume. A bare same-count/different-content rewrite without such a
+    // report is invisible to the Count-keyed fast path by construction (#1106).
     // A single count-keyed cache here used to collide across sessions sharing
     // this singleton (same message count, different content → wrong estimate →
     // wrong compaction decision), hence the per-session dictionary. Guarded by
@@ -91,6 +94,20 @@ public sealed class TokenTracker : ITokenTracker
             {
                 _estimates[message.SessionId] = new SessionEstimate(increment, 1);
             }
+        }
+    }
+
+    /// <inheritdoc />
+    public void RecordUpdatedMessage(AgentMessage message)
+    {
+        ArgumentNullException.ThrowIfNull(message);
+        lock (_sync)
+        {
+            // No delta to apply: the tracker keeps no per-message breakdown, so
+            // an in-place rewrite cannot adjust the running total — drop the
+            // entry instead. The next ShouldCompact call rescans once and O(1)
+            // checks resume, exactly like the external-append/prune fallback.
+            _estimates.Remove(message.SessionId);
         }
     }
 
