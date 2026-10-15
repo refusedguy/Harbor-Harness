@@ -286,6 +286,52 @@ public class ToolCallBlockMapperTests
     }
 
     [Test]
+    public async Task RawText_Completed_Call_ExactShape()
+    {
+        // #1097: pins the RawText shape (glyph, name, arrow, outcome,
+        // duration) that the span rewrite must preserve byte-for-byte.
+        var block = new ToolCallBlock(new ToolCallInfo("t1", "read", "f.cs"));
+        block.Complete(new ToolResultBody("body", isError: false, TimeSpan.FromMilliseconds(250)));
+        await Assert.That(block.RawText()).IsEqualTo("✔ read → ok 250ms");
+    }
+
+    [Test]
+    public async Task RawText_Running_Call_HasNoOutcome()
+    {
+        // #1097: the no-body branch stays header-only (no arrow, no outcome).
+        var block = new ToolCallBlock(new ToolCallInfo("t1", "read", "f.cs"));
+        await Assert.That(block.RawText()).IsEqualTo("⚙ read");
+    }
+
+    [Test]
+    public async Task ToolCallBlock_UsesNoHeapBuilder_RelativeGate()
+    {
+        // #1097 (relative gate, one site): ToolCallBlock.cs must compose its
+        // plain-text line without a heap builder — zero `new StringBuilder`
+        // in this file. Span-based (interpolated handler), not pooled, on
+        // purpose: Harbor.Extensions is not on this assembly's matrix row, so
+        // Presentation renders without the Application-layer pool. Scoped to
+        // this file: TableBlock, OnboardingFlow, ... keep their own slices.
+        string path = FindRepoFile(Path.Combine("src", "Harbor.Tui.CellForge", "Chat", "Widgets", "ToolCallBlock.cs"));
+        string source = await File.ReadAllTextAsync(path);
+        await Assert.That(source.Contains("new StringBuilder")).IsFalse();
+    }
+
+    /// <summary>Locate a repo-relative source file by walking up from the test assembly directory.</summary>
+    private static string FindRepoFile(string relativePath)
+    {
+        string? dir = AppContext.BaseDirectory;
+        while (dir is not null)
+        {
+            string candidate = Path.Combine(dir, relativePath);
+            if (File.Exists(candidate))
+                return candidate;
+            dir = Directory.GetParent(dir)?.FullName;
+        }
+        throw new FileNotFoundException($"Repo file not found: {relativePath}");
+    }
+
+    [Test]
     public async Task Measure_Running_Single_Line_Completed_Grows()
     {
         var block = new ToolCallBlock(new ToolCallInfo("t1", "read", "f.cs"));

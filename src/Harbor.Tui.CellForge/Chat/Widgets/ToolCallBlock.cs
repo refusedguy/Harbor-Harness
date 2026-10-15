@@ -1,4 +1,3 @@
-using System.Text;
 using CSharpFunctionalExtensions;
 using Harbor.Ui.Framework;
 using Harbor.Ui.Framework.State;
@@ -711,15 +710,16 @@ public sealed class ToolCallBlock : ICollapsibleChatBlock
 
     public string RawText()
     {
-        var sb = new StringBuilder();
-        sb.Append(StatusGlyph).Append(' ').Append(Info.ToolName);
-        if (_body.HasValue)
-        {
-            sb.Append(" → ").Append(OutcomeWord(_status))
-              .Append(' ').Append(ToolResultBody.FormatDuration(_body.Value.Duration));
-        }
-
-        return sb.ToString();
+        // §PERF-006 (#1097): the per-call heap builder is gone —
+        // interpolated-string handlers compose this two-segment line over a
+        // stackalloc span instead of allocating. No pool here on purpose:
+        // Harbor.Extensions is not on this assembly's matrix row
+        // (FullLayerMatrixTests), so Presentation renders without the
+        // Application-layer pool. Synchronous composition on the cold
+        // plain-text pipe path, materialized before return.
+        if (!_body.HasValue)
+            return $"{StatusGlyph} {Info.ToolName}";
+        return $"{StatusGlyph} {Info.ToolName} → {OutcomeWord(_status)} {ToolResultBody.FormatDuration(_body.Value.Duration)}";
     }
 
     /// <summary>
