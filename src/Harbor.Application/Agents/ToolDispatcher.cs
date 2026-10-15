@@ -144,14 +144,25 @@ public sealed class ToolDispatcher(
         CancellationToken ct,
         TimeSpan? toolExecutionTimeout = null)
     {
-        bool hasSequential = HasSequentialTool(toolCalls);
+        // #1100: resolve once per call. HasSequentialTool used to resolve
+        // every name (TryCreate+GetTool), then ExecuteSingleAsync resolved
+        // the same names again — 2N registry hits per N-call turn. One pass
+        // here feeds both the sequential gate and dispatch.
+        var resolved = new Result<ITool>[toolCalls.Count];
+        for (int i = 0; i < toolCalls.Count; i++)
+        {
+            resolved[i] = ResolveTool(toolCalls[i].ToolName);
+        }
+
+        bool hasSequential = HasSequentialTool(resolved);
 
         var results = new List<ToolResultEntry>(toolCalls.Count);
 
         if (hasSequential)
         {
-            foreach (var tc in toolCalls)
+            for (int i = 0; i < toolCalls.Count; i++)
             {
+                var tc = toolCalls[i];
                 // #401: an accepted stop ends NEW work. A sequential batch is
                 // the shape where the gap is widest — call k finishing is the
                 // natural moment for the user to press Stop, and without this
@@ -165,7 +176,7 @@ public sealed class ToolDispatcher(
                 // #401 B2: the in-flight side of the same boundary — a
                 // sequential call that outlives the stop gets the grace, then
                 // Abandoned, instead of holding the run open indefinitely.
-                Task<ToolResultEntry> pending = ExecuteSingleAsync(tc, session, partial, agent, ct, toolExecutionTimeout);
+                Task<ToolResultEntry> pending = ExecuteSingleAsync(tc, resolved[i], session, partial, agent, ct, toolExecutionTimeout);
                 results.Add(await AwaitOneWithAbandonAsync(pending, tc, ct).ConfigureAwait(false));
             }
         }
@@ -190,12 +201,12 @@ public sealed class ToolDispatcher(
                     // inside this loop) rather than theoretical.
                     tasks[i] = ct.IsCancellationRequested
                         ? Task.FromResult(NotStartedBecauseStopped(toolCalls[i]))
-                        : ExecuteSingleAsync(toolCalls[i], session, partial, agent, ct, toolExecutionTimeout);
+                        : ExecuteSingleAsync(toolCalls[i], resolved[i], session, partial, agent, ct, toolExecutionTimeout);
                 }
 
-                var resolved = await AwaitAllWithAbandonAsync(
+                var entries = await AwaitAllWithAbandonAsync(
                     tasks, toolCalls, toolCalls.Count, ct).ConfigureAwait(false);
-                results.AddRange(resolved);
+                results.AddRange(entries);
             }
             finally
             {
@@ -215,7 +226,7 @@ public sealed class ToolDispatcher(
     }
 
     /// <summary>
-    ///     Check if any tool in the batch declares <see cref="ExecutionMode.Sequential" />.
+    ///     Check if any resolved tool in the batch declares <see cref="ExecutionMode.Sequential" />.
     ///     If so, the entire batch must run sequentially (otherwise sequential
     ///     tools would race on shared state like the file system or shell).
     /// </summary>
@@ -224,16 +235,15 @@ public sealed class ToolDispatcher(
     ///     combinator predicate per call. Unresolvable entries fold to
     ///     <see langword="false" /> here — their proper error entries are still
     ///     produced per-call by <see cref="ExecuteSingleAsync" />.
+    ///     #1100: runs over the pre-resolved batch (one TryCreate+GetTool per
+    ///     call in ExecuteAsync), not over raw names — no second resolve.
     /// </remarks>
-    private bool HasSequentialTool(IReadOnlyList<ToolCallPart> toolCalls)
+    private bool HasSequentialTool(IReadOnlyList<Result<ITool>> preResolved)
     {
-        for (int i = 0; i < toolCalls.Count; i++)
+        for (int i = 0; i < preResolved.Count; i++)
         {
-            bool sequential = ToolName.TryCreate(toolCalls[i].ToolName)
-                .Bind(tools.GetTool)
-                .Map(static t => t.ExecutionMode == ExecutionMode.Sequential)
-                .Match(static v => v, static _ => false);
-            if (sequential)
+            Result<ITool> entry = preResolved[i];
+            if (entry.IsSuccess && entry.Value.ExecutionMode == ExecutionMode.Sequential)
             {
                 return true;
             }
@@ -430,9 +440,12 @@ public sealed class ToolDispatcher(
     ///     permission → publish start event → execute → publish end event.
     ///     All error paths return a <see cref="ToolResultEntry" /> with
     ///     <c>IsError=true</c> rather than throwing.
+    ///     #1100: the name→tool railway already ran once per call in
+    ///     ExecuteAsync — the pre-resolved outcome rides in, no second lookup.
     /// </summary>
     private async Task<ToolResultEntry> ExecuteSingleAsync(
         ToolCallPart toolCall,
+        Result<ITool> resolved,
         ISessionContext session,
         AssistantMessage partial,
         AgentDefinition agent,
@@ -442,12 +455,9 @@ public sealed class ToolDispatcher(
         using var activity = Source.StartActivity("Tool.Execute");
         activity?.SetTag(ToolNameTag, toolCall.ToolName);
 
-        // ROP-C П.4: the two guard ladders (name parse → registry lookup) ride
-        // one Bind railway. Diagnostics stay distinct by construction: MapError
-        // localizes "invalid name" at its source and the registry-miss branch
-        // carries the available-tools inventory (rop-final-mile L5 boundary).
-        Result<ITool> resolved = ResolveTool(toolCall.ToolName);
-        if (resolved.IsFailure) // §4.6-ok: выход Bind-рельсы (ROP-C П.4), диагностики различаются по построению (L5).
+        // §4.6-ok: выход Bind-рельсы (ROP-C П.4), диагностики различаются по
+        // построению (L5) — текст приехал из ResolveTool в ExecuteAsync.
+        if (resolved.IsFailure)
         {
             return new ToolResultEntry(toolCall.Id, toolCall.ToolName, resolved.Error, true);
         }
