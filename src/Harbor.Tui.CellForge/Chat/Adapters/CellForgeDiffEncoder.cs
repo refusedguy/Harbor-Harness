@@ -41,6 +41,13 @@ public static class CellForgeDiffEncoder
     /// <summary>Standalone encoder — callers supply both frames.</summary>
     public static ICellDiffEncoder Create() => new RowHashDiffEncoder();
 
+    // Static helper runs on the frame path: RowHashDiffEncoder retains its
+    // staging array across Encode calls (amortized, see its remarks), so a
+    // fresh instance per flush re-grows the scratch every frame. Reused
+    // per thread — Encode mutates staging, hence ThreadStatic, not shared.
+    [ThreadStatic]
+    private static RowHashDiffEncoder? _cachedEncoder;
+
     /// <summary>
     ///     Engine-linked encoder — diffs against the engine's current front
     ///     buffer (the last frame it flushed).
@@ -63,7 +70,8 @@ public static class CellForgeDiffEncoder
         ArgumentNullException.ThrowIfNull(engine);
         ArgumentNullException.ThrowIfNull(next);
         var prev = SnapshotFront(engine.Front);
-        return new RowHashDiffEncoder().Encode(prev, next, hints, sequence);
+        _cachedEncoder ??= new RowHashDiffEncoder();
+        return _cachedEncoder.Encode(prev, next, hints, sequence);
     }
 
     /// <summary>

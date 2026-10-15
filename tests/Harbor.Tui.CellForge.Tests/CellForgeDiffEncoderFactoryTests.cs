@@ -84,4 +84,26 @@ public class CellForgeDiffEncoderFactoryTests
         await Assert.That(viaHelper.Changes.Length).IsEqualTo(viaPortable.Changes.Length);
         await Assert.That(viaHelper.Changes[0]).IsEqualTo(viaPortable.Changes[0]);
     }
+
+    [Test]
+    public async Task EncodeFromEngineFront_RepeatedCalls_Stable()
+    {
+        // Accepted-shape guard for the per-thread encoder reuse (#1110):
+        // a retained staging buffer must not leak changes across flushes —
+        // two identical flushes yield identical batches, matching a fresh
+        // portable encoder both times.
+        var front = MakeEngineBuffer(8, 3, 'b');
+        var engine = new DiffEngine(front);
+        var next = MakeRenderingBuffer(8, 3, 'b');
+        next.SetRune(0, 0, new Rune('Z'), UIR.CellStyle.Plain);
+
+        CellDiffBatch first = CellForgeDiffEncoder.EncodeFromEngineFront(engine, next, hints: null, sequence: 1);
+        CellDiffBatch second = CellForgeDiffEncoder.EncodeFromEngineFront(engine, next, hints: null, sequence: 1);
+        var renderingFront = MakeRenderingBuffer(8, 3, 'b');
+        CellDiffBatch viaPortable = new RowHashDiffEncoder().Encode(renderingFront, next, hints: null, sequence: 1);
+
+        await Assert.That(second.Changes.Length).IsEqualTo(first.Changes.Length);
+        await Assert.That(second.Changes.Length).IsEqualTo(viaPortable.Changes.Length);
+        await Assert.That(second.Changes[0]).IsEqualTo(first.Changes[0]);
+    }
 }
