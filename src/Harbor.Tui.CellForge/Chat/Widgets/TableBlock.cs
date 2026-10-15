@@ -570,10 +570,12 @@ public sealed class TableBlock : ICollapsibleChatBlock, IStatefulGenericWidget<G
 
     private string SeparatorRow()
     {
-        string sep = "|";
+        // Single Concat over per-column segments (no heap builder, no
+        // loop-concat): assignments only inside the loop, one join at the end.
+        var parts = new string[Columns];
         for (int c = 0; c < Columns; c++)
         {
-            sep += _table.Alignments[c] switch
+            parts[c] = _table.Alignments[c] switch
             {
                 GfmAlign.Center => " :---: |",
                 GfmAlign.Right => " ---: |",
@@ -581,7 +583,7 @@ public sealed class TableBlock : ICollapsibleChatBlock, IStatefulGenericWidget<G
             };
         }
 
-        return sep;
+        return "|" + string.Concat(parts);
     }
 
     private int[] ColumnWidths(int maxWidth)
