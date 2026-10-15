@@ -72,7 +72,7 @@ public sealed record ToolCallSnapshot(
         string argsJson)
     {
         // An absent/undefined argument payload arrives as an empty string from a
-        // host that never populated one; JsonDocument.Parse("") would throw, and
+        // host that never populated one; deserializing "" throws JsonException, and
         // the card must still render.
         if (string.IsNullOrWhiteSpace(argsJson))
         {

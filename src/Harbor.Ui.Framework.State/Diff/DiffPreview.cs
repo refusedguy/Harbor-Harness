@@ -74,21 +74,26 @@ public static class DiffPreview
         }
 
         // One parse feeds every branch: the file path plus whichever payload
-        // field this tool's arguments carry.
-        string filePath = UnknownPath;
+        // field this tool's arguments carry. No initializer: FindFilePath
+        // already falls back to UnknownPath, and the catch returns, so the
+        // initial value would be dead (S1854).
+        string filePath;
         string? oldString = null;
         string? newString = null;
         string? content = null;
         string? patch = null;
         try
         {
-            using var doc = JsonDocument.Parse(argsJson);
-            if (doc.RootElement.ValueKind != JsonValueKind.Object)
+            // Same DOM as JsonDocument.Parse, but through the source-generated
+            // JsonElement info (PERF-002; TRIM-SERIALIZATION TypeInfo
+            // spelling). Runs once per tool call from ChatAppReducer, never
+            // per frame.
+            JsonElement root = JsonSerializer.Deserialize(argsJson, DiffPreviewJsonContext.Default.JsonElement);
+            if (root.ValueKind != JsonValueKind.Object)
             {
                 return (false, null, null, null);
             }
 
-            JsonElement root = doc.RootElement;
             filePath = FindFilePath(root);
             if (root.TryGetProperty("oldString", out var osEl) && osEl.ValueKind == JsonValueKind.String)
             {
