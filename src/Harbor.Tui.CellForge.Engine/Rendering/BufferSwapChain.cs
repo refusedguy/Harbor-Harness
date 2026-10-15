@@ -32,7 +32,7 @@ public sealed class BufferPair
 ///
 /// Publication is last-writer-wins: a newer offer displaces a pending one
 /// (swap events are rare resize/attach/theme moments, not steady-state
-/// traffic — the displaced pair is dropped to the pool by its producer).
+/// traffic — Publish recycles the displaced pair's buffers to the pool).
 /// The slot pool recycles retired buffers with bounded memory and zero
 /// per-rent allocations within retained capacity.
 /// </summary>
@@ -47,11 +47,17 @@ public sealed class BufferSwapChain
     // Single-slot offer. Reads are volatile; the take is a CAS check-and-clear.
     private BufferPair? _pending;
 
-    /// <summary>Atomically publishes <paramref name="offer" />; a newer publish replaces a pending one.</summary>
+    /// <summary>Atomically publishes <paramref name="offer" />; a newer publish replaces a pending one,
+    /// recycling the displaced pair's buffers to the pool.</summary>
     public void Publish(BufferPair offer)
     {
         ArgumentNullException.ThrowIfNull(offer);
-        Volatile.Write(ref _pending, offer);
+        var evicted = Interlocked.Exchange(ref _pending, offer);
+        if (evicted is not null)
+        {
+            Return(evicted.Back);
+            Return(evicted.Front);
+        }
     }
 
     /// <summary>Takes the pending offer atomically (null when none is pending
