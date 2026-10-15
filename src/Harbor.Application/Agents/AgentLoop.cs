@@ -37,6 +37,14 @@ namespace Harbor.Application.Agents;
 ///         lives in <see cref="MessageSnapshot" /> (verbatim move); the loop keeps
 ///         a forwarder so the five event call sites are untouched.
 ///     </para>
+///     <para>
+///         <b>Decomposition (#1101, slice 2):</b> user-hook gates
+///         (<c>SessionEnd</c> / <c>UserPromptSubmit</c> / <c>SessionStart</c>)
+///         live in <see cref="UserHookGates" /> (verbatim move); the loop keeps
+///         forwarders so the run-lifecycle call sites are untouched.
+///         Turn execution (incl. the <c>LlmEvent</c> switch) stays in
+///         <see cref="TurnRunner" /> — not touched by this slice.
+///     </para>
 /// </summary>
 public sealed class AgentLoop : IAgentLoop
 {
@@ -65,7 +73,7 @@ public sealed class AgentLoop : IAgentLoop
     // the turn boundary, deliberately NOT a CancelAfter on the run token.
     private readonly TimeProvider _clock;
     private readonly TimeSpan? _runTimeout;
-    private readonly IHookRunner? _hooks;
+    private readonly UserHookGates _hookGates;
 
     /// <summary>
     ///     Construct an <see cref="AgentLoop" /> wired to the supplied services.
@@ -131,7 +139,7 @@ public sealed class AgentLoop : IAgentLoop
         _tracer = tracer ?? NullTracer.Instance;
         _clock = timeProvider ?? TimeProvider.System;
         _runTimeout = runTimeout;
-        _hooks = hookRunner;
+        _hookGates = new UserHookGates(hookRunner, logger);
         // ROP-C П.5: the dispatcher is injected via DI when composed by the host,
         // while tests and benchmarks fall back to a locally built one. That
         // fallback uses a NullLogger because the loop's own typed logger must
@@ -390,93 +398,27 @@ public sealed class AgentLoop : IAgentLoop
     }
 
     /// <summary>
-    ///     Run user SessionEnd hooks after the terminal event. Advisory: the
-    ///     runner logs hook failures and never throws on its own (except on a
-    ///     cancelled token, which cannot happen here — the token is
-    ///     <see cref="CancellationToken.None" /> and the run is already over),
-    ///     so a hook can neither fail the run nor rewrite its outcome.
+    ///     Run user SessionEnd hooks after the terminal event.
+    ///     Forwarder over <see cref="UserHookGates" /> (#1101, slice 2: verbatim move).
     /// </summary>
-    private async Task RunSessionEndHooksAsync(string sessionId)
-    {
-        if (_hooks is null)
-        {
-            return;
-        }
-
-        await _hooks.RunSessionEndAsync(sessionId, CancellationToken.None).ConfigureAwait(false);
-    }
+    private Task RunSessionEndHooksAsync(string sessionId) =>
+        _hookGates.RunSessionEndHooksAsync(sessionId);
 
     /// <summary>
-    ///     Run the <c>UserPromptSubmit</c> gate for the prompt that opened
-    ///     this run. Returns <see cref="HookVerdict.Allow" /> — which is what
-    ///     every hooks-free and no-prompt path costs — or the hook's verdict.
+    ///     Run the <c>UserPromptSubmit</c> gate for the prompt that opened this run.
+    ///     Forwarder over <see cref="UserHookGates" /> (#1101, slice 2: verbatim move).
     /// </summary>
-    /// <remarks>
-    ///     The prompt is read as "the last message in the session is a
-    ///     <see cref="UserMessage" />", which is exactly the shape
-    ///     <c>DefaultAgent.PromptAsync</c> produces: it persists the message,
-    ///     then loads the context and calls this loop. A run opened without a
-    ///     fresh user message (an internal re-entry, a drained background
-    ///     completion) has no prompt to submit and fires no hook — claiming a
-    ///     stale prompt would send the hook text the user never typed this
-    ///     turn.
-    /// </remarks>
-    private async Task<HookVerdict> RunUserPromptHooksAsync(
-        ISessionContext session, AgentDefinition agent, ModelInfo model, CancellationToken ct)
-    {
-        if (_hooks is null)
-        {
-            return HookVerdict.Allow;
-        }
-
-        IReadOnlyList<AgentMessage> messages = session.Messages;
-        if (messages.Count == 0 || messages[^1] is not UserMessage prompt)
-        {
-            return HookVerdict.Allow;
-        }
-
-        try
-        {
-            return await _hooks.RunUserPromptSubmitAsync(
-                session.Session.Id, prompt.Content, agent.Name.Value, model.Id, ct).ConfigureAwait(false);
-        }
-        catch (OperationCanceledException) when (ct.IsCancellationRequested)
-        {
-            throw;
-        }
-        catch (Exception ex)
-        {
-            // The runner is contracted never to throw on its own; a failure
-            // here is a hooks-subsystem failure, which fails closed to deny
-            // exactly like the permission-subsystem failure (§G3) rather than
-            // silently letting the prompt through.
-            AgentLoopLog.UserPromptSubmitHooksFailed(_logger, ex, session.Session.Id);
-            return new HookVerdict(HookDecision.Deny, $"Hook execution failed: {ex.Message}", null);
-        }
-    }
+    private Task<HookVerdict> RunUserPromptHooksAsync(
+        ISessionContext session, AgentDefinition agent, ModelInfo model, CancellationToken ct) =>
+        _hookGates.RunUserPromptHooksAsync(session, agent, model, ct);
 
     /// <summary>
-    ///     Run the advisory <c>SessionStart</c> hooks once, after the terminal
-    ///     decision on the prompt gate. Log-only by contract: a hook here
-    ///     cannot fail the run it just watched begin.
+    ///     Run the advisory <c>SessionStart</c> hooks once, after the prompt gate.
+    ///     Forwarder over <see cref="UserHookGates" /> (#1101, slice 2: verbatim move).
     /// </summary>
-    /// <remarks>
-    ///     Deliberately rides the run token, where the post-terminal
-    ///     <see cref="RunSessionEndHooksAsync" /> cannot: this event fires
-    ///     mid-run, so a user who cancels must not be held for up to 30s per
-    ///     hook afterwards. A cancelled run therefore simply never reports a
-    ///     SessionStart it was not given the time to run.
-    /// </remarks>
-    private async Task RunSessionStartHooksAsync(
-        string sessionId, string agent, string model, CancellationToken ct)
-    {
-        if (_hooks is null)
-        {
-            return;
-        }
-
-        await _hooks.RunSessionStartAsync(sessionId, agent, model, ct).ConfigureAwait(false);
-    }
+    private Task RunSessionStartHooksAsync(
+        string sessionId, string agent, string model, CancellationToken ct) =>
+        _hookGates.RunSessionStartHooksAsync(sessionId, agent, model, ct);
 
     /// <summary>
     ///     Materialize a snapshot list of the current session messages for events.
