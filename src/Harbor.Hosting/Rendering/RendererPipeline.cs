@@ -1,5 +1,6 @@
 namespace Harbor.Hosting.Rendering;
 
+using System.Collections.Concurrent;
 using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Tui;
 using Harbor.Ui.Framework.State;
@@ -28,8 +29,11 @@ public sealed class RendererPipeline : IRendererPipeline
     /// <summary>Immutable published state — the CAS target.</summary>
     private sealed record Slot(ITuiRenderer Renderer, string BackendId);
 
-    private readonly object _registrationsGate = new();
-    private readonly Dictionary<string, Func<ITuiRenderer>> _factories = new(StringComparer.OrdinalIgnoreCase);
+    /// <summary>Lock-free backend registry: writes are startup-only
+    /// (<c>TuiModule</c> composition), reads are request-path
+    /// (<c>AvailableBackends</c>, swap lookup) — same discipline as
+    /// <c>LspClient._pending</c> (#1402).</summary>
+    private readonly ConcurrentDictionary<string, Func<ITuiRenderer>> _factories = new(StringComparer.OrdinalIgnoreCase);
     private readonly UiStore? _store;
     private readonly ILogger _logger;
 
@@ -60,22 +64,15 @@ public sealed class RendererPipeline : IRendererPipeline
 
     public IReadOnlyCollection<string> AvailableBackends
     {
-        get
-        {
-            lock (_registrationsGate)
-            {
-                return [.. _factories.Keys];
-            }
-        }
+        // ConcurrentDictionary.Keys enumerates a moment-in-time snapshot —
+        // no lock needed on this request-path read.
+        get => [.. _factories.Keys];
     }
 
     /// <inheritdoc />
     public void Register(string backendId, Func<ITuiRenderer> factory)
     {
-        lock (_registrationsGate)
-        {
-            _factories[backendId] = factory;
-        }
+        _factories[backendId] = factory;
     }
 
     /// <inheritdoc />
@@ -94,10 +91,7 @@ public sealed class RendererPipeline : IRendererPipeline
         }
 
         Func<ITuiRenderer>? factory;
-        lock (_registrationsGate)
-        {
-            _factories.TryGetValue(backendId, out factory);
-        }
+        _factories.TryGetValue(backendId, out factory);
 
         if (factory is null)
         {
