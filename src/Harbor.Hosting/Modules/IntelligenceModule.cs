@@ -2,6 +2,7 @@ using Harbor.Abstractions.Permissions;
 using Harbor.Abstractions.Sessions;
 using Harbor.Application.Configuration;
 using Harbor.Application.Permissions;
+using Harbor.Application.Resilience;
 using Harbor.Application.Sessions;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -19,7 +20,8 @@ internal static class IntelligenceModule
             sp.GetRequiredService<ITokenTracker>(),
             sp.GetRequiredService<Harbor.Abstractions.Providers.IProviderRegistry>(),
             sp.GetRequiredService<ILogger<CompactionService>>(),
-            ctx.Harbor.SecondaryModel));
+            ctx.Harbor.SecondaryModel,
+            sp.GetRequiredService<IRetryPolicy>()));
         // #178: path-extraction policies (Strategy) — a new file-based tool
         // registers an IPathExtractionPolicy instead of editing the permission
         // core. Order matters: first Handles win, legacy fallback is terminal.
