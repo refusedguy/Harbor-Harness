@@ -166,8 +166,12 @@ public sealed class DiffEngine
     /// upholds <c>FRONT == BACK</c>. Hint lifecycle stays with
     /// <see cref="Flush"/>: this method sorts the registered hints
     /// row-major (no allocation) but does NOT clear them.
+    /// Internal on purpose (#1110): a partial drain leaves FRONT half-advanced
+    /// and an abandoned ref-struct enumerator cannot be detected, so the only
+    /// sanctioned drain is the in-house full drain in <see cref="Flush"/>;
+    /// tests reach this through InternalsVisibleTo.
     /// </summary>
-    public FrameDiff Diff(ScreenBuffer next, FrameDiffMode mode = FrameDiffMode.Delta)
+    internal FrameDiff Diff(ScreenBuffer next, FrameDiffMode mode = FrameDiffMode.Delta)
     {
         ArgumentOutOfRangeException.ThrowIfNotEqual(next.Cols, _front.Cols);
         ArgumentOutOfRangeException.ThrowIfNotEqual(next.Rows, _front.Rows);
