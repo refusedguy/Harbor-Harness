@@ -130,6 +130,8 @@ public class GenericLiveRegionTests
     [Test]
     public async Task Region_Paint_MatchesVisibleLinesInEveryMode()
     {
+        // Snapshot-free Paint must draw exactly the VisibleLines window in
+        // every overflow mode (plus the untouched small case).
         var head = new GenericLiveRegion { MaxHeight = 2, Overflow = LiveRegionOverflow.ClipHead };
         head.Update(["a", "b", "c"]);
         string headArt = Art(head, 20);
@@ -160,6 +162,10 @@ public class GenericLiveRegionTests
     [Test]
     public async Task Region_Paint_IsAllocationFree()
     {
+        // Issue #1100 (per-frame snapshots): Paint called VisibleLines(), which
+        // ToArray-copied _lines on every frame. Steady paints must allocate
+        // nothing (same shape as MascotPanelTests.PanelPaint_IsAllocationFree:
+        // warm up tiered-JIT paths, then count thread bytes over 200 paints).
         var region = new GenericLiveRegion { MaxHeight = 8, Overflow = LiveRegionOverflow.ClipHead };
         region.Update(["alpha", "bravo", "charlie", "delta"]);
         var buffer = new ScreenBuffer(80, 8);
@@ -189,6 +195,12 @@ public class GenericLiveRegionTests
     [Timeout(120_000)]
     public async Task Region_Paint_DoubledLines_StaysWithinGrowthLimit()
     {
+        // Relative gate t(2N) <= 3*t(N): painting twice the buffered lines
+        // must cost at most 3x the time, measured in the same process so
+        // runner speed cancels. Quadratic behaviour lands at 4x and cannot
+        // hide under the bound. Best-of-5 rounds, linux-only (timing varies
+        // by OS load). All lines fit the width, so Fit is the identity and
+        // the ratio isolates the windowing itself.
         if (!OperatingSystem.IsLinux())
         {
             return;
@@ -219,6 +231,7 @@ public class GenericLiveRegionTests
         var smallRect = new Rect(0, 0, 80, 500);
         var largeRect = new Rect(0, 0, 80, 500);
 
+        // Warm up (tiered JIT over the paint path) before measuring.
         for (int i = 0; i < 5; i++)
         {
             small.Paint(smallBuffer, smallRect);
