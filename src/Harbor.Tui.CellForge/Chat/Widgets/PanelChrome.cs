@@ -53,7 +53,7 @@ public enum BoxStyle : byte
 /// this layer: the seven private copies it replaced in #553 were the
 /// nearest-existing-code trap — whichever one you copied decided whether
 /// the degenerate-rect guard came with it. The frame <c>Panel</c> widgets
-/// (<c>BorderKind</c>/<c>BorderPanel</c>, in <c>Chat/Rendering/LayoutTree.cs</c>
+/// (<c>BorderKind</c>/<c>BorderPanel</c>, in <c>Chat/Rendering/BorderPanel.cs</c>
 /// since the #436 move out of the engine) are a deliberately separate owner:
 /// four dialects plus title/shadow/focus semantics that overlays do not
 /// share — so a new overlay still calls <c>PaintBorderBox</c> instead.
