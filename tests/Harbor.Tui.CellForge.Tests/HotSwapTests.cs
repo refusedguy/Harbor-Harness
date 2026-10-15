@@ -108,6 +108,30 @@ public class HotSwapTests
         await Assert.That(taken).IsSameReferenceAs(second);
     }
 
+    [Test]
+    public async Task Publish_DisplacedOffer_RecycledToPool()
+    {
+        // #1110 pool-leak row: Publish overwrote _pending with no return of
+        // the evicted pair — a double-OfferSwap before Adopt leaked both
+        // buffers to the GC. Publish now recycles the displaced pair.
+        var chain = new BufferSwapChain();
+        var firstBack = new EngineCells.ScreenBuffer(10, 4);
+        var firstFront = new EngineCells.ScreenBuffer(10, 4);
+        chain.Publish(new BufferPair(firstBack, firstFront));
+        chain.Publish(new BufferPair(new EngineCells.ScreenBuffer(12, 5), new EngineCells.ScreenBuffer(12, 5)));
+
+        // The displaced pair's buffers are back in the pool: the next Rent
+        // reuses one instead of allocating fresh.
+        var rented = chain.Rent(10, 4);
+        bool reused = ReferenceEquals(rented, firstBack) || ReferenceEquals(rented, firstFront);
+        await Assert.That(reused).IsTrue();
+
+        // The live offer is still the second (last-writer-wins preserved).
+        var taken = chain.TryTake();
+        await Assert.That(taken!.Back.Cols).IsEqualTo(12);
+        await Assert.That(taken.Back.Rows).IsEqualTo(5);
+    }
+
     // ── ScreenSession: frame-boundary adoption ─────────────────────────────
 
     [Test]

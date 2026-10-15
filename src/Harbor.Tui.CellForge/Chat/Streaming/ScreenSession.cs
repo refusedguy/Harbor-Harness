@@ -177,7 +177,7 @@ public sealed class ScreenSession
     /// loop keeps running untouched: the offer is adopted atomically at the
     /// next <see cref="BeginFrame"/> (single reference swap, both grids
     /// invalidated → one clean full repaint, never a torn frame). Last
-    /// writer wins; a displaced offer is dropped.
+    /// writer wins; a displaced offer's buffers are recycled to the pool by Publish.
     /// </summary>
     public void OfferSwap(EngineCells.ScreenBuffer back, EngineCells.ScreenBuffer front)
     {
