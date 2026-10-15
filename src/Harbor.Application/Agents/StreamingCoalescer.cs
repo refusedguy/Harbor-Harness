@@ -163,23 +163,24 @@ internal sealed class StreamingCoalescer : IDisposable
 
     /// <summary>
     ///     Frozen empty-JSON-object element shared by every tool call that
-    ///     streamed zero args deltas. The backing <see cref="JsonDocument" />
-    ///     is never disposed (it is process-lifetime state), so the element
-    ///     stays valid for all consumers; concurrent reads of a
-    ///     <see cref="JsonElement" /> are safe because parsing is immutable.
-    ///     Avoids a per-call <c>Parse("{}")</c> allocation.
+    ///     streamed zero args deltas. Decoded once through the source-generated
+    ///     <c>JsonElement</c> info (same DOM as <c>Parse("{}")</c>); the element
+    ///     owns its document so it stays valid for all consumers; concurrent
+    ///     reads of a <see cref="JsonElement" /> are safe because parsing is
+    ///     immutable. Avoids a per-call parse allocation.
     /// </summary>
-    private static readonly JsonElement EmptyArgsElement = JsonDocument.Parse("{}").RootElement;
+    private static readonly JsonElement EmptyArgsElement =
+        JsonSerializer.Deserialize("{}", StreamingCoalescerJsonContext.Default.JsonElement);
 
     /// <summary>
     ///     Materialize all accumulated tool calls into <see cref="ToolCallPart" />
     ///     list. Args JSON is parsed EXACTLY ONCE per call, at materialization
     ///     (deltas are only appended to the pooled builder — never parsed
     ///     per-delta). Single-chunk builders (the common case) are parsed
-    ///     straight from the chunk's buffer, eliminating the intermediate
-    ///     <c>ToString()</c> copy; the parsed element is
-    ///     <see cref="JsonElement.Clone" />-rooted so it survives after the
-    ///     pooled builder is returned to the pool.
+    ///     straight from the chunk's span via the source-generated
+    ///     <c>JsonElement</c> info, eliminating the intermediate
+    ///     <c>ToString()</c> copy; the deserialized element owns its document
+    ///     so it stays valid after the pooled builder is returned to the pool.
     ///     Pooled StringBuilders are returned to the pool afterwards.
     ///     <para>
     ///         Tool calls whose args JSON fails to parse are NOT materialized
@@ -250,12 +251,17 @@ internal sealed class StreamingCoalescer : IDisposable
     }
 
     /// <summary>
-    ///     Parse accumulated args JSON. Single-chunk builders (the common case —
+    ///     Parse accumulated args JSON through the source-generated
+    ///     <c>JsonElement</c> info (same DOM + failure contract as
+    ///     <c>JsonDocument.Parse</c>: comments/trailing-commas rejected,
+    ///     malformed input reports <c>false</c> via <c>JsonException</c>).
+    ///     Single-chunk builders (the common case —
     ///     tool-call args rarely exceed one StringBuilder chunk) are parsed
-    ///     straight from the chunk's buffer with zero intermediate string;
+    ///     straight from the chunk's span with zero intermediate string;
     ///     multi-chunk builders fall back to one <c>ToString()</c> copy.
-    ///     The parsed element is <see cref="JsonElement.Clone" />-rooted so it
-    ///     stays valid after the pooled builder is returned to the pool.
+    ///     The deserialized element owns its document, so no
+    ///     <see cref="JsonElement.Clone" /> is needed to survive the pooled
+    ///     builder going back to the pool.
     /// </summary>
     private static bool TryParseArgs(StringBuilder builder, out JsonElement parsedArgs)
     {
@@ -270,14 +276,12 @@ internal sealed class StreamingCoalescer : IDisposable
                 ReadOnlyMemory<char> first = chunks.Current;
                 if (!chunks.MoveNext())
                 {
-                    using var single = JsonDocument.Parse(first);
-                    parsedArgs = single.RootElement.Clone();
+                    parsedArgs = JsonSerializer.Deserialize(first.Span, StreamingCoalescerJsonContext.Default.JsonElement);
                     return true;
                 }
             }
 
-            using var doc = JsonDocument.Parse(builder.ToString());
-            parsedArgs = doc.RootElement.Clone();
+            parsedArgs = JsonSerializer.Deserialize(builder.ToString(), StreamingCoalescerJsonContext.Default.JsonElement);
             return true;
         }
         catch (JsonException)
