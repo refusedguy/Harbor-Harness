@@ -1,4 +1,5 @@
 using System.Collections.Frozen;
+using System.Text.Json.Serialization.Metadata;
 using Harbor.Providers.OpenAiCompatible.Compat;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -27,6 +28,16 @@ public sealed class ProviderConfig
         AllowTrailingCommas = true,
         TypeInfoResolver = OpenAiCompatibleJsonContext.Default
     };
+
+    /// <summary>
+    ///     Pre-resolved, AOT-safe metadata for the provider config. Pass to the
+    ///     <c>JsonTypeInfo&lt;T&gt;</c> overloads — never to the reflection-based
+    ///     generic-options overloads. Same options behind the info (Web +
+    ///     comments/trailing-commas), so the wire shape and failure contract
+    ///     are unchanged.
+    /// </summary>
+    private static readonly JsonTypeInfo<ProviderConfig> ProviderConfigInfo =
+        (JsonTypeInfo<ProviderConfig>)JsonOptions.GetTypeInfo(typeof(ProviderConfig));
     public string Id { get; init; } = "";
     public string DisplayName { get; init; } = "";
     public string Description { get; init; } = "";
@@ -124,7 +135,7 @@ public sealed class ProviderConfig
         SealedWith(quirks);
 
     public static Result<ProviderConfig> LoadFromFile(string path) =>
-        Result.Try(() => JsonSerializer.Deserialize<ProviderConfig>(File.ReadAllText(path), JsonOptions))
+        Result.Try(() => JsonSerializer.Deserialize(File.ReadAllText(path), ProviderConfigInfo))
             .MapError(ex => $"Failed to load provider config '{path}': {ex}")
             .Bind(Loaded);
 
@@ -133,10 +144,10 @@ public sealed class ProviderConfig
     ///     test harnesses). Same options and validation contract as
     ///     <see cref="LoadFromFile" /> — keeps
     ///     <see cref="OpenAiCompatibleJsonContext" /> internal while still
-    ///     AOT-safe (source-gen resolver only).
+    ///     AOT-safe (pre-resolved TypeInfo).
     /// </summary>
     public static Result<ProviderConfig> LoadFromJson(string json) =>
-        Result.Try(() => JsonSerializer.Deserialize<ProviderConfig>(json, JsonOptions))
+        Result.Try(() => JsonSerializer.Deserialize(json, ProviderConfigInfo))
             .MapError(ex => $"Failed to load provider config from JSON: {ex}")
             .Bind(Loaded);
 
@@ -395,6 +406,15 @@ public sealed class DynamicModelCatalog : IModelCatalog
             .ConfigureAwait(false);
     }
 
+    /// <summary>
+    ///     Parse a models-list response through <c>JsonElement</c> traversal.
+    ///     The <c>ModelsPath</c> (and per-field mapping paths) are per-provider
+    ///     dotted JSON keys, so no static record can serve them — the traversal
+    ///     stays dynamic by design. JSON keys are not CLR members (arch-gate
+    ///     TRIM-MAY-NOT-RESOLVE-A-CLR-MEMBER-BY-A-STRING-NAME ignores them),
+    ///     and no <c>JsonSerializer</c> call is involved here. Cold leg by
+    ///     design (one parse per fetch/cache-read, never per-turn/per-frame).
+    /// </summary>
     private Result<IReadOnlyList<ModelInfo>> ParseModelsResponse(string json, ProviderConfig config)
     {
         try
