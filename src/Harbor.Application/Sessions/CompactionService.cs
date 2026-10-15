@@ -5,6 +5,7 @@ using Harbor.Application.Sessions;
 using System.Diagnostics;
 using System.Text;
 using Harbor.Abstractions.Extensions;
+using Harbor.Application.Resilience;
 using Microsoft.Extensions.Logging;
 namespace Harbor.Application.Sessions;
 /// <summary>
@@ -25,8 +26,23 @@ public sealed class CompactionService(
     ITokenTracker tokenTracker,
     IProviderRegistry providers,
     ILogger<CompactionService> logger,
-    string? secondaryModel = null) : ICompactionService
+    string? secondaryModel = null,
+    IRetryPolicy? retryPolicy = null) : ICompactionService
 {
+    // #1106 (no-retry summary): the summarization stream rides the same retry
+    // budget as the main-loop turn stream (TurnRunner.StreamRetryOptions) —
+    // general transients on a seconds budget, 429s on a separate minutes-scale
+    // budget honoring server Retry-After (#270). Without it any transient 429
+    // during summarization fell straight through to destructive truncation,
+    // while the main loop would have weathered the same storm.
+    private static readonly RetryOptions SummaryRetryOptions = new(
+        MaxAttempts: 3,
+        BaseDelay: TimeSpan.FromSeconds(1),
+        UseJitter: true,
+        MaxRateLimitAttempts: 10,
+        RateLimitBaseDelay: TimeSpan.FromSeconds(5),
+        MaxRetryAfter: TimeSpan.FromMinutes(5));
+
     /// <summary>
     ///     A successfully resolved secondary (cheap) summarization client+model pair.
     /// </summary>
@@ -380,8 +396,44 @@ public sealed class CompactionService(
             CacheStrategy: CacheStrategy.Ephemeral);
     }
 
-    /// <summary>Streams the summarization call, collecting full text into a pooled builder.</summary>
-    private static async Task<Result<string>> CollectSummaryAsync(
+    /// <summary>
+    ///     Streams the summarization call, collecting full text into a pooled builder.
+    ///     Transient provider failures (429/5xx, network blips, timeouts) are
+    ///     retried through the injected <see cref="IRetryPolicy" /> on the
+    ///     main-loop budget (#1106); fatal failures return immediately.
+    ///     A null policy (tests, manual construction) keeps the legacy
+    ///     single-attempt behaviour.
+    /// </summary>
+    private async Task<Result<string>> CollectSummaryAsync(
+        ILlmClient summaryClient,
+        LlmRequest request,
+        CancellationToken ct)
+    {
+        if (retryPolicy is null)
+        {
+            return await StreamSummaryOnceAsync(summaryClient, request, ct).ConfigureAwait(false);
+        }
+
+        try
+        {
+            return await retryPolicy.ExecuteAsync(
+                attemptCt => StreamSummaryOnceAsync(summaryClient, request, attemptCt),
+                SummaryRetryOptions,
+                (ex, attempt) => CompactionServiceLog.SummaryTransientRetry(logger, attempt, ex.Message),
+                ct).ConfigureAwait(false);
+        }
+        catch (LlmStreamErrorException lex)
+        {
+            // Transient budget exhausted (fatal kinds never throw — they return
+            // Failure from the attempt itself): same failure shape as the
+            // single-attempt path, so the caller still falls back to truncation
+            // instead of crashing.
+            return Result.Failure<string>($"LLM error during compaction: {lex.Message}");
+        }
+    }
+
+    /// <summary>One summarization streaming attempt: transient error events throw so the retry policy can replay them.</summary>
+    private static async Task<Result<string>> StreamSummaryOnceAsync(
         ILlmClient summaryClient,
         LlmRequest request,
         CancellationToken ct)
@@ -396,6 +448,14 @@ public sealed class CompactionService(
             }
             if (evt is ErrorEvent err)
             {
+                // Main-loop parity (ROP-A ПР.5): the transport verdict rides on
+                // the event — transient kinds throw so IRetryPolicy replays the
+                // attempt, fatal kinds fail fast with no retry.
+                if (ProviderErrors.IsTransient(err.Kind))
+                {
+                    throw new LlmStreamErrorException(err);
+                }
+
                 return Result.Failure<string>($"LLM error during compaction: {err.Message}");
             }
         }
@@ -628,5 +688,8 @@ internal static partial class CompactionServiceLog
 
     [LoggerMessage(EventId = 5, Level = LogLevel.Error, Message = "Compaction failed for session {SessionId}")]
     public static partial void CompactionRunFailed(ILogger logger, Exception ex, string sessionId);
+
+    [LoggerMessage(EventId = 6, Level = LogLevel.Information, Message = "Summarization attempt {Attempt} failed transiently ({Message}); retrying")]
+    public static partial void SummaryTransientRetry(ILogger logger, int attempt, string message);
 
 }
