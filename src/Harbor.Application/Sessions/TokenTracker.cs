@@ -56,11 +56,14 @@ public sealed class TokenTracker : ITokenTracker
 
     public void RecordTurnUsage(Usage usage)
     {
-        _totalInputTokens += usage.InputTokens;
-        _totalOutputTokens += usage.OutputTokens;
-        _totalReasoningTokens += usage.ReasoningTokens ?? 0;
-        _totalCacheReadTokens += usage.CacheReadTokens ?? 0;
-        _totalCacheWriteTokens += usage.CacheWriteTokens ?? 0;
+        lock (_sync)
+        {
+            _totalInputTokens += usage.InputTokens;
+            _totalOutputTokens += usage.OutputTokens;
+            _totalReasoningTokens += usage.ReasoningTokens ?? 0;
+            _totalCacheReadTokens += usage.CacheReadTokens ?? 0;
+            _totalCacheWriteTokens += usage.CacheWriteTokens ?? 0;
+        }
     }
 
     public int Estimate(string text) => _estimator.Estimate(text);
@@ -141,7 +144,10 @@ public sealed class TokenTracker : ITokenTracker
 
     public TokenStats GetStats()
     {
-        return new TokenStats(_totalInputTokens, _totalOutputTokens, _totalReasoningTokens, _totalCacheReadTokens, _totalCacheWriteTokens);
+        lock (_sync)
+        {
+            return new TokenStats(_totalInputTokens, _totalOutputTokens, _totalReasoningTokens, _totalCacheReadTokens, _totalCacheWriteTokens);
+        }
     }
 
     /// <summary>Per-session running estimate: token sum over the leading Count messages.</summary>
