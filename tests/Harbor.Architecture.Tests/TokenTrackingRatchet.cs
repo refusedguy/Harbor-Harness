@@ -721,9 +721,10 @@ public sealed class TokenTrackingRatchet
             "member declared on the aggregate: GetStats",
             "member declared on the aggregate: RecordAppendedMessage",
             "member declared on the aggregate: RecordTurnUsage",
+            "member declared on the aggregate: RecordUpdatedMessage",
             "member declared on the aggregate: ShouldCompact",
         })
-            .Because("all seven must show up as improvements, so the split's author is told exactly "
+            .Because("all eight must show up as improvements, so the split's author is told exactly "
                    + "which rows to re-measure instead of discovering them one red build at a time");
     }
 

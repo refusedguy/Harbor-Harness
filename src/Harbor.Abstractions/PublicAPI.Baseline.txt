@@ -290,6 +290,7 @@ Harbor.Abstractions.Sessions.ITokenTracker :: int EstimateTokens(IReadOnlyList<A
 Harbor.Abstractions.Sessions.ITokenTracker :: public interface ITokenTracker
 Harbor.Abstractions.Sessions.ITokenTracker :: void RecordAppendedMessage(AgentMessage message)
 Harbor.Abstractions.Sessions.ITokenTracker :: void RecordTurnUsage(Usage usage)
+Harbor.Abstractions.Sessions.ITokenTracker :: void RecordUpdatedMessage(AgentMessage message)
 Harbor.Abstractions.Sessions.SessionCheckpoint :: public bool IsRewindTrail
 Harbor.Abstractions.Sessions.SessionCheckpoint :: public sealed record SessionCheckpoint(string Id, string SessionId, string MessageId, int MessageIndex, DateTimeOffset CreatedAt, string? Label, string? RewindOf = null, int Removed = 0)
 Harbor.Abstractions.Sessions.SessionRewindOutcome :: public sealed record SessionRewindOutcome(string CheckpointId, string MessageId, int Removed, int Remaining)
