@@ -271,9 +271,12 @@ public class ChangeReportTests
             [], 0, 600, 50, false);
         string text = report.ToPlainText();
         await Assert.That(text.Contains(longToken[..20])).IsTrue();
+        // AppendLine emits Environment.NewLine ("\r\n" on Windows), so strip
+        // the carriage return before measuring — the width contract is about
+        // columns, not line endings.
         string[] lines = text.Split('\n');
         for (int i = 0; i < lines.Length; i++)
-            await Assert.That(lines[i].Length <= ChangeReport.TextWidth).IsTrue();
+            await Assert.That(lines[i].TrimEnd('\r').Length <= ChangeReport.TextWidth).IsTrue();
     }
 
     [Test]
