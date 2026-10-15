@@ -284,7 +284,8 @@ public class ExecutionTreeTests
             CancellationToken ct) =>
             Result.Failure<string>("RecordingBackgroundRegistry never starts runs.");
 
-        public IReadOnlyList<BackgroundTaskCompletion> DrainCompleted(string sessionId) => [];
+        public Task<IReadOnlyList<BackgroundTaskCompletion>> DrainCompletedAsync(string sessionId) =>
+            Task.FromResult<IReadOnlyList<BackgroundTaskCompletion>>([]);
 
         public Task<bool> WaitForIdleAsync(
             string? sessionId = null,
@@ -357,7 +358,7 @@ public class ExecutionTreeTests
         DateTimeOffset drainDeadline = DateTimeOffset.UtcNow.AddSeconds(10);
         while (done.Count < 2 && DateTimeOffset.UtcNow < drainDeadline)
         {
-            done = registry.DrainCompleted("parent-1");
+            done = await registry.DrainCompletedAsync("parent-1").ConfigureAwait(false);
             if (done.Count < 2)
                 await Task.Delay(20).ConfigureAwait(false);
         }

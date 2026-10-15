@@ -59,7 +59,7 @@ public interface IBackgroundTaskRegistry
     ///     gone (disposed timeout CTS, finished run). Turn boundaries do NOT
     ///     call this — only a parent cancel does, via the agent loop's cancel
     ///     path. Cancelled runs stay tracked until
-    ///     <see cref="DrainCompleted" /> observes them as cancellations.
+    ///     <see cref="DrainCompletedAsync" /> observes them as cancellations.
     /// </summary>
     /// <param name="sessionId">Launching session whose runs must stop.</param>
     /// <returns>How many tracked runs were signalled (0 when none).</returns>
@@ -69,15 +69,17 @@ public interface IBackgroundTaskRegistry
     ///     Take all finished runs for <paramref name="sessionId" /> and forget
     ///     them (success, failure, crash and cancellation all surface as
     ///     completions — a stuck run never blocks the registry).
+    ///     Async read (#1099): finished tasks are awaited, never taken via a
+    ///     blocking <c>.Result</c>.
     /// </summary>
-    public IReadOnlyList<BackgroundTaskCompletion> DrainCompleted(string sessionId);
+    public Task<IReadOnlyList<BackgroundTaskCompletion>> DrainCompletedAsync(string sessionId);
 
     /// <summary>
     ///     Deterministic test-wait pairing for detached runs (textual
     ///     <c>wait_for_idle</c> steal, #1192): resolves when every tracked run
     ///     is finished — running or not — instead of sleeping a fixed delay.
     ///     Finished-but-not-drained runs count as idle; draining stays a
-    ///     separate step via <see cref="DrainCompleted" />.
+    ///     separate step via <see cref="DrainCompletedAsync" />.
     /// </summary>
     /// <param name="sessionId">
     ///     When set, only runs launched from this session gate idleness; other

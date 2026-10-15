@@ -97,7 +97,7 @@ public sealed class BackgroundTaskRegistry : IBackgroundTaskRegistry
             }
             catch (ObjectDisposedException ex)
             {
-                // Raced with DrainCompleted dropping this run's source —
+                // Raced with DrainCompletedAsync dropping this run's source —
                 // the run is already observed, nothing left to stop.
                 BackgroundTaskRegistryLog.BackgroundTaskSourceDrained(_logger, ex, id);
             }
@@ -112,7 +112,7 @@ public sealed class BackgroundTaskRegistry : IBackgroundTaskRegistry
     }
 
     /// <inheritdoc />
-    public IReadOnlyList<BackgroundTaskCompletion> DrainCompleted(string sessionId)
+    public async Task<IReadOnlyList<BackgroundTaskCompletion>> DrainCompletedAsync(string sessionId)
     {
         var done = new List<BackgroundTaskCompletion>();
         foreach (var (id, task) in _runs)
@@ -130,7 +130,9 @@ public sealed class BackgroundTaskRegistry : IBackgroundTaskRegistry
             {
                 if (_sources.TryRemove(id, out var cts))
                     cts.Dispose();
-                done.Add(new BackgroundTaskCompletion(id, meta.AgentName, Observe(task)));
+                // #1099: async read — IsCompleted guards the wait,
+                // not a blocking take.
+                done.Add(new BackgroundTaskCompletion(id, meta.AgentName, await ObserveAsync(task).ConfigureAwait(false)));
             }
         }
 
@@ -171,21 +173,21 @@ public sealed class BackgroundTaskRegistry : IBackgroundTaskRegistry
     }
 
     // Observe without throwing: faulted/cancelled runs surface as error
-    // completions (reading .Exception observes the task).
-    private static Result<SubAgentRunResult> Observe(Task<Result<SubAgentRunResult>> task)
+    // completions. Awaited, never a blocking .Result take (#1099).
+    private static async Task<Result<SubAgentRunResult>> ObserveAsync(Task<Result<SubAgentRunResult>> task)
     {
-        if (task.IsCompletedSuccessfully)
+        try
         {
-            return task.Result;
+            return await task.ConfigureAwait(false);
         }
-
-        if (task.IsCanceled)
+        catch (OperationCanceledException)
         {
             return Result.Failure<SubAgentRunResult>("Background run was cancelled.");
         }
-
-        string detail = task.Exception?.GetBaseException().Message ?? "unknown crash";
-        return Result.Failure<SubAgentRunResult>($"Background run crashed: {detail}");
+        catch (Exception ex)
+        {
+            return Result.Failure<SubAgentRunResult>($"Background run crashed: {ex.GetBaseException().Message}");
+        }
     }
 }
 
