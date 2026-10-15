@@ -367,6 +367,25 @@ public class CompactionServiceTests
         }
     }
 
+    /// <summary>#1101: singleton thresholds refuse non-positive reserves; TailTurns=0 disables the floor.</summary>
+    [Test]
+    public async Task Thresholds_DefaultAndValidate()
+    {
+        var svc = CreateService();
+        await Assert.That(svc.ReserveTokens).IsEqualTo(CompactionPolicy.DefaultReserveTokens);
+        await Assert.That(svc.KeepRecentTokens).IsEqualTo(20000);
+        await Assert.That(svc.TailTurns).IsEqualTo(2);
+
+        svc.TailTurns = 0;
+        await Assert.That(svc.TailTurns).IsEqualTo(0);
+
+        Assert.Throws<ArgumentOutOfRangeException>(() => { svc.ReserveTokens = 0; });
+        Assert.Throws<ArgumentOutOfRangeException>(() => { svc.ReserveTokens = -1; });
+        Assert.Throws<ArgumentOutOfRangeException>(() => { svc.KeepRecentTokens = 0; });
+        Assert.Throws<ArgumentOutOfRangeException>(() => { svc.KeepRecentTokens = -5; });
+        Assert.Throws<ArgumentOutOfRangeException>(() => { svc.TailTurns = -1; });
+    }
+
     private static AssistantMessage AssistantWithToolCall(string id, string toolName)
     {
         var args = JsonDocument.Parse("{}").RootElement.Clone();

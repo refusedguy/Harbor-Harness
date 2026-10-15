@@ -158,20 +158,51 @@ public sealed class CompactionService(
         "- Do not mention the summary process or that context was compacted.\n" +
         "- Be concise but complete — every detail matters.";
 
+    private int _reserveTokens = CompactionPolicy.DefaultReserveTokens;
+    private int _keepRecentTokens = 20000;
+    private int _tailTurns = 2;
+
     /// <summary>
     ///     Token reserve below the model's context window that triggers compaction.
+    ///     Must be &gt; 0 (mirrors <c>CompactionConfig.Validate</c>).
     /// </summary>
-    public int ReserveTokens { get; set; } = CompactionPolicy.DefaultReserveTokens;
+    public int ReserveTokens
+    {
+        get => _reserveTokens;
+        set
+        {
+            ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(value, 0);
+            _reserveTokens = value;
+        }
+    }
 
     /// <summary>
     ///     Target token count for the kept tail when compacting.
+    ///     Must be &gt; 0 (mirrors <c>CompactionConfig.Validate</c>).
     /// </summary>
-    public int KeepRecentTokens { get; set; } = 20000;
+    public int KeepRecentTokens
+    {
+        get => _keepRecentTokens;
+        set
+        {
+            ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(value, 0);
+            _keepRecentTokens = value;
+        }
+    }
 
     /// <summary>
     ///     Minimum number of recent turns to keep verbatim after compaction.
+    ///     Zero disables the floor (existing test/loop usage); negative is refused.
     /// </summary>
-    public int TailTurns { get; set; } = 2;
+    public int TailTurns
+    {
+        get => _tailTurns;
+        set
+        {
+            ArgumentOutOfRangeException.ThrowIfNegative(value);
+            _tailTurns = value;
+        }
+    }
 
     // #472: the history-shaping policy is NOT here any more. TruncateToFit,
     // TruncateToFitStrict and MaterializeCompactedView moved to CompactionPolicy
