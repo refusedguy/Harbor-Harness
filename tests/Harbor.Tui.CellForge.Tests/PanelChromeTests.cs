@@ -321,7 +321,7 @@ public class PanelChromeTests
     /// copying the nearest private painter — which is how two of the seven
     /// lost the degenerate-rect guard in the first place.
     ///
-    /// Two legitimate owners, not one. <c>Chat/Rendering/LayoutTree.cs</c>
+    /// Two legitimate owners, not one. <c>Chat/Rendering/BorderPanel.cs</c>
     /// hosts <c>BorderPanel</c> — the moved original from #436 (four
     /// <c>BorderKind</c> dialects including Double/Thick, which
     /// <see cref="PanelChrome.CornersFor"/> does not cover; golden grid-dump
@@ -365,11 +365,11 @@ public class PanelChromeTests
                 continue;
             }
 
-            // PanelChrome owns overlay frames; BorderPanel (LayoutTree.cs) owns
+            // PanelChrome owns overlay frames; BorderPanel (BorderPanel.cs) owns
             // golden layout frames — the #436-moved original, not a copy.
             // Anything else spelling corners is a new box painter being born.
             if (relative != Path.Combine("Chat", "Widgets", "PanelChrome.cs") &&
-                relative != Path.Combine("Chat", "Rendering", "LayoutTree.cs"))
+                relative != Path.Combine("Chat", "Rendering", "BorderPanel.cs"))
             {
                 offenders.Add(relative);
             }
