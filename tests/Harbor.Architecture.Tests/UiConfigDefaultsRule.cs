@@ -162,6 +162,160 @@ public class UiConfigDefaultsRule
         "src/Harbor.Desktop.Abstractions/ViewModels/OnboardingViewModel.cs",
     ];
 
+    /// <summary>The hardcoded-default sub-id: one hit per view-model line that hands a config field a literal.</summary>
+    private const string HardcodedDefaultSubId = "HARDCODED-CONFIG-DEFAULT";
+
+    /// <summary>The process-env-write sub-id: one hit per view-model line that calls the env write.</summary>
+    private const string ProcessEnvWriteSubId = "PROCESS-ENV-WRITE";
+
+    // MECHANISM (#1086, step 2, conveyor batch-15)
+    // --------------------------------------------
+    // The ban below is a ScanRule: the two forbidden shapes as two Forbidden
+    // rows, seven planted controls, the two live view-model files as the
+    // MustContain floor, a discovery floor. Enumeration, matching and the
+    // control/discovery/baseline verdicts are ScanRunner's; this file keeps
+    // the issue prose, the probe, and the test names.
+    //
+    // The verdict is ParseViewModelDefaults through the Func-overload,
+    // carrying the original matcher verbatim — StripLiteralsAndComment plus
+    // the ConfigDefaultFieldAssignment offset literal test (R1) and the
+    // ProcessEnvWrite call test (R2), with the blank / `//` / `/*` / `*`
+    // line skip verbatim. The Forbidden rows document the banned spellings;
+    // the runner does not execute them (a line regex over shared-stripped
+    // source cannot see what the literal-blanker sees — the log-message and
+    // write-in-message controls pin exactly that difference).
+    //
+    // The stripper is deliberately NOT the shared one:
+    // SourceScan.StripComments preserves string literals while this rule's
+    // lexer blanks them, so a field name inside a message ("log={LogLevel}")
+    // and the write API named inside a message are code under the shared
+    // stripper and prose under this one. Folding would change matcher input
+    // (ScanRule.cs header: divergent contracts migrate via the Func-overload
+    // with their stripper inside, never by silently adopting the shared one).
+    //
+    // Scope parity is exact: Trees ["src", "apps"] + InScope "/ViewModels/"
+    // walks what EnumerateViewModelFiles walks — no *.cs path under src/ or
+    // apps/ carries a /tests/, /contrib/ or /.worktrees/ segment inside a
+    // ViewModels/ directory, and both sides drop /obj/ + /bin/.
+    //
+    // MinHits 20 is the floor the original discovery test pinned
+    // (files.Count > 20): the walk yields ~54 files today, so a smaller
+    // count means the walk broke rather than the tree is clean.
+
+    /// <summary>
+    ///     The process-wide env WRITE shape, anchored on the call paren. The
+    ///     runner does not execute this row (the rule grades through
+    ///     <see cref="ParseViewModelDefaults" />); it documents the shape the
+    ///     rule bans and carries the failure text.
+    /// </summary>
+    private static readonly Regex ProcessEnvWriteShape = new(
+        @"Environment\.SetEnvironmentVariable\(",
+        RegexOptions.Compiled);
+
+    /// <summary>The view-model ban as data: two documented shapes, planted controls, a floor.</summary>
+    private static readonly ScanRule Rule = new()
+    {
+        Id = "UiConfigDefaults",
+        Trees = ["src", "apps"],
+        InScope = static p => p.Contains("/ViewModels/", StringComparison.Ordinal),
+        Forbidden =
+        [
+            new ScanForbidden(
+                HardcodedDefaultSubId,
+                ConfigDefaultFieldAssignment,
+                "the view-model shows what the config record holds — empty included — and the "
+                + "composition preset picks the rest (ADR-008 — CLI jsonl, desktop memory). Show the "
+                + "stored value verbatim. See issue #677."),
+            new ScanForbidden(
+                ProcessEnvWriteSubId,
+                ProcessEnvWriteShape,
+                "persist to the config record instead: HARBOR_STORAGE is resolved by StorageModule "
+                + "during AddHarbor, HARBOR_MODEL by ConfigurationModule during AddHarbor, OLLAMA_HOST "
+                + "snapshotted by ProviderFactories during AddHarbor. Nothing re-reads them after "
+                + "startup. See issue #677."),
+        ],
+        Controls =
+        [
+            new ScanControl(
+                "Planted/HardcodedDefault.cs",
+                "    private string _storageBackend = \"jsonl\";",
+                HardcodedDefaultSubId),
+            // The conditional shape: the empty branch is the literal.
+            new ScanControl(
+                "Planted/TernaryDefault.cs",
+                "        StorageBackend = string.IsNullOrEmpty(cfg.StorageBackend) ? \"jsonl\" : cfg.StorageBackend",
+                HardcodedDefaultSubId),
+            new ScanControl(
+                "Planted/ProcessEnvWrite.cs",
+                "        Environment.SetEnvironmentVariable(\"HARBOR_STORAGE\", StorageBackend);",
+                ProcessEnvWriteSubId),
+            // The conforming shape: read the record, show it, save it back.
+            new ScanControl(
+                "NearMiss/PassThrough.cs",
+                "        StorageBackend = _common.StorageBackend;",
+                null),
+            // A field name inside a string literal is a message, not a value:
+            // the literal-blanker sees no field here, the shared stripper would.
+            new ScanControl(
+                "NearMiss/LogMessage.cs",
+                "            _logger.LogInformation(\"saved: theme={Theme}, log={LogLevel}, font={Font}\");",
+                null),
+            // Reading the environment is allowed.
+            new ScanControl(
+                "NearMiss/EnvRead.cs",
+                "        OllamaHost = Environment.GetEnvironmentVariable(\"OLLAMA_HOST\") ?? string.Empty;",
+                null),
+            // Naming the write API inside a message is not a call: the
+            // literal-blanker sees no call here, the shared stripper would.
+            new ScanControl(
+                "NearMiss/WriteInMessage.cs",
+                "        _logger.LogDebug(\"a view-model must not call Environment.SetEnvironmentVariable(\");",
+                null),
+        ],
+        // The walk yields ~54 view-model files today, including the two files
+        // the issue named; a smaller count means the walk broke rather than
+        // the tree is clean.
+        MinHits = 20,
+        MustContain =
+        [
+            "apps/Harbor.App.Avalonia/ViewModels/SettingsViewModel.cs",
+            "src/Harbor.Desktop.Abstractions/ViewModels/OnboardingViewModel.cs",
+        ],
+        CustomParse = ParseViewModelDefaults,
+    };
+
+    /// <summary>
+    ///     The custom parser: the original line scan over one file's raw
+    ///     source — the blank / comment-line skip verbatim, then the R1 field
+    ///     test and the R2 write test verbatim, one report per offending line.
+    /// </summary>
+    private static IEnumerable<ScanHit> ParseViewModelDefaults(string displayPath, string rawSource)
+    {
+        string[] lines = rawSource.Split('\n').Select(static l => l.TrimEnd('\r')).ToArray();
+        for (int i = 0; i < lines.Length; i++)
+        {
+            string text = lines[i];
+            string trimmed = text.TrimStart();
+            if (trimmed.Length == 0
+                || trimmed.StartsWith("//", StringComparison.Ordinal)
+                || trimmed.StartsWith("/*", StringComparison.Ordinal)
+                || trimmed.StartsWith('*'))
+            {
+                continue;
+            }
+
+            if (HardcodedConfigDefault(text) is not null)
+            {
+                yield return new ScanHit(HardcodedDefaultSubId, displayPath, i + 1, text.Trim());
+            }
+
+            if (ProcessEnvWrite(text))
+            {
+                yield return new ScanHit(ProcessEnvWriteSubId, displayPath, i + 1, text.Trim());
+            }
+        }
+    }
+
     // ── the rules ─────────────────────────────────────────────────────────
 
     [Test]
@@ -206,6 +360,16 @@ public class UiConfigDefaultsRule
                 "Issue #677. Environment.SetEnvironmentVariable from a view-model mutates process state that no "
                 + "component re-reads after startup, and that outlives the session the user was editing. It is the "
                 + "fourth source of truth for a setting the composition root already resolved.");
+
+        // The ScanRule half: the same two verdicts over ScanRunner's
+        // collection (per-line hits through ParseViewModelDefaults, carrying
+        // the literal-blanking lexer verbatim). No baseline rows and no file
+        // hatch — zero hits is the whole rule (see the MECHANISM note above).
+        List<string> scanFailures = ScanRunner.Evaluate(Rule);
+
+        await Assert.That(scanFailures).IsEmpty()
+            .Because(
+                "Issue #677 via ScanRule. " + string.Join("\n", scanFailures));
     }
 
     // ── non-vacuity ───────────────────────────────────────────────────────
@@ -354,6 +518,132 @@ public class UiConfigDefaultsRule
             await Assert.That(ProcessEnvWrite(good)).IsFalse()
                 .Because($"Reading the environment is allowed; naming the write API inside a message is not a call: {good.Trim()}");
         }
+    }
+
+    /// <summary>
+    ///     The planted controls drive the REAL parser: the field and write
+    ///     shapes reported under their sub-ids (including the ternary), the
+    ///     pass-through and the literal-naming lookalikes silent.
+    /// </summary>
+    [Test]
+    public async Task Detector_ControlsDriveTheRealParser()
+    {
+        List<string> failures = ScanRunner.CheckControls(Rule);
+
+        await Assert.That(failures).IsEmpty()
+            .Because(
+                "the seven planted controls must agree with the matcher cases above through "
+                + "the rule's own parser — otherwise the rule guards nothing, or forbids "
+                + "the fix. " + string.Join("; ", failures));
+    }
+
+    /// <summary>
+    ///     Non-vacuity: the walk must find the layer it claims to govern. A scan
+    ///     rooted at a renamed directory finds zero files and then passes
+    ///     everything.
+    /// </summary>
+    [Test]
+    public async Task Discovery_FindsTheScopeItClaimsToGovern()
+    {
+        List<string> discovery = ScanRunner.CheckDiscovery(Rule);
+
+        await Assert.That(discovery).IsEmpty()
+            .Because(
+                "src/ + apps/ hold far more than 20 view-model files, including SettingsViewModel.cs and "
+                + "OnboardingViewModel.cs; a smaller count — or a scope that stopped "
+                + "seeing those files — means the directory was renamed or the walk stopped "
+                + "matching, and NoViewModel_ChoosesAConfigDefault_OrWritesTheProcessEnvironment becomes "
+                + "vacuous. " + string.Join("; ", discovery));
+    }
+
+    /// <summary>
+    ///     The equivalence proof: the ScanRule parser IS the probe's line scan —
+    ///     the same literal-blanking lexer, the same field and write tests, the
+    ///     same line skip — over every live file in scope. If this fails, the
+    ///     Func path drifted from the oracle.
+    /// </summary>
+    [Test]
+    public async Task Parser_MatchesTheProbeOnEveryLiveFile()
+    {
+        var mismatches = new List<string>();
+        foreach ((string displayPath, string source) in ScanRunner.ReadSources(ScanRunner.ScopeFiles(Rule)))
+        {
+            string[] lines = source.Split('\n').Select(static l => l.TrimEnd('\r')).ToArray();
+            var expected = new List<string>();
+            for (int i = 0; i < lines.Length; i++)
+            {
+                string text = lines[i];
+                string trimmed = text.TrimStart();
+                if (trimmed.Length == 0
+                    || trimmed.StartsWith("//", StringComparison.Ordinal)
+                    || trimmed.StartsWith("/*", StringComparison.Ordinal)
+                    || trimmed.StartsWith('*'))
+                {
+                    continue;
+                }
+
+                if (HardcodedConfigDefault(text) is not null)
+                {
+                    expected.Add($"{HardcodedDefaultSubId}@{i + 1}");
+                }
+
+                if (ProcessEnvWrite(text))
+                {
+                    expected.Add($"{ProcessEnvWriteSubId}@{i + 1}");
+                }
+            }
+
+            List<ScanHit> actual = [.. Rule.CustomParse!(displayPath, source)];
+
+            string expectedKey = string.Join(
+                " | ",
+                expected.OrderBy(static s => s, StringComparer.Ordinal));
+            string actualKey = string.Join(
+                " | ",
+                actual
+                    .OrderBy(static h => h.Line)
+                    .ThenBy(static h => h.RuleId, StringComparer.Ordinal)
+                    .Select(static h => $"{h.RuleId}@{h.Line}"));
+
+            if (!string.Equals(expectedKey, actualKey, StringComparison.Ordinal))
+            {
+                mismatches.Add($"{displayPath} probe=[{expectedKey}] rule=[{actualKey}]");
+            }
+        }
+
+        await Assert.That(mismatches).IsEmpty()
+            .Because(
+                "the ScanRule parser must agree with HardcodedConfigDefault + ProcessEnvWrite on every "
+                + "live file in scope — it carries those methods verbatim, so a disagreement means "
+                + "the Func path stopped calling them. " + string.Join("; ", mismatches));
+    }
+
+    /// <summary>
+    ///     The rule carries no tolerated rows: every hardcoded default and every
+    ///     process-env write is the defect #677 reported, so there is nothing
+    ///     to excuse.
+    /// </summary>
+    [Test]
+    public async Task Baseline_Rows_AllHaveReasons()
+    {
+        List<string> failures = ScanRunner.CheckReasons(Rule);
+
+        await Assert.That(failures).IsEmpty().Because(string.Join("\n", failures));
+    }
+
+    /// <summary>
+    ///     No baseline row is stale: a permission for a problem that no longer
+    ///     exists is a blanket permission.
+    /// </summary>
+    [Test]
+    public async Task Baseline_Rows_Are_Not_Stale()
+    {
+        List<string> stale = ScanRunner.StaleBaselineKeys(
+            Rule, ScanRunner.ReadSources(ScanRunner.ScopeFiles(Rule)));
+
+        await Assert.That(stale).IsEmpty()
+            .Because("a stale baseline row excuses nothing and teaches the next reader "
+                   + "that permissions accumulate. " + string.Join("; ", stale));
     }
 
     // ── helpers ───────────────────────────────────────────────────────────
