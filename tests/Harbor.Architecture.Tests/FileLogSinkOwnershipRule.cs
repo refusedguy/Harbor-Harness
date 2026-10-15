@@ -291,6 +291,192 @@ public sealed class FileLogSinkOwnershipRule
     private static readonly Lazy<ProviderScanReport> Report = new(
         () => FileLogSinkProbe.Scan(RepoPaths.RepoRoot));
 
+    /// <summary>The per-declaration collection's sub-id: one hit per provider declaration found.</summary>
+    private const string ProviderDeclarationSubId = "PROVIDER-DECLARATION";
+
+    // MECHANISM (#1086, step 2, conveyor batch-14)
+    // --------------------------------------------
+    // The ban below is a ScanRule: the provider-interface shape as one
+    // Forbidden row, six planted controls, the two live provider files as the
+    // MustContain floor, a discovery floor. Enumeration, matching and the
+    // control/discovery/baseline verdicts are ScanRunner's; this file keeps
+    // the issue prose, the probe, and the test names.
+    //
+    // The verdict is ParseProviderDeclarations through the Func-overload,
+    // carrying the original matcher verbatim — SourceCommentStripper.StripAll
+    // plus the TypeKeyword find plus the BaseListLineLookahead declaration
+    // window via FileLogSinkProbe.FindDeclarations, with no hatch and an
+    // empty baseline: zero duplicate names is the whole rule. The Forbidden
+    // row documents the banned spelling; the runner does not execute it (a
+    // line regex cannot ask "does this NAME appear in TWO files", and a
+    // per-file Func verdict cannot group across files — the duplicate verdict
+    // is grouping over Collect, in the rule test, like ModelRateLabel's
+    // count rule).
+    //
+    // Scope parity is exact: Trees ["src", "apps"] walks what ScanRoots
+    // walked — no *.cs path under src/ or apps/ carries a /tests/,
+    // /contrib/, /external/, /node_modules/ or /.worktrees/ segment, and
+    // both sides drop /obj/ + /bin/. The stripper is deliberately NOT the
+    // shared one: SourceScan.StripComments is a comment regex that truncates
+    // every line holding a URL at its `//`, while StripAll is the
+    // string-aware lexer that keeps `"http://…"` intact — folding would
+    // change matcher input (ScanRule.cs header: divergent contracts migrate
+    // via the Func-overload with their stripper inside, never by silently
+    // adopting the shared one). The URL control in
+    // Detector_ControlsDriveTheRealParser pins the choice.
+    //
+    // MinHits 500 is the floor the other src + apps *.cs rules share
+    // (TokenCell, ToolGlyph, DefaultModel, MoneyCell): the walk yields ~1140
+    // files today, so a smaller count means the walk broke rather than the
+    // tree is clean.
+
+    /// <summary>
+    ///     The banned spelling: the provider interface, qualified-name
+    ///     tolerant. The runner does not execute this row (the rule grades
+    ///     through <see cref="ParseProviderDeclarations" />); it documents
+    ///     the shape the rule bans and carries the failure text.
+    /// </summary>
+    private static readonly Regex ProviderNameShape = new(
+        @"\bILoggerProvider\b",
+        RegexOptions.Compiled);
+
+    /// <summary>The duplicate-name ban as data: one documented shape, planted controls, a floor.</summary>
+    private static readonly ScanRule Rule = new()
+    {
+        Id = "FileLogSinkOwnership",
+        Trees = ["src", "apps"],
+        Forbidden =
+        [
+            new ScanForbidden(
+                ProviderDeclarationSubId,
+                ProviderNameShape,
+                "a logging provider's simple name must identify ONE declaration. A second one is a "
+                + "copy nobody can find: #558 left 479 byte-identical lines in "
+                + "apps/Harbor.App.Avalonia/Logging/ that no Avalonia code path ever registered (the app "
+                + "logs through Serilog via Harbor.Logging.LoggerSetup), and because the live CLI copy "
+                + "carried the SAME name, every search for it matched that copy instead — so the dead "
+                + "one read as maintained. Delete the unreachable copy; do not keep both in step. "
+                + "See issue #558."),
+        ],
+        Controls =
+        [
+            new ScanControl(
+                "Planted/ProviderDeclaration.cs",
+                "namespace Harbor.App.A.Logging;\n"
+                + "public sealed class DupSink : Microsoft.Extensions.Logging.ILoggerProvider\n"
+                + "{\n"
+                + "    public void Dispose() { }\n"
+                + "}",
+                ProviderDeclarationSubId),
+            // The base list may wrap onto the next lines (BaseListLineLookahead):
+            // a provider whose interface sits on the line after the
+            // declaration is still a provider.
+            new ScanControl(
+                "Planted/WrappedBaseList.cs",
+                "namespace Harbor.App.A.Logging;\n"
+                + "public sealed class DupSink : IDisposable,\n"
+                + "    Microsoft.Extensions.Logging.ILoggerProvider\n"
+                + "{\n"
+                + "    public void Dispose() { }\n"
+                + "}",
+                ProviderDeclarationSubId),
+            // A `//` inside a string literal is not a comment: StripAll keeps
+            // the code after it, the shared regex stripper would eat the
+            // declaration. This control is what proves the divergent stripper
+            // is the one that ran. Not compilable on purpose: code after a
+            // `//`-in-string on the SAME line is the only shape the two
+            // strippers judge differently (a `;` before the base list would
+            // trip the statement-terminator guard, and a second type keyword
+            // on the line would truncate the probe's nameEnd slice at its
+            // brace — both controls for the window's own quirks, not this
+            // one's). Controls are text for the parser, never compiled.
+            new ScanControl(
+                "Planted/UrlStringKeepsCode.cs",
+                "namespace Harbor.App.A.Logging;\n"
+                + "internal const string U = \"http://example.com/a.png\" public sealed class UrlSink : Microsoft.Extensions.Logging.ILoggerProvider",
+                ProviderDeclarationSubId),
+            new ScanControl(
+                "NearMiss/Comment.cs",
+                "namespace Harbor.App.B.Logging;\n"
+                + "// public sealed class DupSink : Microsoft.Extensions.Logging.ILoggerProvider\n"
+                + "public sealed class Unrelated : IDisposable\n"
+                + "{\n"
+                + "    public void Dispose() { }\n"
+                + "}",
+                null),
+            // A same-named class that is NOT a provider must not be collected.
+            new ScanControl(
+                "NearMiss/SameNameNotAProvider.cs",
+                "namespace Harbor.App.B.Logging;\n"
+                + "public sealed class DupSink : IDisposable\n"
+                + "{\n"
+                + "    public void Dispose() { }\n"
+                + "}",
+                null),
+            // An `ILogger` (not `ILoggerProvider`) implementation is the nested
+            // logger every provider holds; the bounded word must not grade it.
+            new ScanControl(
+                "NearMiss/LoggerNotProvider.cs",
+                "namespace Harbor.App.B.Logging;\n"
+                + "public sealed class PlainLogger : Microsoft.Extensions.Logging.ILogger\n"
+                + "{\n"
+                + "    public void Dispose() { }\n"
+                + "}",
+                null),
+        ],
+        // The walk yields ~1140 C# files today, including the two live
+        // provider files; a smaller count means the walk broke rather than
+        // the tree is clean.
+        MinHits = 500,
+        MustContain =
+        [
+            "apps/Harbor.App.Cli/Logging/FileLogger.cs",
+            "src/Harbor.Ui.Framework.Abstractions/Diagnostics/DiagnosticsPanelLoggerProvider.cs",
+        ],
+        CustomParse = ParseProviderDeclarations,
+    };
+
+    /// <summary>
+    ///     The custom parser: the original declaration scan over one file's raw
+    ///     source — split into lines, then FileLogSinkProbe.FindDeclarations
+    ///     verbatim (StripAll + TypeKeyword + declaration window), one report
+    ///     per declaration. Files without a provider match nothing; the
+    ///     duplicate verdict is grouping over Collect, in the rule test.
+    /// </summary>
+    private static IEnumerable<ScanHit> ParseProviderDeclarations(string displayPath, string rawSource)
+    {
+        string[] lines = rawSource.Split('\n').Select(static l => l.TrimEnd('\r')).ToArray();
+        foreach (ProviderDeclaration declaration in FileLogSinkProbe.FindDeclarations(displayPath, lines))
+        {
+            yield return new ScanHit(ProviderDeclarationSubId, displayPath, declaration.Line, declaration.Name);
+        }
+    }
+
+    /// <summary>
+    ///     Every provider declaration ScanRunner collects over the live scope,
+    ///     as (name, file, line) triples in scan order.
+    /// </summary>
+    private static List<ProviderDeclaration> CollectScanDeclarations()
+    {
+        var declarations = new List<ProviderDeclaration>();
+        foreach (ScanHit hit in ScanRunner.Collect(Rule, ScanRunner.ReadSources(ScanRunner.ScopeFiles(Rule))))
+        {
+            declarations.Add(new ProviderDeclaration(hit.Text, hit.File, hit.Line));
+        }
+
+        return declarations;
+    }
+
+    /// <summary>Duplicate simple names among the given declarations, sorted — a non-empty list is the #558 failure.</summary>
+    private static List<string> FindDuplicateNames(IEnumerable<ProviderDeclaration> declarations) =>
+    [
+        .. declarations
+            .GroupBy(static d => d.Name, StringComparer.Ordinal)
+            .Where(static g => g.Count() > 1)
+            .OrderBy(static g => g.Key, StringComparer.Ordinal)
+            .Select(static g => $"{g.Key} x{g.Count()}"),
+    ];
+
     // =====================================================================
     // 1. The rule.
     // =====================================================================
@@ -317,6 +503,20 @@ public sealed class FileLogSinkOwnershipRule
                 + "one read as maintained. Delete the unreachable copy; do not keep both in step. "
                 + "Duplicated: " + (duplicates.Count == 0 ? "(none)" : string.Join(" | ", duplicates))
                 + ". All declarations found: " + Describe(Report.Value.Declarations));
+
+        // The ScanRule half: the same duplicate verdict over ScanRunner's
+        // collection (per-declaration hits grouped by name — a cross-file
+        // question a per-file Func verdict cannot answer alone). No baseline
+        // rows and no file hatch — zero duplicate names is the whole rule
+        // (see the MECHANISM note above).
+        List<ProviderDeclaration> scanDeclarations = CollectScanDeclarations();
+        List<string> scanDuplicates = FindDuplicateNames(scanDeclarations);
+
+        await Assert.That(scanDuplicates).IsEmpty()
+            .Because(
+                "a logging provider's simple name must identify ONE declaration (#558). "
+                + "ScanRule reports: " + (scanDuplicates.Count == 0 ? "(none)" : string.Join(" | ", scanDuplicates))
+                + ". All declarations found: " + Describe(scanDeclarations));
     }
 
     // =====================================================================
@@ -454,6 +654,112 @@ public sealed class FileLogSinkOwnershipRule
             .IsEqualTo(0)
             .Because("a type that implements IDisposable is not a logging provider, and counting it would "
                    + "make the duplicate rule fire on an unrelated same-name class");
+    }
+
+    /// <summary>
+    ///     The planted controls drive the REAL parser: provider declarations
+    ///     reported under their sub-id (including the wrapped base list and
+    ///     the URL-in-string line the shared stripper would eat), the comment
+    ///     and the non-provider neighbours silent.
+    /// </summary>
+    [Test]
+    public async Task Detector_ControlsDriveTheRealParser()
+    {
+        List<string> failures = ScanRunner.CheckControls(Rule);
+
+        await Assert.That(failures).IsEmpty()
+            .Because(
+                "the six planted controls must agree with the matcher cases below through "
+                + "the rule's own parser — otherwise the rule guards nothing, or forbids "
+                + "the fix. " + string.Join("; ", failures));
+    }
+
+    /// <summary>
+    ///     Non-vacuity: the walk must find the tree it claims to govern. A scan
+    ///     rooted at a renamed directory finds zero files and then passes
+    ///     everything.
+    /// </summary>
+    [Test]
+    public async Task Discovery_FindsTheScopeItClaimsToGovern()
+    {
+        List<string> discovery = ScanRunner.CheckDiscovery(Rule);
+
+        await Assert.That(discovery).IsEmpty()
+            .Because(
+                "src/ + apps/ hold far more than 500 C# files, including FileLogger.cs and "
+                + "DiagnosticsPanelLoggerProvider.cs; a smaller count — or a scope that stopped "
+                + "seeing those files — means the directory was renamed or the walk stopped "
+                + "matching, and LoggingProvider_IsDeclaredInExactlyOnePlacePerName becomes "
+                + "vacuous. " + string.Join("; ", discovery));
+    }
+
+    /// <summary>
+    ///     The equivalence proof: the ScanRule parser IS the probe's
+    ///     declaration scan — the same StripAll lexer, the same type keyword,
+    ///     the same declaration window — over every live file in scope. If
+    ///     this fails, the tabular row drifted from the oracle.
+    /// </summary>
+    [Test]
+    public async Task Parser_MatchesTheProbeOnEveryLiveFile()
+    {
+        var mismatches = new List<string>();
+        foreach ((string displayPath, string source) in ScanRunner.ReadSources(ScanRunner.ScopeFiles(Rule)))
+        {
+            string[] lines = source.Split('\n').Select(static l => l.TrimEnd('\r')).ToArray();
+            List<ProviderDeclaration> expected = FileLogSinkProbe.FindDeclarations(displayPath, lines);
+            List<ScanHit> actual = [.. Rule.CustomParse!(displayPath, source)];
+
+            string expectedKey = string.Join(
+                " | ",
+                expected
+                    .OrderBy(static d => d.Line)
+                    .ThenBy(static d => d.Name, StringComparer.Ordinal)
+                    .Select(static d => $"{d.Name}@{d.Line}"));
+            string actualKey = string.Join(
+                " | ",
+                actual
+                    .OrderBy(static h => h.Line)
+                    .ThenBy(static h => h.Text, StringComparer.Ordinal)
+                    .Select(static h => $"{h.Text}@{h.Line}"));
+
+            if (!string.Equals(expectedKey, actualKey, StringComparison.Ordinal))
+            {
+                mismatches.Add($"{displayPath} probe=[{expectedKey}] rule=[{actualKey}]");
+            }
+        }
+
+        await Assert.That(mismatches).IsEmpty()
+            .Because(
+                "the ScanRule parser must agree with FileLogSinkProbe.FindDeclarations on every "
+                + "live file in scope — it carries that method verbatim, so a disagreement means "
+                + "the Func path stopped calling it. " + string.Join("; ", mismatches));
+    }
+
+    /// <summary>
+    ///     The rule carries no tolerated rows: every duplicate provider name
+    ///     is the defect #558 reported, so there is nothing to excuse.
+    /// </summary>
+    [Test]
+    public async Task Baseline_Rows_AllHaveReasons()
+    {
+        List<string> failures = ScanRunner.CheckReasons(Rule);
+
+        await Assert.That(failures).IsEmpty().Because(string.Join("\n", failures));
+    }
+
+    /// <summary>
+    ///     No baseline row is stale: a permission for a problem that no longer
+    ///     exists is a blanket permission.
+    /// </summary>
+    [Test]
+    public async Task Baseline_Rows_Are_Not_Stale()
+    {
+        List<string> stale = ScanRunner.StaleBaselineKeys(
+            Rule, ScanRunner.ReadSources(ScanRunner.ScopeFiles(Rule)));
+
+        await Assert.That(stale).IsEmpty()
+            .Because("a stale baseline row excuses nothing and teaches the next reader "
+                   + "that permissions accumulate. " + string.Join("; ", stale));
     }
 
     /// <summary>Splits a raw string literal into lines the way <c>File.ReadAllLines</c> would.</summary>
