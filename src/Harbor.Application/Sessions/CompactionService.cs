@@ -181,30 +181,8 @@ public sealed class CompactionService(
     ///     the same constant — one source, not two literals that can drift.
     /// </summary>
     private const int SummaryMaxOutputTokens = 4096;
-
-    private int _reserveTokens = CompactionPolicy.DefaultReserveTokens;
     private int _keepRecentTokens = 20000;
     private int _tailTurns = 2;
-
-    /// <summary>
-    ///     Token reserve below the model's context window that triggers compaction.
-    ///     Must be &gt; 0 (mirrors <c>CompactionConfig.Validate</c>).
-    /// </summary>
-    /// <remarks>
-    ///     #1106 row 4 (not this slice): the per-turn <see cref="ShouldCompact" />
-    ///     verdict currently follows the tracker's reserve (single estimate),
-    ///     so mutating this after construction does not move the threshold yet.
-    ///     Unifying the two reserves is the remaining divergent-reserves item.
-    /// </remarks>
-    public int ReserveTokens
-    {
-        get => _reserveTokens;
-        set
-        {
-            ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(value, 0);
-            _reserveTokens = value;
-        }
-    }
 
     /// <summary>
     ///     Target token count for the kept tail when compacting.
@@ -245,13 +223,13 @@ public sealed class CompactionService(
 
     /// <inheritdoc />
     /// <remarks>
-    ///     #1106 (double estimate): the budget verdict is the tracker's O(1)
-    ///     cached decision, not a second O(n) scan past it. The previous body
-    ///     ran its own <c>EstimateTokens</c> full-history scan here, so a turn
-    ///     that had already asked <see cref="ITokenTracker.ShouldCompact" />
-    ///     paid the estimate twice. The reserve that applies is the tracker's;
-    ///     <see cref="ReserveTokens" /> above stays as the config surface whose
-    ///     unification with the tracker is the remaining #1106 row-4 item.
+    ///     #1106 (double estimate, divergent reserves): the budget verdict is
+    ///     the tracker's O(1) cached decision, not a second O(n) scan past it.
+    ///     The previous body ran its own <c>EstimateTokens</c> full-history
+    ///     scan here, so a turn that had already asked
+    ///     <see cref="ITokenTracker.ShouldCompact" /> paid the estimate twice.
+    ///     The reserve that applies is the tracker's alone — this class keeps
+    ///     no second threshold, so the two can never diverge again.
     /// </remarks>
     public bool ShouldCompact(IReadOnlyList<AgentMessage> messages, ModelInfo model)
     {
@@ -583,17 +561,21 @@ public sealed class CompactionService(
     ///     the newest head message is always kept.
     /// </summary>
     /// <remarks>
-    ///     #1106 row 4 (not this slice): the subtracted reserve is this
-    ///     service's own <see cref="ReserveTokens" /> config surface, and the
-    ///     per-turn <see cref="ShouldCompact" /> verdict still follows the
-    ///     tracker's reserve. Unifying the two reserves stays open.
+    ///     #1106 (divergent reserves): the subtracted reserve is the tracker's
+    ///     own <see cref="TokenTracker.ReserveTokens" /> — the same value that
+    ///     drives the per-turn <see cref="ShouldCompact" /> verdict. No second
+    ///     threshold lives on this class any more, so the two cannot drift.
     /// </remarks>
     private int FindPromptStartByBudget(
         IReadOnlyList<AgentMessage> messages,
         int tailStart,
         ModelInfo summaryModel)
     {
-        int budget = summaryModel.ContextWindow - SummaryMaxOutputTokens - ReserveTokens;
+        // Single reserve source: the tracker owns the threshold. CompactionService
+        // kept its own (now deleted) copy that drifted from this one; the tracker's
+        // is the only one that applies (#1106 divergent reserves).
+        int reserveTokens = (tokenTracker as TokenTracker)?.ReserveTokens ?? CompactionPolicy.DefaultReserveTokens;
+        int budget = summaryModel.ContextWindow - SummaryMaxOutputTokens - reserveTokens;
         int start = tailStart - 1;
         if (budget <= 0 || start < 0)
         {

@@ -31,12 +31,15 @@ public sealed class TokenTracker : ITokenTracker
     // _sync: the tracker is a singleton fed by concurrent session runs.
     private readonly Dictionary<string, SessionEstimate> _estimates = new(StringComparer.Ordinal);
 
-    private int _reserveTokens = 16384;
+    private int _reserveTokens = CompactionPolicy.DefaultReserveTokens;
 
     /// <summary>
     ///     Token reserve below the model's context window that triggers compaction.
     ///     Init-only (#80): mutating the threshold on the shared singleton mid-run
     ///     would silently move the goalposts for every session at once.
+    ///     Single source of truth for the threshold (#1106 divergent reserves):
+    ///     <c>CompactionService</c> keeps no second reserve — its
+    ///     <c>ShouldCompact</c> verdict is this tracker's.
     /// </summary>
     public int ReserveTokens
     {
