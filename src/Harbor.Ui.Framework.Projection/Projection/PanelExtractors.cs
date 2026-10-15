@@ -320,15 +320,16 @@ public static class PanelExtractors
         {
             try
             {
-                // Slice the string's memory instead of Substring-copying it:
-                // JsonDocument parses directly from the shared buffer, so no
-                // per-row intermediate string is allocated on this hot path.
-                using JsonDocument doc = JsonDocument.Parse(toolText.AsMemory(brace));
-                if (doc.RootElement.ValueKind == JsonValueKind.Object)
+                // Same DOM as JsonDocument.Parse, but through the source-generated
+                // JsonElement info (PERF-002; TRIM-SERIALIZATION TypeInfo
+                // spelling). No per-row intermediate string: the span overload
+                // deserializes directly from the shared buffer.
+                JsonElement root = JsonSerializer.Deserialize(toolText.AsSpan(brace), PanelExtractorsJsonContext.Default.JsonElement);
+                if (root.ValueKind == JsonValueKind.Object)
                 {
                     foreach (string key in PathKeys)
                     {
-                        if (doc.RootElement.TryGetProperty(key, out JsonElement value) &&
+                        if (root.TryGetProperty(key, out JsonElement value) &&
                             value.ValueKind == JsonValueKind.String)
                         {
                             string? s = value.GetString();
