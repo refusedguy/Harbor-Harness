@@ -11,7 +11,8 @@ namespace Harbor.Tui.CellForge.Widgets;
 /// <c>"(N earlier lines)"</c> label) instead of the head, so the exit status
 /// stays visible. The <c>Overflow</c> flag is the expand affordance — the
 /// feed Enter/click gesture reveals the full body.
-/// BCL-only, AOT-clean, allocation-light (one split per call, rune slices for
+/// BCL-only, AOT-clean, allocation-light (no split per call: span line
+/// walks plus one substring for the visible head/tail, rune slices for
 /// truncation). Mirrors the TS exactly: head truncation appends <c>"…"</c>
 /// inline to the last visible line, then the char budget cuts to
 /// <c>maxChars - 1 + "…"</c>; the tail keeps the last
@@ -29,48 +30,53 @@ internal static class ToolOutputCollapse
     public static CollapseResult Collapse(string output, int maxLines, int maxChars)
     {
         output ??= string.Empty;
-        string[] lines = output.Split('\n');
-        if (lines.Length <= maxLines && CountRunes(output) <= maxChars)
+        int totalLines = CountLines(output);
+        if (totalLines <= maxLines && CountRunes(output) <= maxChars)
         {
             return new CollapseResult(output, Overflow: false);
         }
 
-        int take = Math.Max(0, Math.Min(maxLines, lines.Length));
-        string[] visible = new string[take];
-        Array.Copy(lines, visible, take);
-        if (lines.Length > maxLines && visible.Length > 0)
+        int take = Math.Max(0, Math.Min(maxLines, totalLines));
+        // First `take` lines re-joined by '\n' == the prefix ending at the
+        // take-th newline (Split+Join round-trips exactly, no normalization).
+        string head = take <= 0
+            ? string.Empty
+            : take >= totalLines
+                ? output
+                : output[..TakeEnd(output, take)];
+        if (totalLines > maxLines && take > 0)
         {
-            visible[visible.Length - 1] += "…";
+            head += "…";
         }
 
-        string preview = string.Join("\n", visible);
-        if (CountRunes(preview) > maxChars)
+        if (CountRunes(head) > maxChars)
         {
-            return new CollapseResult(TruncateRunes(preview, Math.Max(0, maxChars - 1)) + "…", Overflow: true);
+            return new CollapseResult(TruncateRunes(head, Math.Max(0, maxChars - 1)) + "…", Overflow: true);
         }
 
-        return new CollapseResult(preview, Overflow: true);
+        return new CollapseResult(head, Overflow: true);
     }
 
     /// <summary>Tail collapse for shell output: label + last lines.</summary>
     public static string CollapseTail(string output, int maxLines, int maxChars)
     {
         output ??= string.Empty;
-        string[] lines = output.Split('\n');
-        if (lines.Length <= maxLines && CountRunes(output) <= maxChars)
+        int totalLines = CountLines(output);
+        if (totalLines <= maxLines && CountRunes(output) <= maxChars)
         {
             return output;
         }
 
-        int count = Math.Max(1, lines.Length - Math.Max(0, maxLines - 1));
+        int count = Math.Max(1, totalLines - Math.Max(0, maxLines - 1));
         string label = count == 1 ? "(1 earlier line)" : $"({count} earlier lines)";
         if (maxLines <= 1)
         {
             return label;
         }
 
-        int keep = Math.Min(maxLines - 1, lines.Length);
-        string tail = string.Join("\n", lines, lines.Length - keep, keep);
+        int keep = Math.Min(maxLines - 1, totalLines);
+        // Last `keep` lines re-joined by '\n' == the suffix starting at that line.
+        string tail = keep >= totalLines ? output : output[LineStart(output, totalLines - keep)..];
         int available = maxChars - CountRunes(label) - 1;
         if (available <= 0)
         {
@@ -85,6 +91,64 @@ internal static class ToolOutputCollapse
         }
 
         return label + "\n" + tailRunes;
+    }
+
+    /// <summary><c>Split('\n').Length</c> without the array: every '\n'
+    /// starts a new line, so even <c>""</c> is one line.</summary>
+    private static int CountLines(string text)
+    {
+        int lines = 1;
+        for (int i = 0; i < text.Length; i++)
+        {
+            if (text[i] == '\n')
+            {
+                lines++;
+            }
+        }
+
+        return lines;
+    }
+
+    /// <summary>Index of the take-th <c>'\n'</c> (end of the <c>take</c>-line
+    /// head prefix). Call only when <c>take</c> is strictly below the line
+    /// count, so the terminator exists.</summary>
+    private static int TakeEnd(string text, int take)
+    {
+        int seen = 0;
+        for (int i = 0; i < text.Length; i++)
+        {
+            if (text[i] == '\n')
+            {
+                seen++;
+                if (seen == take)
+                {
+                    return i;
+                }
+            }
+        }
+
+        return text.Length;
+    }
+
+    /// <summary>Start offset of 0-based line <paramref name="index"/>
+    /// (just past the <c>index</c>-th <c>'\n'</c>). Call only with
+    /// <c>0 &lt; index &lt; lines</c>.</summary>
+    private static int LineStart(string text, int index)
+    {
+        int seen = 0;
+        for (int i = 0; i < text.Length; i++)
+        {
+            if (text[i] == '\n')
+            {
+                seen++;
+                if (seen == index)
+                {
+                    return i + 1;
+                }
+            }
+        }
+
+        return 0;
     }
 
     /// <summary>Shell collapse: command capped to 2 lines, output shown as tail.</summary>
