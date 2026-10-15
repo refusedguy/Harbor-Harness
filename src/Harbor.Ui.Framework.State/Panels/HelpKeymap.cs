@@ -7,6 +7,9 @@ namespace Harbor.Ui.Framework.Panels;
 ///     each in its own widget style (markup vs plain cells) — so the keymap text
 ///     can no longer drift between renderers. Mirrors the
 ///     <see cref="Harbor.Ui.Framework.State.ChatKeyMap"/> default bindings.
+///     Pinned pair (#1112): rows are curated display strings, so equality with
+///     the resolve table is enforced by <c>HelpKeymapPinTests</c>, not by
+///     derivation — update both together when a binding changes.
 /// </summary>
 public static class HelpKeymap
 {
