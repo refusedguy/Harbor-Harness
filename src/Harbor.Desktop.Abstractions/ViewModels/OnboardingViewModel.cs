@@ -336,7 +336,13 @@ public partial class OnboardingViewModel : ObservableObject, IDisposable
         if (!CanAdvance) return;
         if (CurrentStep >= TotalSteps)
         {
-            _ = FinishAsync();
+            // #1099: the save stays observed — a fault-only observer below
+            // logs a late save fault instead of parking it where only
+            // finalization could see it.
+            Harbor.Abstractions.Tools.TaskFireAndForget.Forget(
+                FinishAsync(),
+                ex => _logger.LogError(ex, "Onboarding finish failed"),
+                _wizardCts.Token);
             return;
         }
 
@@ -352,7 +358,13 @@ public partial class OnboardingViewModel : ObservableObject, IDisposable
             // PROD-UI-0 З.4: entering step 4 → fetch the live model list in
             // the background; until it lands (or fails) the free-text box
             // remains visible.
-            _ = LoadModelsAsync();
+            // #1099: the fetch stays observed — a fault-only observer below
+            // logs a late catalog fault instead of parking it where only
+            // finalization could see it.
+            Harbor.Abstractions.Tools.TaskFireAndForget.Forget(
+                LoadModelsAsync(),
+                ex => _logger.LogWarning(ex, "Live model list failed"),
+                _wizardCts.Token);
         }
 
         CurrentStep++;
