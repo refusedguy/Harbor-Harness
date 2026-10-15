@@ -564,7 +564,23 @@ public sealed class EscapeSequenceParser
             // SGR mouse encoding (design §3.2): CSI < button ; col ; row M|m.
             if (finalByte is (byte)'M' or (byte)'m')
             {
-                DecodeSgrMouse(finalByte, parameters);
+                if (SgrMouseDecoder.TryDecode(
+                    finalByte,
+                    parameters,
+                    _mousePressedButton,
+                    _mouseMovedSincePress,
+                    out var mouseEvent,
+                    out var nextPressedButton,
+                    out var nextMovedSincePress))
+                {
+                    _mousePressedButton = nextPressedButton;
+                    _mouseMovedSincePress = nextMovedSincePress;
+                    Enqueue(InputEvent.FromMouse(mouseEvent));
+                }
+                else
+                {
+                    IgnoredSequenceCount++;
+                }
                 return;
             }
 
@@ -652,107 +668,6 @@ public sealed class EscapeSequenceParser
                 IgnoredSequenceCount++;
                 return;
         }
-    }
-
-    /// <summary>
-    /// SGR mouse decoding (design §3.2): CSI &lt; button ; column ; row M|m.
-    /// Button bits: id=bits0-1, shift=4, alt(meta)=8, ctrl=16, motion=32,
-    /// wheel=64. Coordinates are one-based on the wire, stored zero-based.
-    /// Click = clean press→release without motion; Drag = motion with a held
-    /// button; Release = release after drag (§3.2/§3.3).
-    /// </summary>
-    private void DecodeSgrMouse(byte finalByte, ReadOnlySpan<byte> parameters)
-    {
-        var buttonRaw = IntParamAt(parameters, 0);
-        var column = IntParamAt(parameters, 1);
-        var row = IntParamAt(parameters, 2);
-        if (buttonRaw < 0 || column < 0 || row < 0)
-        {
-            IgnoredSequenceCount++;
-            return;
-        }
-
-        var mods = KeyModifiers.None;
-        if ((buttonRaw & 0x04) != 0)
-        {
-            mods |= KeyModifiers.Shift;
-        }
-        if ((buttonRaw & 0x08) != 0)
-        {
-            mods |= KeyModifiers.Alt;
-        }
-        if ((buttonRaw & 0x10) != 0)
-        {
-            mods |= KeyModifiers.Ctrl;
-        }
-
-        // Zero-based viewport coordinates; values may exceed the window
-        // (release-after-drag) — consumers clamp before indexing.
-        var col = column - 1;
-        var r = row - 1;
-
-        var buttonId = buttonRaw & 0x03;
-
-        if ((buttonRaw & 0x40) != 0)
-        {
-            // Wheel: scroll-id in bits 0-1; 64=up, 65=down; 66+ horizontal —
-            // ignored by design (§3.2).
-            if (buttonId > 1)
-            {
-                IgnoredSequenceCount++;
-                return;
-            }
-
-            var wheel = buttonId == 0 ? MouseEventType.WheelUp : MouseEventType.WheelDown;
-            Enqueue(InputEvent.FromMouse(new MouseEvent(wheel, MouseButton.None, col, r, mods)));
-            return;
-        }
-
-        if (finalByte == (byte)'m')
-        {
-            // Release: unpaired releases (no press context) are dropped.
-            if (_mousePressedButton == MouseButton.None || buttonId > 2)
-            {
-                IgnoredSequenceCount++;
-                return;
-            }
-
-            var releasedButton = _mousePressedButton;
-            var wasCleanClick = !_mouseMovedSincePress;
-            _mousePressedButton = MouseButton.None;
-            _mouseMovedSincePress = false;
-
-            Enqueue(InputEvent.FromMouse(new MouseEvent(
-                wasCleanClick ? MouseEventType.Click : MouseEventType.Release,
-                releasedButton, col, r, mods)));
-            return;
-        }
-
-        // Final 'M': press or motion(drag).
-        if ((buttonRaw & 0x20) != 0)
-        {
-            // Motion: only meaningful while a tracked button is held (mode 1002).
-            if (_mousePressedButton == MouseButton.None || buttonId > 2)
-            {
-                IgnoredSequenceCount++;
-                return;
-            }
-
-            _mouseMovedSincePress = true;
-            Enqueue(InputEvent.FromMouse(new MouseEvent(MouseEventType.Drag, _mousePressedButton, col, r, mods)));
-            return;
-        }
-
-        if (buttonId > 2)
-        {
-            // Legacy "release without button" (id 3) and reserved ids.
-            IgnoredSequenceCount++;
-            return;
-        }
-
-        _mousePressedButton = (MouseButton)(buttonId + 1);
-        _mouseMovedSincePress = false;
-        Enqueue(InputEvent.FromMouse(new MouseEvent(MouseEventType.Press, _mousePressedButton, col, r, mods)));
     }
 
     private void EnqueueArrow(KeyCode key, ReadOnlySpan<byte> parameters)
