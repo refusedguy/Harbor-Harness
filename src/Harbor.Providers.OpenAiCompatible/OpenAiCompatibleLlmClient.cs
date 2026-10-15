@@ -58,7 +58,7 @@ public sealed class OpenAiCompatibleLlmClient : ILlmClient
         var writer = channel.Writer;
 
         // #1099: observed — the pump body is catch-all inside, but the
-        // catch-path writer.WriteAsync can still fault (cancelled reader);
+        // catch-path error report can still fault (cancelled reader);
         // the OnlyOnFaulted backstop logs it instead of parking it unobserved
         // (§FP-006, same shape as ToolDispatcher.AbandonLeftoverAsync).
         // #1104: no cancellationToken on Task.Run — a pre-cancelled token
