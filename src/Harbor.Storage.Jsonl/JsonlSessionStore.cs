@@ -199,20 +199,54 @@ public sealed class JsonlSessionStore : ISessionStore, ISessionCheckpointStore
         return loaded.TapError(e => JsonlSessionStoreLog.ReadSessionFailed(_logger, sessionId, e));
     }
 
+    /// <summary>
+    ///     List sessions header-only (#1101 N+1): one header-line read per
+    ///     <c>.jsonl</c> file, no <see cref="GetMessagesAsync" /> reparse.
+    ///     <see cref="GetAsync" /> derives <see cref="SessionMetadata" /> from
+    ///     history, so routing <c>List</c> through it paid a full file parse
+    ///     per session. Callers (session picker, lifecycle switch, IPC list)
+    ///     only need identity + recency — metadata stays
+    ///     <see cref="SessionMetadata.Empty" /> here, <see cref="GetStatsAsync" />
+    ///     remains the derived-stats path.
+    /// </summary>
     public Task<Result<IReadOnlyList<Session>>> ListAsync(string? projectId = null, CancellationToken ct = default)
     {
         return Result.Try(async () =>
         {
+            ct.ThrowIfCancellationRequested();
             var sessions = new List<Session>();
             foreach (string file in Directory.EnumerateFiles(_rootDirectory, "*.jsonl"))
             {
+                ct.ThrowIfCancellationRequested();
                 string sessionId = Path.GetFileNameWithoutExtension(file);
-                var getResult = await GetAsync(sessionId, ct).ConfigureAwait(false);
-                if (getResult.IsSuccess)
+                var headerResult = await SessionFileReader.TryReadHeaderAsync(file, sessionId, ct).ConfigureAwait(false);
+                if (headerResult.IsFailure)
+                    continue;
+#pragma warning disable CFE0001
+                // CFE0001: false positive — the IsFailure guard above continues,
+                // a control-flow shape the analyzer does not model.
+                SessionHeaderEntry header = headerResult.Value;
+#pragma warning restore CFE0001
+                if (projectId is not null && header.ProjectId != projectId)
+                    continue;
+                sessions.Add(new Session(
+                    header.Id,
+                    header.ProjectId,
+                    header.Directory,
+                    header.Title,
+                    header.Agent,
+                    header.Model,
+                    header.ProviderId,
+                    header.CreatedAt,
+                    SessionFileIO.ResolveUpdatedAt(header, file),
+                    SessionMetadata.Empty)
                 {
-                    if (projectId is null || getResult.Value.ProjectId == projectId)
-                        sessions.Add(getResult.Value);
-                }
+                    ParentSessionId = header.ParentSessionId,
+                    Status = header.Status,
+                    GitBranch = header.GitBranch,
+                    GitIsDirty = header.GitIsDirty,
+                    Kind = header.Kind
+                });
             }
 
             sessions.Sort((a, b) => b.UpdatedAt.CompareTo(a.UpdatedAt));
