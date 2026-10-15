@@ -32,6 +32,11 @@ namespace Harbor.Application.Agents;
 ///         (activity, start/end events, cancellation) and iterates turns.
 ///         Behavior is 1-to-1 with the pre-split loop; public contracts unchanged.
 ///     </para>
+///     <para>
+///         <b>Decomposition (#1101, slice 1):</b> message snapshotting for events
+///         lives in <see cref="MessageSnapshot" /> (verbatim move); the loop keeps
+///         a forwarder so the five event call sites are untouched.
+///     </para>
 /// </summary>
 public sealed class AgentLoop : IAgentLoop
 {
@@ -475,16 +480,10 @@ public sealed class AgentLoop : IAgentLoop
 
     /// <summary>
     ///     Materialize a snapshot list of the current session messages for events.
+    ///     Forwarder over <see cref="MessageSnapshot" /> (#1101, slice 1: verbatim move).
     /// </summary>
-    private static List<AgentMessage> SnapshotMessages(IReadOnlyList<AgentMessage> messages)
-    {
-        var snapshot = new List<AgentMessage>(messages.Count);
-        for (int i = 0; i < messages.Count; i++)
-        {
-            snapshot.Add(messages[i]);
-        }
-        return snapshot;
-    }
+    private static List<AgentMessage> SnapshotMessages(IReadOnlyList<AgentMessage> messages) =>
+        MessageSnapshot.Snapshot(messages);
 }
 
 /// <summary>
