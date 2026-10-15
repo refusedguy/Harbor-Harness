@@ -374,4 +374,57 @@ public class TableBlockTests
         await Assert.That(buffer.Get(2, 1).Style.Attrs.HasFlag(StyleAttr.Reverse)).IsFalse();
         await Assert.That(buffer.Get(2, 3).Style.Attrs.HasFlag(StyleAttr.Reverse)).IsFalse();
     }
+
+    [Test]
+    public async Task RawText_Sample_ExactShape()
+    {
+        // #1097: pins the RawText shape (header, separator, body rows) that
+        // the span rewrite must preserve byte-for-byte.
+        string raw = ParseSample().RawText();
+        await Assert.That(raw).IsEqualTo(
+            "| name | age |\n| --- | ---: |\n| ada | 36 |\n| grace | 85 |");
+    }
+
+    [Test]
+    public async Task RawText_EmptyBody_HeaderPlusSeparator()
+    {
+        // #1097: a header-only table stays two lines (no trailing newline).
+        string[] lines = ["| only |", "| --- |"];
+        bool ok = TableBlock.TryParse(lines, 0, out var block, out _);
+        await Assert.That(ok).IsTrue();
+        await Assert.That(block!.RawText()).IsEqualTo("| only |\n| --- |");
+    }
+
+    [Test]
+    public async Task TableBlock_UsesNoHeapBuilder_RelativeGate()
+    {
+        // #1097 (relative gate, one site): TableBlock.cs must compose its
+        // pipe text, rules and truncation without a heap builder — zero
+        // allocations of that kind in this file. Span-based (join +
+        // string.Create + prefix slice), not pooled, on purpose:
+        // Harbor.Extensions is not on this assembly's matrix row, so
+        // Presentation renders without the Application-layer pool. Scoped to
+        // this file: OnboardingFlow, ... keep their own slices.
+        string path = FindRepoFile(Path.Combine("src", "Harbor.Tui.CellForge", "Chat", "Widgets", "TableBlock.cs"));
+        string source = await File.ReadAllTextAsync(path);
+        await Assert.That(source.Contains("new StringBuilder")).IsFalse();
+    }
+
+    /// <summary>Locate a repo-relative source file by walking up from the test assembly directory.</summary>
+    private static string FindRepoFile(string relativePath)
+    {
+        string? dir = AppContext.BaseDirectory;
+        while (dir is not null)
+        {
+            string candidate = Path.Combine(dir, relativePath);
+            if (File.Exists(candidate))
+            {
+                return candidate;
+            }
+
+            dir = Directory.GetParent(dir)?.FullName;
+        }
+
+        throw new FileNotFoundException($"Repo file not found: {relativePath}");
+    }
 }
