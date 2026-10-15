@@ -57,10 +57,9 @@ public sealed class OpenAiCompatibleLlmClient : ILlmClient
 
         var writer = channel.Writer;
 
-        // #1099: observed — the pump body is catch-all inside, but the
-        // catch-path error report can still fault (cancelled reader);
-        // the OnlyOnFaulted backstop logs it instead of parking it unobserved
-        // (§FP-006, same shape as ToolDispatcher.AbandonLeftoverAsync).
+        // #1099: the pump stays observed — a fault-only continuation below
+        // logs a late pump fault instead of parking it where only
+        // finalization could see it.
         // #1104: no cancellationToken on Task.Run — a pre-cancelled token
         // would skip the delegate entirely and the writer would never
         // complete. The token still flows into every await inside (SsePump
