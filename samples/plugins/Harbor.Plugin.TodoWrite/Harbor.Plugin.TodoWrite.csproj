@@ -10,6 +10,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\..\src\Harbor.Abstractions\Harbor.Abstractions.csproj"/>
+    <ProjectReference Include="..\..\..\src\Harbor.Ui.Framework.State\Harbor.Ui.Framework.State.csproj"/>
     <PackageReference Include="Microsoft.Extensions.Logging"/>
   </ItemGroup>
 

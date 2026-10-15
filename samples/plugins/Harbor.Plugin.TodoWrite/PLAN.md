@@ -1,31 +1,28 @@
 # Plan — Harbor.Plugin.TodoWrite
 
-## Status: Sample
+## Status: Showcase slice-1 (#1434)
 
-Sample plugin — demonstrates the `IToolPlugin` extension point. Not a production-grade implementation.
+Showcase plugin — demonstrates `IToolPlugin` + `ITuiPanelPlugin` (tools + panel only, no new axes).
 
 ## Done
 
-- [x] Implements `IToolPlugin`
+- [x] Implements `IToolPlugin` + `ITuiPanelPlugin`
 - [x] Plugin manifest (name, version)
 - [x] Initialize / Shutdown lifecycle
 - [x] Works with the default plugin pipeline (`PluginHostBuilder`)
+- [x] Persistent todos (survive agent restart, `<DataDirectory>/todos.json`)
+- [x] Cross-session search (`action=search`)
+- [x] Read-only `todo-list` panel (text rows)
+- [x] One-command install (`install.sh`) + 60-second demo (`demo.sh`)
+- [x] Showcase doc page (`docs/PLUGIN_SHOWCASE_TODOWRITE.md`)
 
 ## TODO
 
 - [ ] Add unit tests
-- [ ] Add a sample invocation in docs
-- [ ] Error handling polish
-- [ ] Persistent todos (survive agent restart)
 - [ ] Sub-task nesting
 - [ ] Due dates + reminders
 
 ## Known issues
 
-- Todos are in-memory only — lost on restart.
+- Persistence is best-effort JSON; a corrupt file resets to empty in-memory state.
 - No sub-task nesting yet.
-
-## Next priorities
-
-1. **P1**: Add unit tests
-2. **P2**: Error handling polish
