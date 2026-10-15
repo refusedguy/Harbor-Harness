@@ -165,6 +165,9 @@ public class SubAgentCostPropagationTests
 
         public Task<Result> UpdateMessageAsync(string sessionId, AgentMessage message, CancellationToken ct = default)
         {
+            // #1101 silent-upsert: mirror MemorySessionStore — an unknown id
+            // is an honest MessageNotFound failure, never a silent Success,
+            // and only a real replacement is recorded.
             lock (_lock)
             {
                 if (!_messages.TryGetValue(sessionId, out var list))
@@ -174,12 +177,12 @@ public class SubAgentCostPropagationTests
                     if (list[i].Id == message.Id)
                     {
                         list[i] = message;
-                        break;
+                        UpdatedMessages.Add((sessionId, message));
+                        return Task.FromResult(Result.Success());
                     }
                 }
 
-                UpdatedMessages.Add((sessionId, message));
-                return Task.FromResult(Result.Success());
+                return Task.FromResult(Result.Failure($"Message '{message.Id}' not found in session '{sessionId}'."));
             }
         }
 
@@ -299,6 +302,21 @@ public class SubAgentCostPropagationTests
 
         await Assert.That(updated).IsNotNull();
         await Assert.That(updated!.Usage).IsEqualTo(new Usage(110, 55));
+    }
+
+    [Test]
+    public async Task UpdateMessageAsync_UnknownMessage_ReturnsFailureWithoutRecording()
+    {
+        var parent = NewParent();
+        var store = new CostFakeStore();
+        store.Seed(parent, ParentMessage(parent.Id, "parent-msg-1", new Usage(10, 5)));
+        var ghost = ParentMessage(parent.Id, "msg-ghost", new Usage(1, 1));
+
+        var result = await store.UpdateMessageAsync(parent.Id, ghost);
+
+        await Assert.That(result.IsFailure).IsTrue();
+        await Assert.That(result.Error).IsEqualTo($"Message 'msg-ghost' not found in session '{parent.Id}'.");
+        await Assert.That(store.UpdatedMessages.Count).IsEqualTo(0);
     }
 
     [Test]
