@@ -57,6 +57,9 @@ public sealed class OpenAiCompatibleLlmClient : ILlmClient
 
         var writer = channel.Writer;
 
+        // #1099: the pump stays observed — a fault-only continuation below
+        // logs a late pump fault instead of parking it where only
+        // finalization could see it.
         // #1104: no cancellationToken on Task.Run — a pre-cancelled token
         // would skip the delegate entirely and the writer would never
         // complete. The token still flows into every await inside (SsePump
@@ -143,7 +146,15 @@ public sealed class OpenAiCompatibleLlmClient : ILlmClient
             {
                 writer.TryComplete();
             }
-        });
+        }).ContinueWith(
+            t => OpenAiCompatibleLlmClientLog.StreamTaskFailed(
+                _logger,
+                t.Exception?.InnerException ?? t.Exception!,
+                ProviderId.Value,
+                (t.Exception?.InnerException ?? t.Exception!).Message),
+            CancellationToken.None,
+            TaskContinuationOptions.OnlyOnFaulted,
+            TaskScheduler.Default);
 
         await foreach (var evt in channel.Reader.ReadAllAsync(cancellationToken).ConfigureAwait(false))
         {
