@@ -135,13 +135,13 @@ public class ResultTryAdoptionTests
         (Path.Combine("src", "Harbor.Plugins.Registration", "SafePluginRegistrar.cs"), "catch (Exception ex)",
             "try body returns the callee's Result (IPluginRegistrar.Register) — needs a Bind split, not a shape fix"),
         // Outside this wave's perimeter (Harbor.Lsp), and NOT convertible as a
-        // shape fix: the catch takes _sync and mutates _unavailable before
+        // shape fix: the catch records _unavailable via TryAdd before
         // building the Result, and the try ASSIGNS to an outer `session`
         // variable rather than producing the returned value. Making it
         // Result.Try means restructuring the method's control flow, which is
         // its own change with its own review.
         (Path.Combine("src", "Harbor.Lsp", "LspManager.cs"), "server-start-failed",
-            "catch mutates _unavailable under a lock; try assigns an outer local — needs a control-flow refactor"),
+            "catch records _unavailable via TryAdd; try assigns an outer local — needs a control-flow refactor"),
     ];
 
     [Test]

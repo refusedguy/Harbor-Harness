@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Lsp;
 using Microsoft.Extensions.Logging;
@@ -30,9 +31,15 @@ public sealed class LspManager : ILspService
 
     private readonly ILogger<LspManager> _logger;
     private readonly IReadOnlyList<LspServerDefinition> _definitions;
-    private readonly Dictionary<string, LspServerSession> _sessions = [];
-    private readonly HashSet<string> _unavailable = [];
-    private readonly Lock _sync = new();
+    /// <summary>Lock-free session registry (#1095): session open/get/dispose
+    /// never contend — reads are request-path (<c>ResolveSession</c>, the
+    /// <c>GetOrCreateSessionAsync</c> fast path), writes are one spawn per
+    /// language. Same discipline as <c>LspClient._pending</c> (#1402) and
+    /// <c>RendererPipeline._factories</c> (#1438).</summary>
+    private readonly ConcurrentDictionary<string, LspServerSession> _sessions = new();
+    /// <summary>Languages whose server failed to start (byte is an unused
+    /// payload — ConcurrentDictionary as a concurrent set).</summary>
+    private readonly ConcurrentDictionary<string, byte> _unavailable = new();
     private int _disposed;
 
     /// <summary>Create a manager over the builtin server catalog (overridable for tests).</summary>
@@ -242,12 +249,10 @@ public sealed class LspManager : ILspService
                 $"no-server-for-language (extension '{Path.GetExtension(filePath)}')");
         }
 
-        lock (_sync)
+        // Lock-free read (#1095): ConcurrentDictionary needs no gate on this request path.
+        if (_sessions.TryGetValue(definition.Id, out LspServerSession? session) && session is not null)
         {
-            if (_sessions.TryGetValue(definition.Id, out LspServerSession? session) && session is not null)
-            {
-                return Result.Success(session);
-            }
+            return Result.Success(session);
         }
 
         return Result.Failure<LspServerSession>(
@@ -263,18 +268,16 @@ public sealed class LspManager : ILspService
                 $"no-server-for-language (extension '{Path.GetExtension(filePath)}')");
         }
 
-        lock (_sync)
+        // Lock-free fast path (#1095): both lookups need no gate.
+        if (_sessions.TryGetValue(definition.Id, out LspServerSession? existing) && existing is not null)
         {
-            if (_sessions.TryGetValue(definition.Id, out LspServerSession? existing) && existing is not null)
-            {
-                return Result.Success(existing);
-            }
+            return Result.Success(existing);
+        }
 
-            // Start failure is logged once below; repeat opens stay cheap no-ops.
-            if (_unavailable.Contains(definition.Id))
-            {
-                return Result.Failure<LspServerSession>($"server-unavailable ('{definition.Id}')");
-            }
+        // Start failure is logged once below; repeat opens stay cheap no-ops.
+        if (_unavailable.ContainsKey(definition.Id))
+        {
+            return Result.Failure<LspServerSession>($"server-unavailable ('{definition.Id}')");
         }
 
         string workspaceRoot = FindWorkspaceRoot(filePath);
@@ -285,10 +288,7 @@ public sealed class LspManager : ILspService
         }
         catch (Exception ex)
         {
-            lock (_sync)
-            {
-                _ = _unavailable.Add(definition.Id);
-            }
+            _ = _unavailable.TryAdd(definition.Id, 0);
 
             LspManagerLog.ServerUnavailable(_logger, ex, definition.Language, definition.Command);
             return Result.Failure<LspServerSession>($"server-start-failed ('{definition.Id}': {ex.Message})");
@@ -296,9 +296,10 @@ public sealed class LspManager : ILspService
 
         session.DiagnosticsChanged += (_, args) => DiagnosticsChanged?.Invoke(this, args);
 
-        lock (_sync)
+        // Two opens racing the same language: keep the winner, dispose the loser.
+        // TryAdd is atomic (#1095) — the loser path only runs when a concurrent open won.
+        if (!_sessions.TryAdd(definition.Id, session))
         {
-            // Two opens racing the same language: keep the winner, dispose the loser.
             if (_sessions.TryGetValue(definition.Id, out LspServerSession? winner) && winner is not null)
             {
                 // §D4: best-effort by design, but never unobserved — log the loser fault.
@@ -315,9 +316,15 @@ public sealed class LspManager : ILspService
                 return Result.Success(winner);
             }
 
-            _sessions[definition.Id] = session;
-            return Result.Success(session);
+            // Lost the race against DisposeAsync clearing the registry: the
+            // manager is going down — drop our session too and degrade like
+            // every other unresolvable lookup (no new exception types).
+            await session.DisposeAsync().ConfigureAwait(false);
+            return Result.Failure<LspServerSession>(
+                $"session-not-started ('{definition.Id}' — manager is disposed)");
         }
+
+        return Result.Success(session);
     }
 
     /// <summary>Nearest ancestor directory containing <c>.git</c>, else the file's directory.</summary>
@@ -349,12 +356,10 @@ public sealed class LspManager : ILspService
     {
         if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
 
-        List<LspServerSession> sessions;
-        lock (_sync)
-        {
-            sessions = [.. _sessions.Values];
-            _sessions.Clear();
-        }
+        // Moment-in-time snapshot, then clear — ConcurrentDictionary needs no
+        // gate here (same discipline as LspClient.Dispose, #1402).
+        List<LspServerSession> sessions = [.. _sessions.Values];
+        _sessions.Clear();
 
         foreach (LspServerSession session in sessions)
         {
