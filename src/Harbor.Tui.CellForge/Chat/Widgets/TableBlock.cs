@@ -1,4 +1,3 @@
-using System.Text;
 using CSharpFunctionalExtensions;
 using Harbor.Terminal.Abstractions.Rendering;
 using Harbor.Tui.CellForge.Generic.Widgets;
@@ -549,33 +548,42 @@ public sealed class TableBlock : ICollapsibleChatBlock, IStatefulGenericWidget<G
     /// <summary>Copy-friendly pipe form (header + separator + body rows).</summary>
     public string RawText()
     {
-        var sb = new StringBuilder();
-        AppendPipeRow(sb, _table.Headers);
-        sb.Append('\n');
-        sb.Append('|');
+        // §PERF-006 (#1097): the per-call heap builder is gone — this
+        // cold copy path joins preformatted pipe rows (header, separator,
+        // body) with '\n' instead of allocating. No pool here on purpose:
+        // Harbor.Extensions is not on this assembly's matrix row
+        // (FullLayerMatrixTests), so Presentation renders without the
+        // Application-layer pool. Synchronous composition, materialized
+        // before return; byte-identical to the builder it replaces.
+        var lines = new List<string>(2 + _table.Rows.Count)
+        {
+            FormatPipeRow(_table.Headers),
+            SeparatorRow(),
+        };
+        foreach (var row in _table.Rows)
+        {
+            lines.Add(FormatPipeRow(row));
+        }
+
+        return string.Join('\n', lines);
+    }
+
+    private string SeparatorRow()
+    {
+        // Single Concat over per-column segments (no heap builder, no
+        // loop-concat): assignments only inside the loop, one join at the end.
+        var parts = new string[Columns];
         for (int c = 0; c < Columns; c++)
         {
-            sb.Append(_table.Alignments[c] switch
+            parts[c] = _table.Alignments[c] switch
             {
                 GfmAlign.Center => " :---: |",
                 GfmAlign.Right => " ---: |",
                 _ => " --- |",
-            });
+            };
         }
 
-        sb.Append('\n');
-        foreach (var row in _table.Rows)
-        {
-            AppendPipeRow(sb, row);
-            sb.Append('\n');
-        }
-
-        if (sb.Length > 0)
-        {
-            sb.Length--; // trailing newline
-        }
-
-        return sb.ToString();
+        return "|" + string.Concat(parts);
     }
 
     private int[] ColumnWidths(int maxWidth)
@@ -625,15 +633,32 @@ public sealed class TableBlock : ICollapsibleChatBlock, IStatefulGenericWidget<G
     private static string BuildRule(
         char left, char right, char mid, int[] widths, int maxWidth)
     {
-        var sb = new StringBuilder();
-        sb.Append(left);
+        // §PERF-006 (#1097): span-fill via string.Create instead of a heap
+        // builder. Same cold cache-fill path, byte-identical output.
+        int total = 1;
         for (int c = 0; c < widths.Length; c++)
         {
-            sb.Append(H, widths[c] + (2 * Pad));
-            sb.Append(c < widths.Length - 1 ? mid : right);
+            total += widths[c] + (2 * Pad) + 1;
         }
 
-        string rule = sb.ToString();
+        string rule = string.Create(
+            total,
+            (widths, left, right, mid),
+            static (span, st) =>
+            {
+                span[0] = st.left;
+                int pos = 1;
+                for (int c = 0; c < st.widths.Length; c++)
+                {
+                    int run = st.widths[c] + (2 * Pad);
+                    for (int k = 0; k < run; k++)
+                    {
+                        span[pos++] = H;
+                    }
+
+                    span[pos++] = c < st.widths.Length - 1 ? st.mid : st.right;
+                }
+            });
         int ruleWidth = UnicodeWidth.Width(rule);
         if (ruleWidth > maxWidth)
         {
@@ -745,7 +770,9 @@ public sealed class TableBlock : ICollapsibleChatBlock, IStatefulGenericWidget<G
             return width <= 0 ? string.Empty : "…";
         }
 
-        var sb = new StringBuilder();
+        // §PERF-006 (#1097): walk the span to find the rune-boundary cut,
+        // then a single prefix slice + ellipsis — no per-rune appends.
+        int cut = 0;
         int w = 0;
         var span = text.AsSpan();
         while (!span.IsEmpty)
@@ -762,22 +789,22 @@ public sealed class TableBlock : ICollapsibleChatBlock, IStatefulGenericWidget<G
                 break;
             }
 
-            sb.Append(span[..consumed]);
+            cut += consumed;
             w += cw;
             span = span[consumed..];
         }
 
-        sb.Append('…');
-        return sb.ToString();
+        return string.Concat(text.AsSpan(0, cut).ToString(), "…");
     }
 
-    private static void AppendPipeRow(StringBuilder sb, IReadOnlyList<string> cells)
+    private static string FormatPipeRow(IReadOnlyList<string> cells)
     {
-        sb.Append('|');
-        foreach (string cell in cells)
+        if (cells.Count == 0)
         {
-            sb.Append(' ').Append(cell).Append(" |");
+            return "|";
         }
+
+        return "| " + string.Join(" | ", cells) + " |";
     }
 
     private static int CellsBytes(IReadOnlyList<string> cells)
