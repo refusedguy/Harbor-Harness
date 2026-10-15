@@ -166,6 +166,12 @@ public sealed class CompactionService(
     ///     Token reserve below the model's context window that triggers compaction.
     ///     Must be &gt; 0 (mirrors <c>CompactionConfig.Validate</c>).
     /// </summary>
+    /// <remarks>
+    ///     #1106 row 4 (not this slice): the per-turn <see cref="ShouldCompact" />
+    ///     verdict currently follows the tracker's reserve (single estimate),
+    ///     so mutating this after construction does not move the threshold yet.
+    ///     Unifying the two reserves is the remaining divergent-reserves item.
+    /// </remarks>
     public int ReserveTokens
     {
         get => _reserveTokens;
@@ -214,20 +220,18 @@ public sealed class CompactionService(
     // CompactionPolicyInvariantTests.
 
     /// <inheritdoc />
+    /// <remarks>
+    ///     #1106 (double estimate): the budget verdict is the tracker's O(1)
+    ///     cached decision, not a second O(n) scan past it. The previous body
+    ///     ran its own <c>EstimateTokens</c> full-history scan here, so a turn
+    ///     that had already asked <see cref="ITokenTracker.ShouldCompact" />
+    ///     paid the estimate twice. The reserve that applies is the tracker's;
+    ///     <see cref="ReserveTokens" /> above stays as the config surface whose
+    ///     unification with the tracker is the remaining #1106 row-4 item.
+    /// </remarks>
     public bool ShouldCompact(IReadOnlyList<AgentMessage> messages, ModelInfo model)
     {
-        return IsOverBudget(messages, model, ReserveTokens);
-    }
-
-    /// <summary>
-    ///     Budget check behind <see cref="ShouldCompact" />: the estimated
-    ///     history exceeds the model's context window minus the safety reserve.
-    ///     A negative threshold (reserve larger than the window) trips on any content.
-    /// </summary>
-    private bool IsOverBudget(IReadOnlyList<AgentMessage> messages, ModelInfo model, int reserveTokens)
-    {
-        int estimated = tokenTracker.EstimateTokens(messages);
-        return estimated > model.ContextWindow - reserveTokens;
+        return tokenTracker.ShouldCompact(messages, model);
     }
 
     /// <inheritdoc />

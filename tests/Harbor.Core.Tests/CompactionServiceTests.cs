@@ -99,19 +99,19 @@ public class CompactionServiceTests
     }
 
     [Test]
-    public async Task ShouldCompact_ReturnsTrue_WhenOverReserve()
+    public async Task ShouldCompact_DelegatesToTracker_DegenerateWindowRefuses()
     {
+        // #1106 (double estimate): the verdict is the tracker's, so the #80
+        // companion refusal applies here too — SmallModel.ContextWindow (4096)
+        // does not exceed the reserve, and the service no longer trips on the
+        // negative threshold its own scan used to produce.
         var svc = CreateService();
-        // Build a long enough message that the chars/4 heuristic blows past
-        // SmallModel.ContextWindow - ReserveTokens (4096 - 16384 < 0, so always true
-        // for any content). The reserve is larger than the context window, meaning
-        // the threshold (context - reserve) is negative and any non-empty message
-        // triggers compaction.
         var messages = new AgentMessage[] { User("anything at all") };
 
         bool result = svc.ShouldCompact(messages, SmallModel);
 
-        await Assert.That(result).IsTrue();
+        await Assert.That(result).IsFalse();
+        await Assert.That(result).IsEqualTo(new TokenTracker().ShouldCompact(messages, SmallModel));
     }
 
     [Test]
@@ -128,17 +128,35 @@ public class CompactionServiceTests
     }
 
     [Test]
-    public async Task ShouldCompact_RespectsReserveTokensProperty()
+    public async Task ShouldCompact_MatchesTrackerVerdict()
     {
+        // #1106 (double estimate): single source of truth for the decision —
+        // the service verdict equals a fresh tracker's on both sides of the
+        // threshold, so a turn that already asked the tracker pays no second scan.
         var svc = CreateService();
-        // Push the reserve so high that even a tiny message technically overflows
-        // the (negative) threshold for HugeModel.
-        svc.ReserveTokens = int.MaxValue;
-        var messages = new AgentMessage[] { User("hi") };
+        var big = new List<AgentMessage>();
+        for (int i = 0; i < 20; i++)
+            big.Add(User(new string('x', 4000)));
+        var small = new AgentMessage[] { User("hi") };
+        var tracker = new TokenTracker();
 
-        bool result = svc.ShouldCompact(messages, HugeModel);
+        int bigEstimate = tracker.EstimateTokens(big);
+        var tight = new ModelInfo(
+            "test-model",
+            "test",
+            "Test Model",
+            bigEstimate + 16_383,
+            1_024,
+            false,
+            false,
+            true,
+            Pricing.Unknown,
+            "openai");
 
-        await Assert.That(result).IsTrue();
+        await Assert.That(svc.ShouldCompact(big, tight)).IsTrue();
+        await Assert.That(svc.ShouldCompact(big, tight)).IsEqualTo(tracker.ShouldCompact(big, tight));
+        await Assert.That(svc.ShouldCompact(small, HugeModel)).IsFalse();
+        await Assert.That(svc.ShouldCompact(small, HugeModel)).IsEqualTo(tracker.ShouldCompact(small, HugeModel));
     }
 
     [Test]

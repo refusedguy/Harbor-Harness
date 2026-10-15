@@ -23,8 +23,9 @@ namespace Harbor.Benchmarks;
 /// </summary>
 /// <para><b>Measurement contract (#408)</b> — what this number includes:</para>
 /// <list type="bullet">
-///          <item><c>Operation:</c> <c>ShouldCompact</c> called 100× (full token scan over the
-///          history), or one <c>CompactAsync</c> against a stub client that returns a canned
+///          <item><c>Operation:</c> <c>ShouldCompact</c> called 100x (first call scans,
+///          the next 99 ride the tracker's O(1) cache — #1106 single estimate), or one
+///          <c>CompactAsync</c> against a stub client that returns a canned
 ///          summary.</item>
 ///          <item><c>Payload:</c> <c>MessageCount</c> × 4 messages (user / assistant+tool_call
 ///          / tool_result / assistant) against a 200 000-token window — the same synthetic
@@ -35,12 +36,14 @@ namespace Harbor.Benchmarks;
 ///          <item><c>Drain:</c> none — the summarization LLM round-trip is replaced by an
 ///          instant stub, so no queue is involved.</item>
 ///          <item><c>RetainedState:</c> the <see cref="TokenTracker" /> inside the service
-///          (accumulates nothing on this path — <c>CompactAsync</c> accounts the summary, it
+///          (the decision row warms its per-session estimate entry — one O(n) scan,
+///          then O(1) hits; <c>CompactAsync</c> accounts the summary, it
 ///          does not log turns).</item>
 ///          <item><c>AwaitSemantics:</c> the compaction row awaits the full
 ///          <c>CompactAsync</c>; the decision row is synchronous (100 calls inside one op, so
 ///          the reported mean is per-call ÷ 100).</item>
-///          <item><c>AllocAttribution:</c> the decision row is allocation-free (integer scan);
+///          <item><c>AllocAttribution:</c> the decision row pays one integer scan on the
+///          first call, then runs allocation-free on the tracker's cache hits;
 ///          the compaction row allocates the cut point, the summarization prompt string and
 ///          the summary message.</item>
 /// </list>
@@ -94,10 +97,11 @@ public class CompactionServiceBenchmark
     }
 
     /// <summary>
-    ///     Benchmarks the "should we compact?" decision — a full token scan of the history.
-    ///     This runs every turn, so it must stay cheap even at 1000 messages.
+    ///     Benchmarks the "should we compact?" decision — the tracker's cached verdict
+    ///     (one scan, then O(1) hits per #1106). This runs every turn, so it must stay
+    ///     cheap even at 1000 messages.
     /// </summary>
-    [Benchmark(Description = "ShouldCompact (full token scan)")]
+    [Benchmark(Description = "ShouldCompact (cached verdict)")]
     public bool ShouldCompact()
     {
         bool result = false;
