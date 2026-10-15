@@ -418,4 +418,49 @@ public class OnboardingFlowTests
         await Assert.That(flow.IsComplete).IsTrue();
         await Assert.That(flow.Result.Value.Completed).IsFalse();
     }
+
+    [Test]
+    public async Task Provider_LongCatalogue_ShowsHeadPlusTail()
+    {
+        // #1097: pins the truncation branch (head + "…and N more" tail)
+        // that the span rewrite must preserve byte-for-byte.
+        var providers = new List<OnboardingProvider>();
+        for (int i = 0; i < 12; i++)
+            providers.Add(new($"p{i:00}", $"Provider {i:00}", "m", false, null));
+        var flow = new OnboardingFlow(providers, null, null, [Code, Plan]);
+        flow.Start();
+        flow.HandleKey(EnterKey);
+
+        await Assert.That(flow.Dialog.Message.Contains("[10] p09")).IsTrue();
+        await Assert.That(flow.Dialog.Message.Contains("[11]")).IsFalse();
+        await Assert.That(flow.Dialog.Message.Contains("…and 2 more (type the id)")).IsTrue();
+    }
+
+    [Test]
+    public async Task OnboardingFlow_UsesNoHeapBuilder_RelativeGate()
+    {
+        // #1097 (relative gate, one site): OnboardingFlow.cs must compose its
+        // dialog messages without a heap builder — zero `new StringBuilder`
+        // in this file. Span-based (interpolated handlers + string.Join), not
+        // pooled, on purpose: Harbor.Extensions is not on this assembly's
+        // matrix row, so Presentation renders without the Application-layer
+        // pool. Scoped to this file: TableBlock keeps its own slice.
+        string path = FindRepoFile(Path.Combine("src", "Harbor.Tui.CellForge", "Chat", "Onboarding", "OnboardingFlow.cs"));
+        string source = await File.ReadAllTextAsync(path);
+        await Assert.That(source.Contains("new StringBuilder")).IsFalse();
+    }
+
+    /// <summary>Locate a repo-relative source file by walking up from the test assembly directory.</summary>
+    private static string FindRepoFile(string relativePath)
+    {
+        string? dir = AppContext.BaseDirectory;
+        while (dir is not null)
+        {
+            string candidate = Path.Combine(dir, relativePath);
+            if (File.Exists(candidate))
+                return candidate;
+            dir = Directory.GetParent(dir)?.FullName;
+        }
+        throw new FileNotFoundException($"Repo file not found: {relativePath}");
+    }
 }

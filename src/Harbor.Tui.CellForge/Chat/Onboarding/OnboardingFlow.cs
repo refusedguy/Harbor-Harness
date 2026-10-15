@@ -1,4 +1,3 @@
-using System.Text;
 using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Tui.CellForge.Widgets;
 
@@ -320,24 +319,30 @@ public sealed class OnboardingFlow
 
     private string BuildProviderMessage(string? error)
     {
-        var sb = new StringBuilder();
+        // §PERF-006 (#1097): no per-call heap builder — line parts are
+        // composed with interpolated-string handlers (stackalloc span) and
+        // joined once. No pool here on purpose: Harbor.Extensions is not on
+        // this assembly's matrix row, so Presentation renders without the
+        // Application-layer pool. Synchronous composition on the cold
+        // onboarding path, materialized before return.
+        int shown = Math.Min(_providers.Count, MaxListedEntries);
+        var lines = new List<string>(shown + 3);
         if (!string.IsNullOrEmpty(error))
         {
-            sb.Append(error).Append('\n');
+            lines.Add(error);
         }
-        int shown = Math.Min(_providers.Count, MaxListedEntries);
         for (int i = 0; i < shown; i++)
         {
             var p = _providers[i];
             string tag = p.RequiresApiKey ? string.Empty : " (no key needed)";
-            sb.Append("  [").Append(i + 1).Append("] ").Append(p.Id).Append(" — ").Append(p.DisplayName).Append(tag).Append('\n');
+            lines.Add($"  [{i + 1}] {p.Id} — {p.DisplayName}{tag}");
         }
         if (shown < _providers.Count)
         {
-            sb.Append("  …and ").Append(_providers.Count - shown).Append(" more (type the id)\n");
+            lines.Add($"  …and {_providers.Count - shown} more (type the id)");
         }
-        sb.Append("Type a number or id (Esc to cancel).");
-        return sb.ToString();
+        lines.Add("Type a number or id (Esc to cancel).");
+        return string.Join('\n', lines);
     }
 
     private void TryCommitProvider(string rawInput)
@@ -391,17 +396,15 @@ public sealed class OnboardingFlow
     private void ShowAuth(string? error)
     {
         Step = OnboardingStep.Auth;
-        var sb = new StringBuilder();
-        if (!string.IsNullOrEmpty(error))
-        {
-            sb.Append(error).Append('\n');
-        }
-        if (_selected?.SetupHint is not null)
-        {
-            sb.Append(_selected.SetupHint).Append('\n');
-        }
-        sb.Append("Paste the API key and press Enter (Esc to cancel).");
-        Dialog.ShowPrompt($"API key — {_selected?.Id}", sb.ToString(), string.Empty, "Next", "Cancel");
+        // §PERF-006 (#1097): span-composed (see BuildProviderMessage).
+        string message = _selected?.SetupHint is not null
+            ? string.IsNullOrEmpty(error)
+                ? $"{_selected.SetupHint}\nPaste the API key and press Enter (Esc to cancel)."
+                : $"{error}\n{_selected.SetupHint}\nPaste the API key and press Enter (Esc to cancel)."
+            : string.IsNullOrEmpty(error)
+                ? "Paste the API key and press Enter (Esc to cancel)."
+                : $"{error}\nPaste the API key and press Enter (Esc to cancel).";
+        Dialog.ShowPrompt($"API key — {_selected?.Id}", message, string.Empty, "Next", "Cancel");
     }
 
     private void TryCommitAuth(string rawInput)
@@ -427,35 +430,33 @@ public sealed class OnboardingFlow
             Dialog.ShowPrompt($"Pick a model — {providerId}", BuildLiveModelMessage(error, live, defaultModel), string.Empty, "Done", "Cancel");
             return;
         }
-        var sb = new StringBuilder();
-        if (!string.IsNullOrEmpty(error))
-        {
-            sb.Append(error).Append('\n');
-        }
-        sb.Append("Default model: ").Append(defaultModel).Append('\n');
-        sb.Append("Press Enter for default, or type a model name.");
+        // §PERF-006 (#1097): span-composed (see BuildProviderMessage).
+        string message = string.IsNullOrEmpty(error)
+            ? $"Default model: {defaultModel}\nPress Enter for default, or type a model name."
+            : $"{error}\nDefault model: {defaultModel}\nPress Enter for default, or type a model name.";
         _modelPrefill = _selected?.DefaultModel ?? string.Empty;
-        Dialog.ShowPrompt($"Pick a model — {providerId}", sb.ToString(), _modelPrefill, "Done", "Cancel");
+        Dialog.ShowPrompt($"Pick a model — {providerId}", message, _modelPrefill, "Done", "Cancel");
     }
 
     private string BuildLiveModelMessage(string? error, IReadOnlyList<string> live, string defaultModel)
     {
-        var sb = new StringBuilder();
+        // §PERF-006 (#1097): span-composed (see BuildProviderMessage).
+        int shown = Math.Min(live.Count, MaxListedEntries);
+        var lines = new List<string>(shown + 3);
         if (!string.IsNullOrEmpty(error))
         {
-            sb.Append(error).Append('\n');
+            lines.Add(error);
         }
-        int shown = Math.Min(live.Count, MaxListedEntries);
         for (int i = 0; i < shown; i++)
         {
-            sb.Append("  [").Append(i + 1).Append("] ").Append(live[i]).Append('\n');
+            lines.Add($"  [{i + 1}] {live[i]}");
         }
         if (shown < live.Count)
         {
-            sb.Append("  …and ").Append(live.Count - shown).Append(" more (type the id)\n");
+            lines.Add($"  …and {live.Count - shown} more (type the id)");
         }
-        sb.Append("Type a number or id, Enter for ").Append(defaultModel).Append('.');
-        return sb.ToString();
+        lines.Add($"Type a number or id, Enter for {defaultModel}.");
+        return string.Join('\n', lines);
     }
 
     private void TryCommitModel(string rawInput)
@@ -543,14 +544,16 @@ public sealed class OnboardingFlow
     private void ShowAgent(string? error)
     {
         Step = OnboardingStep.Agent;
-        var sb = new StringBuilder();
+        // §PERF-006 (#1097): span-composed (see BuildProviderMessage).
+        int capacity = Math.Min(_agents.Count, MaxListedEntries) + 3;
+        var lines = new List<string>(capacity);
         if (!string.IsNullOrEmpty(error))
         {
-            sb.Append(error).Append('\n');
+            lines.Add(error);
         }
         if (_agents.Count == 0)
         {
-            sb.Append("No agents registered.\n");
+            lines.Add("No agents registered.");
         }
         else
         {
@@ -561,15 +564,15 @@ public sealed class OnboardingFlow
                 string tag = string.Equals(a.Id, AgentName.Fallback, StringComparison.OrdinalIgnoreCase)
                     ? " (default)"
                     : string.Empty;
-                sb.Append("  [").Append(i + 1).Append("] ").Append(a.Id).Append(" — ").Append(a.DisplayName).Append(tag).Append('\n');
+                lines.Add($"  [{i + 1}] {a.Id} — {a.DisplayName}{tag}");
             }
             if (shown < _agents.Count)
             {
-                sb.Append("  …and ").Append(_agents.Count - shown).Append(" more (type the id)\n");
+                lines.Add($"  …and {_agents.Count - shown} more (type the id)");
             }
         }
-        sb.Append("Type a number or id, Enter for ").Append(DefaultAgentName()).Append(" (Esc to cancel).");
-        Dialog.ShowPrompt("Pick a default agent", sb.ToString(), string.Empty, "Done", "Cancel");
+        lines.Add($"Type a number or id, Enter for {DefaultAgentName()} (Esc to cancel).");
+        Dialog.ShowPrompt("Pick a default agent", string.Join('\n', lines), string.Empty, "Done", "Cancel");
     }
 
     private void TryCommitAgent(string rawInput)
