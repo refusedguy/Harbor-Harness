@@ -25,7 +25,7 @@ internal sealed class BackgroundDrain(
             return;
         }
 
-        var done = registry.DrainCompleted(session.Session.Id);
+        var done = await registry.DrainCompletedAsync(session.Session.Id).ConfigureAwait(false);
         if (done.Count == 0)
         {
             return;

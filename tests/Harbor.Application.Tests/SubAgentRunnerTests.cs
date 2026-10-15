@@ -240,7 +240,7 @@ public class SubAgentRunnerTests
                 using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
                 while (bgOutcome is null && !timeout.IsCancellationRequested)
                 {
-                    var done = registry.DrainCompleted("parent-1");
+                    var done = await registry.DrainCompletedAsync("parent-1").ConfigureAwait(false);
                     if (done.Count > 0)
                         bgOutcome = done[0].Result;
                     else
