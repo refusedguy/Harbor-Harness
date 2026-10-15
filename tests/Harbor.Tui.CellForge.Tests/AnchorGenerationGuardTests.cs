@@ -325,12 +325,13 @@ private static UiState StoreAt(int offset) => new()
     private static string[] LayoutSources(string root) =>
     [
         "src/Harbor.Tui.CellForge/Chat/Widgets/VirtualizedChatTimeline.cs",
+        "src/Harbor.Tui.CellForge/Chat/Widgets/VirtualizedChatTimeline.StoreScroll.cs",
         "src/Harbor.Tui.CellForge/Chat/Widgets/TimelineLayoutCache.cs",
     ];
 
     /// <summary>
     ///     THE load-bearing guard. The layout path must stay synchronous: no
-    ///     <c>async</c>, <c>await</c> or <c>Task</c> in the two files that own the
+    ///     <c>async</c>, <c>await</c> or <c>Task</c> in the files that own the
     ///     anchor, the follow-tail state and the layout. If this goes red, layout can
     ///     genuinely complete out of order — and THAT is when #416's
     ///     <c>TaskCompletionSource</c>-gated interleave test becomes writable. Until
