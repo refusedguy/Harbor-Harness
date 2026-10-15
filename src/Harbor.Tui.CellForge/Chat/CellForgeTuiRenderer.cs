@@ -408,14 +408,26 @@ public sealed partial class CellForgeTuiRenderer : BaseTuiRenderer
         base.Dispose();
     }
 
-    public override Task<Maybe<string>> ReadLineAsync(string prompt, CancellationToken ct = default)
+    public override async Task<Maybe<string>> ReadLineAsync(string prompt, CancellationToken ct = default)
     {
         Context.ShowCursor();
-        Context.WriteColored(prompt, TuiColor.Green);
-        string? line = Console.ReadLine();
-        Context.HideCursor();
-        // EOF is absence, not failure: Maybe.None, not Success("") (#589).
-        return Task.FromResult(Maybe.From(line));
+        try
+        {
+            Context.WriteColored(prompt, TuiColor.Green);
+            ct.ThrowIfCancellationRequested();
+            // #1110: Console.ReadLine blocks the calling (frame-loop) thread with
+            // no cancellation. Offload to the pool so ct can abort the wait
+            // (PlainPermissionAsker passes ct expecting Deny-on-cancel); the
+            // orphaned pool read may still block on stdin, which is unavoidable
+            // for a console reader.
+            string? line = await Task.Run(Console.ReadLine, CancellationToken.None).WaitAsync(ct).ConfigureAwait(false);
+            // EOF is absence, not failure: Maybe.None, not Success("") (#589).
+            return Maybe.From(line);
+        }
+        finally
+        {
+            Context.HideCursor();
+        }
     }
 
     public override Task<Result> WriteAsync(string text, CancellationToken ct = default)
