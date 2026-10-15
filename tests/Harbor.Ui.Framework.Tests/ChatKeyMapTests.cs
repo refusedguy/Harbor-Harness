@@ -73,6 +73,21 @@ public class ChatKeyMapTests
     }
 
     [Test]
+    public async Task Abort_HasNoEscapeBinding_EscapeAbortsViaQuitWhileBusy()
+    {
+        // #1112: Abort listed Escape after Quit, unreachable under first-match-wins
+        // (Escape always resolved to Quit). Escape-during-a-run aborts via the
+        // reducer's Quit-when-busy branch, so the Abort entry must stay Ctrl+C-only.
+        var escapeOnAbort = false;
+        foreach (var b in Map.Get(ChatAction.Abort).Bindings)
+        {
+            if (b.Code == UiKeyCode.Escape)
+                escapeOnAbort = true;
+        }
+        await Assert.That(escapeOnAbort).IsFalse();
+    }
+
+    [Test]
     public async Task QuestionMark_ResolvesToHelpPanel_InCoreTable()
     {
         await Assert.That(Map.Resolve(UiKey.ForChar('?'))).IsEqualTo(ChatAction.HelpPanel);
