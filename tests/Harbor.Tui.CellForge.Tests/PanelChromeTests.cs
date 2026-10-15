@@ -379,13 +379,15 @@ public class PanelChromeTests
     }
 
     /// <summary>Every overlay frame goes through the shared painter (7 call sites).</summary>
+    // Dialog's PaintBorderBox call lives in the DialogOverlay.Painting.cs
+    // partial since the #95 painting extract — the entry above follows the call.
     [Test]
     public async Task EveryOverlayBox_GoesThroughPanelChrome()
     {
         string[] overlays =
         [
             "CommandPaletteView.cs",
-            "DialogOverlay.cs",
+            "DialogOverlay.Painting.cs",
             "DiffViewerOverlay.cs",
             "FilePickerView.cs",
             "ImageViewerOverlay.cs",
