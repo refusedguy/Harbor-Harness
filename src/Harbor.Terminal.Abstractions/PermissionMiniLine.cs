@@ -1,3 +1,4 @@
+using System.Buffers;
 using System.Text;
 
 namespace Harbor.Terminal.Abstractions;
@@ -99,25 +100,97 @@ public static class PermissionMiniLine
         return sb.ToString().Trim();
     }
 
+    /// <summary>
+    /// Truncates to <paramref name="maxWidth"/> <em>cells</em>, not chars:
+    /// CJK/emoji runes occupy two cells, so a char-count cut overflows a
+    /// narrow footer. The cut walks <see cref="Rune"/>s, never splitting a
+    /// surrogate pair, and a wide rune needs both cells free (same skip
+    /// policy as <c>ScreenBuffer.SetRune</c>). Pinned by
+    /// <c>PermissionMiniLineTests.Format_Cjk_*</c>. Combining/ZWJ seams stay
+    /// open (counted 1, as before) — see #1017.
+    /// </summary>
     private static string Truncate(string line, int maxWidth, bool mono)
     {
-        if (line.Length <= maxWidth)
+        string ellipsis = mono ? "..." : "…";
+        int ellipsisCells = mono ? 3 : 1;
+        if (CellWidth(line) <= maxWidth)
         {
             return line;
         }
 
-        string ellipsis = mono ? "..." : "…";
-        int keep = maxWidth - ellipsis.Length;
-        if (keep < 0)
+        int budget = maxWidth - ellipsisCells;
+        if (budget <= 0)
         {
-            keep = 0;
+            return ellipsis;
         }
 
-        while (keep > 0 && char.IsLowSurrogate(line[keep]))
+        int cells = 0;
+        int keep = 0;
+        var span = line.AsSpan();
+        while (keep < span.Length)
         {
-            keep--;
+            if (Rune.DecodeFromUtf16(span[keep..], out var rune, out int consumed) != OperationStatus.Done)
+            {
+                consumed = 1;
+                rune = Rune.ReplacementChar;
+            }
+
+            int w = IsWide(rune) ? 2 : 1;
+            if (cells + w > budget)
+            {
+                break;
+            }
+
+            cells += w;
+            keep += consumed;
         }
 
         return line[..keep] + ellipsis;
+    }
+
+    private static int CellWidth(string line)
+    {
+        int cells = 0;
+        var span = line.AsSpan();
+        int i = 0;
+        while (i < span.Length)
+        {
+            if (Rune.DecodeFromUtf16(span[i..], out var rune, out int consumed) != OperationStatus.Done)
+            {
+                consumed = 1;
+                rune = Rune.ReplacementChar;
+            }
+
+            cells += IsWide(rune) ? 2 : 1;
+            i += consumed;
+        }
+
+        return cells;
+    }
+
+    /// <summary>
+    /// Same conservative wide ranges as the terminal table renderer
+    /// (<c>GfmTableFormatter.IsWide</c>): CJK/Hangul/fullwidth are 2 cells,
+    /// Cyrillic stays 1. Astral runes (emoji) are 2 cells.
+    /// </summary>
+    private static bool IsWide(Rune rune)
+    {
+        int v = rune.Value;
+        if (v >= 0x10000)
+        {
+            return true;
+        }
+
+        return v is >= 0x1100 and <= 0x115F or // Hangul Jamo
+            >= 0x2E80 and <= 0x303E or
+            >= 0x3041 and <= 0x33FF or
+            >= 0x3400 and <= 0x4DBF or
+            >= 0x4E00 and <= 0x9FFF or
+            >= 0xA000 and <= 0xA4CF or
+            >= 0xAC00 and <= 0xD7A3 or
+            >= 0xF900 and <= 0xFAFF or
+            >= 0xFE30 and <= 0xFE4F or
+            >= 0xFF00 and <= 0xFF60 or
+            >= 0xFFE0 and <= 0xFFE6;
     }
 }
