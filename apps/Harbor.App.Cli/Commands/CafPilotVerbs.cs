@@ -3,7 +3,7 @@ using ConsoleAppFramework;
 namespace Harbor.App.Cli.Commands;
 
 /// <summary>
-///     LB2 pilot (#1235) + CAF-A (#1286) + CAF-B (#1287) + CAF-D (#1289) + CAF-E (#1290) + CAF-C (#1288):
+///     LB2 pilot (#1235) + CAF-A (#1286) + CAF-B (#1287) + CAF-D (#1289) + CAF-E (#1290) + CAF-C (#1288) + CAF-F (#1288):
 ///     ConsoleAppFramework (incremental source generator, AOT-first) on
 ///     <c>version</c>, <c>storage</c>, <c>sessions</c>, <c>run</c>,
 ///     <c>providers</c>, <c>models</c>, <c>auth</c>, <c>config</c>,
@@ -30,12 +30,17 @@ namespace Harbor.App.Cli.Commands;
 ///         the builder routes it; <c>-h|--help</c> and flag parsing come from
 ///         the framework. Handlers delegate to <see cref="HelpVerbs" /> — the
 ///         output text stays byte-for-byte identical to the manual path
-///         (pilot handlers cover version/storage; CAF-A adds sessions/run;
+///         (pilot handlers cover version — storage moved to
+///         <c>CafStorageCommands</c> in CAF-F (#1288); CAF-A adds run —
+///         sessions moved to <c>CafSessionCommands</c> in CAF-F with a typed
+///         <c>--session</c> flag;
 ///         CAF-B adds providers/models/auth/config; CAF-D adds
 ///         daemon/status/serve/mcp; CAF-E adds setup/tui/demo — with typed
 ///         flags, since those verbs ARE flags — and slice 2 adds ask/events/
 ///         headless/ide/plugin/skill/help; CAF-C adds logs — with typed
-///         flags, since that verb IS flags).
+///         flags, since that verb IS flags; CAF-F completes the issue's
+///         title scope — sessions with a typed <c>--session</c> flag and
+///         storage with an ignored positional tail).
 ///     </para>
 ///     <para>
 ///         Exit code: CAF sets <see cref="Environment.ExitCode" /> from the
@@ -49,7 +54,7 @@ internal static class CafPilotVerbs
     {
         var app = ConsoleApp.Create();
         app.Add("version", CafPilotCommands.Version);
-        app.Add("storage", CafPilotCommands.Storage);
+        app.Add("storage", CafStorageCommands.Storage);
         app.Add("sessions", CafSessionCommands.Sessions);
         app.Add("run", CafRunCommands.Run);
         app.Add("providers", CafProviderCommands.Providers);
@@ -81,14 +86,13 @@ internal static class CafPilotVerbs
 }
 
 /// <summary>
-///     CAF command handlers for the LB2 pilot. The XML doc comments become
+///     CAF command handler for the LB2 pilot. The XML doc comment becomes
 ///     the <c>--help</c> text (CAF reads documentation, not attributes).
+///     (<c>storage</c> used to live here too; CAF-F (#1288) moved it to
+///     <c>CafStorageCommands</c> with an ignored positional tail.)
 /// </summary>
 internal static class CafPilotCommands
 {
     /// <summary>Print the Harbor version and the .NET runtime version.</summary>
     public static int Version() => HelpVerbs.PrintVersion();
-
-    /// <summary>Print the available session storage backends.</summary>
-    public static int Storage() => HelpVerbs.PrintStorageOptions();
 }

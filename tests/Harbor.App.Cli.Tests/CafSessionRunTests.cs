@@ -9,6 +9,9 @@ namespace Harbor.App.Cli.Tests;
 ///     <see cref="CafPilotVerbs" />. Host-free paths only (unknown sub, missing
 ///     args, bare usage, <c>run list</c>): bare invocations must stay
 ///     byte-identical to the manual verbs; <c>--help</c> comes from the framework.
+///     CAF-F (#1288) types the <c>search --session/-s</c> flag the manual parser
+///     accepts anywhere in the sub-args, so flag-carrying host-free paths
+///     (missing query, non-search sub) are pinned too.
 /// </summary>
 /// <remarks>
 ///     The bare <see cref="NotInParallelAttribute" /> is load-bearing: these
@@ -37,6 +40,53 @@ public class CafSessionRunTests
     {
         var direct = await CaptureAsync(() => SessionsVerb.RunAsync(NullLogger.Instance, ["rename"]));
         var viaCaf = await RunCafAsync("sessions", ["rename"]);
+        await Assert.That(viaCaf.Exit).IsEqualTo(2);
+        await Assert.That(viaCaf.Exit).IsEqualTo(direct.Exit);
+        await Assert.That(viaCaf.Out).IsEqualTo(direct.Out);
+        await Assert.That(viaCaf.Err).IsEqualTo(direct.Err);
+    }
+
+    [Test]
+    public async Task Sessions_Search_MissingQuery_MatchesManualByteForByte()
+    {
+        var direct = await CaptureAsync(() => SessionsVerb.RunAsync(NullLogger.Instance, ["search"]));
+        var viaCaf = await RunCafAsync("sessions", ["search"]);
+        await Assert.That(viaCaf.Exit).IsEqualTo(2);
+        await Assert.That(viaCaf.Exit).IsEqualTo(direct.Exit);
+        await Assert.That(viaCaf.Out).IsEqualTo(direct.Out);
+        await Assert.That(viaCaf.Err).IsEqualTo(direct.Err);
+    }
+
+    [Test]
+    public async Task Sessions_Search_SessionFlag_MissingQuery_MatchesManualByteForByte()
+    {
+        string[] tail = ["search", "--session", "abc123"];
+        var direct = await CaptureAsync(() => SessionsVerb.RunAsync(NullLogger.Instance, tail));
+        var viaCaf = await RunCafAsync("sessions", tail);
+        await Assert.That(viaCaf.Exit).IsEqualTo(2);
+        await Assert.That(viaCaf.Exit).IsEqualTo(direct.Exit);
+        await Assert.That(viaCaf.Out).IsEqualTo(direct.Out);
+        await Assert.That(viaCaf.Err).IsEqualTo(direct.Err);
+    }
+
+    [Test]
+    public async Task Sessions_Search_ShortSessionFlag_MissingQuery_MatchesManualByteForByte()
+    {
+        string[] tail = ["search", "-s", "abc123"];
+        var direct = await CaptureAsync(() => SessionsVerb.RunAsync(NullLogger.Instance, tail));
+        var viaCaf = await RunCafAsync("sessions", tail);
+        await Assert.That(viaCaf.Exit).IsEqualTo(2);
+        await Assert.That(viaCaf.Exit).IsEqualTo(direct.Exit);
+        await Assert.That(viaCaf.Out).IsEqualTo(direct.Out);
+        await Assert.That(viaCaf.Err).IsEqualTo(direct.Err);
+    }
+
+    [Test]
+    public async Task Sessions_NonSearch_WithSessionFlag_MatchesManualByteForByte()
+    {
+        string[] tail = ["--session", "abc123", "rename"];
+        var direct = await CaptureAsync(() => SessionsVerb.RunAsync(NullLogger.Instance, tail));
+        var viaCaf = await RunCafAsync("sessions", tail);
         await Assert.That(viaCaf.Exit).IsEqualTo(2);
         await Assert.That(viaCaf.Exit).IsEqualTo(direct.Exit);
         await Assert.That(viaCaf.Out).IsEqualTo(direct.Out);
