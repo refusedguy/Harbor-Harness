@@ -74,8 +74,10 @@ public static class DiffPreview
         }
 
         // One parse feeds every branch: the file path plus whichever payload
-        // field this tool's arguments carry.
-        string filePath = UnknownPath;
+        // field this tool's arguments carry. No initializer: FindFilePath
+        // already falls back to UnknownPath, and the catch returns, so the
+        // initial value would be dead (S1854).
+        string filePath;
         string? oldString = null;
         string? newString = null;
         string? content = null;
