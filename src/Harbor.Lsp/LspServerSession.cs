@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Text.Json;
 using CSharpFunctionalExtensions;
@@ -42,8 +43,13 @@ public sealed class LspServerSession : IAsyncDisposable
     private readonly LspClient _client;
     private readonly Process _process;
     private readonly ILogger _logger;
-    private readonly Dictionary<string, List<LspDiagnostic>> _diagnostics = [];
-    private readonly Lock _diagnosticsLock = new();
+    // #1095: diagnostics cache is on the LSP hot path — the server pushes
+    // publishDiagnostics per keystroke on the notification thread while the
+    // UI/tests pull per file via GetDiagnostics. A ConcurrentDictionary keeps
+    // both sites lock-free; the published List is built locally and never
+    // mutated after publication, so the reference swap is the whole publish.
+    // Same discipline as LspClient._pending (#1402).
+    private readonly ConcurrentDictionary<string, List<LspDiagnostic>> _diagnostics = new();
     private int _documentVersion;
     private int _disposed;
 
@@ -248,12 +254,9 @@ public sealed class LspServerSession : IAsyncDisposable
     /// <summary>Diagnostics last published for the file.</summary>
     public IReadOnlyList<LspDiagnostic> GetDiagnostics(string filePath)
     {
-        lock (_diagnosticsLock)
-        {
-            return _diagnostics.TryGetValue(filePath, out List<LspDiagnostic>? list)
-                ? [.. list]
-                : [];
-        }
+        return _diagnostics.TryGetValue(filePath, out List<LspDiagnostic>? list)
+            ? [.. list]
+            : [];
     }
 
     // ── Notifications ──────────────────────────────────────────────────────
@@ -283,10 +286,7 @@ public sealed class LspServerSession : IAsyncDisposable
                     dto.Message));
             }
 
-            lock (_diagnosticsLock)
-            {
-                _diagnostics[filePath] = list;
-            }
+            _diagnostics[filePath] = list;
 
             DiagnosticsChanged?.Invoke(this, new LspDiagnosticsChangedEventArgs(filePath));
         }
