@@ -6,6 +6,7 @@ namespace Harbor.Registries.Tools;
 public sealed class CompositeToolRegistry : IToolRegistry
 {
     private readonly List<IToolSource> _sources = new();
+    private readonly CompositeLiveSource _liveSource;
     // #183: single volatile publish-once snapshot — see FrozenToolView.
     private volatile FrozenToolView? _frozenView;
 
@@ -16,6 +17,11 @@ public sealed class CompositeToolRegistry : IToolRegistry
 
     /// <inheritdoc />
     public IReadOnlyList<IArgSafetyPolicy> SafetyPolicies => _safetyPolicies;
+
+    public CompositeToolRegistry()
+    {
+        _liveSource = new CompositeLiveSource(_sources);
+    }
 
     /// <summary>Derives the guard set from every source's tool list (#557).</summary>
     private IReadOnlyList<IArgSafetyPolicy> BuildSafetyPolicies()
@@ -44,76 +50,27 @@ public sealed class CompositeToolRegistry : IToolRegistry
 
     public IReadOnlyList<ToolDescriptor> GetAllTools()
     {
-        // Frozen snapshot: the cached array is returned as-is (zero alloc).
-        var view = _frozenView;
-        if (view is not null)
-        {
-            return view.GetAll();
-        }
-
-        int count = 0;
-        foreach (var source in _sources)
-        {
-            count += source.GetAllTools().Count;
-        }
-
-        if (count == 0)
-        {
-            return Array.Empty<ToolDescriptor>();
-        }
-
-        var list = new List<ToolDescriptor>(count);
-        foreach (var source in _sources)
-        {
-            foreach (var t in source.GetAllTools())
-            {
-                list.Add(t);
-            }
-        }
-        return list;
+        // #1101 dual-path (RESOLVED, §OOP-005): single IToolSource path like
+        // ToolRegistry — frozen snapshot when present, live fan-out otherwise.
+        // No duplicated lookup logic here.
+        IToolSource source = _frozenView ?? (IToolSource)_liveSource;
+        return source.GetAllTools();
     }
 
     public IReadOnlyList<ToolDescriptor> ResolveTools(string agentName, PermissionRuleset? sessionPermission = null)
     {
-        // Frozen snapshot: cached array (unfiltered) or memoized per-ruleset
-        // array (filtered) — zero alloc on repeat calls. Treat as read-only.
-        var view = _frozenView;
-        if (view is not null)
-        {
-            return view.Resolve(sessionPermission);
-        }
-
-        var list = new List<ToolDescriptor>();
-        foreach (var source in _sources)
-        {
-            foreach (var t in source.ResolveTools(agentName, sessionPermission))
-            {
-                list.Add(t);
-            }
-        }
-        return list;
+        // #1101 dual-path (RESOLVED): same single-path selection; the frozen
+        // view serves cached/memoized arrays, the live source fans out.
+        IToolSource source = _frozenView ?? (IToolSource)_liveSource;
+        return source.ResolveTools(agentName, sessionPermission);
     }
 
     public Result<ITool> GetTool(ToolName name)
     {
-        var view = _frozenView;
-        if (view is not null && view.TryGetTool(name, out var tool) && tool is not null)
-        {
-            return Result.Success(tool);
-        }
-
-        // §4.6-ok: fold «первый успех» (rop-final-mile L8) — осознанный императивный цикл,
-        // LINQ-эквивалент требует Result?-нуля либо ToArray+Match (дороже/опаснее на горячем пути).
-        foreach (var source in _sources)
-        {
-            var result = source.GetTool(name);
-            if (result.IsSuccess)
-            {
-                return result;
-            }
-        }
-
-        return Result.Failure<ITool>($"Tool '{name}' is not registered.");
+        // #1101 dual-path (RESOLVED): frozen fast path first, live fan-out
+        // inside the source selection.
+        IToolSource source = _frozenView ?? (IToolSource)_liveSource;
+        return source.GetTool(name);
     }
 
     public Result Register(ITool tool) => Result.Failure("CompositeToolRegistry is read-only. Use AddSource to add tools.");
@@ -145,6 +102,74 @@ public sealed class CompositeToolRegistry : IToolRegistry
         // the sources expose, so a path-taking tool in a source is guarded without
         // any list to update.
         _safetyPolicies = BuildSafetyPolicies();
+    }
+
+    /// <summary>
+    ///     Live fan-out <see cref="IToolSource" />: the unfrozen read path.
+    ///     Holds the source-list reference (no per-call allocation for the
+    ///     source itself). Semantics mirror the previous inline else-branches.
+    /// </summary>
+    private sealed class CompositeLiveSource : IToolSource
+    {
+        private readonly List<IToolSource> _sources;
+
+        public CompositeLiveSource(List<IToolSource> sources)
+        {
+            _sources = sources;
+        }
+
+        public IReadOnlyList<ToolDescriptor> GetAllTools()
+        {
+            int count = 0;
+            foreach (var source in _sources)
+            {
+                count += source.GetAllTools().Count;
+            }
+
+            if (count == 0)
+            {
+                return Array.Empty<ToolDescriptor>();
+            }
+
+            var list = new List<ToolDescriptor>(count);
+            foreach (var source in _sources)
+            {
+                foreach (var t in source.GetAllTools())
+                {
+                    list.Add(t);
+                }
+            }
+            return list;
+        }
+
+        public IReadOnlyList<ToolDescriptor> ResolveTools(string agentName, PermissionRuleset? sessionPermission = null)
+        {
+            var list = new List<ToolDescriptor>();
+            foreach (var source in _sources)
+            {
+                foreach (var t in source.ResolveTools(agentName, sessionPermission))
+                {
+                    list.Add(t);
+                }
+            }
+            return list;
+        }
+
+        public Result<ITool> GetTool(ToolName name)
+        {
+            // §4.6-ok: fold «первый успех» (rop-final-mile L8) — осознанный императивный цикл,
+            // LINQ-эквивалент требует Result?-нуля либо ToArray+Match (дороже/опаснее на горячем пути).
+            foreach (var source in _sources)
+            {
+                var result = source.GetTool(name);
+                if (result.IsSuccess)
+                {
+                    return result;
+                }
+            }
+
+            return Result.Failure<ITool>($"Tool '{name}' is not registered.");
+        }
     }
 
     private static ToolDescriptor ToDescriptor(ITool t) => new(

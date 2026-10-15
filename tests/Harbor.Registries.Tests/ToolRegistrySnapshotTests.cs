@@ -255,6 +255,30 @@ public class ToolRegistrySnapshotTests
     }
 
     /// <summary>
+    ///     #1101 dual-path: unfrozen composite fans out to sources with the
+    ///     same names a frozen snapshot serves (single IToolSource path).
+    /// </summary>
+    [Test]
+    public async Task CompositeToolRegistry_Unfrozen_MatchesFrozen()
+    {
+        var unfrozen = new CompositeToolRegistry();
+        unfrozen.AddSource(new StubSource("alpha_tool", "beta_tool"));
+
+        var frozen = new CompositeToolRegistry();
+        frozen.AddSource(new StubSource("alpha_tool", "beta_tool"));
+        frozen.Freeze();
+
+        await AssertSameNames(unfrozen.ResolveTools("code"), "alpha_tool", "beta_tool");
+        await AssertSameNames(frozen.ResolveTools("code"), "alpha_tool", "beta_tool");
+        await AssertSameNames(unfrozen.GetAllTools(), "alpha_tool", "beta_tool");
+
+        var found = unfrozen.GetTool(ToolName.Create("alpha_tool"));
+        await Assert.That(found.IsSuccess).IsTrue();
+        var missing = unfrozen.GetTool(ToolName.Create("nope_tool"));
+        await Assert.That(missing.IsFailure).IsTrue();
+    }
+
+    /// <summary>
     ///     #1240: frozen arrays are pre-sorted by name (ordinal) — the per-turn
     ///     consumer iterates them as-is instead of paying an OrderBy per turn.
     ///     Registration order must not leak into the snapshot order.
