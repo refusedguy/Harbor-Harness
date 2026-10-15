@@ -21,11 +21,8 @@ public sealed class TodoWritePlugin : IToolPlugin, ITuiPanelPlugin
 {
 
     internal static readonly ConcurrentDictionary<string, List<TodoItem>> TodosBySession = new();
-    internal static string? DataDir;
-    private static readonly object PersistGate = new();
 
-    internal static string? PersistPath =>
-        DataDir is null ? null : Path.Combine(DataDir, "todos.json");
+    internal static readonly TodoStore Store = new();
 
     public string Name => "todowrite";
     public Version Version => new(1, 1, 0);
@@ -34,18 +31,17 @@ public sealed class TodoWritePlugin : IToolPlugin, ITuiPanelPlugin
 
     public void Initialize(PluginContext context)
     {
-        DataDir = context.DataDirectory;
+        var logger = context.CreateLogger<TodoWritePlugin>();
         try
         {
-            Directory.CreateDirectory(DataDir);
-            LoadPersisted();
+            Store.Configure(context.DataDirectory);
         }
         catch (Exception ex)
         {
-            context.CreateLogger<TodoWritePlugin>().LogWarning(ex, "TodoWrite persistence disabled");
-            DataDir = null;
+            logger.LogWarning(ex, "TodoWrite persistence disabled");
+            Store.Disable();
         }
-        context.CreateLogger<TodoWritePlugin>().LogInformation("TodoWrite plugin initialized");
+        logger.LogInformation("TodoWrite plugin initialized");
     }
 
     public void RegisterTools(IToolRegistryBuilder builder) => builder.AddTool<TodoWriteTool>();
@@ -54,9 +50,56 @@ public sealed class TodoWritePlugin : IToolPlugin, ITuiPanelPlugin
 
     public Task ShutdownAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
 
-    internal static void LoadPersisted()
+    internal static TodoStatus ParseStatus(string? value) => value switch
     {
-        string? path = PersistPath;
+        "pending" => TodoStatus.Pending,
+        "in_progress" => TodoStatus.InProgress,
+        "completed" => TodoStatus.Completed,
+        _ when Enum.TryParse<TodoStatus>(value, true, out var s) => s,
+        _ => TodoStatus.Pending,
+    };
+}
+
+/// <summary>
+///     Best-effort JSON persistence for the todo cache. All state lives in the
+///     instance; the plugin owns one <c>static readonly</c> instance so the
+///     parameterless tool can reach it. Every failure degrades to in-memory
+///     state and never breaks startup or tool results.
+/// </summary>
+internal sealed class TodoStore
+{
+    private readonly object _gate = new();
+    private string? _dir;
+
+    public void Configure(string dir)
+    {
+        lock (_gate)
+        {
+            _dir = dir;
+        }
+        Directory.CreateDirectory(dir);
+        Load();
+    }
+
+    public void Disable()
+    {
+        lock (_gate)
+        {
+            _dir = null;
+        }
+    }
+
+    private string? PersistPath()
+    {
+        lock (_gate)
+        {
+            return _dir is null ? null : Path.Combine(_dir, "todos.json");
+        }
+    }
+
+    public void Load()
+    {
+        string? path = PersistPath();
         if (path is null || !File.Exists(path))
             return;
         try
@@ -65,33 +108,32 @@ public sealed class TodoWritePlugin : IToolPlugin, ITuiPanelPlugin
             var rows = JsonSerializer.Deserialize<List<PersistedTodo>>(json);
             if (rows is null)
                 return;
-            TodosBySession.Clear();
+            TodoWritePlugin.TodosBySession.Clear();
             foreach (var row in rows)
             {
                 if (string.IsNullOrEmpty(row.SessionId) || string.IsNullOrEmpty(row.Id))
                     continue;
                 var item = new TodoItem(row.Id, row.Content ?? "", (TodoStatus)row.Status);
-                TodosBySession.GetOrAdd(row.SessionId, _ => new List<TodoItem>()).Add(item);
+                TodoWritePlugin.TodosBySession.GetOrAdd(row.SessionId, _ => new List<TodoItem>()).Add(item);
             }
         }
         catch
-        {
-            // Corrupt cache must never break startup; in-memory state stays empty.
+        { /* ignore: corrupt cache resets to empty in-memory state */
         }
     }
 
-    internal static void SavePersisted()
+    public void Save()
     {
-        string? path = PersistPath;
+        string? path = PersistPath();
         if (path is null)
             return;
         try
         {
             List<PersistedTodo> rows;
-            lock (PersistGate)
+            lock (_gate)
             {
                 rows = new List<PersistedTodo>();
-                foreach (var kv in TodosBySession.ToArray())
+                foreach (var kv in TodoWritePlugin.TodosBySession.ToArray())
                 {
                     List<TodoItem> snapshot;
                     lock (kv.Value)
@@ -105,19 +147,9 @@ public sealed class TodoWritePlugin : IToolPlugin, ITuiPanelPlugin
             }
         }
         catch
-        {
-            // Persistence is best-effort; the tool result already succeeded in memory.
+        { /* ignore: persistence is best-effort, the in-memory result already succeeded */
         }
     }
-
-    internal static TodoStatus ParseStatus(string? value) => value switch
-    {
-        "pending" => TodoStatus.Pending,
-        "in_progress" => TodoStatus.InProgress,
-        "completed" => TodoStatus.Completed,
-        _ when Enum.TryParse<TodoStatus>(value, true, out var s) => s,
-        _ => TodoStatus.Pending,
-    };
 }
 
 public sealed class TodoWriteTool : ITool
@@ -200,7 +232,7 @@ public sealed class TodoWriteTool : ITool
 
                     var item = new TodoItem(Guid.NewGuid().ToString("N"), content, TodoStatus.Pending);
                     todos.Add(item);
-                    TodoWritePlugin.SavePersisted();
+                    TodoWritePlugin.Store.Save();
                     return Task.FromResult(ToolResult.Success($"Added todo: {item.Id} — {content}", new { id = item.Id }));
 
                 case "update":
@@ -219,7 +251,7 @@ public sealed class TodoWriteTool : ITool
                     {
                         todos.Remove(toUpdate);
                         todos.Add(toUpdate with { Status = TodoWritePlugin.ParseStatus(newStatus) });
-                        TodoWritePlugin.SavePersisted();
+                        TodoWritePlugin.Store.Save();
                     }
                     return Task.FromResult(ToolResult.Success($"Updated todo: {updateId} → {newStatus}"));
 
@@ -286,13 +318,13 @@ public sealed class TodoWriteTool : ITool
 
                     todos.Remove(toComplete);
                     todos.Add(toComplete with { Status = TodoStatus.Completed });
-                    TodoWritePlugin.SavePersisted();
+                    TodoWritePlugin.Store.Save();
                     return Task.FromResult(ToolResult.Success($"Completed: {toComplete.Content}"));
 
                 case "clear":
                     int cleared = todos.Count;
                     todos.Clear();
-                    TodoWritePlugin.SavePersisted();
+                    TodoWritePlugin.Store.Save();
                     return Task.FromResult(ToolResult.Success($"Cleared {cleared} todos."));
 
                 default:
