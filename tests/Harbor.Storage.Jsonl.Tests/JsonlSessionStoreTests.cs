@@ -105,6 +105,37 @@ public class JsonlSessionStoreTests
     }
 
     [Test]
+    public async Task ListAsync_AfterMessages_ReturnsHeaderOnlyWithEmptyMetadata()
+    {
+        // #1101 N+1: List must not reparse history per session. After messages
+        // land, Get derives stats from them while List stays header-only.
+        var store = CreateStore();
+        try
+        {
+            var session = (await store.CreateAsync("/test", "code", "anthropic", "claude-opus-4")).Value;
+            await store.AppendMessageAsync(session.Id, new UserMessage(
+                "m1", session.Id, DateTimeOffset.UtcNow, "hello", "code", "claude-opus-4"));
+            await store.AppendMessageAsync(session.Id, new AssistantMessage(
+                "m2", session.Id, DateTimeOffset.UtcNow,
+                new ContentPart[] { new TextPart("hi") }, StopReason.Stop, new Usage(10, 5), "claude-opus-4"));
+
+            var list = await store.ListAsync();
+            await Assert.That(list.IsSuccess).IsTrue();
+            await Assert.That(list.Value.Count).IsEqualTo(1);
+            await Assert.That(list.Value[0].Id).IsEqualTo(session.Id);
+            await Assert.That(list.Value[0].Metadata).IsEqualTo(SessionMetadata.Empty);
+
+            var got = await store.GetAsync(session.Id);
+            await Assert.That(got.IsSuccess).IsTrue();
+            await Assert.That(got.Value.Metadata.MessageCount).IsEqualTo(1);
+        }
+        finally
+        {
+            if (Directory.Exists(store.GetRootDirectory())) Directory.Delete(store.GetRootDirectory(), true);
+        }
+    }
+
+    [Test]
     public async Task DeleteAsync_RemovesSession()
     {
         var store = CreateStore();
