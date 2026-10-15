@@ -273,6 +273,69 @@ public class CompactionServiceTests
     }
 
     [Test]
+    public async Task CompactAsync_CapsSummaryPromptToSummaryBudget()
+    {
+        // #1106 row 6: the summary prompt pasted the whole head uncapped, so a
+        // head larger than the summary model's window re-overfilled the very
+        // window compaction is freeing. The prompt now keeps the newest head
+        // messages inside ContextWindow − output − reserve.
+        var capturing = new CapturingSummaryClient("capped summary");
+        var svc = CreateService(capturing);
+        svc.KeepRecentTokens = 1; // each message is ~200 tokens: tailStart == Count
+        svc.TailTurns = 0;
+        svc.ReserveTokens = 100;
+
+        var messages = new List<AgentMessage>();
+        for (int i = 0; i < 10; i++)
+            messages.Add(User($"captest-{i:D2}-" + new string('x', 400)));
+
+        int headEstimate = new TokenTracker().EstimateTokens(messages);
+        // Budget lands mid-head: the full head does not fit, one message does.
+        var tight = new ModelInfo(
+            "test-model",
+            "test",
+            "Test Model",
+            4096 + svc.ReserveTokens + headEstimate / 2,
+            1_024,
+            false,
+            false,
+            true,
+            Pricing.Unknown,
+            "openai");
+
+        await Assert.That(headEstimate).IsGreaterThan(tight.ContextWindow - 4096 - svc.ReserveTokens);
+
+        var result = await svc.CompactAsync("session-1", messages, tight);
+
+        await Assert.That(result.IsSuccess).IsTrue();
+        await Assert.That(result.Value.PrunedMessageCount).IsEqualTo(messages.Count);
+        string prompt = PromptText(capturing);
+        await Assert.That(prompt.Contains("captest-09-")).IsTrue();
+        await Assert.That(prompt.Contains("captest-00-")).IsFalse();
+        await Assert.That(prompt.Contains("omitted to fit context")).IsTrue();
+    }
+
+    [Test]
+    public async Task CompactAsync_SummaryPromptKeepsWholeHeadWhenItFits()
+    {
+        // Companion: a head inside the budget is pasted whole, with no marker.
+        var capturing = new CapturingSummaryClient("full summary");
+        var svc = CreateService(capturing);
+        svc.KeepRecentTokens = 1;
+        svc.TailTurns = 0;
+
+        var messages = new List<AgentMessage> { User("fit-aa"), User("fit-bb") };
+
+        var result = await svc.CompactAsync("session-1", messages, HugeModel);
+
+        await Assert.That(result.IsSuccess).IsTrue();
+        string prompt = PromptText(capturing);
+        await Assert.That(prompt.Contains("fit-aa")).IsTrue();
+        await Assert.That(prompt.Contains("fit-bb")).IsTrue();
+        await Assert.That(prompt.Contains("omitted to fit context")).IsFalse();
+    }
+
+    [Test]
     public async Task Materialize_NoSummary_ReturnsInputUnchanged()
     {
         var messages = new AgentMessage[] { User("hi"), Assistant("ho") };
@@ -415,6 +478,43 @@ public class CompactionServiceTests
             StopReason.ToolUse,
             new Usage(0, 0),
             "test-model");
+    }
+
+    private static string PromptText(CapturingSummaryClient client)
+    {
+        var userMessage = (LlmUserMessage)client.LastRequest!.Messages[0];
+        return userMessage.Content.OfType<LlmTextBlock>().Single().Text;
+    }
+
+    /// <summary>
+    ///     Mock client that records the summarization request so prompt-cap
+    ///     tests can assert on the pasted head slice.
+    /// </summary>
+    private sealed class CapturingSummaryClient : ILlmClient
+    {
+        private readonly string _summary;
+
+        public CapturingSummaryClient(string summary)
+        {
+            _summary = summary;
+        }
+
+        public LlmRequest? LastRequest { get; private set; }
+
+        public ProviderId ProviderId => ProviderId.Create("test");
+
+        public async IAsyncEnumerable<LlmEvent> StreamAsync(
+            LlmRequest request,
+            [EnumeratorCancellation] CancellationToken cancellationToken = default)
+        {
+            LastRequest = request;
+            yield return new TextDeltaEvent("0", _summary);
+            await Task.Delay(1, cancellationToken).ConfigureAwait(false);
+            yield return new StepFinishEvent(0, "stop", new Usage(0, _summary.Length / 4));
+        }
+
+        public Task<Result<IReadOnlyList<ModelInfo>>> GetModelsAsync(CancellationToken cancellationToken = default)
+            => Task.FromResult(Result.Success<IReadOnlyList<ModelInfo>>(new[] { SmallModel }));
     }
 
     /// <summary>

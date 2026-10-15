@@ -107,7 +107,7 @@ public sealed class CompactionService(
         return null;
     }
 
-    private const string SummarizationPrompt = 
+    private const string SummarizationPrompt =
         "You are creating a summary of the conversation so far to provide context to a teammate who is taking over the task.\n" +
         "\n" +
         "The summary should preserve ALL important information needed to continue the work, including:\n" +
@@ -157,6 +157,14 @@ public sealed class CompactionService(
         "- Preserve exact file paths, commands, error strings, identifiers.\n" +
         "- Do not mention the summary process or that context was compacted.\n" +
         "- Be concise but complete — every detail matters.";
+
+    /// <summary>
+    ///     Output slice reserved for the summary itself. The summarization
+    ///     request caps output here (<see cref="BuildSummaryRequest" />), so
+    ///     the prompt cap (<see cref="FindPromptStartByBudget" />) subtracts
+    ///     the same constant — one source, not two literals that can drift.
+    /// </summary>
+    private const int SummaryMaxOutputTokens = 4096;
 
     private int _reserveTokens = CompactionPolicy.DefaultReserveTokens;
     private int _keepRecentTokens = 20000;
@@ -281,7 +289,7 @@ public sealed class CompactionService(
             (ILlmClient summaryClient, ModelInfo summaryModel) =
                 await ResolveSummaryTargetAsync(client, model, ct).ConfigureAwait(false);
 
-            string prompt = BuildSummarizationPrompt(messages, tailStart);
+            string prompt = BuildSummarizationPrompt(messages, FindPromptStartByBudget(messages, tailStart, summaryModel), tailStart);
             LlmRequest request = BuildSummaryRequest(summaryModel, prompt);
 
             Result<string> summaryOutcome =
@@ -366,6 +374,11 @@ public sealed class CompactionService(
     }
 
     /// <summary>Builds the summarization LLM request for the given prompt.</summary>
+    /// <remarks>
+    ///     #1106 row 6: <see cref="SummaryMaxOutputTokens" /> is the same
+    ///     constant <see cref="FindPromptStartByBudget" /> subtracts, so the
+    ///     prompt cap and the request agree on the output slice by construction.
+    /// </remarks>
     private static LlmRequest BuildSummaryRequest(ModelInfo summaryModel, string prompt)
     {
         // Ф8/A1: the summarization system prompt is a compile-time constant, so the
@@ -376,7 +389,7 @@ public sealed class CompactionService(
             SummarizationPrompt,
             Array.Empty<ToolDefinition>(),
             Temperature: 0.3m,
-            MaxOutputTokens: 4096,
+            MaxOutputTokens: SummaryMaxOutputTokens,
             CacheStrategy: CacheStrategy.Ephemeral);
     }
 
@@ -501,14 +514,66 @@ public sealed class CompactionService(
         return tailStart;
     }
 
-    private static string BuildSummarizationPrompt(IReadOnlyList<AgentMessage> messages, int count)
+    /// <summary>
+    ///     First head index that fits the summary call: the prompt pastes the
+    ///     head back into a model with <c>ContextWindow</c> input tokens, so an
+    ///     uncapped paste re-overfills the very window compaction is freeing
+    ///     (#1106 row 6). Walks back from the tail keeping the newest head
+    ///     messages inside <c>ContextWindow − output − reserve</c>; at least
+    ///     the newest head message is always kept.
+    /// </summary>
+    /// <remarks>
+    ///     #1106 row 4 (not this slice): the subtracted reserve is this
+    ///     service's own <see cref="ReserveTokens" /> config surface, and the
+    ///     per-turn <see cref="ShouldCompact" /> verdict still follows the
+    ///     tracker's reserve. Unifying the two reserves stays open.
+    /// </remarks>
+    private int FindPromptStartByBudget(
+        IReadOnlyList<AgentMessage> messages,
+        int tailStart,
+        ModelInfo summaryModel)
+    {
+        int budget = summaryModel.ContextWindow - SummaryMaxOutputTokens - ReserveTokens;
+        int start = tailStart - 1;
+        if (budget <= 0 || start < 0)
+        {
+            return Math.Max(0, start);
+        }
+
+        int promptTokens = 0;
+        for (int i = tailStart - 1; i >= 0; i--)
+        {
+            int msgTokens = tokenTracker.EstimateMessage(messages[i]);
+            if (promptTokens + msgTokens > budget)
+            {
+                break;
+            }
+
+            promptTokens += msgTokens;
+            start = i;
+        }
+
+        return start;
+    }
+
+    /// <summary>
+    ///     Renders the head slice <c>messages[start..count]</c> into the
+    ///     summarization prompt. A non-zero <paramref name="start" /> means the
+    ///     oldest head messages were dropped by the prompt cap, so a marker
+    ///     says so instead of letting the summary read as the whole history.
+    /// </summary>
+    private static string BuildSummarizationPrompt(IReadOnlyList<AgentMessage> messages, int start, int count)
     {
         using var sb = StringBuilderPool.Rent(4096);
         var builder = sb.Builder;
         builder.AppendLine("Summarize the following conversation, preserving all important details:");
         builder.AppendLine();
         builder.AppendLine("<conversation>");
-        for (int i = 0; i < count; i++)
+        if (start > 0)
+        {
+            builder.AppendLine("[... earlier history omitted to fit context ...]");
+        }
+        for (int i = start; i < count; i++)
         {
             var msg = messages[i];
             builder.Append('[').Append(msg.Role).Append("] ");
