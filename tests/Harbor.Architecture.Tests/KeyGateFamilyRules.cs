@@ -47,7 +47,7 @@
 //     QuestionFormView.cs:571                 != 0            (custom row only)
 //     FilePickerView.cs:172                   is None or Shift
 //     CommandPaletteView.cs:276               is None or Shift
-//     CellForgeJumpPalettePanel.cs:250        is None or Shift && !IsControl
+//     CellForgeJumpPalettePanel.cs:317        is None or Shift && !IsControl
 //     ReplInputLoop.cs:461                    is None or Shift
 //
 //   COMMAND (no buffer; runes are h/j/k/l or a y/n/a vote; Shift refused)
