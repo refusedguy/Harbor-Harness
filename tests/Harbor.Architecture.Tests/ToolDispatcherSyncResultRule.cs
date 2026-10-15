@@ -1,36 +1,37 @@
-// ToolDispatcherSyncResultRule — the AwaitOne abandon path stays async.
+// ToolDispatcherSyncResultRule — the abandon paths stay async.
 //
 // THE DEFECT (#1099, sync-over-async on abandon paths)
 // -----------------------------------------------------
 // `ToolDispatcher.AwaitOneWithAbandonAsync` read the finished task with a
 // blocking `pending.Result` behind `IsCompletedSuccessfully` (two sites: the
-// boundary fast-path and the post-grace ternary). The guard makes the block a
-// no-wait today, but the spelling is still sync-over-async: it throws
-// AggregateException instead of the task's exception if the guard ever drifts,
-// and it is the shape a copy-paste carries into a path where the task is NOT
-// complete. The fix is the plain `await pending.ConfigureAwait(false)` —
-// identical on the guarded path, honest on every other.
+// boundary fast-path and the post-grace ternary), and the sibling
+// `AwaitAllWithAbandonAsync` did the same with `all.Result` (boundary
+// fast-path) plus `tasks[i].Result` (per-call post-grace ternary). The guards
+// make the blocks a no-wait today, but the spelling is still sync-over-async:
+// it throws AggregateException instead of the task's exception if a guard ever
+// drifts, and it is the shape a copy-paste carries into a path where the task
+// is NOT complete. The fix is the plain `await ...ConfigureAwait(false)` —
+// identical on the guarded paths, honest on every other.
 //
-// SCOPE — ONE METHOD, ON PURPOSE
-// ------------------------------
-// Only `AwaitOneWithAbandonAsync` in
-// `src/Harbor.Application/Agents/ToolDispatcher.cs` is graded. The sibling
-// `AwaitAllWithAbandonAsync` carries the same smell (`all.Result`,
-// `tasks[i].Result`) and is a real remainder of the same audit, but widening
-// this rule to it without fixing it would ship a red gate. It is left for the
-// follow-up that fixes it, not graded here.
+// SCOPE — BOTH ABANDON PATHS
+// --------------------------
+// `AwaitOneWithAbandonAsync` and `AwaitAllWithAbandonAsync` in
+// `src/Harbor.Application/Agents/ToolDispatcher.cs` are graded. The AwaitAll
+// sibling was a documented remainder when the AwaitOne half landed (#1409);
+// this follow-up fixes it and arms the gate over it.
 //
 // NON-VACUITY
 // -----------
-//   1. `GradedFile_IsReadable` — the graded file was found and contains the
-//      graded method. Without it, "no sync read" and "the walk found nothing"
+//   1. `GradedFile_IsReadable` — the graded file was found and contains both
+//      graded methods. Without it, "no sync read" and "the walk found nothing"
 //      are the same report.
-//   2. `AwaitOne_CarriesNoSyncResult` fails on the pre-fix lines
-//      (`return pending.Result;`, `? pending.Result`) and passes on the fixed
+//   2. `AwaitOne_CarriesNoSyncResult` / `AwaitAll_CarriesNoSyncResult` fail on
+//      the pre-fix lines (`return pending.Result;`, `? pending.Result`,
+//      `return all.Result;`, `? tasks[i].Result`) and pass on the fixed
 //      shape, so a revert re-opens the hole AND reddens this gate.
-//   3. `AwaitOne_PinsAsyncRead` requires the `await pending` spelling inside
-//      the guarded branches, so deleting the branches (or swapping in a
-//      different sink) does not silently satisfy the rule.
+//   3. `AwaitOne_PinsAsyncRead` / `AwaitAll_PinsAsyncRead` require the
+//      `await` spelling inside the guarded branches, so deleting the branches
+//      (or swapping in a different sink) does not silently satisfy the rule.
 
 namespace Harbor.Architecture.Tests;
 
@@ -38,7 +39,7 @@ using System.Text.RegularExpressions;
 using TUnit.Assertions;
 
 /// <summary>
-///     Pins the #1099 fix: the AwaitOne abandon path reads the finished task
+///     Pins the #1099 fix: both abandon paths read the finished task(s)
 ///     with <c>await</c>, never a blocking <c>.Result</c>.
 /// </summary>
 public sealed class ToolDispatcherSyncResultRule
@@ -83,34 +84,48 @@ public sealed class ToolDispatcherSyncResultRule
         return -1;
     }
 
+    private static int FindAwaitAll(string[] lines)
+    {
+        for (int i = 0; i < lines.Length; i++)
+        {
+            if (lines[i].Contains("AwaitAllWithAbandonAsync", StringComparison.Ordinal)
+                && lines[i].Contains("Task<ToolResultEntry[]>", StringComparison.Ordinal))
+            {
+                return i;
+            }
+        }
+
+        return -1;
+    }
+
     /// <summary>The blocking-take ban's sub-id, shared by the rule data and the parser.</summary>
     private const string SyncResultSubId = "SYNC-RESULT-READ";
 
-    // MECHANISM (#1086, step 2, conveyor batch 11)
+    // MECHANISM (#1086, step 2, conveyor batch 11; AwaitAll armed in the #1099 follow-up)
     // --------------------------------------------
     // The ban below is a ScanRule: the blocking-take spelling as one Forbidden
-    // row, five planted controls, the graded file as the MustContain floor, a
+    // row, seven planted controls, the graded file as the MustContain floor, a
     // discovery floor. Enumeration, matching and the control/discovery verdicts
     // are ScanRunner's; this file keeps the issue prose, the method-window
-    // helpers, the async-read pin, and the test names.
+    // helpers, the async-read pins, and the test names.
     //
     // The verdict is ParseSyncResultReads through the Func-overload, carrying
-    // the original window scan verbatim — FindMethod plus the 30-line
-    // MethodWindow with its //-comment strip, via the shared
+    // the original window scans verbatim — FindMethod/FindAwaitAll plus the
+    // MethodWindow with its //-comment strip (30 lines for the one-call path,
+    // 40 for the longer batch path), via the shared
     // FindSyncResultLines helper — with no hatch and an empty baseline: zero
-    // blocking takes in the abandon path is the whole rule. The Forbidden row
+    // blocking takes in either abandon path is the whole rule. The Forbidden row
     // documents the banned spelling; the runner does not execute it (the rule
     // grades through ParseSyncResultReads, whose method-window scoping a line
     // regex cannot express).
     //
     // Scope parity is exact: Trees ["src/Harbor.Application/Agents"] walks what
-    // the old DispatcherSource read, and FindMethod fires only on the
-    // AwaitOneWithAbandonAsync declaration line — the call site, the AwaitAll
-    // sibling (a documented remainder with its own takes) and every other
-    // file's takes match nothing, so widening the walk from the one file to
-    // its directory changes no verdict. MinHits 20 is the slice's file count
-    // today (Pipeline/ included): the floor fails when the walk collapses,
-    // not when the slice is clean.
+    // the old DispatcherSource read, and FindMethod/FindAwaitAll fire only on
+    // the AwaitOneWithAbandonAsync / AwaitAllWithAbandonAsync declaration lines —
+    // the call site and every other file's takes match nothing, so widening
+    // the walk from the one file to its directory changes no verdict. MinHits 20
+    // is the slice's file count today (Pipeline/ included): the floor fails when
+    // the walk collapses, not when the slice is clean.
 
     /// <summary>
     ///     The banned spelling: a blocking <c>.Result</c> take. The runner does
@@ -176,9 +191,26 @@ public sealed class ToolDispatcherSyncResultRule
                 "NearMiss/SiblingMethod.cs",
                 "    private async Task<ToolResultEntry[]> AwaitAllWithAbandonAsync(Task<ToolResultEntry>[] tasks)\n"
                 + "    {\n"
-                + "        resolved[i] = tasks[i].Result;\n"
+                + "        resolved[i] = await tasks[i].ConfigureAwait(false);\n"
                 + "    }",
                 null),
+            new ScanControl(
+                "Planted/BlockingTakeAll.cs",
+                "    private async Task<ToolResultEntry[]> AwaitAllWithAbandonAsync(\n"
+                + "        Task<ToolResultEntry>[] tasks)\n"
+                + "    {\n"
+                + "        if (all.IsCompletedSuccessfully)\n"
+                + "            return all.Result;\n"
+                + "    }",
+                SyncResultSubId),
+            new ScanControl(
+                "Planted/BlockingTakeAllTernary.cs",
+                "    private async Task<ToolResultEntry[]> AwaitAllWithAbandonAsync(Task<ToolResultEntry>[] tasks)\n"
+                + "    {\n"
+                + "        resolved[i] = tasks[i].IsCompletedSuccessfully\n"
+                + "            ? tasks[i].Result\n"
+                + "            : await AbandonLeftoverAsync(tasks[i]);}",
+                SyncResultSubId),
         ],
         // The slice holds twenty C# files today, including ToolDispatcher.cs; a
         // smaller count means the walk broke rather than the slice is clean.
@@ -191,34 +223,53 @@ public sealed class ToolDispatcherSyncResultRule
     };
 
     /// <summary>
-    ///     The custom parser: the original window scan over one file's raw source —
-    ///     the method find plus the 30-line window with its comment strip verbatim
+    ///     The custom parser: the original window scans over one file's raw source —
+    ///     the method finds plus the 30-line windows with their comment strip verbatim
     ///     (via <see cref="FindSyncResultLines" />), one report per line. Files
-    ///     without the abandon path match nothing.
+    ///     without either abandon path match nothing.
     /// </summary>
     private static IEnumerable<ScanHit> ParseSyncResultReads(string displayPath, string rawSource)
     {
         string[] lines = rawSource.Split('\n');
-        int start = FindMethod(lines);
-        if (start < 0)
-        {
-            yield break;
-        }
-
-        foreach (int line in FindSyncResultLines(lines, start))
+        foreach (int line in FindAllSyncResultLines(lines))
         {
             yield return new ScanHit(SyncResultSubId, displayPath, line, lines[line - 1].Trim());
         }
     }
 
     /// <summary>
+    ///     1-based line numbers of the blocking takes inside both abandon paths'
+    ///     method windows: <c>.Result</c> reads after the <c>//</c>-comment strip.
+    /// </summary>
+    private static List<int> FindAllSyncResultLines(string[] lines)
+    {
+        var offenders = new List<int>();
+        int one = FindMethod(lines);
+        if (one >= 0)
+        {
+            offenders.AddRange(FindSyncResultLines(lines, one));
+        }
+
+        int all = FindAwaitAll(lines);
+        if (all >= 0)
+        {
+            // The batch path is longer than the one-call path (batch fast-path
+            // plus the per-call loop): a 40-line window reaches the per-call
+            // ternary without bleeding into AbandonLeftoverAsync.
+            offenders.AddRange(FindSyncResultLines(lines, all, 40));
+        }
+
+        return offenders;
+    }
+
+    /// <summary>
     ///     1-based line numbers of the blocking takes inside the abandon path's
     ///     method window: <c>.Result</c> reads after the <c>//</c>-comment strip.
     /// </summary>
-    private static List<int> FindSyncResultLines(string[] lines, int start)
+    private static List<int> FindSyncResultLines(string[] lines, int start, int maxLines = 30)
     {
         var offenders = new List<int>();
-        string[] window = MethodWindow(lines, start);
+        string[] window = MethodWindow(lines, start, maxLines);
         for (int k = 0; k < window.Length; k++)
         {
             string code = StripLineComment(window[k]);
@@ -232,7 +283,7 @@ public sealed class ToolDispatcherSyncResultRule
     }
 
     /// <summary>
-    ///     The graded file is readable and contains the graded method. A gate
+    ///     The graded file is readable and contains both graded methods. A gate
     ///     that cannot see its subject reports a healthy zero.
     /// </summary>
     [Test]
@@ -246,7 +297,11 @@ public sealed class ToolDispatcherSyncResultRule
             .Because("ToolDispatcher.cs must be readable from the checkout");
 
         await Assert.That(source).Contains("AwaitOneWithAbandonAsync")
-            .Because("AwaitOneWithAbandonAsync is the one abandon path this rule grades; "
+            .Because("AwaitOneWithAbandonAsync is one abandon path this rule grades; "
+                   + "if it moved, this rule must be re-pointed, not silently weakened");
+
+        await Assert.That(source).Contains("AwaitAllWithAbandonAsync")
+            .Because("AwaitAllWithAbandonAsync is the other abandon path this rule grades; "
                    + "if it moved, this rule must be re-pointed, not silently weakened");
     }
 
@@ -308,9 +363,61 @@ public sealed class ToolDispatcherSyncResultRule
     }
 
     /// <summary>
-    ///     The planted controls — both pre-fix takes and the legal neighbours —
+    ///     #1099 fix, pinned: no blocking <c>.Result</c> read survives in the
+    ///     AwaitAll abandon path. Every guarded branch awaits instead, so
+    ///     re-introducing either pre-fix line fails here.
+    /// </summary>
+    [Test]
+    public async Task AwaitAll_CarriesNoSyncResult()
+    {
+        await Assert.That(RepoPaths.RepoRoot).IsNotNull()
+            .Because("the rule reads ToolDispatcher.cs from the checkout");
+
+        string[] lines = DispatcherSource().Split('\n');
+        int start = FindAwaitAll(lines);
+        await Assert.That(start).IsGreaterThanOrEqualTo(0)
+            .Because("AwaitAllWithAbandonAsync must exist in ToolDispatcher.cs; if it "
+                   + "was renamed, this rule must be re-pointed");
+
+        List<int> offenders = FindSyncResultLines(lines, start, 40);
+
+        await Assert.That(offenders).IsEmpty()
+            .Because("a blocking .Result read in AwaitAllWithAbandonAsync is sync-over-async "
+                   + "(#1099): the guarded branches must await the finished batch instead. "
+                   + "Offending 1-based lines: " + string.Join(", ", offenders));
+    }
+
+    /// <summary>
+    ///     The AwaitAll guarded branches carry the async read: dropping the
+    ///     branches (or swapping in a different sink) must not silently
+    ///     satisfy the rule.
+    /// </summary>
+    [Test]
+    public async Task AwaitAll_PinsAsyncRead()
+    {
+        await Assert.That(RepoPaths.RepoRoot).IsNotNull()
+            .Because("the rule reads ToolDispatcher.cs from the checkout");
+
+        string[] lines = DispatcherSource().Split('\n');
+        int start = FindAwaitAll(lines);
+        await Assert.That(start).IsGreaterThanOrEqualTo(0)
+            .Because("AwaitAllWithAbandonAsync must exist in ToolDispatcher.cs; if it "
+                   + "was reworked, this rule must be re-pointed");
+
+        string window = string.Join("\n", MethodWindow(lines, start, 40).Select(StripLineComment));
+        await Assert.That(window).Contains("await all.ConfigureAwait(false)")
+            .Because("the boundary fast-path must read the finished batch with "
+                   + "await all.ConfigureAwait(false), not a blocking take (#1099)");
+
+        await Assert.That(window).Contains("await tasks[i].ConfigureAwait(false)")
+            .Because("the per-call branch must read the finished call with "
+                   + "await tasks[i].ConfigureAwait(false), not a blocking take (#1099)");
+    }
+
+    /// <summary>
+    ///     The planted controls — all four pre-fix takes and the legal neighbours —
     ///     drive the REAL parser: blocking takes reported under their sub-id,
-    ///     the async read, the comment and the sibling method silent.
+    ///     the async reads, the comment and the fixed sibling silent.
     /// </summary>
     [Test]
     public async Task Detector_ControlsDriveTheRealParser()
@@ -319,7 +426,7 @@ public sealed class ToolDispatcherSyncResultRule
 
         await Assert.That(failures).IsEmpty()
             .Because(
-                "the five planted controls must agree with the matcher cases below through "
+                "the seven planted controls must agree with the matcher cases below through "
                 + "the rule's own parser — otherwise the rule guards nothing, or forbids "
                 + "the fix. " + string.Join("; ", failures));
     }
@@ -344,10 +451,9 @@ public sealed class ToolDispatcherSyncResultRule
     }
 
     /// <summary>
-    ///     Non-vacuity: the SAME matcher must fire on both planted pre-fix takes,
-    ///     stay silent on the async read and on comment prose, and never reach the
-    ///     sibling method's takes. This is what separates "the guard is green"
-    ///     from "the guard is looking at nothing".
+    ///     Non-vacuity: the SAME matcher must fire on all four planted pre-fix takes,
+    ///     stay silent on both async reads and on comment prose. This is what
+    ///     separates "the guard is green" from "the guard is looking at nothing".
     /// </summary>
     [Test]
     public async Task Matcher_FiresOnBlockingTakes_AndStaysSilentOtherwise()
@@ -402,17 +508,39 @@ public sealed class ToolDispatcherSyncResultRule
         [
             "    private async Task<ToolResultEntry[]> AwaitAllWithAbandonAsync(Task<ToolResultEntry>[] tasks)",
             "    {",
-            "        resolved[i] = tasks[i].Result;",
+            "        resolved[i] = await tasks[i].ConfigureAwait(false);",
             "    }",
         ];
-        await Assert.That(FindMethod(siblingMethod)).IsEqualTo(-1)
-            .Because("the AwaitAll sibling is a documented remainder graded elsewhere — "
-                   + "this rule's window must not reach it");
+        await Assert.That(FindSyncResultLines(siblingMethod, FindAwaitAll(siblingMethod)).Count).IsEqualTo(0)
+            .Because("the fixed sibling shape is the fix and must not trip the guard, or the guard is noise");
+
+        string[] blockingTakeAll =
+        [
+            "    private async Task<ToolResultEntry[]> AwaitAllWithAbandonAsync(",
+            "        Task<ToolResultEntry>[] tasks)",
+            "    {",
+            "        if (all.IsCompletedSuccessfully)",
+            "            return all.Result;",
+            "    }",
+        ];
+        await Assert.That(FindSyncResultLines(blockingTakeAll, FindAwaitAll(blockingTakeAll)).Count).IsGreaterThan(0)
+            .Because("the AwaitAll boundary pre-fix shape must be detected too — it is the third site the fix converted");
+
+        string[] blockingTakeAllTernary =
+        [
+            "    private async Task<ToolResultEntry[]> AwaitAllWithAbandonAsync(Task<ToolResultEntry>[] tasks)",
+            "    {",
+            "        resolved[i] = tasks[i].IsCompletedSuccessfully",
+            "            ? tasks[i].Result",
+            "            : await AbandonLeftoverAsync(tasks[i]);}",
+        ];
+        await Assert.That(FindSyncResultLines(blockingTakeAllTernary, FindAwaitAll(blockingTakeAllTernary)).Count).IsGreaterThan(0)
+            .Because("the AwaitAll per-call pre-fix shape must be detected too — it is the fourth site the fix converted");
     }
 
     /// <summary>
-    ///     The rule carries no tolerated rows: every blocking take in this abandon
-    ///     path is the defect #1099 reported, so there is nothing to excuse.
+    ///     The rule carries no tolerated rows: every blocking take in these abandon
+    ///     paths is the defect #1099 reported, so there is nothing to excuse.
     /// </summary>
     [Test]
     public async Task Baseline_Rows_AllHaveReasons()

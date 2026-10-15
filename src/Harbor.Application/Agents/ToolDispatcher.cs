@@ -386,7 +386,9 @@ public sealed class ToolDispatcher(
         {
             // The stop landed after the last result: per-call Abandoned marking
             // already happened inside ExecuteWithRetryAsync; carry the batch.
-            return all.Result;
+            // #1099: async read — IsCompletedSuccessfully guards the wait,
+            // not a blocking take.
+            return await all.ConfigureAwait(false);
         }
 
         ToolDispatcherLog.StopAcceptedAwaitingMany(logger, AcceptedStopReason, count, _abandonGrace.TotalMilliseconds);
@@ -396,7 +398,7 @@ public sealed class ToolDispatcher(
         for (int i = 0; i < count; i++)
         {
             resolved[i] = tasks[i].IsCompletedSuccessfully
-                ? tasks[i].Result
+                ? await tasks[i].ConfigureAwait(false)
                 : await AbandonLeftoverAsync(tasks[i], toolCalls[i]).ConfigureAwait(false);
         }
 
