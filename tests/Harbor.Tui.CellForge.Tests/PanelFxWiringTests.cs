@@ -68,6 +68,40 @@ public class PanelFxWiringTests
     }
 
     [Test]
+    public async Task Replace_DropsOldEntranceTracking()
+    {
+        // #1110 pool-leak row: _entranceStarts is keyed by block reference, so
+        // a Replace that never removes the old key pins the dead block and
+        // grows without bound (one entry per streamed retry/replace).
+        var tl = new VirtualizedChatTimeline();
+        tl.EnableEntranceFx();
+
+        _ = PaintTimeline(tl, 40, 6, tick: 0);   // first frame → hasPaintedFrame
+        var live = new UserBlock("streaming...");
+        tl.Append(live);
+        await Assert.That(tl.EntranceTrackedCountForTests).IsEqualTo(1);
+
+        tl.Replace(live, new UserBlock("done"));
+        await Assert.That(tl.EntranceTrackedCountForTests).IsEqualTo(0);
+    }
+
+    [Test]
+    public async Task ReplaceLast_DropsOldEntranceTracking()
+    {
+        // Same leak through the tail-swap path StreamCoalescer uses to commit
+        // the live slot (StartStream retry swap / FinishStreamNow).
+        var tl = new VirtualizedChatTimeline();
+        tl.EnableEntranceFx();
+
+        _ = PaintTimeline(tl, 40, 6, tick: 0);   // first frame → hasPaintedFrame
+        tl.Append(new UserBlock("streaming..."));
+        await Assert.That(tl.EntranceTrackedCountForTests).IsEqualTo(1);
+
+        tl.ReplaceLast(new UserBlock("done"));
+        await Assert.That(tl.EntranceTrackedCountForTests).IsEqualTo(0);
+    }
+
+    [Test]
     public async Task WarnPulse_OscillatesHeaderTone_AndClearsOnDecision()
     {
         var gate = new ApprovalGateView("bash", "ls -la /tmp");

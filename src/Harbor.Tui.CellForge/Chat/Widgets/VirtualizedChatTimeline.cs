@@ -35,6 +35,8 @@ public sealed class VirtualizedChatTimeline
     /// </summary>
     private readonly ScrollableViewport _viewport = new();
     private readonly Dictionary<IChatBlock, long> _entranceStarts = new();
+    /// <summary>Entrance-tracked block count, for leak assertions in tests.</summary>
+    internal int EntranceTrackedCountForTests => _entranceStarts.Count;
     private readonly Rect[] _fxDamage = new Rect[MaxFxDamage];
     private readonly GlowRegion[] _glowRegions = new GlowRegion[MaxFxDamage];
 
@@ -285,6 +287,7 @@ public sealed class VirtualizedChatTimeline
         var old = _cache.BlockAt(_cache.Count - 1);
         _budgetUsed += Math.Max(0, block.BudgetBytes) - Math.Max(0, old.BudgetBytes);
         _cache.Replace(_cache.Count - 1, block);
+        _ = _entranceStarts.Remove(old);
         _dirtyGeometry = true;
         _broadDamage = true;
         MarkLastDirty();
@@ -304,6 +307,7 @@ public sealed class VirtualizedChatTimeline
             {
                 _budgetUsed += Math.Max(0, replacement.BudgetBytes) - Math.Max(0, existing.BudgetBytes);
                 _cache.Replace(i, replacement);
+                _ = _entranceStarts.Remove(existing);
                 _dirtyGeometry = true;
                 _broadDamage = true;
                 _cache.MarkHeightsDirty(i);
