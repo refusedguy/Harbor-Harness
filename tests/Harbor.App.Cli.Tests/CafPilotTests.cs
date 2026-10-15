@@ -65,6 +65,19 @@ public class CafPilotTests
     }
 
     [Test]
+    public async Task Storage_ExtraPositional_MatchesHelpVerbsByteForByte()
+    {
+        // CAF-F (#1288): the manual dispatch ignored the tail
+        // ("storage" => HelpVerbs.PrintStorageOptions()), so an extra
+        // positional must still print the backends (exit 0) instead of
+        // failing closed at the parser (exit 1).
+        string direct = CaptureOut(() => HelpVerbs.PrintStorageOptions());
+        var (exit, viaCaf) = await RunCafAsync("storage", ["bogus-extra"]);
+        await Assert.That(exit).IsEqualTo(0);
+        await Assert.That(viaCaf).IsEqualTo(direct);
+    }
+
+    [Test]
     public async Task Storage_Help_ExitsZeroWithUsage()
     {
         var (exit, output) = await RunCafAsync("storage", ["--help"]);
