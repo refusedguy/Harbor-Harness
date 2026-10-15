@@ -1,4 +1,5 @@
 using System.Text;
+using Harbor.Tui.CellForge.Generic.Widgets;
 using Harbor.Tui.CellForge.Rendering;
 
 namespace Harbor.Tui.CellForge.Widgets;
@@ -13,20 +14,37 @@ namespace Harbor.Tui.CellForge.Widgets;
 /// special case). Scroll state lives in <see cref="ScrollableViewport"/>; the
 /// host syncs it to the painted rows via <see cref="SyncViewport"/> (the same
 /// Configure+EnsureVisible pattern the palette uses since [PRIM3c]) and paints
-/// a <see cref="Scrollbar"/> overlay while overflowing. UI-only state —
-/// rendering stays in <see cref="DialogOverlay"/>.
+/// a <see cref="Scrollbar"/> overlay while overflowing.
+///
+/// Selection + scroll live outside the widget (#1158, ratatui
+/// <c>StatefulWidget</c> analog, same recipe as <c>CommandPaletteView</c>
+/// #1407): <see cref="State"/> survives frames and owns the option axis,
+/// while this type owns content (options) and geometry. <see
+/// cref="Paint(ScreenBuffer, Rect, GenericNavState)"/> renders with any
+/// count-compatible state, so two lists can share one. The legacy selection
+/// API + <see cref="Paint(ScreenBuffer, Rect)"/> path is unchanged.
+/// UI-only state — the overlay seats the rows in the dialog box.
 /// </summary>
-public sealed class DialogSelectList
+public sealed class DialogSelectList : IStatefulGenericWidget<GenericNavState>
 {
     private readonly List<string> _values = new();
     private ListPromptState<string> _state = ListPromptState<string>.FromValues([]);
     private readonly ScrollableViewport _viewport = new();
+    private readonly GenericNavState _navState = new();
 
     /// <summary>Options in host order (defensive copy).</summary>
     public IReadOnlyList<string> Items => _values;
 
     /// <summary>Number of options.</summary>
     public int Count => _values.Count;
+
+    /// <summary>
+    /// External navigation state (selection + scroll), count-synced with the
+    /// options on every <see cref="SetItems"/>. Mutating it directly (e.g. <see
+    /// cref="GenericNavState.SelectNext"/>) drives the <see
+    /// cref="Paint(ScreenBuffer, Rect, GenericNavState)"/> overload.
+    /// </summary>
+    public GenericNavState State => _navState;
 
     /// <summary>Selected index (clamped; -1 when empty).</summary>
     public int SelectedIndex => _state.Index;
@@ -55,6 +73,7 @@ public sealed class DialogSelectList
         _state = ListPromptState<string>.FromValues(_values);
         _viewport.SetTotal(_values.Count);
         _viewport.SetOffset(0);
+        _navState.SetContent(_values.Count);
     }
 
     /// <summary>Selects an index (clamped). No-op when empty.</summary>
@@ -103,6 +122,85 @@ public sealed class DialogSelectList
         else if (target >= _viewport.Offset + _viewport.ViewportH)
         {
             _viewport.SetOffset(target - _viewport.ViewportH + 1);
+        }
+    }
+
+    /// <summary>
+    /// Paints the option rows into <paramref name="rect"/> (one row per
+    /// option, "› "/"  " marker, "…" ellipsis at <see cref="Rect.Width"/>).
+    /// While overflowing, the scrollbar overlay paints on the border column
+    /// just past <paramref name="rect"/> (the overlay seats the rows one
+    /// column inside the box, as before).
+    /// </summary>
+    /// <remarks>Legacy path: highlights the widget-local selection, scrolled by the widget-local viewport.</remarks>
+    public void Paint(ScreenBuffer buffer, Rect rect) => PaintCore(buffer, rect, null);
+
+    /// <summary>
+    /// Paints with an external navigation state (#1158): when <paramref
+    /// name="navState"/> is count-compatible (<c>Count == option count</c>)
+    /// the highlight and scroll come from it, so one state object can drive
+    /// two lists; otherwise falls back to the widget-local selection. The
+    /// option axis stays widget-local.
+    /// </summary>
+    public void Paint(ScreenBuffer buffer, Rect rect, GenericNavState navState)
+    {
+        ArgumentNullException.ThrowIfNull(navState);
+        PaintCore(buffer, rect, navState);
+    }
+
+    private void PaintCore(ScreenBuffer buffer, Rect rect, GenericNavState? navState)
+    {
+        if (rect.Width <= 0 || rect.Height <= 0 || _values.Count == 0)
+        {
+            return;
+        }
+        int selIdx;
+        int firstVis;
+        bool useExternal;
+        if (navState is not null && navState.Count == _values.Count)
+        {
+            navState.Sync(rect.Height);
+            selIdx = navState.Selected;
+            firstVis = navState.Offset;
+            useExternal = true;
+        }
+        else
+        {
+            SyncViewport(rect.Height);
+            selIdx = _state.Index;
+            firstVis = (int)_viewport.Offset;
+            useExternal = false;
+        }
+
+        var selectedStyle = new CellStyle(ChatPalette.Accent, attrs: StyleAttr.Bold);
+        int painted = 0;
+        for (int i = firstVis; i < _values.Count && painted < rect.Height; i++)
+        {
+            bool isPicked = i == selIdx;
+            string text = (isPicked ? "› " : "  ") + _values[i];
+            if (text.Length > rect.Width)
+            {
+                text = text[..Math.Max(0, rect.Width - 1)] + "…";
+            }
+            buffer.SetText(rect.X, rect.Y + painted, text, isPicked ? selectedStyle : ChatPalette.ToolArgs);
+            painted++;
+        }
+        if (_values.Count > rect.Height)
+        {
+            // Scrollbar overlay on the last column of the list rows only —
+            // hidden (buffer untouched) when the content fits. The stateful
+            // path reports the same triple without touching Viewport, so a
+            // stateful paint leaves the legacy scroll alone.
+            if (useExternal)
+            {
+                _ = Scrollbar.TryPaint(
+                    buffer, new Rect(rect.Right, rect.Y, 1, rect.Height),
+                    _values.Count, firstVis, rect.Height);
+            }
+            else
+            {
+                _ = Scrollbar.TryPaint(buffer, new Rect(rect.Right, rect.Y, 1, rect.Height), _viewport);
+            }
         }
     }
 }

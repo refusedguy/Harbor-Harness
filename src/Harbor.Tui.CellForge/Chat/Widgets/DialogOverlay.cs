@@ -1086,25 +1086,9 @@ public sealed class DialogOverlay
         {
             return;
         }
-        _select.SyncViewport(available);
-        int selected = _select.SelectedIndex;
-        var selectedStyle = new CellStyle(ChatPalette.Accent, attrs: StyleAttr.Bold);
-        int first = (int)_select.Viewport.Offset;
-        int painted = 0;
-        for (int i = first; i < _select.Count && painted < available; i++)
-        {
-            string row = (i == selected ? "› " : "  ") + _select.Items[i];
-            if (row.Length > innerW)
-            {
-                row = row[..Math.Max(0, innerW - 1)] + "…";
-            }
-            buffer.SetText(x, y + painted, row, i == selected ? selectedStyle : ChatPalette.ToolArgs);
-            painted++;
-        }
-        if (_select.Count > available)
-        {
-            _ = Scrollbar.TryPaint(buffer, new Rect(box.Right - 1, y, 1, available), _select.Viewport);
-        }
+        // Row painting lives in the widget (#1158); the legacy selection API
+        // keeps this call byte-identical to the inline version it replaces.
+        _select.Paint(buffer, new Rect(x, y, innerW, available));
     }
 
     private void PaintRadioRow(ScreenBuffer buffer, int x, int y, int innerW, Rect box)
