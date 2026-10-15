@@ -67,6 +67,18 @@ internal sealed class TurnRunner(
         RateLimitBaseDelay: TimeSpan.FromSeconds(5),
         MaxRetryAfter: TimeSpan.FromMinutes(5));
 
+    // #1100: the per-turn tool table is stable while the resolved set is.
+    // FrozenToolView already memoizes ResolveTools per ruleset (repeat calls
+    // return the same array instance), but BuildToolDefinitions rebuilt the
+    // ToolDefinition[] every turn — N entries per turn for an identical table.
+    // The built array is reused while the resolved reference is unchanged; a
+    // new reference (re-freeze, ruleset swap) rebuilds once. Guarded by a
+    // lock: TurnRunner is held by the singleton AgentLoop, so bare fields
+    // would be the §OOP-001 shape (unsynchronised mutable state in shared code).
+    private readonly object _toolTableGate = new();
+    private IReadOnlyList<ToolDescriptor>? _lastResolvedTools;
+    private ToolDefinition[]? _lastToolDefinitions;
+
     /// <summary>
     ///     Resolve the provider id, LLM client and concrete model for a run.
     ///     Errors are routed structurally by a flat Bind chain (parse → client →
@@ -164,8 +176,9 @@ internal sealed class TurnRunner(
         // failure, the full history otherwise.
         var llmMessages = messageConverter.ToLlmMessages(turnMessages);
 
-        // 5. Build request — size the ToolDefinition array directly instead of LINQ Select().ToList().
-        var toolDefs = ToolTableBuilder.BuildToolDefinitions(resolvedTools);
+        // 5. Build request — the ToolDefinition array is built once per resolved
+        // set and shared across turns (#1100); a new set rebuilds once.
+        var toolDefs = GetOrBuildToolDefinitions(resolvedTools);
         // Ф6/A1: the system prompt is stable across turns (tools/agent rarely change
         // mid-run and A2 memoizes rebuilds), so every request is a prefix-cache
         // candidate — flag it Ephemeral for providers that support cache_control.
@@ -713,6 +726,41 @@ internal sealed class TurnRunner(
             }
         }
         return null;
+    }
+
+    /// <summary>
+    ///     The turn's <see cref="ToolDefinition" /> table, rebuilt only when the
+    ///     resolved set moves (#1100). Repeat turns with the same resolved
+    ///     reference (the frozen memoised array for an unchanged ruleset) share
+    ///     one built array instead of paying N entries per turn.
+    /// </summary>
+    /// <remarks>
+    ///     Check-then-build runs outside the gate like
+    ///     <c>FrozenToolView.Resolve</c>: holding a lock across N entries would
+    ///     serialise concurrent first-time builds. A lost race only rebuilds —
+    ///     the stored pair is always written together under the gate, so it can
+    ///     never mix generations. The returned array is shared across turns and
+    ///     must be treated as read-only (providers serialise it; nothing mutates it).
+    /// </remarks>
+    private ToolDefinition[] GetOrBuildToolDefinitions(IReadOnlyList<ToolDescriptor> resolvedTools)
+    {
+        lock (_toolTableGate)
+        {
+            if (_lastToolDefinitions is not null && ReferenceEquals(_lastResolvedTools, resolvedTools))
+            {
+                return _lastToolDefinitions;
+            }
+        }
+
+        ToolDefinition[] built = ToolTableBuilder.BuildToolDefinitions(resolvedTools);
+
+        lock (_toolTableGate)
+        {
+            _lastResolvedTools = resolvedTools;
+            _lastToolDefinitions = built;
+        }
+
+        return built;
     }
 }
 
