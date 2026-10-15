@@ -258,4 +258,49 @@ public class ChangeReportTests
         await Assert.That(ChangeReport.ExitCheckFailed).IsEqualTo(1);
         await Assert.That(ChangeReport.ExitCannotProduce).IsEqualTo(2);
     }
+
+    [Test]
+    public async Task PlainText_OverlongWord_SplitsWithinWidth()
+    {
+        // #1097: pins the AppendOverlongWord branch (a single token wider
+        // than TextWidth) that the pooled rewrite must preserve byte-for-byte.
+        string longToken = new string('x', 90);
+        ChangeReport report = ChangeReport.Create(
+            "run-1", Base, Head,
+            [ChangedPathEntry.Create(longToken, "M")],
+            [], 0, 600, 50, false);
+        string text = report.ToPlainText();
+        await Assert.That(text.Contains(longToken[..20])).IsTrue();
+        string[] lines = text.Split('\n');
+        for (int i = 0; i < lines.Length; i++)
+            await Assert.That(lines[i].Length <= ChangeReport.TextWidth).IsTrue();
+    }
+
+    [Test]
+    public async Task ChangeReport_UsesPooledBuilders_RelativeGate()
+    {
+        // #1097 (relative gate, one site): ChangeReport.cs must build its
+        // plain-text report from StringBuilderPool — zero `new StringBuilder`
+        // in this file. Scoped to this file on purpose: the tree still has
+        // cold-path builders (TableBlock, OnboardingFlow, ...), each pooled
+        // on its own issue slice rather than under one absolute ban.
+        string path = FindRepoFile(Path.Combine("src", "Harbor.Application", "Sessions", "ChangeReport.cs"));
+        string source = await File.ReadAllTextAsync(path);
+        await Assert.That(source.Contains("StringBuilderPool.Rent")).IsTrue();
+        await Assert.That(source.Contains("new StringBuilder")).IsFalse();
+    }
+
+    /// <summary>Locate a repo-relative source file by walking up from the test assembly directory.</summary>
+    private static string FindRepoFile(string relativePath)
+    {
+        string? dir = AppContext.BaseDirectory;
+        while (dir is not null)
+        {
+            string candidate = Path.Combine(dir, relativePath);
+            if (File.Exists(candidate))
+                return candidate;
+            dir = Directory.GetParent(dir)?.FullName;
+        }
+        throw new FileNotFoundException($"Repo file not found: {relativePath}");
+    }
 }

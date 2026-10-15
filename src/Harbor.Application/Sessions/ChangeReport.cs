@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text;
+using Harbor.Abstractions.Extensions;
 
 namespace Harbor.Application.Sessions;
 
@@ -566,14 +567,18 @@ public sealed record ChangeReport
     /// </summary>
     public string ToPlainText()
     {
-        var sb = new StringBuilder();
+        // §PERF-006 (#1097): per-call builder rented from
+        // StringBuilderPool instead of allocated. Safe: synchronous
+        // composition on the cold report-render path, materialized
+        // via ToString() before the `using` returns it.
+        using var sb = StringBuilderPool.Rent(1024);
         var runLines = new List<string>(3) { RunId, $"base {BaseRevision}", $"head {HeadRevision}" };
-        AppendBlock(sb, "Run", runLines.Count, runLines);
+        AppendBlock(sb.Builder, "Run", runLines.Count, runLines);
 
         var changedLines = new List<string>(Changed.Count);
         for (int i = 0; i < Changed.Count; i++)
             changedLines.Add($"{Changed[i].Status} {Changed[i].Path}");
-        AppendBlock(sb, "Changed", Changed.Count, changedLines);
+        AppendBlock(sb.Builder, "Changed", Changed.Count, changedLines);
 
         var verifiedLines = new List<string>();
         for (int i = 0; i < Verified.Count; i++)
@@ -584,19 +589,19 @@ public sealed record ChangeReport
                 $"    exit {v.ExitCode.ToString(CultureInfo.InvariantCulture)}, " +
                 $"rev {v.Revision}, env [{string.Join(", ", v.EnvKeys)}]");
         }
-        AppendBlock(sb, "Verified", Verified.Count, verifiedLines);
+        AppendBlock(sb.Builder, "Verified", Verified.Count, verifiedLines);
 
         var notVerifiedLines = new List<string>(NotVerified.Count);
         for (int i = 0; i < NotVerified.Count; i++)
             notVerifiedLines.Add($"{NotVerified[i].What}: {NotVerified[i].Reason}");
-        AppendBlock(sb, "NotVerified", NotVerified.Count, notVerifiedLines);
+        AppendBlock(sb.Builder, "NotVerified", NotVerified.Count, notVerifiedLines);
 
         AppendBlock(
-            sb, "Limits", 2,
+            sb.Builder, "Limits", 2,
             [$"timeout {TimeoutSeconds.ToString(CultureInfo.InvariantCulture)}s",
              $"max steps {MaxSteps.ToString(CultureInfo.InvariantCulture)}"]);
 
-        AppendBlock(sb, "KnownRisks", KnownRisks.Count, KnownRisks);
+        AppendBlock(sb.Builder, "KnownRisks", KnownRisks.Count, KnownRisks);
         return sb.ToString();
     }
 
@@ -626,7 +631,8 @@ public sealed record ChangeReport
             sb.AppendLine(firstIndent + "(none)");
             return;
         }
-        var current = new StringBuilder(firstIndent, TextWidth + 16);
+        using var current = StringBuilderPool.Rent(TextWidth + 16);
+        current.Builder.Append(firstIndent);
         bool fresh = true;
         for (int i = 0; i < words.Length; i++)
         {
@@ -636,23 +642,23 @@ public sealed record ChangeReport
                 if (!fresh)
                 {
                     sb.AppendLine(current.ToString());
-                    current.Clear().Append(contIndent);
+                    current.Builder.Clear().Append(contIndent);
                 }
                 AppendOverlongWord(sb, word, current.ToString(), contIndent);
-                current.Clear().Append(contIndent);
+                current.Builder.Clear().Append(contIndent);
                 fresh = true;
                 continue;
             }
             int need = word.Length + (fresh ? 0 : 1);
-            if (current.Length + need > TextWidth)
+            if (current.Builder.Length + need > TextWidth)
             {
                 sb.AppendLine(current.ToString());
-                current.Clear().Append(contIndent);
+                current.Builder.Clear().Append(contIndent);
                 fresh = true;
             }
             if (!fresh)
-                current.Append(' ');
-            current.Append(word);
+                current.Builder.Append(' ');
+            current.Builder.Append(word);
             fresh = false;
         }
         if (!fresh)
