@@ -13,7 +13,7 @@
 // So this is a ratchet. It freezes the shape exactly as measured and fires when
 // the shape gets WORSE:
 //
-//   * an eighth member on the aggregate,
+//   * a ninth member on the aggregate,
 //   * an eighteenth file that holds the aggregate,
 //   * a consumer that starts calling a member it did not call before.
 //
@@ -24,7 +24,7 @@
 //
 // THE SPLIT IS STILL OWED. THIS FILE DOES NOT DO IT AND IS NOT TRYING TO.
 // -----------------------------------------------------------------------
-// Seven members, and they fall into four groups that no two consumers share.
+// Eight members, and they fall into four groups that no two consumers share.
 // The target is four disjoint roles, each spelled out below with its PROVEN
 // consumers — consumers taken from the measurement, not invented for symmetry.
 // TargetSlices carries them as data, and the two tests at the bottom check that
@@ -34,7 +34,9 @@
 //   ITokenEstimator        Estimate, EstimateMessage, EstimateTokens
 //                          -> CompactionService, CompactionPolicy, TurnRunner,
 //                             CompactionBehavior
-//   IUsageRecorder         RecordAppendedMessage, RecordTurnUsage
+//   IUsageRecorder         RecordAppendedMessage, RecordTurnUsage,
+//                          RecordUpdatedMessage (#1106 staleness: an in-place
+//                          content rewrite drops the running estimate)
 //                          -> TurnRunner, SteeringDrainBehavior, BackgroundDrain
 //   ICompactionHeuristic   ShouldCompact
 //                          -> CompactionBehavior, CompactionService (#1106: the
@@ -225,7 +227,7 @@ public sealed class TokenTrackingRatchet
     private const string AggregateName = "ITokenTracker";
 
     /// <summary>How many members it declared when this table was measured.</summary>
-    private const int MeasuredMemberCount = 7;
+    private const int MeasuredMemberCount = 8;
 
     /// <summary>How many product files held it when this table was measured.</summary>
     private const int MeasuredHolderCount = 17;
@@ -247,7 +249,7 @@ public sealed class TokenTrackingRatchet
 
     /// <summary>
     ///     Every member <c>ITokenTracker</c> declared when measured, ordinal-sorted. This
-    ///     list is also the vocabulary of the per-consumer call scan, so an eighth member
+    ///     list is also the vocabulary of the per-consumer call scan, so a ninth member
     ///     is watched for in consumer code the moment the interface test rejects it.
     /// </summary>
     private static readonly string[] BaselineMembers =
@@ -258,6 +260,7 @@ public sealed class TokenTrackingRatchet
         "GetStats",
         "RecordAppendedMessage",
         "RecordTurnUsage",
+        "RecordUpdatedMessage",
         "ShouldCompact",
     ];
 
@@ -343,7 +346,7 @@ public sealed class TokenTrackingRatchet
             "src/Harbor.Application/Sessions/CompactionPolicy.cs",
             "src/Harbor.Application/Sessions/CompactionService.cs",
         ]),
-        new("IUsageRecorder", ["RecordAppendedMessage", "RecordTurnUsage"],
+        new("IUsageRecorder", ["RecordAppendedMessage", "RecordTurnUsage", "RecordUpdatedMessage"],
         [
             "src/Harbor.Application/Agents/BackgroundDrain.cs",
             "src/Harbor.Application/Agents/Pipeline/SteeringDrainBehavior.cs",
@@ -384,13 +387,13 @@ public sealed class TokenTrackingRatchet
     // =====================================================================
 
     /// <summary>
-    ///     The aggregate still declares exactly the seven measured members. An eighth is
+    ///     The aggregate still declares exactly the eight measured members. A ninth is
     ///     the regression this ratchet exists to stop: it is a member every implementor and
     ///     every test double must now satisfy, added to an interface that is already too
     ///     wide.
     /// </summary>
     [Test]
-    public async Task Ratchet_AggregateDeclaresNoMoreThanTheSevenMeasuredMembers()
+    public async Task Ratchet_AggregateDeclaresNoMoreThanTheEightMeasuredMembers()
     {
         await Assert.That(Resolve(AggregateName)).IsNotNull()
             .Because($"{AggregateFullName} must exist for this ratchet to measure anything. "
@@ -408,7 +411,7 @@ public sealed class TokenTrackingRatchet
         RatchetDelta delta = CompareSets("member declared on the aggregate", BaselineMembers, measured);
 
         await Assert.That(delta.Regressions).IsEmpty()
-            .Because($"an eighth member on {AggregateName} is the regression: every implementor, "
+            .Because($"a ninth member on {AggregateName} is the regression: every implementor, "
                    + "every test double and every consumer's declared type grows with it, and none "
                    + "of the seven current consumers asked for it. Put the new capability on one of "
                    + "the four roles in TargetSlices instead. Added: "
@@ -445,7 +448,7 @@ public sealed class TokenTrackingRatchet
 
         await Assert.That(delta.Regressions).IsEmpty()
             .Because("a new file holds the aggregate. That is the split running backwards: a leaf "
-                   + "consumer declaring the wide type has all seven members in its constructor "
+                   + "consumer declaring the wide type has all eight members in its constructor "
                    + "signature whatever its body touches, and re-imposes them on every implementor "
                    + "and test double. Declare the role it uses — ITokenEstimator to count, "
                    + "IUsageRecorder to record, ICompactionHeuristic to decide, IUsageStats to read. "
@@ -498,7 +501,7 @@ public sealed class TokenTrackingRatchet
     public async Task Plan_TheFourTargetSlicesAreDisjointAndCoverTheSurface()
     {
         await Assert.That(TargetSlices.Length).IsEqualTo(4)
-            .Because("the split of #471 is four roles, not three and not five: the seven members "
+            .Because("the split of #471 is four roles, not three and not five: the eight members "
                    + "form four groups that no two consumers share, which is what the ISP "
                    + "violation is");
 
@@ -618,10 +621,10 @@ public sealed class TokenTrackingRatchet
     }
 
     /// <summary>
-    ///     Control: an eighth member is reported as a regression.
+    ///     Control: a ninth member is reported as a regression.
     /// </summary>
     [Test]
-    public async Task Control_AnEighthMemberIsReportedAsARegression()
+    public async Task Control_ANinthMemberIsReportedAsARegression()
     {
         var degraded = new List<string>(BaselineMembers) { "ResetUsage" };
 
@@ -631,7 +634,7 @@ public sealed class TokenTrackingRatchet
             .Because("this is the claim that the ratchet above is load-bearing, made checkable: a "
                    + "member added to the aggregate must come out of the SAME comparator as a "
                    + "regression. If this fails, the comparator no longer reports growth and "
-                   + "Ratchet_AggregateDeclaresNoMoreThanTheSevenMeasuredMembers is green for the "
+                   + "Ratchet_AggregateDeclaresNoMoreThanTheEightMeasuredMembers is green for the "
                    + "wrong reason");
 
         await Assert.That(delta.Improvements).IsEmpty()

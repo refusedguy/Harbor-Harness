@@ -21,6 +21,24 @@ public interface ITokenTracker
     {
     }
 
+    /// <summary>
+    ///     Records that a message already in the session history was replaced in
+    ///     place (same history length, different content — what
+    ///     <see cref="ISessionStore.UpdateMessageAsync" /> does: it rewrites the
+    ///     entry for the id) so the tracker stops answering from the running
+    ///     estimate built for the old content. The next
+    ///     <see cref="ShouldCompact" /> call rescans once and O(1) checks resume.
+    /// </summary>
+    /// <remarks>
+    ///     Default implementation is a no-op so existing implementors keep compiling;
+    ///     they simply keep whatever staleness behavior their
+    ///     <see cref="ShouldCompact" /> already has.
+    /// </remarks>
+    /// <param name="message">The message that replaced the stored one (same id).</param>
+    void RecordUpdatedMessage(AgentMessage message)
+    {
+    }
+
     int Estimate(string text);
     int EstimateMessage(AgentMessage message);
     int EstimateTokens(IReadOnlyList<AgentMessage> messages);

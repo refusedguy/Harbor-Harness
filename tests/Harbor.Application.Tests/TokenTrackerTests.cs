@@ -89,6 +89,69 @@ public class TokenTrackerTests
         await Assert.That(tracker.ShouldCompact(pruned, Model(tailEstimate + 16_383))).IsTrue();
     }
 
+    /// <summary>
+    ///     #1106 staleness: an in-place content rewrite keeps the history length,
+    ///     so the Count-keyed fast path answers with the pre-edit estimate until
+    ///     the rewrite is reported. Recording the update forces exactly one
+    ///     rescan, after which O(1) checks resume on the fresh entry.
+    /// </summary>
+    [Test]
+    public async Task RecordUpdatedMessage_InvalidatesStaleEstimate()
+    {
+        var tracker = new TokenTracker();
+        var first = Msg("s1", new string('a', 100));
+        var second = Msg("s1", new string('b', 100));
+        tracker.RecordAppendedMessage(first);
+        tracker.RecordAppendedMessage(second);
+        var history = new List<AgentMessage> { first, second };
+
+        int smallEstimate = tracker.EstimateTokens(history);
+        // Window sized so the small history sits exactly on the threshold:
+        // estimated == window - reserve → NOT above → false.
+        var loose = Model(smallEstimate + 16_384);
+        await Assert.That(tracker.ShouldCompact(history, loose)).IsFalse();
+
+        // In-place rewrite (mirrors ISessionStore.UpdateMessageAsync, which
+        // rewrites the entry for the id): same ids, same count, far bigger
+        // content — and a record `with` keeps Id/SessionId, so only Content moves.
+        var edited = new List<AgentMessage>
+        {
+            first with { Content = new string('z', 4_000) },
+            second with { Content = new string('z', 4_000) },
+        };
+        int bigEstimate = tracker.EstimateTokens(edited);
+        await Assert.That(bigEstimate).IsGreaterThan(smallEstimate);
+
+        // Without the report the fast path is stale by construction: same
+        // session, same count → old estimate → still false.
+        await Assert.That(tracker.ShouldCompact(edited, loose)).IsFalse();
+
+        tracker.RecordUpdatedMessage(edited[0]);
+
+        // The report dropped the entry: this call rescans and trips, the next
+        // one answers from the resynced entry with no drift.
+        await Assert.That(tracker.ShouldCompact(edited, loose)).IsTrue();
+        await Assert.That(tracker.ShouldCompact(edited, loose)).IsTrue();
+    }
+
+    /// <summary>
+    ///     Reporting an update for a session the tracker never saw is a harmless
+    ///     no-op: other sessions' entries are untouched and the next check for
+    ///     the unknown session rescans like any cold entry.
+    /// </summary>
+    [Test]
+    public async Task RecordUpdatedMessage_UnknownSession_IsHarmless()
+    {
+        var tracker = new TokenTracker();
+        var known = Msg("s-known", new string('a', 100));
+        tracker.RecordAppendedMessage(known);
+        var history = new List<AgentMessage> { known };
+
+        tracker.RecordUpdatedMessage(Msg("s-unknown", new string('z', 4_000)));
+
+        await Assert.That(tracker.ShouldCompact(history, Model(1_000_000))).IsFalse();
+    }
+
     [Test]
     public async Task ShouldCompact_EmptyHistory_NeverCompacts()
     {
