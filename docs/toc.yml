@@ -88,6 +88,8 @@
   href: PATTERNS.md
 - name: Plugin Development
   href: PLUGIN_DEVELOPMENT.md
+- name: Plugin Showcase GitTools
+  href: PLUGIN_SHOWCASE_GITTOOLS.md
 - name: Plugin Showcase TodoWrite
   href: PLUGIN_SHOWCASE_TODOWRITE.md
 - name: Plugin System
