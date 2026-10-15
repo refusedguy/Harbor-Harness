@@ -1,6 +1,7 @@
 using Harbor.Abstractions.Git;
 using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Tools;
+using Harbor.Tui.CellForge.Generic.Widgets;
 using Harbor.Ui.Framework.Navigation;
 using Harbor.Ui.Framework.Overlays;
 using Harbor.Ui.Framework.Panels;
@@ -75,6 +76,20 @@ namespace Harbor.Tui.CellForge.Panels;
 ///         <see cref="IGitQuery" />, which is a stronger claim than a delegate
 ///         returning whatever string the test likes.
 ///     </para>
+///     <para>
+///         <b>Selection + scroll live outside the panel (#1158, ratatui
+///         <c>StatefulWidget</c> analog, same recipe as <c>DialogSelectList</c>
+///         #1413):</b> <see cref="State" /> survives frames and owns the
+///         selectable axis, while this type owns content (entries, query,
+///         filter) and geometry. <see cref="Build(PanelContext,
+///         GenericNavState)" /> renders with any count-compatible state, so two
+///         panels can share one; otherwise it falls back to the model
+///         selection. The legacy selection API + <see cref="Build(PanelContext)" />
+///         path is unchanged. The panel paints rows of text (not a
+///         <c>ScreenBuffer</c>), so the stateful half is a <c>Build</c>
+///         overload rather than a <c>Paint</c> overload — the same
+///         count-compatible/fallback contract.
+///     </para>
 /// </remarks>
 public sealed class CellForgeJumpPalettePanel : IPanelProvider
 {
@@ -89,6 +104,15 @@ public sealed class CellForgeJumpPalettePanel : IPanelProvider
 
     private readonly object _gate = new();
     private readonly WorktreeJumpPaletteModel _model;
+    private readonly GenericNavState _navState = new();
+
+    /// <summary>
+    /// External navigation state (selection + scroll over the selectable
+    /// rows), count-synced with the results on every <see cref="Build" />.
+    /// Mutating it directly (e.g. <see cref="GenericNavState.SelectNext" />)
+    /// drives the <see cref="Build(PanelContext, GenericNavState)" /> overload.
+    /// </summary>
+    public GenericNavState State => _navState;
 
     /// <summary>Create a panel with a fresh palette model (renderer registration path).</summary>
     public CellForgeJumpPalettePanel()
@@ -135,7 +159,23 @@ public sealed class CellForgeJumpPalettePanel : IPanelProvider
     public int DefaultSize => 48;
 
     /// <inheritdoc />
-    public object? Build(PanelContext ctx)
+    /// <remarks>Legacy path: highlights the model selection and renders every row (<c>Clip</c> cuts the tail).</remarks>
+    public object? Build(PanelContext ctx) => BuildCore(ctx, null);
+
+    /// <summary>
+    /// Builds with an external navigation state (#1158): when <paramref
+    /// name="navState" /> is count-compatible (<c>Count == result count</c>)
+    /// the highlight and scroll come from it, so one state object can drive
+    /// two panels; otherwise falls back to the model selection. The
+    /// entries/query/filter axis stays panel-local.
+    /// </summary>
+    public object? Build(PanelContext ctx, GenericNavState navState)
+    {
+        ArgumentNullException.ThrowIfNull(navState);
+        return BuildCore(ctx, navState);
+    }
+
+    private object? BuildCore(PanelContext ctx, GenericNavState? navState)
     {
         ArgumentNullException.ThrowIfNull(ctx);
         List<WorktreeJumpEntry> snapshot;
@@ -153,6 +193,34 @@ public sealed class CellForgeJumpPalettePanel : IPanelProvider
             selected = _model.SelectedIndex;
             query = _model.Query;
             suggested = _model.SuggestedCount;
+            if (_navState.Count != snapshot.Count)
+            {
+                _navState.SetContent(snapshot.Count);
+            }
+        }
+
+        // Every snapshot entry is selectable (flat list — no header mapping,
+        // the DialogSelectList shape): the state counts selectable entries
+        // only, so Count == snapshot.Count is the compatibility check.
+        bool hasSuggested = query.Length == 0 && suggested > 0 && snapshot.Count > 0;
+        int selIdx;
+        int firstVis;
+        int lastVis;
+        if (navState is not null && snapshot.Count > 0 && navState.Count == snapshot.Count)
+        {
+            // Header + separator + footer separator + footer, plus the two
+            // section headers when the Suggested block is on.
+            int visibleRows = Math.Max(1, ctx.Height - (hasSuggested ? 6 : 4));
+            navState.Sync(visibleRows);
+            selIdx = navState.Selected;
+            firstVis = navState.Offset;
+            lastVis = Math.Min(snapshot.Count, firstVis + visibleRows);
+        }
+        else
+        {
+            selIdx = selected;
+            firstVis = 0;
+            lastVis = snapshot.Count;
         }
 
         var rows = new List<string>(snapshot.Count + 6);
@@ -165,29 +233,28 @@ public sealed class CellForgeJumpPalettePanel : IPanelProvider
             rows.Add(query.Length == 0 ? "No worktrees or sessions." : "No match.");
             rows.Add("Open a session to jump between worktrees.");
         }
-        else if (query.Length == 0 && suggested > 0)
+        else if (hasSuggested)
         {
             // O8 steal (#1177): Suggested section on an empty filter — the
             // marked rows lead under their header, then the full list follows
             // (the same duplication opencode's command palette renders).
             rows.Add("Suggested");
-            int i = 0;
-            for (; i < suggested; i++)
+            for (int i = firstVis; i < suggested && i < lastVis; i++)
             {
-                rows.Add(Row(snapshot[i], i == selected));
+                rows.Add(Row(snapshot[i], i == selIdx));
             }
 
             rows.Add("All");
-            for (; i < snapshot.Count; i++)
+            for (int i = Math.Max(firstVis, suggested); i < lastVis; i++)
             {
-                rows.Add(Row(snapshot[i], i == selected));
+                rows.Add(Row(snapshot[i], i == selIdx));
             }
         }
         else
         {
-            for (int i = 0; i < snapshot.Count; i++)
+            for (int i = firstVis; i < lastVis; i++)
             {
-                rows.Add(Row(snapshot[i], i == selected));
+                rows.Add(Row(snapshot[i], i == selIdx));
             }
         }
 
