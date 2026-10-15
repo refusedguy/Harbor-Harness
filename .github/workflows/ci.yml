@@ -128,6 +128,41 @@ jobs:
               - 'tests/Harbor.DesignSystem.Tests/**'
               - 'tests/Harbor.App.Avalonia.Tests/**'
 
+  # #428 (second slice). Public-API snapshot gate for the frozen interface
+  # facade.
+  #
+  # The baseline `src/Harbor.Abstractions/PublicAPI.Baseline.txt` is the
+  # reviewed surface: 413 effectively-public types/members as
+  # `Qualified.Type :: normalized declaration`, with no file paths and no
+  # line numbers, so moves and re-wraps do not fail the gate. Any added,
+  # removed or re-signed member fails it — additions regenerate the baseline
+  # in the same diff (`--update`, reviewed), removals/re-signs are breaking
+  # and need a major bump + CHANGELOG entry decided outside this gate.
+  # The sibling gate (tools/check-public-api.py, docs.yml) covers
+  # Harbor.Abstractions.Contracts; together they are the full #428 freeze.
+  # No dotnet, no packages: stdlib python only, always runs (no `needs`),
+  # and it is blocking, not advisory.
+  #
+  # The floor is a ratchet. Measured on this tree: 413 members. It is set
+  # AT that value, not below: a floor with slack cannot tell "the surface
+  # got smaller" from "the matcher stopped matching". The non-vacuity proof
+  # is the gate's own --self-test (added/removed member each fail naming
+  # it), run as the first step below.
+  public-api-abstractions:
+    name: public-api snapshot (Abstractions)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: recursive
+      - name: Public-API snapshot gate fails on an unreviewed change
+        run: python3 tools/check-public-api-abstractions.py --self-test
+      - name: Check the frozen facade surface against its baseline
+        run: python3 tools/check-public-api-abstractions.py --min-members 413
+
   build:
     needs: changes
     if: (needs.changes.outputs.dotnet == 'true' || github.event_name == 'workflow_dispatch') && github.actor != 'dependabot[bot]'
