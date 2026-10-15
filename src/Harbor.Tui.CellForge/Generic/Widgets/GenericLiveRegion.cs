@@ -185,6 +185,18 @@ public sealed class GenericLiveRegion
     public string RenderPlainText() => string.Join("\n", VisibleLines());
 
     /// <summary>Paints the visible window at <paramref name="rect"/> (wide lines truncate with an ellipsis).</summary>
+    /// <remarks>
+    ///     No snapshot: <see cref="VisibleLines" /> allocates a window array on
+    ///     every call, and <c>Paint</c> runs per frame while the region is
+    ///     visible — the old path paid a <c>ToArray</c> per frame for a list
+    ///     nothing else can touch mid-pass (owned by the render thread;
+    ///     mutated only via <c>Update</c>/<c>Clear</c>/<c>Complete</c> on the
+    ///     same pass, mirroring <c>ToastOverlay.Paint</c>). The window is
+    ///     resolved with index math instead: same rows as
+    ///     <see cref="VisibleLines" /> in every <see cref="LiveRegionOverflow" />
+    ///     mode, zero allocation. <see cref="VisibleLines" /> stays the pure
+    ///     API for tests and <c>RenderPlainText</c>.
+    /// </remarks>
     public void Paint(ScreenBuffer buffer, Rect rect)
     {
         ArgumentNullException.ThrowIfNull(buffer);
@@ -193,12 +205,38 @@ public sealed class GenericLiveRegion
             return;
         }
 
-        IReadOnlyList<string> visible = VisibleLines();
+        int budget = EffectiveMaxHeight;
+        int start;
+        string? marker = null;
+        int count;
+        if (_lines.Count <= budget)
+        {
+            start = 0;
+            count = _lines.Count;
+        }
+        else if (Overflow == LiveRegionOverflow.ClipTail)
+        {
+            start = 0;
+            count = budget;
+        }
+        else if (Overflow == LiveRegionOverflow.Ellipsize)
+        {
+            start = 0;
+            count = budget;
+            marker = "… +" + (_lines.Count - (budget - 1)).ToString() + " more";
+        }
+        else
+        {
+            start = _lines.Count - budget;
+            count = budget;
+        }
+
         var style = new CellStyle(ChatPalette.Text);
-        int rows = Math.Min(visible.Count, rect.Height);
+        int rows = Math.Min(count, rect.Height);
         for (int r = 0; r < rows; r++)
         {
-            buffer.SetText(rect.X, rect.Y + r, Fit(visible[r], rect.Width), style);
+            string line = marker is not null && r == count - 1 ? marker : _lines[start + r];
+            buffer.SetText(rect.X, rect.Y + r, Fit(line, rect.Width), style);
         }
     }
 

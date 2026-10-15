@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using Harbor.Tui.CellForge.Generic.Widgets;
 using TUnit.Core;
 
@@ -124,5 +125,139 @@ public class GenericLiveRegionTests
         await Assert.That(art.Contains("b")).IsTrue();
         await Assert.That(art.Contains("c")).IsTrue();
         await Assert.That(art.Contains("a")).IsFalse();
+    }
+
+    [Test]
+    public async Task Region_Paint_MatchesVisibleLinesInEveryMode()
+    {
+        var head = new GenericLiveRegion { MaxHeight = 2, Overflow = LiveRegionOverflow.ClipHead };
+        head.Update(["a", "b", "c"]);
+        string headArt = Art(head, 20);
+        await Assert.That(headArt.Contains("b")).IsTrue();
+        await Assert.That(headArt.Contains("c")).IsTrue();
+        await Assert.That(headArt.Contains("a")).IsFalse();
+
+        var tail = new GenericLiveRegion { MaxHeight = 2, Overflow = LiveRegionOverflow.ClipTail };
+        tail.Update(["a", "b", "c"]);
+        string tailArt = Art(tail, 20);
+        await Assert.That(tailArt.Contains("a")).IsTrue();
+        await Assert.That(tailArt.Contains("b")).IsTrue();
+        await Assert.That(tailArt.Contains("c")).IsFalse();
+
+        var ellipsize = new GenericLiveRegion { MaxHeight = 2, Overflow = LiveRegionOverflow.Ellipsize };
+        ellipsize.Update(["a", "b", "c"]);
+        string ellipsizeArt = Art(ellipsize, 20);
+        await Assert.That(ellipsizeArt.Contains("a")).IsTrue();
+        await Assert.That(ellipsizeArt.Contains("more")).IsTrue();
+
+        var small = new GenericLiveRegion { MaxHeight = 8, Overflow = LiveRegionOverflow.ClipHead };
+        small.Update(["x", "y"]);
+        string smallArt = Art(small, 20);
+        await Assert.That(smallArt.Contains("x")).IsTrue();
+        await Assert.That(smallArt.Contains("y")).IsTrue();
+    }
+
+    [Test]
+    public async Task Region_Paint_IsAllocationFree()
+    {
+        var region = new GenericLiveRegion { MaxHeight = 8, Overflow = LiveRegionOverflow.ClipHead };
+        region.Update(["alpha", "bravo", "charlie", "delta"]);
+        var buffer = new ScreenBuffer(80, 8);
+        var rect = new Rect(0, 0, 80, 8);
+
+        for (int i = 0; i < 20; i++)
+        {
+            region.Paint(buffer, rect);
+        }
+
+        GC.WaitForPendingFinalizers();
+
+        long before = GC.GetAllocatedBytesForCurrentThread();
+        const int iterations = 200;
+        for (int i = 0; i < iterations; i++)
+        {
+            region.Paint(buffer, rect);
+        }
+
+        long after = GC.GetAllocatedBytesForCurrentThread();
+
+        await Assert.That(after - before).IsEqualTo(0)
+            .Because("per-frame Paint must read _lines by index instead of snapshotting it per frame.");
+    }
+
+    [Test]
+    [Timeout(120_000)]
+    public async Task Region_Paint_DoubledLines_StaysWithinGrowthLimit()
+    {
+        if (!OperatingSystem.IsLinux())
+        {
+            return;
+        }
+
+        const int lineCount = 200;
+        const int iterations = 20;
+        const int rounds = 5;
+        const double limit = 3.0;
+
+        static GenericLiveRegion BuildRegion(int lines)
+        {
+            var region = new GenericLiveRegion { MaxHeight = 500, Overflow = LiveRegionOverflow.ClipHead };
+            var items = new string[lines];
+            for (int i = 0; i < lines; i++)
+            {
+                items[i] = $"line_{i:0000}_abcdef";
+            }
+
+            region.Update(items);
+            return region;
+        }
+
+        var small = BuildRegion(lineCount);
+        var large = BuildRegion(lineCount * 2);
+        var smallBuffer = new ScreenBuffer(80, 500);
+        var largeBuffer = new ScreenBuffer(80, 500);
+        var smallRect = new Rect(0, 0, 80, 500);
+        var largeRect = new Rect(0, 0, 80, 500);
+
+        for (int i = 0; i < 5; i++)
+        {
+            small.Paint(smallBuffer, smallRect);
+            large.Paint(largeBuffer, largeRect);
+        }
+
+        static double Measure(GenericLiveRegion region, ScreenBuffer buffer, Rect rect)
+        {
+            var sw = Stopwatch.StartNew();
+            for (int i = 0; i < iterations; i++)
+            {
+                region.Paint(buffer, rect);
+            }
+
+            sw.Stop();
+            return sw.Elapsed.TotalMilliseconds;
+        }
+
+        double msSmall = double.MaxValue;
+        double msLarge = double.MaxValue;
+        for (int round = 0; round < rounds; round++)
+        {
+            msSmall = Math.Min(msSmall, Measure(small, smallBuffer, smallRect));
+            msLarge = Math.Min(msLarge, Measure(large, largeBuffer, largeRect));
+        }
+
+        double ratio = msLarge / msSmall;
+        Console.WriteLine(
+            $"liveregion-paint-scaling: {lineCount} lines x{iterations} = {msSmall:F3} ms, "
+            + $"{lineCount * 2} lines x{iterations} = {msLarge:F3} ms "
+            + $"(time x{ratio:F2}, limit x{limit:F2}, best of {rounds})");
+
+        await Assert.That(msSmall).IsGreaterThan(0.0)
+            .Because($"the small-leg baseline must be a real measurement, got {msSmall:F3} ms.");
+        await Assert.That(ratio).IsLessThanOrEqualTo(limit)
+            .Because(
+                $"paint(2N)/paint(N) = {ratio:F2} against a limit of {limit:F2}: "
+                + $"{msLarge:F3} ms for {lineCount * 2} lines versus {msSmall:F3} ms for {lineCount}. "
+                + "Linear is 2.00, so this bound separates linear from quadratic without depending on "
+                + "how fast this runner is.");
     }
 }
