@@ -331,7 +331,7 @@ public sealed partial class WebFetchTool : ITool
             Result allowed = await CheckAllowedAsync(current, ct).ConfigureAwait(false);
             if (allowed.IsFailure)
             {
-                return Result.Failure<FetchOk>(allowed.Error);
+                return allowed.ConvertFailure<FetchOk>();
             }
 
             HttpResponseMessage resp;
