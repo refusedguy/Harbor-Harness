@@ -182,15 +182,14 @@ internal sealed class TurnRunner(
         // Ф6/A1: the system prompt is stable across turns (tools/agent rarely change
         // mid-run and A2 memoizes rebuilds), so every request is a prefix-cache
         // candidate — flag it Ephemeral for providers that support cache_control.
-        var request = new LlmRequest(
+        var request = LlmRequestBuilder.ForTurn(
             agent.Model,
             llmMessages,
             systemPrompt,
             toolDefs,
-            MaxOutputTokens: model.MaxOutputTokens,
-            Temperature: agent.Temperature,
-            ReasoningEffort: agent.ReasoningEffort,
-            CacheStrategy: systemPrompt.Length > 0 ? CacheStrategy.Ephemeral : CacheStrategy.None);
+            model.MaxOutputTokens,
+            agent.Temperature,
+            agent.ReasoningEffort).Build();
 
         // 6. Stream LLM — wrapped in the retry policy (C7): transient provider
         //    failures (HTTP 429/5xx, network errors, timeouts) restart the
