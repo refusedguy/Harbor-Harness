@@ -92,7 +92,7 @@
 // than a flaky suite. `AuthStore.FromConventionalEnv` (AuthStore.cs:65-74)
 // derives `<PROVIDER>_API_KEY` from the provider id and reads the process
 // environment for it, and the onboarding wizard reaches that through
-// `_authStore.GetApiKeyAsync` (OnboardingWizard.cs:245). The variable is read by
+// `_authStore.GetApiKeyAsync` (OnboardingWizard.cs:244). The variable is read by
 // PRODUCT code, in the same process, after the test that destroyed it has
 // returned and passed. The failure therefore belongs to whoever runs next, which
 // is the worst attribution there is.
@@ -312,7 +312,7 @@ public class ProcessEnvIsolationRule
             "SetupChecklistDetectorTests",
             "The whole-environment enumeration, from the other direction. This class writes nothing, so "
             + "nothing in #823's method would have found it, but it constructs an AuthStore and "
-            + "SetupChecklistDetector.DetectAsync calls ListApiKeysAsync (SetupChecklistDetector.cs:176) "
+            + "SetupChecklistDetector.DetectAsync calls ListApiKeysAsync (SetupChecklistDetector.cs:175) "
             + "— the whole process environment, same as above. Stated honestly: today's assertion cannot "
             + "be flipped by a concurrent write, because ProviderKeyStored is true whenever ANY key is "
             + "present and this test stores one in config. It is listed anyway because that is a property "
