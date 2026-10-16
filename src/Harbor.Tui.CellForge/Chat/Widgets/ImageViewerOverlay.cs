@@ -208,7 +208,7 @@ public sealed class ImageViewerOverlay
         PanelChrome.PaintBorderBox(buffer, box, BoxStyle.SquareFrame);
 
         string header = $"{block.Name}  {block.Dimensions ?? block.MimeType}  zoom {_zoom}%";
-        buffer.SetText(box.X + 1, box.Y + 1, Truncate(header, innerW),
+        buffer.SetText(box.X + 1, box.Y + 1, Harbor.Abstractions.Extensions.StringTruncation.Truncate(header, innerW, string.Empty),
             new CellStyle(ChatPalette.Accent, attrs: StyleAttr.Bold));
 
         var imageRect = ComputeImageRect(block, box, bodyH);
@@ -218,7 +218,7 @@ public sealed class ImageViewerOverlay
         }
 
         const string Hints = "+/- zoom | m markup | esc close";
-        buffer.SetText(box.X + 1, box.Bottom - 2, Truncate(Hints, innerW), ChatPalette.Dim);
+        buffer.SetText(box.X + 1, box.Bottom - 2, Harbor.Abstractions.Extensions.StringTruncation.Truncate(Hints, innerW, string.Empty), ChatPalette.Dim);
     }
 
     /// <summary>
@@ -293,7 +293,4 @@ public sealed class ImageViewerOverlay
         var summary = block.SummaryLine().AsSpan();
         buffer.SetText(box.X + 1, box.Y + 3, summary[..Math.Min(innerW, summary.Length)], ChatPalette.Dim);
     }
-
-    private static string Truncate(string text, int width) =>
-        text.Length <= width ? text : text[..Math.Max(0, width)];
 }

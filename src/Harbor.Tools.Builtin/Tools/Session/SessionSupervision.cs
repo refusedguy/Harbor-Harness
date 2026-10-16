@@ -1,4 +1,5 @@
 using System.Text;
+using Harbor.Abstractions.Extensions;
 
 namespace Harbor.Tools.Builtin;
 
@@ -139,9 +140,9 @@ internal static class SessionSupervision
 
     private sealed class RenderOneVisitor : AgentMessageVisitor<string>
     {
-        public override string Visit(UserMessage message) => "[user] " + Truncate(message.Content);
+        public override string Visit(UserMessage message) => "[user] " + message.Content.TruncateWithDropCount(MaxCharsPerEntry, string.Empty);
 
-        public override string Visit(AssistantMessage message) => "[assistant] " + Truncate(AssistantText(message));
+        public override string Visit(AssistantMessage message) => "[assistant] " + AssistantText(message).TruncateWithDropCount(MaxCharsPerEntry, string.Empty);
 
         public override string Visit(ToolResultMessage message) => "[tool_result " + ToolResultSummary(message) + "]";
 
@@ -167,13 +168,6 @@ internal static class SessionSupervision
             }
 
             return errors == 0 ? $"ok ({results.Results.Count})" : $"error {errors}/{results.Results.Count}";
-        }
-
-        private static string Truncate(string text)
-        {
-            if (text.Length <= MaxCharsPerEntry)
-                return text;
-            return text.Substring(0, MaxCharsPerEntry) + $"…[truncated {text.Length - MaxCharsPerEntry} chars]";
         }
     }
 

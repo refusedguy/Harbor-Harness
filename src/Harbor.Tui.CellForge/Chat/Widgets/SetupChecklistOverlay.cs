@@ -185,7 +185,7 @@ public sealed class SetupChecklistOverlay
         int x = box.X + 1 + Padding;
         int y = box.Y + 1;
 
-        buffer.SetText(x, y, Truncate(Title, innerW), new CellStyle(ChatPalette.Accent, attrs: StyleAttr.Bold));
+        buffer.SetText(x, y, Harbor.Abstractions.Extensions.StringTruncation.Truncate(Title, innerW, string.Empty), new CellStyle(ChatPalette.Accent, attrs: StyleAttr.Bold));
         y++;
 
         // Progress indicator: the shared GaugeBar primitive, labeled `done/total`
@@ -202,20 +202,17 @@ public sealed class SetupChecklistOverlay
             CellStyle markerStyle = task.IsDone
                 ? new CellStyle(ChatPalette.Success, attrs: StyleAttr.Bold)
                 : ChatPalette.Dim;
-            buffer.SetText(x, y, Truncate(task.Marker, innerW), markerStyle);
-            buffer.SetText(x + 2, y, Truncate(task.Label, Math.Max(0, innerW - 2)), new CellStyle(ChatPalette.Text));
+            buffer.SetText(x, y, Harbor.Abstractions.Extensions.StringTruncation.Truncate(task.Marker, innerW, string.Empty), markerStyle);
+            buffer.SetText(x + 2, y, Harbor.Abstractions.Extensions.StringTruncation.Truncate(task.Label, Math.Max(0, innerW - 2), string.Empty), new CellStyle(ChatPalette.Text));
             y++;
         }
 
         if (y + 1 < box.Bottom)
         {
-            buffer.SetText(x, box.Bottom - 2, Truncate(FooterHint, innerW), ChatPalette.Dim);
+            buffer.SetText(x, box.Bottom - 2, Harbor.Abstractions.Extensions.StringTruncation.Truncate(FooterHint, innerW, string.Empty), ChatPalette.Dim);
         }
     }
 
     /// <summary>Total content rows: title, gauge, one blank, tasks, footer.</summary>
     private static int RowCount(SetupChecklistModel model) => 3 + model.Tasks.Count + 1;
-
-    private static string Truncate(string text, int width) =>
-        width <= 0 ? string.Empty : text.Length <= width ? text : text[..width];
 }

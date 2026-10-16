@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using Harbor.Abstractions.Extensions;
 
 namespace Harbor.Tools.Mcp;
 
@@ -274,7 +275,7 @@ public static class McpOAuthFlow
             using var response = await http.SendAsync(request, cancellationToken).ConfigureAwait(false);
             string payload = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
             if (!response.IsSuccessStatusCode)
-                return Result.Failure<McpOAuthTokens>($"Token endpoint returned {(int)response.StatusCode}: {Truncate(payload, 200)}");
+                return Result.Failure<McpOAuthTokens>($"Token endpoint returned {(int)response.StatusCode}: {payload.Truncate(200)}");
 
             using var doc = JsonDocument.Parse(payload);
             var root = doc.RootElement;
@@ -300,8 +301,6 @@ public static class McpOAuthFlow
 
     private static string? Str(JsonElement root, string name) =>
         root.TryGetProperty(name, out var v) && v.ValueKind == JsonValueKind.String ? v.GetString() : null;
-
-    private static string Truncate(string s, int max) => s.Length <= max ? s : s[..max] + "…";
 
     private static string Base64Url(byte[] bytes) =>
         Convert.ToBase64String(bytes).TrimEnd('=').Replace('+', '-').Replace('/', '_');
