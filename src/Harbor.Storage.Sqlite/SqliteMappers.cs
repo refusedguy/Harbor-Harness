@@ -168,17 +168,17 @@ internal static class SqliteMappers
         int kindOrd = TryOrdinal(reader, "kind");
         int parentOrd = TryOrdinal(reader, "parent_session_id");
 
-        return new Session(
-            id,
-            projectId,
-            directory,
-            title,
-            agent,
-            model,
-            providerId,
-            createdAt,
-            updatedAt,
-            meta,
+        return Session.Rehydrate(
+            Id: id,
+            ProjectId: projectId,
+            Directory: directory,
+            Title: title,
+            Agent: agent,
+            Model: model,
+            ProviderId: providerId,
+            CreatedAt: createdAt,
+            UpdatedAt: updatedAt,
+            Metadata: meta,
             ParentSessionId: parentOrd < 0 || reader.IsDBNull(parentOrd) ? null : reader.GetString(parentOrd),
             Status: statusOrd < 0 || reader.IsDBNull(statusOrd) ? SessionStatus.Idle : (SessionStatus)reader.GetInt64(statusOrd),
             Kind: kindOrd < 0 || reader.IsDBNull(kindOrd) ? SessionKind.User : (SessionKind)reader.GetInt64(kindOrd));
