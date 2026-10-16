@@ -27,8 +27,8 @@ namespace Harbor.Application.Sessions;
 ///         The runs root is resolved exactly like
 ///         <c>Harbor.Hosting.HarborPaths.GetHarborHome()</c> (<c>HARBOR_HOME</c>
 ///         or <c>~/.harbor</c>) but WITHOUT referencing the Hosting project:
-///         Application depends on Domain only, so the five lines live here
-///         rather than behind a new <c>ProjectReference</c>.
+///         Application depends on Abstractions only, so the five lines live in
+///         <see cref="WorkspacePaths" /> rather than behind a new <c>ProjectReference</c>.
 ///     </para>
 /// </remarks>
 public static class WorkspaceMaterializer
@@ -325,16 +325,15 @@ public static class WorkspaceMaterializer
         return manifests;
     }
 
-    internal static string GetHarborHome()
-    {
-        if (Environment.GetEnvironmentVariable("HARBOR_HOME") is { Length: > 0 } custom)
-            return custom;
-        return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".harbor");
-    }
+    /// <summary>
+    ///     Path helpers, kept for the S2 internals: every other slice resolves
+    ///     paths through <see cref="IWorkspacePaths" /> (<see cref="WorkspacePaths.Default" />).
+    /// </summary>
+    internal static string GetHarborHome() => WorkspacePaths.Default.GetHarborHome();
 
-    internal static string RunsRoot() => Path.Combine(GetHarborHome(), "runs");
+    internal static string RunsRoot() => WorkspacePaths.Default.RunsRoot();
 
-    internal static string RunDir(string runId) => Path.Combine(RunsRoot(), runId);
+    internal static string RunDir(string runId) => WorkspacePaths.Default.RunDir(runId);
 
     private static Result<string> ValidateRunId(string? value)
     {
