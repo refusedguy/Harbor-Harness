@@ -39,7 +39,7 @@ Harbor is a modular .NET 10 AI coding agent harness. The architecture prioritize
 ```
 src/                                   — ~50 projects (all included in Harbor.slnx unless noted)
 ├── Harbor.Abstractions/               — base contracts (no Harbor deps except Abstractions.Contracts; 7 NuGet, gated — см. AGENTS.md §What NOT to do п.1)
-├── Harbor.Abstractions.Contracts/     — models, events, ValueObjects, PermissionRuleset
+├── Harbor.Abstractions.Contracts/     — models, events, records, PermissionRuleset
 ├── Harbor.Registries/                 — Agent/Tool/Provider registries, EventBus; builtin agents are declared in
 │                                        AgentDefinition and registered in ToolsCatalog.CreateAgentRegistry
 ├── Harbor.Application/                — AgentLoop, sessions, permissions, config, onboarding, compaction
@@ -175,7 +175,7 @@ it never needs to reference `Harbor.Application` for agent types.
 
 ### Patterns
 - **CSharpFunctionalExtensions** `Result<T>` for operations that can fail. Avoid throwing exceptions for expected failures.
-- **ValueObject** for strongly-typed identifiers: `SessionId`, `ProviderId`, `ToolName`, etc.
+- **Records** for strongly-typed identifiers: `SessionId`, `ProviderId`, `ToolName`, etc.
 - **Records** for immutable data: `Session`, `AgentMessage`, `LlmEvent`.
 - **Sealed classes** by default. Open for inheritance only when explicitly designed for it.
 - **Interfaces** start with `I` (e.g. `ITool`, `ILlmClient`).

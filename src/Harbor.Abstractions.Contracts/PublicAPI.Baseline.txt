@@ -148,64 +148,56 @@ Harbor.Abstractions.Models.DiagnosticIssueSource :: public enum DiagnosticIssueS
 Harbor.Abstractions.Models.FileAttachment :: public sealed partial record FileAttachment(string Path, string MimeType, byte Data)
 Harbor.Abstractions.Models.FilePart :: public override string Type
 Harbor.Abstractions.Models.FilePart :: public sealed partial record FilePart(string Path, string MimeType, long SizeBytes, byte? Data = null) : ContentPart
-Harbor.Abstractions.Models.Identifiers.AgentName :: protected override IEnumerable<IComparable> GetEqualityComponents()
 Harbor.Abstractions.Models.Identifiers.AgentName :: public const string Fallback = "code"
 Harbor.Abstractions.Models.Identifiers.AgentName :: public override string ToString()
-Harbor.Abstractions.Models.Identifiers.AgentName :: public sealed class AgentName : ValueObject
+Harbor.Abstractions.Models.Identifiers.AgentName :: public sealed record AgentName
 Harbor.Abstractions.Models.Identifiers.AgentName :: public static AgentName Create(string value)
 Harbor.Abstractions.Models.Identifiers.AgentName :: public static Result<AgentName> TryCreate(string? value)
 Harbor.Abstractions.Models.Identifiers.AgentName :: public static implicit operator string(AgentName name)
 Harbor.Abstractions.Models.Identifiers.AgentName :: public string Value
-Harbor.Abstractions.Models.Identifiers.MessageId :: protected override IEnumerable<IComparable> GetEqualityComponents()
 Harbor.Abstractions.Models.Identifiers.MessageId :: public override string ToString()
-Harbor.Abstractions.Models.Identifiers.MessageId :: public sealed class MessageId : ValueObject
+Harbor.Abstractions.Models.Identifiers.MessageId :: public sealed record MessageId
 Harbor.Abstractions.Models.Identifiers.MessageId :: public static MessageId Create(string value)
 Harbor.Abstractions.Models.Identifiers.MessageId :: public static MessageId New()
 Harbor.Abstractions.Models.Identifiers.MessageId :: public static Result<MessageId> TryCreate(string? value)
 Harbor.Abstractions.Models.Identifiers.MessageId :: public static implicit operator string(MessageId id)
 Harbor.Abstractions.Models.Identifiers.MessageId :: public string Value
-Harbor.Abstractions.Models.Identifiers.ModelRef :: protected override IEnumerable<IComparable> GetEqualityComponents()
 Harbor.Abstractions.Models.Identifiers.ModelRef :: public ProviderId ProviderId
 Harbor.Abstractions.Models.Identifiers.ModelRef :: public override string ToString()
-Harbor.Abstractions.Models.Identifiers.ModelRef :: public sealed class ModelRef : ValueObject
+Harbor.Abstractions.Models.Identifiers.ModelRef :: public sealed record ModelRef
 Harbor.Abstractions.Models.Identifiers.ModelRef :: public static ModelRef Create(ProviderId providerId, string modelId)
 Harbor.Abstractions.Models.Identifiers.ModelRef :: public static Result<ModelRef> Qualify(string? providerId, string? modelId)
 Harbor.Abstractions.Models.Identifiers.ModelRef :: public static Result<ModelRef> TryParse(string? value)
 Harbor.Abstractions.Models.Identifiers.ModelRef :: public static implicit operator string(ModelRef id)
 Harbor.Abstractions.Models.Identifiers.ModelRef :: public string ModelId
-Harbor.Abstractions.Models.Identifiers.ProviderId :: protected override IEnumerable<IComparable> GetEqualityComponents()
 Harbor.Abstractions.Models.Identifiers.ProviderId :: public override string ToString()
-Harbor.Abstractions.Models.Identifiers.ProviderId :: public sealed class ProviderId : ValueObject
+Harbor.Abstractions.Models.Identifiers.ProviderId :: public sealed record ProviderId
 Harbor.Abstractions.Models.Identifiers.ProviderId :: public static ProviderId Create(string value)
 Harbor.Abstractions.Models.Identifiers.ProviderId :: public static Result<ProviderId> TryCreate(string? value)
 Harbor.Abstractions.Models.Identifiers.ProviderId :: public static implicit operator string(ProviderId id)
 Harbor.Abstractions.Models.Identifiers.ProviderId :: public string Value
-Harbor.Abstractions.Models.Identifiers.RunId :: protected override IEnumerable<IComparable> GetEqualityComponents()
 Harbor.Abstractions.Models.Identifiers.RunId :: public override string ToString()
-Harbor.Abstractions.Models.Identifiers.RunId :: public sealed class RunId : ValueObject
+Harbor.Abstractions.Models.Identifiers.RunId :: public sealed record RunId
 Harbor.Abstractions.Models.Identifiers.RunId :: public static Result<RunId> TryCreate(string? value)
 Harbor.Abstractions.Models.Identifiers.RunId :: public static RunId Create(string value)
 Harbor.Abstractions.Models.Identifiers.RunId :: public static RunId New()
 Harbor.Abstractions.Models.Identifiers.RunId :: public static implicit operator string(RunId id)
 Harbor.Abstractions.Models.Identifiers.RunId :: public string Value
-Harbor.Abstractions.Models.Identifiers.SessionId :: protected override IEnumerable<IComparable> GetEqualityComponents()
 Harbor.Abstractions.Models.Identifiers.SessionId :: public override string ToString()
-Harbor.Abstractions.Models.Identifiers.SessionId :: public sealed class SessionId : ValueObject
+Harbor.Abstractions.Models.Identifiers.SessionId :: public sealed record SessionId
 Harbor.Abstractions.Models.Identifiers.SessionId :: public static Result<SessionId> TryCreate(string? value)
 Harbor.Abstractions.Models.Identifiers.SessionId :: public static SessionId Create(string value)
 Harbor.Abstractions.Models.Identifiers.SessionId :: public static SessionId New()
 Harbor.Abstractions.Models.Identifiers.SessionId :: public static implicit operator string(SessionId id)
 Harbor.Abstractions.Models.Identifiers.SessionId :: public string Value
-Harbor.Abstractions.Models.Identifiers.ToolCallId :: protected override IEnumerable<IComparable> GetEqualityComponents()
 Harbor.Abstractions.Models.Identifiers.ToolCallId :: public override string ToString()
-Harbor.Abstractions.Models.Identifiers.ToolCallId :: public sealed class ToolCallId : ValueObject
+Harbor.Abstractions.Models.Identifiers.ToolCallId :: public sealed record ToolCallId
 Harbor.Abstractions.Models.Identifiers.ToolCallId :: public static ToolCallId Create(string value)
 Harbor.Abstractions.Models.Identifiers.ToolCallId :: public static ToolCallId New()
 Harbor.Abstractions.Models.Identifiers.ToolCallId :: public static implicit operator string(ToolCallId id)
 Harbor.Abstractions.Models.Identifiers.ToolCallId :: public string Value
-Harbor.Abstractions.Models.Identifiers.ToolName :: protected override IEnumerable<IComparable> GetEqualityComponents()
 Harbor.Abstractions.Models.Identifiers.ToolName :: public override string ToString()
-Harbor.Abstractions.Models.Identifiers.ToolName :: public sealed class ToolName : ValueObject
+Harbor.Abstractions.Models.Identifiers.ToolName :: public sealed record ToolName
 Harbor.Abstractions.Models.Identifiers.ToolName :: public static Result<ToolName> TryCreate(string? value)
 Harbor.Abstractions.Models.Identifiers.ToolName :: public static ToolName Create(string value)
 Harbor.Abstractions.Models.Identifiers.ToolName :: public static implicit operator string(ToolName name)
