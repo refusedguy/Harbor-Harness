@@ -254,7 +254,7 @@ internal static class OpenAiResponsesMapper
                 }
                 else
                 {
-                    SkipContainer(ref reader);
+                    Utf8JsonReaderExtensions.SkipContainer(ref reader);
                 }
 
                 return;
@@ -269,13 +269,13 @@ internal static class OpenAiResponsesMapper
                 }
                 else
                 {
-                    SkipContainer(ref reader);
+                    Utf8JsonReaderExtensions.SkipContainer(ref reader);
                 }
 
                 return;
             }
 
-            SkipContainer(ref reader);
+            Utf8JsonReaderExtensions.SkipContainer(ref reader);
             return;
         }
 
@@ -295,7 +295,7 @@ internal static class OpenAiResponsesMapper
             }
             else
             {
-                SkipContainer(ref reader);
+                Utf8JsonReaderExtensions.SkipContainer(ref reader);
             }
 
             return;
@@ -312,12 +312,12 @@ internal static class OpenAiResponsesMapper
                 }
                 else
                 {
-                    SkipContainer(ref reader);
+                    Utf8JsonReaderExtensions.SkipContainer(ref reader);
                 }
             }
             else
             {
-                SkipContainer(ref reader);
+                Utf8JsonReaderExtensions.SkipContainer(ref reader);
             }
 
             return;
@@ -327,11 +327,11 @@ internal static class OpenAiResponsesMapper
         {
             if (prop == "input_tokens")
             {
-                rInputTokens = ReadTolerantInt(ref reader);
+                rInputTokens = Utf8JsonReaderExtensions.ReadTolerantInt(ref reader);
             }
             else if (prop == "output_tokens")
             {
-                rOutputTokens = ReadTolerantInt(ref reader);
+                rOutputTokens = Utf8JsonReaderExtensions.ReadTolerantInt(ref reader);
             }
             else if (prop == "output_tokens_details")
             {
@@ -342,12 +342,12 @@ internal static class OpenAiResponsesMapper
                 }
                 else
                 {
-                    SkipContainer(ref reader);
+                    Utf8JsonReaderExtensions.SkipContainer(ref reader);
                 }
             }
             else
             {
-                SkipContainer(ref reader);
+                Utf8JsonReaderExtensions.SkipContainer(ref reader);
             }
 
             return;
@@ -357,17 +357,17 @@ internal static class OpenAiResponsesMapper
         {
             if (prop == "reasoning_tokens")
             {
-                rReasoningTokens = ReadTolerantNullableInt(ref reader);
+                rReasoningTokens = Utf8JsonReaderExtensions.ReadTolerantNullableInt(ref reader);
             }
             else
             {
-                SkipContainer(ref reader);
+                Utf8JsonReaderExtensions.SkipContainer(ref reader);
             }
 
             return;
         }
 
-        SkipContainer(ref reader);
+        Utf8JsonReaderExtensions.SkipContainer(ref reader);
     }
 
     private static void Emit(
@@ -438,51 +438,6 @@ internal static class OpenAiResponsesMapper
         return outputIndex.ToString();
     }
 
-    private static void SkipContainer(ref Utf8JsonReader reader)
-    {
-        if (reader.TokenType is JsonTokenType.StartObject or JsonTokenType.StartArray)
-            reader.Skip();
-    }
-
-    private static int ReadTolerantInt(ref Utf8JsonReader reader)
-    {
-        if (reader.TokenType == JsonTokenType.Number)
-        {
-            if (reader.TryGetInt32(out int direct))
-                return direct;
-            if (reader.TryGetDouble(out double dbl))
-                return (int)dbl;
-            return 0;
-        }
-
-        if (reader.TokenType == JsonTokenType.String &&
-            int.TryParse(reader.GetString(), out int parsed))
-        {
-            return parsed;
-        }
-
-        return 0;
-    }
-
-    private static int? ReadTolerantNullableInt(ref Utf8JsonReader reader)
-    {
-        if (reader.TokenType == JsonTokenType.Number)
-        {
-            if (reader.TryGetInt32(out int direct))
-                return direct;
-            if (reader.TryGetDouble(out double dbl))
-                return (int)dbl;
-            return null;
-        }
-
-        if (reader.TokenType == JsonTokenType.String &&
-            int.TryParse(reader.GetString(), out int parsed))
-        {
-            return parsed;
-        }
-
-        return null;
-    }
 }
 
 /// <summary>
