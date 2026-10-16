@@ -136,8 +136,9 @@ public sealed class McpServersConfigLoader
         if (string.IsNullOrWhiteSpace(json))
             return map;
 
-        using var doc = JsonDocument.Parse(json);
-        var root = doc.RootElement;
+        // Same DOM as JsonDocument.Parse, but through the source-generated
+        // JsonElement info (PERF-002; TRIM-SERIALIZATION TypeInfo spelling).
+        JsonElement root = JsonSerializer.Deserialize(json, McpJsonSerializerContext.Default.JsonElement);
         if (root.ValueKind != JsonValueKind.Object)
             return map;
 
