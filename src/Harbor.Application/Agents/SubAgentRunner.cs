@@ -1,4 +1,5 @@
 using System.Threading.Channels;
+using Harbor.Abstractions.Extensions;
 using Harbor.Abstractions.Sessions;
 using Microsoft.Extensions.Logging;
 using Result = CSharpFunctionalExtensions.Result;
@@ -282,7 +283,7 @@ public sealed class SubAgentRunner(
             await PropagateChildCostAsync(
                 request.ParentSessionId, request.ParentMessageId, session.Id, childUsage, CancellationToken.None).ConfigureAwait(false);
 
-            return new SubAgentRunResult(session.Id, agent.Name.Value, Truncate(finalOutput), history.Value.Count, childUsage);
+            return new SubAgentRunResult(session.Id, agent.Name.Value, finalOutput.TruncateWithDropCount(MaxOutputChars), history.Value.Count, childUsage);
         }
         finally
         {
@@ -621,16 +622,7 @@ public sealed class SubAgentRunner(
     {
         int newline = prompt.IndexOf('\n');
         string firstLine = (newline >= 0 ? prompt[..newline] : prompt).Trim();
-        if (firstLine.Length > 60)
-            firstLine = firstLine[..60] + "…";
-        return $"{TitlePrefix}({agent.Name.Value}): {firstLine}";
-    }
-
-    private static string Truncate(string output)
-    {
-        if (output.Length <= MaxOutputChars)
-            return output;
-        return output[..MaxOutputChars] + $"\n…[truncated {output.Length - MaxOutputChars} chars]";
+        return $"{TitlePrefix}({agent.Name.Value}): {firstLine.Truncate(60)}";
     }
 }
 
