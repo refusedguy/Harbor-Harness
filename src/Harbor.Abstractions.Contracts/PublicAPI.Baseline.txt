@@ -318,6 +318,7 @@ Harbor.Abstractions.Models.RunVerificationVerdict :: Verified
 Harbor.Abstractions.Models.RunVerificationVerdict :: public enum RunVerificationVerdict
 Harbor.Abstractions.Models.Session :: public sealed partial record Session(string Id, string ProjectId, string Directory, string Title, string Agent, string Model, string ProviderId, DateTimeOffset CreatedAt, DateTimeOffset UpdatedAt, SessionMetadata Metadata, string? ParentSessionId = null, SessionStatus Status = SessionStatus.Idle, string? GitBranch = null, bool GitIsDirty = false, SessionKind Kind = SessionKind.User)
 Harbor.Abstractions.Models.Session :: public static Session Create(string directory, string agentName, string providerId, string modelId, string? title = null)
+Harbor.Abstractions.Models.Session :: public static Session Rehydrate(string id, string projectId, string directory, string title, string agent, string model, string providerId, DateTimeOffset createdAt, DateTimeOffset updatedAt, SessionMetadata metadata, string? parentSessionId = null, SessionStatus status = SessionStatus.Idle, string? gitBranch = null, bool gitIsDirty = false, SessionKind kind = SessionKind.User)
 Harbor.Abstractions.Models.Session :: public static string ProjectIdFor(string directory)
 Harbor.Abstractions.Models.SessionKind :: Subagent = 1
 Harbor.Abstractions.Models.SessionKind :: User = 0

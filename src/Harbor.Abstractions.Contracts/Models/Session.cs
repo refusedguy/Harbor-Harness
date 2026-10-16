@@ -72,18 +72,77 @@ public sealed partial record Session(
         string id = Guid.NewGuid().ToString("N");
         string projectId = ProjectIdFor(directory);
         var now = DateTimeOffset.UtcNow;
-        return new Session(
-            id,
-            projectId,
-            directory,
-            title ?? $"Session {now:yyyy-MM-dd HH:mm}",
-            agentName,
-            modelId,
-            providerId,
-            now,
-            now,
-            SessionMetadata.Empty);
+        return Rehydrate(
+            id: id,
+            projectId: projectId,
+            directory: directory,
+            title: title ?? $"Session {now:yyyy-MM-dd HH:mm}",
+            agent: agentName,
+            model: modelId,
+            providerId: providerId,
+            createdAt: now,
+            updatedAt: now,
+            metadata: SessionMetadata.Empty);
     }
+
+    /// <summary>
+    ///     Rehydrate a persisted session: every field arrives from storage or
+    ///     the wire, nothing is generated. Single construction point for the
+    ///     full 15-field shape (#1568) — stores and the IPC wire decode call
+    ///     this with named arguments instead of a positional
+    ///     <c>new Session(...)</c>, so a reordered argument fails to compile
+    ///     instead of compiling silently, and a new field lands here first.
+    ///     <see cref="Create" /> remains the create-path; this is the
+    ///     read-path (full/metadata-empty/row/wire representations share it).
+    /// </summary>
+    /// <param name="id">Stable unique identifier (guid as N-string).</param>
+    /// <param name="projectId">Hash-based project id derived from the directory.</param>
+    /// <param name="directory">Absolute working directory of the session.</param>
+    /// <param name="title">Human-readable session title.</param>
+    /// <param name="agent">The agent name bound to this session.</param>
+    /// <param name="model">The model id bound to this session.</param>
+    /// <param name="providerId">The provider id bound to this session.</param>
+    /// <param name="createdAt">UTC timestamp when the session was created.</param>
+    /// <param name="updatedAt">UTC timestamp of the last activity in the session.</param>
+    /// <param name="metadata">Aggregated session stats (cost, tokens, etc.).</param>
+    /// <param name="parentSessionId">Optional parent session id (for branches/forks).</param>
+    /// <param name="status">Current agent activity status.</param>
+    /// <param name="gitBranch">Git branch name (null if not a git repo).</param>
+    /// <param name="gitIsDirty">Whether the git working tree has uncommitted changes.</param>
+    /// <param name="kind">Ownership kind (user conversation vs isolated sub-agent run).</param>
+    /// <returns>The rehydrated <see cref="Session" />.</returns>
+    public static Session Rehydrate(
+        string id,
+        string projectId,
+        string directory,
+        string title,
+        string agent,
+        string model,
+        string providerId,
+        DateTimeOffset createdAt,
+        DateTimeOffset updatedAt,
+        SessionMetadata metadata,
+        string? parentSessionId = null,
+        SessionStatus status = SessionStatus.Idle,
+        string? gitBranch = null,
+        bool gitIsDirty = false,
+        SessionKind kind = SessionKind.User) =>
+        new(
+            Id: id,
+            ProjectId: projectId,
+            Directory: directory,
+            Title: title,
+            Agent: agent,
+            Model: model,
+            ProviderId: providerId,
+            CreatedAt: createdAt,
+            UpdatedAt: updatedAt,
+            Metadata: metadata,
+            ParentSessionId: parentSessionId,
+            Status: status,
+            GitBranch: gitBranch,
+            GitIsDirty: gitIsDirty,
+            Kind: kind);
 
     /// <summary>
     ///     Deterministic project id for a working directory. Was
