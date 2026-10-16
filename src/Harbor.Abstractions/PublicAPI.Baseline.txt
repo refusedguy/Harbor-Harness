@@ -215,6 +215,24 @@ Harbor.Abstractions.Providers.LlmImageBlock :: public sealed record LlmImageBloc
 Harbor.Abstractions.Providers.LlmMessage :: public abstract record LlmMessage
 Harbor.Abstractions.Providers.LlmMessage :: public abstract string Role
 Harbor.Abstractions.Providers.LlmRequest :: public sealed record LlmRequest(string Model, IReadOnlyList<LlmMessage> Messages, string SystemPrompt, IReadOnlyList<ToolDefinition> Tools, ToolChoice? ToolChoice = null, int? MaxOutputTokens = null, decimal? Temperature = null, decimal? TopP = null, int? TopK = null, ReasoningEffort? ReasoningEffort = null, CacheStrategy CacheStrategy = CacheStrategy.None, IReadOnlyDictionary<string, string>? ExtraHeaders = null, string? SessionAffinity = null)
+Harbor.Abstractions.Providers.LlmRequestBuilder :: public IReadOnlyList<LlmMessage> Messages
+Harbor.Abstractions.Providers.LlmRequestBuilder :: public IReadOnlyList<ToolDefinition> Tools
+Harbor.Abstractions.Providers.LlmRequestBuilder :: public LlmRequest Build()
+Harbor.Abstractions.Providers.LlmRequestBuilder :: public LlmRequestBuilder WithCacheStrategy(CacheStrategy cacheStrategy)
+Harbor.Abstractions.Providers.LlmRequestBuilder :: public LlmRequestBuilder WithExtraHeaders(IReadOnlyDictionary<string, string>? extraHeaders)
+Harbor.Abstractions.Providers.LlmRequestBuilder :: public LlmRequestBuilder WithMaxOutputTokens(int? maxOutputTokens)
+Harbor.Abstractions.Providers.LlmRequestBuilder :: public LlmRequestBuilder WithReasoningEffort(ReasoningEffort? reasoningEffort)
+Harbor.Abstractions.Providers.LlmRequestBuilder :: public LlmRequestBuilder WithSessionAffinity(string? sessionAffinity)
+Harbor.Abstractions.Providers.LlmRequestBuilder :: public LlmRequestBuilder WithTemperature(decimal? temperature)
+Harbor.Abstractions.Providers.LlmRequestBuilder :: public LlmRequestBuilder WithToolChoice(ToolChoice? toolChoice)
+Harbor.Abstractions.Providers.LlmRequestBuilder :: public LlmRequestBuilder WithTopK(int? topK)
+Harbor.Abstractions.Providers.LlmRequestBuilder :: public LlmRequestBuilder WithTopP(decimal? topP)
+Harbor.Abstractions.Providers.LlmRequestBuilder :: public LlmRequestBuilder(string model, IReadOnlyList<LlmMessage> messages, string systemPrompt, IReadOnlyList<ToolDefinition> tools)
+Harbor.Abstractions.Providers.LlmRequestBuilder :: public sealed class LlmRequestBuilder
+Harbor.Abstractions.Providers.LlmRequestBuilder :: public static LlmRequestBuilder ForSummary(string model, string prompt, string systemPrompt, int maxOutputTokens)
+Harbor.Abstractions.Providers.LlmRequestBuilder :: public static LlmRequestBuilder ForTurn(string model, IReadOnlyList<LlmMessage> messages, string systemPrompt, IReadOnlyList<ToolDefinition> tools, int? maxOutputTokens, decimal? temperature, ReasoningEffort? reasoningEffort)
+Harbor.Abstractions.Providers.LlmRequestBuilder :: public string Model
+Harbor.Abstractions.Providers.LlmRequestBuilder :: public string SystemPrompt
 Harbor.Abstractions.Providers.LlmTextBlock :: public override string Type
 Harbor.Abstractions.Providers.LlmTextBlock :: public sealed record LlmTextBlock(string Text) : LlmContentBlock
 Harbor.Abstractions.Providers.LlmThinkingBlock :: public override string Type
