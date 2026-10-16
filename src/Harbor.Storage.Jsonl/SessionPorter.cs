@@ -89,13 +89,14 @@ public sealed class JsonlSessionPorter : ISessionPorter
 
         // #199: the header read is a Result step — an empty payload is a
         // failure, and an I/O error travels the rail instead of throwing.
-        var headerLineResult = await TryReadNonEmptyLineAsync(input).ConfigureAwait(false);
+        var headerLineResult = (await TryReadNonEmptyLineAsync(input).ConfigureAwait(false))
+            .MapError(error => $"Import failed while reading header: {error}")
+            .Bind(maybe => maybe.HasValue
+                ? Result.Success<string>(maybe.Value)
+                : Result.Failure<string>("Import failed: payload is empty."));
         if (headerLineResult.IsFailure)
-            return Result.Failure<string>($"Import failed while reading header: {headerLineResult.Error}");
-        Maybe<string> headerLineMaybe = headerLineResult.Value; // guarded: returned above on failure.
-        string? headerLine = headerLineMaybe.HasValue ? headerLineMaybe.Value : null;
-        if (headerLine is null)
-            return Result.Failure<string>("Import failed: payload is empty.");
+            return headerLineResult;
+        string headerLine = headerLineResult.Value; // guarded: returned above on failure.
 
         var envelopeResult = Result.Try(
             () => JsonSerializer.Deserialize(headerLine, JsonlCodecContext.Default.ExportEnvelope),
