@@ -235,24 +235,13 @@ public static class WorkspaceMaterializer
     ///     (freeze/checks/report/accept/reject) — they call it, they do not
     ///     reinterpret states.
     /// </summary>
-    public static Result<RunManifest> TryAdvanceState(string? runIdValue, RunState to)
-    {
-        Result<RunManifest> loaded = TryLoad(runIdValue);
-        if (loaded.IsFailure)
-            return loaded;
-        RunManifest manifest = loaded.Value;
-
-        Result<RunState> gate = RunChangeTransitions.TryTransition(manifest.State, to);
-        if (gate.IsFailure)
-            return gate.ConvertFailure<RunManifest>();
-
-        var advanced = manifest with { State = gate.Value };
-        string manifestPath = Path.Combine(RunDir(manifest.RunId), "manifest.json");
-        Result<string> written = WriteManifestAtomic(manifestPath, advanced, overwrite: true);
-        if (written.IsFailure)
-            return written.ConvertFailure<RunManifest>();
-        return Result.Success(advanced);
-    }
+    public static Result<RunManifest> TryAdvanceState(string? runIdValue, RunState to) =>
+        TryLoad(runIdValue)
+            .Bind(manifest => RunChangeTransitions.TryTransition(manifest.State, to)
+                .Map(state => manifest with { State = state }))
+            .Bind(advanced => WriteManifestAtomic(
+                    Path.Combine(RunDir(advanced.RunId), "manifest.json"), advanced, overwrite: true)
+                .Map(_ => advanced));
 
     /// <summary>
     ///     Release the run: <c>git worktree remove --force</c> plus
