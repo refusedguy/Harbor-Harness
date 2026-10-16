@@ -277,22 +277,18 @@ public static class ChangeSetFreezer
     ///     stage, never an empty set.
     /// </summary>
     /// <param name="runIdValue">Run id (validated like everywhere else: no path separators).</param>
-    public static Result<FrozenChangeSet> TryLoad(string? runIdValue)
-    {
-        Result<string> id = ValidateRunId(runIdValue);
-        if (id.IsFailure)
-            return id.ConvertFailure<FrozenChangeSet>();
-        string runId = id.Value;
-
-        string runDir = WorkspaceMaterializer.RunDir(runId);
-        string patchPath = Path.Combine(runDir, "change.patch");
-        string changesetPath = Path.Combine(runDir, "changeset.json");
-        if (!File.Exists(patchPath) || !File.Exists(changesetPath))
-            return Result.Failure<FrozenChangeSet>(
-                $"Run '{runId}' has no frozen change set ('{patchPath}', '{changesetPath}'): " +
-                "stage 'freeze' (S3, #377) has not produced it — refusing to invent a change set.");
-        return ReadChangesetJson(changesetPath, patchPath);
-    }
+    public static Result<FrozenChangeSet> TryLoad(string? runIdValue) =>
+        ValidateRunId(runIdValue).Bind(runId =>
+        {
+            string runDir = WorkspaceMaterializer.RunDir(runId);
+            string patchPath = Path.Combine(runDir, "change.patch");
+            string changesetPath = Path.Combine(runDir, "changeset.json");
+            if (!File.Exists(patchPath) || !File.Exists(changesetPath))
+                return Result.Failure<FrozenChangeSet>(
+                    $"Run '{runId}' has no frozen change set ('{patchPath}', '{changesetPath}'): " +
+                    "stage 'freeze' (S3, #377) has not produced it — refusing to invent a change set.");
+            return ReadChangesetJson(changesetPath, patchPath);
+        });
 
     private static async Task<Result<FrozenChangeSet>> FreezeIsolatedAsync(
         RunManifest manifest,
