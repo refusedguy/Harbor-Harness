@@ -724,9 +724,7 @@ public static class ChangeSetFreezer
         // text. Patches are UTF-8 by construction for text hunks; binary
         // hunks travel as ASCII base85 (`GIT binary patch`), so a
         // UTF-8 round-trip is lossless for every patch git emits here.
-        Result<WorkspaceMaterializer.GitOutput> out_ =
-            await WorkspaceMaterializer.RunGitAsync(worktree, argv, DiffTimeout, ct).ConfigureAwait(false);
-        return out_
+        return (await WorkspaceMaterializer.RunGitAsync(worktree, argv, DiffTimeout, ct).ConfigureAwait(false))
             .Bind(o => o.ExitCode != 0
                 ? Result.Failure<byte[]>(
                     $"Freeze failed at stage 'diff': {WorkspaceMaterializer.Clip(o.Stderr)}")
