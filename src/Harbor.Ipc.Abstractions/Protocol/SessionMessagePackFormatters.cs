@@ -99,10 +99,22 @@ public sealed class SessionMessagePackFormatter : IMessagePackFormatter<Session?
             // Append-only field: pre-kind peers stop at 14 fields.
             var kind = fieldCount == 15 ? (SessionKind)reader.ReadInt32() : SessionKind.User;
 
-            return new Session(
-                id, projectId, directory, title, agent, model, providerId,
-                createdAt, updatedAt, metadata, parentSessionId, status,
-                gitBranch, gitIsDirty, kind);
+            return Session.Rehydrate(
+                Id: id,
+                ProjectId: projectId,
+                Directory: directory,
+                Title: title,
+                Agent: agent,
+                Model: model,
+                ProviderId: providerId,
+                CreatedAt: createdAt,
+                UpdatedAt: updatedAt,
+                Metadata: metadata,
+                ParentSessionId: parentSessionId,
+                Status: status,
+                GitBranch: gitBranch,
+                GitIsDirty: gitIsDirty,
+                Kind: kind);
         }
         finally
         {
