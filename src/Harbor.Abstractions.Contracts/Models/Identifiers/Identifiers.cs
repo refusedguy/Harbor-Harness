@@ -285,7 +285,7 @@ public sealed record ProviderId
 ///     A <see cref="ModelRef" /> is the canonical "provider/model" string (e.g.
 ///     <c>anthropic/claude-opus-4</c>). Use <see cref="TryParse" /> to parse from user input.
 /// </remarks>
-public sealed class ModelRef : ValueObject
+public sealed record ModelRef
 {
 
     private ModelRef(ProviderId providerId, string modelId)
@@ -423,13 +423,6 @@ public sealed class ModelRef : ValueObject
 
     /// <inheritdoc />
     public override string ToString() => $"{ProviderId}/{ModelId}";
-
-    /// <inheritdoc />
-    protected override IEnumerable<IComparable> GetEqualityComponents()
-    {
-        yield return ProviderId.Value;
-        yield return ModelId;
-    }
 
     /// <summary>
     ///     Implicit conversion to <see cref="string" /> producing the <c>provider/model</c> form.
