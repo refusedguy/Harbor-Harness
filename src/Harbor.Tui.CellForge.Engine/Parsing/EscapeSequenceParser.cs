@@ -71,7 +71,7 @@ public sealed class EscapeSequenceParser
     public ParserState State => _state;
     public int AvailableEvents => _count;
     public int MalformedSequenceCount { get; private set; }
-    public int IgnoredSequenceCount { get; private set; }
+    public int IgnoredSequenceCount { get; internal set; }
 
     /// <summary>True while a bracketed paste block has not been closed yet.</summary>
     public bool IsAwaitingPasteClose { get; private set; }
@@ -555,198 +555,27 @@ public sealed class EscapeSequenceParser
         DecodeCsiFinal(finalByte, prefixByte, paramSpan, intermediateSpan);
     }
 
-    /// <summary>Routes a complete CSI sequence to its decoder. Zone З.2 adds
-    /// mouse M/m, zone З.3 adds paste ~ markers.</summary>
-    private void DecodeCsiFinal(byte finalByte, byte privatePrefix, ReadOnlySpan<byte> parameters, ReadOnlySpan<byte> intermediates)
-    {
-        if (privatePrefix == (byte)'<')
-        {
-            // SGR mouse encoding (design §3.2): CSI < button ; col ; row M|m.
-            if (finalByte is (byte)'M' or (byte)'m')
-            {
-                if (SgrMouseDecoder.TryDecode(
-                    finalByte,
-                    parameters,
-                    _mousePressedButton,
-                    _mouseMovedSincePress,
-                    out var mouseEvent,
-                    out var nextPressedButton,
-                    out var nextMovedSincePress))
-                {
-                    _mousePressedButton = nextPressedButton;
-                    _mouseMovedSincePress = nextMovedSincePress;
-                    Enqueue(InputEvent.FromMouse(mouseEvent));
-                }
-                else
-                {
-                    IgnoredSequenceCount++;
-                }
-                return;
-            }
-
-            IgnoredSequenceCount++;
-            return;
-        }
-
-        if (privatePrefix != 0)
-        {
-            switch (finalByte)
-            {
-                case (byte)'u':
-                    // Answer to our kitty probe CSI ? u → CSI ? flags u.
-                    EnqueueCapability(CapabilityEvent.KittyFlags((uint)Math.Max(0, FirstIntParam(parameters))));
-                    return;
-                case (byte)'y' when intermediates.Length == 1 && intermediates[0] == (byte)'$':
-                    // DECRQM answer: CSI ? Ps ; Pv $ y.
-                    EnqueueCapability(CapabilityEvent.DecRqm(
-                        Math.Max(0, FirstIntParam(parameters)),
-                        Math.Max(0, IntParamAt(parameters, 1))));
-                    return;
-                case (byte)'c':
-                    // Primary device attributes: CSI [ ? Ps ; … c.
-                    EnqueueCapability(CapabilityEvent.Da(Math.Max(0, FirstIntParam(parameters))));
-                    return;
-                default:
-                    // Private-mode reports we did not request (h/l and friends).
-                    IgnoredSequenceCount++;
-                    return;
-            }
-        }
-
-        switch (finalByte)
-        {
-            case (byte)'A':
-                EnqueueArrow(KeyCode.Up, parameters);
-                return;
-            case (byte)'B':
-                EnqueueArrow(KeyCode.Down, parameters);
-                return;
-            case (byte)'C':
-                EnqueueArrow(KeyCode.Right, parameters);
-                return;
-            case (byte)'D':
-                EnqueueArrow(KeyCode.Left, parameters);
-                return;
-            case (byte)'H':
-                EnqueueArrow(KeyCode.Home, parameters);
-                return;
-            case (byte)'F':
-                EnqueueArrow(KeyCode.End, parameters);
-                return;
-            case (byte)'~':
-                if (FirstIntParam(parameters) == 200)
-                {
-                    // Bracketed-paste open marker: CSI 200 ~ (§4.1).
-                    StartPaste();
-                    return;
-                }
-
-                DecodeLegacyTilde(parameters);
-                return;
-            case (byte)'u':
-                if (KittyKeyDecoder.TryDecode(parameters, out var kittyKey))
-                {
-                    Enqueue(InputEvent.FromKey(kittyKey));
-                }
-                else
-                {
-                    IgnoredSequenceCount++;
-                }
-                return;
-            case (byte)'R':
-                // Cursor position report: CSI row ; col R (probe-routable).
-                var row = IntParamAt(parameters, 0);
-                var col = IntParamAt(parameters, 1);
-                if (row > 0 && col > 0)
-                {
-                    EnqueueCapability(CapabilityEvent.CursorPosition(row, col));
-                    return;
-                }
-                IgnoredSequenceCount++;
-                return;
-            default:
-                IgnoredSequenceCount++;
-                return;
-        }
-    }
-
-    private void EnqueueArrow(KeyCode key, ReadOnlySpan<byte> parameters)
-    {
-        var mods = LegacyModifiers(parameters);
-        EnqueueSimple(key, mods);
-    }
-
-    private void DecodeLegacyTilde(ReadOnlySpan<byte> parameters)
-    {
-        var code = FirstIntParam(parameters);
-        var mods = LegacyModifiers(parameters);
-        KeyCode key = code switch
-        {
-            1 => KeyCode.Home,
-            2 => KeyCode.Insert,
-            3 => KeyCode.Delete,
-            4 => KeyCode.End,
-            5 => KeyCode.PageUp,
-            6 => KeyCode.PageDown,
-            7 => KeyCode.Home,
-            8 => KeyCode.End,
-            11 => KeyCode.F1,
-            12 => KeyCode.F2,
-            13 => KeyCode.F3,
-            14 => KeyCode.F4,
-            15 => KeyCode.F5,
-            17 => KeyCode.F6,
-            18 => KeyCode.F7,
-            19 => KeyCode.F8,
-            20 => KeyCode.F9,
-            21 => KeyCode.F10,
-            23 => KeyCode.F11,
-            24 => KeyCode.F12,
-            _ => KeyCode.None,
-        };
-
-        if (key == KeyCode.None)
-        {
-            IgnoredSequenceCount++;
-            return;
-        }
-
-        EnqueueSimple(key, mods);
-    }
+    /// <summary>Routes a complete CSI sequence to its decoder.
+    /// Forwarder over <see cref="CsiDecoder"/> (#1503, slice: verbatim move).</summary>
+    private void DecodeCsiFinal(byte finalByte, byte privatePrefix, ReadOnlySpan<byte> parameters, ReadOnlySpan<byte> intermediates) =>
+        CsiDecoder.DecodeCsiFinal(this, finalByte, privatePrefix, parameters, intermediates, ref _mousePressedButton, ref _mouseMovedSincePress);
 
     /// <summary>
-    /// Legacy CSI/SS3 modifier parameter (xterm encoding): SECOND parameter,
-    /// value−1 with shift=bit0, alt=bit1, ctrl=bit2, meta=bit3. NOTE the
-    /// different bit order versus kitty CSI-u (kitty: shift=1, ctrl=2, alt=4).
+    /// Forwarder over <see cref="CsiDecoder"/> (#1503, slice: verbatim move).</summary>
+    private void EnqueueArrow(KeyCode key, ReadOnlySpan<byte> parameters) =>
+        CsiDecoder.EnqueueArrow(this, key, parameters);
+
+    /// <summary>
+    /// Forwarder over <see cref="CsiDecoder"/> (#1503, slice: verbatim move).</summary>
+    private void DecodeLegacyTilde(ReadOnlySpan<byte> parameters) =>
+        CsiDecoder.DecodeLegacyTilde(this, parameters);
+
+    /// <summary>
+    /// Legacy CSI/SS3 modifier parameter (xterm encoding).
+    /// Forwarder over <see cref="CsiDecoder"/> (#1503, slice: verbatim move).
     /// </summary>
-    private static KeyModifiers LegacyModifiers(ReadOnlySpan<byte> parameters)
-    {
-        var bits = IntParamAt(parameters, 1) - 1;
-        if (bits <= 0)
-        {
-            return KeyModifiers.None;
-        }
-
-        var mods = KeyModifiers.None;
-        if ((bits & 0x01) != 0)
-        {
-            mods |= KeyModifiers.Shift;
-        }
-        if ((bits & 0x02) != 0)
-        {
-            mods |= KeyModifiers.Alt;
-        }
-        if ((bits & 0x04) != 0)
-        {
-            mods |= KeyModifiers.Ctrl;
-        }
-        if ((bits & 0x08) != 0)
-        {
-            mods |= KeyModifiers.Meta;
-        }
-
-        return mods;
-    }
+    private static KeyModifiers LegacyModifiers(ReadOnlySpan<byte> parameters) =>
+        CsiDecoder.LegacyModifiers(parameters);
 
     // ── OSC / DCS strings ─────────────────────────────────────────────────
 
@@ -859,7 +688,7 @@ public sealed class EscapeSequenceParser
     /// <summary>Anti-injection invariant (§4.2): paste content is copied
     /// verbatim into one atomic PasteEvent — escape bytes and control bytes
     /// inside the block are NEVER decoded as key/mouse events.</summary>
-    private void StartPaste()
+    internal void StartPaste()
     {
         _pasteBuffer ??= new byte[_options.MaxPasteBytes];
         _pasteLength = 0;
@@ -954,59 +783,19 @@ public sealed class EscapeSequenceParser
     }
 
     // ── Param scanning helpers (scalar, zero-alloc) ───────────────────────
+    // Bodies live in <see cref="CsiDecoder"/> (#1503, slice: verbatim move).
 
-    private static int FirstIntParam(ReadOnlySpan<byte> parameters) => IntParamAt(parameters, 0);
+    private static int FirstIntParam(ReadOnlySpan<byte> parameters) => CsiDecoder.FirstIntParam(parameters);
 
     /// <summary>Returns the <paramref name="index"/>-th ';'-separated parameter
-    /// (sub-parameters ':' are ignored), or −1 when absent. Shared with
-    /// <see cref="KittyKeyDecoder"/> (kitty modifier group).</summary>
-    internal static int IntParamAt(ReadOnlySpan<byte> parameters, int index)
-    {
-        var group = 0;
-        var value = 0;
-        var digits = 0;
-        foreach (var b in parameters)
-        {
-            if (b == (byte)';')
-            {
-                if (group == index && digits > 0)
-                {
-                    return value;
-                }
-                group++;
-                value = 0;
-                digits = 0;
-                continue;
-            }
-            if (b == (byte)':')
-            {
-                if (group == index)
-                {
-                    // Target group's first sub-parameter ends here.
-                    return digits > 0 ? value : -1;
-                }
-
-                // Sub-parameters of an EARLIER group are skipped transparently.
-                value = 0;
-                digits = 0;
-                continue;
-            }
-            if (b is >= (byte)'0' and <= (byte)'9')
-            {
-                checked
-                {
-                    value = value * 10 + (b - (byte)'0');
-                }
-                digits++;
-            }
-        }
-
-        return group == index && digits > 0 ? value : -1;
-    }
+    /// (sub-parameters ':' are ignored), or −1 when absent.
+    /// Forwarder over <see cref="CsiDecoder"/> (#1503, slice: verbatim move).</summary>
+    internal static int IntParamAt(ReadOnlySpan<byte> parameters, int index) =>
+        CsiDecoder.IntParamAt(parameters, index);
 
     // ── Event queue ───────────────────────────────────────────────────────
 
-    private void EnqueueSimple(KeyCode key, KeyModifiers mods) =>
+    internal void EnqueueSimple(KeyCode key, KeyModifiers mods) =>
         Enqueue(InputEvent.FromKey(KeyEvent.Simple(key, mods)));
 
     private void EnqueueKey(KeyCode key) => EnqueueSimple(key, KeyModifiers.None);
@@ -1014,10 +803,10 @@ public sealed class EscapeSequenceParser
     private void EnqueueChar(Rune rune, KeyModifiers mods) =>
         Enqueue(InputEvent.FromKey(KeyEvent.Char(rune, mods)));
 
-    private void EnqueueCapability(CapabilityEvent evt) =>
+    internal void EnqueueCapability(CapabilityEvent evt) =>
         Enqueue(InputEvent.FromCapability(evt));
 
-    private void Enqueue(in InputEvent evt)
+    internal void Enqueue(in InputEvent evt)
     {
         if (_count == _queue.Length)
         {
