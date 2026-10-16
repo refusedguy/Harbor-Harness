@@ -281,7 +281,7 @@ public static class ChangeSetFreezer
     public static Result<FrozenChangeSet> TryLoad(string? runIdValue) =>
         ValidateRunId(runIdValue).Bind(runId =>
         {
-            string runDir = WorkspaceMaterializer.RunDir(runId);
+            string runDir = WorkspacePaths.Default.RunDir(runId);
             string patchPath = Path.Combine(runDir, "change.patch");
             string changesetPath = Path.Combine(runDir, "changeset.json");
             if (!File.Exists(patchPath) || !File.Exists(changesetPath))
@@ -300,7 +300,7 @@ public static class ChangeSetFreezer
     {
         string worktree = workspace.Path;
         string baseRevision = manifest.BaseRevision;
-        string runDir = WorkspaceMaterializer.RunDir(manifest.RunId);
+        string runDir = WorkspacePaths.Default.RunDir(manifest.RunId);
         string patchPath = Path.Combine(runDir, "change.patch");
         string changesetPath = Path.Combine(runDir, "changeset.json");
 
@@ -479,7 +479,7 @@ public static class ChangeSetFreezer
     private static async Task<Result<FrozenChangeSet>> ReadExistingAsync(
         RunManifest manifest, CancellationToken ct)
     {
-        string runDir = WorkspaceMaterializer.RunDir(manifest.RunId);
+        string runDir = WorkspacePaths.Default.RunDir(manifest.RunId);
         string patchPath = Path.Combine(runDir, "change.patch");
         string changesetPath = Path.Combine(runDir, "changeset.json");
         if (!File.Exists(patchPath) || !File.Exists(changesetPath))
