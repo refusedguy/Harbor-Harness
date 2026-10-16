@@ -1,4 +1,5 @@
 using System.Globalization;
+using Harbor.Abstractions.Extensions;
 
 namespace Harbor.Application.Sessions;
 
@@ -153,7 +154,7 @@ public sealed record FrozenChangeSet
             throw new ArgumentException("A frozen set must name its frozen head.", nameof(headRevision));
         if (string.IsNullOrWhiteSpace(patchPath))
             throw new ArgumentException("A frozen set must name its patch path.", nameof(patchPath));
-        ArgumentNullException.ThrowIfNull(entries);
+        Ensure.NotNull(entries);
         if (ignoredPathCount < 0)
             throw new ArgumentException("The ignored-path count cannot be negative.", nameof(ignoredPathCount));
         var sorted = new List<FrozenChangeEntry>(entries);
