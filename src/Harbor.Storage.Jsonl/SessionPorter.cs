@@ -110,10 +110,11 @@ public sealed class JsonlSessionPorter : ISessionPorter
         // Minted fresh ALWAYS — see ISessionPorter remarks (idempotent double-import).
         // NOTE: stores generate their OWN ids inside CreateAsync, so the enriched
         // target record is derived from created.Value AFTER the call, never before.
-        var created = await store.CreateAsync(source.Directory, source.Agent, source.ProviderId, source.Model, ct)
-            .ConfigureAwait(false);
+        var created = (await store.CreateAsync(source.Directory, source.Agent, source.ProviderId, source.Model, ct)
+            .ConfigureAwait(false))
+            .MapError(error => $"Import failed while creating session: {error}");
         if (created.IsFailure) // §4.6-ok: single rail-step to the transport type.
-            return Result.Failure<string>($"Import failed while creating session: {created.Error}");
+            return created.ConvertFailure<string>();
 
         Session target = created.Value with
         {
