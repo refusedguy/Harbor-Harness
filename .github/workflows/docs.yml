@@ -363,8 +363,9 @@ jobs:
   # exactly one currently-undocumented member, so documenting one means
   # dropping its entry in the same diff, where a reviewer can see it.
   #
-  # The floors are a ratchet, like the ones above. Measured on dev@702647a9:
-  # 494 members, 479 documented (97.0%, floor 0.96), 15 suppressed. The count
+  # The floors are a ratchet, like the ones above. Measured on this tree:
+  # 493 members, 478 documented (97.0%, floor 0.96), 15 suppressed (−8
+  # GetEqualityComponents <inheritdoc/> rows via #1559 records). The count
   # floors are set AT those values, not below: a floor with slack cannot tell
   # "the surface got smaller" from "the matcher stopped matching". The
   # non-vacuity proof is the gate's own --self-test (one undocumented member
@@ -378,20 +379,20 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - name: Check XML-doc coverage of the frozen contract assembly
-        run: python3 tools/check-xml-doc-coverage.py --min-members 494 --min-documented 479 --min-coverage 0.96
+        run: python3 tools/check-xml-doc-coverage.py --min-members 493 --min-documented 478 --min-coverage 0.96
 
   # #428 (first slice). Public-API snapshot gate for the frozen contract
   # assembly.
   #
   # The baseline `src/Harbor.Abstractions.Contracts/PublicAPI.Baseline.txt`
-  # is the reviewed surface: 493 effectively-public types/members as
+  # is the reviewed surface: 491 effectively-public types/members as
   # `Qualified.Type :: normalized declaration`, with no file paths and no
   # line numbers, so moves and re-wraps do not fail the gate. Any added,
   # removed or re-signed member fails it — additions regenerate the baseline
   # in the same diff (`--update`, reviewed), removals/re-signs are breaking
   # and need a major bump + CHANGELOG entry decided outside this gate.
   #
-  # The floor is a ratchet, like the ones above. Measured on this tree: 493
+  # The floor is a ratchet, like the ones above. Measured on this tree: 491
   # members. It is set AT that value, not below: a floor with slack cannot
   # tell "the surface got smaller" from "the matcher stopped matching". The
   # non-vacuity proof is the gate's own --self-test (added/removed member
@@ -405,7 +406,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - name: Check the frozen contract surface against its baseline
-        run: python3 tools/check-public-api.py --min-members 493
+        run: python3 tools/check-public-api.py --min-members 491
 
   # #431 (slice 1). Docs-site assembly from the existing markdown tree.
   #
