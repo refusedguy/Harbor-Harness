@@ -3,6 +3,7 @@ using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Abstractions.Providers;
 using Harbor.Application.Attachments;
+using Harbor.TestKit;
 
 namespace Harbor.Application.Tests.Attachments;
 
@@ -42,7 +43,7 @@ public class ImageAttachmentReaderTests
             var reader = new ImageAttachmentReader();
             var result = await reader.ReadAsync(path, "kilocode", "kilo-auto/free");
 
-            await Assert.That(result.IsSuccess).IsTrue();
+            await Assert.That(result).IsSuccessful();
             await Assert.That(result.Value.MimeType).IsEqualTo("image/png");
             await Assert.That(result.Value.Width).IsEqualTo(1);
             await Assert.That(result.Value.Height).IsEqualTo(1);
@@ -60,7 +61,7 @@ public class ImageAttachmentReaderTests
         var reader = new ImageAttachmentReader();
         var result = await reader.ReadAsync("/nope/does-not-exist.png", "kilocode", "kilo-auto/free");
 
-        await Assert.That(result.IsFailure).IsTrue();
+        await Assert.That(result).IsFailed();
         await Assert.That(result.Error).Contains("not found");
     }
 
@@ -84,7 +85,7 @@ public class ImageAttachmentReaderTests
             var reader = new ImageAttachmentReader();
             var result = await reader.ReadAsync(path, "kilocode", "kilo-auto/free");
 
-            await Assert.That(result.IsSuccess).IsTrue();
+            await Assert.That(result).IsSuccessful();
             await Assert.That(result.Value.MimeType).IsEqualTo("image/jpeg");
             await Assert.That(result.Value.Width).IsEqualTo(400);
             await Assert.That(result.Value.Height).IsEqualTo(600);
@@ -101,7 +102,7 @@ public class ImageAttachmentReaderTests
         var reader = new ImageAttachmentReader();
         var result = await reader.ReadAsync("   ", "kilocode", "kilo-auto/free");
 
-        await Assert.That(result.IsFailure).IsTrue();
+        await Assert.That(result).IsFailed();
         await Assert.That(result.Error).Contains("/attach");
     }
 
@@ -117,7 +118,7 @@ public class ImageAttachmentReaderTests
             var reader = new ImageAttachmentReader();
             var result = await reader.ReadAsync(path, "kilocode", "kilo-auto/free");
 
-            await Assert.That(result.IsFailure).IsTrue();
+            await Assert.That(result).IsFailed();
             await Assert.That(result.Error).Contains("empty");
         }
         finally
@@ -139,7 +140,7 @@ public class ImageAttachmentReaderTests
             var reader = new ImageAttachmentReader();
             var result = await reader.ReadAsync(path, "kilocode", "kilo-auto/free");
 
-            await Assert.That(result.IsFailure).IsTrue();
+            await Assert.That(result).IsFailed();
             await Assert.That(result.Error).Contains("Unsupported image format");
             await Assert.That(result.Error).Contains("PNG");
         }
@@ -165,7 +166,7 @@ public class ImageAttachmentReaderTests
             var reader = new ImageAttachmentReader();
             var result = await reader.ReadAsync(path, "kilocode", "kilo-auto/free");
 
-            await Assert.That(result.IsFailure).IsTrue();
+            await Assert.That(result).IsFailed();
             await Assert.That(result.Error).Contains("too large");
         }
         finally
@@ -189,7 +190,7 @@ public class ImageAttachmentReaderTests
 
             var result = await reader.ReadAsync(path, "kilocode", "text-only");
 
-            await Assert.That(result.IsFailure).IsTrue();
+            await Assert.That(result).IsFailed();
             await Assert.That(result.Error).Contains("does not accept images");
         }
         finally
@@ -213,7 +214,7 @@ public class ImageAttachmentReaderTests
 
             var result = await reader.ReadAsync(path, "kilocode", "sees");
 
-            await Assert.That(result.IsSuccess).IsTrue();
+            await Assert.That(result).IsSuccessful();
         }
         finally
         {
@@ -235,7 +236,7 @@ public class ImageAttachmentReaderTests
             var reader = new ImageAttachmentReader(new StubProviderRegistry([]));
             var result = await reader.ReadAsync(path, "kilocode", "unlisted-model");
 
-            await Assert.That(result.IsSuccess).IsTrue();
+            await Assert.That(result).IsSuccessful();
         }
         finally
         {
@@ -255,7 +256,7 @@ public class ImageAttachmentReaderTests
             var reader = new ImageAttachmentReader(new StubProviderRegistry([], failCatalog: true));
             var result = await reader.ReadAsync(path, "kilocode", "any-model");
 
-            await Assert.That(result.IsSuccess).IsTrue();
+            await Assert.That(result).IsSuccessful();
         }
         finally
         {
