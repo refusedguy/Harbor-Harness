@@ -278,22 +278,18 @@ public static class ChangeSetFreezer
     ///     stage, never an empty set.
     /// </summary>
     /// <param name="runIdValue">Run id (validated like everywhere else: no path separators).</param>
-    public static Result<FrozenChangeSet> TryLoad(string? runIdValue)
-    {
-        Result<string> id = ValidateRunId(runIdValue);
-        if (id.IsFailure)
-            return id.ConvertFailure<FrozenChangeSet>();
-        string runId = id.Value;
-
-        string runDir = WorkspaceMaterializer.RunDir(runId);
-        string patchPath = Path.Combine(runDir, "change.patch");
-        string changesetPath = Path.Combine(runDir, "changeset.json");
-        if (!File.Exists(patchPath) || !File.Exists(changesetPath))
-            return Result.Failure<FrozenChangeSet>(
-                $"Run '{runId}' has no frozen change set ('{patchPath}', '{changesetPath}'): " +
-                "stage 'freeze' (S3, #377) has not produced it — refusing to invent a change set.");
-        return ReadChangesetJson(changesetPath, patchPath);
-    }
+    public static Result<FrozenChangeSet> TryLoad(string? runIdValue) =>
+        ValidateRunId(runIdValue).Bind(runId =>
+        {
+            string runDir = WorkspaceMaterializer.RunDir(runId);
+            string patchPath = Path.Combine(runDir, "change.patch");
+            string changesetPath = Path.Combine(runDir, "changeset.json");
+            if (!File.Exists(patchPath) || !File.Exists(changesetPath))
+                return Result.Failure<FrozenChangeSet>(
+                    $"Run '{runId}' has no frozen change set ('{patchPath}', '{changesetPath}'): " +
+                    "stage 'freeze' (S3, #377) has not produced it — refusing to invent a change set.");
+            return ReadChangesetJson(changesetPath, patchPath);
+        });
 
     private static async Task<Result<FrozenChangeSet>> FreezeIsolatedAsync(
         RunManifest manifest,
@@ -558,11 +554,14 @@ public static class ChangeSetFreezer
 
     private static async Task<Result<int>> CountIgnoredAsync(string worktree, CancellationToken ct)
     {
-        Result<string> porcelain = await PorcelainAsync(worktree, ct, ignored: true).ConfigureAwait(false);
-        if (porcelain.IsFailure)
-            return porcelain.ConvertFailure<int>();
+        return (await PorcelainAsync(worktree, ct, ignored: true).ConfigureAwait(false))
+            .Map(CountIgnoredLines);
+    }
+
+    private static int CountIgnoredLines(string porcelain)
+    {
         int ignored = 0;
-        ReadOnlySpan<char> rest = porcelain.Value.AsSpan();
+        ReadOnlySpan<char> rest = porcelain.AsSpan();
         while (true)
         {
             int nl = rest.IndexOf('\n');
@@ -573,7 +572,7 @@ public static class ChangeSetFreezer
                 break;
             rest = rest.Slice(nl + 1);
         }
-        return Result.Success(ignored);
+        return ignored;
     }
 
     private static async Task<Result<string>> PorcelainAsync(string worktree, CancellationToken ct, bool ignored)
@@ -753,14 +752,12 @@ public static class ChangeSetFreezer
             "-c", "commit.gpgsign=false",
             "commit", "--no-verify", "-m", message,
         ];
-        Result<WorkspaceMaterializer.GitOutput> out_ =
-            await WorkspaceMaterializer.RunGitAsync(worktree, argv, CommitTimeout, ct).ConfigureAwait(false);
-        if (out_.IsFailure)
-            return out_.ConvertFailure<string>();
-        if (out_.Value.ExitCode != 0)
-            return Result.Failure<string>(
-                $"Freeze of run '{runId}' failed at stage 'commit': {WorkspaceMaterializer.Clip(out_.Value.Stderr)}");
-        return await RevParseHeadAsync(worktree, ct).ConfigureAwait(false);
+        return await (await WorkspaceMaterializer.RunGitAsync(worktree, argv, CommitTimeout, ct).ConfigureAwait(false))
+            .Bind(o => o.ExitCode != 0
+                ? Result.Failure<WorkspaceMaterializer.GitOutput>(
+                    $"Freeze of run '{runId}' failed at stage 'commit': {WorkspaceMaterializer.Clip(o.Stderr)}")
+                : Result.Success(o))
+            .Bind(_ => RevParseHeadAsync(worktree, ct)).ConfigureAwait(false);
     }
 
     private static async Task ResetIndexAsync(string worktree)
