@@ -1,31 +1,29 @@
 # Plan — Harbor.Plugin.GitTools
 
-## Status: Sample
+## Status: Showcase slice-2 (#1434)
 
-Sample plugin — demonstrates the `IToolPlugin` extension point. Not a production-grade implementation.
+Showcase plugin — demonstrates `IToolPlugin` + `ITuiPanelPlugin` (tools + panel only, no new axes).
 
 ## Done
 
-- [x] Implements `IToolPlugin`
+- [x] Implements `IToolPlugin` + `ITuiPanelPlugin`
 - [x] Plugin manifest (name, version)
 - [x] Initialize / Shutdown lifecycle
 - [x] Works with the default plugin pipeline (`PluginHostBuilder`)
+- [x] Structured read-only facts (`git_status` with `status` / `branch` / `pr` actions)
+- [x] Best-effort PR status via `gh` (degrades without `gh`, never fails the call)
+- [x] Read-only `git-status` panel (text rows, daemon `IGitQuery` + PR cache, no per-frame spawn)
+- [x] One-command install (`install.sh`) + 60-second demo (`demo.sh`)
+- [x] Showcase doc page (`docs/PLUGIN_SHOWCASE_GITTOOLS.md`)
 
 ## TODO
 
 - [ ] Add unit tests
-- [ ] Add a sample invocation in docs
 - [ ] Error handling polish
-- [ ] Add `git_commit` tool
-- [ ] Add `git_branch` tool
 - [ ] Use LibGit2Sharp instead of shelling out
 
 ## Known issues
 
-- Requires `git` on PATH.
+- Requires `git` on PATH (`gh` optional, PR line only).
 - Shelling out is slower than LibGit2Sharp.
-
-## Next priorities
-
-1. **P1**: Add unit tests
-2. **P2**: Error handling polish
+- The panel PR line refreshes on `git_status pr` tool calls, not per frame (by design — no per-frame spawn).
