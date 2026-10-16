@@ -1,4 +1,5 @@
 using Harbor.Abstractions.Agents;
+using Harbor.Abstractions.Extensions;
 using Harbor.Abstractions.Permissions;
 using Microsoft.Extensions.Logging;
 
@@ -49,7 +50,7 @@ public sealed class ApprovalCoordinator(ILogger<ApprovalCoordinator> logger) : I
     /// <inheritdoc />
     public void RegisterGate(string gateId)
     {
-        ArgumentException.ThrowIfNullOrEmpty(gateId);
+        Ensure.NotEmpty(gateId);
         lock (_gate)
         {
             _gates.TryAdd(gateId, new GateSlot());
@@ -59,8 +60,8 @@ public sealed class ApprovalCoordinator(ILogger<ApprovalCoordinator> logger) : I
     /// <inheritdoc />
     public void RegisterGate(string gateId, string invocationId, int generation)
     {
-        ArgumentException.ThrowIfNullOrEmpty(gateId);
-        ArgumentException.ThrowIfNullOrEmpty(invocationId);
+        Ensure.NotEmpty(gateId);
+        Ensure.NotEmpty(invocationId);
         ArgumentOutOfRangeException.ThrowIfLessThan(generation, 1);
         lock (_gate)
         {
@@ -71,7 +72,7 @@ public sealed class ApprovalCoordinator(ILogger<ApprovalCoordinator> logger) : I
     /// <inheritdoc />
     public ApprovalDecisionDisposition DecideApproval(string gateId, ApprovalResolution decision)
     {
-        ArgumentNullException.ThrowIfNull(decision);
+        Ensure.NotNull(decision);
         GateSlot? slot;
         ApprovalDecisionDisposition disposition;
         lock (_gate)
@@ -110,7 +111,7 @@ public sealed class ApprovalCoordinator(ILogger<ApprovalCoordinator> logger) : I
     public ApprovalDecisionDisposition DecideApproval(
         string gateId, string invocationId, int generation, ApprovalResolution decision)
     {
-        ArgumentNullException.ThrowIfNull(decision);
+        Ensure.NotNull(decision);
         GateSlot? slot;
         ApprovalDecisionDisposition disposition;
         // Captured under the lock, logged after it: no IO (not even the
@@ -257,7 +258,7 @@ public sealed class ApprovalCoordinator(ILogger<ApprovalCoordinator> logger) : I
     /// <inheritdoc />
     public bool TryCommitApproval(long scope, string invocationId, int generation)
     {
-        ArgumentException.ThrowIfNullOrEmpty(invocationId);
+        Ensure.NotEmpty(invocationId);
         lock (_gate)
         {
             if (scope != _cancelGeneration)
@@ -309,7 +310,7 @@ public sealed class ApprovalCoordinator(ILogger<ApprovalCoordinator> logger) : I
     /// <inheritdoc />
     public void RequestCancel(IAgentRunner agent)
     {
-        ArgumentNullException.ThrowIfNull(agent);
+        Ensure.NotNull(agent);
         List<TaskCompletionSource<ApprovalResolution?>> swept;
         lock (_gate)
         {
