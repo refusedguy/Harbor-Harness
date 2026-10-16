@@ -15,7 +15,7 @@ namespace Harbor.Tools.Mcp;
 ///     made the existing seam unusable from outside this assembly.
 /// </summary>
 /// <remarks>
-///     The seam carries <c>Result&lt;Maybe&lt;JsonDocument&gt;&gt;</c> and nothing
+///     The seam carries <c>Result&lt;Maybe&lt;JsonElement&gt;&gt;</c> and nothing
 ///     else (#587). Three outcomes have to stay tellable apart, and a nullable
 ///     return collapses the first two into one <c>null</c>:
 ///     <list type="bullet">
@@ -23,7 +23,7 @@ namespace Harbor.Tools.Mcp;
 ///     the HTTP status, the attempt count and the latency.</item>
 ///     <item><c>Success(Maybe.None)</c> — the server answered, and the answer
 ///     legitimately carries no document (<c>202 Accepted</c>, empty body).</item>
-///     <item><c>Success(Maybe.From(doc))</c> — the response (caller disposes).</item>
+///     <item><c>Success(Maybe.From(el))</c> — the response (no disposal: a source-gen element).</item>
 ///     </list>
 ///     A nullable-returning member is banned here by
 ///     <c>tests/Harbor.Architecture.Tests/RemoteTransportResultRules.cs</c>, which
@@ -32,12 +32,12 @@ namespace Harbor.Tools.Mcp;
 public interface IMcpRemoteTransport : IAsyncDisposable
 {
     /// <summary>
-    ///     Send one JSON-RPC request and return the matching response (caller
-    ///     disposes). <c>Maybe.None</c> is a successful round-trip whose answer
+    ///     Send one JSON-RPC request and return the matching response.
+    ///     <c>Maybe.None</c> is a successful round-trip whose answer
     ///     carries no document — not a failure. User cancellation and disposal
     ///     still throw; every other wire failure is a <c>Failure</c>.
     /// </summary>
-    Task<Result<Maybe<JsonDocument>>> TryRoundTripAsync(
+    Task<Result<Maybe<JsonElement>>> TryRoundTripAsync(
         JsonElement request,
         int? expectedId = null,
         CancellationToken cancellationToken = default);
@@ -92,7 +92,7 @@ public sealed class McpHttpTransport : IMcpRemoteTransport
     ///     document" (202 Accepted, empty body) — a different state from a failure,
     ///     which is why the value is a <see cref="Maybe{T}" /> and not a null.
     /// </summary>
-    public async Task<Result<Maybe<JsonDocument>>> TryRoundTripAsync(
+    public async Task<Result<Maybe<JsonElement>>> TryRoundTripAsync(
         JsonElement request,
         int? expectedId = null,
         CancellationToken cancellationToken = default)
@@ -103,7 +103,7 @@ public sealed class McpHttpTransport : IMcpRemoteTransport
         string body = request.GetRawText();
         Result<Maybe<string>> oauth = await TryGetOAuthTokenAsync(cancellationToken).ConfigureAwait(false);
         if (oauth.IsFailure)
-            return Fail<Maybe<JsonDocument>>(sw, 0, oauth.Error);
+            return Fail<Maybe<JsonElement>>(sw, 0, oauth.Error);
         Maybe<string> oauthToken = oauth.Value;
         int attempt = 1;
 
@@ -120,14 +120,14 @@ public sealed class McpHttpTransport : IMcpRemoteTransport
 
                 if (httpResponse.StatusCode == HttpStatusCode.Accepted)
                 {
-                    return Result.Success(Maybe<JsonDocument>.None);
+                    return Result.Success(Maybe<JsonElement>.None);
                 }
 
                 if (IsTransientStatus(httpResponse.StatusCode))
                 {
                     string cause = $"server returned {(int)httpResponse.StatusCode}";
                     if (attempt >= TransientFailurePolicy.DefaultMaxAttempts)
-                        return Fail<Maybe<JsonDocument>>(sw, attempt, cause);
+                        return Fail<Maybe<JsonElement>>(sw, attempt, cause);
                     if (_logger is not null) McpHttpTransportLog.RequestFailed(_logger, _endpoint, attempt, TransientFailurePolicy.DefaultMaxAttempts, cause);
                     await BackoffAsync(attempt, cancellationToken).ConfigureAwait(false);
                     attempt++;
@@ -135,12 +135,12 @@ public sealed class McpHttpTransport : IMcpRemoteTransport
                 }
 
                 CaptureSession(httpResponse);
-                Result<Maybe<JsonDocument>> read =
+                Result<Maybe<JsonElement>> read =
                     await TryReadResponseAsync(httpResponse, expectedId, attemptCts.Token).ConfigureAwait(false);
                 if (read.IsFailure)
                 {
                     // The response was consumed: a no-frame SSE body is terminal.
-                    return Fail<Maybe<JsonDocument>>(sw, attempt, read.Error);
+                    return Fail<Maybe<JsonElement>>(sw, attempt, read.Error);
                 }
 
                 return read;
@@ -150,7 +150,7 @@ public sealed class McpHttpTransport : IMcpRemoteTransport
                 // Client-side per-attempt timeout — retryable, unlike user cancellation.
                 string cause = $"server did not respond within {_requestTimeout.TotalSeconds:F0}s";
                 if (attempt >= TransientFailurePolicy.DefaultMaxAttempts)
-                    return Fail<Maybe<JsonDocument>>(sw, attempt, cause);
+                    return Fail<Maybe<JsonElement>>(sw, attempt, cause);
 
                 await BackoffAsync(attempt, cancellationToken).ConfigureAwait(false);
                 attempt++;
@@ -164,7 +164,7 @@ public sealed class McpHttpTransport : IMcpRemoteTransport
             }
             catch (Exception ex) when (TransientFailurePolicy.ShouldRetry(ex))
             {
-                return Fail<Maybe<JsonDocument>>(sw, attempt, ex.Message);
+                return Fail<Maybe<JsonElement>>(sw, attempt, ex.Message);
             }
             catch (Exception ex) when (ex is not OperationCanceledException
                 && ex is not ObjectDisposedException
@@ -172,7 +172,7 @@ public sealed class McpHttpTransport : IMcpRemoteTransport
             {
                 // Expected wire failure outside the transient set (e.g. malformed
                 // JSON body): terminal, observable, never a throw.
-                return Fail<Maybe<JsonDocument>>(sw, attempt, ex.Message);
+                return Fail<Maybe<JsonElement>>(sw, attempt, ex.Message);
             }
         }
     }
@@ -262,7 +262,7 @@ public sealed class McpHttpTransport : IMcpRemoteTransport
     ///     a matching frame is a terminal <c>Failure</c> (was: throw in the same method
     ///     that returned null — nulls and throws no longer share one signature).
     /// </summary>
-    private async Task<Result<Maybe<JsonDocument>>> TryReadResponseAsync(
+    private async Task<Result<Maybe<JsonElement>>> TryReadResponseAsync(
         HttpResponseMessage response,
         int? expectedId,
         CancellationToken cancellationToken)
@@ -272,7 +272,7 @@ public sealed class McpHttpTransport : IMcpRemoteTransport
         byte[] payload = await response.Content.ReadAsByteArrayAsync(cancellationToken).ConfigureAwait(false);
         if (IsBlank(payload))
         {
-            return Result.Success(Maybe<JsonDocument>.None);
+            return Result.Success(Maybe<JsonElement>.None);
         }
 
         string mediaType = response.Content.Headers.ContentType?.MediaType ?? "application/json";
@@ -280,11 +280,14 @@ public sealed class McpHttpTransport : IMcpRemoteTransport
         {
             try
             {
-                return Result.Success(Maybe<JsonDocument>.From(JsonDocument.Parse(payload)));
+                // Same DOM as JsonDocument.Parse, but through the source-generated
+                // JsonElement info (PERF-002; TRIM-SERIALIZATION TypeInfo spelling).
+                return Result.Success(Maybe<JsonElement>.From(
+                    JsonSerializer.Deserialize(payload, McpJsonSerializerContext.Default.JsonElement)));
             }
             catch (JsonException ex)
             {
-                return Result.Failure<Maybe<JsonDocument>>($"response was not valid JSON: {ex.Message}");
+                return Result.Failure<Maybe<JsonElement>>($"response was not valid JSON: {ex.Message}");
             }
         }
 
@@ -296,11 +299,11 @@ public sealed class McpHttpTransport : IMcpRemoteTransport
             if (reader.Feed(line) is { Event: "message" } ev
                 && McpSse.TryParseResponse(ev.Data, expectedId) is { } doc)
             {
-                return Result.Success(Maybe<JsonDocument>.From(doc));
+                return Result.Success(Maybe<JsonElement>.From(doc));
             }
         }
 
-        return Result.Failure<Maybe<JsonDocument>>("SSE response carried no matching JSON-RPC frame.");
+        return Result.Failure<Maybe<JsonElement>>("SSE response carried no matching JSON-RPC frame.");
     }
 
     /// <summary>
