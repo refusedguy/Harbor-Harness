@@ -467,9 +467,7 @@ public class FullLayerMatrixTests
                 "Harbor.Ui.Framework.ViewModels",
                 "Harbor.Ui.Framework.Sessions",
                 "Harbor.Ui.Framework.Abstractions",
-                "Harbor.DesignSystem",
-                // #1553 batch 2: Ensure guard helpers (Presentation->Domain is rule-conforming).
-                "Harbor.Extensions", ]),
+                "Harbor.DesignSystem", "Harbor.Extensions", ]),
         // #450: SharpConsoleUI-based renderer (HARBOR_TUI=nickconsoleex), wired
         // behind HarborWithNickConsoleEx. It lives in src/ and Harbor.Hosting
         // references it, so it belongs on the matrix like any other Presentation
