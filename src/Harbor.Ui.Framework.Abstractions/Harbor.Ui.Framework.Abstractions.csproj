@@ -11,6 +11,8 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Harbor.Abstractions\Harbor.Abstractions.csproj"/>
+    <!-- #1553 batch 3: Ensure.NotNull/NotBlank guard helpers. -->
+    <ProjectReference Include="..\Harbor.Extensions\Harbor.Extensions.csproj"/>
   </ItemGroup>
 
   <ItemGroup>

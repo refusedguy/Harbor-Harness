@@ -22,6 +22,8 @@
          no .cs ever used that namespace). -->
     <ProjectReference Include="..\Harbor.DesignSystem\Harbor.DesignSystem.csproj"/>
     <ProjectReference Include="..\Harbor.Desktop.Animations\Harbor.Desktop.Animations.csproj"/>
+    <!-- #1553 batch 3: Ensure.NotNull/NotBlank guard helpers. -->
+    <ProjectReference Include="..\Harbor.Extensions\Harbor.Extensions.csproj"/>
   </ItemGroup>
 
   <ItemGroup>
