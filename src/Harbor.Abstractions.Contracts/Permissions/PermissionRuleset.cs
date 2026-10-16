@@ -473,11 +473,11 @@ public sealed record PermissionRule(
     {
         // Fast path: wildcard matches everything.
         if (Pattern == "*") return true;
-        // Rule patterns are authored with '/' separators, but Path.GetFullPath
-        // emits '\' on Windows (see PermissionService.NormalizePath). Compare
-        // on a canonical forward-slash form so a ruleset is portable across
-        // operating systems.
-        return GetOrCompileRegex(Pattern.Replace('\\', '/')).IsMatch(argPath.Replace('\\', '/'));
+        // No per-call canonical strings (#1528): the cached regex is compiled
+        // from the canonical pattern with a separator class matching both '/'
+        // and '\' (see BoundedPatternRegexCache.CompileGlob), so the raw
+        // argPath matches directly with identical cross-OS semantics.
+        return GetOrCompileRegex(Pattern).IsMatch(argPath);
     }
 
     private static System.Text.RegularExpressions.Regex GetOrCompileRegex(string pattern)

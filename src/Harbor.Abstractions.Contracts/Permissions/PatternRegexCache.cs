@@ -10,7 +10,7 @@ namespace Harbor.Abstractions.Permissions;
 public interface IPatternRegexCache
 {
     /// <summary>
-    ///     Return the compiled regex for a canonical glob pattern,
+    ///     Return the compiled regex for a glob pattern,
     ///     compiling and caching it on miss.
     /// </summary>
     public Regex GetOrAdd(string pattern);
@@ -87,15 +87,27 @@ public sealed class BoundedPatternRegexCache : IPatternRegexCache
     }
 
     /// <summary>
-    ///     Compile a canonical glob (<c>*</c> = any sequence, <c>?</c> = one
-    ///     char) into a case-insensitive regex with a 5s match timeout.
+    ///     Compile a glob (<c>*</c> = any sequence, <c>?</c> = one char) into a
+    ///     case-insensitive regex with a 5s match timeout.
     /// </summary>
+    /// <remarks>
+    ///     Canonicalisation lives here — once per distinct pattern, on cache
+    ///     miss only (#1528). Rule patterns are authored with '/' separators
+    ///     but Windows paths emit '\', so the pattern is canonicalised to
+    ///     forward slashes and every '/' compiles to a separator class matching
+    ///     both. Per-call matching then needs no canonical strings:
+    ///     <see cref="PermissionRule.MatchesPattern" /> passes the raw pattern
+    ///     and argument straight to the cached regex with identical semantics
+    ///     ('\\' ≡ '/').
+    /// </remarks>
     internal static Regex CompileGlob(string pattern)
     {
+        string canonical = pattern.IndexOf('\\') < 0 ? pattern : pattern.Replace('\\', '/');
         string regexPattern = "^" +
-                              Regex.Escape(pattern)
+                              Regex.Escape(canonical)
                                   .Replace("\\*", ".*")
-                                  .Replace("\\?", ".") + "$";
+                                  .Replace("\\?", ".")
+                                  .Replace("/", "[\\\\/]") + "$";
         return new Regex(regexPattern, RegexOptions.IgnoreCase | RegexOptions.CultureInvariant, TimeSpan.FromSeconds(5));
     }
 
