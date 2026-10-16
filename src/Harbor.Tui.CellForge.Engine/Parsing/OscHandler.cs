@@ -5,16 +5,19 @@ using Harbor.Tui.CellForge.Input;
 namespace Harbor.Tui.CellForge.Parsing;
 
 /// <summary>
-/// OSC / string-body path (design §5, auto-theme §3.x),
+/// OSC / string-body + bracketed-paste path (design §4, auto-theme §3.x),
 /// extracted from <see cref="EscapeSequenceParser"/> (#95, one extract per PR).
-/// Verbatim move — the parser's <c>StringBody</c> family, unchanged apart from
-/// threading the owning parser explicitly (mutable string state stays owned
-/// by the parser: <c>internal</c> fields and sinks, cf. <see cref="CsiDecoder"/>).
+/// Verbatim move — the parser's <c>StringBody</c> family and paste block,
+/// unchanged apart from threading the owning parser explicitly (mutable
+/// string/paste state stays owned by the parser: <c>internal</c> fields and
+/// sinks, cf. <see cref="CsiDecoder"/>).
 /// The parser keeps thin forwarders so <c>Step</c> dispatch is untouched;
 /// caller migration and forwarder deletion are tracked in #1392.
-/// (Bracketed-paste half follows in the next commit.)</summary>
+/// </summary>
 internal static class OscHandler
 {
+    private static readonly byte[] PasteClose = [(byte)0x1B, (byte)'[', (byte)'2', (byte)'0', (byte)'1', (byte)'~'];
+
     internal static void StringBody(EscapeSequenceParser parser, byte b, bool belTerminates)
     {
         if (parser._stringEscSeen)
@@ -117,5 +120,102 @@ internal static class OscHandler
         parser._stringLength = 0;
         parser._oscLength = 0;
         parser.SetState(ParserState.Ground);
+    }
+
+    /// <summary>Anti-injection invariant (§4.2): paste content is copied
+    /// verbatim into one atomic PasteEvent — escape bytes and control bytes
+    /// inside the block are NEVER decoded as key/mouse events.</summary>
+    internal static void StartPaste(EscapeSequenceParser parser)
+    {
+        parser._pasteBuffer ??= new byte[parser.Options.MaxPasteBytes];
+        parser._pasteLength = 0;
+        parser._pasteTruncated = false;
+        parser._pasteMarkerProgress = 0;
+        parser.IsAwaitingPasteClose = true;
+        parser.SetState(ParserState.PastePayload);
+    }
+
+    internal static void PastePayloadByte(EscapeSequenceParser parser, byte b)
+    {
+        if (parser._pasteMarkerProgress > 0 && b == PasteClose[parser._pasteMarkerProgress])
+        {
+            // Continue matching the closing marker ESC [ 2 0 1 ~.
+            if (parser._pasteMarkerProgress == PasteClose.Length - 1)
+            {
+                EmitPaste(parser, parser._pasteTruncated);
+                return;
+            }
+
+            parser._pasteMarkerProgress++;
+            return;
+        }
+
+        // Mismatch: the partial marker match was literal content after all.
+        if (parser._pasteMarkerProgress > 0)
+        {
+            // A nested OPEN marker (…200~) shares its prefix with the closer —
+            // count it for diagnostics, content stays literal (§4.2 #5).
+            if (parser._pasteMarkerProgress == 4 && b == (byte)'0')
+            {
+                parser.NestedPasteMarkerCount++;
+            }
+
+            for (var i = 0; i < parser._pasteMarkerProgress; i++)
+            {
+                AppendPasteByte(parser, PasteClose[i]);
+            }
+
+            parser._pasteMarkerProgress = 0;
+        }
+
+        if (b == PasteClose[0])
+        {
+            parser._pasteMarkerProgress = 1;
+            return;
+        }
+
+        AppendPasteByte(parser, b);
+    }
+
+    internal static void AppendPasteByte(EscapeSequenceParser parser, byte b)
+    {
+        if (parser._pasteBuffer is null || parser._pasteLength >= parser._pasteBuffer.Length)
+        {
+            // Paste-flood guard (§8.3): drop beyond cap but keep scanning so
+            // the closing marker still terminates the block cleanly.
+            parser._pasteTruncated = true;
+            return;
+        }
+
+        parser._pasteBuffer[parser._pasteLength++] = b;
+    }
+
+    /// <summary>Watchdog hook: force-closes a hung paste block (design §4.2),
+    /// emitting whatever was accumulated as a truncated paste.</summary>
+    internal static void AbortPendingPaste(EscapeSequenceParser parser)
+    {
+        if (!parser.IsAwaitingPasteClose)
+        {
+            return;
+        }
+
+        parser._pasteMarkerProgress = 0;
+        EmitPaste(parser, wasTruncated: true);
+        parser.SetState(ParserState.Ground);
+    }
+
+    internal static void EmitPaste(EscapeSequenceParser parser, bool wasTruncated)
+    {
+        var text = parser._pasteBuffer is null || parser._pasteLength == 0
+            ? string.Empty
+            : Encoding.UTF8.GetString(parser._pasteBuffer, 0, parser._pasteLength);
+
+        parser._pasteLength = 0;
+        parser._pasteTruncated = false;
+        parser._pasteMarkerProgress = 0;
+        parser.IsAwaitingPasteClose = false;
+        parser.SetState(ParserState.Ground);
+
+        parser.Enqueue(InputEvent.FromPaste(new PasteEvent(text, wasTruncated)));
     }
 }
