@@ -1,0 +1,29 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsPackable>true</IsPackable>
+    <PackageId>Harbor.Hooks</PackageId>
+    <Description>Harbor user-hook runner — plain shell commands from ~/.harbor/hooks.json (PreToolUse gate, advisory events). No plugin machinery, no Roslyn, no Assembly.Load.</Description>
+    <PackageTags>harbor;ai;agent;hooks;process</PackageTags>
+  </PropertyGroup>
+
+  <!--
+    #1613: verbatim extraction of Harbor.Application/Hooks (0 in-project code
+    dependencies — the folder only bound ToolResult from Domain plus BCL/Logging).
+    Application-layer sibling like Harbor.Registries: depends on
+    Harbor.Abstractions only — never on Harbor.Application, Infrastructure,
+    or Presentation. See docs/ARCHITECTURE_LAYERS.md §2.
+    Namespace stays Harbor.Application.Hooks (verbatim slice-1 move, the same
+    convention as the AgentLoop slice extractions #1464/#1475/#1480); consumers
+    keep their usings, only ProjectReferences change.
+  -->
+  <ItemGroup>
+    <ProjectReference Include="..\Harbor.Abstractions\Harbor.Abstractions.csproj"/>
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions"/>
+  </ItemGroup>
+
+</Project>
