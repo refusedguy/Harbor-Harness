@@ -133,36 +133,25 @@ public sealed class OllamaLlmClient : ILlmClient
     private static IReadOnlyList<ModelInfo> ParseModels(string json)
     {
         using var doc = JsonDocument.Parse(json);
-        // Pre-size the models list only when the models array is present and has a known count.
-        List<ModelInfo>? models = null;
-        if (doc.RootElement.TryGetProperty("models", out var modelsArray) && modelsArray.ValueKind == JsonValueKind.Array)
-        {
-            models = new List<ModelInfo>(modelsArray.GetArrayLength());
-            foreach (var m in modelsArray.EnumerateArray())
-            {
-                string? id = m.TryGetProperty("name", out var nameEl) ? nameEl.GetString() : null;
-                if (string.IsNullOrEmpty(id)) continue;
+        Maybe<JsonElement> models = doc.RootElement.TryGetProperty("models", out var arr)
+            && arr.ValueKind == JsonValueKind.Array
+            ? Maybe.From(arr)
+            : Maybe<JsonElement>.None;
+        return models.Match(
+            a => a.EnumerateArray()
+                .Select(m => Maybe.From(m.TryGetProperty("name", out var nameEl) ? nameEl.GetString() : null)
+                    .Where(id => !string.IsNullOrEmpty(id))
+                    .Map(id => new ModelInfo(id!, "ollama", id!, Ctx(m), Ctx(m), false, false, true, Pricing.Unknown, "openai")))
+                .Choose()
+                .ToList(),
+            () => new List<ModelInfo>());
 
-                int ctx = m.TryGetProperty("model_info", out var info) &&
-                          info.TryGetProperty("context_length", out var ctxEl) &&
-                          ctxEl.ValueKind == JsonValueKind.Number
-                    ? ctxEl.GetInt32()
-                    : 4096;
-
-                models.Add(new ModelInfo(
-                    id,
-                    "ollama",
-                    id,
-                    ctx,
-                    ctx,
-                    false,
-                    false,
-                    true,
-                    Pricing.Unknown,
-                    "openai"));
-            }
-        }
-        return (IReadOnlyList<ModelInfo>?)models ?? Array.Empty<ModelInfo>();
+        static int Ctx(JsonElement m) =>
+            m.TryGetProperty("model_info", out var info)
+            && info.TryGetProperty("context_length", out var ctxEl)
+            && ctxEl.ValueKind == JsonValueKind.Number
+                ? ctxEl.GetInt32()
+                : 4096;
     }
 
     /// <summary>
