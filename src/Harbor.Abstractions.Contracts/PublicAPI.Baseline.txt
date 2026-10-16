@@ -75,6 +75,11 @@ Harbor.Abstractions.Events.ToolExecutionStartEvent :: public static ToolExecutio
 Harbor.Abstractions.Events.ToolExecutionUpdateEvent :: public sealed record ToolExecutionUpdateEvent(string ToolCallId, object PartialResult, int? RetryAttempt = null, int? RetryMaxAttempts = null, double? RetryBackoffSeconds = null) : AgentEvent
 Harbor.Abstractions.Events.TurnEndEvent :: public sealed record TurnEndEvent(AssistantMessage AssistantMessage, IReadOnlyList<ToolResultMessage> ToolResults, string? SessionId = null) : AgentEvent
 Harbor.Abstractions.Events.TurnStartEvent :: public sealed record TurnStartEvent(int TurnIndex, string? SessionId = null) : AgentEvent
+Harbor.Abstractions.Extensions.StringTruncation :: public const string Ellipsis = "…"
+Harbor.Abstractions.Extensions.StringTruncation :: public static class StringTruncation
+Harbor.Abstractions.Extensions.StringTruncation :: public static string Truncate(this string? text, int max)
+Harbor.Abstractions.Extensions.StringTruncation :: public static string Truncate(this string? text, int max, string suffix)
+Harbor.Abstractions.Extensions.StringTruncation :: public static string TruncateWithDropCount(this string? text, int max, string separator = "\n", string? detail = null)
 Harbor.Abstractions.Models.AgentMessage :: public abstract partial record AgentMessage(string Id, string SessionId, DateTimeOffset CreatedAt, string? ParentId = null)
 Harbor.Abstractions.Models.AgentMessage :: public abstract string Role
 Harbor.Abstractions.Models.AgentMessageVisitor :: protected virtual TResult VisitUnknown(AgentMessage message)
