@@ -1,7 +1,7 @@
 # Harbor.Extensions
 
 > Infrastructure helpers — ArrayPool, StringBuilder pool, FrozenSet materializers,
-> MemoryPack round-trip helpers. The single "infrastructure-as-helper" layer
+> MemoryPack round-trip helpers, Ensure argument guards. The single "infrastructure-as-helper" layer
 > that sits between the pure domain models and the interface contracts.
 
 ## What's inside
@@ -11,6 +11,7 @@
 | `ArrayPoolExtensions.cs`  | `ArrayPoolExtensions.RentScoped<T>(this ArrayPool<T>, int)` returning a disposable `RentedArray<T>` ref-struct (auto-returns on `Dispose`); `StringBuilderPool` static class with a **size-bucketed** `ConcurrentBag<StringBuilder>[]` backing (#1239 — one bag per `ceil(log2(capacity))`, 16 … 16 KiB, `MaxRetainedPerBucket` cap, `MaxRetainCapacity = 16 KiB` LOH-avoidance); `DictionaryPool<TKey, TValue>` + `PooledDictionary<TKey, TValue>` (same shape over entry bands 8 … 1024, comparers never pooled); the `PooledStringBuilder` readonly struct |
 | `CollectionExtensions.cs` | `ToFrozenSet<T>`, `ToFrozenDictionary<...>` (3 overloads), `AsReadOnlyCollection<T>`, `AsReadOnlyList<T>`, `AddRange<T>(List<T>, ReadOnlySpan<T>)` — Frozen-collection materializers and read-only-collection upcasters for hot-path public APIs                                                                 |
 | `MemoryPackExtensions.cs` | `ToMemoryPackBytes<T>(this T)` and `FromMemoryPackBytes<T>(this byte[])` — extension-method sugar over `MemoryPackSerializer.Serialize<T>` / `Deserialize<T>` for `IMemoryPackable<T>` types                                                                                                                     |
+| `Ensure.cs` | `Ensure.NotNull<T>` / `NotBlank` / `NotEmpty` — thin behavior-identical wrappers over `ArgumentNullException.ThrowIfNull` / `ArgumentException.ThrowIfNullOrWhiteSpace` / `ThrowIfNullOrEmpty` (#1553) |
 
 ## Layer
 

@@ -150,7 +150,7 @@ public sealed record RecordedCheck
 
     private static IReadOnlyList<string> SortedKeys(IReadOnlyList<string> envKeys)
     {
-        ArgumentNullException.ThrowIfNull(envKeys);
+        Ensure.NotNull(envKeys);
         var copy = new List<string>(envKeys.Count);
         for (int i = 0; i < envKeys.Count; i++)
         {
@@ -391,8 +391,8 @@ public sealed record ChangeReport
             throw new ArgumentException("A report must name its base revision.", nameof(baseRevision));
         if (string.IsNullOrWhiteSpace(headRevision))
             throw new ArgumentException("A report must name its frozen head.", nameof(headRevision));
-        ArgumentNullException.ThrowIfNull(changed);
-        ArgumentNullException.ThrowIfNull(checks);
+        Ensure.NotNull(changed);
+        Ensure.NotNull(checks);
         if (ignoredPathCount < 0)
             throw new ArgumentException("The ignored-path count cannot be negative.", nameof(ignoredPathCount));
         if (timeoutSeconds <= 0)
@@ -416,7 +416,7 @@ public sealed record ChangeReport
         for (int i = 0; i < checks.Count; i++)
         {
             RecordedCheck check = checks[i];
-            ArgumentNullException.ThrowIfNull(check);
+            Ensure.NotNull(check);
             if (check.ExitCode.HasValue && !check.TimedOut && check.MissReason is null)
             {
                 if (check.ExitCode.Value != 0)

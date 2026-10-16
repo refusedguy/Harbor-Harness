@@ -104,7 +104,7 @@ public sealed class SystemPromptBuilder : ISystemPromptBuilder
     /// <inheritdoc />
     public Task<string> BuildAsync(SystemPromptContext context, CancellationToken ct = default)
     {
-        ArgumentNullException.ThrowIfNull(context);
+        Ensure.NotNull(context);
         ct.ThrowIfCancellationRequested();
 
         using var sb = StringBuilderPool.Rent(4096);

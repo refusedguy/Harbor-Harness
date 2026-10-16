@@ -1,3 +1,4 @@
+using Harbor.Abstractions.Extensions;
 using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Sessions;
 using Microsoft.Extensions.Logging;
@@ -55,7 +56,7 @@ public sealed class TokenTracker : ITokenTracker
 
     public TokenTracker(HeuristicTokenEstimator estimator, ILogger<TokenTracker>? logger = null)
     {
-        ArgumentNullException.ThrowIfNull(estimator);
+        Ensure.NotNull(estimator);
         _estimator = estimator;
         _logger = logger ?? NullLogger<TokenTracker>.Instance;
     }
@@ -81,7 +82,7 @@ public sealed class TokenTracker : ITokenTracker
     /// <inheritdoc />
     public void RecordAppendedMessage(AgentMessage message)
     {
-        ArgumentNullException.ThrowIfNull(message);
+        Ensure.NotNull(message);
         int increment = _estimator.EstimateMessage(message);
         lock (_sync)
         {
@@ -103,7 +104,7 @@ public sealed class TokenTracker : ITokenTracker
     /// <inheritdoc />
     public void RecordUpdatedMessage(AgentMessage message)
     {
-        ArgumentNullException.ThrowIfNull(message);
+        Ensure.NotNull(message);
         lock (_sync)
         {
             // No delta to apply: the tracker keeps no per-message breakdown, so
@@ -117,8 +118,8 @@ public sealed class TokenTracker : ITokenTracker
     /// <inheritdoc />
     public bool ShouldCompact(IReadOnlyList<AgentMessage> messages, ModelInfo model)
     {
-        ArgumentNullException.ThrowIfNull(messages);
-        ArgumentNullException.ThrowIfNull(model);
+        Ensure.NotNull(messages);
+        Ensure.NotNull(model);
 
         // Degenerate window (#80 companion): missing provider metadata surfaces
         // as ContextWindow == 0, which used to make `estimated > negative`

@@ -1,4 +1,5 @@
 using System.Collections.Frozen;
+using Ensure = Harbor.Abstractions.Extensions.Ensure;
 using Microsoft.Extensions.Logging;
 
 namespace Harbor.Tools.Mcp;
@@ -59,7 +60,7 @@ public sealed class McpHttpTransportFactory : IMcpTransportFactory
     /// <inheritdoc />
     public Result<IMcpRemoteTransport> Create(McpTransportRequest request)
     {
-        ArgumentNullException.ThrowIfNull(request);
+        Ensure.NotNull(request);
         return Result.Success<IMcpRemoteTransport>(new McpHttpTransport(
             request.Endpoint, request.Headers, request.OAuthTokenProvider, request.Logger));
     }
@@ -74,7 +75,7 @@ public sealed class McpSseTransportFactory : IMcpTransportFactory
     /// <inheritdoc />
     public Result<IMcpRemoteTransport> Create(McpTransportRequest request)
     {
-        ArgumentNullException.ThrowIfNull(request);
+        Ensure.NotNull(request);
         return Result.Success<IMcpRemoteTransport>(new McpSseTransport(
             request.Endpoint, request.Headers, request.OAuthTokenProvider, request.Logger));
     }
@@ -112,14 +113,14 @@ public sealed class McpTransportResolver
     /// </summary>
     public McpTransportResolver(IEnumerable<IMcpTransportFactory> factories)
     {
-        ArgumentNullException.ThrowIfNull(factories);
+        Ensure.NotNull(factories);
 
         var byName = new Dictionary<string, IMcpTransportFactory>(StringComparer.OrdinalIgnoreCase);
         var names = new List<string>();
         var ordered = new List<IMcpTransportFactory>();
         foreach (IMcpTransportFactory factory in factories)
         {
-            ArgumentNullException.ThrowIfNull(factory);
+            Ensure.NotNull(factory);
             string name = factory.Name;
             if (string.IsNullOrWhiteSpace(name))
                 throw new ArgumentException(
@@ -187,7 +188,7 @@ public sealed class McpTransportResolver
     /// </summary>
     public Result<IMcpRemoteTransport> Create(string canonicalName, McpTransportRequest request)
     {
-        ArgumentNullException.ThrowIfNull(request);
+        Ensure.NotNull(request);
         if (!_byName.TryGetValue(canonicalName, out IMcpTransportFactory? factory))
             return Result.Failure<IMcpRemoteTransport>(Unsupported(canonicalName));
 

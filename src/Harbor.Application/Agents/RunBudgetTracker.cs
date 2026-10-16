@@ -1,3 +1,4 @@
+using Harbor.Abstractions.Extensions;
 using Harbor.Abstractions.Models;
 
 namespace Harbor.Application.Agents;
@@ -48,7 +49,7 @@ public sealed class RunBudgetTracker
     /// <param name="caps">The ceilings to enforce.</param>
     public RunBudgetTracker(RunBudgetCaps caps)
     {
-        ArgumentNullException.ThrowIfNull(caps);
+        Ensure.NotNull(caps);
         _caps = caps;
     }
 
@@ -83,7 +84,7 @@ public sealed class RunBudgetTracker
     /// </param>
     public void CompleteRequest(Usage? usage, Pricing pricing, int estimatedTokens)
     {
-        ArgumentNullException.ThrowIfNull(pricing);
+        Ensure.NotNull(pricing);
         lock (_sync)
         {
             if (_inFlight > 0)
