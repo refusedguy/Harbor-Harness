@@ -29,11 +29,17 @@ namespace Harbor.Storage.Jsonl;
 /// </summary>
 internal static class SessionSnapshotRetryPolicy
 {
+    /// <summary>
+    ///     Run <paramref name="attempt" /> until <paramref name="isComplete" />
+    ///     accepts the outcome or the shared attempt budget is exhausted; the
+    ///     last outcome is returned as-is either way.
+    /// </summary>
     /// <param name="attempt">One pass over the file.</param>
     /// <param name="isComplete">
     ///     True when the attempt's outcome needs no retry — a stable snapshot,
     ///     or a failure (e.g. an unbounded file) retrying cannot fix.
     /// </param>
+    /// <param name="ct">Cancellation token observed before every attempt and sleep.</param>
     internal static async Task<T> ExecuteAsync<T>(
         Func<CancellationToken, Task<T>> attempt,
         Func<T, bool> isComplete,
@@ -42,9 +48,11 @@ internal static class SessionSnapshotRetryPolicy
         ArgumentNullException.ThrowIfNull(attempt);
         ArgumentNullException.ThrowIfNull(isComplete);
 
-        for (int attemptNumber = 1; ; attemptNumber++)
+        int attemptNumber = 0;
+        while (true)
         {
             ct.ThrowIfCancellationRequested();
+            attemptNumber++;
 
             T current = await attempt(ct).ConfigureAwait(false);
             if (isComplete(current) || attemptNumber >= TransientFailurePolicy.DefaultMaxAttempts)
