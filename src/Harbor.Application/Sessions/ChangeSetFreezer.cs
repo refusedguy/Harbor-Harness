@@ -580,30 +580,24 @@ public static class ChangeSetFreezer
         string[] argv = ignored
             ? ["status", "--porcelain=v1", "--ignored"]
             : ["status", "--porcelain=v1"];
-        Result<WorkspaceMaterializer.GitOutput> out_ =
-            await WorkspaceMaterializer.RunGitAsync(worktree, argv, ProbeTimeout, ct).ConfigureAwait(false);
-        if (out_.IsFailure)
-            return out_.ConvertFailure<string>();
-        if (out_.Value.ExitCode != 0)
-            return Result.Failure<string>(
-                $"Freeze failed at stage 'status': {WorkspaceMaterializer.Clip(out_.Value.Stderr)}");
-        return Result.Success(out_.Value.Stdout);
+        return (await WorkspaceMaterializer.RunGitAsync(worktree, argv, ProbeTimeout, ct).ConfigureAwait(false))
+            .Bind(o => o.ExitCode != 0
+                ? Result.Failure<string>(
+                    $"Freeze failed at stage 'status': {WorkspaceMaterializer.Clip(o.Stderr)}")
+                : Result.Success(o.Stdout));
     }
 
     private static async Task<Result<IReadOnlyList<NameStatus>>> DiffNameStatusAsync(
         string worktree, string baseRevision, CancellationToken ct)
     {
-        Result<WorkspaceMaterializer.GitOutput> out_ =
-            await WorkspaceMaterializer.RunGitAsync(
+        return (await WorkspaceMaterializer.RunGitAsync(
                 worktree,
                 ["diff", "--name-status", "-M", "-z", baseRevision],
-                DiffTimeout, ct).ConfigureAwait(false);
-        if (out_.IsFailure)
-            return out_.ConvertFailure<IReadOnlyList<NameStatus>>();
-        if (out_.Value.ExitCode != 0)
-            return Result.Failure<IReadOnlyList<NameStatus>>(
-                $"Freeze failed at stage 'inventory': {WorkspaceMaterializer.Clip(out_.Value.Stderr)}");
-        return ParseNameStatus(out_.Value.Stdout);
+                DiffTimeout, ct).ConfigureAwait(false))
+            .Bind(o => o.ExitCode != 0
+                ? Result.Failure<IReadOnlyList<NameStatus>>(
+                    $"Freeze failed at stage 'inventory': {WorkspaceMaterializer.Clip(o.Stderr)}")
+                : ParseNameStatus(o.Stdout));
     }
 
     private static Result<IReadOnlyList<NameStatus>> ParseNameStatus(string stdout)
@@ -662,17 +656,14 @@ public static class ChangeSetFreezer
     private static async Task<Result<IReadOnlyList<NumStat>>> DiffNumstatAsync(
         string worktree, string baseRevision, CancellationToken ct)
     {
-        Result<WorkspaceMaterializer.GitOutput> out_ =
-            await WorkspaceMaterializer.RunGitAsync(
+        return (await WorkspaceMaterializer.RunGitAsync(
                 worktree,
                 ["diff", "--numstat", "-M", "-z", baseRevision],
-                DiffTimeout, ct).ConfigureAwait(false);
-        if (out_.IsFailure)
-            return out_.ConvertFailure<IReadOnlyList<NumStat>>();
-        if (out_.Value.ExitCode != 0)
-            return Result.Failure<IReadOnlyList<NumStat>>(
-                $"Freeze failed at stage 'inventory': {WorkspaceMaterializer.Clip(out_.Value.Stderr)}");
-        return ParseNumstat(out_.Value.Stdout);
+                DiffTimeout, ct).ConfigureAwait(false))
+            .Bind(o => o.ExitCode != 0
+                ? Result.Failure<IReadOnlyList<NumStat>>(
+                    $"Freeze failed at stage 'inventory': {WorkspaceMaterializer.Clip(o.Stderr)}")
+                : ParseNumstat(o.Stdout));
     }
 
     private static Result<IReadOnlyList<NumStat>> ParseNumstat(string stdout)
@@ -733,29 +724,21 @@ public static class ChangeSetFreezer
         // text. Patches are UTF-8 by construction for text hunks; binary
         // hunks travel as ASCII base85 (`GIT binary patch`), so a
         // UTF-8 round-trip is lossless for every patch git emits here.
-        Result<WorkspaceMaterializer.GitOutput> out_ =
-            await WorkspaceMaterializer.RunGitAsync(worktree, argv, DiffTimeout, ct).ConfigureAwait(false);
-        if (out_.IsFailure)
-            return out_.ConvertFailure<byte[]>();
-        if (out_.Value.ExitCode != 0)
-            return Result.Failure<byte[]>(
-                $"Freeze failed at stage 'diff': {WorkspaceMaterializer.Clip(out_.Value.Stderr)}");
-        return Result.Success(System.Text.Encoding.UTF8.GetBytes(out_.Value.Stdout));
+        return (await WorkspaceMaterializer.RunGitAsync(worktree, argv, DiffTimeout, ct).ConfigureAwait(false))
+            .Bind(o => o.ExitCode != 0
+                ? Result.Failure<byte[]>(
+                    $"Freeze failed at stage 'diff': {WorkspaceMaterializer.Clip(o.Stderr)}")
+                : Result.Success(System.Text.Encoding.UTF8.GetBytes(o.Stdout)));
     }
 
     private static async Task<Result<string>> RevParseHeadAsync(string worktree, CancellationToken ct)
     {
-        Result<WorkspaceMaterializer.GitOutput> out_ =
-            await WorkspaceMaterializer.RunGitAsync(worktree, ["rev-parse", "HEAD"], ProbeTimeout, ct).ConfigureAwait(false);
-        if (out_.IsFailure)
-            return out_.ConvertFailure<string>();
-        if (out_.Value.ExitCode != 0)
-            return Result.Failure<string>(
-                $"Freeze failed at stage 'head': {WorkspaceMaterializer.Clip(out_.Value.Stderr)}");
-        string head = out_.Value.Stdout.Trim();
-        if (head.Length == 0)
-            return Result.Failure<string>("Freeze failed at stage 'head': git reports an empty HEAD.");
-        return Result.Success(head);
+        return (await WorkspaceMaterializer.RunGitAsync(worktree, ["rev-parse", "HEAD"], ProbeTimeout, ct).ConfigureAwait(false))
+            .Bind(o => o.ExitCode != 0
+                ? Result.Failure<string>(
+                    $"Freeze failed at stage 'head': {WorkspaceMaterializer.Clip(o.Stderr)}")
+                : Result.Success(o.Stdout.Trim()))
+            .Ensure(head => head.Length > 0, "Freeze failed at stage 'head': git reports an empty HEAD.");
     }
 
     private static async Task<Result<string>> CommitFrozenAsync(

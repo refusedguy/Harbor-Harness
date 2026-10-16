@@ -321,19 +321,13 @@ public static class ChangeApplier
 
     private static async Task<Result<string>> RevParseHeadAsync(string repoRoot, CancellationToken ct)
     {
-        Result<GitOutput> head = await RunGitAsync(
-            repoRoot, ["rev-parse", "HEAD"], ProbeTimeout, ct).ConfigureAwait(false);
-        if (head.IsFailure)
-            return head.ConvertFailure<string>();
-        GitOutput headOut = head.Value;
-        if (headOut.ExitCode != 0)
-            return Result.Failure<string>(
-                $"git rev-parse HEAD failed in '{repoRoot}': {Clip(headOut.Stderr)}");
-        string sha = headOut.Stdout.Trim();
-        if (sha.Length == 0)
-            return Result.Failure<string>(
-                $"git rev-parse HEAD returned empty output in '{repoRoot}'.");
-        return Result.Success(sha);
+        return (await RunGitAsync(
+            repoRoot, ["rev-parse", "HEAD"], ProbeTimeout, ct).ConfigureAwait(false))
+            .Bind(o => o.ExitCode != 0
+                ? Result.Failure<string>(
+                    $"git rev-parse HEAD failed in '{repoRoot}': {Clip(o.Stderr)}")
+                : Result.Success(o.Stdout.Trim()))
+            .Ensure(static sha => sha.Length > 0, $"git rev-parse HEAD returned empty output in '{repoRoot}'.");
     }
 
     private static async Task<Result<IReadOnlyList<string>>> TrackedDirtAsync(string repoRoot, CancellationToken ct)
