@@ -553,11 +553,14 @@ public static class ChangeSetFreezer
 
     private static async Task<Result<int>> CountIgnoredAsync(string worktree, CancellationToken ct)
     {
-        Result<string> porcelain = await PorcelainAsync(worktree, ct, ignored: true).ConfigureAwait(false);
-        if (porcelain.IsFailure)
-            return porcelain.ConvertFailure<int>();
+        return (await PorcelainAsync(worktree, ct, ignored: true).ConfigureAwait(false))
+            .Map(CountIgnoredLines);
+    }
+
+    private static int CountIgnoredLines(string porcelain)
+    {
         int ignored = 0;
-        ReadOnlySpan<char> rest = porcelain.Value.AsSpan();
+        ReadOnlySpan<char> rest = porcelain.AsSpan();
         while (true)
         {
             int nl = rest.IndexOf('\n');
@@ -568,7 +571,7 @@ public static class ChangeSetFreezer
                 break;
             rest = rest.Slice(nl + 1);
         }
-        return Result.Success(ignored);
+        return ignored;
     }
 
     private static async Task<Result<string>> PorcelainAsync(string worktree, CancellationToken ct, bool ignored)
