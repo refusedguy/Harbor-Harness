@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using Ensure = Harbor.Abstractions.Extensions.Ensure;
 using System.Text;
 using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Permissions;
@@ -68,7 +69,7 @@ public sealed class ReadGroupBlock : ICollapsibleChatBlock
 
     internal void AddMember(ToolCallBlock member)
     {
-        ArgumentNullException.ThrowIfNull(member);
+        Ensure.NotNull(member);
         _members.Add(member);
         RebuildCountsText();
     }

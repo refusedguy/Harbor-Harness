@@ -1,4 +1,5 @@
 using System.Text;
+using Ensure = Harbor.Abstractions.Extensions.Ensure;
 
 namespace Harbor.Tui.CellForge.Widgets;
 
@@ -76,7 +77,7 @@ public sealed class ListPromptItem<T> where T : notnull
 
     public ListPromptItem(T data, ListPromptItem<T>? parent = null)
     {
-        ArgumentNullException.ThrowIfNull(data);
+        Ensure.NotNull(data);
         Data = data;
         Parent = parent;
         Depth = parent is null ? 0 : parent.Depth + 1;
@@ -132,7 +133,7 @@ public sealed class ListPromptTree<T> where T : notnull
     /// <summary>Adds a root node (groups are built via <see cref="ListPromptItem{T}.AddChild"/>).</summary>
     public void Add(ListPromptItem<T> node)
     {
-        ArgumentNullException.ThrowIfNull(node);
+        Ensure.NotNull(node);
         _roots.Add(node);
     }
 
@@ -241,7 +242,7 @@ public sealed class ListPromptState<T> where T : notnull
         bool searchEnabled = false,
         int initialIndex = 0)
     {
-        ArgumentNullException.ThrowIfNull(items);
+        Ensure.NotNull(items);
         Items = items;
         _converter = converter ?? (static v => v.ToString() ?? string.Empty);
         PageSize = Math.Max(1, pageSize);
@@ -286,7 +287,7 @@ public sealed class ListPromptState<T> where T : notnull
         bool searchEnabled = false,
         int initialIndex = 0)
     {
-        ArgumentNullException.ThrowIfNull(values);
+        Ensure.NotNull(values);
         var nodes = new List<ListPromptItem<T>>(values.Count);
         for (int i = 0; i < values.Count; i++)
         {
@@ -677,7 +678,7 @@ public sealed class SingleListPromptStrategy<T> : IListPromptStrategy<T> where T
     /// <inheritdoc/>
     public ListPromptInputResult HandleInput(in KeyEvent key, ListPromptState<T> state)
     {
-        ArgumentNullException.ThrowIfNull(state);
+        Ensure.NotNull(state);
         if (key.Key == KeyCode.Enter)
         {
             return ListPromptInputResult.Submit;
@@ -698,7 +699,7 @@ public sealed class SingleListPromptStrategy<T> : IListPromptStrategy<T> where T
     /// <inheritdoc/>
     public int CalculateInitialIndex(IReadOnlyList<ListPromptItem<T>> nodes)
     {
-        ArgumentNullException.ThrowIfNull(nodes);
+        Ensure.NotNull(nodes);
         return nodes.Count == 0 ? -1 : 0;
     }
 }
@@ -710,7 +711,7 @@ public sealed class MultiListPromptStrategy<T> : IListPromptStrategy<T> where T 
     /// <inheritdoc/>
     public ListPromptInputResult HandleInput(in KeyEvent key, ListPromptState<T> state)
     {
-        ArgumentNullException.ThrowIfNull(state);
+        Ensure.NotNull(state);
         if (key.Key == KeyCode.Enter)
         {
             return ListPromptInputResult.Submit;
@@ -738,7 +739,7 @@ public sealed class MultiListPromptStrategy<T> : IListPromptStrategy<T> where T 
     /// <inheritdoc/>
     public int CalculateInitialIndex(IReadOnlyList<ListPromptItem<T>> nodes)
     {
-        ArgumentNullException.ThrowIfNull(nodes);
+        Ensure.NotNull(nodes);
         for (int i = 0; i < nodes.Count; i++)
         {
             if (!nodes[i].IsGroup)

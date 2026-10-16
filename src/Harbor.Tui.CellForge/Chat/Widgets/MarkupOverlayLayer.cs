@@ -1,4 +1,5 @@
 using Harbor.Tui.CellForge.Rendering;
+using Ensure = Harbor.Abstractions.Extensions.Ensure;
 
 namespace Harbor.Tui.CellForge.Widgets;
 
@@ -57,7 +58,7 @@ public sealed class MarkupOverlayLayer : IOverlayLayer
     /// </summary>
     public void Paint(ScreenBuffer buffer, Rect clip)
     {
-        ArgumentNullException.ThrowIfNull(buffer);
+        Ensure.NotNull(buffer);
         if (!_overlay.Visible)
         {
             return;

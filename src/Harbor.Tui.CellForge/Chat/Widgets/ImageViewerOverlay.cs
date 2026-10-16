@@ -74,7 +74,7 @@ public sealed class ImageViewerOverlay
     /// </summary>
     public void Show(ImageBlock block, IInlineImageSink? sink)
     {
-        ArgumentNullException.ThrowIfNull(block);
+        Harbor.Abstractions.Extensions.Ensure.NotNull(block);
         _block = block;
         _sink = sink;
         _zoom = 100;
@@ -174,7 +174,7 @@ public sealed class ImageViewerOverlay
     /// </summary>
     public void Paint(ScreenBuffer buffer, Rect viewport)
     {
-        ArgumentNullException.ThrowIfNull(buffer);
+        Harbor.Abstractions.Extensions.Ensure.NotNull(buffer);
         if (!Visible || _block is not { } block)
         {
             return;

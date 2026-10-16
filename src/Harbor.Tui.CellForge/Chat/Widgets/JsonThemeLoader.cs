@@ -1,4 +1,5 @@
 using CSharpFunctionalExtensions;
+using Ensure = Harbor.Abstractions.Extensions.Ensure;
 using Harbor.DesignSystem;
 using Harbor.Ui.Framework.Projection;
 
@@ -73,7 +74,7 @@ public static class JsonThemeLoader
     /// <summary>Parse a theme JSON string, merging missing keys from <paramref name="fallback" />.</summary>
     public static Result<HarborTheme> Parse(string json, HarborTheme fallback)
     {
-        ArgumentNullException.ThrowIfNull(fallback);
+        Ensure.NotNull(fallback);
         var result = ThemeJson.Parse(json, fallback);
         return result.IsSuccess
             ? Result.Success(result.Theme)
@@ -91,7 +92,7 @@ public static class JsonThemeLoader
         HarborTheme fallback,
         IReadOnlyDictionary<string, string>? variableOverrides)
     {
-        ArgumentNullException.ThrowIfNull(fallback);
+        Ensure.NotNull(fallback);
         var result = ThemeJson.Parse(json, fallback, variableOverrides);
         return result.IsSuccess
             ? Result.Success(result.Theme)

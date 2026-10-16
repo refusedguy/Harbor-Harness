@@ -1,3 +1,5 @@
+using Ensure = Harbor.Abstractions.Extensions.Ensure;
+
 namespace Harbor.Tui.CellForge.Widgets;
 
 /// <summary>
@@ -128,7 +130,7 @@ public static class FuzzyMatcher
     /// </summary>
     public static List<T> Filter<T>(string query, IReadOnlyList<T> candidates, Func<T, string> textOf)
     {
-        ArgumentNullException.ThrowIfNull(textOf);
+        Ensure.NotNull(textOf);
 
         var result = new List<T>(candidates.Count);
         if (query.Length == 0)

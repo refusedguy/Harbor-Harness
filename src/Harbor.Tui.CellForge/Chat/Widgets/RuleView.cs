@@ -1,4 +1,5 @@
 using System.Text;
+using Ensure = Harbor.Abstractions.Extensions.Ensure;
 
 namespace Harbor.Tui.CellForge.Widgets;
 
@@ -33,7 +34,7 @@ public static class RuleView
         string? title = null,
         RuleJustify justify = RuleJustify.Center)
     {
-        ArgumentNullException.ThrowIfNull(buffer);
+        Ensure.NotNull(buffer);
         if (width <= 0)
         {
             return;

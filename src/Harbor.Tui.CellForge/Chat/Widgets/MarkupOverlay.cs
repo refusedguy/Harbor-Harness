@@ -1,4 +1,5 @@
 using System.Text;
+using Ensure = Harbor.Abstractions.Extensions.Ensure;
 using Harbor.Tui.CellForge.Input;
 using Harbor.Ui.Framework.State;
 
@@ -199,7 +200,7 @@ public sealed class MarkupOverlay
     /// <summary>Paints the wireframe overlay: frame, image box, annotations, cursor, footer.</summary>
     public void Paint(ScreenBuffer buffer, Rect viewport)
     {
-        ArgumentNullException.ThrowIfNull(buffer);
+        Ensure.NotNull(buffer);
         if (!Visible)
         {
             return;

@@ -1,3 +1,5 @@
+using Ensure = Harbor.Abstractions.Extensions.Ensure;
+
 namespace Harbor.Tui.CellForge.Widgets;
 
 /// <summary>
@@ -51,7 +53,7 @@ public static class GaugeBar
         CellStyle labelOnFill = default,
         CellStyle labelOnTrack = default)
     {
-        ArgumentNullException.ThrowIfNull(buffer);
+        Ensure.NotNull(buffer);
         if (rect.Width <= 0 || rect.Height <= 0)
         {
             return;

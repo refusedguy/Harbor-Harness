@@ -45,7 +45,7 @@ public sealed class LeaderKeyRouter
     /// <summary>Registers a single-character chord. Re-binding replaces.</summary>
     public void Bind(char chord, Action action)
     {
-        ArgumentNullException.ThrowIfNull(action);
+        Harbor.Abstractions.Extensions.Ensure.NotNull(action);
         _bindings[char.ToLowerInvariant(chord)] = action;
     }
 
@@ -57,7 +57,7 @@ public sealed class LeaderKeyRouter
     /// </summary>
     public void Bind(char chord, AppMsg msg, Action? run = null)
     {
-        ArgumentNullException.ThrowIfNull(msg);
+        Harbor.Abstractions.Extensions.Ensure.NotNull(msg);
         _messages[char.ToLowerInvariant(chord)] = (msg, run);
     }
 
