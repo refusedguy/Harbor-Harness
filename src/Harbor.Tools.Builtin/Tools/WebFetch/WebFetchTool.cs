@@ -293,7 +293,7 @@ public sealed partial class WebFetchTool : ITool
     /// <summary>
     ///     GET a URL following up to <see cref="MaxRedirectHops" /> redirects
     ///     manually. Every hop — original URL included — is validated via
-    ///     <see cref="GetBlockedReasonAsync" /> (DNS resolve + IP deny list)
+    ///     <see cref="CheckAllowedAsync" /> (DNS resolve + IP deny list)
     ///     before connecting; DNS is therefore re-resolved whenever the host
     ///     changes (and even when it does not).
     /// </summary>
@@ -328,10 +328,10 @@ public sealed partial class WebFetchTool : ITool
                     $"Blocked URL '{url}': exceeded {MaxRedirectHops} redirects.");
             }
 
-            string? blocked = await GetBlockedReasonAsync(current, ct).ConfigureAwait(false);
-            if (blocked is not null)
+            Result allowed = await CheckAllowedAsync(current, ct).ConfigureAwait(false);
+            if (allowed.IsFailure)
             {
-                return Result.Failure<FetchOk>(blocked);
+                return allowed.ConvertFailure<FetchOk>();
             }
 
             HttpResponseMessage resp;
@@ -401,9 +401,9 @@ public sealed partial class WebFetchTool : ITool
     };
 
     /// <summary>
-    ///     SSRF gate for one request target. Returns <see langword="null" />
-    ///     when fetching <paramref name="uri" /> is allowed, otherwise a
-    ///     human-readable reason.
+    ///     SSRF gate for one request target. Succeeds when fetching
+    ///     <paramref name="uri" /> is allowed, otherwise carries a
+    ///     human-readable reason (fail-closed — no null-as-allowed).
     /// </summary>
     /// <remarks>
     ///     Hosts listed in <see cref="AllowedHosts" /> (or the wildcard
@@ -412,54 +412,34 @@ public sealed partial class WebFetchTool : ITool
     ///     address fails closed. DNS is resolved fresh on every call so each
     ///     redirect hop re-checks its (possibly changed) host.
     /// </remarks>
-    private async Task<string?> GetBlockedReasonAsync(Uri uri, CancellationToken ct)
+    private async Task<Result> CheckAllowedAsync(Uri uri, CancellationToken ct)
     {
         string host = uri.IdnHost;
 
         if (AllowedHosts.Contains("*") || AllowedHosts.Contains(host))
         {
             WebFetchToolLog.HostExplicitlyAllowed(_logger, host);
-            return null;
+            return Result.Success();
         }
 
-        IPAddress[] addresses;
-        try
-        {
-            addresses = await Dns.GetHostAddressesAsync(host, ct).ConfigureAwait(false);
-        }
-        catch (OperationCanceledException ex)
-        {
-            // ROP-A Z1 п.2: same cancel/timeout wording as the send loop.
-            return CancelOrTimeoutMessage(ct, ex);
-        }
-        catch (SocketException ex)
-        {
-            return $"Blocked URL '{uri}' (fail-closed): host '{host}' could not be resolved ({ex.Message}).";
-        }
-        catch (ArgumentException ex)
-        {
-            return $"Blocked URL '{uri}' (fail-closed): invalid host '{host}' ({ex.Message}).";
-        }
-
-        if (addresses.Length == 0)
-        {
-            return $"Blocked URL '{uri}' (fail-closed): host '{host}' resolved to no addresses.";
-        }
-
-        foreach (IPAddress address in addresses)
-        {
-            if (!IsNonPublicAddress(address))
+        return (await Result.Try(
+                    () => Dns.GetHostAddressesAsync(host, ct),
+                    ex => ex is OperationCanceledException
+                        ? CancelOrTimeoutMessage(ct, ex)
+                        : $"Blocked URL '{uri}' (fail-closed): host '{host}' unresolvable ({ex.Message}).")
+                .ConfigureAwait(false))
+            .Ensure(a => a.Length > 0, $"Blocked URL '{uri}' (fail-closed): host '{host}' resolved to no addresses.")
+            // Tap is success-only, so it sits BEFORE the publicity Ensure:
+            // the only point where resolved offenders are observable.
+            .Tap(a =>
             {
-                continue;
-            }
-
-            WebFetchToolLog.BlockedSsrfAttempt(_logger, uri, address);
-            return $"Blocked URL '{uri}': host '{host}' resolves to non-public address {address}. " +
-                   "Fetching loopback/private/link-local targets is disabled by default; " +
-                   "add the host to WebFetchTool.AllowedHosts to allow it deliberately.";
-        }
-
-        return null;
+                foreach (IPAddress x in a.Where(IsNonPublicAddress))
+                    WebFetchToolLog.BlockedSsrfAttempt(_logger, uri, x);
+            })
+            .Ensure(a => a.All(x => !IsNonPublicAddress(x)),
+                a => $"Blocked URL '{uri}': host '{host}' resolves to non-public address {a.First(IsNonPublicAddress)}. " +
+                     "Fetching loopback/private/link-local targets is disabled by default; " +
+                     "add the host to WebFetchTool.AllowedHosts to allow it deliberately.");
     }
 
     /// <summary>
