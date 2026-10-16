@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using Harbor.Abstractions.Agents;
+using Harbor.Abstractions.Extensions;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 
@@ -46,7 +47,7 @@ public sealed class BackgroundTaskRegistry : IBackgroundTaskRegistry
         CancellationToken ct
     )
     {
-        ArgumentNullException.ThrowIfNull(run);
+        Ensure.NotNull(run);
         if (_runs.Count >= MaxBackgroundTasks)
         {
             return Result.Failure<string>(

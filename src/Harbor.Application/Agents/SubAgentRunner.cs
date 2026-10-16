@@ -1,4 +1,5 @@
 using System.Threading.Channels;
+using Harbor.Abstractions.Extensions;
 using Harbor.Abstractions.Sessions;
 using Microsoft.Extensions.Logging;
 using Result = CSharpFunctionalExtensions.Result;
@@ -88,8 +89,8 @@ public sealed class SubAgentRunner(
         SubAgentRunRequest request,
         CancellationToken ct = default)
     {
-        ArgumentNullException.ThrowIfNull(agent);
-        ArgumentNullException.ThrowIfNull(request);
+        Ensure.NotNull(agent);
+        Ensure.NotNull(request);
 
         if (!agent.IsSubAgent)
             return Result.Failure<SubAgentRunResult>(

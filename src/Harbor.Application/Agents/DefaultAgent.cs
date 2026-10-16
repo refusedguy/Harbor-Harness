@@ -1,4 +1,5 @@
 using System.Threading.Channels;
+using Harbor.Abstractions.Extensions;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 namespace Harbor.Application.Agents;
@@ -615,7 +616,7 @@ internal sealed class DefaultSessionContext : ISessionContext
         CancellationToken ct = default,
         ILogger? logger = null)
     {
-        ArgumentNullException.ThrowIfNull(store);
+        Ensure.NotNull(store);
 
         SessionMetadata seed = await ReadSeedAsync(store, session.Id, logger, ct).ConfigureAwait(false);
         return new DefaultSessionContext(
