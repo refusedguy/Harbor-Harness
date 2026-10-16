@@ -568,32 +568,28 @@ public sealed class DynamicModelCatalog : IModelCatalog
             "openai");
     }
 
-    private static string? GetStringField(JsonElement item, string path)
-    {
-        var current = item;
-        foreach (string part in path.Split('.'))
-        {
-            if (!current.TryGetProperty(part, out var next)) return null;
-            current = next;
-        }
-        return current.ValueKind == JsonValueKind.String ? current.GetString() : current.GetRawText();
-    }
+    private static Maybe<JsonElement> Navigate(JsonElement item, string path) =>
+        path.Split('.').Aggregate(
+            Maybe.From(item),
+            (acc, part) => acc.Bind(cur =>
+                cur.TryGetProperty(part, out var next)
+                    ? Maybe.From(next)
+                    : Maybe<JsonElement>.None));
 
-    private static int? GetIntField(JsonElement item, string path)
-    {
-        var current = item;
-        foreach (string part in path.Split('.'))
-        {
-            if (!current.TryGetProperty(part, out var next)) return null;
-            current = next;
-        }
-        return current.ValueKind switch
-        {
-            JsonValueKind.Number => (int)current.GetInt64(),
-            JsonValueKind.String when int.TryParse(current.GetString(), out int i) => i,
-            _ => null
-        };
-    }
+    private static string? GetStringField(JsonElement item, string path) =>
+        Navigate(item, path).Match(
+            e => e.ValueKind == JsonValueKind.String ? e.GetString() : e.GetRawText(),
+            () => null);
+
+    private static int? GetIntField(JsonElement item, string path) =>
+        Navigate(item, path)
+            .Bind(e => e.ValueKind switch
+            {
+                JsonValueKind.Number => Maybe.From((int)e.GetInt64()),
+                JsonValueKind.String when int.TryParse(e.GetString(), out int i) => i,
+                _ => Maybe<int>.None,
+            })
+            .Match(v => (int?)v, () => null);
 }
 
 /// <summary>
