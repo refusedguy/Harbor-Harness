@@ -17,16 +17,6 @@ namespace Harbor.Storage.Jsonl;
 internal static class SessionFileReader
 {
     /// <summary>
-    ///     How many times a read retries after detecting that the file changed
-    ///     under it. One retry absorbs the ordinary "an append landed between
-    ///     the stat and the read" race; the bound is what stops a writer that
-    ///     outpaces the reader from spinning here — the last attempt is returned
-    ///     as an explicitly unstable snapshot that the caller must not cache
-    ///     (#459).
-    /// </summary>
-    private const int MaxSnapshotAttempts = 3;
-
-    /// <summary>
     ///     True when the record is a <c>"message"</c> entry carrying the given
     ///     id. Header lines and unparseable records are never matched, so a
     ///     rewrite cannot accidentally drop them. Malformed lines are left
@@ -157,94 +147,114 @@ internal static class SessionFileReader
         ILogger logger,
         CancellationToken ct)
     {
+        // #1586 (Decorator): the bounded retry over a moving file is
+        // SessionSnapshotRetryPolicy's job — attempt counting, the
+        // inter-attempt delay and the last-attempt passthrough. This method
+        // owns the single pass (ReadSnapshotOnceAsync) plus the
+        // once-per-winning-attempt logging and ordering below. A failure (e.g.
+        // an unbounded file) is complete on arrival — retrying cannot fix it,
+        // so it is returned immediately.
+        Result<SnapshotAttempt> attempt = await SessionSnapshotRetryPolicy.ExecuteAsync(
+            attempt: innerCt => ReadSnapshotOnceAsync(sessionFile, sessionId, innerCt),
+            isComplete: result => result.Match(won => won.Snapshot.IsStable, _ => true),
+            ct).ConfigureAwait(false);
+
+        if (attempt.IsFailure)
+            return attempt.ConvertFailure<MessageReadSnapshot>();
+
+        return attempt.Map(won =>
+        {
+            if (won.ErrorTotal > 0)
+            {
+                SessionFileReaderLog.MalformedLinesEncountered(logger, won.ErrorTotal, sessionId, won.ErrorSummary);
+            }
+
+            if (won.SawOversized)
+            {
+                SessionFileReaderLog.OversizedRecordSkipped(logger, sessionId, ChunkedLineReader.MaxRecordBytes);
+            }
+
+            if (!won.Snapshot.IsStable)
+            {
+                // Loud, because the caller is deliberately NOT caching this and
+                // the next read will re-parse.
+                SessionFileReaderLog.PartialSnapshotReturned(logger, sessionId, won.Snapshot.Messages.Count);
+            }
+
+            return won.Snapshot;
+        });
+    }
+
+    /// <summary>
+    ///     One pass over the session file: measure, read within the open
+    ///     handle's budget, parse, and prove the pairing. Never retries — the
+    ///     <see cref="SessionSnapshotRetryPolicy" /> decorator decides that.
+    /// </summary>
+    private static async Task<Result<SnapshotAttempt>> ReadSnapshotOnceAsync(
+        string sessionFile,
+        string sessionId,
+        CancellationToken ct)
+    {
+        ct.ThrowIfCancellationRequested();
+
+        // Re-measured every attempt; the previous one may be stale. Taken
+        // BEFORE the open: paired with the post-read stat it proves the bytes
+        // we parsed are exactly the file state this stat names.
+        var stat = SessionFileStat.Read(sessionFile);
+        if (stat.Length > int.MaxValue)
+            return TooLarge<SnapshotAttempt>(stat.Length);
+
         var messages = new Dictionary<string, AgentMessage>();
         var errors = new ParseErrors();
 
-        // Taken BEFORE the open: paired with the post-read stat it proves the
-        // bytes we parsed are exactly the file state this stat names.
-        var stat = SessionFileStat.Read(sessionFile);
-        if (stat.Length > int.MaxValue)
-            return TooLarge<MessageReadSnapshot>(stat.Length);
-
-        bool stable = false;
-        bool sawOversized = false;
-        long lastRead = 0;
-        long budget = 0;
-
-        // A single concurrent append is the common case and the retry resolves
-        // it: the next attempt measures the grown file and reads it whole. The
-        // bound keeps a writer streaming faster than we read from turning into
-        // an unbounded spin — the last attempt is returned as an explicitly
-        // unstable snapshot instead.
-        for (int attempt = 1; attempt <= MaxSnapshotAttempts; attempt++)
+        long lastRead;
+        long budget;
+        bool sawOversized;
+        using (var fs = new FileStream(
+                   sessionFile, FileMode.Open, FileAccess.Read, FileShare.Read,
+                   bufferSize: 64 * 1024, useAsync: true))
         {
-            ct.ThrowIfCancellationRequested();
+            // Budget from the OPEN handle, not from a pre-open stat. It
+            // bounds the read; ChunkedLineReader bounds the memory.
+            budget = fs.Length;
+            if (budget > int.MaxValue)
+                return TooLarge<SnapshotAttempt>(budget);
 
-            // Re-measure every attempt; the previous one may be stale.
-            stat = SessionFileStat.Read(sessionFile);
-            if (stat.Length > int.MaxValue)
-                return TooLarge<MessageReadSnapshot>(stat.Length);
-
-            // Only the last attempt's records are kept, and the previous
-            // attempt's are dropped here rather than folded in — the parse is
-            // the expensive half, so a retry re-does it, exactly as it re-did
-            // the read before.
-            messages.Clear();
-            errors.Clear();
-            sawOversized = false;
-
-            using (var fs = new FileStream(
-                       sessionFile, FileMode.Open, FileAccess.Read, FileShare.Read,
-                       bufferSize: 64 * 1024, useAsync: true))
+            using var reader = new ChunkedLineReader(fs) { ByteCeiling = budget };
+            while (await reader.FillAsync(ct).ConfigureAwait(false))
             {
-                // Budget from the OPEN handle, not from a pre-open stat. It
-                // bounds the read; ChunkedLineReader bounds the memory.
-                budget = fs.Length;
-                if (budget > int.MaxValue)
-                    return TooLarge<MessageReadSnapshot>(budget);
-
-                using var reader = new ChunkedLineReader(fs) { ByteCeiling = budget };
-                while (await reader.FillAsync(ct).ConfigureAwait(false))
-                {
-                    FoldRecords(reader, sessionId, messages, errors);
-                }
-
-                FoldTrailingRecord(reader, sessionId, messages, errors);
-                lastRead = reader.BytesRead;
-                sawOversized = reader.SawOversizedRecord;
+                FoldRecords(reader, sessionId, messages, errors);
             }
 
-            // Unchanged mtime across the read, unchanged length, and every
-            // measured byte actually read == the parsed content is the whole
-            // file for that stat. An append moves the length; an atomic
-            // rewrite (temp + rename) moves the path's mtime. A short read
-            // means the file shrank under us, and what we hold is not it.
-            var after = SessionFileStat.Read(sessionFile);
-            stable = lastRead == budget && after.Matches(stat) && after.Length == budget;
-            if (stable)
-                break;
+            FoldTrailingRecord(reader, sessionId, messages, errors);
+            lastRead = reader.BytesRead;
+            sawOversized = reader.SawOversizedRecord;
         }
 
-        if (errors.Total > 0)
-        {
-            SessionFileReaderLog.MalformedLinesEncountered(logger, errors.Total, sessionId, errors.Summary());
-        }
-
-        if (sawOversized)
-        {
-            SessionFileReaderLog.OversizedRecordSkipped(logger, sessionId, ChunkedLineReader.MaxRecordBytes);
-        }
-
-        if (!stable)
-        {
-            // Loud, because the caller is deliberately NOT caching this and
-            // the next read will re-parse.
-            SessionFileReaderLog.PartialSnapshotReturned(logger, sessionId, messages.Count);
-        }
+        // Unchanged mtime across the read, unchanged length, and every
+        // measured byte actually read == the parsed content is the whole
+        // file for that stat. An append moves the length; an atomic
+        // rewrite (temp + rename) moves the path's mtime. A short read
+        // means the file shrank under us, and what we hold is not it.
+        var after = SessionFileStat.Read(sessionFile);
+        bool stable = lastRead == budget && after.Matches(stat) && after.Length == budget;
 
         var ordered = messages.Values.OrderBy(m => m.CreatedAt).ToList();
-        return Result.Success<MessageReadSnapshot>(new MessageReadSnapshot(ordered, stat, stable));
+        var snapshot = new MessageReadSnapshot(ordered, stat, stable);
+        return Result.Success(new SnapshotAttempt(snapshot, errors.Total, errors.Summary(), sawOversized));
     }
+
+    /// <summary>
+    ///     One attempt's outcome: the snapshot plus the diagnostics the outer
+    ///     method logs once for the winning attempt. Only the last attempt's
+    ///     records are ever kept — the parse is the expensive half, so a retry
+    ///     re-does it, exactly as it re-did the read before.
+    /// </summary>
+    private sealed record SnapshotAttempt(
+        MessageReadSnapshot Snapshot,
+        int ErrorTotal,
+        string ErrorSummary,
+        bool SawOversized);
 
     private static Result<T> TooLarge<T>(long length) =>
         Result.Failure<T>($"Session file too large ({length} bytes); refusing unbounded read.");
@@ -336,12 +346,6 @@ internal static class SessionFileReader
 
         /// <summary>Every failure seen, recorded or not.</summary>
         internal int Total { get; private set; }
-
-        internal void Clear()
-        {
-            Total = 0;
-            _recorded.Clear();
-        }
 
         internal void Add(string error)
         {
