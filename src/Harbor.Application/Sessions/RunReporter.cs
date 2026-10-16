@@ -228,15 +228,13 @@ public static class RunReporter
     {
         if (string.IsNullOrWhiteSpace(worktreePath) || !Directory.Exists(worktreePath))
             return Result.Success(false);
-        Result<WorkspaceMaterializer.GitOutput> status = await WorkspaceMaterializer.RunGitAsync(
-            worktreePath, ["status", "--porcelain=v1"], ProbeTimeout, ct).ConfigureAwait(false);
-        if (status.IsFailure)
-            return status.ConvertFailure<bool>();
-        if (status.Value.ExitCode != 0)
-            return Result.Failure<bool>(
-                $"Cannot inspect worktree at '{worktreePath}': " +
-                $"{WorkspaceMaterializer.Clip(status.Value.Stderr)}");
-        return Result.Success(status.Value.Stdout.Trim().Length > 0);
+        return (await WorkspaceMaterializer.RunGitAsync(
+            worktreePath, ["status", "--porcelain=v1"], ProbeTimeout, ct).ConfigureAwait(false))
+            .Bind(status => status.ExitCode != 0
+                ? Result.Failure<bool>(
+                    $"Cannot inspect worktree at '{worktreePath}': " +
+                    $"{WorkspaceMaterializer.Clip(status.Stderr)}")
+                : Result.Success(status.Stdout.Trim().Length > 0));
     }
 
     private static IReadOnlyList<ChangedPathEntry> ToChanged(IReadOnlyList<FrozenChangeEntry> entries)
