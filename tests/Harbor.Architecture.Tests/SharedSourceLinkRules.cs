@@ -6,7 +6,8 @@
 // `<Compile Include>`-linked into consumer projects instead of being referenced.
 //
 //   src/Harbor.Providers.Shared/  SsePump.cs, OpenAiWire.cs, OpenAiImageContent.cs,
-//                                  ProviderArguments.cs (#1102)
+//                                  ProviderArguments.cs (#1102),
+//                                  Utf8JsonReaderExtensions.cs (#1563)
 //   src/Harbor.Storage.Shared/     SessionLockStrip.cs, SessionStoreErrors.cs,
 //                                  SessionStatsAggregator.cs
 //
@@ -84,7 +85,7 @@
 // -----------
 // R1–R3 cross-check the real csproj XML, so they cannot pass by reading nothing.
 // `The_Shared_Folder_Discovery_Is_Not_Empty` and `The_Link_Inventory_Is_Not_Empty`
-// pin the discovered sets to the two folders and thirteen link items this issue is
+// pin the discovered sets to the two folders and twenty link items this issue is
 // about, so a rename, a moved folder or an emptied set fails rather than quietly
 // reducing the rules to nothing. R5 is paired with a negative control: the same
 // walk must NOT return a shared file for a project that does not link it, so R5
@@ -207,19 +208,22 @@ public sealed class SharedSourceLinkRules
     {
         LinkItem[] links = EnumerateLinkItems();
 
-        await Assert.That(links.Length).IsEqualTo(16)
+        await Assert.That(links.Length).IsEqualTo(20)
             .Because(
-                "16 `<Compile Include>` link items: SsePump into four providers, OpenAiWire, "
-                + "OpenAiImageContent and ProviderArguments into OpenAI + OpenAiCompatible, and three "
-                + "files out of Harbor.Storage.Shared into the Jsonl and Sqlite stores plus one more "
-                + "into Memory. "
+                "20 `<Compile Include>` link items: SsePump and Utf8JsonReaderExtensions into four "
+                + "providers, OpenAiWire, OpenAiImageContent and ProviderArguments into OpenAI + "
+                + "OpenAiCompatible, and three files out of Harbor.Storage.Shared into the Jsonl and "
+                + "Sqlite stores plus one more into Memory. "
                 + "A different count means a link was added or removed and R2 is judging a set that "
                 + "is not the build's. The fourteenth is #887's: Memory links SessionStoreErrors.cs "
                 + "alone, so all three stores share the failure texts while each store still links "
                 + "only what it has a use for — see The_Per_Project_File_Walk_Does_Not_Invent_Links. "
                 + "The fifteenth and sixteenth are #1102's: ProviderArguments.cs into OpenAI + "
                 + "OpenAiCompatible, the pooled arguments transcode both OpenAI-format request "
-                + "builders share (Anthropic and Ollama keep their own wire types).");
+                + "builders share (Anthropic and Ollama keep their own wire types). "
+                + "The seventeenth through twentieth are #1563's: Utf8JsonReaderExtensions.cs into "
+                + "all four providers, the tolerant wire-int helpers (ReadTolerantInt/SkipContainer) "
+                + "previously copied byte-identically into four parsers.");
 
         string[] consumers = [.. links.Select(l => l.Consumer).Distinct(StringComparer.Ordinal)];
 

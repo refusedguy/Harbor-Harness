@@ -576,7 +576,7 @@ public sealed class OllamaLlmClient : ILlmClient
                 }
                 else
                 {
-                    SkipContainer(ref reader);
+                    Utf8JsonReaderExtensions.SkipContainer(ref reader);
                 }
             }
             else if (prop == "done")
@@ -585,15 +585,15 @@ public sealed class OllamaLlmClient : ILlmClient
             }
             else if (prop == "prompt_eval_count")
             {
-                rInputTokens = ReadTolerantInt(ref reader);
+                rInputTokens = Utf8JsonReaderExtensions.ReadTolerantInt(ref reader);
             }
             else if (prop == "eval_count")
             {
-                rOutputTokens = ReadTolerantInt(ref reader);
+                rOutputTokens = Utf8JsonReaderExtensions.ReadTolerantInt(ref reader);
             }
             else
             {
-                SkipContainer(ref reader);
+                Utf8JsonReaderExtensions.SkipContainer(ref reader);
             }
 
             return;
@@ -614,12 +614,12 @@ public sealed class OllamaLlmClient : ILlmClient
                 }
                 else
                 {
-                    SkipContainer(ref reader);
+                    Utf8JsonReaderExtensions.SkipContainer(ref reader);
                 }
             }
             else
             {
-                SkipContainer(ref reader);
+                Utf8JsonReaderExtensions.SkipContainer(ref reader);
             }
 
             return;
@@ -647,12 +647,12 @@ public sealed class OllamaLlmClient : ILlmClient
                 }
                 else
                 {
-                    SkipContainer(ref reader);
+                    Utf8JsonReaderExtensions.SkipContainer(ref reader);
                 }
             }
             else
             {
-                SkipContainer(ref reader);
+                Utf8JsonReaderExtensions.SkipContainer(ref reader);
             }
 
             return;
@@ -670,13 +670,13 @@ public sealed class OllamaLlmClient : ILlmClient
             }
             else
             {
-                SkipContainer(ref reader);
+                Utf8JsonReaderExtensions.SkipContainer(ref reader);
             }
 
             return;
         }
 
-        SkipContainer(ref reader);
+        Utf8JsonReaderExtensions.SkipContainer(ref reader);
     }
 
     /// <summary>
@@ -751,31 +751,6 @@ public sealed class OllamaLlmClient : ILlmClient
         }
     }
 
-    private static void SkipContainer(ref Utf8JsonReader reader)
-    {
-        if (reader.TokenType is JsonTokenType.StartObject or JsonTokenType.StartArray)
-            reader.Skip();
-    }
-
-    private static int ReadTolerantInt(ref Utf8JsonReader reader)
-    {
-        if (reader.TokenType == JsonTokenType.Number)
-        {
-            if (reader.TryGetInt32(out int direct))
-                return direct;
-            if (reader.TryGetDouble(out double dbl))
-                return (int)dbl;
-            return 0;
-        }
-
-        if (reader.TokenType == JsonTokenType.String &&
-            int.TryParse(reader.GetString(), out int parsed))
-        {
-            return parsed;
-        }
-
-        return 0;
-    }
 }
 
 public sealed class OllamaConfig
