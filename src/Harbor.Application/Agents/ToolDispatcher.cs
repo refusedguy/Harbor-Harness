@@ -492,27 +492,25 @@ public sealed class ToolDispatcher(
             var attempts = new AttemptCount();
             try
             {
-            // Argument validation on the Result railway (#1515) — a failure
-            // already published its end event inside the gate; the fold only
-            // materializes the entry, so the tool never throws (e.g.
-            // KeyNotFoundException on a missing required prop).
-            Result<Unit> valid = await ValidateArgumentsAsync(tool, toolCall, activity, ct).ConfigureAwait(false);
-            if (valid.IsFailure)
+            // Validate → permission on one railway (#1515): each gate returns
+            // Result<Unit> (success = pass, failure carries the entry text);
+            // the terminal publish already rode the failure branch inside
+            // the gate, so the fold below only materializes the entry.
+            // #49 PR2: the commit scope opens BEFORE the permission check so
+            // a cancel landing anywhere in approve→commit invalidates it.
+            // Scopes are epoch-scoped (parallel calls share fate), not
+            // once-only.
+            long commitScope = 0;
+            Result<Unit> gates = await ValidateArgumentsAsync(tool, toolCall, activity, ct)
+                .Bind(_ =>
+                {
+                    commitScope = coordinator?.BeginApprovalScope() ?? 0;
+                    return CheckPermissionAsync(toolCall, agent, effectiveCt, ct, activity);
+                })
+                .ConfigureAwait(false);
+            if (gates.IsFailure)
             {
-                return ToolResultEntry.From(toolCall.Id, toolCall.ToolName, ToolResult.Error(valid.Error));
-            }
-
-            // Permission check.
-            // #49 PR2: open the commit scope BEFORE the check so a cancel
-            // landing anywhere in approve→commit invalidates it. Scopes are
-            // epoch-scoped (parallel calls share fate), not once-only.
-            long commitScope = coordinator?.BeginApprovalScope() ?? 0;
-
-            ToolResultEntry? denied = await CheckPermissionAsync(
-                toolCall, agent, effectiveCt, ct, activity).ConfigureAwait(false);
-            if (denied is not null)
-            {
-                return denied;
+                return ToolResultEntry.From(toolCall.Id, toolCall.ToolName, ToolResult.Error(gates.Error));
             }
 
             // PX4: user PreToolUse hooks run after the policy gate — they can
@@ -608,10 +606,9 @@ public sealed class ToolDispatcher(
     }
 
     /// <summary>
-    ///     Validate tool arguments on the Result railway (#1515):
-    ///     <see cref="Result.Success{T}">success</see> (<see cref="Unit" />)
-    ///     when valid; otherwise publishes the end event and returns a
-    ///     failure carrying the entry text.
+    ///     Validate tool arguments on the Result railway (#1515): success
+    ///     (<see cref="Unit" />) when valid; otherwise publishes the end
+    ///     event and returns a failure carrying the entry text.
     /// </summary>
     private async Task<Result<Unit>> ValidateArgumentsAsync(
         ITool tool,
@@ -633,11 +630,12 @@ public sealed class ToolDispatcher(
     }
 
     /// <summary>
-    ///     Check permission for one tool call. Returns <see langword="null" />
-    ///     when allowed; otherwise publishes the end event and returns the deny
-    ///     entry. Fail-closed: any non-success verdict denies (§G3).
+    ///     Check permission for one tool call on the Result railway (#1515):
+    ///     success (<see cref="Unit" />) when allowed; otherwise publishes
+    ///     the end event and returns a failure carrying the deny text.
+    ///     Fail-closed: any non-success verdict denies (§G3).
     /// </summary>
-    private async Task<ToolResultEntry?> CheckPermissionAsync(
+    private async Task<Result<Unit>> CheckPermissionAsync(
         ToolCallPart toolCall,
         AgentDefinition agent,
         CancellationToken effectiveCt,
@@ -658,7 +656,7 @@ public sealed class ToolDispatcher(
         // returned without approval) is fail-closed, never fail-open.
         if (permResponse.IsSuccess && permResponse.Value.Action == PermissionAction.Allow)
         {
-            return null;
+            return Result.Success(Unit.Value);
         }
 
         activity?.SetStatus(ActivityStatusCode.Error, "Permission denied");
@@ -693,7 +691,7 @@ public sealed class ToolDispatcher(
         var denied = ToolResult.Error(reason);
         await eventBus.PublishAsync(new ToolExecutionEndEvent(
             toolCall.Id, denied, true), TerminalEventToken).ConfigureAwait(false);
-        return ToolResultEntry.From(toolCall.Id, toolCall.ToolName, denied);
+        return Result.Failure<Unit>(reason);
     }
 
     /// <summary>
