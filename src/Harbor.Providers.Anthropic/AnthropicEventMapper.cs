@@ -237,7 +237,7 @@ internal static class AnthropicEventMapper
                 }
                 else
                 {
-                    SkipContainer(ref reader);
+                    Utf8JsonReaderExtensions.SkipContainer(ref reader);
                 }
 
                 return;
@@ -252,7 +252,7 @@ internal static class AnthropicEventMapper
                 }
                 else
                 {
-                    SkipContainer(ref reader);
+                    Utf8JsonReaderExtensions.SkipContainer(ref reader);
                 }
 
                 return;
@@ -267,7 +267,7 @@ internal static class AnthropicEventMapper
                 }
                 else
                 {
-                    SkipContainer(ref reader);
+                    Utf8JsonReaderExtensions.SkipContainer(ref reader);
                 }
 
                 return;
@@ -277,11 +277,11 @@ internal static class AnthropicEventMapper
             {
                 // content_block_start/_delta carry the block index at top
                 // level — the correlation key for tool-arg deltas (#203 E5).
-                rBlockIndex = ReadTolerantInt(ref reader);
+                rBlockIndex = Utf8JsonReaderExtensions.ReadTolerantInt(ref reader);
                 return;
             }
 
-            SkipContainer(ref reader);
+            Utf8JsonReaderExtensions.SkipContainer(ref reader);
             return;
         }
 
@@ -309,7 +309,7 @@ internal static class AnthropicEventMapper
             }
             else
             {
-                SkipContainer(ref reader);
+                Utf8JsonReaderExtensions.SkipContainer(ref reader);
             }
 
             return;
@@ -331,7 +331,7 @@ internal static class AnthropicEventMapper
             }
             else
             {
-                SkipContainer(ref reader);
+                Utf8JsonReaderExtensions.SkipContainer(ref reader);
             }
 
             return;
@@ -341,29 +341,29 @@ internal static class AnthropicEventMapper
         {
             if (prop == "input_tokens")
             {
-                rInputTokens = ReadTolerantInt(ref reader);
+                rInputTokens = Utf8JsonReaderExtensions.ReadTolerantInt(ref reader);
             }
             else if (prop == "output_tokens")
             {
-                rOutputTokens = ReadTolerantInt(ref reader);
+                rOutputTokens = Utf8JsonReaderExtensions.ReadTolerantInt(ref reader);
             }
             else if (prop == "cache_read_input_tokens")
             {
-                rCacheReadTokens = ReadTolerantNullableInt(ref reader);
+                rCacheReadTokens = Utf8JsonReaderExtensions.ReadTolerantNullableInt(ref reader);
             }
             else if (prop == "cache_creation_input_tokens")
             {
-                rCacheWriteTokens = ReadTolerantNullableInt(ref reader);
+                rCacheWriteTokens = Utf8JsonReaderExtensions.ReadTolerantNullableInt(ref reader);
             }
             else
             {
-                SkipContainer(ref reader);
+                Utf8JsonReaderExtensions.SkipContainer(ref reader);
             }
 
             return;
         }
 
-        SkipContainer(ref reader);
+        Utf8JsonReaderExtensions.SkipContainer(ref reader);
     }
 
     private static void Emit(
@@ -444,51 +444,6 @@ internal static class AnthropicEventMapper
         return $"tc{blockIndex}";
     }
 
-    private static void SkipContainer(ref Utf8JsonReader reader)
-    {
-        if (reader.TokenType is JsonTokenType.StartObject or JsonTokenType.StartArray)
-            reader.Skip();
-    }
-
-    private static int ReadTolerantInt(ref Utf8JsonReader reader)
-    {
-        if (reader.TokenType == JsonTokenType.Number)
-        {
-            if (reader.TryGetInt32(out int direct))
-                return direct;
-            if (reader.TryGetDouble(out double dbl))
-                return (int)dbl;
-            return 0;
-        }
-
-        if (reader.TokenType == JsonTokenType.String &&
-            int.TryParse(reader.GetString(), out int parsed))
-        {
-            return parsed;
-        }
-
-        return 0;
-    }
-
-    private static int? ReadTolerantNullableInt(ref Utf8JsonReader reader)
-    {
-        if (reader.TokenType == JsonTokenType.Number)
-        {
-            if (reader.TryGetInt32(out int direct))
-                return direct;
-            if (reader.TryGetDouble(out double dbl))
-                return (int)dbl;
-            return null;
-        }
-
-        if (reader.TokenType == JsonTokenType.String &&
-            int.TryParse(reader.GetString(), out int parsed))
-        {
-            return parsed;
-        }
-
-        return null;
-    }
 }
 
 /// <summary>
