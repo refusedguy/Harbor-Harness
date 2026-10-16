@@ -116,7 +116,7 @@ public class WebFetchSsrfNegativeTests
     }
 
     [Test]
-    [Skip("Sandbox DNS wildcards NXDOMAIN: .invalid resolved to a captive 200 page, so the fail-closed branch cannot be exercised here. The code path is SocketException → fail-closed block (WebFetchTool.GetBlockedReasonAsync); covered implicitly by CI networks without intercepting resolvers.")]
+    [Skip("Sandbox DNS wildcards NXDOMAIN: .invalid resolved to a captive 200 page, so the fail-closed branch cannot be exercised here. The code path is DNS error → fail-closed block (WebFetchTool.CheckAllowedAsync); covered implicitly by CI networks without intercepting resolvers.")]
     public async Task Execute_UnresolvableHost_FailsClosed()
     {
         await Task.CompletedTask;
