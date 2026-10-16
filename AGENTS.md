@@ -58,7 +58,7 @@ Do not re-read whole files when a `graft` crux or `serena` symbol body already a
 
 ```
 src/Harbor.Abstractions/              — base contracts (no Harbor deps except Abstractions.Contracts; 7 NuGet, gated)
-src/Harbor.Abstractions.Contracts/    — models, events, ValueObjects, PermissionRuleset
+src/Harbor.Abstractions.Contracts/    — models, events, records, PermissionRuleset
 
 src/Harbor.Registries/                — Agent/Tool/Provider registries; builtin agents are declared in
                                        AgentDefinition and registered in ToolsCatalog.CreateAgentRegistry
@@ -170,7 +170,7 @@ LLM-level events (`TextDeltaEvent`, `ToolCallStartEvent`, `StepFinishEvent`, …
 
 ### Identifiers
 
-All IDs are strongly-typed `ValueObject`s defined in
+All IDs are strongly-typed `record`s defined in
 `Harbor.Abstractions.Contracts/Models/Identifiers/Identifiers.cs`:
 - `SessionId`, `MessageId`, `ToolCallId`
 - `ProviderId`, `ModelRef` (e.g. `anthropic/claude-opus-4`)
