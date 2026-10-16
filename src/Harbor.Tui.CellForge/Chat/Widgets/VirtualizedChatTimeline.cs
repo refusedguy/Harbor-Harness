@@ -1,4 +1,5 @@
 using System.Text;
+using Ensure = Harbor.Abstractions.Extensions.Ensure;
 using Harbor.Tui.CellForge.Input;
 using Harbor.Tui.CellForge.Rendering;
 // #436: GlowRegion is engine-typed; its accent/rect convert exactly below.
@@ -208,7 +209,7 @@ public sealed partial class VirtualizedChatTimeline
 
     public void Append(IChatBlock block, bool? scrollEnd = null)
     {
-        ArgumentNullException.ThrowIfNull(block);
+        Ensure.NotNull(block);
 
         // Per-write scroll_end override (#1190, textual write(scroll_end=…)):
         // null honours the global FollowTail; true yanks an unpinned view to
@@ -299,7 +300,7 @@ public sealed partial class VirtualizedChatTimeline
     /// </summary>
     public void Replace(IChatBlock existing, IChatBlock replacement)
     {
-        ArgumentNullException.ThrowIfNull(existing);
+        Ensure.NotNull(existing);
 
         for (int i = 0; i < _cache.Count; i++)
         {
@@ -356,7 +357,7 @@ public sealed partial class VirtualizedChatTimeline
     /// genuinely moved — scroll shift, width change, append, rewrap.</summary>
     public void MarkDirty(IChatBlock block)
     {
-        ArgumentNullException.ThrowIfNull(block);
+        Ensure.NotNull(block);
 
         int index = IndexOf(block);
         if (index < 0)

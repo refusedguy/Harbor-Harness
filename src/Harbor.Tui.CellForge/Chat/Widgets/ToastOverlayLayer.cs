@@ -1,4 +1,5 @@
 using Harbor.Tui.CellForge.Rendering;
+using Ensure = Harbor.Abstractions.Extensions.Ensure;
 using Harbor.Ui.Framework.Rendering;
 
 namespace Harbor.Tui.CellForge.Widgets;
@@ -43,7 +44,7 @@ public sealed class ToastOverlayLayer : IOverlayLayer
     /// </summary>
     public void Paint(ScreenBuffer buffer, Rect clip)
     {
-        ArgumentNullException.ThrowIfNull(buffer);
+        Ensure.NotNull(buffer);
         if (_overlay.IsEmpty)
         {
             return;

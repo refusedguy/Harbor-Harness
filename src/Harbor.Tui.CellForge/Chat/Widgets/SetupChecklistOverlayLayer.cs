@@ -57,7 +57,7 @@ public sealed class SetupChecklistOverlayLayer : IOverlayLayer
     /// </summary>
     public void Paint(ScreenBuffer buffer, Rect clip)
     {
-        ArgumentNullException.ThrowIfNull(buffer);
+        Harbor.Abstractions.Extensions.Ensure.NotNull(buffer);
         if (!_overlay.Visible)
         {
             return;

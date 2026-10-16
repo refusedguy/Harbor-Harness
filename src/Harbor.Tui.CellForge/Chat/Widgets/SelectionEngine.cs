@@ -1,4 +1,5 @@
 using System.Text;
+using Ensure = Harbor.Abstractions.Extensions.Ensure;
 using Harbor.Tui.CellForge.Input;
 using Harbor.Tui.CellForge.Rendering;
 
@@ -50,7 +51,7 @@ public sealed class SelectionEngine
     /// </summary>
     public string? OnRelease(int x, int y, int cols, int rows, Func<int, int, Cell> cellAt)
     {
-        ArgumentNullException.ThrowIfNull(cellAt);
+        Ensure.NotNull(cellAt);
         if (_anchor is not { } anchor)
         {
             return null;

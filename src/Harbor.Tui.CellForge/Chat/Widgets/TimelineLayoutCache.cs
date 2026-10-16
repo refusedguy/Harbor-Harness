@@ -1,6 +1,7 @@
 namespace Harbor.Tui.CellForge.Widgets;
 
 using Harbor.Ui.Framework.Rendering.PerformanceContracts;
+using Ensure = Harbor.Abstractions.Extensions.Ensure;
 
 /// <summary>What <see cref="TimelineLayoutCache.PrepareLayout"/> did this frame.</summary>
 public enum LayoutOutcome : byte
@@ -183,7 +184,7 @@ public sealed class TimelineLayoutCache
 
     public void Append(IChatBlock block)
     {
-        ArgumentNullException.ThrowIfNull(block);
+        Ensure.NotNull(block);
 
         EnsureCapacity(_count + 1);
         _blocks[_count] = block;
@@ -261,7 +262,7 @@ public sealed class TimelineLayoutCache
     {
         ArgumentOutOfRangeException.ThrowIfNegative(index);
         ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(index, _count);
-        ArgumentNullException.ThrowIfNull(block);
+        Ensure.NotNull(block);
 
         var superseded = _blocks[index];
         _blocks[index] = block;
