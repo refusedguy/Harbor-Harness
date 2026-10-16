@@ -100,19 +100,11 @@ public sealed class JsonlSessionPorter : ISessionPorter
 
         var envelopeResult = Result.Try(
             () => JsonSerializer.Deserialize(headerLine, JsonlCodecContext.Default.ExportEnvelope),
-            ex => $"Invalid export header: {ex.Message}");
+            ex => $"Invalid export header: {ex.Message}")
+            .Bind(ValidateExportEnvelope);
         if (envelopeResult.IsFailure)
             return envelopeResult.ConvertFailure<string>();
-        ExportEnvelope? envelope = envelopeResult.Value;
-
-        if (envelope is null || envelope.Marker != EnvelopeMarker)
-            return Result.Failure<string>(
-                $"Not a Harbor session export (missing '{EnvelopeMarker}' marker).");
-        if (envelope.Version > SchemaVersion)
-            return Result.Failure<string>(
-                $"Unsupported export schema version {envelope.Version} (this build supports up to {SchemaVersion}).");
-        if (string.IsNullOrWhiteSpace(envelope.Session.Id))
-            return Result.Failure<string>("Export header has no source session id.");
+        ExportEnvelope envelope = envelopeResult.Value; // guarded: returned above on failure.
 
         Session source = envelope.Session;
         // Minted fresh ALWAYS — see ISessionPorter remarks (idempotent double-import).
@@ -186,6 +178,26 @@ public sealed class JsonlSessionPorter : ISessionPorter
 
         JsonlSessionPorterLog.SessionImported(_logger, target.Id, source.Id, imported, skipped);
         return Result.Success(target.Id);
+    }
+
+    /// <summary>
+    /// Pure header-shape gate for the import preamble: null/marker/version/id
+    /// checks in the same order and with the same texts as the inline ladder
+    /// they replace, so the <c>Result.Try</c> parse above joins the rail via
+    /// <c>Bind</c> and <c>ConvertFailure&lt;string&gt;</c> stays only on the
+    /// transport-type boundary below.
+    /// </summary>
+    private static Result<ExportEnvelope> ValidateExportEnvelope(ExportEnvelope? envelope)
+    {
+        if (envelope is null || envelope.Marker != EnvelopeMarker)
+            return Result.Failure<ExportEnvelope>(
+                $"Not a Harbor session export (missing '{EnvelopeMarker}' marker).");
+        if (envelope.Version > SchemaVersion)
+            return Result.Failure<ExportEnvelope>(
+                $"Unsupported export schema version {envelope.Version} (this build supports up to {SchemaVersion}).");
+        if (string.IsNullOrWhiteSpace(envelope.Session.Id))
+            return Result.Failure<ExportEnvelope>("Export header has no source session id.");
+        return Result.Success(envelope);
     }
 
     /// <summary>
