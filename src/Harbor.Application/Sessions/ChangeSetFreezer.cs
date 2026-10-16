@@ -751,14 +751,12 @@ public static class ChangeSetFreezer
             "-c", "commit.gpgsign=false",
             "commit", "--no-verify", "-m", message,
         ];
-        Result<WorkspaceMaterializer.GitOutput> out_ =
-            await WorkspaceMaterializer.RunGitAsync(worktree, argv, CommitTimeout, ct).ConfigureAwait(false);
-        if (out_.IsFailure)
-            return out_.ConvertFailure<string>();
-        if (out_.Value.ExitCode != 0)
-            return Result.Failure<string>(
-                $"Freeze of run '{runId}' failed at stage 'commit': {WorkspaceMaterializer.Clip(out_.Value.Stderr)}");
-        return await RevParseHeadAsync(worktree, ct).ConfigureAwait(false);
+        return await (await WorkspaceMaterializer.RunGitAsync(worktree, argv, CommitTimeout, ct).ConfigureAwait(false))
+            .Bind(o => o.ExitCode != 0
+                ? Result.Failure<WorkspaceMaterializer.GitOutput>(
+                    $"Freeze of run '{runId}' failed at stage 'commit': {WorkspaceMaterializer.Clip(o.Stderr)}")
+                : Result.Success(o))
+            .Bind(_ => RevParseHeadAsync(worktree, ct)).ConfigureAwait(false);
     }
 
     private static async Task ResetIndexAsync(string worktree)
