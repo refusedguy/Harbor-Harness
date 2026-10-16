@@ -102,6 +102,49 @@ public class RendererPipelineTests
         await Assert.That(swapped).IsFalse();
     }
 
+    [Test]
+    public async Task TryGetCurrent_Initialized_ReturnsValue()
+    {
+        var initial = new CountingRenderer();
+        using var pipeline = new RendererPipeline(initial, "initial", store: null, NullLogger<RendererPipeline>.Instance);
+
+        Maybe<ITuiRenderer> current = pipeline.TryGetCurrent();
+        Maybe<string> backendId = pipeline.TryGetBackendId();
+
+        await Assert.That(current.HasValue).IsTrue();
+        await Assert.That(ReferenceEquals(current.Value, initial)).IsTrue();
+        await Assert.That(backendId.HasValue).IsTrue();
+        await Assert.That(backendId.Value).IsEqualTo("initial");
+    }
+
+    [Test]
+    public async Task TryGetCurrent_Disposed_ReturnsNone_ToResultFails()
+    {
+        var initial = new CountingRenderer();
+        var pipeline = new RendererPipeline(initial, "initial", store: null, NullLogger<RendererPipeline>.Instance);
+        pipeline.Dispose();
+
+        Maybe<ITuiRenderer> current = pipeline.TryGetCurrent();
+
+        await Assert.That(current.HasNoValue).IsTrue();
+        Result<ITuiRenderer> result = current.ToResult("Pipeline not initialized.");
+        await Assert.That(result.IsFailure).IsTrue();
+    }
+
+    [Test]
+    public async Task TryGetBackendId_Disposed_ReturnsNone_MatchFallsBack()
+    {
+        var initial = new CountingRenderer();
+        var pipeline = new RendererPipeline(initial, "initial", store: null, NullLogger<RendererPipeline>.Instance);
+        pipeline.Dispose();
+
+        Maybe<string> backendId = pipeline.TryGetBackendId();
+
+        await Assert.That(backendId.HasNoValue).IsTrue();
+        string label = backendId.Match(static id => id, static () => "<disposed>");
+        await Assert.That(label).IsEqualTo("<disposed>");
+    }
+
     /// <summary>Drives a real MessageStart → TextDelta → MessageEnd round trip so the store's reducer commits a chat line.</summary>
     private static void StreamAssistantLine(UiStore store, string text)
     {

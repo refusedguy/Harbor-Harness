@@ -1,5 +1,6 @@
 namespace Harbor.Hosting.Rendering;
 
+using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Tui;
 
 /// <summary>
@@ -19,10 +20,29 @@ public interface IRendererPipeline : IDisposable
 {
     /// <inheritdoc cref="IDisposable.Dispose" />
     /// <summary>The currently published renderer (never null after construction).</summary>
+    /// <remarks>
+    ///     Compat accessor: throws <see cref="InvalidOperationException"/> when the
+    ///     pipeline holds no renderer (disposed). New code prefers
+    ///     <see cref="TryGetCurrent"/> — absence is <c>Maybe</c>, not an exception (#1509).
+    /// </remarks>
     ITuiRenderer Current { get; }
 
     /// <summary>Backend id of the currently published renderer.</summary>
+    /// <remarks>
+    ///     Compat accessor (see <see cref="Current"/>). New code prefers
+    ///     <see cref="TryGetBackendId"/> (#1509).
+    /// </remarks>
     string CurrentBackendId { get; }
+
+    /// <summary>
+    ///     The currently published renderer, or <c>None</c> when the pipeline
+    ///     holds none (disposed). Canonical absence API (#1509): <c>Maybe</c> for
+    ///     absence, <c>Result</c> (via <c>ToResult</c>) when an error text is needed.
+    /// </summary>
+    Maybe<ITuiRenderer> TryGetCurrent();
+
+    /// <summary>Backend id of the currently published renderer, or <c>None</c> when absent (#1509).</summary>
+    Maybe<string> TryGetBackendId();
 
     /// <summary>Backend ids registered for runtime swap.</summary>
     IReadOnlyCollection<string> AvailableBackends { get; }

@@ -1,3 +1,4 @@
+using CSharpFunctionalExtensions;
 using Harbor.Hosting.Rendering;
 using Harbor.Tui.CellForge.Widgets;
 
@@ -24,11 +25,14 @@ internal sealed class RendererCommand : IReplCommand
             return Task.CompletedTask;
         }
 
+        // #1509: absence is Maybe, not an exception — the disposed pipeline
+        // has no active backend, and that is an expected state, not an invariant.
+        Maybe<string> activeBackend = pipeline.TryGetBackendId();
         var items = pipeline.AvailableBackends
             .Select(id => new CommandItem(
                 id,
                 id,
-                id == pipeline.CurrentBackendId ? "Currently active" : string.Empty,
+                activeBackend.Match(backendId => backendId == id, static () => false) ? "Currently active" : string.Empty,
                 string.Empty,
                 "Renderer"))
             .ToList();
