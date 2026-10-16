@@ -1,5 +1,5 @@
 using System.Collections.Frozen;
-using Harbor.Abstractions.Extensions;
+using Ensure = Harbor.Abstractions.Extensions.Ensure;
 using Microsoft.Extensions.Logging;
 
 namespace Harbor.Tools.Mcp;
