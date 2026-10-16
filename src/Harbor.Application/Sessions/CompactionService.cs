@@ -377,14 +377,11 @@ public sealed class CompactionService(
     {
         // Ф8/A1: the summarization system prompt is a compile-time constant, so the
         // request is a perfect prefix-cache candidate — flag it Ephemeral.
-        return new LlmRequest(
+        return LlmRequestBuilder.ForSummary(
             summaryModel.Id,
-            new[] { LlmUserMessage.Text(prompt) },
+            prompt,
             SummarizationPrompt,
-            Array.Empty<ToolDefinition>(),
-            Temperature: 0.3m,
-            MaxOutputTokens: SummaryMaxOutputTokens,
-            CacheStrategy: CacheStrategy.Ephemeral);
+            SummaryMaxOutputTokens).Build();
     }
 
     /// <summary>
