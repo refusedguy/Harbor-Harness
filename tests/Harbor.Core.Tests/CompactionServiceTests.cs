@@ -43,12 +43,12 @@ public class CompactionServiceTests
         Pricing.Unknown,
         "openai");
 
-    private static CompactionService CreateService(ILlmClient? client = null)
+    private static CompactionService CreateService(ILlmClient? client = null, ITokenTracker? tracker = null)
     {
         var providers = new ProviderRegistry();
         providers.Register(ProviderId.Create("test"), () => client ?? new SummaryLlmClient("summary"));
         return new CompactionService(
-            new TokenTracker(),
+            tracker ?? new TokenTracker(),
             providers,
             NullLogger<CompactionService>.Instance);
     }
@@ -157,6 +157,36 @@ public class CompactionServiceTests
         await Assert.That(svc.ShouldCompact(big, tight)).IsEqualTo(tracker.ShouldCompact(big, tight));
         await Assert.That(svc.ShouldCompact(small, HugeModel)).IsFalse();
         await Assert.That(svc.ShouldCompact(small, HugeModel)).IsEqualTo(tracker.ShouldCompact(small, HugeModel));
+    }
+
+    [Test]
+    public async Task ShouldCompact_FollowsTrackerReserve_SingleSource()
+    {
+        // #1106 (divergent reserves): the service keeps no second threshold —
+        // the knob that moves the verdict is the tracker's reserve alone.
+        // 20 × ~1100 tokens = ~22000: over 30000−16384, under 30000−100.
+        var big = new List<AgentMessage>();
+        for (int i = 0; i < 20; i++)
+            big.Add(User(new string('x', 4000)));
+        var window = new ModelInfo(
+            "test-model",
+            "test",
+            "Test Model",
+            30_000,
+            1_024,
+            false,
+            false,
+            true,
+            Pricing.Unknown,
+            "openai");
+
+        var defaultSvc = CreateService();
+        var tightTracker = new TokenTracker { ReserveTokens = 100 };
+        var tightSvc = CreateService(tracker: tightTracker);
+
+        await Assert.That(defaultSvc.ShouldCompact(big, window)).IsTrue();
+        await Assert.That(tightSvc.ShouldCompact(big, window)).IsFalse();
+        await Assert.That(tightSvc.ShouldCompact(big, window)).IsEqualTo(tightTracker.ShouldCompact(big, window));
     }
 
     [Test]
@@ -280,10 +310,10 @@ public class CompactionServiceTests
         // window compaction is freeing. The prompt now keeps the newest head
         // messages inside ContextWindow − output − reserve.
         var capturing = new CapturingSummaryClient("capped summary");
-        var svc = CreateService(capturing);
+        var tracker = new TokenTracker { ReserveTokens = 100 };
+        var svc = CreateService(capturing, tracker);
         svc.KeepRecentTokens = 1; // each message is ~200 tokens: tailStart == Count
         svc.TailTurns = 0;
-        svc.ReserveTokens = 100;
 
         var messages = new List<AgentMessage>();
         for (int i = 0; i < 10; i++)
@@ -295,7 +325,7 @@ public class CompactionServiceTests
             "test-model",
             "test",
             "Test Model",
-            4096 + svc.ReserveTokens + headEstimate / 2,
+            4096 + tracker.ReserveTokens + headEstimate / 2,
             1_024,
             false,
             false,
@@ -303,7 +333,7 @@ public class CompactionServiceTests
             Pricing.Unknown,
             "openai");
 
-        await Assert.That(headEstimate).IsGreaterThan(tight.ContextWindow - 4096 - svc.ReserveTokens);
+        await Assert.That(headEstimate).IsGreaterThan(tight.ContextWindow - 4096 - tracker.ReserveTokens);
 
         var result = await svc.CompactAsync("session-1", messages, tight);
 
@@ -448,20 +478,17 @@ public class CompactionServiceTests
         }
     }
 
-    /// <summary>#1101: singleton thresholds refuse non-positive reserves; TailTurns=0 disables the floor.</summary>
+    /// <summary>#1101: service thresholds refuse non-positive values; TailTurns=0 disables the floor.</summary>
     [Test]
     public async Task Thresholds_DefaultAndValidate()
     {
         var svc = CreateService();
-        await Assert.That(svc.ReserveTokens).IsEqualTo(CompactionPolicy.DefaultReserveTokens);
         await Assert.That(svc.KeepRecentTokens).IsEqualTo(20000);
         await Assert.That(svc.TailTurns).IsEqualTo(2);
 
         svc.TailTurns = 0;
         await Assert.That(svc.TailTurns).IsEqualTo(0);
 
-        Assert.Throws<ArgumentOutOfRangeException>(() => { svc.ReserveTokens = 0; });
-        Assert.Throws<ArgumentOutOfRangeException>(() => { svc.ReserveTokens = -1; });
         Assert.Throws<ArgumentOutOfRangeException>(() => { svc.KeepRecentTokens = 0; });
         Assert.Throws<ArgumentOutOfRangeException>(() => { svc.KeepRecentTokens = -5; });
         Assert.Throws<ArgumentOutOfRangeException>(() => { svc.TailTurns = -1; });
