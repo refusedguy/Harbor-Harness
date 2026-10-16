@@ -51,8 +51,9 @@ public static class McpOAuthFlow
                 using var response = await http.SendAsync(request, cancellationToken).ConfigureAwait(false);
                 if (!response.IsSuccessStatusCode)
                     continue;
-                using var doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false));
-                var root = doc.RootElement;
+                // Same DOM as JsonDocument.Parse, but through the source-generated
+                // JsonElement info (PERF-002; TRIM-SERIALIZATION TypeInfo spelling).
+                JsonElement root = JsonSerializer.Deserialize(await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false), McpJsonSerializerContext.Default.JsonElement);
                 return new McpOAuthEndpoints(
                     config.AuthorizationEndpoint ?? Str(root, "authorization_endpoint"),
                     config.TokenEndpoint ?? Str(root, "token_endpoint"),
@@ -178,8 +179,10 @@ public static class McpOAuthFlow
             using var response = await http.SendAsync(request, cancellationToken).ConfigureAwait(false);
             if (!response.IsSuccessStatusCode)
                 return Result.Success(Maybe<string>.None);
-            using var doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false));
-            string? clientId = doc.RootElement.TryGetProperty("client_id", out var id) && id.ValueKind == JsonValueKind.String
+            // Same DOM as JsonDocument.Parse, but through the source-generated
+            // JsonElement info (PERF-002; TRIM-SERIALIZATION TypeInfo spelling).
+            JsonElement regRoot = JsonSerializer.Deserialize(await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false), McpJsonSerializerContext.Default.JsonElement);
+            string? clientId = regRoot.TryGetProperty("client_id", out var id) && id.ValueKind == JsonValueKind.String
                 ? id.GetString()
                 : null;
             return Result.Success(Maybe<string>.From(clientId));
@@ -277,8 +280,9 @@ public static class McpOAuthFlow
             if (!response.IsSuccessStatusCode)
                 return Result.Failure<McpOAuthTokens>($"Token endpoint returned {(int)response.StatusCode}: {payload.Truncate(200)}");
 
-            using var doc = JsonDocument.Parse(payload);
-            var root = doc.RootElement;
+            // Same DOM as JsonDocument.Parse, but through the source-generated
+            // JsonElement info (PERF-002; TRIM-SERIALIZATION TypeInfo spelling).
+            JsonElement root = JsonSerializer.Deserialize(payload, McpJsonSerializerContext.Default.JsonElement);
             if (!root.TryGetProperty("access_token", out var at) || at.ValueKind != JsonValueKind.String)
                 return Result.Failure<McpOAuthTokens>("Token endpoint response has no access_token.");
             string? refresh = root.TryGetProperty("refresh_token", out var rt) && rt.ValueKind == JsonValueKind.String

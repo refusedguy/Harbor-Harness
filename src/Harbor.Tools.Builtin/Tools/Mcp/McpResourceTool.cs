@@ -123,8 +123,10 @@ public sealed partial class McpResourceTool : ITool
     {
         try
         {
-            using var doc = JsonDocument.Parse(payloadJson);
-            if (!doc.RootElement.TryGetProperty("contents", out var contents)
+            // Same DOM as JsonDocument.Parse, but through the source-generated
+            // JsonElement info (PERF-002; TRIM-SERIALIZATION TypeInfo spelling).
+            JsonElement root = JsonSerializer.Deserialize(payloadJson, McpJsonSerializerContext.Default.JsonElement);
+            if (!root.TryGetProperty("contents", out var contents)
                 || contents.ValueKind != JsonValueKind.Array
                 || contents.GetArrayLength() == 0)
                 return Result.Failure<string>($"MCP server returned no contents for '{uri}'.");

@@ -136,8 +136,10 @@ public sealed partial class McpPromptTool : ITool
     {
         try
         {
-            using var doc = JsonDocument.Parse(payloadJson);
-            if (!doc.RootElement.TryGetProperty("messages", out var messages)
+            // Same DOM as JsonDocument.Parse, but through the source-generated
+            // JsonElement info (PERF-002; TRIM-SERIALIZATION TypeInfo spelling).
+            JsonElement root = JsonSerializer.Deserialize(payloadJson, McpJsonSerializerContext.Default.JsonElement);
+            if (!root.TryGetProperty("messages", out var messages)
                 || messages.ValueKind != JsonValueKind.Array
                 || messages.GetArrayLength() == 0)
                 return Result.Failure<string>($"MCP server returned no messages for prompt '{name}'.");
