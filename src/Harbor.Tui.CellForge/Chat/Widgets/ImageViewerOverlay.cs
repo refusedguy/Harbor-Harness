@@ -1,4 +1,3 @@
-using Harbor.Abstractions.Extensions;
 using Harbor.Ui.Framework.Rendering;
 
 using CSharpFunctionalExtensions;
@@ -209,7 +208,7 @@ public sealed class ImageViewerOverlay
         PanelChrome.PaintBorderBox(buffer, box, BoxStyle.SquareFrame);
 
         string header = $"{block.Name}  {block.Dimensions ?? block.MimeType}  zoom {_zoom}%";
-        buffer.SetText(box.X + 1, box.Y + 1, header.Truncate(innerW, string.Empty),
+        buffer.SetText(box.X + 1, box.Y + 1, Harbor.Abstractions.Extensions.StringTruncation.Truncate(header, innerW, string.Empty),
             new CellStyle(ChatPalette.Accent, attrs: StyleAttr.Bold));
 
         var imageRect = ComputeImageRect(block, box, bodyH);
@@ -219,7 +218,7 @@ public sealed class ImageViewerOverlay
         }
 
         const string Hints = "+/- zoom | m markup | esc close";
-        buffer.SetText(box.X + 1, box.Bottom - 2, Hints.Truncate(innerW, string.Empty), ChatPalette.Dim);
+        buffer.SetText(box.X + 1, box.Bottom - 2, Harbor.Abstractions.Extensions.StringTruncation.Truncate(Hints, innerW, string.Empty), ChatPalette.Dim);
     }
 
     /// <summary>

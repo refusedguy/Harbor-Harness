@@ -1,5 +1,4 @@
 using System.Text;
-using Harbor.Abstractions.Extensions;
 
 namespace Harbor.Tui.CellForge.Widgets;
 
@@ -367,7 +366,7 @@ public sealed class DiffViewerOverlay
         string modeTag = Mode == DiffViewerMode.Unified ? "unified" : "split";
         string wrapTag = Wrap ? "wrap" : "nowrap";
         string header = $"Diff — {FilePath}  hunk {Math.Min(_selectedHunk + 1, Math.Max(1, _hunks.Count))}/{Math.Max(1, _hunks.Count)}  [{modeTag}]  [{wrapTag}]";
-        buffer.SetText(box.X + 1, box.Y + 1, header.Truncate(innerW), new CellStyle(ChatPalette.Accent, attrs: StyleAttr.Bold));
+        buffer.SetText(box.X + 1, box.Y + 1, Harbor.Abstractions.Extensions.StringTruncation.Truncate(header, innerW), new CellStyle(ChatPalette.Accent, attrs: StyleAttr.Bold));
 
         var rows = BuildRows(innerW);
         _lastRows = rows.Count;
@@ -380,7 +379,7 @@ public sealed class DiffViewerOverlay
         }
 
         const string Hints = "n/p hunk | s split | w wrap | q close";
-        buffer.SetText(box.X + 1, box.Bottom - 2, Hints.Truncate(innerW), ChatPalette.Dim);
+        buffer.SetText(box.X + 1, box.Bottom - 2, Harbor.Abstractions.Extensions.StringTruncation.Truncate(Hints, innerW), ChatPalette.Dim);
     }
 
     internal IReadOnlyList<DiffBodyRow> BuildRows(int innerW)
@@ -628,7 +627,7 @@ public sealed class DiffViewerOverlay
             return out_;
         }
 
-        out_.Add(text.Truncate(width));
+        out_.Add(Harbor.Abstractions.Extensions.StringTruncation.Truncate(text, width));
         return out_;
     }
 

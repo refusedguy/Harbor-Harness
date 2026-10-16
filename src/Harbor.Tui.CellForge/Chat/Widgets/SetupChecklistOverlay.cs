@@ -1,4 +1,3 @@
-using Harbor.Abstractions.Extensions;
 using Harbor.Ui.Framework.Projection;
 
 namespace Harbor.Tui.CellForge.Widgets;
@@ -186,7 +185,7 @@ public sealed class SetupChecklistOverlay
         int x = box.X + 1 + Padding;
         int y = box.Y + 1;
 
-        buffer.SetText(x, y, Title.Truncate(innerW, string.Empty), new CellStyle(ChatPalette.Accent, attrs: StyleAttr.Bold));
+        buffer.SetText(x, y, Harbor.Abstractions.Extensions.StringTruncation.Truncate(Title, innerW, string.Empty), new CellStyle(ChatPalette.Accent, attrs: StyleAttr.Bold));
         y++;
 
         // Progress indicator: the shared GaugeBar primitive, labeled `done/total`
@@ -203,14 +202,14 @@ public sealed class SetupChecklistOverlay
             CellStyle markerStyle = task.IsDone
                 ? new CellStyle(ChatPalette.Success, attrs: StyleAttr.Bold)
                 : ChatPalette.Dim;
-            buffer.SetText(x, y, task.Marker.Truncate(innerW, string.Empty), markerStyle);
-            buffer.SetText(x + 2, y, task.Label.Truncate(Math.Max(0, innerW - 2), string.Empty), new CellStyle(ChatPalette.Text));
+            buffer.SetText(x, y, Harbor.Abstractions.Extensions.StringTruncation.Truncate(task.Marker, innerW, string.Empty), markerStyle);
+            buffer.SetText(x + 2, y, Harbor.Abstractions.Extensions.StringTruncation.Truncate(task.Label, Math.Max(0, innerW - 2), string.Empty), new CellStyle(ChatPalette.Text));
             y++;
         }
 
         if (y + 1 < box.Bottom)
         {
-            buffer.SetText(x, box.Bottom - 2, FooterHint.Truncate(innerW, string.Empty), ChatPalette.Dim);
+            buffer.SetText(x, box.Bottom - 2, Harbor.Abstractions.Extensions.StringTruncation.Truncate(FooterHint, innerW, string.Empty), ChatPalette.Dim);
         }
     }
 

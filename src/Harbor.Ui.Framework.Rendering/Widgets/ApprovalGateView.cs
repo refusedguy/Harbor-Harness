@@ -1,5 +1,4 @@
 using System.Text;
-using Harbor.Abstractions.Extensions;
 using Harbor.Ui.Framework.Rendering.Input;
 using Harbor.Ui.Framework.Rendering;
 
@@ -191,7 +190,7 @@ public sealed class ApprovalGateView : IChatBlock, IFocusTarget
         // while this gate is the routed target — visible without a mouse.
         string focusRail = _focused && IsPending ? "▸" : string.Empty;
         buffer.SetText(ctx.Rect.X, ctx.Rect.Y,
-            (focusRail + HeaderLabel + " · " + ToolName).Truncate(ctx.Rect.Width, string.Empty), headerStyle);
+            Harbor.Abstractions.Extensions.StringTruncation.Truncate(focusRail + HeaderLabel + " · " + ToolName, ctx.Rect.Width, string.Empty), headerStyle);
 
         // Detail body, wrapped to the clip rect, plain tool-args tone.
         EnsureWrapped(inner);
@@ -209,7 +208,7 @@ public sealed class ApprovalGateView : IChatBlock, IFocusTarget
 
         if (IsPending)
         {
-            buffer.SetText(ctx.Rect.X, lastRow, HintLine.Truncate(ctx.Rect.Width, string.Empty), ChatPalette.Dim);
+            buffer.SetText(ctx.Rect.X, lastRow, Harbor.Abstractions.Extensions.StringTruncation.Truncate(HintLine, ctx.Rect.Width, string.Empty), ChatPalette.Dim);
             return;
         }
 
@@ -219,7 +218,7 @@ public sealed class ApprovalGateView : IChatBlock, IFocusTarget
             ApprovalChoice.Deny => ("✗ denied", ChatPalette.ToolError),
             _ => ("✓ approved (always)", new CellStyle(PackedColor.Indexed(6))),
         };
-        buffer.SetText(ctx.Rect.X, lastRow, stamp.Truncate(ctx.Rect.Width, string.Empty), style);
+        buffer.SetText(ctx.Rect.X, lastRow, Harbor.Abstractions.Extensions.StringTruncation.Truncate(stamp, ctx.Rect.Width, string.Empty), style);
     }
 
     public string RawText()

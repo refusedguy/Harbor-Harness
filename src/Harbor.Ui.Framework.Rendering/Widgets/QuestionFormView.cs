@@ -1,5 +1,4 @@
 using System.Text;
-using Harbor.Abstractions.Extensions;
 using Harbor.Ui.Framework.Rendering.Input;
 using Harbor.Ui.Framework.Rendering;
 
@@ -446,7 +445,7 @@ public sealed class QuestionFormView : IChatBlock, IFocusTarget
             else
             {
                 string line = row.Pad ? new string(' ', Math.Min(LeftPad, width)) + row.Text : row.Text;
-                buffer.SetText(ctx.Rect.X, y, line.Truncate(width, string.Empty), row.Style);
+                buffer.SetText(ctx.Rect.X, y, Harbor.Abstractions.Extensions.StringTruncation.Truncate(line, width, string.Empty), row.Style);
             }
         }
     }
@@ -787,7 +786,7 @@ public sealed class QuestionFormView : IChatBlock, IFocusTarget
         // its audit tone on top — painting the checkbox before the row fill
         // buries it under the row style.
         string text = row.Text;
-        buffer.SetText(x, y, text.Truncate(width, string.Empty), row.Style);
+        buffer.SetText(x, y, Harbor.Abstractions.Extensions.StringTruncation.Truncate(text, width, string.Empty), row.Style);
         if (width > 0 && text.Length > 0)
         {
             buffer.SetText(x, y, text.AsSpan(0, 1), cursorStyle);
