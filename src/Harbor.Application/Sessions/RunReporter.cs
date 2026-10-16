@@ -127,7 +127,7 @@ public static class RunReporter
 
     private static async Task<ReportResult> RereportAsync(RunManifest manifest, CancellationToken ct)
     {
-        string runDir = WorkspaceMaterializer.RunDir(manifest.RunId);
+        string runDir = WorkspacePaths.Default.RunDir(manifest.RunId);
         string jsonPath = Path.Combine(runDir, ReportJsonFileName);
         string textPath = Path.Combine(runDir, ReportTextFileName);
         byte[] storedJson;
@@ -292,7 +292,7 @@ public static class RunReporter
     private static async Task<Result<string>> WriteAtomicAsync(
         string runId, string fileName, byte[] bytes, CancellationToken ct)
     {
-        string runDir = WorkspaceMaterializer.RunDir(runId);
+        string runDir = WorkspacePaths.Default.RunDir(runId);
         try
         {
             Directory.CreateDirectory(runDir);
