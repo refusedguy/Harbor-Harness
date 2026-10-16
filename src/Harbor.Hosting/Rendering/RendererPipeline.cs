@@ -58,9 +58,23 @@ public sealed class RendererPipeline : IRendererPipeline
     /// <inheritdoc />
     public event EventHandler<RendererSwappedEventArgs>? RendererSwapped;
 
-    public ITuiRenderer Current => (_current ?? throw new InvalidOperationException("Pipeline not initialized.")).Renderer;
+    /// <inheritdoc />
+    public Maybe<ITuiRenderer> TryGetCurrent() =>
+        _current is { } slot ? Maybe.From(slot.Renderer) : Maybe<ITuiRenderer>.None;
 
-    public string CurrentBackendId => (_current ?? throw new InvalidOperationException("Pipeline not initialized.")).BackendId;
+    /// <inheritdoc />
+    public Maybe<string> TryGetBackendId() =>
+        _current is { } slot ? Maybe.From(slot.BackendId) : Maybe<string>.None;
+
+    /// <inheritdoc />
+    public ITuiRenderer Current => TryGetCurrent().Match(
+        static renderer => renderer,
+        static () => throw new InvalidOperationException("Pipeline not initialized."));
+
+    /// <inheritdoc />
+    public string CurrentBackendId => TryGetBackendId().Match(
+        static backendId => backendId,
+        static () => throw new InvalidOperationException("Pipeline not initialized."));
 
     public IReadOnlyCollection<string> AvailableBackends
     {
