@@ -280,7 +280,7 @@ public class CellForgeEngineAbsenceAxisTests
             .Because(
                 "The repo-wide scan found no Maybe-typed declaration anywhere under the repository root. "
                 + "That is not expected — IAgent.State is Maybe<AgentState> and McpSseTransport returns "
-                + "Result<Maybe<JsonDocument>> — so a zero here means the walk failed (wrong root, unreadable "
+                + "Result<Maybe<JsonElement>> — so a zero here means the walk failed (wrong root, unreadable "
                 + "directory) and this rule would be green over nothing. A guard that silently stopped "
                 + "looking is worse than no guard, because the conversion it protects is still coming.");
 

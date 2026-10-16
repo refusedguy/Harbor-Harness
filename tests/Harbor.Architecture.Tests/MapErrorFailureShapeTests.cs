@@ -188,10 +188,10 @@ public sealed class MapErrorFailureShapeTests
             ["src/Harbor.Tools.Builtin/Tools/Mcp/McpRegistry.cs"] = new(
                 2,
                 "Two re-types: `entry.GetTransport` is Result<IMcpRemoteTransport> → Result<string> "
-                + "(409) and `TryRoundTripAsync` is Result<Maybe<JsonDocument>> → Result<string> "
-                + "(428). The registry's contract is a JSON-RPC string; the transport factory returns a "
+                + "(405) and `TryRoundTripAsync` is Result<Maybe<JsonElement>> → Result<string> "
+                + "(424). The registry's contract is a JSON-RPC string; the transport factory returns a "
                 + "transport and the round trip returns a document. The hand-built prefix keeps "
-                + "`server.method`, which is the only thing identifying WHICH call failed. Site 428 is "
+                + "`server.method`, which is the only thing identifying WHICH call failed. Site 424 is "
                 + "an owner decision rather than an oversight — #587 weighed MapError there and "
                 + "rejected it in a comment at the call site: the transport's own diagnostic (endpoint, "
                 + "HTTP status, attempt count, latency) must arrive untouched, and only the registered "

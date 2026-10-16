@@ -33,17 +33,16 @@ public class McpRemoteTransportTests
     /// <summary>
     ///     Drives a round-trip for tests that assert on what the SERVER observed
     ///     (headers, session id, body) rather than on the answer. Asserts the call
-    ///     succeeded and disposes the document, so a test can no longer swallow a
-    ///     transport failure by discarding the result (#587).
+    ///     succeeded, so a test can no longer swallow a transport failure by
+    ///     discarding the result (#587).
     /// </summary>
     private static async Task RoundTripAndAssertAsync(
         IMcpRemoteTransport transport,
         JsonElement request,
         int? expectedId)
     {
-        Result<Maybe<JsonDocument>> result = await transport.TryRoundTripAsync(request, expectedId);
+        Result<Maybe<JsonElement>> result = await transport.TryRoundTripAsync(request, expectedId);
         await Assert.That(result.IsSuccess).IsTrue();
-        result.Value.GetValueOrDefault()?.Dispose();
     }
 
     // ---------- Streamable HTTP ----------
@@ -56,12 +55,12 @@ public class McpRemoteTransportTests
 
         await using var transport = new McpHttpTransport(server.Url);
         using var request = JsonDocument.Parse("""{"jsonrpc":"2.0","id":42,"method":"tools/list","params":{}}""");
-        Result<Maybe<JsonDocument>> roundTrip = await transport.TryRoundTripAsync(request.RootElement.Clone(), 42);
-        using JsonDocument? response = roundTrip.Value.GetValueOrDefault();
+        Result<Maybe<JsonElement>> roundTrip = await transport.TryRoundTripAsync(request.RootElement.Clone(), 42);
+        JsonElement? response = roundTrip.Value.GetValueOrDefault();
 
         await Assert.That(roundTrip.IsSuccess).IsTrue();
         await Assert.That(response).IsNotNull();
-        await Assert.That(response!.RootElement.GetProperty("id").GetInt32()).IsEqualTo(42);
+        await Assert.That(response!.Value.GetProperty("id").GetInt32()).IsEqualTo(42);
         await Assert.That(server.RequestBodies).Contains(b => b.Contains("tools/list"));
     }
 
@@ -73,7 +72,7 @@ public class McpRemoteTransportTests
 
         await using var transport = new McpHttpTransport(server.Url);
         using var request = JsonDocument.Parse("""{"jsonrpc":"2.0","id":1,"method":"ping","params":{}}""");
-        Result<Maybe<JsonDocument>> result = await transport.TryRoundTripAsync(request.RootElement.Clone(), 1);
+        Result<Maybe<JsonElement>> result = await transport.TryRoundTripAsync(request.RootElement.Clone(), 1);
 
         await Assert.That(result.IsFailure).IsTrue();
         await Assert.That(result.Error).Contains("500");
@@ -94,7 +93,7 @@ public class McpRemoteTransportTests
 
         await using var transport = new McpHttpTransport(server.Url);
         using var request = JsonDocument.Parse("""{"jsonrpc":"2.0","id":1,"method":"ping","params":{}}""");
-        Result<Maybe<JsonDocument>> roundTrip = await transport.TryRoundTripAsync(request.RootElement.Clone(), 1);
+        Result<Maybe<JsonElement>> roundTrip = await transport.TryRoundTripAsync(request.RootElement.Clone(), 1);
 
         await Assert.That(roundTrip.IsFailure).IsTrue();
         await Assert.That(roundTrip.IsSuccess).IsFalse();
@@ -114,7 +113,7 @@ public class McpRemoteTransportTests
 
         await using var transport = new McpHttpTransport(server.Url);
         using var request = JsonDocument.Parse("""{"jsonrpc":"2.0","id":7,"method":"tools/call","params":{}}""");
-        Result<Maybe<JsonDocument>> result = await transport.TryRoundTripAsync(request.RootElement.Clone(), 7);
+        Result<Maybe<JsonElement>> result = await transport.TryRoundTripAsync(request.RootElement.Clone(), 7);
 
         await Assert.That(result.IsFailure).IsTrue();
         await Assert.That(result.Error).Contains("no matching JSON-RPC frame");
@@ -128,8 +127,8 @@ public class McpRemoteTransportTests
 
         await using var transport = new McpHttpTransport(server.Url);
         using var request = JsonDocument.Parse("""{"jsonrpc":"2.0","id":1,"method":"ping","params":{}}""");
-        Result<Maybe<JsonDocument>> roundTrip = await transport.TryRoundTripAsync(request.RootElement.Clone(), 1);
-        using JsonDocument? response = roundTrip.Value.GetValueOrDefault();
+        Result<Maybe<JsonElement>> roundTrip = await transport.TryRoundTripAsync(request.RootElement.Clone(), 1);
+        JsonElement? response = roundTrip.Value.GetValueOrDefault();
 
         await Assert.That(roundTrip.IsSuccess).IsTrue();
         await Assert.That(response).IsNotNull();
@@ -167,7 +166,7 @@ public class McpRemoteTransportTests
                 Result.Failure<Maybe<string>>("grant rejected: invalid_grant")));
         using var request = JsonDocument.Parse("""{"jsonrpc":"2.0","id":1,"method":"ping","params":{}}""");
 
-        Result<Maybe<JsonDocument>> result = await transport.TryRoundTripAsync(request.RootElement.Clone(), 1);
+        Result<Maybe<JsonElement>> result = await transport.TryRoundTripAsync(request.RootElement.Clone(), 1);
 
         await Assert.That(result.IsFailure).IsTrue();
         await Assert.That(result.Error).Contains("invalid_grant");
@@ -214,7 +213,7 @@ public class McpRemoteTransportTests
             oauthTokenProvider: _ => throw new InvalidOperationException("provider exploded"));
         using var request = JsonDocument.Parse("""{"jsonrpc":"2.0","id":1,"method":"ping","params":{}}""");
 
-        Result<Maybe<JsonDocument>> result = await transport.TryRoundTripAsync(request.RootElement.Clone(), 1);
+        Result<Maybe<JsonElement>> result = await transport.TryRoundTripAsync(request.RootElement.Clone(), 1);
 
         await Assert.That(result.IsFailure).IsTrue();
         await Assert.That(result.Error).Contains("provider exploded");
@@ -248,12 +247,12 @@ public class McpRemoteTransportTests
 
         await using var transport = new McpHttpTransport(server.Url);
         using var request = JsonDocument.Parse("""{"jsonrpc":"2.0","id":7,"method":"tools/call","params":{}}""");
-        Result<Maybe<JsonDocument>> roundTrip = await transport.TryRoundTripAsync(request.RootElement.Clone(), 7);
-        using JsonDocument? response = roundTrip.Value.GetValueOrDefault();
+        Result<Maybe<JsonElement>> roundTrip = await transport.TryRoundTripAsync(request.RootElement.Clone(), 7);
+        JsonElement? response = roundTrip.Value.GetValueOrDefault();
 
         await Assert.That(roundTrip.IsSuccess).IsTrue();
         await Assert.That(response).IsNotNull();
-        await Assert.That(response!.RootElement.GetProperty("result").GetProperty("ok").GetBoolean()).IsTrue();
+        await Assert.That(response!.Value.GetProperty("result").GetProperty("ok").GetBoolean()).IsTrue();
     }
 
     // ---------- Legacy HTTP + SSE ----------
@@ -266,12 +265,12 @@ public class McpRemoteTransportTests
 
         await using var transport = new McpSseTransport(new Uri(server.Url + "/sse"));
         using var request = JsonDocument.Parse("""{"jsonrpc":"2.0","id":3,"method":"tools/list","params":{}}""");
-        Result<Maybe<JsonDocument>> roundTrip = await transport.TryRoundTripAsync(request.RootElement.Clone(), 3);
-        using JsonDocument? response = roundTrip.Value.GetValueOrDefault();
+        Result<Maybe<JsonElement>> roundTrip = await transport.TryRoundTripAsync(request.RootElement.Clone(), 3);
+        JsonElement? response = roundTrip.Value.GetValueOrDefault();
 
         await Assert.That(roundTrip.IsSuccess).IsTrue();
         await Assert.That(response).IsNotNull();
-        await Assert.That(response!.RootElement.GetProperty("result").GetProperty("echo").GetBoolean()).IsTrue();
+        await Assert.That(response!.Value.GetProperty("result").GetProperty("echo").GetBoolean()).IsTrue();
         await Assert.That(server.RequestBodies.Any(b => b.Contains("tools/list"))).IsTrue();
     }
 
@@ -298,7 +297,7 @@ public class McpRemoteTransportTests
         await using var transport = new McpSseTransport(new Uri(server.Url + "/sse"));
         using var request = JsonDocument.Parse("""{"jsonrpc":"2.0","id":4,"method":"tools/list","params":{}}""");
 
-        Result<Maybe<JsonDocument>> roundTrip = await transport.TryRoundTripAsync(request.RootElement.Clone(), 4);
+        Result<Maybe<JsonElement>> roundTrip = await transport.TryRoundTripAsync(request.RootElement.Clone(), 4);
 
         await Assert.That(roundTrip.IsFailure).IsTrue();
         await Assert.That(roundTrip.Error).Contains("401");
@@ -324,7 +323,7 @@ public class McpRemoteTransportTests
         await using var transport = new McpSseTransport(new Uri(server.Url + "/sse"));
         using var request = JsonDocument.Parse("""{"jsonrpc":"2.0","id":5,"method":"tools/list","params":{}}""");
 
-        Result<Maybe<JsonDocument>> roundTrip = await transport.TryRoundTripAsync(request.RootElement.Clone(), 5);
+        Result<Maybe<JsonElement>> roundTrip = await transport.TryRoundTripAsync(request.RootElement.Clone(), 5);
 
         await Assert.That(roundTrip.IsFailure).IsTrue();
         await Assert.That(roundTrip.Error).Contains("403");
@@ -353,7 +352,7 @@ public class McpRemoteTransportTests
             });
 
         using var request = JsonDocument.Parse("""{"jsonrpc":"2.0","id":6,"method":"tools/list","params":{}}""");
-        Result<Maybe<JsonDocument>> roundTrip = await transport.TryRoundTripAsync(request.RootElement.Clone(), 6);
+        Result<Maybe<JsonElement>> roundTrip = await transport.TryRoundTripAsync(request.RootElement.Clone(), 6);
 
         await Assert.That(roundTrip.IsFailure).IsTrue();
         await Assert.That(tokenCalls)
@@ -376,7 +375,7 @@ public class McpRemoteTransportTests
         await using var transport = new McpSseTransport(new Uri(server.Url + "/sse"));
         using var request = JsonDocument.Parse("""{"jsonrpc":"2.0","id":7,"method":"tools/list","params":{}}""");
 
-        Result<Maybe<JsonDocument>> roundTrip = await transport.TryRoundTripAsync(request.RootElement.Clone(), 7);
+        Result<Maybe<JsonElement>> roundTrip = await transport.TryRoundTripAsync(request.RootElement.Clone(), 7);
 
         await Assert.That(roundTrip.IsFailure).IsTrue();
         await Assert.That(roundTrip.Error).Contains("503");
@@ -419,7 +418,7 @@ public class McpRemoteTransportTests
         using var request = JsonDocument.Parse(
             $$$"""{"jsonrpc":"2.0","id":{{{requestId}}},"method":"tools/list","params":{}}""");
 
-        Result<Maybe<JsonDocument>> roundTrip = await transport.TryRoundTripAsync(request.RootElement.Clone(), requestId);
+        Result<Maybe<JsonElement>> roundTrip = await transport.TryRoundTripAsync(request.RootElement.Clone(), requestId);
 
         await Assert.That(roundTrip.IsFailure).IsTrue();
         await Assert.That(server.ConnectionsAccepted)

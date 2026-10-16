@@ -21,26 +21,26 @@ public class McpWireAllocTests
     [Test]
     public async Task SseParser_MatchingId_ReturnsDocument()
     {
-        using JsonDocument? doc = McpSse.TryParseResponse(
+        JsonElement? doc = McpSse.TryParseResponse(
             """{"jsonrpc":"2.0","id":7,"result":{"ok":true}}""", 7);
 
         await Assert.That(doc).IsNotNull();
-        await Assert.That(doc!.RootElement.GetProperty("id").GetInt32()).IsEqualTo(7);
+        await Assert.That(doc!.Value.GetProperty("id").GetInt32()).IsEqualTo(7);
     }
 
     [Test]
     public async Task SseParser_NullFilter_ReturnsAnyDocument()
     {
-        using JsonDocument? doc = McpSse.TryParseResponse("[1,2]", null);
+        JsonElement? doc = McpSse.TryParseResponse("[1,2]", null);
 
         await Assert.That(doc).IsNotNull();
-        await Assert.That(doc!.RootElement.GetArrayLength()).IsEqualTo(2);
+        await Assert.That(doc!.Value.GetArrayLength()).IsEqualTo(2);
     }
 
     [Test]
     public async Task SseParser_WhitespaceFraming_StillMatches()
     {
-        using JsonDocument? doc = McpSse.TryParseResponse(
+        JsonElement? doc = McpSse.TryParseResponse(
             """  {"jsonrpc":"2.0","id":7,"result":{}}  """, 7);
 
         await Assert.That(doc).IsNotNull();
@@ -87,8 +87,8 @@ public class McpWireAllocTests
     public async Task RequestBuilder_EmitsValidEnvelope_WithEscapedMethod()
     {
         using var paramsDoc = JsonDocument.Parse("""{"x":1}""");
-        using JsonDocument request = McpJsonRpc.BuildRequest(7, "too\"ls/call", paramsDoc.RootElement);
-        JsonElement root = request.RootElement;
+        JsonElement request = McpJsonRpc.BuildRequest(7, "too\"ls/call", paramsDoc.RootElement);
+        JsonElement root = request;
 
         await Assert.That(root.GetProperty("jsonrpc").GetString()).IsEqualTo("2.0");
         await Assert.That(root.GetProperty("id").GetInt32()).IsEqualTo(7);
@@ -99,36 +99,36 @@ public class McpWireAllocTests
     [Test]
     public async Task ToolCallParams_MissingArguments_EmitsEmptyObject()
     {
-        using JsonDocument paramsDoc = McpJsonRpc.BuildToolCallParams("t", default);
+        JsonElement paramsEl = McpJsonRpc.BuildToolCallParams("t", default);
 
-        await Assert.That(paramsDoc.RootElement.GetRawText()).IsEqualTo("""{"name":"t","arguments":{}}""");
+        await Assert.That(paramsEl.GetRawText()).IsEqualTo("""{"name":"t","arguments":{}}""");
     }
 
     [Test]
     public async Task PromptGetParams_EscapesName_Verbatim()
     {
         const string name = "we\"ird\nname";
-        using JsonDocument paramsDoc = McpJsonRpc.BuildPromptGetParams(name, default);
+        JsonElement paramsEl = McpJsonRpc.BuildPromptGetParams(name, default);
 
-        await Assert.That(paramsDoc.RootElement.GetProperty("name").GetString()).IsEqualTo(name);
-        await Assert.That(paramsDoc.RootElement.GetProperty("arguments").ValueKind).IsEqualTo(JsonValueKind.Object);
+        await Assert.That(paramsEl.GetProperty("name").GetString()).IsEqualTo(name);
+        await Assert.That(paramsEl.GetProperty("arguments").ValueKind).IsEqualTo(JsonValueKind.Object);
     }
 
     [Test]
     public async Task ResourceReadParams_EscapesUri_Verbatim()
     {
         const string uri = "file:///a\"b.md";
-        using JsonDocument paramsDoc = McpJsonRpc.BuildResourceReadParams(uri);
+        JsonElement paramsEl = McpJsonRpc.BuildResourceReadParams(uri);
 
-        await Assert.That(paramsDoc.RootElement.GetProperty("uri").GetString()).IsEqualTo(uri);
+        await Assert.That(paramsEl.GetProperty("uri").GetString()).IsEqualTo(uri);
     }
 
     [Test]
     public async Task RegisterClientBody_Shape()
     {
-        using JsonDocument body = McpJsonRpc.BuildRegisterClientBody("https://app/cb", "a b");
+        JsonElement body = McpJsonRpc.BuildRegisterClientBody("https://app/cb", "a b");
 
-        await Assert.That(body.RootElement.GetRawText()).IsEqualTo(
+        await Assert.That(body.GetRawText()).IsEqualTo(
             """{"redirect_uris":["https://app/cb"],"grant_types":["authorization_code","refresh_token"],"scope":"a b"}""");
     }
 

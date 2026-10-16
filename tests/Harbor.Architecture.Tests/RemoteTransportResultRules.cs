@@ -8,7 +8,7 @@
 //
 // A nullable document has two meanings and no way to tell them apart: "the
 // server answered 202 with no body" and "the endpoint returned 503 three times
-// in 12.4 s". The lossless `Result<Maybe<JsonDocument>> TryRoundTripAsync`
+// in 12.4 s". The lossless `Result<Maybe<JsonElement>> TryRoundTripAsync`
 // already existed on both concrete transports (#201 C4) — but only on the
 // concrete classes, so the interface could not reach it, and the single
 // production caller went through a `Match(static doc => ..., _ => null)`
@@ -82,7 +82,7 @@ public class RemoteTransportResultRules
             $"every member of IMcpRemoteTransport must return Task<Result<…>>. A nullable or bare return cannot tell "
             + $"\"the server answered with no body\" apart from \"the endpoint returned 503 three times\", and the second "
             + $"case is what used to reach the user as a bare \"returned no response\". Declare "
-            + $"Task<Result<Maybe<JsonDocument>>> TryRoundTripAsync(…) and keep the diagnostic. Offenders:"
+            + $"Task<Result<Maybe<JsonElement>>> TryRoundTripAsync(…) and keep the diagnostic. Offenders:"
             + $"{Environment.NewLine}{string.Join(Environment.NewLine, violations)}");
     }
 
