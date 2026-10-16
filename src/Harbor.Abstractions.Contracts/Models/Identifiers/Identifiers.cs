@@ -50,7 +50,7 @@ internal static class IdentifierValidation
 ///     <see cref="TryCreate" /> for a <see cref="Result" />-based API. Implicitly converts to
 ///     <see cref="string" /> for storage/serialization convenience.
 /// </remarks>
-public sealed class SessionId : ValueObject
+public sealed record SessionId
 {
 
     private SessionId(string value)
@@ -97,12 +97,6 @@ public sealed class SessionId : ValueObject
     /// <inheritdoc />
     public override string ToString() => Value;
 
-    /// <inheritdoc />
-    protected override IEnumerable<IComparable> GetEqualityComponents()
-    {
-        yield return Value;
-    }
-
     /// <summary>
     ///     Implicit conversion to <see cref="string" /> for storage/serialization convenience.
     /// </summary>
@@ -116,7 +110,7 @@ public sealed class SessionId : ValueObject
 /// <remarks>
 ///     See <see cref="SessionId" /> for usage patterns.
 /// </remarks>
-public sealed class MessageId : ValueObject
+public sealed record MessageId
 {
 
     private MessageId(string value)
@@ -163,12 +157,6 @@ public sealed class MessageId : ValueObject
     /// <inheritdoc />
     public override string ToString() => Value;
 
-    /// <inheritdoc />
-    protected override IEnumerable<IComparable> GetEqualityComponents()
-    {
-        yield return Value;
-    }
-
     /// <summary>
     ///     Implicit conversion to <see cref="string" /> for storage/serialization convenience.
     /// </summary>
@@ -183,7 +171,7 @@ public sealed class MessageId : ValueObject
 ///     Each <see cref="ToolCallPart" /> in an assistant message carries a <c>Id</c> that is later
 ///     matched against <see cref="ToolResultEntry.ToolCallId" /> in tool result messages.
 /// </remarks>
-public sealed class ToolCallId : ValueObject
+public sealed record ToolCallId
 {
 
     private ToolCallId(string value)
@@ -216,12 +204,6 @@ public sealed class ToolCallId : ValueObject
 
     /// <inheritdoc />
     public override string ToString() => Value;
-
-    /// <inheritdoc />
-    protected override IEnumerable<IComparable> GetEqualityComponents()
-    {
-        yield return Value;
-    }
 
     /// <summary>
     ///     Implicit conversion to <see cref="string" /> for storage/serialization convenience.
@@ -630,7 +612,7 @@ public sealed class AgentName : ValueObject
 ///     </para>
 ///     <para>See <see cref="SessionId" /> for usage patterns.</para>
 /// </remarks>
-public sealed class RunId : ValueObject
+public sealed record RunId
 {
 
     private RunId(string value)
@@ -676,12 +658,6 @@ public sealed class RunId : ValueObject
 
     /// <inheritdoc />
     public override string ToString() => Value;
-
-    /// <inheritdoc />
-    protected override IEnumerable<IComparable> GetEqualityComponents()
-    {
-        yield return Value;
-    }
 
     /// <summary>
     ///     Implicit conversion to <see cref="string" /> for storage/serialization convenience.
