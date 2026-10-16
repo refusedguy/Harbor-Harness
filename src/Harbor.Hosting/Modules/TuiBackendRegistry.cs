@@ -301,4 +301,27 @@ public static class TuiBackendRegistry
 
         return registry[FallbackBackendId];
     }
+
+    /// <summary>
+    ///     Facade (#1525, Structural/Facade) over the <c>Build</c> + <c>Resolve</c> +
+    ///     fallback dance: one call builds the id/alias index (compiled-in factories
+    ///     plus the plugin door), normalizes <paramref name="rawId" />, and applies
+    ///     the single <see cref="FallbackBackendId" /> rule for unknown ids.
+    ///     Hosts that only need the factory call this; <see cref="Build" /> and
+    ///     <see cref="Resolve(FrozenDictionary{string, ITuiRendererFactory}, string)" />
+    ///     stay as the implementation details (and the swap table still reads the
+    ///     built index directly).
+    /// </summary>
+    /// <param name="rawId">Raw <c>HARBOR_TUI</c>/default value (trimmed, case-insensitive, aliases resolved).</param>
+    /// <param name="pluginBackends">
+    ///     Backends a plugin registered through
+    ///     <c>IPluginLoadHost.RegisterTuiBackend</c>; <c>null</c> is the
+    ///     compiled-in-only set, same as <see cref="Build()" />.
+    /// </param>
+    public static ITuiRendererFactory ResolveBackend(
+        string rawId,
+        IReadOnlyDictionary<string, PluginTuiBackend>? pluginBackends = null) =>
+        Resolve(
+            pluginBackends is null ? Build() : Build(pluginBackends),
+            rawId);
 }
