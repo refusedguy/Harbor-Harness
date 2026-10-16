@@ -141,6 +141,37 @@ public class PermissionRulesetTests
         await Assert.That(ruleset.Evaluate("mytool", "src/Program.cs")).IsEqualTo(PermissionAction.Allow);
     }
 
+    [Test]
+    public async Task MatchesPattern_BackslashInArgPath_MatchesSlashPattern()
+    {
+        var rule = new PermissionRule("read", "src/*", PermissionAction.Allow);
+        await Assert.That(rule.MatchesPattern("src\\a.cs")).IsTrue();
+    }
+
+    [Test]
+    public async Task MatchesPattern_BackslashInPattern_MatchesSlashArg()
+    {
+        var rule = new PermissionRule("read", "src\\*", PermissionAction.Allow);
+        await Assert.That(rule.MatchesPattern("src/a.cs")).IsTrue();
+    }
+
+    [Test]
+    public async Task MatchesPattern_MixedSeparators_Match()
+    {
+        var rule = new PermissionRule("read", "src\\sub/*", PermissionAction.Allow);
+        await Assert.That(rule.MatchesPattern("src/sub\\a.cs")).IsTrue();
+        await Assert.That(rule.MatchesPattern("src\\sub/a.cs")).IsTrue();
+    }
+
+    [Test]
+    public async Task MatchesPattern_SeparatorClass_DoesNotOverMatch()
+    {
+        var rule = new PermissionRule("read", "src/*.cs", PermissionAction.Allow);
+        await Assert.That(rule.MatchesPattern("src/a.cs")).IsTrue();
+        await Assert.That(rule.MatchesPattern("srcx/a.cs")).IsFalse();
+        await Assert.That(rule.MatchesPattern("other/a.cs")).IsFalse();
+    }
+
     private sealed class DenyMyToolPolicy : IArgSafetyPolicy
     {
         public bool AppliesTo(string permission) =>
