@@ -100,21 +100,21 @@ public sealed class SessionMessagePackFormatter : IMessagePackFormatter<Session?
             var kind = fieldCount == 15 ? (SessionKind)reader.ReadInt32() : SessionKind.User;
 
             return Session.Rehydrate(
-                Id: id,
-                ProjectId: projectId,
-                Directory: directory,
-                Title: title,
-                Agent: agent,
-                Model: model,
-                ProviderId: providerId,
-                CreatedAt: createdAt,
-                UpdatedAt: updatedAt,
-                Metadata: metadata,
-                ParentSessionId: parentSessionId,
-                Status: status,
-                GitBranch: gitBranch,
-                GitIsDirty: gitIsDirty,
-                Kind: kind);
+                id: id,
+                projectId: projectId,
+                directory: directory,
+                title: title,
+                agent: agent,
+                model: model,
+                providerId: providerId,
+                createdAt: createdAt,
+                updatedAt: updatedAt,
+                metadata: metadata,
+                parentSessionId: parentSessionId,
+                status: status,
+                gitBranch: gitBranch,
+                gitIsDirty: gitIsDirty,
+                kind: kind);
         }
         finally
         {
