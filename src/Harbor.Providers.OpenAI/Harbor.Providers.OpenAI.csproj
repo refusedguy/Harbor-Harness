@@ -13,6 +13,7 @@
     <Compile Include="..\Harbor.Providers.Shared\OpenAiWire.cs" LinkBase="Shared" />
     <Compile Include="..\Harbor.Providers.Shared\OpenAiImageContent.cs" LinkBase="Shared" />
     <Compile Include="..\Harbor.Providers.Shared\ProviderArguments.cs" LinkBase="Shared" />
+    <Compile Include="..\Harbor.Providers.Shared\Utf8JsonReaderExtensions.cs" LinkBase="Shared" />
   </ItemGroup>
 
   <ItemGroup>
