@@ -5,6 +5,7 @@
 // truth, four identical internal copies — no cross-provider coupling.
 
 using System.Text.Json;
+using CSharpFunctionalExtensions;
 
 namespace Harbor.Providers.Internal;
 
@@ -27,32 +28,18 @@ internal static class Utf8JsonReaderExtensions
     ///     (<c>7.0</c>) or strings (<c>"7"</c>). Never throws — returns 0
     ///     when the value is missing or unparseable (DOM parity).
     /// </summary>
-    internal static int ReadTolerantInt(ref Utf8JsonReader reader)
-    {
-        if (reader.TokenType == JsonTokenType.Number)
-        {
-            if (reader.TryGetInt32(out int direct))
-                return direct;
-            if (reader.TryGetDouble(out double dbl))
-                return (int)dbl;
-            return 0;
-        }
-
-        if (reader.TokenType == JsonTokenType.String &&
-            int.TryParse(reader.GetString(), out int parsed))
-        {
-            return parsed;
-        }
-
-        return 0;
-    }
+    internal static int ReadTolerantInt(ref Utf8JsonReader reader) =>
+        ReadTolerant(ref reader).Match(static v => v, static () => 0);
 
     /// <summary>
     ///     Nullable variant of <see cref="ReadTolerantInt" />: returns
     ///     <c>null</c> instead of 0 when the value is missing or unparseable
     ///     (cache-token counters that must stay absent, not zero).
     /// </summary>
-    internal static int? ReadTolerantNullableInt(ref Utf8JsonReader reader)
+    internal static int? ReadTolerantNullableInt(ref Utf8JsonReader reader) =>
+        ReadTolerant(ref reader).Match(static v => (int?)v, static () => (int?)null);
+
+    private static Maybe<int> ReadTolerant(ref Utf8JsonReader reader)
     {
         if (reader.TokenType == JsonTokenType.Number)
         {
@@ -60,7 +47,7 @@ internal static class Utf8JsonReaderExtensions
                 return direct;
             if (reader.TryGetDouble(out double dbl))
                 return (int)dbl;
-            return null;
+            return Maybe<int>.None;
         }
 
         if (reader.TokenType == JsonTokenType.String &&
@@ -69,6 +56,6 @@ internal static class Utf8JsonReaderExtensions
             return parsed;
         }
 
-        return null;
+        return Maybe<int>.None;
     }
 }
