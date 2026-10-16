@@ -474,9 +474,9 @@ public sealed class DefaultAgentSingleSourceTests
     {
         string text = File.ReadAllText(Path.Combine(root, AgentNameSourceRelativePath));
 
-        // Anchor on the class declaration and read forward, so a `Fallback` belonging
+        // Anchor on the record declaration and read forward, so a `Fallback` belonging
         // to some LATER type in the same file cannot be mistaken for AgentName's.
-        int classStart = text.IndexOf("class AgentName", StringComparison.Ordinal);
+        int classStart = text.IndexOf("record AgentName", StringComparison.Ordinal);
         if (classStart < 0)
         {
             return null;
