@@ -60,7 +60,7 @@ public sealed class JsonlSessionPorter : ISessionPorter
 
         var messages = await store.GetMessagesAsync(sessionId, ct).ConfigureAwait(false);
         if (messages.IsFailure) // §4.6-ok: header written → surface a clear partial-export failure.
-            return Result.Failure($"Cannot export messages of session '{sessionId}': {messages.Error}");
+            return messages.ConvertFailure().MapError(e => $"Cannot export messages of session '{sessionId}': {e}");
 
         foreach (AgentMessage message in messages.Value)
         {
