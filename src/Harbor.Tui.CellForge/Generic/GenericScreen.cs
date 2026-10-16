@@ -1,4 +1,5 @@
 using Harbor.Tui.CellForge.Generic.Widgets;
+using Ensure = Harbor.Abstractions.Extensions.Ensure;
 using Harbor.Tui.CellForge.Rendering;
 using Harbor.Ui.Framework.Rendering.Widgets;
 
@@ -74,7 +75,7 @@ public sealed class GenericContentPanel : Panel
     public GenericContentPanel(GenericNodeSpec spec)
         : base(spec.Id, new Size(Math.Max(1, spec.MinWidth), Math.Max(1, spec.MinHeight)), spec.Priority)
     {
-        ArgumentNullException.ThrowIfNull(spec);
+        Ensure.NotNull(spec);
         Title = spec.Title ?? string.Empty;
         Field = spec.Field;
         Lines = spec.Lines ?? Array.Empty<string>();
@@ -102,7 +103,7 @@ public sealed class GenericContentPanel : Panel
 
     public override void Paint(ScreenBuffer buffer)
     {
-        ArgumentNullException.ThrowIfNull(buffer);
+        Ensure.NotNull(buffer);
         if (Rect.Width <= 0 || Rect.Height <= 0)
         {
             return;
@@ -232,7 +233,7 @@ public sealed class GenericScreen
         IReadOnlyList<GenericNodeSpec> nodes,
         IReadOnlyList<GenericSplitSpec>? splits = null)
     {
-        ArgumentNullException.ThrowIfNull(nodes);
+        Ensure.NotNull(nodes);
         if (nodes.Count == 0)
         {
             throw new ArgumentException("At least one node is required.", nameof(nodes));
@@ -242,8 +243,8 @@ public sealed class GenericScreen
         for (int i = 0; i < nodes.Count; i++)
         {
             var node = nodes[i];
-            ArgumentNullException.ThrowIfNull(node);
-            ArgumentException.ThrowIfNullOrWhiteSpace(node.Id);
+            Ensure.NotNull(node);
+            Ensure.NotBlank(node.Id);
             if (!seen.Add(node.Id))
             {
                 throw new ArgumentException($"Duplicate node id '{node.Id}'.", nameof(nodes));
@@ -275,7 +276,7 @@ public sealed class GenericScreen
             for (int i = 0; i < splits.Count; i++)
             {
                 var split = splits[i];
-                ArgumentNullException.ThrowIfNull(split);
+                Ensure.NotNull(split);
                 if (!byId.TryGetValue(split.NewPanelId, out var spec))
                 {
                     throw new KeyNotFoundException($"split seats unknown node '{split.NewPanelId}'");
@@ -314,7 +315,7 @@ public sealed class GenericScreen
     /// <summary>Paints every panel (plus overlays) into <paramref name="buffer"/>.</summary>
     public void PaintAll(ScreenBuffer buffer)
     {
-        ArgumentNullException.ThrowIfNull(buffer);
+        Ensure.NotNull(buffer);
         Tree.PaintAll(buffer);
     }
 

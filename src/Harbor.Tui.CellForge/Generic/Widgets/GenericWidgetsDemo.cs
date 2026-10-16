@@ -1,3 +1,5 @@
+using Ensure = Harbor.Abstractions.Extensions.Ensure;
+
 namespace Harbor.Tui.CellForge.Generic.Widgets;
 
 /// <summary>
@@ -23,7 +25,7 @@ public static class GenericWidgetsDemo
     /// <summary>Paints the demo into <paramref name="buffer"/> (all widgets, fixed sample state).</summary>
     public static void Paint(ScreenBuffer buffer, Rect rect)
     {
-        ArgumentNullException.ThrowIfNull(buffer);
+        Ensure.NotNull(buffer);
         if (rect.Width <= 0 || rect.Height <= 0)
         {
             return;
