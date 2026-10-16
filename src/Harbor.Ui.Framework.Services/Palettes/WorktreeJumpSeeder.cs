@@ -1,4 +1,5 @@
 using Harbor.Abstractions.Git;
+using Ensure = Harbor.Abstractions.Extensions.Ensure;
 
 namespace Harbor.Ui.Framework.Overlays;
 
@@ -64,8 +65,8 @@ public static class WorktreeJumpSeeder
         IReadOnlyList<GitWorktreeInfo> worktrees,
         bool includeSubagents = false)
     {
-        ArgumentNullException.ThrowIfNull(sessions);
-        ArgumentNullException.ThrowIfNull(worktrees);
+        Ensure.NotNull(sessions);
+        Ensure.NotNull(worktrees);
 
         var byPath = new Dictionary<string, GitWorktreeInfo>(StringComparer.Ordinal);
         for (int i = 0; i < worktrees.Count; i++)
