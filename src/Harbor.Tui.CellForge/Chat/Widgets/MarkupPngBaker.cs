@@ -1,4 +1,5 @@
 using System.Buffers.Binary;
+using Ensure = Harbor.Abstractions.Extensions.Ensure;
 using System.IO.Compression;
 using Harbor.Ui.Framework.State;
 
@@ -255,8 +256,8 @@ public static class MarkupPngBaker
 
     internal static void Draw(RgbaImage image, MarkupAnnotationModel model)
     {
-        ArgumentNullException.ThrowIfNull(image);
-        ArgumentNullException.ThrowIfNull(model);
+        Ensure.NotNull(image);
+        Ensure.NotNull(model);
         if (model.Items.Length == 0 || image.Width <= 0 || image.Height <= 0)
         {
             return;
@@ -281,7 +282,7 @@ public static class MarkupPngBaker
 
     internal static byte[] Encode(RgbaImage image)
     {
-        ArgumentNullException.ThrowIfNull(image);
+        Ensure.NotNull(image);
         int stride = image.Width * 4;
         var raw = new byte[image.Height * (stride + 1)];
         for (int y = 0; y < image.Height; y++)

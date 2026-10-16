@@ -27,7 +27,7 @@ public sealed class VimComposerMode
     /// <summary>Routes one key: normal-mode chords first, everything else reaches the composer.</summary>
     public ComposerAction HandleKey(in KeyEvent key, ComposerController composer)
     {
-        ArgumentNullException.ThrowIfNull(composer);
+        Harbor.Abstractions.Extensions.Ensure.NotNull(composer);
 
         if (!Enabled)
         {

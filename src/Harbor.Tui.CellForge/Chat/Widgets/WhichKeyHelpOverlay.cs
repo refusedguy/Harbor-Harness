@@ -232,7 +232,7 @@ public sealed class WhichKeyHelpOverlay
     /// </summary>
     public void Paint(ScreenBuffer buffer, Rect viewport)
     {
-        ArgumentNullException.ThrowIfNull(buffer);
+        Harbor.Abstractions.Extensions.Ensure.NotNull(buffer);
         if (!IsShown)
         {
             return;

@@ -8,6 +8,7 @@
 // rule as FlexLayout and LayoutTree.
 
 using System.Runtime.InteropServices;
+using Ensure = Harbor.Abstractions.Extensions.Ensure;
 using UIR = Harbor.Ui.Framework.Rendering;
 using EngineRect = Harbor.Tui.CellForge.Rendering.Rect;
 
@@ -64,7 +65,7 @@ public sealed class ChildContainer : Panel
         FlexJustify justify = FlexJustify.Start)
         : base(id, min, priority)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(id);
+        Ensure.NotBlank(id);
         ArgumentOutOfRangeException.ThrowIfNegative(gap);
         Direction = direction;
         Gap = gap;
@@ -86,7 +87,7 @@ public sealed class ChildContainer : Panel
     /// <summary>Setup-time: appends <paramref name="child"/> with its track.</summary>
     public void Add(Panel child, FlexTrack track)
     {
-        ArgumentNullException.ThrowIfNull(child);
+        Ensure.NotNull(child);
         _children.Add(child);
         _tracks.Add(track);
         _frames.Add(default);
@@ -96,7 +97,7 @@ public sealed class ChildContainer : Panel
     /// <summary>Setup-time: removes <paramref name="child"/> and its track/frame.</summary>
     public bool Remove(Panel child)
     {
-        ArgumentNullException.ThrowIfNull(child);
+        Ensure.NotNull(child);
         int index = _children.IndexOf(child);
         if (index < 0)
         {
@@ -132,7 +133,7 @@ public sealed class ChildContainer : Panel
     /// </summary>
     public override void Paint(UIR.ScreenBuffer buffer)
     {
-        ArgumentNullException.ThrowIfNull(buffer);
+        Ensure.NotNull(buffer);
         EnsureArranged();
         for (int i = 0; i < _children.Count; i++)
         {

@@ -84,7 +84,7 @@ public sealed class CellForgeSubagentsPanel : IPanelProvider
     /// <inheritdoc />
     public object? Build(PanelContext ctx)
     {
-        ArgumentNullException.ThrowIfNull(ctx);
+        Harbor.Abstractions.Extensions.Ensure.NotNull(ctx);
         lock (_gate)
         {
             if (_transcriptSessionId is not null)
@@ -128,7 +128,7 @@ public sealed class CellForgeSubagentsPanel : IPanelProvider
     /// <inheritdoc />
     public bool OnKey(UiKey key, PanelContext ctx)
     {
-        ArgumentNullException.ThrowIfNull(ctx);
+        Harbor.Abstractions.Extensions.Ensure.NotNull(ctx);
 
         // #833: a chord is not a refresh or a scroll. The panel is read-only and
         // holds no text, so it has no claim on a modified rune — Ctrl+r belongs to

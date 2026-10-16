@@ -1021,7 +1021,7 @@ public static class ChatScreenPanelDock
     /// <summary>True when at least one dock leaf is currently attached to the tree.</summary>
     public static bool HasDocks(ChatScreen screen)
     {
-        ArgumentNullException.ThrowIfNull(screen);
+        Harbor.Abstractions.Extensions.Ensure.NotNull(screen);
         foreach (var panel in screen.Tree.Panels)
         {
             if (panel is CellForgeDockPanel)
@@ -1056,9 +1056,9 @@ public static class ChatScreenPanelDock
         int viewportWidth,
         int viewportHeight)
     {
-        ArgumentNullException.ThrowIfNull(screen);
-        ArgumentNullException.ThrowIfNull(registry);
-        ArgumentNullException.ThrowIfNull(state);
+        Harbor.Abstractions.Extensions.Ensure.NotNull(screen);
+        Harbor.Abstractions.Extensions.Ensure.NotNull(registry);
+        Harbor.Abstractions.Extensions.Ensure.NotNull(state);
 
         foreach (string id in new[] { CellForgeDockPanel.LeftId, CellForgeDockPanel.RightId, CellForgeDockPanel.BottomId })
         {
@@ -1189,9 +1189,9 @@ public static class ChatScreenPanelDock
     /// </summary>
     public static void UpdatePanels(ChatScreen screen, PanelRegistry registry, UiState state, PanelServices? services = null)
     {
-        ArgumentNullException.ThrowIfNull(screen);
-        ArgumentNullException.ThrowIfNull(registry);
-        ArgumentNullException.ThrowIfNull(state);
+        Harbor.Abstractions.Extensions.Ensure.NotNull(screen);
+        Harbor.Abstractions.Extensions.Ensure.NotNull(registry);
+        Harbor.Abstractions.Extensions.Ensure.NotNull(state);
 
         var view = registry.View(state);
         var active = PanelArbiter.ResolveActive(view.Providers, state);
@@ -1252,8 +1252,8 @@ public static class ChatScreenPanelDock
         int width = 80,
         int height = 24)
     {
-        ArgumentNullException.ThrowIfNull(registry);
-        ArgumentNullException.ThrowIfNull(state);
+        Harbor.Abstractions.Extensions.Ensure.NotNull(registry);
+        Harbor.Abstractions.Extensions.Ensure.NotNull(state);
 
         string? id = state.Ui.FocusedPanelId;
         if (string.IsNullOrEmpty(id))
@@ -1311,9 +1311,9 @@ public static class ChatScreenPanelDock
         UiState state,
         PanelServices? services)
     {
-        ArgumentNullException.ThrowIfNull(buffer);
-        ArgumentNullException.ThrowIfNull(registry);
-        ArgumentNullException.ThrowIfNull(state);
+        Harbor.Abstractions.Extensions.Ensure.NotNull(buffer);
+        Harbor.Abstractions.Extensions.Ensure.NotNull(registry);
+        Harbor.Abstractions.Extensions.Ensure.NotNull(state);
 
         var view = registry.View(state);
         var active = PanelArbiter.ResolveActive(view.Providers, state);

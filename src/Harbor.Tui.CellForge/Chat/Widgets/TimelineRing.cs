@@ -1,4 +1,5 @@
 using Harbor.Tui.CellForge.Rendering;
+using Ensure = Harbor.Abstractions.Extensions.Ensure;
 
 namespace Harbor.Tui.CellForge.Widgets;
 
@@ -44,7 +45,7 @@ public sealed class TimelineRing
     /// <summary>Appends and evicts oldest entries while over budget.</summary>
     public void Append(IChatBlock block)
     {
-        ArgumentNullException.ThrowIfNull(block);
+        Ensure.NotNull(block);
 
         EnsureCapacity(_count + 1);
         _slots[(_head + _count) % _slots.Length] = block;

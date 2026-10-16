@@ -1,3 +1,5 @@
+using Ensure = Harbor.Abstractions.Extensions.Ensure;
+
 namespace Harbor.Tui.CellForge.Generic.Widgets;
 
 /// <summary>Per-column alignment for <see cref="GenericTable"/>.</summary>
@@ -76,7 +78,7 @@ public sealed class GenericTable : IStatefulGenericWidget<GenericNavState>
     /// <summary>Replaces the headers (copied; null entries coerce to empty).</summary>
     public void SetHeaders(IReadOnlyList<string> headers, IReadOnlyList<GenericColumnAlign>? aligns = null)
     {
-        ArgumentNullException.ThrowIfNull(headers);
+        Ensure.NotNull(headers);
         _headers.Clear();
         for (int i = 0; i < headers.Count; i++)
         {
@@ -93,7 +95,7 @@ public sealed class GenericTable : IStatefulGenericWidget<GenericNavState>
     /// <summary>Appends a body row (copied; null entries coerce to empty).</summary>
     public void AddRow(IReadOnlyList<string> cells)
     {
-        ArgumentNullException.ThrowIfNull(cells);
+        Ensure.NotNull(cells);
         var row = new string[Math.Max(1, _headers.Count)];
         for (int i = 0; i < row.Length; i++)
         {
@@ -190,7 +192,7 @@ public sealed class GenericTable : IStatefulGenericWidget<GenericNavState>
     /// <inheritdoc />
     public void Paint(ScreenBuffer buffer, Rect rect, GenericNavState state)
     {
-        ArgumentNullException.ThrowIfNull(state);
+        Ensure.NotNull(state);
         int capacity = Math.Max(0, rect.Height - FrameH);
         state.Sync(Math.Max(1, capacity));
         bool shared = state.Count == _rows.Count;
@@ -201,7 +203,7 @@ public sealed class GenericTable : IStatefulGenericWidget<GenericNavState>
 
     private void PaintCore(ScreenBuffer buffer, Rect rect, int selected, int offset)
     {
-        ArgumentNullException.ThrowIfNull(buffer);
+        Ensure.NotNull(buffer);
         if (rect.Width <= 0 || rect.Height <= 0 || _headers.Count == 0)
         {
             return;

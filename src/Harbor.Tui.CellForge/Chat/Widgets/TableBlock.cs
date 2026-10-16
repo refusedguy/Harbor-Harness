@@ -1,4 +1,5 @@
 using CSharpFunctionalExtensions;
+using Ensure = Harbor.Abstractions.Extensions.Ensure;
 using Harbor.Terminal.Abstractions.Rendering;
 using Harbor.Tui.CellForge.Generic.Widgets;
 
@@ -80,7 +81,7 @@ public sealed class TableBlock : ICollapsibleChatBlock, IStatefulGenericWidget<G
 
     public TableBlock(GfmTable table)
     {
-        ArgumentNullException.ThrowIfNull(table);
+        Ensure.NotNull(table);
         if (table.Headers.Count == 0)
         {
             throw new ArgumentException("Table must have at least one column.", nameof(table));
@@ -411,7 +412,7 @@ public sealed class TableBlock : ICollapsibleChatBlock, IStatefulGenericWidget<G
     /// </summary>
     public void Paint(in BlockPaintContext ctx, GenericNavState rowState)
     {
-        ArgumentNullException.ThrowIfNull(rowState);
+        Ensure.NotNull(rowState);
         // NOTE: named rowSel (not row) — CellForgeEngineAbsenceAxisTests collects
         // Maybe-typed names per file, so a Maybe row local here would collide with
         // ClampRow's nullable-int pattern below and trip the struct-unaware gate.

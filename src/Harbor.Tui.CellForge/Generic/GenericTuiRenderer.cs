@@ -1,4 +1,5 @@
 using Harbor.Ui.Framework.State;
+using Ensure = Harbor.Abstractions.Extensions.Ensure;
 
 namespace Harbor.Tui.CellForge.Generic;
 
@@ -63,7 +64,7 @@ public sealed class GenericTuiRenderer : IDisposable
     /// </summary>
     public TuiEffect Dispatch(AppMsg msg)
     {
-        ArgumentNullException.ThrowIfNull(msg);
+        Ensure.NotNull(msg);
         return _store.Dispatch(msg);
     }
 
@@ -108,7 +109,7 @@ public sealed class GenericTuiRenderer : IDisposable
     /// </summary>
     public void Paint(ScreenBuffer buffer)
     {
-        ArgumentNullException.ThrowIfNull(buffer);
+        Ensure.NotNull(buffer);
         Screen.Solve(buffer.Cols, buffer.Rows);
         Screen.PaintAll(buffer);
         SyncFocusFromStore();

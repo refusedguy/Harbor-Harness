@@ -1,4 +1,5 @@
 using System.Text;
+using Ensure = Harbor.Abstractions.Extensions.Ensure;
 using Harbor.Tui.CellForge.Input;
 using Harbor.Tui.CellForge.Rendering;
 // #436: GlowRegion is engine-typed; its accent/rect convert exactly below.
@@ -101,7 +102,7 @@ public sealed partial class VirtualizedChatTimeline
     /// </summary>
     public LayoutOutcome ApplyStoreState(UiState state, int width, int viewportH)
     {
-        ArgumentNullException.ThrowIfNull(state);
+        Ensure.NotNull(state);
         int viewH = viewportH > 0 ? viewportH : Math.Max(0, state.Ui.ViewportLines);
         FollowTail = state.Ui.ScrollOffset <= 0;
         if (!FollowTail)

@@ -40,7 +40,7 @@ public sealed class CellForgeDiagnosticsPanel : CellForgePanelBase
     /// <inheritdoc />
     public override object? Build(PanelContext ctx)
     {
-        ArgumentNullException.ThrowIfNull(ctx);
+        Harbor.Abstractions.Extensions.Ensure.NotNull(ctx);
         var diagnostics = PanelExtractors.CollectDiagnostics(ctx.State);
         int cursor = ResolveCursor(ctx);
         cursor = diagnostics.Count == 0 ? 0 : Math.Clamp(cursor, 0, diagnostics.Count - 1);

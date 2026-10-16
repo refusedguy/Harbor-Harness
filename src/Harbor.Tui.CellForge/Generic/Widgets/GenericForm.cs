@@ -1,3 +1,5 @@
+using Ensure = Harbor.Abstractions.Extensions.Ensure;
+
 namespace Harbor.Tui.CellForge.Generic.Widgets;
 
 /// <summary>
@@ -67,7 +69,7 @@ public sealed class GenericForm
     /// <summary>Appends a row.</summary>
     public void Add(IGenericFormField field)
     {
-        ArgumentNullException.ThrowIfNull(field);
+        Ensure.NotNull(field);
         _fields.Add(field);
     }
 
@@ -137,7 +139,7 @@ public sealed class GenericForm
     /// <summary>Paints labeled rows top to bottom with error lines under invalid rows.</summary>
     public void Paint(ScreenBuffer buffer, Rect rect)
     {
-        ArgumentNullException.ThrowIfNull(buffer);
+        Ensure.NotNull(buffer);
         if (rect.Width <= 0 || rect.Height <= 0 || _fields.Count == 0)
         {
             return;

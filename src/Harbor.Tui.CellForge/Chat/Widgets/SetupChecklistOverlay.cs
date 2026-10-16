@@ -161,7 +161,7 @@ public sealed class SetupChecklistOverlay
     /// <param name="viewport">Viewport the box is centered in.</param>
     public void Paint(ScreenBuffer buffer, Rect viewport)
     {
-        ArgumentNullException.ThrowIfNull(buffer);
+        Harbor.Abstractions.Extensions.Ensure.NotNull(buffer);
         if (!Visible)
         {
             return;

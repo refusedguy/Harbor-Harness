@@ -1,4 +1,5 @@
 using System.Text;
+using Ensure = Harbor.Abstractions.Extensions.Ensure;
 
 namespace Harbor.Tui.CellForge.Generic.Widgets;
 
@@ -175,7 +176,7 @@ public sealed class GenericTextField : IGenericFormField
     /// <summary>Paints the visible slice into the first row of <paramref name="rect"/>.</summary>
     public void Paint(ScreenBuffer buffer, Rect rect)
     {
-        ArgumentNullException.ThrowIfNull(buffer);
+        Ensure.NotNull(buffer);
         if (rect.Width <= 0 || rect.Height <= 0)
         {
             return;

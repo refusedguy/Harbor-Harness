@@ -99,7 +99,7 @@ public static class SideBarView
     /// <summary>Paints the sidebar into <paramref name="rect" />. Tiny rects are skipped.</summary>
     public static void Paint(ScreenBuffer buffer, Rect rect, SideBarState state, IReadOnlyList<SideBarSlot>? extraSlots = null, IReadOnlyList<SessionRowViewModel>? sessions = null)
     {
-        ArgumentNullException.ThrowIfNull(state);
+        Harbor.Abstractions.Extensions.Ensure.NotNull(state);
         if (rect.Width < 12 || rect.Height < 6 || rect.X >= buffer.Cols || rect.Y >= buffer.Rows)
         {
             return;

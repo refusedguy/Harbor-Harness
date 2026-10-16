@@ -1,4 +1,5 @@
 using Harbor.Ui.Framework.Rendering;
+using Ensure = Harbor.Abstractions.Extensions.Ensure;
 
 // #436: this file declares the host-owned panel vocabulary in the engine's
 // namespace (Harbor.Tui.CellForge.Rendering), so the engine's verbatim ports
@@ -358,7 +359,7 @@ public sealed class LayoutTree
     /// <exception cref="ArgumentException">Replacement id differs.</exception>
     public void Update(string panelId, Panel replacement)
     {
-        ArgumentNullException.ThrowIfNull(replacement);
+        Ensure.NotNull(replacement);
         if (!string.Equals(replacement.Id, panelId, StringComparison.Ordinal))
         {
             throw new ArgumentException($"Replacement id '{replacement.Id}' differs from '{panelId}'.", nameof(replacement));
@@ -415,7 +416,7 @@ public sealed class LayoutTree
 
     public void AddRoot(Panel panel)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(panel.Id);
+        Ensure.NotBlank(panel.Id);
         _root = new SplitNode(panel);
         Register(panel);
     }
@@ -471,7 +472,7 @@ public sealed class LayoutTree
         IReadOnlyList<FlexTrack>? tracks = null,
         byte gap = 1)
     {
-        ArgumentNullException.ThrowIfNull(panels);
+        Ensure.NotNull(panels);
         if (panels.Count == 0)
             throw new ArgumentException("At least one panel is required.", nameof(panels));
         if (tracks is not null && tracks.Count != panels.Count)
@@ -481,7 +482,7 @@ public sealed class LayoutTree
             throw new InvalidOperationException($"panel '{panelId}' is already a container; stacks only wrap leaves.");
         foreach (var p in panels)
         {
-            ArgumentNullException.ThrowIfNull(p);
+            Ensure.NotNull(p);
             if (p.Id == panelId || _panels.ContainsKey(p.Id))
                 throw new ArgumentException($"panel '{p.Id}' is already in the tree.", nameof(panels));
         }

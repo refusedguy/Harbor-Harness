@@ -1,4 +1,5 @@
 using Harbor.DesignSystem;
+using Ensure = Harbor.Abstractions.Extensions.Ensure;
 
 using CSharpFunctionalExtensions;
 
@@ -71,7 +72,7 @@ public sealed class ThemeFileWatcher : IDisposable
         Action<HarborTheme>? onApplied = null,
         Action<string>? onError = null)
     {
-        ArgumentNullException.ThrowIfNull(store);
+        Ensure.NotNull(store);
         _path = path;
         _store = store;
         _onApplied = onApplied;
@@ -131,7 +132,7 @@ public sealed class ThemeFileWatcher : IDisposable
     /// </returns>
     public bool TryUpdateVariables(IReadOnlyDictionary<string, string> variables)
     {
-        ArgumentNullException.ThrowIfNull(variables);
+        Ensure.NotNull(variables);
         if (LastApplied.HasNoValue)
         {
             return false;

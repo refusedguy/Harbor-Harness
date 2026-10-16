@@ -1,3 +1,5 @@
+using Ensure = Harbor.Abstractions.Extensions.Ensure;
+
 namespace Harbor.Tui.CellForge.Rendering;
 
 /// <summary>
@@ -73,7 +75,7 @@ public static class ScreenBuilder
         IReadOnlyList<ScreenLeafSpec> leaves,
         IReadOnlyList<ScreenSplitSpec>? splits = null)
     {
-        ArgumentNullException.ThrowIfNull(leaves);
+        Ensure.NotNull(leaves);
         if (leaves.Count == 0)
         {
             throw new ArgumentException("At least one leaf is required.", nameof(leaves));
@@ -83,9 +85,9 @@ public static class ScreenBuilder
         for (int i = 0; i < leaves.Count; i++)
         {
             var leaf = leaves[i];
-            ArgumentNullException.ThrowIfNull(leaf);
-            ArgumentException.ThrowIfNullOrWhiteSpace(leaf.Id);
-            ArgumentNullException.ThrowIfNull(leaf.Create);
+            Ensure.NotNull(leaf);
+            Ensure.NotBlank(leaf.Id);
+            Ensure.NotNull(leaf.Create);
             if (!seen.Add(leaf.Id))
             {
                 throw new ArgumentException($"Duplicate leaf id '{leaf.Id}'.", nameof(leaves));
@@ -105,9 +107,9 @@ public static class ScreenBuilder
         for (int i = 0; i < splits.Count; i++)
         {
             var split = splits[i];
-            ArgumentNullException.ThrowIfNull(split);
-            ArgumentException.ThrowIfNullOrWhiteSpace(split.TargetId);
-            ArgumentException.ThrowIfNullOrWhiteSpace(split.NewPanelId);
+            Ensure.NotNull(split);
+            Ensure.NotBlank(split.TargetId);
+            Ensure.NotBlank(split.NewPanelId);
             if (!byId.TryGetValue(split.NewPanelId, out var spec))
             {
                 throw new ArgumentException($"Split seats unknown leaf '{split.NewPanelId}'.", nameof(splits));
@@ -145,9 +147,9 @@ public static class ScreenBuilder
         int sizeCells,
         byte gap = 0)
     {
-        ArgumentNullException.ThrowIfNull(tree);
-        ArgumentException.ThrowIfNullOrWhiteSpace(anchorId);
-        ArgumentNullException.ThrowIfNull(leaf);
+        Ensure.NotNull(tree);
+        Ensure.NotBlank(anchorId);
+        Ensure.NotNull(leaf);
 
         Panel? anchor = null;
         foreach (var panel in tree.Panels)

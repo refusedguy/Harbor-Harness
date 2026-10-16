@@ -340,7 +340,7 @@ public sealed class DiffViewerOverlay
     /// </summary>
     public void Paint(ScreenBuffer buffer, Rect viewport)
     {
-        ArgumentNullException.ThrowIfNull(buffer);
+        Harbor.Abstractions.Extensions.Ensure.NotNull(buffer);
         if (!Visible)
         {
             return;

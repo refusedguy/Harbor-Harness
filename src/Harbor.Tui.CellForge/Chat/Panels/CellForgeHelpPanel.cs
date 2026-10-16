@@ -29,7 +29,7 @@ public sealed class CellForgeHelpPanel : CellForgePanelBase
     /// <inheritdoc />
     public override object? Build(PanelContext ctx)
     {
-        ArgumentNullException.ThrowIfNull(ctx);
+        Harbor.Abstractions.Extensions.Ensure.NotNull(ctx);
         var rows = new List<string>(32);
         rows.Add("Harbor — keymap & panels");
         rows.Add(PanelText.Separator);

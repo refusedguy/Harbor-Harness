@@ -1,3 +1,5 @@
+using Ensure = Harbor.Abstractions.Extensions.Ensure;
+
 namespace Harbor.Tui.CellForge.Generic.Widgets;
 
 /// <summary>
@@ -42,7 +44,7 @@ public static class GenericProgressBar
         CellStyle fill = default,
         CellStyle track = default)
     {
-        ArgumentNullException.ThrowIfNull(buffer);
+        Ensure.NotNull(buffer);
         if (rect.Width <= 0 || rect.Height <= 0)
         {
             return;
@@ -126,7 +128,7 @@ public sealed class GenericSpinner
     /// <summary>Paints the current frame at the top-left of <paramref name="rect"/>.</summary>
     public void Paint(ScreenBuffer buffer, Rect rect, CellStyle style = default)
     {
-        ArgumentNullException.ThrowIfNull(buffer);
+        Ensure.NotNull(buffer);
         if (rect.Width <= 0 || rect.Height <= 0)
         {
             return;

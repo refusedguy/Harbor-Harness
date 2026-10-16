@@ -1,4 +1,5 @@
 using Harbor.Ui.Framework.State;
+using Ensure = Harbor.Abstractions.Extensions.Ensure;
 
 namespace Harbor.Tui.CellForge.Generic;
 
@@ -28,7 +29,7 @@ public sealed class GenericScreenProjector : IProjector<UiState>
     /// <inheritdoc/>
     public void Project(UiState state)
     {
-        ArgumentNullException.ThrowIfNull(state);
+        Ensure.NotNull(state);
         string? id = state.Ui.FocusedPanelId;
         if (id is null)
             return;

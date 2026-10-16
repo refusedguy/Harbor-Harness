@@ -13,8 +13,8 @@ internal sealed class EventSubscription : IDisposable
 {
     public EventSubscription(IEventBus bus, Func<AgentEvent, CancellationToken, ValueTask> handler, bool autoSubscribe = true)
     {
-        ArgumentNullException.ThrowIfNull(bus);
-        ArgumentNullException.ThrowIfNull(handler);
+        Harbor.Abstractions.Extensions.Ensure.NotNull(bus);
+        Harbor.Abstractions.Extensions.Ensure.NotNull(handler);
         Subscription = autoSubscribe ? bus.Subscribe(handler) : NoSubscription.Instance;
     }
 

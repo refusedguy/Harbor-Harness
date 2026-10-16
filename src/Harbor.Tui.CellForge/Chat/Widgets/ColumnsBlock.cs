@@ -1,4 +1,5 @@
 using System.Text;
+using Ensure = Harbor.Abstractions.Extensions.Ensure;
 
 namespace Harbor.Tui.CellForge.Widgets;
 
@@ -38,7 +39,7 @@ public sealed class ColumnsBlock : IChatBlock
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="gap"/> is negative.</exception>
     public ColumnsBlock(IReadOnlyList<string> items, int gap = DefaultGap)
     {
-        ArgumentNullException.ThrowIfNull(items);
+        Ensure.NotNull(items);
         ArgumentOutOfRangeException.ThrowIfNegative(gap);
 
         _items = new string[items.Count];

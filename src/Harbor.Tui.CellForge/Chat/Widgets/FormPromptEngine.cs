@@ -1,4 +1,5 @@
 using System.Globalization;
+using Ensure = Harbor.Abstractions.Extensions.Ensure;
 
 namespace Harbor.Tui.CellForge.Widgets;
 
@@ -44,7 +45,7 @@ public sealed class FormValueConverter<T> where T : notnull
         Func<string, CultureInfo, FormConvertResult<T>> tryConvert,
         Func<T, CultureInfo, string>? toDisplay = null)
     {
-        ArgumentNullException.ThrowIfNull(tryConvert);
+        Ensure.NotNull(tryConvert);
         _tryConvert = tryConvert;
         if (toDisplay is null)
         {
@@ -167,7 +168,7 @@ public sealed class FormPromptState<T> where T : notnull
 
     public FormPromptState(FormValueConverter<T> converter, CultureInfo? culture = null)
     {
-        ArgumentNullException.ThrowIfNull(converter);
+        Ensure.NotNull(converter);
         _converter = converter;
         _culture = culture ?? CultureInfo.InvariantCulture;
         _defaultValue = default!;
@@ -217,7 +218,7 @@ public sealed class FormPromptState<T> where T : notnull
     /// <summary>Sets the default submitted for empty input (the DefaultValue/EditableDefaultValue axis).</summary>
     public void SetDefault(T value)
     {
-        ArgumentNullException.ThrowIfNull(value);
+        Ensure.NotNull(value);
         _defaultValue = value;
         HasDefault = true;
     }
@@ -232,7 +233,7 @@ public sealed class FormPromptState<T> where T : notnull
     /// <summary>Replaces the choice set (copied; empty = unconstrained).</summary>
     public void SetChoices(IReadOnlyList<T> choices)
     {
-        ArgumentNullException.ThrowIfNull(choices);
+        Ensure.NotNull(choices);
         _choices.Clear();
         for (int i = 0; i < choices.Count; i++)
         {
@@ -251,14 +252,14 @@ public sealed class FormPromptState<T> where T : notnull
     /// </summary>
     public void AddValidator(Func<T, string?> validator)
     {
-        ArgumentNullException.ThrowIfNull(validator);
+        Ensure.NotNull(validator);
         _validators.Add(validator);
     }
 
     /// <summary>Appends a raw-text validator (runs before conversion).</summary>
     public void AddTextValidator(Func<string, string?> validator)
     {
-        ArgumentNullException.ThrowIfNull(validator);
+        Ensure.NotNull(validator);
         _textValidators.Add(validator);
     }
 
@@ -287,7 +288,7 @@ public sealed class FormPromptState<T> where T : notnull
     /// <summary>Reads one line (null = cancelled) and submits it — the scripted-prompt path.</summary>
     public FormPromptOutcome ReadAndSubmit(IFormInputSource source, out T value, out string error)
     {
-        ArgumentNullException.ThrowIfNull(source);
+        Ensure.NotNull(source);
         string? line = source.ReadLine();
         if (line is null)
         {

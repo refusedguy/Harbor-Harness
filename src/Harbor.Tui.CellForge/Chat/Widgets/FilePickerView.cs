@@ -90,7 +90,7 @@ public sealed class FilePickerView : IStatefulGenericWidget<GenericNavState>
 
     public void Show(IReadOnlyList<FilePickerItem> files)
     {
-        ArgumentNullException.ThrowIfNull(files);
+        Harbor.Abstractions.Extensions.Ensure.NotNull(files);
         _files = files;
         _query = string.Empty;
         _selected = 0;
@@ -197,7 +197,7 @@ public sealed class FilePickerView : IStatefulGenericWidget<GenericNavState>
     /// </summary>
     public void Paint(ScreenBuffer buffer, Rect rect, GenericNavState navState)
     {
-        ArgumentNullException.ThrowIfNull(navState);
+        Harbor.Abstractions.Extensions.Ensure.NotNull(navState);
         PaintCore(buffer, rect, navState);
     }
 

@@ -1,4 +1,5 @@
 using System.Text;
+using Ensure = Harbor.Abstractions.Extensions.Ensure;
 using Harbor.Tui.CellForge.Rendering;
 
 namespace Harbor.Tui.CellForge.Widgets;
@@ -102,7 +103,7 @@ public static class PanelChrome
     /// </summary>
     public static void PaintTopRule(ScreenBuffer buffer, Rect rect)
     {
-        ArgumentNullException.ThrowIfNull(buffer);
+        Ensure.NotNull(buffer);
         PaintRule(buffer, rect.X, rect.Y, rect.Width);
     }
 
@@ -112,7 +113,7 @@ public static class PanelChrome
     /// </summary>
     public static void PaintBottomRule(ScreenBuffer buffer, Rect rect)
     {
-        ArgumentNullException.ThrowIfNull(buffer);
+        Ensure.NotNull(buffer);
         if (rect.Height <= 0)
         {
             return;
@@ -127,7 +128,7 @@ public static class PanelChrome
     /// </summary>
     public static void PaintLeftRule(ScreenBuffer buffer, Rect rect)
     {
-        ArgumentNullException.ThrowIfNull(buffer);
+        Ensure.NotNull(buffer);
         if (rect.Width <= 0 || rect.Height <= 0)
         {
             return;
@@ -149,7 +150,7 @@ public static class PanelChrome
     /// </summary>
     public static void PaintTitleRow(ScreenBuffer buffer, int x, int y, int width, string title)
     {
-        ArgumentNullException.ThrowIfNull(buffer);
+        Ensure.NotNull(buffer);
         if (width <= 0 || string.IsNullOrEmpty(title))
         {
             return;
@@ -193,7 +194,7 @@ public static class PanelChrome
     /// </summary>
     public static void PaintMessageSeparator(ScreenBuffer buffer, int x, int y, int width)
     {
-        ArgumentNullException.ThrowIfNull(buffer);
+        Ensure.NotNull(buffer);
         if (width <= 0)
         {
             return;
@@ -213,7 +214,7 @@ public static class PanelChrome
     /// </summary>
     public static void FillPanelBackground(ScreenBuffer buffer, Rect rect)
     {
-        ArgumentNullException.ThrowIfNull(buffer);
+        Ensure.NotNull(buffer);
         if (rect.Width <= 0 || rect.Height <= 0)
         {
             return;
@@ -257,7 +258,7 @@ public static class PanelChrome
     /// <param name="style">Frame dialect; see <see cref="BoxStyle"/>.</param>
     public static void PaintBorderBox(ScreenBuffer buffer, Rect rect, BoxStyle style = BoxStyle.RoundedPanel)
     {
-        ArgumentNullException.ThrowIfNull(buffer);
+        Ensure.NotNull(buffer);
 
         if (style == BoxStyle.RoundedPanel)
         {

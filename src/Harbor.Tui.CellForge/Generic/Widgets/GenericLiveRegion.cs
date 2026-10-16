@@ -1,3 +1,5 @@
+using Ensure = Harbor.Abstractions.Extensions.Ensure;
+
 namespace Harbor.Tui.CellForge.Generic.Widgets;
 
 /// <summary>
@@ -99,7 +101,7 @@ public sealed class GenericLiveRegion
     /// <summary>Replaces the buffer with <paramref name="lines"/> (copied; null entries coerce to empty).</summary>
     public void Update(IReadOnlyList<string> lines)
     {
-        ArgumentNullException.ThrowIfNull(lines);
+        Ensure.NotNull(lines);
         _lines.Clear();
         for (int i = 0; i < lines.Count; i++)
         {
@@ -110,7 +112,7 @@ public sealed class GenericLiveRegion
     /// <summary>Replaces the buffer with <paramref name="text"/> split on '\n' (trailing newline ignored).</summary>
     public void Update(string text)
     {
-        ArgumentNullException.ThrowIfNull(text);
+        Ensure.NotNull(text);
         _lines.Clear();
         int start = 0;
         for (int i = 0; i <= text.Length; i++)
@@ -199,7 +201,7 @@ public sealed class GenericLiveRegion
     /// </remarks>
     public void Paint(ScreenBuffer buffer, Rect rect)
     {
-        ArgumentNullException.ThrowIfNull(buffer);
+        Ensure.NotNull(buffer);
         if (rect.Width <= 0 || rect.Height <= 0 || _lines.Count == 0)
         {
             return;
@@ -323,7 +325,7 @@ public static class LiveColumns
     /// <summary>Joins non-empty columns with <paramref name="separator"/> (empty columns dropped).</summary>
     public static string Join(string separator, params string[] columns)
     {
-        ArgumentNullException.ThrowIfNull(columns);
+        Ensure.NotNull(columns);
         var sb = new System.Text.StringBuilder();
         bool first = true;
         for (int i = 0; i < columns.Length; i++)

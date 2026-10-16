@@ -1,4 +1,5 @@
 using Harbor.Tui.CellForge.Widgets;
+using Ensure = Harbor.Abstractions.Extensions.Ensure;
 
 namespace Harbor.Tui.CellForge.Generic.Widgets;
 
@@ -61,7 +62,7 @@ public sealed class GenericSelectionList : IGenericFormField, IStatefulGenericWi
     /// <summary>Replaces the options (copied; null entries coerce to empty).</summary>
     public void SetItems(IReadOnlyList<string> items)
     {
-        ArgumentNullException.ThrowIfNull(items);
+        Ensure.NotNull(items);
         _items.Clear();
         for (int i = 0; i < items.Count; i++)
         {
@@ -127,8 +128,8 @@ public sealed class GenericSelectionList : IGenericFormField, IStatefulGenericWi
     /// <inheritdoc />
     public void Paint(ScreenBuffer buffer, Rect rect, GenericNavState state)
     {
-        ArgumentNullException.ThrowIfNull(buffer);
-        ArgumentNullException.ThrowIfNull(state);
+        Ensure.NotNull(buffer);
+        Ensure.NotNull(state);
         if (rect.Width <= 0 || rect.Height <= 0 || _items.Count == 0)
         {
             return;

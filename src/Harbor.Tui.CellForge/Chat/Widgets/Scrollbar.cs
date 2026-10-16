@@ -1,4 +1,5 @@
 using System.Text;
+using Ensure = Harbor.Abstractions.Extensions.Ensure;
 using Harbor.Ui.Framework.Rendering;
 
 namespace Harbor.Tui.CellForge.Widgets;
@@ -64,7 +65,7 @@ public static class ScrollableViewportScrollbarExtensions
         ScrollDirection direction,
         long amount = 1)
     {
-        ArgumentNullException.ThrowIfNull(viewport);
+        Ensure.NotNull(viewport);
         return direction == ScrollDirection.Forward
             ? viewport.ScrollBy(amount)
             : viewport.ScrollBy(-amount);
@@ -245,8 +246,8 @@ public static class Scrollbar
         CellStyle? beginStyle = null,
         CellStyle? endStyle = null)
     {
-        ArgumentNullException.ThrowIfNull(buffer);
-        ArgumentNullException.ThrowIfNull(viewport);
+        Ensure.NotNull(buffer);
+        Ensure.NotNull(viewport);
         int viewportLen = orientation.IsVertical() ? viewport.ViewportH : rect.Width;
         return TryPaint(
             buffer, rect, viewport.TotalContent, viewport.Offset, viewportLen,
@@ -287,7 +288,7 @@ public static class Scrollbar
         CellStyle? beginStyle = null,
         CellStyle? endStyle = null)
     {
-        ArgumentNullException.ThrowIfNull(buffer);
+        Ensure.NotNull(buffer);
         if (rect.Width <= 0 || rect.Height <= 0 || viewportH <= 0)
         {
             return false;

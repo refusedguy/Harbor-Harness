@@ -171,13 +171,13 @@ public sealed class CellForgeJumpPalettePanel : IPanelProvider
     /// </summary>
     public object? Build(PanelContext ctx, GenericNavState navState)
     {
-        ArgumentNullException.ThrowIfNull(navState);
+        Harbor.Abstractions.Extensions.Ensure.NotNull(navState);
         return BuildCore(ctx, navState);
     }
 
     private object? BuildCore(PanelContext ctx, GenericNavState? navState)
     {
-        ArgumentNullException.ThrowIfNull(ctx);
+        Harbor.Abstractions.Extensions.Ensure.NotNull(ctx);
         List<WorktreeJumpEntry> snapshot;
         int selected;
         string query;

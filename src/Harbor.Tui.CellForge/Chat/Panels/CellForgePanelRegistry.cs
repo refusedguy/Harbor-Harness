@@ -1,4 +1,5 @@
 using System.Collections.Immutable;
+using Ensure = Harbor.Abstractions.Extensions.Ensure;
 using Harbor.Ui.Framework.Panels;
 using Harbor.Ui.Framework.State;
 using Harbor.Abstractions.Models;
@@ -54,7 +55,7 @@ public sealed class CellForgePanelRegistry
     /// <param name="store">The CellForge TEA store to seed.</param>
     public TuiEffect EnsureSeeded(UiStore store)
     {
-        ArgumentNullException.ThrowIfNull(store);
+        Ensure.NotNull(store);
         var all = Registry.All;
         var idsBuilder = ImmutableArray.CreateBuilder<string>(all.Count);
         var statesBuilder = ImmutableDictionary.CreateBuilder<string, TuiPanelState>(StringComparer.Ordinal);
@@ -94,8 +95,8 @@ public static class PanelArbiter
     /// <summary>Resolve the single active panel from a registry + snapshot.</summary>
     public static IPanelProvider? ResolveActive(PanelRegistry registry, UiState state)
     {
-        ArgumentNullException.ThrowIfNull(registry);
-        ArgumentNullException.ThrowIfNull(state);
+        Ensure.NotNull(registry);
+        Ensure.NotNull(state);
         return ResolveActive(registry.All, state);
     }
 
@@ -105,8 +106,8 @@ public static class PanelArbiter
     /// </summary>
     public static IPanelProvider? ResolveActive(IReadOnlyList<IPanelProvider> providers, UiState state)
     {
-        ArgumentNullException.ThrowIfNull(providers);
-        ArgumentNullException.ThrowIfNull(state);
+        Ensure.NotNull(providers);
+        Ensure.NotNull(state);
 
         // FocusedPanelId is authoritative when its state agrees.
         string? focusedId = state.Ui.FocusedPanelId;

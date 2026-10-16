@@ -91,7 +91,7 @@ public sealed class ChatScreenBridge : IDisposable
         bool autoSubscribe = true,
         IApprovalCoordinator? coordinator = null)
     {
-        ArgumentNullException.ThrowIfNull(bus);
+        Harbor.Abstractions.Extensions.Ensure.NotNull(bus);
         _panel = panel ?? throw new ArgumentNullException(nameof(panel));
         _status = status ?? throw new ArgumentNullException(nameof(status));
         _streams = new StreamCoalescer(panel, status);
