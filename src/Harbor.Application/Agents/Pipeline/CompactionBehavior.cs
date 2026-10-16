@@ -31,8 +31,12 @@ public sealed class CompactionBehavior(
     IEventBus eventBus,
     IMetrics metrics,
     ILogger logger,
-    IHookRunner? hookRunner = null)
+    IHookRunner? hookRunner = null,
+    ICompactionView? compactionView = null)
 {
+    // #1612: the history-shaping seam — the turn pipeline depends on this
+    // contract, never on the CompactionPolicy statics directly.
+    private readonly ICompactionView _compactionView = compactionView ?? CompactionView.Instance;
     /// <summary>
     ///     Run the pre-turn compaction pass for one turn.
     /// </summary>
@@ -107,7 +111,7 @@ public sealed class CompactionBehavior(
                 // from the compacted view instead of the overfull
                 // pre-compaction history.
                 IReadOnlyList<AgentMessage> compacted =
-                    CompactionPolicy.MaterializeCompactedView(session.Messages);
+                    _compactionView.MaterializeCompactedView(session.Messages);
                 metrics.Histogram(
                     "session.context.size", tokenTracker.EstimateTokens(compacted),
                     new KeyValuePair<string, object?>("context.phase", "post-compaction"),

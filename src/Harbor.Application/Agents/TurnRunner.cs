@@ -1,4 +1,5 @@
 using System.Text;
+using Harbor.Abstractions.Sessions;
 using Harbor.Application.Agents.Pipeline;
 using Harbor.Application.Resilience;
 using Harbor.Application.Sessions;
@@ -53,7 +54,8 @@ internal sealed class TurnRunner(
     IMcpRegistry? mcpRegistry,
     CompactionBehavior compactionBehavior,
     SteeringDrainBehavior steering,
-    BackgroundDrain backgroundDrain)
+    BackgroundDrain backgroundDrain,
+    ICompactionView? compactionView = null)
 {
     // C7: bounded retry budget for the LLM streaming call site only.
     // #270: 429s draw from a separate minutes-scale budget (10 attempts from a
@@ -78,6 +80,10 @@ internal sealed class TurnRunner(
     private readonly object _toolTableGate = new();
     private IReadOnlyList<ToolDescriptor>? _lastResolvedTools;
     private ToolDefinition[]? _lastToolDefinitions;
+
+    // #1612: the history-shaping seam — truncation and the compacted view run
+    // through this contract, never through the CompactionPolicy statics directly.
+    private readonly ICompactionView _compactionView = compactionView ?? CompactionView.Instance;
 
     /// <summary>
     ///     Resolve the provider id, LLM client and concrete model for a run.
@@ -135,7 +141,7 @@ internal sealed class TurnRunner(
         // list: after a summary was produced, ShouldCompact and the
         // request both see [summary] + kept tail, so compaction does
         // not re-trigger on every subsequent turn.
-        IReadOnlyList<AgentMessage> turnMessages = CompactionPolicy.MaterializeCompactedView(session.Messages);
+        IReadOnlyList<AgentMessage> turnMessages = _compactionView.MaterializeCompactedView(session.Messages);
 
         // 2. Compaction check + truncation fallback — the per-turn
         // CompactionBehavior owns threshold check, summarization,
@@ -151,7 +157,7 @@ internal sealed class TurnRunner(
         // request from a strictly reduced recent tail instead.
         if (truncationFallback)
         {
-            turnMessages = CompactionPolicy.TruncateToFitStrict(turnMessages, model, tokenTracker);
+            turnMessages = _compactionView.TruncateToFitStrict(turnMessages, model, tokenTracker);
             metrics.Histogram(
                 "session.context.size", tokenTracker.EstimateTokens(turnMessages),
                 new KeyValuePair<string, object?>("context.phase", "truncated"),
