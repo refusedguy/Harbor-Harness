@@ -1,3 +1,5 @@
+using Harbor.Abstractions.Extensions;
+
 namespace Harbor.Abstractions.Events;
 
 /// <summary>
@@ -103,17 +105,8 @@ public static class ProviderErrors
     /// </summary>
     /// <param name="body">Full provider error body text.</param>
     /// <returns>Original text when within budget, otherwise head + marker.</returns>
-    public static string TruncateErrorBody(string body)
-    {
-        if (body.Length <= MaxProviderErrorBodyChars)
-        {
-            return body;
-        }
-
-        return string.Concat(
-            body.AsSpan(0, MaxProviderErrorBodyChars),
-            $"\n…[truncated {body.Length - MaxProviderErrorBodyChars} chars; showing first {MaxProviderErrorBodyChars}]");
-    }
+    public static string TruncateErrorBody(string body) =>
+        body.TruncateWithDropCount(MaxProviderErrorBodyChars, detail: $"showing first {MaxProviderErrorBodyChars}");
 
     /// <summary>
     ///     Builds the user-facing wire-error message for a non-success HTTP

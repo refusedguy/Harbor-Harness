@@ -1,4 +1,5 @@
 using System.Globalization;
+using Harbor.Abstractions.Extensions;
 using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Ui.Framework.Diagnostics;
 using Harbor.Ui.Framework.State;
@@ -577,20 +578,7 @@ public static class PanelText
     }
 
     /// <summary>Hard-truncate <paramref name="text" /> to <paramref name="max" /> columns.</summary>
-    public static string Truncate(string text, int max)
-    {
-        if (string.IsNullOrEmpty(text) || max <= 0)
-        {
-            return string.Empty;
-        }
-
-        if (text.Length <= max)
-        {
-            return text;
-        }
-
-        return max == 1 ? "…" : text[..(max - 1)] + "…";
-    }
+    public static string Truncate(string text, int max) => text.Truncate(max);
 
     /// <summary>Keep the tail of a path visible (filename first), prefix with <c>…</c>.</summary>
     public static string ShortenTail(string path, int max)
