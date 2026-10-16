@@ -79,7 +79,7 @@ public sealed class CellForgeFileTreePanel : CellForgePanelBase
     /// <inheritdoc />
     public override object? Build(PanelContext ctx)
     {
-        ArgumentNullException.ThrowIfNull(ctx);
+        Harbor.Abstractions.Extensions.Ensure.NotNull(ctx);
         string dir = ctx.State.Ui.ResolvePanelDirectory(Id);
 
         // The demand signal. Non-blocking, idempotent, and the only call in this

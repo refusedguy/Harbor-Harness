@@ -1,4 +1,5 @@
 using Harbor.Ui.Framework.Overlays;
+using Ensure = Harbor.Abstractions.Extensions.Ensure;
 using Harbor.Ui.Framework.Panels;
 using Harbor.Ui.Framework.Projection;
 using Harbor.Ui.Framework.State;
@@ -37,7 +38,7 @@ public sealed class CellForgeSessionSidebarPanel : CellForgePanelBase
     /// <inheritdoc />
     public override object? Build(PanelContext ctx)
     {
-        ArgumentNullException.ThrowIfNull(ctx);
+        Ensure.NotNull(ctx);
         return PanelText.Clip(
             PanelRows.SessionRows(ctx.State.Chat.Sessions, ctx.State.Chat.ActiveSessionId, ctx.State.Chat.IsLoading, ctx.Width, ctx.Height),
             ctx.Width,

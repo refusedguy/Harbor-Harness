@@ -1,4 +1,5 @@
 using Harbor.Ui.Framework.Panels;
+using Ensure = Harbor.Abstractions.Extensions.Ensure;
 using Harbor.Ui.Framework.Projection;
 using Harbor.Ui.Framework.State;
 
@@ -50,7 +51,7 @@ public sealed class CellForgeSkillFreshnessPanel : IPanelProvider
     /// <inheritdoc />
     public object? Build(PanelContext ctx)
     {
-        ArgumentNullException.ThrowIfNull(ctx);
+        Ensure.NotNull(ctx);
         return PanelText.Clip(
             PanelRows.SkillFreshnessRows(_model.GetEntries()),
             ctx.Width,

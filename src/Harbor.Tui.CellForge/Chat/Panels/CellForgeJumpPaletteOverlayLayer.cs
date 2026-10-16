@@ -134,7 +134,7 @@ public sealed class CellForgeJumpPaletteOverlayLayer : IOverlayLayer
     /// </summary>
     public void Sync(Rect viewport, PanelContext context)
     {
-        ArgumentNullException.ThrowIfNull(context);
+        Harbor.Abstractions.Extensions.Ensure.NotNull(context);
         _viewport = viewport;
         _ctx = context;
         if (!IsOpenIn(context.State))
@@ -189,7 +189,7 @@ public sealed class CellForgeJumpPaletteOverlayLayer : IOverlayLayer
     /// </summary>
     public void Paint(ScreenBuffer buffer, Rect clip)
     {
-        ArgumentNullException.ThrowIfNull(buffer);
+        Harbor.Abstractions.Extensions.Ensure.NotNull(buffer);
         if (!Visible)
         {
             return;

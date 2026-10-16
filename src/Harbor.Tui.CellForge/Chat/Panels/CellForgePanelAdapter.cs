@@ -44,7 +44,7 @@ public static class CellForgePanelAdapter
     /// </summary>
     public static void RegisterDecoder(IPanelWidgetDecoder decoder)
     {
-        ArgumentNullException.ThrowIfNull(decoder);
+        Harbor.Abstractions.Extensions.Ensure.NotNull(decoder);
         lock (_decoderGate)
         {
             _decoders = _decoders.Append(decoder).OrderByDescending(d => d.Priority).ToArray();
@@ -72,8 +72,8 @@ public static class CellForgePanelAdapter
         int height,
         PanelServices? services = null)
     {
-        ArgumentNullException.ThrowIfNull(provider);
-        ArgumentNullException.ThrowIfNull(state);
+        Harbor.Abstractions.Extensions.Ensure.NotNull(provider);
+        Harbor.Abstractions.Extensions.Ensure.NotNull(state);
         return RenderToRows(provider, new PanelContext(state, width, height, services));
     }
 
@@ -83,16 +83,16 @@ public static class CellForgePanelAdapter
     /// </summary>
     public static IReadOnlyList<string> RenderToRows(IPanelProvider provider, PanelContext ctx)
     {
-        ArgumentNullException.ThrowIfNull(provider);
-        ArgumentNullException.ThrowIfNull(ctx);
+        Harbor.Abstractions.Extensions.Ensure.NotNull(provider);
+        Harbor.Abstractions.Extensions.Ensure.NotNull(ctx);
         return WidgetToRows(provider.Build(ctx), ctx);
     }
 
     /// <summary>Route a key to the focused panel's <see cref="IPanelProvider.OnKey" />.</summary>
     public static bool RouteKey(IPanelProvider provider, UiKey key, PanelContext ctx)
     {
-        ArgumentNullException.ThrowIfNull(provider);
-        ArgumentNullException.ThrowIfNull(ctx);
+        Harbor.Abstractions.Extensions.Ensure.NotNull(provider);
+        Harbor.Abstractions.Extensions.Ensure.NotNull(ctx);
         return provider.OnKey(key, ctx);
     }
 

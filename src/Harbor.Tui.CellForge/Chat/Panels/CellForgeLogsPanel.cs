@@ -1,4 +1,5 @@
 using Harbor.Ui.Framework.Diagnostics;
+using Ensure = Harbor.Abstractions.Extensions.Ensure;
 using Harbor.Ui.Framework.Panels;
 using Harbor.Ui.Framework.Projection;
 using Harbor.Ui.Framework.State;
@@ -27,7 +28,7 @@ public sealed class CellForgeLogsPanel : CellForgePanelBase
     /// <inheritdoc />
     public override object? Build(PanelContext ctx)
     {
-        ArgumentNullException.ThrowIfNull(ctx);
+        Ensure.NotNull(ctx);
         // #470: the diagnostics buffer is an explicitly typed field on
         // PanelServices, filled by the composition root — not a per-frame lookup
         // against a container the host may never have handed us.

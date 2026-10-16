@@ -1,4 +1,5 @@
 using Harbor.Ui.Framework.Panels;
+using Ensure = Harbor.Abstractions.Extensions.Ensure;
 using Harbor.Ui.Framework.Projection;
 using Harbor.Ui.Framework.State;
 
@@ -26,7 +27,7 @@ public sealed class CellForgeTodoListPanel : CellForgePanelBase
     /// <inheritdoc />
     public override object? Build(PanelContext ctx)
     {
-        ArgumentNullException.ThrowIfNull(ctx);
+        Ensure.NotNull(ctx);
         return PanelText.Clip(
             PanelRows.TodoRows(PanelExtractors.ExtractTodos(ctx.State), ctx.Width),
             ctx.Width,

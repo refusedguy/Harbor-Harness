@@ -1,4 +1,5 @@
 using Harbor.Tui.CellForge.Rendering;
+using Ensure = Harbor.Abstractions.Extensions.Ensure;
 using Harbor.Ui.Framework.Panels;
 using Harbor.Ui.Framework.Projection;
 using Harbor.Ui.Framework.State;
@@ -47,7 +48,7 @@ public sealed class CellForgeDiffPreviewPanel : CellForgePanelBase
     /// <inheritdoc />
     public override object? Build(PanelContext ctx)
     {
-        ArgumentNullException.ThrowIfNull(ctx);
+        Ensure.NotNull(ctx);
         var changes = PanelExtractors.ExtractRecentChanges(ctx.State, 8);
         bool split = HunkVirtualizer.PreferSplit(ctx.Width);
         var rows = new List<string>(changes.Count * (MaxBodyRows + 2) + 4);

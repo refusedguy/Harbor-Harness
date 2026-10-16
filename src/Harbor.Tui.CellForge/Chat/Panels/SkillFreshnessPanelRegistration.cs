@@ -33,8 +33,8 @@ public static class SkillFreshnessPanelRegistration
     /// </summary>
     public static void RegisterSkillFreshness(this CellForgePanelRegistry panels, SkillFreshnessModel model)
     {
-        ArgumentNullException.ThrowIfNull(panels);
-        ArgumentNullException.ThrowIfNull(model);
+        Harbor.Abstractions.Extensions.Ensure.NotNull(panels);
+        Harbor.Abstractions.Extensions.Ensure.NotNull(model);
         panels.Register(new CellForgeSkillFreshnessPanel(model));
     }
 
