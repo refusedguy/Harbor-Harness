@@ -3,6 +3,7 @@ using Harbor.Abstractions.Agents;
 using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Abstractions.Permissions;
 using Harbor.Application.Permissions;
+using Harbor.TestKit;
 using Microsoft.Extensions.Logging.Abstractions;
 using Harbor.Registries.Agents;
 
@@ -56,11 +57,11 @@ public class PermissionPathPolicyTests
             new PathArgExtractionPolicy(new[] { "myfilesync" })));
 
         var allowedResult = await svc.CheckAsync("code", "myfilesync", Args(("path", "safe/file.txt")));
-        await Assert.That(allowedResult.IsSuccess).IsTrue();
+        await Assert.That(allowedResult).IsSuccessful();
         await Assert.That(allowedResult.Value.Action).IsEqualTo(PermissionAction.Allow);
 
         var deniedResult = await svc.CheckAsync("code", "myfilesync", Args(("path", "unsafe/file.txt")));
-        await Assert.That(deniedResult.IsSuccess).IsTrue();
+        await Assert.That(deniedResult).IsSuccessful();
         await Assert.That(deniedResult.Value.Action).IsEqualTo(PermissionAction.Deny);
     }
 
@@ -76,7 +77,7 @@ public class PermissionPathPolicyTests
         // and with no asker configured Ask falls back to Deny.
         var result = await svc.CheckAsync("code", "myfilesync", Args(("path", "/definitely-outside-workspace-178/probe.txt")));
 
-        await Assert.That(result.IsSuccess).IsTrue();
+        await Assert.That(result).IsSuccessful();
         await Assert.That(result.Value.Action).IsEqualTo(PermissionAction.Deny);
     }
 
@@ -122,7 +123,7 @@ public class PermissionPathPolicyTests
         // path that would have been allowed.
         var result = await svc.CheckAsync("code", "read", Args(("path", "safe/file.txt")));
 
-        await Assert.That(result.IsSuccess).IsTrue();
+        await Assert.That(result).IsSuccessful();
         await Assert.That(result.Value.Action).IsEqualTo(PermissionAction.Deny);
     }
 
@@ -184,7 +185,7 @@ public class PermissionPathPolicyTests
         var outside = await svc.CheckAsync(
             "code", tool, Args(("path", "/definitely-outside-workspace-595/probe.txt")));
 
-        await Assert.That(outside.IsSuccess).IsTrue();
+        await Assert.That(outside).IsSuccessful();
         await Assert.That(outside.Value.Action).IsEqualTo(PermissionAction.Deny)
             .Because($"'{tool}' declares a path argument, so an Allow verdict for a path "
                    + "outside the workspace must be downgraded to Ask (and to Deny with no "
