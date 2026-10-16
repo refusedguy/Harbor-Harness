@@ -1,3 +1,5 @@
+using Ensure = Harbor.Abstractions.Extensions.Ensure;
+
 namespace Harbor.Tui.CellForge.Widgets;
 
 /// <summary>
@@ -46,7 +48,7 @@ public sealed class AutocompleteDestructiveGate
     /// </returns>
     public bool Commit(AutocompleteItem item)
     {
-        ArgumentNullException.ThrowIfNull(item);
+        Ensure.NotNull(item);
         if (!item.IsDestructive)
         {
             _armedId = null;
@@ -84,8 +86,8 @@ public static class AutocompleteFilter
         IReadOnlyList<AutocompleteItem> candidates,
         AutocompleteMode mode)
     {
-        ArgumentNullException.ThrowIfNull(query);
-        ArgumentNullException.ThrowIfNull(candidates);
+        Ensure.NotNull(query);
+        Ensure.NotNull(candidates);
 
         var scoped = new List<AutocompleteItem>(candidates.Count);
         for (int i = 0; i < candidates.Count; i++)
@@ -106,7 +108,7 @@ public static class AutocompleteFilter
     /// </summary>
     public static bool CanQueueWhileBusy(AutocompleteItem item)
     {
-        ArgumentNullException.ThrowIfNull(item);
+        Ensure.NotNull(item);
         return item.IsQueueable;
     }
 }

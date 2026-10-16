@@ -129,7 +129,7 @@ public sealed partial class DialogOverlay
 
     public void ShowAlert(string title, string message, string okLabel = "OK")
     {
-        ArgumentNullException.ThrowIfNull(okLabel);
+        Harbor.Abstractions.Extensions.Ensure.NotNull(okLabel);
         _kind = DialogKind.Alert;
         _title = title ?? string.Empty;
         _message = message ?? string.Empty;
@@ -146,8 +146,8 @@ public sealed partial class DialogOverlay
         string okLabel = "OK",
         string cancelLabel = "Cancel")
     {
-        ArgumentNullException.ThrowIfNull(okLabel);
-        ArgumentNullException.ThrowIfNull(cancelLabel);
+        Harbor.Abstractions.Extensions.Ensure.NotNull(okLabel);
+        Harbor.Abstractions.Extensions.Ensure.NotNull(cancelLabel);
         _kind = DialogKind.Confirm;
         _title = title ?? string.Empty;
         _message = message ?? string.Empty;
@@ -166,8 +166,8 @@ public sealed partial class DialogOverlay
         string okLabel = "OK",
         string cancelLabel = "Cancel")
     {
-        ArgumentNullException.ThrowIfNull(okLabel);
-        ArgumentNullException.ThrowIfNull(cancelLabel);
+        Harbor.Abstractions.Extensions.Ensure.NotNull(okLabel);
+        Harbor.Abstractions.Extensions.Ensure.NotNull(cancelLabel);
         _kind = DialogKind.Prompt;
         _title = title ?? string.Empty;
         _message = message ?? string.Empty;
@@ -194,9 +194,9 @@ public sealed partial class DialogOverlay
         string okLabel = "OK",
         string cancelLabel = "Cancel")
     {
-        ArgumentNullException.ThrowIfNull(options);
-        ArgumentNullException.ThrowIfNull(okLabel);
-        ArgumentNullException.ThrowIfNull(cancelLabel);
+        Harbor.Abstractions.Extensions.Ensure.NotNull(options);
+        Harbor.Abstractions.Extensions.Ensure.NotNull(okLabel);
+        Harbor.Abstractions.Extensions.Ensure.NotNull(cancelLabel);
         if (options.Count == 0)
         {
             throw new ArgumentException("Select dialog needs at least one option.", nameof(options));
@@ -228,9 +228,9 @@ public sealed partial class DialogOverlay
         string okLabel = "OK",
         string cancelLabel = "Cancel")
     {
-        ArgumentNullException.ThrowIfNull(options);
-        ArgumentNullException.ThrowIfNull(okLabel);
-        ArgumentNullException.ThrowIfNull(cancelLabel);
+        Harbor.Abstractions.Extensions.Ensure.NotNull(options);
+        Harbor.Abstractions.Extensions.Ensure.NotNull(okLabel);
+        Harbor.Abstractions.Extensions.Ensure.NotNull(cancelLabel);
         if (options.Count == 0)
         {
             throw new ArgumentException("Radio dialog needs at least one option.", nameof(options));
@@ -262,8 +262,8 @@ public sealed partial class DialogOverlay
         string okLabel = "OK",
         string cancelLabel = "Cancel")
     {
-        ArgumentNullException.ThrowIfNull(okLabel);
-        ArgumentNullException.ThrowIfNull(cancelLabel);
+        Harbor.Abstractions.Extensions.Ensure.NotNull(okLabel);
+        Harbor.Abstractions.Extensions.Ensure.NotNull(cancelLabel);
         _kind = DialogKind.Multiline;
         _title = title ?? string.Empty;
         _message = message ?? string.Empty;
@@ -302,8 +302,8 @@ public sealed partial class DialogOverlay
         string okLabel = "Confirm",
         string cancelLabel = "Cancel")
     {
-        ArgumentNullException.ThrowIfNull(okLabel);
-        ArgumentNullException.ThrowIfNull(cancelLabel);
+        Harbor.Abstractions.Extensions.Ensure.NotNull(okLabel);
+        Harbor.Abstractions.Extensions.Ensure.NotNull(cancelLabel);
         _kind = DialogKind.Approval;
         _approvalTool = string.IsNullOrWhiteSpace(toolName) ? "?" : toolName.Trim();
         _title = $"permission required · {_approvalTool}";
@@ -418,7 +418,7 @@ public sealed partial class DialogOverlay
     /// </summary>
     public void SyncFrom(DialogOverlay source)
     {
-        ArgumentNullException.ThrowIfNull(source);
+        Harbor.Abstractions.Extensions.Ensure.NotNull(source);
         if (ReferenceEquals(this, source))
         {
             return;

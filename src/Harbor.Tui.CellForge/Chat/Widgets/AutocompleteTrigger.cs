@@ -1,4 +1,5 @@
 using Harbor.Tui.CellForge.Rendering;
+using Ensure = Harbor.Abstractions.Extensions.Ensure;
 using Harbor.Ui.Framework.State;
 
 namespace Harbor.Tui.CellForge.Widgets;
@@ -183,7 +184,7 @@ public static class PromptBufferAutocompleteExtensions
     /// </summary>
     public static bool TryScanAutocomplete(this PromptBuffer buffer, out AutocompleteTrigger trigger)
     {
-        ArgumentNullException.ThrowIfNull(buffer);
+        Ensure.NotNull(buffer);
         return AutocompleteTriggerScan.TryScan(buffer.AsSpan(), buffer.Cursor, out trigger);
     }
 }

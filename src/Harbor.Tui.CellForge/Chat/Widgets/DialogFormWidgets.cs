@@ -1,4 +1,5 @@
 using System.Text;
+using Ensure = Harbor.Abstractions.Extensions.Ensure;
 using Harbor.Tui.CellForge.Generic.Widgets;
 using Harbor.Tui.CellForge.Rendering;
 
@@ -64,7 +65,7 @@ public sealed class DialogSelectList : IStatefulGenericWidget<GenericNavState>
     /// <summary>Replaces the options (copied; null entries coerce to empty) and resets selection/scroll.</summary>
     public void SetItems(IReadOnlyList<string> items)
     {
-        ArgumentNullException.ThrowIfNull(items);
+        Ensure.NotNull(items);
         _values.Clear();
         for (int i = 0; i < items.Count; i++)
         {
@@ -144,7 +145,7 @@ public sealed class DialogSelectList : IStatefulGenericWidget<GenericNavState>
     /// </summary>
     public void Paint(ScreenBuffer buffer, Rect rect, GenericNavState navState)
     {
-        ArgumentNullException.ThrowIfNull(navState);
+        Ensure.NotNull(navState);
         PaintCore(buffer, rect, navState);
     }
 
@@ -238,7 +239,7 @@ public sealed class DialogRadioGroup
     /// <summary>Replaces the options (copied; null entries coerce to empty) and selects <paramref name="selectedIndex"/> (clamped).</summary>
     public void SetOptions(IReadOnlyList<string> options, int selectedIndex = 0)
     {
-        ArgumentNullException.ThrowIfNull(options);
+        Ensure.NotNull(options);
         _options.Clear();
         for (int i = 0; i < options.Count; i++)
         {

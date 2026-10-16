@@ -1,3 +1,5 @@
+using Ensure = Harbor.Abstractions.Extensions.Ensure;
+
 namespace Harbor.Tui.CellForge.Widgets;
 
 /// <summary>
@@ -52,7 +54,7 @@ public static class BreakdownStrip
         int width,
         Span<int> counts)
     {
-        ArgumentNullException.ThrowIfNull(segments);
+        Ensure.NotNull(segments);
         if (counts.Length < segments.Count)
         {
             throw new ArgumentException("Counts span too small.", nameof(counts));
@@ -121,8 +123,8 @@ public static class BreakdownStrip
         IReadOnlyList<BreakdownSegment> segments,
         IReadOnlyList<CellStyle>? styles = null)
     {
-        ArgumentNullException.ThrowIfNull(buffer);
-        ArgumentNullException.ThrowIfNull(segments);
+        Ensure.NotNull(buffer);
+        Ensure.NotNull(segments);
         if (rect.Width <= 0 || rect.Height <= 0)
         {
             return;
@@ -165,7 +167,7 @@ public static class BreakdownStrip
     /// </summary>
     public static string TagText(IReadOnlyList<BreakdownSegment> segments)
     {
-        ArgumentNullException.ThrowIfNull(segments);
+        Ensure.NotNull(segments);
         if (segments.Count == 0)
         {
             return "(empty)";

@@ -126,7 +126,7 @@ public sealed class CommandPaletteView : IStatefulGenericWidget<GenericNavState>
 
     public void Show(IReadOnlyList<CommandItem> commands)
     {
-        ArgumentNullException.ThrowIfNull(commands);
+        Harbor.Abstractions.Extensions.Ensure.NotNull(commands);
         _frames.Clear();
         PushFrame(new PaletteFrame("Commands", "", commands, null));
     }
@@ -148,7 +148,7 @@ public sealed class CommandPaletteView : IStatefulGenericWidget<GenericNavState>
 
     public void PushFrame(PaletteFrame frame)
     {
-        ArgumentNullException.ThrowIfNull(frame);
+        Harbor.Abstractions.Extensions.Ensure.NotNull(frame);
         _frames.Push(frame);
         _pendingCommit = null;
         _pendingInput = null;
@@ -365,7 +365,7 @@ public sealed class CommandPaletteView : IStatefulGenericWidget<GenericNavState>
     /// </summary>
     public void Paint(ScreenBuffer buffer, Rect rect, GenericNavState navState)
     {
-        ArgumentNullException.ThrowIfNull(navState);
+        Harbor.Abstractions.Extensions.Ensure.NotNull(navState);
         PaintCore(buffer, rect, navState);
     }
 
@@ -533,7 +533,7 @@ public sealed class CommandPaletteView : IStatefulGenericWidget<GenericNavState>
     /// </summary>
     public static CommandItem FromHit(CommandHit hit)
     {
-        ArgumentNullException.ThrowIfNull(hit);
+        Harbor.Abstractions.Extensions.Ensure.NotNull(hit);
         return new CommandItem(hit.Id, hit.Title, hit.Detail, string.Empty, hit.Group);
     }
 
@@ -547,7 +547,7 @@ public sealed class CommandPaletteView : IStatefulGenericWidget<GenericNavState>
     /// </summary>
     public void ShowFromHits(IReadOnlyList<CommandHit> hits)
     {
-        ArgumentNullException.ThrowIfNull(hits);
+        Harbor.Abstractions.Extensions.Ensure.NotNull(hits);
         var items = new List<CommandItem>(hits.Count);
         for (int i = 0; i < hits.Count; i++)
         {
