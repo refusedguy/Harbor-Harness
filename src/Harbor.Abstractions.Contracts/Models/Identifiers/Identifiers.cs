@@ -218,7 +218,7 @@ public sealed record ToolCallId
 /// <remarks>
 ///     Provider ids are normalized to lowercase and must match <c>^[a-z0-9][a-z0-9-]*$</c>.
 /// </remarks>
-public sealed class ProviderId : ValueObject
+public sealed record ProviderId
 {
 
     private ProviderId(string value)
@@ -270,12 +270,6 @@ public sealed class ProviderId : ValueObject
 
     /// <inheritdoc />
     public override string ToString() => Value;
-
-    /// <inheritdoc />
-    protected override IEnumerable<IComparable> GetEqualityComponents()
-    {
-        yield return Value;
-    }
 
     /// <summary>
     ///     Implicit conversion to <see cref="string" /> for storage/serialization convenience.
@@ -450,7 +444,7 @@ public sealed class ModelRef : ValueObject
 /// <remarks>
 ///     Tool names are normalized to lowercase and must match <c>^[a-z][a-z0-9_]*$</c>.
 /// </remarks>
-public sealed class ToolName : ValueObject
+public sealed record ToolName
 {
 
     private ToolName(string value)
@@ -503,12 +497,6 @@ public sealed class ToolName : ValueObject
     /// <inheritdoc />
     public override string ToString() => Value;
 
-    /// <inheritdoc />
-    protected override IEnumerable<IComparable> GetEqualityComponents()
-    {
-        yield return Value;
-    }
-
     /// <summary>
     ///     Implicit conversion to <see cref="string" /> for storage/serialization convenience.
     /// </summary>
@@ -522,7 +510,7 @@ public sealed class ToolName : ValueObject
 /// <remarks>
 ///     Agent names are normalized to lowercase but otherwise unrestricted.
 /// </remarks>
-public sealed class AgentName : ValueObject
+public sealed record AgentName
 {
     /// <summary>
     ///     The agent a session gets when nobody named one — the one place in the
@@ -584,12 +572,6 @@ public sealed class AgentName : ValueObject
 
     /// <inheritdoc />
     public override string ToString() => Value;
-
-    /// <inheritdoc />
-    protected override IEnumerable<IComparable> GetEqualityComponents()
-    {
-        yield return Value;
-    }
 
     /// <summary>
     ///     Implicit conversion to <see cref="string" /> for storage/serialization convenience.
