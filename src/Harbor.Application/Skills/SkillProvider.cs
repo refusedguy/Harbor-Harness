@@ -1,6 +1,7 @@
 using Harbor.Abstractions.Sessions;
+using Harbor.Application.Sessions;
 
-namespace Harbor.Application.Sessions;
+namespace Harbor.Application.Skills;
 
 /// <summary>
 ///     Default <see cref="ISkillProvider" /> backed by <see cref="WorkspaceContextSource" />.

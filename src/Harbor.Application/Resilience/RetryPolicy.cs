@@ -3,7 +3,6 @@ using System.Net;
 using System.Threading;
 using Harbor.Abstractions.Events;
 using Harbor.Abstractions.Resilience;
-using Harbor.Application.Agents;
 
 namespace Harbor.Application.Resilience;
 

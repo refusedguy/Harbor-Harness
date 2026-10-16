@@ -1,7 +1,6 @@
 using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Providers;
 using Harbor.Abstractions.Sessions;
-using Harbor.Application.Sessions;
 using System.Diagnostics;
 using System.Text;
 using Harbor.Abstractions.Extensions;
