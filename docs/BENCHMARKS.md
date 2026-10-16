@@ -943,6 +943,23 @@ second fold is what gives `ProjectHistory`'s common-prefix scan something to
 reuse — drop that scan and line 0 comes back as a new instance and the counter
 fires.
 
+### MatchesPattern scaling gate (#1528) — **RELATIVE**, CI merge gate
+
+`Harbor.Abstractions.Tests.MatchesPatternScalingGates`, in the `test (core)` merge-gate shard.
+
+Same relative convention as #410: N against 2N inside one run, no absolute
+budgets. The slice: `PermissionRule.MatchesPattern` allocated 2 strings per
+call (`Pattern.Replace` + `argPath.Replace`) for every rule evaluated.
+Canonicalisation moved to `BoundedPatternRegexCache.CompileGlob` — once per
+distinct pattern, cache miss only — with `/` compiling to a `[\\/]`
+separator class, so per-call matching passes the raw strings with identical
+`'\\' ≡ '/'` semantics.
+
+| Test | Relative claim | Gate | Measured (run 38855125995, PR #1600) |
+|---|---|---|---|
+| `Cost_GrowsLinearly_InRuleCount` | time over N-rule `Evaluate` miss-walks, 256 → 512 rules — warm-up discarded, best-of-5 | ratio ≤ 3.0 (linear ≈ 2.0; O(N²) ≈ 4.0) | **1.39** (17.058 → 23.767 ms) |
+| `Cost_GrowsLinearly_InRuleCount` | allocations over the same walks — exact-zero, not a ratio: 2 wasted strings per rule are still linear, so a ratio gate passes with the bug in place | exactly 0 B on both windows | 0 → 0 B |
+
 ### ConsoleEx cell-diff core (`DiffEngineBenchmark`, 2026-08-26, Release)
 
 Frame-budget targets from `specs/07-tui.md` (< 16 ms/frame) and celldiff §7 — all met with an order of magnitude of headroom. Flush = real DiffEngine scan + AnsiWriter SGR/cursor encoding into a discarding backend (no tty I/O).
