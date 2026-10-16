@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Harbor.Abstractions.Events;
+using Harbor.Abstractions.Extensions;
 using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Abstractions.Tools;
@@ -284,6 +285,5 @@ public sealed class SandboxedPluginTool : ITool
         };
     }
 
-    private static string Truncate(string value) =>
-        value.Length <= 200 ? value : value[..200];
+    private static string Truncate(string value) => value.Truncate(200, string.Empty);
 }
