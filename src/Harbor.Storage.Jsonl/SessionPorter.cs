@@ -47,7 +47,7 @@ public sealed class JsonlSessionPorter : ISessionPorter
 
         var session = await store.GetAsync(sessionId, ct).ConfigureAwait(false);
         if (session.IsFailure) // §4.6-ok: propagate store diagnostic verbatim.
-            return Result.Failure($"Cannot export session '{sessionId}': {session.Error}");
+            return session.ConvertFailure().MapError(e => $"Cannot export session '{sessionId}': {e}");
 
         var stats = await store.GetStatsAsync(sessionId, ct).ConfigureAwait(false);
 
