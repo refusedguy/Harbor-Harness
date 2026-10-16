@@ -5,6 +5,7 @@ using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Abstractions.Permissions;
 using Harbor.Application.Configuration;
 using Harbor.Application.Permissions;
+using Harbor.TestKit;
 using Microsoft.Extensions.Logging.Abstractions;
 using Harbor.Registries.Agents;
 namespace Harbor.Core.Tests;
@@ -51,7 +52,7 @@ public class PermissionServiceTests
 
         var result = await svc.CheckAsync("code", "read", args);
 
-        await Assert.That(result.IsSuccess).IsTrue();
+        await Assert.That(result).IsSuccessful();
         await Assert.That(result.Value.Action).IsEqualTo(PermissionAction.Allow);
     }
 
@@ -69,7 +70,7 @@ public class PermissionServiceTests
 
         var result = await svc.CheckAsync("code", "read", args);
 
-        await Assert.That(result.IsSuccess).IsTrue();
+        await Assert.That(result).IsSuccessful();
         await Assert.That(result.Value.Action).IsEqualTo(PermissionAction.Deny);
     }
 
@@ -85,7 +86,7 @@ public class PermissionServiceTests
 
         var result = await svc.CheckAsync("code", "edit", args);
 
-        await Assert.That(result.IsSuccess).IsTrue();
+        await Assert.That(result).IsSuccessful();
         await Assert.That(result.Value.Action).IsEqualTo(PermissionAction.Deny);
     }
 
@@ -108,7 +109,7 @@ public class PermissionServiceTests
 
         var result = await svc.CheckAsync("code", "write", args);
 
-        await Assert.That(result.IsSuccess).IsTrue();
+        await Assert.That(result).IsSuccessful();
         await Assert.That(result.Value.Action).IsEqualTo(PermissionAction.Allow);
         await Assert.That(result.Value.PersistDecision).IsTrue();
         await Assert.That(captured).IsNotNull();
@@ -126,7 +127,7 @@ public class PermissionServiceTests
 
         var result = await svc.CheckAsync("code", "write", args);
 
-        await Assert.That(result.IsSuccess).IsTrue();
+        await Assert.That(result).IsSuccessful();
         await Assert.That(result.Value.Action).IsEqualTo(PermissionAction.Deny);
     }
 
@@ -144,7 +145,7 @@ public class PermissionServiceTests
 
         var result = await svc.CheckAsync("code", "bash", args);
 
-        await Assert.That(result.IsSuccess).IsTrue();
+        await Assert.That(result).IsSuccessful();
         await Assert.That(result.Value.Action).IsEqualTo(PermissionAction.Deny);
     }
 
@@ -156,7 +157,7 @@ public class PermissionServiceTests
 
         var result = await svc.CheckAsync("nonexistent", "read", args);
 
-        await Assert.That(result.IsFailure).IsTrue();
+        await Assert.That(result).IsFailed();
         await Assert.That(result.Error).Contains("nonexistent");
     }
 
@@ -170,11 +171,11 @@ public class PermissionServiceTests
         var (svc, _) = CreateService(agent);
 
         var allowedResult = await svc.CheckAsync("code", "edit", Args(("path", "safe/file.txt")));
-        await Assert.That(allowedResult.IsSuccess).IsTrue();
+        await Assert.That(allowedResult).IsSuccessful();
         await Assert.That(allowedResult.Value.Action).IsEqualTo(PermissionAction.Allow);
 
         var deniedResult = await svc.CheckAsync("code", "edit", Args(("path", "unsafe/file.txt")));
-        await Assert.That(deniedResult.IsSuccess).IsTrue();
+        await Assert.That(deniedResult).IsSuccessful();
         await Assert.That(deniedResult.Value.Action).IsEqualTo(PermissionAction.Deny);
     }
 
@@ -188,11 +189,11 @@ public class PermissionServiceTests
         var (svc, _) = CreateService(agent);
 
         var allowedResult = await svc.CheckAsync("code", "bash", Args(("command", "ls -la /tmp")));
-        await Assert.That(allowedResult.IsSuccess).IsTrue();
+        await Assert.That(allowedResult).IsSuccessful();
         await Assert.That(allowedResult.Value.Action).IsEqualTo(PermissionAction.Allow);
 
         var deniedResult = await svc.CheckAsync("code", "bash", Args(("command", "rm -rf /")));
-        await Assert.That(deniedResult.IsSuccess).IsTrue();
+        await Assert.That(deniedResult).IsSuccessful();
         await Assert.That(deniedResult.Value.Action).IsEqualTo(PermissionAction.Deny);
     }
 
@@ -205,7 +206,7 @@ public class PermissionServiceTests
 
         var result = await svc.CheckAsync("code", "task", Args());
 
-        await Assert.That(result.IsSuccess).IsTrue();
+        await Assert.That(result).IsSuccessful();
         // No asker → Ask falls back to Deny for safety.
         await Assert.That(result.Value.Action).IsEqualTo(PermissionAction.Deny);
     }
@@ -238,7 +239,7 @@ public class PermissionServiceTests
 
         var result = await svc.AskUserAsync(new PermissionRequest("read", "*", JsonDocument.Parse("{}").RootElement, Array.Empty<string>()));
 
-        await Assert.That(result.IsSuccess).IsTrue();
+        await Assert.That(result).IsSuccessful();
         await Assert.That(result.Value.Action).IsEqualTo(PermissionAction.Deny);
     }
 
@@ -318,7 +319,7 @@ public class PermissionServiceTests
         store.Release();
         var result = await checkTask.ConfigureAwait(false);
 
-        await Assert.That(result.IsSuccess).IsTrue();
+        await Assert.That(result).IsSuccessful();
         await Assert.That(result.Value.Action).IsEqualTo(PermissionAction.Allow);
     }
 

@@ -3,6 +3,7 @@ using Harbor.Abstractions.Agents;
 using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Abstractions.Permissions;
 using Harbor.Application.Permissions;
+using Harbor.TestKit;
 using Microsoft.Extensions.Logging.Abstractions;
 using Harbor.Registries.Agents;
 
@@ -60,7 +61,7 @@ public class PermissionPathPolicyPerToolTests
 
         var result = await svc.CheckAsync("code", tool, Args(("path", "safe/file.txt")));
 
-        await Assert.That(result.IsSuccess).IsTrue();
+        await Assert.That(result).IsSuccessful();
         await Assert.That(result.Value.Action).IsEqualTo(PermissionAction.Allow);
     }
 
@@ -83,7 +84,7 @@ public class PermissionPathPolicyPerToolTests
 
         var result = await svc.CheckAsync("code", tool, Args(("path", "other/file.txt")));
 
-        await Assert.That(result.IsSuccess).IsTrue();
+        await Assert.That(result).IsSuccessful();
         await Assert.That(result.Value.Action).IsEqualTo(PermissionAction.Deny);
     }
 
@@ -106,7 +107,7 @@ public class PermissionPathPolicyPerToolTests
 
         var result = await svc.CheckAsync("code", tool, Args(("path", "safe/../../etc/passwd")));
 
-        await Assert.That(result.IsSuccess).IsTrue();
+        await Assert.That(result).IsSuccessful();
         await Assert.That(result.Value.Action).IsEqualTo(PermissionAction.Deny);
     }
 
@@ -135,7 +136,7 @@ public class PermissionPathPolicyPerToolTests
         var svc = CreateService(agent, Asker);
         var result = await svc.CheckAsync("code", tool, Args(("path", "safe/file.txt")));
 
-        await Assert.That(result.IsSuccess).IsTrue();
+        await Assert.That(result).IsSuccessful();
         await Assert.That(result.Value.Action).IsEqualTo(PermissionAction.Allow);
         await Assert.That(result.Value.PersistDecision).IsTrue();
         await Assert.That(captured).IsNotNull();
@@ -160,7 +161,7 @@ public class PermissionPathPolicyPerToolTests
 
         var result = await svc.CheckAsync("code", tool, Args());
 
-        await Assert.That(result.IsSuccess).IsTrue();
+        await Assert.That(result).IsSuccessful();
         await Assert.That(result.Value.Action).IsEqualTo(PermissionAction.Allow);
     }
 }
