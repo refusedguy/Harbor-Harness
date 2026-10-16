@@ -73,16 +73,16 @@ public sealed partial record Session(
         string projectId = ProjectIdFor(directory);
         var now = DateTimeOffset.UtcNow;
         return Rehydrate(
-            Id: id,
-            ProjectId: projectId,
-            Directory: directory,
-            Title: title ?? $"Session {now:yyyy-MM-dd HH:mm}",
-            Agent: agentName,
-            Model: modelId,
-            ProviderId: providerId,
-            CreatedAt: now,
-            UpdatedAt: now,
-            Metadata: SessionMetadata.Empty);
+            id: id,
+            projectId: projectId,
+            directory: directory,
+            title: title ?? $"Session {now:yyyy-MM-dd HH:mm}",
+            agent: agentName,
+            model: modelId,
+            providerId: providerId,
+            createdAt: now,
+            updatedAt: now,
+            metadata: SessionMetadata.Empty);
     }
 
     /// <summary>
