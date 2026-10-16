@@ -133,7 +133,7 @@ public sealed class ModelRefSingleParserTests
         ["apps/Harbor.App.Cli/Repl/ReplRunner.cs"] =
             "REAL DEBT, out of #678's scope. Three sites split the effective model for the "
             + "status line; each is a count-2 split, so none of them truncates.",
-        ["src/Harbor.Application/Onboarding/OnboardingWizard.cs"] =
+        ["src/Harbor.Application/Configuration/OnboardingWizard.cs"] =
             "REAL DEBT, out of #678's scope. The console wizard's 'prefix unless present' rule, "
             + "written twice in one file. It is the reference implementation OnboardingFlow "
             + "mirrors, which is why the two answers differ from ModelRef.Qualify's — see the "

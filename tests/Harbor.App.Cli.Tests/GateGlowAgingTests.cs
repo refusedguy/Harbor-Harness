@@ -65,7 +65,6 @@ using Harbor.Abstractions.Agents;
 using Harbor.Abstractions.Models;
 using Harbor.App.Cli.Repl;
 using Harbor.Application.Configuration;
-using Harbor.Application.Onboarding;
 using Harbor.Application.Permissions;
 using Harbor.Registries.Events;
 using Harbor.TestKit;

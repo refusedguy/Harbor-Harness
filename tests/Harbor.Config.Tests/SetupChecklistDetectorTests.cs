@@ -2,7 +2,6 @@ using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Abstractions.Providers;
 using Harbor.Application.Configuration;
-using Harbor.Application.Onboarding;
 using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Harbor.Config.Tests;

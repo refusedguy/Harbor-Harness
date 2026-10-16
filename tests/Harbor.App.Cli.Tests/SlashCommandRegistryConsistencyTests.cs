@@ -5,7 +5,6 @@ using Harbor.Abstractions.Permissions;
 using Harbor.Abstractions.Tui;
 using Harbor.App.Cli.Repl;
 using Harbor.Application.Configuration;
-using Harbor.Application.Onboarding;
 using Harbor.Application.Permissions;
 using Harbor.TestKit;
 using Harbor.Ui.Framework.Commands;

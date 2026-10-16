@@ -53,7 +53,6 @@ using Harbor.Abstractions.Permissions;
 using Harbor.Abstractions.Sessions;
 using Harbor.App.Cli.Repl;
 using Harbor.Application.Configuration;
-using Harbor.Application.Onboarding;
 using Harbor.Application.Permissions;
 using Harbor.Application.Skills;
 using Harbor.TestKit;
