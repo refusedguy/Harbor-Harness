@@ -14,7 +14,7 @@
 // the shape gets WORSE:
 //
 //   * a ninth member on the aggregate,
-//   * an eighteenth file that holds the aggregate,
+//   * a twentieth file that holds the aggregate,
 //   * a consumer that starts calling a member it did not call before.
 //
 // Every one of those is an ADDITION, and an addition is the only direction that
@@ -230,7 +230,7 @@ public sealed class TokenTrackingRatchet
     private const int MeasuredMemberCount = 8;
 
     /// <summary>How many product files held it when this table was measured.</summary>
-    private const int MeasuredHolderCount = 17;
+    private const int MeasuredHolderCount = 19;
 
     /// <summary>
     ///     How many holders call at least one member: the seven leaf consumers, plus the
@@ -266,7 +266,7 @@ public sealed class TokenTrackingRatchet
 
     /// <summary>
     ///     Every product file that holds the aggregate, with the members it calls.
-    ///     Ten composition roots, seven leaf consumers.
+    ///     Twelve composition roots, seven leaf consumers.
     /// </summary>
     private static readonly TokenHolderBaseline[] BaselineHolders =
     [
@@ -290,6 +290,8 @@ public sealed class TokenTrackingRatchet
             true),
         new("src/Harbor.Abstractions/Sessions/ITokenTracker.cs", [],
             "the declaration itself", true),
+        new("src/Harbor.Abstractions/Sessions/ICompactionView.cs", [],
+            "the history-shaping seam (#1612): declares the tracker only as parameter types, calls nothing", true),
         new("src/Harbor.Application/Agents/AgentLoop.cs", [],
             "names the type as a ctor parameter and calls no member. That parameter exists "
             + "only to be forwarded to the four behaviours; the field that used to hold it was "
@@ -315,6 +317,8 @@ public sealed class TokenTrackingRatchet
             + "adding EstimateMessage until the budget is spent. Added by #472, which moved "
             + "TruncateToFit / TruncateToFitStrict here out of CompactionService — this row "
             + "is the ratchet catching that move rather than the move sneaking past it", false),
+        new("src/Harbor.Application/Sessions/CompactionView.cs", [],
+            "the seam's forwarder (#1612): hands the tracker to the CompactionPolicy statics, calls no member itself", true),
         new("src/Harbor.Application/Sessions/CompactionService.cs",
             ["Estimate", "EstimateMessage", "ShouldCompact"],
             "counts text and history and asks the tracker for the budget verdict "
@@ -426,7 +430,7 @@ public sealed class TokenTrackingRatchet
     }
 
     /// <summary>
-    ///     No eighteenth file holds the aggregate. Every row in the table above is a
+    ///     No twentieth file holds the aggregate. Every row in the table above is a
     ///     composition root that legitimately needs the wide type, or one of the seven leaf
     ///     consumers the split exists for; a new one is coupling being added, not moved.
     /// </summary>
