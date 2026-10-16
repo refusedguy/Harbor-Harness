@@ -492,12 +492,14 @@ public sealed class ToolDispatcher(
             var attempts = new AttemptCount();
             try
             {
-            // Argument validation — returns a tool error instead of letting the
-            // tool throw (e.g. KeyNotFoundException on a missing required prop).
-            ToolResultEntry? invalid = await ValidateArgumentsAsync(tool, toolCall, activity, ct).ConfigureAwait(false);
-            if (invalid is not null)
+            // Argument validation on the Result railway (#1515) — a failure
+            // already published its end event inside the gate; the fold only
+            // materializes the entry, so the tool never throws (e.g.
+            // KeyNotFoundException on a missing required prop).
+            Result<Unit> valid = await ValidateArgumentsAsync(tool, toolCall, activity, ct).ConfigureAwait(false);
+            if (valid.IsFailure)
             {
-                return invalid;
+                return ToolResultEntry.From(toolCall.Id, toolCall.ToolName, ToolResult.Error(valid.Error));
             }
 
             // Permission check.
@@ -533,11 +535,11 @@ public sealed class ToolDispatcher(
                 // A hook edited the args: re-validate the edited payload the
                 // same way the original was validated above (start event is
                 // already published, so the failure entry pairs correctly).
-                ToolResultEntry? editedInvalid = await ValidateArgumentsAsync(
+                Result<Unit> editedValid = await ValidateArgumentsAsync(
                     tool, effectiveCall, activity, ct).ConfigureAwait(false);
-                if (editedInvalid is not null)
+                if (editedValid.IsFailure)
                 {
-                    return editedInvalid;
+                    return ToolResultEntry.From(effectiveCall.Id, effectiveCall.ToolName, ToolResult.Error(editedValid.Error));
                 }
             }
 
@@ -606,26 +608,28 @@ public sealed class ToolDispatcher(
     }
 
     /// <summary>
-    ///     Validate tool arguments. Returns <see langword="null" /> when valid;
-    ///     otherwise publishes the end event and returns the error entry.
+    ///     Validate tool arguments on the Result railway (#1515):
+    ///     <see cref="Result.Success{T}">success</see> (<see cref="Unit" />)
+    ///     when valid; otherwise publishes the end event and returns a
+    ///     failure carrying the entry text.
     /// </summary>
-    private async Task<ToolResultEntry?> ValidateArgumentsAsync(
+    private async Task<Result<Unit>> ValidateArgumentsAsync(
         ITool tool,
         ToolCallPart toolCall,
         Activity? activity,
         CancellationToken ct)
     {
-        var validation = tool.ValidateArguments(toolCall.Args);
-        if (validation.IsSuccess)
+        Result check = tool.ValidateArguments(toolCall.Args);
+        if (check.IsSuccess)
         {
-            return null;
+            return Result.Success(Unit.Value);
         }
 
-        activity?.SetStatus(ActivityStatusCode.Error, validation.Error);
-        var invalid = ToolResult.Error(validation.Error);
+        activity?.SetStatus(ActivityStatusCode.Error, check.Error);
+        var invalid = ToolResult.Error(check.Error);
         await eventBus.PublishAsync(new ToolExecutionEndEvent(
             toolCall.Id, invalid, true), TerminalEventToken).ConfigureAwait(false);
-        return ToolResultEntry.From(toolCall.Id, toolCall.ToolName, invalid);
+        return Result.Failure<Unit>(check.Error);
     }
 
     /// <summary>
