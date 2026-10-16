@@ -59,6 +59,7 @@ public class LayerDependencyTests
     internal static readonly string[] NonDomainHarborAssemblies =
     [
         "Harbor.Application",
+        "Harbor.Hooks",
         "Harbor.Registries",
         "Harbor.Plugins.Runtime",
         "Harbor.Providers.OpenAiCompatible",
@@ -78,6 +79,7 @@ public class LayerDependencyTests
     internal static readonly string[] NonDomainNonSelfHarborAssemblies =
     [
         "Harbor.Application",
+        "Harbor.Hooks",
         "Harbor.Registries",
         "Harbor.Plugins.Runtime",
         "Harbor.App.Cli"
