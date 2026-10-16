@@ -244,7 +244,7 @@ public sealed class SandboxedPluginTool : ITool
             {
                 if (evidenceBased)
                     continue;
-                target = Truncate(rawArgs);
+                target = rawArgs.Truncate(200, string.Empty);
             }
 
             await _audit.WriteAsync(
@@ -284,6 +284,4 @@ public sealed class SandboxedPluginTool : ITool
             _ => null,
         };
     }
-
-    private static string Truncate(string value) => value.Truncate(200, string.Empty);
 }
