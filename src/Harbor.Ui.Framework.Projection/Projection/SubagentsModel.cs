@@ -50,7 +50,7 @@ public static class SubagentsModel
         string? activeSessionId,
         DateTimeOffset now)
     {
-        ArgumentNullException.ThrowIfNull(all);
+        Harbor.Abstractions.Extensions.Ensure.NotNull(all);
         var rows = new List<SubagentRow>();
         for (int i = 0; i < all.Count; i++)
         {
@@ -138,7 +138,7 @@ public static class SubagentsModel
     /// <param name="width">Available width for single-line truncation.</param>
     public static List<string> TranscriptRows(string title, IReadOnlyList<AgentMessage> messages, int width)
     {
-        ArgumentNullException.ThrowIfNull(messages);
+        Harbor.Abstractions.Extensions.Ensure.NotNull(messages);
         var rows = new List<string>(messages.Count + 2);
         rows.Add($"{PanelText.Truncate(title, Math.Max(1, width - 14))} (read-only)");
         rows.Add(PanelText.Separator);

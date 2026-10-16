@@ -19,7 +19,7 @@ public static class PanelRows
     /// <summary>Todo-list rows: header, Spectre-parity icons, done/active/pending summary.</summary>
     public static List<string> TodoRows(IReadOnlyList<TodoItem> todos, int width)
     {
-        ArgumentNullException.ThrowIfNull(todos);
+        Ensure.NotNull(todos);
         var rows = new List<string>(todos.Count + 4);
         rows.Add($"Todo List ({todos.Count} items)");
         rows.Add(PanelText.Separator);
@@ -135,7 +135,7 @@ public static class PanelRows
     /// </summary>
     public static List<string> DiagnosticsRows(IReadOnlyList<PanelDiagnostic> diagnostics, int cursor, int width, int height)
     {
-        ArgumentNullException.ThrowIfNull(diagnostics);
+        Ensure.NotNull(diagnostics);
         var rows = new List<string>(diagnostics.Count + 4);
         rows.Add($"Diagnostics ({diagnostics.Count} issue(s))");
         rows.Add(PanelText.Separator);
@@ -169,7 +169,7 @@ public static class PanelRows
     /// <summary>Diff-preview rows: header per change plus up to 4 body lines.</summary>
     public static List<string> DiffRows(IReadOnlyList<PanelFileChange> changes, int width)
     {
-        ArgumentNullException.ThrowIfNull(changes);
+        Ensure.NotNull(changes);
         var rows = new List<string>(changes.Count * 5 + 4);
         rows.Add($"Diff Preview ({changes.Count} recent change(s))");
         rows.Add(PanelText.Separator);
@@ -212,7 +212,7 @@ public static class PanelRows
     /// <summary>Session sidebar rows: active session highlighted, loading footer.</summary>
     public static List<string> SessionRows(IReadOnlyList<SessionInfo> sessions, SessionId? activeSessionId, bool isLoading, int width, int height)
     {
-        ArgumentNullException.ThrowIfNull(sessions);
+        Ensure.NotNull(sessions);
         var rows = new List<string>(sessions.Count + 4);
         rows.Add("Sessions");
         rows.Add(PanelText.Separator);
@@ -247,7 +247,7 @@ public static class PanelRows
     /// <summary>Log panel rows: level tags, timestamps, truncated bodies.</summary>
     public static List<string> LogRows(IReadOnlyList<DiagnosticEntry> entries, int width, int height)
     {
-        ArgumentNullException.ThrowIfNull(entries);
+        Ensure.NotNull(entries);
         var rows = new List<string>(16);
         rows.Add("Logs (F12 to hide · live ILogger output · file at ~/.harbor/logs/)");
         rows.Add(PanelText.Separator);
@@ -310,7 +310,7 @@ public static class PanelRows
         int width,
         int height)
     {
-        ArgumentNullException.ThrowIfNull(entries);
+        Ensure.NotNull(entries);
         return FileTreeBody(entries, cursor, width, height, displayDir, FileTreeFooter.Empty);
     }
 
@@ -341,8 +341,8 @@ public static class PanelRows
         int width,
         int height)
     {
-        ArgumentNullException.ThrowIfNull(snapshot);
-        ArgumentNullException.ThrowIfNull(rows);
+        Ensure.NotNull(snapshot);
+        Ensure.NotNull(rows);
 
         if (snapshot.Status == AsyncStatus.Error)
         {
@@ -470,7 +470,7 @@ public static class PanelRows
     /// <summary>Skill-freshness rows: header, one pill row per skill, stale summary.</summary>
     public static List<string> SkillFreshnessRows(IReadOnlyList<SkillFreshnessEntry> skills)
     {
-        ArgumentNullException.ThrowIfNull(skills);
+        Ensure.NotNull(skills);
         var rows = new List<string>(skills.Count + 5);
         rows.Add($"Skills ({skills.Count})");
         rows.Add(PanelText.Separator);
