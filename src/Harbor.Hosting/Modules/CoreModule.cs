@@ -5,6 +5,7 @@ using Harbor.Application.Hooks;
 using Harbor.Application.Onboarding;
 using Harbor.Application.Resilience;
 using Harbor.Application.Sessions;
+using Harbor.Application.Skills;
 using Harbor.Abstractions.Permissions;
 using Harbor.Abstractions.Sessions;
 using Harbor.Abstractions.Tools;
