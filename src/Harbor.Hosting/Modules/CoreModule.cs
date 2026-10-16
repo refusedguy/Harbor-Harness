@@ -2,7 +2,6 @@ using Harbor.Application.Agents;
 using Harbor.Application.Agents.Pipeline;
 using Harbor.Application.Diagnostics;
 using Harbor.Application.Hooks;
-using Harbor.Application.Onboarding;
 using Harbor.Application.Resilience;
 using Harbor.Application.Sessions;
 using Harbor.Application.Skills;

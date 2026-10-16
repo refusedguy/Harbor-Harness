@@ -29,7 +29,6 @@ global using Harbor.Abstractions.Tui;
 global using Harbor.Application.Agents;
 global using Harbor.Application.Configuration;
 global using Harbor.Registries.Events;
-global using Harbor.Application.Onboarding;
 global using Harbor.Application.Permissions;
 global using Harbor.Application.Resilience;
 global using Harbor.Application.Sessions;

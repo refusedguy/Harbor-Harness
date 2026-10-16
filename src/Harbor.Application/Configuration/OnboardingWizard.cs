@@ -2,9 +2,8 @@ using System.Globalization;
 using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Agents;
 using Harbor.Abstractions.Models.Identifiers;
-using Harbor.Application.Configuration;
 using Microsoft.Extensions.Logging;
-namespace Harbor.Application.Onboarding;
+namespace Harbor.Application.Configuration;
 /// <summary>
 ///     First-run onboarding wizard. Walks user through:
 ///     1. Pick a provider (from presets)

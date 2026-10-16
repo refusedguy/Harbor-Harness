@@ -92,7 +92,7 @@ public sealed record OnboardingResult(
 /// </para>
 /// <para>
 /// Step semantics mirror the console
-/// <c>Harbor.Application.Onboarding.OnboardingWizard</c> (number-or-id
+/// <c>Harbor.Application.Configuration.OnboardingWizard</c> (number-or-id
 /// provider pick, auth skipped for local providers, empty model input keeps
 /// the default, <c>provider/</c> prefix added unless present, agent pick
 /// projected from the registry with the fallback as entry 1).
