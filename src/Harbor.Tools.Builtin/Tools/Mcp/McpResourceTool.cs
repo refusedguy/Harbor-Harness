@@ -98,8 +98,8 @@ public sealed partial class McpResourceTool : ITool
 
         McpResourceToolLog.ReadingResource(_logger, server, uri);
 
-        using var paramsDoc = McpJsonRpc.BuildResourceReadParams(uri);
-        var invoked = await registry.InvokeAsync(server, "resources/read", paramsDoc.RootElement, cancellationToken)
+        JsonElement paramsEl = McpJsonRpc.BuildResourceReadParams(uri);
+        var invoked = await registry.InvokeAsync(server, "resources/read", paramsEl, cancellationToken)
             .ConfigureAwait(false);
         if (invoked.IsFailure)
         {
