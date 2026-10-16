@@ -1,4 +1,5 @@
 using Harbor.Abstractions.Models.Identifiers;
+using Ensure = Harbor.Abstractions.Extensions.Ensure;
 using Harbor.Tui.CellForge.Widgets;
 
 using CSharpFunctionalExtensions;
@@ -149,7 +150,7 @@ public sealed class OnboardingFlow
         IReadOnlyDictionary<string, IReadOnlyList<string>>? liveModels = null,
         IReadOnlyList<OnboardingAgent>? agents = null)
     {
-        ArgumentNullException.ThrowIfNull(providers);
+        Ensure.NotNull(providers);
         _providers = providers;
         _agents = agents ?? Array.Empty<OnboardingAgent>();
         _configured = configuredProviderIds is null

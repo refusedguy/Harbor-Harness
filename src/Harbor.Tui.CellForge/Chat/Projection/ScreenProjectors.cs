@@ -1,4 +1,5 @@
 using System.Collections.Immutable;
+using Ensure = Harbor.Abstractions.Extensions.Ensure;
 using System.ComponentModel;
 using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Terminal.Abstractions.ViewModels;
@@ -49,8 +50,8 @@ public sealed class ScreenProjectorRegistry
     /// <summary>Registers (or replaces) the projector for its <see cref="IProjector{TState}.ScreenId"/>.</summary>
     public void Register(IProjector<UiState> projector)
     {
-        ArgumentNullException.ThrowIfNull(projector);
-        ArgumentException.ThrowIfNullOrWhiteSpace(projector.ScreenId);
+        Ensure.NotNull(projector);
+        Ensure.NotBlank(projector.ScreenId);
         _byScreenId[projector.ScreenId] = projector;
     }
 
@@ -64,7 +65,7 @@ public sealed class ScreenProjectorRegistry
     /// </summary>
     public bool Project(string screenId, UiState state)
     {
-        ArgumentNullException.ThrowIfNull(state);
+        Ensure.NotNull(state);
         if (!_byScreenId.TryGetValue(screenId, out var projector))
             return false;
         projector.Project(state);
@@ -136,7 +137,7 @@ public sealed class ChatScreenProjector : IProjector<UiState>, IDisposable
     /// <inheritdoc/>
     public void Project(UiState state)
     {
-        ArgumentNullException.ThrowIfNull(state);
+        Ensure.NotNull(state);
         ProjectStatus(state);
         ProjectStreaming(state);
         SyncInputFromState(state);

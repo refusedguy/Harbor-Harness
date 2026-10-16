@@ -92,8 +92,8 @@ public sealed class OverlayStack
     /// </summary>
     public void Push(IOverlayLayer layer)
     {
-        ArgumentNullException.ThrowIfNull(layer);
-        ArgumentException.ThrowIfNullOrWhiteSpace(layer.Id);
+        Harbor.Abstractions.Extensions.Ensure.NotNull(layer);
+        Harbor.Abstractions.Extensions.Ensure.NotBlank(layer.Id);
         for (int i = 0; i < _layers.Count; i++)
         {
             if (string.Equals(_layers[i].Id, layer.Id, StringComparison.Ordinal))
@@ -206,7 +206,7 @@ public sealed class OverlayStack
     /// </summary>
     public void PaintOver(UIR.ScreenBuffer buffer)
     {
-        ArgumentNullException.ThrowIfNull(buffer);
+        Harbor.Abstractions.Extensions.Ensure.NotNull(buffer);
         if (_layers.Count == 0)
         {
             return;
@@ -378,7 +378,7 @@ public static class OverlayPopup
     /// </summary>
     public static void Clear(UIR.ScreenBuffer buffer, UIR.Rect rect)
     {
-        ArgumentNullException.ThrowIfNull(buffer);
+        Harbor.Abstractions.Extensions.Ensure.NotNull(buffer);
         buffer.Fill(rect, UIR.Cell.Blank);
     }
 }

@@ -1,6 +1,7 @@
 namespace Harbor.Tui.CellForge.Rendering;
 
 using Harbor.Ui.Framework.Rendering;
+using Ensure = Harbor.Abstractions.Extensions.Ensure;
 using Harbor.Ui.Framework.Rendering.Protocol;
 
 // #436: this adapter straddles the engine/host boundary inside the engine's
@@ -67,8 +68,8 @@ public static class CellForgeDiffEncoder
         IReadOnlyList<UIR.Rect>? hints,
         long sequence)
     {
-        ArgumentNullException.ThrowIfNull(engine);
-        ArgumentNullException.ThrowIfNull(next);
+        Ensure.NotNull(engine);
+        Ensure.NotNull(next);
         var prev = SnapshotFront(engine.Front);
         _cachedEncoder ??= new RowHashDiffEncoder();
         return _cachedEncoder.Encode(prev, next, hints, sequence);
@@ -145,7 +146,7 @@ public static class CellForgeDiffEncoder
             IReadOnlyList<UIR.Rect>? hints,
             long sequence)
         {
-            ArgumentNullException.ThrowIfNull(next);
+            Ensure.NotNull(next);
             SyncSnapshot();
             return _portable.Encode(_snapshot, next, hints, sequence);
         }

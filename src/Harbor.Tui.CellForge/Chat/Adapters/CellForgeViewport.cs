@@ -1,4 +1,5 @@
 using Harbor.Ui.Framework.Projection;
+using Ensure = Harbor.Abstractions.Extensions.Ensure;
 
 namespace Harbor.Tui.CellForge.Rendering;
 
@@ -95,7 +96,7 @@ public sealed class CellForgeViewport : IUiViewport
     /// </summary>
     public void Apply(UiScreenModel screen)
     {
-        ArgumentNullException.ThrowIfNull(screen);
+        Ensure.NotNull(screen);
         TotalLines = screen.Transcript.RenderedLines.Count;
         ScrollOffset = FollowTail ? 0 : Math.Clamp(ScrollOffset, 0, MaxScrollOffset);
     }

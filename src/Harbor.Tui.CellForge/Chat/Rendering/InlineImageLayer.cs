@@ -1,4 +1,5 @@
 using System.Runtime.InteropServices;
+using Ensure = Harbor.Abstractions.Extensions.Ensure;
 using Harbor.Tui.CellForge.Capabilities;
 using Harbor.Ui.Framework.Rendering;
 
@@ -154,7 +155,7 @@ public sealed class InlineImageLayer : IInlineImageSink
     /// </summary>
     public void Emit(AnsiWriter writer)
     {
-        ArgumentNullException.ThrowIfNull(writer);
+        Ensure.NotNull(writer);
 
         // A geometry change reflows the terminal's own cell grid, so nothing
         // can be assumed to still be where we left it: resend the lot.
