@@ -24,11 +24,10 @@ namespace Harbor.Application.Sessions;
 ///         falls back to working in the caller's tree.
 ///     </para>
 ///     <para>
-///         The runs root is resolved exactly like
-///         <c>Harbor.Hosting.HarborPaths.GetHarborHome()</c> (<c>HARBOR_HOME</c>
-///         or <c>~/.harbor</c>) but WITHOUT referencing the Hosting project:
-///         Application depends on Domain only, so the five lines live here
-///         rather than behind a new <c>ProjectReference</c>.
+///         Path resolution (<c>HARBOR_HOME</c> or <c>~/.harbor</c>) lives in
+///         <see cref="IWorkspacePaths" /> / <see cref="WorkspacePaths" /> (#1610):
+///         this class resolves its own directories through
+///         <c>WorkspacePaths.Default</c> like every other S2–S8 slice.
 ///     </para>
 /// </remarks>
 public static class WorkspaceMaterializer
@@ -68,7 +67,7 @@ public static class WorkspaceMaterializer
                 $"WorkspaceIsolation.{contract.Isolation} materialization is not implemented in v1 " +
                 "(S2 supports git worktrees only) — refusing to fall back to working in the caller's tree.");
 
-        string runDir = RunDir(runId.Value);
+        string runDir = WorkspacePaths.Default.RunDir(runId.Value);
         string manifestPath = Path.Combine(runDir, "manifest.json");
         string worktreePath = Path.Combine(runDir, "worktree");
 
@@ -200,7 +199,7 @@ public static class WorkspaceMaterializer
         // Hoisted to the guard level: CFE0001 does not carry the guard into
         // the catch/using blocks below.
         string checkedRunId = id.Value;
-        string manifestPath = Path.Combine(RunDir(checkedRunId), "manifest.json");
+        string manifestPath = Path.Combine(WorkspacePaths.Default.RunDir(checkedRunId), "manifest.json");
         byte[] bytes;
         try
         {
@@ -240,7 +239,7 @@ public static class WorkspaceMaterializer
             .Bind(manifest => RunChangeTransitions.TryTransition(manifest.State, to)
                 .Map(state => manifest with { State = state }))
             .Bind(advanced => WriteManifestAtomic(
-                    Path.Combine(RunDir(advanced.RunId), "manifest.json"), advanced, overwrite: true)
+                    Path.Combine(WorkspacePaths.Default.RunDir(advanced.RunId), "manifest.json"), advanced, overwrite: true)
                 .Map(_ => advanced));
 
     /// <summary>
@@ -289,7 +288,7 @@ public static class WorkspaceMaterializer
         }
 
         var released = manifest with { State = RunState.Released };
-        string manifestPath = Path.Combine(RunDir(manifest.RunId), "manifest.json");
+        string manifestPath = Path.Combine(WorkspacePaths.Default.RunDir(manifest.RunId), "manifest.json");
         Result<string> written = WriteManifestAtomic(manifestPath, released, overwrite: true);
         if (written.IsFailure)
             return written.ConvertFailure<RunManifest>();
@@ -309,7 +308,7 @@ public static class WorkspaceMaterializer
         string[] dirs;
         try
         {
-            dirs = Directory.GetDirectories(RunsRoot());
+            dirs = Directory.GetDirectories(WorkspacePaths.Default.RunsRoot());
         }
         catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException || ex is DirectoryNotFoundException)
         {
@@ -324,17 +323,6 @@ public static class WorkspaceMaterializer
         manifests.Sort(static (a, b) => a.CreatedAtUtc.CompareTo(b.CreatedAtUtc));
         return manifests;
     }
-
-    internal static string GetHarborHome()
-    {
-        if (Environment.GetEnvironmentVariable("HARBOR_HOME") is { Length: > 0 } custom)
-            return custom;
-        return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".harbor");
-    }
-
-    internal static string RunsRoot() => Path.Combine(GetHarborHome(), "runs");
-
-    internal static string RunDir(string runId) => Path.Combine(RunsRoot(), runId);
 
     private static Result<string> ValidateRunId(string? value)
     {
