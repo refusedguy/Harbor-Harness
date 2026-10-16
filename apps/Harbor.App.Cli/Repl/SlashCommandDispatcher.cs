@@ -540,7 +540,10 @@ internal sealed class SlashCommandDispatcher
                 return Task.FromResult(Result.Success());
             }
 
-            ctx.Writer($"Renderer: {pipeline.CurrentBackendId} | available: {string.Join(", ", pipeline.AvailableBackends)}");
+            // #1509: absence is Maybe, not an exception — a disposed pipeline
+            // reports "<disposed>" instead of throwing.
+            string label = pipeline.TryGetBackendId().Match(static backendId => backendId, static () => "<disposed>");
+            ctx.Writer($"Renderer: {label} | available: {string.Join(", ", pipeline.AvailableBackends)}");
             ctx.Writer("Usage: /renderer <backend>");
             return Task.FromResult(Result.Success());
         });
