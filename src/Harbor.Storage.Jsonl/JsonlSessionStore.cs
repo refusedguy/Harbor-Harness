@@ -176,24 +176,22 @@ public sealed class JsonlSessionStore : ISessionStore, ISessionCheckpointStore
             ct.ThrowIfCancellationRequested();
 
             var metadata = await GetStatsAsync(sessionId, ct).ConfigureAwait(false);
-            return new Session(
-                header.Id,
-                header.ProjectId,
-                header.Directory,
-                header.Title,
-                header.Agent,
-                header.Model,
-                header.ProviderId,
-                header.CreatedAt,
-                SessionFileIO.ResolveUpdatedAt(header, sessionFile),
-                metadata.IsSuccess ? metadata.Value : SessionMetadata.Empty)
-            {
-                ParentSessionId = header.ParentSessionId,
-                Status = header.Status,
-                GitBranch = header.GitBranch,
-                GitIsDirty = header.GitIsDirty,
-                Kind = header.Kind
-            };
+            return Session.Rehydrate(
+                Id: header.Id,
+                ProjectId: header.ProjectId,
+                Directory: header.Directory,
+                Title: header.Title,
+                Agent: header.Agent,
+                Model: header.Model,
+                ProviderId: header.ProviderId,
+                CreatedAt: header.CreatedAt,
+                UpdatedAt: SessionFileIO.ResolveUpdatedAt(header, sessionFile),
+                Metadata: metadata.IsSuccess ? metadata.Value : SessionMetadata.Empty,
+                ParentSessionId: header.ParentSessionId,
+                Status: header.Status,
+                GitBranch: header.GitBranch,
+                GitIsDirty: header.GitIsDirty,
+                Kind: header.Kind);
         }, ResultErrors.Message).ConfigureAwait(false);
 
         return loaded.TapError(e => JsonlSessionStoreLog.ReadSessionFailed(_logger, sessionId, e));
@@ -229,24 +227,22 @@ public sealed class JsonlSessionStore : ISessionStore, ISessionCheckpointStore
 #pragma warning restore CFE0001
                 if (projectId is not null && header.ProjectId != projectId)
                     continue;
-                sessions.Add(new Session(
-                    header.Id,
-                    header.ProjectId,
-                    header.Directory,
-                    header.Title,
-                    header.Agent,
-                    header.Model,
-                    header.ProviderId,
-                    header.CreatedAt,
-                    SessionFileIO.ResolveUpdatedAt(header, file),
-                    SessionMetadata.Empty)
-                {
-                    ParentSessionId = header.ParentSessionId,
-                    Status = header.Status,
-                    GitBranch = header.GitBranch,
-                    GitIsDirty = header.GitIsDirty,
-                    Kind = header.Kind
-                });
+                sessions.Add(Session.Rehydrate(
+                    Id: header.Id,
+                    ProjectId: header.ProjectId,
+                    Directory: header.Directory,
+                    Title: header.Title,
+                    Agent: header.Agent,
+                    Model: header.Model,
+                    ProviderId: header.ProviderId,
+                    CreatedAt: header.CreatedAt,
+                    UpdatedAt: SessionFileIO.ResolveUpdatedAt(header, file),
+                    Metadata: SessionMetadata.Empty,
+                    ParentSessionId: header.ParentSessionId,
+                    Status: header.Status,
+                    GitBranch: header.GitBranch,
+                    GitIsDirty: header.GitIsDirty,
+                    Kind: header.Kind));
             }
 
             sessions.Sort((a, b) => b.UpdatedAt.CompareTo(a.UpdatedAt));
