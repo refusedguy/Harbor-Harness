@@ -111,7 +111,7 @@ public static class UiStrings
     /// </summary>
     public static string Get(string key, string locale)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(key);
+        Harbor.Abstractions.Extensions.Ensure.NotBlank(key);
         string tag = Normalize(locale) ?? DefaultLocale;
         if (!tag.Equals(DefaultLocale, StringComparison.Ordinal))
         {

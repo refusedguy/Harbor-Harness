@@ -1,3 +1,5 @@
+using Ensure = Harbor.Abstractions.Extensions.Ensure;
+
 namespace Harbor.Ui.Framework.State;
 
 /// <summary>
@@ -20,7 +22,7 @@ public sealed class QuickSwitchSlots
     /// <summary>Binds a session id to a slot (1..9). Re-binding replaces.</summary>
     public void Assign(int slot, string sessionId)
     {
-        ArgumentNullException.ThrowIfNull(sessionId);
+        Ensure.NotNull(sessionId);
         if (slot is < 1 or > Count)
         {
             throw new ArgumentOutOfRangeException(nameof(slot));
@@ -47,7 +49,7 @@ public sealed class QuickSwitchSlots
     /// </summary>
     public void Push(string sessionId)
     {
-        ArgumentNullException.ThrowIfNull(sessionId);
+        Ensure.NotNull(sessionId);
 
         for (int i = 0; i < Count - 1; i++)
         {

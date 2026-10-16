@@ -588,7 +588,7 @@ public static class UnicodeWidth
     /// </summary>
     public static int WidthCached(string text)
     {
-        ArgumentNullException.ThrowIfNull(text);
+        Harbor.Abstractions.Extensions.Ensure.NotNull(text);
         if (t_trackLookups)
         {
             t_widthLookups++;

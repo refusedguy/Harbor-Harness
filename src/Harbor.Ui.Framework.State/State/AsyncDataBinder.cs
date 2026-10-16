@@ -1,3 +1,5 @@
+using Ensure = Harbor.Abstractions.Extensions.Ensure;
+
 namespace Harbor.Ui.Framework.State;
 
 /// <summary>
@@ -27,7 +29,7 @@ public static class AsyncDataBinder
     /// <typeparam name="TItem">Row type held by the bound collection.</typeparam>
     public static void Apply<TItem>(AsyncData<IReadOnlyList<TItem>> data, IAsyncDataSink<TItem> sink)
     {
-        ArgumentNullException.ThrowIfNull(sink);
+        Ensure.NotNull(sink);
 
         switch (data.Status)
         {

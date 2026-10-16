@@ -22,7 +22,7 @@ public static class KeyEventAdapter
     /// </summary>
     public static AppMsg.KeyInput ToKeyInput(UiKeyDto dto, ChatKeyMap keyMap)
     {
-        ArgumentNullException.ThrowIfNull(keyMap);
+        Harbor.Abstractions.Extensions.Ensure.NotNull(keyMap);
         var key = ToUiKey(dto);
         return new AppMsg.KeyInput(keyMap.Resolve(key), key);
     }
@@ -42,7 +42,7 @@ public static class KeyEventAdapter
     /// </summary>
     public static bool TryConvert(in KeyEvent evt, ChatKeyMap keyMap, out AppMsg.KeyInput msg)
     {
-        ArgumentNullException.ThrowIfNull(keyMap);
+        Harbor.Abstractions.Extensions.Ensure.NotNull(keyMap);
         if (!KeyEventMapper.TryMap(evt, out var dto))
         {
             msg = new AppMsg.KeyInput(ChatAction.None, UiKey.Unknown);

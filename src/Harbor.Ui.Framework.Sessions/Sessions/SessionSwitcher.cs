@@ -67,7 +67,7 @@ public sealed class SessionSwitcher
     /// <returns>True on success, false on failure.</returns>
     public async Task<bool> OpenAsync(Session session, UiStore targetStore)
     {
-        ArgumentNullException.ThrowIfNull(targetStore);
+        Harbor.Abstractions.Extensions.Ensure.NotNull(targetStore);
 
         // #596: this used to be
         //     GetAllAgents().FirstOrDefault(a => a.Name.Value == session.Agent)
