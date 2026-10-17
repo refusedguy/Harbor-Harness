@@ -184,6 +184,6 @@ public static class HostsCatalog
 ///     to make the read reflection-free.
 /// </summary>
 [System.Text.Json.Serialization.JsonSerializable(typeof(JsonElement))]
-internal sealed partial class HostsCatalogJsonContext : JsonSerializerContext
+internal sealed partial class HostsCatalogJsonContext : System.Text.Json.Serialization.JsonSerializerContext
 {
 }

@@ -280,7 +280,7 @@ public sealed class LspClient : IAsyncDisposable
             // no document lifetime is tracked by the read loop. Malformed
             // bodies still throw JsonException — the loop logs and aborts the
             // session exactly as before.
-            return JsonSerializer.Deserialize(body.AsMemory(0, contentLength), LspJsonContext.Default.JsonElement);
+            return JsonSerializer.Deserialize(body.AsSpan(0, contentLength), LspJsonContext.Default.JsonElement);
         }
         finally
         {
