@@ -33,10 +33,11 @@ internal static class RegistriesModule
         var agentRegistry = ToolsCatalog.CreateAgentRegistry(ctx);
 
         // #477: remote MCP transports are a registration seam. The resolver is
-        // built once from the builtins + whatever the host passed through
-        // HarborComposeOptions.McpTransports, handed to the registry (which
-        // both validates the config name and dispatches on it) and published
-        // into the container so plugins/hosts can enumerate the same set.
+        // built once here (the composition root, #1576) from the builtins +
+        // whatever the host passed through HarborComposeOptions.McpTransports,
+        // injected into the registry (which both validates the config name and
+        // dispatches on it) and published into the container so plugins/hosts
+        // can enumerate the same set.
         var mcpTransports = McpTransportResolver.Compose(ctx.Options.McpTransports);
         foreach (IMcpTransportFactory mcpTransport in mcpTransports.Factories)
             services.AddSingleton<IMcpTransportFactory>(mcpTransport);
