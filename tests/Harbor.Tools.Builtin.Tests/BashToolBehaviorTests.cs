@@ -183,7 +183,8 @@ public class BashToolBehaviorTests
 
     // ── Helpers ───────────────────────────────────────────────────────────
 
-    private static BashTool NewTool() => new(NullLogger<BashTool>.Instance);
+    private static BashTool NewTool() =>
+        new(new SystemProcessProxy(), NullLogger<BashTool>.Instance);
 
     private static ToolContext CreateContext() => new(
         "test-session",
