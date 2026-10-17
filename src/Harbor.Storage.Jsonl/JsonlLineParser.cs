@@ -33,7 +33,8 @@ namespace Harbor.Storage.Jsonl;
 ///         parser. A <c>parts</c> entry this build cannot rebuild used to yield
 ///         <see langword="null" /> and be skipped, so a session written by a
 ///         newer Harbor reloaded here with the unknown part missing and nothing
-///         logged. It is refused by name now; see <see cref="BuildContentPart"/>
+///         logged. It is refused by name now; see
+///         Harbor.Storage.Shared.MessagePartAdapter
 ///         for why there is no third option.
 ///     </para>
 /// </remarks>
@@ -488,7 +489,8 @@ internal static class JsonlLineParser
                 continue;
 
             // #550: there is no null to skip any more. A part that cannot be rebuilt
-            // names its tag and takes the record with it (see BuildContentPart) —
+            // names its tag and takes the record with it (the shared adapter's
+            // message-part projection) —
             // the previous `if (part is not null)` is exactly the line that let a
             // part disappear from a reloaded transcript without a word.
             parts.Add(ParseSinglePart(ref reader));
@@ -497,10 +499,15 @@ internal static class JsonlLineParser
         return parts;
     }
 
-    /// <summary>Parses one object of the <c>parts</c> array, or throws naming what is wrong with it.</summary>
+    /// <summary>Not a tag → type factory: the scan stays span-zero-alloc and
+    ///     hands the scanned fields to
+    ///     <c>Harbor.Storage.Shared.MessagePartAdapter</c>, which owns the
+    ///     tag → type table and refuses a part it cannot rebuild by name
+    ///     (#550, #1591).</summary>
     private static ContentPart ParseSinglePart(ref Utf8JsonReader reader)
     {
-        PartType partType = PartType.Unknown;
+        MessagePartAdapter.PartTagKind partKind = MessagePartAdapter.PartTagKind.Unknown;
+        string? unknownTagText = null;
         ReadOnlySpan<byte> tag = default;
         string? text = null;
         string? partId = null;
@@ -510,6 +517,7 @@ internal static class JsonlLineParser
         string? path = null;
         string? mimeType = null;
         long sizeBytes = 0;
+        bool hasSizeBytes = false;
 
         while (reader.Read() && reader.TokenType != JsonTokenType.EndObject)
         {
@@ -523,10 +531,14 @@ internal static class JsonlLineParser
             {
                 case PartProperty.Type:
                     // Borrowed, not copied: the tag is only ever turned into a string
-                    // on the throw path, so the success path allocates nothing more
-                    // than it did before (#460's read gate measures exactly this).
+                    // on the throw path (an unknown discriminator), so the success path
+                    // allocates nothing more than it did before (#460's read gate
+                    // measures exactly this).
                     tag = reader.ValueSpan;
-                    partType = MatchPartType(tag);
+                    partKind = MessagePartAdapter.ClassifyTag(tag);
+                    unknownTagText = partKind == MessagePartAdapter.PartTagKind.Unknown && !tag.IsEmpty
+                        ? System.Text.Encoding.UTF8.GetString(tag)
+                        : null;
                     break;
                 case PartProperty.Text:
                     text = reader.GetString();
@@ -549,6 +561,7 @@ internal static class JsonlLineParser
                     break;
                 case PartProperty.SizeBytes:
                     sizeBytes = reader.GetInt64();
+                    hasSizeBytes = true;
                     break;
                 default:
                     reader.Skip();
@@ -556,74 +569,44 @@ internal static class JsonlLineParser
             }
         }
 
-        return BuildContentPart(partType, tag, text, partId, toolName, args, hasArgs, path, mimeType, sizeBytes);
-    }
+        // The tag → type table and the refusal texts live in the shared adapter;
+        // this transport keeps the span scan and its zero-alloc success path
+        // (#1591: the tag string exists only on the refusal path, exactly as the
+        // previous TagName did).
+        var scan = new MessagePartAdapter.PartScan(
+            Tag: unknownTagText,
+            Text: text,
+            PartId: partId,
+            ToolName: toolName,
+            Args: args,
+            HasArgs: hasArgs,
+            Path: path,
+            MimeType: mimeType,
+            SizeBytes: sizeBytes,
+            HasSizeBytes: hasSizeBytes);
 
-    /// <summary>Builds a <see cref="ContentPart" /> from scanned fields, or refuses the record by name.</summary>
-    /// <remarks>
-    ///     #550. This is a tag → type factory, not a walk over the part union, so
-    ///     <see cref="ContentPartVisitor{TResult}" /> never reached it and every arm
-    ///     used to fall into <c>_ => null</c>, which the caller skipped: a session
-    ///     written by a NEWER Harbor reloaded in this one with the unknown part
-    ///     missing and nothing anywhere saying why. Both refusals are loud and both
-    ///     name the part, because the reader has no honest third option — there is no
-    ///     union case that stands for "a part I could not read", and inventing one
-    ///     would be the same loss with a nicer shape.
-    ///     <list type="bullet">
-    ///         <item>An unknown tag is version skew: this build is older than the
-    ///         file, and the operator is the only one who can resolve that.</item>
-    ///         <item>A known tag missing a field is a corrupt record: the line
-    ///         claims a part it does not contain.</item>
-    ///     </list>
-    ///     The throw rides the store's existing per-record failure channel —
-    ///     <see cref="ParseAssistantPayload" /> catches it, names the message, and
-    ///     the reader logs it while still returning the rest of the transcript.
-    /// </remarks>
-    private static ContentPart BuildContentPart(
-        PartType partType,
-        ReadOnlySpan<byte> tag,
-        string? text,
-        string? partId,
-        string? toolName,
-        JsonElement args,
-        bool hasArgs,
-        string? path,
-        string? mimeType,
-        long sizeBytes)
-    {
-        return partType switch
+        if (!MessagePartAdapter.TryBuildContentPart(
+                in scan,
+                partKind,
+                MessagePartAdapter.ArgsPolicy.RequirePresent,
+                MessagePartAdapter.SizePolicy.TolerateMissing,
+                out ContentPart? part,
+                out MessagePartAdapter.PartRefusal refusal))
         {
-            PartType.Text when text is not null => new TextPart(text),
-            PartType.Thinking when text is not null => new ThinkingPart(text),
-            PartType.ToolCall when partId is not null && toolName is not null && hasArgs
-                => new ToolCallPart(partId, toolName, args),
-            PartType.File when path is not null && mimeType is not null => new FilePart(path, mimeType, sizeBytes),
+            throw new JsonException(
+                MessagePartAdapter.FormatRefusal(refusal, MessagePartAdapter.PartTransport.JsonlLine));
+        }
 
-            PartType.Text => throw new JsonException("content part of type 'text' is missing 'text'"),
-            PartType.Thinking => throw new JsonException("content part of type 'thinking' is missing 'text'"),
-            PartType.ToolCall => throw new JsonException(
-                "content part of type 'tool_call' is missing 'id', 'toolName' or 'args'"),
-            PartType.File => throw new JsonException(
-                "content part of type 'file' is missing 'path', 'mimeType' or 'sizeBytes'"),
-
-            // The foreign-tag refusal is the catch-all rather than one arm per enum
-            // member. An enum with an explicit underlying type carries unnamed values,
-            // and a set of named arms does NOT make the switch expression exhaustive
-            // (CS8524) — a named `PartType.Unknown` arm would not have covered them.
-            // Every unnamed value is the same refusal anyway: a tag this build has no
-            // row for.
-            _ => throw new JsonException(
-                $"content part type '{TagName(tag)}' is not known to this build — this session was written by a newer Harbor, and the record is refused rather than read with the part missing"),
-        };
+        return part;
     }
 
-    /// <summary>
-    ///     The offending tag, spelled out for a diagnostic. Only ever called from a
-    ///     <c>throw</c> expression, so the one string it allocates cannot reach the
-    ///     read hot path.
-    /// </summary>
-    private static string TagName(ReadOnlySpan<byte> tag) =>
-        tag.IsEmpty ? "<no 'type' discriminator>" : System.Text.Encoding.UTF8.GetString(tag);
+    // BuildContentPart and TagName moved to the shared adapter with its whole
+    // #550 rationale (an unknown tag is version skew, a known tag missing a
+    // member is a corrupt record, and the refusal names the part) — see
+    // Harbor.Storage.Shared.MessagePartAdapter (#1591). The throw above rides
+    // the store's existing per-record failure channel — ParseAssistantPayload
+    // catches it, names the message, and the reader logs it while still
+    // returning the rest of the transcript.
 
     // ── Property matchers (zero-alloc, UTF-8 span compare) ─────────────────
 
@@ -634,7 +617,6 @@ internal static class JsonlLineParser
     private enum ToolResultProperty : byte { Other, Results }
     private enum ResultEntryProperty : byte { Other, ToolCallId, ToolName, Output, IsError }
     private enum PartProperty : byte { Other, Type, Text, Id, ToolName, Args, Path, MimeType, SizeBytes }
-    private enum PartType : byte { Unknown, Text, Thinking, ToolCall, File }
 
     private static LineProperty MatchLineProperty(ReadOnlySpan<byte> p) => p switch
     {
@@ -705,14 +687,8 @@ internal static class JsonlLineParser
         _ => PartProperty.Other
     };
 
-    private static PartType MatchPartType(ReadOnlySpan<byte> p) => p switch
-    {
-        var x when x.SequenceEqual("text"u8) => PartType.Text,
-        var x when x.SequenceEqual("thinking"u8) => PartType.Thinking,
-        var x when x.SequenceEqual("tool_call"u8) => PartType.ToolCall,
-        var x when x.SequenceEqual("file"u8) => PartType.File,
-        _ => PartType.Unknown
-    };
+    // MatchPartType moved to the shared adapter: MessagePartAdapter.ClassifyTag
+    // is the same zero-alloc span compare over the one tag vocabulary (#1591).
 
     private static MessageRole MatchRole(ReadOnlySpan<byte> p) => p switch
     {

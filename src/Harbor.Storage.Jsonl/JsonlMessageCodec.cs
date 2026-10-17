@@ -82,7 +82,9 @@ internal static class JsonlMessageCodec
 
     /// <summary>
     ///     Project a single <see cref="ContentPart" /> into its JSON shape
-    ///     using a named DTO type (AOT-registered).
+    ///     using a named DTO type (AOT-registered). Tag strings come from
+    ///     <c>Harbor.Storage.Shared.MessagePartAdapter</c> — the one place the
+    ///     persisted discriminator vocabulary is declared (#1591).
     /// </summary>
     /// <remarks>
     ///     #550: the former <c>_ => new UnknownPartPayload("unknown")</c> wrote a
@@ -94,10 +96,10 @@ internal static class JsonlMessageCodec
     /// </remarks>
     public static object SerializePart(ContentPart part) => part switch
     {
-        TextPart t => new TextPartPayload("text", t.Text),
-        ThinkingPart th => new ThinkingPartPayload("thinking", th.Text),
-        ToolCallPart tc => new ToolCallPartPayload("tool_call", tc.Id, tc.ToolName, tc.Args),
-        FilePart f => new FilePartPayload("file", f.Path, f.MimeType, f.SizeBytes),
+        TextPart t => new TextPartPayload(MessagePartAdapter.TextTag, t.Text),
+        ThinkingPart th => new ThinkingPartPayload(MessagePartAdapter.ThinkingTag, th.Text),
+        ToolCallPart tc => new ToolCallPartPayload(MessagePartAdapter.ToolCallTag, tc.Id, tc.ToolName, tc.Args),
+        FilePart f => new FilePartPayload(MessagePartAdapter.FileTag, f.Path, f.MimeType, f.SizeBytes),
         _ => throw Unsupported(part.Type, part.GetType().Name, "part")
     };
 
@@ -366,16 +368,18 @@ internal static class JsonlMessageCodec
     ///     Parse a single JSONL part back into its <see cref="ContentPart" />.
     /// </summary>
     /// <remarks>
-    ///     #550 — this is a tag → type factory, not a walk over the part union, so
-    ///     <see cref="ContentPartVisitor{TResult}" /> never reached it and its
-    ///     <c>_ => null</c> fed a <c>DeserializePart(partEl) is not null</c> filter in
-    ///     <see cref="DecodeAssistant" />: a part tag this build does not know vanished
-    ///     from the reloaded transcript with no error anywhere. Every refusal here is
-    ///     loud, and refusing an unknown tag is the *only* honest answer — the union has
-    ///     no case for "a part I could not read", and the "forward-compat with future
-    ///     part types" this used to claim described a data loss, not a compatibility.
-    ///     The store's own read path refuses the same tags the same way
-    ///     (<see cref="JsonlLineParser" />); the two have to agree.
+    ///     #550 — the part object's projection is the shared
+    ///     <c>Harbor.Storage.Shared.MessagePartAdapter</c> tag → type factory
+    ///     (#1591): one vocabulary, one required-member census for the element
+    ///     reader, the row reader and the span parser. This method keeps its
+    ///     shape and its <c>JsonException</c> contract: every refusal is loud,
+    ///     and refusing an unknown tag is the *only* honest answer — the union
+    ///     has no case for "a part I could not read", and the "forward-compat
+    ///     with future part types" the pre-#550 code claimed described a data
+    ///     loss, not a compatibility. The store's own read path refuses the
+    ///     same tags the same way (<see cref="JsonlLineParser" />); the two
+    ///     have to agree, and the shared table is what makes refusing the same
+    ///     thing mechanical rather than pinned by hope.
     /// </remarks>
     /// <exception cref="JsonException">
     ///     The tag is unknown to this build, or the part is missing a member its tag
@@ -383,59 +387,29 @@ internal static class JsonlMessageCodec
     /// </exception>
     public static ContentPart DeserializePart(JsonElement element)
     {
-        if (!element.TryGetProperty("type", out var typeElement) || typeElement.ValueKind != JsonValueKind.String)
+        if (!MessagePartAdapter.TryScanPartFields(element, legacyCasing: false, out var scan))
         {
-            throw new JsonException("content part has no 'type' discriminator, so it cannot be rebuilt.");
+            throw new JsonException(MessagePartAdapter.FormatRefusal(
+                new MessagePartAdapter.PartRefusal(
+                    MessagePartAdapter.PartRefusalKind.NoDiscriminator,
+                    MessagePartAdapter.PartTagKind.Unknown,
+                    null,
+                    null),
+                MessagePartAdapter.PartTransport.JsonlElement));
         }
 
-        string type = typeElement.GetString()!;
-        switch (type)
+        if (!MessagePartAdapter.TryBuildContentPart(
+                in scan,
+                MessagePartAdapter.ClassifyTag(scan.Tag),
+                MessagePartAdapter.ArgsPolicy.TolerateMissing,
+                MessagePartAdapter.SizePolicy.RequirePresent,
+                out ContentPart? part,
+                out MessagePartAdapter.PartRefusal refusal))
         {
-            case "text":
-                return new TextPart(RequiredString(element, "text", type));
-            case "thinking":
-                return new ThinkingPart(RequiredString(element, "text", type));
-            case "tool_call":
-                return new ToolCallPart(
-                    RequiredString(element, "id", type),
-                    RequiredString(element, "toolName", type),
-                    // Tolerated exactly as before: a tool_call row with no args at all
-                    // is read with an undefined element, which is a faithful reading of
-                    // "this part carries no arguments".
-                    element.TryGetProperty("args", out var args) ? args.Deserialize<JsonElement>() : default);
-            case "file":
-                return new FilePart(
-                    RequiredString(element, "path", type),
-                    RequiredString(element, "mimeType", type),
-                    RequiredInt64(element, "sizeBytes", type));
-            default:
-                throw new JsonException(
-                    $"content part type '{type}' is not known to this build — this payload was written by a newer Harbor, "
-                    + "and the message is refused rather than read with the part missing");
+            throw new JsonException(
+                MessagePartAdapter.FormatRefusal(refusal, MessagePartAdapter.PartTransport.JsonlElement));
         }
-    }
 
-    /// <summary>
-    ///     A mandatory string member of a part. A missing one used to reach
-    ///     <c>GetProperty</c> and throw <see cref="KeyNotFoundException" /> straight out
-    ///     of the porter's decode, where nothing was waiting to catch it — the whole
-    ///     import died instead of one line being skipped. It is a named
-    ///     <see cref="JsonException" /> now, which the caller's <c>Result.Try</c> turns
-    ///     into the per-line diagnostic that path already has a channel for.
-    /// </summary>
-    private static string RequiredString(JsonElement element, string field, string tag)
-    {
-        if (!element.TryGetProperty(field, out var value) || value.ValueKind != JsonValueKind.String)
-            throw new JsonException($"content part of type '{tag}' is missing '{field}'.");
-
-        return value.GetString()!;
-    }
-
-    private static long RequiredInt64(JsonElement element, string field, string tag)
-    {
-        if (!element.TryGetProperty(field, out var value) || value.ValueKind != JsonValueKind.Number)
-            throw new JsonException($"content part of type '{tag}' is missing '{field}'.");
-
-        return value.GetInt64();
+        return part;
     }
 }
