@@ -1,9 +1,6 @@
 using CSharpFunctionalExtensions;
 using Ensure = Harbor.Abstractions.Extensions.Ensure;
-using Harbor.DesignSystem;
-// (the using Harbor.Ui.Framework.Projection the CellForge copy carried is
-// dropped with the move — #1617: nothing in this file binds the Projection
-// vocabulary, and a dead edge is exactly what the liveness rules red.)
+using Harbor.DesignSystem; // #1617: the dead Projection using dropped with the move
 
 namespace Harbor.Tui.CellForge.Widgets;
 
