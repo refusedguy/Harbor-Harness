@@ -22,6 +22,14 @@ public static class JsonArgs
             ? n
             : null;
 
+    /// <summary>
+    ///     Int32 property clamped to <paramref name="min" />..<paramref name="max" />;
+    ///     <paramref name="defaultValue" /> when absent / not a number (ROP-A zone-1,
+    ///     replaces the GetInt-ternary-Math.Clamp copy pasted across builtin tools).
+    /// </summary>
+    public static int GetClampedInt(JsonElement args, string name, int min, int max, int defaultValue) =>
+        GetInt(args, name) is { } value ? Math.Clamp(value, min, max) : defaultValue;
+
     /// <summary>Boolean property value; false when absent or not a boolean.</summary>
     public static bool GetBool(JsonElement args, string name) =>
         args.TryGetProperty(name, out var el) && el.ValueKind is JsonValueKind.True or JsonValueKind.False &&
