@@ -204,13 +204,10 @@ public sealed class LspClient : IAsyncDisposable
         {
             while (!ct.IsCancellationRequested)
             {
-                JsonDocument? doc = await ReadFrameAsync(ct).ConfigureAwait(false);
-                if (doc is null) break;
+                JsonElement? root = await ReadFrameAsync(ct).ConfigureAwait(false);
+                if (root is null) break;
 
-                using (doc)
-                {
-                    HandleFrame(doc.RootElement);
-                }
+                HandleFrame(root.Value);
             }
         }
         catch (OperationCanceledException)
@@ -271,14 +268,19 @@ public sealed class LspClient : IAsyncDisposable
         return span[start..end];
     }
 
-    private async Task<JsonDocument?> ReadFrameAsync(CancellationToken ct)
+    private async Task<JsonElement?> ReadFrameAsync(CancellationToken ct)
     {
         int contentLength = await ReadHeadersAsync(ct).ConfigureAwait(false);
         byte[] body = ArrayPool<byte>.Shared.Rent(contentLength);
         try
         {
             await ReadExactlyAsync(body, contentLength, ct).ConfigureAwait(false);
-            return JsonDocument.Parse(body.AsMemory(0, contentLength));
+            // Same DOM as JsonDocument.Parse, but through the source-generated
+            // JsonElement info (PERF-002): the element is self-contained, so
+            // no document lifetime is tracked by the read loop. Malformed
+            // bodies still throw JsonException — the loop logs and aborts the
+            // session exactly as before.
+            return JsonSerializer.Deserialize(body.AsMemory(0, contentLength), LspJsonContext.Default.JsonElement);
         }
         finally
         {
