@@ -177,19 +177,25 @@ public sealed class ChatHistoryView : TuiViewBase<ChatHistoryViewModel>
         TranscriptVerbosity verbosity,
         ISet<string> collapsed)
     {
-        foreach (GroupNode<ChatEntry, TranscriptGroupKind> child in group.Children)
-        {
-            if (child is GroupNode<ChatEntry, TranscriptGroupKind>.Entry leaf)
+        // Composite consumer: the Entry/Group walk lives in GroupTree.Walk; a
+        // nested group hands its subtree back to RenderRow, which decides
+        // expansion there (#1589).
+        GroupTree.Walk(
+            group.Children,
+            leaf => RenderEntry(context, leaf.Value.Role, leaf.Value.Content),
+            nested =>
             {
-                RenderEntry(context, leaf.Value.Role, leaf.Value.Content);
-            }
-            else if (child is GroupNode<ChatEntry, TranscriptGroupKind>.Group nested)
-            {
-                RenderRow(context, new TranscriptRow.Group(
-                    nested.Kind, nested.Children, nested.Size,
-                    Completed: group.Completed, PendingToolCallIds: group.PendingToolCallIds), level + 1, verbosity, collapsed);
-            }
-        }
+                RenderRow(
+                    context,
+                    new TranscriptRow.Group(
+                        nested.Kind, nested.Children, nested.Size,
+                        Completed: group.Completed, PendingToolCallIds: group.PendingToolCallIds),
+                    level + 1,
+                    verbosity,
+                    collapsed);
+
+                return false;
+            });
     }
 
     private static void RenderHeader(ITuiRenderContext context, TranscriptRow.Group group)
@@ -219,20 +225,14 @@ public sealed class ChatHistoryView : TuiViewBase<ChatHistoryViewModel>
     private static IEnumerable<ChatEntry> TranscriptGroupingEntries(
         IReadOnlyList<GroupNode<ChatEntry, TranscriptGroupKind>> nodes)
     {
-        foreach (GroupNode<ChatEntry, TranscriptGroupKind> node in nodes)
-        {
-            if (node is GroupNode<ChatEntry, TranscriptGroupKind>.Entry leaf)
-            {
-                yield return leaf.Value;
-            }
-            else if (node is GroupNode<ChatEntry, TranscriptGroupKind>.Group nested)
-            {
-                foreach (ChatEntry entry in TranscriptGroupingEntries(nested.Children))
-                {
-                    yield return entry;
-                }
-            }
-        }
+        // Composite consumer: leaves are collected by GroupTree.Walk in
+        // reading order — no local recursion here (#1589).
+        var leaves = new List<ChatEntry>(nodes.Count);
+        GroupTree.Walk(
+            nodes,
+            leaf => leaves.Add(leaf.Value),
+            static _ => true);
+        return leaves;
     }
 
     private static void RenderEntry(ITuiRenderContext context, string role, string content)
