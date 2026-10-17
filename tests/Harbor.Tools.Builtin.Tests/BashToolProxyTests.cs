@@ -62,7 +62,10 @@ public class BashToolProxyTests
         ToolResult result = await tool.ExecuteAsync(args, CreateContext()).WaitAsync(TimeSpan.FromSeconds(15));
 
         await Assert.That(result.IsError).IsFalse();
-        await Assert.That(result.Output).IsEqualTo("out-1\nout-2\n[stderr]\nerr-1\n[exit code: 0]\n");
+        // Composition appends a '\n' separator after each non-empty block, on
+        // top of the newline-terminated builders — the empty lines are the tool's
+        // committed shape (real-shell tests only assert Contains).
+        await Assert.That(result.Output).IsEqualTo("out-1\nout-2\n\n[stderr]\nerr-1\n\n[exit code: 0]\n");
         // No `env` argument → the spec carries a null environment override.
         await Assert.That(proxy.LastSpec!.Environment).IsNull();
     }
@@ -141,7 +144,9 @@ public class BashToolProxyTests
         using var callerCts = new CancellationTokenSource(TimeSpan.FromMilliseconds(400));
         var args = JsonDocument.Parse("""{"command":"sleep 100","timeout":30}""").RootElement;
 
-        ToolResult result = await tool.ExecuteAsync(args, CreateContext(callerCts.Token)).WaitAsync(TimeSpan.FromSeconds(15));
+        ToolResult result = await tool
+            .ExecuteAsync(args, CreateContext(), callerCts.Token)
+            .WaitAsync(TimeSpan.FromSeconds(15));
 
         await Assert.That(result.IsError).IsTrue();
         await Assert.That(result.Output).Contains("Command was cancelled.");
@@ -207,12 +212,12 @@ public class BashToolProxyTests
         Build = _ => new FakeProcessHandle(["out-1", "out-2"], ["err-1"], 0)
     };
 
-    private static ToolContext CreateContext(CancellationToken ct = default) => new(
+    private static ToolContext CreateContext() => new(
         "test-session",
         "test-message",
         "test-call",
         "code",
-        ct,
+        CancellationToken.None,
         Array.Empty<AgentMessage>(),
         (_, _) => Task.CompletedTask,
         (_, _) => Task.FromResult(new PermissionResponse(PermissionAction.Allow, false)));
