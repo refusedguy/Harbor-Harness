@@ -60,6 +60,7 @@ public class LayerDependencyTests
     [
         "Harbor.Application",
         "Harbor.Hooks",
+        "Harbor.Permissions",
         "Harbor.Registries",
         "Harbor.Plugins.Runtime",
         "Harbor.Providers.OpenAiCompatible",
@@ -80,6 +81,7 @@ public class LayerDependencyTests
     [
         "Harbor.Application",
         "Harbor.Hooks",
+        "Harbor.Permissions",
         "Harbor.Registries",
         "Harbor.Plugins.Runtime",
         "Harbor.App.Cli"

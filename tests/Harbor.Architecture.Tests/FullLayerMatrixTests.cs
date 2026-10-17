@@ -164,7 +164,7 @@ public class FullLayerMatrixTests
         "Harbor.Tui.NickConsoleEx",
         // Application
         "Harbor.Application", "Harbor.ChangeTracking",
-        "Harbor.Hooks",
+        "Harbor.Hooks", "Harbor.Permissions",
         "Harbor.Registries",
         "Harbor.Plugins.Abstractions",
         "Harbor.Plugins.Runtime",
@@ -526,7 +526,8 @@ public class FullLayerMatrixTests
             ["Harbor.Abstractions", "Harbor.Diagnostics.Abstractions", "Harbor.Extensions",
                 // #1613: user-hook runner, verbatim extraction of Application/Hooks
                 // (Application→Application is allowed by MatrixTable_RespectsLayerRules).
-                "Harbor.Hooks"]),
+                // #1615: permissions subdomain extraction — mirror edge below.
+                "Harbor.Hooks", "Harbor.Permissions"]),
         // #1613: Harbor.Hooks — Application-layer sibling like Harbor.Registries:
         // the hook runner binds ToolResult (Domain) + BCL + Logging only; edge is Contracts (Hooks resolves no facade-level type).
         ["Harbor.Hooks"] = new(Layer.Application, ["Harbor.Abstractions.Contracts"]),
@@ -534,6 +535,15 @@ public class FullLayerMatrixTests
         // reads (never re-exports) its run vocabulary — Application keeps it so Application stays a leaf over Abstractions.
         ["Harbor.ChangeTracking"] = new(Layer.Application, ["Harbor.Application", "Harbor.Extensions", "Harbor.Abstractions.Contracts"]),
         ["Harbor.Registries"] = new(Layer.Application, ["Harbor.Abstractions"]),
+        // #1615: Harbor.Permissions — Application-layer sibling like Harbor.Registries,
+        // the verbatim extraction of Application/Permissions. PermissionService /
+        // ApprovalCoordinator / the path policies bind the contracts-assembly
+        // vocabulary plus BCL/Logging only; the whole-config IConfigStore surface is
+        // cut at the seam and arrives pre-adapted as IPermissionConfigStore.
+        // The Harbor.Application row above grants the mirror edge — realized in IL by
+        // PermissionConfigStoreAdapter implementing the subdomain's seam
+        // (Application→Application is allowed by MatrixTable_RespectsLayerRules).
+        ["Harbor.Permissions"] = new(Layer.Application, ["Harbor.Abstractions"]),
         ["Harbor.Plugins.Abstractions"] = new(Layer.Application, ["Harbor.Abstractions"]),
         // Runtime is the composition surface over the plugin machinery stack
         // (Host/Storage/Compilation/Instantiation/Registration are its family);
@@ -605,7 +615,7 @@ public class FullLayerMatrixTests
             // Wires DI over the whole graph incl. contrib renderers — free tier.
             "Harbor.Abstractions", "Harbor.Abstractions.Contracts",
             "Harbor.Diagnostics.Abstractions", "Harbor.Telemetry.Core",
-            "Harbor.Application", "Harbor.Hooks", "Harbor.Registries",
+            "Harbor.Application", "Harbor.Hooks", "Harbor.Permissions", "Harbor.Registries",
             "Harbor.Desktop.Abstractions",
             "Harbor.Terminal.Abstractions", "Harbor.Ui.Framework.State",
             // #667: FileTreeLoader, registered in TuiModule. First direct edge

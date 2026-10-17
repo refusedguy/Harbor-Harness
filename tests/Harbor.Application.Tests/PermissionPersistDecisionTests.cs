@@ -131,7 +131,10 @@ public class PermissionPersistDecisionTests
                 "test",
                 PermissionRuleset.Default);
             var registry = new FakeAgentRegistry(agent);
-            var svc = new PermissionService(registry, NullLogger<PermissionService>.Instance, configStore: store);
+            var store = new JsonConfigStore(path, NullLogger<JsonConfigStore>.Instance);
+            var svc = new PermissionService(
+                registry, NullLogger<PermissionService>.Instance,
+                configStore: new PermissionConfigStoreAdapter(store));
 
             var ruleset = svc.GetRuleset("code");
             await Assert.That(ruleset.Evaluate("bash", "make build")).IsEqualTo(PermissionAction.Allow);
@@ -161,7 +164,9 @@ public class PermissionPersistDecisionTests
                 PermissionRuleset.Default);
             var registry = new FakeAgentRegistry(agent);
             var store = new JsonConfigStore(path, NullLogger<JsonConfigStore>.Instance);
-            var svc = new PermissionService(registry, NullLogger<PermissionService>.Instance, configStore: store);
+            var svc = new PermissionService(
+                registry, NullLogger<PermissionService>.Instance,
+                configStore: new PermissionConfigStoreAdapter(store));
 
             // Simulate a user decision by directly adding to _persisted via CheckAsync
             // (in real usage, CheckAsync prompts and persists when PersistDecision=true)

@@ -180,7 +180,7 @@ public sealed class ToolNameListRule
     ///     <c>FormerTableFileRelativePath</c>.
     /// </remarks>
     private const string FormerTableFileRelativePath =
-        "src/Harbor.Application/Permissions/PathArgExtractionPolicy.cs";
+        "src/Harbor.Permissions/PathArgExtractionPolicy.cs";
 
     /// <summary>One quoted, tool-shaped word on a code line.</summary>
     private static readonly Regex QuotedWord = new(@"""(?<name>[a-z][a-z0-9_]*)""", RegexOptions.Compiled);
