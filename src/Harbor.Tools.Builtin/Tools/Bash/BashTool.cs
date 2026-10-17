@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using AutoCtor;
 using Harbor.Abstractions.Extensions;
 using Microsoft.Extensions.Logging;
@@ -22,6 +21,12 @@ namespace Harbor.Tools.Builtin;
 [AutoConstruct]
 public sealed partial class BashTool : ITool
 {
+    // #1590 (Proxy): the tool no longer touches `System.Diagnostics.Process`
+    // directly — process creation, pipe drain and tree-kill live behind
+    // IProcessProxy (SystemProcessProxy in production, a scripted fake in
+    // tests). Declared before _logger so the generated ctor reads
+    // (proxy, logger) in field order.
+    private readonly IProcessProxy _processes;
     private readonly ILogger<BashTool> _logger;
 
     /// <inheritdoc />
@@ -73,33 +78,13 @@ public sealed partial class BashTool : ITool
         if (cwd is null && !Directory.Exists(baseDir))
             return ToolResult.Error($"Working directory does not exist: '{baseDir}'.");
 
-        var psi = new ProcessStartInfo
+        var spec = new ProcessSpec
         {
             FileName = GetShell(),
-            UseShellExecute = false,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            RedirectStandardInput = false,
-            CreateNoWindow = true,
-            WorkingDirectory = cwd ?? baseDir
+            Arguments = OperatingSystem.IsWindows() ? ["/c", command] : ["-c", command],
+            WorkingDirectory = cwd ?? baseDir,
+            Environment = env
         };
-
-        if (OperatingSystem.IsWindows())
-        {
-            psi.ArgumentList.Add("/c");
-            psi.ArgumentList.Add(command);
-        }
-        else
-        {
-            psi.ArgumentList.Add("-c");
-            psi.ArgumentList.Add(command);
-        }
-
-        if (env is not null)
-        {
-            foreach ((string k, string v) in env)
-                psi.Environment[k] = v;
-        }
 
         // §PERF-006 (RESOLVED): stdout/stderr are accumulated in two StringBuilders
         // rented from StringBuilderPool (no per-call allocation), and each is capped
@@ -109,7 +94,14 @@ public sealed partial class BashTool : ITool
         // strictly better than crashing the agent. Append('\n') is used instead of
         // AppendLine() to keep the separator platform-independent (the rendered
         // transcript already normalises line endings).
-        using var process = new Process { StartInfo = psi };
+        // #1590: process creation went through the Proxy seam. The seam
+        // preserves the tool's exact failure messages, the subscribe-before-Begin
+        // ordering (BCL buffers lines until BeginReading) and the detach-in-finally
+        // discipline (use-after-return on the pooled builders).
+        Result<IProcessHandle> started = _processes.Start(spec);
+        if (started.IsFailure)
+            return ToolResult.Error(started.Error);
+        using var process = started.Value;
         const int MaxOutputChars = 100_000;
         using var stdout = StringBuilderPool.Rent(4096);
         using var stderr = StringBuilderPool.Rent(1024);
@@ -127,21 +119,13 @@ public sealed partial class BashTool : ITool
 
         BashToolLog.Executing(_logger, command, timeout);
 
-        process.OutputDataReceived += OnStdout;
-        process.ErrorDataReceived += OnStderr;
+        process.StdoutLine += OnStdout;
+        process.StderrLine += OnStderr;
 
-        try
-        {
-            if (!process.Start())
-                return ToolResult.Error("Failed to start process.");
-        }
-        catch (Exception ex)
-        {
-            return ToolResult.Error($"Failed to start process: {ex.Message}");
-        }
-
-        process.BeginOutputReadLine();
-        process.BeginErrorReadLine();
+        // After a successful Start the handle is live; lines are buffered by
+        // the BCL until BeginReading, so attaching the callbacks just above
+        // (before the readers begin) cannot miss early output.
+        process.BeginReading();
 
         // Bounded drain: wait for the reader callbacks to signal end-of-stream
         // so the builders are quiescent before they are read or returned.
@@ -172,7 +156,7 @@ public sealed partial class BashTool : ITool
             if (!process.HasExited)
             {
                 // ROP-A Z1 п.14: kill semantics live in one shared helper.
-                ToolErrors.KillQuietly(process);
+                process.KillTree();
                 bool timedOut = !cancellationToken.IsCancellationRequested;
                 await DrainAsync().ConfigureAwait(false);
                 if (timedOut)
@@ -191,14 +175,9 @@ public sealed partial class BashTool : ITool
         {
             // Detach BEFORE the pooled builders are read or returned, so no
             // late process callback can append into a recycled builder.
-            process.OutputDataReceived -= OnStdout;
-            process.ErrorDataReceived -= OnStderr;
-            try { process.CancelOutputRead(); }
-            catch (InvalidOperationException) { /* never started reading */
-            }
-            try { process.CancelErrorRead(); }
-            catch (InvalidOperationException) { /* never started reading */
-            }
+            process.StdoutLine -= OnStdout;
+            process.StderrLine -= OnStderr;
+            process.CancelReading();
         }
 
         // §PERF-006 (tail): the composed transcript was the last per-call
@@ -240,34 +219,34 @@ public sealed partial class BashTool : ITool
         // drain gives up — without detach, a late callback would append into
         // a pooled builder already returned to StringBuilderPool
         // (use-after-return corrupting another renter's buffer).
-        void OnStdout(object _, DataReceivedEventArgs e)
+        void OnStdout(object? _, ProcessLineEventArgs e)
         {
-            if (e.Data is null)
+            if (e.Line is null)
             {
                 stdoutEof.TrySetResult();
                 return;
             }
             if (stdout.Builder.Length >= MaxOutputChars)
             {
-                stdoutDropped += e.Data.Length + 1;
+                stdoutDropped += e.Line.Length + 1;
                 return;
             }
-            stdout.Builder.Append(e.Data).Append('\n');
+            stdout.Builder.Append(e.Line).Append('\n');
         }
 
-        void OnStderr(object _, DataReceivedEventArgs e)
+        void OnStderr(object? _, ProcessLineEventArgs e)
         {
-            if (e.Data is null)
+            if (e.Line is null)
             {
                 stderrEof.TrySetResult();
                 return;
             }
             if (stderr.Builder.Length >= MaxOutputChars)
             {
-                stderrDropped += e.Data.Length + 1;
+                stderrDropped += e.Line.Length + 1;
                 return;
             }
-            stderr.Builder.Append(e.Data).Append('\n');
+            stderr.Builder.Append(e.Line).Append('\n');
         }
     }
 

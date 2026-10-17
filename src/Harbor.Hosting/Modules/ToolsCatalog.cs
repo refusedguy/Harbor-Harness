@@ -158,7 +158,9 @@ internal static class ToolsCatalog
         tb.AddTool(lf => new ReadTool(lf.CreateLogger<ReadTool>(), lspService));
         tb.AddTool(lf => new WriteTool(lf.CreateLogger<WriteTool>()));
         tb.AddTool(lf => new EditTool(lf.CreateLogger<EditTool>(), lspService));
-        tb.AddTool(lf => new BashTool(lf.CreateLogger<BashTool>()));
+        // #1590: BashTool доходит до OS-процессов только через Proxy-шов — здесь
+        // production SystemProcessProxy; тесты подменяют его сценарием.
+        tb.AddTool(lf => new BashTool(new SystemProcessProxy(), lf.CreateLogger<BashTool>()));
         tb.AddTool(lf => new GlobTool(lf.CreateLogger<GlobTool>()));
         tb.AddTool(lf => new GrepTool(lf.CreateLogger<GrepTool>()));
         tb.AddTool(lf => new LsTool(lf.CreateLogger<LsTool>()));

@@ -361,7 +361,7 @@ public class BashToolTests
     [Test]
     public async Task ExecuteAsync_Echo_ReturnsOutput()
     {
-        var tool = new BashTool(NullLogger<BashTool>.Instance);
+        var tool = new BashTool(new SystemProcessProxy(), NullLogger<BashTool>.Instance);
         var args = JsonDocument.Parse("""{"command": "echo hello"}""").RootElement;
         var ctx = TestAgents.CreateToolContext();
 
@@ -374,7 +374,7 @@ public class BashToolTests
     [Test]
     public async Task ExecuteAsync_ExitCode_NonZero_ReturnsError()
     {
-        var tool = new BashTool(NullLogger<BashTool>.Instance);
+        var tool = new BashTool(new SystemProcessProxy(), NullLogger<BashTool>.Instance);
         var args = JsonDocument.Parse("""{"command": "exit 1"}""").RootElement;
         var ctx = TestAgents.CreateToolContext();
 
