@@ -1,6 +1,7 @@
 using System.Buffers;
 using System.Text;
 using Harbor.Abstractions.Lsp;
+using Harbor.Abstractions.Tools;
 using Microsoft.Extensions.Logging;
 using Result = CSharpFunctionalExtensions.Result;
 
@@ -345,8 +346,7 @@ public sealed partial class ReadTool : ITool
     }
 
     private static bool IsImageMimeType(string mime)
-        => mime.StartsWith("image/", StringComparison.OrdinalIgnoreCase)
-           && !mime.Equals("image/svg+xml", StringComparison.OrdinalIgnoreCase);
+        => MimeTypes.IsImage(mime) && !mime.Equals("image/svg+xml", StringComparison.OrdinalIgnoreCase);
     // svg — text XML; often better as text. Toggle if you want vision for svg.
 }
 

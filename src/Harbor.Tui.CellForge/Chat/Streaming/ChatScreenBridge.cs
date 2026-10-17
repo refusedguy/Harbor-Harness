@@ -3,6 +3,7 @@ using System.Text.Json;
 using Harbor.Abstractions.Events;
 using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Permissions;
+using Harbor.Abstractions.Tools;
 using Harbor.Terminal.Abstractions.Renderers;
 using Harbor.Terminal.Abstractions.ViewModels;
 using Harbor.Tui.CellForge.Widgets;
@@ -568,7 +569,7 @@ public sealed class ChatScreenBridge : IDisposable
         public override HistoryPartVisitor Visit(FilePart part)
         {
             string mime = part.MimeType;
-            if (!mime.StartsWith("image/", StringComparison.OrdinalIgnoreCase))
+            if (!MimeTypes.IsImage(mime))
             {
                 // Non-image files have no timeline card; the old switch skipped
                 // them here too. Explicit so a new kind cannot ride along.
