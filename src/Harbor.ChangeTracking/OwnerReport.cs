@@ -1,6 +1,6 @@
 using System.Text;
 
-namespace Harbor.Application.Sessions;
+namespace Harbor.ChangeTracking;
 
 /// <summary>
 ///     One verified check the S5 change report vouches for (epic #42, slice S8):

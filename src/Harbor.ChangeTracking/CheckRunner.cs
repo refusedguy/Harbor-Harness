@@ -1,7 +1,7 @@
 using System.Diagnostics;
 using System.Text;
 
-namespace Harbor.Application.Sessions;
+namespace Harbor.ChangeTracking;
 
 /// <summary>
 ///     Declared check (epic #42, slice S4, #378): one command the operator

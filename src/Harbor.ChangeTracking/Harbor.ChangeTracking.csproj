@@ -1,0 +1,28 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsPackable>true</IsPackable>
+    <PackageId>Harbor.ChangeTracking</PackageId>
+    <Description>Harbor verified-change pipeline — isolated-worktree materialization plus the freeze/check/report/accept/reject chain over run manifests (#1616).</Description>
+    <PackageTags>harbor;ai;agent;verified-change;sessions</PackageTags>
+  </PropertyGroup>
+
+  <!--
+    #1616: the verified-change pipeline (S2–S9 slices) extracted verbatim from
+    Harbor.Application into its own assembly. It reads the shared run
+    vocabulary — IsolatedWorkspace / RunManifest / RunState
+    (Harbor.Application.Sessions, sessions/IsolatedWorkspace.cs) and
+    WorkspacePaths / IWorkspacePaths (sessions/WorkspacePaths.cs, #1610,
+    deliberately kept in Harbor.Application so Application stays a leaf over
+    Abstractions) — and nothing else. No Harbor.Application code binds any
+    ChangeTracking type (the consumers are apps/Harbor.App.Cli verbs and
+    tests), so the ProjectReference has no opposite side and no cycle.
+  -->
+  <ItemGroup>
+    <ProjectReference Include="..\Harbor.Abstractions.Contracts\Harbor.Abstractions.Contracts.csproj"/>
+    <ProjectReference Include="..\Harbor.Application\Harbor.Application.csproj"/>
+    <ProjectReference Include="..\Harbor.Extensions\Harbor.Extensions.csproj"/>
+  </ItemGroup>
+
+</Project>

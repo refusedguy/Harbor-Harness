@@ -156,7 +156,7 @@ public class FullLayerMatrixTests
         // library (external/ConsoleEx), referenced only for the renderer it wraps.
         "Harbor.Tui.NickConsoleEx",
         // Application
-        "Harbor.Application",
+        "Harbor.Application", "Harbor.ChangeTracking",
         "Harbor.Registries",
         "Harbor.Plugins.Abstractions",
         "Harbor.Plugins.Runtime",
@@ -480,7 +480,7 @@ public class FullLayerMatrixTests
         // ---- Application ----------------------------------------------------
         ["Harbor.Application"] = new(Layer.Application,
             ["Harbor.Abstractions", "Harbor.Diagnostics.Abstractions", "Harbor.Extensions"]),
-        ["Harbor.Registries"] = new(Layer.Application, ["Harbor.Abstractions"]),
+        ["Harbor.Registries"] = new(Layer.Application, ["Harbor.Abstractions"]), ["Harbor.ChangeTracking"] = new(Layer.Application, ["Harbor.Application", "Harbor.Extensions", "Harbor.Abstractions.Contracts"]), // #1616: verified-change pipeline, verbatim extract from Harbor.Application; reads (never re-exports) its run vocabulary.
         ["Harbor.Plugins.Abstractions"] = new(Layer.Application, ["Harbor.Abstractions"]),
         // Runtime is the composition surface over the plugin machinery stack
         // (Host/Storage/Compilation/Instantiation/Registration are its family);

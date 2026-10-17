@@ -1,4 +1,4 @@
-namespace Harbor.Application.Sessions;
+namespace Harbor.ChangeTracking;
 
 /// <summary>
 ///     Legal-transition map for the verified-change run lifecycle (epic #42,

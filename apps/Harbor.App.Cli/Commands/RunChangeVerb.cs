@@ -1,6 +1,7 @@
 using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Models;
 using Harbor.Application.Sessions;
+using Harbor.ChangeTracking;
 
 namespace Harbor.App.Cli.Commands;
 

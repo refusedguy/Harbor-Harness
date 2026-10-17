@@ -1,6 +1,6 @@
 using System.Globalization;
 
-namespace Harbor.Application.Sessions;
+namespace Harbor.ChangeTracking;
 
 /// <summary>
 ///     Checks-file parser (epic #42, slice S9, #397): turns the operator's

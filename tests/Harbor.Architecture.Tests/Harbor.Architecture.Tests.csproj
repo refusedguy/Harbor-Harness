@@ -47,6 +47,8 @@
     <ProjectReference Include="..\..\src\Harbor.Diagnostics.Abstractions\Harbor.Diagnostics.Abstractions.csproj"/>
     <ProjectReference Include="..\..\src\Harbor.Terminal.Abstractions\Harbor.Terminal.Abstractions.csproj"/>
     <ProjectReference Include="..\..\src\Harbor.Application\Harbor.Application.csproj"/>
+    <!-- #1616: the extracted verified-change pipeline joins layer enforcement. -->
+    <ProjectReference Include="..\..\src\Harbor.ChangeTracking\Harbor.ChangeTracking.csproj"/>
     <ProjectReference Include="..\..\src\Harbor.Registries\Harbor.Registries.csproj"/>
     <ProjectReference Include="..\..\src\Harbor.Plugins.Runtime\Harbor.Plugins.Runtime.csproj"/>
     <ProjectReference Include="..\..\src\Harbor.Providers.OpenAiCompatible\Harbor.Providers.OpenAiCompatible.csproj"/>
