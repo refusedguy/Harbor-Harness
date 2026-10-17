@@ -570,10 +570,10 @@ internal static class JsonlLineParser
             }
         }
 
-        // The tag → type table and the refusal texts live in the shared adapter;
-        // this transport keeps the span scan and its zero-alloc success path
-        // (#1591: the tag string exists only on the refusal path, exactly as the
-        // previous TagName did).
+        // The tag-to-type table and the refusal texts live in the shared
+        // adapter. This transport keeps the span scan and its zero-alloc
+        // success path — the tag string is materialized only on the refusal
+        // path, exactly as the previous TagName helper did.
         var scan = new MessagePartAdapter.PartScan(
             Tag: unknownTagText,
             Text: text,

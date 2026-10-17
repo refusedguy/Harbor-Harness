@@ -16,21 +16,22 @@
 // needed synchronized edits in all three places with nothing noticing the
 // edit that forgot one. This adapter is the one contract; the backends differ
 // only in TRANSPORT:
-//   - JsonlLineParser scans raw UTF-8 spans and classifies the tag itself
-//     (the span matcher below keeps that path allocation-free on success);
-//   - the other two readers scan a JsonElement through TryScanPartFields
-//     (one shared scanner, with the row's legacy-PascalCase tolerance driven
-//     by the legacyCasing flag rather than a second hand-maintained copy);
-//   - every backend writes its own refusal WORDING (the SQLite converter says
-//     "row", the JSONL paths say "session"/"payload"); the refusal STRUCTURE —
+//   - JsonlLineParser scans raw UTF-8 spans and classifies the tag itself;
+//     the span matcher below keeps that path allocation-free on success.
+//   - the other two readers scan a JsonElement through TryScanPartFields —
+//     one shared scanner, with the row's legacy-PascalCase tolerance driven
+//     by the legacyCasing flag rather than a second hand-maintained copy.
+//   - every backend writes its own refusal WORDING — the SQLite converter says
+//     "row", the JSONL paths say "session" and "payload"; the refusal STRUCTURE —
 //     kind, tag, missing member — is produced here and only formatted there.
 //
 // ADDING A NEW ContentPart SUBTYPE (the checklist the three copies used to
 // scatter) is now one shared table plus the two write shapes:
-//   1. a tag constant below and arms in the span classifier + ClassifyTag(string)
-//      + TryBuildContentPart (the tag → type factory and required-member census);
-//   2. a write arm in the JSONL codec (SerializePart DTO) and the SQLite
-//      converter (PartWriter) — the transports' own shapes;
+//   1. a tag constant below, arms in the span classifier and in the
+//      ClassifyTag(string) path, and arms in TryBuildContentPart — the tag to
+//      type factory plus the required-member census.
+//   2. a write arm in the JSONL codec SerializePart DTO and in the SQLite
+//      PartWriter converter — the transports' own shapes.
 //   3. nothing else: tests/Harbor.Storage.Tests/StorageBackendParityTests
 //      pins both backends to the same vocabulary, and a backend the table
 //      missed goes red there instead of silently dropping a tagged part.
