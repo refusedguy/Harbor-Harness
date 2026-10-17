@@ -163,7 +163,7 @@ internal static class CellForgeModule
                 Harbor.Application.Permissions.PermissionService>>(),
             asker,
             workspaceRoot: Directory.GetCurrentDirectory(),
-            configStore: sp.GetService<IConfigStore>());
+            configStore: sp.GetService<IPermissionConfigStore>());
     }
 
     /// <summary>
