@@ -14,6 +14,7 @@
 
 namespace Harbor.Architecture.Tests;
 
+using System.Text;
 using TUnit.Assertions;
 
 /// <summary>
