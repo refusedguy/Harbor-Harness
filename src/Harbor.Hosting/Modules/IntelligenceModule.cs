@@ -34,7 +34,7 @@ internal static class IntelligenceModule
             sp.GetRequiredService<Harbor.Abstractions.Agents.IAgentRegistry>(),
             sp.GetRequiredService<ILogger<PermissionService>>(),
             workspaceRoot: Directory.GetCurrentDirectory(),
-            configStore: sp.GetService<IConfigStore>(),
+            configStore: sp.GetService<IPermissionConfigStore>(),
             pathPolicies: sp.GetServices<IPathExtractionPolicy>(),
             // #557: the guards are the ones the TOOL REGISTRY derived from what each
             // tool declares on ITool.SafetyProfile — not a static name list. Read
