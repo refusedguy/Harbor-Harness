@@ -184,7 +184,7 @@ Presentation      Harbor.Ui.Framework (+ .State/.ViewModels/.Projection/.Renderi
                   .Services/.Sessions — TEA-style state/reducers/projection),
                   Harbor.Desktop.{Abstractions,Shared,Animations},
                   Harbor.DesignSystem, Harbor.Terminal.Abstractions,
-                  Harbor.Tui.{AnsiPlain,CellForge,NickConsoleEx,Notifications},
+                  Harbor.Tui.{AnsiPlain,CellForge,CellForge.Syntax,NickConsoleEx,Notifications},
                   apps/Harbor.App.Avalonia
 Composition Root  apps/Harbor.App.Cli (+ src/Harbor.Hosting, Harbor.Plugins.Host)
 ```

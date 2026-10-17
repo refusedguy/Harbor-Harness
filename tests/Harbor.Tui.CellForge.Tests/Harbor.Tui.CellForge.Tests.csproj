@@ -8,8 +8,8 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\Harbor.Tui.CellForge.Engine\Harbor.Tui.CellForge.Engine.csproj"/>
     <ProjectReference Include="..\..\src\Harbor.Tui.CellForge\Harbor.Tui.CellForge.csproj"/>
-    <!-- #1617: the tokenizer / language-registry / theme-loader tests moved
-         verbatim-none: they stay here (the goldens live in this project) and
+    <!-- #1617: the tokenizer / language-registry / theme-loader / theme-watcher
+         tests don't move: they stay here (the goldens live in this project) and
          bind the extracted assembly directly. TryParseHex is internal, so the
          InternalsVisibleTo row in the Syntax csproj points at this project. -->
     <ProjectReference Include="..\..\src\Harbor.Tui.CellForge.Syntax\Harbor.Tui.CellForge.Syntax.csproj"/>
