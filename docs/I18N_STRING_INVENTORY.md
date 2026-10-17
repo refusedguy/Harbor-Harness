@@ -69,7 +69,7 @@ culture (dates, numbers, token counts, durations):
 - `src/Harbor.Ui.Framework.Projection/Projection/PanelRows.cs:642-645` — counts `K`/`M`
 - `src/Harbor.Tui.CellForge/Chat/Widgets/SideBarView.cs:637-639` — token `k`/`M`
 - `src/Harbor.Tui.CellForge/Chat/Widgets/SessionTabStripPanel.cs:551` — `"+" + hidden`
-- `src/Harbor.Tui.CellForge/Chat/Widgets/RetryCountdown.cs:81` — seconds + `"s"`
+- `src/Harbor.Tui.CellForge.Engine/Widgets/RetryCountdown.cs:81` — seconds + `"s"`
 
 The remainder are wire formats (JSON/SSE payloads, ids, paths, log templates)
 that must stay invariant — each gets a one-line justification comment in the
