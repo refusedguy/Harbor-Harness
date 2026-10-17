@@ -38,7 +38,7 @@
 //     -> ReplRunner.RunInteractiveAsync (:124; :162 TuiMode.IsCellForgeSelected
 //        is the default backend) -> RunCellForgeAsync (:174) -> :383 RunAsync
 //     -> CellForgeReplRunner.RunAsync:369 -> ReplLifecycle.RunAsync
-//     -> ReplLifecycle.cs:245 host.Input.HandleInputAsync
+//     -> ReplLifecycle.cs:252 host.Input.HandleInputAsync
 //     -> ReplInputLoop.cs:95 HandleKeyAsync
 //
 // and `HandleKeyAsync` is a working router — it just routes AROUND the stack.
