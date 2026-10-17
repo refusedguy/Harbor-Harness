@@ -1,23 +1,98 @@
-# Harbor release — tag-driven GitHub Release with binaries.
+# Harbor release — tag-driven GitHub Release with NativeAOT binaries.
 #
-# Triggered by pushing a v* tag. Publishes self-contained single-file
-# Harbor.App.Cli for linux-x64, linux-arm64 and win-x64 — ALL from
-# ubuntu-latest (runtime packs come from NuGet; non-AOT cross-OS publish
-# is fully supported by the SDK) — archives them and creates a GitHub
-# Release with extracted changelog notes + commit list.
+# Triggered by pushing a v* tag. Publishes NativeAOT Harbor.App.Cli for the
+# RIDs below, archives them, and creates a GitHub Release with extracted
+# changelog notes + commit list + SHA256SUMS.txt.
 #
-# Local dry run of the publish recipe:
+# ── Recipe provenance ────────────────────────────────────────────────────
+# The publish recipe is REUSED, not invented: it is exactly the recipe ci.yml
+# job `aot-publish` gates on (linux-x64, "fulltree"):
+#
+#   dotnet publish apps/Harbor.App.Cli -c Release -r <rid> \
+#     --self-contained true -p:HarborWithAot=true -p:ContinuousIntegrationBuild=true
+#
+# That is recipe 2 in apps/Harbor.App.Cli.csproj: PublishAot on, everything
+# else at its default (plugins/providers/tools stay compiled in). ci.yml
+# proves that recipe produces a binary that runs `--version/--help/--providers`
+# on content (its smoke asserts ollama/kilocode/openrouter registered), and
+# `tools/aot-publish-gate.py` holds the publish to a warning baseline. This
+# workflow does not duplicate the gate — at tag time the publish must simply
+# SUCCEED, or no Release is created (`fail-fast: false` keeps sibling legs
+# building so one flaky OS does not hide all evidence).
+#
+# ── RID matrix and why it is a subset ────────────────────────────────────
+# NativeAOT does NOT support cross-OS compilation (dotnet docs,
+# docs/core/deploying/native-aot/cross-compile.md): each OS family must build
+# on its own OS host, so the matrix carries a per-leg `os`. Cross-ARCH
+# x64<->arm64 IS supported on all three OSes, which is what makes this shape
+# possible with three runner images:
+#
+#   linux-x64   ubuntu-latest   — the CI-verified leg, native arch.
+#   win-x64     windows-latest  — native arch.
+#   win-arm64   windows-latest  — cross-arch from the x64 host; the runner
+#                                 image ships the VS "C++ ARM64 build tools"
+#                                 component (runner-images inventory:
+#                                 Microsoft.VisualStudio.Component.VC.Tools.ARM64).
+#   osx-arm64   macos-latest    — native arch (macos-latest is an arm64 image).
+#   osx-x64     macos-latest    — cross-arch from the arm64 host; Xcode ships
+#                                 both toolchains (dotnet docs, same pages).
+#
+# Excluded from the task's six-RID wish list, deliberately ("if a RID is
+# cranky, ship only the stable ones"):
+#   * linux-arm64   — cross-compiling from the x64 Linux host needs a
+#                     multiarch sysroot (dpkg --add-architecture arm64 +
+#                     zlib1g-dev:arm64 from ports.ubuntu.com), which the
+#                     dotnet docs themselves call "not documented or
+#                     guaranteed by Ubuntu". Too flaky to gate a release on.
+#   * linux-musl-x64 — glibc->musl cross-compilation is unsupported; it needs
+#                     an Alpine container job (apk clang build-base
+#                     zlib-dev). Both can land as container legs later
+#                     without changing this file's shape.
+#
+# Non-host-native legs (win-arm64, osx-x64) cannot run a smoke on their build
+# host — no cross-OS emulation is wired for them. They rely on the same
+# recipe being proven on the native legs, plus the build provenance
+# attestation. Do not "fix" their skipped smoke by running --version on an
+# x64 host for an arm64 exe: it does not execute.
+#
+# ── Packaging: why providers/ is shipped in every archive ────────────────
+# Provider REGISTRATION reads providers/*.json from disk
+# (ProviderPresetCatalog.FindProvidersDirectories: ~/.harbor/providers, then
+# <exeDir>/providers, then up to 8 ancestors). The embedded-resource branch
+# in Harbor.Hosting is DEAD (docs/AOT_PUBLISH.md §"What the providers
+# assertion really proves" — Harbor.Hosting does not set EmbedProviders), so
+# a bare binary extracted into a fresh directory registers no
+# openai-compatible provider: kilocode/openrouter etc. come ONLY from the
+# JSON configs next to the executable. Every archive therefore carries the
+# repo's providers/*.json beside the binary, and the fresh-extraction smoke
+# below asserts one of them (kilocode) actually registers — from a path that
+# has no repo ancestor, i.e. what a user's `mkdir && unzip` produces.
+#
+# ── Triggers ─────────────────────────────────────────────────────────────
+# push of a v* tag runs everything and creates the Release. workflow_dispatch
+# runs the same matrix with NO release creation at all, so the RID matrix can
+# be validated BEFORE cutting a tag — a dispatch never creates or mutates a
+# Release; its dist is preserved as a run artifact instead.
+#
+# Local dry run of the publish recipe itself:
 #   dotnet publish apps/Harbor.App.Cli -c Release -r <rid> --self-contained true \
-#     -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true \
-#     -p:IncludeAllContentForSelfExtract=true -o out/<rid>
+#     -p:HarborWithAot=true -p:ContinuousIntegrationBuild=true -o out/<rid>
 name: release
 
 on:
   push:
     tags:
       - "v*"
+  workflow_dispatch:
 
-permissions: {}
+# `gh release create` needs contents: write. Declared at workflow level so
+# the grant is explicit (this file IS the release authority); each job then
+# NARROWS to what it needs, the same pattern ci.yml uses in reverse
+# (top-level `{}` + per-job grants). A workflow-level grant is not inherited
+# by a job that declares its own permissions — the per-job lists below are
+# therefore complete.
+permissions:
+  contents: write
 
 concurrency:
   group: release-${{ github.ref }}
@@ -33,22 +108,37 @@ env:
 
 jobs:
   binaries:
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
+    runs-on: ${{ matrix.os }}
+    # AOT of this tree fits ci.yml's 45' budget for the linux leg with room
+    # to spare, but windows/macos runners are slower on cold caches — and
+    # this job must not be the thing that turns a release red on a timer.
+    timeout-minutes: 120
     permissions:
       contents: read
-      id-token: write
+      id-token: write        # attest-build-provenance requires OIDC
       attestations: write
     strategy:
       fail-fast: false
       matrix:
         include:
+          # See the matrix rationale in the file header. Keep `archive` in
+          # sync with the smoke steps: tar.gz legs extract with bsdtar-style
+          # `tar -xzf`, the zip legs extract in pwsh.
           - rid: linux-x64
-            archive: tar.gz
-          - rid: linux-arm64
+            os: ubuntu-latest
             archive: tar.gz
           - rid: win-x64
+            os: windows-latest
             archive: zip
+          - rid: win-arm64
+            os: windows-latest
+            archive: zip
+          - rid: osx-arm64
+            os: macos-latest
+            archive: tar.gz
+          - rid: osx-x64
+            os: macos-latest
+            archive: tar.gz
     steps:
       - uses: actions/checkout@v7
         with:
@@ -61,48 +151,118 @@ jobs:
           cache: true
           cache-dependency-path: "Directory.Packages.props"
 
-      - name: Publish Harbor.App.Cli (${{ matrix.rid }})
+      # Same package set as ci.yml job aot-publish: ubuntu-latest ships most
+      # of the native toolchain, but naming it explicitly keeps this step
+      # portable to a newer image. `objcopy` is NOT a package — it lives in
+      # binutils, and asking apt for `objcopy` dies before dotnet runs.
+      - name: Install the native AOT toolchain (Linux leg)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq clang lld binutils zlib1g-dev
+
+      # The ci.yml recipe, verbatim (see file header). No PublishSingleFile:
+      # an AOT binary is already a single native file, and csproj's AOT block
+      # sets StripSymbols/TrimMode for the size story. --self-contained true
+      # is passed by hand even though the csproj sets it, so this workflow
+      # does not silently depend on that block surviving Directory.Build.props's
+      # repo-wide SelfContained=false (NETSDK1102 is the failure otherwise —
+      # the exact reason ci.yml names the flag explicitly too).
+      - name: Publish Harbor.App.Cli (NativeAOT, ${{ matrix.rid }})
+        shell: bash
         run: >-
           dotnet publish apps/Harbor.App.Cli -c Release -r ${{ matrix.rid }}
           --self-contained true
-          -p:PublishSingleFile=true
-          -p:IncludeNativeLibrariesForSelfExtract=true
-          -p:IncludeAllContentForSelfExtract=true
+          -p:HarborWithAot=true
           -p:ContinuousIntegrationBuild=true
           -o publish/${{ matrix.rid }}
 
-      - name: Smoke — published binary runs (linux-x64 only)
-        if: matrix.rid == 'linux-x64'
-        run: ./publish/linux-x64/Harbor.App.Cli --version
+      # Provider registration is disk-Driven (see the packaging note in the
+      # header): without a sibling providers/ directory a released binary
+      # registers no openai-compatible provider. Ship the repo's JSON
+      # configs beside the binary in every archive.
+      - name: Ship providers/ next to the binary
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "publish/${{ matrix.rid }}/providers"
+          cp providers/*.json "publish/${{ matrix.rid }}/providers/"
 
+      # Archive BEFORE the smoke: extraction exercises the package the user
+      # gets, not the build tree.
       - name: Archive (tar.gz)
         if: matrix.archive == 'tar.gz'
-        run: >-
-          tar -czf "harbor-cli-${{ github.ref_name }}-${{ matrix.rid }}.tar.gz"
-          -C publish/${{ matrix.rid }} .
+        shell: bash
+        run: tar -czf "harbor-${{ matrix.rid }}.tar.gz" -C "publish/${{ matrix.rid }}" .
 
+      # pwsh's Compress-Archive, not `zip`: there is no zip.exe on the
+      # Windows runner image, and the archives are Windows-targeted anyway.
       - name: Archive (zip)
         if: matrix.archive == 'zip'
+        shell: pwsh
+        run: Compress-Archive -Path "publish/${{ matrix.rid }}/*" -DestinationPath "harbor-${{ matrix.rid }}.zip" -Force
+
+      # Fresh-extraction smoke, host-native legs only. The extract lives
+      # OUTSIDE the checkout (no repo ancestor in the walker's chain
+      # ProviderPresetCatalog walks), so this validates the shipped package
+      # shape: binary + providers/ registering kilocode, matching the
+      # content assertion ci.yml's AOT smoke makes on the tree build.
+      - name: Smoke — extracted package runs (linux-x64)
+        if: matrix.rid == 'linux-x64'
+        shell: bash
         run: |
-          (cd publish/${{ matrix.rid }} && zip -r "../../harbor-cli-${{ github.ref_name }}-${{ matrix.rid }}.zip" .)
+          set -euo pipefail
+          mkdir ext
+          tar -xzf "harbor-${{ matrix.rid }}.tar.gz" -C ext
+          ext/Harbor.App.Cli --version
+          ext/Harbor.App.Cli --help > /dev/null
+          ext/Harbor.App.Cli --providers | tee ext/providers-smoke.txt
+          # ollama alone proves nothing here: it is a native factory, not a
+          # JSON provider. kilocode is what a bare providers/ copy must yield.
+          grep -qi kilocode ext/providers-smoke.txt \
+            || { echo "::error::providers/ did not survive into the archive — kilocode is not registered"; cat ext/providers-smoke.txt; exit 1; }
+
+      - name: Smoke — extracted package runs (win-x64)
+        if: matrix.rid == 'win-x64'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          New-Item -ItemType Directory -Force ext | Out-Null
+          Expand-Archive -Path "harbor-win-x64.zip" -DestinationPath ext -Force
+          & ext/Harbor.App.Cli.exe --version
+          if ($LASTEXITCODE -ne 0) { throw "--version exited $LASTEXITCODE" }
+          $prov = & ext/Harbor.App.Cli.exe --providers 2>&1 | Out-String
+          Write-Output $prov
+          if ($LASTEXITCODE -ne 0) { throw "--providers exited $LASTEXITCODE" }
+          # See the linux-x64 smoke for why kilocode, not ollama, is the assert.
+          if ($prov -notmatch '(?i)kilocode') { throw "providers/ did not survive into the archive — kilocode is not registered" }
+
+      - name: Smoke — extracted package runs (osx-arm64)
+        if: matrix.rid == 'osx-arm64'
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir ext
+          tar -xzf "harbor-${{ matrix.rid }}.tar.gz" -C ext
+          ext/Harbor.App.Cli --version
+          ext/Harbor.App.Cli --help > /dev/null
+          ext/Harbor.App.Cli --providers | tee ext/providers-smoke.txt
+          # Same assert as the linux-x64 smoke: kilocode proves the shipped
+          # providers/ copy registered the JSON catalogue; ollama alone would
+          # not (native factory).
+          grep -qi kilocode ext/providers-smoke.txt \
+            || { echo "::error::providers/ did not survive into the archive — kilocode is not registered"; cat ext/providers-smoke.txt; exit 1; }
 
       - name: Generate artifact attestation
         uses: actions/attest-build-provenance@v2
         with:
-          subject-path: "harbor-cli-${{ github.ref_name }}-${{ matrix.rid }}.*"
-
-      - name: Generate Checksums
-        run: |
-          sha256sum harbor-cli-* > SHA256SUMS.txt
-          cat SHA256SUMS.txt
+          subject-path: "harbor-${{ matrix.rid }}.*"
 
       - name: Upload archive artifact
         uses: actions/upload-artifact@v7
         with:
-          name: harbor-cli-${{ matrix.rid }}
-          path: |
-            harbor-cli-${{ github.ref_name }}-${{ matrix.rid }}.*
-            SHA256SUMS.txt
+          name: harbor-${{ matrix.rid }}
+          path: harbor-${{ matrix.rid }}.*
           if-no-files-found: error
           retention-days: 7
 
@@ -122,6 +282,20 @@ jobs:
         with:
           path: dist
           merge-multiple: true
+
+      # Generated HERE, once, over the merged dist — not per matrix job. A
+      # checksums file that each leg computes over its own archive and that
+      # merge-multiple UNITED would have collided on the name and shipped a
+      # last-writer-wins subset; one file over the final dist is the verifiable
+      # set (archives + their hashes, matching what `gh release create`
+      # attaches).
+      - name: Generate SHA256SUMS.txt (all RIDs)
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd dist
+          sha256sum harbor-* > SHA256SUMS.txt
+          cat SHA256SUMS.txt
 
       - name: Generate release notes
         run: |
@@ -146,11 +320,36 @@ jobs:
             fi
           } > notes.md
 
+      # Tag builds end here: the Release is created with every archive + the
+      # checksum file. `needs: binaries` means this step runs only when every
+      # matrix leg succeeded (fail-fast: false just lets the siblings finish
+      # for evidence), so the globs below are never a subset of a broken
+      # world. workflow_dispatch never reaches here (see the dry-run step).
       - name: Create GitHub Release
+        if: github.event_name == 'push'
         env:
           GH_TOKEN: ${{ github.token }}
         run: >-
           gh release create "${GITHUB_REF_NAME}"
           --title "Harbor ${GITHUB_REF_NAME}"
           --notes-file notes.md
-          dist/*
+          dist/harbor-* dist/SHA256SUMS.txt
+
+      # workflow_dispatch is the pre-tag validation run: same matrix, same
+      # packaging and smokes, no Release side-effect. dist is preserved as a
+      # run artifact so the packaging can be inspected without cutting a tag.
+      # With merge-multiple above the per-RID files land FLAT in dist/, so
+      # the globs are single-level. The artifact name must differ from the
+      # per-RID `harbor-<rid>` names: download quirks aside, a collision on
+      # the name would make the dump ambiguous in the Actions UI.
+      - name: Dry run — preserve dist as artifact
+        if: github.event_name == 'workflow_dispatch'
+        uses: actions/upload-artifact@v7
+        with:
+          name: harbor-release-dryrun
+          path: |
+            dist/harbor-*.zip
+            dist/harbor-*.tar.gz
+            dist/SHA256SUMS.txt
+          if-no-files-found: error
+          retention-days: 7
