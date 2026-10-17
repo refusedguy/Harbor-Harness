@@ -14,6 +14,7 @@
 
 namespace Harbor.Architecture.Tests;
 
+using System.Text;
 using TUnit.Assertions;
 
 /// <summary>
@@ -29,8 +30,21 @@ public sealed class AcceptedStopCensusRule
             return string.Empty;
         }
 
-        string path = Path.Combine(root, "src", "Harbor.Application", "Agents", "ToolDispatcher.cs");
-        return File.Exists(path) ? File.ReadAllText(path) : string.Empty;
+        // #1507 (#95 slice): the validate/permission/retry chain — five of
+        // the seven terminal publishes — moved verbatim to ToolRetryPolicy.cs
+        // (same assembly). The terminal surface now spans both files.
+        string agents = Path.Combine(root, "src", "Harbor.Application", "Agents");
+        var sb = new StringBuilder();
+        foreach (string name in new[] { "ToolDispatcher.cs", "ToolRetryPolicy.cs" })
+        {
+            string path = Path.Combine(agents, name);
+            if (File.Exists(path))
+            {
+                sb.AppendLine(File.ReadAllText(path));
+            }
+        }
+
+        return sb.ToString();
     }
 
     private static int Count(string source, string literal)
@@ -54,7 +68,7 @@ public sealed class AcceptedStopCensusRule
     public async Task DispatchLoops_StillConsultRunTokenBeforeStart()
     {
         await Assert.That(RepoPaths.RepoRoot).IsNotNull()
-            .Because("the rule reads ToolDispatcher.cs from the checkout");
+            .Because("the rule reads ToolDispatcher.cs + ToolRetryPolicy.cs from the checkout");
 
         string source = DispatcherSource();
         await Assert.That(source).IsNotEmpty()
@@ -74,7 +88,7 @@ public sealed class AcceptedStopCensusRule
     public async Task TerminalToolEndEvents_StillRideTerminalToken()
     {
         await Assert.That(RepoPaths.RepoRoot).IsNotNull()
-            .Because("the rule reads ToolDispatcher.cs from the checkout");
+            .Because("the rule reads ToolDispatcher.cs + ToolRetryPolicy.cs from the checkout");
 
         string[] lines = DispatcherSource().Split('\n');
         var terminalSites = new List<int>();
@@ -116,7 +130,7 @@ public sealed class AcceptedStopCensusRule
     public async Task InFlightRemainder_IsNamedAbandoned()
     {
         await Assert.That(RepoPaths.RepoRoot).IsNotNull()
-            .Because("the rule reads ToolDispatcher.cs from the checkout");
+            .Because("the rule reads ToolDispatcher.cs + ToolRetryPolicy.cs from the checkout");
 
         string source = DispatcherSource();
 
