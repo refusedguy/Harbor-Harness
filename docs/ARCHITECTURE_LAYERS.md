@@ -67,7 +67,9 @@ inner layer, never the other way around. The innermost layer (Domain/Abstraction
 ┌─────────────────────────────────────────────────────────────────┐
 │  APPLICATION (use cases, orchestration)                         │
 │  - Harbor.Application (AgentLoop, Sessions, Agents,             │
-│                        Configuration, Permissions, Onboarding)  │
+│                        Configuration, Onboarding)               │
+│  - Harbor.Permissions (PermissionService, ApprovalCoordinator,  │
+│    path policies; seam IPermissionConfigStore over config.json) │
 │  - Harbor.Registries                                            │
 │  - Harbor.Plugins.Abstractions (the plugin contract surface)    │
 │  - contrib/scripting: Harbor.Scripting.* (ScriptHost, Bridge)   │

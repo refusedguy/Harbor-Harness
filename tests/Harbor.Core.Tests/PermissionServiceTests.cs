@@ -246,8 +246,10 @@ public class PermissionServiceTests
     /// <summary>
     ///     Config store whose load blocks on a gate (#82 regression harness).
     ///     A blocking ctor would hang construction until <see cref="Release" />.
+    ///     #1615: the service binds its own seam (IPermissionConfigStore), so the
+    ///     gate sits on the section view of the same HarborConfig fixture.
     /// </summary>
-    private sealed class GatedConfigStore : IConfigStore
+    private sealed class GatedConfigStore : IPermissionConfigStore
     {
         private readonly TaskCompletionSource<bool> _gate = new(TaskCreationOptions.RunContinuationsAsynchronously);
         private readonly HarborConfig _config;
@@ -258,24 +260,18 @@ public class PermissionServiceTests
 
         public void Release() => _gate.TrySetResult(true);
 
-        public async Task<Result<HarborConfig>> LoadAsync(CancellationToken ct = default)
+        public async Task<Result<Dictionary<string, List<PermissionRule>>>> LoadAsync(CancellationToken ct = default)
         {
             LoadCalls++;
             await _gate.Task.WaitAsync(ct).ConfigureAwait(false);
-            return Result.Success(_config);
+            return Result.Success(_config.Permissions);
         }
 
-        public Task<Result> SaveAsync(HarborConfig config, CancellationToken ct = default) =>
-            Task.FromResult(Result.Success());
-
-        public Task<Result> UpdateAsync(Func<HarborConfig, HarborConfig> updater, CancellationToken ct = default)
+        public Task<Result> UpdateAsync(Func<Dictionary<string, List<PermissionRule>>, Dictionary<string, List<PermissionRule>>> updater, CancellationToken ct = default)
         {
-            updater(_config);
+            updater(_config.Permissions);
             return Task.FromResult(Result.Success());
         }
-
-        public Task<Result<string>> GetApiKeyAsync(string providerId, CancellationToken ct = default) =>
-            Task.FromResult(Result.Failure<string>($"No API key for '{providerId}'."));
     }
 
     private static HarborConfig ConfigWith(params PermissionRule[] persisted)
