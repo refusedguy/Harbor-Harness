@@ -266,6 +266,11 @@ Harbor.Abstractions.Sessions.HeuristicTokenEstimator :: public sealed class Heur
 Harbor.Abstractions.Sessions.ICompactionService :: public Task<Result<CompactionResult>> CompactAsync(string sessionId, IReadOnlyList<AgentMessage> messages, ModelInfo model, CancellationToken ct = default)
 Harbor.Abstractions.Sessions.ICompactionService :: public bool ShouldCompact(IReadOnlyList<AgentMessage> messages, ModelInfo model)
 Harbor.Abstractions.Sessions.ICompactionService :: public interface ICompactionService
+Harbor.Abstractions.Sessions.ICompactionView :: public IReadOnlyList<AgentMessage> MaterializeCompactedView(IReadOnlyList<AgentMessage> messages)
+Harbor.Abstractions.Sessions.ICompactionView :: public IReadOnlyList<AgentMessage> TruncateToFit(IReadOnlyList<AgentMessage> messages, ModelInfo model, ITokenTracker tokenTracker, int reserveTokens = DefaultReserveTokens)
+Harbor.Abstractions.Sessions.ICompactionView :: public IReadOnlyList<AgentMessage> TruncateToFitStrict(IReadOnlyList<AgentMessage> messages, ModelInfo model, ITokenTracker tokenTracker, int reserveTokens = DefaultReserveTokens)
+Harbor.Abstractions.Sessions.ICompactionView :: public const int DefaultReserveTokens = 16384
+Harbor.Abstractions.Sessions.ICompactionView :: public interface ICompactionView
 Harbor.Abstractions.Sessions.ISessionCheckpointStore :: public Task<Result<IReadOnlyList<SessionCheckpoint>>> ListCheckpointsAsync(string sessionId, CancellationToken ct = default)
 Harbor.Abstractions.Sessions.ISessionCheckpointStore :: public Task<Result<SessionCheckpoint>> CreateCheckpointAsync(string sessionId, string messageId, string? label = null, CancellationToken ct = default)
 Harbor.Abstractions.Sessions.ISessionCheckpointStore :: public Task<Result<SessionRewindOutcome>> RewindToCheckpointAsync(string sessionId, string checkpointId, CancellationToken ct = default)

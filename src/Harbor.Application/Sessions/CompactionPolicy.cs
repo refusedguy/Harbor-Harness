@@ -20,10 +20,10 @@ namespace Harbor.Application.Sessions;
 ///         none of it is summarization.
 ///     </para>
 ///     <para>
-///         Pure and static on purpose: no state, no DI, no new interface — feature freeze
-///         #555. Every rule about what these methods return is graded by
-///         <c>CompactionPolicyInvariantTests</c>, which is where the orphan guarantee
-///         below is enforced rather than merely claimed.
+///         Pure and static on purpose: no state, no DI. The product seam is
+///         <c>ICompactionView</c> (#1612, forwarded by <c>CompactionView</c>):
+///         turn code depends on that contract; the rules these methods return
+///         are graded by <c>CompactionPolicyInvariantTests</c> as before.
 ///     </para>
 ///     <para>
 ///         Which of the two truncation policies is live has its answer in one place, and
@@ -40,7 +40,7 @@ public static class CompactionPolicy
     ///     Default token reserve used by the truncation methods when the caller does not
     ///     supply one.
     /// </summary>
-    public const int DefaultReserveTokens = 16384;
+    public const int DefaultReserveTokens = ICompactionView.DefaultReserveTokens;
 
     /// <summary>
     ///     Floor for the truncation budget so very small context windows still

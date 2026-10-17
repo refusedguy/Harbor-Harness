@@ -22,6 +22,9 @@ internal static class IntelligenceModule
             sp.GetRequiredService<ILogger<CompactionService>>(),
             ctx.Harbor.SecondaryModel,
             sp.GetRequiredService<IRetryPolicy>()));
+        // #1612: history-shaping seam for the turn pipeline — a stateless
+        // forwarder, shared process-wide like the extraction policies below.
+        services.AddSingleton<ICompactionView>(CompactionView.Instance);
         // #178: path-extraction policies (Strategy) — a new file-based tool
         // registers an IPathExtractionPolicy instead of editing the permission
         // core. Order matters: first Handles win, legacy fallback is terminal.

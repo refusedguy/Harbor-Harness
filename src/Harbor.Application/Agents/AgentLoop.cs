@@ -119,7 +119,12 @@ public sealed class AgentLoop : IAgentLoop
         // direct-construction caller keeps compiling unchanged; null keeps
         // the hooks-free path. Forwarded to the fallback dispatcher and the
         // compaction behavior below for their own event points.
-        IHookRunner? hookRunner = null)
+        IHookRunner? hookRunner = null,
+        // #1612: history-shaping seam for the turn pipeline. Optional so every
+        // direct-construction caller keeps compiling unchanged; null keeps the
+        // default forwarder. Forwarded to the compaction behavior and the
+        // turn runner below.
+        ICompactionView? compactionView = null)
     {
         _providers = providers;
         _tools = tools;
@@ -156,8 +161,12 @@ public sealed class AgentLoop : IAgentLoop
         // PX4 slice 2: the optional hook runner rides here too, so the
         // advisory PreCompact point fires from the same seam the loop already
         // used for the Pre/PostToolUse gate. Null keeps the hooks-free path.
+        // #1612: one seam instance for the whole run — the behavior and the
+        // turn runner must agree on the view, so the loop resolves the default
+        // once instead of each of them falling back independently.
+        ICompactionView view = compactionView ?? CompactionView.Instance;
         _compactionBehavior = new CompactionBehavior(
-            compaction, tokenTracker, eventBus, _metrics, logger, hookRunner);
+            compaction, tokenTracker, eventBus, _metrics, logger, hookRunner, view);
         _steering = new SteeringDrainBehavior(tokenTracker, logger);
         // ROP-D Z3: MCP server instructions flow into the system prompt when a
         // registry is composed in; tests without one keep the section absent.
@@ -172,7 +181,7 @@ public sealed class AgentLoop : IAgentLoop
         _turnRunner = new TurnRunner(
             providers, tools, _promptBuilder, messageConverter, eventBus, logger,
             _metrics, tokenTracker, retryPolicy, _toolDispatcher, mcpRegistry,
-            _compactionBehavior, _steering, _backgroundDrain);
+            _compactionBehavior, _steering, _backgroundDrain, view);
     }
 
     /// <summary>
