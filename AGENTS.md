@@ -67,6 +67,7 @@ src/Harbor.Hosting/                   — DI modules wired by the CLI (TuiModule
 src/Harbor.Terminal.Abstractions/     — ITuiRenderer, ITuiRenderContext, BaseTuiRenderer, views/VMs
 src/Harbor.Tui.AnsiPlain/             — unified ANSI-streaming + plain-text renderer (pipes/CI via HARBOR_TUI=plain; merges former Ansi/Plain backends)
 src/Harbor.Tui.CellForge(+.Engine)/   — canonical fullscreen cell-diff renderer (HARBOR_TUI=cellforge; `consoleex` is a legacy alias)
+src/Harbor.Tui.CellForge.Syntax/      — CellForge syntax-highlight + themes cluster (CodeSyntaxTokenizer/ILanguageSupport/CodeHighlightPalette + JsonThemeLoader/ThemeFileWatcher), extracted verbatim #1617; namespaces stay Harbor.Tui.CellForge.*
 src/Harbor.Tui.NickConsoleEx/         — SharpConsoleUI-based renderer (HARBOR_TUI=nickconsoleex; complements CellForge)
 src/Harbor.Tui.Notifications/         — desktop OS notifications renderer
 src/Harbor.Ui.Framework{,.Abstractions,.State,.ViewModels,.Rendering,.Projection,.Services,.Sessions}/ — TEA-style UI state/reducers/projection/services shared by apps (shell csproj is a meta-package)

@@ -17,10 +17,15 @@
     <!-- #1553 batch 2: Ensure.NotNull/NotBlank guard helpers. -->
     <ProjectReference Include="..\Harbor.Extensions\Harbor.Extensions.csproj"/>
     <ProjectReference Include="..\Harbor.Tui.CellForge.Engine\Harbor.Tui.CellForge.Engine.csproj"/>
+    <!-- #1617: the syntax-highlight + themes cluster (Chat/Rendering/Code* +
+         ILanguageSupport + registry + palette, Chat/Widgets/JsonThemeLoader +
+         ThemeFileWatcher) lives in the Syntax sibling now; AssistantMarkdownBlock
+         still binds CodeTokenizer, so the edge is realized. Namespaces unchanged. -->
+    <ProjectReference Include="..\Harbor.Tui.CellForge.Syntax\Harbor.Tui.CellForge.Syntax.csproj"/>
     <ProjectReference Include="..\Harbor.Ui.Framework.Rendering\Harbor.Ui.Framework.Rendering.csproj"/>
     <ProjectReference Include="..\Harbor.Ui.Framework.State\Harbor.Ui.Framework.State.csproj"/>
     <!-- CF-A-001: прямые референсы вместо транзитивных. Projection/Terminal.Abstractions
-         используются в коде (CellForgeTuiRenderer.cs:4-7; Widgets/JsonThemeLoader.cs:2).
+         используются в коде (CellForgeTuiRenderer.cs:4-7; Widgets/ChatScreenLayout.cs:4).
          Services / ViewModels / Sessions / Ui.Framework.Abstractions — поверхность
          панельной интеграции (TOP-1 #27, эпики B-K), разрешены строкой Harbor.Tui.CellForge
          в tests/Harbor.Architecture.Tests/FullLayerMatrixTests.cs.

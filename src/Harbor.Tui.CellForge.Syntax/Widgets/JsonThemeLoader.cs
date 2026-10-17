@@ -1,7 +1,6 @@
 using CSharpFunctionalExtensions;
 using Ensure = Harbor.Abstractions.Extensions.Ensure;
-using Harbor.DesignSystem;
-using Harbor.Ui.Framework.Projection;
+using Harbor.DesignSystem; // #1617: the dead Projection using dropped with the move
 
 namespace Harbor.Tui.CellForge.Widgets;
 

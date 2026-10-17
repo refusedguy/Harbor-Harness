@@ -1,0 +1,41 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsPackable>true</IsPackable>
+    <PackageId>Harbor.Tui.CellForge.Syntax</PackageId>
+    <Description>Harbor TUI syntax — fenced-code highlighting (CodeSyntaxTokenizer, the ILanguageSupport registry and builtin language groups, CodeHighlightPalette) and the terminal theme plumbing (JsonThemeLoader parser, ThemeFileWatcher live-reload). Extracted verbatim from Harbor.Tui.CellForge (issue #1617); namespaces stay Harbor.Tui.CellForge.Rendering / .Widgets, so consumers keep their usings and only ProjectReferences change. AOT-compatible.</Description>
+    <PackageTags>harbor;tui;syntax-highlighting;tokenizer;themes</PackageTags>
+    <!-- Presentation sibling of Harbor.Tui.CellForge — must stay trim/AOT-clean. -->
+    <IsAotCompatible>true</IsAotCompatible>
+  </PropertyGroup>
+
+  <!--
+    #1617: verbatim extraction of the CellForge syntax-highlight + themes cluster
+    (Chat/Rendering/CodeSyntaxTokenizer + ILanguageSupport + builtin supports +
+    LanguageSupportRegistry + CodeHighlightPalette + CodeTokenizer façade,
+    Chat/Widgets/JsonThemeLoader + ThemeFileWatcher). The single seam the
+    cluster had was Harbor.Ui.Framework.Rendering (spans paint into Rendering
+    grids) plus Harbor.DesignSystem (theme documents) — both stay; the
+    CellForge root keeps ChatScreen/Streaming/LayoutTree/OverlayStack and binds
+    this assembly for CodeTokenizer (AssistantMarkdownBlock).
+  -->
+  <ItemGroup>
+    <ProjectReference Include="..\Harbor.Extensions\Harbor.Extensions.csproj"/>
+    <ProjectReference Include="..\Harbor.Ui.Framework.Rendering\Harbor.Ui.Framework.Rendering.csproj"/>
+    <ProjectReference Include="..\Harbor.DesignSystem\Harbor.DesignSystem.csproj"/>
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- CSharpFunctionalExtensions: the Result/Maybe railway in
+         JsonThemeLoader / ThemeFileWatcher. Rides in transitively via
+         Harbor.Extensions→Harbor.Abstractions; this assembly binds it
+         DIRECTLY, so it is declared. -->
+    <PackageReference Include="CSharpFunctionalExtensions"/>
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Harbor.Tui.CellForge.Tests"/>
+  </ItemGroup>
+
+</Project>

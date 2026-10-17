@@ -242,8 +242,8 @@ public sealed class ThemeStoreSeamRules
     /// </summary>
     private static readonly string[] GatedWidgets =
     [
-        "src/Harbor.Tui.CellForge/Chat/Widgets/JsonThemeLoader.cs",
-        "src/Harbor.Tui.CellForge/Chat/Widgets/ThemeFileWatcher.cs",
+        "src/Harbor.Tui.CellForge.Syntax/Widgets/JsonThemeLoader.cs",
+        "src/Harbor.Tui.CellForge.Syntax/Widgets/ThemeFileWatcher.cs",
     ];
 
     /// <summary>
@@ -275,7 +275,7 @@ public sealed class ThemeStoreSeamRules
     ///     port" must be a claim the scanner can contradict, and a sibling that
     ///     passes is a far better control than a synthetic string.
     /// </summary>
-    private const string PortNamingControl = "src/Harbor.Tui.CellForge/Chat/Widgets/ThemeFileWatcher.cs";
+    private const string PortNamingControl = "src/Harbor.Tui.CellForge.Syntax/Widgets/ThemeFileWatcher.cs";
 
 
     /// <summary>
