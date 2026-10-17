@@ -42,10 +42,13 @@ internal static class OnboardingPicks
     }
 
     /// <summary>
-    ///     Normalize a model the user typed free-text: trim once, then prepend
-    ///     <c>providerId/</c> unless it is already provider-qualified (has a
-    ///     slash). Shared by the live-list tail and the free-text fallback so the
-    ///     two prompts stop disagreeing about whitespace (#1577).
+    ///     Normalize a model the user typed free-text: trim once, then read the
+    ///     <c>provider/model</c> identity through the contract (#678) instead of
+    ///     counting slashes: a typed <c>otherprov/some-model</c> named a provider
+    ///     on purpose, so <see cref="ModelRef.TryParse" /> runs first and
+    ///     <see cref="ModelRef.Qualify" /> catches the bare name. Shared by the
+    ///     live-list tail and the free-text fallback so the two prompts stop
+    ///     disagreeing about whitespace (#1577).
     /// </summary>
     /// <param name="input">The raw model id or bare model name; may be <c>null</c>.</param>
     /// <param name="providerId">The provider id to prefix a bare name with.</param>
@@ -53,6 +56,14 @@ internal static class OnboardingPicks
     public static string NormalizeModelId(string? input, string providerId)
     {
         string trimmed = input?.Trim() ?? string.Empty;
-        return trimmed.Contains('/') ? trimmed : $"{providerId}/{trimmed}";
+        if (trimmed.Length == 0)
+            return trimmed;
+
+        if (ModelRef.TryParse(trimmed) is { IsSuccess: true, Value: var reference })
+            return reference.ToString(); // already a reference — keep its normalized form.
+        return ModelRef.Qualify(providerId, trimmed)
+            is { IsSuccess: true, Value: var qualified }
+            ? qualified.ToString() // bare name: the contract adds the provider prefix.
+            : $"{providerId}/{trimmed}"; // invalid provider id: keep the unvalidated shape.
     }
 }
