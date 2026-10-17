@@ -8,6 +8,10 @@
   <ItemGroup>
     <ProjectReference Include="../../src/Harbor.ChangeTracking/Harbor.ChangeTracking.csproj"/>
     <ProjectReference Include="../../tests/Harbor.TestKit/Harbor.TestKit.csproj"/>
+    <!-- WorkspaceMaterializerTests drives BashTool/WriteTool inside a
+         materialized worktree; nothing else in this closure ships Tools.Builtin,
+         so the edge is declared like Harbor.Application.Tests declares it. -->
+    <ProjectReference Include="../../src/Harbor.Tools.Builtin/Harbor.Tools.Builtin.csproj"/>
   </ItemGroup>
 
 </Project>
