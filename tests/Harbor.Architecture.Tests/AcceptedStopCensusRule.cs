@@ -33,7 +33,10 @@ public sealed class AcceptedStopCensusRule
         // #1507 (#95 slice): the validate/permission/retry chain — five of
         // the seven terminal publishes — moved verbatim to ToolRetryPolicy.cs
         // (same assembly). The terminal surface now spans both files.
-        string agents = Path.Combine(root, "src", "Harbor.Application", "Agents");
+        // #1623: both files moved verbatim from Harbor.Application to the
+        // extracted Harbor.AgentRuntime assembly; the census re-points with them
+        // (verbatim move, counts unchanged).
+        string agents = Path.Combine(root, "src", "Harbor.AgentRuntime", "Agents");
         var sb = new StringBuilder();
         foreach (string name in new[] { "ToolDispatcher.cs", "ToolRetryPolicy.cs" })
         {

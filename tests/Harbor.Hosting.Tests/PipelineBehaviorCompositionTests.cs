@@ -2,13 +2,13 @@
 //
 // WHAT #480 A10 CLAIMED
 // ---------------------
-// "src/Harbor.Application/Agents/AgentLoop.cs assembles its pipeline by hand:
+// "src/Harbor.AgentRuntime/Agents/AgentLoop.cs assembles its pipeline by hand:
 //  :109-113 new AgentPipeline([new LoggingBehavior, new PermissionCheckBehavior])
 //  — the behaviour list is HARDCODED, so a third behaviour is unreachable
 //  without editing AgentLoop."
 //
 // The shape is real and it is worth a gate. `IPipelineBehavior` is a public,
-// documented extension seam in src/Harbor.Application/Agents/Pipeline/, and
+// documented extension seam in src/Harbor.AgentRuntime/Agents/Pipeline/, and
 // `AgentPipeline` already takes `IEnumerable<IPipelineBehavior>` — the door is
 // built and the frame is on the wall. What is missing is the DOOR: nothing in
 // the composition root ever registers a behaviour, so the set of behaviours
@@ -155,7 +155,7 @@ public class PipelineBehaviorCompositionTests
 
         await Assert.That(unreachable).IsEmpty()
             .Because(
-                "IPipelineBehavior is a public seam in src/Harbor.Application/Agents/Pipeline/ and AgentPipeline "
+                "IPipelineBehavior is a public seam in src/Harbor.AgentRuntime/Agents/Pipeline/ and AgentPipeline "
                 + "already takes IEnumerable<IPipelineBehavior>. An implementation nobody registers is an "
                 + "extension point that exists and cannot be delivered — #620's half-open axis, in the agent "
                 + "pipeline. Unregistered: " + failures);

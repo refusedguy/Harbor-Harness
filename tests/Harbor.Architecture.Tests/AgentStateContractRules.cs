@@ -142,7 +142,7 @@ public sealed class AgentStateContractRules
         MustContain =
         [
             "src/Harbor.Abstractions/Agents/IAgent.cs",
-            "src/Harbor.Application/Agents/DefaultAgent.cs",
+            "src/Harbor.AgentRuntime/Agents/DefaultAgent.cs",
             "src/Harbor.Telemetry.Core/TracingAgentProxy.cs",
         ],
         CustomParse = ParseFabrications,
