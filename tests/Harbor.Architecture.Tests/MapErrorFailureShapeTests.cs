@@ -165,15 +165,6 @@ public sealed class MapErrorFailureShapeTests
     private static readonly Dictionary<string, HandBuiltExemption> HandBuiltMessageExemptions =
         new(StringComparer.Ordinal)
         {
-            ["src/Harbor.Storage.Jsonl/SessionPorter.cs"] = new(
-                4,
-                "Four sites, all re-types: `store.GetAsync` is Result<Session> → Result (line 50), "
-                + "`GetMessagesAsync` is Result<IReadOnlyList<AgentMessage>> → Result (63), "
-                + "`TryReadNonEmptyLineAsync` is Result<Maybe<string>> → Result<string> (95), and "
-                + "`store.CreateAsync` is Result<Session> → Result<string> (124). MapError would hand "
-                + "back the store's own Result<T>; the porter's Result / Result<string> is a different "
-                + "contract. A message that keeps both the session id and the store's reason is right "
-                + "here — the hand-built string is the honest shape until the signature moves."),
             ["src/Harbor.Tools.Builtin/Tools/Mcp/McpOAuthHandler.cs"] = new(
                 2,
                 "Two re-types: `McpOAuthFlow.RefreshAsync` is Result<McpOAuthTokens> → "
@@ -212,6 +203,12 @@ public sealed class MapErrorFailureShapeTests
         // so the exemption had nothing left to exempt. See
         // SessionsSlice_HasNoHandBuiltFailureMessage and
         // SessionsSlice_ExemptionIsGoneOnceItsLastSiteWasConverted.
+        // src/Harbor.Storage.Jsonl/SessionPorter.cs is likewise NOT here any more
+        // (#1558 batch-3). Its four re-types are now `ConvertFailure().MapError(…)`
+        // (ExportAsync GetAsync/GetMessagesAsync), `MapError(…).Bind(…)` (ImportAsync
+        // header-line) and `.MapError(…)` + `ConvertFailure<string>()` (ImportAsync
+        // create-session) — every error still a function of `e` with byte-identical
+        // text, so the entry had nothing left to exempt.
     };
 
     // ── Rule: no hand-built failure message ──────────────────────────────────

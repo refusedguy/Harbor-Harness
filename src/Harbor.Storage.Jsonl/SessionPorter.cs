@@ -47,7 +47,7 @@ public sealed class JsonlSessionPorter : ISessionPorter
 
         var session = await store.GetAsync(sessionId, ct).ConfigureAwait(false);
         if (session.IsFailure) // §4.6-ok: propagate store diagnostic verbatim.
-            return Result.Failure($"Cannot export session '{sessionId}': {session.Error}");
+            return session.ConvertFailure().MapError(e => $"Cannot export session '{sessionId}': {e}");
 
         var stats = await store.GetStatsAsync(sessionId, ct).ConfigureAwait(false);
 
@@ -60,7 +60,7 @@ public sealed class JsonlSessionPorter : ISessionPorter
 
         var messages = await store.GetMessagesAsync(sessionId, ct).ConfigureAwait(false);
         if (messages.IsFailure) // §4.6-ok: header written → surface a clear partial-export failure.
-            return Result.Failure($"Cannot export messages of session '{sessionId}': {messages.Error}");
+            return messages.ConvertFailure().MapError(e => $"Cannot export messages of session '{sessionId}': {e}");
 
         foreach (AgentMessage message in messages.Value)
         {
@@ -89,38 +89,32 @@ public sealed class JsonlSessionPorter : ISessionPorter
 
         // #199: the header read is a Result step — an empty payload is a
         // failure, and an I/O error travels the rail instead of throwing.
-        var headerLineResult = await TryReadNonEmptyLineAsync(input).ConfigureAwait(false);
+        var headerLineResult = (await TryReadNonEmptyLineAsync(input).ConfigureAwait(false))
+            .MapError(error => $"Import failed while reading header: {error}")
+            .Bind(maybe => maybe.HasValue
+                ? Result.Success<string>(maybe.Value)
+                : Result.Failure<string>("Import failed: payload is empty."));
         if (headerLineResult.IsFailure)
-            return Result.Failure<string>($"Import failed while reading header: {headerLineResult.Error}");
-        Maybe<string> headerLineMaybe = headerLineResult.Value; // guarded: returned above on failure.
-        string? headerLine = headerLineMaybe.HasValue ? headerLineMaybe.Value : null;
-        if (headerLine is null)
-            return Result.Failure<string>("Import failed: payload is empty.");
+            return headerLineResult;
+        string headerLine = headerLineResult.Value; // guarded: returned above on failure.
 
         var envelopeResult = Result.Try(
             () => JsonSerializer.Deserialize(headerLine, JsonlCodecContext.Default.ExportEnvelope),
-            ex => $"Invalid export header: {ex.Message}");
+            ex => $"Invalid export header: {ex.Message}")
+            .Bind(ValidateExportEnvelope);
         if (envelopeResult.IsFailure)
             return envelopeResult.ConvertFailure<string>();
-        ExportEnvelope? envelope = envelopeResult.Value;
-
-        if (envelope is null || envelope.Marker != EnvelopeMarker)
-            return Result.Failure<string>(
-                $"Not a Harbor session export (missing '{EnvelopeMarker}' marker).");
-        if (envelope.Version > SchemaVersion)
-            return Result.Failure<string>(
-                $"Unsupported export schema version {envelope.Version} (this build supports up to {SchemaVersion}).");
-        if (string.IsNullOrWhiteSpace(envelope.Session.Id))
-            return Result.Failure<string>("Export header has no source session id.");
+        ExportEnvelope envelope = envelopeResult.Value; // guarded: returned above on failure.
 
         Session source = envelope.Session;
         // Minted fresh ALWAYS — see ISessionPorter remarks (idempotent double-import).
         // NOTE: stores generate their OWN ids inside CreateAsync, so the enriched
         // target record is derived from created.Value AFTER the call, never before.
-        var created = await store.CreateAsync(source.Directory, source.Agent, source.ProviderId, source.Model, ct)
-            .ConfigureAwait(false);
+        var created = (await store.CreateAsync(source.Directory, source.Agent, source.ProviderId, source.Model, ct)
+            .ConfigureAwait(false))
+            .MapError(error => $"Import failed while creating session: {error}");
         if (created.IsFailure) // §4.6-ok: single rail-step to the transport type.
-            return Result.Failure<string>($"Import failed while creating session: {created.Error}");
+            return created.ConvertFailure<string>();
 
         Session target = created.Value with
         {
@@ -185,6 +179,26 @@ public sealed class JsonlSessionPorter : ISessionPorter
 
         JsonlSessionPorterLog.SessionImported(_logger, target.Id, source.Id, imported, skipped);
         return Result.Success(target.Id);
+    }
+
+    /// <summary>
+    /// Pure header-shape gate for the import preamble: null/marker/version/id
+    /// checks in the same order and with the same texts as the inline ladder
+    /// they replace, so the <c>Result.Try</c> parse above joins the rail via
+    /// <c>Bind</c> and <c>ConvertFailure&lt;string&gt;</c> stays only on the
+    /// transport-type boundary below.
+    /// </summary>
+    private static Result<ExportEnvelope> ValidateExportEnvelope(ExportEnvelope? envelope)
+    {
+        if (envelope is null || envelope.Marker != EnvelopeMarker)
+            return Result.Failure<ExportEnvelope>(
+                $"Not a Harbor session export (missing '{EnvelopeMarker}' marker).");
+        if (envelope.Version > SchemaVersion)
+            return Result.Failure<ExportEnvelope>(
+                $"Unsupported export schema version {envelope.Version} (this build supports up to {SchemaVersion}).");
+        if (string.IsNullOrWhiteSpace(envelope.Session.Id))
+            return Result.Failure<ExportEnvelope>("Export header has no source session id.");
+        return Result.Success(envelope);
     }
 
     /// <summary>
