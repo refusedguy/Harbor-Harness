@@ -29,9 +29,12 @@ internal abstract class FsNode
 
     /// <summary>
     ///     Whether the node is a composite. Kept as a property so policy filters
-    ///     (prune lists, tracked-file rules) stay uniform over the model.
+    ///     (prune lists, tracked-file rules) stay uniform over the model. Derived
+    ///     roles answer polymorphically — no type test on <c>this</c> (S3060, the
+    ///     rule the pre-#1588 walkers tripped with their <c>is DirectoryInfo</c>
+    ///     branching).
     /// </summary>
-    public bool IsDirectory => this is FsDirectory;
+    public abstract bool IsDirectory { get; }
 }
 
 /// <summary>
@@ -44,6 +47,9 @@ internal sealed class FsFile : FsNode
 
     /// <summary>The <see cref="FileInfo" /> this node was materialised from.</summary>
     public FileInfo File { get; }
+
+    /// <inheritdoc />
+    public override bool IsDirectory => false;
 }
 
 /// <summary>
@@ -58,6 +64,9 @@ internal sealed class FsDirectory : FsNode
 
     /// <summary>The <see cref="DirectoryInfo" /> this node was materialised from.</summary>
     public DirectoryInfo Directory { get; }
+
+    /// <inheritdoc />
+    public override bool IsDirectory => true;
 }
 
 /// <summary>
