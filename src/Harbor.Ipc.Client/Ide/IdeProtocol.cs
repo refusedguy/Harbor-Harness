@@ -1,3 +1,4 @@
+using System.Text.Json;
 using System.Text.Json.Serialization;
 
 namespace Harbor.Ipc.Ide;
@@ -196,6 +197,9 @@ public sealed class IdeRpcException : Exception
 [JsonSerializable(typeof(IdeAbortResult))]
 [JsonSerializable(typeof(IdeStreamNotification))]
 [JsonSerializable(typeof(IdePromptErrorNotification))]
+// Raw tool↔editor envelopes (IdeJsonRpcServer.HandleLine) read as JsonElement
+// via the same contract — reflection-free DOM on the server path (PERF-002).
+[JsonSerializable(typeof(JsonElement))]
 [JsonSerializable(typeof(string))]
 [JsonSerializable(typeof(bool))]
 internal sealed partial class IdeJsonContext : JsonSerializerContext;

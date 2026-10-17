@@ -1,3 +1,4 @@
+using System.Text.Json;
 using System.Text.Json.Serialization;
 
 namespace Harbor.Lsp;
@@ -208,4 +209,7 @@ public static class LspWire
 [JsonSerializable(typeof(LspWire.DidCloseTextDocumentParams))]
 [JsonSerializable(typeof(LspWire.PositionParams))]
 [JsonSerializable(typeof(LspWire.PublishDiagnosticsParams))]
+// Raw wire frames (LspClient.ReadFrameAsync) read as JsonElement via the
+// same contract — reflection-free DOM on the read path (PERF-002).
+[JsonSerializable(typeof(JsonElement))]
 internal sealed partial class LspJsonContext : JsonSerializerContext;

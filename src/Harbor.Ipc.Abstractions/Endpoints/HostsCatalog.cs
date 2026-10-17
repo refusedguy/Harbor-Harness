@@ -50,8 +50,8 @@ public static class HostsCatalog
                     new Dictionary<string, EndpointDescriptor>());
             }
 
-            using var doc = JsonDocument.Parse(File.ReadAllText(path));
-            if (doc.RootElement.ValueKind != JsonValueKind.Object)
+            JsonElement root = JsonSerializer.Deserialize(File.ReadAllText(path), HostsCatalogJsonContext.Default.JsonElement); // same DOM as JsonDocument.Parse via source-gen JsonElement info (PERF-002); malformed still throws JsonException
+            if (root.ValueKind != JsonValueKind.Object)
             {
                 return Result.Failure<IReadOnlyDictionary<string, EndpointDescriptor>>(
                     $"hosts.json root must be an object: {path}");
@@ -63,7 +63,7 @@ public static class HostsCatalog
             // no longer hides the rest. A single bad entry reports exactly the
             // same message as before (Combine of one failure is that failure).
             var failures = new List<Result>();
-            foreach (var entry in doc.RootElement.EnumerateObject())
+            foreach (var entry in root.EnumerateObject())
             {
                 var parsed = ParseEntry(entry.Name, entry.Value);
                 if (parsed.IsSuccess)
@@ -174,4 +174,16 @@ public static class HostsCatalog
                 $"Host '{name}': unknown kind \"{kind}\" (expected uds | tcp | tailscale).")
         };
     }
+}
+
+/// <summary>
+///     Source-generated JSON metadata for the <c>hosts.json</c> catalog
+///     (AOT-safe, PERF-002): the catalog is read as a raw
+///     <see cref="JsonElement"/> object and resolved entry-by-entry in
+///     <see cref="HostsCatalog.ParseEntry" />, so the context exists purely
+///     to make the read reflection-free.
+/// </summary>
+[System.Text.Json.Serialization.JsonSerializable(typeof(JsonElement))]
+internal sealed partial class HostsCatalogJsonContext : System.Text.Json.Serialization.JsonSerializerContext
+{
 }

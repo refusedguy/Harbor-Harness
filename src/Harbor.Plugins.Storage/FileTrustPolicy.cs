@@ -209,10 +209,12 @@ public sealed class FileTrustPolicy : IPluginTrustPolicy
         {
             if (File.Exists(_storePath))
             {
-                using var doc = JsonDocument.Parse(File.ReadAllText(_storePath));
-                loaded = doc.RootElement.ValueKind == JsonValueKind.Array
-                    ? DeserializeList(doc.RootElement)
-                    : [];
+                // Same DOM as JsonDocument.Parse, but through the source-generated
+                // JsonElement info (PERF-002): the element is self-contained, so
+                // no document lifetime is tracked here. Malformed files still
+                // throw JsonException — caught below and treated as empty.
+                JsonElement root = JsonSerializer.Deserialize(File.ReadAllText(_storePath), FileTrustPolicyJsonContext.Default.JsonElement);
+                loaded = root.ValueKind == JsonValueKind.Array ? DeserializeList(root) : [];
             }
             else
             {
@@ -302,6 +304,9 @@ public sealed class FileTrustPolicy : IPluginTrustPolicy
 /// <summary>Source-generated JSON metadata for the trust store (AOT-safe).</summary>
 [JsonSerializable(typeof(FileTrustPolicy.TrustEntry))]
 [JsonSerializable(typeof(List<FileTrustPolicy.TrustEntry>))]
+// Cold-leg catalog read (LoadEntries) uses the raw JsonElement info so the
+// reflection-free property tolerance of DeserializeList is preserved verbatim.
+[JsonSerializable(typeof(JsonElement))]
 [JsonSourceGenerationOptions(WriteIndented = true, DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull)]
 internal sealed partial class FileTrustPolicyJsonContext : JsonSerializerContext
 {
