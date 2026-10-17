@@ -183,6 +183,49 @@ public static class GroupTree
         throw new ArgumentOutOfRangeException(nameof(count), "Group split exceeds entry count.");
     }
 
+    /// <summary>
+    ///     The one depth-first walk of a node forest — a Visitor over the
+    ///     <see cref="GroupNode{TEntry, TKind}" /> Composite: visiting a node
+    ///     dispatches to a leaf visit or a group visit; a group visit returns
+    ///     whether to descend, and descending re-enters <see cref="Walk" /> on
+    ///     the node's children. Consuming a tree therefore means handing
+    ///     delegates to this one operation, instead of owning an
+    ///     <c>is Entry / is Group</c> recursion per consumer (#1589).
+    /// </summary>
+    /// <param name="nodes">Forest to walk; children keep their list order.</param>
+    /// <param name="visitEntry">Leaf sink; each entry is visited exactly once, in reading order.</param>
+    /// <param name="visitGroup">
+    ///     Group sink, visited before its children. Returns whether to descend
+    ///     into the subtree (<see langword="false"/> prunes it wholesale).
+    /// </param>
+    public static void Walk<TEntry, TKind>(
+        IEnumerable<GroupNode<TEntry, TKind>> nodes,
+        Action<GroupNode<TEntry, TKind>.Entry> visitEntry,
+        Func<GroupNode<TEntry, TKind>.Group, bool> visitGroup)
+        where TKind : notnull
+    {
+        ArgumentNullException.ThrowIfNull(nodes);
+        ArgumentNullException.ThrowIfNull(visitEntry);
+        ArgumentNullException.ThrowIfNull(visitGroup);
+
+        foreach (GroupNode<TEntry, TKind> node in nodes)
+        {
+            switch (node)
+            {
+                case GroupNode<TEntry, TKind>.Entry leaf:
+                    visitEntry(leaf);
+                    break;
+
+                case GroupNode<TEntry, TKind>.Group group:
+                    if (visitGroup(group))
+                    {
+                        Walk(group.Children, visitEntry, visitGroup);
+                    }
+                    break;
+            }
+        }
+    }
+
     private static void AppendEntry<TEntry, TKind>(
         List<BuilderNode<TEntry, TKind>> nodes,
         TEntry entry,

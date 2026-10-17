@@ -87,6 +87,45 @@ public class GroupTreeTests
         }
     }
 
+    [Test]
+    public async Task Walk_VisitsGroupBeforeChildren_AndEntriesInReadingOrder()
+    {
+        var read = ("read", new[] { "activity", "exploration" });
+        var search = ("search", new[] { "activity", "exploration" });
+        var text = ("text", Array.Empty<string>());
+        var tree = GroupTree.GroupEntries(new[] { read, search, text }, Path);
+
+        var visited = new List<string>();
+        GroupTree.Walk(
+            tree,
+            leaf => visited.Add(leaf.Value.Item1),
+            group =>
+            {
+                visited.Add(group.Kind);
+                return true;
+            });
+
+        await Assert.That(
+            string.Join(',', visited)).IsEqualTo("activity,exploration,read,search,text");
+    }
+
+    [Test]
+    public async Task Walk_PruneSkipsSubtree_TopLevelEntriesStillVisited()
+    {
+        var read = ("read", new[] { "activity", "exploration" });
+        var text = ("text", Array.Empty<string>());
+        var tree = GroupTree.GroupEntries(new[] { read, text }, Path);
+
+        var visited = new List<string>();
+        GroupTree.Walk(
+            tree,
+            leaf => visited.Add(leaf.Value.Item1),
+            static _ => false);
+
+        await Assert.That(
+            string.Join(',', visited)).IsEqualTo("text");
+    }
+
     private static int LeafCount(
         IReadOnlyList<GroupNode<(string, string[]), string>> nodes)
     {
