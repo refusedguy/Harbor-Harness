@@ -47,7 +47,9 @@ permissions-persisted decision ("always") short-circuits the Ask prompt.
 ## Dependencies
 
 `Harbor.Abstractions` (+ `Harbor.Abstractions.Contracts` transitively, for
-the `PermissionRuleset`/`ToolSafetyDeclaration` vocabulary),
+the `PermissionRuleset`/`ToolSafetyDeclaration` vocabulary), the
+`Harbor.Extensions` Domain helper leaf (the `Ensure.*` argument guards in
+`ApprovalCoordinator` — the same edge Harbor.Application's own row carries),
 `CSharpFunctionalExtensions` (the `Result` railway in `PermissionService`),
 `Microsoft.Extensions.Logging.Abstractions` (the `[LoggerMessage]` factory
 class). No Infrastructure, no Presentation, no Harbor.Application.
