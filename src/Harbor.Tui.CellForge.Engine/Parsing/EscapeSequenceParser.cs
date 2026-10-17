@@ -1,5 +1,4 @@
 using System.Text;
-using Harbor.Tui.CellForge.Capabilities;
 using Harbor.Tui.CellForge.Input;
 
 namespace Harbor.Tui.CellForge.Parsing;
@@ -18,8 +17,8 @@ namespace Harbor.Tui.CellForge.Parsing;
 /// </summary>
 public sealed class EscapeSequenceParser
 {
-    private const byte Esc = 0x1B;
-    private const byte Bel = 0x07;
+    internal const byte Esc = 0x1B;
+    internal const byte Bel = 0x07;
     private const byte Can = 0x18;
     private const byte Sub = 0x1A;
 
@@ -39,14 +38,14 @@ public sealed class EscapeSequenceParser
     private KeyModifiers _utf8PendingMods;
 
     // OSC / DCS / APC / PM string consumption guard.
-    private int _stringLength;
-    private bool _stringEscSeen;
+    internal int _stringLength;
+    internal bool _stringEscSeen;
 
     // OSC string capture (auto-theme §3.x): bytes of the current OSC string
     // body, lazily allocated, bounded by MaxStringBytes. Only OSC 11 reports
     // are decoded — every other OSC string stays discarded.
-    private byte[]? _oscBuffer;
-    private int _oscLength;
+    internal byte[]? _oscBuffer;
+    internal int _oscLength;
 
     // SGR-mouse press context for Click/Drag/Release synthesis (§3.3).
     private MouseButton _mousePressedButton;
@@ -54,12 +53,10 @@ public sealed class EscapeSequenceParser
 
     // Bracketed-paste payload assembly (§4). The payload buffer is reused
     // across pastes; only the final UTF-8 decode allocates one string.
-    private byte[]? _pasteBuffer;
-    private int _pasteLength;
-    private bool _pasteTruncated;
-    private int _pasteMarkerProgress;
-
-    private static readonly byte[] PasteClose = [(byte)0x1B, (byte)'[', (byte)'2', (byte)'0', (byte)'1', (byte)'~'];
+    internal byte[]? _pasteBuffer;
+    internal int _pasteLength;
+    internal bool _pasteTruncated;
+    internal int _pasteMarkerProgress;
 
     public EscapeSequenceParser(ParserOptions? options = null)
     {
@@ -70,15 +67,17 @@ public sealed class EscapeSequenceParser
     public ParserOptions Options => _options;
     public ParserState State => _state;
     public int AvailableEvents => _count;
-    public int MalformedSequenceCount { get; private set; }
+    public int MalformedSequenceCount { get; internal set; }
     public int IgnoredSequenceCount { get; internal set; }
 
     /// <summary>True while a bracketed paste block has not been closed yet.</summary>
-    public bool IsAwaitingPasteClose { get; private set; }
+    public bool IsAwaitingPasteClose { get; internal set; }
 
     /// <summary>Nested open markers (200~ without close) seen inside paste
     /// blocks — treated as literal content per §4.2 #5.</summary>
-    public int NestedPasteMarkerCount { get; private set; }
+    public int NestedPasteMarkerCount { get; internal set; }
+
+    internal void SetState(ParserState value) => _state = value;
 
     /// <summary>Feeds a chunk of raw stdin bytes. Chunks may split escape
     /// sequences or UTF-8 characters at any byte boundary.</summary>
@@ -578,209 +577,51 @@ public sealed class EscapeSequenceParser
         CsiDecoder.LegacyModifiers(parameters);
 
     // ── OSC / DCS strings ─────────────────────────────────────────────────
+    // Bodies live in <see cref="OscHandler"/> (#1504, slice: verbatim move).
 
-    private void StringBody(byte b, bool belTerminates)
-    {
-        if (_stringEscSeen)
-        {
-            _stringEscSeen = false;
-            if (b == (byte)'\\')
-            {
-                // ST terminator — an OSC string just completed.
-                EmitOscReportIfPresent("\u001B\\");
-                _state = ParserState.Ground;
-                return;
-            }
-
-            // Embedded non-ST ESC — swallow both bytes, keep consuming.
-            _stringLength += 2;
-            if (_stringLength > _options.MaxStringBytes)
-            {
-                ForceStringAbort();
-            }
-            return;
-        }
-
-        if (belTerminates && b == Bel)
-        {
-            EmitOscReportIfPresent("\u0007");
-            _state = ParserState.Ground;
-            return;
-        }
-
-        if (b == Esc)
-        {
-            _stringEscSeen = true;
-            return;
-        }
-
-        CaptureOscByte(b);
-        _stringLength++;
-        if (_stringLength > _options.MaxStringBytes)
-        {
-            ForceStringAbort();
-        }
-    }
+    private void StringBody(byte b, bool belTerminates) =>
+        OscHandler.StringBody(this, b, belTerminates);
 
     /// <summary>Stashes one OSC-string body byte (OscString state only) so an
-    /// OSC 11 background report can be decoded on termination.</summary>
-    private void CaptureOscByte(byte b)
-    {
-        if (_state != ParserState.OscString)
-        {
-            return;
-        }
-
-        if (_oscBuffer is null)
-        {
-            _oscBuffer = new byte[_options.MaxStringBytes];
-        }
-
-        if (_oscLength < _oscBuffer.Length)
-        {
-            _oscBuffer[_oscLength++] = b;
-        }
-    }
+    /// OSC 11 background report can be decoded on termination.
+    /// Forwarder over <see cref="OscHandler"/> (#1504, slice: verbatim move).</summary>
+    private void CaptureOscByte(byte b) =>
+        OscHandler.CaptureOscByte(this, b);
 
     /// <summary>Decodes a just-terminated OSC string: «11;rgb:…» background
     /// reports and «99;…» kitty notification capability answers become
-    /// capability events; every other OSC string stays discarded.</summary>
-    private void EmitOscReportIfPresent(string terminator)
-    {
-        int len = _oscLength;
-        _oscLength = 0;
-        if (_state != ParserState.OscString || len < 3 || _oscBuffer is null)
-        {
-            return;
-        }
+    /// capability events; every other OSC string stays discarded.
+    /// Forwarder over <see cref="OscHandler"/> (#1504, slice: verbatim move).</summary>
+    private void EmitOscReportIfPresent(string terminator) =>
+        OscHandler.EmitOscReportIfPresent(this, terminator);
 
-        if (_oscBuffer[0] == (byte)'1' && _oscBuffer[1] == (byte)'1' && _oscBuffer[2] == (byte)';')
-        {
-            string report = Encoding.ASCII.GetString(_oscBuffer, 0, len) + terminator;
-            if (TerminalBackgroundProbe.TryParseOsc11(report, out var background))
-            {
-                EnqueueCapability(CapabilityEvent.Osc11Background(background.R, background.G, background.B));
-            }
-
-            return;
-        }
-
-        if (_oscBuffer[0] == (byte)'9' && _oscBuffer[1] == (byte)'9' && _oscBuffer[2] == (byte)';')
-        {
-            // kitty desktop-notification capability answer (osc-sprint §777):
-            // the query OSC 99;i=harbor:p=? was answered — notifications exist.
-            EnqueueCapability(CapabilityEvent.Osc99Notify());
-        }
-    }
-
-    private void ForceStringAbort()
-    {
-        MalformedSequenceCount++;
-        Enqueue(InputEvent.Unknown());
-        _stringEscSeen = false;
-        _stringLength = 0;
-        _oscLength = 0;
-        _state = ParserState.Ground;
-    }
+    private void ForceStringAbort() =>
+        OscHandler.ForceStringAbort(this);
 
     // ── Bracketed paste (§4) ──────────────────────────────────────────────
+    // Bodies live in <see cref="OscHandler"/> (#1504, slice: verbatim move).
 
     /// <summary>Anti-injection invariant (§4.2): paste content is copied
     /// verbatim into one atomic PasteEvent — escape bytes and control bytes
-    /// inside the block are NEVER decoded as key/mouse events.</summary>
-    internal void StartPaste()
-    {
-        _pasteBuffer ??= new byte[_options.MaxPasteBytes];
-        _pasteLength = 0;
-        _pasteTruncated = false;
-        _pasteMarkerProgress = 0;
-        IsAwaitingPasteClose = true;
-        _state = ParserState.PastePayload;
-    }
+    /// inside the block are NEVER decoded as key/mouse events.
+    /// Forwarder over <see cref="OscHandler"/> (#1504, slice: verbatim move).</summary>
+    internal void StartPaste() =>
+        OscHandler.StartPaste(this);
 
-    private void PastePayloadByte(byte b)
-    {
-        if (_pasteMarkerProgress > 0 && b == PasteClose[_pasteMarkerProgress])
-        {
-            // Continue matching the closing marker ESC [ 2 0 1 ~.
-            if (_pasteMarkerProgress == PasteClose.Length - 1)
-            {
-                EmitPaste(_pasteTruncated);
-                return;
-            }
+    private void PastePayloadByte(byte b) =>
+        OscHandler.PastePayloadByte(this, b);
 
-            _pasteMarkerProgress++;
-            return;
-        }
-
-        // Mismatch: the partial marker match was literal content after all.
-        if (_pasteMarkerProgress > 0)
-        {
-            // A nested OPEN marker (…200~) shares its prefix with the closer —
-            // count it for diagnostics, content stays literal (§4.2 #5).
-            if (_pasteMarkerProgress == 4 && b == (byte)'0')
-            {
-                NestedPasteMarkerCount++;
-            }
-
-            for (var i = 0; i < _pasteMarkerProgress; i++)
-            {
-                AppendPasteByte(PasteClose[i]);
-            }
-
-            _pasteMarkerProgress = 0;
-        }
-
-        if (b == PasteClose[0])
-        {
-            _pasteMarkerProgress = 1;
-            return;
-        }
-
-        AppendPasteByte(b);
-    }
-
-    private void AppendPasteByte(byte b)
-    {
-        if (_pasteBuffer is null || _pasteLength >= _pasteBuffer.Length)
-        {
-            // Paste-flood guard (§8.3): drop beyond cap but keep scanning so
-            // the closing marker still terminates the block cleanly.
-            _pasteTruncated = true;
-            return;
-        }
-
-        _pasteBuffer[_pasteLength++] = b;
-    }
+    private void AppendPasteByte(byte b) =>
+        OscHandler.AppendPasteByte(this, b);
 
     /// <summary>Watchdog hook: force-closes a hung paste block (design §4.2),
-    /// emitting whatever was accumulated as a truncated paste.</summary>
-    public void AbortPendingPaste()
-    {
-        if (!IsAwaitingPasteClose)
-        {
-            return;
-        }
+    /// emitting whatever was accumulated as a truncated paste.
+    /// Forwarder over <see cref="OscHandler"/> (#1504, slice: verbatim move).</summary>
+    public void AbortPendingPaste() =>
+        OscHandler.AbortPendingPaste(this);
 
-        _pasteMarkerProgress = 0;
-        EmitPaste(wasTruncated: true);
-        _state = ParserState.Ground;
-    }
-
-    private void EmitPaste(bool wasTruncated)
-    {
-        var text = _pasteBuffer is null || _pasteLength == 0
-            ? string.Empty
-            : Encoding.UTF8.GetString(_pasteBuffer, 0, _pasteLength);
-
-        _pasteLength = 0;
-        _pasteTruncated = false;
-        _pasteMarkerProgress = 0;
-        IsAwaitingPasteClose = false;
-        _state = ParserState.Ground;
-
-        Enqueue(InputEvent.FromPaste(new PasteEvent(text, wasTruncated)));
-    }
+    private void EmitPaste(bool wasTruncated) =>
+        OscHandler.EmitPaste(this, wasTruncated);
 
     // ── Param scanning helpers (scalar, zero-alloc) ───────────────────────
     // Bodies live in <see cref="CsiDecoder"/> (#1503, slice: verbatim move).
