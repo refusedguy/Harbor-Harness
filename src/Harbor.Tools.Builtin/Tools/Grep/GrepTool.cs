@@ -102,9 +102,7 @@ public sealed partial class GrepTool : ITool
         string path = JsonArgs.GetString(args, "path") ?? Environment.CurrentDirectory;
         string? include = JsonArgs.GetString(args, "include");
         bool ignoreCase = JsonArgs.GetBool(args, "ignoreCase");
-        int maxResults = JsonArgs.GetInt(args, "maxResults") is { } max
-            ? Math.Clamp(max, 1, 10_000)
-            : 100;
+        int maxResults = JsonArgs.GetClampedInt(args, "maxResults", 1, 10_000, 100);
 
         // One-shot search: Compiled is often slower (JIT of regex). MatchTimeout = safety.
         var options = RegexOptions.CultureInvariant
