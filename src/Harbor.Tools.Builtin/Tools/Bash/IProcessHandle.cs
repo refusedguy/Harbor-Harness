@@ -15,11 +15,11 @@ namespace Harbor.Tools.Builtin;
 /// </remarks>
 public interface IProcessHandle : IDisposable
 {
-    /// <summary>Raised for each stdout line, then once with <c>null</c> at end-of-stream.</summary>
-    event Action<string?> StdoutLine;
+    /// <summary>Raised for each stdout line, then once with <see cref="ProcessLineEventArgs.Line" /> = <c>null</c> at end-of-stream.</summary>
+    event EventHandler<ProcessLineEventArgs>? StdoutLine;
 
-    /// <summary>Raised for each stderr line, then once with <c>null</c> at end-of-stream.</summary>
-    event Action<string?> StderrLine;
+    /// <summary>Raised for each stderr line, then once with <see cref="ProcessLineEventArgs.Line" /> = <c>null</c> at end-of-stream.</summary>
+    event EventHandler<ProcessLineEventArgs>? StderrLine;
 
     /// <summary>Starts the asynchronous line readers (BCL: BeginOutputReadLine + BeginErrorReadLine).</summary>
     void BeginReading();

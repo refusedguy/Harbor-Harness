@@ -271,10 +271,10 @@ internal sealed class FakeProcessHandle(
     private int _terminations; // 0 = running, 1 = EoS+fired exactly once
 
     /// <inheritdoc />
-    public event Action<string?> StdoutLine;
+    public event EventHandler<ProcessLineEventArgs>? StdoutLine;
 
     /// <inheritdoc />
-    public event Action<string?> StderrLine;
+    public event EventHandler<ProcessLineEventArgs>? StderrLine;
 
     /// <summary>Exit code the tool reads; real kills report non-zero, tests default to <see cref="exitCode" />.</summary>
     public int ExitCodeOverride { get; set; } = int.MinValue;
@@ -300,12 +300,12 @@ internal sealed class FakeProcessHandle(
             foreach (string line in stdout)
             {
                 if (HasExited) break;
-                StdoutLine?.Invoke(line);
+                StdoutLine?.Invoke(this, new ProcessLineEventArgs(line));
             }
             foreach (string line in stderr)
             {
                 if (HasExited) break;
-                StderrLine?.Invoke(line);
+                StderrLine?.Invoke(this, new ProcessLineEventArgs(line));
             }
             if (HasExited) { EmitEndOfStreams(); return; }
             if (hang) return; // never exits on its own — KillTree() must drive it
@@ -339,8 +339,8 @@ internal sealed class FakeProcessHandle(
     {
         if (Interlocked.Exchange(ref _terminations, 1) > 0)
             return;
-        StdoutLine?.Invoke(null);
-        StderrLine?.Invoke(null);
+        StdoutLine?.Invoke(this, new ProcessLineEventArgs(null));
+        StderrLine?.Invoke(this, new ProcessLineEventArgs(null));
         _exit.TrySetResult();
     }
 }

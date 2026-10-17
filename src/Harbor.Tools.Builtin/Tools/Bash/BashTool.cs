@@ -219,34 +219,34 @@ public sealed partial class BashTool : ITool
         // drain gives up — without detach, a late callback would append into
         // a pooled builder already returned to StringBuilderPool
         // (use-after-return corrupting another renter's buffer).
-        void OnStdout(string? line)
+        void OnStdout(object? _, ProcessLineEventArgs e)
         {
-            if (line is null)
+            if (e.Line is null)
             {
                 stdoutEof.TrySetResult();
                 return;
             }
             if (stdout.Builder.Length >= MaxOutputChars)
             {
-                stdoutDropped += line.Length + 1;
+                stdoutDropped += e.Line.Length + 1;
                 return;
             }
-            stdout.Builder.Append(line).Append('\n');
+            stdout.Builder.Append(e.Line).Append('\n');
         }
 
-        void OnStderr(string? line)
+        void OnStderr(object? _, ProcessLineEventArgs e)
         {
-            if (line is null)
+            if (e.Line is null)
             {
                 stderrEof.TrySetResult();
                 return;
             }
             if (stderr.Builder.Length >= MaxOutputChars)
             {
-                stderrDropped += line.Length + 1;
+                stderrDropped += e.Line.Length + 1;
                 return;
             }
-            stderr.Builder.Append(line).Append('\n');
+            stderr.Builder.Append(e.Line).Append('\n');
         }
     }
 

@@ -10,18 +10,34 @@ namespace Harbor.Tools.Builtin;
 public sealed class SystemProcessHandle : IProcessHandle
 {
     private readonly Process _process;
+    private EventHandler<ProcessLineEventArgs>? _stdout;
+    private EventHandler<ProcessLineEventArgs>? _stderr;
 
     /// <inheritdoc />
-    public event Action<string?> StdoutLine;
+    public event EventHandler<ProcessLineEventArgs>? StdoutLine
+    {
+        add => _stdout += value;
+        remove => _stdout -= value;
+    }
 
     /// <inheritdoc />
-    public event Action<string?> StderrLine;
+    public event EventHandler<ProcessLineEventArgs>? StderrLine
+    {
+        add => _stderr += value;
+        remove => _stderr -= value;
+    }
 
     /// <summary>Takes ownership of an already-created (but not necessarily started) child.</summary>
     public SystemProcessHandle(Process process)
     {
         _process = process;
     }
+
+    /// <summary>Bridge so the proxy (outside this type) can feed BCL stream events into the line events.</summary>
+    internal void RaiseStdout(string? line) => _stdout?.Invoke(this, new ProcessLineEventArgs(line));
+
+    /// <summary>Bridge so the proxy (outside this type) can feed BCL stream events into the line events.</summary>
+    internal void RaiseStderr(string? line) => _stderr?.Invoke(this, new ProcessLineEventArgs(line));
 
     /// <inheritdoc />
     public void BeginReading()

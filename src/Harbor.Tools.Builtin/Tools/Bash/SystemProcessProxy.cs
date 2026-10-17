@@ -39,8 +39,8 @@ public sealed class SystemProcessProxy : IProcessProxy
         // BeginOutputReadLine, and BashTool attaches to the handle's events
         // before it calls BeginReading (the buffering boundary) — so no line
         // can be missed even though this wiring already exists.
-        process.OutputDataReceived += (_, e) => handle.StdoutLine?.Invoke(e.Data);
-        process.ErrorDataReceived += (_, e) => handle.StderrLine?.Invoke(e.Data);
+        process.OutputDataReceived += (_, e) => handle.RaiseStdout(e.Data);
+        process.ErrorDataReceived += (_, e) => handle.RaiseStderr(e.Data);
 
         try
         {
