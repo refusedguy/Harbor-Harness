@@ -87,6 +87,8 @@
          assemblies (Harbor.Application use cases + Harbor.Registries impls);
          reference the real owners directly. -->
     <ProjectReference Include="..\..\src\Harbor.Application\Harbor.Application.csproj"/>
+    <!-- #1623: ServiceRegistration binds the extracted agent-loop types directly (using Harbor.Application.Agents). -->
+    <ProjectReference Include="..\..\src\Harbor.AgentRuntime\Harbor.AgentRuntime.csproj"/>
     <ProjectReference Include="..\..\src\Harbor.Registries\Harbor.Registries.csproj"/>
     <ProjectReference Include="..\..\src\Harbor.Hosting\Harbor.Hosting.csproj"/>
     <ProjectReference Include="..\..\src\Harbor.Desktop.Abstractions\Harbor.Desktop.Abstractions.csproj"/>
