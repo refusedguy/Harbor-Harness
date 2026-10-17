@@ -138,7 +138,9 @@ public class FsModelTests
             int iDirA = outD.IndexOf("[dir]  a/", StringComparison.Ordinal);
             int iFileA = outD.IndexOf("[file]", StringComparison.Ordinal);
             await Assert.That(iDirB).IsGreaterThan(0);
-            await Assert.That(iDirA).IsGreaterThan(iDirB);
+            // Не менять направление: OrdinalIgnoreCase даёт 'a' раньше 'B' ('A' < 'B') —
+            // контракт dirs-first ignore-case из FsModel.Read, а не ordinal-порядок.
+            await Assert.That(iDirA).IsLessThan(iDirB);
             await Assert.That(iFileA).IsGreaterThan(iDirA);
             // The shared hidden rule: dot entries stay out unless `all` is set.
             await Assert.That(outD.Contains(".hidden")).IsFalse();
