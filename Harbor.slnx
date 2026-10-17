@@ -25,6 +25,8 @@
         <Project Path="src/Harbor.Hosting/Harbor.Hosting.csproj"/>
         <Project Path="src/Harbor.Logging/Harbor.Logging.csproj"/>
         <Project Path="src/Harbor.Application/Harbor.Application.csproj"/>
+        <!-- #1623: agent runtime (AgentLoop/TurnRunner/ToolDispatcher + pipeline + resilience impls) extracted from Harbor.Application. -->
+        <Project Path="src/Harbor.AgentRuntime/Harbor.AgentRuntime.csproj"/>
         <Project Path="src/Harbor.Extensions/Harbor.Extensions.csproj"/>
         <Project Path="src/Harbor.Terminal.Abstractions/Harbor.Terminal.Abstractions.csproj"/>
         <Project Path="src/Harbor.Desktop.Abstractions/Harbor.Desktop.Abstractions.csproj"/>

@@ -7,6 +7,8 @@
 
   <ItemGroup>
     <ProjectReference Include="../../src/Harbor.Application/Harbor.Application.csproj"/>
+    <!-- #1623: MultiSessionLoadHarness constructs AgentLoop/RetryPolicy directly. -->
+    <ProjectReference Include="../../src/Harbor.AgentRuntime/Harbor.AgentRuntime.csproj"/>
     <ProjectReference Include="../../src/Harbor.Providers.OpenAiCompatible/Harbor.Providers.OpenAiCompatible.csproj"/>
     <ProjectReference Include="../../src/Harbor.Registries/Harbor.Registries.csproj"/>
     <ProjectReference Include="../../src/Harbor.Storage.Memory/Harbor.Storage.Memory.csproj"/>

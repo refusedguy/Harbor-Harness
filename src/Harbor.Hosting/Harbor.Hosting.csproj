@@ -74,6 +74,8 @@
     <ProjectReference Include="..\Harbor.Diagnostics.Abstractions\Harbor.Diagnostics.Abstractions.csproj"/>
     <ProjectReference Include="..\Harbor.Telemetry.Core\Harbor.Telemetry.Core.csproj"/>
     <ProjectReference Include="..\Harbor.Application\Harbor.Application.csproj"/>
+    <!-- #1623: CoreModule/RegistriesModule/ToolsCatalog bind the extracted agent-loop types; Application no longer compiles them. -->
+    <ProjectReference Include="..\Harbor.AgentRuntime\Harbor.AgentRuntime.csproj"/>
     <ProjectReference Include="..\Harbor.Registries\Harbor.Registries.csproj"/>
     <ProjectReference Include="..\Harbor.Desktop.Abstractions\Harbor.Desktop.Abstractions.csproj"/>
 
