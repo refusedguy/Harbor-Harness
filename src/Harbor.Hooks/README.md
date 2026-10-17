@@ -99,7 +99,7 @@ A hook reads the `HookPayload` serialized on **stdin**, writes `{"decision":
   or any app. Enforced by `tests/Harbor.Architecture.Tests/FullLayerMatrixTests.cs`
   (Application layer; the only Harbor edge is → Domain Contracts).
 
-## Limits
+## Limitations
 
 - Plain commands, not plugins: no Roslyn compilation, no `Assembly.Load`, no
   plugin interface family — deliberately (AOT-safe by construction).
