@@ -627,4 +627,129 @@ public class DynamicModelCatalogTests
             if (Directory.Exists(cacheDir)) Directory.Delete(cacheDir, true);
         }
     }
+
+    [Test]
+    public async Task GetModelsAsync_EntryWithoutId_IsSkippedAndCounted()
+    {
+        // #1581 partial skip: the catalog keeps the parsable entries, the
+        // corrupted one is dropped — but the skip is accounted, not silent.
+        string json = """
+                      { "data": [
+                          { "name": "no id here", "context_length": 8192 },
+                          { "id": "good-model", "name": "Good", "context_length": 8192 }
+                        ] }
+                      """;
+        var handler = new StubHttpHandler(_ => new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent(json, Encoding.UTF8, "application/json")
+        });
+        var http = new HttpClient(handler);
+        string cacheDir = NewCacheDir();
+        try
+        {
+            var catalog = new DynamicModelCatalog(http, cacheDir, NullLogger<DynamicModelCatalog>.Instance);
+            var config = new ProviderConfig
+            {
+                Id = "partialskip",
+                DisplayName = "PartialSkip",
+                BaseUrl = "https://api.example.com",
+                ModelsUrl = "https://api.example.com/models"
+            };
+
+            var result = await catalog.GetModelsAsync(config);
+
+            await Assert.That(result.IsSuccess).IsTrue();
+            await Assert.That(result.Value.Count).IsEqualTo(1);
+            await Assert.That(result.Value[0].Id).IsEqualTo("good-model");
+        }
+        finally
+        {
+            if (Directory.Exists(cacheDir)) Directory.Delete(cacheDir, true);
+        }
+    }
+
+    [Test]
+    public async Task GetModelsAsync_AllEntriesWithoutId_ReturnsFailureWithSkipReasons()
+    {
+        // #1581: when every entry is skipped, the old code returned an empty
+        // Success and the corridor below reported "Model 'x' not found in
+        // provider catalog" — the real cause had nowhere to go. The skip list
+        // now rides the Result's error.
+        string json = """
+                      { "data": [
+                          { "name": "no id", "context_length": 8192 },
+                          { "name": "still no id", "context_length": 4096 }
+                        ] }
+                      """;
+        var handler = new StubHttpHandler(_ => new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent(json, Encoding.UTF8, "application/json")
+        });
+        var http = new HttpClient(handler);
+        string cacheDir = NewCacheDir();
+        try
+        {
+            var catalog = new DynamicModelCatalog(http, cacheDir, NullLogger<DynamicModelCatalog>.Instance);
+            var config = new ProviderConfig
+            {
+                Id = "allskip",
+                DisplayName = "AllSkip",
+                BaseUrl = "https://api.example.com",
+                ModelsUrl = "https://api.example.com/models"
+            };
+
+            var result = await catalog.GetModelsAsync(config);
+
+            await Assert.That(result.IsFailure).IsTrue();
+            await Assert.That(result.Error).Contains("all 2 model entries were skipped");
+            await Assert.That(result.Error).Contains("no 'id'");
+            await Assert.That(result.Error).Contains("[0]");
+            await Assert.That(result.Error).Contains("[1]");
+        }
+        finally
+        {
+            if (Directory.Exists(cacheDir)) Directory.Delete(cacheDir, true);
+        }
+    }
+
+    [Test]
+    public async Task GetModelsAsync_MalformedEntryDoesNotAbortRemainingEntries()
+    {
+        // A bad-read entry (counted skip) must not poison the entries after it.
+        string json = """
+                      { "data": [
+                          { "id": "first", "name": "First", "context_length": 8192 },
+                          null,
+                          { "id": "second", "name": "Second", "context_length": 4096 }
+                        ] }
+                      """;
+        var handler = new StubHttpHandler(_ => new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent(json, Encoding.UTF8, "application/json")
+        });
+        var http = new HttpClient(handler);
+        string cacheDir = NewCacheDir();
+        try
+        {
+            var catalog = new DynamicModelCatalog(http, cacheDir, NullLogger<DynamicModelCatalog>.Instance);
+            var config = new ProviderConfig
+            {
+                Id = "skipnull",
+                DisplayName = "SkipNull",
+                BaseUrl = "https://api.example.com",
+                ModelsUrl = "https://api.example.com/models"
+            };
+
+            var result = await catalog.GetModelsAsync(config);
+
+            await Assert.That(result.IsSuccess).IsTrue();
+            await Assert.That(result.Value.Count).IsEqualTo(2);
+            await Assert.That(result.Value[0].Id).IsEqualTo("first");
+            await Assert.That(result.Value[1].Id).IsEqualTo("second");
+        }
+        finally
+        {
+            if (Directory.Exists(cacheDir)) Directory.Delete(cacheDir, true);
+        }
+    }
 }

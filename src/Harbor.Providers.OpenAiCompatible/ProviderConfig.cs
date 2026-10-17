@@ -447,20 +447,44 @@ public sealed class DynamicModelCatalog : IModelCatalog
             var mapping = config.ModelMapping ?? new ModelMapping();
             var result = new List<ModelInfo>();
 
-            foreach (var item in modelsArray.EnumerateArray())
+            // Skip accounting (#1581): a corrupted catalog entry must not
+            // silently shorten the returned list. Every entry that fails to
+            // parse — either a normal Failure from ParseModel or an unexpected
+            // exception — is counted here with its index and reason, and the
+            // accounting below decides how the skips surface.
+            var skips = new List<string>();
+            int total = modelsArray.GetArrayLength();
+
+            for (int i = 0; i < total; i++)
             {
                 try
                 {
-                    var model = ParseModel(item, config, mapping);
-                    if (model is not null)
-                        result.Add(model);
+                    var parsed = ParseModel(modelsArray[i], config, mapping);
+                    if (parsed.IsSuccess)
+                        result.Add(parsed.Value);
+                    else
+                        skips.Add($"[{i}] {parsed.Error}");
                 }
                 catch (Exception ex)
                 {
-                    DynamicModelCatalogLog.ParseModelFailed(_logger, ex);
+                    DynamicModelCatalogLog.ParseModelFailed(_logger, ex, i);
+                    skips.Add($"[{i}] {ex.Message}");
                 }
             }
 
+            if (skips.Count == 0)
+                return Result.Success<IReadOnlyList<ModelInfo>>(result);
+
+            string reasons = string.Join("; ", skips);
+
+            // Every entry was skipped: returning an empty Success would send
+            // "Model 'x' not found in provider catalog" downstream and bury the
+            // real cause in the log. Keep the true cause on the Result rail.
+            if (result.Count == 0)
+                return Result.Failure<IReadOnlyList<ModelInfo>>(
+                    $"Failed to parse models response: all {total} model entries were skipped — {reasons}");
+
+            DynamicModelCatalogLog.ModelsSkipped(_logger, config.Id, skips.Count, total, reasons);
             return Result.Success<IReadOnlyList<ModelInfo>>(result);
         }
         catch (Exception ex)
@@ -546,16 +570,24 @@ public sealed class DynamicModelCatalog : IModelCatalog
         return copy;
     }
 
-    private static ModelInfo? ParseModel(JsonElement item, ProviderConfig config, ModelMapping mapping)
+    /// <summary>
+    ///     Parse one models-array entry onto the Result rail (#1581): a record
+    ///     without an <c>id</c> is a <see cref="Result" /> failure carrying the
+    ///     reason, not a silent <c>null</c>. The caller counts failures and
+    ///     reports them, so a corrupted entry surfaces in the catalog
+    ///     diagnostics instead of shortening the list by one with no trace.
+    /// </summary>
+    private static Result<ModelInfo> ParseModel(JsonElement item, ProviderConfig config, ModelMapping mapping)
     {
         string? id = GetStringField(item, mapping.Id ?? "id");
-        if (string.IsNullOrEmpty(id)) return null;
+        if (string.IsNullOrEmpty(id))
+            return Result.Failure<ModelInfo>("model entry has no 'id' (or it is null)");
 
         string displayName = GetStringField(item, mapping.DisplayName ?? "name") ?? id;
         int contextWindow = GetIntField(item, mapping.ContextWindow ?? "context_length") ?? 4096;
         int maxOutput = GetIntField(item, mapping.MaxOutputTokens ?? "max_output_tokens") ?? 4096;
 
-        return new ModelInfo(
+        return Result.Success(new ModelInfo(
             id,
             config.Id,
             displayName,
@@ -565,7 +597,7 @@ public sealed class DynamicModelCatalog : IModelCatalog
             false,
             true,
             Pricing.Unknown,
-            "openai");
+            "openai"));
     }
 
     private static Maybe<JsonElement> Navigate(JsonElement item, string path) =>
@@ -599,6 +631,9 @@ internal static partial class DynamicModelCatalogLog
     [LoggerMessage(EventId = 1, Level = LogLevel.Warning, Message = "Failed to fetch models for {Provider}, trying stale cache")]
     public static partial void FetchModelsFailed(ILogger logger, Exception ex, string provider);
 
-    [LoggerMessage(EventId = 2, Level = LogLevel.Warning, Message = "Failed to parse model from response")]
-    public static partial void ParseModelFailed(ILogger logger, Exception ex);
+    [LoggerMessage(EventId = 2, Level = LogLevel.Warning, Message = "Failed to parse model entry {Index} from models response")]
+    public static partial void ParseModelFailed(ILogger logger, Exception ex, int index);
+
+    [LoggerMessage(EventId = 3, Level = LogLevel.Warning, Message = "Provider {Provider}: skipped {Skipped} of {Total} model entries. Reasons: {Reasons}")]
+    public static partial void ModelsSkipped(ILogger logger, string provider, int skipped, int total, string reasons);
 }
