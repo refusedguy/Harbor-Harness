@@ -61,7 +61,7 @@ public sealed class McpSseTransport : IMcpRemoteTransport
     ///     document" (202 Accepted, empty body) — a different state from a failure,
     ///     which is why the value is a <see cref="Maybe{T}" /> and not a null.
     /// </summary>
-    public async Task<Result<Maybe<JsonDocument>>> TryRoundTripAsync(
+    public async Task<Result<Maybe<JsonElement>>> TryRoundTripAsync(
         JsonElement request,
         int? expectedId = null,
         CancellationToken cancellationToken = default)
@@ -89,7 +89,7 @@ public sealed class McpSseTransport : IMcpRemoteTransport
                     // The verdict travels beside the Result because the status code
                     // cannot travel inside it (Failure is a string).
                     if (!once.Retryable || attempt >= TransientFailurePolicy.DefaultMaxAttempts)
-                        return Fail<Maybe<JsonDocument>>(sw, attempt, once.Outcome.Error);
+                        return Fail<Maybe<JsonElement>>(sw, attempt, once.Outcome.Error);
                     if (_logger is not null) McpSseTransportLog.RoundTripFailed(_logger, _endpoint, attempt, TransientFailurePolicy.DefaultMaxAttempts, once.Outcome.Error);
                     await BackoffAsync(attempt, cancellationToken).ConfigureAwait(false);
                     attempt++;
@@ -102,7 +102,7 @@ public sealed class McpSseTransport : IMcpRemoteTransport
             {
                 string cause = $"server did not respond within {_requestTimeout.TotalSeconds:F0}s";
                 if (attempt >= TransientFailurePolicy.DefaultMaxAttempts)
-                    return Fail<Maybe<JsonDocument>>(sw, attempt, cause);
+                    return Fail<Maybe<JsonElement>>(sw, attempt, cause);
 
                 await BackoffAsync(attempt, cancellationToken).ConfigureAwait(false);
                 attempt++;
@@ -116,13 +116,13 @@ public sealed class McpSseTransport : IMcpRemoteTransport
             }
             catch (Exception ex) when (TransientFailurePolicy.ShouldRetry(ex))
             {
-                return Fail<Maybe<JsonDocument>>(sw, attempt, ex.Message);
+                return Fail<Maybe<JsonElement>>(sw, attempt, ex.Message);
             }
             catch (Exception ex) when (ex is not OperationCanceledException
                 && ex is not ObjectDisposedException
                 && !cancellationToken.IsCancellationRequested)
             {
-                return Fail<Maybe<JsonDocument>>(sw, attempt, ex.Message);
+                return Fail<Maybe<JsonElement>>(sw, attempt, ex.Message);
             }
         }
     }
@@ -158,16 +158,16 @@ public sealed class McpSseTransport : IMcpRemoteTransport
     ///         being hoisted into a shared type the policy comment disclaims.
     ///     </para>
     /// </remarks>
-    private readonly record struct Attempt(Result<Maybe<JsonDocument>> Outcome, bool Retryable)
+    private readonly record struct Attempt(Result<Maybe<JsonElement>> Outcome, bool Retryable)
     {
         /// <summary>A failure worth another attempt: a dropped socket, a closed stream, a 5xx.</summary>
-        public static Attempt Transient(Result<Maybe<JsonDocument>> outcome) => new(outcome, true);
+        public static Attempt Transient(Result<Maybe<JsonElement>> outcome) => new(outcome, true);
 
         /// <summary>A failure that will repeat verbatim: a refusal, a bad grant, a wrong URL.</summary>
-        public static Attempt Terminal(Result<Maybe<JsonDocument>> outcome) => new(outcome, false);
+        public static Attempt Terminal(Result<Maybe<JsonElement>> outcome) => new(outcome, false);
 
         /// <summary>The success case — there is no cause to weigh.</summary>
-        public static Attempt Succeeded(Result<Maybe<JsonDocument>> outcome) => new(outcome, false);
+        public static Attempt Succeeded(Result<Maybe<JsonElement>> outcome) => new(outcome, false);
     }
 
     /// <summary>
@@ -194,7 +194,7 @@ public sealed class McpSseTransport : IMcpRemoteTransport
             // A rejected grant is an answer, not an outage. McpHttpTransport already
             // gets this right by resolving the token before its loop; here the
             // resolution is per attempt, so the grant was asked for three times.
-            return Attempt.Terminal(oauth.ConvertFailure<Maybe<JsonDocument>>());
+            return Attempt.Terminal(oauth.ConvertFailure<Maybe<JsonElement>>());
         }
 
         Maybe<string> oauthToken = oauth.Value;
@@ -207,7 +207,7 @@ public sealed class McpSseTransport : IMcpRemoteTransport
         Result getOk = EnsureSuccessResult(sseResponse, "SSE channel");
         if (getOk.IsFailure)
         {
-            return AttemptFor(sseResponse.StatusCode, getOk.ConvertFailure<Maybe<JsonDocument>>());
+            return AttemptFor(sseResponse.StatusCode, getOk.ConvertFailure<Maybe<JsonElement>>());
         }
 
         var reader = new SseEventReader();
@@ -227,7 +227,7 @@ public sealed class McpSseTransport : IMcpRemoteTransport
                 // The channel opened and then closed: a blip, and the one failure on
                 // this path that genuinely earns its retries.
                 return Attempt.Transient(
-                    Result.Failure<Maybe<JsonDocument>>("SSE stream closed before announcing an endpoint."));
+                    Result.Failure<Maybe<JsonElement>>("SSE stream closed before announcing an endpoint."));
             }
 
             if (reader.Feed(line) is { } ev && ev.Event == "endpoint")
@@ -248,7 +248,7 @@ public sealed class McpSseTransport : IMcpRemoteTransport
         Result postOk = EnsureSuccessResult(postResponse, "message endpoint");
         if (postOk.IsFailure)
         {
-            return AttemptFor(postResponse.StatusCode, postOk.ConvertFailure<Maybe<JsonDocument>>());
+            return AttemptFor(postResponse.StatusCode, postOk.ConvertFailure<Maybe<JsonElement>>());
         }
 
         // 3. Keep reading the SSE channel for the response frame.
@@ -258,13 +258,13 @@ public sealed class McpSseTransport : IMcpRemoteTransport
             if (line is null)
             {
                 return Attempt.Transient(
-                    Result.Failure<Maybe<JsonDocument>>("SSE stream closed before a response arrived."));
+                    Result.Failure<Maybe<JsonElement>>("SSE stream closed before a response arrived."));
             }
 
             if (reader.Feed(line) is { Event: "message" } ev
                 && McpSse.TryParseResponse(ev.Data, expectedId) is { } doc)
             {
-                return Attempt.Succeeded(Result.Success(Maybe<JsonDocument>.From(doc)));
+                return Attempt.Succeeded(Result.Success(Maybe<JsonElement>.From(doc)));
             }
         }
     }
@@ -276,7 +276,7 @@ public sealed class McpSseTransport : IMcpRemoteTransport
     ///     hiccup is. Everything else (401/403/404, and 429, which both transports
     ///     also treat as terminal) is an answer rather than a blip.
     /// </summary>
-    private static Attempt AttemptFor(HttpStatusCode status, Result<Maybe<JsonDocument>> failure)
+    private static Attempt AttemptFor(HttpStatusCode status, Result<Maybe<JsonElement>> failure)
         => IsTransientStatus(status)
             ? Attempt.Transient(failure)
             : Attempt.Terminal(failure);

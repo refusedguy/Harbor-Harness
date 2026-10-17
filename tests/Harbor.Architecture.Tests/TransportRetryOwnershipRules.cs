@@ -304,7 +304,7 @@ public class TransportRetryOwnershipRules
     ///         typed-error surface is <c>Result&lt;T, E&gt;</c> — a different
     ///         arity — so carrying a status would mean re-declaring
     ///         <c>IMcpRemoteTransport.TryRoundTripAsync</c> as
-    ///         <c>Result&lt;Maybe&lt;JsonDocument&gt;, T&gt;</c>, which is the
+    ///         <c>Result&lt;Maybe&lt;JsonElement&gt;, T&gt;</c>, which is the
     ///         #587 seam this same test project seals in
     ///         <c>RemoteTransportResultRules</c>. And nothing wants it past the
     ///         boundary: the seam's one production caller

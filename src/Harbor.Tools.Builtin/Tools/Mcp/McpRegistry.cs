@@ -370,20 +370,17 @@ public sealed class McpRegistry : IMcpRegistry, IAsyncDisposable
             int id = Interlocked.Increment(ref _nextId);
 
             // #180: writer-built envelope over a pooled buffer — no
-            // interpolated string, no re-parse. The element is used only
-            // inside the using lifetime (WriteAsync reads it synchronously),
-            // so no Clone is needed.
-            using var requestDoc = McpJsonRpc.BuildRequest(id, method, args);
-            await transport.WriteAsync(requestDoc.RootElement, cancellationToken).ConfigureAwait(false);
+            // interpolated string, no re-parse. The element is self-contained
+            // (source-gen JsonElement, no disposal), and WriteAsync reads it
+            // synchronously, so no Clone is needed.
+            JsonElement requestEl = McpJsonRpc.BuildRequest(id, method, args);
+            await transport.WriteAsync(requestEl, cancellationToken).ConfigureAwait(false);
 
-            var response = await transport.ReadAsync(cancellationToken).ConfigureAwait(false);
+            JsonElement? response = await transport.ReadAsync(cancellationToken).ConfigureAwait(false);
             if (response is null)
                 return Result.Failure<string>($"MCP server '{server}' returned no response.");
 
-            using (response)
-            {
-                return ProcessResponse(response, server, method, entry);
-            }
+            return ProcessResponse(response.Value, server, method, entry);
         }
         catch (Exception ex)
         {
@@ -411,9 +408,9 @@ public sealed class McpRegistry : IMcpRegistry, IAsyncDisposable
         try
         {
             int id = Interlocked.Increment(ref _nextId);
-            using var requestDoc = McpJsonRpc.BuildRequest(id, method, args);
-            Result<Maybe<JsonDocument>> roundTrip = await transport
-                .TryRoundTripAsync(requestDoc.RootElement, id, cancellationToken)
+            JsonElement requestEl = McpJsonRpc.BuildRequest(id, method, args);
+            Result<Maybe<JsonElement>> roundTrip = await transport
+                .TryRoundTripAsync(requestEl, id, cancellationToken)
                 .ConfigureAwait(false);
 
             // #587: the transport's own diagnostic is what the reader gets. It already
@@ -429,11 +426,11 @@ public sealed class McpRegistry : IMcpRegistry, IAsyncDisposable
             // The one case that legitimately has no diagnostic: the server answered,
             // and the answer carries no document (202 Accepted, empty body). Reporting
             // it as anything else would re-invent the conflation this seam removed.
-            Maybe<JsonDocument> maybeResponse = roundTrip.Value;
+            Maybe<JsonElement> maybeResponse = roundTrip.Value;
             if (maybeResponse.HasNoValue)
                 return Result.Failure<string>($"MCP server '{server}' returned no response.");
 
-            using JsonDocument response = maybeResponse.Value;
+            JsonElement response = maybeResponse.Value;
             return ProcessResponse(response, server, method, entry);
         }
         catch (Exception ex)
@@ -445,15 +442,15 @@ public sealed class McpRegistry : IMcpRegistry, IAsyncDisposable
     }
 
     /// <summary>Shared JSON-RPC response handling: error mapping + `instructions` harvest (ROP-D Z3).</summary>
-    private Result<string> ProcessResponse(JsonDocument response, string server, string method, ServerEntry entry)
+    private Result<string> ProcessResponse(JsonElement response, string server, string method, ServerEntry entry)
     {
-        if (response.RootElement.TryGetProperty("error", out var error))
+        if (response.TryGetProperty("error", out var error))
         {
             string msg = error.TryGetProperty("message", out var m) ? m.GetString() ?? "unknown" : "unknown";
             return Result.Failure<string>($"MCP error from '{server}': {msg}");
         }
 
-        var resultElement = response.RootElement.GetProperty("result");
+        var resultElement = response.GetProperty("result");
         if (method == "initialize"
             && resultElement.ValueKind == JsonValueKind.Object
             && resultElement.TryGetProperty("instructions", out var initIns)

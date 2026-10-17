@@ -110,8 +110,8 @@ public sealed partial class McpPromptTool : ITool
 
         McpPromptToolLog.RenderingPrompt(_logger, server, name);
 
-        using var paramsDoc = McpJsonRpc.BuildPromptGetParams(name, arguments);
-        var invoked = await registry.InvokeAsync(server, "prompts/get", paramsDoc.RootElement, cancellationToken)
+        JsonElement paramsEl = McpJsonRpc.BuildPromptGetParams(name, arguments);
+        var invoked = await registry.InvokeAsync(server, "prompts/get", paramsEl, cancellationToken)
             .ConfigureAwait(false);
         if (invoked.IsFailure)
         {

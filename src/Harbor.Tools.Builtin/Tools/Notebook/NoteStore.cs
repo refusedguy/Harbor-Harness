@@ -1,4 +1,5 @@
 using System.Text;
+using Harbor.Tools.Mcp;
 using Result = CSharpFunctionalExtensions.Result;
 
 namespace Harbor.Tools.Builtin;
@@ -84,9 +85,14 @@ internal sealed class NoteStore
         await using var fs = new FileStream(
             path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite,
             64 * 1024, FileOptions.Asynchronous);
-        var doc = await JsonDocument.ParseAsync(fs, cancellationToken: ct).ConfigureAwait(false);
+        // Same DOM as JsonDocument.ParseAsync, but through the source-generated
+        // JsonElement info (PERF-002; TRIM-SERIALIZATION TypeInfo spelling).
+        // The element is self-contained, so the undisposed-document leak the
+        // old ParseAsync shape left behind is gone too.
+        JsonElement root = await JsonSerializer.DeserializeAsync(
+            fs, McpJsonSerializerContext.Default.JsonElement, ct).ConfigureAwait(false);
         var dict = new Dictionary<string, NoteEntry>(StringComparer.Ordinal);
-        foreach (var prop in doc.RootElement.EnumerateObject())
+        foreach (var prop in root.EnumerateObject())
         {
             if (prop.Value.ValueKind != JsonValueKind.Object) continue;
             string c = prop.Value.TryGetProperty("content", out var cEl) && cEl.ValueKind == JsonValueKind.String

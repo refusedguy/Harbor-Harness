@@ -170,10 +170,10 @@ public static class McpOAuthFlow
         {
             // #180: writer-built body (no Serialize-inside-interpolation).
             // (Cold path; fixed on touch per the issue.)
-            using var body = McpJsonRpc.BuildRegisterClientBody(redirectUri, string.Join(" ", scopes));
+            JsonElement body = McpJsonRpc.BuildRegisterClientBody(redirectUri, string.Join(" ", scopes));
             using var request = new HttpRequestMessage(HttpMethod.Post, registrationEndpoint)
             {
-                Content = new StringContent(body.RootElement.GetRawText(), Encoding.UTF8, "application/json")
+                Content = new StringContent(body.GetRawText(), Encoding.UTF8, "application/json")
             };
             request.Headers.UserAgent.ParseAdd(UserAgent);
             using var response = await http.SendAsync(request, cancellationToken).ConfigureAwait(false);

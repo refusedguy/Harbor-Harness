@@ -28,13 +28,15 @@ internal sealed class McpJsonRpcTransport : IAsyncDisposable
         await _writer.WriteAsync("\n".AsMemory(), ct).ConfigureAwait(false);
     }
 
-    public async Task<JsonDocument?> ReadAsync(CancellationToken ct = default)
+    public async Task<JsonElement?> ReadAsync(CancellationToken ct = default)
     {
         string? line;
         while ((line = await _reader.ReadLineAsync(ct).ConfigureAwait(false)) is not null)
         {
             if (string.IsNullOrWhiteSpace(line)) continue;
-            return JsonDocument.Parse(line);
+            // Same DOM as JsonDocument.Parse, but through the source-generated
+            // JsonElement info (PERF-002; TRIM-SERIALIZATION TypeInfo spelling).
+            return JsonSerializer.Deserialize(line, McpJsonSerializerContext.Default.JsonElement);
         }
         return null;
     }

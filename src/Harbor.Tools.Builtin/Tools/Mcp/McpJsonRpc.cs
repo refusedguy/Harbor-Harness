@@ -9,15 +9,15 @@ namespace Harbor.Tools.Mcp;
 /// over an <see cref="ArrayBufferWriter{T}"/> and parsed once from UTF-8 —
 /// no string-interpolated JSON, no <c>JsonSerializer.Serialize</c> inside
 /// interpolation, and no intermediate UTF-16 transcode of the envelope.
-/// The returned document owns its copy (the buffer is not retained), so
-/// callers dispose as usual. Behavior is byte-compatible with the previous
+/// The returned element is self-contained (the buffer is not retained),
+/// so callers use it directly with no disposal. Behavior is byte-compatible with the previous
 /// interpolate-then-parse construction (same members, same order, same
 /// string escaping — now actually escaped instead of raw-interpolated).
 /// </summary>
 internal static class McpJsonRpc
 {
     /// <summary>Build a <c>{"jsonrpc":"2.0","id":…,"method":…,"params":…}</c> request envelope.</summary>
-    public static JsonDocument BuildRequest(int id, string method, JsonElement paramsElement)
+    public static JsonElement BuildRequest(int id, string method, JsonElement paramsElement)
     {
         var buffer = new ArrayBufferWriter<byte>(256);
         using (var writer = new Utf8JsonWriter(buffer))
@@ -31,11 +31,13 @@ internal static class McpJsonRpc
             writer.WriteEndObject();
         }
 
-        return JsonDocument.Parse(buffer.WrittenMemory);
+        // Same DOM as JsonDocument.Parse, but through the source-generated
+        // JsonElement info (PERF-002; TRIM-SERIALIZATION TypeInfo spelling).
+        return JsonSerializer.Deserialize(buffer.WrittenMemory.Span, McpJsonSerializerContext.Default.JsonElement);
     }
 
     /// <summary>Build <c>tools/call</c> params. Missing arguments become <c>{}</c>.</summary>
-    public static JsonDocument BuildToolCallParams(string toolName, JsonElement arguments)
+    public static JsonElement BuildToolCallParams(string toolName, JsonElement arguments)
     {
         var buffer = new ArrayBufferWriter<byte>(128);
         using (var writer = new Utf8JsonWriter(buffer))
@@ -47,11 +49,13 @@ internal static class McpJsonRpc
             writer.WriteEndObject();
         }
 
-        return JsonDocument.Parse(buffer.WrittenMemory);
+        // Same DOM as JsonDocument.Parse, but through the source-generated
+        // JsonElement info (PERF-002; TRIM-SERIALIZATION TypeInfo spelling).
+        return JsonSerializer.Deserialize(buffer.WrittenMemory.Span, McpJsonSerializerContext.Default.JsonElement);
     }
 
     /// <summary>Build <c>prompts/get</c> params. Missing arguments become <c>{}</c>.</summary>
-    public static JsonDocument BuildPromptGetParams(string name, JsonElement arguments)
+    public static JsonElement BuildPromptGetParams(string name, JsonElement arguments)
     {
         var buffer = new ArrayBufferWriter<byte>(128);
         using (var writer = new Utf8JsonWriter(buffer))
@@ -63,11 +67,13 @@ internal static class McpJsonRpc
             writer.WriteEndObject();
         }
 
-        return JsonDocument.Parse(buffer.WrittenMemory);
+        // Same DOM as JsonDocument.Parse, but through the source-generated
+        // JsonElement info (PERF-002; TRIM-SERIALIZATION TypeInfo spelling).
+        return JsonSerializer.Deserialize(buffer.WrittenMemory.Span, McpJsonSerializerContext.Default.JsonElement);
     }
 
     /// <summary>Build <c>resources/read</c> params.</summary>
-    public static JsonDocument BuildResourceReadParams(string uri)
+    public static JsonElement BuildResourceReadParams(string uri)
     {
         var buffer = new ArrayBufferWriter<byte>(128);
         using (var writer = new Utf8JsonWriter(buffer))
@@ -77,14 +83,16 @@ internal static class McpJsonRpc
             writer.WriteEndObject();
         }
 
-        return JsonDocument.Parse(buffer.WrittenMemory);
+        // Same DOM as JsonDocument.Parse, but through the source-generated
+        // JsonElement info (PERF-002; TRIM-SERIALIZATION TypeInfo spelling).
+        return JsonSerializer.Deserialize(buffer.WrittenMemory.Span, McpJsonSerializerContext.Default.JsonElement);
     }
 
     /// <summary>
     /// Build the RFC7591 dynamic-client-registration body
     /// (<c>redirect_uris</c> / <c>grant_types</c> / <c>scope</c>).
     /// </summary>
-    public static JsonDocument BuildRegisterClientBody(string redirectUri, string scopes)
+    public static JsonElement BuildRegisterClientBody(string redirectUri, string scopes)
     {
         var buffer = new ArrayBufferWriter<byte>(192);
         using (var writer = new Utf8JsonWriter(buffer))
@@ -103,7 +111,9 @@ internal static class McpJsonRpc
             writer.WriteEndObject();
         }
 
-        return JsonDocument.Parse(buffer.WrittenMemory);
+        // Same DOM as JsonDocument.Parse, but through the source-generated
+        // JsonElement info (PERF-002; TRIM-SERIALIZATION TypeInfo spelling).
+        return JsonSerializer.Deserialize(buffer.WrittenMemory.Span, McpJsonSerializerContext.Default.JsonElement);
     }
 
     private static void WriteArgumentsOrEmpty(Utf8JsonWriter writer, JsonElement arguments)

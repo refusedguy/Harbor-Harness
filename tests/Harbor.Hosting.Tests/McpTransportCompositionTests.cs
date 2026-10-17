@@ -94,11 +94,11 @@ public class McpTransportCompositionTests
 
     private sealed class StubTransport : IMcpRemoteTransport
     {
-        public Task<Result<Maybe<System.Text.Json.JsonDocument>>> TryRoundTripAsync(
+        public Task<Result<Maybe<System.Text.Json.JsonElement>>> TryRoundTripAsync(
             System.Text.Json.JsonElement request,
             int? expectedId = null,
             CancellationToken cancellationToken = default)
-            => Task.FromResult(Result.Success(Maybe<System.Text.Json.JsonDocument>.None));
+            => Task.FromResult(Result.Success(Maybe<System.Text.Json.JsonElement>.None));
 
         public ValueTask DisposeAsync() => ValueTask.CompletedTask;
     }

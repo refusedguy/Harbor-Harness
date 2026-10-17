@@ -74,18 +74,20 @@ internal sealed class SseEventReader
 internal static class McpSse
 {
     /// <summary>
-    ///     Parse an SSE <c>data</c> payload as JSON-RPC and return it (caller disposes)
+    ///     Parse an SSE <c>data</c> payload as JSON-RPC and return it
     ///     when it answers the request with <paramref name="expectedId" />. Returns null
     ///     for non-JSON frames (keep-alives) and for responses belonging to other
     ///     in-flight requests.
     /// </summary>
-    public static JsonDocument? TryParseResponse(string data, int? expectedId)
+    public static JsonElement? TryParseResponse(string data, int? expectedId)
     {
         if (expectedId is not { } id)
         {
             try
             {
-                return JsonDocument.Parse(data);
+                // Same DOM as JsonDocument.Parse, but through the source-generated
+                // JsonElement info (PERF-002; TRIM-SERIALIZATION TypeInfo spelling).
+                return JsonSerializer.Deserialize(data, McpJsonSerializerContext.Default.JsonElement);
             }
             catch (JsonException)
             {
@@ -108,7 +110,9 @@ internal static class McpSse
                 return null;
             try
             {
-                return JsonDocument.Parse(rented.AsMemory(0, byteCount));
+                // Same DOM as JsonDocument.Parse, but through the source-generated
+                // JsonElement info (PERF-002; TRIM-SERIALIZATION TypeInfo spelling).
+                return JsonSerializer.Deserialize(rented.AsSpan(0, byteCount), McpJsonSerializerContext.Default.JsonElement);
             }
             catch (JsonException)
             {

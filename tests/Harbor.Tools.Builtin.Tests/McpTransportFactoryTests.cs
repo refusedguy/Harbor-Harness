@@ -17,7 +17,7 @@ namespace Harbor.Tools.Builtin.Tests;
 ///     <c>registry.InvokeAsync</c> below builds a transport through
 ///     <c>McpRegistry.GetTransport</c>, whose no-auth branch reads
 ///     <c>HARBOR_MCP_OAUTH_TOKEN</c> from the process environment
-///     (McpRegistry.cs:574) — the variable <c>McpRemoteTransportTests</c> pins to
+///     (McpRegistry.cs:571) — the variable <c>McpRemoteTransportTests</c> pins to
 ///     null. A named key is a mutex over its named peers, so this side has to hold
 ///     the same one or the writer's key excludes nothing.
 /// </remarks>
@@ -373,17 +373,17 @@ public class McpTransportFactoryTests
 
     private sealed class StubTransport(string? response) : IMcpRemoteTransport
     {
-        // #587: the seam is Result<Maybe<JsonDocument>>. A null `response` models a
+        // #587: the seam is Result<Maybe<JsonElement>>. A null `response` models a
         // server that answers with no document (Maybe.None) — NOT a transport
         // failure, which is what the registry's "returned no response" branch is for.
-        public Task<Result<Maybe<System.Text.Json.JsonDocument>>> TryRoundTripAsync(
+        public Task<Result<Maybe<System.Text.Json.JsonElement>>> TryRoundTripAsync(
             System.Text.Json.JsonElement request,
             int? expectedId = null,
             CancellationToken cancellationToken = default)
             => Task.FromResult(response is null
-                ? Result.Success(Maybe<System.Text.Json.JsonDocument>.None)
-                : Result.Success(Maybe<System.Text.Json.JsonDocument>.From(
-                    System.Text.Json.JsonDocument.Parse(response))));
+                ? Result.Success(Maybe<System.Text.Json.JsonElement>.None)
+                : Result.Success(Maybe<System.Text.Json.JsonElement>.From(
+                    System.Text.Json.JsonSerializer.Deserialize(response, McpJsonSerializerContext.Default.JsonElement))));
 
         public ValueTask DisposeAsync() => ValueTask.CompletedTask;
     }
