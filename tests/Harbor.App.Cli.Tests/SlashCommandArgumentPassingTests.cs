@@ -63,7 +63,6 @@ using Harbor.Abstractions.Permissions;
 using Harbor.Abstractions.Providers;
 using Harbor.App.Cli.Repl;
 using Harbor.Application.Configuration;
-using Harbor.Application.Onboarding;
 using Harbor.TestKit;
 using Microsoft.Extensions.Logging.Abstractions;
 using TUnit.Assertions;

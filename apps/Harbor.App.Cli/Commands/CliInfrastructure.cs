@@ -7,7 +7,6 @@ using Harbor.Abstractions.Sessions;
 using Harbor.Abstractions.Tools;
 using Harbor.App.Cli.Repl;
 using Harbor.Application.Configuration;
-using Harbor.Application.Onboarding;
 using Harbor.Ipc;
 using Harbor.Ipc.Protocol;
 using Harbor.Terminal.Abstractions;

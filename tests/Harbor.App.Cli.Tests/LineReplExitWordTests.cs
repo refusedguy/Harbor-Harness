@@ -5,7 +5,6 @@ using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Tools;
 using Harbor.App.Cli.Repl;
 using Harbor.Application.Configuration;
-using Harbor.Application.Onboarding;
 using Harbor.Application.Permissions;
 using Harbor.Terminal.Abstractions;
 using Harbor.Terminal.Abstractions.Renderers;

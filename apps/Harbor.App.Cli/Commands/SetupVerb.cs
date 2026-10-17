@@ -1,6 +1,6 @@
 using CSharpFunctionalExtensions;
 using Harbor.App.Cli.Hosting;
-using Harbor.Application.Onboarding;
+using Harbor.Application.Configuration;
 using Harbor.Terminal.Abstractions;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;

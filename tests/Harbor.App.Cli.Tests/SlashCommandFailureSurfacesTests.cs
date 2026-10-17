@@ -53,7 +53,6 @@ using Harbor.Abstractions.Permissions;
 using Harbor.Abstractions.Sessions;
 using Harbor.App.Cli.Repl;
 using Harbor.Application.Configuration;
-using Harbor.Application.Onboarding;
 using Harbor.Application.Permissions;
 using Harbor.Application.Skills;
 using Harbor.TestKit;
@@ -252,7 +251,7 @@ public class SlashCommandFailureSurfacesTests
         // Three empty answers is exactly how OnboardingWizard gives up
         // ("Non-interactive input or setup aborted."), so the wizard fails for
         // real without a fake. Its Result is consumed on the boot path
-        // (ReplRunner.cs:221 — the `Setup failed: {wizardResult.Error}` write, and
+        //  (ReplRunner.cs:220 — the `Setup failed: {wizardResult.Error}` write, and
         // not the config-load report that sits 58 lines above it); on the slash
         // path it used to be returned into the
         // dispatcher and dropped, leaving the prompts with no ending.

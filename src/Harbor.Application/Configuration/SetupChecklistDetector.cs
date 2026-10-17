@@ -1,9 +1,8 @@
 using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Abstractions.Providers;
-using Harbor.Application.Configuration;
 using Microsoft.Extensions.Logging;
 
-namespace Harbor.Application.Onboarding;
+namespace Harbor.Application.Configuration;
 
 // KILLER_FEATURES §2.7 Feature 9 (issue #383): setup-guide DETECTION.
 //

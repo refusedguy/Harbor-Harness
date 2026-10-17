@@ -1,4 +1,4 @@
-using Harbor.Application.Onboarding;
+using Harbor.Application.Configuration;
 using Harbor.Tui.CellForge.Widgets;
 using Harbor.Ui.Framework.Projection;
 using Harbor.Ui.Framework.Rendering;

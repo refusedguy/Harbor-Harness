@@ -6,7 +6,6 @@ using Harbor.Abstractions.Sessions;
 using Harbor.Abstractions.Tools;
 using Harbor.App.Cli.Configuration;
 using Harbor.Application.Configuration;
-using Harbor.Application.Onboarding;
 using Harbor.Application.Sessions;
 using Harbor.Desktop.Abstractions.Configuration;
 using Harbor.Terminal.Abstractions;

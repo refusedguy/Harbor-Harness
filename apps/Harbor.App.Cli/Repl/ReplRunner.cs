@@ -6,7 +6,6 @@ using Harbor.Abstractions.Permissions;
 using Harbor.Abstractions.Providers;
 using Harbor.Abstractions.Sessions;
 using Harbor.Application.Configuration;
-using Harbor.Application.Onboarding;
 using Harbor.App.Cli.Hosting;
 using Harbor.Terminal.Abstractions;
 using Harbor.Tui.CellForge.Input;

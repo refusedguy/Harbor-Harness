@@ -10,7 +10,6 @@ using Harbor.Abstractions.Tui;
 using Harbor.App.Cli.Commands;
 using Harbor.App.Cli.Hosting;
 using Harbor.Application.Configuration;
-using Harbor.Application.Onboarding;
 using Harbor.Application.Skills;
 using Harbor.Terminal.Abstractions;
 using Harbor.Ui.Framework.Commands;

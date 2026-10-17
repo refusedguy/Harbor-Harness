@@ -8,7 +8,6 @@ using Harbor.Abstractions.Permissions;
 using Harbor.Application.Configuration;
 using Harbor.Registries.Events;
 using Harbor.App.Cli.Repl;
-using Harbor.Application.Onboarding;
 using Harbor.Application.Permissions;
 using Harbor.TestKit;
 using Harbor.Tui.CellForge.Input;

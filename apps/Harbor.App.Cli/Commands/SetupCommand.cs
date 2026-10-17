@@ -1,6 +1,6 @@
 using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Tui;
-using Harbor.Application.Onboarding;
+using Harbor.Application.Configuration;
 
 namespace Harbor.App.Cli.Commands;
 
