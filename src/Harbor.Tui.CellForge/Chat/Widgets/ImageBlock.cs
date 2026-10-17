@@ -1,5 +1,6 @@
 using System.Buffers.Binary;
 using System.Text;
+using Harbor.Abstractions.Tools;
 using Harbor.Tui.CellForge.Capabilities;
 using Harbor.Ui.Framework.Rendering;
 
@@ -132,7 +133,7 @@ public sealed class ImageBlock : IChatBlock
         SizeBytes = Math.Max(0, sizeBytes);
         GraphicsAvailable = graphicsAvailable;
 
-        IsImage = MimeType.StartsWith("image/", StringComparison.OrdinalIgnoreCase);
+        IsImage = MimeTypes.IsImage(MimeType);
         int w = 0, h = 0;
         HasPngHeader = IsImage && data is { Length: >= 24 } && PngProbe.TryReadDimensions(data, out w, out h);
         if (!HasPngHeader)
