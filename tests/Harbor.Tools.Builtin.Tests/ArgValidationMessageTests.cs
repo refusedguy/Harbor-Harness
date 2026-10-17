@@ -50,7 +50,7 @@ public class ArgValidationMessageTests
     [Test]
     public async Task Bash_Messages()
     {
-        var tool = new BashTool(NullLogger<BashTool>.Instance);
+        var tool = new BashTool(new SystemProcessProxy(), NullLogger<BashTool>.Instance);
         await Assert.That(await Error(tool, "{}")).IsEqualTo("Missing required argument 'command'.");
         await Assert.That(await Error(tool, """{"command":123}""")).IsEqualTo("Missing required argument 'command'.");
         await Assert.That(await Error(tool, """{"command":"   "}""")).IsEqualTo("'command' cannot be empty.");

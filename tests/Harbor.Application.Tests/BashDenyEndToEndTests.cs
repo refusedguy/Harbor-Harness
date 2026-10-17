@@ -42,7 +42,7 @@ public class BashDenyEndToEndTests
     {
         var agents = new FakeAgentRegistry(agent);
         var permissions = new PermissionService(agents, NullLogger<PermissionService>.Instance);
-        return (permissions, new BashTool(NullLogger<BashTool>.Instance));
+        return (permissions, new BashTool(new SystemProcessProxy(), NullLogger<BashTool>.Instance));
     }
 
     private static JsonElement Args(string command) =>

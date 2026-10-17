@@ -156,8 +156,9 @@ public class BashToolProxyTests
         Directory.CreateDirectory(workDir);
         FakeProcessProxy proxy = new() { Build = _ => new FakeProcessHandle([], [], 0) };
         BashTool tool = new(proxy, NullLogger<BashTool>.Instance);
-        var args = JsonDocument.Parse(
-            $$"""{"command":"pwd-marker-1590","cwd":"{{workDir}}","env":{"KIL":"peace"}}""").RootElement;
+        string argsJson = """{"command":"pwd-marker-1590","cwd":"@CWD@","env":{"KIL":"peace"}}"""
+            .Replace("@CWD@", workDir);
+        var args = JsonDocument.Parse(argsJson).RootElement;
         string shell = OperatingSystem.IsWindows() ? "cmd.exe" : "/bin/bash";
 
         try

@@ -20,7 +20,7 @@ public class ToolGlueSpikeTests
     [Test]
     public async Task Bash_GlueMatchesDeletedHandwrittenMembers()
     {
-        var tool = new BashTool(NullLogger<BashTool>.Instance);
+        var tool = new BashTool(new SystemProcessProxy(), NullLogger<BashTool>.Instance);
 
         await Assert.That(tool.Name.Value).IsEqualTo("bash");
         await Assert.That(tool.DisplayName).IsEqualTo("Bash");

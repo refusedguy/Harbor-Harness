@@ -158,9 +158,8 @@ internal static class ToolsCatalog
         tb.AddTool(lf => new ReadTool(lf.CreateLogger<ReadTool>(), lspService));
         tb.AddTool(lf => new WriteTool(lf.CreateLogger<WriteTool>()));
         tb.AddTool(lf => new EditTool(lf.CreateLogger<EditTool>(), lspService));
-        // #1590: BashTool reaches OS processes only through the Proxy seam;
-        // the production SystemProcessProxy is stateless, so a fresh one per
-        // tool keeps the lambda style while the seam stays swappable in tests.
+        // #1590: BashTool доходит до OS-процессов только через Proxy-шов — здесь
+        // production SystemProcessProxy; тесты подменяют его сценарием.
         tb.AddTool(lf => new BashTool(new SystemProcessProxy(), lf.CreateLogger<BashTool>()));
         tb.AddTool(lf => new GlobTool(lf.CreateLogger<GlobTool>()));
         tb.AddTool(lf => new GrepTool(lf.CreateLogger<GrepTool>()));

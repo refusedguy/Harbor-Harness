@@ -243,7 +243,8 @@ public class WorkspaceMaterializerTests
                 string worktree = created.Value.Path;
                 try
                 {
-                    var bash = new Harbor.Tools.Builtin.BashTool(NullLogger<Harbor.Tools.Builtin.BashTool>.Instance);
+                    var bash = new Harbor.Tools.Builtin.BashTool(
+                        new Harbor.Tools.Builtin.SystemProcessProxy(), NullLogger<Harbor.Tools.Builtin.BashTool>.Instance);
                     using var pwdDoc = JsonDocument.Parse("""{"command":"pwd"}""");
                     var pwd = await bash.ExecuteAsync(pwdDoc.RootElement, Ctx(worktree));
                     await Assert.That(pwd.IsError).IsFalse();
