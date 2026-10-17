@@ -198,8 +198,8 @@ public sealed class OnboardingWizard
                 continue;
             }
 
-            if (int.TryParse(input, out int idx) && idx >= 1 && idx <= presets.Count)
-                return Result.Success(presets[idx - 1]);
+            if (OnboardingPicks.TryPickByNumber(input, presets, out var pickedPreset))
+                return Result.Success(pickedPreset); // #1577: trim + range once, in OnboardingPicks.
 
             var byId = ProviderPresets.Find(input);
             if (byId is not null) return Result.Success(byId);
@@ -353,13 +353,13 @@ public sealed class OnboardingWizard
         if (string.IsNullOrWhiteSpace(input))
             return presetDefault;
 
-        if (int.TryParse(input, out int idx) && idx >= 1 && idx <= liveModels.Count)
-            return $"{provider.Id}/{liveModels[idx - 1]}";
+        if (OnboardingPicks.TryPickByNumber(input, liveModels, out var pickedModel))
+            return $"{provider.Id}/{pickedModel}"; // #1577: TryPickByNumber — trim + range once.
 
         // Raw model id — prepend provider prefix unless already present.
-        if (!input.Contains('/'))
-            return $"{provider.Id}/{input.Trim()}";
-        return input.Trim();
+        // Trim + prefix normalization are shared with the free-text fallback (#1577):
+        string normalized = OnboardingPicks.NormalizeModelId(input, provider.Id);
+        return normalized;
     }
 
     /// <summary>The original free-text fallback (preset default on Enter).</summary>
@@ -375,9 +375,9 @@ public sealed class OnboardingWizard
         string input = await reader("Press Enter to use default, or type a model name: ").ConfigureAwait(false);
         if (string.IsNullOrWhiteSpace(input)) return defaultModel;
 
-        // If user typed just a model name without provider/, prepend it
-        if (!input.Contains('/')) return $"{provider.Id}/{input}";
-        return input.Trim();
+        // If user typed just a model name without provider/, prepend it.
+        // Same helper as the live-list tail — trims too, so both prompts agree (#1577):
+        return OnboardingPicks.NormalizeModelId(input, provider.Id);
     }
 
     /// <summary>
