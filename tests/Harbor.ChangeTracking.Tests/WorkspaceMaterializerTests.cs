@@ -5,9 +5,10 @@ using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Abstractions.Permissions;
 using Harbor.Abstractions.Tools;
 using Harbor.Application.Sessions;
+using Harbor.ChangeTracking;
 using Microsoft.Extensions.Logging.Abstractions;
 
-namespace Harbor.Application.Tests;
+namespace Harbor.ChangeTracking.Tests;
 
 /// <summary>
 ///     S2 (#376): the S1 contract becomes a real isolated working copy plus a

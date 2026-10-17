@@ -1,6 +1,7 @@
 using Harbor.Application.Sessions;
+using Harbor.ChangeTracking;
 
-namespace Harbor.Application.Tests;
+namespace Harbor.ChangeTracking.Tests;
 
 /// <summary>
 ///     S5 slice 1 (#379): the verification report is derived from recorded

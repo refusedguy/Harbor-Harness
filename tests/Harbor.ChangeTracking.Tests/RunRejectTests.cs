@@ -1,6 +1,7 @@
 using Harbor.Application.Sessions;
+using Harbor.ChangeTracking;
 
-namespace Harbor.Application.Tests;
+namespace Harbor.ChangeTracking.Tests;
 
 /// <summary>
 ///     S7 slice 1 (#385): the reject router and the out-of-reach inventory.

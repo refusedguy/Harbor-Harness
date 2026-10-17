@@ -1,7 +1,8 @@
 using CSharpFunctionalExtensions;
 using Harbor.Application.Sessions;
+using Harbor.ChangeTracking;
 
-namespace Harbor.Application.Tests;
+namespace Harbor.ChangeTracking.Tests;
 
 /// <summary>
 ///     S9 checks wiring (#397): the operator's <c>--checks</c> file parses

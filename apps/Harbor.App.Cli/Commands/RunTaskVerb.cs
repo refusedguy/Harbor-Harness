@@ -1,5 +1,6 @@
 using Harbor.App.Cli.Hosting;
 using Harbor.Application.Sessions;
+using Harbor.ChangeTracking;
 
 namespace Harbor.App.Cli.Commands;
 

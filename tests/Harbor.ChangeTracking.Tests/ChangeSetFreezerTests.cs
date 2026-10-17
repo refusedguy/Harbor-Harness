@@ -4,8 +4,9 @@ using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Application.Sessions;
+using Harbor.ChangeTracking;
 
-namespace Harbor.Application.Tests;
+namespace Harbor.ChangeTracking.Tests;
 
 /// <summary>
 ///     S3 (#377): the agent's work in the isolated copy freezes into an

@@ -25,6 +25,8 @@
         <Project Path="src/Harbor.Hosting/Harbor.Hosting.csproj"/>
         <Project Path="src/Harbor.Logging/Harbor.Logging.csproj"/>
         <Project Path="src/Harbor.Application/Harbor.Application.csproj"/>
+        <!-- #1616: verified-change pipeline extracted from Harbor.Application. -->
+        <Project Path="src/Harbor.ChangeTracking/Harbor.ChangeTracking.csproj"/>
         <Project Path="src/Harbor.Extensions/Harbor.Extensions.csproj"/>
         <Project Path="src/Harbor.Terminal.Abstractions/Harbor.Terminal.Abstractions.csproj"/>
         <Project Path="src/Harbor.Desktop.Abstractions/Harbor.Desktop.Abstractions.csproj"/>
@@ -112,6 +114,8 @@
         <Project Path="tests/Harbor.App.Avalonia.Tests/Harbor.App.Avalonia.Tests.csproj"/>
         <Project Path="tests/Harbor.App.Cli.Tests/Harbor.App.Cli.Tests.csproj"/>
         <Project Path="tests/Harbor.Application.Tests/Harbor.Application.Tests.csproj"/>
+        <!-- #1616: tests for the extracted verified-change pipeline. -->
+        <Project Path="tests/Harbor.ChangeTracking.Tests/Harbor.ChangeTracking.Tests.csproj"/>
         <Project Path="tests/Harbor.Hosting.Tests/Harbor.Hosting.Tests.csproj"/>
         <Project Path="tests/Harbor.Transport.Remote.Tests/Harbor.Transport.Remote.Tests.csproj"/>
         <Project Path="tests/Harbor.Ipc.Tests/Harbor.Ipc.Tests.csproj"/>

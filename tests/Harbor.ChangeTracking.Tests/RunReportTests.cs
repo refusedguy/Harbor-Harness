@@ -2,8 +2,9 @@ using System.Diagnostics;
 using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Models;
 using Harbor.Application.Sessions;
+using Harbor.ChangeTracking;
 
-namespace Harbor.Application.Tests;
+namespace Harbor.ChangeTracking.Tests;
 
 /// <summary>
 ///     S5 remainder (#379), driven end to end by S9 (#397): the verification

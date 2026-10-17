@@ -3,6 +3,7 @@ using Harbor.Abstractions.Agents;
 using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Sessions;
 using Harbor.Application.Sessions;
+using Harbor.ChangeTracking;
 using Microsoft.Extensions.DependencyInjection;
 namespace Harbor.App.Cli.Commands;
 /// <summary>

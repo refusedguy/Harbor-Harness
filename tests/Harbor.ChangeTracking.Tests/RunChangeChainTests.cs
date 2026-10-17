@@ -2,8 +2,9 @@ using System.Diagnostics;
 using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Models;
 using Harbor.Application.Sessions;
+using Harbor.ChangeTracking;
 
-namespace Harbor.Application.Tests;
+namespace Harbor.ChangeTracking.Tests;
 
 /// <summary>
 ///     S9 (#397): one end-to-end test driving the whole verified-change chain
