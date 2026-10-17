@@ -253,7 +253,7 @@ public static class CheckRunner
             return id.ConvertFailure<CheckReport>();
         string runId = id.Value;
 
-        string path = Path.Combine(RunDir(runId), "checks.json");
+        string path = Path.Combine(WorkspacePaths.Default.RunDir(runId), "checks.json");
         byte[] bytes;
         try
         {
@@ -769,20 +769,6 @@ public static class CheckRunner
         return new StreamCapture(Encoding.UTF8.GetString(linear, offset, count - offset), truncated);
     }
 
-    internal static string GetHarborHome()
-    {
-        // Same five lines as WorkspaceMaterializer (and the same reason they
-        // live here rather than behind a Hosting ProjectReference): Application
-        // depends on Domain only. HARBOR_HOME or ~/.harbor.
-        if (Environment.GetEnvironmentVariable("HARBOR_HOME") is { Length: > 0 } custom)
-            return custom;
-        return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".harbor");
-    }
-
-    internal static string RunsRoot() => Path.Combine(GetHarborHome(), "runs");
-
-    internal static string RunDir(string runId) => Path.Combine(RunsRoot(), runId);
-
     /// <summary>
     ///     Write <c>runs/&lt;RunId&gt;/checks.json</c> atomically (temp + rename).
     ///     Zero checks serialize as <c>"checks": "none"</c> — S5 (#379) turns
@@ -791,7 +777,7 @@ public static class CheckRunner
     /// </summary>
     private static Result<string> WriteChecksJson(string runId, CheckReport report)
     {
-        string runDir = RunDir(runId);
+        string runDir = WorkspacePaths.Default.RunDir(runId);
         try
         {
             Directory.CreateDirectory(runDir);

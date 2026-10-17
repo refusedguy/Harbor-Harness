@@ -142,7 +142,7 @@ public static class ChangeApplier
                 $"Stage 'reverify' needs the S4 check suite (#378) and the S5 report (#379): " +
                 "neither is implemented — refusing to apply without re-verification. Nothing written.");
 
-        string patchPath = Path.Combine(WorkspaceMaterializer.RunDir(manifest.RunId), ChangePatchFileName);
+        string patchPath = Path.Combine(WorkspacePaths.Default.RunDir(manifest.RunId), ChangePatchFileName);
         if (!File.Exists(patchPath))
             return dryRun
                 ? Cancelled($"Run '{manifest.RunId}' has no {ChangePatchFileName} yet: " +
@@ -375,7 +375,7 @@ public static class ChangeApplier
         try
         {
             string logPath = Path.Combine(
-                WorkspaceMaterializer.RunDir(manifest.RunId), AcceptLogFileName);
+                WorkspacePaths.Default.RunDir(manifest.RunId), AcceptLogFileName);
             await File.AppendAllTextAsync(logPath, line + "\n").ConfigureAwait(false);
             return null;
         }

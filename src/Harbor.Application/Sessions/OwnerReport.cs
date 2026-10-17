@@ -260,7 +260,7 @@ public sealed class OwnerReport
             return id.ConvertFailure<string>();
         string runId = id.Value;
 
-        string runDir = WorkspaceMaterializer.RunDir(runId);
+        string runDir = WorkspacePaths.Default.RunDir(runId);
         try
         {
             Directory.CreateDirectory(runDir);
@@ -307,7 +307,7 @@ public sealed class OwnerReport
             return id.ConvertFailure<string>();
         string runId = id.Value;
 
-        string path = Path.Combine(WorkspaceMaterializer.RunDir(runId), OwnerReportFileName);
+        string path = Path.Combine(WorkspacePaths.Default.RunDir(runId), OwnerReportFileName);
         string text;
         try
         {
