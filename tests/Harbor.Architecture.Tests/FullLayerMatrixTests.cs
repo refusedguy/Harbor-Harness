@@ -150,6 +150,10 @@ public class FullLayerMatrixTests
         "Harbor.Tui.AnsiPlain",
         "Harbor.Tui.CellForge.Engine",
         "Harbor.Tui.CellForge",
+        // #1617: the syntax-highlight + themes cluster (CodeSyntaxTokenizer /
+        // ILanguageSupport family / CodeHighlightPalette / CodeTokenizer facade,
+        // JsonThemeLoader / ThemeFileWatcher) as its own Presentation sibling.
+        "Harbor.Tui.CellForge.Syntax",
         // #450: was reachable from Harbor.Hosting but present in NEITHER this
         // inventory, the matrix, nor an out-of-scope list — i.e. its own
         // dependencies were unbounded. SharpConsoleUI is a third-party renderer
@@ -468,7 +472,26 @@ public class FullLayerMatrixTests
                 "Harbor.Ui.Framework.ViewModels",
                 "Harbor.Ui.Framework.Sessions",
                 "Harbor.Ui.Framework.Abstractions",
-                "Harbor.DesignSystem", "Harbor.Extensions", ]),
+                "Harbor.DesignSystem", "Harbor.Extensions",
+                // #1617: Presentation→Presentation sibling holding the extracted
+                // syntax-highlight + themes cluster; realized by
+                // AssistantMarkdownBlock binding CodeTokenizer.
+                "Harbor.Tui.CellForge.Syntax", ]),
+        // #1617: Harbor.Tui.CellForge.Syntax — Presentation-layer sibling like
+        // Harbor.Tui.CellForge.Engine: the verbatim extraction of the CellForge
+        // syntax-highlight + themes cluster (issue body files: CodeSyntaxTokenizer
+        // + ILanguageSupport/BuiltinLanguageSupports/LanguageSupportRegistry +
+        // CodeHighlightPalette + CodeTokenizer facade, JsonThemeLoader +
+        // ThemeFileWatcher). The namespaces stay Harbor.Tui.CellForge.* verbatim,
+        // so the consumers' usings did not move with the code. The vocabulary it
+        // binds is Rendering (spans paint into Rendering grids — the UIR pin) and
+        // DesignSystem (HarborTheme/ThemeJson/TerminalColorPalette/IThemeStore);
+        // Harbor.Extensions is the Ensure-guard Domain helper leaf the same way
+        // #1615's Permissions row grants it, and the Result/Maybe railway rides
+        // CSharpFunctionalExtensions transitively through Extensions→Abstractions
+        // while the code binds it directly.
+        ["Harbor.Tui.CellForge.Syntax"] = new(Layer.Presentation,
+            [ "Harbor.Extensions", "Harbor.Ui.Framework.Rendering", "Harbor.DesignSystem" ]),
         // #450: SharpConsoleUI-based renderer (HARBOR_TUI=nickconsoleex), wired
         // behind HarborWithNickConsoleEx. It lives in src/ and Harbor.Hosting
         // references it, so it belongs on the matrix like any other Presentation

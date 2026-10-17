@@ -111,7 +111,7 @@ public class ResultFailureConversionTests
     /// </summary>
     private static readonly Dictionary<string, string> Exemptions = new(StringComparer.Ordinal)
     {
-        ["src/Harbor.Tui.CellForge/Chat/Widgets/JsonThemeLoader.cs"] =
+        ["src/Harbor.Tui.CellForge.Syntax/Widgets/JsonThemeLoader.cs"] =
             "The receiver is ThemeParseResult (src/Harbor.DesignSystem/DesignSystem/ThemeJson.cs:11) — "
             + "a hand-rolled `sealed record` with its own IsSuccess/Error/Theme, not a Result<T>. "
             + "ConvertFailure is an instance member of the Result family and does not exist on it, so "

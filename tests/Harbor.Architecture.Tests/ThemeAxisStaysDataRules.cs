@@ -165,8 +165,8 @@ public sealed class ThemeAxisStaysDataRules
     [
         "src/Harbor.Hosting/Themes/ThemeStore.cs",
         "src/Harbor.Hosting/Themes/ThemeDirectoryWatcher.cs",
-        "src/Harbor.Tui.CellForge/Chat/Widgets/ThemeFileWatcher.cs",
-        "src/Harbor.Tui.CellForge/Chat/Widgets/JsonThemeLoader.cs",
+        "src/Harbor.Tui.CellForge.Syntax/Widgets/ThemeFileWatcher.cs",
+        "src/Harbor.Tui.CellForge.Syntax/Widgets/JsonThemeLoader.cs",
     ];
 
     /// <summary>The discovery-path ban as data; the grading is <see cref="ParseThemeNameTables" />.</summary>
