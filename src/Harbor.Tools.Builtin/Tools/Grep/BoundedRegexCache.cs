@@ -63,7 +63,7 @@ internal sealed class BoundedRegexCache
         ArgumentException.ThrowIfNullOrWhiteSpace(pattern);
 
         var key = new Key(pattern, options, matchTimeout);
-        if (TryGet(key, out var hit))
+        if (TryGet(key) is { } hit)
             return hit;
 
         var compiled = factory(key.Pattern, key.Options, key.Timeout);
@@ -90,19 +90,18 @@ internal sealed class BoundedRegexCache
         }
     }
 
-    private bool TryGet(Key key, out Regex regex)
+    private Regex? TryGet(Key key)
     {
         lock (_gate)
         {
-            if (_entries.TryGetValue(key, out regex))
+            if (_entries.TryGetValue(key, out var hit))
             {
                 Touch(key);
-                return true;
+                return hit;
             }
-        }
 
-        regex = null!;
-        return false;
+            return null;
+        }
     }
 
     private void Touch(Key key)
