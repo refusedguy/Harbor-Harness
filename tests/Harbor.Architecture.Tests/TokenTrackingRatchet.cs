@@ -294,20 +294,20 @@ public sealed class TokenTrackingRatchet
             "the declaration itself", true),
         new("src/Harbor.Abstractions/Sessions/ICompactionView.cs", [],
             "the history-shaping seam (#1612): declares the tracker only as parameter types, calls nothing", true),
-        new("src/Harbor.Application/Agents/AgentLoop.cs", [],
+        new("src/Harbor.AgentRuntime/Agents/AgentLoop.cs", [],
             "names the type as a ctor parameter and calls no member. That parameter exists "
             + "only to be forwarded to the four behaviours; the field that used to hold it was "
             + "write-only and #981 removed it",
             true),
-        new("src/Harbor.Application/Agents/BackgroundDrain.cs", ["RecordAppendedMessage"],
+        new("src/Harbor.AgentRuntime/Agents/BackgroundDrain.cs", ["RecordAppendedMessage"],
             "appends drained background output to the running estimate", false),
-        new("src/Harbor.Application/Agents/Pipeline/CompactionBehavior.cs",
+        new("src/Harbor.AgentRuntime/Agents/Pipeline/CompactionBehavior.cs",
             ["EstimateTokens", "ShouldCompact"],
             "asks whether to compact, and sizes the histogram it logs either way", false),
-        new("src/Harbor.Application/Agents/Pipeline/SteeringDrainBehavior.cs",
+        new("src/Harbor.AgentRuntime/Agents/Pipeline/SteeringDrainBehavior.cs",
             ["RecordAppendedMessage"],
             "records the steer message that was appended to the history", false),
-        new("src/Harbor.Application/Agents/TurnRunner.cs",
+        new("src/Harbor.AgentRuntime/Agents/TurnRunner.cs",
             ["EstimateMessage", "EstimateTokens", "RecordAppendedMessage", "RecordTurnUsage"],
             "records what the turn spent and what it appended, sizes the turn for a metric, "
             + "and — #404 — sizes the just-streamed message for the run-budget ledger when the "
@@ -347,19 +347,19 @@ public sealed class TokenTrackingRatchet
     [
         new("ITokenEstimator", ["Estimate", "EstimateMessage", "EstimateTokens"],
         [
-            "src/Harbor.Application/Agents/Pipeline/CompactionBehavior.cs",
-            "src/Harbor.Application/Agents/TurnRunner.cs",
+            "src/Harbor.AgentRuntime/Agents/Pipeline/CompactionBehavior.cs",
+            "src/Harbor.AgentRuntime/Agents/TurnRunner.cs",
             "src/Harbor.Application/Sessions/CompactionPolicy.cs",
             "src/Harbor.Application/Sessions/CompactionService.cs",
         ]),
         new("IUsageRecorder", ["RecordAppendedMessage", "RecordTurnUsage", "RecordUpdatedMessage"],
         [
-            "src/Harbor.Application/Agents/BackgroundDrain.cs",
-            "src/Harbor.Application/Agents/Pipeline/SteeringDrainBehavior.cs",
-            "src/Harbor.Application/Agents/TurnRunner.cs",
+            "src/Harbor.AgentRuntime/Agents/BackgroundDrain.cs",
+            "src/Harbor.AgentRuntime/Agents/Pipeline/SteeringDrainBehavior.cs",
+            "src/Harbor.AgentRuntime/Agents/TurnRunner.cs",
         ]),
         new("ICompactionHeuristic", ["ShouldCompact"],
-        ["src/Harbor.Application/Agents/Pipeline/CompactionBehavior.cs",
+        ["src/Harbor.AgentRuntime/Agents/Pipeline/CompactionBehavior.cs",
          "src/Harbor.Application/Sessions/CompactionService.cs"]),
         // ReplLifecycle is NOT a row here even though it is a real GetStats consumer: it
         // reaches the aggregate through the host's Tokens property and never names the
@@ -600,7 +600,7 @@ public sealed class TokenTrackingRatchet
                    + "empty measurement is green forever, which is the whole failure mode a "
                    + "ratchet has to avoid");
 
-        await Assert.That(measured.ContainsKey("src/Harbor.Application/Agents/AgentLoop.cs")).IsTrue()
+        await Assert.That(measured.ContainsKey("src/Harbor.AgentRuntime/Agents/AgentLoop.cs")).IsTrue()
             .Because("the zero-member holder is the finding the header makes a point of, so its "
                    + "absence from the measurement must be noticed. If the file genuinely stopped "
                    + "naming the aggregate, delete the row from BaselineHolders deliberately "
@@ -612,7 +612,7 @@ public sealed class TokenTrackingRatchet
                    + "in a real product file, found by the same receiver-agnostic pattern the "
                    + "ratchet above grades with (#1106: verdict via tracker, no own scan)");
 
-        await Assert.That(measured["src/Harbor.Application/Agents/AgentLoop.cs"].Count).IsEqualTo(0)
+        await Assert.That(measured["src/Harbor.AgentRuntime/Agents/AgentLoop.cs"].Count).IsEqualTo(0)
             .Because("AgentLoop names the aggregate as a constructor parameter and calls no member, "
                    + "so the correct measurement is EMPTY. A non-empty result here would mean the "
                    + "header's claim is no longer true, and the row above is no longer a finding");
@@ -679,7 +679,7 @@ public sealed class TokenTrackingRatchet
     [Test]
     public async Task Control_AConsumerCallingOneMoreMemberIsReportedAsARegression()
     {
-        const string Consumer = "src/Harbor.Application/Agents/Pipeline/SteeringDrainBehavior.cs";
+        const string Consumer = "src/Harbor.AgentRuntime/Agents/Pipeline/SteeringDrainBehavior.cs";
         var degraded = new Dictionary<string, IReadOnlyList<string>>(BaselineHolderMap(), StringComparer.Ordinal)
         {
             [Consumer] = ["GetStats", "RecordAppendedMessage"],
