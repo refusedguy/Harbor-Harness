@@ -219,10 +219,15 @@ public sealed class IdeJsonRpcServer : IAsyncDisposable
                 break;
         }
 
-        JsonDocument doc;
+        // Same DOM as JsonDocument.Parse, but through the source-generated
+        // JsonElement info (PERF-002): the element is self-contained, so the
+        // request does not pin a document that had to be disposed. Malformed
+        // lines still throw JsonException — answered with the same null-id
+        // invalid_request error below.
+        JsonElement root;
         try
         {
-            doc = JsonDocument.Parse(line);
+            root = JsonSerializer.Deserialize(line, IdeJsonContext.Default.JsonElement);
         }
         catch (JsonException ex)
         {
@@ -233,39 +238,34 @@ public sealed class IdeJsonRpcServer : IAsyncDisposable
             return;
         }
 
-        using (doc)
+        if (root.ValueKind != JsonValueKind.Object)
         {
-            JsonElement root = doc.RootElement;
-            if (root.ValueKind != JsonValueKind.Object)
-            {
-                await WriteErrorAsync(default, IdeRpcException.InvalidRequest, "Request must be a JSON object.")
-                    .ConfigureAwait(false);
-                return;
-            }
-
-            // Notifications (no id) from the editor are accepted and ignored.
-            if (!root.TryGetProperty("id", out JsonElement id))
-            {
-                IdeJsonRpcServerLog.IgnoredEditorNotification(_logger, line);
-                return;
-            }
-
-            if (!root.TryGetProperty("method", out JsonElement methodEl) || methodEl.ValueKind != JsonValueKind.String)
-            {
-                await WriteErrorAsync(id, IdeRpcException.InvalidRequest, "Missing string 'method'.")
-                    .ConfigureAwait(false);
-                return;
-            }
-
-            string method = methodEl.GetString()!;
-            JsonElement? parameters = root.TryGetProperty("params", out JsonElement p) ? p : null;
-
-            // Dispatch is fire-and-forget: the JsonDocument is disposed when this
-            // method returns, so the dispatched work must own its data. Clone both
-            // the id and the params — a JsonElement view into a disposed document
-            // throws ObjectDisposedException on first access (GetRawText/Deserialize).
-            Dispatch(method, parameters?.Clone(), id.Clone(), serverCt);
+            await WriteErrorAsync(default, IdeRpcException.InvalidRequest, "Request must be a JSON object.")
+                .ConfigureAwait(false);
+            return;
         }
+
+        // Notifications (no id) from the editor are accepted and ignored.
+        if (!root.TryGetProperty("id", out JsonElement id))
+        {
+            IdeJsonRpcServerLog.IgnoredEditorNotification(_logger, line);
+            return;
+        }
+
+        if (!root.TryGetProperty("method", out JsonElement methodEl) || methodEl.ValueKind != JsonValueKind.String)
+        {
+            await WriteErrorAsync(id, IdeRpcException.InvalidRequest, "Missing string 'method'.")
+                .ConfigureAwait(false);
+            return;
+        }
+
+        string method = methodEl.GetString()!;
+        JsonElement? parameters = root.TryGetProperty("params", out JsonElement p) ? p : null;
+
+        // Dispatch is fire-and-forget: the source-generated JsonElement is
+        // self-contained (no document lifetime behind it), so the dispatched
+        // work owns its data without a defensive clone.
+        Dispatch(method, parameters, id, serverCt);
     }
 
     // ── Envelope pre-scan (#180) ─────────────────────────────────────────
