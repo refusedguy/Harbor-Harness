@@ -138,7 +138,7 @@ public sealed class ModelRefSingleParserTests
             + "written twice in one file. It is the reference implementation OnboardingFlow "
             + "mirrors, which is why the two answers differ from ModelRef.Qualify's — see the "
             + "note on that method before 'unifying' them.",
-        ["src/Harbor.Application/Permissions/PermissionPathNormalizer.cs"] =
+        ["src/Harbor.Permissions/PermissionPathNormalizer.cs"] =
             "NOT A REFERENCE. A filesystem path prefix. Listed because the matcher is textual, "
             + "not semantic.",
         ["src/Harbor.Application/Skills/SkillUpdater.cs"] =
