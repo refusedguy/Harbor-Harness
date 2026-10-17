@@ -20,7 +20,22 @@ path — and knows nothing about chat, agents or events.
 
 ## Public API
 
-Four areas, one per directory.
+Four I/O areas, one per directory, plus the #1620 verbatim leaf areas below them.
+
+### `Widgets/` and `Streaming/` — verbatim leaf moves (#1620)
+
+The pure-BCL chat-widget leaves moved verbatim from
+`Harbor.Tui.CellForge/Chat` into the engine (namespaces stay
+`Harbor.Tui.CellForge.Widgets` / `Harbor.Tui.CellForge.Streaming`): the
+spinner/retry text formatters (`SpinnerStrip`, `RetryCountdown`), the JPEG
+header probe (`JpegProbe`), the scroll-capability pair
+(`ScrollableViewport` + `ScrollInfo`/`IScrollInfoProvider`), the mascot-mode
+resolver (`MascotMode`/`MascotModeEnv`), the two-budget tool-output collapse
+(`ToolOutputCollapse`), the thinking-summary helpers (`ThinkingSummary`), and
+the commit-tick pacing hysteresis (`CommitTickPacer`). None of them speaks any
+Harbor vocabulary beyond this namespace family — that is what made them batch A
+(verbatim, no adaptation); the leaves that still bind `ChatPalette`/`Ensure`/
+`ScreenBuffer` stay behind for the batch-B adapted moves (#1627).
 
 ### `Input/` — raw mode and byte decoding
 
@@ -184,7 +199,10 @@ Rendering→State crossing point. `MouseRouter.WheelToKey` + a
 the remaining cell/input/probe/layout vocabulary (SplitDir/Size included) was ported into the engine
 verbatim (same shape, engine-owned namespaces), and the chat-owned rendering
 (prompt/composer/markdown/overlay/layout/image-layer, 17 files) moved to
-`Harbor.Tui.CellForge/Chat/Rendering`. The #1009 caveat is cleared with them:
+`Harbor.Tui.CellForge/Chat/Rendering`. #1620 followed the same direction with the
+pure-BCL widget leaves (see `Widgets/`/`Streaming/` above): they resolve with
+BCL and this namespace family alone, so they moved verbatim — bodies byte-equal,
+namespaces unchanged, zero Harbor imports to port. The #1009 caveat is cleared with them:
 `Contracts` reached the engine only transitively (`Rendering→Contracts`), so
 with both edges gone no Harbor assembly is reachable at all.
 

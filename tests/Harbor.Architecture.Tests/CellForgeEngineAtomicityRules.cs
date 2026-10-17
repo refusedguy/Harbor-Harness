@@ -908,4 +908,72 @@ public sealed class CellForgeEngineAtomicityRules
                 + "person it annoys; one that fires on nothing enforces nothing. "
                 + string.Join("; ", failures));
     }
+
+    // =====================================================================
+    // 5. The #1620 batch-A verbatim leaf set, pinned where it landed.
+    // =====================================================================
+
+    /// <summary>
+    ///     The #1620 batch-A verbatim leaf moves, as (engine path, chat path)
+    ///     relative to each project directory. Each of these files resolves
+    ///     with BCL and the engine's own namespace family alone — that is the
+    ///     property that made the move verbatim: bodies untouched, namespaces
+    ///     unchanged, import rule above still grading them where they now
+    ///     live. The table is the assertion: a row whose engine file is gone,
+    ///     or whose chat file is back, names the drift.
+    /// </summary>
+    private static readonly (string EngineFile, string ChatFile)[] VerbatimLeafMoves =
+    [
+        ("Widgets/SpinnerStrip.cs", "Chat/Widgets/SpinnerStrip.cs"),
+        ("Widgets/RetryCountdown.cs", "Chat/Widgets/RetryCountdown.cs"),
+        ("Widgets/JpegProbe.cs", "Chat/Widgets/JpegProbe.cs"),
+        ("Widgets/ScrollableViewport.cs", "Chat/Widgets/ScrollableViewport.cs"),
+        ("Widgets/ScrollInfo.cs", "Chat/Widgets/ScrollInfo.cs"),
+        ("Widgets/MascotMode.cs", "Chat/Widgets/MascotMode.cs"),
+        ("Widgets/ToolOutputCollapse.cs", "Chat/Widgets/ToolOutputCollapse.cs"),
+        ("Widgets/ThinkingSummary.cs", "Chat/Widgets/ThinkingSummary.cs"),
+        ("Streaming/CommitTickPacer.cs", "Chat/Streaming/CommitTickPacer.cs"),
+    ];
+
+    /// <summary>
+    ///     The verbatim leaf set lives in the engine, and no chat copy is back
+    ///     beside it. The reverse half is the load-bearing one: a Chat file
+    ///     shadowing the engine copy in the same namespace wins resolution for
+    ///     chat callers, so the two bodies would drift apart while every rule
+    ///     here grades only the engine side — the silent-fork failure this
+    ///     batch exists to move away from.
+    /// </summary>
+    [Test]
+    public async Task TheVerbatimLeafSetLivesInTheEngineAndItsChatCopiesAreGone()
+    {
+        if (RepoPaths.RepoRoot is not { } root)
+        {
+            return;
+        }
+
+        var drift = new List<string>();
+        foreach ((string engineFile, string chatFile) in VerbatimLeafMoves)
+        {
+            if (!File.Exists(Path.Combine(root, "src", ProjectDir, engineFile.Replace('/', Path.DirectorySeparatorChar))))
+            {
+                drift.Add($"src/{ProjectDir}/{engineFile} — row in VerbatimLeafMoves names a file that is gone; "
+                          + "either the leaf moved again (update the row in the same commit) or the engine lost it");
+            }
+
+            if (File.Exists(Path.Combine(root, "src", "Harbor.Tui.CellForge", chatFile.Replace('/', Path.DirectorySeparatorChar))))
+            {
+                drift.Add($"src/Harbor.Tui.CellForge/{chatFile} — a Chat copy came back and now shadows the "
+                          + "engine type for chat callers; delete the copy or fold it into the engine file");
+            }
+        }
+
+        await Assert.That(drift).IsEmpty()
+            .Because(
+                "#1620 moved nine pure-BCL chat-widget leaves into the engine verbatim (no adaptation: "
+                + "bodies byte-equal, namespaces unchanged, zero Harbor imports in the bodies outside doc "
+                + "crefs). This file's import rule keeps grading them in their new home, and rows in "
+                + "VerbatimLeafMoves keep grading that the home and the origin do not disagree — which is "
+                + "what 'дословный переезд' means as a checkable fact: same body, one home, no shadow. "
+                + "Drift: " + Offenders(drift));
+    }
 }
