@@ -6,6 +6,7 @@ namespace Harbor.Tui.CellForge.Tests;
 /// Fuzzy matcher contract for the command palette: subsequence matching,
 /// boundary/consecutive bonuses, stable ranking, empty-query passthrough.
 /// </summary>
+[NotInParallel("fuzzy-cache")]
 public class FuzzyMatcherTests
 {
     [Test]
