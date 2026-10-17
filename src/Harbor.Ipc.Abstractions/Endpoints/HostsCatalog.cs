@@ -1,5 +1,4 @@
 using System.Text.Json;
-using System.Text.Json.Serialization;
 using CSharpFunctionalExtensions;
 
 namespace Harbor.Ipc.Protocol;
@@ -51,11 +50,7 @@ public static class HostsCatalog
                     new Dictionary<string, EndpointDescriptor>());
             }
 
-            // Same DOM as JsonDocument.Parse, but through the source-generated
-            // JsonElement info (PERF-002): the element is self-contained, so
-            // no document lifetime is tracked here. Malformed files still
-            // throw JsonException — caught below with the same message shape.
-            JsonElement root = JsonSerializer.Deserialize(File.ReadAllText(path), HostsCatalogJsonContext.Default.JsonElement);
+            JsonElement root = JsonSerializer.Deserialize(File.ReadAllText(path), HostsCatalogJsonContext.Default.JsonElement); // same DOM as JsonDocument.Parse via source-gen JsonElement info (PERF-002); malformed still throws JsonException
             if (root.ValueKind != JsonValueKind.Object)
             {
                 return Result.Failure<IReadOnlyDictionary<string, EndpointDescriptor>>(
@@ -188,7 +183,7 @@ public static class HostsCatalog
 ///     <see cref="HostsCatalog.ParseEntry" />, so the context exists purely
 ///     to make the read reflection-free.
 /// </summary>
-[JsonSerializable(typeof(JsonElement))]
+[System.Text.Json.Serialization.JsonSerializable(typeof(JsonElement))]
 internal sealed partial class HostsCatalogJsonContext : JsonSerializerContext
 {
 }
