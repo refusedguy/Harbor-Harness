@@ -27,7 +27,7 @@ public class McpConfigTests
             """);
 
             var loggerFactory = LoggerFactory.Create(b => { });
-            var registry = new McpRegistry(loggerFactory.CreateLogger<McpRegistry>());
+            var registry = new McpRegistry(loggerFactory.CreateLogger<McpRegistry>(), McpTransportResolver.Default);
             var result = registry.RegisterFromConfig(tempFile);
             await Assert.That(result.IsSuccess).IsTrue();
             await Assert.That(registry.GetServerNames()).Contains("test-server");
@@ -42,7 +42,7 @@ public class McpConfigTests
     public async Task RegisterFromConfig_ReturnsSuccess_WhenFileMissing()
     {
             var loggerFactory = LoggerFactory.Create(b => { });
-        var registry = new McpRegistry(loggerFactory.CreateLogger<McpRegistry>());
+        var registry = new McpRegistry(loggerFactory.CreateLogger<McpRegistry>(), McpTransportResolver.Default);
         var result = registry.RegisterFromConfig("/nonexistent/path/harbor.mcp.json");
         await Assert.That(result.IsSuccess).IsTrue();
     }
@@ -63,7 +63,7 @@ public class McpConfigTests
             """);
 
             var loggerFactory = LoggerFactory.Create(b => { });
-            var registry = new McpRegistry(loggerFactory.CreateLogger<McpRegistry>());
+            var registry = new McpRegistry(loggerFactory.CreateLogger<McpRegistry>(), McpTransportResolver.Default);
             var result = registry.RegisterFromConfig(tempFile);
             await Assert.That(result.IsSuccess).IsTrue();
             await Assert.That(registry.GetServerNames()).Contains("my-server");

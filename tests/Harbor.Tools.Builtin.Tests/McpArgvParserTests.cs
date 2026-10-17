@@ -135,7 +135,7 @@ public class McpArgvParserTests
     [Test]
     public async Task Register_LegacyQuotedCommand_SucceedsAndParses()
     {
-        var registry = new McpRegistry(NullLogger<McpRegistry>.Instance);
+        var registry = new McpRegistry(NullLogger<McpRegistry>.Instance, McpTransportResolver.Default);
         var result = registry.Register("quoted", "npx -y 'srv foo'");
         await Assert.That(result.IsSuccess).IsTrue();
     }
@@ -143,7 +143,7 @@ public class McpArgvParserTests
     [Test]
     public async Task Register_BlankLegacyCommand_Fails()
     {
-        var registry = new McpRegistry(NullLogger<McpRegistry>.Instance);
+        var registry = new McpRegistry(NullLogger<McpRegistry>.Instance, McpTransportResolver.Default);
         var result = registry.Register("blank", "   ");
         await Assert.That(result.IsFailure).IsTrue();
         await Assert.That(result.Error).Contains("empty");

@@ -422,7 +422,7 @@ public class McpOAuthTests : IDisposable
     public async Task Registry_RemoteWithAuth_ExposesRegistration()
     {
         using var loggerFactory = LoggerFactory.Create(b => { });
-        var registry = new McpRegistry(loggerFactory.CreateLogger<McpRegistry>());
+        var registry = new McpRegistry(loggerFactory.CreateLogger<McpRegistry>(), McpTransportResolver.Default);
         var oauth = new McpOAuthConfig { ClientId = "cid" };
         var registered = registry.Register("cloud", "https://mcp.example.com/mcp", "http", null, oauth);
 
