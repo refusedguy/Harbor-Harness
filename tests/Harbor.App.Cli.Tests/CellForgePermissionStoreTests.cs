@@ -16,7 +16,8 @@ namespace Harbor.App.Cli.Tests;
 
 /// <summary>
 ///     #1125: CellForge-оверрайд <c>IPermissionService</c> обязан прокидывать
-///     <c>IConfigStore</c> — иначе persisted-правила из <c>config.json</c> в
+///     persisted-правила (<c>IPermissionConfigStore</c>, #1615 the seam
+///     adapted over <c>IConfigStore</c>) — иначе persisted-правила из <c>config.json</c> в
 ///     интерактивном пути не читаются и чек упирается в approval-карточку.
 ///     Фабрика вызывается напрямую: env-гейт
 ///     <c>CellForgeModule.IsApprovalPromptAvailable</c> в CI недоступен
@@ -64,6 +65,8 @@ public class CellForgePermissionStoreTests
         var services = new ServiceCollection();
         services.AddSingleton<IAgentRegistry>(registry);
         services.AddSingleton<IConfigStore>(new StubConfigStore(config));
+        services.AddSingleton<IPermissionConfigStore>(sp => new PermissionConfigStoreAdapter(
+            sp.GetRequiredService<IConfigStore>()));
         services.AddSingleton<ILogger<PermissionService>>(NullLogger<PermissionService>.Instance);
         services.AddSingleton(new CellForgePermissionAsker(
             () => throw new InvalidOperationException("asker must not be called for a persisted rule"),
