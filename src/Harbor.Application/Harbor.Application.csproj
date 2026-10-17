@@ -1,10 +1,10 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
-  <PropertyGroup>
+   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
     <IsPackable>true</IsPackable>
     <PackageId>Harbor.Application</PackageId>
-    <Description>Harbor application layer — use cases (AgentLoop, DefaultAgent, CompactionService, SystemPromptBuilder, MessageConverter, PermissionService, OnboardingWizard, HarborConfig).</Description>
+    <Description>Harbor application layer — use cases (AgentLoop, DefaultAgent, CompactionService, SystemPromptBuilder, MessageConverter, OnboardingWizard, HarborConfig). The Permissions subdomain is the sibling Harbor.Permissions assembly (#1615).</Description>
     <PackageTags>harbor;ai;agent;application;use-cases</PackageTags>
   </PropertyGroup>
 
@@ -23,10 +23,17 @@
     Application layer depends on Harbor.Abstractions only — never on
     Infrastructure (Providers.*, Storage.*, Tools.Builtin), never on
     Presentation (Tui.*), never on sibling Application projects
-    (Plugins.Runtime, Scripting). See docs/ARCHITECTURE_LAYERS.md §2.
+    (Plugins.Runtime, Scripting) — EXCEPT Harbor.Permissions (#1615): the
+    permissions subdomain extracted verbatim from Permissions/. AgentLoop and
+    ToolDispatcher bind only the CONTRACTS (IPermissionService in
+    Abstractions.Contracts, IApprovalCoordinator in Abstractions); the edge
+    stays real for the compaction-adjacent Resources/config readers that name
+    Harbor.Application.Permissions types, and is declared here rather than
+    hidden behind transitivity. See docs/ARCHITECTURE_LAYERS.md §2.
   -->
   <ItemGroup>
     <ProjectReference Include="..\Harbor.Abstractions\Harbor.Abstractions.csproj"/>
+    <ProjectReference Include="..\Harbor.Permissions\Harbor.Permissions.csproj"/>
     <ProjectReference Include="..\Harbor.Diagnostics.Abstractions\Harbor.Diagnostics.Abstractions.csproj"/>
     <ProjectReference Include="..\Harbor.Extensions\Harbor.Extensions.csproj"/>
   </ItemGroup>
