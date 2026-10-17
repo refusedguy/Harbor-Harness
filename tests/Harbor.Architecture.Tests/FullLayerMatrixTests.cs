@@ -160,7 +160,7 @@ public class FullLayerMatrixTests
         // library (external/ConsoleEx), referenced only for the renderer it wraps.
         "Harbor.Tui.NickConsoleEx",
         // Application
-        "Harbor.Application",
+        "Harbor.Application", "Harbor.ChangeTracking",
         "Harbor.Hooks",
         "Harbor.Registries",
         "Harbor.Plugins.Abstractions",
@@ -510,6 +510,9 @@ public class FullLayerMatrixTests
         // #1613: Harbor.Hooks — Application-layer sibling like Harbor.Registries:
         // the hook runner binds ToolResult (Domain) + BCL + Logging only; edge is Contracts (Hooks resolves no facade-level type).
         ["Harbor.Hooks"] = new(Layer.Application, ["Harbor.Abstractions.Contracts"]),
+        // #1616: verified-change pipeline, verbatim extract from Harbor.Application;
+        // reads (never re-exports) its run vocabulary — Application keeps it so Application stays a leaf over Abstractions.
+        ["Harbor.ChangeTracking"] = new(Layer.Application, ["Harbor.Application", "Harbor.Extensions", "Harbor.Abstractions.Contracts"]),
         ["Harbor.Registries"] = new(Layer.Application, ["Harbor.Abstractions"]),
         ["Harbor.Plugins.Abstractions"] = new(Layer.Application, ["Harbor.Abstractions"]),
         // Runtime is the composition surface over the plugin machinery stack
