@@ -485,8 +485,8 @@ public class FullLayerMatrixTests
                 // (Application→Application is allowed by MatrixTable_RespectsLayerRules).
                 "Harbor.Hooks"]),
         // #1613: Harbor.Hooks — Application-layer sibling like Harbor.Registries:
-        // the hook runner binds ToolResult (Domain) + BCL + Logging only.
-        ["Harbor.Hooks"] = new(Layer.Application, ["Harbor.Abstractions"]),
+        // the hook runner binds ToolResult (Domain) + BCL + Logging only; edge is Contracts (Hooks resolves no facade-level type).
+        ["Harbor.Hooks"] = new(Layer.Application, ["Harbor.Abstractions.Contracts"]),
         ["Harbor.Registries"] = new(Layer.Application, ["Harbor.Abstractions"]),
         ["Harbor.Plugins.Abstractions"] = new(Layer.Application, ["Harbor.Abstractions"]),
         // Runtime is the composition surface over the plugin machinery stack

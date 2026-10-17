@@ -12,14 +12,15 @@
     #1613: verbatim extraction of Harbor.Application/Hooks (0 in-project code
     dependencies — the folder only bound ToolResult from Domain plus BCL/Logging).
     Application-layer sibling like Harbor.Registries: depends on
-    Harbor.Abstractions only — never on Harbor.Application, Infrastructure,
+    Harbor.Abstractions.Contracts only (ToolResult; the Hooks code resolves no
+    facade-level type) — never on Harbor.Application, Infrastructure,
     or Presentation. See docs/ARCHITECTURE_LAYERS.md §2.
     Namespace stays Harbor.Application.Hooks (verbatim slice-1 move, the same
     convention as the AgentLoop slice extractions #1464/#1475/#1480); consumers
     keep their usings, only ProjectReferences change.
   -->
   <ItemGroup>
-    <ProjectReference Include="..\Harbor.Abstractions\Harbor.Abstractions.csproj"/>
+    <ProjectReference Include="..\Harbor.Abstractions.Contracts\Harbor.Abstractions.Contracts.csproj"/>
   </ItemGroup>
 
   <ItemGroup>
