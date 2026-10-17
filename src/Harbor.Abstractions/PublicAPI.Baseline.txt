@@ -392,6 +392,7 @@ Harbor.Abstractions.Tools.JsonArgs :: public static Result<string> RequireString
 Harbor.Abstractions.Tools.JsonArgs :: public static bool GetBool(JsonElement args, string name)
 Harbor.Abstractions.Tools.JsonArgs :: public static bool? GetBoolOrNull(JsonElement args, string name)
 Harbor.Abstractions.Tools.JsonArgs :: public static class JsonArgs
+Harbor.Abstractions.Tools.JsonArgs :: public static int GetClampedInt(JsonElement args, string name, int min, int max, int defaultValue)
 Harbor.Abstractions.Tools.JsonArgs :: public static int? GetInt(JsonElement args, string name)
 Harbor.Abstractions.Tools.JsonArgs :: public static string? GetString(JsonElement args, string name)
 Harbor.Abstractions.Tools.McpServerInstructions :: public sealed record McpServerInstructions(string ServerName, string Instructions)

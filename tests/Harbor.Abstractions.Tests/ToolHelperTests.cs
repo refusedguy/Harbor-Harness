@@ -51,6 +51,21 @@ public class ToolHelperTests
         await Assert.That(empty.Error).Contains("'empty'");
     }
 
+    [Test]
+    public async Task JsonArgs_GetClampedInt_ClampsAndDefaults()
+    {
+        var args = Parse("""{"big":50000,"small":0,"neg":-5,"one":7}""");
+
+        await Assert.That(JsonArgs.GetClampedInt(args, "big", 1, 10_000, 100)).IsEqualTo(10_000);
+        await Assert.That(JsonArgs.GetClampedInt(args, "small", 1, 10_000, 100)).IsEqualTo(1);
+        await Assert.That(JsonArgs.GetClampedInt(args, "neg", 1, 10_000, 100)).IsEqualTo(1);
+        await Assert.That(JsonArgs.GetClampedInt(args, "one", 1, 10_000, 100)).IsEqualTo(7);
+
+        // absent / wrong-kind → default, not clamp edges
+        await Assert.That(JsonArgs.GetClampedInt(args, "missing", 1, 10_000, 100)).IsEqualTo(100);
+        await Assert.That(JsonArgs.GetClampedInt(args, "s", 1, 10_000, 100)).IsEqualTo(100);
+    }
+
     // ── ToolPaths ──
 
     [Test]
