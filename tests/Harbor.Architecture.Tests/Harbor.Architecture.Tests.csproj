@@ -63,6 +63,9 @@
     <ProjectReference Include="..\..\src\Harbor.Tui.AnsiPlain\Harbor.Tui.AnsiPlain.csproj"/>
     <ProjectReference Include="..\..\src\Harbor.Tui.CellForge.Engine\Harbor.Tui.CellForge.Engine.csproj"/>
     <ProjectReference Include="..\..\src\Harbor.Tui.CellForge\Harbor.Tui.CellForge.csproj"/>
+    <!-- #1617: the matrix-coverage rule loads every Presentation row's assembly;
+         the Syntax sibling is one. -->
+    <ProjectReference Include="..\..\src\Harbor.Tui.CellForge.Syntax\Harbor.Tui.CellForge.Syntax.csproj"/>
 
     <!-- ROP-D Z2: every remaining main-solution src project joins enforcement
          (previously ~28 projects had zero layer rules). Harbor.CodeGen is a
