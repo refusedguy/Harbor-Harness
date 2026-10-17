@@ -1,4 +1,7 @@
+using Harbor.Storage.Shared;
+
 namespace Harbor.Storage.Jsonl;
+
 /// <summary>
 ///     Stateless JSON codec for <see cref="AgentMessage" /> / <see cref="ContentPart" />
 ///     serialization to/from the JSONL wire format. Extracted from

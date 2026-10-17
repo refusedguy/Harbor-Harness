@@ -7,6 +7,7 @@ using System.Text.Json.Serialization.Metadata;
 using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Results;
+using Harbor.Storage.Shared;
 
 namespace Harbor.Storage.Sqlite;
 

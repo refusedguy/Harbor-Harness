@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Harbor.Abstractions.Models;
+using Harbor.Storage.Shared;
 
 namespace Harbor.Storage.Jsonl;
 
