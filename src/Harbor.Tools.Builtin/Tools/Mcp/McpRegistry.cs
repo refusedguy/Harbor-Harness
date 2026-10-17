@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Text.Json;
+using Ensure = Harbor.Abstractions.Extensions.Ensure;
 using Harbor.Abstractions.Results;
 using Microsoft.Extensions.Logging;
 
@@ -49,14 +50,17 @@ public sealed class McpRegistry : IMcpRegistry, IAsyncDisposable
     /// <summary>Create an empty MCP registry.</summary>
     /// <param name="logger">Optional logger for registration and transport diagnostics.</param>
     /// <param name="transports">
-    ///     Transport strategies. Null → <see cref="McpTransportResolver.Default" />
-    ///     (streamable HTTP + legacy SSE). Pass a resolver with extra factories to
-    ///     add a transport kind without editing this class (#477).
+    ///     Transport strategies (streamable HTTP + legacy SSE at minimum).
+    ///     #1576: the resolver is composed by the composition root and injected
+    ///     here — it is no longer defaulted to a process-global static. Pass a
+    ///     resolver with extra factories to add a transport kind without
+    ///     editing this class (#477).
     /// </param>
-    public McpRegistry(ILogger<McpRegistry>? logger = null, McpTransportResolver? transports = null)
+    public McpRegistry(ILogger<McpRegistry>? logger, McpTransportResolver transports)
     {
+        Ensure.NotNull(transports);
         _logger = logger;
-        _transports = transports ?? McpTransportResolver.Default;
+        _transports = transports;
     }
 
     /// <summary>
