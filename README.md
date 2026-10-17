@@ -62,6 +62,35 @@ CI regenerates the GIFs on TUI changes (`.github/workflows/demo.yml`).
 
 ## Quick start
 
+### Install from a release (no .NET needed)
+
+Every `v*` tag ships self-contained NativeAOT binaries on the repo's [GitHub Releases](https://github.com/refusedguy/Harbor-Harness/releases) — no .NET SDK or runtime is required. Each archive contains the `harbor` binary plus the bundled `providers/` directory it reads at startup; `SHA256SUMS.txt` holds the checksums of all assets.
+
+| Asset | Platform |
+|---|---|
+| `harbor-linux-x64.tar.gz` | Linux x64 (built on ubuntu-latest — runs on glibc of the same era or newer) |
+| `harbor-win-x64.zip` | Windows x64 |
+| `harbor-win-arm64.zip` | Windows ARM64 |
+| `harbor-osx-x64.tar.gz` | macOS Intel |
+| `harbor-osx-arm64.tar.gz` | macOS Apple Silicon |
+
+```bash
+# Linux / macOS
+mkdir -p ~/harbor && cd ~/harbor
+curl -L https://github.com/refusedguy/Harbor-Harness/releases/latest/download/harbor-linux-x64.tar.gz -o harbor.tar.gz
+tar -xzf harbor.tar.gz
+./Harbor.App.Cli --version
+
+export KILO_API_KEY=klo_...   # or your provider's key — see below
+./Harbor.App.Cli
+```
+
+Windows: download `harbor-win-x64.zip`, extract, run `Harbor.App.Cli.exe`.
+
+> **Not shipped**: `linux-arm64` / `linux-musl-x64` binaries — NativeAOT cross-compilation for both needs toolchains the GitHub runners do not provide (reasoning is in `.github/workflows/release.yml`); build from source instead.
+
+### Build from source
+
 ```bash
 # Install .NET 10, then:
 git clone --recurse-submodules https://github.com/refusedguy/Harbor-Harness.git
