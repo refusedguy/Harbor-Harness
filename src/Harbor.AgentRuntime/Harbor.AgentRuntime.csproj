@@ -1,0 +1,59 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsPackable>true</IsPackable>
+    <PackageId>Harbor.AgentRuntime</PackageId>
+    <Description>Harbor agent runtime — AgentLoop, TurnRunner, ToolDispatcher, SubAgentRunner, pipeline behaviors and retry mechanics (#1623).</Description>
+    <PackageTags>harbor;ai;agent;agentloop;runtime</PackageTags>
+  </PropertyGroup>
+
+  <!--
+    #1623: the agent loop (Agents/* + Agents/Pipeline/* + the Resilience
+    implementations) extracted verbatim from Harbor.Application into its own
+    assembly, plan A part 1/4 of the Application decomp split. One-way edge:
+    AgentRuntime -> Application only. Application holds the shared vocabulary
+    both sides read and does NOT bind any moved type:
+
+      - Contracts that the residue still consumes: IRetryPolicy / RetryOptions /
+        IToolRetryDecider / IRetryAfterHint (Harbor.Application.Resilience,
+        deliberately NOT moved — CompactionService binds them and would flip the
+        edge into a cycle; the RetryPolicy / DefaultToolRetryDecider
+        implementations moved with the loop that drives them, in the SAME
+        Harbor.Application.Resilience namespace per the NetArchLayerRules
+        backward-compat convention).
+      - Loop vocabulary read via the ProjectReference below: Harbor.Application
+        .Hooks (IHookRunner, HookDecision, HookVerdict — #1646 will extract),
+        .Sessions (CompactionPolicy, CompactionView, CachingSystemPromptBuilder,
+        MessageConverter, WorkspaceContextSource — #1624 will extract),
+        .Resources (CoreResources) and .Telemetry (#1626 will extract).
+  -->
+  <ItemGroup>
+    <ProjectReference Include="..\Harbor.Abstractions\Harbor.Abstractions.csproj"/>
+    <ProjectReference Include="..\Harbor.Diagnostics.Abstractions\Harbor.Diagnostics.Abstractions.csproj"/>
+    <ProjectReference Include="..\Harbor.Extensions\Harbor.Extensions.csproj"/>
+    <ProjectReference Include="..\Harbor.Application\Harbor.Application.csproj"/>
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions"/>
+    <PackageReference Include="ZLinq"/>
+    <!--
+      ZLinq.DropInGenerator emits source-generated extension methods that take
+      priority over System.Linq's. Combined with `<Using Remove="System.Linq" />`
+      below, every LINQ call site in Harbor.AgentRuntime resolves to ZLinq's
+      zero-allocation pipeline without rewriting call sites (moved verbatim from
+      Harbor.Application, which does exactly this — same setup as Abstractions
+      and Registries).
+    -->
+    <PackageReference Include="ZLinq.DropInGenerator">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Remove="System.Linq"/>
+  </ItemGroup>
+
+</Project>
