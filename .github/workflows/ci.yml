@@ -390,6 +390,7 @@ jobs:
               Harbor.Config.Tests
               Harbor.Domain.Tests
               Harbor.Application.Tests
+              Harbor.ChangeTracking.Tests
               Harbor.Core.Tests
               Harbor.Registries.Tests
               Harbor.Hosting.Tests
@@ -615,6 +616,7 @@ jobs:
             Harbor.Config.Tests \
             Harbor.Domain.Tests \
             Harbor.Application.Tests \
+            Harbor.ChangeTracking.Tests \
             Harbor.Core.Tests \
             Harbor.Registries.Tests \
             Harbor.Hosting.Tests \
