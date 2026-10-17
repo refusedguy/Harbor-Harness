@@ -54,10 +54,12 @@ internal static class ToolsCatalog
     /// <summary>Build the MCP registry and load the mcp.json overlays (or the empty desktop stand-in).</summary>
     /// <param name="ctx">Composition context (options + logger factory).</param>
     /// <param name="transports">
-    ///     Remote transport strategies (#477). Null → <see cref="McpTransportResolver.Default" />.
+    ///     Remote transport strategies (#477), composed at the composition root
+    ///     and injected (#1576) — the registry no longer defaults to
+    ///     <see cref="McpTransportResolver.Default" /> on its own.
     /// </param>
     internal static IMcpRegistry CreateMcpRegistry(
-        HarborCompositionContext ctx, McpTransportResolver? transports = null)
+        HarborCompositionContext ctx, McpTransportResolver transports)
     {
         if (!ctx.Options.IncludeMcpTools)
         {

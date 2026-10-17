@@ -149,7 +149,7 @@ public class McpTransportFactoryTests
     [Arguments("ssee")]
     public async Task Register_MisspelledTransport_FailsLoudlyAndRegistersNothing(string transport)
     {
-        var registry = new McpRegistry();
+        var registry = new McpRegistry(null, McpTransportResolver.Default);
 
         Result registered = registry.Register("srv", "https://example.com/mcp", transport);
 
@@ -164,7 +164,7 @@ public class McpTransportFactoryTests
     [Test]
     public async Task Register_BlankTransport_FailsLoudly()
     {
-        var registry = new McpRegistry();
+        var registry = new McpRegistry(null, McpTransportResolver.Default);
 
         await Assert.That(registry.Register("a", "https://example.com/mcp", "").IsFailure).IsTrue();
         await Assert.That(registry.Register("b", "https://example.com/mcp", "  ").IsFailure).IsTrue();
@@ -174,7 +174,7 @@ public class McpTransportFactoryTests
     [Test]
     public async Task Register_CanonicalizesTransportName()
     {
-        var registry = new McpRegistry();
+        var registry = new McpRegistry(null, McpTransportResolver.Default);
 
         Result registered = registry.Register("srv", "https://example.com/mcp", "SSE");
         Result<McpRemoteRegistration> view = registry.GetRemoteRegistration("srv");
@@ -198,7 +198,7 @@ public class McpTransportFactoryTests
             }
             """);
 
-            var registry = new McpRegistry();
+            var registry = new McpRegistry(null, McpTransportResolver.Default);
             Result loaded = registry.RegisterFromConfig(tempFile);
             Result<McpRemoteRegistration> view = registry.GetRemoteRegistration("plain");
 
@@ -218,7 +218,7 @@ public class McpTransportFactoryTests
         // Overload trap, pinned deliberately: Register(name, string) resolves to
         // the stdio form (a candidate needing no default arguments wins), so a
         // remote server must name its transport — or come from mcp.json.
-        var registry = new McpRegistry();
+        var registry = new McpRegistry(null, McpTransportResolver.Default);
 
         Result registered = registry.Register("srv", "https://example.com/mcp");
 
@@ -326,7 +326,7 @@ public class McpTransportFactoryTests
             }
             """);
 
-            var registry = new McpRegistry();
+            var registry = new McpRegistry(null, McpTransportResolver.Default);
             Result loaded = registry.RegisterFromConfig(tempFile);
 
             // The file itself parses — the bad server is dropped, the good one stays.
