@@ -156,46 +156,24 @@ public sealed partial class LsTool : ITool
         if (currentDepth >= maxDepth || state.Truncated)
             return;
 
-        FileSystemInfo[] entries;
-        try
-        {
-            // One pass: dirs + files with metadata, no extra FileInfo per path.
-            entries = new DirectoryInfo(path).GetFileSystemInfos();
-        }
-        catch (Exception ex) when (ex is UnauthorizedAccessException or DirectoryNotFoundException or IOException)
-        {
-            // ROP-A Z1 п.15: silent skip keeps the listing contract; trace
-            // explains why the subtree is missing.
-            LsToolLog.SkippingUnreadableDirectory(logger, ex, path);
-            return;
-        }
-
-        // Stable, agent-friendly order: dirs first, then files; ordinal ignore-case.
-        Array.Sort(entries, static (a, b) =>
-        {
-            bool aDir = a is DirectoryInfo;
-            bool bDir = b is DirectoryInfo;
-            if (aDir != bDir)
-                return aDir ? -1 : 1;
-            return string.Compare(a.Name, b.Name, StringComparison.OrdinalIgnoreCase);
-        });
+        // The one traversal (#1588): FsModel.Read returns the level as model nodes —
+        // sorted, hidden-filtered (`all` is the listing's hidden toggle), with the
+        // unreadable-directory skip handled by the shared reader.
+        var nodes = FsModel.Read(path, all,
+            (d, ex) => LsToolLog.SkippingUnreadableDirectory(logger, ex, d));
 
         string indent = currentDepth == 0 ? "" : new string(' ', currentDepth * 2);
 
-        foreach (var entry in entries)
+        foreach (var node in nodes)
         {
             ct.ThrowIfCancellationRequested();
             if (state.Truncated)
                 return;
 
-            string name = entry.Name;
-            if (!all && name.StartsWith('.'))
-                continue;
-
-            if (entry is DirectoryInfo dir)
+            if (node is FsDirectory dirNode)
             {
                 // Always show the dir row; prune children of heavy folders when recursive.
-                if (!AppendDirectoryEntry(sb, indent, relativePrefix, name, state))
+                if (!AppendDirectoryEntry(sb, indent, relativePrefix, node.Name, state))
                 {
                     return;
                 }
@@ -203,7 +181,7 @@ public sealed partial class LsTool : ITool
                 if (!recursive)
                     continue;
 
-                if (PrunedDirNames.Contains(name))
+                if (PrunedDirNames.Contains(node.Name))
                 {
                     // Mark prune so the model knows we skipped the dump.
                     if (state.TryAdd())
@@ -217,8 +195,8 @@ public sealed partial class LsTool : ITool
                 }
 
                 ListDirectory(logger,
-                    dir.FullName,
-                    $"{relativePrefix}{name}/",
+                    dirNode.FullName,
+                    $"{relativePrefix}{node.Name}/",
                     all,
                     recursive,
                     maxDepth,
@@ -227,9 +205,9 @@ public sealed partial class LsTool : ITool
                     state,
                     ct);
             }
-            else if (entry is FileInfo file)
+            else if (node is FsFile fileNode)
             {
-                if (!AppendFileEntry(sb, indent, relativePrefix, file, state))
+                if (!AppendFileEntry(sb, indent, relativePrefix, fileNode.File, state))
                 {
                     return;
                 }

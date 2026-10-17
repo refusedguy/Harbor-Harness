@@ -153,46 +153,28 @@ public sealed partial class TreeTool : ITool
     {
         if (depth >= maxDepth || state.Truncated) return;
 
-        FileSystemInfo[] entries;
-        try
-        {
-            entries = new DirectoryInfo(dir).GetFileSystemInfos();
-        }
-        catch (Exception ex) when (ex is UnauthorizedAccessException or DirectoryNotFoundException or IOException)
-        {
-            // ROP-A Z1 п.15: silent skip keeps the tree contract; trace explains.
-            TreeToolLog.SkippingUnreadableDirectory(logger, ex, dir);
-            return;
-        }
+        // The one traversal (#1588): FsModel.Read returns the level as model nodes —
+        // sorted, hidden-filtered, no `is DirectoryInfo` branching here.
+        var nodes = FsModel.Read(dir, includeHidden,
+            (d, ex) => TreeToolLog.SkippingUnreadableDirectory(logger, ex, d));
 
-        // Sort: dirs first, then files; ignore-case ordinal.
-        Array.Sort(entries, static (a, b) =>
+        // Tool-local policy over the model: prune list + gitignore.
+        var visible = new List<FsNode>(nodes.Count);
+        foreach (var node in nodes)
         {
-            bool ad = a is DirectoryInfo;
-            bool bd = b is DirectoryInfo;
-            if (ad != bd) return ad ? -1 : 1;
-            return string.Compare(a.Name, b.Name, StringComparison.OrdinalIgnoreCase);
-        });
-
-        // Filter hidden + prune list + gitignore.
-        var visible = new List<FileSystemInfo>(entries.Length);
-        foreach (var e in entries)
-        {
-            if (!includeHidden && e.Name.StartsWith('.')) continue;
-
-            if (e is DirectoryInfo di)
+            if (node.IsDirectory)
             {
-                if (tracked is null && PrunedDirNames.Contains(e.Name)) continue;
-                visible.Add(di);
+                if (tracked is null && PrunedDirNames.Contains(node.Name)) continue;
+                visible.Add(node);
             }
             else
             {
                 if (tracked is not null)
                 {
-                    string rel = Path.GetRelativePath(dir, e.FullName).Replace('\\', '/');
+                    string rel = Path.GetRelativePath(dir, node.FullName).Replace('\\', '/');
                     if (!tracked.Contains(rel)) continue;
                 }
-                visible.Add(e);
+                visible.Add(node);
             }
         }
 
@@ -210,12 +192,12 @@ public sealed partial class TreeTool : ITool
 
             sb.Append(prefix).Append(branch).Append(entry.Name);
 
-            if (entry is DirectoryInfo)
+            if (entry is FsDirectory dirNode)
             {
                 state.DirAdded();
                 // If prune list hit (git tracked but dir empty) we still show it.
                 sb.Append('/').Append('\n');
-                Walk(logger, entry.FullName, childPrefix, depth + 1, maxDepth,
+                Walk(logger, dirNode.FullName, childPrefix, depth + 1, maxDepth,
                     includeHidden, tracked, sb, state, ct);
             }
             else
