@@ -8,6 +8,11 @@
 //  - Harbor.Abstractions.Permissions: the contract vocabulary — IPermissionService,
 //    IApprovalCoordinator, PermissionRuleset/Rule, PermissionRequest/Response, the
 //    ToolSafety* declarations and BuiltinToolSafetyProfiles (the Contracts assembly).
+//  - Harbor.Abstractions.Models.Identifiers: AgentName.TryCreate in
+//    PermissionService (the Identifiers ValueObject home).
+//  - Harbor.Abstractions.Extensions: the Ensure.* argument guards in
+//    ApprovalCoordinator (namespace lives in the Harbor.Extensions leaf,
+//    referenced from the csproj).
 // Everything else (System + System.Linq via SDK ImplicitUsings, IO, Threading,
 // Microsoft.Extensions.Logging) rides the SDK implicit usings or the files' own
 // explicit using lists. Deliberately no ZLinq: the retired Harbor.Application
@@ -16,4 +21,6 @@
 global using System.Text.Json;
 global using CSharpFunctionalExtensions;
 global using Harbor.Abstractions.Agents;
+global using Harbor.Abstractions.Extensions;
+global using Harbor.Abstractions.Models.Identifiers;
 global using Harbor.Abstractions.Permissions;

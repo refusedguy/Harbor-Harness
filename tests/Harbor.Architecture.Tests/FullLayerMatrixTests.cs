@@ -484,12 +484,15 @@ public class FullLayerMatrixTests
         // #1615: Harbor.Permissions — Application-layer sibling like Harbor.Registries,
         // the verbatim extraction of Application/Permissions. PermissionService /
         // ApprovalCoordinator / the path policies bind the contracts-assembly
-        // vocabulary plus BCL/Logging only; the whole-config IConfigStore surface is
-        // cut at the seam and arrives pre-adapted as IPermissionConfigStore.
+        // vocabulary, the Harbor.Extensions Ensure.* leaf (Domain, the same edge
+        // Harbor.Application's own row carries) plus BCL/Logging only; the
+        // whole-config IConfigStore surface is cut at the seam and arrives
+        // pre-adapted as IPermissionConfigStore.
         // The Harbor.Application row above grants the mirror edge — realized in IL by
         // PermissionConfigStoreAdapter implementing the subdomain's seam
         // (Application→Application is allowed by MatrixTable_RespectsLayerRules).
-        ["Harbor.Permissions"] = new(Layer.Application, ["Harbor.Abstractions"]),
+        ["Harbor.Permissions"] = new(Layer.Application,
+            ["Harbor.Abstractions", "Harbor.Extensions"]),
         ["Harbor.Plugins.Abstractions"] = new(Layer.Application, ["Harbor.Abstractions"]),
         // Runtime is the composition surface over the plugin machinery stack
         // (Host/Storage/Compilation/Instantiation/Registration are its family);

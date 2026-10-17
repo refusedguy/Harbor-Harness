@@ -18,10 +18,16 @@
     on Harbor.Application, Infrastructure, or Presentation; the whole-config
     IConfigStore surface is cut here and re-offered as the narrow
     IPermissionConfigStore seam (the ctor still names its parameter configStore,
-    so every call site keeps compiling). See docs/ARCHITECTURE_LAYERS.md §2.
+    so every call site keeps compiling). Harbor.Extensions joins the Domain
+    set the way Harbor.Application's own row already permits it: a zero-Harbor
+    helper leaf, bound here for the Ensure.* argument guards in
+    ApprovalCoordinator. See docs/ARCHITECTURE_LAYERS.md §2.
   -->
   <ItemGroup>
     <ProjectReference Include="..\Harbor.Abstractions\Harbor.Abstractions.csproj"/>
+    <!-- Ensure.* guards (ApprovalCoordinator) live in the Harbor.Extensions
+         Domain helper leaf — the same edge Harbor.Application's row carries. -->
+    <ProjectReference Include="..\Harbor.Extensions\Harbor.Extensions.csproj"/>
   </ItemGroup>
 
   <ItemGroup>
