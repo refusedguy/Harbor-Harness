@@ -1,7 +1,5 @@
 using System.Collections.Concurrent;
 using System.Linq;
-using Harbor.Application.Configuration;
-using Harbor.Application.Resources;
 using Microsoft.Extensions.Logging;
 namespace Harbor.Application.Permissions;
 /// <summary>
@@ -13,7 +11,7 @@ public sealed class PermissionService : IPermissionService
     private readonly ILogger<PermissionService> _logger;
     private readonly Func<PermissionRequest, CancellationToken, Task<PermissionResponse>>? _userAsker;
     private readonly string? _workspaceRoot;
-    private readonly IConfigStore? _configStore;
+    private readonly IPermissionConfigStore? _configStore;
     private readonly IPathExtractionPolicy[] _pathPolicies;
 
     /// <summary>
@@ -53,7 +51,11 @@ public sealed class PermissionService : IPermissionService
     ///     outside the workspace is downgraded to <see cref="PermissionAction.Ask" />.
     ///     When <see langword="null" />, relative paths resolve against the process working directory.
     /// </param>
-    /// <param name="configStore">Optional config store for persisting permission decisions across sessions.</param>
+    /// <param name="configStore">
+    ///     Optional persisted-decision store for this service's own
+    ///     <see cref="IPermissionConfigStore" /> seam (#1615), implemented on
+    ///     the Application side over the whole-config IConfigStore.
+    /// </param>
     /// <param name="pathPolicies">
     ///     Optional path-extraction policy registry (Strategy, issue #178). Consulted in
     ///     order; the first policy whose <see cref="IPathExtractionPolicy.Handles" />
@@ -73,7 +75,7 @@ public sealed class PermissionService : IPermissionService
         ILogger<PermissionService> logger,
         Func<PermissionRequest, CancellationToken, Task<PermissionResponse>>? userAsker = null,
         string? workspaceRoot = null,
-        IConfigStore? configStore = null,
+        IPermissionConfigStore? configStore = null,
         IEnumerable<IPathExtractionPolicy>? pathPolicies = null,
         Func<IReadOnlyList<IArgSafetyPolicy>>? safetyPolicies = null)
     {
@@ -106,7 +108,7 @@ public sealed class PermissionService : IPermissionService
         ILogger<PermissionService> logger,
         Func<PermissionRequest, CancellationToken, Task<PermissionResponse>>? userAsker = null,
         string? workspaceRoot = null,
-        IConfigStore? configStore = null,
+        IPermissionConfigStore? configStore = null,
         IEnumerable<IPathExtractionPolicy>? pathPolicies = null,
         Func<IReadOnlyList<IArgSafetyPolicy>>? safetyPolicies = null,
         CancellationToken ct = default)
@@ -295,10 +297,10 @@ public sealed class PermissionService : IPermissionService
             return;
         }
 
-        var config = loadResult.Value;
-        if (config.Permissions is null || config.Permissions.Count == 0) return;
+        var persisted = loadResult.Value;
+        if (persisted is null || persisted.Count == 0) return;
 
-        foreach (var (agentKey, rules) in config.Permissions)
+        foreach (var (agentKey, rules) in persisted)
         {
             var byRule = new ConcurrentDictionary<string, PermissionRule>();
             foreach (var rule in rules)
@@ -309,7 +311,7 @@ public sealed class PermissionService : IPermissionService
             _persisted[agentKey] = byRule;
         }
 
-        PermissionServiceLog.PersistedRulesLoaded(_logger, config.Permissions.Values.Sum(list => list.Count), config.Permissions.Count);
+        PermissionServiceLog.PersistedRulesLoaded(_logger, persisted.Values.Sum(list => list.Count), persisted.Count);
     }
 
     /// <summary>
@@ -337,11 +339,7 @@ public sealed class PermissionService : IPermissionService
             permissions[agentKey] = rules;
         }
 
-        var updateResult = await _configStore.UpdateAsync(c =>
-        {
-            c.Permissions = permissions;
-            return c;
-        }, ct).ConfigureAwait(false);
+        var updateResult = await _configStore.UpdateAsync(_ => permissions, ct).ConfigureAwait(false);
         if (updateResult.IsFailure)
         {
             PermissionServiceLog.SavePersistedFailed(_logger, updateResult.Error);
