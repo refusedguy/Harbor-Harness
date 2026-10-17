@@ -23,10 +23,15 @@
     Application layer depends on Harbor.Abstractions only — never on
     Infrastructure (Providers.*, Storage.*, Tools.Builtin), never on
     Presentation (Tui.*), never on sibling Application projects
-    (Plugins.Runtime, Scripting). See docs/ARCHITECTURE_LAYERS.md §2.
+    (Plugins.Runtime, Scripting) — EXCEPT Harbor.Hooks (#1613): the user-hook
+    runner extracted verbatim from Hooks/ (0 in-project deps). ToolDispatcher,
+    AgentLoop, CompactionBehavior and UserHookGates bind IHookRunner, so the
+    edge is real and declared here rather than hidden behind transitivity.
+    See docs/ARCHITECTURE_LAYERS.md §2.
   -->
   <ItemGroup>
     <ProjectReference Include="..\Harbor.Abstractions\Harbor.Abstractions.csproj"/>
+    <ProjectReference Include="..\Harbor.Hooks\Harbor.Hooks.csproj"/>
     <ProjectReference Include="..\Harbor.Diagnostics.Abstractions\Harbor.Diagnostics.Abstractions.csproj"/>
     <ProjectReference Include="..\Harbor.Extensions\Harbor.Extensions.csproj"/>
   </ItemGroup>

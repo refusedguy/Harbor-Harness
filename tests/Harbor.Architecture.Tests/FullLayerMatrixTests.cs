@@ -157,6 +157,7 @@ public class FullLayerMatrixTests
         "Harbor.Tui.NickConsoleEx",
         // Application
         "Harbor.Application",
+        "Harbor.Hooks",
         "Harbor.Registries",
         "Harbor.Plugins.Abstractions",
         "Harbor.Plugins.Runtime",
@@ -479,7 +480,13 @@ public class FullLayerMatrixTests
 
         // ---- Application ----------------------------------------------------
         ["Harbor.Application"] = new(Layer.Application,
-            ["Harbor.Abstractions", "Harbor.Diagnostics.Abstractions", "Harbor.Extensions"]),
+            ["Harbor.Abstractions", "Harbor.Diagnostics.Abstractions", "Harbor.Extensions",
+                // #1613: user-hook runner, verbatim extraction of Application/Hooks
+                // (Application→Application is allowed by MatrixTable_RespectsLayerRules).
+                "Harbor.Hooks"]),
+        // #1613: Harbor.Hooks — Application-layer sibling like Harbor.Registries:
+        // the hook runner binds ToolResult (Domain) + BCL + Logging only; edge is Contracts (Hooks resolves no facade-level type).
+        ["Harbor.Hooks"] = new(Layer.Application, ["Harbor.Abstractions.Contracts"]),
         ["Harbor.Registries"] = new(Layer.Application, ["Harbor.Abstractions"]),
         ["Harbor.Plugins.Abstractions"] = new(Layer.Application, ["Harbor.Abstractions"]),
         // Runtime is the composition surface over the plugin machinery stack
@@ -552,7 +559,7 @@ public class FullLayerMatrixTests
             // Wires DI over the whole graph incl. contrib renderers — free tier.
             "Harbor.Abstractions", "Harbor.Abstractions.Contracts",
             "Harbor.Diagnostics.Abstractions", "Harbor.Telemetry.Core",
-            "Harbor.Application", "Harbor.Registries",
+            "Harbor.Application", "Harbor.Hooks", "Harbor.Registries",
             "Harbor.Desktop.Abstractions",
             "Harbor.Terminal.Abstractions", "Harbor.Ui.Framework.State",
             // #667: FileTreeLoader, registered in TuiModule. First direct edge
