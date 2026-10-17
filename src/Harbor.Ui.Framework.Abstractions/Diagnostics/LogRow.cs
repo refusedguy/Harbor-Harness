@@ -1,5 +1,6 @@
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
+using Ensure = Harbor.Abstractions.Extensions.Ensure;
 using Microsoft.Extensions.Logging;
 
 namespace Harbor.Ui.Framework.Diagnostics;
@@ -105,7 +106,7 @@ public static class LogRowFormat
     /// <summary>Panel layout: <c>HH:mm:ss.fff TAG category message</c>, local time, no brackets.</summary>
     public static string Panel(LogRow row)
     {
-        ArgumentNullException.ThrowIfNull(row);
+        Ensure.NotNull(row);
 
         string time = row.Timestamp.ToLocalTime().ToString(TimestampFormat, CultureInfo.InvariantCulture);
         return $"{time} {row.LevelTag} {row.Category} {row.Message}".TrimEnd();
@@ -118,7 +119,7 @@ public static class LogRowFormat
     /// </summary>
     public static string File(LogRow row, int threadId)
     {
-        ArgumentNullException.ThrowIfNull(row);
+        Ensure.NotNull(row);
 
         string time = row.Timestamp.ToString(TimestampFormat, CultureInfo.InvariantCulture);
         return $"{time} [{row.LevelTag}] [{threadId,3}] {row.Category}: {row.Message}";

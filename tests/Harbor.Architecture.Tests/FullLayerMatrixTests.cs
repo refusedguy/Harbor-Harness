@@ -291,7 +291,7 @@ public class FullLayerMatrixTests
         // ModelRef as the only type in the repo whose two halves are non-null by
         // construction, and a port that hands out a pair of nullable strings
         // cannot be moved onto it without losing the property.
-        ["Harbor.Ui.Framework.Abstractions"] = new(Layer.Domain, ["Harbor.Abstractions.Contracts"]),
+        ["Harbor.Ui.Framework.Abstractions"] = new(Layer.Domain, ["Harbor.Abstractions.Contracts", "Harbor.Extensions"]),
 
         // ---- Presentation -------------------------------------------------
         // #450: "Harbor.Ui.Framework" was permitted here but never used. The
@@ -306,7 +306,7 @@ public class FullLayerMatrixTests
                 // #33 T1: KeyEventAdapter consumes the BCL-only UiKeyDto key
                 // vocabulary (Rendering.Input) — the reversed edge replacing the
                 // old Rendering→State one; Presentation→Presentation conforms.
-                "Harbor.Ui.Framework.Rendering"]),
+                "Harbor.Ui.Framework.Rendering", "Harbor.Extensions"]),
         // #594 removed the `Harbor.Ui.Framework.Reducers` row outright. It was
         // the second home for the AgentEvent → UI-state fold, and nothing ever
         // built a renderer on it: no composition root constructed its AppStore,
@@ -325,7 +325,7 @@ public class FullLayerMatrixTests
         // Abstractions package in IL. Same Presentation → Domain edge the
         // other Ui.Framework.* rows already declare (#567 precedent).
         ["Harbor.Ui.Framework.Services"] = new(Layer.Presentation,
-            ["Harbor.Abstractions", "Harbor.Ui.Framework.State", "Harbor.Ui.Framework.Abstractions"]),
+            ["Harbor.Abstractions", "Harbor.Ui.Framework.State", "Harbor.Ui.Framework.Abstractions", "Harbor.Extensions"]),
         // #567: ToolCallViewModel.Status is a ToolCallState, so the view-models
         // now bind the Abstractions package in IL rather than carrying an
         // unbound reference to it. Same Presentation → Domain edge the other
@@ -342,7 +342,7 @@ public class FullLayerMatrixTests
             [ "Harbor.Abstractions.Contracts", "Harbor.Ui.Framework.State", "Harbor.Ui.Framework.Abstractions",
              // RgbColor is defined in the standalone DesignSystem package but
              // keeps its historical Projection namespace for compatibility.
-             "Harbor.DesignSystem"]),
+             "Harbor.DesignSystem", "Harbor.Extensions"]),
         // Renderer-agnostic shared layer: cell/screen primitives, input
         // vocabulary and chat widgets consumed by every renderer backend.
         // Leaf Presentation library over the HDS token catalog (DesignSystem)
@@ -356,7 +356,7 @@ public class FullLayerMatrixTests
         // Rendering→Projection→State would be an MSBuild cycle).
         ["Harbor.Ui.Framework.Rendering"] = new(Layer.Presentation,
             ["Harbor.DesignSystem", // #75: canonical ctx% helper (ContextUsage) — Presentation → Domain is rule-conforming.
-                "Harbor.Abstractions.Contracts"]),
+                "Harbor.Abstractions.Contracts", "Harbor.Extensions"]),
         // HDS v1 token catalog — standalone leaf: ZERO Harbor references. The
         // design-system package ships RgbColor (under the historical Projection
         // namespace) plus the cell-style primitives and ChatPalette, so
@@ -372,7 +372,7 @@ public class FullLayerMatrixTests
         // be justified here. That is the same shape #567 recorded for
         // ViewModels → Abstractions below.
         ["Harbor.Ui.Framework.Sessions"] = new(Layer.Presentation,
-            ["Harbor.Abstractions", "Harbor.Ui.Framework.State", "Harbor.Ui.Framework.Services", "Harbor.Ui.Framework.Abstractions", "Harbor.Ui.Framework.ViewModels"]),
+            ["Harbor.Abstractions", "Harbor.Ui.Framework.State", "Harbor.Ui.Framework.Services", "Harbor.Ui.Framework.Abstractions", "Harbor.Ui.Framework.ViewModels", "Harbor.Extensions"]),
         // #450: "Harbor.Terminal.Abstractions" and "Harbor.Ui.Framework" were both
         // permitted but never referenced. Terminal.Abstractions is dead permission
         // (no file names the ITuiRenderer/ITuiView vocabulary); Ui.Framework is an

@@ -1,3 +1,5 @@
+using Ensure = Harbor.Abstractions.Extensions.Ensure;
+
 namespace Harbor.Ui.Framework.Overlays;
 
 /// <summary>
@@ -102,7 +104,7 @@ public static class SessionTreeModel
     /// </summary>
     public static IReadOnlyList<SessionTreeEntry> BuildEntries(IReadOnlyList<SessionTreeSeed> seeds)
     {
-        ArgumentNullException.ThrowIfNull(seeds);
+        Ensure.NotNull(seeds);
 
         var byId = new Dictionary<string, SessionTreeSeed>(seeds.Count, StringComparer.Ordinal);
         for (int i = 0; i < seeds.Count; i++)
@@ -269,7 +271,7 @@ public sealed class SessionTreePanelModel
     /// <summary>Open the panel over prebuilt <paramref name="entries" /> (resets query + selection).</summary>
     public void Show(IReadOnlyList<SessionTreeEntry> entries)
     {
-        ArgumentNullException.ThrowIfNull(entries);
+        Ensure.NotNull(entries);
         _all.Clear();
         _all.AddRange(entries);
         _query = string.Empty;

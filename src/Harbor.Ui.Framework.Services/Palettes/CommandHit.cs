@@ -1,3 +1,5 @@
+using Ensure = Harbor.Abstractions.Extensions.Ensure;
+
 namespace Harbor.Ui.Framework.Overlays;
 
 // Steal/textual T4 (#1186): the palette no longer owns per-source catalogs.
@@ -32,18 +34,18 @@ public sealed record CommandHit(
     /// <summary>Score-0 provider-ordered row for the empty query.</summary>
     public static CommandHit Discovery(string providerId, string id, string title, string detail = "", string group = "")
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(providerId);
-        ArgumentException.ThrowIfNullOrWhiteSpace(id);
-        ArgumentNullException.ThrowIfNull(title);
+        Ensure.NotBlank(providerId);
+        Ensure.NotBlank(id);
+        Ensure.NotNull(title);
         return new CommandHit(providerId, id, title, detail, group, 0, true);
     }
 
     /// <summary>Scored row for a non-empty query.</summary>
     public static CommandHit Scored(string providerId, string id, string title, string detail, string group, int score)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(providerId);
-        ArgumentException.ThrowIfNullOrWhiteSpace(id);
-        ArgumentNullException.ThrowIfNull(title);
+        Ensure.NotBlank(providerId);
+        Ensure.NotBlank(id);
+        Ensure.NotNull(title);
         return new CommandHit(providerId, id, title, detail, group, score, false);
     }
 }
@@ -58,7 +60,7 @@ public static class CommandHits
     /// <summary>Wrap <paramref name="hits" /> as a single-use async stream.</summary>
     public static IAsyncEnumerable<CommandHit> From(IReadOnlyList<CommandHit> hits)
     {
-        ArgumentNullException.ThrowIfNull(hits);
+        Ensure.NotNull(hits);
         return new Snapshot(hits);
     }
 

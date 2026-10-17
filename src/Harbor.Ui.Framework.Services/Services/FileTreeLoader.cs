@@ -4,6 +4,7 @@ using Harbor.Abstractions.Filesystem;
 using Harbor.Abstractions.Tools;
 using Harbor.Ui.Framework.Panels;
 using Harbor.Ui.Framework.State;
+using Ensure = Harbor.Abstractions.Extensions.Ensure;
 using Microsoft.Extensions.Logging;
 
 namespace Harbor.Ui.Framework.Services;
@@ -80,7 +81,7 @@ public sealed class FileTreeLoader : IFileTreeLoader, IDisposable
     /// <param name="logger">Logger for the diagnostic trail of a failed load.</param>
     public FileTreeLoader(IDirectoryLister lister, ILogger<FileTreeLoader> logger)
     {
-        ArgumentNullException.ThrowIfNull(lister);
+        Ensure.NotNull(lister);
         _lister = lister;
         _logger = logger;
     }

@@ -64,7 +64,7 @@ public sealed class TuiEffectHost : ITuiEffectRunner
 
     public void RebindStore(UiStore newStore)
     {
-        ArgumentNullException.ThrowIfNull(newStore);
+        Harbor.Abstractions.Extensions.Ensure.NotNull(newStore);
         _store = newStore;
     }
 

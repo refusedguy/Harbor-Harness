@@ -111,7 +111,7 @@ public sealed record PanelServices
     /// </remarks>
     public static PanelServices FromContainer(IServiceProvider container)
     {
-        ArgumentNullException.ThrowIfNull(container);
+        Harbor.Abstractions.Extensions.Ensure.NotNull(container);
         return new PanelServices
         {
             Store = container.GetService(typeof(UiStore)) as UiStore,

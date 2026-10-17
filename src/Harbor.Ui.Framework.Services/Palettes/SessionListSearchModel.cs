@@ -1,3 +1,5 @@
+using Ensure = Harbor.Abstractions.Extensions.Ensure;
+
 namespace Harbor.Ui.Framework.Overlays;
 
 /// <summary>
@@ -62,7 +64,7 @@ public static class SessionListSearchModel
     public static IReadOnlyList<SessionListRow> FilterLocal(
         IReadOnlyList<SessionListRow> rows, string? query)
     {
-        ArgumentNullException.ThrowIfNull(rows);
+        Ensure.NotNull(rows);
         string q = query?.Trim() ?? string.Empty;
 
         var pinned = new List<SessionListRow>(rows.Count);
@@ -99,7 +101,7 @@ public static class SessionListSearchModel
     public static IReadOnlyList<SessionListRow> ApplyScope(
         IReadOnlyList<SessionListRow> rows, SessionListScope scope, string? cwd)
     {
-        ArgumentNullException.ThrowIfNull(rows);
+        Ensure.NotNull(rows);
         if (scope == SessionListScope.AllProjects || string.IsNullOrWhiteSpace(cwd))
         {
             return new List<SessionListRow>(rows);
@@ -131,9 +133,9 @@ public static class SessionListSearchModel
         IReadOnlyList<SessionListRow> latest,
         bool serverReady)
     {
-        ArgumentNullException.ThrowIfNull(local);
-        ArgumentNullException.ThrowIfNull(server);
-        ArgumentNullException.ThrowIfNull(latest);
+        Ensure.NotNull(local);
+        Ensure.NotNull(server);
+        Ensure.NotNull(latest);
         if (!serverReady)
         {
             return local;
@@ -154,7 +156,7 @@ public static class SessionListSearchModel
     public static IReadOnlyList<SessionListRow> TogglePin(
         IReadOnlyList<SessionListRow> rows, string? sessionId)
     {
-        ArgumentNullException.ThrowIfNull(rows);
+        Ensure.NotNull(rows);
         var next = new List<SessionListRow>(rows.Count);
         for (int i = 0; i < rows.Count; i++)
         {
@@ -177,7 +179,7 @@ public static class SessionListSearchModel
         string? newTitle,
         out IReadOnlyList<SessionListRow> updated)
     {
-        ArgumentNullException.ThrowIfNull(rows);
+        Ensure.NotNull(rows);
         string title = newTitle?.Trim() ?? string.Empty;
         if (title.Length == 0 || title.Length > MaxTitleLength)
         {
@@ -211,7 +213,7 @@ public static class SessionListSearchModel
         string? sessionId,
         out IReadOnlyList<SessionListRow> updated)
     {
-        ArgumentNullException.ThrowIfNull(rows);
+        Ensure.NotNull(rows);
         var next = new List<SessionListRow>(rows.Count);
         bool found = false;
         for (int i = 0; i < rows.Count; i++)

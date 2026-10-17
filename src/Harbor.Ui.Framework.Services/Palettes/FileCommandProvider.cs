@@ -1,3 +1,5 @@
+using Ensure = Harbor.Abstractions.Extensions.Ensure;
+
 namespace Harbor.Ui.Framework.Overlays;
 
 // Steal/textual T4 (#1186): the files source as a provider with a background-
@@ -52,7 +54,7 @@ public sealed class FileCommandProvider : ICommandProvider
     /// <summary>Replace the index (kept ordinal-sorted).</summary>
     public void SetFiles(IEnumerable<string> paths)
     {
-        ArgumentNullException.ThrowIfNull(paths);
+        Ensure.NotNull(paths);
         var list = new List<string>();
         foreach (string path in paths)
         {

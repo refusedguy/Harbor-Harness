@@ -1,3 +1,5 @@
+using Ensure = Harbor.Abstractions.Extensions.Ensure;
+
 namespace Harbor.Ui.Framework.Overlays;
 
 // Steal/textual T4 (#1186): the worktree-jump source as a provider. Seed rows
@@ -44,7 +46,7 @@ public sealed class WorktreeCommandProvider : ICommandProvider
     /// <summary>Replace the seed rows (kept in incoming order).</summary>
     public void SetEntries(IReadOnlyList<WorktreeJumpEntry> entries)
     {
-        ArgumentNullException.ThrowIfNull(entries);
+        Ensure.NotNull(entries);
         _entries = entries;
     }
 

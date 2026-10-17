@@ -1,4 +1,5 @@
 using System.Text;
+using Ensure = Harbor.Abstractions.Extensions.Ensure;
 
 namespace Harbor.Ui.Framework.Projection;
 
@@ -123,7 +124,7 @@ public sealed class SkillFreshnessModel
     /// <summary>Replace the snapshot (resets counts).</summary>
     public void SetSkills(IReadOnlyList<SkillFreshnessEntry> entries)
     {
-        ArgumentNullException.ThrowIfNull(entries);
+        Ensure.NotNull(entries);
         lock (_gate)
         {
             _entries = new List<SkillFreshnessEntry>(entries);
@@ -184,7 +185,7 @@ public static class SkillFreshnessAggregate
     /// </summary>
     public static SkillFreshnessSummary? Of(IReadOnlyList<SkillFreshnessEntry> entries)
     {
-        ArgumentNullException.ThrowIfNull(entries);
+        Ensure.NotNull(entries);
 
         int changed = 0;
         int missing = 0;

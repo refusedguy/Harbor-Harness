@@ -1,3 +1,5 @@
+using Ensure = Harbor.Abstractions.Extensions.Ensure;
+
 namespace Harbor.Ui.Framework.Overlays;
 
 /// <summary>
@@ -85,7 +87,7 @@ public sealed class ProviderPanelModel
     /// <summary>Open the panel over <paramref name="seeds" /> (resets query + selection).</summary>
     public void Show(IReadOnlyList<ProviderSeed> seeds)
     {
-        ArgumentNullException.ThrowIfNull(seeds);
+        Ensure.NotNull(seeds);
         _all.Clear();
         for (int i = 0; i < seeds.Count; i++)
         {

@@ -13,6 +13,8 @@
     <ProjectReference Include="..\Harbor.Abstractions\Harbor.Abstractions.csproj"/>
     <ProjectReference Include="..\Harbor.Ui.Framework.State\Harbor.Ui.Framework.State.csproj"/>
     <ProjectReference Include="..\Harbor.Ui.Framework.Abstractions\Harbor.Ui.Framework.Abstractions.csproj"/>
+    <!-- #1553 batch 3: Ensure.NotNull/NotBlank guard helpers. -->
+    <ProjectReference Include="..\Harbor.Extensions\Harbor.Extensions.csproj"/>
   </ItemGroup>
 
   <ItemGroup>

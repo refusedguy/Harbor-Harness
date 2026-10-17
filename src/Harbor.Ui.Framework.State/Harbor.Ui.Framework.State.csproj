@@ -16,6 +16,8 @@
          (Rendering.Input) — the reversed edge (State→Rendering) replaces the
          old Rendering→State one; Presentation→Presentation is rule-conforming. -->
     <ProjectReference Include="..\Harbor.Ui.Framework.Rendering\Harbor.Ui.Framework.Rendering.csproj"/>
+    <!-- #1553 batch 3: Ensure.NotNull/NotBlank guard helpers. -->
+    <ProjectReference Include="..\Harbor.Extensions\Harbor.Extensions.csproj"/>
   </ItemGroup>
 
   <ItemGroup>

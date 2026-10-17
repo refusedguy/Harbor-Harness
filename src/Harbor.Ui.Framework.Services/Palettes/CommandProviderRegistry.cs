@@ -1,3 +1,5 @@
+using Ensure = Harbor.Abstractions.Extensions.Ensure;
+
 namespace Harbor.Ui.Framework.Overlays;
 
 // Steal/textual T4 (#1186): the N-provider aggregation from textual's
@@ -33,7 +35,7 @@ public sealed class CommandProviderRegistry
     /// <summary>Add a provider (insertion order is the merge order; <see cref="ICommandProvider.Order" /> decides discovery rank).</summary>
     public void Add(ICommandProvider provider)
     {
-        ArgumentNullException.ThrowIfNull(provider);
+        Ensure.NotNull(provider);
         _providers.Add(provider);
     }
 

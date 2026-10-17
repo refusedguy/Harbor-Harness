@@ -1,3 +1,5 @@
+using Ensure = Harbor.Abstractions.Extensions.Ensure;
+
 namespace Harbor.Ui.Framework.Overlays;
 
 /// <summary>
@@ -108,7 +110,7 @@ public sealed class WorktreeJumpPaletteModel
     /// </summary>
     public void Show(IReadOnlyList<WorktreeJumpEntry> entries, IReadOnlySet<string>? suggestedSessionIds)
     {
-        ArgumentNullException.ThrowIfNull(entries);
+        Ensure.NotNull(entries);
         _all.Clear();
         _all.AddRange(entries);
         _suggested = suggestedSessionIds ?? NoSuggested;
@@ -125,7 +127,7 @@ public sealed class WorktreeJumpPaletteModel
     /// </summary>
     public void Reseed(IReadOnlyList<WorktreeJumpEntry> entries, IReadOnlySet<string>? suggestedSessionIds = null)
     {
-        ArgumentNullException.ThrowIfNull(entries);
+        Ensure.NotNull(entries);
         _all.Clear();
         _all.AddRange(entries);
         _suggested = suggestedSessionIds ?? NoSuggested;

@@ -4,6 +4,7 @@ using System.Text.Json;
 using System.Text.RegularExpressions;
 using Harbor.Ui.Framework.State;
 using Harbor.Abstractions.Models;
+using Ensure = Harbor.Abstractions.Extensions.Ensure;
 
 namespace Harbor.Ui.Framework.Projection;
 
@@ -50,7 +51,7 @@ public static class PanelExtractors
     /// </summary>
     public static IReadOnlyList<TodoItem> ExtractTodos(IReadOnlyList<ChatLine> lines)
     {
-        ArgumentNullException.ThrowIfNull(lines);
+        Ensure.NotNull(lines);
         if (lines.Count == 0)
         {
             return Array.Empty<TodoItem>();
@@ -100,7 +101,7 @@ public static class PanelExtractors
     /// <summary>Overload reading from <see cref="UiState.Chat.Lines" />.</summary>
     public static IReadOnlyList<TodoItem> ExtractTodos(UiState state)
     {
-        ArgumentNullException.ThrowIfNull(state);
+        Ensure.NotNull(state);
         return ExtractTodos(state.Chat.Lines);
     }
 
@@ -116,7 +117,7 @@ public static class PanelExtractors
     /// </summary>
     public static IReadOnlyList<PanelFileChange> ExtractRecentChanges(IReadOnlyList<ChatLine> lines, int maxCount = 8)
     {
-        ArgumentNullException.ThrowIfNull(lines);
+        Ensure.NotNull(lines);
         if (lines.Count == 0 || maxCount <= 0)
         {
             return Array.Empty<PanelFileChange>();
@@ -165,7 +166,7 @@ public static class PanelExtractors
     /// </summary>
     public static IReadOnlyList<PanelFileChange> ExtractRecentChanges(UiState state, int maxCount = 8)
     {
-        ArgumentNullException.ThrowIfNull(state);
+        Ensure.NotNull(state);
 
         IReadOnlyList<PanelFileChange> changes = ExtractRecentChanges(state.Chat.Lines, maxCount);
         if (changes.Count == 0 || state.Chat.ToolCalls.IsEmpty)
@@ -221,7 +222,7 @@ public static class PanelExtractors
     /// </remarks>
     public static IReadOnlyList<PanelDiagnostic> CollectDiagnostics(UiState state)
     {
-        ArgumentNullException.ThrowIfNull(state);
+        Ensure.NotNull(state);
 
         ImmutableArray<DiagnosticIssue> issues = state.Chat.Diagnostics;
         if (issues.Length == 0)

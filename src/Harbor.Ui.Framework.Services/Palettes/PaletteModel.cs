@@ -1,3 +1,5 @@
+using Ensure = Harbor.Abstractions.Extensions.Ensure;
+
 namespace Harbor.Ui.Framework.Overlays;
 
 // Framework-owned palette navigation state machine (DIP/OCP, fixes #363):
@@ -51,7 +53,7 @@ public sealed class PaletteModel<TItem>
     /// <summary>Replace the whole stack with a single root frame.</summary>
     public void Show(PaletteFrame<TItem> root)
     {
-        ArgumentNullException.ThrowIfNull(root);
+        Ensure.NotNull(root);
         _frames.Clear();
         PushFrame(root);
     }
@@ -71,7 +73,7 @@ public sealed class PaletteModel<TItem>
     /// <summary>Push a drill-down frame (clears stale pending continuations).</summary>
     public void PushFrame(PaletteFrame<TItem> frame)
     {
-        ArgumentNullException.ThrowIfNull(frame);
+        Ensure.NotNull(frame);
         _frames.Push(frame);
         _pendingCommit = null;
         _pendingInput = null;
