@@ -43,6 +43,21 @@ public abstract partial record AgentMessage(
     ///     (e.g. <c>"user"</c>, <c>"assistant"</c>, <c>"tool_result"</c>).
     /// </summary>
     public abstract string Role { get; }
+
+    /// <summary>
+    ///     Prototype clone of this message for one other session: a fresh record
+    ///     of the same runtime case with only the owning session id re-stamped.
+    /// </summary>
+    /// <remarks>
+    ///     The one cloning point for fork-style history copies (#1571): a
+    ///     with-expression on the abstract base record invokes the derived
+    ///     case's copy constructor, so <c>user</c>/<c>assistant</c>/
+    ///     <c>tool_result</c> keep their runtime type. Fork-like paths call
+    ///     this instead of re-deriving a <c>with</c>-chain at each site.
+    /// </remarks>
+    /// <param name="sessionId">The owning session id for the copy.</param>
+    /// <returns>A clone of this message re-stamped to <paramref name="sessionId" />.</returns>
+    public AgentMessage CloneForSession(string sessionId) => this with { SessionId = sessionId };
 }
 
 /// <summary>
