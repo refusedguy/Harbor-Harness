@@ -396,6 +396,10 @@ Harbor.Abstractions.Tools.JsonArgs :: public static int GetClampedInt(JsonElemen
 Harbor.Abstractions.Tools.JsonArgs :: public static int? GetInt(JsonElement args, string name)
 Harbor.Abstractions.Tools.JsonArgs :: public static string? GetString(JsonElement args, string name)
 Harbor.Abstractions.Tools.McpServerInstructions :: public sealed record McpServerInstructions(string ServerName, string Instructions)
+Harbor.Abstractions.Tools.MimeTypes :: public static bool IsAudio(string? mime)
+Harbor.Abstractions.Tools.MimeTypes :: public static bool IsImage(string? mime)
+Harbor.Abstractions.Tools.MimeTypes :: public static bool IsVideo(string? mime)
+Harbor.Abstractions.Tools.MimeTypes :: public static class MimeTypes
 Harbor.Abstractions.Tools.TaskFireAndForget :: public static class TaskFireAndForget
 Harbor.Abstractions.Tools.TaskFireAndForget :: public static void Forget(Task task, Action<Exception>? onError = null, CancellationToken cancellationToken = default)
 Harbor.Abstractions.Tools.ToolContext :: public sealed record ToolContext(string SessionId, string MessageId, string? CallId, string Agent, CancellationToken Abort, IReadOnlyList<AgentMessage> Messages, Func<ToolProgressUpdate, CancellationToken, Task> ReportProgress, Func<PermissionRequest, CancellationToken, Task<PermissionResponse>> Ask, string? WorkingDirectory = null)
