@@ -156,7 +156,7 @@ public class FullLayerMatrixTests
         // library (external/ConsoleEx), referenced only for the renderer it wraps.
         "Harbor.Tui.NickConsoleEx",
         // Application
-        "Harbor.Application",
+        "Harbor.Application", "Harbor.AgentRuntime",
         "Harbor.Registries",
         "Harbor.Plugins.Abstractions",
         "Harbor.Plugins.Runtime",
@@ -479,7 +479,7 @@ public class FullLayerMatrixTests
 
         // ---- Application ----------------------------------------------------
         ["Harbor.Application"] = new(Layer.Application,
-            ["Harbor.Abstractions", "Harbor.Diagnostics.Abstractions", "Harbor.Extensions"]),
+            ["Harbor.Abstractions", "Harbor.Diagnostics.Abstractions", "Harbor.Extensions"]), ["Harbor.AgentRuntime"] = new(Layer.Application, ["Harbor.Abstractions", "Harbor.Diagnostics.Abstractions", "Harbor.Extensions", "Harbor.Application"]), // #1623: agent loop (Agents/AgentLoop..RunBudgetTracker, Agents/Pipeline/*, Resilience impls) — verbatim extract from Harbor.Application, one-way edge; reads the loop vocabulary (Hooks/Sessions/Resources/Telemetry/Resilience contracts) via the Application reference and nothing else.
         ["Harbor.Registries"] = new(Layer.Application, ["Harbor.Abstractions"]),
         ["Harbor.Plugins.Abstractions"] = new(Layer.Application, ["Harbor.Abstractions"]),
         // Runtime is the composition surface over the plugin machinery stack
@@ -552,7 +552,7 @@ public class FullLayerMatrixTests
             // Wires DI over the whole graph incl. contrib renderers — free tier.
             "Harbor.Abstractions", "Harbor.Abstractions.Contracts",
             "Harbor.Diagnostics.Abstractions", "Harbor.Telemetry.Core",
-            "Harbor.Application", "Harbor.Registries",
+            "Harbor.Application", "Harbor.AgentRuntime", "Harbor.Registries",
             "Harbor.Desktop.Abstractions",
             "Harbor.Terminal.Abstractions", "Harbor.Ui.Framework.State",
             // #667: FileTreeLoader, registered in TuiModule. First direct edge
