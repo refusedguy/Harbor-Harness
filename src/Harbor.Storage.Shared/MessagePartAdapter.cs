@@ -16,7 +16,7 @@
 // needed synchronized edits in all three places with nothing noticing the
 // edit that forgot one. This adapter is the one contract; the backends differ
 // only in TRANSPORT:
-//   - JsonlLineParser scans raw UTF-8 spans and classifies the tag itself;
+//   - JsonlLineParser scans raw UTF-8 spans and classifies the tag itself —
 //     the span matcher below keeps that path allocation-free on success.
 //   - the other two readers scan a JsonElement through TryScanPartFields —
 //     one shared scanner, with the row's legacy-PascalCase tolerance driven
