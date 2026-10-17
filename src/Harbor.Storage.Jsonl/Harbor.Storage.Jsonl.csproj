@@ -18,11 +18,16 @@
     <Compile Include="..\Harbor.Storage.Shared\SessionLockStrip.cs" LinkBase="Shared" />
     <Compile Include="..\Harbor.Storage.Shared\SessionStatsAggregator.cs" LinkBase="Shared" />
     <Compile Include="..\Harbor.Storage.Shared\SessionStoreErrors.cs" LinkBase="Shared" />
+    <!-- #1591: the shared domain ↔ persist-form projection for message parts. -->
+    <Compile Include="..\Harbor.Storage.Shared\MessagePartAdapter.cs" LinkBase="Shared" />
   </ItemGroup>
 
   <ItemGroup>
     <InternalsVisibleTo Include="Harbor.Storage.Jsonl.Tests"/>
     <InternalsVisibleTo Include="Harbor.Benchmarks"/>
+    <!-- #1591: parity tests live next to the cross-store suites (they compare
+         both backends' projections, so they need both). -->
+    <InternalsVisibleTo Include="Harbor.Storage.Tests"/>
   </ItemGroup>
 
   <ItemGroup>

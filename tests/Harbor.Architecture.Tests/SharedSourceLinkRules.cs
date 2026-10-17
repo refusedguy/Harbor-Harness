@@ -208,11 +208,11 @@ public sealed class SharedSourceLinkRules
     {
         LinkItem[] links = EnumerateLinkItems();
 
-        await Assert.That(links.Length).IsEqualTo(20)
+        await Assert.That(links.Length).IsEqualTo(22)
             .Because(
-                "20 `<Compile Include>` link items: SsePump and Utf8JsonReaderExtensions into four "
+                "22 `<Compile Include>` link items: SsePump and Utf8JsonReaderExtensions into four "
                 + "providers, OpenAiWire, OpenAiImageContent and ProviderArguments into OpenAI + "
-                + "OpenAiCompatible, and three files out of Harbor.Storage.Shared into the Jsonl and "
+                + "OpenAiCompatible, and four files out of Harbor.Storage.Shared into the Jsonl and "
                 + "Sqlite stores plus one more into Memory. "
                 + "A different count means a link was added or removed and R2 is judging a set that "
                 + "is not the build's. The fourteenth is #887's: Memory links SessionStoreErrors.cs "
@@ -223,7 +223,12 @@ public sealed class SharedSourceLinkRules
                 + "builders share (Anthropic and Ollama keep their own wire types). "
                 + "The seventeenth through twentieth are #1563's: Utf8JsonReaderExtensions.cs into "
                 + "all four providers, the tolerant wire-int helpers (ReadTolerantInt/SkipContainer) "
-                + "previously copied byte-identically into four parsers.");
+                + "previously copied byte-identically into four parsers. "
+                + "The twenty-first and twenty-second are #1591's: MessagePartAdapter.cs into the "
+                + "Jsonl and Sqlite stores, the one domain ↔ persist-form projection for content "
+                + "parts the two backends used to hand-maintain separately — Memory is not a "
+                + "consumer (it links SessionStoreErrors alone and does not compile its own "
+                + "message-codec read path).");
 
         string[] consumers = [.. links.Select(l => l.Consumer).Distinct(StringComparer.Ordinal)];
 

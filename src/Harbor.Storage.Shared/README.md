@@ -13,11 +13,13 @@ Shared source code compiled into the session-store assemblies via `<Compile Incl
 | `SessionStoreErrors.cs` | yes | yes | **yes** (#887) |
 | `SessionLockStrip.cs` | yes | yes | no |
 | `SessionStatsAggregator.cs` | yes | no | no |
+| `MessagePartAdapter.cs` | yes | yes | no |
 
 Each exclusion is a real difference in what the store does, not an oversight:
 
 - **Memory does not link `SessionLockStrip.cs`.** The strip is a `SemaphoreSlim` per session over a `ConcurrentDictionary` the store owns as a field, and both Jsonl and Sqlite own one. Memory takes `lock (list)` on the per-session `List<AgentMessage>` instead — a different primitive with the same exclusion guarantee — and its read paths (`GetAsync`, `DeleteAsync`, `GetStatsAsync`, `UpdateAsync`) take no lock at all. There is no strip there to hand out.
 - **Sqlite and Memory do not link `SessionStatsAggregator.cs`.** It folds `SessionMetadata` out of message history, which is what the JSONL store does on every `GetStatsAsync`. The other two persist the metadata record and return `session.Metadata`.
+- **Memory does not link `MessagePartAdapter.cs` (#1591).** The adapter is the one domain ↔ persist-form projection for assistant-message content parts — the tag vocabulary, the per-tag required-member census, the shared JsonElement scanner and the structured refusal the three part readers (the JSONL span parser, the JSONL element codec, the SQLite row converter) used to hand-maintain separately. Memory does not decompose part objects itself; it holds live `AgentMessage` records, so there is no projection for it to consume.
 
 `SessionStoreErrors.cs` reaches all three, so `InvalidSessionId` sits unused in Sqlite and in Memory. That is not new and not a warning: it guards caller-supplied ids reaching `File.*` (#83), which neither of those two stores does, and both compile under `TreatWarningsAsErrors` today.
 
@@ -34,6 +36,7 @@ No string changed in that change: all eleven were byte-identical in shape to the
 | `SessionLockStrip.cs` | `AcquireAsync` / `Evict` over a caller-owned `ConcurrentDictionary<string, SemaphoreSlim>` — per-session granularity replacing the old global `lock (_lock)` (#184). |
 | `SessionStoreErrors.cs` | `SessionNotFound` / `MessageNotFound` / `InvalidSessionId` — the failure texts all three stores emit, linked by every one of them. Pinned by the #199 ROP suites. |
 | `SessionStatsAggregator.cs` | `Aggregate` — the pure message-history → `SessionMetadata` fold moved verbatim out of `JsonlSessionStore.GetStatsAsync`. |
+| `MessagePartAdapter.cs` | `TryScanPartFields` / `TryBuildContentPart` / `FormatRefusal` — the shared tag → type projection for message parts (#1591), one vocabulary and required-member census for the Jsonl span parser, the Jsonl element codec and the Sqlite row converter. Refusal wording stays per-transport; structure does not. |
 
 ## Consuming it
 
