@@ -19,7 +19,10 @@ namespace Harbor.Application.Sessions;
 ///     model instead of the primary one. Resolution is lazy and cached per
 ///     successful pair; ANY resolution failure (provider missing, model not
 ///     found, catalog fetch failed) falls back to the primary model so a bad
-///     secondary config can never break compaction itself.
+///     secondary config can never break compaction itself. An invalid
+///     configured value (unparseable reference) is logged at Warning at
+///     construction (#1582) — the feature degrades the same way, but the
+///     config typo is visible.
 /// </remarks>
 public sealed class CompactionService(
     ITokenTracker tokenTracker,
@@ -52,10 +55,23 @@ public sealed class CompactionService(
     // must not pin the fallback forever). Reference writes are atomic, so two
     // concurrent first calls may both resolve once (benign and idempotent),
     // while every later call reads the cached pair without locking.
-    private readonly ModelRef? _secondaryRef = ParseSecondary(secondaryModel);
+    private readonly ModelRef? _secondaryRef = ParseSecondary(secondaryModel, logger);
 
-    /// <summary>Parse the configured reference; an invalid value silently disables the feature.</summary>
-    private static ModelRef? ParseSecondary(string? value)
+    /// <summary>
+    ///     Parse the configured reference; an invalid value logs the reason at
+    ///     Warning and disables the feature. #1582 (ROP corridor, §ROP-001/§ROP-002
+    ///     precedent): the old
+    ///     <c>parsed.IsSuccess ? parsed.Value : null</c> threw the
+    ///     <see cref="ModelRef.TryParse" /> error away — a typo in the
+    ///     secondary-model config silently switched fallback summarization off
+    ///     with zero signal in logs or diagnostics. The raw invalid value and the
+    ///     parse reason now surface via
+    ///     <see cref="CompactionServiceLog.SecondaryModelInvalid" />,
+    ///     the same observability the resolution path gets from
+    ///     <see cref="LogSecondaryFallback" />. Silence stays legitimate only for
+    ///     a value that was never configured (null/blank) — feature off, not broken.
+    /// </summary>
+    private static ModelRef? ParseSecondary(string? value, ILogger logger)
     {
         if (string.IsNullOrWhiteSpace(value))
         {
@@ -63,7 +79,13 @@ public sealed class CompactionService(
         }
 
         Result<ModelRef> parsed = ModelRef.TryParse(value);
-        return parsed.IsSuccess ? parsed.Value : null;
+        if (parsed.IsFailure)
+        {
+            CompactionServiceLog.SecondaryModelInvalid(logger, value, parsed.Error);
+            return null;
+        }
+
+        return parsed.Value;
     }
 
     private ResolvedSecondary? _resolvedSecondary;
@@ -734,5 +756,8 @@ internal static partial class CompactionServiceLog
 
     [LoggerMessage(EventId = 6, Level = LogLevel.Information, Message = "Summarization attempt {Attempt} failed transiently ({Message}); retrying")]
     public static partial void SummaryTransientRetry(ILogger logger, int attempt, string message);
+
+    [LoggerMessage(EventId = 7, Level = LogLevel.Warning, Message = "Configured secondary compaction model '{Secondary}' is invalid ({Error}); fallback summarization stays on the primary model")]
+    public static partial void SecondaryModelInvalid(ILogger logger, string secondary, string error);
 
 }

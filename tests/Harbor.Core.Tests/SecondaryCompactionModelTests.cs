@@ -9,6 +9,7 @@ using Harbor.Application.Configuration;
 using Harbor.Application.Sessions;
 using Harbor.Registries;
 using Harbor.Storage.Memory;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using TUnit.Assertions;
 using Harbor.Registries.Providers;
@@ -116,6 +117,66 @@ public class SecondaryCompactionModelTests
     }
 
     [Test]
+    public async Task Constructor_SecondaryInvalid_LogsWarningWithInvalidValueAndReason()
+    {
+        // #1582: the parse error used to be swallowed — the feature switched off
+        // silently. The raw invalid value + the TryParse reason must reach the
+        // Warning log (same observability as the resolution path).
+        var log = new CapturingLogger();
+
+        _ = new CompactionService(
+            new TokenTracker(),
+            new ProviderRegistry(),
+            log,
+            secondaryModel: "no-slash-here");
+
+        await Assert.That(log.Messages.Any(
+            m => m.Contains("no-slash-here") && m.Contains("Invalid model reference"))).IsTrue();
+    }
+
+    [Test]
+    public async Task CompactAsync_SecondaryInvalid_FallsBackToPrimaryClient()
+    {
+        var primary = new CapturingLlmClient("primary summary", [PrimaryModel]);
+        var providers = new ProviderRegistry();
+        providers.Register(ProviderId.Create("test"), () => primary);
+        var svc = new CompactionService(
+            new TokenTracker(),
+            providers,
+            NullLogger<CompactionService>.Instance,
+            secondaryModel: "no-slash-here")
+        {
+            KeepRecentTokens = 500,
+            TailTurns = 0
+        };
+
+        var result = await svc.CompactAsync("session-1", History(), HugeWindow(PrimaryModel));
+
+        // Same degradation as before (#1582), but the config error is logged at
+        // construction; here just pin the behaviour on a single primary client.
+        await Assert.That(result.IsSuccess).IsTrue();
+        await Assert.That(primary.Requests.Count).IsEqualTo(1);
+        var summaryAssistant = (AssistantMessage)result.Value.SummaryMessage;
+        await Assert.That(summaryAssistant.Model).IsEqualTo("test-model");
+    }
+
+    [Test]
+    public async Task Constructor_SecondaryNotConfigured_LogsNothing()
+    {
+        // null/blank is "feature off", not "feature broken" — must stay silent
+        // and must not pre-fire ModelRef.TryParse's empty-reference error.
+        var log = new CapturingLogger();
+
+        _ = new CompactionService(
+            new TokenTracker(),
+            new ProviderRegistry(),
+            log,
+            secondaryModel: " ");
+
+        await Assert.That(log.Messages.Count).IsEqualTo(0);
+    }
+
+    [Test]
     public async Task ConfigNormalize_InvalidSecondaryModel_ReturnsFailure()
     {
         var raw = new RawConfigDto { SecondaryModel = "no-slash-here" };
@@ -184,6 +245,27 @@ public class SecondaryCompactionModelTests
         StopReason.Stop,
         new Usage(0, 0),
         "test-model");
+
+    /// <summary>
+    ///     Log capture for the #1582 observability tests: records the formatted
+    ///     message of every entry, warnings included.
+    /// </summary>
+    private sealed class CapturingLogger : ILogger<CompactionService>
+    {
+        public List<string> Messages { get; } = [];
+
+        public IDisposable? BeginScope<TState>(TState state)
+            where TState : notnull => null;
+
+        public bool IsEnabled(LogLevel logLevel) => true;
+
+        public void Log<TState>(
+            LogLevel logLevel,
+            EventId eventId,
+            TState state,
+            Exception? exception,
+            Func<TState, Exception?, string> formatter) => Messages.Add(formatter(state, exception));
+    }
 
     /// <summary>Capturing client bound to a fixed provider id and catalog.</summary>
     private sealed class CapturingLlmClient(string summary, ModelInfo[] catalog) : ILlmClient
