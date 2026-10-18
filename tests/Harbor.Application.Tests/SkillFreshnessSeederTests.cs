@@ -168,6 +168,23 @@ public class SkillFreshnessSeederTests : IDisposable
         await Assert.That(entries[2].Name).IsEqualTo("zeta");
     }
 
+    /// <summary>
+    ///     #1580: the front-matter <c>name:</c> read shares the same helper
+    ///     as <c>WorkspaceContextSource</c> — prefix is matched
+    ///     case-insensitively.
+    /// </summary>
+    [Test]
+    public async Task Seed_FrontMatterName_CaseInsensitivePrefix()
+    {
+        string skills = WriteSkillDir("review",
+            "---\nNAME: renamed\ndescription: d\n---\n# Review\n");
+
+        var entries = SkillFreshnessSeeder.Seed(skills, null, lockFilePath: null);
+
+        await Assert.That(entries.Count).IsEqualTo(1);
+        await Assert.That(entries[0].Name).IsEqualTo("renamed");
+    }
+
     private string WriteSkillDir(string name, string body)
     {
         string root = Path.Combine(_dir, "skills");

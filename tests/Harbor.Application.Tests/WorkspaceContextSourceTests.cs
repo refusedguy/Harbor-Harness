@@ -85,6 +85,64 @@ public class WorkspaceContextSourceTests : IDisposable
         await Assert.That(skills[0].Description).IsEqualTo("Reviews pull requests with the house style");
     }
 
+    /// <summary>
+    ///     #1580: the front-matter field helper matches the prefix
+    ///     case-insensitively regardless of the field's letter case.
+    /// </summary>
+    [Test]
+    public async Task LoadSkills_FrontMatterFields_CaseInsensitivePrefix()
+    {
+        string projectSkills = Path.Combine(_dir, ".harbor", "skills");
+        Directory.CreateDirectory(projectSkills);
+        await File.WriteAllTextAsync(Path.Combine(projectSkills, "review.md"),
+            "---\nNAME: review\nDESCRIPTION: Reviews pull requests\n---\n# Review\n");
+
+        var skills = WorkspaceContextSource.LoadSkills(_dir, globalSkillsDir: null);
+
+        await Assert.That(skills.Count).IsEqualTo(1);
+        await Assert.That(skills[0].Name).IsEqualTo("review");
+        await Assert.That(skills[0].Description).IsEqualTo("Reviews pull requests");
+    }
+
+    /// <summary>
+    ///     #1580: leading indentation before the field prefix is tolerated —
+    ///     the helper trims the line before matching.
+    /// </summary>
+    [Test]
+    public async Task LoadSkills_FrontMatterFields_IndentedValue_Parsed()
+    {
+        string skillDir = Path.Combine(_dir, ".harbor", "skills", "deploy");
+        Directory.CreateDirectory(skillDir);
+        await File.WriteAllTextAsync(Path.Combine(skillDir, "SKILL.md"),
+            "---\n    name: deploy\n    description: Ships the branch to staging\n---\n# Deploy\n");
+
+        var skills = WorkspaceContextSource.LoadSkills(_dir);
+
+        await Assert.That(skills.Count).IsEqualTo(1);
+        await Assert.That(skills[0].Name).IsEqualTo("deploy");
+        await Assert.That(skills[0].Description).IsEqualTo("Ships the branch to staging");
+    }
+
+    /// <summary>
+    ///     #1580: the helper maps an empty field value to null, so the
+    ///     directory-name fallback applies for <c>name:</c> and the
+    ///     prose/markdown fallback applies for <c>description:</c>.
+    /// </summary>
+    [Test]
+    public async Task LoadSkills_FrontMatterEmptyValues_FallBack()
+    {
+        string skillDir = Path.Combine(_dir, ".harbor", "skills", "deploy");
+        Directory.CreateDirectory(skillDir);
+        await File.WriteAllTextAsync(Path.Combine(skillDir, "SKILL.md"),
+            "---\nname:\ndescription:\n---\n# Deploy\nRun it.\n");
+
+        var skills = WorkspaceContextSource.LoadSkills(_dir);
+
+        await Assert.That(skills.Count).IsEqualTo(1);
+        await Assert.That(skills[0].Name).IsEqualTo("deploy");
+        await Assert.That(skills[0].Description).IsEqualTo("Deploy");
+    }
+
     [Test]
     public async Task LoadSkills_ProjectShadowsGlobal_OnNameCollision()
     {
