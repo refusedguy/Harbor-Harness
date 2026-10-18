@@ -60,7 +60,9 @@ internal sealed class BoundedRegexCache
         TimeSpan matchTimeout,
         Func<string, RegexOptions, TimeSpan, Regex> factory)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(pattern);
+        // Whitespace-only is a legitimate regex (matches whitespace) and must not
+        // throw here — GrepTool's validation contract expects it to compile (#181).
+        ArgumentException.ThrowIfNullOrEmpty(pattern);
 
         var key = new Key(pattern, options, matchTimeout);
         if (TryGet(key) is { } hit)

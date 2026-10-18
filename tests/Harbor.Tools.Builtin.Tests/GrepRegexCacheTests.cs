@@ -11,8 +11,8 @@ public class BoundedRegexCacheTests
     [Test]
     public async Task SamePatternAndOptions_ReturnsSameInstance()
     {
-        var first = Compile("* {1,}");
-        var second = Compile("* {1,}");
+        var first = Compile("harbor{1,}");
+        var second = Compile("harbor{1,}");
 
         await Assert.That(ReferenceEquals(first, second)).IsTrue();
     }
