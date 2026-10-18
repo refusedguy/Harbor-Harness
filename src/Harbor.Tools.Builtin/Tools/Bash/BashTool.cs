@@ -202,9 +202,12 @@ public sealed partial class BashTool : ITool
 
         if (output.Builder.Length > 50_000)
         {
-            const string HardCutNote = "\n[output truncated to 50000 chars]\n";
-            output.Builder.Length = 50_000 - HardCutNote.Length;
-            output.Builder.Append(HardCutNote);
+            // #1587: the tail note comes from the unified output-limit seam; its
+            // own leading newline is the separator (the cut can land mid-line),
+            // so the total stays exactly the hard cut (asserted by the Proxy tests).
+            string hardCutNote = ToolOutputLimit.TruncationNote(50_000, "chars");
+            output.Builder.Length = 50_000 - hardCutNote.Length;
+            output.Builder.Append(hardCutNote);
         }
 
         bool isError = process.ExitCode != 0;

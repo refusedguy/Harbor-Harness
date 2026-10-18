@@ -108,7 +108,8 @@ public class BashToolProxyTests
         await Assert.That(result.IsError).IsFalse();
         // Combined transcript exceeds the hard cut → truncated to exactly 50_000.
         await Assert.That(result.Output.Length).IsEqualTo(50_000);
-        await Assert.That(result.Output).Contains("[output truncated to 50000 chars]");
+        // #1587: the tail note's wording moved to the unified output-limit seam.
+        await Assert.That(result.Output).Contains("truncated at 50000 chars");
         // The dropped line's marker survives nowhere in the visible output...
         await Assert.That(result.Output).DoesNotContain("KIL-DROPPED");
         // ...but the drop itself is surfaced in the log (12 = line + '\n').

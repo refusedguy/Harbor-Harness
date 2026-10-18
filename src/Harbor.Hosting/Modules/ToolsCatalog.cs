@@ -155,20 +155,31 @@ internal static class ToolsCatalog
         // to pass `null!`, so the LSP / MCP / session-store lookups that hung off
         // it were dead). A null `lspService` / `sessionStore` now degrades the
         // optional enrichment visibly instead of resolving against a null provider.
-        tb.AddTool(lf => new ReadTool(lf.CreateLogger<ReadTool>(), lspService));
+        // #1587: the generation-point tools (Read/Bash/Grep/WebFetch/Tree) pass
+        // through the output-limit decorator — unified char cap + marker applied
+        // at the composition root; each tool's own caps stay intact beneath it.
+        tb.AddTool(lf => new OutputLimitToolDecorator(
+            new ReadTool(lf.CreateLogger<ReadTool>(), lspService),
+            lf.CreateLogger<OutputLimitToolDecorator>()));
         tb.AddTool(lf => new WriteTool(lf.CreateLogger<WriteTool>()));
         tb.AddTool(lf => new EditTool(lf.CreateLogger<EditTool>(), lspService));
         // #1590: BashTool доходит до OS-процессов только через Proxy-шов — здесь
         // production SystemProcessProxy; тесты подменяют его сценарием.
-        tb.AddTool(lf => new BashTool(new SystemProcessProxy(), lf.CreateLogger<BashTool>()));
+        tb.AddTool(lf => new OutputLimitToolDecorator(
+            new BashTool(new SystemProcessProxy(), lf.CreateLogger<BashTool>()),
+            lf.CreateLogger<OutputLimitToolDecorator>()));
         tb.AddTool(lf => new GlobTool(lf.CreateLogger<GlobTool>()));
-        tb.AddTool(lf => new GrepTool(lf.CreateLogger<GrepTool>()));
+        tb.AddTool(lf => new OutputLimitToolDecorator(
+            new GrepTool(lf.CreateLogger<GrepTool>()),
+            lf.CreateLogger<OutputLimitToolDecorator>()));
         tb.AddTool(lf => new LsTool(lf.CreateLogger<LsTool>()));
         tb.AddTool(lf => new SkillTool(sessionStore, lf.CreateLogger<SkillTool>()));
         if (full)
         {
             tb.AddTool(lf => new TaskTool(agentRegistry, lf.CreateLogger<TaskTool>(), subAgentRunner, backgroundTasks));
-            tb.AddTool(lf => new WebFetchTool(lf.CreateLogger<WebFetchTool>()));
+            tb.AddTool(lf => new OutputLimitToolDecorator(
+                new WebFetchTool(lf.CreateLogger<WebFetchTool>()),
+                lf.CreateLogger<OutputLimitToolDecorator>()));
         }
         if (full && sessionStore is not null)
         {
@@ -184,7 +195,9 @@ internal static class ToolsCatalog
         {
             tb.AddTool(lf => new RipGrepTool(lf.CreateLogger<RipGrepTool>()));
         }
-        tb.AddTool(lf => new TreeTool(lf.CreateLogger<TreeTool>()));
+        tb.AddTool(lf => new OutputLimitToolDecorator(
+            new TreeTool(lf.CreateLogger<TreeTool>()),
+            lf.CreateLogger<OutputLimitToolDecorator>()));
         if (lspService is not null)
         {
             tb.AddTool(new LspTool(lspService, ctx.LoggerFactory.CreateLogger<LspTool>()));

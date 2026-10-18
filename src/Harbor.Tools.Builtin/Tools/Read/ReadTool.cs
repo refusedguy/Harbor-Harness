@@ -236,11 +236,14 @@ public sealed partial class ReadTool : ITool
 
         if (truncatedByLines || truncatedByChars)
         {
-            sb.Append("\n\n… truncated");
+            // #1587: note wording from the output-limit seam — the line window
+            // is user-guided (offset/limit hint), the char cap stays a tool
+            // resource bound. Only one of the two stops can fire (the first
+            // break exits the stream).
             if (truncatedByLines)
-                sb.Append($" (limit {maxLines} lines; pass offset/limit to continue)");
+                sb.Append(ToolOutputLimit.TruncationNote(maxLines, "lines", "pass offset/limit to continue"));
             if (truncatedByChars)
-                sb.Append($" (hit {MaxChars} char cap)");
+                sb.Append(ToolOutputLimit.TruncationNote(MaxChars, "chars"));
         }
 
         ReadToolLog.ReadComplete(_logger, taken, truncatedByLines || truncatedByChars);

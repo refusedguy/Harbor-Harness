@@ -239,8 +239,9 @@ public sealed partial class WebFetchTool : ITool
                 markdown = HtmlToMarkdownConverter.Convert(html);
             }
 
-            if (markdown.Length > maxChars)
-                markdown = markdown[..maxChars] + "\n\n… truncated at " + maxChars + " chars";
+            bool hitMaxChars = markdown.Length > maxChars;
+            if (hitMaxChars)
+                markdown = ToolOutputLimit.Apply(markdown, maxChars); // #1587: unified note
 
             var summary = new StringBuilder(128);
             summary.Append("Fetched ").Append(finalUri).Append(" — ").Append((int)response.StatusCode)
@@ -257,7 +258,7 @@ public sealed partial class WebFetchTool : ITool
                     sizeBytes = bytes.Length,
                     hops,
                     selector,
-                    truncated = markdown.Length >= maxChars,
+                    truncated = hitMaxChars,
                     chars = markdown.Length
                 });
         }
