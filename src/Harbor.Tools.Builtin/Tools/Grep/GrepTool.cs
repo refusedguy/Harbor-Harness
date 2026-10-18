@@ -67,13 +67,16 @@ public sealed partial class GrepTool : ITool
                                                                       """);
 
     /// <summary>
-    ///     Single regex compilation point (ROP-A Z1 п.5): validation and
-    ///     execution share one compiled instance instead of compiling twice
-    ///     with duplicated catch blocks.
+    ///     Single regex compilation point (ROP-A Z1 п.5) backed by the
+    ///     bounded <see cref="BoundedRegexCache" /> flyweight (#1585):
+    ///     validation and execution share one compiled instance for
+    ///     (pattern, options) — across calls, not just within one.
     /// </summary>
     private static Result<Regex> CompileRegex(string pattern, RegexOptions options) =>
         Result.Try(
-            () => new Regex(pattern, options, TimeSpan.FromSeconds(2)),
+            () => BoundedRegexCache.Shared.GetOrAdd(
+                pattern, options, TimeSpan.FromSeconds(2),
+                static (p, o, t) => new Regex(p, o, t)),
             ex => $"Invalid regex: {ex.Message}");
 
     public Result ValidateArguments(JsonElement args)
@@ -413,8 +416,11 @@ public sealed partial class GrepTool : ITool
                                  .Replace("\\|", "|", StringComparison.Ordinal)
                              + "$";
 
-        return new Regex(pattern, RegexOptions.IgnoreCase | RegexOptions.CultureInvariant,
-            TimeSpan.FromSeconds(1));
+        // Flyweight (#1585): cache instance reuse for an unchanged include glob.
+        return BoundedRegexCache.Shared.GetOrAdd(
+            pattern, RegexOptions.IgnoreCase | RegexOptions.CultureInvariant,
+            TimeSpan.FromSeconds(1),
+            static (p, o, t) => new Regex(p, o, t));
     }
 }
 
