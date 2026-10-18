@@ -13,19 +13,25 @@ namespace Harbor.Abstractions.Tests;
 // GATE: relative, same shape as #410 / #1373. Cost(2N)/cost(N) <= 3 for time
 // over N-rule Evaluate miss-walks (linear is 2.00, O(N^2) is 4.00). No
 // absolute millisecond budget: those measure the runner, not the code.
+// Measured through the DOCUMENTED MINI-COPY of Harbor.TestKit's
+// TestScalingGate (#1652; Abstractions.Tests must not reference TestKit — it
+// drags Harbor.Application): GC-fenced legs scaled toward ~100 ms of real
+// work, medians over five rounds, x1.05 noise band on the time branch;
+// #1642's ratio-3.63-out-of-a-20-ms-best-of leg is the shape that dies here.
 //
 // The alloc leg is exact-zero rather than a ratio, deliberately: 2 wasted
 // strings per rule is still LINEAR, so alloc(2N)/alloc(N) ~= 2.0 passes with
 // the bug in place — a ratio gate cannot see this regression. Zero is
 // portable where milliseconds are not (precedent:
 // Fit_AllocatesNothing_WhenTheRowIsResolvedByDroppingSegments), so the N-rule
-// and 2N-rule windows must both allocate 0 B.
+// and 2N-rule windows must both allocate 0 B; the helper measures the
+// allocation but is told NOT to ratio-assert it (a ratio over "0 / 0 B" is a
+// number invented for the caller), so the exact-zero asserts below stand.
 [NotInParallel]
 public sealed class MatchesPatternScalingGates
 {
     private const int Rules = 256;
     private const double GrowthLimit = 3.0;
-    private const int Rounds = 5;
     private const int CallsPerWindow = 200;
     private const string ArgPath = "src/evaluate/target.cs";
 
@@ -42,18 +48,28 @@ public sealed class MatchesPatternScalingGates
         return new PermissionRuleset(rules, Array.Empty<IArgSafetyPolicy>());
     }
 
-    private static (double Ms, long Allocated) DriveEvaluates(PermissionRuleset ruleset)
+    /// <summary>
+    ///     One measured leg: <paramref name="units" /> burst windows worth of
+    ///     full miss-walks over <paramref name="ruleset" />, timed and
+    ///     allocation-counter'd as one window. The zero-alloc claim scales
+    ///     with the unit count — a miss-walk allocates nothing, so the
+    ///     scaled window must still land at exactly 0 B.
+    /// </summary>
+    private static (double Ms, long Allocated) DriveEvaluates(PermissionRuleset ruleset, int units)
     {
         // Stopwatch first: its own allocation must fall outside the window the
         // exact-zero alloc leg reads.
         var sw = Stopwatch.StartNew();
         long before = GC.GetAllocatedBytesForCurrentThread();
-        for (int i = 0; i < CallsPerWindow; i++)
+        for (int u = 0; u < units; u++)
         {
-            var action = ruleset.Evaluate("read", ArgPath);
-            if (action != PermissionAction.Ask)
+            for (int i = 0; i < CallsPerWindow; i++)
             {
-                throw new InvalidOperationException("Gate measured a match instead of a full miss-walk.");
+                var action = ruleset.Evaluate("read", ArgPath);
+                if (action != PermissionAction.Ask)
+                {
+                    throw new InvalidOperationException("Gate measured a match instead of a full miss-walk.");
+                }
             }
         }
 
@@ -75,50 +91,33 @@ public sealed class MatchesPatternScalingGates
         await Assert.That(small.Evaluate("read", ArgPath)).IsEqualTo(PermissionAction.Ask);
         await Assert.That(large.Evaluate("read", ArgPath)).IsEqualTo(PermissionAction.Ask);
 
-        // Warm-up (tiered JIT), discarded.
-        _ = DriveEvaluates(small);
+        TestScalingGateResult result = await TestScalingGate.MeasureAsync(
+            measureSmallLeg: units => Task.FromResult(AsLeg(DriveEvaluates(small, units))),
+            measureLargeLeg: units => Task.FromResult(AsLeg(DriveEvaluates(large, units))),
+            initialUnits: CallsPerWindow,
+            options: new TestScalingGateOptions
+            {
+                Label = "matches-pattern-scaling",
+                GrowthLimit = GrowthLimit,
+            });
 
-        long allocSmall = long.MaxValue;
-        long allocLarge = long.MaxValue;
-        double msSmall = double.MaxValue;
-        double msLarge = double.MaxValue;
-        for (int round = 0; round < Rounds; round++)
-        {
-            var s = DriveEvaluates(small);
-            var l = DriveEvaluates(large);
-            allocSmall = Math.Min(allocSmall, s.Allocated);
-            allocLarge = Math.Min(allocLarge, l.Allocated);
-            msSmall = Math.Min(msSmall, s.Ms);
-            msLarge = Math.Min(msLarge, l.Ms);
-        }
+        await result.AssertWithinLimitsAsync(
+            topic: "time(2N)/time(N)",
+            linearWhy: "Linear is 2.00 and O(N^2) is 4.00.",
+            assertAllocRatio: false); // exact-zero contract below, not a ratio.
 
-        double timeRatio = msLarge / msSmall;
-
-        Console.WriteLine(
-            $"matches-pattern-scaling: {Rules} rules = {msSmall:F3} ms / {allocSmall} B, "
-            + $"{Rules * 2} rules = {msLarge:F3} ms / {allocLarge} B "
-            + $"(time x{timeRatio:F2}, limit x{GrowthLimit:F2}, best of {Rounds}; "
-            + "the absolute columns are informational and runner-dependent)");
-
-        await Assert.That(msSmall)
-            .IsGreaterThan(0.0)
-            .Because("the time baseline must be a real measurement: msSmall = " + msSmall.ToString("F3") + " ms.");
-        await Assert.That(timeRatio)
-            .IsLessThanOrEqualTo(GrowthLimit)
-            .Because(
-                "time(2N)/time(N) = " + timeRatio.ToString("F2") + " against a limit of "
-                + GrowthLimit.ToString("F2") + ". Linear is 2.00 and O(N^2) is 4.00.");
-
-        await Assert.That(allocSmall)
+        await Assert.That(result.AllocSmall)
             .IsEqualTo(0L)
             .Because(
                 "a miss-walk over " + Rules + " rules must allocate nothing: the two "
                 + "per-call canonical strings are gone (#1528), but measured "
-                + allocSmall + " B.");
-        await Assert.That(allocLarge)
+                + result.AllocSmall + " B.");
+        await Assert.That(result.AllocLarge)
             .IsEqualTo(0L)
             .Because(
                 "a miss-walk over " + (Rules * 2) + " rules must allocate nothing either, "
-                + "but measured " + allocLarge + " B.");
+                + "but measured " + result.AllocLarge + " B.");
     }
+
+    private static TestScalingGateLeg AsLeg((double Ms, long Allocated) leg) => new(leg.Ms, leg.Allocated);
 }

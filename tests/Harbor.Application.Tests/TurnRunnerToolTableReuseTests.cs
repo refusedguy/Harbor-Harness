@@ -41,7 +41,11 @@ namespace Harbor.Application.Tests;
 ///         the single-size run, measured in the same process
 ///         (<c>t(2N) &lt;= 3*t(N)</c>). A quadratic regression in the
 ///         request-build path lands at 4x and cannot hide under it; runner
-///         speed cancels in the ratio. Best-of-5 rounds, linux-only (GC
+///         speed cancels in the ratio. Measured through
+///         <see cref="Harbor.TestKit.TestScalingGate" /> (#1652): GC-fenced
+///         legs scaled to ~100 ms of real work, medians over five rounds, and
+///         a x1.05 noise band on the time branch only — millisecond legs under
+///         best-of-5 kept deciding the ratio on CI noise. Linux-only (GC
 ///         accounting varies by OS). Allocations ride
 ///         <c>AllocationProbe.MeasureProcessAsync</c> (#741: the body awaits,
 ///         so the per-thread counter would compare two unrelated threads),
@@ -54,14 +58,11 @@ public class TurnRunnerToolTableReuseTests
     /// <summary>Tools in the small leg; the large one doubles it.</summary>
     private const int ToolCount = 100;
 
-    /// <summary>Runs per measured leg (one run is sub-millisecond noise).</summary>
+    /// <summary>Runs per measured leg's unit: one text-only turn; the #1652 leg scaler repeats it.</summary>
     private const int Iterations = 20;
 
     /// <summary>Growth allowed for a doubled input, on cost and allocations.</summary>
     private const double GrowthLimit = 3.0;
-
-    /// <summary>Rounds per leg, best-of (a descheduled or collected leg only inflates).</summary>
-    private const int Rounds = 5;
 
     private static readonly JsonDocument SchemaDoc = JsonDocument.Parse("""{"type":"object"}""");
 
@@ -296,22 +297,26 @@ public class TurnRunnerToolTableReuseTests
         }
     }
 
-    private static async Task<(double Ms, long Allocated)> MeasureAsync(StableToolRegistry registry, AgentDefinition agent)
+    /// <summary>
+    ///     One measured leg: <paramref name="units" /> text-only runs, timed and
+    ///     allocated as one window (#741: process-wide counter, the body
+    ///     awaits). The #1652 leg scaler multiplies <paramref name="units" />
+    ///     until the window reaches a measurable duration; every unit is a
+    ///     fresh cold-table run, so a build-path regression still lands on the
+    ///     2N leg and not the N leg.
+    /// </summary>
+    private static async Task<TestScalingGateLeg> MeasureLegAsync(StableToolRegistry registry, AgentDefinition agent, int units)
     {
-        GC.Collect();
-        GC.WaitForPendingFinalizers();
-        GC.Collect();
-
         var sw = Stopwatch.StartNew();
         long allocated = await AllocationProbe.MeasureProcessAsync(async () =>
         {
-            for (int i = 0; i < Iterations; i++)
+            for (int i = 0; i < units; i++)
             {
                 await RunTextOnlyAsync(registry, agent).ConfigureAwait(false);
             }
         }).ConfigureAwait(false);
         sw.Stop();
-        return (sw.Elapsed.TotalMilliseconds, allocated);
+        return new TestScalingGateLeg(sw.Elapsed.TotalMilliseconds, allocated);
     }
 
     [Test]
@@ -325,53 +330,18 @@ public class TurnRunnerToolTableReuseTests
         var small = new StableToolRegistry(NumberedTools(ToolCount));
         var large = new StableToolRegistry(NumberedTools(ToolCount * 2));
 
-        // Warm up (tiered JIT over the turn path) before any measurement.
-        await RunTextOnlyAsync(small, agent);
-        await RunTextOnlyAsync(large, agent);
+        TestScalingGateResult result = await TestScalingGate.MeasureAsync(
+            measureSmallLeg: units => MeasureLegAsync(small, agent, units),
+            measureLargeLeg: units => MeasureLegAsync(large, agent, units),
+            initialUnits: Iterations,
+            options: new TestScalingGateOptions
+            {
+                Label = "turnrunner-tooltable-scaling",
+                GrowthLimit = GrowthLimit,
+            });
 
-        double msSmall = double.MaxValue;
-        double msLarge = double.MaxValue;
-        long allocSmall = long.MaxValue;
-        long allocLarge = long.MaxValue;
-        for (int round = 0; round < Rounds; round++)
-        {
-            (double tSmall, long aSmall) = await MeasureAsync(small, agent);
-            (double tLarge, long aLarge) = await MeasureAsync(large, agent);
-            msSmall = Math.Min(msSmall, tSmall);
-            msLarge = Math.Min(msLarge, tLarge);
-            allocSmall = Math.Min(allocSmall, aSmall);
-            allocLarge = Math.Min(allocLarge, aLarge);
-        }
-
-        double timeRatio = msLarge / msSmall;
-        double allocRatio = (double)allocLarge / allocSmall;
-
-        // Printed, not only asserted, so the deciding ratio is readable next
-        // to the test instead of existing only in a failure message. The
-        // absolute columns are informational and runner-dependent.
-        Console.WriteLine(
-            $"turnrunner-tooltable-scaling: {ToolCount} tools x{Iterations} = {msSmall:F3} ms / {allocSmall} B, "
-            + $"{ToolCount * 2} tools x{Iterations} = {msLarge:F3} ms / {allocLarge} B "
-            + $"(time x{timeRatio:F2}, alloc x{allocRatio:F2}, limit x{GrowthLimit:F2}, best of {Rounds}; "
-            + "the absolute columns are informational and runner-dependent)");
-
-        // Non-vacuity: both ratios divide by the small leg, so a zero there
-        // means "measured nothing" — the #591 shape.
-        await Assert.That(msSmall).IsGreaterThan(0.0)
-            .Because($"the small-leg baseline must be a real measurement, got {msSmall:F3} ms.");
-        await Assert.That(allocSmall).IsGreaterThan(0L)
-            .Because($"the small-leg allocation baseline must be a real measurement, got {allocSmall} B.");
-
-        await Assert.That(timeRatio).IsLessThanOrEqualTo(GrowthLimit)
-            .Because(
-                $"run(2N)/run(N) = {timeRatio:F2} against a limit of {GrowthLimit:F2}: "
-                + $"{msLarge:F3} ms for {ToolCount * 2} tools versus {msSmall:F3} ms for {ToolCount}. "
-                + "Linear is 2.00, so this bound separates linear from quadratic without depending on "
-                + "how fast this runner is.");
-        await Assert.That(allocRatio).IsLessThanOrEqualTo(GrowthLimit)
-            .Because(
-                $"alloc(2N)/alloc(N) = {allocRatio:F2} against a limit of {GrowthLimit:F2}: "
-                + $"{allocLarge} B versus {allocSmall} B. "
-                + "Allocations do not move with the runner's speed at all, so this ratio holds on every machine.");
+        await result.AssertWithinLimitsAsync(
+            topic: "run(2N)/run(N)",
+            linearWhy: "Linear is 2.00, so this bound separates linear from quadratic without depending on how fast this runner is.");
     }
 }

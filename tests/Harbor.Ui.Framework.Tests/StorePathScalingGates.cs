@@ -207,39 +207,17 @@ public sealed class StorePathScalingGates
     ///         what #465 rejected for the mirror-image reason — it sits above
     ///         the quadratic shape the gate exists to catch.
     ///     </para>
+    ///     <para>
+    ///         The measure lives in the DOCUMENTED MINI-COPY of Harbor.TestKit's
+    ///         <see cref="TestScalingGate" /> (#1652; Ui.Framework.Tests must not
+    ///         reference TestKit — it drags Harbor.Application): GC-fenced legs
+    ///         scaled toward ~100 ms of real work, medians over five rounds,
+    ///         x1.05 noise band on the time branch only. The hand-rolled
+    ///         best-of-5 loop stayed at a ~10 ms leg, which was exactly small
+    ///         enough for a neighbour or a collection to decide the ratio.
+    ///     </para>
     /// </remarks>
     private const double GrowthLimit = 3.0;
-
-    /// <summary>
-    ///     Rounds per leg, best-of. The minimum is the estimator that noise can
-    ///     only inflate: a leg that was descheduled, that took a collection, or
-    ///     that ran against a busy core is slower than the same leg on a quiet
-    ///     one. Both operands use it, so a slowdown that happened to affect the
-    ///     whole round cancels in the ratio instead of deciding the gate. Five,
-    ///     not three, because exclusive execution removes the neighbours but not
-    ///     every collection: the 2N window allocates ~2.5 MiB by itself, and a
-    ///     gen0 triggered by the window's OWN budget lands on one leg and not
-    ///     the other. A round costs ~10 ms, so the extra legs are free, and the
-    ///     probability that every 2N leg took a collection while no 1N leg did
-    ///     falls with each one added.
-    /// </summary>
-    private const int Rounds = 5;
-
-    /// <summary>
-    ///     Deltas driven through the identical path before any measurement, and
-    ///     DISCARDED. The first pass over <c>ChatAppReducer.Update</c> and
-    ///     <c>DefaultUiProjector.Project</c> pays for tiered-JIT compilation of
-    ///     those methods and of everything they reach.
-    /// </summary>
-    /// <remarks>
-    ///     Left inside a measured window it would be billed to the code as
-    ///     overhead the code does not have — and because it lands on the N leg
-    ///     first it inflates the DENOMINATOR, which would make the gate pass
-    ///     more easily, not less. Discarded rather than merely reordered for
-    ///     that reason: the warm-up is the first iteration, and the first
-    ///     iteration is not evidence.
-    /// </remarks>
-    private const int WarmupDeltas = Messages * 100;
 
     // =====================================================================
     // 1. The measurement.
@@ -321,78 +299,56 @@ public sealed class StorePathScalingGates
             return;
         }
 
-        // Warm-up first, and throw the result away — see WarmupDeltas.
-        _ = DriveCost(WarmupDeltas).Allocated;
+        // The leg is a REPEAT of the same unit, per the helper's own contract
+        // (#1652): the unit is one full Deltas-delta drive — self-contained
+        // store + projector, exactly the shape the gate is about — and the
+        // scaler repeats it until the leg reaches ~100 ms of real work. It
+        // must NOT amplify N itself (Deltas*units deltas in one drive): that
+        // changes the problem the ratio is about, and a drive of 46k deltas
+        // folds/flushes differently than 10 drives of 1k — the x3.77 alloc
+        // ratio the scaled-drive variant measured on CI was that changed
+        // shape, not the code under test. Probes (the first JIT-paying pass
+        // over ChatAppReducer.Update / DefaultUiProjector.Project) are
+        // discarded by the helper, so the discarded-first-iteration argument
+        // still holds verbatim.
+        TestScalingGateResult result = await TestScalingGate.MeasureAsync(
+            measureSmallLeg: units => Task.FromResult(RepeatDriveLeg(Deltas, units)),
+            measureLargeLeg: units => Task.FromResult(RepeatDriveLeg(Deltas * 2, units)),
+            initialUnits: 1,
+            options: new TestScalingGateOptions
+            {
+                Label = "store-path-scaling",
+                GrowthLimit = GrowthLimit,
+            });
 
-        long allocSmall = long.MaxValue;
-        long allocLarge = long.MaxValue;
-        double msSmall = double.MaxValue;
-        double msLarge = double.MaxValue;
-        for (int round = 0; round < Rounds; round++)
-        {
-            Drive small = DriveCost(Deltas);
-            Drive large = DriveCost(Deltas * 2);
-
-            allocSmall = Math.Min(allocSmall, small.Allocated);
-            allocLarge = Math.Min(allocLarge, large.Allocated);
-            msSmall = Math.Min(msSmall, small.Elapsed.TotalMilliseconds);
-            msLarge = Math.Min(msLarge, large.Elapsed.TotalMilliseconds);
-        }
-
-        double allocRatio = (double)allocLarge / allocSmall;
-        double timeRatio = msLarge / msSmall;
-
-        // Printed, not only asserted: tools/test-measurements.py (#618) lifts
-        // this into the job summary, so the ratio that decided the gate is
-        // readable next to the test that decided it instead of existing only in
-        // a failure message. The absolute columns are informational and are
-        // expected to differ per runner — that is the entire point of the gate.
-        Console.WriteLine(
-            $"store-path-scaling: {Deltas} deltas = {msSmall:F3} ms / {allocSmall / 1024.0:F1} KiB, "
-            + $"{Deltas * 2} deltas = {msLarge:F3} ms / {allocLarge / 1024.0:F1} KiB "
-            + $"(time x{timeRatio:F2}, alloc x{allocRatio:F2}, limit x{GrowthLimit:F2}, best of {Rounds}; "
-            + "the absolute columns are informational and runner-dependent)");
-
-        // Neither operand may be zero. The rule below divides by the small one,
-        // and a zero there means the measurement did not happen — which is the
-        // #591 shape: a rule that cannot tell "no cost" from "no measurement"
-        // and reports a plausible verdict either way. The control below pins
-        // that rejection; these two assertions make sure a zero cannot even
-        // reach it.
-        await Assert.That(allocSmall)
-            .IsGreaterThan(0L)
-            .Because(
-                "the allocation baseline must be a real measurement: a zero denominator makes the ratio gate "
-                + "meaningless, and a gate that cannot tell 'allocated nothing' from 'measured nothing' is the "
-                + "defect class #591 exists to stop. allocSmall = " + allocSmall + " B, allocLarge = "
-                + allocLarge + " B.");
-        await Assert.That(msSmall)
-            .IsGreaterThan(0.0)
-            .Because(
-                "the time baseline must be a real measurement, for the same reason as the allocation baseline "
-                + "above. msSmall = " + msSmall.ToString("F3") + " ms, msLarge = "
-                + msLarge.ToString("F3") + " ms.");
-
-        // Both gates are RATIOS. Doubling the input may cost at most GrowthLimit
-        // times as much; a quadratic regression lands at 4.
-        await Assert.That(timeRatio)
-            .IsLessThanOrEqualTo(GrowthLimit)
-            .Because(
-                "time(2N)/time(N) = " + timeRatio.ToString("F2") + " against a limit of "
-                + GrowthLimit.ToString("F2") + " at N = " + Deltas + ": " + msLarge.ToString("F3")
-                + " ms for " + (Deltas * 2) + " deltas versus " + msSmall.ToString("F3") + " ms for " + Deltas
-                + ". Linear is 2.00 and an O(N^2) regression is 4.00, so this bound separates them without "
+        await result.AssertWithinLimitsAsync(
+            topic: "time(2N)/time(N)",
+            linearWhy:
+                "Linear is 2.00 and an O(N^2) regression is 4.00, so this bound separates them without "
                 + "depending on how fast this runner is — which an absolute millisecond would, and which is why "
                 + "#410 does not use one.");
-        await Assert.That(allocRatio)
-            .IsLessThanOrEqualTo(GrowthLimit)
-            .Because(
-                "alloc(2N)/alloc(N) = " + allocRatio.ToString("F2") + " against a limit of "
-                + GrowthLimit.ToString("F2") + " at N = " + Deltas + ": "
-                + (allocLarge / 1024.0).ToString("F1") + " KiB for " + (Deltas * 2) + " deltas versus "
-                + (allocSmall / 1024.0).ToString("F1") + " KiB for " + Deltas
-                + ". Allocations are the half of this claim that does not move with the runner's speed at all, so "
-                + "this ratio holds on every machine.");
+    }
+
+    /// <summary>
+    ///     One measured leg: <paramref name="units" /> full repeats of the same
+    ///     <paramref name="deltas" />-delta drive, elapsed time and allocation
+    ///     summed over the repeats. Each repeat rebuilds its own
+    ///     <see cref="UiStore" /> + <see cref="DefaultUiProjector" />, and
+    ///     <see cref="DriveCost" /> fences GC before its own inner window, so
+    ///     repeat-to-repeat carryover is fenced on both scales.
+    /// </summary>
+    private static TestScalingGateLeg RepeatDriveLeg(int deltas, int units)
+    {
+        TimeSpan total = TimeSpan.Zero;
+        long allocated = 0;
+        for (int u = 0; u < units; u++)
+        {
+            Drive drive = DriveCost(deltas);
+            total += drive.Elapsed;
+            allocated += drive.Allocated;
+        }
+
+        return new TestScalingGateLeg(total.TotalMilliseconds, allocated);
     }
 
     [Test]
@@ -562,10 +518,10 @@ public sealed class StorePathScalingGates
     public async Task TheRatioRuleAnswersTheDeclaredQuestion()
     {
         var wrong = DeclaredContract
-            .Where(row => WithinGrowthLimit(row.Small, row.Large, row.Limit) != row.Accept)
+            .Where(row => TestScalingGate.WithinLimit(row.Small, row.Large, row.Limit) != row.Accept)
             .Select(row =>
                 row.Name + " (expected " + (row.Accept ? "accepted" : "rejected") + ", rule says "
-                + (WithinGrowthLimit(row.Small, row.Large, row.Limit) ? "accepted" : "rejected") + ")")
+                + (TestScalingGate.WithinLimit(row.Small, row.Large, row.Limit) ? "accepted" : "rejected") + ")")
             .ToArray();
 
         await Assert.That(string.Join(" | ", wrong))
@@ -578,23 +534,6 @@ public sealed class StorePathScalingGates
                 + "defect — a matcher weakened into returning a plausible verdict on a tree it had not examined. "
                 + "Mismatches: " + (wrong.Length == 0 ? "(none)" : string.Join(" | ", wrong)));
     }
-
-    /// <summary>
-    ///     Whether a doubling of the input may cost at most <paramref name="limit" />
-    ///     times as much.
-    /// </summary>
-    /// <remarks>
-    ///     The <c>small &gt; 0</c> guard is load-bearing, not defensive
-    ///     decoration. Without it a zero baseline gives <c>0/0 = NaN</c> or
-    ///     <c>x/0 = +inf</c>, and the comparison happens to reject both — but
-    ///     only as an emergent property of IEEE-754 rather than as a decision
-    ///     this file records. Making it explicit is what lets
-    ///     <see cref="DeclaredContract" /> pin rows 6 and 7, and a rule whose
-    ///     refusals are pinned is a rule that can be reasoned about when it
-    ///     misbehaves.
-    /// </remarks>
-    private static bool WithinGrowthLimit(double small, double large, double limit) =>
-        small > 0.0 && large <= small * limit;
 
     // =====================================================================
     // helpers
