@@ -1,5 +1,4 @@
 using System.Globalization;
-using System.Resources;
 
 namespace Harbor.Ui.Framework.Strings;
 
@@ -31,6 +30,15 @@ namespace Harbor.Ui.Framework.Strings;
 ///         Slice 2 ships <c>en</c> + <c>ru</c> and extracts 14 representative keys;
 ///         the remaining inventory occurrences stay pending (see
 ///         <c>docs/I18N_STRING_INVENTORY.md</c>).
+///     </para>
+///     <para>
+///         Issue #1573: this static type no longer owns state. It is a forwarder
+///         over one shared <see cref="UiStringsCatalog" /> (the migration shim the
+///         issue sketch allows) for call sites the inventory extraction has not
+///         converted yet — the catalogue itself lives behind
+///         <see cref="IUiStrings" />, a DI singleton in the composition root,
+///         substitutable in tests with a pinned locale instead of env/culture
+///         mutation. <see cref="ResolveLocale" /> stays pure here.
 ///     </para>
 /// </remarks>
 public static class UiStrings
@@ -68,21 +76,55 @@ public static class UiStrings
         "Cli_NoSessions",
     ];
 
-    // The base name derives from this type (namespace + name), which is what the
-    // SDK embeds the .resx pair under. A string literal drifted once
-    // (MissingManifestResourceException in CI); typeof() cannot.
-    private static readonly ResourceManager Manager = new(typeof(UiStrings));
-
-    private static readonly CultureInfo English = CultureInfo.GetCultureInfo("en");
-    private static readonly CultureInfo Russian = CultureInfo.GetCultureInfo("ru");
+    // Forwarder target (issue #1573): the shared default instance the migrated
+    // seams resolve through DI, minus the indirection. Stateless — two
+    // UiStringsCatalog instances disagree on nothing.
+    private static readonly UiStringsCatalog Default = new();
 
     /// <summary>Locale the UI renders in: <c>HARBOR_LOCALE</c>, else ambient, else <c>en</c>.</summary>
-    public static string CurrentLocale =>
-        ResolveLocale(Environment.GetEnvironmentVariable(EnvVar));
+    /// <remarks>
+    ///     Issue #1573 forwarder: resolves through the shared catalogue
+    ///     instance; new concrete call sites should resolve
+    ///     <see cref="ILocaleService" /> from the host instead.
+    /// </remarks>
+    public static string CurrentLocale => Default.CurrentLocale;
+
+    /// <summary>
+    ///     Looks up <paramref name="key" /> in the current locale
+    ///     (<see cref="CurrentLocale" />), falling back to <c>en</c>.
+    /// </summary>
+    /// <remarks>
+    ///     Issue #1573 forwarder: the same lookup on the injectable
+    ///     <see cref="IUiStrings" />, which the composition root registers as a
+    ///     singleton. Kept until the inventory migration converts every call
+    ///     site; new code should depend on the interface.
+    /// </remarks>
+    public static string Get(string key) => Default.Get(key);
+
+    /// <summary>
+    ///     Looks up <paramref name="key" /> in <paramref name="locale" />, falling back
+    ///     to <c>en</c>. A key missing from the requested satellite renders its
+    ///     <c>en</c> text; a key in no catalogue at all comes back as itself because
+    ///     there is no <c>en</c> text to render.
+    /// </summary>
+    /// <remarks>Issue #1573 forwarder, as <see cref="Get(string)" />.</remarks>
+    public static string Get(string key, string locale) => Default.Get(key, locale);
+
+    /// <summary>
+    ///     Enumerates the neutral (<c>en</c>) entries. Audit seam for the
+    ///     <c>Keys</c> drift guard; production lookups go through <see cref="Get(string)" />.
+    ///     Reads the <see cref="CultureInfo.InvariantCulture" /> set: the neutral
+    ///     resources are the invariant set, not an <c>en</c> satellite (none ships).
+    /// </summary>
+    /// <remarks>Issue #1573 forwarder over the shared catalogue instance.</remarks>
+    public static IReadOnlyDictionary<string, string> GetEnglishEntries() => Default.GetEnglishEntries();
 
     /// <summary>
     ///     Pure locale resolution behind <see cref="CurrentLocale" />, kept separate so
     ///     tests stay hermetic (no env mutation, no ambient-culture dependence).
+    ///     Issue #1573 pulled the <c>HARBOR_LOCALE</c>/<see cref="CultureInfo.CurrentUICulture" />
+    ///     reads out of the lookup into <see cref="UiStringsCatalog" />; this pure
+    ///     half is unchanged.
     /// </summary>
     /// <param name="envValue">Value of <c>HARBOR_LOCALE</c>; <see langword="null" /> when unset.</param>
     /// <param name="uiCulture">Ambient UI culture; defaults to <see cref="CultureInfo.CurrentUICulture" />.</param>
@@ -97,61 +139,7 @@ public static class UiStrings
         return Normalize(tag) ?? DefaultLocale;
     }
 
-    /// <summary>
-    ///     Looks up <paramref name="key" /> in the current locale
-    ///     (<see cref="CurrentLocale" />), falling back to <c>en</c>.
-    /// </summary>
-    public static string Get(string key) => Get(key, CurrentLocale);
-
-    /// <summary>
-    ///     Looks up <paramref name="key" /> in <paramref name="locale" />, falling back
-    ///     to <c>en</c>. A key missing from the requested satellite renders its
-    ///     <c>en</c> text; a key in no catalogue at all comes back as itself because
-    ///     there is no <c>en</c> text to render.
-    /// </summary>
-    public static string Get(string key, string locale)
-    {
-        Harbor.Abstractions.Extensions.Ensure.NotBlank(key);
-        string tag = Normalize(locale) ?? DefaultLocale;
-        if (!tag.Equals(DefaultLocale, StringComparison.Ordinal))
-        {
-            string? translated = Manager.GetString(key, CultureFor(tag));
-            if (translated is not null)
-            {
-                return translated;
-            }
-        }
-
-        return Manager.GetString(key, English) ?? key;
-    }
-
-    /// <summary>
-    ///     Enumerates the neutral (<c>en</c>) entries. Audit seam for the
-    ///     <c>Keys</c> drift guard; production lookups go through <see cref="Get(string)" />.
-    ///     Reads the <see cref="CultureInfo.InvariantCulture" /> set: the neutral
-    ///     resources are the invariant set, not an <c>en</c> satellite (none ships).
-    /// </summary>
-    public static IReadOnlyDictionary<string, string> GetEnglishEntries()
-    {
-        ResourceSet? set = Manager.GetResourceSet(CultureInfo.InvariantCulture, createIfNotExists: true, tryParents: false);
-        var entries = new Dictionary<string, string>(StringComparer.Ordinal);
-        if (set is null)
-        {
-            return entries;
-        }
-
-        foreach (System.Collections.DictionaryEntry entry in set)
-        {
-            if (entry.Key is string name && entry.Value is string value)
-            {
-                entries[name] = value;
-            }
-        }
-
-        return entries;
-    }
-
-    private static string? Normalize(string? value)
+    internal static string? Normalize(string? value)
     {
         if (string.IsNullOrWhiteSpace(value))
         {
@@ -168,10 +156,4 @@ public static class UiStrings
         tag = tag.ToLowerInvariant();
         return SupportedLocales.Contains(tag, StringComparer.Ordinal) ? tag : null;
     }
-
-    private static CultureInfo CultureFor(string tag) => tag switch
-    {
-        "ru" => Russian,
-        _ => English,
-    };
 }
