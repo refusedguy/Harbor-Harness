@@ -1,6 +1,7 @@
 using System.Buffers;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Permissions;
 using Harbor.Abstractions.Tools;
@@ -24,12 +25,14 @@ internal sealed class McpStdioServer
     /// <summary>
     /// Frozen empty-JSON-object element for argument-less <c>tools/call</c>
     /// invocations — same convention as <c>AgentLoop.EmptyMalformedArgsElement</c>:
-    /// the backing <see cref="JsonDocument"/> is never disposed
-    /// (process-lifetime state), so the element stays valid; concurrent reads
-    /// are safe because parsed JSON is immutable. Avoids a per-call
+    /// process-lifetime state backed by the source-generated
+    /// <see cref="JsonElement"/> info, so the element is self-contained
+    /// (no undisposed document is kept alive) and concurrent reads stay
+    /// safe because parsed JSON is immutable. Avoids a per-call
     /// <c>Parse("{}") + Clone()</c> (#180).
     /// </summary>
-    private static readonly JsonElement EmptyArgs = JsonDocument.Parse("{}").RootElement;
+    private static readonly JsonElement EmptyArgs =
+        JsonSerializer.Deserialize("{}", McpStdioServerJsonContext.Default.JsonElement);
 
     private readonly McpPluginLoadHost _loadHost;
     private readonly ILogger<McpStdioServer> _logger;
@@ -91,8 +94,11 @@ internal sealed class McpStdioServer
                 return null;
         }
 
-        using var doc = JsonDocument.Parse(line);
-        var root = doc.RootElement;
+        // Same DOM as JsonDocument.Parse, but through the source-generated
+        // JsonElement info (PERF-002): the element is self-contained, so the
+        // frame no longer pins a document that had to be disposed. Malformed
+        // frames still throw JsonException — RunAsync logs them as before.
+        JsonElement root = JsonSerializer.Deserialize(line, McpStdioServerJsonContext.Default.JsonElement);
         if (!root.TryGetProperty("method", out var methodEl) || methodEl.ValueKind != JsonValueKind.String)
             return null;
 
@@ -360,4 +366,14 @@ internal static partial class McpStdioServerLog
 
     [LoggerMessage(EventId = 2, Level = LogLevel.Error, Message = "Tool '{Tool}' threw")]
     public static partial void ToolThrew(ILogger logger, Exception ex, string tool);
+}
+
+/// <summary>
+///     Source-generated JSON metadata for the stdio MCP envelope path (AOT-safe,
+///     PERF-002): raw <see cref="JsonElement"/> frames carry no typed DTOs, so
+///     the context exists purely to make envelope parsing reflection-free.
+/// </summary>
+[JsonSerializable(typeof(JsonElement))]
+internal sealed partial class McpStdioServerJsonContext : JsonSerializerContext
+{
 }
