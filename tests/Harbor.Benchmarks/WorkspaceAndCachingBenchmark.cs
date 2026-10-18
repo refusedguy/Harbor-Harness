@@ -157,8 +157,10 @@ public class WorkspaceContextSourceBenchmark
 ///          <item><c>Operation:</c> one <c>CachingSystemPromptBuilder.BuildAsync</c> that hits
 ///          the cache, or one that misses on a freshly minted context.</item>
 ///          <item><c>Payload:</c> <c>ToolCount</c> (4 / 16) stub tool descriptors plus two
-///          context files and two skills, all sharing one pre-built <c>JsonDocument</c> so the
-///          static schema-text cache stays at one entry.</item>
+///          context files and two skills, all sharing one pre-built
+///          <c>JsonDocument</c> so the schema cost measured is the real one — the
+///          schema is hashed in place per turn (#1532 removed the per-document
+///          raw-text cache whose reference keys could never hit).</item>
 ///          <item><c>StateReset:</c> per iteration — <c>ResetBuilder</c>
 ///          (<c>[IterationSetup]</c>) drops the previous cache dictionary and rebuilds the hit
 ///          context, then re-warms the hit key. Without it the miss row's unique keys would
@@ -170,9 +172,9 @@ public class WorkspaceContextSourceBenchmark
 ///          is re-warmed inside the iteration.</item>
 ///          <item><c>AwaitSemantics:</c> every row awaits <c>BuildAsync</c>; on these contexts
 ///          it completes synchronously.</item>
-///          <item><c>AllocAttribution:</c> the key computation (a 512-char
-///          <c>StringBuilder</c> + SHA-256) dominates the hit row; the miss row adds the
-///          assembled prompt.</item>
+///          <item><c>AllocAttribution:</c> the key computation (one
+///          <c>IncrementalHash</c> pass streamed over the field spans, per #1532) dominates
+///          the hit row; the miss row adds the assembled prompt.</item>
 /// </list>
 [MemoryDiagnoser]
 [SimpleJob(warmupCount: 3, iterationCount: 5)]
