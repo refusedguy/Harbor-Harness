@@ -6,6 +6,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+### #1587 — Decorator-шов механики лимитов вывода (Read/Bash/Grep/WebFetch/Tree)
+
+**Один шов на механику усечения вместо N переизобретений: единый кап + единый маркер.**
+
+- `ToolOutputLimit` + `OutputLimitToolDecorator` в `Harbor.Tools.Builtin/Tools/OutputLimit/` — head-keep/cut с унифицированной заметкой на точке генерации (`Apply`) и `TruncationNote(limit, unit, hint?)` для тулов, объявляющих свои лимиты (линии/запись/match-count — tool semantics; ресурсные границы и arg-контракты остаются в тулах). Декоратор навешен на пять тулов из issue в `ToolsCatalog.CreateToolRegistry`; `DecoratorDefaultCap = 200_000` выше per-tool капов (bash hard-cut 50k, read 100k), поэтому два слоя композиционные, а смена глобальной политики (напр. единый бюджет на turn) правит один файл.
+- Тексты примечаний мигрированы на шов: Read (строки+chars), WebFetch (chars), Tree (entries), Bash hard-cut (chars — `[output truncated to 50000 chars]` → `… truncated at 50000 chars`); per-stream кап и warning-лог Bash не тронуты (#1651, вербатим); Grep-пагинация (maxResults/ранний stop) осталась search-механикой, не текст-усечением. `ToolResultContextTrim` в конвертере — отдельный downstream-слой, продолжает работать.
+
 ### #46 S7 — ddmin shrink contract for UI-sequence failures (#424)
 
 **Shrinking a flaky UI sequence is now a bounded mechanical step: fixed cancel-approve-commit list by default, opt-in seeded generator, determinism gate, 50-check / 30-second budgets.**
