@@ -39,13 +39,16 @@ namespace Harbor.Application.Git;
 public static class WorktreePorcelainParser
 {
     /// <summary>
-    ///     One porcelain key's handler. <see cref="Prefix" /> is what the line
-    ///     matched against; <see cref="LineIsKey" /> selects whole-line equality
-    ///     over StartsWith (for keys with no payload, like <c>bare</c>);
-    ///     <see cref="StartsRecord" /> declares that the key begins a new
-    ///     record, so the previous one flushes first — on <c>worktree </c>,
-    ///     and only there, the parser emits and resets before dispatching.
+    ///     One porcelain key's handler. <see cref="LineIsKey" /> selects
+    ///     whole-line equality over StartsWith (for keys with no payload, like
+    ///     <c>bare</c>); <see cref="StartsRecord" /> declares that the key
+    ///     begins a new record, so the previous one flushes first — on
+    ///     <c>worktree </c>, and only there, the parser emits and resets before
+    ///     dispatching.
     /// </summary>
+    /// <param name="Prefix">What the line is matched against.</param>
+    /// <param name="LineIsKey">Match the whole line, not just the prefix.</param>
+    /// <param name="StartsRecord">Flush the record being built before handling.</param>
     /// <param name="Handle">
     ///     Writes the line's payload into the record being built. The payload is
     ///     the rest of the line after the key (empty for whole-line keys); it is
