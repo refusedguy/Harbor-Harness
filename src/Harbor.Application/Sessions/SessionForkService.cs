@@ -137,7 +137,8 @@ public sealed class SessionForkService
         int copied = 0;
         for (int i = 0; i < count; i++)
         {
-            AgentMessage copy = msgsRes.Value[i] with { SessionId = child.Id };
+            // #1571: the copy protocol lives on the message (Prototype), not here.
+            AgentMessage copy = msgsRes.Value[i].CloneForSession(child.Id);
             Result appended = await store.AppendMessageAsync(child.Id, copy, ct).ConfigureAwait(false);
             if (appended.IsFailure)
             {

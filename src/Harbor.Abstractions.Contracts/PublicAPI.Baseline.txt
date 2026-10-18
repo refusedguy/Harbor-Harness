@@ -80,6 +80,7 @@ Harbor.Abstractions.Extensions.StringTruncation :: public static class StringTru
 Harbor.Abstractions.Extensions.StringTruncation :: public static string Truncate(this string? text, int max)
 Harbor.Abstractions.Extensions.StringTruncation :: public static string Truncate(this string? text, int max, string suffix)
 Harbor.Abstractions.Extensions.StringTruncation :: public static string TruncateWithDropCount(this string? text, int max, string separator = "\n", string? detail = null)
+Harbor.Abstractions.Models.AgentMessage :: public AgentMessage CloneForSession(string sessionId)
 Harbor.Abstractions.Models.AgentMessage :: public abstract partial record AgentMessage(string Id, string SessionId, DateTimeOffset CreatedAt, string? ParentId = null)
 Harbor.Abstractions.Models.AgentMessage :: public abstract string Role
 Harbor.Abstractions.Models.AgentMessageVisitor :: protected virtual TResult VisitUnknown(AgentMessage message)
