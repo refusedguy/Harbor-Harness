@@ -12,8 +12,7 @@ internal sealed class EvalProfile
 
     public static EvalProfile Load(string path, string repoRoot)
     {
-        var opts = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
-        var p = JsonSerializer.Deserialize<EvalProfile>(File.ReadAllText(path), opts)
+        var p = JsonSerializer.Deserialize(File.ReadAllText(path), EvalContractJsonContext.Default.EvalProfile)
             ?? throw new InvalidOperationException($"Invalid profile {path}.");
         p.RepoRoot = repoRoot;
         return p;
