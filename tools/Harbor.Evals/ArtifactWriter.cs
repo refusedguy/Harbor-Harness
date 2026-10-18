@@ -20,7 +20,7 @@ internal static class ArtifactWriter
     // SummaryBuilder.Resummarize reads attempt.json/verdict.json back by key.
     public sealed record ParserDiagnostics(List<string> unknown_lines);
     public sealed record ManifestDiff(string[] added, string[] removed, string[] changed);
-    public sealed record VerificationReport(bool ran, int exit, List<CheckResult> checks);
+    public sealed record VerificationReport(bool ran, int exit, List<VerifierRunner.CheckResult> checks);
     public sealed record AttemptRecord(
         string batch,
         string task,
