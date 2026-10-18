@@ -47,6 +47,10 @@ internal static class CoreModule
                     .CreateLogger<Harbor.Application.Providers.ProviderHealthCheck>()));
         services.AddSingleton<ITokenTracker, TokenTracker>();
         services.AddSingleton<ISystemPromptBuilder>(sp => new SystemPromptBuilder(sp.GetRequiredService<ILogger<SystemPromptBuilder>>()));
+        // #1523: the workspace snapshot cache is instance state behind this
+        // interface; the static facade (TurnRunner's pre-DI path) forwards to
+        // the same shared Instance, so both consumers read one cache.
+        services.AddSingleton<IWorkspaceContextSource>(_ => WorkspaceContextSource.Instance);
         services.AddSingleton<ISkillProvider, SkillProvider>();
         services.AddSingleton<MessageConverter>();
         services.AddSingleton<IRetryPolicy, RetryPolicy>();
