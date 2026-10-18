@@ -13,6 +13,11 @@
          bind the extracted assembly directly. TryParseHex is internal, so the
          InternalsVisibleTo row in the Syntax csproj points at this project. -->
     <ProjectReference Include="..\..\src\Harbor.Tui.CellForge.Syntax\Harbor.Tui.CellForge.Syntax.csproj"/>
+    <!-- #1618: the ListPromptEngine / FormPromptEngine tests stay here (the
+         goldens live in this project) and bind the extracted Prompts
+         assembly directly — the public surface needs no InternalsVisibleTo
+         row, so the Prompts csproj grants none. -->
+    <ProjectReference Include="..\..\src\Harbor.Tui.CellForge.Prompts\Harbor.Tui.CellForge.Prompts.csproj"/>
     <!-- #462: PaletteCatalogTests derives its expectations from SlashCommandCatalog. -->
     <ProjectReference Include="..\..\src\Harbor.Ui.Framework.Abstractions\Harbor.Ui.Framework.Abstractions.csproj"/>
     <ProjectReference Include="..\..\src\Harbor.CodeGen\Harbor.CodeGen.csproj"/>

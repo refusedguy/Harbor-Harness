@@ -68,6 +68,9 @@
     <!-- #1617: the matrix-coverage rule loads every Presentation row's assembly;
          the Syntax sibling is one. -->
     <ProjectReference Include="..\..\src\Harbor.Tui.CellForge.Syntax\Harbor.Tui.CellForge.Syntax.csproj"/>
+    <!-- #1618: same rule — the Prompts sibling (ListPromptEngine /
+         FormPromptEngine extraction) is a Presentation row too. -->
+    <ProjectReference Include="..\..\src\Harbor.Tui.CellForge.Prompts\Harbor.Tui.CellForge.Prompts.csproj"/>
 
     <!-- ROP-D Z2: every remaining main-solution src project joins enforcement
          (previously ~28 projects had zero layer rules). Harbor.CodeGen is a
