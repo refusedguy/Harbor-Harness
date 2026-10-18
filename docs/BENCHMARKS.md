@@ -994,6 +994,41 @@ The BDN absolute columns live in the `benchmark` workflow (`CachingPromptBenchma
 dominated by the `ComputeKey` pass either way, so the PR-marginal claim moves
 with the ratio above, not with those absolute numbers.
 
+### ProjectHistory first-occurrence map (#1535) — **RELATIVE**, CI merge gate
+
+`Harbor.Ui.Framework.Tests.ProjectHistoryScalingGates`, in the `test (ui)` merge-gate shard.
+
+Same relative convention as #410: N against 2N inside one run, no absolute
+budgets. The slice: `DefaultUiProjector.ProjectHistory` rebuilt a
+`Dictionary<ChatLine,int>` over the WHOLE transcript on every history change —
+O(history) dictionary + N hash inserts per fold, per frame batch — even for a
+pure append (the `MessageEnd` fold), whose unchanged prefix the map already
+covered. The map is now cached against `cache.Lines` (the same key the
+common-prefix reuse is keyed on) and extended over only the appended lines;
+the full rebuild stays for a changed prefix, where entries beyond the prefix
+would answer stale first-occurrence indices. First-equal-wins `BlockId`
+semantics unchanged — pinned against a reference mapper through appends, the
+tool-call key, and a `HydrateSession` rewrite in the same file.
+
+The window is measured APPENDS at approximately-fixed transcript size, seeded
+unmeasured — deliberately not a growth-from-empty drive: the common-prefix
+scan and the per-fold builders are O(n) per change too and are OUT of this
+slice (#97 slices them separately), so a growth drive would show ×4 to the
+correct tree and read the #939 shape, a bound that fails on right numbers. What
+the gate guards is the regression this slice would take worst: a per-change
+map rebuild scaling with the transcript on every append.
+
+| Test | Relative claim | Gate | Measured (run 39123327931, PR #1685) |
+|---|---|---|---|
+| `AppendOnly_Cost_GrowsLinearly_InTranscriptLength` | time over 128 append+`Project` pairs at ~512 vs ~1024 transcript lines — seed unmeasured, append sieve warmed, best-of-5 | ratio ≤ 3.0 (linear ≈ 2.0; O(N²) ≈ 4.0) | **1.82** (6.482 → 11.814 ms) |
+| `AppendOnly_Cost_GrowsLinearly_InTranscriptLength` | allocations over the same windows, thread-local `GC.GetAllocatedBytesForCurrentThread` | ratio ≤ 3.0 | **1.84** (6688.2 → 12318.3 KiB) |
+
+Per-change before/after shape (structural, not re-measured on the runner): the
+per-append cost carried a fresh O(history) dictionary on the pre-slice tree
+and carries none after — the O(1)-per-append extension replaced the
+O(history)-per-append rebuild, which is also what keeps the measured ratio
+near linear at ×1.82/×1.84.
+
 ### ConsoleEx cell-diff core (`DiffEngineBenchmark`, 2026-08-26, Release)
 
 Frame-budget targets from `specs/07-tui.md` (< 16 ms/frame) and celldiff §7 — all met with an order of magnitude of headroom. Flush = real DiffEngine scan + AnsiWriter SGR/cursor encoding into a discarding backend (no tty I/O).
