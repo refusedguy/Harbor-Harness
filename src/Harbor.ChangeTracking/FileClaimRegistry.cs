@@ -5,7 +5,7 @@ using System.Globalization;
 using System.Text;
 using CSharpFunctionalExtensions;
 
-namespace Harbor.Application.Sessions;
+namespace Harbor.ChangeTracking;
 
 /// <summary>
 /// Cross-process advisory lock backed by an exclusive-create claim file

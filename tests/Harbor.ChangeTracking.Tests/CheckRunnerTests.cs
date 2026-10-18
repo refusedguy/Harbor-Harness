@@ -2,8 +2,9 @@ using System.Text.Json;
 using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Application.Sessions;
+using Harbor.ChangeTracking;
 
-namespace Harbor.Application.Tests;
+namespace Harbor.ChangeTracking.Tests;
 
 /// <summary>
 ///     S4 (#378): declared checks run against the isolated copy and record

@@ -1,6 +1,7 @@
 using Harbor.Application.Sessions;
+using Harbor.ChangeTracking;
 
-namespace Harbor.Application.Tests;
+namespace Harbor.ChangeTracking.Tests;
 
 /// <summary>
 ///     S7 slice 1 (#385): the reject router and the out-of-reach inventory.
@@ -219,7 +220,7 @@ public class RunRejectTests
         string? dir = AppContext.BaseDirectory;
         while (dir is not null)
         {
-            string candidate = Path.Combine(dir, "src", "Harbor.Application", "Sessions", "RunReject.cs");
+            string candidate = Path.Combine(dir, "src", "Harbor.ChangeTracking", "RunReject.cs");
             if (File.Exists(candidate))
                 return candidate;
             dir = Path.GetDirectoryName(dir);

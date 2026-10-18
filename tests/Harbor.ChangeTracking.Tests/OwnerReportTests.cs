@@ -3,9 +3,10 @@ using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Application.Sessions;
+using Harbor.ChangeTracking;
 using TUnit.Assertions;
 
-namespace Harbor.Application.Tests;
+namespace Harbor.ChangeTracking.Tests;
 
 /// <summary>
 ///     S8 (#392, spec 17 §6): the owner report renders five sections in fixed

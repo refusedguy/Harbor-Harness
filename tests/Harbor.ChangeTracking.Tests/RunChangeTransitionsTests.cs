@@ -1,7 +1,8 @@
 using CSharpFunctionalExtensions;
 using Harbor.Application.Sessions;
+using Harbor.ChangeTracking;
 
-namespace Harbor.Application.Tests;
+namespace Harbor.ChangeTracking.Tests;
 
 /// <summary>
 ///     S9 slice 1 (#397): the run lifecycle is one explicit state machine.

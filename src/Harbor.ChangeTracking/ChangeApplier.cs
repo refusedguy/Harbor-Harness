@@ -1,7 +1,7 @@
 using System.Diagnostics;
 using System.Text;
 
-namespace Harbor.Application.Sessions;
+namespace Harbor.ChangeTracking;
 
 /// <summary>
 ///     Outcome of one <c>harbor run accept</c> attempt (epic #42, slice S6,

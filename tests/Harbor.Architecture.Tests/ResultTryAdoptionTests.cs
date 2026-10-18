@@ -27,7 +27,9 @@
 //
 //   1. `catch (Exception ex) when (ex is IOException or ...)` — narrowed by an
 //      exception filter. Live examples: ImageAttachmentReader.cs:73, :96,
-//      FileClaimRegistry.cs:149, WorkspaceInspector.cs:142, SkillUpdater.cs:273.
+//      FileClaimRegistry.cs:149 (moved verbatim to Harbor.ChangeTracking by
+//      #1616 — content, line numbering untouched), WorkspaceInspector.cs:142,
+//      SkillUpdater.cs:273.
 //      Converting these would swallow exceptions the author chose to let escape.
 //   2. `catch (IOException)` / `catch (JsonException)` — narrowed by type.
 //      Live examples: DaemonBindPolicy.cs:233,253; HostsCatalog.cs:87,92;

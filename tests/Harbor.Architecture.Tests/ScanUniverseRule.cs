@@ -109,6 +109,10 @@
 //     #1055s3: +1 (tests=32, 54 total) — the new Harbor.Plugins.Host.Tests
 //     declares ProjectReferences into src/. The red-run record above stands;
 //     this delta is derived from the diff.
+//     #1616: +1 (tests=33, 55 total) — the extracted Harbor.ChangeTracking
+//     pipeline gets its own Harbor.ChangeTracking.Tests, which references
+//     Harbor.ChangeTracking (src/) and, like Harbor.Application.Tests, also
+//     Harbor.Tools.Builtin for the materializer's bash/write checks.
 //
 // Both baselines above are transcribed verbatim from that log rather than
 // recomputed. The three non-vacuity assertions and the positive control passed
@@ -367,7 +371,7 @@ public sealed class ScanUniverseRule
     ///     referrers of the assembly it was grading.
     /// </remarks>
     private static readonly string[] MeasuredBlindTrees =
-        ["apps=2", "contrib=14", "samples=5", "tests=32", "tools=1"];
+        ["apps=2", "contrib=14", "samples=5", "tests=33", "tools=1"];
 
     /// <summary>What the two walks found, once.</summary>
     private sealed record UniverseReport(

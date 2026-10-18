@@ -1,6 +1,7 @@
 using Harbor.Application.Sessions;
+using Harbor.ChangeTracking;
 
-namespace Harbor.Application.Tests;
+namespace Harbor.ChangeTracking.Tests;
 
 /// <summary>
 ///     S5 slice 1 (#379): the verification report is derived from recorded
@@ -287,7 +288,7 @@ public class ChangeReportTests
         // in this file. Scoped to this file on purpose: the tree still has
         // cold-path builders (TableBlock, OnboardingFlow, ...), each pooled
         // on its own issue slice rather than under one absolute ban.
-        string path = FindRepoFile(Path.Combine("src", "Harbor.Application", "Sessions", "ChangeReport.cs"));
+        string path = FindRepoFile(Path.Combine("src", "Harbor.ChangeTracking", "ChangeReport.cs"));
         string source = await File.ReadAllTextAsync(path);
         await Assert.That(source.Contains("StringBuilderPool.Rent")).IsTrue();
         await Assert.That(source.Contains("new StringBuilder")).IsFalse();

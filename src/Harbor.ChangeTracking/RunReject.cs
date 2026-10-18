@@ -1,4 +1,4 @@
-namespace Harbor.Application.Sessions;
+namespace Harbor.ChangeTracking;
 
 /// <summary>
 ///     Outcome of one <c>harbor run reject</c> decision (epic #42, slice S7,

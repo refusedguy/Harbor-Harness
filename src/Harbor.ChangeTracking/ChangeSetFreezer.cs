@@ -1,7 +1,7 @@
 using System.Globalization;
 using Harbor.Abstractions.Extensions;
 
-namespace Harbor.Application.Sessions;
+namespace Harbor.ChangeTracking;
 
 /// <summary>
 ///     One path in the frozen change set (epic #42, slice S3, #377): the
