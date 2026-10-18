@@ -1,3 +1,4 @@
+using System.Collections.Frozen;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Text;
@@ -19,6 +20,48 @@ public enum McpServerState : byte
 
 /// <summary>One MCP server row of the sidebar.</summary>
 public sealed record McpServerStatus(string Name, McpServerState State);
+
+/// <summary>
+///     What one MCP server row paints — its glyph and colour, owned by the
+///     state (State pattern, #1550). <c>PaintMcp</c> used to carry the
+///     mapping as an inline switch over <see cref="McpServerState" />:
+///     painting behaviour derived from internal state, every pixel pair
+///     living as an arm of the paint method — and each new status meaning a
+///     fresh edit to the painter. Now each state owns one instance of this
+///     record and the painter asks the state for its row. Adding a status is
+///     one enum member plus one table entry below, PaintMcp untouched;
+///     pixels are identical to the switch it replaced.
+/// </summary>
+/// <remarks>
+///     The three instances are the pixels; the frozen table is the only
+///     state → visual declaration, built once — no per-lookup
+///     allocation on the paint hot path. An out-of-range byte throws (fail
+///     fast) instead of silently painting as some other state; the byte is
+///     only ever produced inside this file, so the throw fires on corrupted
+///     data only.
+/// </remarks>
+public sealed record McpServerStateVisual(char Glyph, PackedColor Color)
+{
+    /// <summary>Established session: filled dot, success colour.</summary>
+    public static readonly McpServerStateVisual Connected = new('●', ChatPalette.Success);
+
+    /// <summary>Handshake in flight: half-filled dot, warning colour.</summary>
+    public static readonly McpServerStateVisual Connecting = new('◐', ChatPalette.Warning);
+
+    /// <summary>Unreachable or failed: filled dot, error colour.</summary>
+    public static readonly McpServerStateVisual Error = new('●', ChatPalette.Error);
+
+    private static readonly FrozenDictionary<McpServerState, McpServerStateVisual> ByState =
+        new Dictionary<McpServerState, McpServerStateVisual>(3)
+        {
+            [McpServerState.Connected] = Connected,
+            [McpServerState.Connecting] = Connecting,
+            [McpServerState.Error] = Error,
+        }.ToFrozenDictionary();
+
+    /// <summary>The visual this state paints with. An undefined byte throws.</summary>
+    public static McpServerStateVisual Of(McpServerState state) => ByState[state];
+}
 
 /// <summary>
 /// Immutable sidebar snapshot — session info, token counter, model, modified
@@ -92,9 +135,6 @@ public sealed record SideBarSlot(
 public static class SideBarView
 {
     private const char SectionDot = '●';
-    private const char ServerConnected = '●';
-    private const char ServerConnecting = '◐';
-    private const char ServerError = '●';
 
     /// <summary>Paints the sidebar into <paramref name="rect" />. Tiny rects are skipped.</summary>
     public static void Paint(ScreenBuffer buffer, Rect rect, SideBarState state, IReadOnlyList<SideBarSlot>? extraSlots = null, IReadOnlyList<SessionRowViewModel>? sessions = null)
@@ -297,16 +337,13 @@ public static class SideBarView
                 for (int i = 0; i < serverRows; i++)
                 {
                     var server = servers[i];
-                    (char glyph, PackedColor color) = server.State switch
-                    {
-                        McpServerState.Connected => (ServerConnected, ChatPalette.Success),
-                        McpServerState.Connecting => (ServerConnecting, ChatPalette.Warning),
-                        _ => (ServerError, ChatPalette.Error),
-                    };
-                    var style = new CellStyle(color);
+                    // State pattern (#1550): the state owns its glyph + colour —
+                    // the painter asks, it never branches.
+                    var visual = McpServerStateVisual.Of(server.State);
+                    var style = new CellStyle(visual.Color);
                     if (Y < rect.Bottom - 1)
                     {
-                        glyphBuf[0] = glyph;
+                        glyphBuf[0] = visual.Glyph;
                         glyphBuf[1] = ' ';
                         buffer.SetText(labelX + 1, Y, glyphBuf, style);
                         ValueLine(buffer, rect, labelX + 3, Y, innerW - 3, server.Name.AsSpan(), style);
