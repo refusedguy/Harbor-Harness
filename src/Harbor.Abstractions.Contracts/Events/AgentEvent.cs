@@ -92,7 +92,7 @@ public sealed record ToolExecutionStartEvent(
         new(
             toolCallId,
             toolName,
-            args.ValueKind == JsonValueKind.Undefined ? args : args.Clone(),
+            OwnedJson.CloneOwned(args),
             glyph);
 }
 
@@ -280,7 +280,7 @@ public sealed record ToolCallEndEvent(string Id, string ToolName, JsonElement Ar
     ///     <see cref="JsonDocument" /> lifetime (#87).
     /// </summary>
     public static ToolCallEndEvent Create(string id, string toolName, JsonElement args) =>
-        new(id, toolName, args.ValueKind == JsonValueKind.Undefined ? args : args.Clone());
+        new(id, toolName, OwnedJson.CloneOwned(args));
 }
 
 /// <summary>
