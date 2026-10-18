@@ -308,11 +308,11 @@ public static class WorkspaceContextSource
                     return null;
                 }
 
-                string trimmed = line.TrimStart();
-                if (trimmed.StartsWith("name:", StringComparison.OrdinalIgnoreCase))
+                // Issue #1580: the trim → case-insensitive prefix → trim
+                // → empty→null chain lives in FrontMatter.
+                if (FrontMatter.GetFrontMatterField(line, "name") is { } name)
                 {
-                    string name = trimmed["name:".Length..].Trim();
-                    return name.Length == 0 ? null : name;
+                    return name;
                 }
             }
         }
@@ -352,10 +352,11 @@ public static class WorkspaceContextSource
                         continue;
                     }
 
-                    string trimmed = line.TrimStart();
-                    if (trimmed.StartsWith("description:", StringComparison.OrdinalIgnoreCase))
+                    if (FrontMatter.GetFrontMatterField(line, "description") is { } description)
                     {
-                        return Cap(trimmed["description:".Length..].Trim());
+                        // Cap stays here: the helper returns the raw field, the
+                        // prompt-lean cap is a description-call-site policy.
+                        return Cap(description);
                     }
 
                     continue;

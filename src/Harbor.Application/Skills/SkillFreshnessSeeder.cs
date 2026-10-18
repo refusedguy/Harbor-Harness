@@ -193,11 +193,11 @@ public static class SkillFreshnessSeeder
                     return null;
                 }
 
-                string trimmed = text.TrimStart();
-                if (trimmed.StartsWith("name:", StringComparison.OrdinalIgnoreCase))
+                // Issue #1580: same helper as WorkspaceContextSource — same
+                // in-assembly parse, discovery shapes stay mirrored.
+                if (FrontMatter.GetFrontMatterField(text, "name") is { } name)
                 {
-                    string name = trimmed["name:".Length..].Trim();
-                    return name.Length == 0 ? null : name;
+                    return name;
                 }
             }
         }
