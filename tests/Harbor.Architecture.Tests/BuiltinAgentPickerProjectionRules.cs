@@ -9,7 +9,7 @@
 //
 //   1. src/Harbor.Abstractions/Agents/AgentDefinition.cs              declaration
 //   2. src/Harbor.Hosting/Modules/ToolsCatalog.cs:30-32                registration
-//   3. src/Harbor.Application/Configuration/OnboardingWizard.cs:376-390   the menu
+//   3. src/Harbor.Onboarding/Onboarding/OnboardingWizard.cs:376-390     the menu
 //   4. apps/Harbor.App.Cli/Commands/AgentCommand.cs:63                 /agent's own text
 //   5. src/Harbor.Application/Configuration/HarborConfig.cs:108        doc comment
 //   6. src/Harbor.Desktop.Abstractions/Configuration/CommonConfig.cs  doc comment
@@ -159,7 +159,7 @@ public sealed class BuiltinAgentPickerProjectionRules
     /// </summary>
     private static readonly string[] PickerFiles =
     [
-        "src/Harbor.Application/Configuration/OnboardingWizard.cs",
+        "src/Harbor.Onboarding/Onboarding/OnboardingWizard.cs",
         "apps/Harbor.App.Cli/Commands/AgentCommand.cs",
     ];
 

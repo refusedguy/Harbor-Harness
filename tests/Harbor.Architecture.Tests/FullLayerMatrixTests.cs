@@ -164,6 +164,9 @@ public class FullLayerMatrixTests
         "Harbor.Tui.NickConsoleEx",
         // Application
         "Harbor.Application", "Harbor.ChangeTracking",
+        // #1614: first-run wizard + setup-checklist detection, one-way leaf
+        // over Harbor.Application's configuration family (0 reverse edges).
+        "Harbor.Onboarding",
         "Harbor.Hooks", "Harbor.Permissions",
         "Harbor.Registries",
         "Harbor.Plugins.Abstractions",
@@ -546,6 +549,15 @@ public class FullLayerMatrixTests
         // (Application→Application is allowed by MatrixTable_RespectsLayerRules).
         ["Harbor.Permissions"] = new(Layer.Application,
             ["Harbor.Abstractions", "Harbor.Extensions"]),
+        // #1614: Harbor.Onboarding — Application-layer one-way leaf like Hooks, but
+        // with a real edge INTO Harbor.Application: the wizard binds AuthStore,
+        // IConfigStore, JsonConfigStore and ProviderPresets (the issue's
+        // "→Configuration" arrow). 0 reverse edges: nothing in src/ names the leaf
+        // except the composition root (Harbor.Hosting registers the wizard in
+        // CoreModule). The Contracts edge derives from Harbor.Abstractions
+        // (ProviderId/ModelRef) via ExpandAllowed.
+        ["Harbor.Onboarding"] = new(Layer.Application,
+            ["Harbor.Application", "Harbor.Abstractions"]),
         ["Harbor.Registries"] = new(Layer.Application, ["Harbor.Abstractions"]),
         ["Harbor.Plugins.Abstractions"] = new(Layer.Application, ["Harbor.Abstractions"]),
         // Runtime is the composition surface over the plugin machinery stack
@@ -618,7 +630,7 @@ public class FullLayerMatrixTests
             // Wires DI over the whole graph incl. contrib renderers — free tier.
             "Harbor.Abstractions", "Harbor.Abstractions.Contracts",
             "Harbor.Diagnostics.Abstractions", "Harbor.Telemetry.Core",
-            "Harbor.Application", "Harbor.Hooks", "Harbor.Permissions", "Harbor.Registries",
+            "Harbor.Application", "Harbor.Onboarding", "Harbor.Hooks", "Harbor.Permissions", "Harbor.Registries",
             "Harbor.Desktop.Abstractions",
             "Harbor.Terminal.Abstractions", "Harbor.Ui.Framework.State",
             // #667: FileTreeLoader, registered in TuiModule. First direct edge

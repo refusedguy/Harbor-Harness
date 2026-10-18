@@ -67,15 +67,19 @@ inner layer, never the other way around. The innermost layer (Domain/Abstraction
 ┌─────────────────────────────────────────────────────────────────┐
 │  APPLICATION (use cases, orchestration)                         │
 │  - Harbor.Application (AgentLoop, Sessions, Agents,             │
-│                        Configuration, Onboarding)               │
+│  - Harbor.Application (AgentLoop, Sessions, Agents,             │
+│                        Configuration)                           │
 │  - Harbor.Hooks (user-hook runner, #1613 extraction)           │
 │  - Harbor.Permissions (PermissionService, ApprovalCoordinator,  │
 │    path policies; seam IPermissionConfigStore over config.json) │
+│  - Harbor.Onboarding (first-run wizard + setup-checklist        │
+│    detection, #1614 one-way leaf → rides Configuration)         │
 │  - Harbor.Registries                                            │
 │  - Harbor.Plugins.Abstractions (the plugin contract surface)    │
 │  - contrib/scripting: Harbor.Scripting.* (ScriptHost, Bridge)   │
 │  Depends on: Domain ONLY (Harbor.Abstractions +                 │
-│              Harbor.Abstractions.Contracts)                     │
+│              Harbor.Abstractions.Contracts); Harbor.            │
+│              Onboarding rides Application too (#1614, 1-way)    │
 └─────────────────────────────────────────────────────────────────┘
                                   ▲
                                   │ implements

@@ -271,7 +271,7 @@ Moved platform-agnostic logic out of `Harbor.App.Avalonia` into `Harbor.Ui.Frame
   generated member pages is CI-proven by `.github/workflows/docs-site.yml` (#431 D4);
   XML-doc coverage gate landed (D3, 494 members / 97.0%). Still open: README link
   after the live URL (needs the first green Pages deploy).
-- [x] Per-project READMEs: **54/54 `src/` projects** have a README, enforced by
+- [x] Per-project READMEs: **55/55 `src/` projects** have a README, enforced by
   `ReadmeCoverageTests` in `tests/Harbor.Architecture.Tests/` (fails the Release
   build via the `HarborArchitectureGate` target). Measured 2026-09-28 on
   `de2358f` (#430): coverage was **48/54** before the slice — 6 projects had no
@@ -329,8 +329,8 @@ Moved platform-agnostic logic out of `Harbor.App.Avalonia` into `Harbor.Ui.Frame
 | Metric | Value |
 |---|---|
 | .NET SDK | 10.0.302 |
-| Source projects (`src/`) | 52 (+26 in `contrib/`) |
-| `src/` projects with a README | 52/52 (CI-enforced) |
+| Source projects (`src/`) | 55 (+26 in `contrib/`) |
+| `src/` projects with a README | 55/55 (CI-enforced) |
 | Test projects (`tests/`, csproj dirs) | 37 (incl. benchmarks + E2E harnesses) |
 | Unit tests passing | ~1350 (см. [PROJECT_STATUS.md](./PROJECT_STATUS.md)) |
 | E2E tests passing | 12 + CellForge PTY suite |

@@ -59,6 +59,8 @@ public class LayerDependencyTests
     internal static readonly string[] NonDomainHarborAssemblies =
     [
         "Harbor.Application",
+        // #1614: onboarding one-way leaf, Application-layer sibling like Hooks.
+        "Harbor.Onboarding",
         "Harbor.Hooks",
         "Harbor.Permissions",
         "Harbor.Registries",
@@ -80,6 +82,8 @@ public class LayerDependencyTests
     internal static readonly string[] NonDomainNonSelfHarborAssemblies =
     [
         "Harbor.Application",
+        // #1614: onboarding one-way leaf, Application-layer sibling like Hooks.
+        "Harbor.Onboarding",
         "Harbor.Hooks",
         "Harbor.Permissions",
         "Harbor.Registries",
