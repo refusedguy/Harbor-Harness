@@ -173,8 +173,9 @@ internal static class ToolsCatalog
         if (full && sessionStore is not null)
         {
             // #165: peer supervision. The store arrives as a deferred forwarder
-            // (built eagerly, attached once the container can build the real
-            // store) — same gap as DeferredSubAgentRunner above.
+            // whose Attach lives inside RegistryFacade.Compose (#1592) — the
+            // catalog only carries the seam, the two-phase assembly protocol
+            // is not this file's business any more.
             tb.AddTool(lf => new SessionReadTool(sessionStore, lf.CreateLogger<SessionReadTool>()));
             tb.AddTool(lf => new SessionSteerTool(sessionStore, lf.CreateLogger<SessionSteerTool>()));
         }

@@ -1,17 +1,11 @@
-using Harbor.Abstractions.Agents;
-using Harbor.Abstractions.Providers;
-using Harbor.Abstractions.Tools;
-using Harbor.Telemetry;
 #if HARBOR_WITH_PLUGINS
 using Harbor.Plugins.Hosting;
 #endif
-using Harbor.Ui.Framework.Panels;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
-// DI014/DI016 (Excubo): the registries are eager artifacts, so a temporary
-// provider is constructed deliberately to resolve logger factories for
-// registry construction (documented pattern).
+// DI014/DI016 (Excubo): the plugin reload services register factories that
+// resolve through the provider deliberately (documented pattern).
 #pragma warning disable DI014, DI016
 
 namespace Harbor.Hosting;
@@ -19,10 +13,13 @@ namespace Harbor.Hosting;
 internal static class RegistriesModule
 {
     /// <summary>
-    ///     Builds the eager registries (agents / mcp / tools / providers /
-    ///     panels), notes the plugin route (out-of-proc — the CLI registers
-    ///     nothing in-process), freezes, then publishes everything as
-    ///     singletons (di-design §3.5 order).
+    ///     Publishes the eager registries into the container through ONE
+    ///     facade step (#1592): <see cref="RegistryFacade.Compose" /> builds,
+    ///     wires, freezes and publishes agents / mcp / tools / providers /
+    ///     panels; the deferred forwarders are its implementation detail and
+    ///     never leave that method. What remains here is the plugin route
+    ///     (out-of-proc — the CLI registers nothing in-process, #1055s3),
+    ///     layered on top of the already-published graph (di-design §3.5 order).
     /// </summary>
     internal static IServiceCollection AddHarborRegistries(
         this IServiceCollection services,
@@ -30,87 +27,10 @@ internal static class RegistriesModule
     {
         RegistriesModuleLog.RegisteringAgentsToolsProviders(ctx.Logger);
 
-        var agentRegistry = ToolsCatalog.CreateAgentRegistry(ctx);
-
-        // #477: remote MCP transports are a registration seam. The resolver is
-        // built once from the builtins + whatever the host passed through
-        // HarborComposeOptions.McpTransports, handed to the registry (which
-        // both validates the config name and dispatches on it) and published
-        // into the container so plugins/hosts can enumerate the same set.
-        var mcpTransports = McpTransportResolver.Compose(ctx.Options.McpTransports);
-        foreach (IMcpTransportFactory mcpTransport in mcpTransports.Factories)
-            services.AddSingleton<IMcpTransportFactory>(mcpTransport);
-        services.AddSingleton(mcpTransports);
-        RegistriesModuleLog.McpTransportsRegistered(ctx.Logger, string.Join(", ", mcpTransports.SupportedNames));
-
-        var mcpRegistry = ToolsCatalog.CreateMcpRegistry(ctx, mcpTransports);
-        // Sub-agent runner: TaskTool is built EAGERLY here, but its real dependencies
-        // (ISessionStore — registered later in AddHarborStorage; IAgentLoop — DI-built)
-        // only exist inside the container. The deferred forwarder closes that gap: the
-        // tool holds it now, the real runner attaches on first resolution (F4-decouple).
-        var subAgents = new Harbor.Application.Agents.DeferredSubAgentRunner();
-        // #165: peer-supervision tools hold this forwarder until the container
-        // can build the real store (same eager-registry gap as subAgents).
-        var supervisedSessions = new Harbor.Tools.Builtin.DeferredSessionStore();
-        var backgroundTasks = new Harbor.Application.Agents.BackgroundTaskRegistry(
-            ctx.LoggerFactory.CreateLogger<Harbor.Application.Agents.BackgroundTaskRegistry>());
-        services.AddSingleton<Harbor.Abstractions.Agents.IBackgroundTaskRegistry>(backgroundTasks);
-        // LSP facade: one manager for the whole process — the `lsp` tool and the
-        // desktop editor share the same auto-spawned language servers + cache.
-        var lspService = new Harbor.Lsp.LspManager(
-            ctx.LoggerFactory.CreateLogger<Harbor.Lsp.LspManager>());
-        services.AddSingleton<Harbor.Abstractions.Lsp.ILspService>(lspService);
-        var toolRegistry = ToolsCatalog.CreateToolRegistry(ctx, mcpRegistry, agentRegistry, subAgents, backgroundTasks, lspService, supervisedSessions);
-        services.AddSingleton<Harbor.Abstractions.Agents.ISubAgentRunner>(sp =>
-        {
-            var store = sp.GetRequiredService<Harbor.Abstractions.Sessions.ISessionStore>();
-            var real = new Harbor.Application.Agents.SubAgentRunner(
-                store,
-                sp.GetRequiredService<Harbor.Abstractions.Agents.IAgentLoop>(),
-                sp.GetRequiredService<Microsoft.Extensions.Logging.ILoggerFactory>()
-                    .CreateLogger<Harbor.Application.Agents.SubAgentRunner>());
-            subAgents.Attach(real);
-            supervisedSessions.Attach(store);
-            return real;
-        });
-        var providerRegistry = ProviderFactories.CreateProviderRegistry(ctx, services);
-        var panelRegistry = new PanelRegistry(ctx.LoggerFactory.CreateLogger<PanelRegistry>());
-
-        // #562: publish the bundle before Freeze() so a module that runs
-        // before this one reads ctx.Registries gets a named
-        // InvalidOperationException rather than a member typed non-nullable
-        // and holding null. (#1055s3: no in-process plugin pipeline mutates
-        // the registries any more — plugin tools arrive over MCP, and the
-        // plugin-contributed backend maps stay at their empty defaults.)
-        //
-        // Assigning the bundle before Freeze() is deliberate and does not weaken
-        // the §3.5 invariant: Freeze() mutates the registry OBJECTS, and every
-        // consumer of the four registries gets them either from the
-        // instrumented views published below (after the freeze) or from a later
-        // module in AddHarbor's chain.
-        ctx.SetRegistries(new HarborRegistries(agentRegistry, toolRegistry, providerRegistry, panelRegistry));
+        RegistryFacade.Compose(services, ctx);
 
 #if HARBOR_WITH_PLUGINS
         StartupPluginLoad startupLoad = LoadPlugins(ctx);
-#else
-        RegistriesModuleLog.PluginRuntimeDisabled(ctx.Logger);
-#endif
-
-        toolRegistry.Freeze();
-        providerRegistry.Freeze();
-
-        // sprint3-C C1: instrument at the DI boundary. Consumers resolving
-        // the interfaces get the instrumented views, never the raw registries.
-        services.AddSingleton<IToolRegistry>(new InstrumentedToolRegistry(
-            toolRegistry, MeterMetrics.Instance, ActivityTracer.Instance));
-        services.AddSingleton<IProviderRegistry>(new InstrumentedProviderRegistry(
-            providerRegistry, MeterMetrics.Instance, ActivityTracer.Instance));
-        services.AddSingleton<IAgentRegistry>(agentRegistry);
-        services.AddSingleton<IMcpRegistry>(mcpRegistry);
-        services.AddSingleton(panelRegistry);
-        services.AddSingleton<IPanelRegistry>(panelRegistry);
-
-#if HARBOR_WITH_PLUGINS
         services.AddSingleton(startupLoad);
         services.AddSingleton(sp =>
         {
@@ -127,6 +47,8 @@ internal static class RegistriesModule
             ctx.Options.HarborDir,
             autoReloadEnabled: ctx.Harbor.Tooling.AutoReloadPlugins,
             sp.GetRequiredService<ILoggerFactory>()));
+#else
+        RegistriesModuleLog.PluginRuntimeDisabled(ctx.Logger);
 #endif
 
         return services;
