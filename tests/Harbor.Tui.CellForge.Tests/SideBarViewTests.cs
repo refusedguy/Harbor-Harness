@@ -372,6 +372,69 @@ public class SideBarViewTests
         await Assert.That(markSeen).IsFalse();
     }
 
+    // ── #1550: the MCP state owns its row visual (State pattern) ─────────
+
+    [Test]
+    public async Task Paint_McpRows_StateCarriesItsGlyphAndColor()
+    {
+        // Pixel pin: (glyph, colour) per state is exactly the pair the old
+        // inline switch painted — the table only moved where it lives.
+        (McpServerState State, char Glyph, PackedColor Color)[] expected =
+        [
+            (McpServerState.Connected, '●', ChatPalette.Success),
+            (McpServerState.Connecting, '◐', ChatPalette.Warning),
+            (McpServerState.Error, '●', ChatPalette.Error),
+        ];
+
+        foreach (var (state, glyph, color) in expected)
+        {
+            var (buffer, rect) = MakeBuffer(cols: 80, rows: 30);
+            SideBarView.Paint(buffer, rect, new SideBarState(
+                McpServers: [new McpServerStatus("alpha", state)]));
+
+            int row = RowOf(buffer, rect, "alpha");
+            await Assert.That(row).IsGreaterThan(0);
+            var glyphCell = buffer.Get(rect.X + 3, row);
+            await Assert.That((char)glyphCell.Rune).IsEqualTo(glyph)
+                .Because("the glyph belongs to the state; the painter must ask, not branch.");
+            await Assert.That(glyphCell.Style.Fg == color).IsTrue();
+        }
+    }
+
+    [Test]
+    public async Task McpServerStateVisual_Of_IsTotalOverTheEnum()
+    {
+        await Assert.That(McpServerStateVisual.Of(McpServerState.Connected).Glyph).IsEqualTo('●');
+        await Assert.That(McpServerStateVisual.Of(McpServerState.Connecting).Glyph).IsEqualTo('◐');
+        await Assert.That(McpServerStateVisual.Of(McpServerState.Error).Glyph).IsEqualTo('●');
+
+        await Assert.That(McpServerStateVisual.Of(McpServerState.Connected).Color == ChatPalette.Success).IsTrue();
+        await Assert.That(McpServerStateVisual.Of(McpServerState.Connecting).Color == ChatPalette.Warning).IsTrue();
+        await Assert.That(McpServerStateVisual.Of(McpServerState.Error).Color == ChatPalette.Error).IsTrue();
+    }
+
+    [Test]
+    public async Task McpServerStateVisual_Of_UndefinedState_FailsFast()
+    {
+        // A corrupted byte must not silently paint as some other state.
+        Assert.Throws<KeyNotFoundException>(() => _ = McpServerStateVisual.Of((McpServerState)9));
+    }
+
+    private static int RowOf(ScreenBuffer buffer, Rect rect, string needle)
+    {
+        // Dump line i ↔ buffer row rect.Y + i.
+        string[] rows = Dump(buffer, rect).Split('\n');
+        for (int i = 0; i < rows.Length; i++)
+        {
+            if (rows[i].Contains(needle))
+            {
+                return rect.Y + i;
+            }
+        }
+
+        return -1;
+    }
+
     private static int LastLineContaining(string dump, string needle)
     {
         string[] rows = dump.Split('\n');
