@@ -1,4 +1,5 @@
 using System.Globalization;
+using Harbor.Abstractions.Env;
 
 namespace Harbor.Ui.Framework.Strings;
 
@@ -47,7 +48,7 @@ public static class UiStrings
     public const string DefaultLocale = "en";
 
     /// <summary>Env var that selects the UI locale; wins over the ambient culture.</summary>
-    public const string EnvVar = "HARBOR_LOCALE";
+    public const string EnvVar = HarborEnv.Locale;
 
     /// <summary>Locales with a shipped satellite, in preference order.</summary>
     public static readonly IReadOnlyList<string> SupportedLocales = ["en", "ru"];

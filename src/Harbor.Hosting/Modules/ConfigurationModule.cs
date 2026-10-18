@@ -1,3 +1,4 @@
+using Harbor.Abstractions.Env;
 using Harbor.Application.Configuration;
 using Harbor.Registries.Events;
 using Harbor.Desktop.Abstractions.Configuration;
@@ -63,7 +64,7 @@ internal static class ConfigurationModule
             () => harborStore.LoadAsync().GetAwaiter().GetResult(),
             new HarborConfig(), "HarborConfig", ctx);
 
-        string? envModel = Environment.GetEnvironmentVariable("HARBOR_MODEL");
+        string? envModel = HarborEnv.Get(HarborEnv.Model);
         if (!string.IsNullOrEmpty(envModel))
             ctx.Harbor.Model = envModel;
 

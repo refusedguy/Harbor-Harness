@@ -2,6 +2,7 @@ using Harbor.Abstractions.Agents;
 using Harbor.Application.Permissions;
 using Harbor.Abstractions.Permissions;
 using Harbor.App.Cli.Hosting;
+using Harbor.Abstractions.Env;
 using Harbor.Terminal.Abstractions;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -21,7 +22,7 @@ internal static class DemoRuntime
     ///     Env var <c>HARBOR_DEMO_TUI</c> — the renderer <c>harbor demo</c> was asked
     ///     for. Set by <c>DemoCommand</c> alongside <c>HARBOR_DEMO</c>.
     /// </summary>
-    internal const string TuiEnvVar = "HARBOR_DEMO_TUI";
+    internal const string TuiEnvVar = HarborEnv.DemoTui;
 
     /// <summary>
     ///     Register the demo permission service. The scripted asker auto-approves

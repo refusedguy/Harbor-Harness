@@ -1,3 +1,4 @@
+using Harbor.Abstractions.Env;
 using Harbor.App.Cli.Hosting;
 using Harbor.Ipc;
 using Microsoft.Extensions.DependencyInjection;
@@ -20,8 +21,8 @@ internal static class EventsVerb
             return 2;
         }
 
-        if (string.IsNullOrEmpty(Environment.GetEnvironmentVariable("HARBOR_MODE")))
-            Environment.SetEnvironmentVariable("HARBOR_MODE", "ipc-client");
+        if (string.IsNullOrEmpty(HarborEnv.Get(HarborEnv.Mode)))
+            Environment.SetEnvironmentVariable(HarborEnv.Mode, "ipc-client");
 
         using var host = HostBuilder.Build(args);
         var client = host.Services.GetRequiredService<IHarborClient>();

@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
+using Harbor.Abstractions.Env;
 using Harbor.Plugins.Compilation;
 using Harbor.Plugins.Hosting;
 using Harbor.Plugins.Instantiation;
@@ -84,7 +85,7 @@ public static class Program
         string[] args, string defaultGlobal, string defaultProject)
     {
         var global = defaultGlobal;
-        var project = Environment.GetEnvironmentVariable("HARBOR_PROJECT_PLUGINS") ?? defaultProject;
+        var project = HarborEnv.Get(HarborEnv.ProjectPlugins) ?? defaultProject;
 
         int i = 0;
         while (i < args.Length)

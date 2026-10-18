@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Harbor.Abstractions.Env;
 using Harbor.Ui.Framework.Diagnostics;
 namespace Harbor.App.Cli.Hosting;
 /// <summary>
@@ -91,7 +92,7 @@ internal static class TuiMode
     public static string ResolveTuiId()
     {
 #if HARBOR_WITH_SPECTRE_TUI
-        string envTui = Environment.GetEnvironmentVariable("HARBOR_TUI") ?? string.Empty;
+        string envTui = HarborEnv.Get(HarborEnv.Tui) ?? string.Empty;
         if (!string.IsNullOrWhiteSpace(envTui))
             return envTui.Trim();
 
@@ -114,7 +115,7 @@ internal static class TuiMode
 #else
         // Spectre excluded — still honor an explicit CellForge selection (it is
         // always compiled in src/Harbor.Tui.CellForge), otherwise plain.
-        string envPlain = Environment.GetEnvironmentVariable("HARBOR_TUI") ?? string.Empty;
+        string envPlain = HarborEnv.Get(HarborEnv.Tui) ?? string.Empty;
         if (!string.IsNullOrWhiteSpace(envPlain))
             return envPlain.Trim();
 
@@ -196,7 +197,7 @@ internal static class TuiMode
     /// </summary>
     public static bool IsCellForgeSelected()
     {
-        string envTui = Environment.GetEnvironmentVariable("HARBOR_TUI") ?? string.Empty;
+        string envTui = HarborEnv.Get(HarborEnv.Tui) ?? string.Empty;
         if (IsCellForgeId(envTui))
             return true;
 
@@ -223,7 +224,7 @@ internal static class TuiMode
     ///     meant legacy and still does), and the only state that moves is the
     ///     one the issue asks to move — the unset default.
     /// </remarks>
-    public const string WindowsCellForgeOptOutVariable = "HARBOR_CELLFORGE_WINDOWS";
+    public const string WindowsCellForgeOptOutVariable = HarborEnv.CellForgeWindows;
 
     /// <summary>
     ///     True when the Windows opt-out above is set. Platform-independent
@@ -232,7 +233,7 @@ internal static class TuiMode
     /// </summary>
     public static bool IsWindowsCellForgeOptedOut()
     {
-        string? raw = Environment.GetEnvironmentVariable(WindowsCellForgeOptOutVariable)?.Trim();
+        string? raw = HarborEnv.Get(WindowsCellForgeOptOutVariable)?.Trim();
         return string.Equals(raw, "0", StringComparison.OrdinalIgnoreCase)
             || string.Equals(raw, "false", StringComparison.OrdinalIgnoreCase);
     }
@@ -245,7 +246,7 @@ internal static class TuiMode
     ///     the setup overlay up; with it, the run diverts to the legacy
     ///     line-reader wizard exactly as before slice 2.
     /// </summary>
-    public const string LegacySetupOptInVariable = "HARBOR_LEGACY_SETUP";
+    public const string LegacySetupOptInVariable = HarborEnv.LegacySetup;
 
     /// <summary>
     ///     True when the legacy first-run path above is requested.
@@ -253,7 +254,7 @@ internal static class TuiMode
     /// </summary>
     public static bool IsLegacySetupRequested()
     {
-        string? raw = Environment.GetEnvironmentVariable(LegacySetupOptInVariable)?.Trim();
+        string? raw = HarborEnv.Get(LegacySetupOptInVariable)?.Trim();
         return string.Equals(raw, "1", StringComparison.OrdinalIgnoreCase)
             || string.Equals(raw, "true", StringComparison.OrdinalIgnoreCase);
     }

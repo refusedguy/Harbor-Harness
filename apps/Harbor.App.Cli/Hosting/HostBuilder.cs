@@ -1,4 +1,5 @@
 using Harbor.App.Cli.Configuration;
+using Harbor.Abstractions.Env;
 using Harbor.App.Cli.Demo;
 using Harbor.Application.Configuration;
 using Harbor.Desktop.Abstractions.Configuration;
@@ -57,7 +58,7 @@ internal static partial class HostBuilder
         // `harbor demo` (HARBOR_DEMO=1, set by DemoCommand): override the
         // fail-closed default asker with the scripted auto-approving gate.
         // Last IPermissionService registration wins (same trick as AddCellForge).
-        if (Environment.GetEnvironmentVariable("HARBOR_DEMO") is "1")
+        if (HarborEnv.Get(HarborEnv.Demo) is "1")
         {
             builder.Services.AddDemoRuntime();
         }

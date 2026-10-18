@@ -1,4 +1,5 @@
 using System.Collections.Frozen;
+using Harbor.Abstractions.Env;
 using CSharpFunctionalExtensions;
 using Harbor.Ipc;
 #if HARBOR_WITH_DAEMON
@@ -28,10 +29,10 @@ internal static class IpcModule
         this IServiceCollection services,
         HarborCompositionContext ctx)
     {
-        string mode = Environment.GetEnvironmentVariable("HARBOR_MODE") ?? "inprocess";
+        string mode = HarborEnv.Get(HarborEnv.Mode) ?? "inprocess";
         IpcModuleLog.HarborMode(ctx.Logger, mode);
 
-        string pipeName = Environment.GetEnvironmentVariable("HARBOR_IPC_PIPE") ?? "harbor-ipc";
+        string pipeName = HarborEnv.Get(HarborEnv.IpcPipe) ?? "harbor-ipc";
 
         FrozenDictionary<string, IHarborModeStrategy> registry = HarborModeRegistry.Build();
         Maybe<IHarborModeStrategy> strategy = HarborModeRegistry.Resolve(registry, mode);
@@ -65,7 +66,7 @@ internal static class IpcModule
     /// </remarks>
     internal static void AddNetworkedListenerIfConfigured(IServiceCollection services, HarborCompositionContext ctx)
     {
-        string? listenOn = Environment.GetEnvironmentVariable("HARBOR_LISTEN");
+        string? listenOn = HarborEnv.Get(HarborEnv.Listen);
         if (string.IsNullOrWhiteSpace(listenOn) || listenOn.Equals("uds", StringComparison.OrdinalIgnoreCase))
         {
             return; // local-only daemon (default)
@@ -78,7 +79,7 @@ internal static class IpcModule
         }
 
         int port = DaemonBindPolicy.DefaultPort;
-        if (int.TryParse(Environment.GetEnvironmentVariable("HARBOR_PORT"), out int configured) &&
+        if (int.TryParse(HarborEnv.Get(HarborEnv.Port), out int configured) &&
             configured is > 0 and <= 65535)
         {
             port = configured;

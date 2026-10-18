@@ -1,5 +1,7 @@
 namespace Harbor.Hosting;
 
+using Harbor.Abstractions.Env;
+
 /// <summary>
 ///     Forwarder over <see cref="Harbor.Abstractions.Filesystem.HarborPaths" />.
 ///     The canonical home resolution moved down to Harbor.Abstractions (#1570)
@@ -9,9 +11,8 @@ namespace Harbor.Hosting;
 /// </summary>
 public static class HarborPaths
 {
-    /// <summary>Forwarded from <c>Harbor.Abstractions.Filesystem.HarborPaths</c>.</summary>
-    public const string HarborHomeVariable =
-        Harbor.Abstractions.Filesystem.HarborPaths.HarborHomeVariable;
+    /// <summary>Environment variable overriding the Harbor home directory.</summary>
+    public const string HarborHomeVariable = HarborEnv.Home;
 
     /// <summary>Forwarded from <c>Harbor.Abstractions.Filesystem.HarborPaths</c>.</summary>
     public static string GetHarborHome() =>

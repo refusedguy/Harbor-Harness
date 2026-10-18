@@ -1,5 +1,6 @@
 using System.Text;
 using CSharpFunctionalExtensions;
+using Harbor.Abstractions.Env;
 using Harbor.Abstractions.Events;
 using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Models.Identifiers;
@@ -28,7 +29,7 @@ internal sealed class SessionTitleService(IReplHost host, ILogger logger)
         // Deterministic harness escape hatch (PTY E2E): the background AI
         // upgrade races request-order assertions by design, so suites that
         // assert on the mock wire set HARBOR_NO_AUTOTITLE=1.
-        if (Environment.GetEnvironmentVariable("HARBOR_NO_AUTOTITLE") == "1")
+        if (HarborEnv.Get(HarborEnv.NoAutotitle) == "1")
         {
             return;
         }

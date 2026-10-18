@@ -1,3 +1,4 @@
+using Harbor.Abstractions.Env;
 using Harbor.Hosting;
 using Harbor.Tools.Mcp;
 
@@ -119,7 +120,7 @@ public static class McpLoginRunner
         string harborHome = HarborPaths.GetHarborHome();
         string projectRoot = Directory.GetCurrentDirectory();
         var paths = new List<string>();
-        if (Environment.GetEnvironmentVariable("HARBOR_MCP_CONFIG") is { Length: > 0 } explicitConfig)
+        if (HarborEnv.Get(HarborEnv.McpConfig) is { Length: > 0 } explicitConfig)
             paths.Add(explicitConfig);
         paths.Add(Path.Combine(harborHome, "mcp.json"));
         paths.Add(Path.Combine(projectRoot, ".harbor", "mcp.json"));

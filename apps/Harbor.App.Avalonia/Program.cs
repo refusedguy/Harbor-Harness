@@ -1,5 +1,6 @@
 using Avalonia;
 using Avalonia.Controls;
+using Harbor.Abstractions.Env;
 using Harbor.App.Avalonia;
 
 // Harbor.App.Avalonia — standalone desktop GUI entry point.
@@ -86,7 +87,7 @@ static string ResolveShellMode(string[] args)
     }
 
     // HARBOR_SHELL env var.
-    string? env = Environment.GetEnvironmentVariable("HARBOR_SHELL");
+    string? env = HarborEnv.Get(HarborEnv.Shell);
     if (!string.IsNullOrWhiteSpace(env))
     {
         string value = env.Trim().ToLowerInvariant();
@@ -126,7 +127,7 @@ static string ResolveThemeMode(string[] args)
         }
     }
 
-    string? themeEnv = Environment.GetEnvironmentVariable("HARBOR_THEME");
+    string? themeEnv = HarborEnv.Get(HarborEnv.Theme);
     if (!string.IsNullOrWhiteSpace(themeEnv))
     {
         string value = themeEnv.Trim().ToLowerInvariant();

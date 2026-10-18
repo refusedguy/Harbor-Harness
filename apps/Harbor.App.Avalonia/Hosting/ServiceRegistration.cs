@@ -1,5 +1,6 @@
 using Harbor.Abstractions.Agents;
 using Harbor.Abstractions.Events;
+using Harbor.Abstractions.Env;
 using Harbor.Abstractions.Filesystem;
 using Harbor.Abstractions.Git;
 using Harbor.Abstractions.Permissions;
@@ -208,8 +209,8 @@ internal static class ServiceRegistration
     /// <param name="services">The DI container.</param>
     public static void RegisterHarborClient(IServiceCollection services)
     {
-        string ipcMode = Environment.GetEnvironmentVariable("HARBOR_MODE") ?? "inprocess";
-        string ipcPipe = Environment.GetEnvironmentVariable("HARBOR_IPC_PIPE") ?? "harbor-ipc";
+        string ipcMode = HarborEnv.Get(HarborEnv.Mode) ?? "inprocess";
+        string ipcPipe = HarborEnv.Get(HarborEnv.IpcPipe) ?? "harbor-ipc";
         switch (ipcMode.ToLowerInvariant())
         {
             case "ipc-client":

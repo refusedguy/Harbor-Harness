@@ -2,6 +2,7 @@ using DiffPlex;
 using DiffPlex.Chunkers;
 using DiffPlex.DiffBuilder;
 using DiffPlex.DiffBuilder.Model;
+using Harbor.Abstractions.Env;
 using Harbor.Ui.Framework.Rendering.Widgets;
 
 namespace Harbor.Ui.Framework.State;
@@ -34,7 +35,7 @@ namespace Harbor.Ui.Framework.State;
 public static class DiffPlexPilot
 {
     /// <summary>Environment flag that opts the desktop and patch previews into the pilot.</summary>
-    public const string EnableEnvVar = "HARBOR_DIFFPLEX";
+    public const string EnableEnvVar = HarborEnv.Diffplex;
 
     /// <summary>
     ///     Largest combined input, in characters, the pilot will diff. Past it the
