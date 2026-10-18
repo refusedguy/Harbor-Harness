@@ -38,6 +38,15 @@ public class McpWireAllocTests
     }
 
     [Test]
+    public async Task SseParser_NullFilter_NonJson_ReturnsNull()
+    {
+        // Invalid JSON on the unfiltered branch must stay a skip (null),
+        // never an exception surfacing into the transport read loop.
+        await Assert.That(McpSse.TryParseResponse("keep-alive", null)).IsNull();
+        await Assert.That(McpSse.TryParseResponse("{\"id\":", null)).IsNull();
+    }
+
+    [Test]
     public async Task SseParser_WhitespaceFraming_StillMatches()
     {
         JsonElement? doc = McpSse.TryParseResponse(
@@ -75,9 +84,9 @@ public class McpWireAllocTests
             _ = McpSse.TryParseResponse(frame, 7);
         long after = GC.GetAllocatedBytesForCurrentThread();
 
-        // No DOM is ever built on the mismatch path — pooled encode + span
-        // scan only. Generous bound (~164 B/iter); the old parse + dispose
-        // cost ~1 KB+ per frame.
+        // No DOM is ever built on the mismatch path — pooled encode, span
+        // scan, and one Result.Try delegate (#1536). Generous bound
+        // (~164 B/iter); the old parse + dispose cost ~1 KB+ per frame.
         await Assert.That(after - before).IsLessThanOrEqualTo(200 * 164);
     }
 

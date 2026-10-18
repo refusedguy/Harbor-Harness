@@ -2,6 +2,7 @@ using System.Buffers;
 using System.Collections.Frozen;
 using System.Text;
 using System.Text.Json;
+using Harbor.Abstractions.Results;
 
 namespace Harbor.Tools.Mcp;
 
@@ -77,47 +78,60 @@ internal static class McpSse
     ///     Parse an SSE <c>data</c> payload as JSON-RPC and return it
     ///     when it answers the request with <paramref name="expectedId" />. Returns null
     ///     for non-JSON frames (keep-alives) and for responses belonging to other
-    ///     in-flight requests.
+    ///     in-flight requests. Internally a Result.Try chain (#1536) replaces the
+    ///     former double <c>try/catch → null</c> and the scanner catch-all: parse
+    ///     failure and id mismatch stay distinguishable in the chain and collapse
+    ///     back to null only at the boundary.
     /// </summary>
     public static JsonElement? TryParseResponse(string data, int? expectedId)
     {
-        if (expectedId is not { } id)
-        {
-            try
-            {
-                // Same DOM as JsonDocument.Parse, but through the source-generated
-                // JsonElement info (PERF-002; TRIM-SERIALIZATION TypeInfo spelling).
-                return JsonSerializer.Deserialize(data, McpJsonSerializerContext.Default.JsonElement);
-            }
-            catch (JsonException)
-            {
-                return null;
-            }
-        }
+        Result<Maybe<JsonElement>> frame = expectedId is not { } id
+            ? ParseFrame(data)
+            : ParseFrameMatchingId(data, id);
 
-        // Filtered path (#180): encode once into a pooled buffer, scan the
-        // envelope for the top-level "id" with Utf8JsonReader (no DOM), and
-        // only then parse the same bytes. Non-JSON frames and id mismatches
-        // return null without ever materializing a document (previously:
-        // full parse + dispose, plus an exception on malformed frames).
+        return frame.Match(
+            static parsed => parsed.HasValue ? (JsonElement?)parsed.Value : null,
+            static frameError => (JsonElement?)null);
+    }
+
+    private static Result<Maybe<JsonElement>> ParseFrame(string frame)
+    {
+        // Same DOM as JsonDocument.Parse, but through the source-generated
+        // JsonElement info (PERF-002; TRIM-SERIALIZATION TypeInfo spelling).
+        return Result.Try(
+            () => Maybe<JsonElement>.From(JsonSerializer.Deserialize(frame, McpJsonSerializerContext.Default.JsonElement)),
+            ResultErrors.Message);
+    }
+
+    /// <summary>
+    ///     Filtered path (#180): encode once into a pooled buffer, scan the
+    ///     envelope for the top-level "id" with Utf8JsonReader (no DOM), and only
+    ///     then parse the same bytes (#1536: scan/parse failures become explicit
+    ///     Result failures instead of silently swallowed exceptions).
+    /// </summary>
+    private static Result<Maybe<JsonElement>> ParseFrameMatchingId(string data, int id)
+    {
         int byteCount = Encoding.UTF8.GetByteCount(data);
         byte[] rented = ArrayPool<byte>.Shared.Rent(byteCount);
         try
         {
             Encoding.UTF8.GetBytes(data, rented);
-            ReadOnlySpan<byte> utf8 = rented.AsSpan(0, byteCount);
-            if (!IdMatches(utf8, id))
-                return null;
-            try
-            {
-                // Same DOM as JsonDocument.Parse, but through the source-generated
-                // JsonElement info (PERF-002; TRIM-SERIALIZATION TypeInfo spelling).
-                return JsonSerializer.Deserialize(rented.AsSpan(0, byteCount), McpJsonSerializerContext.Default.JsonElement);
-            }
-            catch (JsonException)
-            {
-                return null;
-            }
+            Result<bool> scan = Result.Try(
+                () => IdMatches(rented.AsSpan(0, byteCount), id),
+                ResultErrors.Message);
+
+            if (scan.IsFailure)
+                return scan.ConvertFailure<Maybe<JsonElement>>();
+
+            if (!scan.Value)
+                return Result.Failure<Maybe<JsonElement>>("id mismatch");
+
+            // Only an owned frame reaches the DOM — the mismatch path above
+            // stays DOM-free (previously: full parse + dispose, plus an
+            // exception on malformed frames).
+            return Result.Try(
+                () => Maybe<JsonElement>.From(JsonSerializer.Deserialize(rented.AsSpan(0, byteCount), McpJsonSerializerContext.Default.JsonElement)),
+                ResultErrors.Message);
         }
         finally
         {
@@ -128,66 +142,58 @@ internal static class McpSse
     /// <summary>
     /// Scan a UTF-8 JSON-RPC frame for its top-level <c>"id"</c> without
     /// building a DOM. Mirrors the old <c>TryGetProperty("id") + Number +
-    /// TryGetInt32</c> check exactly, including last-wins on duplicate keys
-    /// and rejection of trailing garbage; malformed input scans as no-match
-    /// (the old path mapped both to null as well).
+    /// TryGetInt32</c> check exactly, including last-wins on duplicate keys.
+    /// Throws on malformed input (truncated frame, trailing garbage) — the
+    /// wrapping Result.Try turns that into an explicit failure; the former
+    /// catch-all reported it as a silent no-match instead (#1536).
     /// </summary>
     private static bool IdMatches(ReadOnlySpan<byte> utf8, int expectedId)
     {
-        try
+        var reader = new Utf8JsonReader(utf8);
+        if (!reader.Read() || reader.TokenType != JsonTokenType.StartObject)
+            return false;
+
+        bool closed = false;
+        bool hasNumericId = false;
+        int lastId = 0;
+        while (reader.Read())
         {
-            var reader = new Utf8JsonReader(utf8);
-            if (!reader.Read() || reader.TokenType != JsonTokenType.StartObject)
-                return false;
-
-            bool closed = false;
-            bool hasNumericId = false;
-            int lastId = 0;
-            while (reader.Read())
+            if (reader.TokenType == JsonTokenType.EndObject)
             {
-                if (reader.TokenType == JsonTokenType.EndObject)
-                {
-                    closed = true;
-                    break;
-                }
-
-                if (reader.TokenType != JsonTokenType.PropertyName)
-                    continue;
-
-                bool isId = reader.ValueSpan.SequenceEqual("id"u8);
-                if (!reader.Read())
-                    return false; // truncated frame
-                if (!isId)
-                {
-                    reader.Skip();
-                    continue;
-                }
-
-                if (reader.TokenType == JsonTokenType.Number && reader.TryGetInt32(out int value))
-                {
-                    hasNumericId = true;
-                    lastId = value;
-                }
-                else
-                {
-                    // String/null/bool/container "id" never matched the old
-                    // Number+TryGetInt32 check; keep scanning so a later
-                    // duplicate still decides (last-wins, like TryGetProperty).
-                    hasNumericId = false;
-                    reader.Skip();
-                }
+                closed = true;
+                break;
             }
 
-            // A closed root object whose trailing bytes hold another token is
-            // malformed (the old Parse threw) — not a match.
-            return closed && hasNumericId && lastId == expectedId && !reader.Read();
+            if (reader.TokenType != JsonTokenType.PropertyName)
+                continue;
+
+            bool isId = reader.ValueSpan.SequenceEqual("id"u8);
+            if (!reader.Read())
+                return false; // truncated frame
+            if (!isId)
+            {
+                reader.Skip();
+                continue;
+            }
+
+            if (reader.TokenType == JsonTokenType.Number && reader.TryGetInt32(out int value))
+            {
+                hasNumericId = true;
+                lastId = value;
+            }
+            else
+            {
+                // String/null/bool/container "id" never matched the old
+                // Number+TryGetInt32 check; keep scanning so a later
+                // duplicate still decides (last-wins, like TryGetProperty).
+                hasNumericId = false;
+                reader.Skip();
+            }
         }
-        catch (Exception)
-        {
-            // Best-effort fast path: anything the scanner does not understand
-            // (malformed frames, novel token shapes) scans as no-match — the
-            // old path mapped every one of those to null as well.
-            return false;
-        }
+
+        // A closed root object whose trailing bytes hold another token is
+        // malformed (the read below throws) — surfaced as a Result failure
+        // by the wrapping Result.Try, same null at the boundary as before.
+        return closed && hasNumericId && lastId == expectedId && !reader.Read();
     }
 }
