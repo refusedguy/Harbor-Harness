@@ -1,12 +1,15 @@
 using System.Reflection;
-using Harbor.Application.Permissions;
 using TUnit.Assertions;
 
 namespace Harbor.Application.Tests;
 
 public class CoreResourcesTests
 {
-    private static readonly Type CoreResourcesType = typeof(PermissionService).Assembly.GetType("Harbor.Application.Resources.CoreResources")!;
+    // #1615: anchor by an Application assembly type picked for stability —
+    // PermissionService moved to the Harbor.Permissions assembly, but
+    // CoreResources stayed here (its consumer, AgentLoop, is public, so the
+    // reflection below can still strip its internals within the same assembly).
+    private static readonly Type CoreResourcesType = typeof(Harbor.Application.Agents.AgentLoop).Assembly.GetType("Harbor.Application.Resources.CoreResources")!;
     private static readonly MethodInfo GetLogMethod = CoreResourcesType.GetMethod("GetLog", BindingFlags.Public | BindingFlags.Static)!;
     private static readonly MethodInfo GetErrorMethod = CoreResourcesType.GetMethod("GetError", BindingFlags.Public | BindingFlags.Static)!;
 
