@@ -653,8 +653,9 @@ re-run.
 
 Before ROP-D only assemblies with a hand-written `typeof()` probe had layer rules
 (~18 src projects). `FullLayerMatrixTests.cs` closes the gap with one data
-table covering **every main-solution src assembly** (**52 rows** as of 2026-10-18
-(#1618): 53 src assemblies in `Harbor.slnx` minus the `Harbor.Plugins.Host` exe, which is
+table covering **every main-solution src assembly** (**53 rows** as of 2026-10-18
+(#1618; #1660's ChangeTracking row landed on dev the same day, so the count
+reflects both): 54 src assemblies in `Harbor.slnx` minus the `Harbor.Plugins.Host` exe, which is
 `OutOfScopeAssemblies` — see §2 banner; the table was 45 rows at inception and
 47/50 src dirs as of 2026-08-27):
 
