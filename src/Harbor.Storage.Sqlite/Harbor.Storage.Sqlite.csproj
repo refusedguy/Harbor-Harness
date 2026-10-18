@@ -17,6 +17,8 @@
     <!-- #184: shared session-store source, linked like Harbor.Providers.Shared (no ProjectReference). -->
     <Compile Include="..\Harbor.Storage.Shared\SessionLockStrip.cs" LinkBase="Shared" />
     <Compile Include="..\Harbor.Storage.Shared\SessionStoreErrors.cs" LinkBase="Shared" />
+    <!-- #1591: the shared domain ↔ persist-form projection for message parts. -->
+    <Compile Include="..\Harbor.Storage.Shared\MessagePartAdapter.cs" LinkBase="Shared" />
   </ItemGroup>
 
   <ItemGroup>
