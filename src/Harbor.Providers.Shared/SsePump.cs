@@ -544,8 +544,9 @@ internal static class SsePump
         {
             // The line split across pipe refills: stitch it into the byte
             // window once, then decode from there.
-            line = byteWindow.AsSpan(0, byteLen);
-            lineBytes.CopyTo(line);
+            Span<byte> stitched = byteWindow.AsSpan(0, byteLen);
+            lineBytes.CopyTo(stitched);
+            line = stitched;
         }
 
         int charCount = Encoding.UTF8.GetChars(line, charWindow);
