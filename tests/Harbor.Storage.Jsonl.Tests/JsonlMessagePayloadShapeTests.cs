@@ -98,7 +98,7 @@ public class JsonlMessagePayloadShapeTests
         JsonElement args = JsonDocument.Parse("""{"path":"a.txt"}""").RootElement;
         var message = new AssistantMessage(
             "m1", "sess-1", CreatedAt,
-            [new TextPart("thinking-out"), new ThinkingPart("reason"), new ToolCallPart.Create("tc_1", "read", args)],
+            [new TextPart("thinking-out"), new ThinkingPart("reason"), ToolCallPart.Create("tc_1", "read", args)],
             StopReason.ToolUse, new Usage(10, 5), "p/m");
 
         string json = EntryJson(message);

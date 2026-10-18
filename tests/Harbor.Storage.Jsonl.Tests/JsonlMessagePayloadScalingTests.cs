@@ -52,7 +52,7 @@ public class JsonlMessagePayloadScalingTests
             0 => new UserMessage($"u{i}", "sess", CreatedAt, "content", "code", "p/m"),
             1 => new AssistantMessage(
                 $"a{i}", "sess", CreatedAt,
-                [new TextPart("hi"), new ThinkingPart("reason"), new ToolCallPart.Create($"tc_{i}", "read", ArgsDoc.RootElement)],
+                [new TextPart("hi"), new ThinkingPart("reason"), ToolCallPart.Create($"tc_{i}", "read", ArgsDoc.RootElement)],
                 StopReason.ToolUse, new Usage(10, 5), "p/m"),
             _ => new ToolResultMessage(
                 $"r{i}", "sess", CreatedAt,
