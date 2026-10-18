@@ -220,7 +220,7 @@ public class RunRejectTests
         string? dir = AppContext.BaseDirectory;
         while (dir is not null)
         {
-            string candidate = Path.Combine(dir, "src", "Harbor.Application", "Sessions", "RunReject.cs");
+            string candidate = Path.Combine(dir, "src", "Harbor.ChangeTracking", "RunReject.cs");
             if (File.Exists(candidate))
                 return candidate;
             dir = Path.GetDirectoryName(dir);
