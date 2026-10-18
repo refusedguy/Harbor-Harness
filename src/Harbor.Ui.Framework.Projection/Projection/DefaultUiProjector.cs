@@ -185,6 +185,7 @@ public sealed class DefaultUiProjector : IUiProjector
             Lines = state.Chat.Lines,
             BaseRendered = history.Rendered,
             BaseBlocks = history.Blocks,
+            FirstIndex = history.FirstIndex,
             IsStreaming = state.Chat.IsStreaming,
             ThinkBuf = thinkBuf,
             TextBuf = textBuf,
@@ -214,7 +215,16 @@ public sealed class DefaultUiProjector : IUiProjector
     private readonly record struct ChromeModels(UiHeaderModel Header, UiStatusBarModel StatusBar, UiInputModel Input, bool Unchanged);
 
     /// <summary>Projected history rows plus whether the cached ones were reused.</summary>
-    private readonly record struct HistoryModels(ImmutableArray<UiRenderedLine> Rendered, ImmutableArray<UiBlock> Blocks, bool Unchanged);
+    /// <remarks>
+    ///     <see cref="FirstIndex" /> carries the first-occurrence map produced
+    ///     for this projection so the next one can extend it incrementally
+    ///     instead of rebuilding it (issue #1535).
+    /// </remarks>
+    private readonly record struct HistoryModels(
+        ImmutableArray<UiRenderedLine> Rendered,
+        ImmutableArray<UiBlock> Blocks,
+        bool Unchanged,
+        Dictionary<ChatLine, int>? FirstIndex);
 
     /// <summary>Projected streaming tail plus whether the cached one was reused.</summary>
     private readonly record struct TailModels(ImmutableArray<UiRenderedLine> Rendered, ImmutableArray<UiBlock> Blocks, bool Unchanged);
@@ -270,63 +280,119 @@ public sealed class DefaultUiProjector : IUiProjector
         {
             baseRendered = cache!.BaseRendered;
             baseBlocks = cache.BaseBlocks;
+            return new HistoryModels(baseRendered, baseBlocks, Unchanged: true, FirstIndex: cache.FirstIndex);
+        }
+
+        // Common-prefix scan: transcript updates are append-only in the
+        // common case (MessageEnd folds the streaming message into the
+        // tail of Lines), so reuse the projection of the unchanged prefix.
+        int commonPrefix = 0;
+        if (cache is not null)
+        {
+            int limit = Math.Min(cache.Lines.Length, state.Chat.Lines.Length);
+            while (commonPrefix < limit && cache.Lines[commonPrefix].Equals(state.Chat.Lines[commonPrefix]))
+            {
+                commonPrefix++;
+            }
+        }
+
+        // Pure append (the MessageEnd fold): the map cached from the previous
+        // projection already covers every line of the unchanged prefix, so it
+        // only needs the appended lines TryAdd'd in (issue #1535). A full map
+        // stays for a changed prefix: entries left over from beyond the
+        // common prefix would return stale first-occurrence indices once the
+        // history is rewritten underneath them.
+        bool pureAppend = cache is not null
+            && commonPrefix == cache.Lines.Length
+            && cache.FirstIndex is not null;
+
+        var renderedBuilder = ImmutableArray.CreateBuilder<UiRenderedLine>(state.Chat.Lines.Length);
+        var blockBuilder = ImmutableArray.CreateBuilder<UiBlock>(state.Chat.Lines.Length);
+        if (commonPrefix > 0)
+        {
+            renderedBuilder.AddRange(cache!.BaseRendered.AsSpan().Slice(0, commonPrefix));
+            blockBuilder.AddRange(cache.BaseBlocks.AsSpan().Slice(0, commonPrefix));
+        }
+
+        var firstOccurrence = pureAppend
+            ? cache!.FirstIndex!
+            : new Dictionary<ChatLine, int>(state.Chat.Lines.Length);
+
+        void Emit(int i, int firstIndex)
+        {
+            ChatLine line = state.Chat.Lines[i];
+            string id = ToolCallKey.TranscriptBlockId(line, firstIndex);
+            var spans = ResolveSpans(line.Role, line.Text);
+
+            renderedBuilder.Add(new UiRenderedLine(
+                Id: id,
+                Spans: spans,
+                Kind: UiLineKind.Body,
+                TimestampUtc: line.TimestampUtc));
+
+            blockBuilder.Add(new UiMessageBlock(
+                Id: id,
+                Role: line.Role,
+                Spans: spans,
+                Phase: MessageRenderPhase.Complete));
+        }
+
+        if (pureAppend)
+        {
+            // The map is published in the next cache, so it outlives this call
+            // and concurrent Project callers may arrive with the same cached
+            // instance. The extension is therefore serialized, and every
+            // lookup into the shared map happens inside the same lock; the
+            // rebuild and linesSame paths never touch its contents.
+            // TODO(principles)[THREAD-SAFETY]: extending FirstIndex mutates a
+            // map already published inside an earlier ProjectionCache, so this
+            // lock stands in for the copy-on-append or concurrent-map
+            // refactoring the shape would really want; see the mutation note
+            // on the ProjectionCache type.
+            lock (firstOccurrence)
+            {
+                if (state.Chat.Lines.Length > firstOccurrence.Count)
+                {
+                    firstOccurrence.EnsureCapacity(state.Chat.Lines.Length);
+                }
+
+                for (int i = commonPrefix; i < state.Chat.Lines.Length; i++)
+                {
+                    // A successful TryAdd IS the first-occurrence answer —
+                    // nothing earlier maps this line. When it fails, the
+                    // stored index is the first one, which is what the full
+                    // rebuild's `firstIndex[line]` lookup returns.
+                    if (firstOccurrence.TryAdd(state.Chat.Lines[i], i))
+                    {
+                        Emit(i, i);
+                    }
+                    else
+                    {
+                        Emit(i, firstOccurrence[state.Chat.Lines[i]]);
+                    }
+                }
+            }
         }
         else
         {
-            // Common-prefix scan: transcript updates are append-only in the
-            // common case (MessageEnd folds the streaming message into the
-            // tail of Lines), so reuse the projection of the unchanged prefix.
-            int commonPrefix = 0;
-            if (cache is not null)
-            {
-                int limit = Math.Min(cache.Lines.Length, state.Chat.Lines.Length);
-                while (commonPrefix < limit && cache.Lines[commonPrefix].Equals(state.Chat.Lines[commonPrefix]))
-                {
-                    commonPrefix++;
-                }
-            }
-
             // First-occurrence map preserves the historical
             // `Lines.IndexOf(line)` BlockId semantics (first equal line wins)
             // at O(n) total instead of O(n²).
-            var firstIndex = new Dictionary<ChatLine, int>(state.Chat.Lines.Length);
             for (int i = 0; i < state.Chat.Lines.Length; i++)
             {
-                firstIndex.TryAdd(state.Chat.Lines[i], i);
-            }
-
-            var renderedBuilder = ImmutableArray.CreateBuilder<UiRenderedLine>(state.Chat.Lines.Length);
-            var blockBuilder = ImmutableArray.CreateBuilder<UiBlock>(state.Chat.Lines.Length);
-            if (commonPrefix > 0)
-            {
-                renderedBuilder.AddRange(cache!.BaseRendered.AsSpan().Slice(0, commonPrefix));
-                blockBuilder.AddRange(cache.BaseBlocks.AsSpan().Slice(0, commonPrefix));
+                firstOccurrence.TryAdd(state.Chat.Lines[i], i);
             }
 
             for (int i = commonPrefix; i < state.Chat.Lines.Length; i++)
             {
-                ChatLine line = state.Chat.Lines[i];
-                string id = ToolCallKey.TranscriptBlockId(line, firstIndex[line]);
-                var spans = ResolveSpans(line.Role, line.Text);
-
-                renderedBuilder.Add(new UiRenderedLine(
-                    Id: id,
-                    Spans: spans,
-                    Kind: UiLineKind.Body,
-                    TimestampUtc: line.TimestampUtc));
-
-                blockBuilder.Add(new UiMessageBlock(
-                    Id: id,
-                    Role: line.Role,
-                    Spans: spans,
-                    Phase: MessageRenderPhase.Complete));
+                Emit(i, firstOccurrence[state.Chat.Lines[i]]);
             }
-
-            baseRendered = renderedBuilder.MoveToImmutable();
-            baseBlocks = blockBuilder.MoveToImmutable();
         }
 
-        return new HistoryModels(baseRendered, baseBlocks, linesSame);
+        baseRendered = renderedBuilder.MoveToImmutable();
+        baseBlocks = blockBuilder.MoveToImmutable();
+
+        return new HistoryModels(baseRendered, baseBlocks, Unchanged: false, FirstIndex: firstOccurrence);
     }
 
     /// <summary>Projects the streaming tail, rebuilding only when a buffer reference changed.</summary>
@@ -408,6 +474,18 @@ public sealed class DefaultUiProjector : IUiProjector
     /// </summary>
     /// <remarks>
     ///     <para>
+    ///         The one deliberate exception to "read-only thereafter" is
+    ///         <see cref="FirstIndex" />, which <see cref="ProjectHistory" />
+    ///         extends in place on a pure append (issue #1535) rather than
+    ///         rebuilding — an O(lines) rehash per fold, every fold, was the
+    ///         cost of the old full-map rebuild. The extension mutates a map
+    ///         other threads may be reading out of an earlier cache, so it is
+    ///         serialized by locking the map, and every lookup into the shared
+    ///         map happens inside that lock. The <see cref="FirstIndex" />
+    ///         contents always cover the cached <see cref="Lines" /> exactly,
+    ///         which is what makes an extension without a rebuild sufficient.
+    ///     </para>
+    ///     <para>
     ///         The six members marked <see langword="required" /> are <b>never</b> absent —
     ///         they are either assigned by that initializer or the type does not exist yet.
     ///         They used to be declared <c>= null!</c>, which is a lie the compiler was asked
@@ -444,6 +522,12 @@ public sealed class DefaultUiProjector : IUiProjector
         public ImmutableArray<ChatLine> Lines;
         public ImmutableArray<UiRenderedLine> BaseRendered;
         public ImmutableArray<UiBlock> BaseBlocks;
+
+        // First-occurrence map over `Lines` (issue #1535): for every line, the
+        // index of its first equal occurrence — the BlockId semantics. Covers
+        // `Lines` exactly by construction and is extended in place on a pure
+        // append, rebuilt whenever the common prefix changed.
+        public Dictionary<ChatLine, int>? FirstIndex;
 
         // Streaming tail: keyed by IsStreaming + normalized buffer references.
         public bool IsStreaming;
