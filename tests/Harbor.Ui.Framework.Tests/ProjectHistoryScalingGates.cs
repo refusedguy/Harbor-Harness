@@ -255,7 +255,7 @@ public sealed class ProjectHistoryScalingGates
         var projector = new DefaultUiProjector();
         UiScreenModel screen = projector.Project(store.State);
         await Assert.That(store.State.Chat.Lines.Length).IsEqualTo(TranscriptLines);
-        int projectedHistory = Math.Min(store.State.Chat.Lines.Length, screen.Transcript.RenderedLines.Length);
+        int projectedHistory = Math.Min(store.State.Chat.Lines.Length, screen.Transcript.RenderedLines.Count);
         await Assert.That(projectedHistory).IsEqualTo(TranscriptLines);
 
         await AssertIdsFollowFirstEqualWins(store.State, screen);
