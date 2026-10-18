@@ -21,26 +21,32 @@
 // "put this in Infrastructure" was never available. See
 // DesktopAbstractionsLeafTakesNoIoRules for the guard that keeps the leaf clean.
 //
-// Persists the shared CommonConfig to ~/.harbor/config.json using
-// System.Text.Json with SOURCE-GENERATED metadata (ConfigJsonContext) so it
-// works under NativeAOT — reflection-based serialization is unavailable
-// there. Writes are atomic (temp file + File.Move) and serialised via a
-// SemaphoreSlim so concurrent callers don't truncate each other's
-// writes. Reads fall back to the default CommonConfig when the file is missing
-// or corrupt — never throws for expected IO failures.
+// Persists the shared CommonConfig to ~/.harbor/config.json. Writes are
+// atomic (temp file + File.Move) and serialized via a SemaphoreSlim so
+// concurrent callers don't truncate each other's writes. Reads fall back to
+// the default CommonConfig when the file is missing or corrupt — never throws
+// for expected IO failures.
 //
-// This mirrors JsonAppConfigStore<T>'s design. The non-generic signature
-// (ICommonConfigStore vs IAppConfigStore<T>) keeps the DI surface simple:
-// there is exactly one CommonConfig type, so there is exactly one
-// JsonCommonConfigStore registration per app.
+// #1593 (Bridge): the FILE PIPELINE itself (exists-probe, ReadAllTextAsync,
+// corrupt→failure mapping, ensure-directory, serialized atomic write, and the
+// common defaults-merge / foreign-field-preserve merges) lives in
+// JsonFileConfigMechanism, shared with JsonAppConfigStore<T>. What is left
+// here is the FORM — the parts that genuinely belong to CommonConfig:
+// - its AOT-safe serializer (ConfigJson.CommonConfigInfo),
+// - #913 path ownership (the store reads and writes its OWN file regardless
+//   of what the payload's ConfigDirectory says, and pins/shapes the record
+//   both ways),
+// - defaults-merge on load and foreign-field merge on save,
+// - this store's SG4 log wording.
+// The non-generic signature (ICommonConfigStore vs IAppConfigStore<T>) keeps
+// the DI surface simple: there is exactly one CommonConfig type, so there is
+// exactly one JsonCommonConfigStore registration per app.
 
 using System.Collections.Immutable;
-using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using CSharpFunctionalExtensions;
 using System.Text.Json.Serialization.Metadata;
-using System.Text.Json.Nodes;
+using CSharpFunctionalExtensions;
 using Harbor.Desktop.Abstractions.Configuration;
 namespace Harbor.Hosting.Configuration;
 /// <summary>
@@ -72,15 +78,10 @@ namespace Harbor.Hosting.Configuration;
 /// </remarks>
 public sealed class JsonCommonConfigStore : ICommonConfigStore
 {
-    // AOT-safe metadata: seeded from the source-generated ConfigJsonContext,
-    // with the immutable-collection converters layered on top. Do NOT switch
-    // these calls back to the reflection-based JsonSerializer.Deserialize<T>(
-    // json, options) form — it breaks NativeAOT-published apps.
     private static readonly JsonTypeInfo<CommonConfig> CommonConfigInfo = ConfigJson.CommonConfigInfo;
 
     private readonly CommonConfig _default;
-    private readonly SemaphoreSlim _lock = new(1, 1);
-    private readonly ILogger<JsonCommonConfigStore> _logger;
+    private readonly JsonFileConfigMechanism<CommonConfig> _mechanism;
 
     /// <summary>
     ///     Construct a JSON-backed common-config store.
@@ -93,112 +94,13 @@ public sealed class JsonCommonConfigStore : ICommonConfigStore
     public JsonCommonConfigStore(CommonConfig defaultConfig, ILogger<JsonCommonConfigStore> logger)
     {
         _default = defaultConfig ?? throw new ArgumentNullException(nameof(defaultConfig));
-        _logger = logger ?? throw new ArgumentNullException(nameof(logger));
-    }
+        if (logger is null) throw new ArgumentNullException(nameof(logger));
 
-    /// <inheritdoc />
-    public async Task<Result<CommonConfig>> LoadAsync(CancellationToken ct = default)
-    {
-        await _lock.WaitAsync(ct).ConfigureAwait(false);
-        try
+        // #1593: declare the FORM once; JsonFileConfigMechanism runs it.
+        _mechanism = new(new JsonFileConfigHooks<CommonConfig>
         {
-            string path = _default.ConfigFilePath;
-            if (!File.Exists(path))
-            {
-                JsonCommonConfigStoreLog.ConfigFileNotFound(_logger, path);
-                return Result.Success(_default);
-            }
-
-            string json = await File.ReadAllTextAsync(path, ct).ConfigureAwait(false);
-            var config = DeserializeMergedWithDefaults(json);
-            if (config is null)
-            {
-                JsonCommonConfigStoreLog.ConfigNullUsingDefaults(_logger, path);
-                return Result.Success(_default);
-            }
-
-            // #913: pin the directory to the one this store was constructed
-            // with, so the record handed back and the path SaveAsync writes to
-            // can never disagree. `ConfigDirectory` round-trips through the
-            // file, and the merge above lets the FILE's copy win — so before
-            // this, a config.json carrying a stale absolute path (relocated
-            // ~/.harbor, a config copied off another machine, a pinned E2E
-            // sandbox) made LoadAsync return a record that pointed somewhere
-            // other than the file it had just read.
-            return Result.Success(config with { ConfigDirectory = _default.ConfigDirectory });
-        }
-        catch (JsonException ex)
-        {
-            JsonCommonConfigStoreLog.ParseFailed(_logger, ex, _default.ConfigFilePath);
-            return Result.Failure<CommonConfig>($"Common config at {_default.ConfigFilePath} is corrupt: {ex.Message}");
-        }
-        catch (Exception ex)
-        {
-            JsonCommonConfigStoreLog.LoadFailed(_logger, ex, _default.ConfigFilePath);
-            return Result.Failure<CommonConfig>(ex.Message);
-        }
-        finally
-        {
-            _lock.Release();
-        }
-    }
-
-    /// <summary>
-    ///     Deserialize <paramref name="json" /> with ABSENT keys filled from
-    ///     the default instance instead of being reset to null.
-    /// </summary>
-    /// <remarks>
-    ///     <para>
-    ///         <b>Why this exists (.NET 10 STJ source-gen):</b> metadata-based
-    ///         deserialization assigns <c>default(T)</c> (i.e. NULL for string)
-    ///         to every init-only property that is ABSENT from the JSON — it
-    ///         does NOT leave the parameterless-constructor field-initializer
-    ///         value in place (the reflection-based serializer does). A config
-    ///         file written before a property existed therefore loaded as
-    ///         <c>ConfigDirectory = null</c> and crashed
-    ///         <c>Path.Combine(null, …)</c> on next use.
-    ///     </para>
-    ///     <para>
-    ///         Fix: deep-merge the parsed file over the serialized defaults
-    ///         node-first, then deserialize the merged node. Explicit nulls in
-    ///         the file still win; only ABSENT keys fall back to defaults.
-    ///     </para>
-    /// </remarks>
-    private CommonConfig? DeserializeMergedWithDefaults(string json)
-    {
-        var fileNode = JsonNode.Parse(json);
-        if (fileNode is not JsonObject fileObject)
-        {
-            return JsonSerializer.Deserialize(json, CommonConfigInfo);
-        }
-
-        byte[] defaultsBytes = JsonSerializer.SerializeToUtf8Bytes(_default, CommonConfigInfo);
-        using var defaultsDoc = JsonDocument.Parse(defaultsBytes);
-        var defaultsNode = JsonNode.Parse(defaultsDoc.RootElement.GetRawText());
-        if (defaultsNode is not JsonObject defaultsObject)
-        {
-            return JsonSerializer.Deserialize(json, CommonConfigInfo);
-        }
-
-        // The serialized defaults object carries EVERY property key, so no
-        // key is "absent" after the merge and the null-reset cannot trigger.
-        // File values win verbatim (including explicit nulls — explicit user
-        // choice); keys missing from the file keep their default values.
-        foreach (var (key, value) in fileObject)
-        {
-            defaultsObject[key] = value is null ? null : JsonNode.Parse(value.ToJsonString());
-        }
-
-        return defaultsNode.Deserialize(CommonConfigInfo);
-    }
-
-    /// <inheritdoc />
-    public async Task<Result> SaveAsync(CommonConfig config, CancellationToken ct = default)    {
-        if (config is null) throw new ArgumentNullException(nameof(config));
-
-        await _lock.WaitAsync(ct).ConfigureAwait(false);
-        try
-        {
+            Default = _default,
+            LoadPath = () => _default.ConfigFilePath,
             // #913: the target is the store's OWN file — the same
             // _default.ConfigFilePath LoadAsync reads from — NOT one
             // re-derived from the payload's ConfigDirectory. That property is
@@ -210,91 +112,58 @@ public sealed class JsonCommonConfigStore : ICommonConfigStore
             // that foreign path, so the split reproduced itself on every
             // subsequent save. The invariant belongs to the store, so the
             // store decides where it writes.
-            string path = _default.ConfigFilePath;
-            config = config with { ConfigDirectory = _default.ConfigDirectory };
-
-            string? dir = Path.GetDirectoryName(path);
-            if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))
+            SavePath = _ => _default.ConfigFilePath,
+            Deserialize = json => JsonFileConfigMechanism<CommonConfig>.DeserializeMergedWithDefaults(json, _default, CommonConfigInfo),
+            AfterLoad = config =>
             {
-                Directory.CreateDirectory(dir);
-            }
-
-            // MERGE with existing JSON to preserve fields from other config systems
-            // (e.g. HarborConfig's "provider", "model", "tui", "onboarded", "providers",
-            // "enabledPlugins", "disabledTools", "maxSteps", "costLimit", "compaction").
-            // Without this, saving CommonConfig wipes those fields and breaks the CLI.
-            string existingJson = "{}";
-            if (File.Exists(path))
+                // #913: pin the directory to the one this store was constructed
+                // with, so the record handed back and the path SaveAsync writes to
+                // can never disagree. `ConfigDirectory` round-trips through the
+                // file, and the merge above lets the FILE's copy win — so before
+                // this, a config.json carrying a stale absolute path (relocated
+                // ~/.harbor, a config copied off another machine, a pinned E2E
+                // sandbox) made LoadAsync return a record that pointed somewhere
+                // other than the file it had just read.
+                return config with { ConfigDirectory = _default.ConfigDirectory };
+            },
+            Serialize = async (config, ct) =>
             {
-                existingJson = await File.ReadAllTextAsync(path, ct).ConfigureAwait(false);
-            }
+                // #913: the payload may carry a foreign or stale
+                // ConfigDirectory; the file always records the directory this
+                // store was constructed with, so the next Load has nothing
+                // stale left to inherit.
+                var pinned = config with { ConfigDirectory = _default.ConfigDirectory };
 
-            // Parse existing JSON, update CommonConfig fields, preserve everything else.
-            using var existingDoc = JsonDocument.Parse(string.IsNullOrEmpty(existingJson) ? "{}" : existingJson);
-            using var memStream = new MemoryStream();
-            using (var writer = new Utf8JsonWriter(memStream, new JsonWriterOptions { Indented = true }))
-            {
-                writer.WriteStartObject();
-
-                // Write CommonConfig fields
-                // JsonProperty.WriteTo writes BOTH name AND value — don't call WritePropertyName first!
-                byte[] commonJson = JsonSerializer.SerializeToUtf8Bytes(config, CommonConfigInfo);
-                using var commonDoc = JsonDocument.Parse(commonJson);
-                foreach (var prop in commonDoc.RootElement.EnumerateObject())
+                // MERGE with existing JSON to preserve fields from other config systems
+                // (e.g. HarborConfig's "provider", "model", "tui", "onboarded", "providers",
+                // "enabledPlugins", "disabledTools", "maxSteps", "costLimit", "compaction").
+                // Without this, saving CommonConfig wipes those fields and breaks the CLI.
+                string existingJson = "{}";
+                if (File.Exists(_default.ConfigFilePath))
                 {
-                    prop.WriteTo(writer);
+                    existingJson = await File.ReadAllTextAsync(_default.ConfigFilePath, ct).ConfigureAwait(false);
                 }
 
-                // Write existing fields that CommonConfig doesn't have
-                foreach (var prop in existingDoc.RootElement.EnumerateObject())
-                {
-                    if (commonDoc.RootElement.TryGetProperty(prop.Name, out _))
-                        continue;
-                    prop.WriteTo(writer);
-                }
-
-                writer.WriteEndObject();
-            }
-
-            string mergedJson = Encoding.UTF8.GetString(memStream.ToArray());
-            string tempPath = path + ".tmp";
-
-            // Write to temp file first, then atomically move into place.
-            await File.WriteAllTextAsync(tempPath, mergedJson, ct).ConfigureAwait(false);
-            if (File.Exists(path))
-            {
-                File.Delete(path);
-            }
-            File.Move(tempPath, path);
-
-            JsonCommonConfigStoreLog.ConfigSaved(_logger, path);
-            return Result.Success();
-        }
-        catch (Exception ex)
-        {
-            JsonCommonConfigStoreLog.SaveFailed(_logger, ex, config.ConfigFilePath);
-            return Result.Failure(ex.Message);
-        }
-        finally
-        {
-            _lock.Release();
-        }
+                return JsonFileConfigMechanism<CommonConfig>.SerializeMergedWithExisting(existingJson, pinned, CommonConfigInfo);
+            },
+            CorruptError = ex => $"Common config at {_default.ConfigFilePath} is corrupt: {ex.Message}",
+            LogFileNotFound = path => JsonCommonConfigStoreLog.ConfigFileNotFound(logger, path),
+            LogNullConfig = path => JsonCommonConfigStoreLog.ConfigNullUsingDefaults(logger, path),
+            LogParseFailed = (ex, path) => JsonCommonConfigStoreLog.ParseFailed(logger, ex, path),
+            LogLoadFailed = (ex, path) => JsonCommonConfigStoreLog.LoadFailed(logger, ex, path),
+            LogSaved = (path, _) => JsonCommonConfigStoreLog.ConfigSaved(logger, path),
+            LogSaveFailed = (ex, path) => JsonCommonConfigStoreLog.SaveFailed(logger, ex, path),
+        });
     }
 
     /// <inheritdoc />
-    public async Task<Result> UpdateAsync(Func<CommonConfig, CommonConfig> updater, CancellationToken ct = default)
-    {
-        if (updater is null) throw new ArgumentNullException(nameof(updater));
+    public Task<Result<CommonConfig>> LoadAsync(CancellationToken ct = default) => _mechanism.LoadAsync(ct);
 
-        var loadResult = await LoadAsync(ct).ConfigureAwait(false);
-        if (loadResult.IsFailure)
-        {
-            return loadResult;
-        }
+    /// <inheritdoc />
+    public Task<Result> SaveAsync(CommonConfig config, CancellationToken ct = default) => _mechanism.SaveAsync(config, ct);
 
-        var updated = updater(loadResult.Value);
-        return await SaveAsync(updated, ct).ConfigureAwait(false);
-    }
+    /// <inheritdoc />
+    public Task<Result> UpdateAsync(Func<CommonConfig, CommonConfig> updater, CancellationToken ct = default) => _mechanism.UpdateAsync(updater, ct);
 }
 
 /// <summary>

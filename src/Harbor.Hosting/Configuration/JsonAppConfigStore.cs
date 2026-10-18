@@ -10,11 +10,11 @@
 // in the leaf; only the persistence moved. See JsonCommonConfigStore.cs for the
 // full note and DesktopAbstractionsLeafTakesNoIoRules for the guard.
 //
-// Persists per-app config to ~/.harbor/<ConfigFileName>.json using
-// System.Text.Json. Writes are atomic (temp file + File.Move) and serialized
-// via a SemaphoreSlim so concurrent callers don't truncate each other's writes.
-// Reads fall back to the supplied default config when the file is missing or
-// corrupt — never throws for expected IO failures.
+// Persists per-app config to ~/.harbor/<ConfigFileName>.json. Writes are
+// atomic (temp file + File.Move) and serialized via a SemaphoreSlim so
+// concurrent callers don't truncate each other's writes. Reads fall back to
+// the supplied default config when the file is missing or corrupt — never
+// throws for expected IO failures.
 //
 // AOT note: because the concrete T (CliConfig, AvaloniaConfig, …) is defined
 // in each app's own assembly, this store cannot source-generate metadata for
@@ -31,6 +31,17 @@
 // Both product call sites omitted the argument, so it was the live path, not a
 // fallback nobody reached. It is gone; omitting the argument is now an immediate
 // named exception instead of a deferred one.
+//
+// #1593 (Bridge): the file pipeline (exists-probe, ReadAllTextAsync,
+// corrupt→failure mapping, ensure-directory, serialized atomic write — the
+// skeleton this file used to duplicate from JsonCommonConfigStore) lives in
+// JsonFileConfigMechanism, shared by both stores. What is left here is the
+// FORM — the parts that belong to the per-app config shape:
+// - the caller-supplied source-generated JsonTypeInfo<T> (#414: no reflection
+//   fallback exists; omitting it is an immediate, named construction failure),
+// - payload-derived save path (config.ConfigFilePath — deliberately UNlike
+//   the common store's #913 store-owned path, and unchanged),
+// - this store's SG4 log wording.
 
 using System.Collections.Immutable;
 using System.Text.Json;
@@ -77,8 +88,7 @@ public sealed class JsonAppConfigStore<T> : IAppConfigStore<T> where T : AppConf
     // comment claiming otherwise predates that.
 
     private readonly T _default;
-    private readonly SemaphoreSlim _lock = new(1, 1);
-    private readonly ILogger<JsonAppConfigStore<T>> _logger;
+    private readonly JsonFileConfigMechanism<T> _mechanism;
 
     /// <summary>
     ///     Non-null by construction. The parameter is nullable so the "no contract
@@ -117,7 +127,7 @@ public sealed class JsonAppConfigStore<T> : IAppConfigStore<T> where T : AppConf
         JsonTypeInfo<T>? jsonTypeInfo = null)
     {
         _default = defaultConfig ?? throw new ArgumentNullException(nameof(defaultConfig));
-        _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+        if (logger is null) throw new ArgumentNullException(nameof(logger));
 
         // #414: there is no reflection fallback any more. It used to be
         // `_jsonTypeInfo is not null ? <generated> : JsonSerializer.Deserialize<T>(
@@ -149,105 +159,41 @@ public sealed class JsonAppConfigStore<T> : IAppConfigStore<T> where T : AppConf
         }
 
         _jsonTypeInfo = jsonTypeInfo;
-    }
 
-    /// <inheritdoc />
-    public async Task<Result<T>> LoadAsync(CancellationToken ct = default)
-    {
-        await _lock.WaitAsync(ct).ConfigureAwait(false);
-        try
+        // #1593: declare the FORM once; JsonFileConfigMechanism runs it.
+        // Unlike JsonCommonConfigStore there is no #913 story here: the save
+        // target stays payload-derived (config.ConfigFilePath), exactly as it
+        // always was.
+        _mechanism = new(new JsonFileConfigHooks<T>
         {
-            string path = _default.ConfigFilePath;
-            if (!File.Exists(path))
-            {
-                JsonAppConfigStoreLog.ConfigFileNotFound(_logger, path, _default.AppId);
-                return Result.Success(_default);
-            }
-
-            string json = await File.ReadAllTextAsync(path, ct).ConfigureAwait(false);
+            Default = _default,
+            LoadPath = () => _default.ConfigFilePath,
+            SavePath = config => config.ConfigFilePath,
             // #414: no reflection branch. The JsonTypeInfo overload is the only call, so the
             // contract comes from generated metadata or not at all — see the constructor.
-            var config = JsonSerializer.Deserialize(json, _jsonTypeInfo);
-            if (config is null)
-            {
-                JsonAppConfigStoreLog.ConfigNullUsingDefaults(_logger, path);
-                return Result.Success(_default);
-            }
-            return Result.Success(config);
-        }
-        catch (JsonException ex)
-        {
-            JsonAppConfigStoreLog.ParseFailed(_logger, ex, _default.ConfigFilePath);
-            return Result.Failure<T>($"App config at {_default.ConfigFilePath} is corrupt: {ex.Message}");
-        }
-        catch (Exception ex)
-        {
-            JsonAppConfigStoreLog.LoadFailed(_logger, ex, _default.ConfigFilePath);
-            return Result.Failure<T>(ex.Message);
-        }
-        finally
-        {
-            _lock.Release();
-        }
-    }
-
-    /// <inheritdoc />
-    public async Task<Result> SaveAsync(T config, CancellationToken ct = default)
-    {
-        if (config is null) throw new ArgumentNullException(nameof(config));
-
-        await _lock.WaitAsync(ct).ConfigureAwait(false);
-        try
-        {
-            string path = config.ConfigFilePath;
-            string? dir = Path.GetDirectoryName(path);
-            if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))
-            {
-                Directory.CreateDirectory(dir);
-            }
-
+            Deserialize = json => JsonSerializer.Deserialize(json, _jsonTypeInfo),
+            AfterLoad = config => config,
             // #414: as in LoadAsync, the only (de)serialization call is the
             // JsonTypeInfo one.
-            string json = JsonSerializer.Serialize(config, _jsonTypeInfo);
-            string tempPath = path + ".tmp";
-
-            // Write to temp file first, then atomically move into place. This
-            // ensures a crash mid-write leaves the previous file intact.
-            await File.WriteAllTextAsync(tempPath, json, ct).ConfigureAwait(false);
-            if (File.Exists(path))
-            {
-                File.Delete(path);
-            }
-            File.Move(tempPath, path);
-
-            JsonAppConfigStoreLog.ConfigSaved(_logger, path, config.AppId);
-            return Result.Success();
-        }
-        catch (Exception ex)
-        {
-            JsonAppConfigStoreLog.SaveFailed(_logger, ex, config.ConfigFilePath);
-            return Result.Failure(ex.Message);
-        }
-        finally
-        {
-            _lock.Release();
-        }
+            Serialize = (config, _) => Task.FromResult(JsonSerializer.Serialize(config, _jsonTypeInfo)),
+            CorruptError = ex => $"App config at {_default.ConfigFilePath} is corrupt: {ex.Message}",
+            LogFileNotFound = path => JsonAppConfigStoreLog.ConfigFileNotFound(logger, path, _default.AppId),
+            LogNullConfig = path => JsonAppConfigStoreLog.ConfigNullUsingDefaults(logger, path),
+            LogParseFailed = (ex, path) => JsonAppConfigStoreLog.ParseFailed(logger, ex, path),
+            LogLoadFailed = (ex, path) => JsonAppConfigStoreLog.LoadFailed(logger, ex, path),
+            LogSaved = (path, config) => JsonAppConfigStoreLog.ConfigSaved(logger, path, config.AppId),
+            LogSaveFailed = (ex, path) => JsonAppConfigStoreLog.SaveFailed(logger, ex, path),
+        });
     }
 
     /// <inheritdoc />
-    public async Task<Result> UpdateAsync(Func<T, T> updater, CancellationToken ct = default)
-    {
-        if (updater is null) throw new ArgumentNullException(nameof(updater));
+    public Task<Result<T>> LoadAsync(CancellationToken ct = default) => _mechanism.LoadAsync(ct);
 
-        var loadResult = await LoadAsync(ct).ConfigureAwait(false);
-        if (loadResult.IsFailure)
-        {
-            return loadResult;
-        }
+    /// <inheritdoc />
+    public Task<Result> SaveAsync(T config, CancellationToken ct = default) => _mechanism.SaveAsync(config, ct);
 
-        var updated = updater(loadResult.Value);
-        return await SaveAsync(updated, ct).ConfigureAwait(false);
-    }
+    /// <inheritdoc />
+    public Task<Result> UpdateAsync(Func<T, T> updater, CancellationToken ct = default) => _mechanism.UpdateAsync(updater, ct);
 }
 
 /// <summary>
