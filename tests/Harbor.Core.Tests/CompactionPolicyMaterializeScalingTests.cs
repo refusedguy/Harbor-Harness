@@ -29,8 +29,8 @@
 //    mutable view list would trade the scan for a race, §OOP-001), so a
 //    growing-legs shape cannot separate the scan from the copy. This shape
 //    is measured at a FIXED history instead: the small leg materializes an
-//    N-message summarized history `unique` times, the large leg a 2N-message
-//    one. That is exactly the within-turn repeat call (#97: "O(n) twice per
+//    N-message summarized history N times, the large leg a 2N-message one.
+//    That is exactly the within-turn repeat call (#97: "O(n) twice per
 //    turn"): the FIRST call of each leg pays the full scan + view, every
 //    subsequent call rides the anchor cache.
 //
