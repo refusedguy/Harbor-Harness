@@ -8,11 +8,11 @@ namespace Harbor.Application.Sessions;
 /// </summary>
 /// <remarks>
 ///     <para>
-///         The runs root is resolved exactly like
-///         <c>Harbor.Hosting.HarborPaths.GetHarborHome()</c> (<c>HARBOR_HOME</c>
-///         or <c>~/.harbor</c>) but WITHOUT referencing the Hosting project:
-///         Application depends on Abstractions only, so the five lines live
-///         here rather than behind a new <c>ProjectReference</c>.
+///         The runs root is resolved through
+///         <see cref="Harbor.Abstractions.Filesystem.HarborPaths.GetHarborHome" />
+///         (<c>HARBOR_HOME</c> or <c>~/.harbor</c>) — the same helper
+///         Harbor.Hosting forwards to (#1570). Application depends on
+///         Abstractions only, which is exactly why the helper now lives there.
 ///     </para>
 ///     <para>
 ///         Consumers use <see cref="WorkspacePaths.Default" /> (the process-wide
@@ -46,12 +46,7 @@ public sealed class WorkspacePaths : IWorkspacePaths
     }
 
     /// <inheritdoc />
-    public string GetHarborHome()
-    {
-        if (Environment.GetEnvironmentVariable("HARBOR_HOME") is { Length: > 0 } custom)
-            return custom;
-        return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".harbor");
-    }
+    public string GetHarborHome() => Harbor.Abstractions.Filesystem.HarborPaths.GetHarborHome();
 
     /// <inheritdoc />
     public string RunsRoot() => Path.Combine(GetHarborHome(), "runs");
