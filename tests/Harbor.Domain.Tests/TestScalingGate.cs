@@ -26,9 +26,13 @@ namespace Harbor.Domain.Tests;
 //
 //   1. LEG SCALING — a warm-up probe measures the small leg at
 //      `initialUnits` units of work and the unit count is raised until one
-//      leg needs >= `TargetLegMs` (50–100 ms) of wall time. The legs that
-//      flaked were 1–25 ms; at 10x that length, any transient that lands in
-//      one leg inflates the ratio by at most ~10%, not by 2–4x.
+//      leg needs >= `TargetLegMs` (50–100 ms) of wall time, and the stop a
+//      "big enough" probe suggests must be CONFIRMED by a second probe: a
+//      polluted probe must not freeze the legs short (the #1652 ui run
+//      decided its ratio on 15 ms legs after exactly such a verdict). The
+//      flaked gates ran 1–25 ms legs; at 10x that length, any transient
+//      that lands in one leg inflates the ratio by at most ~10%, not by
+//      2–4x.
 //   2. MEDIAN over ROUNDS — the leg pair is measured `Rounds` (>= 5) times
 //      and the MEDIANS form both ratios. Best-of-N tracked the luckiest round
 //      (a descheduled or collected leg only inflates a leg, so best-of *can*
@@ -290,6 +294,16 @@ internal static class TestScalingGate
     internal const double TimeEpsilon = 1.05;
 
     /// <summary>
+    ///     Probe budget for leg scaling. Each attempt grows the unit count by
+    ///     at most x8 toward <see cref="TestScalingGateOptions.TargetLegMs" />,
+    ///     and a "big enough" probe verdict must be confirmed by a second
+    ///     probe before it stops the scaling — eight attempts give a small
+    ///     <c>initialUnits</c> enough cap-depth to actually reach the target
+    ///     while MaxUnits remains the hard ceiling.
+    /// </summary>
+    private const int MaxScaleAttempts = 8;
+
+    /// <summary>
     ///     The double in a single expression, so every gate's positive-control
     ///     table pins the SAME decision function: a zero or negative baseline
     ///     is refused (a ratio over a baseline that was never measured would
@@ -336,19 +350,40 @@ internal static class TestScalingGate
         int units = Math.Max(1, initialUnits);
 
         // A mid-leg transient only ever inflates a leg, so scaling the unit
-        // count by the measured small-leg duration is monotone and safe. One
-        // probe round; up to three rescales — the probe itself is discarded
-        // measurement, and each later probe is also a tiered-JIT warm-up of
-        // the exact path that will be measured.
+        // count by the measured small-leg duration is monotone and safe. But
+        // the same noise cuts both ways: a PROBE caught in a CI-fleet hiccup
+        // can measure far above the steady rate, and the stop that "leg is
+        // big enough" then suggests would freeze the legs SHORT — the #1652
+        // ui run scaled only to 262 units on exactly such a probe and went on
+        // to decide a 3.44-over-3.15 ratio on 15 ms legs. So the "reached
+        // TargetLegMs" verdict is CONFIRMED by a second probe at the same
+        // units before it is trusted, and scaling continues — from the
+        // confirming measurement, which is the warm per-unit estimate — until
+        // two probes agree or a bound (attempts, MaxUnits) ends the loop.
+        // Every probe still doubles as a tiered-JIT warm-up of the measured
+        // path, and each attempt scales by at least one unit, so growth stays
+        // monotone and MaxUnits remains the hard ceiling.
         double probeMs = 0.0;
-        for (int attempt = 0; attempt < 3; attempt++)
+        for (int attempt = 0; attempt < MaxScaleAttempts; attempt++)
         {
             Fence();
             TestScalingGateLeg probe = await measureSmallLeg(units).ConfigureAwait(false);
             probeMs = probe.Ms;
-            if (probeMs <= 0.0 || probeMs >= opts.TargetLegMs || units >= opts.MaxUnits)
+            if (probeMs <= 0.0 || units >= opts.MaxUnits)
             {
                 break;
+            }
+
+            if (probeMs >= opts.TargetLegMs)
+            {
+                Fence();
+                TestScalingGateLeg confirm = await measureSmallLeg(units).ConfigureAwait(false);
+                if (confirm.Ms >= opts.TargetLegMs)
+                {
+                    break;
+                }
+
+                probeMs = confirm.Ms; // the confirming measurement is the warm estimate
             }
 
             long scaled = (long)Math.Ceiling(units * Math.Min(8.0, opts.TargetLegMs / probeMs));
