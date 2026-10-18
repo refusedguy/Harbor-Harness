@@ -106,9 +106,9 @@ internal static class ArtifactWriter
         File.WriteAllText(Path.Combine(attemptRoot, "parser-diagnostics.json"),
             JsonSerializer.Serialize(new ParserDiagnostics(events.Unknown), ArtifactJsonContext.Default.ParserDiagnostics));
         File.WriteAllText(Path.Combine(attemptRoot, "initial-manifest.json"),
-            JsonSerializer.Serialize(before.Files, ArtifactJsonContext.Default.GetTypeInfo(typeof(Dictionary<string, string>))));
+            JsonSerializer.Serialize(before.Files, ArtifactJsonContext.Default.DictionaryStringString));
         File.WriteAllText(Path.Combine(attemptRoot, "final-manifest.json"),
-            JsonSerializer.Serialize(after.Files, ArtifactJsonContext.Default.GetTypeInfo(typeof(Dictionary<string, string>))));
+            JsonSerializer.Serialize(after.Files, ArtifactJsonContext.Default.DictionaryStringString));
         File.WriteAllText(Path.Combine(attemptRoot, "changes.json"),
             JsonSerializer.Serialize(DiffManifests(before, after), ArtifactJsonContext.Default.ManifestDiff));
         File.WriteAllText(Path.Combine(attemptRoot, "verification.json"),

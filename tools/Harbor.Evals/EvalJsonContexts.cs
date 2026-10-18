@@ -41,6 +41,7 @@ internal sealed partial class EvalContractJsonContext : JsonSerializerContext;
 [JsonSerializable(typeof(ArtifactWriter.ParserDiagnostics))]
 [JsonSerializable(typeof(ArtifactWriter.ManifestDiff))]
 [JsonSerializable(typeof(ArtifactWriter.VerificationReport))]
+[JsonSerializable(typeof(Dictionary<string, string>))]
 [JsonSerializable(typeof(VerifierRunner.CheckResult))]
 internal sealed partial class ArtifactJsonContext : JsonSerializerContext;
 
