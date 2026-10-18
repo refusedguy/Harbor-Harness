@@ -26,7 +26,7 @@ namespace Harbor.Storage.Jsonl;
 ///         during the write itself, not just before it.
 ///     </para>
 /// </remarks>
-public sealed class JsonlSessionStore : ISessionStore, ISessionCheckpointStore
+public sealed partial class JsonlSessionStore : ISessionStore, ISessionCheckpointStore
 {
     // JSONL codec context provides AOT-safe serialization via JsonTypeInfo.
     // See JsonlCodecContext.cs for the registered types.
@@ -573,14 +573,26 @@ public sealed class JsonlSessionStore : ISessionStore, ISessionCheckpointStore
     }
 
     /// <summary>
-    ///     Mark a checkpoint over a message (#1247): the
-    ///     anchor's zero-based index in message order is recorded as a
-    ///     <c>"type":"checkpoint"</c> line appended to the session file, so a
-    ///     later <see cref="RewindToCheckpointAsync" /> can restore it by
+    ///     Mark a checkpoint over a message (#1247): the anchor's zero-based
+    ///     index in message order is recorded as a <c>"type":"checkpoint"</c>
+    ///     line appended to the session file, so a later
+    ///     <see cref="RewindToCheckpointAsync" /> can restore it by
     ///     checkpoint id instead of message id. Checkpoints are metadata —
     ///     the message read path skips them, so history, stats and export
     ///     are unchanged by their presence.
     /// </summary>
+    /// <remarks>
+    ///     <para>
+    ///         <b>#1551 (Memento):</b> this member is the caretaker half of
+    ///         the pattern — it resolves the file, decides the session
+    ///         existence policy, then hands the capture over to the
+    ///         originator (<see cref="CaptureCheckpointAsync" /> in
+    ///         <c>SessionCheckpointOriginator.cs</c>). The anchor scan, the
+    ///         checkpoint's id/index construction and the persisted line
+    ///         shape belong to the originator and the mapper kit; the store
+    ///         keeps and numbers snapshots but never opens one.
+    ///     </para>
+    /// </remarks>
     /// <param name="sessionId">The session id.</param>
     /// <param name="messageId">Anchor message id to mark.</param>
     /// <param name="label">Optional human label.</param>
@@ -601,39 +613,10 @@ public sealed class JsonlSessionStore : ISessionStore, ISessionCheckpointStore
             return Result.Failure<SessionCheckpoint>(SessionStoreErrors.SessionNotFound(sessionId));
         }
 
-        var messagesResult = await GetMessagesAsync(sessionId, ct).ConfigureAwait(false);
-        if (messagesResult.IsFailure)
-            return messagesResult.ConvertFailure<SessionCheckpoint>();
-
-#pragma warning disable CFE0001
-        // CFE0001: false positive — the IsFailure guard above is an early
-        // return, a control-flow shape the analyzer does not model.
-        IReadOnlyList<AgentMessage> messages = messagesResult.Value;
-#pragma warning restore CFE0001
-        int index = -1;
-        for (int i = 0; i < messages.Count; i++)
-        {
-            if (string.Equals(messages[i].Id, messageId, StringComparison.Ordinal))
-            {
-                index = i;
-                break;
-            }
-        }
-
-        if (index < 0)
-            return Result.Failure<SessionCheckpoint>(SessionStoreErrors.MessageNotFound(sessionId, messageId));
-
-        var checkpoint = new SessionCheckpoint(
-            Guid.NewGuid().ToString("N"), sessionId, messageId, index,
-            DateTimeOffset.UtcNow, label);
-
-        var appended = await AppendCheckpointEntryAsync(sessionId, sessionFile, new CheckpointEntry(
-            "checkpoint", checkpoint.Id, checkpoint.MessageId, checkpoint.MessageIndex,
-            checkpoint.CreatedAt, checkpoint.Label), ct).ConfigureAwait(false);
-        if (appended.IsFailure)
-            return appended.ConvertFailure<SessionCheckpoint>();
-
-        return Result.Success(checkpoint);
+        // #1551: capture is originator work — the store neither scans the
+        // anchor (no index arithmetic here) nor builds the checkpoint row.
+        return await CaptureCheckpointAsync(sessionId, sessionFile, messageId, label, ct)
+            .ConfigureAwait(false);
     }
 
     /// <summary>
@@ -679,13 +662,25 @@ public sealed class JsonlSessionStore : ISessionStore, ISessionCheckpointStore
 
     /// <summary>
     ///     Rewind a session to a checkpoint (#1247): the
-    ///     session is truncated to the checkpoint's anchor message via
-    ///     <see cref="DeleteMessagesAfterAsync" /> (checkpoints past the
-    ///     anchor go with the dropped future), then a trail marker is
+    ///     session is truncated to the checkpoint's anchor message, checkpoints
+    ///     past the anchor go with the dropped future, and a trail marker is
     ///     appended — the honest trail: which checkpoint was restored, how
     ///     many messages were dropped, when. History is truncated, but the
     ///     rewind itself is recorded, not silent.
     /// </summary>
+    /// <remarks>
+    ///     <para>
+    ///         <b>#1551 (Memento):</b> this member is the caretaker half of
+    ///         the pattern — same as <see cref="CreateCheckpointAsync" />: it
+    ///         resolves the file, checks the session still exists, then
+    ///         delegates to the originator
+    ///         (<see cref="RestoreCheckpointAsync" />). It performs no
+    ///         message scanning and no index arithmetic: the restore knows a
+    ///         checkpoint only by its opaque
+    ///         <see cref="SessionCheckpointMemento" />, which the originator
+    ///         re-materializes from the listed rows through the mapper kit.
+    ///     </para>
+    /// </remarks>
     /// <param name="sessionId">The session id.</param>
     /// <param name="checkpointId">Id of the checkpoint to restore (from <see cref="ListCheckpointsAsync" />).</param>
     /// <param name="ct">Cancellation token.</param>
@@ -693,56 +688,22 @@ public sealed class JsonlSessionStore : ISessionStore, ISessionCheckpointStore
     public async Task<Result<SessionRewindOutcome>> RewindToCheckpointAsync(
         string sessionId, string checkpointId, CancellationToken ct = default)
     {
+        // §3.4: observe cancellation BEFORE the existence policy.
         ct.ThrowIfCancellationRequested();
-
-        var listed = await ListCheckpointsAsync(sessionId, ct).ConfigureAwait(false);
-        if (listed.IsFailure)
-            return listed.ConvertFailure<SessionRewindOutcome>();
-
-#pragma warning disable CFE0001
-        // CFE0001: false positive — the IsFailure guard above is an early return.
-        IReadOnlyList<SessionCheckpoint> checkpoints = listed.Value;
-#pragma warning restore CFE0001
-        SessionCheckpoint? checkpoint = null;
-        foreach (var c in checkpoints)
-        {
-            if (!c.IsRewindTrail && string.Equals(c.Id, checkpointId, StringComparison.Ordinal))
-            {
-                checkpoint = c;
-                break;
-            }
-        }
-
-        if (checkpoint is null)
-            return Result.Failure<SessionRewindOutcome>(SessionStoreErrors.CheckpointNotFound(sessionId, checkpointId));
-
-        var truncated = await DeleteMessagesAfterAsync(sessionId, checkpoint.MessageId, ct).ConfigureAwait(false);
-        if (truncated.IsFailure)
-            return truncated.ConvertFailure<SessionRewindOutcome>();
-
-#pragma warning disable CFE0001
-        // CFE0001: false positive — the IsFailure guard above is an early return.
-        int removed = truncated.Value;
-#pragma warning restore CFE0001
-
         var resolved = SessionFilePaths.TryResolveSessionFile(_rootDirectory, sessionId);
         if (resolved.IsFailure)
             return resolved.ConvertFailure<SessionRewindOutcome>();
-        var trailed = await AppendCheckpointEntryAsync(sessionId, resolved.Value, new CheckpointEntry(
-            "checkpoint", Guid.NewGuid().ToString("N"), checkpoint.MessageId, checkpoint.MessageIndex,
-            DateTimeOffset.UtcNow, null, checkpoint.Id, removed), ct).ConfigureAwait(false);
-        if (trailed.IsFailure)
-            return trailed.ConvertFailure<SessionRewindOutcome>();
+        string sessionFile = resolved.Value; // guarded: returned above on failure.
+        if (!File.Exists(sessionFile))
+        {
+            _messageCache.TryRemove(sessionId, out _);
+            return Result.Failure<SessionRewindOutcome>(SessionStoreErrors.SessionNotFound(sessionId));
+        }
 
-        var reread = await GetMessagesAsync(sessionId, ct).ConfigureAwait(false);
-        if (reread.IsFailure)
-            return reread.ConvertFailure<SessionRewindOutcome>();
-
-#pragma warning disable CFE0001
-        // CFE0001: false positive — the IsFailure guard above is an early return.
-        int remaining = reread.Value.Count;
-#pragma warning restore CFE0001
-        return Result.Success(new SessionRewindOutcome(checkpointId, checkpoint.MessageId, removed, remaining));
+        // #1551: restore is originator work — the caretaker knows nothing
+        // about anchors, message order or the trail line's internals.
+        return await RestoreCheckpointAsync(sessionId, sessionFile, checkpointId, ct)
+            .ConfigureAwait(false);
     }
 
     /// <summary>
@@ -831,9 +792,9 @@ public sealed class JsonlSessionStore : ISessionStore, ISessionCheckpointStore
             return;
         }
 
-        checkpoints.Add(new SessionCheckpoint(
-            entry.Id, sessionId, entry.MessageId, entry.MessageIndex,
-            entry.CreatedAt, entry.Label, entry.RewindOf, entry.Removed));
+        // #1551: row → contract goes through the mapper kit — no second
+        // converter of the same border may exist.
+        checkpoints.Add(SessionCheckpointMapperKit.ToContract(entry, sessionId));
     }
 
     /// <summary>
