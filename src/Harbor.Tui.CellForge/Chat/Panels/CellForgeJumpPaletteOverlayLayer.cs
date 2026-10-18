@@ -1,4 +1,5 @@
 using Harbor.Tui.CellForge.Rendering;
+using Harbor.Tui.CellForge.Widgets;
 using Harbor.Ui.Framework.Navigation;
 using Harbor.Ui.Framework.Panels;
 using Harbor.Ui.Framework.State;
@@ -11,7 +12,15 @@ namespace Harbor.Tui.CellForge.Panels;
 ///     overlay primitives — no new z-layer system: the host pushes this layer
 ///     onto <c>LayoutTree.Overlays</c> (the same
 ///     <see cref="OverlayStack" /> that seats the dialog / toast / diff viewer)
-///     and calls <see cref="Sync" /> per frame.
+///     and calls <see cref="Sync" /> per frame. The IOverlayLayer skeleton —
+///     the viewport field, the single-viewport <c>Sync(Rect)</c> overload,
+///     the <see cref="Paint" /> guard chain
+///     and the <see cref="Opaque" /> / <see cref="HitTransparent" /> /
+///     <see cref="IsModal" /> constants — lives in
+///     <see cref="OverlayLayerBase{TOverlay}"/> (#1537); this seat keeps only
+///     its deltas: its provider-backed <see cref="Bounds"/>, the
+///     provider-context <see cref="Sync(Rect, PanelContext)"/> and its
+///     <see cref="OnKey"/>.
 /// </summary>
 /// <remarks>
 ///     <para>
@@ -50,7 +59,7 @@ namespace Harbor.Tui.CellForge.Panels;
 ///         an unchanged frame.
 ///     </para>
 /// </remarks>
-public sealed class CellForgeJumpPaletteOverlayLayer : IOverlayLayer
+public sealed class CellForgeJumpPaletteOverlayLayer : OverlayLayerBase<CellForgeJumpPalettePanel>
 {
     /// <summary>Stable layer id (push replaces by id, moving to top).</summary>
     public const string LayerId = "jump";
@@ -64,78 +73,78 @@ public sealed class CellForgeJumpPaletteOverlayLayer : IOverlayLayer
     /// <summary>Smallest useful box (header + separators + hint + one row).</summary>
     internal const int MinHeight = 5;
 
-    private readonly CellForgeJumpPalettePanel _panel;
     private PanelContext _ctx = new(new UiState(), 0, 0);
-    private Rect _viewport = new(0, 0, 80, 24);
     private IReadOnlyList<string> _rows = Array.Empty<string>();
 
-    /// <summary>Wrap a palette provider (the host owns the instance and its model).</summary>
+    /// <summary>
+    ///     Wrap a palette provider (the host owns the instance and its model).
+    ///     The three flags are the seat's PRIM2c constants: the box blanks and
+    ///     occludes what it covers, captures hit-tests inside its bounds, and
+    ///     owns the keyboard while it is up.
+    /// </summary>
     public CellForgeJumpPaletteOverlayLayer(CellForgeJumpPalettePanel panel)
+        : base(panel, LayerId, opaque: true, hitTransparent: false, isModal: true)
     {
-        _panel = panel ?? throw new ArgumentNullException(nameof(panel));
     }
 
-    /// <inheritdoc />
-    public string Id => LayerId;
-
-    /// <inheritdoc />
-    public Rect Bounds
+    /// <summary>
+    ///     The centred box: as tall as the rows the provider built (clamped to
+    ///     <see cref="MinHeight"/>…<see cref="MaxHeight"/> and to the viewport)
+    ///     and as wide as the provider's build width. The clamp to the viewport
+    ///     is <see cref="OverlayPopup.CenteredRect" />'s job, so a five-row
+    ///     palette on a four-row terminal degrades to the full viewport instead
+    ///     of painting outside it.
+    /// </summary>
+    protected override Rect ComputeBoundsCore(Rect viewport)
     {
-        get
-        {
-            int height = Math.Clamp(_rows.Count, MinHeight, MaxHeight);
-            return OverlayPopup.CenteredRect(_viewport, BoxWidth(), height);
-        }
+        int height = Math.Clamp(_rows.Count, MinHeight, MaxHeight);
+        return OverlayPopup.CenteredRect(viewport, BoxWidth(), height);
     }
 
     /// <summary>
     ///     Box width in columns — independent of the row count, so
     ///     <see cref="Sync" /> can build the provider at its final width before
     ///     the height is known. <see cref="OverlayPopup.CenteredRect" /> clamps
-    ///     it to the viewport.
+    ///     the final box to the viewport in both dimensions. The terminal cap
+    ///     keeps long paths readable on wide terminals.
     /// </summary>
-    private int BoxWidth() => Math.Min(MaxWidth, _panel.DefaultSize);
-
-    /// <inheritdoc />
-    public bool Visible
-    {
-        get
-        {
-            if (!IsOpenIn(_ctx.State))
-            {
-                // Closed palette: no box, no paint, and — critically — no modal
-                // barrier, so the composer and panels get their keys back.
-                return false;
-            }
-
-            var box = Bounds;
-            return box.Width > 0 && box.Height > 0;
-        }
-    }
-
-    /// <summary>Opaque inside the box (the provider blanks it), transparent elsewhere.</summary>
-    public bool Opaque => true;
-
-    /// <inheritdoc />
-    public bool HitTransparent => false;
+    private int BoxWidth() => Math.Min(MaxWidth, Overlay.DefaultSize);
 
     /// <summary>
-    ///     Modal input barrier: while the palette is up, keys beneath it
-    ///     (panels, composer) starve — the palette owns the keyboard.
+    ///     The state half of the base's <see cref="Visible" /> contract: the
+    ///     palette has content to draw exactly when its panel state is anything
+    ///     but <see cref="TuiPanelState.Hidden" /> in the snapshot.
     /// </summary>
-    public bool IsModal => true;
+    /// <inheritdoc />
+    protected override bool IsShownCore => IsOpenIn(_ctx.State);
+
+    /// <summary>
+    ///     The palette is open when its panel is anything but
+    ///     <see cref="TuiPanelState.Hidden" /> in the snapshot — the same
+    ///     reducer-driven signal the dock uses, so Ctrl+J and Esc keep toggling
+    ///     it through <c>AppMsg.TogglePanel</c>. <see cref="Visible"/> adds the
+    ///     positive-size geometry on top of this state half, so a closed
+    ///     palette means: no box, no paint, and — critically — no modal
+    ///     barrier, so the composer and panels get their keys back.
+    /// </summary>
+    private static bool IsOpenIn(UiState state) =>
+        state.Ui.PanelStates.TryGetValue(OverlayIds.JumpPalette, out var panelState)
+        && panelState != TuiPanelState.Hidden;
 
     /// <summary>
     ///     Refreshes the viewport the centred box is computed from and the
     ///     per-frame provider context, then snapshots the provider's rows (the
     ///     ENG12 replace-wholesale pattern the dock leaves use — one build per
     ///     frame, never one per <see cref="Bounds" /> read). Call once per frame
-    ///     (or on resize).
+    ///     (or on resize); the single-viewport <c>Sync(Rect)</c> still updates
+    ///     the viewport for hosts that have no context. A closed palette
+    ///     empties the rows besides, so the next <see cref="Visible" /> read
+    ///     is false even before the host's next context refresh arrives.
     /// </summary>
     public void Sync(Rect viewport, PanelContext context)
     {
         Harbor.Abstractions.Extensions.Ensure.NotNull(context);
-        _viewport = viewport;
+        base.Sync(viewport);
         _ctx = context;
         if (!IsOpenIn(context.State))
         {
@@ -146,7 +155,7 @@ public sealed class CellForgeJumpPaletteOverlayLayer : IOverlayLayer
         // Build at the box width so the provider clips rows with its ellipsis
         // rule instead of a raw slice; the height comes from the row count.
         _rows = CellForgePanelAdapter.RenderToRows(
-            _panel,
+            Overlay,
             context with
             {
                 Width = Math.Max(1, Math.Min(BoxWidth(), viewport.Width)),
@@ -155,18 +164,9 @@ public sealed class CellForgeJumpPaletteOverlayLayer : IOverlayLayer
     }
 
     /// <summary>
-    ///     The palette is open when its panel is anything but
-    ///     <see cref="TuiPanelState.Hidden" /> in the snapshot — the same
-    ///     reducer-driven signal the dock uses, so Ctrl+J and Esc keep toggling
-    ///     it through <c>AppMsg.TogglePanel</c>.
-    /// </summary>
-    private static bool IsOpenIn(UiState state) =>
-        state.Ui.PanelStates.TryGetValue(OverlayIds.JumpPalette, out var panelState)
-        && panelState != TuiPanelState.Hidden;
-
-    /// <summary>
     ///     Routes a decoded key to the palette. Returns false when the palette
-    ///     does not consume it (e.g. Ctrl/Alt chords) so the host keymap still
+    ///     is closed in the snapshot or when the key maps to no printable
+    ///     chord it consumes (e.g. Ctrl/Alt composites) so the host keymap still
     ///     sees it.
     /// </summary>
     public bool OnKey(in KeyEvent key)
@@ -177,7 +177,7 @@ public sealed class CellForgeJumpPaletteOverlayLayer : IOverlayLayer
         }
 
         var box = Bounds;
-        return _panel.OnKey(
+        return Overlay.OnKey(
             KeyEventAdapter.ToUiKey(dto),
             _ctx with { Width = Math.Max(1, box.Width), Height = Math.Max(1, box.Height) });
     }
@@ -187,20 +187,8 @@ public sealed class CellForgeJumpPaletteOverlayLayer : IOverlayLayer
     ///     the chat underneath never bleeds through). Rows past the box height
     ///     are dropped; the provider already clipped them to its width.
     /// </summary>
-    public void Paint(ScreenBuffer buffer, Rect clip)
+    protected override void PaintCore(ScreenBuffer buffer, Rect box)
     {
-        Harbor.Abstractions.Extensions.Ensure.NotNull(buffer);
-        if (!Visible)
-        {
-            return;
-        }
-
-        var box = Bounds;
-        if (box.Intersect(clip).Area == 0)
-        {
-            return;
-        }
-
         OverlayPopup.Clear(buffer, box);
 
         // ENG12 #284 (TGui snapshot pattern): rows are replaced wholesale by
