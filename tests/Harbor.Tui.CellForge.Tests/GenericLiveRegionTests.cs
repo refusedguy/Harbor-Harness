@@ -248,8 +248,8 @@ public class GenericLiveRegionTests
         }
 
         TestScalingGateResult result = await TestScalingGate.MeasureAsync(
-            measureSmallLeg: units => MeasureLegs(small, smallBuffer, smallRect, units),
-            measureLargeLeg: units => MeasureLegs(large, largeBuffer, largeRect, units),
+            measureSmallLeg: units => Task.FromResult(MeasureLegs(small, smallBuffer, smallRect, units)),
+            measureLargeLeg: units => Task.FromResult(MeasureLegs(large, largeBuffer, largeRect, units)),
             initialUnits: 20,
             options: new TestScalingGateOptions
             {
