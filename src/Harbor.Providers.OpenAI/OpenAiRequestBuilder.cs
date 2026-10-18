@@ -5,6 +5,7 @@ using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Providers;
 using Harbor.Providers.Internal;
 using Microsoft.Extensions.Logging;
+using ZLinq;
 
 namespace Harbor.Providers.OpenAI;
 
@@ -502,18 +503,31 @@ internal static class OpenAiRequestBuilder
     ///     carries none. <see langword="null" /> is meaningful here: it is what
     ///     makes the caller omit <c>content</c> entirely.
     /// </summary>
-    private static string? FirstTextOrNull(IReadOnlyList<LlmContentBlock> content)
-    {
-        for (int i = 0; i < content.Count; i++)
-        {
-            if (content[i] is LlmTextBlock text)
-            {
-                return text.Text;
-            }
-        }
-
-        return null;
-    }
+    /// <remarks>
+    ///     <para>
+    ///         #1554 — this used to be a hand-rolled <c>for</c> with early
+    ///         return. It now reads the same body through ZLinq instead of a
+    ///         lazy <see cref="System.Linq.Enumerable" /> enumerator (hot-path
+    ///         forum rule): <c>AsValueEnumerable</c> on an
+    ///         <see cref="IReadOnlyList{LlmContentBlock}" /> binds a struct
+    ///         iterator with zero heap allocations, and the
+    ///         <see langword="static" /> lambda closes over nothing, so the
+    ///         closure tax is zero too.
+    ///     </para>
+    ///     <para>
+    ///         The <see langword="null" /> returned on "no text block" is a
+    ///         distinct outcome from a matched block, so the
+    ///         <see langword="is" /> pattern is the null-semantics boundary —
+    ///         not CFE <see cref="CSharpFunctionalExtensions.MaybeExt" />, whose
+    ///         <c>TryFirst(predicate)</c> would sit on an eagerly allocated
+    ///         enumerator for the same shape.
+    ///     </para>
+    /// </remarks>
+    private static string? FirstTextOrNull(IReadOnlyList<LlmContentBlock> content) =>
+        content.AsValueEnumerable()
+            .FirstOrDefault(static b => b is LlmTextBlock) is LlmTextBlock text
+            ? text.Text
+            : null;
 }
 
 /// <summary>
