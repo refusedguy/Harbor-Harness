@@ -72,14 +72,14 @@ internal static class JsonlMessageCodec
                 u.Content, u.Agent, u.Model,
                 Attachments: SerializeAttachments(u.Attachments)),
             AssistantMessage a => new AssistantPayload(
-                Parts: a.Parts.Select(SerializePart).ToArray(),
-                StopReason: a.StopReason.ToString().ToLowerInvariant(),
+                Parts: SerializeParts(a.Parts),
+                StopReason: StopReasonLower(a.StopReason),
                 Usage: a.Usage,
                 Model: a.Model,
                 IsSummary: a.IsSummary,
                 SummaryFirstKeptId: a.SummaryFirstKeptId),
             ToolResultMessage tr => new ToolResultPayload(
-                tr.Results.Select(r => new ToolResultEntry(r.ToolCallId, r.ToolName, r.Output, r.IsError)).ToArray()),
+                SerializeToolResults(tr.Results)),
             _ => throw Unsupported(message.Role, message.GetType().Name, "message")
         };
     }
@@ -116,6 +116,87 @@ internal static class JsonlMessageCodec
         new($"{what} kind '{typeName}' (type discriminator '{tag}') has no JSONL shape. "
             + "A new subtype must ship with a SerializePart/SerializeMessagePayload arm; writing a placeholder "
             + "would persist a record the read path cannot read back.");
+
+    /// <summary>
+    ///     Project the assistant <see cref="ContentPart" /> list into the JSON
+    ///     shapes, pre-sizing the result array from the source count (issue
+    ///     #1531). Replaced the <c>Select(SerializePart).ToArray()</c> chain,
+    ///     which cost an iterator + an oversized growable array per persisted
+    ///     assistant message on the append path of every turn. The on-disk
+    ///     shape is unchanged: the same payload objects, in the same order.
+    /// </summary>
+    /// <remarks>
+    ///     <see cref="SerializeAttachments" /> predates this and already used
+    ///     the manual pre-sized loop — this is the same shape generalized.
+    /// </remarks>
+    public static object[] SerializeParts(IReadOnlyList<ContentPart> parts)
+    {
+        if (parts.Count == 0)
+            return [];
+
+        var payload = new object[parts.Count];
+        for (int i = 0; i < parts.Count; i++)
+        {
+            payload[i] = SerializePart(parts[i]);
+        }
+
+        return payload;
+    }
+
+    /// <summary>
+    ///     Project the tool-result entries of a <see cref="ToolResultMessage" />
+    ///     into their JSON shape, pre-sizing the result array from the source
+    ///     count (issue #1531). Replaced the <c>Select(r => new
+    ///     ToolResultEntry(...)).ToArray()</c> chain on the same append path.
+    ///     <see cref="ToolResultEntry.Metadata" /> is still dropped — see #51
+    ///     in the <see cref="SerializeMessagePayload" /> remarks.
+    /// </summary>
+    public static ToolResultEntry[] SerializeToolResults(IReadOnlyList<ToolResultEntry> results)
+    {
+        if (results.Count == 0)
+            return [];
+
+        var payload = new ToolResultEntry[results.Count];
+        for (int i = 0; i < results.Count; i++)
+        {
+            ToolResultEntry r = results[i];
+            payload[i] = new ToolResultEntry(r.ToolCallId, r.ToolName, r.Output, r.IsError);
+        }
+
+        return payload;
+    }
+
+    /// <summary>
+    ///     The lowercase wire spelling of a <see cref="StopReason" /> (issue
+    ///     #1531). Replaces <c>ToString().ToLowerInvariant()</c> — an enum
+    ///     name materialization + a lowercase copy, two allocations per
+    ///     assistant message per turn. The arm bodies are the enum members'
+    ///     names lowered, so the on-disk contract is byte-identical with what
+    ///     <c>ToString().ToLowerInvariant()</c> wrote: <see cref="StopReason.ToolUse" />
+    ///     persists as <c>"tooluse"</c> (and reads back through
+    ///     <see cref="StopReasonTable.TryParseSpan" />; <c>"tool_use"</c> is a
+    ///     provider-side alias, NOT the JSONL spelling).
+    /// </summary>
+    /// <remarks>
+    ///     A discard-less switch over an enum does not compile — CS8524 is an
+    ///     unconditional error under the build's warnings-as-errors (the
+    ///     compiler demands the unnamed enum domain too). So the gate is
+    ///     layered like <c>ToolCallState</c>'s: every member is named
+    ///     explicitly and the unnamed domain (<c>(StopReason)99</c>) throws
+    ///     loudly instead of silently serializing a numeric spelling.
+    /// </remarks>
+    private static string StopReasonLower(StopReason reason) => reason switch
+    {
+        StopReason.Stop => "stop",
+        StopReason.Length => "length",
+        StopReason.ToolUse => "tooluse",
+        StopReason.ContentFilter => "contentfilter",
+        StopReason.Error => "error",
+        StopReason.Aborted => "aborted",
+        _ => throw new InvalidOperationException(
+            $"StopReason '{reason}' is an unnamed enum value and has no lowercase wire spelling: "
+            + "name it explicitly with the lowered member name body (issue #1531)."),
+    };
 
     /// <summary>
     ///     Project the images a user attached to a turn (issue #386). Returns

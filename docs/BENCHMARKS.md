@@ -1029,6 +1029,38 @@ and carries none after — the O(1)-per-append extension replaced the
 O(history)-per-append rebuild, which is also what keeps the measured ratio
 near linear at ×1.82/×1.84.
 
+### JsonlMessagePayload serialization gate (#1531) — **RELATIVE**, CI merge gate ⏳ first run pending
+
+`Harbor.Storage.Jsonl.Tests.JsonlMessagePayloadScalingTests`, in the `test (platform)` merge-gate shard.
+
+Same relative convention as #410 / #1528: N against 2N inside one run, no absolute
+budgets, measured through the shared `Harbor.TestKit.TestScalingGate` (#1652 —
+GC-fenced legs scaled toward ~100 ms of real work, medians over five rounds,
+x1.05 noise band on the time branch only). The slice differs from the
+issue-#1528 exact-zero rule: `JsonlMessageCodec.SerializeMessagePayload` did
+real per-message allocation work that is *linear*, so a ratio gate is the
+honest shape here, not an exact-zero one.
+
+**Before (code shape, per the #97 slice audit — the LINQ path had no bench row
+of its own, so the "before" column is structural, not measured):** every
+persisted assistant message paid a `Select(SerializePart).ToArray()` iterator +
+an oversized growable array, every tool-result message a
+`Select(new ToolResultEntry(...)).ToArray()` iterator + array, and every
+assistant message two strings for `StopReason.ToString() + ToLowerInvariant()` —
+on the append path of every turn. **After:** one pre-sized array per message,
+zero extra strings (a constant `StopReason` switch), on-disk payload shapes
+byte-identical (pinned by `JsonlMessagePayloadShapeTests`, including the
+`"tooluse"` spelling).
+
+| Test | Relative claim | Gate | Measured |
+|---|---|---|---|
+| `SerializeMessagePayload_DoubledMessages_StaysWithinGrowthLimit` | time over N → 2N alternating user/assistant/tool_result payload batches — leg-scaled, medians of 5 rounds, linux-gated | ratio ≤ 3.0 (linear ≈ 2.0; O(N²) ≈ 4.0) | ⏳ not yet measured |
+| `SerializeMessagePayload_DoubledMessages_StaysWithinGrowthLimit` | allocations over the same batches — runner-independent half of the claim | ratio ≤ 3.0, strict (no band, #1652) | ⏳ not yet measured |
+
+> The `[scaling] jsonl-payload-scaling: ...` report line prints into the
+> `test (platform)` job log on every run — cite THAT run's values when filling
+> the Measured column, never the local absolute milliseconds.
+
 ### ConsoleEx cell-diff core (`DiffEngineBenchmark`, 2026-08-26, Release)
 
 Frame-budget targets from `specs/07-tui.md` (< 16 ms/frame) and celldiff §7 — all met with an order of magnitude of headroom. Flush = real DiffEngine scan + AnsiWriter SGR/cursor encoding into a discarding backend (no tty I/O).
