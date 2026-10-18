@@ -153,13 +153,17 @@ public sealed class MessagePackRpcServer : IAsyncDisposable
             MessagePackRpcServerLog.ClientConnected(_logger);
             while (!session.ConnectionCts.IsCancellationRequested)
             {
-                FrameReadResult? readOpt = await ReadRequestAsync(session).ConfigureAwait(false);
-                if (readOpt is not { } read)
+                Result<FrameReadResult, Exception> readResult =
+                    await ReadRequestAsync(session).ConfigureAwait(false);
+                if (readResult.IsFailure)
                 {
+                    // Read failed — connection must close. The reason is preserved
+                    // in readResult.Error (cancelled disconnect vs stream error);
+                    // nothing is swallowed here.
                     return;
                 }
 
-                FrameDecision frame = HandleFrameOutcome(read);
+                FrameDecision frame = HandleFrameOutcome(readResult.Value);
                 if (frame == FrameDecision.Close)
                 {
                     return;
@@ -246,20 +250,27 @@ public sealed class MessagePackRpcServer : IAsyncDisposable
         Close,
     }
 
-    /// <summary>Reads one frame; returns <see langword="null" /> when the connection must close.</summary>
-    private async Task<FrameReadResult?> ReadRequestAsync(ClientSession session)
-    {
-        try
+    /// <summary>
+    ///     Reads one frame. Failure means the connection must close, with the
+    ///     reason preserved in <see cref="Result{T, E}.Error" /> instead of a
+    ///     blind <see langword="null" />: an <see cref="OperationCanceledException" />
+    ///     is an expected cancelled disconnect (not logged), anything else is a
+    ///     stream error logged via <see cref="MessagePackRpcServerLog.StreamReadFailed" />.
+    /// </summary>
+    private async Task<Result<FrameReadResult, Exception>> ReadRequestAsync(ClientSession session) =>
+        (await Result.Try(
+                async () => await session.FrameReader
+                    .ReadRequestAsync(session.Stream, session.ConnectionCt)
+                    .ConfigureAwait(false),
+                static ex => ex)
+            .ConfigureAwait(false))
+        .TapError(ex =>
         {
-            return await session.FrameReader.ReadRequestAsync(session.Stream, session.ConnectionCt).ConfigureAwait(false);
-        }
-        catch (OperationCanceledException) { return null; }
-        catch (Exception ex)
-        {
-            MessagePackRpcServerLog.StreamReadFailed(_logger, ex);
-            return null;
-        }
-    }
+            if (ex is not OperationCanceledException)
+            {
+                MessagePackRpcServerLog.StreamReadFailed(_logger, ex);
+            }
+        });
 
     /// <summary>Classifies a frame read: dispatch the request, skip the frame, or close the connection.</summary>
     private FrameDecision HandleFrameOutcome(FrameReadResult read)
