@@ -154,9 +154,16 @@ internal readonly record struct OverlayLayerCensus(
 /// </summary>
 internal static class OverlayKeyPlaneProbe
 {
-    /// <summary>The layer declaration form: a sealed class implementing the overlay seam.</summary>
+    /// <summary>
+    ///     The layer declaration form: a sealed class on the overlay seam, either
+    ///     directly (<c>: IOverlayLayer</c>) or through the shared abstract
+    ///     <c>OverlayLayerBase&lt;TOverlay&gt;</c> skeleton (#1537 collapsed the
+    ///     eight byte-identical skeletons into it; the skeleton base is abstract,
+    ///     so it is never a census row, and the fact columns below are unchanged).
+    /// </summary>
     internal static readonly Regex LayerDeclaration =
-        new(@"public\s+sealed\s+class\s+(?<name>\w+)\s*:\s*IOverlayLayer\b", RegexOptions.Compiled);
+        new(@"public\s+sealed\s+class\s+(?<name>\w+)\s*:\s*(?:IOverlayLayer\b|OverlayLayerBase<)", RegexOptions.Compiled);
+
 
     /// <summary>The key-reading override. Its absence means the interface default `=&gt; false`.</summary>
     internal static readonly Regex ReadsKeys =
