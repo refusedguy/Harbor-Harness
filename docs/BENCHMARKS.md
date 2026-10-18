@@ -984,7 +984,7 @@ that text back out is the per-turn cost the map existed to avoid.
 
 | Test | Relative claim | Gate | Measured |
 |---|---|---|---|
-| `KeyCost_GrowsLinearly_InContextSize` | time + allocations over `BuildAsync` with a context file of 32 KiB → 64 KiB, one fresh-key turn per unit, inner builder faked out so the window is the key pass | ratio ≤ 3.0 both branches (linear ≈ 2.0; the joined-string regression is 4.0) ⏳ numbers land with this PR's `test (core)` run | — |
+| `KeyCost_GrowsLinearly_InContextSize` | time + allocations over `BuildAsync` with a context file of 32 KiB → 64 KiB, one fresh-key turn per unit, inner builder faked out so the window is the key pass | ratio ≤ 3.0 both branches (linear ≈ 2.0; the joined-string regression is 4.0) | **1.90** time (80.945 → 153.602 ms, medians of 5 legs of 2233 units), **1.00** allocations (2 197 496 B on both legs — flat in N) — run 39125259218, PR #1692 |
 | `BuildAsync_SameContentsTwice_ServesOneBuild` | hit-rate assertion the issue asked for: same 256 KiB context twice → one `ComputeKey` result, one inner build, `CacheHits == 1` | exactly one build | asserted in-test |
 | `BuildAsync_SameSchemaDifferentWhitespace_ServesOneBuild` | value-key proof the reference map could never give: same schema tree with different literal whitespace → same key → one build | exactly one build | asserted in-test |
 | `BuildAsync_DifferentSchemaValue_RebuildsPrompt` | negative control for the assert above (a constant-hit unchanged comparison cannot serve a stale schema) | two builds | asserted in-test |
