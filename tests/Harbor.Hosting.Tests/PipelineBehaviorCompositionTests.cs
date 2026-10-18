@@ -212,8 +212,9 @@ public class PipelineBehaviorCompositionTests
         {
             await Assert.That(names).Contains(expected)
                 .Because(
-                    expected + " is one of the two behaviours #480 A10 names as being newed up inside "
-                    + "AgentLoop's constructor (AgentLoop.cs:109-113). If the type is gone or was renamed, the "
+                    expected + " is one of the two behaviours #480 A10 names as being newed up by "
+                    + "AgentLoop (src/Harbor.AgentRuntime/Agents/AgentLoop.cs:204, the "
+                    + "DefaultRunBehaviors fallback the ctor consumes at :160). If the type is gone or was renamed, the "
                     + "rule above is no longer talking about the code this guard was written for. Found: "
                     + names);
         }

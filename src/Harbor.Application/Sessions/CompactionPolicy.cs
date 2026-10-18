@@ -11,8 +11,10 @@ namespace Harbor.Application.Sessions;
 ///     <para>
 ///         Split out of <see cref="CompactionService" /> for #472, and the reason is not
 ///         the line count. Two of the three members here are called by files that are NOT
-///         <see cref="ICompactionService" /> consumers at all: <c>TurnRunner.cs:138</c>
-///         and <c>CompactionBehavior.cs:78</c> reached into a DI-registered implementation
+///         <see cref="ICompactionService" /> consumers at all:
+///         <c>src/Harbor.AgentRuntime/Agents/TurnRunner.cs:144,160</c> and
+///         <c>src/Harbor.AgentRuntime/Agents/Pipeline/CompactionBehavior.cs:114</c> reached into
+///         a DI-registered implementation
 ///         class to call its statics. <c>CompactionBehavior</c> has
 ///         <see cref="ICompactionService" /> injected and still reached for the static,
 ///         which is the coupling in one line. The summarizer needs an
@@ -27,7 +29,7 @@ namespace Harbor.Application.Sessions;
 ///     </para>
 ///     <para>
 ///         Which of the two truncation policies is live has its answer in one place, and
-///         this is it: <see cref="TruncateToFitStrict" />, from <c>TurnRunner.cs:138</c>, on
+///         this is it: <see cref="TruncateToFitStrict" />, from <c>src/Harbor.AgentRuntime/Agents/TurnRunner.cs:160</c>, on
 ///         a turn where summarization has already failed. <see cref="TruncateToFit" /> is
 ///         its non-reducing sibling, has no product call site, and is kept as public
 ///         surface pending the owner call on #772. The two read alike on purpose, so check
@@ -63,7 +65,7 @@ public static class CompactionPolicy
     ///     </para>
     ///     <para>
     ///         <b>No product call site (#772).</b> The live compaction-failure fallback is
-    ///         <see cref="TruncateToFitStrict" />, called at <c>TurnRunner.cs:138</c>. This
+    ///         <see cref="TruncateToFitStrict" />, called at <c>src/Harbor.AgentRuntime/Agents/TurnRunner.cs:160</c>. This
     ///         method is its non-reducing sibling and nothing in the product calls it. The
     ///         two are near-duplicates by move-history, and this one is the more forgiving —
     ///         it returns the history unchanged when the history already fits, which is
