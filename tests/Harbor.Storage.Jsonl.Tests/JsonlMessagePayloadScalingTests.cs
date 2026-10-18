@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Harbor.Abstractions.Models;
 using Harbor.TestKit;
 namespace Harbor.Storage.Jsonl.Tests;
