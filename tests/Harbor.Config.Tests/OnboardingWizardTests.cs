@@ -584,6 +584,37 @@ public class OnboardingWizardTests
     }
 
     [Test]
+    public async Task RunAsync_CustomModelName_WithWhitespace_IsTrimmed()
+    {
+        // #1577: the free-text fallback used to prepend without trimming
+        // ("ollama/ llama3.2 ") while the live-list tail trimmed the same
+        // input — one prompt family, two answers. NormalizeModelId trims
+        // once, so the padded spelling lands in the config clean.
+        (var wizard, var store, _, string path) = CreateWizard();
+        var output = new List<string>();
+        Action<string> writer = s => output.Add(s);
+
+        // Pick ollama, type a padded bare model name, code agent.
+        var responses = new Queue<string>(new[] { "ollama", "  llama3.2  ", "1" });
+        Func<string, Task<string>> reader = _ => Task.FromResult(responses.Dequeue());
+
+        Environment.SetEnvironmentVariable("OLLAMA_API_KEY", null);
+        try
+        {
+            var result = await wizard.RunAsync(reader, writer);
+
+            await Assert.That(result.IsSuccess).IsTrue();
+            var loaded = await store.LoadAsync();
+            await Assert.That(loaded.Value.Model).IsEqualTo("ollama/llama3.2");
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("OLLAMA_API_KEY", null);
+            Cleanup(path);
+        }
+    }
+
+    [Test]
     public async Task RunAsync_AgentSelection_ByName_And_ByPrintedIndex()
     {
         // Every registered agent is selectable BOTH ways, and by NAME is the half
