@@ -2,6 +2,7 @@ using System.Buffers;
 using System.Net;
 using System.Net.Sockets;
 using System.Text;
+using Harbor.Abstractions.Tools;
 using Microsoft.Extensions.Logging;
 using Result = CSharpFunctionalExtensions.Result;
 
@@ -531,9 +532,9 @@ public sealed partial class WebFetchTool : ITool
     }
 
     private static bool IsBinaryContentType(string contentType)
-        => contentType.StartsWith("image/", StringComparison.OrdinalIgnoreCase)
-           || contentType.StartsWith("audio/", StringComparison.OrdinalIgnoreCase)
-           || contentType.StartsWith("video/", StringComparison.OrdinalIgnoreCase)
+        => MimeTypes.IsImage(contentType)
+           || MimeTypes.IsAudio(contentType)
+           || MimeTypes.IsVideo(contentType)
            || contentType.Contains("font", StringComparison.OrdinalIgnoreCase)
            || contentType.Equals("application/zip", StringComparison.OrdinalIgnoreCase)
            || contentType.Equals("application/gzip", StringComparison.OrdinalIgnoreCase)

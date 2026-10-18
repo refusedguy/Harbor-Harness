@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.Json;
 using Harbor.Abstractions.Events;
 using Harbor.Abstractions.Models;
+using Harbor.Abstractions.Tools;
 using Harbor.Tui.CellForge.Widgets;
 using Harbor.Ui.Framework;
 
@@ -278,7 +279,7 @@ internal sealed class ToolCardTracker
         {
             foreach (var att in attachments)
             {
-                if (att.MimeType.StartsWith("image/", StringComparison.OrdinalIgnoreCase))
+                if (MimeTypes.IsImage(att.MimeType))
                 {
                     AppendImageCard(att.Path, att.MimeType, att.Data.Length, att.Data);
                 }
