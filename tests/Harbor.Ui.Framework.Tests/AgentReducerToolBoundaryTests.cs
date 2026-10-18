@@ -202,7 +202,7 @@ public class AgentReducerToolBoundaryScalingGates
     // truncation branch (slice + TrimStart + "..." copy) the #1530 span path
     // serves from a single allocation.
     private static readonly string OutputPayload =
-        new(' ', 24) + "result-tail " + new string('p', 1900);
+        new string(' ', 24) + "result-tail " + new string('p', 1900);
 
     [Test]
     [Timeout(120_000)]
