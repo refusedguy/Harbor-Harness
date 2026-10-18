@@ -100,6 +100,10 @@
 
   <ItemGroup>
     <InternalsVisibleTo Include="Harbor.Benchmarks"/>
+    <!-- #1623: the extracted agent loop reads .Resources (CoreResources) over the
+         ProjectReference — see Harbor.AgentRuntime.csproj header. CompactionService
+         binds nothing back; the edge stays one-way AgentRuntime -> Application. -->
+    <InternalsVisibleTo Include="Harbor.AgentRuntime"/>
   </ItemGroup>
 
   <ItemGroup>
