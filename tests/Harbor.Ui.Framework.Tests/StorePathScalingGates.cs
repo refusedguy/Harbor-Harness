@@ -299,15 +299,21 @@ public sealed class StorePathScalingGates
             return;
         }
 
-        // The leg is one full drive, now scaled (#1652): the mini-copy helper
-        // multiplies the delta budget until ONE drive takes ~100 ms of real
-        // work; probes and warm-ups are discarded by the helper, so a first
-        // pass over ChatAppReducer.Update / DefaultUiProjector.Project pays
-        // tiered-JIT compilation without ever landing on the N-leg baseline
-        // (the discarded-first-iteration argument, kept verbatim).
+        // The leg is a REPEAT of the same unit, per the helper's own contract
+        // (#1652): the unit is one full Deltas-delta drive — self-contained
+        // store + projector, exactly the shape the gate is about — and the
+        // scaler repeats it until the leg reaches ~100 ms of real work. It
+        // must NOT amplify N itself (Deltas*units deltas in one drive): that
+        // changes the problem the ratio is about, and a drive of 46k deltas
+        // folds/flushes differently than 10 drives of 1k — the x3.77 alloc
+        // ratio the scaled-drive variant measured on CI was that changed
+        // shape, not the code under test. Probes (the first JIT-paying pass
+        // over ChatAppReducer.Update / DefaultUiProjector.Project) are
+        // discarded by the helper, so the discarded-first-iteration argument
+        // still holds verbatim.
         TestScalingGateResult result = await TestScalingGate.MeasureAsync(
-            measureSmallLeg: units => Task.FromResult(AsLeg(DriveCost(Deltas * units))),
-            measureLargeLeg: units => Task.FromResult(AsLeg(DriveCost(Deltas * 2 * units))),
+            measureSmallLeg: units => Task.FromResult(RepeatDriveLeg(Deltas, units)),
+            measureLargeLeg: units => Task.FromResult(RepeatDriveLeg(Deltas * 2, units)),
             initialUnits: 1,
             options: new TestScalingGateOptions
             {
@@ -323,7 +329,27 @@ public sealed class StorePathScalingGates
                 + "#410 does not use one.");
     }
 
-    private static TestScalingGateLeg AsLeg(Drive drive) => new(drive.Elapsed.TotalMilliseconds, drive.Allocated);
+    /// <summary>
+    ///     One measured leg: <paramref name="units" /> full repeats of the same
+    ///     <paramref name="deltas" />-delta drive, elapsed time and allocation
+    ///     summed over the repeats. Each repeat rebuilds its own
+    ///     <see cref="UiStore" /> + <see cref="DefaultUiProjector" />, and
+    ///     <see cref="DriveCost" /> fences GC before its own inner window, so
+    ///     repeat-to-repeat carryover is fenced on both scales.
+    /// </summary>
+    private static TestScalingGateLeg RepeatDriveLeg(int deltas, int units)
+    {
+        TimeSpan total = TimeSpan.Zero;
+        long allocated = 0;
+        for (int u = 0; u < units; u++)
+        {
+            Drive drive = DriveCost(deltas);
+            total += drive.Elapsed;
+            allocated += drive.Allocated;
+        }
+
+        return new TestScalingGateLeg(total.TotalMilliseconds, allocated);
+    }
 
     [Test]
     [Timeout(120_000)]
