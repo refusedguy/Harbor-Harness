@@ -171,11 +171,14 @@ public sealed class ReactiveHookGenerator : IIncrementalGenerator
     /// </summary>
     private static string PropertyName(string fieldName)
     {
-        string stem = fieldName.StartsWith("m_", StringComparison.Ordinal) || fieldName.StartsWith("_", StringComparison.Ordinal)
-            ? fieldName.Length > 2
-                ? fieldName[2..]
-                : string.Empty
-            : fieldName;
+        // The CMT rule: m_lowerCamel and _lowerCamel both map to UpperCamel
+        // — m_ strips TWO characters, a _ strips ONE (the naive [2..] for
+        // both ate the first letter after _ and produced OnSStreamingChanged).
+        string stem = fieldName.StartsWith("m_", StringComparison.Ordinal)
+            ? fieldName[2..]
+            : fieldName.StartsWith("_", StringComparison.Ordinal)
+                ? fieldName[1..]
+                : fieldName;
         return stem.Length == 0 ? fieldName : char.ToUpperInvariant(stem[0]) + stem[1..];
     }
 
