@@ -154,6 +154,9 @@ public class FullLayerMatrixTests
         // ILanguageSupport family / CodeHighlightPalette / CodeTokenizer facade,
         // JsonThemeLoader / ThemeFileWatcher) as its own Presentation sibling.
         "Harbor.Tui.CellForge.Syntax",
+        // #1618: the prompt-engine pair (ListPromptEngine / FormPromptEngine,
+        // SC7+SC6 #1215/#1214) as its own Presentation sibling.
+        "Harbor.Tui.CellForge.Prompts",
         // #450: was reachable from Harbor.Hosting but present in NEITHER this
         // inventory, the matrix, nor an out-of-scope list — i.e. its own
         // dependencies were unbounded. SharpConsoleUI is a third-party renderer
@@ -476,7 +479,11 @@ public class FullLayerMatrixTests
                 // #1617: Presentation→Presentation sibling holding the extracted
                 // syntax-highlight + themes cluster; realized by
                 // AssistantMarkdownBlock binding CodeTokenizer.
-                "Harbor.Tui.CellForge.Syntax", ]),
+                "Harbor.Tui.CellForge.Syntax",
+                // #1618: Presentation→Presentation sibling holding the extracted
+                // prompt-engine pair; realized by DialogSelectList building
+                // ListPromptState<string>.
+                "Harbor.Tui.CellForge.Prompts", ]),
         // #1617: Harbor.Tui.CellForge.Syntax — Presentation-layer sibling like
         // Harbor.Tui.CellForge.Engine: the verbatim extraction of the CellForge
         // syntax-highlight + themes cluster (issue body files: CodeSyntaxTokenizer
@@ -492,6 +499,19 @@ public class FullLayerMatrixTests
         // while the code binds it directly.
         ["Harbor.Tui.CellForge.Syntax"] = new(Layer.Presentation,
             [ "Harbor.Extensions", "Harbor.Ui.Framework.Rendering", "Harbor.DesignSystem" ]),
+        // #1618: Harbor.Tui.CellForge.Prompts — Presentation-layer sibling exactly
+        // like the Syntax row above: the verbatim extraction of the CellForge
+        // prompt-engine pair (issue body files: ListPromptEngine + FormPromptEngine,
+        // the SC7 List-prompt / SC6 TextPrompt port pair behind the type: dialog
+        // widgets). The namespace stays Harbor.Tui.CellForge.Widgets verbatim, so
+        // DialogFormWidgets kept its usings and only this row + CellForge's mirror
+        // edge were recorded. The vocabulary it binds is the key surface
+        // (KeyEvent/KeyCode/KeyModifiers.AcceptsTypedChar, one Rendering/Input
+        // namespace imported once in the sibling's GlobalUsings.cs) and the
+        // Ensure-guard Domain helper leaf — no painting, no palette, no theme
+        // store, no Result/Maybe railway: the pair is BCL + two direct edges.
+        ["Harbor.Tui.CellForge.Prompts"] = new(Layer.Presentation,
+            [ "Harbor.Extensions", "Harbor.Ui.Framework.Rendering" ]),
         // #450: SharpConsoleUI-based renderer (HARBOR_TUI=nickconsoleex), wired
         // behind HarborWithNickConsoleEx. It lives in src/ and Harbor.Hosting
         // references it, so it belongs on the matrix like any other Presentation

@@ -287,7 +287,7 @@ public class KeyGateFamilyRules
         // search text through AcceptsTypedChar (admits Shift, refuses
         // Ctrl/Alt/Meta) and vim keys navigate when search is off — the
         // buffer gate, not the command one.
-        new("ListPromptEngine", KeyGateFamily.Buffer, "src/Harbor.Tui.CellForge/Chat/Widgets/ListPromptEngine.cs"),
+        new("ListPromptEngine", KeyGateFamily.Buffer, "src/Harbor.Tui.CellForge.Prompts/Widgets/ListPromptEngine.cs"),
 
         // The host key map, found by the coverage grep and NOT on the issue's
         // list: ChatKeyMap.cs:244 turns an unmatched printable rune into
