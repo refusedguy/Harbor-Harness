@@ -130,6 +130,7 @@ public class PermissionPersistDecisionTests
                 "test-model",
                 "test",
                 PermissionRuleset.Default);
+            var registry = new FakeAgentRegistry(agent);
             var svc = new PermissionService(
                 registry, NullLogger<PermissionService>.Instance,
                 configStore: new PermissionConfigStoreAdapter(store));

@@ -534,7 +534,6 @@ public class FullLayerMatrixTests
         // #1616: verified-change pipeline, verbatim extract from Harbor.Application;
         // reads (never re-exports) its run vocabulary — Application keeps it so Application stays a leaf over Abstractions.
         ["Harbor.ChangeTracking"] = new(Layer.Application, ["Harbor.Application", "Harbor.Extensions", "Harbor.Abstractions.Contracts"]),
-        ["Harbor.Registries"] = new(Layer.Application, ["Harbor.Abstractions"]),
         // #1615: Harbor.Permissions — Application-layer sibling like Harbor.Registries,
         // the verbatim extraction of Application/Permissions. PermissionService /
         // ApprovalCoordinator / the path policies bind the contracts-assembly
@@ -547,6 +546,7 @@ public class FullLayerMatrixTests
         // (Application→Application is allowed by MatrixTable_RespectsLayerRules).
         ["Harbor.Permissions"] = new(Layer.Application,
             ["Harbor.Abstractions", "Harbor.Extensions"]),
+        ["Harbor.Registries"] = new(Layer.Application, ["Harbor.Abstractions"]),
         ["Harbor.Plugins.Abstractions"] = new(Layer.Application, ["Harbor.Abstractions"]),
         // Runtime is the composition surface over the plugin machinery stack
         // (Host/Storage/Compilation/Instantiation/Registration are its family);
