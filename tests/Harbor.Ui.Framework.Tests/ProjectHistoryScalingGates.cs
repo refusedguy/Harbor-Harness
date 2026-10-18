@@ -64,13 +64,14 @@ public sealed class ProjectHistoryScalingGates
     ///     512, not 100: the per-change cost is O(N) scan + O(N) builder
     ///     work, and a leg must dwarf its own bookkeeping so the measurement
     ///     is the code under test, not the harness dispatch. A leg of 512
-    ///     lines with 64 measured appends costs a few milliseconds — five
+    ///     lines with 128 measured appends lands the window in the few-
+    ///     milliseconds range where the best-of-5 minima are stable — five
     ///     rounds of both legs stay far under the 120 s timeout.
     /// </remarks>
     private const int TranscriptLines = 512;
 
     /// <summary>Measured append+Project pairs per window, at ~constant transcript size.</summary>
-    private const int AppendsPerWindow = 64;
+    private const int AppendsPerWindow = 128;
 
     /// <summary>Appends driven (and discarded) before the measured window.</summary>
     /// <remarks>
