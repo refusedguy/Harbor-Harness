@@ -45,7 +45,7 @@ public sealed class ReactiveHookGenerator : IIncrementalGenerator
         string Namespace,
         (string Name, string Access)[] Nesting,
         string ClassName,
-        string PropertyName,
+        string HookName,
         string TypeName,
         bool Layout,
         bool NonNegative,
@@ -142,7 +142,7 @@ public sealed class ReactiveHookGenerator : IIncrementalGenerator
             field.ContainingType.ContainingNamespace?.ToDisplayString() ?? string.Empty,
             nesting.ToArray(),
             field.ContainingType.MetadataName,
-            PropertyName(field.Name),
+            HookName: PropertyName(field.Name),
             field.Type.ToDisplayString(TypeDisplay),
             layout,
             nonNegative,
@@ -205,60 +205,73 @@ public sealed class ReactiveHookGenerator : IIncrementalGenerator
 
         // Nesting shell: a nested partial declaration must repeat its
         // enclosing partial containers (test Stubs nest inside the fixture).
-        string indent = string.Empty;
+        // Indentation is level-arithmetic, not string mutation: an indent
+        // string would be re-assigned inside a loop (S1643).
+        int level = 0;
         for (int i = first.Nesting.Length - 1; i > 0; i--)
         {
-            sb.Append(indent).Append(first.Nesting[i].Access).Append(" partial class ").Append(first.Nesting[i].Name).AppendLine();
-            sb.Append(indent).AppendLine("{");
-            indent += "    ";
+            Indent(sb, level).Append(first.Nesting[i].Access).Append(" partial class ").Append(first.Nesting[i].Name).AppendLine();
+            Indent(sb, level).AppendLine("{");
+            level++;
         }
 
         // The hooked class itself: no sealed/abstract — a partial
         // declaration may carry those at most once (the source's own does).
-        sb.Append(indent).Append(first.Nesting[0].Access).Append(" partial class ").Append(first.Nesting[0].Name).AppendLine();
-        sb.Append(indent).AppendLine("{");
-        indent += "    ";
+        Indent(sb, level).Append(first.Nesting[0].Access).Append(" partial class ").Append(first.Nesting[0].Name).AppendLine();
+        Indent(sb, level).AppendLine("{");
+        level++;
 
         foreach (HookData h in data)
         {
             if (!h.NonNegative && !h.NonNull)
             {
-                sb.Append(indent).Append("partial void On").Append(h.PropertyName).Append("Changed(").Append(h.TypeName)
+                Indent(sb, level).Append("partial void On").Append(h.HookName).Append("Changed(").Append(h.TypeName)
                     .Append(" value) => Mark").Append(h.Layout ? "Layout" : "Repaint").AppendLine("();");
                 continue;
             }
 
-            sb.Append(indent).Append("partial void On").Append(h.PropertyName).Append("Changed(").Append(h.TypeName).Append(" value)").AppendLine();
-            sb.Append(indent).AppendLine("{");
-            string inner = indent + "    ";
-            sb.Append(inner).Append(h.TypeName).Append(" coerced = ");
+            Indent(sb, level).Append("partial void On").Append(h.HookName).Append("Changed(").Append(h.TypeName).Append(" value)").AppendLine();
+            Indent(sb, level).AppendLine("{");
+            int inner = level + 1;
+            Indent(sb, inner).Append(h.TypeName).Append(" coerced = ");
             if (h.NonNull)
             {
                 sb.Append("NonNull(value);").AppendLine();
-                sb.Append(inner).Append("if (!global::System.String.Equals(coerced, value, global::System.StringComparison.Ordinal))").AppendLine();
+                Indent(sb, inner).Append("if (!global::System.String.Equals(coerced, value, global::System.StringComparison.Ordinal))").AppendLine();
             }
             else
             {
                 sb.Append("NonNegative(value);").AppendLine();
-                sb.Append(inner).Append("if (coerced != value)").AppendLine();
+                Indent(sb, inner).Append("if (coerced != value)").AppendLine();
             }
 
-            sb.Append(inner).AppendLine("{");
-            sb.Append(inner).Append("    ").Append(h.PropertyName).Append(" = coerced;").AppendLine();
-            sb.Append(inner).Append("    return;").AppendLine();
-            sb.Append(inner).AppendLine("}");
-            sb.Append(inner).Append(h.Layout ? "MarkLayout();" : "MarkRepaint();").AppendLine();
-            sb.Append(indent).AppendLine("}");
+            Indent(sb, inner).AppendLine("{");
+            Indent(sb, inner).Append("    ").Append(h.HookName).Append(" = coerced;").AppendLine();
+            Indent(sb, inner).Append("    return;").AppendLine();
+            Indent(sb, inner).AppendLine("}");
+            Indent(sb, inner).Append(h.Layout ? "MarkLayout();" : "MarkRepaint();").AppendLine();
+            Indent(sb, level).AppendLine("}");
         }
 
-        indent = indent[..^4];
-        sb.Append(indent).AppendLine("}");
+        level--;
+        Indent(sb, level).AppendLine("}");
         for (int i = 1; i < first.Nesting.Length; i++)
         {
-            indent = indent[..^4];
-            sb.Append(indent).AppendLine("}");
+            level--;
+            Indent(sb, level).AppendLine("}");
         }
 
         return sb.ToString();
+    }
+
+    /// <summary>
+    ///     Level arithmetic instead of an indent string: no string is
+    ///     created, concatenated, or compounded inside a loop (S1643) and
+    ///     every line keeps the same 4-space step.
+    /// </summary>
+    private static StringBuilder Indent(StringBuilder sb, int level)
+    {
+        sb.Append(' ', 4 * level);
+        return sb;
     }
 }
