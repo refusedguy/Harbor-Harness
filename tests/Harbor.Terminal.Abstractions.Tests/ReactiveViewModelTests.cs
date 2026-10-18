@@ -5,8 +5,10 @@ using TUnit.Assertions;
 namespace Harbor.Terminal.Abstractions.Tests;
 
 /// <summary>
-///     T2 reactive conventions (#1184): dirty flags, watch_*, validate_*,
-///     compute_* on <see cref="ReactiveViewModel" />.
+///     T2 reactive conventions (#1184): dirty flags and compute_* on
+///     <see cref="ReactiveViewModel" />. The On&lt;Name&gt;Changed hooks are
+///     EMITTED by ReactiveHookGenerator from the [Reactive] annotations
+///     (issue #1542) — the stub declares fields only, no manual partials.
 /// </summary>
 public partial class ReactiveViewModelTests
 {
@@ -21,38 +23,13 @@ public partial class ReactiveViewModelTests
         private int _rows;
 
         [ObservableProperty]
-        [Reactive]
+        [Reactive(NonNegative = true)]
         private int _count;
 
         public override string Id => "stub";
 
         // compute_*: read-only derivation, never two-field-synced.
         public string Computed => $"label={Label} rows={Rows}";
-
-        public int WatchCalls { get; private set; }
-
-        private void Watch_Label(string newValue)
-        {
-            WatchCalls++;
-            MarkRepaint();
-        }
-
-        partial void OnLabelChanged(string value) => Watch_Label(value);
-
-        private static int Validate_Count(int value) => NonNegative(value);
-
-        partial void OnCountChanged(int value)
-        {
-            int coerced = Validate_Count(value);
-            if (coerced != value)
-            {
-                Count = coerced;
-                return;
-            }
-            MarkRepaint();
-        }
-
-        partial void OnRowsChanged(int value) => MarkLayout();
     }
 
     [Test]
@@ -65,7 +42,7 @@ public partial class ReactiveViewModelTests
     }
 
     [Test]
-    public async Task RepaintField_MarksRepaintOnly()
+    public async Task ReactiveField_MarksRepaintOnly()
     {
         var vm = new StubVm();
         vm.Label = "hi";
@@ -92,7 +69,7 @@ public partial class ReactiveViewModelTests
     }
 
     [Test]
-    public async Task Validate_CoercesNegativeToZero()
+    public async Task CoerceNegativeSet_FloorsToZero()
     {
         var vm = new StubVm();
         vm.Count = -5;
@@ -101,12 +78,13 @@ public partial class ReactiveViewModelTests
     }
 
     [Test]
-    public async Task Watch_InvokedOnChange()
+    public async Task GeneratedHook_MarksRepaintOnEveryChange()
     {
         var vm = new StubVm();
         vm.Label = "a";
+        vm.ClearDirty();
         vm.Label = "b";
-        await Assert.That(vm.WatchCalls).IsEqualTo(2);
+        await Assert.That(vm.NeedsRepaint).IsTrue();
     }
 
     [Test]

@@ -18,11 +18,22 @@ public enum ReactiveDirty
 
 /// <summary>
 ///     Declares how a <c>[ObservableProperty]</c> field invalidates the
-///     cell-diff engine. Documentation + grep anchor for the
-///     <c>watch_*</c> partial wired next to the field; the wiring itself
-///     stays an explicit <c>On&lt;Name&gt;Changed</c> partial (no reflection,
-///     AOT-safe) that calls <see cref="ReactiveViewModel.MarkRepaint" /> or
-///     <see cref="ReactiveViewModel.MarkLayout" />.
+///     cell-diff engine. Read by <c>ReactiveHookGenerator</c> (Harbor.CodeGen),
+///     which emits the <c>On&lt;Name&gt;Changed</c> hook for every
+///     <c>[Reactive]</c> field whose containing class derives
+///     <see cref="ReactiveViewModel" /> (issue #1542): the
+///     MarkRepaint/MarkLayout call follows <see cref="Repaint" /> /
+///     <see cref="Layout" />, and the optional coerce branch re-assigns the
+///     coerced value through the generated property (the setter re-enters
+///     the hook and marks the dirty kind there).
+///
+///     This is the single record of intent — do NOT also write a manual
+///     <c>On&lt;Name&gt;Changed</c> for a <c>[Reactive]</c> field: a second
+///     implementation of the same partial method stops the build (two
+///     records of one thing, and it would double-fire). Manual
+///     <c>On&lt;Name&gt;Changed</c> hooks remain available only for fields
+///     tagged but NOT marked <c>[Reactive]</c> (pure side-effect
+///     <c>watch_*</c>).
 /// </summary>
 [AttributeUsage(AttributeTargets.Field)]
 public sealed class ReactiveAttribute : Attribute
@@ -32,6 +43,21 @@ public sealed class ReactiveAttribute : Attribute
 
     /// <summary>Expensive layout: recompute the widget tree (implies repaint).</summary>
     public bool Layout { get; set; }
+
+    /// <summary>
+    ///     Generated coerce branch: floors at zero (issue #1542). A set below
+    ///     0 is re-assigned as 0 through the generated property; the setter
+    ///     re-enters the hook and marks the dirty kind. Only for int-typed
+    ///     fields — anything else fails to compile (type mismatch).
+    /// </summary>
+    public bool NonNegative { get; set; }
+
+    /// <summary>
+    ///     Generated coerce branch: <see langword="null" /> becomes
+    ///     <see cref="string.Empty" /> (issue #1542). Only for
+    ///     string-typed fields.
+    /// </summary>
+    public bool NonNull { get; set; }
 }
 
 /// <summary>
@@ -40,13 +66,16 @@ public sealed class ReactiveAttribute : Attribute
 ///     <c>UiState</c> + <c>ChatAppReducer</c> stay canonical; this only
 ///     structures per-VM field plumbing:
 ///     <list type="bullet">
-///         <item><c>watch_*</c>: <c>On&lt;Name&gt;Changed</c> partials named
-///         <c>Watch_&lt;Name&gt;</c> for side-effects (vs the
-///         <c>UpdateFromEventAsync</c> pattern-match, which stays the event entry point).</item>
-///         <item>layout-vs-repaint: <c>[Reactive(Layout = true)]</c> fields call
-///         <see cref="MarkLayout" />, the rest call <see cref="MarkRepaint" />.</item>
-///         <item><c>validate_*</c>: coerce/clamp helpers named
-///         <c>Validate_&lt;Name&gt;</c>, applied in the changed-partial.</item>
+///         <item>layout-vs-repaint + coerce: <c>[Reactive]</c> options drive
+///         the GENERATED <c>On&lt;Name&gt;Changed</c> hook
+///         (<c>ReactiveHookGenerator</c>, issue #1542) — see
+///         <see cref="ReactiveAttribute" />. Manual <c>On&lt;Name&gt;Changed</c>
+///         implementations for <c>[Reactive]</c> fields collide with the
+///         generated ones and stop the build; side-effect hooks stay
+///         hand-written only for fields NOT carrying <c>[Reactive]</c>.</item>
+///         <item><c>validate_*</c>: the coerce helpers
+///         <see cref="NonNegative" /> / <see cref="NonNull" /> are shared
+///         statics the generated coerce branch calls — not per-field shims.</item>
 ///         <item><c>compute_*</c>: read-only derived getters (no manual
 ///         two-field sync).</item>
 ///     </list>
@@ -116,9 +145,9 @@ public abstract partial class ReactiveViewModel : ObservableObject, ITuiViewMode
         NeedsRepaint = false;
     }
 
-    /// <summary>Shared <c>validate_*</c> helper: floors at zero.</summary>
+    /// <summary>Shared coerce helper: floors at zero (called by the generated hook, issue #1542).</summary>
     protected static int NonNegative(int value) => value < 0 ? 0 : value;
 
-    /// <summary>Shared <c>validate_*</c> helper: nulls to empty.</summary>
+    /// <summary>Shared coerce helper: nulls to empty (called by the generated hook, issue #1542).</summary>
     protected static string NonNull(string? value) => value ?? string.Empty;
 }

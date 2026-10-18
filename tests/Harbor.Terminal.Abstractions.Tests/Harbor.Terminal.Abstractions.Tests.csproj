@@ -13,6 +13,14 @@
     <ProjectReference Include="../../src/Harbor.Abstractions/Harbor.Abstractions.csproj"/>
     <ProjectReference Include="../../src/Harbor.Terminal.Abstractions/Harbor.Terminal.Abstractions.csproj"/>
     <ProjectReference Include="../../tests/Harbor.TestKit/Harbor.TestKit.csproj"/>
+    <!-- ReactiveHookGenerator must run here too: ReactiveViewModelTests' stub
+         declares [Reactive] fields and tests its EMITTED hooks end-to-end
+         (issue #1542). Analyzer output does not flow transitively through
+         the Terminal.Abstractions ProjectReference — same pattern as that
+         project's own Harbor.CodeGen reference. -->
+    <ProjectReference Include="../../src/Harbor.CodeGen/Harbor.CodeGen.csproj">
+      <OutputItemType>Analyzer</OutputItemType>
+    </ProjectReference>
   </ItemGroup>
 
   <ItemGroup>
