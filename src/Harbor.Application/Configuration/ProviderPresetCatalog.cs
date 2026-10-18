@@ -1,4 +1,5 @@
 using System.Reflection;
+using CSharpFunctionalExtensions;
 using Microsoft.Extensions.Logging;
 
 namespace Harbor.Application.Configuration;
@@ -100,8 +101,8 @@ public static class ProviderPresetCatalog
 
         foreach (string json in configs)
         {
-            Projected? entry = Parse(json);
-            if (entry is null || !seen.Add(entry.Value.Preset.Id)) continue;
+            Maybe<Projected> entry = Parse(json);
+            if (entry.HasNoValue || !seen.Add(entry.Value.Preset.Id)) continue;
             projected.Add(entry.Value);
         }
 
@@ -201,19 +202,32 @@ public static class ProviderPresetCatalog
     }
 
     /// <summary>
-    ///     Project one JSON payload. Returns <see langword="null" /> for anything that is
-    ///     not a usable provider config: malformed JSON, a non-object root, or no id.
+    ///     Project one JSON payload into a <see cref="Maybe{T}" />. <c>None</c> for
+    ///     anything that is not a usable provider config: malformed JSON, a
+    ///     non-object root, or no id — #1505: absence travels as a value, not as a
+    ///     null pointer (§ROP-001), so the <c>catch (JsonException)</c> arm, the
+    ///     non-object arm and the no-id arm all hand back
+    ///     <see cref="Maybe{T}.None" /> instead of <see langword="null" />.
     /// </summary>
-    private static Projected? Parse(string json)
+    /// <remarks>
+    ///     <para>#1505 AOT arrow, for the record: this is a <i>runtime</i>
+    ///     projection, not build-time codegen — the <c>&lt;EmbedProviders&gt;</c>
+    ///     embed contract is untouched — and both halves are AOT-safe:
+    ///     <see cref="Maybe{T}" /> is a plain CFE value type (no reflection,
+    ///     no source-generated converters involved) and the parse itself is
+    ///     <see cref="Utf8JsonReader" />-backed <see cref="JsonDocument.Parse" />.
+    ///     </para>
+    /// </remarks>
+    private static Maybe<Projected> Parse(string json)
     {
         try
         {
             using var document = JsonDocument.Parse(json);
             JsonElement root = document.RootElement;
-            if (root.ValueKind != JsonValueKind.Object) return null;
+            if (root.ValueKind != JsonValueKind.Object) return Maybe<Projected>.None;
 
             string? id = GetString(root, "id");
-            if (string.IsNullOrWhiteSpace(id)) return null;
+            if (string.IsNullOrWhiteSpace(id)) return Maybe<Projected>.None;
 
             string displayName = GetString(root, "displayName") ?? id;
             string description = GetString(root, "description") ?? displayName;
@@ -232,11 +246,11 @@ public static class ProviderPresetCatalog
                 // and `priority` are read here and nowhere else.
                 GetString(root, "icon") ?? ProviderPresets.DefaultIcon);
 
-            return new Projected(preset, GetInt(root, "priority") ?? DefaultPriority);
+            return Maybe.From(new Projected(preset, GetInt(root, "priority") ?? DefaultPriority));
         }
         catch (JsonException)
         {
-            return null;
+            return Maybe<Projected>.None;
         }
     }
 
