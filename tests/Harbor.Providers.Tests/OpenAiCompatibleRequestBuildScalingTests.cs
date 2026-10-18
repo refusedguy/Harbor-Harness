@@ -19,7 +19,13 @@ namespace Harbor.Providers.Tests;
 ///         the single-size build, measured in the same run
 ///         (<c>t(2N) &lt;= 3*t(N)</c>). A quadratic regression lands at 4x
 ///         and cannot hide under it; runner speed cancels in the ratio.
-///         Best-of-5 rounds, linux-only (GC accounting varies by OS).
+///         Measured through the DOCUMENTED MINI-COPY of Harbor.TestKit's
+///         <see cref="TestScalingGate" /> (#1652; Providers.Tests must not
+///         reference TestKit — it drags Harbor.Application): GC-fenced legs
+///         scaled toward ~100 ms of real work, medians over five rounds, and
+///         a x1.05 noise band on the time branch only — the #1643
+///         3.27-vs-3.0 flake came out of a 7.9 ms best-of-5 leg.
+///         Linux-only (GC accounting varies by OS).
 ///     </para>
 /// </summary>
 [NotInParallel("compat-scale")]
@@ -28,14 +34,11 @@ public class OpenAiCompatibleRequestBuildScalingTests
     /// <summary>Tool calls in the small request; the large one doubles it.</summary>
     private const int ToolCalls = 200;
 
-    /// <summary>Request builds per measured leg (one build is sub-millisecond noise).</summary>
+    /// <summary>Request builds per leg's unit (one build is sub-millisecond noise).</summary>
     private const int Iterations = 30;
 
     /// <summary>Growth allowed for a doubled input, on cost and allocations.</summary>
     private const double GrowthLimit = 3.0;
-
-    /// <summary>Rounds per leg, best-of (a descheduled or collected leg only inflates).</summary>
-    private const int Rounds = 5;
 
     private static readonly JsonDocument ArgsDoc = JsonDocument.Parse("""{"path":"a.txt"}""");
 
@@ -72,23 +75,24 @@ public class OpenAiCompatibleRequestBuildScalingTests
         using var msg = client.BuildRequest(request, "test-key");
     }
 
-    private static (double Ms, long Allocated) Measure(OpenAiCompatibleLlmClient client, LlmRequest request)
+    /// <summary>
+    ///     One measured leg: <paramref name="units" /> builds of the same
+    ///     request, timed and allocation-counter'd as one window.
+    /// </summary>
+    private static (double Ms, long Allocated) Measure(OpenAiCompatibleLlmClient client, LlmRequest request, int units)
     {
-        GC.Collect();
-        GC.WaitForPendingFinalizers();
-        GC.Collect();
-
         long before = GC.GetAllocatedBytesForCurrentThread();
         var sw = Stopwatch.StartNew();
-        for (int i = 0; i < Iterations; i++)
+        for (int i = 0; i < units; i++)
         {
             BuildAndDispose(client, request);
         }
 
         sw.Stop();
-        long allocated = GC.GetAllocatedBytesForCurrentThread() - before;
-        return (sw.Elapsed.TotalMilliseconds, allocated);
+        return (sw.Elapsed.TotalMilliseconds, GC.GetAllocatedBytesForCurrentThread() - before);
     }
+
+    private static TestScalingGateLeg AsLeg((double Ms, long Allocated) leg) => new(leg.Ms, leg.Allocated);
 
     [Test]
     [Timeout(120_000)]
@@ -101,54 +105,19 @@ public class OpenAiCompatibleRequestBuildScalingTests
         var small = AssistantRequest(ToolCalls);
         var large = AssistantRequest(ToolCalls * 2);
 
-        // Warm up (tiered JIT over the serializer) before any measurement.
-        BuildAndDispose(client, small);
-        BuildAndDispose(client, large);
+        TestScalingGateResult result = await TestScalingGate.MeasureAsync(
+            measureSmallLeg: units => Task.FromResult(AsLeg(Measure(client, small, units))),
+            measureLargeLeg: units => Task.FromResult(AsLeg(Measure(client, large, units))),
+            initialUnits: Iterations,
+            options: new TestScalingGateOptions
+            {
+                Label = "compat-build-scaling",
+                GrowthLimit = GrowthLimit,
+            });
 
-        double msSmall = double.MaxValue;
-        double msLarge = double.MaxValue;
-        long allocSmall = long.MaxValue;
-        long allocLarge = long.MaxValue;
-        for (int round = 0; round < Rounds; round++)
-        {
-            (double tSmall, long aSmall) = Measure(client, small);
-            (double tLarge, long aLarge) = Measure(client, large);
-            msSmall = Math.Min(msSmall, tSmall);
-            msLarge = Math.Min(msLarge, tLarge);
-            allocSmall = Math.Min(allocSmall, aSmall);
-            allocLarge = Math.Min(allocLarge, aLarge);
-        }
-
-        double timeRatio = msLarge / msSmall;
-        double allocRatio = (double)allocLarge / allocSmall;
-
-        // Printed, not only asserted, so the deciding ratio is readable next
-        // to the test instead of existing only in a failure message. The
-        // absolute columns are informational and runner-dependent.
-        Console.WriteLine(
-            $"compat-build-scaling: {ToolCalls} calls x{Iterations} = {msSmall:F3} ms / {allocSmall} B, "
-            + $"{ToolCalls * 2} calls x{Iterations} = {msLarge:F3} ms / {allocLarge} B "
-            + $"(time x{timeRatio:F2}, alloc x{allocRatio:F2}, limit x{GrowthLimit:F2}, best of {Rounds}; "
-            + "the absolute columns are informational and runner-dependent)");
-
-        // Non-vacuity: both ratios divide by the small leg, so a zero there
-        // means "measured nothing" — the #591 shape.
-        await Assert.That(msSmall).IsGreaterThan(0.0)
-            .Because($"the small-leg baseline must be a real measurement, got {msSmall:F3} ms.");
-        await Assert.That(allocSmall).IsGreaterThan(0L)
-            .Because($"the small-leg allocation baseline must be a real measurement, got {allocSmall} B.");
-
-        await Assert.That(timeRatio).IsLessThanOrEqualTo(GrowthLimit)
-            .Because(
-                $"build(2N)/build(N) = {timeRatio:F2} against a limit of {GrowthLimit:F2}: "
-                + $"{msLarge:F3} ms for {ToolCalls * 2} tool calls versus {msSmall:F3} ms for {ToolCalls}. "
-                + "Linear is 2.00, so this bound separates linear from quadratic without depending on "
-                + "how fast this runner is.");
-        await Assert.That(allocRatio).IsLessThanOrEqualTo(GrowthLimit)
-            .Because(
-                $"alloc(2N)/alloc(N) = {allocRatio:F2} against a limit of {GrowthLimit:F2}: "
-                + $"{allocLarge} B versus {allocSmall} B. "
-                + "Allocations do not move with the runner's speed at all, so this ratio holds on every machine.");
+        await result.AssertWithinLimitsAsync(
+            topic: "build(2N)/build(N)",
+            linearWhy: "Linear is 2.00, so this bound separates linear from quadratic without depending on how fast this runner is.");
     }
 
     [Test]

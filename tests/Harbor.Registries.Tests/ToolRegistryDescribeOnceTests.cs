@@ -28,7 +28,10 @@ namespace Harbor.Registries.Tests;
 ///         resolve uses a fresh ruleset instance (the per-ruleset cache is keyed
 ///         by reference), so every iteration pays the filter cost. Synchronous
 ///         body, so <c>AllocationProbe.MeasureThread</c> (exact per-thread
-///         counter, no serialisation needed). Best-of-5 rounds, linux-only (GC
+///         counter, no serialisation needed). Measured through
+///         <see cref="Harbor.TestKit.TestScalingGate" /> (#1652): GC-fenced
+///         legs scaled to ~100 ms of real work, medians over five rounds, and
+///         a x1.05 noise band on the time branch only. Linux-only (GC
 ///         accounting varies by OS).
 ///     </para>
 /// </summary>
@@ -37,14 +40,11 @@ public class ToolRegistryDescribeOnceTests
     /// <summary>Tools in the small leg; the large one doubles it.</summary>
     private const int ToolCount = 100;
 
-    /// <summary>Resolves per measured leg (one resolve is sub-millisecond noise).</summary>
+    /// <summary>Resolves per leg's unit: one fresh-ruleset filtered resolve.</summary>
     private const int Iterations = 50;
 
     /// <summary>Growth allowed for a doubled input, on cost and allocations.</summary>
     private const double GrowthLimit = 3.0;
-
-    /// <summary>Rounds per leg, best-of (a descheduled or collected leg only inflates).</summary>
-    private const int Rounds = 5;
 
     private static readonly JsonDocument SchemaDoc = JsonDocument.Parse("""{"type":"object"}""");
 
@@ -145,19 +145,18 @@ public class ToolRegistryDescribeOnceTests
         await Assert.That(ReferenceEquals(filtered, again)).IsTrue();
     }
 
-    private static (double Ms, long Allocated) MeasureFirstTimeResolves(ToolRegistry registry)
+    /// <summary>
+    ///     One measured leg: <paramref name="units" /> first-time filtered
+    ///     resolves, timed and allocation-counter'd as one window. A fresh
+    ///     ruleset per iteration is INSIDE the window (the per-ruleset cache is
+    ///     keyed by reference), so every iteration pays the filter cost.
+    /// </summary>
+    private static TestScalingGateLeg MeasureFirstTimeResolves(ToolRegistry registry, int units)
     {
-        // Warm up (tiered JIT over the filter path) before measuring.
-        _ = registry.ResolveTools("code", NewAllowAll());
-
-        GC.Collect();
-        GC.WaitForPendingFinalizers();
-        GC.Collect();
-
         var sw = Stopwatch.StartNew();
         long allocated = AllocationProbe.MeasureThread(() =>
         {
-            for (int i = 0; i < Iterations; i++)
+            for (int i = 0; i < units; i++)
             {
                 // Fresh ruleset instance per iteration: the per-ruleset cache is
                 // keyed by reference, so each resolve pays the filter cost.
@@ -165,7 +164,7 @@ public class ToolRegistryDescribeOnceTests
             }
         });
         sw.Stop();
-        return (sw.Elapsed.TotalMilliseconds, allocated);
+        return new TestScalingGateLeg(sw.Elapsed.TotalMilliseconds, allocated);
     }
 
     [Test]
@@ -180,49 +179,18 @@ public class ToolRegistryDescribeOnceTests
         var small = CreateFrozenRegistry(ToolCount);
         var large = CreateFrozenRegistry(ToolCount * 2);
 
-        double msSmall = double.MaxValue;
-        double msLarge = double.MaxValue;
-        long allocSmall = long.MaxValue;
-        long allocLarge = long.MaxValue;
-        for (int round = 0; round < Rounds; round++)
-        {
-            (double tSmall, long aSmall) = MeasureFirstTimeResolves(small);
-            (double tLarge, long aLarge) = MeasureFirstTimeResolves(large);
-            msSmall = Math.Min(msSmall, tSmall);
-            msLarge = Math.Min(msLarge, tLarge);
-            allocSmall = Math.Min(allocSmall, aSmall);
-            allocLarge = Math.Min(allocLarge, aLarge);
-        }
+        TestScalingGateResult result = await TestScalingGate.MeasureAsync(
+            measureSmallLeg: units => Task.FromResult(MeasureFirstTimeResolves(small, units)),
+            measureLargeLeg: units => Task.FromResult(MeasureFirstTimeResolves(large, units)),
+            initialUnits: Iterations,
+            options: new TestScalingGateOptions
+            {
+                Label = "toolregistry-describeonce-scaling",
+                GrowthLimit = GrowthLimit,
+            });
 
-        double timeRatio = msLarge / msSmall;
-        double allocRatio = (double)allocLarge / allocSmall;
-
-        // Printed, not only asserted, so the deciding ratio is readable next
-        // to the test instead of existing only in a failure message. The
-        // absolute columns are informational and runner-dependent.
-        Console.WriteLine(
-            $"toolregistry-describeonce-scaling: {ToolCount} tools x{Iterations} = {msSmall:F3} ms / {allocSmall} B, "
-            + $"{ToolCount * 2} tools x{Iterations} = {msLarge:F3} ms / {allocLarge} B "
-            + $"(time x{timeRatio:F2}, alloc x{allocRatio:F2}, limit x{GrowthLimit:F2}, best of {Rounds}; "
-            + "the absolute columns are informational and runner-dependent)");
-
-        // Non-vacuity: both ratios divide by the small leg, so a zero there
-        // means "measured nothing" — the #591 shape.
-        await Assert.That(msSmall).IsGreaterThan(0.0)
-            .Because($"the small-leg baseline must be a real measurement, got {msSmall:F3} ms.");
-        await Assert.That(allocSmall).IsGreaterThan(0L)
-            .Because($"the small-leg allocation baseline must be a real measurement, got {allocSmall} B.");
-
-        await Assert.That(timeRatio).IsLessThanOrEqualTo(GrowthLimit)
-            .Because(
-                $"run(2N)/run(N) = {timeRatio:F2} against a limit of {GrowthLimit:F2}: "
-                + $"{msLarge:F3} ms for {ToolCount * 2} tools versus {msSmall:F3} ms for {ToolCount}. "
-                + "Linear is 2.00, so this bound separates linear from quadratic without depending on "
-                + "how fast this runner is.");
-        await Assert.That(allocRatio).IsLessThanOrEqualTo(GrowthLimit)
-            .Because(
-                $"alloc(2N)/alloc(N) = {allocRatio:F2} against a limit of {GrowthLimit:F2}: "
-                + $"{allocLarge} B versus {allocSmall} B. "
-                + "Allocations do not move with the runner's speed at all, so this ratio holds on every machine.");
+        await result.AssertWithinLimitsAsync(
+            topic: "resolve(2N)/resolve(N)",
+            linearWhy: "Linear is 2.00, so this bound separates linear from quadratic without depending on how fast this runner is.");
     }
 }

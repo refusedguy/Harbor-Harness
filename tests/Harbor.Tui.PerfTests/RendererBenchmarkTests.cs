@@ -142,64 +142,46 @@ public class RendererBenchmarkTests
         // cancels. Doc-doubling is the DESIGN guarantee (frozen blocks free,
         // so its linear is 1.00); iter-doubling is the linearity check
         // (twice the renders, so its linear is 2.00).
-        const int rounds = 3;
-        double docSmallMs = double.MaxValue;
-        double docLargeMs = double.MaxValue;
-        double iterSmallMs = double.MaxValue;
-        double iterLargeMs = double.MaxValue;
-        long docSmallAlloc = long.MaxValue;
-        long docLargeAlloc = long.MaxValue;
-        for (int round = 0; round < rounds; round++)
-        {
-            (double t100, long a100) = MeasureTailRender(frozenBlocks: 99, iterations: 100);
-            (double tDoc200, long aDoc200) = MeasureTailRender(frozenBlocks: 199, iterations: 100);
-            (double tIter200, long _) = MeasureTailRender(frozenBlocks: 99, iterations: 200);
-            docSmallMs = Math.Min(docSmallMs, t100);
-            docLargeMs = Math.Min(docLargeMs, tDoc200);
-            iterSmallMs = Math.Min(iterSmallMs, t100);
-            iterLargeMs = Math.Min(iterLargeMs, tIter200);
-            docSmallAlloc = Math.Min(docSmallAlloc, a100);
-            docLargeAlloc = Math.Min(docLargeAlloc, aDoc200);
-        }
+        //
+        // #1652 measure: the DOCUMENTED MINI-COPY of Harbor.TestKit's
+        // TestScalingGate (Tui.PerfTests must not reference TestKit — it
+        // drags Harbor.Application) runs the legs GC-fenced, scaled to
+        // ~100 ms of real work (the millisecond-leg best-of shape is where
+        // the noise lives), and reports MEDIANS over five rounds. The old
+        // hand-rolled loop shared one doc-100 leg between the two ratio
+        // claims; two leg pairs measure the two claims independently and
+        // the alloc claim rides the doc pair.
+        TestScalingGateResult docResult = await TestScalingGate.MeasureAsync(
+            measureSmallLeg: units => Task.FromResult(AsLeg(MeasureTailRender(frozenBlocks: 99, iterations: units))),
+            measureLargeLeg: units => Task.FromResult(AsLeg(MeasureTailRender(frozenBlocks: 199, iterations: units))),
+            initialUnits: 100,
+            options: new TestScalingGateOptions
+            {
+                Label = "tail-render-doc-scaling",
+                GrowthLimit = GrowthLimit,
+            });
 
-        double docRatio = docLargeMs / docSmallMs;
-        double iterRatio = iterLargeMs / iterSmallMs;
-        double allocRatio = (double)docLargeAlloc / docSmallAlloc;
-        Console.WriteLine(
-            $"tail-render-scaling: doc100 = {docSmallMs:F3} ms / {docSmallAlloc} B, "
-            + $"doc200 = {docLargeMs:F3} ms / {docLargeAlloc} B "
-            + $"(doc x{docRatio:F2}, iter x{iterRatio:F2}, alloc x{allocRatio:F2}, limit x{GrowthLimit:F2}, best of {rounds}; "
-            + "absolute columns are informational and runner-dependent)");
+        await docResult.AssertWithinLimitsAsync(
+            topic: "doc(200)/doc(100)",
+            linearWhy: "Doubling the frozen doc should cost nothing at all (frozen blocks render once and are then free, so a correct tree sits at 1.00); a quadratic regression lands at 4.");
 
-        // Non-vacuity: the gates below divide by the small operands, so a
-        // zero here means "measured nothing" — the #591 shape.
-        await Assert.That(docSmallMs).IsGreaterThan(0.0)
-            .Because($"the doc100 baseline must be a real measurement, got {docSmallMs:F3} ms.");
-        await Assert.That(iterSmallMs).IsGreaterThan(0.0)
-            .Because($"the iter100 baseline must be a real measurement, got {iterSmallMs:F3} ms.");
-        await Assert.That(docSmallAlloc).IsGreaterThan(0L)
-            .Because($"the doc100 allocation baseline must be a real measurement, got {docSmallAlloc} B.");
+        TestScalingGateResult iterResult = await TestScalingGate.MeasureAsync(
+            measureSmallLeg: units => Task.FromResult(AsLeg(MeasureTailRender(frozenBlocks: 99, iterations: units))),
+            measureLargeLeg: units => Task.FromResult(AsLeg(MeasureTailRender(frozenBlocks: 99, iterations: units * 2))),
+            initialUnits: 100,
+            options: new TestScalingGateOptions
+            {
+                Label = "tail-render-iter-scaling",
+                GrowthLimit = GrowthLimit,
+                MeasureAllocations = false,
+            });
 
-        // The gates are RATIOS. Doubling the frozen doc must stay free and
-        // doubling the tail renders may at most triple the cost; a quadratic
-        // regression lands at 4 on either leg.
-        await Assert.That(docRatio).IsLessThanOrEqualTo(GrowthLimit)
-            .Because(
-                $"doc(200)/doc(100) = {docRatio:F2} against a limit of {GrowthLimit:F2}: "
-                + $"{docLargeMs:F3} ms for a 200-block doc versus {docSmallMs:F3} ms for 100 blocks. "
-                + "Frozen blocks render once and are then free, so a correct tree sits at 1.00.");
-        await Assert.That(iterRatio).IsLessThanOrEqualTo(GrowthLimit)
-            .Because(
-                $"iter(200)/iter(100) = {iterRatio:F2} against a limit of {GrowthLimit:F2}: "
-                + $"{iterLargeMs:F3} ms for 200 tail renders versus {iterSmallMs:F3} ms for 100. "
-                + "Linear is 2.00, so this bound separates linear from quadratic without depending on "
-                + "how fast this runner is.");
-        await Assert.That(allocRatio).IsLessThanOrEqualTo(GrowthLimit)
-            .Because(
-                $"alloc(200)/alloc(100) = {allocRatio:F2} against a limit of {GrowthLimit:F2}: "
-                + $"{docLargeAlloc} B for a 200-block doc versus {docSmallAlloc} B for 100. "
-                + "Allocations do not move with the runner's speed at all, so this ratio holds on every machine.");
+        await iterResult.AssertWithinLimitsAsync(
+            topic: "iter(200)/iter(100)",
+            linearWhy: "Twice the tail renders is twice the work (linear is 2.00), so this bound separates linear from quadratic without depending on how fast this runner is.");
     }
+
+    private static TestScalingGateLeg AsLeg((double Ms, long Allocated) leg) => new(leg.Ms, leg.Allocated);
 
     /// <summary>
     ///     The declared verdicts, as data. A ratio rule is a claim about
@@ -231,10 +213,10 @@ public class RendererBenchmarkTests
     public async Task TheRatioRuleAnswersTheDeclaredQuestion()
     {
         var wrong = DeclaredContract
-            .Where(row => WithinGrowthLimit(row.Small, row.Large, row.Limit) != row.Accept)
+            .Where(row => TestScalingGate.WithinLimit(row.Small, row.Large, row.Limit) != row.Accept)
             .Select(row =>
                 row.Name + " (expected " + (row.Accept ? "accepted" : "rejected") + ", rule says "
-                + (WithinGrowthLimit(row.Small, row.Large, row.Limit) ? "accepted" : "rejected") + ")")
+                + (TestScalingGate.WithinLimit(row.Small, row.Large, row.Limit) ? "accepted" : "rejected") + ")")
             .ToArray();
 
         await Assert.That(string.Join(" | ", wrong))
@@ -245,20 +227,6 @@ public class RendererBenchmarkTests
                 + "green cost gate no longer means what it says. Mismatches: "
                 + (wrong.Length == 0 ? "(none)" : string.Join(" | ", wrong)));
     }
-
-    /// <summary>
-    ///     Whether a doubling of the input may cost at most <paramref name="limit" />
-    ///     times as much.
-    /// </summary>
-    /// <remarks>
-    ///     The <c>small &gt; 0</c> guard is load-bearing, not defensive
-    ///     decoration. Without it a zero baseline gives <c>0/0 = NaN</c> or
-    ///     <c>x/0 = +inf</c>, and the comparison happens to reject both — but
-    ///     only as an emergent property of IEEE-754 rather than as a decision
-    ///     this file records.
-    /// </remarks>
-    private static bool WithinGrowthLimit(double small, double large, double limit) =>
-        small > 0.0 && large <= small * limit;
 
     private static (double Ms, long Allocated) MeasureTailRender(int frozenBlocks, int iterations)
     {

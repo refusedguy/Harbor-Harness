@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using Harbor.Tui.CellForge.Generic.Widgets;
+using Harbor.TestKit;
 using TUnit.Core;
 
 namespace Harbor.Tui.CellForge.Tests;
@@ -198,18 +199,21 @@ public class GenericLiveRegionTests
         // Relative gate t(2N) <= 3*t(N): painting twice the buffered lines
         // must cost at most 3x the time, measured in the same process so
         // runner speed cancels. Quadratic behaviour lands at 4x and cannot
-        // hide under the bound. Best-of-5 rounds, linux-only (timing varies
-        // by OS load). All lines fit the width, so Fit is the identity and
-        // the ratio isolates the windowing itself.
+        // hide under the bound. Time-only (no alloc leg): the steady paint is
+        // pinned allocation-free by Region_Paint_IsAllocationFree above, and
+        // an alloc ratio over "0 / 0 B" would be a number invented for the
+        // caller. Measured through Harbor.TestKit's TestScalingGate (#1652):
+        // GC-fenced legs scaled toward ~100 ms of real work, medians over five
+        // rounds, x1.05 noise band on the time branch — the old best-of-5 over
+        // millisecond legs decided real CI runs (the #1649 flake). Linux-only
+        // (timing varies by OS load). All lines fit the width, so Fit is the
+        // identity and the ratio isolates the windowing itself.
         if (!OperatingSystem.IsLinux())
         {
             return;
         }
 
         const int lineCount = 200;
-        const int iterations = 20;
-        const int rounds = 5;
-        const double limit = 3.0;
 
         static GenericLiveRegion BuildRegion(int lines)
         {
@@ -231,46 +235,31 @@ public class GenericLiveRegionTests
         var smallRect = new Rect(0, 0, 80, 500);
         var largeRect = new Rect(0, 0, 80, 500);
 
-        // Warm up (tiered JIT over the paint path) before measuring.
-        for (int i = 0; i < 5; i++)
-        {
-            small.Paint(smallBuffer, smallRect);
-            large.Paint(largeBuffer, largeRect);
-        }
-
-        static double Measure(GenericLiveRegion region, ScreenBuffer buffer, Rect rect)
+        static TestScalingGateLeg MeasureLegs(GenericLiveRegion region, ScreenBuffer buffer, Rect rect, int units)
         {
             var sw = Stopwatch.StartNew();
-            for (int i = 0; i < iterations; i++)
+            for (int i = 0; i < units; i++)
             {
                 region.Paint(buffer, rect);
             }
 
             sw.Stop();
-            return sw.Elapsed.TotalMilliseconds;
+            return new TestScalingGateLeg(sw.Elapsed.TotalMilliseconds, 0L);
         }
 
-        double msSmall = double.MaxValue;
-        double msLarge = double.MaxValue;
-        for (int round = 0; round < rounds; round++)
-        {
-            msSmall = Math.Min(msSmall, Measure(small, smallBuffer, smallRect));
-            msLarge = Math.Min(msLarge, Measure(large, largeBuffer, largeRect));
-        }
+        TestScalingGateResult result = await TestScalingGate.MeasureAsync(
+            measureSmallLeg: units => MeasureLegs(small, smallBuffer, smallRect, units),
+            measureLargeLeg: units => MeasureLegs(large, largeBuffer, largeRect, units),
+            initialUnits: 20,
+            options: new TestScalingGateOptions
+            {
+                Label = "liveregion-paint-scaling",
+                GrowthLimit = 3.0,
+                MeasureAllocations = false,
+            });
 
-        double ratio = msLarge / msSmall;
-        Console.WriteLine(
-            $"liveregion-paint-scaling: {lineCount} lines x{iterations} = {msSmall:F3} ms, "
-            + $"{lineCount * 2} lines x{iterations} = {msLarge:F3} ms "
-            + $"(time x{ratio:F2}, limit x{limit:F2}, best of {rounds})");
-
-        await Assert.That(msSmall).IsGreaterThan(0.0)
-            .Because($"the small-leg baseline must be a real measurement, got {msSmall:F3} ms.");
-        await Assert.That(ratio).IsLessThanOrEqualTo(limit)
-            .Because(
-                $"paint(2N)/paint(N) = {ratio:F2} against a limit of {limit:F2}: "
-                + $"{msLarge:F3} ms for {lineCount * 2} lines versus {msSmall:F3} ms for {lineCount}. "
-                + "Linear is 2.00, so this bound separates linear from quadratic without depending on "
-                + "how fast this runner is.");
+        await result.AssertWithinLimitsAsync(
+            topic: "paint(2N)/paint(N)",
+            linearWhy: "Linear is 2.00, so this bound separates linear from quadratic without depending on how fast this runner is.");
     }
 }

@@ -27,8 +27,12 @@ namespace Harbor.Application.Tests;
 ///         single-size batch, measured in the same run
 ///         (<c>t(2N) &lt;= 3*t(N)</c>). A double-resolve regression lands
 ///         above it only when paired with the exact-count test below, which
-///         pins the registry hits at N, not 2N. Best-of-5 rounds, linux-only
-///         (GC accounting varies by OS).
+///         pins the registry hits at N, not 2N. Measured through
+///         <see cref="Harbor.TestKit.TestScalingGate" /> (#1652): GC-fenced
+///         legs scaled to ~100 ms of real work, medians over five rounds, and
+///         a x1.05 noise band on the time branch only — the millisecond-leg
+///         best-of-5 shape that flaked three gates in one day is gone.
+///         Linux-only (GC accounting varies by OS).
 ///     </para>
 /// </summary>
 [NotInParallel("dispatcher-scale")]
@@ -39,9 +43,6 @@ public class ToolDispatcherResolveOnceTests
 
     /// <summary>Growth allowed for a doubled input, on cost and allocations.</summary>
     private const double GrowthLimit = 3.0;
-
-    /// <summary>Rounds per leg, best-of (a descheduled or collected leg only inflates).</summary>
-    private const int Rounds = 5;
 
     private static readonly JsonDocument ArgsDoc = JsonDocument.Parse("""{}""");
 
@@ -207,19 +208,26 @@ public class ToolDispatcherResolveOnceTests
         await Assert.That(result.Results[0].Output).Contains("noop");
     }
 
-    private static async Task<(double Ms, long Allocated)> MeasureAsync(ToolDispatcher dispatcher, IReadOnlyList<ToolCallPart> calls)
+    /// <summary>
+    ///     One measured leg: <paramref name="units" /> dispatches of the same
+    ///     batch, timed and allocation-counter'd as one window. The #1652 leg
+    ///     scaler multiplies <paramref name="units" /> until the window reaches
+    ///     a measurable duration; the batch itself stays fixed so the ratio
+    ///     stays about the dispatch path, not about batch size.
+    /// </summary>
+    private static async Task<TestScalingGateLeg> DispatchLegAsync(
+        ToolDispatcher dispatcher, IReadOnlyList<ToolCallPart> calls, int units)
     {
-        GC.Collect();
-        GC.WaitForPendingFinalizers();
-        GC.Collect();
-
         long before = GC.GetAllocatedBytesForCurrentThread();
         var sw = Stopwatch.StartNew();
-        await dispatcher.ExecuteAsync(calls, NewSession(), AssistantMessage.Empty("s", "m"), CodeAgent(), CancellationToken.None)
-            .ConfigureAwait(false);
+        for (int i = 0; i < units; i++)
+        {
+            await dispatcher.ExecuteAsync(calls, NewSession(), AssistantMessage.Empty("s", "m"), CodeAgent(), CancellationToken.None)
+                .ConfigureAwait(false);
+        }
+
         sw.Stop();
-        long allocated = GC.GetAllocatedBytesForCurrentThread() - before;
-        return (sw.Elapsed.TotalMilliseconds, allocated);
+        return new TestScalingGateLeg(sw.Elapsed.TotalMilliseconds, GC.GetAllocatedBytesForCurrentThread() - before);
     }
 
     [Test]
@@ -234,53 +242,18 @@ public class ToolDispatcherResolveOnceTests
         var small = Batch("noop", ToolCalls);
         var large = Batch("noop", ToolCalls * 2);
 
-        // Warm up (tiered JIT over the dispatch path) before any measurement.
-        await MeasureAsync(dispatcher, small);
-        await MeasureAsync(dispatcher, large);
+        TestScalingGateResult result = await TestScalingGate.MeasureAsync(
+            measureSmallLeg: units => DispatchLegAsync(dispatcher, small, units),
+            measureLargeLeg: units => DispatchLegAsync(dispatcher, large, units),
+            initialUnits: 1,
+            options: new TestScalingGateOptions
+            {
+                Label = "dispatcher-dispatch-scaling",
+                GrowthLimit = GrowthLimit,
+            });
 
-        double msSmall = double.MaxValue;
-        double msLarge = double.MaxValue;
-        long allocSmall = long.MaxValue;
-        long allocLarge = long.MaxValue;
-        for (int round = 0; round < Rounds; round++)
-        {
-            (double tSmall, long aSmall) = await MeasureAsync(dispatcher, small);
-            (double tLarge, long aLarge) = await MeasureAsync(dispatcher, large);
-            msSmall = Math.Min(msSmall, tSmall);
-            msLarge = Math.Min(msLarge, tLarge);
-            allocSmall = Math.Min(allocSmall, aSmall);
-            allocLarge = Math.Min(allocLarge, aLarge);
-        }
-
-        double timeRatio = msLarge / msSmall;
-        double allocRatio = (double)allocLarge / allocSmall;
-
-        // Printed, not only asserted, so the deciding ratio is readable next
-        // to the test instead of existing only in a failure message. The
-        // absolute columns are informational and runner-dependent.
-        Console.WriteLine(
-            $"dispatcher-dispatch-scaling: {ToolCalls} calls x1 = {msSmall:F3} ms / {allocSmall} B, "
-            + $"{ToolCalls * 2} calls x1 = {msLarge:F3} ms / {allocLarge} B "
-            + $"(time x{timeRatio:F2}, alloc x{allocRatio:F2}, limit x{GrowthLimit:F2}, best of {Rounds}; "
-            + "the absolute columns are informational and runner-dependent)");
-
-        // Non-vacuity: both ratios divide by the small leg, so a zero there
-        // means "measured nothing" — the #591 shape.
-        await Assert.That(msSmall).IsGreaterThan(0.0)
-            .Because($"the small-leg baseline must be a real measurement, got {msSmall:F3} ms.");
-        await Assert.That(allocSmall).IsGreaterThan(0L)
-            .Because($"the small-leg allocation baseline must be a real measurement, got {allocSmall} B.");
-
-        await Assert.That(timeRatio).IsLessThanOrEqualTo(GrowthLimit)
-            .Because(
-                $"dispatch(2N)/dispatch(N) = {timeRatio:F2} against a limit of {GrowthLimit:F2}: "
-                + $"{msLarge:F3} ms for {ToolCalls * 2} tool calls versus {msSmall:F3} ms for {ToolCalls}. "
-                + "Linear is 2.00, so this bound separates linear from quadratic without depending on "
-                + "how fast this runner is.");
-        await Assert.That(allocRatio).IsLessThanOrEqualTo(GrowthLimit)
-            .Because(
-                $"alloc(2N)/alloc(N) = {allocRatio:F2} against a limit of {GrowthLimit:F2}: "
-                + $"{allocLarge} B versus {allocSmall} B. "
-                + "Allocations do not move with the runner's speed at all, so this ratio holds on every machine.");
+        await result.AssertWithinLimitsAsync(
+            topic: "dispatch(2N)/dispatch(N)",
+            linearWhy: "Linear is 2.00, so this bound separates linear from quadratic without depending on how fast this runner is.");
     }
 }
