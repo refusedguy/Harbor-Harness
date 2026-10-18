@@ -75,6 +75,44 @@ public class WorktreePorcelainParserTests
     }
 
     /// <summary>
+    ///     Only a record-start key (<c>worktree </c>) flushes the record being
+    ///     built (#1560): unrecognised keys arriving mid-record neither split it
+    ///     nor corrupt the fields already written.
+    /// </summary>
+    [Test]
+    public async Task Parse_UnrecognisedKeysInsideRecord_DoNotSplitIt()
+    {
+        var infos = WorktreePorcelainParser.Parse(
+            "worktree /repo\nHEAD abc123\nfoo bar\nbranch refs/heads/main\n");
+
+        await Assert.That(infos.Count).IsEqualTo(1);
+        await Assert.That(infos[0].Path).IsEqualTo("/repo");
+        await Assert.That(infos[0].Branch).IsEqualTo("main");
+    }
+
+    /// <summary>
+    ///     A flushed record's state is fully reset, so a flag like <c>bare</c>
+    ///     never leaks into the next one (#1560): the empty-path record carries
+    ///     <c>bare</c> when it is dropped, and the record after it — which never
+    ///     saw that line — must not inherit it.
+    /// </summary>
+    /// <remarks>
+    ///     The dropped record is deliberately the one holding the flag: its
+    ///     <c>worktree </c> has no payload, so its flush emits nothing and the
+    ///     reset is what keeps <c>bare</c> out of the record that follows.
+    /// </remarks>
+    [Test]
+    public async Task Parse_EmptyPathRecord_IsDroppedWithoutLeakingState()
+    {
+        var infos = WorktreePorcelainParser.Parse("worktree \nbare\nworktree /repo\n");
+
+        await Assert.That(infos.Count).IsEqualTo(1);
+        await Assert.That(infos[0].Path).IsEqualTo("/repo");
+        await Assert.That(infos[0].Branch).IsNull();
+        await Assert.That(infos[0].IsBare).IsFalse();
+    }
+
+    /// <summary>
     ///     CRLF is what git emits on Windows and this runs on Windows CI, so the
     ///     tolerance is load-bearing rather than decorative: without the trim a
     ///     path would arrive with a trailing <c>\r</c> and match nothing.

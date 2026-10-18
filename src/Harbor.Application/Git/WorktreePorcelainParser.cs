@@ -24,12 +24,72 @@ namespace Harbor.Application.Git;
 ///     a parser nobody is watching.
 /// </para>
 /// <para>
-///     The state machine is unchanged from the original — it was already correct,
-///     including its tolerance of CRLF and of unrecognised lines.
+///     The dispatch is a <see cref="Fields" /> table since #1560: one porcelain
+///     key = one handler record, and the loop walks the table per line — the
+///     old else-if chain knew each branch's prefix inline, so every new key
+///     meant editing the middle of the chain. Adding a key is now one record at
+///     the end of the table; existing records untouched. Record order in the
+///     table is the dispatch order (first match wins) — it is declared here
+///     rather than being implied by how the chain happened to be written.
+///     The parse itself is unchanged: same infos on the same inputs, including
+///     its tolerance of CRLF and of unrecognised lines, and <see cref="Flush" />
+///     fires the same way — before a record-start key and once at the end.
 /// </para>
 /// </remarks>
 public static class WorktreePorcelainParser
 {
+    /// <summary>
+    ///     One porcelain key's handler. <see cref="Prefix" /> is what the line
+    ///     matched against; <see cref="LineIsKey" /> selects whole-line equality
+    ///     over StartsWith (for keys with no payload, like <c>bare</c>);
+    ///     <see cref="StartsRecord" /> declares that the key begins a new
+    ///     record, so the previous one flushes first — on <c>worktree </c>,
+    ///     and only there, the parser emits and resets before dispatching.
+    /// </summary>
+    /// <param name="Handle">
+    ///     Writes the line's payload into the record being built. The payload is
+    ///     the rest of the line after the key (empty for whole-line keys); it is
+    ///     trimmed to <see langword="null" /> when empty, which is what makes a
+    ///     detached worktree report a null branch rather than an empty string.
+    /// </param>
+    private sealed record PorcelainField(
+        string Prefix,
+        bool LineIsKey,
+        bool StartsRecord,
+        Action<WorktreeRecord, string> Handle);
+
+    /// <summary>
+    ///     The record being built — the fields the table handlers write and
+    ///     <see cref="Flush" /> turns into a <see cref="GitWorktreeInfo" />.
+    /// </summary>
+    private sealed class WorktreeRecord
+    {
+        public string? Path;
+        public string? Branch;
+        public bool Bare;
+
+        public void Reset()
+        {
+            Path = null;
+            Branch = null;
+            Bare = false;
+        }
+    }
+
+    /// <summary>
+    ///     The porcelain keys this parser knows. Order is significant (the first
+    ///     matching record handles the line) and declared: keys here never
+    ///     overlap in practice, but the contract is first-match-wins, so a new
+    ///     record must go where that wins correctly — at the end is the safe
+    ///     default for a fresh key.
+    /// </summary>
+    private static readonly PorcelainField[] Fields =
+    [
+        new("worktree ", LineIsKey: false, StartsRecord: true, Handle: SetPath),
+        new("branch refs/heads/", LineIsKey: false, StartsRecord: false, Handle: SetBranch),
+        new("bare", LineIsKey: true, StartsRecord: false, Handle: MarkBare),
+    ];
+
     /// <summary>
     ///     Parse <c>git worktree list --porcelain</c> output into records, in the
     ///     order git emitted them (the main checkout first). Malformed lines are
@@ -44,19 +104,15 @@ public static class WorktreePorcelainParser
             return infos;
         }
 
-        string? path = null;
-        string? branch = null;
-        bool bare = false;
+        var record = new WorktreeRecord();
         void Flush()
         {
-            if (!string.IsNullOrEmpty(path))
+            if (!string.IsNullOrEmpty(record.Path))
             {
-                infos.Add(new GitWorktreeInfo(path, branch, bare));
+                infos.Add(new GitWorktreeInfo(record.Path, record.Branch, record.Bare));
             }
 
-            path = null;
-            branch = null;
-            bare = false;
+            record.Reset();
         }
 
         // Split on '\n' and trim a trailing '\r' per line (git emits LF; tolerate CRLF).
@@ -77,24 +133,45 @@ public static class WorktreePorcelainParser
 
             string line = len > 0 ? output.Substring(start, len) : string.Empty;
             start = i + 1;
-            if (line.StartsWith("worktree ", StringComparison.Ordinal))
+
+            foreach (PorcelainField field in Fields)
             {
-                Flush();
-                string candidate = line.Substring("worktree ".Length).Trim();
-                path = candidate.Length > 0 ? candidate : null;
-            }
-            else if (line.StartsWith("branch refs/heads/", StringComparison.Ordinal))
-            {
-                string candidate = line.Substring("branch refs/heads/".Length).Trim();
-                branch = candidate.Length > 0 ? candidate : null;
-            }
-            else if (line == "bare")
-            {
-                bare = true;
+                bool match = field.LineIsKey
+                    ? line == field.Prefix
+                    : line.StartsWith(field.Prefix, StringComparison.Ordinal);
+                if (!match)
+                {
+                    continue;
+                }
+
+                if (field.StartsRecord)
+                {
+                    Flush();
+                }
+
+                field.Handle(record, field.LineIsKey ? string.Empty : line[field.Prefix.Length..]);
+                break;
             }
         }
 
         Flush();
         return infos;
+    }
+
+    private static void SetPath(WorktreeRecord record, string payload)
+    {
+        string candidate = payload.Trim();
+        record.Path = candidate.Length > 0 ? candidate : null;
+    }
+
+    private static void SetBranch(WorktreeRecord record, string payload)
+    {
+        string candidate = payload.Trim();
+        record.Branch = candidate.Length > 0 ? candidate : null;
+    }
+
+    private static void MarkBare(WorktreeRecord record, string payload)
+    {
+        record.Bare = true;
     }
 }
