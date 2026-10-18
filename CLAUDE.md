@@ -56,6 +56,9 @@ src/                                   — ~50 projects (all included in Harbor.
 │                                        cell-diff output; HARBOR_TUI=cellforge, legacy alias: consoleex)
 ├── Harbor.Tui.CellForge.Syntax/       — CellForge syntax-highlight + themes cluster (tokenizer/language
 │                                        registry/palette + JsonThemeLoader/ThemeFileWatcher; #1617 move-out)
+├── Harbor.Tui.CellForge.Prompts/      — CellForge prompt engines, console-free (ListPromptEngine +
+│                                        FormPromptEngine; #1618 move-out; namespaces stay
+│                                        Harbor.Tui.CellForge.Widgets)
 ├── Harbor.Tui.Notifications/          — desktop OS notifications renderer
 ├── Harbor.Ui.Framework*/              — TEA-style UI state/reducers/projection/services shared by apps
 ├── Harbor.Plugins.{Abstractions,Compilation,Instantiation,Registration,
@@ -100,7 +103,7 @@ gate: `tools/check-abstractions-contract.py`).
 | **Domain**       | `Harbor.Abstractions` (+ `.Contracts`), `Harbor.Diagnostics.Abstractions`, `Harbor.Extensions`, `Harbor.Ipc.Abstractions`, `Harbor.Ui.Framework.Abstractions` | BCL + gated NuGet only, except the Domain→Domain edge `Harbor.Abstractions` → `Harbor.Abstractions.Contracts` |
 | **Application**  | `Harbor.Application`, `Harbor.Registries`, `Harbor.Plugins.Abstractions`                                  | Domain only (NOT each other, NOT Infrastructure, NOT Presentation) |
 | **Infrastructure** | `Harbor.Storage.*`, `Harbor.Providers.*`, `Harbor.Tools.Builtin`, `Harbor.Ipc.{Client,InProcess,Server}`, `Harbor.Plugins.{Compilation,Hosting,Instantiation,Registration,Runtime,Storage}` | Domain only (NOT Application, NOT each other) |
-| **Presentation** | `Harbor.Terminal.Abstractions`, `Harbor.Ui.Framework` (+ `.State`/`.ViewModels`/`.Projection`/`.Rendering`/`.Services`/`.Sessions`), `Harbor.Desktop.*`, `Harbor.DesignSystem`, `Harbor.Tui.{AnsiPlain,CellForge,CellForge.Syntax,NickConsoleEx,Notifications}`, `Harbor.App.Avalonia` | Domain only, plus Presentation→Presentation siblings (NOT Application, NOT Infrastructure) |
+| **Presentation** | `Harbor.Terminal.Abstractions`, `Harbor.Ui.Framework` (+ `.State`/`.ViewModels`/`.Projection`/`.Rendering`/`.Services`/`.Sessions`), `Harbor.Desktop.*`, `Harbor.DesignSystem`, `Harbor.Tui.{AnsiPlain,CellForge,CellForge.Syntax,CellForge.Prompts,NickConsoleEx,Notifications}`, `Harbor.App.Avalonia` | Domain only, plus Presentation→Presentation siblings (NOT Application, NOT Infrastructure) |
 | **Composition Root** | `apps/Harbor.App.Cli/Hosting/HostBuilder.cs` (+ `src/Harbor.Hosting/Modules/*`, `src/Harbor.Plugins.Host`) | Everything — the ONLY place that `new`s concrete impls |
 
 `Harbor.Tui.Abstractions` and `Harbor.Scripting` are named nowhere above because they
