@@ -62,7 +62,15 @@ public class StorageBackendParityTests
         {
             object dto = JsonlMessageCodec.SerializePart(part);
             string jsonlJson = JsonSerializer.Serialize(dto, dto.GetType(), JsonlMessageCodec.JsonOptions);
-            string sqliteJson = JsonSerializer.Serialize(part, SqliteMappers.JsonOptions);
+            // NOT JsonSerializer.Serialize(part, options): ContentPart carries
+            // [JsonPolymorphic], and the declared-type generic overload needs a
+            // metadata-capable converter to build its PolymorphicTypeResolver — the
+            // options-level row converter is not one, so configuring would already
+            // throw NotSupportedException regardless of the value. The row cell's
+            // write path is the converter itself (ContentPartListJsonConverter
+            // delegates every element to it — see that file's header for the #177
+            // precedent on the same trap).
+            string sqliteJson = WriteViaRowConverter(part);
 
             await Assert.That(sqliteJson).IsEqualTo(jsonlJson)
                 .Because($"Both backends must write the same persisted shape for {part.Type}.");
@@ -91,7 +99,7 @@ public class StorageBackendParityTests
         {
             object dto = JsonlMessageCodec.SerializePart(part);
             string jsonlJson = JsonSerializer.Serialize(dto, dto.GetType(), JsonlMessageCodec.JsonOptions);
-            string sqliteJson = JsonSerializer.Serialize(part, SqliteMappers.JsonOptions);
+            string sqliteJson = WriteViaRowConverter(part);
 
             ContentPart codecOverJsonl = ReadViaElementCodec(jsonlJson);
             ContentPart rowOverJsonl = ReadViaRowConverter(jsonlJson);
@@ -208,6 +216,26 @@ public class StorageBackendParityTests
         reader.Read();
         return SqliteMappers.ContentPartJsonConverter.Instance.Read(ref reader, typeof(ContentPart), SqliteMappers.JsonOptions)
             ?? throw new JsonException("row converter returned null — the #550 refusal must throw instead");
+    }
+
+    /// <summary>
+    ///     The row cell's write path, byte for byte: <c>ContentPartJsonConverter</c>
+    ///     is the converter the SQLite store writes one part through (the parts-list
+    ///     converter delegates each element to it). The declared-type generic
+    ///     overload is unreachable for ContentPart — its [JsonPolymorphic] metadata
+    ///     cannot configure over the row converter (NotSupportedException in
+    ///     PolymorphicTypeResolver) — so the persisted shape is sampled at the seam
+    ///     the row actually has.
+    /// </summary>
+    private static string WriteViaRowConverter(ContentPart part)
+    {
+        using var stream = new MemoryStream();
+        using (var writer = new Utf8JsonWriter(stream))
+        {
+            SqliteMappers.ContentPartJsonConverter.Instance.Write(writer, part, SqliteMappers.JsonOptions);
+        }
+
+        return Encoding.UTF8.GetString(stream.ToArray());
     }
 
     private static void RowRead(string partJson, out string error)
