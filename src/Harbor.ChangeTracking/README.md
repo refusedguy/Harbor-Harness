@@ -1,5 +1,7 @@
 # Harbor.ChangeTracking
 
+## What lives here
+
 The **verified-change pipeline** as its own assembly (#1616). Everything between
 "an agent's tree change happened in an isolated worktree" and "the operator
 accepted or rejected it" lives here: worktree materialization, the frozen
