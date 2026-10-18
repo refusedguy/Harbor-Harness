@@ -261,18 +261,13 @@ public sealed class SandboxedPluginTool : ITool
     {
         string? Pick(params string[] keys)
         {
-            if (args.ValueKind == JsonValueKind.Object)
+            foreach (var key in keys)
             {
-                foreach (var key in keys)
-                {
-                    if (args.TryGetProperty(key, out var value) && value.ValueKind == JsonValueKind.String)
-                    {
-                        var s = value.GetString();
-                        if (!string.IsNullOrEmpty(s))
-                            return s;
-                    }
-                }
+                var s = JsonArgs.GetString(args, key);
+                if (!string.IsNullOrEmpty(s))
+                    return s;
             }
+
             return null;
         }
 

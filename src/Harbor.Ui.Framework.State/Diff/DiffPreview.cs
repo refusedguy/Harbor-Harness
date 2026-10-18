@@ -1,5 +1,6 @@
 using System.Text;
 using System.Text.Json;
+using Harbor.Abstractions.Tools;
 
 namespace Harbor.Ui.Framework.State;
 
@@ -95,25 +96,10 @@ public static class DiffPreview
             }
 
             filePath = FindFilePath(root);
-            if (root.TryGetProperty("oldString", out var osEl) && osEl.ValueKind == JsonValueKind.String)
-            {
-                oldString = osEl.GetString();
-            }
-
-            if (root.TryGetProperty("newString", out var nsEl) && nsEl.ValueKind == JsonValueKind.String)
-            {
-                newString = nsEl.GetString();
-            }
-
-            if (root.TryGetProperty("content", out var cEl) && cEl.ValueKind == JsonValueKind.String)
-            {
-                content = cEl.GetString();
-            }
-
-            if (root.TryGetProperty("patch", out var pEl) && pEl.ValueKind == JsonValueKind.String)
-            {
-                patch = pEl.GetString();
-            }
+            oldString = JsonArgs.GetString(root, "oldString");
+            newString = JsonArgs.GetString(root, "newString");
+            content = JsonArgs.GetString(root, "content");
+            patch = JsonArgs.GetString(root, "patch");
         }
         catch (JsonException)
         {

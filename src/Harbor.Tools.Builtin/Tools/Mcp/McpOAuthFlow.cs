@@ -2,6 +2,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using Harbor.Abstractions.Extensions;
+using Harbor.Abstractions.Tools;
 
 namespace Harbor.Tools.Mcp;
 
@@ -55,9 +56,9 @@ public static class McpOAuthFlow
                 // JsonElement info (PERF-002; TRIM-SERIALIZATION TypeInfo spelling).
                 JsonElement root = JsonSerializer.Deserialize(await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false), McpJsonSerializerContext.Default.JsonElement);
                 return new McpOAuthEndpoints(
-                    config.AuthorizationEndpoint ?? Str(root, "authorization_endpoint"),
-                    config.TokenEndpoint ?? Str(root, "token_endpoint"),
-                    config.RegistrationEndpoint ?? Str(root, "registration_endpoint"));
+                    config.AuthorizationEndpoint ?? JsonArgs.GetString(root, "authorization_endpoint"),
+                    config.TokenEndpoint ?? JsonArgs.GetString(root, "token_endpoint"),
+                    config.RegistrationEndpoint ?? JsonArgs.GetString(root, "registration_endpoint"));
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
@@ -182,9 +183,7 @@ public static class McpOAuthFlow
             // Same DOM as JsonDocument.Parse, but through the source-generated
             // JsonElement info (PERF-002; TRIM-SERIALIZATION TypeInfo spelling).
             JsonElement regRoot = JsonSerializer.Deserialize(await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false), McpJsonSerializerContext.Default.JsonElement);
-            string? clientId = regRoot.TryGetProperty("client_id", out var id) && id.ValueKind == JsonValueKind.String
-                ? id.GetString()
-                : null;
+            string? clientId = JsonArgs.GetString(regRoot, "client_id");
             return Result.Success(Maybe<string>.From(clientId));
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
@@ -285,9 +284,7 @@ public static class McpOAuthFlow
             JsonElement root = JsonSerializer.Deserialize(payload, McpJsonSerializerContext.Default.JsonElement);
             if (!root.TryGetProperty("access_token", out var at) || at.ValueKind != JsonValueKind.String)
                 return Result.Failure<McpOAuthTokens>("Token endpoint response has no access_token.");
-            string? refresh = root.TryGetProperty("refresh_token", out var rt) && rt.ValueKind == JsonValueKind.String
-                ? rt.GetString()
-                : null;
+            string? refresh = JsonArgs.GetString(root, "refresh_token");
             long expiresIn = root.TryGetProperty("expires_in", out var ei) && ei.ValueKind == JsonValueKind.Number
                 && ei.TryGetInt64(out long s) ? s : 3600;
             return Result.Success(new McpOAuthTokens(
@@ -302,9 +299,6 @@ public static class McpOAuthFlow
             return Result.Failure<McpOAuthTokens>($"Token request failed: {ex.Message}");
         }
     }
-
-    private static string? Str(JsonElement root, string name) =>
-        root.TryGetProperty(name, out var v) && v.ValueKind == JsonValueKind.String ? v.GetString() : null;
 
     private static string Base64Url(byte[] bytes) =>
         Convert.ToBase64String(bytes).TrimEnd('=').Replace('+', '-').Replace('/', '_');

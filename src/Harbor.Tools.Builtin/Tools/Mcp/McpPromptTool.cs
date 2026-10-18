@@ -1,4 +1,5 @@
 using Harbor.Abstractions.Extensions;
+using Harbor.Abstractions.Tools;
 using Harbor.Tools.Mcp;
 using Microsoft.Extensions.Logging;
 using Result = CSharpFunctionalExtensions.Result;
@@ -91,9 +92,7 @@ public sealed partial class McpPromptTool : ITool
         string name = args.GetProperty("name").GetString()!;
         // #180: writer-built params over a pooled buffer. Absent arguments
         // default to {} exactly as before (previously via the "{}" fallback).
-        JsonElement arguments = args.TryGetProperty("arguments", out var a) && a.ValueKind == JsonValueKind.Object
-            ? a
-            : default;
+        JsonElement arguments = JsonArgs.GetObject(args, "arguments");
 
         // #470: constructor-injected by the composition root. The per-call
         // lookup on the old service-provider field could never fire — the
