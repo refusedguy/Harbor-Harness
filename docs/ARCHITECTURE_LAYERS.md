@@ -27,8 +27,8 @@ inner layer, never the other way around. The innermost layer (Domain/Abstraction
 │  - apps/Harbor.App.Avalonia (cross-platform desktop GUI)        │
 │  - contrib/apps/: Harbor.App.Wpf / App.Maui / App.Blazor        │
 │  - In-solution TUI renderers: Tui.AnsiPlain (unified ANSI +     │
-│    plain) / Tui.CellForge (+ .Engine) / Tui.NickConsoleEx /     │
-│    Tui.Notifications                                            │
+│    plain) / Tui.CellForge (+ .Engine/.Syntax) /              │
+│    Tui.NickConsoleEx / Tui.Notifications                     │
 │  - Optional contrib/tui renderers: Spectre / .Fullscreen /      │
 │    SpectreTui / TerminalGui / Termina / RazorConsole / Sixel    │
 │  - Harbor.Desktop.Abstractions (config schema: CommonConfig,    │
@@ -289,7 +289,7 @@ flowchart TB
     subgraph Pres["Presentation (UI / CLI)"]
         Cli["Harbor.App.Cli<br/>(Composition Root)"]
         TuiAnsi["Harbor.Tui.AnsiPlain (ANSI + plain)<br/>/ .Notifications"]
-        TuiConsoleEx["Harbor.Tui.CellForge (+ .Engine)<br/>/ .NickConsoleEx (cell-diff backends)"]
+        TuiConsoleEx["Harbor.Tui.CellForge (+ .Engine / .Syntax)<br/>/ .NickConsoleEx (cell-diff backends)"]
         TuiContrib["contrib/tui: Spectre / SpectreTui<br/>/ TerminalGui / Termina / RazorConsole / Sixel"]
         DesktopAbs["Harbor.Desktop.Abstractions<br/>(config schema, desktop VM bases)"]
     end
@@ -653,8 +653,8 @@ re-run.
 
 Before ROP-D only assemblies with a hand-written `typeof()` probe had layer rules
 (~18 src projects). `FullLayerMatrixTests.cs` closes the gap with one data
-table covering **every main-solution src assembly** (**50 rows** as of 2026-10-11:
-51 src assemblies in `Harbor.slnx` minus the `Harbor.Plugins.Host` exe, which is
+table covering **every main-solution src assembly** (**51 rows** as of 2026-10-17
+(#1617): 52 src assemblies in `Harbor.slnx` minus the `Harbor.Plugins.Host` exe, which is
 `OutOfScopeAssemblies` — see §2 banner; the table was 45 rows at inception and
 47/50 src dirs as of 2026-08-27):
 

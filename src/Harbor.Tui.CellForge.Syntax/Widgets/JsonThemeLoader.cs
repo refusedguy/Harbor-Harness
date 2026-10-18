@@ -1,7 +1,6 @@
 using CSharpFunctionalExtensions;
 using Ensure = Harbor.Abstractions.Extensions.Ensure;
-using Harbor.DesignSystem;
-using Harbor.Ui.Framework.Projection;
+using Harbor.DesignSystem; // #1617: RgbColor comes via the global Projection using (GlobalUsings.cs) — the projection using was NOT dead
 
 namespace Harbor.Tui.CellForge.Widgets;
 
