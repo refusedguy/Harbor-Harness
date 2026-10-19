@@ -16,7 +16,8 @@ namespace Harbor.Config.Tests;
 /// #823: this class writes nothing, which is exactly why it is easy to miss. It
 /// constructs an <see cref="AuthStore" />, and
 /// <c>SetupChecklistDetector.DetectAsync</c> calls
-/// <c>AuthStore.ListApiKeysAsync</c> (SetupChecklistDetector.cs:175), which
+/// <c>AuthStore.ListApiKeysAsync</c> (SetupChecklistDetector.cs:175,
+/// re-anchored after the #1614 extraction to Harbor.Onboarding), which
 /// enumerates the ENTIRE process environment (AuthStore.cs:140) and synthesises a
 /// provider entry for every <c>*_API_KEY</c> in it. Two classes in this assembly
 /// write exactly those variables. No assertion here can be flipped by that today —

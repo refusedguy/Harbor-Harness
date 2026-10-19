@@ -92,7 +92,8 @@
 // than a flaky suite. `AuthStore.FromConventionalEnv` (AuthStore.cs:65-74)
 // derives `<PROVIDER>_API_KEY` from the provider id and reads the process
 // environment for it, and the onboarding wizard reaches that through
-// `_authStore.GetApiKeyAsync` (OnboardingWizard.cs:244). The variable is read by
+// `_authStore.GetApiKeyAsync` (OnboardingWizard.cs:244, re-anchored after the
+// #1614 extraction to Harbor.Onboarding). The variable is read by
 // PRODUCT code, in the same process, after the test that destroyed it has
 // returned and passed. The failure therefore belongs to whoever runs next, which
 // is the worst attribution there is.

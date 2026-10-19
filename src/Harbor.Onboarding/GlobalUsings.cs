@@ -7,14 +7,20 @@
 //    ".Value without IsSuccess" analyzer gate rides Directory.Build.props
 //    solution-wide and applies here too (the wizard carries the audited
 //    pragma from the CfeValueBaselineTests baseline).
-//  - Harbor.Abstractions.Models: ModelRef, which OnboardingPicks.
+//  - Harbor.Abstractions.Models.Identifiers: ModelRef, which OnboardingPicks.
 //    NormalizeModelId resolves without a file-local using.
+//  - Harbor.Abstractions.Providers: the ResolveClient extension method the
+//    wizard's live-model step resolves (ProviderRegistryResolve) — an
+//    extension method needs its namespace in scope even when its receiver
+//    type is spelled out fully qualified.
 //
 // Everything else is covered elsewhere: System / IO / Threading /
 // Collections.Generic come from the SDK's implicit usings; identifiers
-// (ProviderId), providers (IProviderHealthCheck), agents (IAgentRegistry)
-// and ILogger are declared file-locally by the moved files. Deliberately no
+// (ProviderId), agents (IAgentRegistry) and ILogger are declared file-locally
+// by the moved files, and IProviderHealthCheck / IProviderRegistry are always
+// spelled out as Abstractions.Providers.*. Deliberately no
 // ZLinq drop-in: the one LINQ call site (OnboardingWizard's live-model list
 // Select+ToList) compiles against System.Linq from the implicit usings.
 global using CSharpFunctionalExtensions;
-global using Harbor.Abstractions.Models;
+global using Harbor.Abstractions.Models.Identifiers;
+global using Harbor.Abstractions.Providers;
