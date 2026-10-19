@@ -32,7 +32,7 @@ public sealed class ImageViewerOverlayLayer : OverlayLayerBase<ImageViewerOverla
     protected override bool IsShownCore => Overlay.Visible;
 
     /// <summary>Routes a decoded key to the viewer (zoom, dismiss).</summary>
-    public bool OnKey(in KeyEvent key) => Overlay.HandleKey(key);
+    public override bool OnKey(in KeyEvent key) => Overlay.HandleKey(key);
 
     protected override void PaintCore(ScreenBuffer buffer, Rect box) => Overlay.Paint(buffer, Viewport);
 }

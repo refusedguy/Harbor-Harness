@@ -47,7 +47,7 @@ public sealed class DiffViewerOverlayLayer : OverlayLayerBase<DiffViewerOverlay>
         Bounds.Height >= DiffViewerOverlay.MinHeight;
 
     /// <summary>Routes a decoded key to the viewer (hunk nav, toggles, dismiss).</summary>
-    public bool OnKey(in KeyEvent key) => Overlay.HandleKey(in key);
+    public override bool OnKey(in KeyEvent key) => Overlay.HandleKey(in key);
 
     protected override void PaintCore(ScreenBuffer buffer, Rect box) => Overlay.Paint(buffer, Viewport);
 }

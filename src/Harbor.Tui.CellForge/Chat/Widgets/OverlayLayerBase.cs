@@ -95,6 +95,23 @@ public abstract class OverlayLayerBase<TOverlay> : IOverlayLayer
     public bool IsModal => _isModal;
 
     /// <summary>
+    ///     Offered a decoded key, top-down by <see cref="OverlayStack.RouteKey"/>
+    ///     (ENG4 #275). The interface ships an observe-only default
+    ///     (<c>=&gt; false</c>); a <c>virtual</c> here maps IOverlayLayer.OnKey
+    ///     to class dispatch, so a seat that overrides it is reachable through
+    ///     the stack: a derived class's own member does NOT implicitly
+    ///     re-implement an interface it only inherits — with <see cref="IOverlayLayer"/>
+    ///     listed only here, the three seats that used to declare
+    ///     <c>public bool OnKey</c> routed to the interface default and the
+    ///     RouteKey tests failed (#1537 CI, three seats). Key-reading seats
+    ///     (diff, image, setup-checklist, jump palette) therefore declare
+    ///     <c>public override bool OnKey</c>; observe-only seats (dialog, toast,
+    ///     markup, whichkey) inherit this <c>false</c> and stay unable to read
+    ///     a key — the same fact-count the key-plane census asserts.
+    /// </summary>
+    public virtual bool OnKey(in KeyEvent key) => false;
+
+    /// <summary>
     ///     Refreshes the viewport the seat's box is computed from. The host calls
     ///     this per frame (or on resize); hidden paint stays a no-op, so quiet
     ///     frames and goldens stay byte-identical.

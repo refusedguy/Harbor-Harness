@@ -262,7 +262,7 @@ internal static class OverlayKeyRouteClaimProbe
 
     /// <summary>Any <c>IOverlayLayer</c> key override — the other half of the seam.</summary>
     internal static readonly Regex OnKeyOverride =
-        new(@"public\s+bool\s+OnKey\s*\(\s*in\s+KeyEvent\s+key\s*\)", RegexOptions.Compiled);
+        new(@"public\s+(?:(?:override|virtual)\s+)?bool\s+OnKey\s*\(\s*in\s+KeyEvent\s+key\s*\)", RegexOptions.Compiled);
 
     /// <summary>One claimed routing path, located.</summary>
     /// <param name="Shape">Which claim shape matched.</param>

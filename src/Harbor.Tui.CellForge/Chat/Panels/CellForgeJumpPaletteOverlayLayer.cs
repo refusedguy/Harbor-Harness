@@ -169,7 +169,7 @@ public sealed class CellForgeJumpPaletteOverlayLayer : OverlayLayerBase<CellForg
     ///     chord it consumes (e.g. Ctrl/Alt composites) so the host keymap still
     ///     sees it.
     /// </summary>
-    public bool OnKey(in KeyEvent key)
+    public override bool OnKey(in KeyEvent key)
     {
         if (!Visible || !KeyEventMapper.TryMap(in key, out var dto))
         {

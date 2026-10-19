@@ -165,9 +165,9 @@ internal static class OverlayKeyPlaneProbe
         new(@"public\s+sealed\s+class\s+(?<name>\w+)\s*:\s*(?:IOverlayLayer\b|OverlayLayerBase<)", RegexOptions.Compiled);
 
 
-    /// <summary>The key-reading override. Its absence means the interface default `=&gt; false`.</summary>
+    /// <summary>The key-reading override. Its absence means the observe-only default (`=&gt; false`, the interface's before #1537, the base class's since it — the base ships <see langword="virtual"/> and key-reading seats override it).</summary>
     internal static readonly Regex ReadsKeys =
-        new(@"public\s+bool\s+OnKey\s*\(\s*in\s+KeyEvent\s+key\s*\)", RegexOptions.Compiled);
+        new(@"public\s+(?:override\s+)?bool\s+OnKey\s*\(\s*in\s+KeyEvent\s+key\s*\)", RegexOptions.Compiled);
 
     /// <summary>A lazily-constructed layer field, as <c>SyncOverlays</c> declares them.</summary>
     internal static readonly Regex LazyLayerField =
