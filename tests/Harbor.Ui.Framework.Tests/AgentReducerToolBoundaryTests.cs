@@ -68,9 +68,13 @@ public class AgentReducerToolBoundaryTests
     private static UiState ReducePair(string argsJson, string output, bool isError = false)
     {
         UiState state = ReduceStart(argsJson);
+        // The event's THIRD positional parameter is the event's own IsError
+        // (ToolCallId, Result, IsError) — it cannot be derived from the result,
+        // so the error flavour must pass isError explicitly; a literal false
+        // constructed success events and forced the ✓ glyph onto error lines.
         return AgentReducer.Reduce(
             state,
-            new ToolExecutionEndEvent("tc1", new ToolResult(output, isError), false));
+            new ToolExecutionEndEvent("tc1", new ToolResult(output, isError), isError));
     }
 
     // ── tool-start: one payload, two consumers ────────────────────────────
@@ -169,8 +173,12 @@ public class AgentReducerToolBoundaryTests
         // The regression these literals exist for: truncation trims the START
         // of the window only, so a window that ends in whitespace keeps that
         // space before the "..." — and an all-space window becomes "..." alone.
+        // The trailing space must sit INSIDE the 600-char window of a truncated
+        // output: 599 a's + ' ' are exactly 600 chars (the SHORT branch, whose
+        // Trim() legitimately drops the trailing space), so the fixture grows
+        // past the budget while the window itself still ends in the space.
         UiState windowTrailingSpace = ReducePair(
-            """{"path":"a.cs"}""", new string('a', 599) + " ");
+            """{"path":"a.cs"}""", new string('a', 599) + " " + new string('b', 10));
         await Assert.That(windowTrailingSpace.Chat.Lines[1].Text)
             .IsEqualTo("✓ " + new string('a', 599) + " ...");
 
