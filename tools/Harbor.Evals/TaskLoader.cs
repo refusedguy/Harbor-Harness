@@ -5,12 +5,10 @@ namespace Harbor.Evals;
 /// <summary>Task + constraints + prompt loading. No execution here.</summary>
 internal static class TaskLoader
 {
-    private static readonly JsonSerializerOptions Json = new() { PropertyNameCaseInsensitive = true };
-
     public static EvalTask Load(string taskDir)
     {
         string taskJson = File.ReadAllText(Path.Combine(taskDir, "task.json"));
-        var task = JsonSerializer.Deserialize<EvalTask>(taskJson, Json)
+        var task = JsonSerializer.Deserialize(taskJson, EvalContractJsonContext.Default.EvalTask)
             ?? throw new InvalidOperationException($"Invalid task.json in {taskDir}: null.");
         if (task.SchemaVersion != 1)
             throw new InvalidOperationException($"Unsupported task schema {task.SchemaVersion} in {taskDir}.");
@@ -25,7 +23,7 @@ internal static class TaskLoader
         string path = Path.Combine(taskDir, file);
         if (!File.Exists(path))
             return new EvalConstraints();
-        var c = JsonSerializer.Deserialize<EvalConstraints>(File.ReadAllText(path), Json);
+        var c = JsonSerializer.Deserialize(File.ReadAllText(path), EvalContractJsonContext.Default.EvalConstraints);
         return c ?? new EvalConstraints();
     }
 }

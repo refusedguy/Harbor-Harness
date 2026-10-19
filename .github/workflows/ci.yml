@@ -115,6 +115,13 @@ jobs:
               - 'build/**'
               - 'dist/**'
               - 'packaging/**'
+              # Harbor.Evals is a real csproj inside Harbor.slnx — the `build`
+              # job compiles it like everything else. It lives under tools/,
+              # so without this line a code change to the evals runner would
+              # set dotnet=false, skip the very build/test jobs that compile
+              # the tree it ships in, and land unvalidated — issue #618's
+              # defect with the same payload again (#1565 batch-4 hit this).
+              - 'tools/Harbor.Evals/**'
             ui:
               - 'src/Harbor.Tui*/**'
               - 'src/Harbor.Ui.Framework*/**'

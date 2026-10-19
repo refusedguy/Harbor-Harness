@@ -5,8 +5,6 @@ namespace Harbor.Evals;
 /// <summary>Batch summary: solved share, constraint share, costs, failure classes.</summary>
 internal static class SummaryBuilder
 {
-    private static readonly JsonSerializerOptions Json = new() { WriteIndented = true };
-
     public sealed record AttemptSummary(
         string Task,
         int Attempt,
@@ -17,6 +15,21 @@ internal static class SummaryBuilder
         string? PrimaryFailure,
         double DurationS);
 
+    /// <summary>Named record replaying the previous anonymous summary shape
+    /// (issue #1565 batch-4): identical JSON property names and declaration
+    /// order, so summary.json stays byte-identical for the evals tooling.</summary>
+    public sealed record BatchSummary(
+        string batch,
+        int attempts,
+        double? solved_share,
+        double? constraint_pass_share,
+        Dictionary<string, int> failures,
+        decimal? full_cost_to_success,
+        double cost_coverage,
+        double? false_success_share,
+        double claims_coverage,
+        List<AttemptSummary> items);
+
     public static void Write(string resultsRoot, string batchId, List<AttemptSummary> attempts)
     {
         int valid = attempts.Count(a => a.TaskOutcome is "solved" or "failed");
@@ -26,26 +39,24 @@ internal static class SummaryBuilder
             .GroupBy(a => a.PrimaryFailure!).ToDictionary(g => g.Key, g => g.Count());
         var claims = ReadManualClaims(Path.Combine(resultsRoot, batchId));
 
-        var summary = new
-        {
-            batch = batchId,
-            attempts = attempts.Count,
-            solved_share = valid == 0 ? (double?)null : (double)solved / valid,
-            constraint_pass_share = attempts.Count == 0 ? (double?)null : (double)constrained / attempts.Count,
-            failures = byFailure,
+        var summary = new BatchSummary(
+            batch: batchId,
+            attempts: attempts.Count,
+            solved_share: valid == 0 ? (double?)null : (double)solved / valid,
+            constraint_pass_share: attempts.Count == 0 ? (double?)null : (double)constrained / attempts.Count,
+            failures: byFailure,
             // Cost accounting plugs in when usage.json exists per attempt.
             // Unknown cost stays null per spec; a null total means unmeasured.
-            full_cost_to_success = (decimal?)null,
-            cost_coverage = 0.0,
+            full_cost_to_success: (decimal?)null,
+            cost_coverage: 0.0,
             // Manual agent-claim annotation (see evals/README.md): a human sets
             // agentClaim/falseSuccess in verdict.json post-hoc. No claim ever
             // comes from the agent transcript (no regex on success claims).
-            false_success_share = claims.Share,
-            claims_coverage = claims.Coverage,
-            items = attempts,
-        };
+            false_success_share: claims.Share,
+            claims_coverage: claims.Coverage,
+            items: attempts);
         string dir = Path.Combine(resultsRoot, batchId);
-        File.WriteAllText(Path.Combine(dir, "summary.json"), JsonSerializer.Serialize(summary, Json));
+        File.WriteAllText(Path.Combine(dir, "summary.json"), JsonSerializer.Serialize(summary, ArtifactJsonContext.Default.BatchSummary));
 
         var md = new System.Text.StringBuilder().AppendLine($"# Eval batch {batchId}").AppendLine();
         md.AppendLine($"- attempts: {attempts.Count}, solved share: {(summary.solved_share?.ToString("P1") ?? "n/a")}");

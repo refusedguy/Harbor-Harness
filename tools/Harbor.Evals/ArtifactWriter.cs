@@ -6,8 +6,6 @@ namespace Harbor.Evals;
 /// <summary>Writes attempt.json, manifests, patch, verification + verdict.</summary>
 internal static class ArtifactWriter
 {
-    private static readonly JsonSerializerOptions Json = new() { WriteIndented = true };
-
     public sealed record AttemptVerdict(
         string Execution, // completed | timed_out | crashed | harness_error
         string Verification, // pass | fail | error
@@ -16,6 +14,27 @@ internal static class ArtifactWriter
         string? AgentClaim, // success | failure | null (manual for v0)
         bool? FalseSuccess,
         string? PrimaryFailure); // incorrect_change | broke_existing | violated_constraint | ... | unknown
+
+    // Named records replaying the previous anonymous payload shapes (issue
+    // #1565 batch-4): identical JSON property names and declaration order —
+    // SummaryBuilder.Resummarize reads attempt.json/verdict.json back by key.
+    public sealed record ParserDiagnostics(List<string> unknown_lines);
+    public sealed record ManifestDiff(string[] added, string[] removed, string[] changed);
+    public sealed record VerificationReport(bool ran, int exit, List<VerifierRunner.CheckResult> checks);
+    public sealed record AttemptRecord(
+        string batch,
+        string task,
+        int fixture,
+        int attempt,
+        string harbor_commit,
+        string provider,
+        string model,
+        string[] env_names,
+        DateTimeOffset started_utc,
+        DateTimeOffset ended_utc,
+        double duration_s,
+        int exit_code,
+        string runner);
 
     public static AttemptVerdict Decide(
         ProcessDriver.DriveResult drive,
@@ -85,46 +104,44 @@ internal static class ArtifactWriter
         File.WriteAllText(Path.Combine(attemptRoot, "stderr.raw.log"), drive.Stderr);
         File.WriteAllLines(Path.Combine(attemptRoot, "events.jsonl"), events.JsonLines);
         File.WriteAllText(Path.Combine(attemptRoot, "parser-diagnostics.json"),
-            JsonSerializer.Serialize(new { unknown_lines = events.Unknown }, Json));
+            JsonSerializer.Serialize(new ParserDiagnostics(events.Unknown), ArtifactJsonContext.Default.ParserDiagnostics));
         File.WriteAllText(Path.Combine(attemptRoot, "initial-manifest.json"),
-            JsonSerializer.Serialize(before.Files, Json));
+            JsonSerializer.Serialize(before.Files, ArtifactJsonContext.Default.DictionaryStringString));
         File.WriteAllText(Path.Combine(attemptRoot, "final-manifest.json"),
-            JsonSerializer.Serialize(after.Files, Json));
+            JsonSerializer.Serialize(after.Files, ArtifactJsonContext.Default.DictionaryStringString));
         File.WriteAllText(Path.Combine(attemptRoot, "changes.json"),
-            JsonSerializer.Serialize(DiffManifests(before, after), Json));
+            JsonSerializer.Serialize(DiffManifests(before, after), ArtifactJsonContext.Default.ManifestDiff));
         File.WriteAllText(Path.Combine(attemptRoot, "verification.json"),
-            JsonSerializer.Serialize(new { ran = verify.Ran, exit = verify.ExitCode, checks = verify.Checks }, Json));
+            JsonSerializer.Serialize(new VerificationReport(verify.Ran, verify.ExitCode, verify.Checks), ArtifactJsonContext.Default.VerificationReport));
         File.WriteAllText(Path.Combine(attemptRoot, "verifier.stdout.log"), verify.Stdout);
         File.WriteAllText(Path.Combine(attemptRoot, "verifier.stderr.log"), verify.Stderr);
         File.WriteAllText(Path.Combine(attemptRoot, "attempt.json"),
-            JsonSerializer.Serialize(new
-            {
-                batch = batchId,
-                task = task.Id,
-                fixture = task.FixtureVersion,
-                attempt,
-                harbor_commit = GitCommit(profile.RepoRoot),
-                provider = profile.Provider,
-                model = profile.Model,
+            JsonSerializer.Serialize(new AttemptRecord(
+                batch: batchId,
+                task: task.Id,
+                fixture: task.FixtureVersion,
+                attempt: attempt,
+                harbor_commit: GitCommit(profile.RepoRoot),
+                provider: profile.Provider,
+                model: profile.Model,
                 // Config fingerprint only: env NAMES, never values (no secrets in artifacts).
-                env_names = profile.Harbor.Env.Keys.Concat(ProcessDriver.PassthroughNames()).OrderBy(k => k).ToArray(),
-                started_utc = drive.StartedUtc,
-                ended_utc = drive.EndedUtc,
-                duration_s = (drive.EndedUtc - drive.StartedUtc).TotalSeconds,
-                exit_code = drive.ExitCode,
-                runner = "Harbor.Evals v0",
-            }, Json));
+                env_names: profile.Harbor.Env.Keys.Concat(ProcessDriver.PassthroughNames()).OrderBy(k => k).ToArray(),
+                started_utc: drive.StartedUtc,
+                ended_utc: drive.EndedUtc,
+                duration_s: (drive.EndedUtc - drive.StartedUtc).TotalSeconds,
+                exit_code: drive.ExitCode,
+                runner: "Harbor.Evals v0"), ArtifactJsonContext.Default.AttemptRecord));
         File.WriteAllText(Path.Combine(attemptRoot, "verdict.json"),
-            JsonSerializer.Serialize(verdict, Json));
+            JsonSerializer.Serialize(verdict, ArtifactJsonContext.Default.AttemptVerdict));
     }
 
-    private static object DiffManifests(WorkspacePreparer.FileManifest before, WorkspacePreparer.FileManifest after)
+    private static ManifestDiff DiffManifests(WorkspacePreparer.FileManifest before, WorkspacePreparer.FileManifest after)
     {
         var added = after.Files.Keys.Except(before.Files.Keys, StringComparer.Ordinal).ToArray();
         var removed = before.Files.Keys.Except(after.Files.Keys, StringComparer.Ordinal).ToArray();
         var changed = after.Files.Keys.Intersect(before.Files.Keys, StringComparer.Ordinal)
             .Where(k => after.Files[k] != before.Files[k]).ToArray();
-        return new { added, removed, changed };
+        return new ManifestDiff(added, removed, changed);
     }
 
     private static string GitCommit(string repoRoot)

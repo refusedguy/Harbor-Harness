@@ -7,6 +7,11 @@ internal static class EventParser
 {
     public sealed record ParsedEvents(List<string> JsonLines, List<string> Unknown, bool SawAgentEnd);
 
+    /// <summary>One events.jsonl line. Named record instead of the previous
+    /// anonymous shape — source-gen cannot speak compiler-generated types; the
+    /// JSON keys ("kind", "text") and order are identical.</summary>
+    public sealed record ParseEvent(string kind, string text);
+
     public static ParsedEvents Parse(string stdout)
     {
         var lines = new List<string>();
@@ -28,7 +33,7 @@ internal static class EventParser
             string rest = line[(close + 1)..].Trim();
             if (kind == "agent_end")
                 end = true;
-            lines.Add(JsonSerializer.Serialize(new { kind, text = rest }));
+            lines.Add(JsonSerializer.Serialize(new ParseEvent(kind, rest), EventJsonContext.Default.ParseEvent));
         }
 
         return new ParsedEvents(lines, unknown, end);
