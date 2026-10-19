@@ -1,4 +1,5 @@
 using System.Text;
+using Harbor.Abstractions.Env;
 using Harbor.Abstractions.Events;
 using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Application.Configuration;
@@ -583,7 +584,7 @@ internal sealed class ReplLifecycle(CellForgeReplRunner host)
     // ThemeJsonApplied carries string.Empty, so direct wiring keeps behavior.
     private void ArmThemeWatcher()
     {
-        string path = Environment.GetEnvironmentVariable("HARBOR_THEME_FILE")
+        string path = HarborEnv.Get(HarborEnv.ThemeFile)
                       ?? Path.Combine(
                           Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
                           ".harbor", "theme.json");

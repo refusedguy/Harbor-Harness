@@ -1,5 +1,7 @@
 namespace Harbor.Application.Sessions;
 
+using Harbor.Abstractions.Env;
+
 /// <summary>
 ///     Run-directory layout for epic #42 (issue #1610): the single home for
 ///     <c>GetHarborHome</c> / <c>RunsRoot</c> / <c>RunDir</c>, extracted out of
@@ -47,6 +49,7 @@ public sealed class WorkspacePaths : IWorkspacePaths
 
     /// <inheritdoc />
     public string GetHarborHome() => Harbor.Abstractions.Filesystem.HarborPaths.GetHarborHome();
+
 
     /// <inheritdoc />
     public string RunsRoot() => Path.Combine(GetHarborHome(), "runs");

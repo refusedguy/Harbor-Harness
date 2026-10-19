@@ -1,3 +1,4 @@
+using Harbor.Abstractions.Env;
 using Harbor.App.Cli.Logging;
 using Microsoft.Extensions.Logging;
 
@@ -18,7 +19,7 @@ internal static class CliArgs
     ///     asker'ом — Ask-вызовы получают быстрый Deny вместо вечного ожидания.
     /// </summary>
     internal static void MarkApproverless() =>
-        Environment.SetEnvironmentVariable("HARBOR_NO_APPROVER", "1");
+        Environment.SetEnvironmentVariable(HarborEnv.NoApprover, "1");
 
     // Delegates to HarborLogManager.ResolveConsoleLevel so the default level
     // (Debug under debugger, Information otherwise) and the --log-level /

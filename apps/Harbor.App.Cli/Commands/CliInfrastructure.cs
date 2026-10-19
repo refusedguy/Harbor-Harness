@@ -1,5 +1,6 @@
 using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Agents;
+using Harbor.Abstractions.Env;
 using Harbor.Abstractions.Events;
 using Harbor.Abstractions.Permissions;
 using Harbor.Abstractions.Providers;
@@ -129,7 +130,7 @@ internal static class CliInfrastructure
     /// </summary>
     internal static async Task StartIpcAsync(IServiceProvider services, ILogger logger)
     {
-        string mode = Environment.GetEnvironmentVariable("HARBOR_MODE") ?? "inprocess";
+        string mode = HarborEnv.Get(HarborEnv.Mode) ?? "inprocess";
         if (string.Equals(mode, "ipc-server", StringComparison.OrdinalIgnoreCase))
         {
             // Every registered server starts: the local pipe/UDS listener and
@@ -156,7 +157,7 @@ internal static class CliInfrastructure
     /// </summary>
     internal static async Task StopIpcAsync(IServiceProvider services, ILogger logger)
     {
-        string mode = Environment.GetEnvironmentVariable("HARBOR_MODE") ?? "inprocess";
+        string mode = HarborEnv.Get(HarborEnv.Mode) ?? "inprocess";
         if (string.Equals(mode, "ipc-server", StringComparison.OrdinalIgnoreCase))
         {
             var server = services.GetService<IHarborServer>();

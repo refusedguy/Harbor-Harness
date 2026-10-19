@@ -16,6 +16,43 @@ Harbor.Abstractions.Contracts.TuiRendererAttribute :: public sealed class TuiRen
 Harbor.Abstractions.Contracts.TuiRendererAttribute :: public string Backend
 Harbor.Abstractions.Contracts.TuiRendererAttribute :: public string? ArgsFormatter
 Harbor.Abstractions.Contracts.TuiRendererAttribute :: public string? ContextType
+Harbor.Abstractions.Env.HarborEnv :: public const string CellForgeWindows = "HARBOR_CELLFORGE_WINDOWS"
+Harbor.Abstractions.Env.HarborEnv :: public const string Demo = "HARBOR_DEMO"
+Harbor.Abstractions.Env.HarborEnv :: public const string DemoStepMs = "HARBOR_DEMO_STEP_MS"
+Harbor.Abstractions.Env.HarborEnv :: public const string DemoTui = "HARBOR_DEMO_TUI"
+Harbor.Abstractions.Env.HarborEnv :: public const string Diffplex = "HARBOR_DIFFPLEX"
+Harbor.Abstractions.Env.HarborEnv :: public const string Home = "HARBOR_HOME"
+Harbor.Abstractions.Env.HarborEnv :: public const string InlineImage = "HARBOR_INLINE_IMAGE"
+Harbor.Abstractions.Env.HarborEnv :: public const string IpcPipe = "HARBOR_IPC_PIPE"
+Harbor.Abstractions.Env.HarborEnv :: public const string LegacySetup = "HARBOR_LEGACY_SETUP"
+Harbor.Abstractions.Env.HarborEnv :: public const string Listen = "HARBOR_LISTEN"
+Harbor.Abstractions.Env.HarborEnv :: public const string Locale = "HARBOR_LOCALE"
+Harbor.Abstractions.Env.HarborEnv :: public const string LogLevel = "HARBOR_LOGLEVEL"
+Harbor.Abstractions.Env.HarborEnv :: public const string Mascot = "HARBOR_MASCOT"
+Harbor.Abstractions.Env.HarborEnv :: public const string MascotMode = "HARBOR_MASCOT_MODE"
+Harbor.Abstractions.Env.HarborEnv :: public const string McpConfig = "HARBOR_MCP_CONFIG"
+Harbor.Abstractions.Env.HarborEnv :: public const string McpOAuthToken = "HARBOR_MCP_OAUTH_TOKEN"
+Harbor.Abstractions.Env.HarborEnv :: public const string Mode = "HARBOR_MODE"
+Harbor.Abstractions.Env.HarborEnv :: public const string Model = "HARBOR_MODEL"
+Harbor.Abstractions.Env.HarborEnv :: public const string NoApprover = "HARBOR_NO_APPROVER"
+Harbor.Abstractions.Env.HarborEnv :: public const string NoAutotitle = "HARBOR_NO_AUTOTITLE"
+Harbor.Abstractions.Env.HarborEnv :: public const string Osc777 = "HARBOR_OSC777"
+Harbor.Abstractions.Env.HarborEnv :: public const string Port = "HARBOR_PORT"
+Harbor.Abstractions.Env.HarborEnv :: public const string ProjectPlugins = "HARBOR_PROJECT_PLUGINS"
+Harbor.Abstractions.Env.HarborEnv :: public const string Shell = "HARBOR_SHELL"
+Harbor.Abstractions.Env.HarborEnv :: public const string SkillFreshness = "HARBOR_SKILL_FRESHNESS"
+Harbor.Abstractions.Env.HarborEnv :: public const string SkipOnboarding = "HARBOR_SKIP_ONBOARDING"
+Harbor.Abstractions.Env.HarborEnv :: public const string Storage = "HARBOR_STORAGE"
+Harbor.Abstractions.Env.HarborEnv :: public const string Theme = "HARBOR_THEME"
+Harbor.Abstractions.Env.HarborEnv :: public const string ThemeFile = "HARBOR_THEME_FILE"
+Harbor.Abstractions.Env.HarborEnv :: public const string ThemesDir = "HARBOR_THEMES_DIR"
+Harbor.Abstractions.Env.HarborEnv :: public const string Tui = "HARBOR_TUI"
+Harbor.Abstractions.Env.HarborEnv :: public const string TuiNoBuiltinPanels = "HARBOR_TUI_NO_BUILTIN_PANELS"
+Harbor.Abstractions.Env.HarborEnv :: public const string TuiRuntimeSwap = "HARBOR_TUI_RUNTIME_SWAP"
+Harbor.Abstractions.Env.HarborEnv :: public const string WithAllProviders = "HARBOR_WITH_ALL_PROVIDERS"
+Harbor.Abstractions.Env.HarborEnv :: public static bool TryGet(string variable, out string? value)
+Harbor.Abstractions.Env.HarborEnv :: public static class HarborEnv
+Harbor.Abstractions.Env.HarborEnv :: public static string? Get(string variable)
 Harbor.Abstractions.Events.AgentEndEvent :: public sealed record AgentEndEvent(IReadOnlyList<AgentMessage> NewMessages, bool Cancelled = false, RunLimitKind? Limit = null) : AgentEvent
 Harbor.Abstractions.Events.AgentErrorEvent :: public sealed record AgentErrorEvent(string Message, string? Exception = null) : AgentEvent
 Harbor.Abstractions.Events.AgentEvent :: public DateTimeOffset Timestamp

@@ -1,4 +1,5 @@
 using System.Runtime.InteropServices;
+using Harbor.Abstractions.Env;
 using Harbor.App.Cli.Hosting;
 using Harbor.Ipc;
 using Microsoft.Extensions.DependencyInjection;
@@ -22,16 +23,16 @@ internal static class HeadlessVerb
 
         // A headless host without a transport serves nobody: default to
         // ipc-server unless the operator pinned another mode explicitly.
-        if (string.IsNullOrEmpty(Environment.GetEnvironmentVariable("HARBOR_MODE")))
+        if (string.IsNullOrEmpty(HarborEnv.Get(HarborEnv.Mode)))
         {
-            Environment.SetEnvironmentVariable("HARBOR_MODE", "ipc-server");
+            Environment.SetEnvironmentVariable(HarborEnv.Mode, "ipc-server");
         }
 
         using var host = HostBuilder.Build(args);
         var server = host.Services.GetService<IHarborServer>();
         if (server is null)
         {
-            HeadlessVerbLog.HeadlessRequiresIpcServer(logger, Environment.GetEnvironmentVariable("HARBOR_MODE"));
+            HeadlessVerbLog.HeadlessRequiresIpcServer(logger, HarborEnv.Get(HarborEnv.Mode));
             Console.Error.WriteLine("daemon: IPC server unavailable — cannot run headless.");
             return 1;
         }

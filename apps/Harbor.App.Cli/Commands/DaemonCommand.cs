@@ -1,6 +1,8 @@
 using System.Diagnostics;
 using System.Globalization;
 using System.Threading.Tasks;
+using Harbor.Abstractions.Env;
+
 namespace Harbor.App.Cli.Commands;
 
 public sealed class DaemonCommand : ICommand
@@ -72,7 +74,7 @@ public sealed class DaemonCommand : ICommand
         };
         psi.ArgumentList.Add("--headless");
         // The daemon exists to serve remote clients over IPC.
-        psi.Environment["HARBOR_MODE"] = "ipc-server";
+        psi.Environment[HarborEnv.Mode] = "ipc-server";
 
         Process? process;
         try

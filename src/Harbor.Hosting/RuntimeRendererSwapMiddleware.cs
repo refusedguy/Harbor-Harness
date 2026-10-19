@@ -1,5 +1,6 @@
 namespace Harbor.Hosting;
 
+using Harbor.Abstractions.Env;
 using Harbor.Abstractions.Tui;
 using Harbor.Hosting.Rendering;
 using Microsoft.Extensions.Logging;
@@ -36,7 +37,7 @@ public sealed class RuntimeRendererSwapMiddleware
         _pipeline = pipeline;
         _logger = logger;
 
-        string? env = Environment.GetEnvironmentVariable("HARBOR_TUI_RUNTIME_SWAP")?.Trim();
+        string? env = HarborEnv.Get(HarborEnv.TuiRuntimeSwap)?.Trim();
         if (!string.IsNullOrEmpty(env) && env.Equals("1", StringComparison.OrdinalIgnoreCase) || env?.Equals("true", StringComparison.OrdinalIgnoreCase) == true)
         {
             IsEnabled = true;

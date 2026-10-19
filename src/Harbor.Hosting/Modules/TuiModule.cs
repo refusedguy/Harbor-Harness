@@ -1,4 +1,5 @@
 using System.Collections.Frozen;
+using Harbor.Abstractions.Env;
 using Harbor.Hosting.Rendering;
 using Harbor.Ui.Framework.State;
 using Harbor.Abstractions.Filesystem;
@@ -32,7 +33,7 @@ internal static class TuiModule
         // CellForge lives in src/Harbor.Tui.CellForge (always compiled in) and is not gated by
         // HARBOR_WITH_SPECTRE_TUI — the registry resolves its canonical
         // `cellforge` id and the legacy `consoleex` alias on every build.
-        string envTui = Environment.GetEnvironmentVariable("HARBOR_TUI") ?? string.Empty;
+        string envTui = HarborEnv.Get(HarborEnv.Tui) ?? string.Empty;
         string requested = string.IsNullOrWhiteSpace(envTui) ? defaultTui : envTui.Trim();
 
         // #581: `Build` merges the plugin-contributed backends (#581's new

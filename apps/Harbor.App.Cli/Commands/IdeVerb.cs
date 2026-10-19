@@ -1,3 +1,4 @@
+using Harbor.Abstractions.Env;
 using Harbor.App.Cli.Hosting;
 using Microsoft.Extensions.Logging;
 
@@ -15,10 +16,10 @@ internal static class IdeVerb
 {
     internal static async Task<int> RunAsync(ILogger logger, string[] args)
     {
-        if (string.IsNullOrEmpty(Environment.GetEnvironmentVariable("HARBOR_LOGLEVEL")))
-            Environment.SetEnvironmentVariable("HARBOR_LOGLEVEL", "None");
-        if (string.IsNullOrEmpty(Environment.GetEnvironmentVariable("HARBOR_MODE")))
-            Environment.SetEnvironmentVariable("HARBOR_MODE", "ipc-client");
+        if (string.IsNullOrEmpty(HarborEnv.Get(HarborEnv.LogLevel)))
+            Environment.SetEnvironmentVariable(HarborEnv.LogLevel, "None");
+        if (string.IsNullOrEmpty(HarborEnv.Get(HarborEnv.Mode)))
+            Environment.SetEnvironmentVariable(HarborEnv.Mode, "ipc-client");
 
         IdeVerbLog.StartingIdeBridge(logger);
         using var host = HostBuilder.Build(args);

@@ -1,3 +1,4 @@
+using Harbor.Abstractions.Env;
 using Harbor.DesignSystem;
 
 namespace Harbor.Hosting.Themes;
@@ -95,7 +96,7 @@ public sealed class ThemeStore : IThemeStore
     /// </summary>
     public static string DefaultDirectory()
     {
-        string? env = Environment.GetEnvironmentVariable("HARBOR_THEMES_DIR");
+        string? env = HarborEnv.Get(HarborEnv.ThemesDir);
         if (!string.IsNullOrWhiteSpace(env))
         {
             return env;

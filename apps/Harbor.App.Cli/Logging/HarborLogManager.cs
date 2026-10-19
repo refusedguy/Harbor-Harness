@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using Harbor.Abstractions.Env;
 using Microsoft.Extensions.Logging;
 namespace Harbor.App.Cli.Logging;
 /// <summary>
@@ -156,7 +157,7 @@ public static class HarborLogManager
                 if (raw is not null) break;
             }
         }
-        raw ??= Environment.GetEnvironmentVariable("HARBOR_LOGLEVEL");
+        raw ??= HarborEnv.Get(HarborEnv.LogLevel);
         if (Enum.TryParse(raw, true, out LogLevel parsed))
             return parsed;
         return Debugger.IsAttached ? LogLevel.Debug : LogLevel.Information;

@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Agents;
+using Harbor.Abstractions.Env;
 using Harbor.Abstractions.Events;
 using Harbor.Abstractions.Sessions;
 using Harbor.App.Cli.Demo;
@@ -98,11 +99,11 @@ public sealed class DemoCommand : ICommand
     {
         Environment.SetEnvironmentVariable("HOME", demoHome);
         Environment.SetEnvironmentVariable("USERPROFILE", demoHome);
-        Environment.SetEnvironmentVariable("HARBOR_TUI", options.Tui);
-        Environment.SetEnvironmentVariable("HARBOR_MODEL", "demo/" + DemoLlmServer.ModelId);
+        Environment.SetEnvironmentVariable(HarborEnv.Tui, options.Tui);
+        Environment.SetEnvironmentVariable(HarborEnv.Model, "demo/" + DemoLlmServer.ModelId);
         Environment.SetEnvironmentVariable("DEMO_API_KEY", "demo-key");
-        Environment.SetEnvironmentVariable("HARBOR_SKIP_ONBOARDING", "1");
-        Environment.SetEnvironmentVariable("HARBOR_DEMO", "1");
+        Environment.SetEnvironmentVariable(HarborEnv.SkipOnboarding, "1");
+        Environment.SetEnvironmentVariable(HarborEnv.Demo, "1");
         // The demo runtime reads this before the host is built, to know whether
         // the scripted approval gate may paint a card through ITuiRenderer
         // (line renderers) or must stay silent (the cell-diff frame owns stdout).
