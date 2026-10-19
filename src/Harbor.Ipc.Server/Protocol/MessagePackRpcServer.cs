@@ -158,12 +158,13 @@ public sealed class MessagePackRpcServer : IAsyncDisposable
                 if (readResult.IsFailure)
                 {
                     // Read failed — connection must close. The reason is preserved
-                    // in readResult.Error (cancelled disconnect vs stream error);
+                    // in readResult.Error: cancelled disconnect vs stream error,
                     // nothing is swallowed here.
                     return;
                 }
 
-                FrameDecision frame = HandleFrameOutcome(readResult.Value);
+                FrameReadResult read = readResult.Value;
+                FrameDecision frame = HandleFrameOutcome(read);
                 if (frame == FrameDecision.Close)
                 {
                     return;
