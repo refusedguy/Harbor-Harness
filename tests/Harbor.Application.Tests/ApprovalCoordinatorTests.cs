@@ -36,8 +36,8 @@ public class ApprovalCoordinatorTests
         await Assert.That(coordinator.DecideApproval("g1", Approve()))
             .IsEqualTo(ApprovalDecisionDisposition.Accepted);
         var outcome = await coordinator.WaitForDecisionAsync("g1", CancellationToken.None);
-        await Assert.That(outcome).IsNotNull();
-        await Assert.That(outcome!.Approved).IsTrue();
+        await Assert.That(outcome.IsSuccess).IsTrue();
+        await Assert.That(outcome.Value.Approved).IsTrue();
     }
 
     [Test]
@@ -68,8 +68,8 @@ public class ApprovalCoordinatorTests
 
         // First decision stands: the twin's Deny did not overwrite the slot.
         var outcome = await coordinator.WaitForDecisionAsync("g1", CancellationToken.None);
-        await Assert.That(outcome).IsNotNull();
-        await Assert.That(outcome!.Approved).IsTrue();
+        await Assert.That(outcome.IsSuccess).IsTrue();
+        await Assert.That(outcome.Value.Approved).IsTrue();
     }
 
     [Test]
@@ -86,8 +86,8 @@ public class ApprovalCoordinatorTests
             .IsEqualTo(ApprovalDecisionDisposition.Accepted);
 
         var outcome = await wait;
-        await Assert.That(outcome).IsNotNull();
-        await Assert.That(outcome!.Approved).IsTrue();
+        await Assert.That(outcome.IsSuccess).IsTrue();
+        await Assert.That(outcome.Value.Approved).IsTrue();
     }
 
     [Test]
@@ -108,8 +108,8 @@ public class ApprovalCoordinatorTests
 
         await Assert.That(await decideTask).IsEqualTo(ApprovalDecisionDisposition.Accepted);
         var outcome = await wait.WaitAsync(TimeSpan.FromSeconds(5));
-        await Assert.That(outcome).IsNotNull();
-        await Assert.That(outcome!.Approved).IsTrue();
+        await Assert.That(outcome.IsSuccess).IsTrue();
+        await Assert.That(outcome.Value.Approved).IsTrue();
     }
 
     [Test]
@@ -118,6 +118,38 @@ public class ApprovalCoordinatorTests
         var coordinator = NewCoordinator();
         await Assert.That(coordinator.DecideApproval("nope", Approve()))
             .IsEqualTo(ApprovalDecisionDisposition.StaleGate);
+    }
+
+    [Test]
+    public async Task WaitForUnknownGate_IsFailureWithDiagnostics_NoThrow()
+    {
+        // #1508: the former `throw new InvalidOperationException("Unknown approval
+        // gate …")` was the second of two error channels on one signature. It is
+        // now an explicit Failure on the Result railway — no throw for expected
+        // paths, diagnostics in the error text.
+        var coordinator = NewCoordinator();
+
+        var outcome = await coordinator.WaitForDecisionAsync("nope", CancellationToken.None);
+
+        await Assert.That(outcome.IsFailure).IsTrue();
+        await Assert.That(outcome.Error).IsEqualTo("Unknown approval gate 'nope' — RegisterGate first.");
+    }
+
+    [Test]
+    public async Task WaitForCancelledGate_IsFailureCancelled_NoNull()
+    {
+        // #1508: cancel no longer surfaces as `null` (via TCS) — it fails closed
+        // on the railway with the stable "cancelled" error text. The waiter got
+        // registered, then RequestCancel swept the undecided gate.
+        var coordinator = NewCoordinator();
+        var runner = new FakeRunner();
+        coordinator.RegisterGate("g1");
+        coordinator.RequestCancel(runner);
+
+        var outcome = await coordinator.WaitForDecisionAsync("g1", CancellationToken.None);
+
+        await Assert.That(outcome.IsFailure).IsTrue();
+        await Assert.That(outcome.Error).IsEqualTo("cancelled");
     }
 
     [Test]
@@ -131,7 +163,8 @@ public class ApprovalCoordinatorTests
         coordinator.RequestCancel(runner);
 
         var outcome = await wait;
-        await Assert.That(outcome).IsNull(); // fail closed → asker maps to Deny
+        await Assert.That(outcome.IsFailure).IsTrue(); // fail closed → asker maps to Deny
+        await Assert.That(outcome.Error).IsEqualTo("cancelled");
         await Assert.That(runner.AbortToken.IsCancellationRequested).IsTrue();
     }
 
@@ -147,7 +180,7 @@ public class ApprovalCoordinatorTests
             .IsEqualTo(ApprovalDecisionDisposition.AlreadyCancelled);
 
         var outcome = await coordinator.WaitForDecisionAsync("g1", CancellationToken.None);
-        await Assert.That(outcome).IsNull();
+        await Assert.That(outcome.IsFailure).IsTrue();
     }
 
     [Test]
@@ -165,7 +198,8 @@ public class ApprovalCoordinatorTests
         // Decision won the race: waiter gets it. Cancel still aborts the run —
         // the tool executes with a cancelled token (existing ToolDispatcher path).
         var outcome = await wait;
-        await Assert.That(outcome!.Approved).IsTrue();
+        await Assert.That(outcome.IsSuccess).IsTrue();
+        await Assert.That(outcome.Value.Approved).IsTrue();
         await Assert.That(runner.AbortToken.IsCancellationRequested).IsTrue();
     }
 
@@ -201,11 +235,11 @@ public class ApprovalCoordinatorTests
             var outcome = await wait;
             if (decideTask.Result == ApprovalDecisionDisposition.Accepted)
             {
-                await Assert.That(outcome).IsNotNull();
+                await Assert.That(outcome.IsSuccess).IsTrue();
             }
             else
             {
-                await Assert.That(outcome).IsNull();
+                await Assert.That(outcome.IsFailure).IsTrue();
             }
 
             await Assert.That(runner.AbortToken.IsCancellationRequested).IsTrue();

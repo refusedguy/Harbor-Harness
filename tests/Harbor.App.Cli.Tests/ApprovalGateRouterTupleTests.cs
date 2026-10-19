@@ -48,8 +48,8 @@ public class ApprovalGateRouterTupleTests
         await Assert.That(router.TryRouteApprovalKey(KeyEvent.Char(new System.Text.Rune('y')))).IsTrue();
 
         var outcome = await wait;
-        await Assert.That(outcome).IsNotNull();
-        await Assert.That(outcome!.Approved).IsTrue();
+        await Assert.That(outcome.IsSuccess).IsTrue();
+        await Assert.That(outcome.Value.Approved).IsTrue();
     }
 
     [Test]
@@ -81,8 +81,8 @@ public class ApprovalGateRouterTupleTests
         // And the winner stands: the twin's Deny did not overwrite the slot, so a
         // waiter attaching afterwards resolves the approval, not the denial.
         var outcome = await coordinator.WaitForDecisionAsync(gate.Id, CancellationToken.None);
-        await Assert.That(outcome).IsNotNull();
-        await Assert.That(outcome!.Approved).IsTrue();
+        await Assert.That(outcome.IsSuccess).IsTrue();
+        await Assert.That(outcome.Value.Approved).IsTrue();
     }
 
     [Test]
@@ -102,8 +102,8 @@ public class ApprovalGateRouterTupleTests
 
         await Assert.That(router.TryRouteApprovalKey(KeyEvent.Char(new System.Text.Rune('y')))).IsTrue();
         var outcome = await wait;
-        await Assert.That(outcome).IsNotNull();
-        await Assert.That(outcome!.Approved).IsTrue();
+        await Assert.That(outcome.IsSuccess).IsTrue();
+        await Assert.That(outcome.Value.Approved).IsTrue();
     }
 
     [Test]
@@ -124,8 +124,8 @@ public class ApprovalGateRouterTupleTests
         await Assert.That(coordinator.DecideApproval(gate.Id, "inv-coord", 1, Approve()))
             .IsEqualTo(ApprovalDecisionDisposition.Accepted);
         var outcome = await wait;
-        await Assert.That(outcome).IsNotNull();
-        await Assert.That(outcome!.Approved).IsTrue();
+        await Assert.That(outcome.IsSuccess).IsTrue();
+        await Assert.That(outcome.Value.Approved).IsTrue();
     }
 
     [Test]
@@ -142,8 +142,8 @@ public class ApprovalGateRouterTupleTests
         await Assert.That(router.TryRouteApprovalKey(KeyEvent.Char(new System.Text.Rune('n')))).IsTrue();
 
         var outcome = await wait;
-        await Assert.That(outcome).IsNotNull();
-        await Assert.That(outcome!.Approved).IsFalse();
+        await Assert.That(outcome.IsSuccess).IsTrue();
+        await Assert.That(outcome.Value.Approved).IsFalse();
     }
 
     [Test]

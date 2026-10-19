@@ -94,11 +94,18 @@ public interface IApprovalCoordinator
         string gateId, string invocationId, int generation, ApprovalResolution decision);
 
     /// <summary>
-    ///     Wait for a gate's decision. Returns <see langword="null" /> when cancellation
-    ///     wins (the linked token fired or <see cref="RequestCancel" /> swept the gate) —
-    ///     callers fail closed (deny). Unknown gate ids throw (programmer error: register first).
+    ///     Wait for a gate's decision. A decision resolves with
+    ///     <see cref="Result{ApprovalResolution}.IsSuccess" /> carrying the
+    ///     <see cref="ApprovalResolution" /> (#1508: neither channel throws — one
+    ///     signature, one error highway). Unknown gate ids are a caller error
+    ///     (register first) and surface as a failed <see cref="Result{ApprovalResolution}" />
+    ///     with a diagnostic message, where the former <see langword="throw" /> used to
+    ///     kill the ask line. A won cancellation (the linked token fired or
+    ///     <see cref="RequestCancel" /> swept the gate) resolves failed as
+    ///     <c>"cancelled"</c> — callers fail closed (deny), exactly as the former
+    ///     <see langword="null" /> required.
     /// </summary>
-    Task<ApprovalResolution?> WaitForDecisionAsync(string gateId, CancellationToken ct);
+    Task<Result<ApprovalResolution>> WaitForDecisionAsync(string gateId, CancellationToken ct);
 
     /// <summary>
     ///     The single runtime cancellation ingress: replaces every direct

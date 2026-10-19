@@ -2,7 +2,8 @@
 // Harbor.Application/GlobalUsings.cs, narrowed to what the Permissions surface binds:
 //  - System.Text.Json: JsonElement argument reading (IPathExtractionPolicy.Extract).
 //  - CSharpFunctionalExtensions: the Result railway in PermissionService
-//    (ApprovalCoordinator and the policies are Result-free).
+//    and in ApprovalCoordinator (WaitForDecisionAsync → Result<ApprovalResolution>,
+//    #1508; the arg policies are still Result-free).
 //  - Harbor.Abstractions.Agents: IAgentRegistry/AgentDefinition
 //    (PermissionService ctor + registry lookup).
 //  - Harbor.Abstractions.Permissions: the contract vocabulary — IPermissionService,

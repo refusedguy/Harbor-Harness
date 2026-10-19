@@ -198,14 +198,20 @@ public sealed class ApprovalCoordinator(ILogger<ApprovalCoordinator> logger) : I
     }
 
     /// <inheritdoc />
-    public async Task<ApprovalResolution?> WaitForDecisionAsync(string gateId, CancellationToken ct)
+    public async Task<Result<ApprovalResolution>> WaitForDecisionAsync(string gateId, CancellationToken ct)
     {
         GateSlot slot;
         lock (_gate)
         {
+            // #1508: an unknown gate is a caller error, answered on the railway —
+            // an explicit Failure with the diagnostic text, NOT the former
+            // `throw new InvalidOperationException(...)`: the asker path fail-closes
+            // on IsFailure instead of dying on an exception (and nothing can any
+            // longer observe the decision vs. a null=default(Decision) mixup).
             if (!_gates.TryGetValue(gateId, out slot!))
             {
-                throw new InvalidOperationException($"Unknown approval gate '{gateId}' — RegisterGate first.");
+                return Result.Failure<ApprovalResolution>(
+                    $"Unknown approval gate '{gateId}' — RegisterGate first.");
             }
         }
 
@@ -216,13 +222,26 @@ public sealed class ApprovalCoordinator(ILogger<ApprovalCoordinator> logger) : I
             using var reg = ct.Register(static state => ((GateSlot)state!).Tcs.TrySetResult(null), slot);
             var result = await slot.Tcs.Task.ConfigureAwait(false);
             ForgetGate(gateId, slot);
-            return result;
+            return MapOutcome(result);
         }
 
         var outcome = await slot.Tcs.Task.ConfigureAwait(false);
         ForgetGate(gateId, slot);
-        return outcome;
+        return MapOutcome(outcome);
     }
+
+    /// <summary>
+    ///     #1508: the internal channel keeps <see cref="ApprovalResolution" />
+    ///     nullable — cancel sweeps and fired tokens complete the TCS with
+    ///     <see langword="null" /> — and this is the single boundary that maps it
+    ///     onto the <c>Result&lt;ApprovalResolution&gt;</c> return shape: a decision
+    ///     succeeds, a cancellation fails closed with the stable
+    ///     <c>"cancelled"</c> error text (the contract ToolDispatcher documents:
+    ///     a lost approval is a deny).
+    /// </summary>
+    private static Result<ApprovalResolution> MapOutcome(ApprovalResolution? resolution) => resolution is null
+        ? Result.Failure<ApprovalResolution>("cancelled")
+        : Result.Success(resolution);
 
     /// <inheritdoc />
     public long BeginApprovalScope()
