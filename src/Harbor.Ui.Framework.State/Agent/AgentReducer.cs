@@ -42,18 +42,12 @@ public static class AgentReducer
         MessageEndEvent => OnMessageEnd(state),
 // The transcript line is the DISPLAY text; Chat.ToolCalls is the STRUCTURE (#680).
         // Both are written here so a renderer can read the call instead of parsing
-        // the line it is about to draw. The diff payload is derived once, here,
-        // rather than once per rendering path.
-        ToolExecutionStartEvent tes => state
-            .PutToolCall(ToolCallSnapshot.Start(
-                tes.ToolCallId, tes.ToolName, tes.Glyph, EmptyPayloadLiteral(tes.Args) ?? tes.Args.GetRawText()))
-            .AddLine(ChatRole.Tool, FormatToolStart(tes), tes.ToolCallId),
-        ToolExecutionEndEvent tee => state
-            .CompleteToolCall(
-                tee.ToolCallId,
-                tee.IsError ? ToolCallState.Error : ToolCallState.Success,
-                FormatToolResultPreview(tee))
-            .AddLine(ChatRole.ToolResult, FormatToolEnd(tee), tee.ToolCallId),
+        // the line it is about to draw. The shared payload is derived once per
+        // event (#1530): the raw-args string feeds the snapshot and the line from
+        // a single GetRawText(), and the result preview serves both writers from
+        // one computation — each writer no longer re-encodes the payload itself.
+        ToolExecutionStartEvent tes => ReduceToolStart(state, tes),
+        ToolExecutionEndEvent tee => ReduceToolEnd(state, tee),
         SessionStatsEvent ss => OnSessionStats(state, ss),
         CompactionStartedEvent => state with { Chat = state.Chat with { Status = "compacting" } },
         CompactionCompletedEvent cc => OnCompactionCompleted(state, cc),
@@ -398,20 +392,65 @@ public static class AgentReducer
                 $"compaction failed: {cf.Error} — continuing on truncated history")
             .WithStatus("running");
 
-    // ── formatting helpers (escaping) ─────────────────────────────────────
+    // ── tool-boundary folds (#1530) ───────────────────────────────────────
 
-    private static string FormatToolStart(ToolExecutionStartEvent tes)
+    /// <summary>Characters of <c>Result.Output</c> a preview may carry before
+    /// the <see cref="Ellipsis" /> is appended — the #680 budget, unchanged.</summary>
+    private const int PreviewBudget = 600;
+
+    /// <summary>Truncation marker of a previewed result tail.</summary>
+    private const string Ellipsis = "...";
+
+    /// <summary>Constant of <see cref="Ellipsis" /> for the constant-bound
+    /// stackalloc in the truncation branch (a string constant's Length is not
+    /// a constant expression).</summary>
+    private const int EllipsisCharLength = 3;
+
+    /// <summary>
+    ///     The tool-start fold with the payload computed ONCE (#1530): the
+    ///     empty-literal probe and <c>GetRawText</c> run a single time and the
+    ///     string feeds both writers — the structured snapshot and the
+    ///     transcript line.
+    /// </summary>
+    private static UiState ReduceToolStart(UiState state, ToolExecutionStartEvent tes)
     {
         string args = EmptyPayloadLiteral(tes.Args) ?? tes.Args.GetRawText();
-        return string.IsNullOrEmpty(args) || args == "{}"
-            ? $"→ {tes.ToolName}"
-            : $"→ {tes.ToolName}  {args}";
+        return state
+            .PutToolCall(ToolCallSnapshot.Start(tes.ToolCallId, tes.ToolName, tes.Glyph, args))
+            .AddLine(ChatRole.Tool, FormatToolStart(tes.ToolName, args), tes.ToolCallId);
     }
 
-    private static string FormatToolEnd(ToolExecutionEndEvent tee)
+    /// <summary>
+    ///     The tool-end fold with the preview computed ONCE (#1530): the
+    ///     trimmed result text feeds both writers — the snapshot's result and
+    ///     the transcript line — instead of two independent encodings.
+    /// </summary>
+    private static UiState ReduceToolEnd(UiState state, ToolExecutionEndEvent tee)
     {
-        string label = tee.IsError ? "✗" : "✓";
-        return $"{label} {FormatToolResultPreview(tee)}";
+        string preview = FormatToolResultPreview(tee);
+        return state
+            .CompleteToolCall(
+                tee.ToolCallId,
+                tee.IsError ? ToolCallState.Error : ToolCallState.Success,
+                preview)
+            .AddLine(ChatRole.ToolResult, FormatToolEnd(tee.IsError, preview), tee.ToolCallId);
+    }
+
+    // ── formatting helpers (escaping) ─────────────────────────────────────
+
+    /// <summary>
+    ///     The display line of a tool start. Args are pre-materialised by
+    ///     <see cref="ReduceToolStart" /> (#1530) — this formatter only renders.
+    /// </summary>
+    private static string FormatToolStart(string toolName, string args) =>
+        string.IsNullOrEmpty(args) || args == "{}"
+            ? $"→ {toolName}"
+            : $"→ {toolName}  {args}";
+
+    private static string FormatToolEnd(bool isError, string preview)
+    {
+        string label = isError ? "✗" : "✓";
+        return $"{label} {preview}";
     }
 
     /// <summary>
@@ -421,11 +460,38 @@ public static class AgentReducer
     ///     without it, so a renderer no longer strips a "✓ "/"✗ " prefix back off
     ///     a string to recover the result (#680).
     /// </summary>
+    /// <remarks>
+    ///     <para>
+    ///         #1530: one string allocation, no intermediate <c>+ "..."</c> copy
+    ///         followed by a second <c>Trim()</c> string. Visible text stays
+    ///         byte-identical with the old two-allocation form: the trimmed
+    ///         string's trailing characters are the <c>"..."</c> itself, so an
+    ///         end-trim on the old composite could never strip past the dots —
+    ///         truncation therefore needs a leading trim only. The staging
+    ///         buffer is a constant-bound stackalloc (603 chars), so the heap
+    ///         sees exactly one string.
+    ///     </para>
+    /// </remarks>
     private static string FormatToolResultPreview(ToolExecutionEndEvent tee)
     {
-        string output = tee.Result.Output ?? string.Empty;
-        string preview = output.Length > 600 ? output[..600] + "..." : output;
-        return preview.Trim();
+        string output = tee.Result.Output;
+        if (string.IsNullOrEmpty(output))
+        {
+            return string.Empty;
+        }
+
+        if (output.Length <= PreviewBudget)
+        {
+            return output.Trim();
+        }
+
+        // constant-bound stack frame, worth paying because it makes the
+        // truncated branch single-allocation on the heap.
+        Span<char> staged = stackalloc char[PreviewBudget + EllipsisCharLength];
+        ReadOnlySpan<char> visible = output.AsSpan(0, PreviewBudget).TrimStart();
+        visible.CopyTo(staged);
+        Ellipsis.CopyTo(staged.Slice(visible.Length, EllipsisCharLength));
+        return new string(staged[..(visible.Length + Ellipsis.Length)]);
     }
 
     private static UiState WithStatus(this UiState state, string status) =>
