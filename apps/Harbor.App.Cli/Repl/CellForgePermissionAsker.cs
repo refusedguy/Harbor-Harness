@@ -17,9 +17,10 @@ namespace Harbor.App.Cli.Repl;
 /// <remarks>
 ///     #49 PR1: ожидание идёт через <see cref="IApprovalCoordinator" /> —
 ///     единую точку линеаризации решения vs отмены. Отмена (Ctrl+C/Esc,
-///     RPC, session-switch) прилетает как <see langword="null" /> и
-///     маппится в fail-closed Deny; view-решение штампует роутер через тот же
-///     координатор, повторные/поздние решения гейт не трогают.
+///     RPC, session-switch) прилетает как failed <c>Result&lt;ApprovalResolution&gt;</c>
+///     ("cancelled", #1508) и маппится в fail-closed Deny; view-решение
+///     штампует роутер через тот же координатор, повторные/поздние решения
+///     гейт не трогают.
 ///     #49 PR4: гейт регистрируется с привязкой (invocationId, generation) из
 ///     запроса — роутер штампует тот же 4-tuple; legacy-запросы без invocation
 ///     идут по старому gate-only пути.
@@ -42,16 +43,17 @@ internal sealed class CellForgePermissionAsker(
             coordinator.RegisterGate(gate.Id, request.InvocationId, request.Generation);
         }
 
-        var resolution = await coordinator.WaitForDecisionAsync(gate.Id, ct).ConfigureAwait(false);
-        if (resolution is null)
+        var outcome = await coordinator.WaitForDecisionAsync(gate.Id, ct).ConfigureAwait(false);
+        if (outcome.IsFailure)
         {
-            // Cancel won: fail closed. Resolve the card visually so it doesn't
+            // #1508: "cancelled" (error) — cancel won: fail closed, ровно как
+            // прежний null-канал. Resolve the card visually so it doesn't
             // linger as pending (best-effort — the router may have pruned it).
             gate.TryDecide(ApprovalChoice.Deny);
             return new(PermissionAction.Deny, false);
         }
 
-        return Map(resolution);
+        return Map(outcome.Value);
     }
 
     /// <summary>Одна строка «цель запроса»: правило-паттерн плюс однострочный JSON аргументов.</summary>

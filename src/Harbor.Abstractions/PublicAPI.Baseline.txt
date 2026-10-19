@@ -150,7 +150,7 @@ Harbor.Abstractions.Permissions.ApprovalDecisionDisposition :: public enum Appro
 Harbor.Abstractions.Permissions.ApprovalResolution :: public sealed record ApprovalResolution(bool Approved, bool PersistDecision)
 Harbor.Abstractions.Permissions.IApprovalCoordinator :: ApprovalDecisionDisposition DecideApproval(string gateId, ApprovalResolution decision)
 Harbor.Abstractions.Permissions.IApprovalCoordinator :: ApprovalDecisionDisposition DecideApproval(string gateId, string invocationId, int generation, ApprovalResolution decision)
-Harbor.Abstractions.Permissions.IApprovalCoordinator :: Task<ApprovalResolution?> WaitForDecisionAsync(string gateId, CancellationToken ct)
+Harbor.Abstractions.Permissions.IApprovalCoordinator :: Task<Result<ApprovalResolution>> WaitForDecisionAsync(string gateId, CancellationToken ct)
 Harbor.Abstractions.Permissions.IApprovalCoordinator :: bool TryCommitApproval(long scope, string invocationId, int generation)
 Harbor.Abstractions.Permissions.IApprovalCoordinator :: long BeginApprovalScope()
 Harbor.Abstractions.Permissions.IApprovalCoordinator :: public interface IApprovalCoordinator

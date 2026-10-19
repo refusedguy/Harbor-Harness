@@ -48,8 +48,8 @@ public class ApprovalGateRouterTupleTests
         await Assert.That(router.TryRouteApprovalKey(KeyEvent.Char(new System.Text.Rune('y')))).IsTrue();
 
         var outcome = await wait;
-        await Assert.That(outcome).IsNotNull();
-        await Assert.That(outcome!.Approved).IsTrue();
+        await Assert.That(outcome.IsSuccess).IsTrue();
+        await Assert.That(outcome.Value.Approved).IsTrue();
     }
 
     [Test]
@@ -58,8 +58,8 @@ public class ApprovalGateRouterTupleTests
         // #797: this is what the previous BoundMatch_Accepted_WaiterResolves asserted
         // with a waiter parked on the very TCS the router just completed — a
         // disposition the test did not own. WaitForDecisionAsync drops the slot on
-        // consume (ApprovalCoordinator.cs:223 — unchanged by the #1615 move to
-        // src/Harbor.Permissions), and the continuation is queued by
+        // consume (ApprovalCoordinator.cs:224 — the #1508 doc-comment insert shifted
+        // the consume lines from :223 to :224/:229), and the continuation is queued by
         // RunContinuationsAsynchronously, so who runs first was up to the scheduler:
         // test thread first → AlreadyDecided, waiter first → the slot is gone → StaleGate.
         // Both are correct product states; only the first was the one asserted.
@@ -81,8 +81,8 @@ public class ApprovalGateRouterTupleTests
         // And the winner stands: the twin's Deny did not overwrite the slot, so a
         // waiter attaching afterwards resolves the approval, not the denial.
         var outcome = await coordinator.WaitForDecisionAsync(gate.Id, CancellationToken.None);
-        await Assert.That(outcome).IsNotNull();
-        await Assert.That(outcome!.Approved).IsTrue();
+        await Assert.That(outcome.IsSuccess).IsTrue();
+        await Assert.That(outcome.Value.Approved).IsTrue();
     }
 
     [Test]
@@ -102,8 +102,8 @@ public class ApprovalGateRouterTupleTests
 
         await Assert.That(router.TryRouteApprovalKey(KeyEvent.Char(new System.Text.Rune('y')))).IsTrue();
         var outcome = await wait;
-        await Assert.That(outcome).IsNotNull();
-        await Assert.That(outcome!.Approved).IsTrue();
+        await Assert.That(outcome.IsSuccess).IsTrue();
+        await Assert.That(outcome.Value.Approved).IsTrue();
     }
 
     [Test]
@@ -124,8 +124,8 @@ public class ApprovalGateRouterTupleTests
         await Assert.That(coordinator.DecideApproval(gate.Id, "inv-coord", 1, Approve()))
             .IsEqualTo(ApprovalDecisionDisposition.Accepted);
         var outcome = await wait;
-        await Assert.That(outcome).IsNotNull();
-        await Assert.That(outcome!.Approved).IsTrue();
+        await Assert.That(outcome.IsSuccess).IsTrue();
+        await Assert.That(outcome.Value.Approved).IsTrue();
     }
 
     [Test]
@@ -142,8 +142,8 @@ public class ApprovalGateRouterTupleTests
         await Assert.That(router.TryRouteApprovalKey(KeyEvent.Char(new System.Text.Rune('n')))).IsTrue();
 
         var outcome = await wait;
-        await Assert.That(outcome).IsNotNull();
-        await Assert.That(outcome!.Approved).IsFalse();
+        await Assert.That(outcome.IsSuccess).IsTrue();
+        await Assert.That(outcome.Value.Approved).IsFalse();
     }
 
     [Test]
