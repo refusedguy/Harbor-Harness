@@ -164,7 +164,7 @@ public class OutputLimitToolDecoratorTests
         public ExecutionMode ExecutionMode => ExecutionMode.Parallel;
         public ToolSafetyProfile SafetyProfile => ToolSafetyProfile.Opaque;
         public string? PromptSnippet => "fakelimit: scripted";
-        public IReadOnlyList<string> PromptGuidelines => ["scripted"];
+        public IReadOnlyList<string> PromptGuidelines { get; } = ["scripted"];
 
         public JsonDocument ParameterSchema { get; } = JsonDocument.Parse("""{"type":"object"}""");
 
