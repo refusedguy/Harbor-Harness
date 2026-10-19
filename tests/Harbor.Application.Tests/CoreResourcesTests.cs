@@ -7,9 +7,10 @@ public class CoreResourcesTests
 {
     // #1615: anchor by an Application assembly type picked for stability —
     // PermissionService moved to the Harbor.Permissions assembly, but
-    // CoreResources stayed here (its consumer, AgentLoop, is public, so the
-    // reflection below can still strip its internals within the same assembly).
-    private static readonly Type CoreResourcesType = typeof(Harbor.Application.Agents.AgentLoop).Assembly.GetType("Harbor.Application.Resources.CoreResources")!;
+    // CoreResources stayed here (#1623 then moved its consumer AgentLoop to
+    // Harbor.AgentRuntime, so the anchor binds CompactionPolicy instead — its
+    // static member footprint is the stable Application surface).
+    private static readonly Type CoreResourcesType = typeof(Harbor.Application.Sessions.CompactionPolicy).Assembly.GetType("Harbor.Application.Resources.CoreResources")!;
     private static readonly MethodInfo GetLogMethod = CoreResourcesType.GetMethod("GetLog", BindingFlags.Public | BindingFlags.Static)!;
     private static readonly MethodInfo GetErrorMethod = CoreResourcesType.GetMethod("GetError", BindingFlags.Public | BindingFlags.Static)!;
 

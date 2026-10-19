@@ -89,7 +89,7 @@ recorded, because they answer #44's topology question.
 
 | Site | Verdict | Reason |
 |---|---|---|
-| `src/Harbor.Application/Agents/DefaultAgent.cs:110` | mandatory | listener fan-out drives sub-agent/turn accounting |
+| `src/Harbor.AgentRuntime/Agents/DefaultAgent.cs:110` | mandatory | listener fan-out drives sub-agent/turn accounting |
 | `src/Harbor.Application/Diagnostics/DiagnosticsAggregator.cs:102,103` | mandatory | tool-error and agent-error records must exist for `/diagnostics` |
 | `src/Harbor.Ipc.Server/Protocol/EventBroadcaster.cs:129` | mandatory | remote/daemon clients and reconnect replay (own 1000-envelope ring) |
 | `src/Harbor.Ipc.InProcess/InProcessHarborClient.cs:104` | mandatory | in-process client stream |

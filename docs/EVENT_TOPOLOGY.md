@@ -26,9 +26,9 @@ snapshot of subscribers in the publisher's own call stack**.
 
 ```
 producers (await PublishAsync directly)
-  AgentLoop ..................... src/Harbor.Application/Agents/AgentLoop.cs:189,234,241,253
-  ToolDispatcher ................ src/Harbor.Application/Agents/ToolDispatcher.cs:215,269,283,298,329,375,418,480,505,516
-  CompactionBehavior ............ src/Harbor.Application/Agents/Pipeline/CompactionBehavior.cs:55,83,118
+  AgentLoop ..................... src/Harbor.AgentRuntime/Agents/AgentLoop.cs:189,234,241,253
+  ToolDispatcher ................ src/Harbor.AgentRuntime/Agents/ToolDispatcher.cs:215,269,283,298,329,375,418,480,505,516
+  CompactionBehavior ............ src/Harbor.AgentRuntime/Agents/Pipeline/CompactionBehavior.cs:55,83,118
   SandboxedPluginTool ........... src/Harbor.Plugins.Registration/SandboxedPluginTool.cs:188
         │ await _eventBus.PublishAsync(evt, ct)
         ▼
@@ -44,7 +44,7 @@ InMemoryEventBus.PublishAsync ... src/Harbor.Registries/Events/InMemoryEventBus.
         │ same event reference to every subscriber in the snapshot, in subscription order
         ▼
 subscribers (all in-process, each owns its IDisposable — see §6)
-  DefaultAgent listener fan-out ............. src/Harbor.Application/Agents/DefaultAgent.cs:110
+  DefaultAgent listener fan-out ............. src/Harbor.AgentRuntime/Agents/DefaultAgent.cs:110
   DiagnosticsAggregator (tool/agent errors) . src/Harbor.Application/Diagnostics/DiagnosticsAggregator.cs:102,103
   EventBroadcaster → IPC clients ............ src/Harbor.Ipc.Server/Protocol/EventBroadcaster.cs:129
   InProcessHarborClient ..................... src/Harbor.Ipc.InProcess/InProcessHarborClient.cs:104
@@ -70,7 +70,7 @@ there is nothing left off it.
 | RPC client frame queue, bounded 4096, `DropOldest` | `src/Harbor.Ipc.Client/Protocol/MessagePackRpcClient.cs:36-41` | wire frames arriving from the server; not a bus subscriber |
 | In-process client queue, bounded 1024, `DropOldest` | `src/Harbor.Ipc.InProcess/InProcessHarborClient.cs:97-102` | latest-events-visible TUI semantics |
 | CellForge REPL event pump, unbounded, `SingleReader = true` | declared `apps/Harbor.App.Cli/Repl/CellForgeReplRunner.cs:103`, written `apps/Harbor.App.Cli/Repl/ReplLifecycle.cs:98-103`, drained `apps/Harbor.App.Cli/Repl/ReplLifecycle.cs:205` | marshals bus events onto the frame-loop thread. The only `Channel<AgentEvent>` in the repo, and it is **downstream of** `Subscribe`, not inside the bus |
-| Steering queues (agent control, **not** events) | `src/Harbor.Application/Agents/AgentSteeringQueue.cs:13-15` (held by `DefaultAgent.cs:26`), `src/Harbor.Application/Agents/SubAgentRunner.cs:139` | agent steering messages, unrelated to the bus |
+| Steering queues (agent control, **not** events) | `src/Harbor.AgentRuntime/Agents/AgentSteeringQueue.cs:13-15` (held by `DefaultAgent.cs:26`), `src/Harbor.AgentRuntime/Agents/SubAgentRunner.cs:139` | agent steering messages, unrelated to the bus |
 | Provider LLM stream channels | `src/Harbor.Providers.*/…LlmClient.cs` | raw LLM deltas before they become `MessageUpdateEvent`s |
 
 ## 2. Who updates the store

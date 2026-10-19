@@ -128,7 +128,7 @@ public sealed class CfeValueBaselineTests
     /// </summary>
     private static readonly CfeExemption[] Baseline =
     [
-        new("src/Harbor.Application/Agents/SubAgentRunner.cs", "PropagateUnderLockAsync",
+        new("src/Harbor.AgentRuntime/Agents/SubAgentRunner.cs", "PropagateUnderLockAsync",
             "if (IsFailure) { return; } else-branch access"),
         new("src/Harbor.Application/Attachments/ImageAttachmentReader.cs", "CheckVisionAsync",
             "if (IsFailure) { log; return Result.Success(); } then early return"),

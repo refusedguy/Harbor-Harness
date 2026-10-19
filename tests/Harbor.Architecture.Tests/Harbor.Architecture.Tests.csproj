@@ -55,6 +55,8 @@
     <!-- #1616: the extracted verified-change pipeline joins layer enforcement. -->
     <ProjectReference Include="..\..\src\Harbor.ChangeTracking\Harbor.ChangeTracking.csproj"/>
     <ProjectReference Include="..\..\src\Harbor.Permissions\Harbor.Permissions.csproj"/>
+    <!-- #1623: NetArchLayerRules binds AgentLoop directly; the type now lives in Harbor.AgentRuntime. -->
+    <ProjectReference Include="..\..\src\Harbor.AgentRuntime\Harbor.AgentRuntime.csproj"/>
     <ProjectReference Include="..\..\src\Harbor.Registries\Harbor.Registries.csproj"/>
     <ProjectReference Include="..\..\src\Harbor.Plugins.Runtime\Harbor.Plugins.Runtime.csproj"/>
     <ProjectReference Include="..\..\src\Harbor.Providers.OpenAiCompatible\Harbor.Providers.OpenAiCompatible.csproj"/>

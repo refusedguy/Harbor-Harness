@@ -17,7 +17,7 @@
 // SCOPE — ONE CLASS, ON PURPOSE
 // -----------------------------
 // Only `BackgroundTaskRegistry` in
-// `src/Harbor.Application/Agents/BackgroundTaskRegistry.cs` is graded
+// `src/Harbor.AgentRuntime/Agents/BackgroundTaskRegistry.cs` is graded
 // (`DrainCompletedAsync` + `ObserveAsync`). The sibling abandon-path sync
 // reads elsewhere in #1099 (OnboardingVM x2, OpenAiCompatible `Task.Run`)
 // are real remainders of the same audit, but widening this rule to them
@@ -55,7 +55,7 @@ public sealed class BackgroundTaskSyncResultRule
             return string.Empty;
         }
 
-        string path = Path.Combine(root, "src", "Harbor.Application", "Agents", "BackgroundTaskRegistry.cs");
+        string path = Path.Combine(root, "src", "Harbor.AgentRuntime", "Agents", "BackgroundTaskRegistry.cs");
         return File.Exists(path) ? File.ReadAllText(path) : string.Empty;
     }
 
@@ -107,7 +107,7 @@ public sealed class BackgroundTaskSyncResultRule
     // grades through ParseSyncResultReads, whose method-window scoping a line
     // regex cannot express).
     //
-    // Scope parity is exact: Trees ["src/Harbor.Application/Agents"] walks what
+    // Scope parity is exact: Trees ["src/Harbor.AgentRuntime/Agents"] walks what
     // the old RegistrySource read, and FindObserver fires only on the
     // ObserveAsync declaration line — DrainCompletedAsync's
     // `completion.Result.Match` ROP read (an already-materialized
@@ -131,7 +131,7 @@ public sealed class BackgroundTaskSyncResultRule
     private static readonly ScanRule Rule = new()
     {
         Id = "BackgroundTaskSyncResult",
-        Trees = ["src/Harbor.Application/Agents"],
+        Trees = ["src/Harbor.AgentRuntime/Agents"],
         Forbidden =
         [
             new ScanForbidden(
@@ -188,7 +188,7 @@ public sealed class BackgroundTaskSyncResultRule
         MinHits = 20,
         MustContain =
         [
-            "src/Harbor.Application/Agents/BackgroundTaskRegistry.cs",
+            "src/Harbor.AgentRuntime/Agents/BackgroundTaskRegistry.cs",
         ],
         CustomParse = ParseSyncResultReads,
     };
@@ -343,7 +343,7 @@ public sealed class BackgroundTaskSyncResultRule
 
         await Assert.That(discovery).IsEmpty()
             .Because(
-                "src/Harbor.Application/Agents holds twenty C# files, including BackgroundTaskRegistry.cs; "
+                "src/Harbor.AgentRuntime/Agents holds twenty C# files, including BackgroundTaskRegistry.cs; "
                 + "a smaller count — or a scope that stopped seeing that file — means the "
                 + "directory was renamed or the walk stopped matching, and "
                 + "Drain_CarriesNoSyncResult becomes vacuous. "

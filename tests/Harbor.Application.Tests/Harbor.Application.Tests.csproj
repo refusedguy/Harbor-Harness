@@ -9,6 +9,8 @@
     <ProjectReference Include="../../src/Harbor.Application/Harbor.Application.csproj"/>
     <ProjectReference Include="../../src/Harbor.Hooks/Harbor.Hooks.csproj"/>
     <ProjectReference Include="../../src/Harbor.Permissions/Harbor.Permissions.csproj"/>
+    <!-- #1623: the loop tests bind the extracted agent-runtime types (AgentLoop/TurnRunner/ToolDispatcher/...). -->
+    <ProjectReference Include="../../src/Harbor.AgentRuntime/Harbor.AgentRuntime.csproj"/>
     <ProjectReference Include="../../tests/Harbor.TestKit/Harbor.TestKit.csproj"/>
     <ProjectReference Include="../../src/Harbor.Tools.Builtin/Harbor.Tools.Builtin.csproj"/>
   </ItemGroup>

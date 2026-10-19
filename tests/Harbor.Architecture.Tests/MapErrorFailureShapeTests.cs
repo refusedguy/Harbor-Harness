@@ -189,7 +189,7 @@ public sealed class MapErrorFailureShapeTests
                 + "server name is prepended. The reason counted ONE site until #976, because "
                 + "AllowList_EveryEntryStillMatchesSomething could not see a second one hiding behind "
                 + "the file-level exemption."),
-            ["src/Harbor.Application/Agents/SubAgentRunner.cs"] = new(
+            ["src/Harbor.AgentRuntime/Agents/SubAgentRunner.cs"] = new(
                 4,
                 "Four re-types: Result<Session> → Result<SubAgentRunResult> (109), "
                 + "Result<IReadOnlyList<AgentMessage>> → Result<SubAgentRunResult> (132), "

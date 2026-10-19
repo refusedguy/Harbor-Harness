@@ -19,21 +19,22 @@
 // The four rules, each quoted from the code that claims it
 // ---------------------------------------------------------
 //   1. NEITHER TRUNCATION MAY OPEN THE KEPT SLICE ON AN ORPHAN TOOL RESULT.
-//      CompactionPolicy.cs:58-60 ("The cut point never lands on a ToolResultMessage:
+//      CompactionPolicy.cs:60-62 ("The cut point never lands on a ToolResultMessage:
 //      orphan tool results whose assistant tool_call was dropped would be rejected by
-//      providers") and :147-148 (the same claim in TruncateToFitStrict).
+//      providers") and :149-150 (the same claim in TruncateToFitStrict).
 //   2. TruncateToFitStrict ALWAYS REDUCES STRICTLY ABOVE THE KEEP FLOOR.
-//      CompactionPolicy.cs:144-146 ("Whenever total > 4 the target is strictly below
+//      CompactionPolicy.cs:146-148 ("Whenever total > 4 the target is strictly below
 //      total, so reduction is guaranteed even when the whole history would trivially
 //      fit"). 4 is a real threshold in the code, not one invented here: it is
-//      `MinimumKeptMessages` at :168.
+//      `MinimumKeptMessages` at :170.
 //   3. MaterializeCompactedView IS IDEMPOTENT.
 //      The compacted view is recomputed from the raw append-only history on every turn
-//      (TurnRunner.cs:144, CompactionBehavior.cs:114). Materializing a view that has
+//      (src/Harbor.AgentRuntime/Agents/TurnRunner.cs:144,
+//       src/Harbor.AgentRuntime/Agents/Pipeline/CompactionBehavior.cs:114). Materializing a view that has
 //      already been materialized must not shrink it again, or the session bleeds one
 //      turn at a time.
 //   4. MaterializeCompactedView FAILS SAFE.
-//      CompactionPolicy.cs:228-230 ("when no summary exists, or the anchor id cannot be
+//      CompactionPolicy.cs:230-232 ("when no summary exists, or the anchor id cannot be
 //      resolved, the input instance is returned unchanged rather than risking silent
 //      history loss"). Silent history loss is the worst outcome this subsystem has.
 //
@@ -45,7 +46,8 @@
 // the list, and the "always keep at least one message" clamp puts the cut back on the
 // last result — a kept slice that is exactly one orphan ToolResultMessage.
 //
-// That slice goes straight into the next LLM request: TurnRunner.cs:160 calls
+// That slice goes straight into the next LLM request:
+// src/Harbor.AgentRuntime/Agents/TurnRunner.cs:160 calls
 // TruncateToFitStrict and hands the result to the request builder, on the same turn
 // where summarization has ALREADY failed. The provider rejects an unpaired tool result,
 // so the run that was already degraded becomes a hard failure — and the fallback stays
@@ -151,7 +153,7 @@ public class CompactionPolicyInvariantTests
         }
 
         await Assert.That(violations).IsEmpty()
-            .Because("CompactionPolicy.TruncateToFit documents at CompactionPolicy.cs:58 "
+            .Because("CompactionPolicy.TruncateToFit documents at CompactionPolicy.cs:60 "
                    + "that the cut point never lands on a ToolResultMessage, because an orphan "
                    + "result whose assistant tool_call was dropped is rejected by the "
                    + "provider. These histories broke that: "
@@ -161,7 +163,7 @@ public class CompactionPolicyInvariantTests
     /// <summary>
     ///     Rule 1 again, for <c>TruncateToFitStrict</c> — and this is the one that
     ///     matters, because unlike its sibling this method is ON the live path:
-    ///     <c>TurnRunner.cs:160</c> calls it and feeds the result straight into the next
+    ///     <c>src/Harbor.AgentRuntime/Agents/TurnRunner.cs:160</c> calls it and feeds the result straight into the next
     ///     LLM request, on a turn where summarization has already failed.
     /// </summary>
     [Test]
@@ -266,7 +268,8 @@ public class CompactionPolicyInvariantTests
     /// <summary>
     ///     Rule 3: materializing an already-materialized view changes nothing. The view
     ///     is rebuilt from the raw append-only history on every single turn
-    ///     (<c>TurnRunner.cs:144</c>, <c>CompactionBehavior.cs:114</c>), so a second pass
+    ///     (<c>src/Harbor.AgentRuntime/Agents/TurnRunner.cs:144</c>,
+    ///      <c>src/Harbor.AgentRuntime/Agents/Pipeline/CompactionBehavior.cs:114</c>), so a second pass
     ///     over an already-folded view is a guaranteed code path, not a hypothetical.
     /// </summary>
     [Test]

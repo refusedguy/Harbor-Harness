@@ -53,14 +53,19 @@ public class GfmTableParserAndFormatBenchmark
     public string[] Format_Table()
     {
         GfmTableParser.TryParse(_tableLines, 0, out var table, out _);
-        return GfmTableFormatter.Format(table, 120).ToArray();
+        // CS0121 guard (#1623): Harbor.Application and Harbor.AgentRuntime both
+        // emit the internal ZLinqDropInExtensions (IVT'd to Benchmarks), so a
+        // bare `.ToArray()` on the returned IReadOnlyList<string> is ambiguous
+        // between them. The collection expression is the same materialisation
+        // (count + index copy over IReadOnlyList) with no extension lookup.
+        return [.. GfmTableFormatter.Format(table, 120)];
     }
 
     [Benchmark(Description = "Parse + Format roundtrip")]
     public string[] ParseAndFormat()
     {
         GfmTableParser.TryParse(_tableLines, 0, out var table, out _);
-        return GfmTableFormatter.Format(table, 120).ToArray();
+        return [.. GfmTableFormatter.Format(table, 120)];
     }
 
     private static string[] BuildGfmTable(int rowCount)

@@ -7,6 +7,8 @@
 
   <ItemGroup>
     <ProjectReference Include="../../src/Harbor.Hosting/Harbor.Hosting.csproj"/>
+    <!-- #1623: PipelineBehaviorCompositionTests binds Harbor.Application.Agents (moved types). -->
+    <ProjectReference Include="../../src/Harbor.AgentRuntime/Harbor.AgentRuntime.csproj"/>
   </ItemGroup>
 
   <ItemGroup>

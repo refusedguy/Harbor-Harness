@@ -23,24 +23,24 @@
     Application layer depends on Harbor.Abstractions only — never on
     Infrastructure (Providers.*, Storage.*, Tools.Builtin), never on
     Presentation (Tui.*), never on sibling Application projects
-    (Plugins.Runtime, Scripting) — EXCEPT Harbor.Hooks (#1613): the user-hook
-    runner extracted verbatim from Hooks/ (0 in-project deps). ToolDispatcher,
-    AgentLoop, CompactionBehavior and UserHookGates bind IHookRunner, so the
-    edge is real and declared here rather than hidden behind transitivity.
-    EXCEPT Harbor.Permissions (#1615): the permissions subdomain extracted
-    verbatim from Permissions/. AgentLoop and ToolDispatcher bind only the
-    CONTRACTS (IPermissionService in Abstractions.Contracts,
-    IApprovalCoordinator in Abstractions); the edge stays real for the
-    compaction-adjacent Resources/config readers that name
+    (Plugins.Runtime, Scripting) — EXCEPT Harbor.Permissions (#1615): the
+    permissions subdomain extracted verbatim from Permissions/. AgentLoop and
+    ToolDispatcher bind only the CONTRACTS (IPermissionService in
+    Abstractions.Contracts, IApprovalCoordinator in Abstractions); the edge
+    stays real for the compaction-adjacent Resources/config readers that name
     Harbor.Application.Permissions types, and is declared here rather than
     hidden behind transitivity.
+    #1623: the extracted agent loop (Harbor.AgentRuntime) took the IHookRunner
+    consumers (ToolDispatcher, AgentLoop, CompactionBehavior, UserHookGates) and
+    the Diagnostics.Abstractions telemetry bindings with it, so the former
+    Harbor.Hooks / Harbor.Diagnostics.Abstractions edges moved to AgentRuntime's
+    row and this csproj no longer declares them. The compiled assembly
+    must not reference either (liveness rule in the architecture tests).
     See docs/ARCHITECTURE_LAYERS.md §2.
   -->
   <ItemGroup>
     <ProjectReference Include="..\Harbor.Abstractions\Harbor.Abstractions.csproj"/>
-    <ProjectReference Include="..\Harbor.Hooks\Harbor.Hooks.csproj"/>
     <ProjectReference Include="..\Harbor.Permissions\Harbor.Permissions.csproj"/>
-    <ProjectReference Include="..\Harbor.Diagnostics.Abstractions\Harbor.Diagnostics.Abstractions.csproj"/>
     <ProjectReference Include="..\Harbor.Extensions\Harbor.Extensions.csproj"/>
   </ItemGroup>
 
@@ -100,6 +100,10 @@
 
   <ItemGroup>
     <InternalsVisibleTo Include="Harbor.Benchmarks"/>
+    <!-- #1623: the extracted agent loop reads .Resources (CoreResources) over the
+         ProjectReference — see Harbor.AgentRuntime.csproj header. CompactionService
+         binds nothing back; the edge stays one-way AgentRuntime -> Application. -->
+    <InternalsVisibleTo Include="Harbor.AgentRuntime"/>
   </ItemGroup>
 
   <ItemGroup>

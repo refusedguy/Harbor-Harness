@@ -481,43 +481,43 @@ this document's answer.
 
 | File | Line | Member | Has XML doc? | Priority |
 |------|------|--------|--------------|----------|
-| Harbor.Application/Agents/AgentLoop.cs | 25 | class AgentLoop | YES | HIGH |
-| Harbor.Application/Agents/AgentLoop.cs | 102 | public async Task<Result> RunAsync(ISessionContext session, AgentDefinition agent, CancellationToken ct = default) | YES | HIGH |
-| Harbor.Application/Agents/DefaultAgent.cs | 9 | class DefaultAgent | YES | HIGH |
-| Harbor.Application/Agents/DefaultAgent.cs | 127 | AgentState State | YES | HIGH |
-| Harbor.Application/Agents/DefaultAgent.cs | 143 | public void ResetAbortSource() | YES | HIGH |
-| Harbor.Application/Agents/DefaultAgent.cs | 174 | public IDisposable Subscribe(Func<AgentEvent, CancellationToken, ValueTask> listener) | YES | HIGH |
-| Harbor.Application/Agents/DefaultAgent.cs | 204 | public async Task<Result> PromptAsync(string text, CancellationToken ct = default) | YES | HIGH |
-| Harbor.Application/Agents/DefaultAgent.cs | 243 | public async Task<Result> PromptAsync(UserMessage message, CancellationToken ct = default) | YES | HIGH |
-| Harbor.Application/Agents/DefaultAgent.cs | 360 | public void Steer(AgentMessage message) => _steeringQueue.Writer.TryWrite(message); | YES | HIGH |
-| Harbor.Application/Agents/DefaultAgent.cs | 377 | public Task WaitForIdleAsync(CancellationToken ct = default) | YES | HIGH |
-| Harbor.Application/Agents/DefaultAgent.cs | 397 | public void Initialize(Session session, AgentDefinition agent) | YES | HIGH |
-| Harbor.Application/Agents/DefaultAgent.cs | 426 | public void Dispose() | YES | HIGH |
-| Harbor.Application/Agents/DefaultAgent.cs | 469 | public void Dispose() | **NO** | HIGH |
-| Harbor.Application/Agents/DefaultAgent.cs | 480 | class DefaultSessionContext | YES | MED |
-| Harbor.Application/Agents/DefaultAgent.cs | 506 | Session Session | **NO** | LOW |
-| Harbor.Application/Agents/DefaultAgent.cs | 515 | public async Task AppendMessageAsync(AgentMessage message, CancellationToken ct = default) | **NO** | MED |
-| Harbor.Application/Agents/DefaultAgent.cs | 530 | public async Task UpdateStatsAsync(Usage usage, CancellationToken ct = default) | **NO** | MED |
-| Harbor.Application/Agents/IToolDispatcher.cs | 10 | interface IToolDispatcher | YES | HIGH |
-| Harbor.Application/Agents/StreamingCoalescer.cs | 13 | record MalformedToolCall | YES | LOW |
-| Harbor.Application/Agents/StreamingCoalescer.cs | 42 | class StreamingCoalescer | YES | MED |
-| Harbor.Application/Agents/StreamingCoalescer.cs | 64 | public void Dispose() | YES | HIGH |
-| Harbor.Application/Agents/StreamingCoalescer.cs | 74 | public void AppendTextDelta(string delta) | YES | MED |
-| Harbor.Application/Agents/StreamingCoalescer.cs | 81 | public void AppendThinkingDelta(string delta) | YES | MED |
-| Harbor.Application/Agents/StreamingCoalescer.cs | 88 | public void StartToolCall(string id, string toolName) => _pendingToolCalls[id] = (toolName, StringBuilderPool.Rent()); | YES | HIGH |
-| Harbor.Application/Agents/StreamingCoalescer.cs | 91 | public void AppendToolCallDelta(string id, string argsDelta) | YES | HIGH |
-| Harbor.Application/Agents/StreamingCoalescer.cs | 104 | public string FlushText() | YES | HIGH |
-| Harbor.Application/Agents/StreamingCoalescer.cs | 117 | public string FlushThinking() | YES | HIGH |
-| Harbor.Application/Agents/StreamingCoalescer.cs | 172 | public List<ToolCallPart> MaterializeToolCalls(List<MalformedToolCall>? malformedSink = null) | YES | HIGH |
-| Harbor.Application/Agents/StreamingCoalescer.cs | 259 | public void DiscardPendingToolCalls() | YES | HIGH |
-| Harbor.Application/Agents/StreamingCoalescer.cs | 269 | public void Reset() | YES | HIGH |
-| Harbor.Application/Agents/SubAgentRunner.cs | 32 | class SubAgentRunner | YES | HIGH |
-| Harbor.Application/Agents/SubAgentRunner.cs | 53 | public async Task<Result<SubAgentRunResult>> RunAsync( | YES | HIGH |
-| Harbor.Application/Agents/SubAgentRunner.cs | 220 | class DeferredSubAgentRunner | YES | HIGH |
-| Harbor.Application/Agents/SubAgentRunner.cs | 225 | public void Attach(ISubAgentRunner inner) | YES | MED |
-| Harbor.Application/Agents/SubAgentRunner.cs | 232 | public Task<Result<SubAgentRunResult>> RunAsync( | YES | HIGH |
-| Harbor.Application/Agents/ToolDispatcher.cs | 47 | class ToolDispatcher | YES | HIGH |
-| Harbor.Application/Agents/ToolDispatcher.cs | 64 | public async Task<ToolResultMessage> ExecuteAsync( | YES | HIGH |
+| Harbor.AgentRuntime/Agents/AgentLoop.cs | 25 | class AgentLoop | YES | HIGH |
+| Harbor.AgentRuntime/Agents/AgentLoop.cs | 102 | public async Task<Result> RunAsync(ISessionContext session, AgentDefinition agent, CancellationToken ct = default) | YES | HIGH |
+| Harbor.AgentRuntime/Agents/DefaultAgent.cs | 9 | class DefaultAgent | YES | HIGH |
+| Harbor.AgentRuntime/Agents/DefaultAgent.cs | 127 | AgentState State | YES | HIGH |
+| Harbor.AgentRuntime/Agents/DefaultAgent.cs | 143 | public void ResetAbortSource() | YES | HIGH |
+| Harbor.AgentRuntime/Agents/DefaultAgent.cs | 174 | public IDisposable Subscribe(Func<AgentEvent, CancellationToken, ValueTask> listener) | YES | HIGH |
+| Harbor.AgentRuntime/Agents/DefaultAgent.cs | 204 | public async Task<Result> PromptAsync(string text, CancellationToken ct = default) | YES | HIGH |
+| Harbor.AgentRuntime/Agents/DefaultAgent.cs | 243 | public async Task<Result> PromptAsync(UserMessage message, CancellationToken ct = default) | YES | HIGH |
+| Harbor.AgentRuntime/Agents/DefaultAgent.cs | 360 | public void Steer(AgentMessage message) => _steeringQueue.Writer.TryWrite(message); | YES | HIGH |
+| Harbor.AgentRuntime/Agents/DefaultAgent.cs | 377 | public Task WaitForIdleAsync(CancellationToken ct = default) | YES | HIGH |
+| Harbor.AgentRuntime/Agents/DefaultAgent.cs | 397 | public void Initialize(Session session, AgentDefinition agent) | YES | HIGH |
+| Harbor.AgentRuntime/Agents/DefaultAgent.cs | 426 | public void Dispose() | YES | HIGH |
+| Harbor.AgentRuntime/Agents/DefaultAgent.cs | 469 | public void Dispose() | **NO** | HIGH |
+| Harbor.AgentRuntime/Agents/DefaultAgent.cs | 480 | class DefaultSessionContext | YES | MED |
+| Harbor.AgentRuntime/Agents/DefaultAgent.cs | 506 | Session Session | **NO** | LOW |
+| Harbor.AgentRuntime/Agents/DefaultAgent.cs | 515 | public async Task AppendMessageAsync(AgentMessage message, CancellationToken ct = default) | **NO** | MED |
+| Harbor.AgentRuntime/Agents/DefaultAgent.cs | 530 | public async Task UpdateStatsAsync(Usage usage, CancellationToken ct = default) | **NO** | MED |
+| Harbor.AgentRuntime/Agents/IToolDispatcher.cs | 10 | interface IToolDispatcher | YES | HIGH |
+| Harbor.AgentRuntime/Agents/StreamingCoalescer.cs | 13 | record MalformedToolCall | YES | LOW |
+| Harbor.AgentRuntime/Agents/StreamingCoalescer.cs | 42 | class StreamingCoalescer | YES | MED |
+| Harbor.AgentRuntime/Agents/StreamingCoalescer.cs | 64 | public void Dispose() | YES | HIGH |
+| Harbor.AgentRuntime/Agents/StreamingCoalescer.cs | 74 | public void AppendTextDelta(string delta) | YES | MED |
+| Harbor.AgentRuntime/Agents/StreamingCoalescer.cs | 81 | public void AppendThinkingDelta(string delta) | YES | MED |
+| Harbor.AgentRuntime/Agents/StreamingCoalescer.cs | 88 | public void StartToolCall(string id, string toolName) => _pendingToolCalls[id] = (toolName, StringBuilderPool.Rent()); | YES | HIGH |
+| Harbor.AgentRuntime/Agents/StreamingCoalescer.cs | 91 | public void AppendToolCallDelta(string id, string argsDelta) | YES | HIGH |
+| Harbor.AgentRuntime/Agents/StreamingCoalescer.cs | 104 | public string FlushText() | YES | HIGH |
+| Harbor.AgentRuntime/Agents/StreamingCoalescer.cs | 117 | public string FlushThinking() | YES | HIGH |
+| Harbor.AgentRuntime/Agents/StreamingCoalescer.cs | 172 | public List<ToolCallPart> MaterializeToolCalls(List<MalformedToolCall>? malformedSink = null) | YES | HIGH |
+| Harbor.AgentRuntime/Agents/StreamingCoalescer.cs | 259 | public void DiscardPendingToolCalls() | YES | HIGH |
+| Harbor.AgentRuntime/Agents/StreamingCoalescer.cs | 269 | public void Reset() | YES | HIGH |
+| Harbor.AgentRuntime/Agents/SubAgentRunner.cs | 32 | class SubAgentRunner | YES | HIGH |
+| Harbor.AgentRuntime/Agents/SubAgentRunner.cs | 53 | public async Task<Result<SubAgentRunResult>> RunAsync( | YES | HIGH |
+| Harbor.AgentRuntime/Agents/SubAgentRunner.cs | 220 | class DeferredSubAgentRunner | YES | HIGH |
+| Harbor.AgentRuntime/Agents/SubAgentRunner.cs | 225 | public void Attach(ISubAgentRunner inner) | YES | MED |
+| Harbor.AgentRuntime/Agents/SubAgentRunner.cs | 232 | public Task<Result<SubAgentRunResult>> RunAsync( | YES | HIGH |
+| Harbor.AgentRuntime/Agents/ToolDispatcher.cs | 47 | class ToolDispatcher | YES | HIGH |
+| Harbor.AgentRuntime/Agents/ToolDispatcher.cs | 64 | public async Task<ToolResultMessage> ExecuteAsync( | YES | HIGH |
 | Harbor.Application/Configuration/AuthStore.cs | 13 | class AuthStore | YES | HIGH |
 | Harbor.Application/Configuration/AuthStore.cs | 41 | public async Task<Result<string>> GetApiKeyAsync(string providerId, CancellationToken ct = default) => | YES | HIGH |
 | Harbor.Application/Configuration/AuthStore.cs | 95 | public async Task<Result> SetApiKeyAsync(string providerId, string apiKey, CancellationToken ct = default) | YES | HIGH |
@@ -581,10 +581,10 @@ this document's answer.
 | Harbor.Application/Providers/ProviderHealthCheck.cs | 76 | public static string Classify(string rawError) | YES | MED |
 | Harbor.Application/Resilience/IRetryPolicy.cs | 6 | interface IRetryPolicy | **NO** | HIGH |
 | Harbor.Application/Resilience/RetryOptions.cs | 3 | record RetryOptions | **NO** | LOW |
-| Harbor.Application/Resilience/RetryPolicy.cs | 33 | class RetryPolicy | YES | MED |
-| Harbor.Application/Resilience/RetryPolicy.cs | 86 | public static bool IsTransient(Exception ex, out TimeSpan? retryAfter) | YES | MED |
-| Harbor.Application/Resilience/RetryPolicy.cs | 119 | public static bool IsTransient(ProviderErrorKind kind) => ProviderErrors.IsTransient(kind); | YES | MED |
-| Harbor.Application/Resilience/RetryPolicyExtensions.cs | 17 | class RetryPolicyExtensions | YES | MED |
+| Harbor.AgentRuntime/Resilience/RetryPolicy.cs | 33 | class RetryPolicy | YES | MED |
+| Harbor.AgentRuntime/Resilience/RetryPolicy.cs | 86 | public static bool IsTransient(Exception ex, out TimeSpan? retryAfter) | YES | MED |
+| Harbor.AgentRuntime/Resilience/RetryPolicy.cs | 119 | public static bool IsTransient(ProviderErrorKind kind) => ProviderErrors.IsTransient(kind); | YES | MED |
+| Harbor.AgentRuntime/Resilience/RetryPolicyExtensions.cs | 17 | class RetryPolicyExtensions | YES | MED |
 | Harbor.Application/Resources/CoreResources.cs | 5 | class CoreResources | **NO** | HIGH |
 | Harbor.Application/Resources/CoreResources.cs | 10 | public static string GetLog(string name) => Log.GetString(name) ?? name; | **NO** | HIGH |
 | Harbor.Application/Resources/CoreResources.cs | 11 | public static string GetError(string name) => Error.GetString(name) ?? name; | **NO** | HIGH |

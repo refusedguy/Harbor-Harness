@@ -16,7 +16,7 @@
 // SCOPE — BOTH ABANDON PATHS
 // --------------------------
 // `AwaitOneWithAbandonAsync` and `AwaitAllWithAbandonAsync` in
-// `src/Harbor.Application/Agents/ToolDispatcher.cs` are graded. The AwaitAll
+// `src/Harbor.AgentRuntime/Agents/ToolDispatcher.cs` are graded. The AwaitAll
 // sibling was a documented remainder when the AwaitOne half landed (#1409);
 // this follow-up fixes it and arms the gate over it.
 //
@@ -52,7 +52,7 @@ public sealed class ToolDispatcherSyncResultRule
             return string.Empty;
         }
 
-        string path = Path.Combine(root, "src", "Harbor.Application", "Agents", "ToolDispatcher.cs");
+        string path = Path.Combine(root, "src", "Harbor.AgentRuntime", "Agents", "ToolDispatcher.cs");
         return File.Exists(path) ? File.ReadAllText(path) : string.Empty;
     }
 
@@ -119,7 +119,7 @@ public sealed class ToolDispatcherSyncResultRule
     // grades through ParseSyncResultReads, whose method-window scoping a line
     // regex cannot express).
     //
-    // Scope parity is exact: Trees ["src/Harbor.Application/Agents"] walks what
+    // Scope parity is exact: Trees ["src/Harbor.AgentRuntime/Agents"] walks what
     // the old DispatcherSource read, and FindMethod/FindAwaitAll fire only on
     // the AwaitOneWithAbandonAsync / AwaitAllWithAbandonAsync declaration lines —
     // the call site and every other file's takes match nothing, so widening
@@ -141,7 +141,7 @@ public sealed class ToolDispatcherSyncResultRule
     private static readonly ScanRule Rule = new()
     {
         Id = "ToolDispatcherSyncResult",
-        Trees = ["src/Harbor.Application/Agents"],
+        Trees = ["src/Harbor.AgentRuntime/Agents"],
         Forbidden =
         [
             new ScanForbidden(
@@ -217,7 +217,7 @@ public sealed class ToolDispatcherSyncResultRule
         MinHits = 20,
         MustContain =
         [
-            "src/Harbor.Application/Agents/ToolDispatcher.cs",
+            "src/Harbor.AgentRuntime/Agents/ToolDispatcher.cs",
         ],
         CustomParse = ParseSyncResultReads,
     };
@@ -443,7 +443,7 @@ public sealed class ToolDispatcherSyncResultRule
 
         await Assert.That(discovery).IsEmpty()
             .Because(
-                "src/Harbor.Application/Agents holds twenty C# files, including ToolDispatcher.cs; "
+                "src/Harbor.AgentRuntime/Agents holds twenty C# files, including ToolDispatcher.cs; "
                 + "a smaller count — or a scope that stopped seeing that file — means the "
                 + "directory was renamed or the walk stopped matching, and "
                 + "AwaitOne_CarriesNoSyncResult becomes vacuous. "
