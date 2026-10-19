@@ -8,8 +8,8 @@ retry mechanics (`Resilience/*`) — a verbatim extraction from
 `Harbor.Application` (#1623, plan A part 1/4 of the Application decomp split).
 Namespaces are unchanged (`Harbor.Application.Agents`,
 `Harbor.Application.Agents.Pipeline`, `Harbor.Application.Resilience`), so
-existing usings keep compiling — same backward-compat convention as #1464,
-#1475, #1480 and the Hooks extraction (#1613).
+existing usings keep compiling — same backward-compat convention as the
+earlier verbatim extractions (#1464, #1475, #1480 and #1613's Hooks move).
 
 ## Public API
 

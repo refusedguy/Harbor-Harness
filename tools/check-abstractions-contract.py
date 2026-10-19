@@ -199,7 +199,10 @@ NON-VACUITY
   what the three counters are so the two can be diffed. Measured over the four
   guarded projects: 16 packages declared, 7 distinct non-BCL namespaces, 152
   `.cs` files — of which two packages are the phantoms the follow-up removed, so
-  the floors in docs.yml are 14 / 7 / 152.
+  the floors in docs.yml are 14 / 7 / 152. #1623 then moved the agent loop
+  (Harbor.AgentRuntime) out of the Application perimeter (the Permissions
+  #1615 and Onboarding #1614 extractions landed first); recomputed from
+  `--report` on the merged tree: 13 / 7 / 143, and the floors are 13 / 7 / 143.
 
   --self-test runs fifteen fixtures covering every vacuity shape measured while
   writing this: a declared package nothing uses, a used namespace nothing
