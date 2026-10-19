@@ -135,10 +135,8 @@ public class JsonlMessagePayloadShapeTests
 
         // The entry projection used to ride the same Select(...) chain, so both
         // contracts are re-pinned here. Each entry's own spelling is asserted
-        // (not one concatenated literal — the object?-typed Metadata member's
-        // null rendering is the serializer's business, #51 only promises the
-        // drop), the two must appear in message order, and no metadata must
-        // survive a non-null one.
+        // (not one concatenated literal), the two must appear in message order,
+        // and no metadata content may survive a non-null one.
         await Assert.That(json.Contains(
             "{\"toolCallId\":\"tc_1\",\"toolName\":\"read\",\"output\":\"first\",\"isError\":false",
             StringComparison.Ordinal)).IsTrue();
@@ -147,9 +145,24 @@ public class JsonlMessagePayloadShapeTests
             StringComparison.Ordinal)).IsTrue();
         await Assert.That(json.IndexOf("tc_1", StringComparison.Ordinal))
             .IsLessThan(json.IndexOf("tc_2", StringComparison.Ordinal));
-        await Assert.That(json.Contains("metadata", StringComparison.Ordinal)).IsFalse();
+
+        // #51 drops Metadata's CONTENT, not the member. The projection writes
+        // entries whose Metadata is null through `JsonlCodecContext.Default.*`,
+        // whose generated type info does not carry the WhenWritingNull rule —
+        // that lives only on JsonlCodecContext.JsonOptions — so the wire
+        // spelling of both entries is `"metadata":null` (byte-compat with older
+        // builds, which wrote the same null member). What must never survive is
+        // a non-null value, asserted per entry below rather than against the
+        // raw string, because the content itself is arbitrary `object?`.
+        await Assert.That(json.Contains("\"metadata\":null", StringComparison.Ordinal)).IsTrue();
 
         using var doc = JsonDocument.Parse(json);
+        foreach (var entryEl in doc.RootElement.GetProperty("payload").GetProperty("results").EnumerateArray())
+        {
+            bool metadataIsNull = !entryEl.TryGetProperty("metadata", out var m) || m.ValueKind == JsonValueKind.Null;
+            await Assert.That(metadataIsNull).IsTrue();
+        }
+
         var back = JsonlMessageCodec.DeserializeMessage("sess-1", doc.RootElement.Clone());
 
         await Assert.That(back.IsSuccess).IsTrue();
