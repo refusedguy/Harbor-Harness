@@ -294,10 +294,7 @@ public sealed partial record ToolCallPart(
     /// <param name="toolName">The name of the tool to invoke.</param>
     /// <param name="args">The raw JSON arguments (view or owned — cloned).</param>
     public static ToolCallPart Create(string id, string toolName, JsonElement args) =>
-        new(id, toolName, CloneOwned(args));
-
-    private static JsonElement CloneOwned(JsonElement args) =>
-        args.ValueKind == JsonValueKind.Undefined ? args : args.Clone();
+        new(id, toolName, OwnedJson.CloneOwned(args));
 
     // MemoryPack source-gen hook: register the JsonElement formatter before any
     // (de)serialization of ToolCallPart occurs. This ensures the Args member can

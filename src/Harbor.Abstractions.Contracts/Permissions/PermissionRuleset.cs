@@ -1,3 +1,4 @@
+using Harbor.Abstractions.Models;
 namespace Harbor.Abstractions.Permissions;
 /// <summary>
 ///     Permission ruleset for an agent or session.
@@ -542,7 +543,7 @@ public sealed record PermissionRequest(
         IReadOnlyList<string> alwaysOptions,
         string? invocationId = null,
         int generation = 1) =>
-        new(permission, pattern, args.ValueKind == JsonValueKind.Undefined ? args : args.Clone(), alwaysOptions, invocationId, generation);
+        new(permission, pattern, OwnedJson.CloneOwned(args), alwaysOptions, invocationId, generation);
 }
 
 /// <summary>
