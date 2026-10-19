@@ -120,7 +120,7 @@ public sealed partial class TreeTool : ITool
         Walk(_logger, path, "", 0, maxDepth, includeHidden, tracked, b, state, ct);
 
         if (state.Truncated)
-            b.Append("\n… truncated at ").Append(maxEntries).Append(" entries");
+            b.Append(ToolOutputLimit.TruncationNote(maxEntries, "entries")); // #1587: unified note
 
         int dirs = state.Dirs;
         int files = state.Files;
