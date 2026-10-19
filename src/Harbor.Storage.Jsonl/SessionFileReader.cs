@@ -107,6 +107,17 @@ internal static class SessionFileReader
     ///         are limited to the returned message object graph.
     ///     </para>
     ///     <para>
+    ///         <b>Ordering without a blind sort (#1533):</b> the reader used to
+    ///         finish every parse with
+    ///         <c>messages.Values.OrderBy(m =&gt; m.CreatedAt).ToList()</c> —
+    ///         O(n log n) sorting machinery and a second full list on every
+    ///         cache miss, including the cache-miss-per-appended-turn steady
+    ///         state. The parse now collects records in arrival order
+    ///         (<see cref="MessageInbox" />) and pays the stable
+    ///         <c>CreatedAt</c> sort exactly once — only when a comparison
+    ///         pass proves the log was not append-linear.
+    ///     </para>
+    ///     <para>
     ///         <b>Snapshot integrity (#459):</b> the read is bounded by the
     ///         length measured on the <em>open handle</em> — never by the
     ///         pooled buffer's capacity and never by a stat taken before the
@@ -204,7 +215,7 @@ internal static class SessionFileReader
         if (stat.Length > int.MaxValue)
             return TooLarge<SnapshotAttempt>(stat.Length);
 
-        var messages = new Dictionary<string, AgentMessage>();
+        var inbox = new MessageInbox();
         var errors = new ParseErrors();
 
         long lastRead;
@@ -223,10 +234,10 @@ internal static class SessionFileReader
             using var reader = new ChunkedLineReader(fs) { ByteCeiling = budget };
             while (await reader.FillAsync(ct).ConfigureAwait(false))
             {
-                FoldRecords(reader, sessionId, messages, errors);
+                FoldRecords(reader, sessionId, inbox, errors);
             }
 
-            FoldTrailingRecord(reader, sessionId, messages, errors);
+            FoldTrailingRecord(reader, sessionId, inbox, errors);
             lastRead = reader.BytesRead;
             sawOversized = reader.SawOversizedRecord;
         }
@@ -239,8 +250,7 @@ internal static class SessionFileReader
         var after = SessionFileStat.Read(sessionFile);
         bool stable = lastRead == budget && after.Matches(stat) && after.Length == budget;
 
-        var ordered = messages.Values.OrderBy(m => m.CreatedAt).ToList();
-        var snapshot = new MessageReadSnapshot(ordered, stat, stable);
+        var snapshot = new MessageReadSnapshot(inbox.ToChronological(), stat, stable);
         return Result.Success(new SnapshotAttempt(snapshot, errors.Total, errors.Summary(), sawOversized));
     }
 
@@ -268,12 +278,12 @@ internal static class SessionFileReader
     private static void FoldRecords(
         ChunkedLineReader reader,
         string sessionId,
-        Dictionary<string, AgentMessage> messages,
+        MessageInbox inbox,
         ParseErrors errors)
     {
         while (reader.TryGetRecord(out var record))
         {
-            FoldRecord(record, sessionId, messages, errors);
+            FoldRecord(record, sessionId, inbox, errors);
         }
     }
 
@@ -285,24 +295,24 @@ internal static class SessionFileReader
     private static void FoldTrailingRecord(
         ChunkedLineReader reader,
         string sessionId,
-        Dictionary<string, AgentMessage> messages,
+        MessageInbox inbox,
         ParseErrors errors)
     {
         if (reader.TryGetTrailingRecord(out var record))
         {
-            FoldRecord(record, sessionId, messages, errors);
+            FoldRecord(record, sessionId, inbox, errors);
         }
     }
 
     /// <summary>
-    ///     Fold one record into <paramref name="messages" /> (latest id wins).
+    ///     Fold one record into <paramref name="inbox" /> (latest id wins).
     ///     Header lines and blank lines are dropped; a per-line parse failure is
     ///     routed to <paramref name="errors" /> and the record is skipped.
     /// </summary>
     private static void FoldRecord(
         ReadOnlySpan<byte> record,
         string sessionId,
-        Dictionary<string, AgentMessage> messages,
+        MessageInbox inbox,
         ParseErrors errors)
     {
         if (record.IsEmpty || record.IndexOfAnyExcept((byte)' ', (byte)'\t') < 0)
@@ -323,11 +333,78 @@ internal static class SessionFileReader
         var msgResult = JsonlLineParser.Parse(record, sessionId);
         if (msgResult.IsSuccess)
         {
-            messages[msgResult.Value.Id] = msgResult.Value;
+            inbox.Add(msgResult.Value);
         }
         else
         {
             errors.Add($"Line parse failed: {msgResult.Error}");
+        }
+    }
+
+    /// <summary>
+    ///     Arrival-order store for a read: the collector behind the JSONL
+    ///     messages → snapshot pipeline.
+    /// </summary>
+    /// <remarks>
+    ///     <para>
+    ///         <b>#1533 — the read path does not sort what is already ordered.
+    ///         </b> The collector that replaced the
+    ///         <c>Dictionary&lt;string, AgentMessage&gt;</c> keeps records in
+    ///         arrival order and remembers each id's slot, so a repeated id
+    ///         replaces its value IN PLACE — the same "latest id wins, the
+    ///         first-occurrence position counts" semantics the dictionary used
+    ///         to feed <c>Values.OrderBy(m =&gt; m.CreatedAt)</c> with. A JSONL
+    ///         session file is an append-linear log, so the arrival order is
+    ///         the chronological order almost always: proving that is one
+    ///         comparison pass over the collected list, and the stable
+    ///         <c>OrderBy</c> sort runs exactly once, on the first
+    ///         provably-out-of-order read — instead of paying
+    ///         O(n log n) machinery plus a fresh list on every cache miss.
+    ///     </para>
+    ///     <para>
+    ///         The list this collector returns is privately owned — built by
+    ///         this read, handed to the <see cref="MessageReadSnapshot" />, and
+    ///         never re-sorted in place afterwards.
+    ///     </para>
+    /// </remarks>
+    private sealed class MessageInbox
+    {
+        private readonly List<AgentMessage> _arrival = [];
+        private readonly Dictionary<string, int> _slots = new();
+
+        /// <summary>Records one parsed message; a repeated id replaces its value in place.</summary>
+        internal void Add(AgentMessage message)
+        {
+            if (_slots.TryGetValue(message.Id, out int slot))
+            {
+                _arrival[slot] = message;
+                return;
+            }
+
+            _slots.Add(message.Id, _arrival.Count);
+            _arrival.Add(message);
+        }
+
+        /// <summary>
+        ///     The parsed messages in chronological order: arrival order when
+        ///     the log is append-linear (the common case, returned as-is), a
+        ///     stable <c>CreatedAt</c> sort when the file was not written in
+        ///     time order.
+        /// </summary>
+        internal IReadOnlyList<AgentMessage> ToChronological()
+        {
+            int count = _arrival.Count;
+            for (int i = 1; i < count; i++)
+            {
+                if (_arrival[i - 1].CreatedAt > _arrival[i].CreatedAt)
+                {
+                    // Same stable sort the read path has always applied, run
+                    // only once — on the read that detects disorder.
+                    return _arrival.OrderBy(m => m.CreatedAt).ToList();
+                }
+            }
+
+            return _arrival;
         }
     }
 

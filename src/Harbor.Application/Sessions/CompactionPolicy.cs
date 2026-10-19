@@ -229,13 +229,93 @@ public static class CompactionPolicy
     ///         resolved, the input instance is returned unchanged rather than
     ///         risking silent history loss.
     ///     </para>
+    ///     <para>
+    ///         <b>Anchor cache (#1533):</b> the scans this method used to run on
+    ///         every call — reverse scan for the newest summary, forward scan for
+    ///         its anchor — are O(history) <em>twice per turn</em>
+    ///         (<c>TurnRunner.RunTurnAsync</c>, then <c>CompactionBehavior</c>
+    ///         after a fresh compaction). What it learned is now remembered
+    ///         against the input list instance, so the steady per-turn shape is:
+    ///         an unchanged history returns the remembered answer with zero
+    ///         rescans and zero allocations (still the input instance itself when
+    ///         nothing is compacted, exactly like the <c>summaryIndex &lt; 0</c>
+    ///         return below); appended history rescans only the appended window;
+    ///         a new summary, a resolved uncertainty, a shrunk or swapped list
+    ///         re-derives the view with the same scans as before. The cache is
+    ///         keyed to the input list instance, published through
+    ///         volatility-preserving snapshots, and dies with the list — no
+    ///         global mutable state leaks out, and concurrent callers read a
+    ///         consistent snapshot or recompute the same answer.
+    ///     </para>
     /// </summary>
     /// <param name="messages">The raw (append-only) session history.</param>
     /// <returns>The compacted view, or <paramref name="messages" /> when nothing is compacted.</returns>
     public static IReadOnlyList<AgentMessage> MaterializeCompactedView(IReadOnlyList<AgentMessage> messages)
     {
+        int count = messages.Count;
+        if (count == 0)
+        {
+            return messages;
+        }
+
+        // The cache is keyed to the list instance: DefaultSessionContext grooms
+        // one List<AgentMessage> per run and appends to it turn over turn, so
+        // the instance survives long enough to pay for itself.
+        AnchorCache cache = AnchorCaches.GetValue(messages, static _ => new AnchorCache());
+        AnchorState? state = Volatile.Read(ref cache.State);
+
+        if (state is AnchorState known && known.Count == count && HistoryIntact(messages, known))
+        {
+            // Unchanged history: the remembered answer still describes it. The
+            // no-summary arm yields the input instance — the fail-safe return
+            // keeps its identity, zero allocations.
+            return known.View ?? messages;
+        }
+
+        if (state is AnchorState prior && count > prior.Count
+            && ReferenceEquals(messages[prior.Count - 1], prior.TailRef)
+            && SummarySlotsIntact(messages, prior))
+        {
+            // Append-only growth: the prefix the state was computed over is
+            // still there (the object recorded as its tail still sits at the
+            // old last index), so only the appended window can hold a newer
+            // summary. The per-turn steady state costs O(appended) here
+            // instead of O(history).
+            bool windowHasNewerSummary = false;
+            for (int i = count - 1; i >= prior.Count; i--)
+            {
+                if (messages[i] is AssistantMessage { IsSummary: true })
+                {
+                    windowHasNewerSummary = true;
+                    break;
+                }
+            }
+
+            if (!windowHasNewerSummary)
+            {
+                if (prior.SummaryIndex < 0)
+                {
+                    Volatile.Write(ref cache.State, AnchorState.WithoutSummary(messages, count));
+                    return messages;
+                }
+
+                var reJoined = BuildView(messages, prior.SummaryIndex, prior.KeptStart);
+                Volatile.Write(ref cache.State, AnchorState.WithResolvedSummary(
+                    messages, count, prior.SummaryIndex, prior.KeptStart, reJoined));
+                return reJoined;
+            }
+
+            // A newer summary landed in the window — it is at a higher index
+            // than the remembered one, so the remembered answer is stale in
+            // exactly the way the full pass re-derives below. A compaction
+            // turn is rare; paying the old O(history) scan there is the
+            // realism this optimization preserves.
+        }
+
+        // Full pass — the exact scans the method has always run: reverse scan
+        // for the newest summary, then forward scan for its anchor.
         int summaryIndex = -1;
-        for (int i = messages.Count - 1; i >= 0; i--)
+        for (int i = count - 1; i >= 0; i--)
         {
             if (messages[i] is AssistantMessage { IsSummary: true })
             {
@@ -246,6 +326,7 @@ public static class CompactionPolicy
 
         if (summaryIndex < 0)
         {
+            Volatile.Write(ref cache.State, AnchorState.WithoutSummary(messages, count));
             return messages;
         }
 
@@ -269,22 +350,15 @@ public static class CompactionPolicy
 
             if (!resolved)
             {
+                Volatile.Write(ref cache.State, AnchorState.WithUnresolvedAnchor(
+                    messages, count, summaryIndex, summary));
                 return messages;
             }
         }
 
-        var view = new List<AgentMessage>(
-            1 + summaryIndex - keptStart + (messages.Count - summaryIndex - 1));
-        view.Add(summary);
-        for (int i = keptStart; i < summaryIndex; i++)
-        {
-            view.Add(messages[i]);
-        }
-        for (int i = summaryIndex + 1; i < messages.Count; i++)
-        {
-            view.Add(messages[i]);
-        }
-
+        var view = BuildView(messages, summaryIndex, keptStart);
+        Volatile.Write(ref cache.State, AnchorState.WithResolvedSummary(
+            messages, count, summaryIndex, keptStart, view));
         return view;
     }
 
@@ -350,5 +424,182 @@ public static class CompactionPolicy
         }
 
         return tailLength - 1;
+    }
+
+    // =====================================================================
+    // #1533 — the materialize anchor cache.
+    //
+    // Everything below is appended at the END of the class on purpose: the
+    // invariant guards (CompactionPolicyInvariantTests) cite the truncation
+    // methods ABOVE by exact line (CompactionPolicy.cs:58-60, :144-146,
+    // :147-148, :168, :228-230), and a field or using added before them would
+    // silently invalidate those citations without touching a rule. The
+    // ConditionalWeakTable is therefore spelled fully qualified instead of
+    // growing a using at the top of the file.
+    //
+    // SHAPE: one table entry per input list instance (the table keys on
+    // identity and the entry dies with the list — no leak, and two sessions
+    // that each hold their own history list never share state). The entry's
+    // payload is an IMMUTABLE snapshot describing what one earlier scan
+    // learned:
+    //
+    //   * `TailRef` — the object that sat at the snapshot's last index. A list
+    //     that appended since publish moves it; a list rewritten in place
+    //     loses it.
+    //   * `SummaryRef` / `KeptRef` — the summary object and the kept-tail
+    //     start object the answer was derived from, rechecked per fast path so
+    //     a stale slot fails closed into the full pass.
+    //   * `View` — the materialized list itself, `null` when the snapshot's
+    //     answer is "return the input" (no summary, or an unresolvable
+    //     anchor).
+    //
+    // Snapshot publication is `Volatile.Read` / `Volatile.Write` on the entry
+    // field: a reader either sees a complete old snapshot or a complete new
+    // one, computes the same answer either way, and the last publisher wins.
+    // No lock, no blockable path, nothing the agent loop's turn thread can
+    // wait on.
+    // =====================================================================
+
+    /// <summary>
+    ///     Per-input-instance decision cache for
+    ///     <see cref="MaterializeCompactedView" />. The value is created once
+    ///     per table hit and stays alive as long as the key does.
+    /// </summary>
+    /// <remarks>
+    ///     Fully qualified type: see the block comment above — no <c>using</c>
+    ///     at the top of this file, so the line citations in
+    ///     <c>CompactionPolicyInvariantTests</c> keep pointing where they
+    ///     point.
+    /// </remarks>
+    private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<
+        IReadOnlyList<AgentMessage>,
+        AnchorCache> AnchorCaches = new();
+
+    /// <summary>The cached scan result for one input list instance.</summary>
+    private sealed class AnchorCache
+    {
+        /// <summary>
+        ///     The last published scan result, read and written through
+        ///     <c>Volatile.Read</c> / <c>Volatile.Write</c> only, so a reader
+        ///     never observes a half-written snapshot between publishers.
+        /// </summary>
+        internal AnchorState? State;
+    }
+
+    /// <summary>
+    ///     One immutable scan result: what the cache knew about the input list
+    ///     it was produced from, and the ready answer (<see cref="View" />,
+    ///     or <c>null</c> for "the input is already the answer").
+    /// </summary>
+    private sealed record AnchorState(
+        int Count,
+        int SummaryIndex,
+        int KeptStart,
+        string? AnchorId,
+        AgentMessage? SummaryRef,
+        AgentMessage? KeptRef,
+        AgentMessage? TailRef,
+        IReadOnlyList<AgentMessage>? View)
+    {
+        /// <summary>No summary anywhere in the history: the input is the answer.</summary>
+        internal static AnchorState WithoutSummary(IReadOnlyList<AgentMessage> messages, int count)
+        {
+            return new AnchorState(count, -1, -1, null, null, null, messages[count - 1], null);
+        }
+
+        /// <summary>
+        ///     Summary found but its anchor id does not resolve inside the
+        ///     history: the input is the answer (fail-safe), remembered so the
+        ///     identical next call does not re-pay the anchor walk.
+        /// </summary>
+        internal static AnchorState WithUnresolvedAnchor(
+            IReadOnlyList<AgentMessage> messages,
+            int count,
+            int summaryIndex,
+            AssistantMessage summary)
+        {
+            return new AnchorState(
+                count, summaryIndex, summaryIndex, summary.SummaryFirstKeptId,
+                summary, summary, messages[count - 1], null);
+        }
+
+        /// <summary>
+        ///     A resolved, materialized answer: <see cref="View" /> is the list
+        ///     the caller may keep reading on every hit until the history
+        ///     changes shape.
+        /// </summary>
+        internal static AnchorState WithResolvedSummary(
+            IReadOnlyList<AgentMessage> messages,
+            int count,
+            int summaryIndex,
+            int keptStart,
+            IReadOnlyList<AgentMessage> view)
+        {
+            return new AnchorState(
+                count, summaryIndex, keptStart,
+                ((AssistantMessage)messages[summaryIndex]).SummaryFirstKeptId,
+                messages[summaryIndex], messages[keptStart], messages[count - 1], view);
+        }
+    }
+
+    /// <summary>
+    ///     The history the snapshot answered for is still exactly the history
+    ///     in <paramref name="messages" /> at the same <c>Count</c>: the
+    ///     recorded tail object is still the current tail, and — when a
+    ///     summary is part of the answer — the recorded summary and kept-tail
+    ///     objects still sit at their recorded slots.
+    /// </summary>
+    /// <remarks>
+    ///     Session history is append-only
+    ///     (<see cref="Harbor.Abstractions.Sessions.ISessionContext" /> doc:
+    ///     the in-memory snapshot is only appended to by the loop), so a
+    ///     three-reference probe covers every append story. A list that is
+    ///     replaced between calls is a different table key by construction.
+    /// </remarks>
+    private static bool HistoryIntact(IReadOnlyList<AgentMessage> messages, AnchorState state)
+    {
+        int count = messages.Count;
+        return count > 0
+            && ReferenceEquals(messages[count - 1], state.TailRef)
+            && SummarySlotsIntact(messages, state);
+    }
+
+    /// <summary>The summary half of <see cref="HistoryIntact" /> — no summary recorded, or both anchors still in place.</summary>
+    private static bool SummarySlotsIntact(IReadOnlyList<AgentMessage> messages, AnchorState state)
+    {
+        if (state.SummaryIndex < 0)
+        {
+            return true;
+        }
+
+        return state.SummaryIndex < messages.Count
+            && state.KeptStart <= state.SummaryIndex
+            && ReferenceEquals(messages[state.SummaryIndex], state.SummaryRef)
+            && ReferenceEquals(messages[state.KeptStart], state.KeptRef);
+    }
+
+    /// <summary>
+    ///     The materialized view: <c>[summary] + kept tail + everything
+    ///     appended after the summary</c> — the assembly the method has always
+    ///     produced, now the one shared builder.
+    /// </summary>
+    private static List<AgentMessage> BuildView(
+        IReadOnlyList<AgentMessage> messages,
+        int summaryIndex,
+        int keptStart)
+    {
+        int count = messages.Count;
+        var view = new List<AgentMessage>(1 + summaryIndex - keptStart + (count - summaryIndex - 1));
+        view.Add(messages[summaryIndex]);
+        for (int i = keptStart; i < summaryIndex; i++)
+        {
+            view.Add(messages[i]);
+        }
+        for (int i = summaryIndex + 1; i < count; i++)
+        {
+            view.Add(messages[i]);
+        }
+
+        return view;
     }
 }
