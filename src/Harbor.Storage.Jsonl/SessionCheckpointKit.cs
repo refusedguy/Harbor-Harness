@@ -13,7 +13,7 @@
 //     snapshot of one plain checkpoint, created when the originator freezes
 //     its anchor state and absorbed only by the originator's restore.
 //
-// Every conversion is a member of <see cref="SessionCheckpointMapperKit" />;
+// Every conversion is a member of <see cref="SessionCheckpointMapperKit" />,
 // no type here builds another by hand. The kit is deliberately dumb — pure
 // functions, no I/O, no locks — so the pattern's boundary (the first
 // comment's border) is the only place the three shapes ever touch.
