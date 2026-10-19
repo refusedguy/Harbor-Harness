@@ -141,7 +141,9 @@ public class SessionFileReaderScalingTests
         var read = await SessionFileReader.ParseMessagesFromDiskAsync(file, sessionId, NullLogger.Instance, CancellationToken.None);
         await Assert.That(read.IsSuccess).IsTrue();
 
-        var ids = read.Value.Messages.Select(m => m.Id).ToList();
+        // TUnit's IsEqualTo between a List<string> and string[] degrades to a
+        // reference comparison — both sides must be the same collection type.
+        string[] ids = read.Value.Messages.Select(m => m.Id).ToArray();
         await Assert.That(ids).IsEqualTo(new[] { "0", "1", "2", "3", "4" });
     }
 
@@ -171,7 +173,7 @@ public class SessionFileReaderScalingTests
 
             var read = await SessionFileReader.ParseMessagesFromDiskAsync(file, sessionId, NullLogger.Instance, CancellationToken.None);
             await Assert.That(read.IsSuccess).IsTrue();
-            await Assert.That(read.Value.Messages.Select(m => m.Id).ToList())
+            await Assert.That(read.Value.Messages.Select(m => m.Id).ToArray())
                 .IsEqualTo(new[] { "0", "1", "2", "3" });
         }
         finally
@@ -214,7 +216,7 @@ public class SessionFileReaderScalingTests
 
             var messages = read.Value.Messages.ToList();
             await Assert.That(messages.Count).IsEqualTo(2);
-            await Assert.That(messages.Select(m => m.Id).ToList()).IsEqualTo(new[] { "1", "0" });
+            await Assert.That(messages.Select(m => m.Id).ToArray()).IsEqualTo(new[] { "1", "0" });
             await Assert.That(((UserMessage)messages[1]).Content).IsEqualTo("latest write")
                 .Because("latest id wins, exactly as the Dictionary the old read used did");
         }
