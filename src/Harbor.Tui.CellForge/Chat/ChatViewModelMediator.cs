@@ -54,20 +54,20 @@ public sealed class ChatViewModelMediator : IChatViewModelMediator
     ///     <c>ResolveInputVm</c> behaviour, moved verbatim.
     /// </summary>
     /// <param name="viewModels">The renderer's shared view-model registry.</param>
-    /// <param name="statusVm">Explicit status-bar VM, or null for the registry default.</param>
-    /// <param name="chatVm">Explicit chat-history VM, or null for the registry default.</param>
-    /// <param name="inputVm">Explicit input VM, or null for the registry default.</param>
     /// <param name="screen">Host screen accessor the projector reads per frame.</param>
     /// <param name="idlePlaceholder">Input placeholder while the agent is idle.</param>
     /// <param name="busyPlaceholder">Input placeholder while the agent is running.</param>
+    /// <param name="statusVm">Explicit status-bar VM, or null for the registry default.</param>
+    /// <param name="chatVm">Explicit chat-history VM, or null for the registry default.</param>
+    /// <param name="inputVm">Explicit input VM, or null for the registry default.</param>
     public ChatViewModelMediator(
         ViewModelRegistry viewModels,
-        StatusBarViewModel? statusVm = null,
-        ChatHistoryViewModel? chatVm = null,
-        InputViewModel? inputVm = null,
         Func<ChatScreen?> screen,
         string idlePlaceholder,
-        string busyPlaceholder)
+        string busyPlaceholder,
+        StatusBarViewModel? statusVm = null,
+        ChatHistoryViewModel? chatVm = null,
+        InputViewModel? inputVm = null)
     {
         var resolvedStatus = statusVm ?? viewModels.Get<StatusBarViewModel>("status-bar")!;
         var resolvedChat = chatVm ?? viewModels.Get<ChatHistoryViewModel>("chat-history")!;

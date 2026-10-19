@@ -139,8 +139,8 @@ public sealed partial class CellForgeTuiRenderer : BaseTuiRenderer
         Panels = new CellForgePanelRegistry();
         RegisterBuiltinPanels(Panels);
         _mediator = new ChatViewModelMediator(
-            ViewModels, statusVm, chatVm, inputVm,
-            () => Screen, IdlePlaceholder, BusyPlaceholder);
+            ViewModels, () => Screen, IdlePlaceholder, BusyPlaceholder,
+            statusVm, chatVm, inputVm);
         _chatProjector = _mediator.ChatProjector;
         Projectors = new ScreenProjectorRegistry();
         Projectors.Register(_chatProjector);
@@ -171,8 +171,8 @@ public sealed partial class CellForgeTuiRenderer : BaseTuiRenderer
         Panels = new CellForgePanelRegistry();
         RegisterBuiltinPanels(Panels);
         _mediator = new ChatViewModelMediator(
-            ViewModels, statusVm, chatVm, inputVm,
-            () => Screen, IdlePlaceholder, BusyPlaceholder);
+            ViewModels, () => Screen, IdlePlaceholder, BusyPlaceholder,
+            statusVm, chatVm, inputVm);
         _chatProjector = _mediator.ChatProjector;
         Projectors = new ScreenProjectorRegistry();
         Projectors.Register(_chatProjector);
