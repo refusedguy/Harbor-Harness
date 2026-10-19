@@ -33,7 +33,7 @@ public class RetryLlmClientDecoratorTests
     public async Task StreamException_PreflightTransient_IsRetried()
     {
         var inner = new ScriptedLlmClient(
-            ThenThrow(new HttpRequestException("no such host", null)),
+            ThenThrow(null, new HttpRequestException("no such host", null)),
             Events(new FinishEvent()));
         var decorator = Make(inner);
 
@@ -249,16 +249,19 @@ public class RetryLlmClientDecoratorTests
         }
     }
 
-    /// <summary>Yields <paramref name="first" />, then the next move fails with <paramref name="ex" />.</summary>
-    private static async IAsyncEnumerable<LlmEvent> ThenThrow(LlmEvent first, Exception ex)
+    /// <summary>
+    ///     Yields <paramref name="first" /> when non-null, then fails the next
+    ///     move with <paramref name="ex" />. One helper for both shapes
+    ///     (immediate-preflight-failure and fail-after-first-delivery): the
+    ///     conditional yield is what keeps this an async iterator (CS8419).
+    /// </summary>
+    private static async IAsyncEnumerable<LlmEvent> ThenThrow(LlmEvent? first, Exception ex)
     {
-        yield return first;
-        await Task.Yield();
-        throw ex;
-    }
+        if (first is not null)
+        {
+            yield return first;
+        }
 
-    private static async IAsyncEnumerable<LlmEvent> ThenThrow(Exception ex)
-    {
         await Task.Yield();
         throw ex;
     }
