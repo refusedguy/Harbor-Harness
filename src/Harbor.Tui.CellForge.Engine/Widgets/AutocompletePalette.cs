@@ -1,5 +1,13 @@
-using Ensure = Harbor.Abstractions.Extensions.Ensure;
-
+// #1627 batch B (adapted): same body as the Chat leaf
+// (Harbor.Tui.CellForge/Chat/Widgets/AutocompletePalette.cs, now deleted)
+// except the four `Ensure.NotNull(…)` alias hits — the engine is BCL-only (no
+// Harbor.Extensions), and `Ensure.NotNull(value, name)` delegates to exactly
+// `ArgumentNullException.ThrowIfNull(value, name)` with the caller-expression
+// name, so the retype is behavior-identical. `AutocompleteMode` moved beside
+// this family (its own file) because <see cref="AutocompleteItem.Mode"/> and
+// <see cref="AutocompleteFilter.Filter"/> bind it; the trigger record, the
+// trigger scan and the PromptBuffer extensions stay in the chat file they came
+// from (KeyGateFamilyRules pins that path).
 namespace Harbor.Tui.CellForge.Widgets;
 
 /// <summary>
@@ -48,7 +56,7 @@ public sealed class AutocompleteDestructiveGate
     /// </returns>
     public bool Commit(AutocompleteItem item)
     {
-        Ensure.NotNull(item);
+        ArgumentNullException.ThrowIfNull(item);
         if (!item.IsDestructive)
         {
             _armedId = null;
@@ -86,8 +94,8 @@ public static class AutocompleteFilter
         IReadOnlyList<AutocompleteItem> candidates,
         AutocompleteMode mode)
     {
-        Ensure.NotNull(query);
-        Ensure.NotNull(candidates);
+        ArgumentNullException.ThrowIfNull(query);
+        ArgumentNullException.ThrowIfNull(candidates);
 
         var scoped = new List<AutocompleteItem>(candidates.Count);
         for (int i = 0; i < candidates.Count; i++)
@@ -108,7 +116,7 @@ public static class AutocompleteFilter
     /// </summary>
     public static bool CanQueueWhileBusy(AutocompleteItem item)
     {
-        Ensure.NotNull(item);
+        ArgumentNullException.ThrowIfNull(item);
         return item.IsQueueable;
     }
 }

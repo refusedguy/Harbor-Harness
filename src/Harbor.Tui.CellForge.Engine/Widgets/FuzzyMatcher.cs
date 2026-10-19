@@ -1,5 +1,9 @@
-using Ensure = Harbor.Abstractions.Extensions.Ensure;
-
+// #1627 batch B (adapted): same body as the Chat leaf
+// (Harbor.Tui.CellForge/Chat/Widgets/FuzzyMatcher.cs, now deleted) except the
+// one `Ensure.NotNull(textOf)` alias hit — the engine is BCL-only (no
+// Harbor.Extensions), and `Ensure.NotNull(value, name)` delegates to exactly
+// `ArgumentNullException.ThrowIfNull(value, name)` with the caller-expression
+// name, so the retype is behavior-identical.
 namespace Harbor.Tui.CellForge.Widgets;
 
 /// <summary>
@@ -130,7 +134,7 @@ public static class FuzzyMatcher
     /// </summary>
     public static List<T> Filter<T>(string query, IReadOnlyList<T> candidates, Func<T, string> textOf)
     {
-        Ensure.NotNull(textOf);
+        ArgumentNullException.ThrowIfNull(textOf);
 
         var result = new List<T>(candidates.Count);
         if (query.Length == 0)
