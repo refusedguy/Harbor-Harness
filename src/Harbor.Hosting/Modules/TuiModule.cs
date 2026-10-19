@@ -81,6 +81,16 @@ internal static class TuiModule
         services.AddSingleton<IDirectoryLister, SystemDirectoryLister>();
         services.AddSingleton<IFileTreeLoader, FileTreeLoader>();
 
+        // #1573: the UI string catalogue and its locale resolve are a DI
+        // singleton (one instance per host), not the static process-global
+        // `UiStrings`. The registration goes through `AddUiStrings` (Harbor.
+        // Ui.Framework.Services) rather than naming Abstractions types here:
+        // the full layer matrix does not allow the CompositionRoot to bind
+        // the pure Domain assembly the catalogue lives in. The static type
+        // stays as a forwarder over its own default instance until the #434
+        // inventory migration converts every call site.
+        services.AddUiStrings();
+
         // #666: the same shape, for git. The jump-palette panel used to fork
         // `git worktree list --porcelain` from inside a Presentation assembly; it
         // now asks `IGitQuery` and the spawn lives in `ProcessGitQuery`, in
