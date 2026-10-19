@@ -633,17 +633,39 @@ public sealed class McpRegistry : IMcpRegistry, IAsyncDisposable
 
         public McpProcessClient? GetProcess()
         {
-            if (_startInfo is null)
-            {
-                return null; // remote entries have no subprocess
-            }
+            // #1552: `null` here is remote by design — InvokeAsync branches on
+            // IsRemote first, so this guard is a shape contract, not a result
+            // channel.
+            if (_startInfo is not { } startInfo)
+                return null;
 
+            // Cached-live check first — only a respawn is allowed to fail.
             if (_process is { HasExited: false }) return _process;
             _process?.DisposeSync();
 
+            // Result.Try, not a bare try/catch→null (#1552, CSE bible §4.5 via
+            // ResultErrors): cancellation is rethrown, every other spawn cause
+            // keeps its message on the failure side, and the process field is
+            // assigned only on success (Tap) instead of inside the try. The
+            // same TreeTool (ROP-A Z1 п.16) fold shape: failure → None here,
+            // where the by-design remote None above is long gone.
+            return Result.Try(() => Spawn(startInfo), ResultErrors.Message)
+                .Tap(process => _process = process)
+                .AsMaybe()
+                .GetValueOrDefault();
+        }
+
+        /// <summary>
+        ///     Pure spawn: build psi from the registered start info and hand it
+        ///     to <see cref="McpProcessClient" />, whose constructor starts the
+        ///     stderr pump — the child-pipe-drain hand-off (rule 3) stays in this
+        ///     one member, so the psi is never kept by a member that redirects.
+        /// </summary>
+        private static McpProcessClient Spawn(McpServerStartInfo startInfo)
+        {
             var psi = new ProcessStartInfo
             {
-                FileName = _startInfo.Command,
+                FileName = startInfo.Command,
                 RedirectStandardInput = true,
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
@@ -651,26 +673,18 @@ public sealed class McpRegistry : IMcpRegistry, IAsyncDisposable
                 CreateNoWindow = true
             };
 
-            if (_startInfo.Args is { Count: > 0 })
-                foreach (var a in _startInfo.Args)
+            if (startInfo.Args is { Count: > 0 })
+                foreach (var a in startInfo.Args)
                     psi.ArgumentList.Add(a);
 
-            if (!string.IsNullOrWhiteSpace(_startInfo.WorkingDirectory))
-                psi.WorkingDirectory = _startInfo.WorkingDirectory;
+            if (!string.IsNullOrWhiteSpace(startInfo.WorkingDirectory))
+                psi.WorkingDirectory = startInfo.WorkingDirectory;
 
-            if (_startInfo.Environment is { Count: > 0 })
-                foreach (var (k, v) in _startInfo.Environment)
+            if (startInfo.Environment is { Count: > 0 })
+                foreach (var (k, v) in startInfo.Environment)
                     psi.Environment[k] = v;
 
-            try
-            {
-                _process = new McpProcessClient(psi);
-                return _process;
-            }
-            catch
-            {
-                return null;
-            }
+            return new McpProcessClient(psi);
         }
 
         public ValueTask DisposeAsync()
