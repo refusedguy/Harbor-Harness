@@ -150,6 +150,42 @@ public class PermissionServiceTests
     }
 
     [Test]
+    public async Task AskUserAsync_AskerReturnsNull_ReturnsExplicitFailureNotSuccessWithNull()
+    {
+        // #1584: a broken custom asker that answers null must not ride the
+        // success rail (Success(null) NRE'd downstream on .Value, §ROP-002
+        // class). Expected-failure path: explicit Result.Failure with a clear
+        // error — no exception, no null-carrying success.
+        var (svc, _) = CreateService(
+            AgentWithRuleset(),
+            (req, ct) => Task.FromResult<PermissionResponse>(null!));
+
+        var result = await svc.AskUserAsync(
+            new PermissionRequest("write", "*", JsonDocument.Parse("{}").RootElement, new[] { "allow", "deny" }));
+
+        await Assert.That(result).IsFailed();
+        await Assert.That(result.Error).Contains("asker returned null");
+        await Assert.That(result.Error).Contains("write");
+    }
+
+    [Test]
+    public async Task AskUserAsync_AskerReturnsNull_DoesNotPersistDecision()
+    {
+        // #1584: the null answer is a failure, so the "always" persistence
+        // branch in CheckAsync (askResult.IsSuccess && .PersistDecision) must
+        // never see it — no rule is recorded for the tool + argument.
+        var agent = AgentWithRuleset(new PermissionRule("write", "*", PermissionAction.Ask));
+        var (svc, _) = CreateService(agent, (req, ct) => Task.FromResult<PermissionResponse>(null!));
+
+        var result = await svc.CheckAsync("code", "write", Args(("path", "/repo/file.txt")));
+
+        await Assert.That(result).IsFailed();
+        await Assert.That(result.Error).Contains("asker returned null");
+        await Assert.That(svc.GetRuleset("code").Rules.Count(r => r.Action != PermissionAction.Ask))
+            .IsEqualTo(0);
+    }
+
+    [Test]
     public async Task CheckAsync_UnknownAgent_ReturnsFailure()
     {
         var (svc, _) = CreateService(AgentWithRuleset(new PermissionRule("read", "*", PermissionAction.Allow)));
