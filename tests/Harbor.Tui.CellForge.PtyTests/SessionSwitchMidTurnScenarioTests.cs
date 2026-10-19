@@ -42,7 +42,7 @@ public sealed class SessionSwitchMidTurnScenarioTests : CellForgePtyScenarioBase
 
         // /new mid-turn is refused — the in-flight turn keeps its session.
         await CommitSlashAsync("/new").ConfigureAwait(false);
-        Session.SendKey("\x1b"); // the commit leaves the palette open; close it
+        await ClosePaletteAsync().ConfigureAwait(false); // the commit leaves the palette open; close it and prove closed
         _ = await WaitForScreenAsync(
             l => l.Any(x => x.Contains("Cannot create session while running", StringComparison.Ordinal)),
             TimeSpan.FromSeconds(15)).ConfigureAwait(false);
@@ -53,7 +53,7 @@ public sealed class SessionSwitchMidTurnScenarioTests : CellForgePtyScenarioBase
 
         // Idle /new opens a fresh session and clears the timeline.
         await CommitSlashAsync("/new").ConfigureAwait(false);
-        Session.SendKey("\x1b"); // same: close the palette left open by the commit
+        await ClosePaletteAsync().ConfigureAwait(false); // same: close the palette left open by the commit, deterministically
         _ = await WaitForScreenAsync(
             l => l.Any(x => x.Contains("Started fresh session", StringComparison.Ordinal)),
             TimeSpan.FromSeconds(15)).ConfigureAwait(false);
@@ -98,5 +98,38 @@ public sealed class SessionSwitchMidTurnScenarioTests : CellForgePtyScenarioBase
                 && l.Any(x => x.Contains("[slash] new", StringComparison.Ordinal)),
             TimeSpan.FromSeconds(15)).ConfigureAwait(false);
         Session.SendKey("\r");
+    }
+
+    /// <summary>
+    ///     Close the palette the commit left open and PROVE it closed before
+    ///     the next keystroke burst: the <c>\r</c>-commit → Esc pair is a
+    ///     burst the child may coalesce (the burst-sensitivity note on
+    ///     <see cref="CommitSlashAsync" />), and a commit that switches the
+    ///     session drains pending input — CI saw exactly that (the Esc was
+    ///     swallowed, the palette stayed open and ate the next burst as
+    ///     palette query text). The palette footer's <c>esc close</c> hint
+    ///     is the open marker (<see cref="CommandPaletteView" /> hints) —
+    ///     wait for its absence, retrying the keystroke once in case the
+    ///     child dropped it.
+    /// </summary>
+    private async Task ClosePaletteAsync()
+    {
+        for (int attempt = 0; attempt < 2; attempt++)
+        {
+            Session.SendKey("\x1b");
+            try
+            {
+                _ = await WaitForScreenAsync(
+                    l => !l.Any(x => x.Contains("esc close", StringComparison.Ordinal)),
+                    TimeSpan.FromSeconds(5)).ConfigureAwait(false);
+                return;
+            }
+            catch (TimeoutException)
+            {
+                // Swallowed Esc — send it again.
+            }
+        }
+
+        throw new TimeoutException($"slash palette did not close on Esc (retried). Screen:\n{ScreenText}");
     }
 }

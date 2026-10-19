@@ -322,7 +322,13 @@ public class SsePumpLineLoopTests
         await Assert.That(lines[0]).IsEqualTo("data: {\"n\":1}");
     }
 
-    /// <summary>Cold-path capture handler: every served line, as a materialised string.</summary>
+    /// <summary>
+    ///     Cold-path capture handler: every served line, as a materialised
+    ///     string. Pump contract (<c>SseSpanLineHandler</c>): <c>true</c>
+    ///     keeps streaming, <c>false</c> stops — so with no sentinel the walk
+    ///     continues over every line, and with one it stops exactly on the
+    ///     sentinel line (captured, tail unserved).
+    /// </summary>
     private sealed class CaptureHandler(string? stopWhen = null)
     {
         public List<string> Captured { get; } = [];
@@ -331,7 +337,7 @@ public class SsePumpLineLoopTests
         {
             string s = new string(line);
             Captured.Add(s);
-            return Task.FromResult(stopWhen is not null && string.Equals(s, stopWhen, StringComparison.Ordinal));
+            return Task.FromResult(stopWhen is null || !string.Equals(s, stopWhen, StringComparison.Ordinal));
         }
     }
 
