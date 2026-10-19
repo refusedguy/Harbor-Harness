@@ -235,7 +235,23 @@ public sealed class PermissionService : IPermissionService
 
         try
         {
-            var response = await _userAsker(request, ct).ConfigureAwait(false);
+            PermissionResponse response = await _userAsker(request, ct).ConfigureAwait(false);
+
+            // #1584: a misbehaving injected asker may badly answer null. It must
+            // not ride the success rail — Success(null) previously flowed past
+            // the .PersistDecision / .Action reads in EvaluateActionAsync and
+            // NRE'd into the generic tool-execution catch, masking the Ask
+            // context (§ROP-002 class: trusted boundary without a null guard).
+            // A null answer is an expected failure: explicit Result.Failure with
+            // diagnostics; every caller folds a non-success verdict into a
+            // fail-closed Deny (mirror of the deliberate Deny for no asker).
+            if (response is null)
+            {
+                PermissionServiceLog.AskerReturnedNull(_logger, request.Permission, request.Pattern);
+                return Result.Failure<PermissionResponse>(
+                    $"Permission asker returned null for '{request.Permission}' ('{request.Pattern}') — failing closed to Deny.");
+            }
+
             return Result.Success(response);
         }
         catch (Exception ex)
@@ -412,5 +428,10 @@ internal static partial class PermissionServiceLog
 
     [LoggerMessage(EventId = 4, Level = LogLevel.Warning, Message = "Failed to save persisted permissions: {Error}")]
     public static partial void SavePersistedFailed(ILogger logger, string error);
+
+    // #1584: signals the asker-null boundary so the fail-closed failure is
+    // diagnosable instead of surfacing as a masked "tool failed" NRE.
+    [LoggerMessage(EventId = 5, Level = LogLevel.Warning, Message = "Permission asker returned null for tool '{Tool}' on pattern '{Pattern}' — failing closed to Deny.")]
+    public static partial void AskerReturnedNull(ILogger logger, string tool, string pattern);
 
 }
