@@ -141,10 +141,18 @@ public class SessionFileReaderScalingTests
         var read = await SessionFileReader.ParseMessagesFromDiskAsync(file, sessionId, NullLogger.Instance, CancellationToken.None);
         await Assert.That(read.IsSuccess).IsTrue();
 
-        // TUnit's IsEqualTo between a List<string> and string[] degrades to a
-        // reference comparison — both sides must be the same collection type.
+        // TUnit's IsEqualTo on collections compares by reference (both
+        // List<string> and string[] degrade to reference equality — CI logs
+        // show "same contents, different reference" for both), and
+        // IsEquivalentTo ignores order — useless for an order proof. Assert
+        // the order per index instead.
         string[] ids = read.Value.Messages.Select(m => m.Id).ToArray();
-        await Assert.That(ids).IsEqualTo(new[] { "0", "1", "2", "3", "4" });
+        await Assert.That(ids.Length).IsEqualTo(5);
+        await Assert.That(ids[0]).IsEqualTo("0");
+        await Assert.That(ids[1]).IsEqualTo("1");
+        await Assert.That(ids[2]).IsEqualTo("2");
+        await Assert.That(ids[3]).IsEqualTo("3");
+        await Assert.That(ids[4]).IsEqualTo("4");
     }
 
     /// <summary>
@@ -173,8 +181,15 @@ public class SessionFileReaderScalingTests
 
             var read = await SessionFileReader.ParseMessagesFromDiskAsync(file, sessionId, NullLogger.Instance, CancellationToken.None);
             await Assert.That(read.IsSuccess).IsTrue();
-            await Assert.That(read.Value.Messages.Select(m => m.Id).ToArray())
-                .IsEqualTo(new[] { "0", "1", "2", "3" });
+            // Order proof per index (IsEqualTo is reference-based on
+            // collections in this TUnit version — see the comment in
+            // InOrderRecords_ParseInArrivalOrder_WithoutAnyResort).
+            string[] sorted = read.Value.Messages.Select(m => m.Id).ToArray();
+            await Assert.That(sorted.Length).IsEqualTo(4);
+            await Assert.That(sorted[0]).IsEqualTo("0");
+            await Assert.That(sorted[1]).IsEqualTo("1");
+            await Assert.That(sorted[2]).IsEqualTo("2");
+            await Assert.That(sorted[3]).IsEqualTo("3");
         }
         finally
         {
@@ -216,7 +231,10 @@ public class SessionFileReaderScalingTests
 
             var messages = read.Value.Messages.ToList();
             await Assert.That(messages.Count).IsEqualTo(2);
-            await Assert.That(messages.Select(m => m.Id).ToArray()).IsEqualTo(new[] { "1", "0" });
+            string[] winners = messages.Select(m => m.Id).ToArray();
+            await Assert.That(winners.Length).IsEqualTo(2);
+            await Assert.That(winners[0]).IsEqualTo("1");
+            await Assert.That(winners[1]).IsEqualTo("0");
             await Assert.That(((UserMessage)messages[1]).Content).IsEqualTo("latest write")
                 .Because("latest id wins, exactly as the Dictionary the old read used did");
         }
