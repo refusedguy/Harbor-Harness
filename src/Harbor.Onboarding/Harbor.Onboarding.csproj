@@ -1,0 +1,38 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsPackable>true</IsPackable>
+    <PackageId>Harbor.Onboarding</PackageId>
+    <Description>Harbor onboarding — first-run interactive wizard (provider / API-key / model / agent picker, #1577 numbered picks) plus setup-checklist detection (issue #383). One-way leaf over Harbor.Application's configuration family; 0 reverse edges.</Description>
+    <PackageTags>harbor;ai;agent;onboarding;setup</PackageTags>
+  </PropertyGroup>
+
+  <!--
+    #1614: verbatim extraction of Harbor.Application/Configuration's onboarding
+    trio (OnboardingWizard, OnboardingPicks, SetupChecklistDetector) into a
+    one-way leaf — an Application-layer sibling like Harbor.Hooks (#1613), but
+    with a real edge INTO Harbor.Application: the wizard binds AuthStore,
+    IConfigStore, JsonConfigStore and ProviderPresets, which stay with the
+    configuration family in Harbor.Application (the issue's "→Configuration"
+    arrow). 0 reverse edges: nothing in src/ references Harbor.Onboarding
+    except the composition root (Harbor.Hosting registers the wizard in
+    CoreModule), the CLI, and the test projects.
+    Namespace stays Harbor.Application.Configuration (verbatim move, the same
+    convention as #1613 Hooks and the AgentLoop slice extractions
+    #1464/#1475/#1480), so consumers keep their usings — only
+    ProjectReferences change.
+    Deliberately no ZLinq here (Application's zero-alloc LINQ drop-in): the
+    trio's single LINQ call site compiles against the SDK's implicit
+    System.Linq — see GlobalUsings.cs.
+  -->
+  <ItemGroup>
+    <ProjectReference Include="..\Harbor.Application\Harbor.Application.csproj"/>
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="CSharpFunctionalExtensions"/>
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions"/>
+  </ItemGroup>
+
+</Project>

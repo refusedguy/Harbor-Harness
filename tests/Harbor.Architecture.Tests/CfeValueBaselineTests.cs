@@ -132,7 +132,7 @@ public sealed class CfeValueBaselineTests
             "if (IsFailure) { return; } else-branch access"),
         new("src/Harbor.Application/Attachments/ImageAttachmentReader.cs", "CheckVisionAsync",
             "if (IsFailure) { log; return Result.Success(); } then early return"),
-        new("src/Harbor.Application/Configuration/OnboardingWizard.cs", "TryFetchLiveModelsAsync",
+        new("src/Harbor.Onboarding/Onboarding/OnboardingWizard.cs", "TryFetchLiveModelsAsync",
             "if (IsFailure) { print reason; return null; } early return"),
         new("src/Harbor.Application/Sessions/SessionForkService.cs", "ForkAsync",
             "if (IsFailure) { return Result.Failure(...); } early return"),

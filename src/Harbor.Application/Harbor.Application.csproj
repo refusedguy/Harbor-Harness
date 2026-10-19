@@ -4,7 +4,7 @@
     <TargetFramework>net10.0</TargetFramework>
     <IsPackable>true</IsPackable>
     <PackageId>Harbor.Application</PackageId>
-    <Description>Harbor application layer — use cases (AgentLoop, DefaultAgent, CompactionService, SystemPromptBuilder, MessageConverter, OnboardingWizard, HarborConfig). The Permissions subdomain is the sibling Harbor.Permissions assembly (#1615).</Description>
+    <Description>Harbor application layer — use cases (AgentLoop, DefaultAgent, CompactionService, SystemPromptBuilder, MessageConverter, HarborConfig). The Permissions subdomain is the sibling Harbor.Permissions assembly (#1615); OnboardingWizard + SetupChecklistDetector moved to Harbor.Onboarding (#1614).</Description>
     <PackageTags>harbor;ai;agent;application;use-cases</PackageTags>
   </PropertyGroup>
 

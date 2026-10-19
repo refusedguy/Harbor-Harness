@@ -6,12 +6,12 @@ namespace Harbor.Application.Configuration;
 
 // KILLER_FEATURES §2.7 Feature 9 (issue #383): setup-guide DETECTION.
 //
-// Detection lives here (Application) and stays free of any UI-framework
-// reference — the CLI composition root maps the signals onto the framework
-// `SetupChecklistModel` (Harbor.Ui.Framework.Projection), exactly like
-// `SkillFreshnessSeeder` maps snapshots onto `SkillFreshnessEntry`. That keeps
-// `Harbor.Application`'s Domain-only edge and the FullLayerMatrixTests row
-// green.
+// Detection lives here (the Harbor.Onboarding leaf, #1614) and stays free of
+// any UI-framework reference — the CLI composition root maps the signals onto
+// the framework `SetupChecklistModel` (Harbor.Ui.Framework.Projection), exactly
+// like `SkillFreshnessSeeder` maps snapshots onto `SkillFreshnessEntry`. That
+// keeps `Harbor.Application`'s Domain-only contract intact and the
+// FullLayerMatrixTests row (Application layer, one-way leaf) green.
 //
 // Existence-tolerant by contract: a missing config, an unreadable store or a
 // failing probe yield "not done" signals, never a throw. Setup detection runs

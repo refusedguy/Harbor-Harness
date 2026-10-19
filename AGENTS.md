@@ -470,7 +470,7 @@ below are kept so the contract has a name and a future wiring has somewhere to
 land — **they do not add a panel today.** For a plugin panel that is actually
 painted, implement `ITuiPanelPlugin`.
 
-1. Create a class library project referencing `Harbor.Terminal.Abstractions`. (This step used to add "`Harbor.Tui.Abstractions` is a deprecated facade slated for removal in v0.6". **That project does not exist** — there is no `src/Harbor.Tui.Abstractions`, no `.csproj` by that name anywhere outside `contrib/`, and no matrix row for it. It was a rename to `Harbor.Terminal.Abstractions`; see `docs/ARCHITECTURE_LAYERS.md:377` and `CLAUDE.md:99`. Do not add a reference to it, and do not describe it as pending removal.)
+1. Create a class library project referencing `Harbor.Terminal.Abstractions`. (This step used to add "`Harbor.Tui.Abstractions` is a deprecated facade slated for removal in v0.6". **That project does not exist** — there is no `src/Harbor.Tui.Abstractions`, no `.csproj` by that name anywhere outside `contrib/`, and no matrix row for it. It was a rename to `Harbor.Terminal.Abstractions`; see `docs/ARCHITECTURE_LAYERS.md:381` and `CLAUDE.md:99`. Do not add a reference to it, and do not describe it as pending removal.)
 2. Implement `ITuiPlugin` — set `Name`, `Version`, `Description`.
 3. In `RegisterTui(ViewRegistry, ViewModelRegistry)`, register any custom views / view models.
 4. Register *before* `BaseTuiRenderer.InitializeAsync` to override builtins.

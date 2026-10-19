@@ -44,7 +44,9 @@ public class OnboardingWizardTests
     ///         (<c>AuthStore.cs:65-74</c>) derives <c>&lt;PROVIDER&gt;_API_KEY</c> from
     ///         the provider id and reads the process environment for it, and the wizard
     ///         reaches it through <c>_authStore.GetApiKeyAsync</c>
-    ///         (<c>OnboardingWizard.cs:244</c>) — so a nulled <c>OLLAMA_API_KEY</c> is
+    ///         (<c>OnboardingWizard.cs:244</c>, re-anchored after the #1614
+    ///         extraction to Harbor.Onboarding) — so a nulled
+    ///         <c>OLLAMA_API_KEY</c> is
     ///         read by PRODUCT code in this same process, by whichever test runs next.
     ///     </para>
     ///     <para>

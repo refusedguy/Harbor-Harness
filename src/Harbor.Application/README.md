@@ -22,7 +22,6 @@ LLM turns, tool invocations, compaction events, and permission checks.
 | `Resilience/RetryPolicy.cs`        | `IRetryPolicy` impl — retries only transient failures (HTTP 408/429/5xx, network, provider timeouts) with capped exponential backoff (`BaseDelay · 2^(attempt−1)` + optional jitter); fatal errors propagate immediately. |
 | `Resilience/RetryPolicyExtensions.cs` | Central retry policy helpers for transient provider errors — `ExecuteSafeAsync` adapts exception-based retries onto the `Result<T>` railway. |
 | `Telemetry/`                       | Usage telemetry plumbing consumed by the app hosts.                                                                      |
-| `Onboarding/OnboardingWizard.cs`   | First-run interactive wizard: pick provider → enter API key → pick live model → pick agent → save config.                |
 | `Configuration/HarborConfig.cs`    | Application config model + `JsonConfigStore`, `AuthStore`, `ProviderPresets` (the provider picker catalogue, projected from `providers/*.json` by `Configuration/ProviderPresetCatalog.cs` — one declaration per provider, #580).    |
 
 ## Why this project exists
@@ -62,7 +61,9 @@ over `Assembly.GetReferencedAssemblies()`.
 Types declare namespaces matching their assembly of residence (ROP-D Z1):
 `Harbor.Application.Agents`, `Harbor.Application.Sessions`,
 `Harbor.Application.Configuration`, `Harbor.Application.Resilience`,
-`Harbor.Application.Providers`, `Harbor.Application.Telemetry`. Consumers that
+`Harbor.Application.Providers`, `Harbor.Application.Telemetry`. (The onboarding
+trio declared this Configuration namespace too; #1614 moved it to the
+`Harbor.Onboarding` leaf keeping the namespace verbatim.) Consumers that
 no longer needs a `using` rewrite: the old `Harbor.Core` facade that once
 re-exported them was deleted in #451. The `Harbor.Application.Permissions`
 namespace is the #1615 extraction — the same namespace now lives in the

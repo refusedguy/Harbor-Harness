@@ -47,6 +47,10 @@
     <ProjectReference Include="..\..\src\Harbor.Diagnostics.Abstractions\Harbor.Diagnostics.Abstractions.csproj"/>
     <ProjectReference Include="..\..\src\Harbor.Terminal.Abstractions\Harbor.Terminal.Abstractions.csproj"/>
     <ProjectReference Include="..\..\src\Harbor.Application\Harbor.Application.csproj"/>
+    <!-- #1614: onboarding one-way leaf — SlashCommandContextScopeTests /
+         ReplConstructorCompositionTests / BuiltinAgentPickerProjectionRules /
+         CfeValueBaselineTests bind OnboardingWizard. -->
+    <ProjectReference Include="..\..\src\Harbor.Onboarding\Harbor.Onboarding.csproj"/>
     <ProjectReference Include="..\..\src\Harbor.Hooks\Harbor.Hooks.csproj"/>
     <!-- #1616: the extracted verified-change pipeline joins layer enforcement. -->
     <ProjectReference Include="..\..\src\Harbor.ChangeTracking\Harbor.ChangeTracking.csproj"/>

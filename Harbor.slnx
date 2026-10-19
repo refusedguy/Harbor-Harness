@@ -28,6 +28,7 @@
         <!-- #1616: verified-change pipeline extracted from Harbor.Application. -->
         <Project Path="src/Harbor.ChangeTracking/Harbor.ChangeTracking.csproj"/>
         <Project Path="src/Harbor.Permissions/Harbor.Permissions.csproj"/>
+        <Project Path="src/Harbor.Onboarding/Harbor.Onboarding.csproj"/>
         <Project Path="src/Harbor.Extensions/Harbor.Extensions.csproj"/>
         <Project Path="src/Harbor.Terminal.Abstractions/Harbor.Terminal.Abstractions.csproj"/>
         <Project Path="src/Harbor.Desktop.Abstractions/Harbor.Desktop.Abstractions.csproj"/>

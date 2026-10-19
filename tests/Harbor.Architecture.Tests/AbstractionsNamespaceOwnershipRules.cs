@@ -4,7 +4,7 @@
 // ----------------------
 // The layers are declared but the NAMES do not reflect them. A type that lives
 // in Harbor.Registries (an Application-layer assembly, see
-// FullLayerMatrixTests.cs:549) was declared in a namespace that READS like a
+// FullLayerMatrixTests.cs:561) was declared in a namespace that READS like a
 // contract:
 //
 //   src/Harbor.Registries/Agents/AgentRegistry.cs     ->  Harbor.Abstractions.Agents
