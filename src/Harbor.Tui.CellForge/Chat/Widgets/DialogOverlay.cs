@@ -752,126 +752,19 @@ public sealed partial class DialogOverlay
         key.Modifiers.AcceptsTypedChar()
         && !char.IsControl(key.KeyChar);
 
-    private bool HandleSelectKey(ConsoleKeyInfo key)
-    {
-        switch (key.Key)
-        {
-            case ConsoleKey.UpArrow:
-                _select.Move(-1);
-                return true;
-            case ConsoleKey.DownArrow:
-                _select.Move(1);
-                return true;
-            case ConsoleKey.PageUp:
-                _select.Move(-SelectPageRows);
-                return true;
-            case ConsoleKey.PageDown:
-                _select.Move(SelectPageRows);
-                return true;
-            case ConsoleKey.Home:
-                _select.MoveTo(0);
-                return true;
-            case ConsoleKey.End:
-                _select.MoveTo(_select.Count - 1);
-                return true;
-            case ConsoleKey.Enter:
-                return false;
-            default:
-                return false;
-        }
-    }
+    // The four kind switches the legacy per-kind handlers carried below the
+    // shared prefix moved into the per-kind state objects at the end of this
+    // file (#1497). The handler names stay — the census rule and the release
+    // gate of #784 locate the dispatch through them — and are now one-line
+    // delegations.
 
-    private bool HandleRadioKey(ConsoleKeyInfo key)
-    {
-        // Left/Right move in the shared arrow step above; Up/Down are aliases.
-        switch (key.Key)
-        {
-            case ConsoleKey.UpArrow:
-                _radio.Move(-1);
-                return true;
-            case ConsoleKey.DownArrow:
-                _radio.Move(1);
-                return true;
-            case ConsoleKey.Home:
-                _radio.MoveTo(0);
-                return true;
-            case ConsoleKey.End:
-                _radio.MoveTo(_radio.Count - 1);
-                return true;
-            case ConsoleKey.Enter:
-                return false;
-            default:
-                return false;
-        }
-    }
+    private bool HandleSelectKey(ConsoleKeyInfo key) => SelectModeState.Instance.HandleConsoleKey(this, key);
 
-    private bool HandleApprovalKey(ConsoleKeyInfo key)
-    {
-        // Choice navigation mirrors the radio row, including vertical arrows.
-        // Typing edits the reject reason, since arrows never leave the choices.
-        switch (key.Key)
-        {
-            case ConsoleKey.UpArrow:
-                _radio.Move(-1);
-                return true;
-            case ConsoleKey.DownArrow:
-                _radio.Move(1);
-                return true;
-            case ConsoleKey.Home:
-                _radio.MoveTo(0);
-                return true;
-            case ConsoleKey.End:
-                _radio.MoveTo(_radio.Count - 1);
-                return true;
-            case ConsoleKey.Enter:
-                return false;
-            case ConsoleKey.Backspace:
-                _editor.Backspace();
-                return true;
-            case ConsoleKey.Delete:
-                _editor.DeleteForward();
-                return true;
-        }
-        if (AcceptsTypedChar(key))
-        {
-            _editor.InsertChar(key.KeyChar);
-            return true;
-        }
-        return false;
-    }
+    private bool HandleRadioKey(ConsoleKeyInfo key) => RadioModeState.Instance.HandleConsoleKey(this, key);
 
-    private bool HandleMultilineKey(ConsoleKeyInfo key)
-    {
-        switch (key.Key)
-        {
-            case ConsoleKey.Enter:
-                return false;
-            case ConsoleKey.Backspace:
-                _editor.Backspace();
-                return true;
-            case ConsoleKey.Delete:
-                _editor.DeleteForward();
-                return true;
-            case ConsoleKey.UpArrow:
-                _editor.MoveUp();
-                return true;
-            case ConsoleKey.DownArrow:
-                _editor.MoveDown();
-                return true;
-            case ConsoleKey.Home:
-                _editor.MoveToLineStart();
-                return true;
-            case ConsoleKey.End:
-                _editor.MoveToLineEnd();
-                return true;
-        }
-        if (AcceptsTypedChar(key))
-        {
-            _editor.InsertChar(key.KeyChar);
-            return true;
-        }
-        return false;
-    }
+    private bool HandleApprovalKey(ConsoleKeyInfo key) => ApprovalModeState.Instance.HandleConsoleKey(this, key);
+
+    private bool HandleMultilineKey(ConsoleKeyInfo key) => MultilineModeState.Instance.HandleConsoleKey(this, key);
 
     private void CycleFocus(bool forward)
     {
@@ -886,6 +779,198 @@ public sealed partial class DialogOverlay
         else
         {
             _focusedButton = (_focusedButton - 1 + _buttons.Count) % _buttons.Count;
+        }
+    }
+
+    // ── [GoF State] #1497: one state object per dispatched DialogKind ─────────
+    //
+    // The four per-kind key-switch nuclei from the old Handle methods live
+    // here. The kind dispatcher inside HandleKey remains the single
+    // dispatch-by-kind point (no new extension axis; #555 holds): a new dialog
+    // kind is a new state class plus one dispatcher arm, and none of the
+    // existing states change. Prompt is deliberately NOT a state: it has no
+    // kind switch of its own and its path is frozen legacy by its own
+    // contract.
+    //
+    // The states are stateless singletons that only ROUTE — the dialog's own
+    // data stays in its fields, so SyncFrom keeps copying fields and needs no
+    // state bookkeeping. What used to be copied between the handlers (the
+    // Up/Down/Home/End branches and the Backspace/Delete/typed-char trio) is
+    // shared once in DialogChoiceNavState / EditBuffer instead.
+
+    /// <summary>
+    /// Mode state of the legacy key path: the per-kind remainder of
+    /// <c>HandleKey(ConsoleKeyInfo)</c> after its shared Escape/Tab/arrows
+    /// prefix. Routing only — see the note above.
+    /// </summary>
+    private abstract class DialogModeState
+    {
+        /// <summary>Routes one editing/nav key for this kind. Consumed keys return true.</summary>
+        public abstract bool HandleConsoleKey(DialogOverlay overlay, ConsoleKeyInfo key);
+
+        /// <summary>
+        /// Backspace/Delete/typed-char edits through the shared multiline
+        /// editor: the buffer the <see cref="DialogKind.Multiline"/> kind
+        /// types into, and the reject-reason field of an approval modal.
+        /// </summary>
+        protected static bool EditBuffer(DialogOverlay overlay, ConsoleKeyInfo key)
+        {
+            switch (key.Key)
+            {
+                case ConsoleKey.Backspace:
+                    overlay._editor.Backspace();
+                    return true;
+                case ConsoleKey.Delete:
+                    overlay._editor.DeleteForward();
+                    return true;
+            }
+            if (AcceptsTypedChar(key))
+            {
+                overlay._editor.InsertChar(key.KeyChar);
+                return true;
+            }
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Shared arrow navigation for the modes that move one selection with the
+    /// arrows: <see cref="SelectModeState"/> steps the option column,
+    /// <see cref="RadioModeState"/> and <see cref="ApprovalModeState"/> step
+    /// the shared radio row. The copied Up/Down/Home/End branch pair #1497
+    /// names is this base routing once, with the state naming the field each
+    /// gesture touches. Enter keeps the uniform dialog contract: the host
+    /// commits and reads the selection.
+    /// </summary>
+    private abstract class DialogChoiceNavState : DialogModeState
+    {
+        /// <summary>Move the active selection by one row (negative = up).</summary>
+        protected abstract void MoveBy(DialogOverlay overlay, int step);
+
+        /// <summary>Jump the active selection to an edge: <c>0</c> = first row, <c>-1</c> = last.</summary>
+        protected abstract void MoveToEdge(DialogOverlay overlay, int edge);
+
+        public override bool HandleConsoleKey(DialogOverlay overlay, ConsoleKeyInfo key)
+        {
+            switch (key.Key)
+            {
+                case ConsoleKey.UpArrow:
+                    MoveBy(overlay, -1);
+                    return true;
+                case ConsoleKey.DownArrow:
+                    MoveBy(overlay, 1);
+                    return true;
+                case ConsoleKey.Home:
+                    MoveToEdge(overlay, 0);
+                    return true;
+                case ConsoleKey.End:
+                    MoveToEdge(overlay, -1);
+                    return true;
+                default:
+                    return false;
+            }
+        }
+    }
+
+    /// <summary>
+    /// <see cref="DialogKind.Select"/>: option-column navigation. PageUp and
+    /// PageDown page by <see cref="SelectPageRows"/> before the shared row
+    /// navigation runs.
+    /// </summary>
+    private sealed class SelectModeState : DialogChoiceNavState
+    {
+        internal static readonly SelectModeState Instance = new();
+
+        public override bool HandleConsoleKey(DialogOverlay overlay, ConsoleKeyInfo key)
+        {
+            switch (key.Key)
+            {
+                case ConsoleKey.PageUp:
+                    overlay._select.Move(-SelectPageRows);
+                    return true;
+                case ConsoleKey.PageDown:
+                    overlay._select.Move(SelectPageRows);
+                    return true;
+            }
+            return base.HandleConsoleKey(overlay, key);
+        }
+
+        protected override void MoveBy(DialogOverlay overlay, int step) => overlay._select.Move(step);
+
+        protected override void MoveToEdge(DialogOverlay overlay, int edge) =>
+            overlay._select.MoveTo(edge == 0 ? 0 : overlay._select.Count - 1);
+    }
+
+    /// <summary>
+    /// <see cref="DialogKind.Radio"/>: the single-row mutually-exclusive
+    /// choice. Left/Right are aliases handled by the shared prefix above;
+    /// Up/Down/Home/End route through this state.
+    /// </summary>
+    private sealed class RadioModeState : DialogChoiceNavState
+    {
+        internal static readonly RadioModeState Instance = new();
+
+        protected override void MoveBy(DialogOverlay overlay, int step) => overlay._radio.Move(step);
+
+        protected override void MoveToEdge(DialogOverlay overlay, int edge) =>
+            overlay._radio.MoveTo(edge == 0 ? 0 : overlay._radio.Count - 1);
+    }
+
+    /// <summary>
+    /// <see cref="DialogKind.Approval"/>: the fixed PRIM4 radio choice row
+    /// (same navigation as <see cref="RadioModeState"/>) plus the
+    /// reject-reason editor. Typing edits the reason, since arrows never
+    /// leave the choices.
+    /// </summary>
+    private sealed class ApprovalModeState : DialogChoiceNavState
+    {
+        internal static readonly ApprovalModeState Instance = new();
+
+        public override bool HandleConsoleKey(DialogOverlay overlay, ConsoleKeyInfo key)
+        {
+            if (base.HandleConsoleKey(overlay, key))
+            {
+                return true;
+            }
+            return EditBuffer(overlay, key);
+        }
+
+        protected override void MoveBy(DialogOverlay overlay, int step) => overlay._radio.Move(step);
+
+        protected override void MoveToEdge(DialogOverlay overlay, int edge) =>
+            overlay._radio.MoveTo(edge == 0 ? 0 : overlay._radio.Count - 1);
+    }
+
+    /// <summary>
+    /// <see cref="DialogKind.Multiline"/>: the shared multiline editor owns the
+    /// vertical arrows and Home/End as caret moves; Backspace/Delete/typed
+    /// chars route through <see cref="DialogModeState.EditBuffer"/>. Plain
+    /// Enter still submits (the Shift/Alt+Enter newline split is kitty-only).
+    /// </summary>
+    private sealed class MultilineModeState : DialogModeState
+    {
+        internal static readonly MultilineModeState Instance = new();
+
+        public override bool HandleConsoleKey(DialogOverlay overlay, ConsoleKeyInfo key)
+        {
+            switch (key.Key)
+            {
+                case ConsoleKey.Enter:
+                    return false;
+                case ConsoleKey.UpArrow:
+                    overlay._editor.MoveUp();
+                    return true;
+                case ConsoleKey.DownArrow:
+                    overlay._editor.MoveDown();
+                    return true;
+                case ConsoleKey.Home:
+                    overlay._editor.MoveToLineStart();
+                    return true;
+                case ConsoleKey.End:
+                    overlay._editor.MoveToLineEnd();
+                    return true;
+            }
+            return EditBuffer(overlay, key);
         }
     }
 }
