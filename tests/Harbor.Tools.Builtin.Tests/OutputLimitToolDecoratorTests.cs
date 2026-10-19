@@ -103,7 +103,7 @@ public class OutputLimitToolDecoratorTests
         await Assert.That(result.Output).IsEqualTo("fine");
         await Assert.That(result.IsError).IsFalse();
         await Assert.That(ReferenceEquals(result.Metadata, inner.Metadata)).IsTrue();
-        await Assert.That(fake.LastArgs.Value.GetRawText()).IsEqualTo(EmptyArgs().GetRawText());
+        await Assert.That(fake.LastArgs.GetRawText()).IsEqualTo(EmptyArgs().GetRawText());
     }
 
     [Test]
@@ -133,7 +133,7 @@ public class OutputLimitToolDecoratorTests
 
         Result validation = decorator.ValidateArguments(EmptyArgs());
 
-        await Assert.That(validation.IsError).IsTrue();
+        await Assert.That(validation.IsFailure).IsTrue();
         await Assert.That(validation.Error).IsEqualTo("bad args");
     }
 
@@ -152,7 +152,7 @@ public class OutputLimitToolDecoratorTests
 
     private sealed class FakeLimitTool : ITool
     {
-        public ToolResult Result { get; set; } = ToolResult.Success(string.Empty);
+        public ToolResult Result { get; set; } = new ToolResult(string.Empty, false);
 
         public Result Validation { get; set; } = Result.Success();
 
