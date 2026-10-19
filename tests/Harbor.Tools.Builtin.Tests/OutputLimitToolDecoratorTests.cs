@@ -152,9 +152,9 @@ public class OutputLimitToolDecoratorTests
 
     private sealed class FakeLimitTool : ITool
     {
-        public ToolResult Result { get; set; } = new ToolResult(string.Empty, false);
+        public ToolResult Result { get; set; } = ToolResult.Success(string.Empty);
 
-        public Result Validation { get; set; } = Result.Success();
+        public Result Validation { get; set; } = global::CSharpFunctionalExtensions.Result.Success();
 
         public ToolName Name => ToolName.Create("fakelimit");
 
