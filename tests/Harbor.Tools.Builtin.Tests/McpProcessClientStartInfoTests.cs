@@ -17,7 +17,7 @@ namespace Harbor.Tools.Builtin.Tests;
 /// </summary>
 public class McpProcessClientStartInfoTests
 {
-    private static McpRegistry NewRegistry() => new(NullLogger<McpRegistry>.Instance);
+    private static McpRegistry NewRegistry() => new(NullLogger<McpRegistry>.Instance, McpTransportResolver.Default);
 
     [Test]
     public async Task Register_StartInfo_SpawnsWithArgsEnvCwd()

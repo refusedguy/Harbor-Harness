@@ -13,7 +13,7 @@ namespace Harbor.Tools.Builtin.Tests;
 public class McpRegistryInstructionsTests : IDisposable
 {
     private readonly string _dir = Directory.CreateTempSubdirectory("harbor-mcp-ins").FullName;
-    private readonly McpRegistry _registry = new(NullLogger<McpRegistry>.Instance);
+    private readonly McpRegistry _registry = new(NullLogger<McpRegistry>.Instance, McpTransportResolver.Default);
 
     public void Dispose()
     {

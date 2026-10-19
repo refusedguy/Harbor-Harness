@@ -99,7 +99,14 @@ public static class McpTransportNames
 /// </summary>
 public sealed class McpTransportResolver
 {
-    /// <summary>The builtin transports (streamable HTTP + legacy SSE).</summary>
+    /// <summary>
+    ///     Compat shim: the builtin transports (streamable HTTP + legacy SSE)
+    ///     for construction sites without a resolver. #1576: the composition
+    ///     root composes the process resolver (<see cref="Compose" />) and
+    ///     publishes it into the container, so production consumers take the
+    ///     injected instance — reach for this static only in legacy ctors and
+    ///     tests, never as a new dependency.
+    /// </summary>
     public static McpTransportResolver Default { get; } = Compose(null);
 
     private readonly FrozenDictionary<string, IMcpTransportFactory> _byName;

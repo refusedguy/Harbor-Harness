@@ -19,7 +19,7 @@ namespace Harbor.Tools.Builtin.Tests;
 ///     #823: the two tests below write <c>HARBOR_MCP_OAUTH_TOKEN</c> and
 ///     <c>HARBOR_HOME</c> into the process environment, and the product reads both
 ///     back — the token in <c>McpRegistry.GetTransport</c>'s no-auth branch
-///     (McpRegistry.cs:571), the home in <c>McpOAuthTokenCache.DefaultDirectory</c>.
+///     (McpRegistry.cs:575), the home in <c>McpOAuthTokenCache.DefaultDirectory</c>.
 ///     <c>McpTransportFactoryTests</c> reaches that same branch through
 ///     <c>registry.InvokeAsync</c> and is not in the issue's list. Both carry
 ///     <c>process-env</c> now; neither held any key before, so the scheduler was
@@ -471,7 +471,7 @@ public class McpRemoteTransportTests
                 """);
 
             var loggerFactory = LoggerFactory.Create(_ => { });
-            var registry = new McpRegistry(loggerFactory.CreateLogger<McpRegistry>());
+            var registry = new McpRegistry(loggerFactory.CreateLogger<McpRegistry>(), McpTransportResolver.Default);
             await Assert.That(registry.RegisterFromConfig(tempFile).IsSuccess).IsTrue();
 
             using var args = JsonDocument.Parse("{}");
@@ -514,7 +514,7 @@ public class McpRemoteTransportTests
         {
             Environment.SetEnvironmentVariable("HARBOR_HOME", scratch);
 
-            await using var registry = new McpRegistry(null);
+            await using var registry = new McpRegistry(null, McpTransportResolver.Default);
             // The auth block is what makes "no token" fatal rather than "go anonymous".
             McpOAuthConfig auth = new() { ClientId = "cid", TokenEndpoint = $"{server.Url}/token" };
             var registered = registry.Register("cloud", server.Url.ToString(), McpTransportNames.Http, null, auth);
@@ -552,7 +552,7 @@ public class McpRemoteTransportTests
         {
             Environment.SetEnvironmentVariable("HARBOR_MCP_OAUTH_TOKEN", null);
 
-            await using var registry = new McpRegistry(null);
+            await using var registry = new McpRegistry(null, McpTransportResolver.Default);
             await Assert.That(registry.Register("anon", server.Url.ToString(), McpTransportNames.Http).IsSuccess).IsTrue();
 
             using var args = JsonDocument.Parse("{}");
@@ -583,7 +583,7 @@ public class McpRemoteTransportTests
         using FakeServer server = FakeServer.Start();
         server.QueueStatusCodes.AddRange([503, 503, 503, 503]);
 
-        await using var registry = new McpRegistry(null);
+        await using var registry = new McpRegistry(null, McpTransportResolver.Default);
         // The transport must be named: a two-argument Register(name, value) binds to
         // the stdio overload (a candidate needing no default arguments wins), which
         // would register a subprocess instead of this endpoint.
@@ -610,7 +610,7 @@ public class McpRemoteTransportTests
         using FakeServer server = FakeServer.Start();
         server.QueueStatusCodes.Add(202);
 
-        await using var registry = new McpRegistry(null);
+        await using var registry = new McpRegistry(null, McpTransportResolver.Default);
         await Assert.That(registry.Register("remote", server.Url.ToString(), McpTransportNames.Http).IsSuccess).IsTrue();
 
         using var args = JsonDocument.Parse("{}");
@@ -624,7 +624,7 @@ public class McpRemoteTransportTests
     [Test]
     public async Task Registry_RegisterUrl_RejectsInvalidTransportAndUrl()
     {
-        var registry = new McpRegistry(null);
+        var registry = new McpRegistry(null, McpTransportResolver.Default);
         await Assert.That(registry.Register("a", "not-a-url", "http").IsSuccess).IsFalse();
         await Assert.That(registry.Register("b", "http://localhost/x", "grpc").IsSuccess).IsFalse();
         await Assert.That(registry.Register("c", "http://localhost/x", "sse").IsSuccess).IsTrue();

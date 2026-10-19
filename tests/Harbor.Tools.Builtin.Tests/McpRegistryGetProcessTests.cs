@@ -20,7 +20,7 @@ public class McpRegistryGetProcessTests
     [Test]
     public async Task Invoke_UnspawnableCommand_FailsAsResultInsteadOfThrowing()
     {
-        var registry = new McpRegistry(NullLogger<McpRegistry>.Instance);
+        var registry = new McpRegistry(NullLogger<McpRegistry>.Instance, McpTransportResolver.Default);
         var register = registry.Register("ghost", new McpServerStartInfo
         {
             // Cannot exist — Process.Start throws before any pipe exists.
@@ -40,7 +40,7 @@ public class McpRegistryGetProcessTests
     [Test]
     public async Task Invoke_AfterFailedSpawn_RetriesCleanly()
     {
-        var registry = new McpRegistry(NullLogger<McpRegistry>.Instance);
+        var registry = new McpRegistry(NullLogger<McpRegistry>.Instance, McpTransportResolver.Default);
         registry.Register("ghost", new McpServerStartInfo
         {
             Command = Path.Join(Path.GetTempPath(), "harbor-1552-ghost-absent"),
