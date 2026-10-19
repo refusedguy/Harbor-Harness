@@ -1,0 +1,42 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsPackable>true</IsPackable>
+    <PackageId>Harbor.Permissions</PackageId>
+    <Description>Harbor permissions subdomain — PermissionService, ApprovalCoordinator and the path-extraction policies (Strategy, #178). Extracted verbatim from Harbor.Application (#1615); the only outward seam is IPermissionConfigStore, implemented on the Configuration side over IConfigStore.</Description>
+    <PackageTags>harbor;ai;agent;permissions;approval</PackageTags>
+  </PropertyGroup>
+
+  <!--
+    #1615: verbatim extraction of Harbor.Application/Permissions (issue body:
+    "поддомен с 1 внешним швом (IConfigStore + Configuration) — вынос целиком").
+    Application-layer sibling, the same convention as the Harbor.Hooks
+    extraction #1613 (AgentLoop slice moves #1464/#1475/#1480): the namespace
+    stays Harbor.Application.Permissions verbatim, consumers keep their usings,
+    only ProjectReferences change. Depends on Harbor.Abstractions only — never
+    on Harbor.Application, Infrastructure, or Presentation; the whole-config
+    IConfigStore surface is cut here and re-offered as the narrow
+    IPermissionConfigStore seam (the ctor still names its parameter configStore,
+    so every call site keeps compiling). Harbor.Extensions joins the Domain
+    set the way Harbor.Application's own row already permits it: a zero-Harbor
+    helper leaf, bound here for the Ensure.* argument guards in
+    ApprovalCoordinator. See docs/ARCHITECTURE_LAYERS.md §2.
+  -->
+  <ItemGroup>
+    <ProjectReference Include="..\Harbor.Abstractions\Harbor.Abstractions.csproj"/>
+    <!-- Ensure.* guards (ApprovalCoordinator) live in the Harbor.Extensions
+         Domain helper leaf — the same edge Harbor.Application's row carries. -->
+    <ProjectReference Include="..\Harbor.Extensions\Harbor.Extensions.csproj"/>
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- CSharpFunctionalExtensions: the Result railway in PermissionService
+         (ApprovalCoordinator and the policies are Result-free). Rides in
+         transitively via Harbor.Abstractions for Harbor.Application; this
+         assembly binds it DIRECTLY, so it is declared. -->
+    <PackageReference Include="CSharpFunctionalExtensions"/>
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions"/>
+  </ItemGroup>
+
+</Project>

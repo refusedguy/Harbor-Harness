@@ -8,6 +8,7 @@
   <ItemGroup>
     <ProjectReference Include="../../src/Harbor.Application/Harbor.Application.csproj"/>
     <ProjectReference Include="../../src/Harbor.Hooks/Harbor.Hooks.csproj"/>
+    <ProjectReference Include="../../src/Harbor.Permissions/Harbor.Permissions.csproj"/>
     <ProjectReference Include="../../tests/Harbor.TestKit/Harbor.TestKit.csproj"/>
     <ProjectReference Include="../../src/Harbor.Tools.Builtin/Harbor.Tools.Builtin.csproj"/>
   </ItemGroup>

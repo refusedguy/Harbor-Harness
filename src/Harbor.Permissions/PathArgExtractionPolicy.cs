@@ -50,8 +50,8 @@ public sealed class PathArgExtractionPolicy : IPathExtractionPolicy
     ///     <c>yield return</c> loop is plain <c>IEnumerable&lt;T&gt;</c> and sidesteps
     ///     the whole question.
     /// </remarks>
-    private static readonly FrozenSet<string> DefaultTools = BuiltinPathTools()
-        .ToFrozenSet(StringComparer.Ordinal);
+    private static readonly FrozenSet<string> DefaultTools = FrozenSet.ToFrozenSet(
+        BuiltinPathTools(), StringComparer.Ordinal);
 
     /// <summary>Shared stateless instance (default tool set).</summary>
     public static readonly PathArgExtractionPolicy Instance = new();
@@ -68,7 +68,7 @@ public sealed class PathArgExtractionPolicy : IPathExtractionPolicy
     /// <param name="tools">Tool names whose <c>path</c> argument is normalized.</param>
     public PathArgExtractionPolicy(IEnumerable<string> tools)
     {
-        _tools = tools.ToFrozenSet(StringComparer.Ordinal);
+        _tools = FrozenSet.ToFrozenSet(tools, StringComparer.Ordinal);
     }
 
     /// <summary>

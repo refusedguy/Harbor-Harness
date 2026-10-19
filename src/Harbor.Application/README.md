@@ -15,7 +15,6 @@ LLM turns, tool invocations, compaction events, and permission checks.
 | `Sessions/CompactionService.cs`    | Anchored-summary compaction: when a session approaches the context window, summarize the head and keep a recent tail.   |
 | `Sessions/SystemPromptBuilder.cs`  | Assembles the system prompt: identity + tool policy + constraints + env + agent + tools + MCP + skills + context files. |
 | `Sessions/MessageConverter.cs`     | Adapter from domain `AgentMessage`s to LLM-specific `LlmMessage`s.                                                      |
-| `Permissions/PermissionService.cs` | Specification-pattern permission evaluator: looks up the agent's `PermissionRuleset` and applies allow/deny/ask.        |
 | `Sessions/CachingSystemPromptBuilder.cs` | Memoizing decorator over `ISystemPromptBuilder` — re-assembles the prompt only when inputs change.                    |
 | `Sessions/TokenTracker.cs`         | `ITokenTracker` impl — per-turn usage aggregation (`TokenStats`) plus a running token estimate that keeps `ShouldCompact` O(1).   |
 | `Sessions/WorkspaceContextSource.cs` | Injects workspace context files into the system prompt.                                                                |
@@ -44,7 +43,8 @@ Application projects (`Harbor.Plugins.Runtime`, `Harbor.Scripting.*`).
 ## Dependency rules
 
 * **May reference:** `Harbor.Abstractions`, `Harbor.Extensions`,
-  `Harbor.Diagnostics.Abstractions`.
+  `Harbor.Diagnostics.Abstractions`, `Harbor.Permissions` (#1615 — the seam
+  implementation, Application→Application edges are matrix-allowed).
 * **Must not reference:** `Harbor.Registries`,
   `Harbor.Plugins.*`, `Harbor.Scripting.*`, `Harbor.Providers.*`,
   `Harbor.Storage.*`, `Harbor.Tools.Builtin`, `Harbor.Tui.*`, any app.
@@ -61,11 +61,13 @@ over `Assembly.GetReferencedAssemblies()`.
 
 Types declare namespaces matching their assembly of residence (ROP-D Z1):
 `Harbor.Application.Agents`, `Harbor.Application.Sessions`,
-`Harbor.Application.Permissions`, `Harbor.Application.Onboarding`,
 `Harbor.Application.Configuration`, `Harbor.Application.Resilience`,
 `Harbor.Application.Providers`, `Harbor.Application.Telemetry`. Consumers that
 no longer needs a `using` rewrite: the old `Harbor.Core` facade that once
-re-exported them was deleted in #451.
+re-exported them was deleted in #451. The `Harbor.Application.Permissions`
+namespace is the #1615 extraction — the same namespace now lives in the
+sibling `Harbor.Permissions` assembly; `PermissionConfigStoreAdapter`
+implements that subdomain's seam on the Application side.
 
 ## Performance intent
 

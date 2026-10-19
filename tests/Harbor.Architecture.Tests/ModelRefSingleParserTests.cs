@@ -133,7 +133,7 @@ public sealed class ModelRefSingleParserTests
         ["apps/Harbor.App.Cli/Repl/ReplRunner.cs"] =
             "REAL DEBT, out of #678's scope. Three sites split the effective model for the "
             + "status line; each is a count-2 split, so none of them truncates.",
-        ["src/Harbor.Application/Permissions/PermissionPathNormalizer.cs"] =
+        ["src/Harbor.Permissions/PermissionPathNormalizer.cs"] =
             "NOT A REFERENCE. A filesystem path prefix. Listed because the matcher is textual, "
             + "not semantic.",
         ["src/Harbor.Application/Skills/SkillUpdater.cs"] =

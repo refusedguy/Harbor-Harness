@@ -34,6 +34,11 @@ internal static class ConfigurationModule
         // ---- stores -------------------------------------------------------
         services.AddSingleton<IConfigStore>(sp => new JsonConfigStore(
             logger: sp.GetRequiredService<ILogger<JsonConfigStore>>()));
+        // #1615: the Permissions subdomain binds its own narrow seam
+        // (IPermissionConfigStore) rather than the whole-config IConfigStore —
+        // the adapter projects the permissions section down.
+        services.AddSingleton<IPermissionConfigStore>(sp => new PermissionConfigStoreAdapter(
+            sp.GetRequiredService<IConfigStore>()));
         if (options.RegisterCommonConfigStore)
         {
             services.AddSingleton<ICommonConfigStore>(sp => new JsonCommonConfigStore(
