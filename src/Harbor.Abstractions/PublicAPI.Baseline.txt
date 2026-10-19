@@ -387,6 +387,7 @@ Harbor.Abstractions.Tools.JsonArgValidator :: public static Result<string> Requi
 Harbor.Abstractions.Tools.JsonArgValidator :: public static bool HasNonEmptyArray(JsonElement args, string name)
 Harbor.Abstractions.Tools.JsonArgValidator :: public static bool HasString(JsonElement args, string name)
 Harbor.Abstractions.Tools.JsonArgValidator :: public static class JsonArgValidator
+Harbor.Abstractions.Tools.JsonArgs :: public static JsonElement GetObject(JsonElement args, string name)
 Harbor.Abstractions.Tools.JsonArgs :: public static Result<int> RequireInt(JsonElement args, string name)
 Harbor.Abstractions.Tools.JsonArgs :: public static Result<string> RequireString(JsonElement args, string name)
 Harbor.Abstractions.Tools.JsonArgs :: public static bool GetBool(JsonElement args, string name)
@@ -394,6 +395,7 @@ Harbor.Abstractions.Tools.JsonArgs :: public static bool? GetBoolOrNull(JsonElem
 Harbor.Abstractions.Tools.JsonArgs :: public static class JsonArgs
 Harbor.Abstractions.Tools.JsonArgs :: public static int GetClampedInt(JsonElement args, string name, int min, int max, int defaultValue)
 Harbor.Abstractions.Tools.JsonArgs :: public static int? GetInt(JsonElement args, string name)
+Harbor.Abstractions.Tools.JsonArgs :: public static string? GetFirstString(JsonElement args, params string names)
 Harbor.Abstractions.Tools.JsonArgs :: public static string? GetString(JsonElement args, string name)
 Harbor.Abstractions.Tools.McpServerInstructions :: public sealed record McpServerInstructions(string ServerName, string Instructions)
 Harbor.Abstractions.Tools.MimeTypes :: public static bool IsAudio(string? mime)

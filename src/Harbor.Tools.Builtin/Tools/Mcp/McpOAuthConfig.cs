@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Harbor.Abstractions.Tools;
 
 namespace Harbor.Tools.Mcp;
 
@@ -70,9 +71,6 @@ public sealed record McpOAuthConfig
         if (auth.ValueKind != JsonValueKind.Object)
             return Result.Failure<Maybe<McpOAuthConfig>>("InvalidAuthBlock: 'auth' must be an object.");
 
-        static string? Str(JsonElement o, string name) =>
-            o.TryGetProperty(name, out var v) && v.ValueKind == JsonValueKind.String ? v.GetString() : null;
-
         var scopes = new List<string>();
         if (auth.TryGetProperty("scopes", out var scopesEl) && scopesEl.ValueKind == JsonValueKind.Array)
         {
@@ -90,12 +88,12 @@ public sealed record McpOAuthConfig
 
         return Result.Success(Maybe<McpOAuthConfig>.From(new McpOAuthConfig
         {
-            ClientId = Str(auth, "clientId"),
-            ClientSecret = Str(auth, "clientSecret"),
+            ClientId = JsonArgs.GetString(auth, "clientId"),
+            ClientSecret = JsonArgs.GetString(auth, "clientSecret"),
             Scopes = scopes,
-            AuthorizationEndpoint = Str(auth, "authorizationEndpoint"),
-            TokenEndpoint = Str(auth, "tokenEndpoint"),
-            RegistrationEndpoint = Str(auth, "registrationEndpoint"),
+            AuthorizationEndpoint = JsonArgs.GetString(auth, "authorizationEndpoint"),
+            TokenEndpoint = JsonArgs.GetString(auth, "tokenEndpoint"),
+            RegistrationEndpoint = JsonArgs.GetString(auth, "registrationEndpoint"),
             RedirectPort = port,
         }));
     }

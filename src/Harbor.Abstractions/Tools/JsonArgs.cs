@@ -56,4 +56,31 @@ public static class JsonArgs
         return Result.SuccessIf(value.HasValue, $"Missing or non-numeric '{name}'.")
             .Map(() => value!.Value);
     }
+
+    /// <summary>
+    ///     Object property value, or <c>default</c> when absent / not an object —
+    ///     the "absent ⇒ <c>default</c>" spelling callers use for pass-through
+    ///     subtrees (e.g. MCP <c>arguments</c>).
+    /// </summary>
+    public static JsonElement GetObject(JsonElement args, string name) =>
+        args.TryGetProperty(name, out var el) && el.ValueKind == JsonValueKind.Object
+            ? el
+            : default;
+
+    /// <summary>
+    ///     First string-valued property among alias names (legacy + current
+    ///     casing), or null when none of them is present as a string (issue
+    ///     #1579: replaces the per-store first-of-names loops).
+    /// </summary>
+    public static string? GetFirstString(JsonElement args, params string[] names)
+    {
+        foreach (string name in names)
+        {
+            string? value = GetString(args, name);
+            if (value is not null)
+                return value;
+        }
+
+        return null;
+    }
 }

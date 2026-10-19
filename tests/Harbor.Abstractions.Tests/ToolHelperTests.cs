@@ -66,6 +66,34 @@ public class ToolHelperTests
         await Assert.That(JsonArgs.GetClampedInt(args, "s", 1, 10_000, 100)).IsEqualTo(100);
     }
 
+    [Test]
+    public async Task JsonArgs_GetObject_ReturnsElementOrDefault()
+    {
+        var args = Parse("""{"obj":{"k":1},"arr":[1],"notObj":"x"}""");
+
+        JsonElement obj = JsonArgs.GetObject(args, "obj");
+        await Assert.That(obj.ValueKind).IsEqualTo(JsonValueKind.Object);
+        await Assert.That(obj.GetProperty("k").GetInt32()).IsEqualTo(1);
+
+        // Absent / wrong kind → default (Undefined), the "absent ⇒ {}"
+        // spelling MCP pass-through arguments relied on.
+        await Assert.That(JsonArgs.GetObject(args, "missing").ValueKind).IsEqualTo(JsonValueKind.Undefined);
+        await Assert.That(JsonArgs.GetObject(args, "arr").ValueKind).IsEqualTo(JsonValueKind.Undefined);
+        await Assert.That(JsonArgs.GetString(args, "obj")).IsNull();
+    }
+
+    [Test]
+    public async Task JsonArgs_GetFirstString_ReturnsFirstStringAlias()
+    {
+        var args = Parse("""{"toolName":"camel","ToolName":"pascal","count":3}""");
+
+        // First alias present as a string wins; non-string/absent aliases skipped.
+        await Assert.That(JsonArgs.GetFirstString(args, "toolName", "ToolName")).IsEqualTo("camel");
+        await Assert.That(JsonArgs.GetFirstString(args, "ToolName", "toolName")).IsEqualTo("pascal");
+        await Assert.That(JsonArgs.GetFirstString(args, "missing", "ToolName")).IsEqualTo("pascal");
+        await Assert.That(JsonArgs.GetFirstString(args, "missing", "count", "other")).IsNull();
+    }
+
     // ── ToolPaths ──
 
     [Test]

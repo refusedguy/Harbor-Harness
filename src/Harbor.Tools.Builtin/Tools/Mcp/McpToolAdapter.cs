@@ -1,3 +1,4 @@
+using Harbor.Abstractions.Tools;
 using Microsoft.Extensions.Logging;
 
 namespace Harbor.Tools.Mcp;
@@ -41,9 +42,7 @@ public sealed class McpToolAdapter : ITool
 
     public async Task<ToolResult> ExecuteAsync(JsonElement args, ToolContext context, CancellationToken cancellationToken = default)
     {
-        JsonElement methodArgs = args.TryGetProperty("arguments", out var a) && a.ValueKind == JsonValueKind.Object
-            ? a
-            : default;
+        JsonElement methodArgs = JsonArgs.GetObject(args, "arguments");
 
         JsonElement argsEl = McpJsonRpc.BuildToolCallParams(_toolName, methodArgs);
         // ROP-A Z1 п.17: boundary Match.

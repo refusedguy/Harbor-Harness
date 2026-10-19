@@ -1,3 +1,4 @@
+using Harbor.Abstractions.Tools;
 using Harbor.Storage.Shared;
 
 namespace Harbor.Storage.Jsonl;
@@ -341,9 +342,9 @@ internal static class JsonlMessageCodec
         {
             // Field names tolerate legacy PascalCase (pre-V4 files written without
             // a naming policy) and post-fix camelCase.
-            string? tcId = FirstString(rEl, "toolCallId", "ToolCallId");
-            string? tn = FirstString(rEl, "toolName", "ToolName");
-            string? output = FirstString(rEl, "output", "Output");
+            string? tcId = JsonArgs.GetFirstString(rEl, "toolCallId", "ToolCallId");
+            string? tn = JsonArgs.GetFirstString(rEl, "toolName", "ToolName");
+            string? output = JsonArgs.GetFirstString(rEl, "output", "Output");
             bool isError = rEl.TryGetProperty("isError", out var ie) && ie.GetBoolean()
                            || rEl.TryGetProperty("IsError", out var ie2) && ie2.GetBoolean();
             if (tcId is null || tn is null || output is null)
@@ -354,17 +355,6 @@ internal static class JsonlMessageCodec
 
         return Result.Success<AgentMessage>(new ToolResultMessage(
             id, sessionId, createdAt, results, parentId));
-    }
-
-    /// <summary>First non-null string among alias property names (legacy + current casing).</summary>
-    private static string? FirstString(JsonElement element, params string[] names)
-    {
-        foreach (string name in names)
-        {
-            if (element.TryGetProperty(name, out var v) && v.ValueKind == JsonValueKind.String)
-                return v.GetString();
-        }
-        return null;
     }
 
     /// <summary>
