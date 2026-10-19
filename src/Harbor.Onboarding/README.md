@@ -1,5 +1,7 @@
 # Harbor.Onboarding
 
+## Overview
+
 The first-run experience as a one-way leaf: the interactive onboarding wizard
 that walks a new user through provider → API key → model → agent → saved
 config, and the setup-checklist detector that reports which setup steps are
