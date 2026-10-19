@@ -3,9 +3,10 @@
 //
 // The claim under test: CompactionPolicy.MaterializeCompactedView used to pay
 // TWO O(history) scans on every turn — the reverse scan for the newest summary
-// plus the forward anchor walk, twice per turn (TurnRunner.cs:138, then
-// CompactionBehavior.cs:110 after a fresh compaction) — even when NOTHING
-// was compacted. After #1533 the anchor is remembered per input list: an
+// plus the forward anchor walk, twice per turn — even when NOTHING was
+// compacted (#1533: TurnRunner.cs:138 for the reverse scan and
+// CompactionBehavior.cs:110 after a fresh compaction). Both files moved to
+// Harbor.AgentRuntime by #1623. After #1533 the anchor is remembered per input list: an
 // unchanged history returns the remembered answer with zero rescans and zero
 // allocations (still the input instance itself when there is no summary, so
 // the documented fail-safe identity is untouched); appended history rescans
