@@ -976,4 +976,121 @@ public sealed class CellForgeEngineAtomicityRules
                 + "what 'дословный переезд' means as a checkable fact: same body, one home, no shadow. "
                 + "Drift: " + Offenders(drift));
     }
+
+    // ── #1627 batch B (adapted) ─────────────────────────────────────────────
+    //
+    // Batch A moved leaves whose bodies were byte-equal chat↔engine. Batch B
+    // (#1627) moves leaves that still bind ONE small vocabulary — and adapts
+    // that binding instead of dragging it along:
+    //
+    //   * the `Ensure` guard alias (Harbor.Abstractions.Extensions, carried by
+    //     Harbor.Extensions) is not BCL, so the moved body retypes each
+    //     `Ensure.NotNull(value, name)` to `ArgumentNullException.ThrowIfNull(
+    //     value)` — the alias's own delegate implementation, with the
+    //     CallerArgumentExpression name preserved; behavior-identical by
+    //     construction, and FuzzyMatcher/AutocompletePalette gain no new
+    //     vocabulary in their new home;
+    //   * `AutocompleteMode` re-homes out of AutocompleteTrigger.cs beside the
+    //     engine-hosted filter family it parameterizes (AutocompleteItem.Mode,
+    //     AutocompleteFilter.Filter). The trigger record, the trigger scan and
+    //     the PromptBuffer extensions stay in that chat file untouched —
+    //     KeyGateFamilyRules pins AutocompleteTriggerScan's chat path, and the
+    //     file keeps its Rendering / UiKey vocabulary.
+    //
+    // The painting widgets named in the issue (ColumnsBlock, GaugeBar,
+    // CalendarView, RuleView, SelectionEngine) do NOT follow: they paint the
+    // UIR painter grid (global `Cell`/`ScreenBuffer` aliases →
+    // Harbor.Ui.Framework.Rendering — a different buffer type from the engine
+    // grid, see ScreenSession's painter-side BACK) and three of them bind
+    // ChatPalette (DesignSystem) / PanelChrome / IChatBlock. Hosted here they
+    // would need exactly the imports the empty Reviewed* tables above forbid.
+    //
+    // The chat half of a whole-file row is a LEGAL deletion (the guard retype
+    // is the only body change), so the verdicts mirror VerbatimLeafMoves: the
+    // engine home exists, no chat copy shadows it, and the re-homed enum no
+    // longer lives in the chat file it left.
+
+    /// <summary>
+    ///     Whole-file adapted leaves (guard retype, body otherwise equal):
+    ///     the engine home and the deleted chat leaf.
+    /// </summary>
+    private static readonly (string EngineFile, string ChatFile)[] AdaptedLeafMoves =
+    [
+        ("Widgets/FuzzyMatcher.cs", "Chat/Widgets/FuzzyMatcher.cs"),
+        ("Widgets/AutocompletePalette.cs", "Chat/Widgets/AutocompletePalette.cs"),
+    ];
+
+    /// <summary>
+    ///     The re-homed enum: engine file that must exist, and the chat file it
+    ///     left — which must itself stay (KeyGateFamilyRules pins its path)
+    ///     while no longer declaring the moved type.
+    /// </summary>
+    private const string RehomedEnumEngineFile = "Widgets/AutocompleteMode.cs";
+    private const string RehomedEnumChatFile = "Chat/Widgets/AutocompleteTrigger.cs";
+    private const string RehomedEnumChatDeclaration = "public enum AutocompleteMode";
+
+    /// <summary>
+    ///     The adapted leaf set lives in the engine, and no chat copy is back
+    ///     beside it. The shadow half is the load-bearing one, exactly as for
+    ///     VerbatimLeafMoves: the moved types keep the namespace
+    ///     <c>Harbor.Tui.CellForge.Widgets</c>, so a chat copy in the same
+    ///     namespace wins resolution for chat callers while engine callers see
+    ///     the engine one — a silent fork across assemblies. The re-homed
+    ///     enum's chat declaration is the same hazard in miniature: two
+    ///     <c>AutocompleteMode</c> types under one name.
+    /// </summary>
+    [Test]
+    public async Task TheAdaptedLeafSetLivesInTheEngineAndItsChatCopiesAreGone()
+    {
+        if (RepoPaths.RepoRoot is not { } root)
+        {
+            return;
+        }
+
+        var drift = new List<string>();
+        foreach ((string engineFile, string chatFile) in AdaptedLeafMoves)
+        {
+            if (!File.Exists(Path.Combine(root, "src", ProjectDir, engineFile.Replace('/', Path.DirectorySeparatorChar))))
+            {
+                drift.Add($"src/{ProjectDir}/{engineFile} — row in AdaptedLeafMoves names a file that is gone; "
+                          + "either the leaf moved again (update the row in the same commit) or the engine lost it");
+            }
+
+            if (File.Exists(Path.Combine(root, "src", "Harbor.Tui.CellForge", chatFile.Replace('/', Path.DirectorySeparatorChar))))
+            {
+                drift.Add($"src/Harbor.Tui.CellForge/{chatFile} — a Chat copy came back and now shadows the "
+                          + "engine type for chat callers; delete the copy or fold it into the engine file");
+            }
+        }
+
+        string rehomedEngine = Path.Combine(root, "src", ProjectDir, RehomedEnumEngineFile.Replace('/', Path.DirectorySeparatorChar));
+        string rehomedChat = Path.Combine(root, "src", "Harbor.Tui.CellForge", RehomedEnumChatFile.Replace('/', Path.DirectorySeparatorChar));
+        if (!File.Exists(rehomedEngine))
+        {
+            drift.Add($"src/{ProjectDir}/{RehomedEnumEngineFile} — the re-homed AutocompleteMode engine home is gone; "
+                      + "update the row in the same commit or the chat scan loses the type its trigger record names");
+        }
+
+        if (!File.Exists(rehomedChat))
+        {
+            drift.Add($"src/Harbor.Tui.CellForge/{RehomedEnumChatFile} — AutocompleteTriggerScan's pinned home is gone; "
+                      + "KeyGateFamilyRules names this exact path");
+        }
+        else
+        {
+            string chatText = File.ReadAllText(rehomedChat);
+            if (chatText.Contains(RehomedEnumChatDeclaration, StringComparison.Ordinal))
+            {
+                drift.Add($"src/Harbor.Tui.CellForge/{RehomedEnumChatFile} — declares AutocompleteMode again; "
+                          + "the re-homed engine enum is now forked under one name across the two assemblies");
+            }
+        }
+
+        await Assert.That(drift).IsEmpty()
+            .Because(
+                "#1627 batch B moved the adapted engine leaves (guard retype, re-homed enum) behind the same "
+                + "one-home-no-shadow contract as #1620's verbatim rows: AdaptedLeafMoves grades the two "
+                + "whole-file leaves, and the re-home check grades AutocompleteMode's move out of "
+                + "AutocompleteTrigger.cs without retyping any chat caller. Drift: " + Offenders(drift));
+    }
 }

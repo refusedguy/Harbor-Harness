@@ -37,6 +37,20 @@ Harbor vocabulary beyond this namespace family — that is what made them batch 
 (verbatim, no adaptation); the leaves that still bind `ChatPalette`/`Ensure`/
 `ScreenBuffer` stay behind for the batch-B adapted moves (#1627).
 
+Batch B followed (#1627, adapted): `FuzzyMatcher` (the fzf-style subsequence
+scorer) and the autocomplete filter family
+(`AutocompleteItem`/`AutocompleteDestructiveGate`/`AutocompleteFilter`), with
+`AutocompleteMode` re-homed out of `AutocompleteTrigger.cs` beside them. These
+bound exactly one chat vocabulary — the `Ensure` guard alias — so the adaptation
+is the mechanical retype `Ensure.NotNull(value, name)` →
+`ArgumentNullException.ThrowIfNull(value)`: the alias delegates to precisely
+that, the caller-expression name survives, and the engine gains no Harbor
+import. The widgets that paint the UIR painter grid (`GaugeBar`,
+`ColumnsBlock`/`IChatBlock`, `CalendarView`/`RuleView` via `PanelChrome`,
+`SelectionEngine`, the overlay family) stay in chat: here they would need the
+`Harbor.Ui.Framework`/`Harbor.Abstractions`/`Harbor.DesignSystem` imports the
+empty reviewed tables above forbid.
+
 ### `Input/` — raw mode and byte decoding
 
 `ITerminalModeController` (`Input/ITerminalModeController.cs:9`) is the
