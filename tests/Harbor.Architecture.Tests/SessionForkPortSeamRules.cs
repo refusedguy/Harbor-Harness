@@ -6,7 +6,7 @@
 // parameter of `SessionFactory`'s constructor, so a host that wires nothing
 // gets an error instead of a second, silent fork. #882 is the follow-up
 // question, and it is a good one: the port is bound in exactly ONE place —
-// `apps/Harbor.App.Avalonia/Hosting/ServiceRegistration.cs:192` — and nothing
+// `apps/Harbor.App.Avalonia/Hosting/ServiceRegistration.cs:193` — and nothing
 // says the next host has to bind it too. Only the compiler stands there, and
 // the compiler is standing in the wrong place (see "WHAT THE REQUIRED
 // PARAMETER DOES AND DOES NOT BUY" below).
@@ -507,7 +507,7 @@ public sealed class SessionForkPortSeamRules
                 continue;
             }
 
-            // Comments stripped: ServiceRegistration.cs:189-191 is a three-line comment
+            // Comments stripped: ServiceRegistration.cs:190-192 is a three-line comment
             // explaining WHY the adapter exists, and it names both types. A registration scan
             // that reads prose grades the explanation as the registration.
             string clean = string.Join('\n', StrippedLines(text));
