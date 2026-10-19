@@ -9,8 +9,9 @@
 // lives in the provider builders, never in shared provider-id branching
 // (§OOP-002).
 //
-// #1517: the inline `switch (LlmContentBlock)` that used to sit in
-// WriteUserContent is consolidated into a single Object Adapter (composition,
+// #1517: the inline control-flow block that used to dispatch over
+// LlmContentBlock values inside WriteUserContent is consolidated into a
+// single Object Adapter (composition,
 // no class inheritance) below: LlmContentBlock values and the OpenAI
 // content-part wire shape are incompatible, and the adapter is the ONE place
 // that translates between them — text → {"type":"text"}, image → image_url
