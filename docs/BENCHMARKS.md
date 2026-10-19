@@ -960,6 +960,40 @@ separator class, so per-call matching passes the raw strings with identical
 | `Cost_GrowsLinearly_InRuleCount` | time over N-rule `Evaluate` miss-walks, 256 → 512 rules — warm-up discarded, best-of-5 | ratio ≤ 3.0 (linear ≈ 2.0; O(N²) ≈ 4.0) | **1.39** (17.058 → 23.767 ms) |
 | `Cost_GrowsLinearly_InRuleCount` | allocations over the same walks — exact-zero, not a ratio: 2 wasted strings per rule are still linear, so a ratio gate passes with the bug in place | exactly 0 B on both windows | 0 → 0 B |
 
+### Prompt-cache key scaling gate (#1532) — **RELATIVE**, CI merge gate
+
+`Harbor.Application.Tests.CachingSystemPromptBuilderKeyScalingTests`, in the
+`test (core)` merge-gate shard.
+
+Same relative convention as #410/#1528: N against 2N inside one run, no
+absolute budgets. The slice: `ComputeKey` used to join EVERY context field
+into one `StringBuilder` (doubling the context bytes per turn) and hash the
+whole prompt text twice more (`GetBytes` → whole-context `byte[]`, then
+`SHA256.HashData`), and it kept a static
+`ConcurrentDictionary<JsonDocument, string>` keyed by document REFERENCE — a
+fresh doc per tool resolution could never hit, so the map never once served a
+hit and grew one entry per distinct document instance, unbounded.
+
+The rewrite streams every field's UTF-8 encoding into ONE
+`IncrementalHash(SHA256)` through a ~243-byte bounded stack buffer — the
+joined string and the whole-context byte array no longer exist — and hashes
+tool schemas in place as canonical JSON (`JsonElement.WriteTo` into a reused
+`Utf8JsonWriter`). The static schema-text map is gone, not value-keyed: the
+only stable value a `JsonDocument` carries is its own raw text, and reading
+that text back out is the per-turn cost the map existed to avoid.
+
+| Test | Relative claim | Gate | Measured |
+|---|---|---|---|
+| `KeyCost_GrowsLinearly_InContextSize` | time + allocations over `BuildAsync` with a context file of 32 KiB → 64 KiB, one fresh-key turn per unit, inner builder faked out so the window is the key pass | ratio ≤ 3.0 both branches (linear ≈ 2.0; the joined-string regression is 4.0) | **1.90** time (80.945 → 153.602 ms, medians of 5 legs of 2233 units), **1.00** allocations (2 197 496 B on both legs — flat in N) — run 39125259218, PR #1692 |
+| `BuildAsync_SameContentsTwice_ServesOneBuild` | hit-rate assertion the issue asked for: same 256 KiB context twice → one `ComputeKey` result, one inner build, `CacheHits == 1` | exactly one build | asserted in-test |
+| `BuildAsync_SameSchemaDifferentWhitespace_ServesOneBuild` | value-key proof the reference map could never give: same schema tree with different literal whitespace → same key → one build | exactly one build | asserted in-test |
+| `BuildAsync_DifferentSchemaValue_RebuildsPrompt` | negative control for the assert above (a constant-hit unchanged comparison cannot serve a stale schema) | two builds | asserted in-test |
+
+The BDN absolute columns live in the `benchmark` workflow (`CachingPromptBenchmark`,
+`Build_Hit` / `Build_Miss`, `--job Short`); key computation on the hit row is
+dominated by the `ComputeKey` pass either way, so the PR-marginal claim moves
+with the ratio above, not with those absolute numbers.
+
 ### ConsoleEx cell-diff core (`DiffEngineBenchmark`, 2026-08-26, Release)
 
 Frame-budget targets from `specs/07-tui.md` (< 16 ms/frame) and celldiff §7 — all met with an order of magnitude of headroom. Flush = real DiffEngine scan + AnsiWriter SGR/cursor encoding into a discarding backend (no tty I/O).

@@ -1,6 +1,8 @@
+using System.Buffers;
 using System.Collections.Concurrent;
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.Json;
 using Harbor.Abstractions.Sessions;
 namespace Harbor.Application.Sessions;
 /// <summary>
@@ -153,8 +155,8 @@ namespace Harbor.Application.Sessions;
 public sealed class CachingSystemPromptBuilder(ISystemPromptBuilder inner) : ISystemPromptBuilder
 {
     private const char Separator = '\u001f';
+    private static readonly byte[] SeparatorBytes = [(byte)Separator];
 
-    private static readonly ConcurrentDictionary<System.Text.Json.JsonDocument, string> _schemaTextCache = new();
     private readonly ConcurrentDictionary<string, string> _cache = new(StringComparer.Ordinal);
 
     /// <summary>Number of prompts served from cache (diagnostics/tests).</summary>
@@ -183,45 +185,75 @@ public sealed class CachingSystemPromptBuilder(ISystemPromptBuilder inner) : ISy
     }
 
     /// <summary>
-    ///     Derive a deterministic cache key from every context component.
-    ///     SHA-256 over a separator-joined field dump — collision-safe for
-    ///     realistic inputs and allocation-light enough for a per-turn call.
+    ///     Derive a deterministic cache key from every context component:
+    ///     SHA-256 streamed over the field spans. Every field's UTF-8 encoding
+    ///     is appended to one <see cref="IncrementalHash" /> through a bounded
+    ///     stack buffer, so the turn pays a single hash pass over the context
+    ///     bytes and never materializes the joined prompt text or a whole-context
+    ///     byte array (#1532). The separator byte after each field keeps the
+    ///     boundary the old separator-joined dump supplied, so arg-boundary
+    ///     ambiguity is unchanged.
     /// </summary>
     /// <remarks>
-    ///     The two model fields sit next to each other because they are rendered as
-    ///     one line: <c>- Model: &lt;provider&gt;/&lt;id&gt;</c>
-    ///     (<c>SystemPromptBuilder</c>, the Environment section). #815 keyed the
-    ///     agent's provider here and not the model's, and with the pair adjacent the
-    ///     block still read as coverage. <c>PromptCacheKeyCoverageRules</c> compares
-    ///     both chains against the renderer, so the next mismatch cannot land quietly.
+    ///     <para>
+    ///         The two model fields sit next to each other because they are rendered as
+    ///         one line: <c>- Model: &lt;provider&gt;/&lt;id&gt;</c>
+    ///         (<c>SystemPromptBuilder</c>, the Environment section). #815 keyed the
+    ///         agent's provider here and not the model's, and with the pair adjacent the
+    ///         block still read as coverage. <c>PromptCacheKeyCoverageRules</c> compares
+    ///         both chains against the renderer, so the next mismatch cannot land quietly.
+    ///     </para>
+    ///     <para>
+    ///         The tool schemas used to ride a static <c>ConcurrentDictionary</c> that
+    ///         cached raw schema text per <c>JsonDocument</c> REFERENCE. A fresh document
+    ///         per tool resolution can never hit an equal-reference key, so that map
+    ///         never once served a hit and grew one entry per distinct document instance
+    ///         for the decorator's process-long lifetime. #1532 hashes the schema
+    ///         directly per turn (see <see cref="AppendSchemaField" />) and the map is
+    ///         gone; a value-keyed replacement is deliberately not reintroduced — the
+    ///         only stable value a <c>JsonDocument</c> can carry is its own text, and
+    ///         extracting that text is the per-turn cost the map existed to avoid. The
+    ///         cache surface that remains is the one that earns its keep: the prompt
+    ///         cache itself, keyed by this hash.
+    ///     </para>
+    ///     <para>
+    ///         Keys from this builder do not byte-match keys produced before this
+    ///         rewrite: schemas now hash as canonical JSON rather than raw text, and the
+    ///         fields are chunk-encoded rather than joined. That is safe — the prompt
+    ///         cache is in-memory for one decorator instance and there is no persisted
+    ///         key — and it lands as one sole extra rebuild for whatever distinct
+    ///         contexts run before the decorator's next disposal, not as a missed hit.
+    ///     </para>
     /// </remarks>
     private static string ComputeKey(SystemPromptContext context)
     {
-        var sb = new StringBuilder(512);
-        AppendField(sb, context.Agent.Name.Value);
-        AppendField(sb, context.Agent.DisplayName);
-        AppendField(sb, context.Agent.Description);
-        AppendField(sb, context.Agent.Model);
+        using IncrementalHash hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
+        var schemaBuffer = new ArrayBufferWriter<byte>(256);
+        using var schemaWriter = new Utf8JsonWriter(schemaBuffer, new JsonWriterOptions { SkipValidation = true });
+
+        AppendField(hash, context.Agent.Name.Value);
+        AppendField(hash, context.Agent.DisplayName);
+        AppendField(hash, context.Agent.Description);
+        AppendField(hash, context.Agent.Model);
         // Over-keyed, and declared as such in PromptCacheKeyCoverageRules: the
         // agent's provider is never rendered. It stays because dropping it is not
         // what fixes #815 — adding the model's is — and because it is the cheapest
         // per-agent cache separation available.
-        AppendField(sb, context.Agent.ProviderId);
-        AppendField(sb, context.Agent.Temperature?.ToString(System.Globalization.CultureInfo.InvariantCulture));
-        AppendField(sb, context.Agent.ReasoningEffort?.ToString());
-        AppendField(sb, context.Agent.SystemPromptAppend);
-        AppendField(sb, context.Model.ProviderId);
-        AppendField(sb, context.Model.Id);
+        AppendField(hash, context.Agent.ProviderId);
+        AppendField(hash, context.Agent.Temperature?.ToString(System.Globalization.CultureInfo.InvariantCulture));
+        AppendField(hash, context.Agent.ReasoningEffort?.ToString());
+        AppendField(hash, context.Agent.SystemPromptAppend);
+        AppendField(hash, context.Model.ProviderId);
+        AppendField(hash, context.Model.Id);
 
         var tools = context.Tools;
         for (int i = 0; i < tools.Count; i++)
         {
             var t = tools[i];
-            AppendField(sb, t.Name.Value);
-            AppendField(sb, t.Description);
-            string raw = _schemaTextCache.GetOrAdd(t.Schema, static d => d.RootElement.GetRawText());
-            AppendField(sb, raw);
-            AppendField(sb, t.PromptSnippet);
+            AppendField(hash, t.Name.Value);
+            AppendField(hash, t.Description);
+            AppendSchemaField(hash, t.Schema, schemaWriter, schemaBuffer);
+            AppendField(hash, t.PromptSnippet);
             // #792: the builder emits up to MaxGuidelinesPerTool of these as
             // `  - <guideline>` lines, which makes them prompt content exactly
             // as the three fields above are. Keyed raw — every guideline, not
@@ -232,36 +264,109 @@ public sealed class CachingSystemPromptBuilder(ISystemPromptBuilder inner) : ISy
             var guidelines = t.PromptGuidelines;
             for (int g = 0; g < guidelines.Count; g++)
             {
-                AppendField(sb, guidelines[g]);
+                AppendField(hash, guidelines[g]);
             }
         }
 
         var files = context.ContextFiles;
         for (int i = 0; i < files.Count; i++)
         {
-            AppendField(sb, files[i].Path);
-            AppendField(sb, files[i].Content);
+            AppendField(hash, files[i].Path);
+            AppendField(hash, files[i].Content);
         }
 
         var skills = context.Skills;
         for (int i = 0; i < skills.Count; i++)
         {
-            AppendField(sb, skills[i].Name);
-            AppendField(sb, skills[i].Description);
-            AppendField(sb, skills[i].FilePath);
+            AppendField(hash, skills[i].Name);
+            AppendField(hash, skills[i].Description);
+            AppendField(hash, skills[i].FilePath);
         }
 
-        AppendField(sb, context.McpInstructions);
-        AppendField(sb, context.WorkingDirectory);
+        AppendField(hash, context.McpInstructions);
+        AppendField(hash, context.WorkingDirectory);
 
-        byte[] hash = SHA256.HashData(Encoding.UTF8.GetBytes(sb.ToString()));
-        return Convert.ToHexString(hash);
+        return Convert.ToHexString(hash.GetHashAndReset());
     }
 
-    /// <summary>Append one field plus separator; null fields collapse to a bare separator.</summary>
-    private static void AppendField(StringBuilder sb, string? field)
+    /// <summary>
+    ///     Append one field plus a separator byte; null fields collapse to a bare
+    ///     separator. The field's UTF-8 encoding reaches the hash through bounded
+    ///     chunks — a context file can be arbitrarily large, and the turn must not
+    ///     hold its entire encoding in memory just to hash it (#1532).
+    /// </summary>
+    private static void AppendField(IncrementalHash hash, string? field)
     {
-        sb.Append(field);
-        sb.Append(Separator);
+        AppendChars(hash, field);
+        hash.AppendData(SeparatorBytes);
     }
+
+    /// <summary>
+    ///     Encode <paramref name="chars" /> into the hash in bounded chunks: never
+    ///     more than <see cref="MaxChunkBytes" /> encoded bytes exist at a time,
+    ///     whatever the field size. Chunk boundaries avoid splitting surrogate
+    ///     pairs, so a pair cuts with the chunk it belongs to; every split is
+    ///     deterministic from the field's own length, so the same field hashes to
+    ///     the same bytes on every turn.
+    /// </summary>
+    /// <remarks>
+    ///     <see cref="Encoding.UTF8" /> emits at most three UTF-8 bytes for one
+    ///     <c>char</c> (rounded up), which pins <see cref="MaxChunkBytes" /> to
+    ///     <c>GetMaxByteCount(MaxChunkChars)</c>; the span target of
+    ///     <c>Encoding.GetBytes</c> throws on a too-small buffer, hence the bound.
+    /// </remarks>
+    private static void AppendChars(IncrementalHash hash, ReadOnlySpan<char> chars)
+    {
+        // Hoisted out of the loop on purpose: inside the loop body it would
+        // re-stackalloc on every iteration (see EscapeCodeStrategy for the same
+        // discipline in this codebase).
+        Span<byte> scratch = stackalloc byte[MaxChunkBytes];
+        while (chars.Length > 0)
+        {
+            int take = Math.Min(chars.Length, MaxChunkChars);
+            if (take < chars.Length && take > 1 && char.IsHighSurrogate(chars[take - 1]))
+            {
+                take--; // keep the pair with the chunk it belongs to
+            }
+
+            int written = Encoding.UTF8.GetBytes(chars[..take], scratch);
+            hash.AppendData(scratch[..written]);
+            chars = chars[take..];
+        }
+    }
+
+    /// <summary>
+    ///     Hash one tool schema in place: <see cref="JsonElement.WriteTo" /> streams
+    ///     canonical UTF-8 JSON into a reused <see cref="ArrayBufferWriter" />, so a
+    ///     turn builds no per-schema raw-text string and keeps no per-schema cache
+    ///     entry (#1532).
+    /// </summary>
+    /// <remarks>
+    ///     Canonical JSON is a deliberate rep of the raw text the schema dump used to
+    ///     read: two documents print equal bytes when their value trees are equal,
+    ///     regardless of the whitespace their literal text carried — a stronger
+    ///     notion of "same schema" for a key than raw text had.
+    /// </remarks>
+    private static void AppendSchemaField(
+        IncrementalHash hash,
+        JsonDocument schema,
+        Utf8JsonWriter writer,
+        ArrayBufferWriter<byte> buffer)
+    {
+        buffer.Clear();
+        writer.Reset(buffer);
+        schema.RootElement.WriteTo(writer);
+        writer.Flush();
+        hash.AppendData(buffer.WrittenSpan);
+        hash.AppendData(SeparatorBytes);
+    }
+
+    /// <summary>
+    ///     Bounded-encoding knobs for <see cref="AppendField" />:
+    ///     <see cref="MaxChunkChars" /> source characters encode under
+    ///     <see cref="MaxChunkBytes" /> target bytes, per the
+    ///     <c>Encoding.UTF8.GetMaxByteCount</c> ceiling (<c>(chars + 1) × 3</c>).
+    /// </summary>
+    private const int MaxChunkChars = 80;
+    private const int MaxChunkBytes = (MaxChunkChars + 1) * 3;
 }

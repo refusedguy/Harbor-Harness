@@ -195,6 +195,15 @@ jobs:
           sudo systemctl stop snapd.service snapd.socket || true
           taskset -c 1 dotnet run -c Release --no-build -- --filter '*CellSimd*' --job Short
 
+      # #1532: the prompt-cache key is a per-turn hot path (it is read once per
+      # turn even on a hit). Build_Hit/Build_Miss cover it; the CachingPrompt
+      # scaling-gate rows in docs/BENCHMARKS.md are filled from this step.
+      - name: Bench CachingPrompt key path
+        working-directory: tests/Harbor.Benchmarks
+        run: |
+          sudo systemctl stop snapd.service snapd.socket || true
+          taskset -c 1 dotnet run -c Release --no-build -- --filter '*CachingPrompt*' --job Short
+
       - name: Publish results to job summary
         if: always()
         shell: bash
