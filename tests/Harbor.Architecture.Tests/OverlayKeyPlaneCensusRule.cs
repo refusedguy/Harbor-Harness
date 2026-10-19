@@ -154,13 +154,20 @@ internal readonly record struct OverlayLayerCensus(
 /// </summary>
 internal static class OverlayKeyPlaneProbe
 {
-    /// <summary>The layer declaration form: a sealed class implementing the overlay seam.</summary>
+    /// <summary>
+    ///     The layer declaration form: a sealed class on the overlay seam, either
+    ///     directly (<c>: IOverlayLayer</c>) or through the shared abstract
+    ///     <c>OverlayLayerBase&lt;TOverlay&gt;</c> skeleton (#1537 collapsed the
+    ///     eight byte-identical skeletons into it; the skeleton base is abstract,
+    ///     so it is never a census row, and the fact columns below are unchanged).
+    /// </summary>
     internal static readonly Regex LayerDeclaration =
-        new(@"public\s+sealed\s+class\s+(?<name>\w+)\s*:\s*IOverlayLayer\b", RegexOptions.Compiled);
+        new(@"public\s+sealed\s+class\s+(?<name>\w+)\s*:\s*(?:IOverlayLayer\b|OverlayLayerBase<)", RegexOptions.Compiled);
 
-    /// <summary>The key-reading override. Its absence means the interface default `=&gt; false`.</summary>
+
+    /// <summary>The key-reading override. Its absence means the observe-only default (`=&gt; false`, the interface's before #1537, the base class's since it — the base ships <see langword="virtual"/> and key-reading seats override it).</summary>
     internal static readonly Regex ReadsKeys =
-        new(@"public\s+bool\s+OnKey\s*\(\s*in\s+KeyEvent\s+key\s*\)", RegexOptions.Compiled);
+        new(@"public\s+(?:override\s+)?bool\s+OnKey\s*\(\s*in\s+KeyEvent\s+key\s*\)", RegexOptions.Compiled);
 
     /// <summary>A lazily-constructed layer field, as <c>SyncOverlays</c> declares them.</summary>
     internal static readonly Regex LazyLayerField =

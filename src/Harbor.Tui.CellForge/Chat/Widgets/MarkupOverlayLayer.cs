@@ -1,5 +1,4 @@
 using Harbor.Tui.CellForge.Rendering;
-using Ensure = Harbor.Abstractions.Extensions.Ensure;
 
 namespace Harbor.Tui.CellForge.Widgets;
 
@@ -17,64 +16,24 @@ namespace Harbor.Tui.CellForge.Widgets;
 /// <see cref="MarkupOverlay.HandleKey" /> directly) rather than from
 /// <see cref="IsModal" />, since no product code calls
 /// <see cref="OverlayStack.RouteKey" /> (#858). The layer takes the
-/// <c>OnKey</c> default, exactly like the dialog and toast layers.
+/// <c>OnKey</c> default, exactly like the dialog and toast layers. Skeleton
+/// (viewport, <see cref="Sync"/>, the <see cref="Paint"/> guard chain, flags)
+/// lives in <see cref="OverlayLayerBase{TOverlay}" /> (#1537).
 /// </summary>
-public sealed class MarkupOverlayLayer : IOverlayLayer
+public sealed class MarkupOverlayLayer : OverlayLayerBase<MarkupOverlay>
 {
     /// <summary>Stable layer id (push replaces by id, moving to top).</summary>
     public const string LayerId = "markup";
 
-    private readonly MarkupOverlay _overlay;
-    private Rect _viewport = new(0, 0, 80, 24);
-
     public MarkupOverlayLayer(MarkupOverlay overlay)
+        : base(overlay, LayerId, opaque: true, hitTransparent: false, isModal: true)
     {
-        _overlay = overlay ?? throw new ArgumentNullException(nameof(overlay));
     }
 
-    public string Id => LayerId;
+    /// <summary>The fullscreen box is computed from the pushed viewport.</summary>
+    protected override Rect ComputeBoundsCore(Rect viewport) => Overlay.ComputeBox(viewport);
 
-    public Rect Bounds => _overlay.ComputeBox(_viewport);
+    protected override bool IsShownCore => Overlay.Visible;
 
-    public bool Visible => _overlay.Visible && Bounds.Width > 0 && Bounds.Height > 0;
-
-    public bool Opaque => true;
-
-    public bool HitTransparent => false;
-
-    /// <summary>
-    /// Modal: while the markup session is up, keys stop at this layer and the
-    /// panels beneath starve — an annotated screenshot must not be typed into.
-    /// </summary>
-    public bool IsModal => true;
-
-    /// <summary>Refreshes the viewport the fullscreen box is computed from.</summary>
-    public void Sync(Rect viewport) => _viewport = viewport;
-
-    /// <summary>
-    /// Paints the overlay for one <paramref name="clip" /> fragment. The layer
-    /// is fullscreen and opaque; fragmented clips repaint the box and rely on
-    /// bottom-to-top order — the opaque layer above wins.
-    /// </summary>
-    public void Paint(ScreenBuffer buffer, Rect clip)
-    {
-        Ensure.NotNull(buffer);
-        if (!_overlay.Visible)
-        {
-            return;
-        }
-
-        var box = Bounds;
-        if (box.Width <= 0 || box.Height <= 0)
-        {
-            return;
-        }
-
-        if (box.Intersect(clip).Area == 0)
-        {
-            return;
-        }
-
-        _overlay.Paint(buffer, _viewport);
-    }
+    protected override void PaintCore(ScreenBuffer buffer, Rect box) => Overlay.Paint(buffer, Viewport);
 }

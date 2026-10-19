@@ -1,6 +1,4 @@
 using Harbor.Tui.CellForge.Rendering;
-using Ensure = Harbor.Abstractions.Extensions.Ensure;
-using Harbor.Ui.Framework.Rendering;
 
 namespace Harbor.Tui.CellForge.Widgets;
 
@@ -9,58 +7,28 @@ namespace Harbor.Tui.CellForge.Widgets;
 /// Non-opaque (never occludes layers beneath) and hit-transparent (pointer
 /// events fall through). The host pushes one instance onto
 /// <c>LayoutTree.Overlays</c> above the dialog layer and calls
-/// <see cref="Sync"/> per frame; hidden paint stays a no-op.
+/// <see cref="Sync"/> per frame; hidden paint stays a no-op. Skeleton
+/// (viewport, <see cref="Sync"/>, the <see cref="Paint"/> guard chain, flags)
+/// lives in <see cref="OverlayLayerBase{TOverlay}"/> (#1537).
 /// </summary>
-public sealed class ToastOverlayLayer : IOverlayLayer
+public sealed class ToastOverlayLayer : OverlayLayerBase<ToastOverlay>
 {
     /// <summary>Stable layer id (push replaces by id, moving to top).</summary>
     public const string LayerId = "toast";
 
-    private readonly ToastOverlay _overlay;
-    private Rect _viewport = new(0, 0, 80, 24);
-
     public ToastOverlayLayer(ToastOverlay overlay)
+        : base(overlay, LayerId, opaque: false, hitTransparent: true)
     {
-        _overlay = overlay ?? throw new ArgumentNullException(nameof(overlay));
     }
 
-    public string Id => LayerId;
+    /// <summary>The top-right strip the toasts are laid out in.</summary>
+    protected override Rect ComputeBoundsCore(Rect viewport) => Overlay.ComputeBounds(viewport);
 
-    public Rect Bounds => _overlay.ComputeBounds(_viewport);
-
-    public bool Visible => !_overlay.IsEmpty && Bounds.Width > 0 && Bounds.Height > 0;
-
-    public bool Opaque => false;
-
-    public bool HitTransparent => true;
-
-    /// <summary>Refreshes the viewport the top-right strip is computed from.</summary>
-    public void Sync(Rect viewport) => _viewport = viewport;
+    protected override bool IsShownCore => !Overlay.IsEmpty;
 
     /// <summary>
-    /// Paints the toasts for one <paramref name="clip"/> fragment. Toasts sit
-    /// topmost, so the clip is the full strip in practice; fragmented clips
-    /// repaint the strip and rely on bottom-to-top order for correctness.
+    /// The strip paints its own box (the only seat that does): the overlay
+    /// already clips each toast cell into it.
     /// </summary>
-    public void Paint(ScreenBuffer buffer, Rect clip)
-    {
-        Ensure.NotNull(buffer);
-        if (_overlay.IsEmpty)
-        {
-            return;
-        }
-
-        var bounds = Bounds;
-        if (bounds.Width <= 0 || bounds.Height <= 0)
-        {
-            return;
-        }
-
-        if (bounds.Intersect(clip).Area == 0)
-        {
-            return;
-        }
-
-        _overlay.Paint(buffer, bounds);
-    }
+    protected override void PaintCore(ScreenBuffer buffer, Rect box) => Overlay.Paint(buffer, box);
 }
