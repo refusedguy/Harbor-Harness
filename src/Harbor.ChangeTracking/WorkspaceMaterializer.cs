@@ -24,11 +24,12 @@ namespace Harbor.ChangeTracking;
 ///         falls back to working in the caller's tree.
 ///     </para>
 ///     <para>
-///         The runs root is resolved exactly like
-///         <c>Harbor.Hosting.HarborPaths.GetHarborHome()</c> (<c>HARBOR_HOME</c>
-///         or <c>~/.harbor</c>) but WITHOUT referencing the Hosting project:
-///         Application depends on Abstractions only, so the five lines live in
-///         <see cref="WorkspacePaths" /> rather than behind a new <c>ProjectReference</c>.
+///         The runs root resolves through
+///         <c>Harbor.Abstractions.Filesystem.HarborPaths.GetHarborHome()</c>
+///         (<c>HARBOR_HOME</c> or <c>~/.harbor</c>) — the same helper
+///         Harbor.Hosting forwards to (#1570). Application depends on
+///         Abstractions only, and no longer carries its own copy of the
+///         resolution: the one-line fan-in lives in <see cref="WorkspacePaths" />.
 ///     </para>
 /// </remarks>
 public static class WorkspaceMaterializer

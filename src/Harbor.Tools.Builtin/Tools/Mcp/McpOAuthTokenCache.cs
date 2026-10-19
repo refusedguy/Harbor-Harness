@@ -45,12 +45,14 @@ public sealed class McpOAuthTokenCache
         _directory = directory ?? DefaultDirectory();
     }
 
-    /// <summary>Resolve the default cache directory (mirrors HarborPaths: HARBOR_HOME wins).</summary>
+    /// <summary>
+    ///     Resolve the default cache directory out of <see cref="Harbor.Abstractions.Filesystem.HarborPaths" />
+    ///     (HARBOR_HOME wins) — the single home resolution shared with the rest of
+    ///     the harness (#1570), previously a verbatim copy.
+    /// </summary>
     public static string DefaultDirectory()
     {
-        string home = Environment.GetEnvironmentVariable("HARBOR_HOME") is { Length: > 0 } custom
-            ? custom
-            : Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".harbor");
+        string home = Harbor.Abstractions.Filesystem.HarborPaths.GetHarborHome();
         return Path.Combine(home, "mcp-oauth");
     }
 

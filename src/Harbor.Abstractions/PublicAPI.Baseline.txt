@@ -83,6 +83,9 @@ Harbor.Abstractions.Events.IEventSubscriber :: public interface IEventSubscriber
 Harbor.Abstractions.Filesystem.DirectoryEntry :: public sealed record DirectoryEntry(string Name, string FullPath, bool IsDirectory, bool IsHidden)
 Harbor.Abstractions.Filesystem.DirectoryListing :: public sealed record DirectoryListing(string Directory, IReadOnlyList<DirectoryEntry> Entries, bool Truncated = false, int TotalCount = 0)
 Harbor.Abstractions.Filesystem.DirectoryListing :: public static DirectoryListing Empty(string directory)
+Harbor.Abstractions.Filesystem.HarborPaths :: public const string HarborHomeVariable = "HARBOR_HOME"
+Harbor.Abstractions.Filesystem.HarborPaths :: public static class HarborPaths
+Harbor.Abstractions.Filesystem.HarborPaths :: public static string GetHarborHome()
 Harbor.Abstractions.Filesystem.IDirectoryLister :: Task<Result<DirectoryListing>> ListAsync(string directory, CancellationToken cancellationToken = default)
 Harbor.Abstractions.Filesystem.IDirectoryLister :: public interface IDirectoryLister
 Harbor.Abstractions.Filesystem.IFileTreePolicy :: bool IsIgnoredDirectory(string name)
