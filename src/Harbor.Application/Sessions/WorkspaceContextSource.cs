@@ -1,5 +1,3 @@
-using System.Collections.Concurrent;
-using System.Text;
 using Harbor.Abstractions.Tools;
 
 namespace Harbor.Application.Sessions;
@@ -14,160 +12,73 @@ namespace Harbor.Application.Sessions;
 /// </summary>
 /// <remarks>
 ///     <para>
+///         #1523: this used to be a <c>static class</c> owning a process-wide
+///         cache outside DI. The implementation now lives in the injectable
+///         <see cref="WorkspaceContextService" /> (registered in the
+///         composition root as the <see cref="IWorkspaceContextSource" />
+///         singleton), and this type remains as a thin migration forwarder on
+///         the same shared instance, so pre-DI call sites keep a single cache.
+///         New code injects <see cref="IWorkspaceContextSource" />.
+///     </para>
+///     <para>
 ///         All lookups are existence-tolerant: a missing directory or file
 ///         yields an empty result, never a failure — a workspace without skills
 ///         is normal, not an error.
 ///     </para>
-///     <para>
-///         Skill format: <c>&lt;name&gt;/SKILL.md</c> in a skills root
-///         (preferred — front-matter <c>name:</c>, else the directory name) or
-///         a legacy flat <c>&lt;name&gt;.md</c> file. The description comes
-///         from a front-matter <c>description:</c> line when present, otherwise
-///         from the first non-empty line stripped of Markdown markers.
-///         Project-local skills shadow global ones with the same name.
-///     </para>
-///     <para>
-///         Per-turn cost is bounded: two directory enumerations plus reading at
-///         most the first few lines of every skill file and the full text of the
-///         two context files. The expensive prompt assembly itself stays behind
-///         <see cref="CachingSystemPromptBuilder" />'s content hash.
-///     </para>
 /// </remarks>
 public static class WorkspaceContextSource
 {
+    /// <summary>
+    ///     The shared workspace source: the very instance the composition root
+    ///     registers as <see cref="IWorkspaceContextSource" />, so static and
+    ///     DI consumers read one cache (#1523).
+    /// </summary>
+    public static WorkspaceContextService Instance { get; } = new();
+
     /// <summary>Project context files probed in the working directory.</summary>
-    public static readonly string[] ContextFileNames = ["AGENTS.md", "CLAUDE.md"];
-
-    private const string ProjectSkillsDir = ".harbor/skills";
-    private const string SkillFileName = "SKILL.md";
-    private const int MaxDescriptionLength = 160;
-    // Safety valve so a stray huge file cannot swallow the model's context window.
-    private const long MaxContextFileBytes = 256 * 1024;
-
-    private sealed record CachedSnapshot(
-        IReadOnlyList<ContextFile> Files,
-        IReadOnlyList<SkillDescriptor> Skills,
-        long Version);
-
-    private static readonly ConcurrentDictionary<string, CachedSnapshot> _cache = new(StringComparer.Ordinal);
+    public static string[] ContextFileNames => WorkspaceContextService.ContextFileNames;
 
     /// <summary>
     ///     Cached variant of the two per-turn loads. Version = XOR of last-write ticks of
     ///     AGENTS.md/CLAUDE.md and both skill directories. Fast path reuses the cached
     ///     lists without touching skill-file contents.
     /// </summary>
-    public static (IReadOnlyList<ContextFile> Files, IReadOnlyList<SkillDescriptor> Skills) GetOrLoadCached(string workingDirectory)
-    {
-        long version = 0;
-        try
-        {
-            foreach (string name in ContextFileNames)
-            {
-                string path = Path.Combine(workingDirectory, name);
-                if (File.Exists(path))
-                    version ^= new FileInfo(path).LastWriteTimeUtc.Ticks;
-            }
-            string projectSkillsDir = Path.Combine(workingDirectory, ProjectSkillsDir);
-            if (Directory.Exists(projectSkillsDir))
-                version ^= new DirectoryInfo(projectSkillsDir).LastWriteTimeUtc.Ticks;
-            string userProfile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-            if (!string.IsNullOrEmpty(userProfile))
-            {
-                string globalSkillsDir = Path.Combine(userProfile, ProjectSkillsDir);
-                if (Directory.Exists(globalSkillsDir))
-                    version ^= new DirectoryInfo(globalSkillsDir).LastWriteTimeUtc.Ticks;
-            }
-        }
-        catch { /* best-effort version */ }
+    public static (IReadOnlyList<ContextFile> Files, IReadOnlyList<SkillDescriptor> Skills) GetOrLoadCached(
+        string workingDirectory) =>
+        Instance.GetOrLoadCached(workingDirectory);
 
-        if (_cache.TryGetValue(workingDirectory, out var snap) && snap.Version == version)
-            return (snap.Files, snap.Skills);
-
-        var files = LoadContextFiles(workingDirectory);
-        var skills = LoadSkills(workingDirectory);
-        var entry = new CachedSnapshot(files, skills, version);
-        _cache[workingDirectory] = entry;
-        return (files, skills);
-    }
-
-    /// <summary>Evict one directory from the workspace cache (tests/benchmarks).</summary>
-    public static void Invalidate(string workingDirectory) => _cache.TryRemove(workingDirectory, out _);
+    /// <summary>
+    ///     Evict one directory from the workspace cache (tests/benchmarks).
+    ///     #1523: the eviction is per instance — tests that must not share the
+    ///     cache use a fresh <c>WorkspaceContextService</c> instead.
+    /// </summary>
+    public static void Invalidate(string workingDirectory) => Instance.Invalidate(workingDirectory);
 
     /// <summary>Load project context files found in <paramref name="workingDirectory" />.</summary>
-    public static IReadOnlyList<ContextFile> LoadContextFiles(string workingDirectory)
-    {
-        var files = new List<ContextFile>(ContextFileNames.Length);
-        foreach (string name in ContextFileNames)
-        {
-            string path = Path.Combine(workingDirectory, name);
-            if (!File.Exists(path))
-            {
-                continue;
-            }
-
-            try
-            {
-                var info = new FileInfo(path);
-                if (info.Length == 0 || info.Length > MaxContextFileBytes)
-                {
-                    continue;
-                }
-
-                files.Add(new ContextFile(name, File.ReadAllText(path)));
-            }
-            catch (IOException)
-            {
-                // Unreadable context file — skip it; the prompt builds without it.
-            }
-        }
-
-        return files;
-    }
+    public static IReadOnlyList<ContextFile> LoadContextFiles(string workingDirectory) =>
+        Instance.LoadContextFiles(workingDirectory);
 
     /// <summary>
     ///     Render aggregated MCP server instructions as a prompt block
     ///     (ROP-D Z3). Returns <c>null</c> when no server reported instructions
     ///     so the builder skips the section entirely.
     /// </summary>
-    public static string? FormatMcpInstructions(IReadOnlyList<McpServerInstructions>? servers)
-    {
-        if (servers is null || servers.Count == 0)
-        {
-            return null;
-        }
-
-        var sb = new StringBuilder("Instructions from connected MCP servers:");
-        foreach (McpServerInstructions server in servers)
-        {
-            sb.Append("\n- ").Append(server.ServerName).Append(": ")
-              .Append(server.Instructions.ReplaceLineEndings(" "));
-        }
-
-        return sb.ToString();
-    }
+    public static string? FormatMcpInstructions(IReadOnlyList<McpServerInstructions>? servers) =>
+        Instance.FormatMcpInstructions(servers);
 
     /// <summary>
     ///     Load available skills from the project-local and global skill
     ///     directories. Project-local entries win on name collisions.
     /// </summary>
-    public static IReadOnlyList<SkillDescriptor> LoadSkills(string workingDirectory)
-    {
-        string userProfile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-        string? globalSkillsDir = string.IsNullOrEmpty(userProfile)
-            ? null
-            : Path.Combine(userProfile, ProjectSkillsDir);
-        return LoadSkills(workingDirectory, globalSkillsDir);
-    }
+    public static IReadOnlyList<SkillDescriptor> LoadSkills(string workingDirectory) =>
+        Instance.LoadSkills(workingDirectory);
 
     /// <summary>
     ///     Testable core: the global skill directory is injected instead of
     ///     resolved from the user profile.
     /// </summary>
-    public static IReadOnlyList<SkillDescriptor> LoadSkills(string workingDirectory, string? globalSkillsDir)
-    {
-        string projectSkillsDir = Path.Combine(workingDirectory, ProjectSkillsDir);
-        return LoadSkillsFromRoots(projectSkillsDir, globalSkillsDir);
-    }
+    public static IReadOnlyList<SkillDescriptor> LoadSkills(string workingDirectory, string? globalSkillsDir) =>
+        Instance.LoadSkills(workingDirectory, globalSkillsDir);
 
     /// <summary>
     ///     Load skills from explicit skills roots (e.g. CLI <c>skill list</c>
@@ -176,213 +87,8 @@ public static class WorkspaceContextSource
     /// <remarks>
     ///     #1240: the returned array is sorted by name (ordinal) — a frozen
     ///     snapshot the per-turn consumer (<c>SystemPromptBuilder</c>) iterates
-    ///     as-is instead of paying an <c>OrderBy</c> per turn. Discovery walks
-    ///     two roots (project, then global) and two shapes per root (flat, then
-    ///     directory), so per-root ordering alone cannot yield a globally
-    ///     sorted list; the sort here is what makes it total. A front-matter
-    ///     <c>name:</c> can also reorder within one root for the same reason.
+    ///     as-is instead of paying an <c>OrderBy</c> per turn.
     /// </remarks>
-    public static IReadOnlyList<SkillDescriptor> LoadSkillsFromRoots(string? projectSkillsDir, string? globalSkillsDir)
-    {
-        var skills = new List<SkillDescriptor>();
-        var seenNames = new HashSet<string>(StringComparer.Ordinal);
-
-        // Project first so it shadows same-named global skills.
-        CollectSkills(projectSkillsDir, skills, seenNames);
-        CollectSkills(globalSkillsDir, skills, seenNames);
-        skills.Sort(CompareSkillsByName);
-        return skills.ToArray();
-    }
-
-    private static int CompareSkillsByName(SkillDescriptor left, SkillDescriptor right) =>
-        string.CompareOrdinal(left.Name, right.Name);
-
-    private static void CollectSkills(string? directory, List<SkillDescriptor> skills, HashSet<string> seenNames)
-    {
-        if (string.IsNullOrEmpty(directory) || !Directory.Exists(directory))
-        {
-            return;
-        }
-
-        string[] skillFiles;
-        try
-        {
-            skillFiles = Directory.GetFiles(directory, "*.md", SearchOption.TopDirectoryOnly);
-        }
-        catch (IOException)
-        {
-            return;
-        }
-        catch (UnauthorizedAccessException)
-        {
-            return;
-        }
-
-        Array.Sort(skillFiles, StringComparer.Ordinal);
-
-        foreach (string filePath in skillFiles)
-        {
-            string name = Path.GetFileNameWithoutExtension(filePath);
-            if (name.Length == 0 || !seenNames.Add(name))
-            {
-                continue;
-            }
-
-            skills.Add(new SkillDescriptor(name, ExtractDescription(filePath), filePath));
-        }
-
-        CollectSkillDirectories(directory, skills, seenNames);
-    }
-
-    /// <summary>
-    ///     Second discovery shape: <c>&lt;root&gt;/&lt;name&gt;/SKILL.md</c>.
-    ///     The skill name is the front-matter <c>name:</c> when present, else
-    ///     the directory name. Runs after the flat scan in the same root so a
-    ///     flat <c>&lt;name&gt;.md</c> wins ties within one root (documented
-    ///     precedence); project-vs-global shadowing is unchanged.
-    /// </summary>
-    private static void CollectSkillDirectories(string? directory, List<SkillDescriptor> skills, HashSet<string> seenNames)
-    {
-        if (string.IsNullOrEmpty(directory) || !Directory.Exists(directory))
-        {
-            return;
-        }
-
-        string[] subdirs;
-        try
-        {
-            subdirs = Directory.GetDirectories(directory);
-        }
-        catch (IOException)
-        {
-            return;
-        }
-        catch (UnauthorizedAccessException)
-        {
-            return;
-        }
-
-        Array.Sort(subdirs, StringComparer.Ordinal);
-
-        foreach (string subdir in subdirs)
-        {
-            string skillFile = Path.Combine(subdir, SkillFileName);
-            if (!File.Exists(skillFile))
-            {
-                continue;
-            }
-
-            string name = ExtractName(skillFile) ?? Path.GetFileName(subdir);
-            if (string.IsNullOrEmpty(name) || !seenNames.Add(name))
-            {
-                continue;
-            }
-
-            skills.Add(new SkillDescriptor(name, ExtractDescription(skillFile), skillFile));
-        }
-    }
-
-    /// <summary>Front-matter <c>name:</c> from the first 20 lines, else null.</summary>
-    private static string? ExtractName(string filePath)
-    {
-        try
-        {
-            using var reader = new StreamReader(filePath);
-            bool inFrontMatter = false;
-            int linesRead = 0;
-            while (linesRead++ < 20 && reader.ReadLine() is { } line)
-            {
-                if (linesRead == 1 && line.TrimEnd() == "---")
-                {
-                    inFrontMatter = true;
-                    continue;
-                }
-
-                if (!inFrontMatter)
-                {
-                    return null;
-                }
-
-                if (line.TrimEnd() == "---")
-                {
-                    return null;
-                }
-
-                // Issue #1580: the trim → case-insensitive prefix → trim
-                // → empty→null chain lives in FrontMatter.
-                if (FrontMatter.GetFrontMatterField(line, "name") is { } name)
-                {
-                    return name;
-                }
-            }
-        }
-        catch (IOException)
-        {
-            // Fall through to null below (no front-matter name).
-        }
-
-        return null;
-    }
-
-    /// <summary>
-    ///     Read the skill's short description: front-matter
-    ///     <c>description:</c> when present, else the first non-empty line
-    ///     stripped of Markdown heading/list markers, capped to keep prompts lean.
-    /// </summary>
-    private static string ExtractDescription(string filePath)
-    {
-        try
-        {
-            using var reader = new StreamReader(filePath);
-            bool inFrontMatter = false;
-            int linesRead = 0;
-            while (linesRead++ < 20 && reader.ReadLine() is { } line)
-            {
-                if (linesRead == 1 && line.TrimEnd() == "---")
-                {
-                    inFrontMatter = true;
-                    continue;
-                }
-
-                if (inFrontMatter)
-                {
-                    if (line.TrimEnd() == "---")
-                    {
-                        inFrontMatter = false;
-                        continue;
-                    }
-
-                    if (FrontMatter.GetFrontMatterField(line, "description") is { } description)
-                    {
-                        // Cap stays here: the helper returns the raw field, the
-                        // prompt-lean cap is a description-call-site policy.
-                        return Cap(description);
-                    }
-
-                    continue;
-                }
-
-                string prose = line.TrimStart();
-                if (prose.Length == 0)
-                {
-                    continue;
-                }
-
-                prose = prose.TrimStart('#', ' ', '-', '*').Trim();
-                if (prose.Length > 0)
-                {
-                    return Cap(prose);
-                }
-            }
-        }
-        catch (IOException)
-        {
-            // Fall through to the generic descriptor below.
-        }
-
-        return "No description provided.";
-    }
-
-    private static string Cap(string description) =>
-        description.Length <= MaxDescriptionLength ? description : description[..MaxDescriptionLength];
+    public static IReadOnlyList<SkillDescriptor> LoadSkillsFromRoots(string? projectSkillsDir, string? globalSkillsDir) =>
+        Instance.LoadSkillsFromRoots(projectSkillsDir, globalSkillsDir);
 }

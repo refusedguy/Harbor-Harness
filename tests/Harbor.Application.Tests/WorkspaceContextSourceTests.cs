@@ -272,4 +272,61 @@ public class WorkspaceContextSourceTests : IDisposable
         // Multi-line server text is flattened to one line per bullet.
         await Assert.That(block).Contains("- git: Never force-push. Use dry runs.");
     }
+
+    // ---- #1523: the snapshot cache is instance state, not a static global --
+
+    /// <summary>
+    ///     #1523: one instance's cache hit reuses the same snapshot lists —
+    ///     reference identity proves the fast path, not a reload.
+    /// </summary>
+    [Test]
+    public async Task GetOrLoadCached_SecondCall_SameInstance_ReusesCachedSnapshot()
+    {
+        await File.WriteAllTextAsync(Path.Combine(_dir, "AGENTS.md"), "# agents rules");
+        var source = new WorkspaceContextService();
+
+        var (first, _) = source.GetOrLoadCached(_dir);
+        var (second, _) = source.GetOrLoadCached(_dir);
+
+        await Assert.That(second).IsSameReferenceAs(first);
+    }
+
+    /// <summary>
+    ///     #1523: fresh instances own fresh caches — the old static global
+    ///     would let a second "instance" see the first one's snapshot.
+    /// </summary>
+    [Test]
+    public async Task GetOrLoadCached_DistinctInstances_DoNotShareCache()
+    {
+        await File.WriteAllTextAsync(Path.Combine(_dir, "AGENTS.md"), "# agents rules");
+        var first = new WorkspaceContextService();
+        var second = new WorkspaceContextService();
+
+        var (firstFiles, _) = first.GetOrLoadCached(_dir);
+        var (secondFiles, _) = second.GetOrLoadCached(_dir);
+
+        await Assert.That(secondFiles).IsNotSameReferenceAs(firstFiles);
+    }
+
+    /// <summary>
+    ///     #1523: <c>Invalidate</c> evicts on the instance it was called on
+    ///     only — the replacing fixture/scope isolation story for the old
+    ///     static test hook.
+    /// </summary>
+    [Test]
+    public async Task Invalidate_InstanceScoped_EvictsOnlyThatInstance()
+    {
+        await File.WriteAllTextAsync(Path.Combine(_dir, "AGENTS.md"), "# agents rules");
+        var evicted = new WorkspaceContextService();
+        var untouched = new WorkspaceContextService();
+
+        var (evictedFirst, _) = evicted.GetOrLoadCached(_dir);
+        var (untouchedFirst, _) = untouched.GetOrLoadCached(_dir);
+        evicted.Invalidate(_dir);
+        var (evictedSecond, _) = evicted.GetOrLoadCached(_dir);
+        var (untouchedSecond, _) = untouched.GetOrLoadCached(_dir);
+
+        await Assert.That(evictedSecond).IsNotSameReferenceAs(evictedFirst);
+        await Assert.That(untouchedSecond).IsSameReferenceAs(untouchedFirst);
+    }
 }
