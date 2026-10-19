@@ -84,10 +84,11 @@ internal sealed class OllamaProviderFactory : IProviderFactory
 
     public ProviderId ProviderId => ProviderId.Create("ollama");
 
+    // #1502: transient-retry at the provider seam (preflight = first event).
     public ILlmClient CreateClient(ILoggerFactory loggerFactory) => new OllamaLlmClient(
         _httpFactory.CreateClient("ollama"),
         new OllamaConfig(),
-        loggerFactory.CreateLogger<OllamaLlmClient>());
+        loggerFactory.CreateLogger<OllamaLlmClient>()).WithTransientRetry(loggerFactory);
 }
 
 #if HARBOR_WITH_ALL_PROVIDERS
@@ -108,7 +109,8 @@ internal sealed class AnthropicProviderFactory : IProviderFactory
         _httpFactory.CreateClient("anthropic"),
         new AnthropicConfig(),
         new ConfigAuthResolver(_authStore, "anthropic"),
-        loggerFactory.CreateLogger<AnthropicLlmClient>());
+        // #1502: transient-retry at the provider seam (preflight = first event).
+        loggerFactory.CreateLogger<AnthropicLlmClient>()).WithTransientRetry(loggerFactory);
 }
 
 internal sealed class OpenAiProviderFactory : IProviderFactory
@@ -128,7 +130,8 @@ internal sealed class OpenAiProviderFactory : IProviderFactory
         _httpFactory.CreateClient("openai"),
         new OpenAIConfig(),
         new ConfigAuthResolver(_authStore, "openai"),
-        loggerFactory.CreateLogger<OpenAILlmClient>());
+        // #1502: transient-retry at the provider seam (preflight = first event).
+        loggerFactory.CreateLogger<OpenAILlmClient>()).WithTransientRetry(loggerFactory);
 }
 #endif
 
@@ -144,10 +147,15 @@ internal sealed class DesktopOllamaProviderFactory : IProviderFactory
 
     public ProviderId ProviderId => ProviderId.Create("ollama");
 
-    public ILlmClient CreateClient(ILoggerFactory loggerFactory) => new OllamaLlmClient(
-        _httpClient,
-        new OllamaConfig(),
-        loggerFactory.CreateLogger<OllamaLlmClient>());
+    public ILlmClient CreateClient(ILoggerFactory loggerFactory)
+    {
+        // #1502: transient-retry at the provider seam (preflight = first event).
+        OllamaLlmClient inner = new(
+            _httpClient,
+            new OllamaConfig(),
+            loggerFactory.CreateLogger<OllamaLlmClient>());
+        return inner.WithTransientRetry(loggerFactory);
+    }
 }
 
 /// <summary>

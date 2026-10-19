@@ -87,7 +87,9 @@ internal static class JsonProviderDiscovery
                     var configRef = config.WithQuirks(Harbor.Providers.OpenAiCompatible.Compat.ProviderCompatFlags.For(config.GetProviderId()));
                     pb.AddProvider(config.Id, () => new Harbor.Providers.OpenAiCompatible.OpenAiCompatibleLlmClient(
                         http, configRef, authResolver, modelCatalog,
-                        loggerFactory.CreateLogger<Harbor.Providers.OpenAiCompatible.OpenAiCompatibleLlmClient>()));
+                        loggerFactory.CreateLogger<Harbor.Providers.OpenAiCompatible.OpenAiCompatibleLlmClient>())
+                        // #1502: transient-retry at the provider seam (preflight = first event).
+                        .WithTransientRetry(loggerFactory));
                     JsonProviderDiscoveryLog.ProviderRegistered(logger, config.Id, file);
                 }
                 catch (Exception ex)
@@ -158,7 +160,9 @@ public static void RegisterJsonProviders(
                     http, config,
                     new ConfigAuthResolver(authStore, config.Id),
                     modelCatalog,
-                    loggerFactory.CreateLogger<OpenAiCompatibleLlmClient>()));
+                    loggerFactory.CreateLogger<OpenAiCompatibleLlmClient>())
+                    // #1502: transient-retry at the provider seam (preflight = first event).
+                    .WithTransientRetry(loggerFactory));
             }
             catch (Exception ex)
             {
@@ -189,7 +193,9 @@ public static void RegisterJsonProviders(
                 http, sealedConfig,
                 new ConfigAuthResolver(authStore, sealedConfig.Id),
                 modelCatalog,
-                loggerFactory.CreateLogger<OpenAiCompatibleLlmClient>()));
+                loggerFactory.CreateLogger<OpenAiCompatibleLlmClient>())
+                // #1502: transient-retry at the provider seam (preflight = first event).
+                .WithTransientRetry(loggerFactory));
         }
         catch (Exception ex)
         {
