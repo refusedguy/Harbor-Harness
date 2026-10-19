@@ -748,11 +748,12 @@ public sealed class ToolDispatcher(
         // toolCall: two display-classes per tool call on the hot path. The
         // lambda bodies are static in behaviour and only toolCall varies per
         // call, so they now route through one small sealed state object per
-        // call (the issue's "small sealed state record" option, ToolContext's
-        // public delegate signatures untouched) and the display-class
-        // allocations are gone. Behaviour stays byte-identical: the progress
-        // callback still awaits the publish inside try/catch (ReportProgressCore)
-        // and Ask still fails closed to Deny on any permission failure (AskCore).
+        // call — the issue's small sealed state record option, with the
+        // ToolContext delegate signatures untouched — and the display-class
+        // allocations are gone. Behaviour stays byte-identical: the publish
+        // remains awaited with failures only logged, per the progress shape
+        // defined on ReportProgressCore, and Ask still fails closed to Deny
+        // on any permission failure, per the AskCore shape from #201 B1.
         ToolCallGates gates = new(this, toolCall);
         return new ToolContext(
             session.Session.Id,
