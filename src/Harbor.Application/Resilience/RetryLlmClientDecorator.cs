@@ -99,7 +99,7 @@ public sealed class RetryLlmClientDecorator : ILlmClient
     private readonly ILlmClient _inner;
     private readonly IRetryPolicy _retryPolicy;
     private readonly RetryOptions _options;
-    private readonly ILogger _logger;
+    private readonly ILogger<RetryLlmClientDecorator> _logger;
 
     /// <summary>
     ///     Construct with explicit policy and budget. Production wiring uses
@@ -115,7 +115,7 @@ public sealed class RetryLlmClientDecorator : ILlmClient
         _inner = inner;
         _retryPolicy = retryPolicy;
         _options = options ?? DefaultProviderRetryOptions;
-        _logger = logger ?? NullLogger.Instance;
+        _logger = logger ?? NullLogger<RetryLlmClientDecorator>.Instance;
     }
 
     /// <inheritdoc />
