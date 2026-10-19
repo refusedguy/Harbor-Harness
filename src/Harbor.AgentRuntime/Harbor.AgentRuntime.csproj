@@ -22,16 +22,18 @@
         implementations moved with the loop that drives them, in the SAME
         Harbor.Application.Resilience namespace per the NetArchLayerRules
         backward-compat convention).
-      - Loop vocabulary read via the ProjectReference below: Harbor.Application
-        .Hooks (IHookRunner, HookDecision, HookVerdict — #1646 will extract),
-        .Sessions (CompactionPolicy, CompactionView, CachingSystemPromptBuilder,
-        MessageConverter, WorkspaceContextSource — #1624 will extract),
-        .Resources (CoreResources) and .Telemetry (#1626 will extract).
+      - Loop vocabulary read via the ProjectReference below: Harbor.Hooks
+        (IHookRunner, HookDecision, HookVerdict — now its own assembly, #1596),
+        Harbor.Application .Sessions (CompactionPolicy, CompactionView,
+        CachingSystemPromptBuilder, MessageConverter, WorkspaceContextSource —
+        #1624 will extract), .Resources (CoreResources) and .Telemetry (#1626
+        will extract).
   -->
   <ItemGroup>
     <ProjectReference Include="..\Harbor.Abstractions\Harbor.Abstractions.csproj"/>
     <ProjectReference Include="..\Harbor.Diagnostics.Abstractions\Harbor.Diagnostics.Abstractions.csproj"/>
     <ProjectReference Include="..\Harbor.Extensions\Harbor.Extensions.csproj"/>
+    <ProjectReference Include="..\Harbor.Hooks\Harbor.Hooks.csproj"/>
     <ProjectReference Include="..\Harbor.Application\Harbor.Application.csproj"/>
   </ItemGroup>
 
@@ -54,6 +56,11 @@
 
   <ItemGroup>
     <Using Remove="System.Linq"/>
+  </ItemGroup>
+  <!-- #1623: StreamingCoalescer moved here with the agent loop and stays internal;
+       the benchmark binds it directly (tests/Harbor.Benchmarks/StreamingCoalescerBenchmark.cs). -->
+  <ItemGroup>
+    <InternalsVisibleTo Include="Harbor.Benchmarks"/>
   </ItemGroup>
 
 </Project>

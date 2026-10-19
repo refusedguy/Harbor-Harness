@@ -526,11 +526,9 @@ public class FullLayerMatrixTests
 
         // ---- Application ----------------------------------------------------
         ["Harbor.Application"] = new(Layer.Application,
-            ["Harbor.Abstractions", "Harbor.Diagnostics.Abstractions", "Harbor.Extensions",
-                // #1613: user-hook runner, verbatim extraction of Application/Hooks
-                // (Application→Application is allowed by MatrixTable_RespectsLayerRules).
+            ["Harbor.Abstractions", "Harbor.Extensions",
                 // #1615: permissions subdomain extraction — mirror edge below.
-                "Harbor.Hooks", "Harbor.Permissions"]),
+                "Harbor.Permissions"]),
         // #1613: Harbor.Hooks — Application-layer sibling like Harbor.Registries:
         // the hook runner binds ToolResult (Domain) + BCL + Logging only; edge is Contracts (Hooks resolves no facade-level type).
         ["Harbor.Hooks"] = new(Layer.Application, ["Harbor.Abstractions.Contracts"]),
@@ -558,7 +556,11 @@ public class FullLayerMatrixTests
         // (ProviderId/ModelRef) via ExpandAllowed.
         ["Harbor.Onboarding"] = new(Layer.Application,
             ["Harbor.Application", "Harbor.Abstractions"]),
-        ["Harbor.AgentRuntime"] = new(Layer.Application, ["Harbor.Abstractions", "Harbor.Diagnostics.Abstractions", "Harbor.Extensions", "Harbor.Application"]),
+        ["Harbor.AgentRuntime"] = new(Layer.Application, ["Harbor.Abstractions", "Harbor.Diagnostics.Abstractions", "Harbor.Extensions",
+            // #1623: the extracted loop binds IHookRunner (UserHookGates, CompactionBehavior,
+            // ToolDispatcher) — the edge Application keeps on its own row, plus Diagnostics
+            // Abstractions for the telemetry measurements the loop publishes.
+            "Harbor.Hooks", "Harbor.Application"]),
         // #1623: agent loop (Agents/AgentLoop..RunBudgetTracker, Agents/Pipeline/*, Resilience impls) —
         // verbatim extract from Harbor.Application, one-way edge; reads the loop vocabulary
         // (Hooks/Sessions/Resources/Telemetry/Resilience contracts) via the Application reference and nothing else.
