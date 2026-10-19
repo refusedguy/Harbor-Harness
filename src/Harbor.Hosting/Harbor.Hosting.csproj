@@ -70,13 +70,15 @@
   <ItemGroup>
     <!-- Base graph: abstractions + contracts + application pipeline (+ Harbor.Hooks,
          #1613 extraction of the user-hook runner, + Harbor.Permissions, #1615
-         extraction of the permission subdomain) + desktop config types
+         extraction of the permission subdomain; + Harbor.Onboarding, #1614 one-way
+         leaf over the configuration family) + desktop config types
            (composition root: references Harbor.Application + Harbor.Registries directly) -->
     <ProjectReference Include="..\Harbor.Abstractions\Harbor.Abstractions.csproj"/>
     <ProjectReference Include="..\Harbor.Abstractions.Contracts\Harbor.Abstractions.Contracts.csproj"/>
     <ProjectReference Include="..\Harbor.Diagnostics.Abstractions\Harbor.Diagnostics.Abstractions.csproj"/>
     <ProjectReference Include="..\Harbor.Telemetry.Core\Harbor.Telemetry.Core.csproj"/>
     <ProjectReference Include="..\Harbor.Application\Harbor.Application.csproj"/>
+    <ProjectReference Include="..\Harbor.Onboarding\Harbor.Onboarding.csproj"/>
     <ProjectReference Include="..\Harbor.Hooks\Harbor.Hooks.csproj"/>
     <ProjectReference Include="..\Harbor.Permissions\Harbor.Permissions.csproj"/>
     <ProjectReference Include="..\Harbor.Registries\Harbor.Registries.csproj"/>
