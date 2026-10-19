@@ -77,11 +77,11 @@ public sealed class SqliteSessionStore : ISessionStore, ISessionCheckpointStore
                 cmd.Parameters.AddWithValue("@model", session.Model);
                 cmd.Parameters.AddWithValue("@provider", session.ProviderId);
                 cmd.Parameters.AddWithValue("@ver", "0.2.0");
-                cmd.Parameters.AddWithValue("@created", session.CreatedAt.ToString("O"));
-                cmd.Parameters.AddWithValue("@updated", session.UpdatedAt.ToString("O"));
+                cmd.Parameters.Add(StampParam("@created", session.CreatedAt));
+                cmd.Parameters.Add(StampParam("@updated", session.UpdatedAt));
                 cmd.Parameters.AddWithValue("@meta", JsonSerializer.Serialize(session.Metadata, SqliteMappers.SessionMetadataInfo));
-                cmd.Parameters.AddWithValue("@status", (int)session.Status);
-                cmd.Parameters.AddWithValue("@kind", (int)session.Kind);
+                cmd.Parameters.Add(IntParam("@status", (int)session.Status));
+                cmd.Parameters.Add(IntParam("@kind", (int)session.Kind));
                 cmd.Parameters.AddWithValue("@parent", (object?)session.ParentSessionId ?? DBNull.Value);
                 cmd.ExecuteNonQuery();
 
@@ -179,8 +179,8 @@ public sealed class SqliteSessionStore : ISessionStore, ISessionCheckpointStore
                 cmd.Parameters.AddWithValue("@role", message.Role);
                 cmd.Parameters.AddWithValue("@agent", message is UserMessage u ? u.Agent : DBNull.Value);
                 cmd.Parameters.AddWithValue("@model", message is UserMessage um ? um.Model : message is AssistantMessage a ? a.Model : DBNull.Value);
-                cmd.Parameters.AddWithValue("@created", message.CreatedAt.ToString("O"));
-                cmd.Parameters.AddWithValue("@createdMs", message.CreatedAt.ToUnixTimeMilliseconds());
+                cmd.Parameters.Add(StampParam("@created", message.CreatedAt));
+                cmd.Parameters.Add(LongParam("@createdMs", message.CreatedAt.ToUnixTimeMilliseconds()));
                 cmd.Parameters.AddWithValue("@payload", SqliteMappers.SerializeMessage(message));
                 cmd.ExecuteNonQuery();
 
@@ -188,7 +188,7 @@ public sealed class SqliteSessionStore : ISessionStore, ISessionCheckpointStore
                 using var upd = conn.CreateCommand();
                 upd.Transaction = tx;
                 upd.CommandText = "UPDATE sessions SET updated_at = @now WHERE id = @sid";
-                upd.Parameters.AddWithValue("@now", DateTimeOffset.UtcNow.ToString("O"));
+                upd.Parameters.Add(StampParam("@now", DateTimeOffset.UtcNow));
                 upd.Parameters.AddWithValue("@sid", sessionId);
                 upd.ExecuteNonQuery();
 
@@ -224,8 +224,8 @@ public sealed class SqliteSessionStore : ISessionStore, ISessionCheckpointStore
                 cmd.Parameters.AddWithValue("@id", message.Id);
                 cmd.Parameters.AddWithValue("@sid", sessionId);
                 cmd.Parameters.AddWithValue("@role", message.Role);
-                cmd.Parameters.AddWithValue("@created", message.CreatedAt.ToString("O"));
-                cmd.Parameters.AddWithValue("@createdMs", message.CreatedAt.ToUnixTimeMilliseconds());
+                cmd.Parameters.Add(StampParam("@created", message.CreatedAt));
+                cmd.Parameters.Add(LongParam("@createdMs", message.CreatedAt.ToUnixTimeMilliseconds()));
                 cmd.Parameters.AddWithValue("@payload", SqliteMappers.SerializeMessage(message));
                 return cmd.ExecuteNonQuery();
             }, ResultErrors.Message)
@@ -377,14 +377,14 @@ public sealed class SqliteSessionStore : ISessionStore, ISessionCheckpointStore
                         WHERE session_id = @sid
                           AND (created_at_ms > @anchor OR (created_at_ms = @anchor AND rowid > @rid))
                         """;
-                    cmd.Parameters.AddWithValue("@anchor", anchorMs);
-                    cmd.Parameters.AddWithValue("@rid", anchorRowId);
+                    cmd.Parameters.Add(LongParam("@anchor", anchorMs));
+                    cmd.Parameters.Add(LongParam("@rid", anchorRowId));
                     deleted = cmd.ExecuteNonQuery();
 
                     using var upd = conn.CreateCommand();
                     upd.Transaction = scope;
                     upd.CommandText = "UPDATE sessions SET updated_at = @now WHERE id = @sid";
-                    upd.Parameters.AddWithValue("@now", DateTimeOffset.UtcNow.ToString("O"));
+                    upd.Parameters.Add(StampParam("@now", DateTimeOffset.UtcNow));
                     upd.Parameters.AddWithValue("@sid", sessionId);
                     upd.ExecuteNonQuery();
 
@@ -469,8 +469,8 @@ public sealed class SqliteSessionStore : ISessionStore, ISessionCheckpointStore
                 insert.Parameters.AddWithValue("@id", checkpoint.Id);
                 insert.Parameters.AddWithValue("@sid", sessionId);
                 insert.Parameters.AddWithValue("@mid", messageId);
-                insert.Parameters.AddWithValue("@idx", index);
-                insert.Parameters.AddWithValue("@created", checkpoint.CreatedAt.ToString("O"));
+                insert.Parameters.Add(IntParam("@idx", index));
+                insert.Parameters.Add(StampParam("@created", checkpoint.CreatedAt));
                 insert.Parameters.AddWithValue("@label", (object?)label ?? DBNull.Value);
                 insert.ExecuteNonQuery();
 
@@ -612,10 +612,10 @@ public sealed class SqliteSessionStore : ISessionStore, ISessionCheckpointStore
                 cmd.Parameters.AddWithValue("@sid", sessionId);
                 cmd.Parameters.AddWithValue("@id", trailId);
                 cmd.Parameters.AddWithValue("@mid", checkpoint.MessageId);
-                cmd.Parameters.AddWithValue("@idx", checkpoint.MessageIndex);
-                cmd.Parameters.AddWithValue("@created", now.ToString("O"));
+                cmd.Parameters.Add(IntParam("@idx", checkpoint.MessageIndex));
+                cmd.Parameters.Add(StampParam("@created", now));
                 cmd.Parameters.AddWithValue("@rewindOf", checkpoint.Id);
-                cmd.Parameters.AddWithValue("@removed", removed);
+                cmd.Parameters.Add(IntParam("@removed", removed));
                 cmd.ExecuteNonQuery();
 
                 cmd.CommandText = "SELECT COUNT(*) FROM messages WHERE session_id = @sid";
@@ -703,10 +703,10 @@ public sealed class SqliteSessionStore : ISessionStore, ISessionCheckpointStore
                                       """;
                     cmd.Parameters.AddWithValue("@id", session.Id);
                     cmd.Parameters.AddWithValue("@title", session.Title);
-                    cmd.Parameters.AddWithValue("@status", (int)session.Status);
-                    cmd.Parameters.AddWithValue("@kind", (int)session.Kind);
+                    cmd.Parameters.Add(IntParam("@status", (int)session.Status));
+                    cmd.Parameters.Add(IntParam("@kind", (int)session.Kind));
                     cmd.Parameters.AddWithValue("@parent", (object?)session.ParentSessionId ?? DBNull.Value);
-                    cmd.Parameters.AddWithValue("@updated", DateTimeOffset.UtcNow.ToString("O"));
+                    cmd.Parameters.Add(StampParam("@updated", DateTimeOffset.UtcNow));
                     return cmd.ExecuteNonQuery();
                 }, ResultErrors.Message)
                 .TapError(e => SqliteSessionStoreLog.UpdateSessionFailed(_logger, session.Id, e))
@@ -794,6 +794,44 @@ public sealed class SqliteSessionStore : ISessionStore, ISessionCheckpointStore
             _initialized = true;
         }
     }
+
+    // ── #1534: typed-parameter shaping for the append/write hot paths ─────
+
+    /// <summary>
+    ///     THE single cached round-trip ("O") timestamp path (issue #1534).
+    ///     Every TEXT date column — sessions.created_at/updated_at,
+    ///     messages.created_at, checkpoints.created_at — formats through this
+    ///     one method, and every read (<c>SqliteMappers.ReadSession</c>,
+    ///     <see cref="ReadCheckpoint" />) parses the same text back with
+    ///     <c>DateTimeOffset.Parse</c>. "O" is the round-trip specifier, so the
+    ///     parse returns the original instant with its offset intact and the
+    ///     symmetry is pinned by <c>SqliteIsoStampRoundTripTests</c>. The
+    ///     chronology authority on message rows is the INTEGER
+    ///     <c>created_at_ms</c> column (ticks, not text); the TEXT stamp stays
+    ///     display-only and keeps <c>ListAsync</c>'s lexicographic
+    ///     <c>ORDER BY updated_at</c> semantics exactly as they were.
+    /// </summary>
+    private static string Timestamp(DateTimeOffset value) => value.ToString("O");
+
+    /// <summary>
+    ///     Typed parameter builders for the write paths (issue #1534). The
+    ///     column's <see cref="SqliteType" /> is known statically at every
+    ///     callsite, so each parameter carries an explicit one instead of
+    ///     <c>SqliteParameterCollection.AddWithValue</c>'s per-call
+    ///     type inference from the runtime value — what #97's "N× boxed
+    ///     AddWithValue" line described. The <see cref="SqliteParameter.Value" />
+    ///     setter itself still boxes the value once (a binder-API shape, not
+    ///     an inference cost); what these builders remove is the per-call
+    ///     inference walk plus the per-site duplicated "O" formatting.
+    /// </summary>
+    private static SqliteParameter IntParam(string name, int value) =>
+        new(name, SqliteType.Integer) { Value = value };
+
+    private static SqliteParameter LongParam(string name, long value) =>
+        new(name, SqliteType.Integer) { Value = value };
+
+    private static SqliteParameter StampParam(string name, DateTimeOffset value) =>
+        new(name, SqliteType.Text) { Value = Timestamp(value) };
 
     private SqliteConnection OpenConnection()
     {
