@@ -22,6 +22,11 @@
          ThemeFileWatcher) lives in the Syntax sibling now; AssistantMarkdownBlock
          still binds CodeTokenizer, so the edge is realized. Namespaces unchanged. -->
     <ProjectReference Include="..\Harbor.Tui.CellForge.Syntax\Harbor.Tui.CellForge.Syntax.csproj"/>
+    <!-- #1618: the prompt-engine pair (Chat/Widgets/ListPromptEngine +
+         FormPromptEngine, SC7+SC6 #1215/#1214) lives in the Prompts sibling
+         now; DialogFormWidgets still builds ListPromptState<string>, so the
+         edge is realized. Namespaces unchanged. -->
+    <ProjectReference Include="..\Harbor.Tui.CellForge.Prompts\Harbor.Tui.CellForge.Prompts.csproj"/>
     <ProjectReference Include="..\Harbor.Ui.Framework.Rendering\Harbor.Ui.Framework.Rendering.csproj"/>
     <ProjectReference Include="..\Harbor.Ui.Framework.State\Harbor.Ui.Framework.State.csproj"/>
     <!-- CF-A-001: прямые референсы вместо транзитивных. Projection/Terminal.Abstractions

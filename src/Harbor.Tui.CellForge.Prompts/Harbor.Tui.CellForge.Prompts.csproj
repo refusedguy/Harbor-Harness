@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsPackable>true</IsPackable>
+    <PackageId>Harbor.Tui.CellForge.Prompts</PackageId>
+    <Description>Harbor TUI prompt engines — the console-free half of the Spectre.Console prompt ports serving CellForge dialogs: ListPromptEngine (ListPromptState/IListPromptStrategy: leaf-index navigation, wrap-around, incremental search, multi-select subtree toggling) and FormPromptEngine (FormPromptState/FormConverters/FormConfirmState: text in, value-or-error out). Extracted verbatim from Harbor.Tui.CellForge (issue #1618); the namespace stays Harbor.Tui.CellForge.Widgets, so consumers keep their usings and only ProjectReferences change. AOT-compatible.</Description>
+    <PackageTags>harbor;tui;prompts;list-prompt;form-prompt;spectre-port</PackageTags>
+    <!-- Presentation sibling of Harbor.Tui.CellForge — must stay trim/AOT-clean. -->
+    <IsAotCompatible>true</IsAotCompatible>
+  </PropertyGroup>
+
+  <!--
+    #1618: verbatim extraction of the CellForge prompt-engine pair
+    (Chat/Widgets/ListPromptEngine.cs (753) + Chat/Widgets/FormPromptEngine.cs
+    (428)). The pair binds ZERO Harbor.Tui.CellForge namespaces — the seam the
+    issue measured — so it moves as one state-only unit: no painting, no
+    palette, no store. The one vocabulary it consumes is the UIR key surface
+    (KeyEvent/KeyCode/KeyModifiers.AcceptsTypedChar) plus the Ensure guards
+    from Harbor.Extensions; Harbor.Ui.Framework.Rendering supplies the keys.
+  -->
+  <ItemGroup>
+    <ProjectReference Include="..\Harbor.Extensions\Harbor.Extensions.csproj"/>
+    <ProjectReference Include="..\Harbor.Ui.Framework.Rendering\Harbor.Ui.Framework.Rendering.csproj"/>
+  </ItemGroup>
+
+</Project>

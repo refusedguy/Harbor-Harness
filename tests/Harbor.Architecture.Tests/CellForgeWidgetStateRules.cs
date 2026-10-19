@@ -58,6 +58,10 @@ public sealed class CellForgeWidgetStateRules
         "src/Harbor.Tui.CellForge/Chat/Widgets",
         "src/Harbor.Tui.CellForge/Chat/Panels",
         "src/Harbor.Tui.CellForge/Chat/Onboarding",
+        // #1618: ListPromptEngine lives in the Prompts sibling after the
+        // move-out; its ListPromptItem.Parent exemption stays recorded in this
+        // table, so the tree follows the file.
+        "src/Harbor.Tui.CellForge.Prompts/Widgets",
     ];
 
     /// <summary>
