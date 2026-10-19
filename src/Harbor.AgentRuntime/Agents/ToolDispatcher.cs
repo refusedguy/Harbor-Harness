@@ -742,6 +742,19 @@ public sealed class ToolDispatcher(
             ToolDispatcherLog.ExecutingTool(logger, toolCall.ToolName, toolCall.Id, toolCall.Args.GetRawText());
         }
 
+        // #1529: both callbacks used to compile to one closure display-class
+        // plus an async delegate each — lambda 1 captured
+        // toolCall/eventBus/logger, lambda 2 captured
+        // toolCall/permissions/logger — 2 display-classes per tool call on the
+        // per-tool-call hot path. The lambda bodies are static in behaviour;
+        // only `toolCall` varies per call. They now route through one small
+        // sealed state object per call (the issue's "small sealed state
+        // record" shape; ToolContext's public delegate signatures stay
+        // untouched) — zero display-class allocations per call, behaviour
+        // byte-identical: progress still awaits the publish inside try/catch
+        // (§FP-003, see ReportProgressCore) and Ask still fails closed to
+        // Deny on any permission failure (#201 B1, see AskCore).
+        ToolCallGates gates = new(this, toolCall);
         return new ToolContext(
             session.Session.Id,
             partial.Id,
@@ -749,42 +762,76 @@ public sealed class ToolDispatcher(
             agent.Name.Value,
             effectiveCt,
             session.Messages,
-            async (update, c) =>
-            {
-                // §FP-003 (RESOLVED): previously `_ = eventBus.PublishAsync(...)`
-                // was fire-and-forget — exceptions died as unobserved task exceptions
-                // and tool progress updates were silently dropped on bus back-pressure.
-                // The lambda is now async and awaits the publish with a try/catch so
-                // failures are logged without breaking tool execution. Return type is
-                // still `Task` per the ToolContext.ReportProgress contract.
-                try
-                {
-                    await eventBus.PublishAsync(new ToolExecutionUpdateEvent(toolCall.Id, update.PartialResult ?? update), c)
-                        .ConfigureAwait(false);
-                }
-                catch (Exception ex)
-                {
-                    ToolDispatcherLog.ToolProgressPublishFailed(logger, ex, toolCall.Id);
-                }
-            },
-            // #201 B1: the Ask callback rides the AskUserAsync railway (checked,
-            // never .Value) — a permission-subsystem failure fails closed to
-            // Deny instead of throwing into the tool run (§ROP-002 recurrence).
-            async (req, c) =>
-            {
-                Result<PermissionResponse> asked = await permissions.AskUserAsync(req, c).ConfigureAwait(false);
-                if (asked.IsFailure)
-                {
-                    ToolDispatcherLog.PermissionAskFailed(logger, req.Permission, toolCall.Id, asked.Error);
-                    return new PermissionResponse(PermissionAction.Deny, false);
-                }
-
-                return asked.Value;
-            },
+            gates.ReportProgress,
+            gates.Ask,
             // S2 (#376): tools resolve their cwd from the session directory,
             // which SubAgentRunner binds to the isolated worktree. Main-session
             // directories are the user's cwd, so behaviour there is unchanged.
             session.Session.Directory);
+    }
+
+    /// <summary>
+    ///     #1529: body of the per-call progress callback (was an async lambda
+    ///     capturing <c>toolCall</c>/<c>eventBus</c>/<c>logger</c>).
+    /// </summary>
+    private async Task ReportProgressCore(
+        ToolCallPart toolCall,
+        ToolProgressUpdate update,
+        CancellationToken c)
+    {
+        // §FP-003 (RESOLVED): previously `_ = eventBus.PublishAsync(...)`
+        // was fire-and-forget — exceptions died as unobserved task exceptions
+        // and tool progress updates were silently dropped on bus back-pressure.
+        // The callback is async and awaits the publish with a try/catch so
+        // failures are logged without breaking tool execution. Return type is
+        // still `Task` per the ToolContext.ReportProgress contract.
+        try
+        {
+            await eventBus.PublishAsync(new ToolExecutionUpdateEvent(toolCall.Id, update.PartialResult ?? update), c)
+                .ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            ToolDispatcherLog.ToolProgressPublishFailed(logger, ex, toolCall.Id);
+        }
+    }
+
+    /// <summary>
+    ///     #1529: body of the per-call Ask callback (was an async lambda
+    ///     capturing <c>toolCall</c>/<c>permissions</c>/<c>logger</c>).
+    /// </summary>
+    private async Task<PermissionResponse> AskCore(
+        ToolCallPart toolCall,
+        PermissionRequest req,
+        CancellationToken c)
+    {
+        // #201 B1: the Ask callback rides the AskUserAsync railway (checked,
+        // never .Value) — a permission-subsystem failure fails closed to
+        // Deny instead of throwing into the tool run (§ROP-002 recurrence).
+        Result<PermissionResponse> asked = await permissions.AskUserAsync(req, c).ConfigureAwait(false);
+        if (asked.IsFailure)
+        {
+            ToolDispatcherLog.PermissionAskFailed(logger, req.Permission, toolCall.Id, asked.Error);
+            return new PermissionResponse(PermissionAction.Deny, false);
+        }
+
+        return asked.Value;
+    }
+
+    /// <summary>
+    ///     #1529: per-call state behind <see cref="ToolContext.ReportProgress" />
+    ///     and <see cref="ToolContext.Ask" />. One small sealed object replaces
+    ///     the two former closure display-classes; the bodies live on the
+    ///     dispatcher (<see cref="ReportProgressCore" /> / <see cref="AskCore" />),
+    ///     forwarded 1:1 so the callback behaviour is unchanged.
+    /// </summary>
+    private sealed class ToolCallGates(ToolDispatcher dispatcher, ToolCallPart toolCall)
+    {
+        public Task ReportProgress(ToolProgressUpdate update, CancellationToken c) =>
+            dispatcher.ReportProgressCore(toolCall, update, c);
+
+        public Task<PermissionResponse> Ask(PermissionRequest req, CancellationToken c) =>
+            dispatcher.AskCore(toolCall, req, c);
     }
 
     /// <summary>

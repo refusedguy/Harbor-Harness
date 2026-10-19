@@ -1061,6 +1061,37 @@ byte-identical (pinned by `JsonlMessagePayloadShapeTests`, including the
 > `test (platform)` job log on every run — cite THAT run's values when filling
 > the Measured column, never the local absolute milliseconds.
 
+### Tool-context callback closures (#1529) — **RELATIVE**, CI merge gate ⏳ first run pending
+
+`Harbor.Application.Tests.ToolDispatcherToolContextScalingTests`, in the `test (core)` merge-gate shard.
+
+Same relative convention as #410/#1528: N against 2N inside one run, no
+absolute budgets, measured through the shared `Harbor.TestKit.TestScalingGate`
+(#1652 — GC-fenced legs scaled toward ~100 ms of real work, medians over five
+rounds, x1.05 noise band on the time branch only).
+
+**Before (per call, structural):** `ToolDispatcher.CreateToolContext` wired
+both `ToolContext` callbacks as inline async lambdas — one closure
+display-class per lambda (progress captured `toolCall`/`eventBus`/`logger`,
+Ask captured `toolCall`/`permissions`/`logger`) — 2 display-classes per tool
+call on the per-tool-call hot path, on top of the `ToolContext` itself.
+**After:** the bodies hoisted to dispatcher instance methods
+(`ReportProgressCore`/`AskCore`, behaviour 1:1 — §FP-003 progress try/catch
+and the #201 B1 ask fail-closed shape are pinned by
+`ToolDispatcherProgressCallbackTests` plus `ToolDispatcherAskFailClosedTests`),
+routed through one small sealed state object per call (`ToolCallGates`, the
+issue's "small sealed state record" shape; `ToolContext`'s public delegate
+signatures untouched) — zero display-class allocations per call.
+
+| Test | Relative claim | Gate | Measured |
+|---|---|---|---|
+| `ToolContextBuilds_DoubledBatch_StaysWithinGrowthLimit` | time over dispatching a 100 → 200 tool-call batch (one `ToolContext` build per tool call per dispatch) — leg-scaled, medians of 5 rounds, linux-gated | ratio ≤ 3.0 (linear ≈ 2.0; O(N²) ≈ 4.0) | ⏳ not yet measured |
+| `ToolContextBuilds_DoubledBatch_StaysWithinGrowthLimit` | allocations over the same batches — runner-independent half of the claim | ratio ≤ 3.0, strict (no band, #1652) | ⏳ not yet measured |
+
+> The `[scaling] dispatcher-tool-context-scaling: ...` report line prints into
+> the `test (core)` job log on every run — cite THAT run's values when filling
+> the Measured column, never the local absolute milliseconds.
+
 ### ConsoleEx cell-diff core (`DiffEngineBenchmark`, 2026-08-26, Release)
 
 Frame-budget targets from `specs/07-tui.md` (< 16 ms/frame) and celldiff §7 — all met with an order of magnitude of headroom. Flush = real DiffEngine scan + AnsiWriter SGR/cursor encoding into a discarding backend (no tty I/O).
