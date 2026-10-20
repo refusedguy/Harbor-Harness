@@ -133,9 +133,10 @@ TABLE_HEADER = (
 )
 
 # The modes a row may claim. "gate" fails a build, "advisory" reports and
-# lets the build pass, "reporter" prints and never fails, "helper" is a tool
-# the pipeline uses, "library" is imported rather than run.
-MODES = ("gate", "advisory", "reporter", "helper", "library")
+# lets the build pass, "control" proves that a COMPILE-time gate is armed
+# and therefore runs the compiler, "reporter" prints and never fails,
+# "helper" is a tool the pipeline uses, "library" is imported rather than run.
+MODES = ("gate", "advisory", "control", "reporter", "helper", "library")
 
 # The self-test flags this repository uses. A row names one of them, or "—".
 SELF_TEST_FLAGS = ("--self-test", "--selftest")
@@ -401,6 +402,25 @@ def source_of(repo: str, script: str) -> str:
             return handle.read()
     except OSError:
         return ""
+
+
+def docstring_of(source: str) -> str:
+    """The module docstring, which is where a tool's header lives.
+
+    The rule the policy states is "the header says why it is python", and a
+    header is the docstring. Reading the first N lines instead would make
+    the rule depend on how long a tool's explanation is, and a tool with a
+    good explanation would fail for having one.
+    """
+    text = source.lstrip("\ufeff")
+    if text.startswith("#!"):
+        _, _, text = text.partition("\n")
+    text = text.lstrip()
+    if not text.startswith('"""') and not text.startswith("'''"):
+        return "\n".join(source.splitlines()[:40])
+    quote = text[:3]
+    end = text.find(quote, 3)
+    return text if end < 0 else text[:end]
 
 
 def evaluate(repo: str) -> tuple[list[Finding], int]:
@@ -682,24 +702,28 @@ def evaluate(repo: str) -> tuple[list[Finding], int]:
                     ))
 
         # The reason the tool is python, and the two things it may not do.
-        if mode in ("gate", "advisory"):
-            head = "\n".join(source.splitlines()[:40])
+        # A "control" is exempt from the dotnet rule on purpose: it is the
+        # proof that a COMPILE-time gate is armed, so running the compiler
+        # is the whole of its job. A gate that needed the SDK would be a
+        # different thing.
+        if mode in ("gate", "advisory", "control"):
+            head = docstring_of(source)
             if WHY_PYTHON_MARKER not in head.lower():
                 findings.append(Finding(
                     "POLICY-HEADER-MISSING",
-                    f"{script} does not say why it is python in its first "
-                    f"40 lines (the marker is {WHY_PYTHON_MARKER!r})",
+                    f"{script} does not say why it is python in its header "
+                    f"(the marker is {WHY_PYTHON_MARKER!r})",
                     script,
                 ))
             code = code_only(source)
-            if DOTNET_CALL_RE.search(code):
+            if mode in ("gate", "advisory") and DOTNET_CALL_RE.search(code):
                 findings.append(Finding(
                     "POLICY-DOTNET-CALL",
                     f"{script} shells out to dotnet, and a gate that needs "
                     f"the SDK cannot run on the PR that fixes the build",
                     script,
                 ))
-            if TIME_CALL_RE.search(code):
+            if mode in ("gate", "advisory") and TIME_CALL_RE.search(code):
                 findings.append(Finding(
                     "POLICY-TIME-CALL",
                     f"{script} measures time, and a timing threshold is a "
