@@ -81,3 +81,9 @@ docs/BENCHMARKS.md | 1946 | > toast\-timer change of §6\.4 and after `StateTest
 docs/BENCHMARKS.md | 1946 | > project of its own\): three processes, 107 tests instead of 133\. The plan | the pull request dropped these rows from its own final head (see the neighbouring exception)
 docs/BENCHMARKS.md | 1946 | > checked in is measured from run \*\*39436580540\*\*, the run before it\. | the pull request dropped these rows from its own final head (see the neighbouring exception)
 docs/BENCHMARKS.md | 1946 | \| C,\ 39440361839\ \(final\ tree\)\| 3\ \|\ \*\*15\.5\ s\*\| \*\*15\.9\ s\*\| 107\ \| 19\| | the pull request dropped this row of its own benchmark table; the row in the file today carries the newer run id and the newer numbers
+
+# PR #2035 rewrote the `ci-shard-slices.py` row of this file: the same tool is
+# still listed, with the description of its new role (the one source of the CI
+# project lists). The gate compares LINES, so the old wording is a loss once
+# the row is rewritten.
+tools/README.md | 1992 | The build-output slices must match the test shards | PR #2035 rewrote the row: the same tool is still listed, with the description of its new role
