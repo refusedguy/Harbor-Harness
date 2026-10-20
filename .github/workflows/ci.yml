@@ -1511,6 +1511,9 @@ jobs:
           set -uo pipefail
           guard=""
           if [ "${{ matrix.guard }}" = "true" ]; then
+            # The zero-test guard: a suite that discovered nothing must not
+            # read as green. `--minimum-expected-tests 1` is the count-based
+            # half (MTP exit 9 when fewer than one test ran).
             guard="--minimum-expected-tests 1"
           fi
           trx_dir="TestResults/${{ matrix.shard }}"
