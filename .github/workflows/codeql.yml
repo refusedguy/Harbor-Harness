@@ -62,9 +62,9 @@ jobs:
       security-events: write
       contents: read
     steps:
+      # No `submodules: recursive`: the vendored ConsoleEx submodule left the
+      # product (ADR-019); nothing in this workflow builds contrib/external/.
       - uses: actions/checkout@v7
-        with:
-          submodules: recursive
 
       # build-mode: none never restores into the default global-packages
       # folder, so the NuGet cache it would save is always empty.

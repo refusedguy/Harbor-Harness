@@ -108,10 +108,11 @@ jobs:
     outputs:
       dotnet: ${{ steps.filter.outputs.dotnet }}
     steps:
-      # No `submodules: recursive` here (ci.yml's `changes` job has it): a
-      # paths filter reads the repository's own paths, the vendored submodule
-      # is not in the filter, and cloning it would cost a checkout on every
-      # run of a job whose only job is to answer a yes/no question.
+      # No `submodules: recursive` here, and no checkout in this workflow
+      # fetches one: a paths filter reads the repository's own paths, the
+      # vendored submodule is not in the filter, and cloning it would cost a
+      # checkout on every run of a job whose only job is to answer a yes/no
+      # question.
       - uses: actions/checkout@v7
       - uses: dorny/paths-filter@v3
         id: filter
@@ -258,9 +259,9 @@ jobs:
               Harbor.Tui.CellForge.Tests
               Harbor.Ipc.Tests
     steps:
+      # No `submodules: recursive`: the vendored ConsoleEx submodule left the
+      # product (ADR-019); nothing in this workflow builds contrib/external/.
       - uses: actions/checkout@v7
-        with:
-          submodules: recursive
 
       - name: Setup .NET 10
         uses: actions/setup-dotnet@v6

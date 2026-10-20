@@ -85,9 +85,9 @@ jobs:
       packages: ${{ steps.filter.outputs.packages }}
       deps: ${{ steps.filter.outputs.deps }}
     steps:
+      # No `submodules: recursive`: the vendored ConsoleEx submodule left the
+      # product (ADR-019); nothing in this workflow builds contrib/external/.
       - uses: actions/checkout@v7
-        with:
-          submodules: recursive
       - uses: dorny/paths-filter@v3
         id: filter
         with:
@@ -211,9 +211,9 @@ jobs:
     permissions:
       contents: read
     steps:
+      # No `submodules: recursive`: the vendored ConsoleEx submodule left the
+      # product (ADR-019); nothing in this workflow builds contrib/external/.
       - uses: actions/checkout@v7
-        with:
-          submodules: recursive
       - name: Public-API snapshot gate fails on an unreviewed change
         run: python3 tools/check-public-api-abstractions.py --self-test
       - name: Check the frozen facade surface against its baseline
@@ -263,9 +263,9 @@ jobs:
     permissions:
       contents: read
     steps:
+      # No `submodules: recursive`: the vendored ConsoleEx submodule left the
+      # product (ADR-019); nothing in this workflow builds contrib/external/.
       - uses: actions/checkout@v7
-        with:
-          submodules: recursive
       - name: Setup .NET 10
         uses: actions/setup-dotnet@v6
         with:
@@ -325,9 +325,9 @@ jobs:
       # block: the value is the only thing that turns it off.
       HarborArchGate: ${{ github.event_name == 'pull_request' && 'false' || 'true' }}
     steps:
+      # No `submodules: recursive`: the vendored ConsoleEx submodule left the
+      # product (ADR-019); nothing in this workflow builds contrib/external/.
       - uses: actions/checkout@v7
-        with:
-          submodules: recursive
 
       - name: Setup .NET 10
         uses: actions/setup-dotnet@v6
@@ -1000,9 +1000,9 @@ jobs:
               Harbor.LoadTests
               Harbor.E2E.Framework.Tests
     steps:
+      # No `submodules: recursive`: the vendored ConsoleEx submodule left the
+      # product (ADR-019); nothing in this workflow builds contrib/external/.
       - uses: actions/checkout@v7
-        with:
-          submodules: recursive
 
       # The shards run the binaries the build job already produced (the
       # "Download build outputs" step below), so nothing here restores into
@@ -1154,9 +1154,9 @@ jobs:
     permissions:
       contents: read
     steps:
+      # No `submodules: recursive`: the vendored ConsoleEx submodule left the
+      # product (ADR-019); nothing in this workflow builds contrib/external/.
       - uses: actions/checkout@v7
-        with:
-          submodules: recursive
 
       - name: Setup .NET 10
         uses: actions/setup-dotnet@v6
@@ -1421,9 +1421,9 @@ jobs:
     permissions:
       contents: read
     steps:
+      # No `submodules: recursive`: the vendored ConsoleEx submodule left the
+      # product (ADR-019); nothing in this workflow builds contrib/external/.
       - uses: actions/checkout@v7
-        with:
-          submodules: recursive
 
       - name: Setup .NET 10
         uses: actions/setup-dotnet@v6
@@ -1642,9 +1642,9 @@ jobs:
     permissions:
       contents: read
     steps:
+      # No `submodules: recursive`: the vendored ConsoleEx submodule left the
+      # product (ADR-019); nothing in this workflow builds contrib/external/.
       - uses: actions/checkout@v7
-        with:
-          submodules: recursive
 
       - name: Setup .NET 10
         uses: actions/setup-dotnet@v6
@@ -1684,9 +1684,9 @@ jobs:
     env:
       HARBOR_PERF_REPORT: ${{ github.workspace }}/renderer-perf-report.txt
     steps:
+      # No `submodules: recursive`: the vendored ConsoleEx submodule left the
+      # product (ADR-019); nothing in this workflow builds contrib/external/.
       - uses: actions/checkout@v7
-        with:
-          submodules: recursive
       - name: Setup .NET 10
         uses: actions/setup-dotnet@v6
         with:

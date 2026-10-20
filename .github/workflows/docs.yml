@@ -51,7 +51,8 @@
 #   broken link in a docs-only PR must be red, not a note in the log.
 #
 # NOT a dotnet job: nothing here needs the SDK, the solution, or a submodule
-# (no tracked markdown lives in external/ConsoleEx). If that changes, add
+# (no tracked markdown lives in contrib/external/ConsoleEx, the vendored tree
+# that moved out of the product in ADR-019). If that changes, add
 # `submodules: recursive` to the checkout below.
 name: docs
 

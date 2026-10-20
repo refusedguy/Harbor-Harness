@@ -6,7 +6,17 @@
     Directory.Build.props so central package management and analyzer settings
     keep applying.
   -->
-  <Import Project="$([MSBuild]::GetPathOfFileAbove('Directory.Build.props', '$(MSBuildThisFileDirectory)../'))"/>
+  <!--
+    The solution-wide Directory.Build.props is imported by RELATIVE path, not by
+    the GetPathOfFileAbove function. MSBuild evaluates both to the same file
+    (this directory's parent's parent), but the project-file analyzer (#1857)
+    can only follow an import it can resolve on disk, and a property function
+    is not resolvable to it: with the function form the analyzer never sees
+    the solution-wide props, so the properties pinned there (NuGetAuditMode,
+    NuGetAuditLevel) look unset and the rules that read them fire. Same shape
+    as tests/Directory.Build.props and contrib/apps/Directory.Build.props.
+  -->
+  <Import Project="../../Directory.Build.props"/>
 
   <PropertyGroup>
     <IsPackable>false</IsPackable>
