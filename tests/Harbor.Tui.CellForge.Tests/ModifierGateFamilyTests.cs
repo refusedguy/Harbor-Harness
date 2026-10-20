@@ -24,9 +24,7 @@ namespace Harbor.Tui.CellForge.Tests;
 ///     - <c>ApprovalGateView.cs:254</c>    y/n/a + Enter/Escape
 // check-doc-cites: record-drift ApprovalGateView.cs:254 now="if (!key.Modifiers.IsUnmodified())" [#947: written over `if (key.Modifiers != KeyModifiers.None)`; repair deferred to the owner's symbol-rename decision] -->
 ///     - <c>TreeView.cs:296</c>, <c>Tabs.cs:143</c>, <c>ToolCardTracker.cs:747</c>
-///     - <c>DiffViewerOverlay.cs:210</c>, <c>ImageViewerOverlay.cs:124</c>
-// check-doc-cites: record-drift ImageViewerOverlay.cs:124 now="case KeyCode.Left:" [#947: written over `if ((key.Modifiers & (KeyModifiers.Ctrl `; repair deferred to the owner's symbol-rename decision] -->
-// check-doc-cites: record-drift DiffViewerOverlay.cs:210 now="if (key.Modifiers.IsCommandModifier())" [#947: written over `if ((key.Modifiers & (ConsoleModifiers.C`; repair deferred to the owner's symbol-rename decision] -->
+///     - <c>DiffViewerOverlay.cs:378</c>, <c>ImageViewerOverlay.cs:128</c>
 ///
 /// So <c>ApprovalGateView</c> is not the dissenter the issue named: it holds
 /// no buffer, its letters are case-folded (<c>Rune.ToUpperInvariant</c>) so a

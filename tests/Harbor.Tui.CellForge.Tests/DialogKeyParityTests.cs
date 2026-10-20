@@ -44,8 +44,7 @@ namespace Harbor.Tui.CellForge.Tests;
 ///    (Multiline/Approval x Shift|Alt+Enter) because the legacy
 ///    <c>ConsoleKeyInfo</c> cannot express it. Everything else must match.
 /// 2. <c>src/Harbor.Tui.CellForge/Chat/Rendering/ComposerController.cs:282</c> types a char only when
-///    <c>(mods & (Ctrl|Meta|Alt)) == 0</c>; <c>DiffViewerOverlay.cs:210</c>
-// check-doc-cites: record-drift DiffViewerOverlay.cs:210 now="if (key.Modifiers.IsCommandModifier())" [#947: written over `if ((key.Modifiers & (ConsoleModifiers.C`; repair deferred to the owner's symbol-rename decision] -->
+///    <c>(mods & (Ctrl|Meta|Alt)) == 0</c>; <c>DiffViewerOverlay.cs:378</c>
 ///    refuses <c>Control|Alt</c> and lets <c>Shift</c> through;
 ///    <c>ApprovalGateView.cs:256</c> refuses any modifier.
 ///    <c>DialogOverlay</c>'s kitty overload copies the composer gate
