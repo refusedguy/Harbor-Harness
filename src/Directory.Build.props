@@ -50,8 +50,11 @@
       VSTHRD110 — "observe the result of async calls". PrivateAssets=all:
       the analyzer must not flow to anything this repository publishes.
     -->
-    <PackageReference Include="Microsoft.VisualStudio.Threading.Analyzers">
+    <PackageReference Include="Microsoft.VisualStudio.Threading.Analyzers" ExcludeAssets="runtime">
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <!-- Proj0037 (#1857): an analyzer package ships no runtime assembly, so
+           the runtime asset is excluded explicitly. The attribute form, not a
+           child element: Proj0037 reads the attribute. -->
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
   </ItemGroup>
