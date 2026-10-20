@@ -64,7 +64,7 @@
       "reason": "A document that names the view seam is in neither the teaching nor the describing list, so the guard would be green over a document that teaches a dead seam. The rule names the missing file (CHANGELOG.md).",
       "ratchet": "keep",
       "evidence": [
-        "guard: tests/Harbor.Architecture.Tests/CellForgeWidgetAxisRules.cs:1201 — 'Unclassified: CHANGELOG.md'"
+        "guard: tests/Harbor.Architecture.Tests/CellForgeWidgetAxisRules.cs:1200 — 'Unclassified: CHANGELOG.md'"
       ]
     },
     {
@@ -74,7 +74,7 @@
       "ratchet": "keep",
       "evidence": [
         "run 38357908793 — 'Offenders: src/Harbor.Tui.CellForge/Chat/Rendering/ScreenBuilder.cs:102'",
-        "guard: tests/Harbor.Architecture.Tests/CellForgeWidgetAxisRules.cs:752"
+        "guard: tests/Harbor.Architecture.Tests/CellForgeWidgetAxisRules.cs:751"
       ]
     },
     {
@@ -159,7 +159,7 @@
       "ratchet": "keep",
       "evidence": [
         "run 38264879229 — 'src/Harbor.Tui.CellForge.Engine/Input/BindingsMap.cs'",
-        "guard: tests/Harbor.Architecture.Tests/KeyGateFamilyRules.cs:728"
+        "guard: tests/Harbor.Architecture.Tests/KeyGateFamilyRules.cs:741"
       ]
     },
     {
@@ -186,7 +186,7 @@
       "reason": "A new hand-rolled read of a slash-separated string appeared in product code, with the file and line named. A second parser of the same concept is a real drift source.",
       "ratchet": "keep",
       "evidence": [
-        "guard: tests/Harbor.Architecture.Tests/ModelRefSingleParserTests.cs:414 — 'src/Harbor.Application/Configuration/OnboardingPicks.cs:56 [ADHOC-CUT]'"
+        "guard: tests/Harbor.Architecture.Tests/ModelRefSingleParserTests.cs:413 — 'src/Harbor.Application/Configuration/OnboardingPicks.cs:56 [ADHOC-CUT]'"
       ]
     },
     {
@@ -195,7 +195,7 @@
       "reason": "The rule fired on its own inventory: an entry names a file that no longer contains an ad-hoc cut, so the exception is stale. The rule asks for the row to be deleted.",
       "ratchet": "ledger-edit",
       "evidence": [
-        "guard: tests/Harbor.Architecture.Tests/ModelRefSingleParserTests.cs:437 — 'inventory entry src/Harbor.Application/Configuration/OnboardingWizard.cs no longer contains an ad-hoc cut'"
+        "guard: tests/Harbor.Architecture.Tests/ModelRefSingleParserTests.cs:436 — 'inventory entry src/Harbor.Application/Configuration/OnboardingWizard.cs no longer contains an ad-hoc cut'"
       ]
     },
     {
@@ -204,7 +204,7 @@
       "reason": "The analyzer did not report a planted capability, so the ban has a hole the text rule cannot see. The control exists to make that hole loud.",
       "ratchet": "keep",
       "evidence": [
-        "guard: tests/Harbor.Architecture.Tests/PilotRoslynAnalyzerTests.cs:59"
+        "guard: tests/Harbor.Architecture.Tests/PilotRoslynAnalyzerTests.cs:184"
       ]
     },
     {
@@ -363,7 +363,7 @@
       "reason": "The analyzer reported a Result read that a dominating IsSuccess/IsFailure check protects: a false positive in the guard, which the rule's own message calls a noise machine.",
       "ratchet": "keep",
       "evidence": [
-        "guard: tests/Harbor.Architecture.Tests/Roslyn/UnguardedResultReadAnalyzerTests.cs:88"
+        "guard: tests/Harbor.Architecture.Tests/Roslyn/UnguardedResultReadAnalyzerTests.cs:358"
       ]
     },
     {
@@ -372,7 +372,7 @@
       "reason": "The analyzer flagged a file that neither the text rule nor a documented exemption knows about, so the migration would go red on a site nobody reviewed. The rule names the file.",
       "ratchet": "keep",
       "evidence": [
-        "guard: tests/Harbor.Architecture.Tests/Roslyn/UnguardedResultReadAnalyzerTests.cs:88 — 'Files: src/Harbor.Tools.Builtin/Tools/Mcp/McpOAuthHandler.cs'"
+        "guard: tests/Harbor.Architecture.Tests/Roslyn/UnguardedResultReadAnalyzerTests.cs:376 — 'Files: src/Harbor.Tools.Builtin/Tools/Mcp/McpOAuthHandler.cs'"
       ]
     }
   ],

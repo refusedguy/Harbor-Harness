@@ -174,8 +174,8 @@ the message each time).
 |---|---|---:|---|---|
 | `AcceptedStopCensusRule.TerminalToolEndEvents_StillRideTerminalToken` | `AcceptedStopCensusRule.cs:91` | 1 | defect | keep |
 | `CellForgeEngineAbsenceAxisTests.NoMaybeMemberIsReadWithAStructUnawareForm` | `CellForgeEngineAbsenceAxisTests.cs:236` | 1 | defect | keep |
-| `CellForgeWidgetAxisRules.PerimeterSettlesAgainstTheFilesThatNameTheSeam` | `CellForgeWidgetAxisRules.cs:1201` | 1 | defect | keep |
-| `CellForgeWidgetAxisRules.WidgetAxis_TheShippedLayoutTreeHasNoSecondHome` | `CellForgeWidgetAxisRules.cs:752` | 1 | defect | keep |
+| `CellForgeWidgetAxisRules.PerimeterSettlesAgainstTheFilesThatNameTheSeam` | `CellForgeWidgetAxisRules.cs:1200` | 1 | defect | keep |
+| `CellForgeWidgetAxisRules.WidgetAxis_TheShippedLayoutTreeHasNoSecondHome` | `CellForgeWidgetAxisRules.cs:751` | 1 | defect | keep |
 | `CellForgeWidgetStateRules.ClassifiedProperties_StillExistAndAreStillNullableReferences` | `CellForgeWidgetStateRules.cs:179` | 1 | noise | ledger-edit |
 | `CellForgeWidgetStateRules.EveryNullablePublicWidgetProperty_IsClassified` | `CellForgeWidgetStateRules.cs:149` | 1 | defect | keep |
 | `ContribBoundaryNameRule.CrossBoundaryNames_MatchTheMeasuredBaseline` | `ContribBoundaryNameRule.cs:368` | 1 | noise | fix-the-rule |
@@ -184,11 +184,11 @@ the message each time).
 | `EnforcerIntegrityTests.Matrix_AllowedEntries_AreLive` | `EnforcerIntegrityTests.cs:278` | 2 | noise | ledger-edit |
 | `FullLayerMatrixTests.EverySrcAssembly_ReferenceSet_MatchesMatrix` | `FullLayerMatrixTests.cs:725` | 3 | defect | keep |
 | `FullLayerMatrixTests.Matrix_CoversExactlyTheSrcInventory` | `FullLayerMatrixTests.cs:856` | 1 | defect | keep |
-| `KeyGateFamilyRules.TableCoversEveryRoutedSiteInTheProductTree` | `KeyGateFamilyRules.cs:728` | 1 | defect | keep |
+| `KeyGateFamilyRules.TableCoversEveryRoutedSiteInTheProductTree` | `KeyGateFamilyRules.cs:741` | 1 | defect | keep |
 | `MaybeAbsenceTests.GuardedProjects_DeclareNoAbsenceViaNullableOutParameter` | `MaybeAbsenceTests.cs:225` | 1 | defect | keep |
 | `McpHttpClientOwnershipRules.Assert_TheClientHasExactlyOneOwnerAndItIsNotPublic` | `McpHttpClientOwnershipRules.cs:160` | 1 | defect | keep |
-| `ModelRefSingleParserTests.EveryAdHocCut_IsEitherTheContractOrInventoryed` | `ModelRefSingleParserTests.cs:414` | 2 | defect | keep |
-| `ModelRefSingleParserTests.EveryInventoryEntry_StillNamesAFileThatStillCuts` | `ModelRefSingleParserTests.cs:437` | 1 | noise | ledger-edit |
+| `ModelRefSingleParserTests.EveryAdHocCut_IsEitherTheContractOrInventoryed` | `ModelRefSingleParserTests.cs:413` | 2 | defect | keep |
+| `ModelRefSingleParserTests.EveryInventoryEntry_StillNamesAFileThatStillCuts` | `ModelRefSingleParserTests.cs:436` | 1 | noise | ledger-edit |
 | `PilotRoslynAnalyzerTests.Pilot_Harch001_Reports_Every_Planted_Dynamic_Code_Capability` | `PilotRoslynAnalyzerTests.cs:184` | 1 | defect | keep |
 | `ReadmeCoverageTests.Assert_NoNewProjectLacksAReadme` | `ReadmeCoverageTests.cs:114` | 3 | style | keep |
 | `ReadmeCoverageTests.Assert_PackableReadmesHaveRequiredSections` | `ReadmeCoverageTests.cs:136` | 4 | style | keep |
