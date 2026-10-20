@@ -12,7 +12,7 @@ namespace Harbor.Tui.CellForge.PtyTests;
 ///     No <c>[NotInParallel]</c> key (#1789): every test here spawns its OWN
 ///     pseudo-terminal (<c>PtySession.Start</c> → its own
 ///     <c>posix_openpt</c>) and its own child (<c>cat</c>/<c>sh</c>), and none
-///     of them writes process-wide state — so there is no shared resource to
+///     of them writes process-wide state, so there is no shared resource to
 ///     serialize against. The key these tests used to carry serialized them
 ///     against 39 unrelated scenario classes for nothing.
 /// </summary>

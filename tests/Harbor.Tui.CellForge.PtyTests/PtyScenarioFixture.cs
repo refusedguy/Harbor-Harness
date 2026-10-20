@@ -5,7 +5,7 @@ namespace Harbor.Tui.CellForge.PtyTests;
 
 /// <summary>
 ///     Per-test fixture for the CellForge PTY scenarios: a private mock LLM
-///     server and a private temp <c>$HOME</c> — and nothing else.
+///     server and a private temp <c>$HOME</c>, and nothing else.
 ///     <para />
 ///     WHY THIS EXISTS INSTEAD OF <see cref="MockServerFixture" />
 ///     <para />
@@ -17,19 +17,19 @@ namespace Harbor.Tui.CellForge.PtyTests;
 ///     <c>ChildEnv</c> (CellForgePtyScenarioBase.cs), and the test process
 ///     itself reads no home-scoped state. <see cref="PtySession" /> copies the
 ///     process environment into the child's, and the scenario's own
-///     <c>HOME</c>/<c>USERPROFILE</c> entries overwrite that copy — so the
+///     <c>HOME</c>/<c>USERPROFILE</c> entries overwrite that copy, so the
 ///     swap only ever mattered as a way of making the PROCESS environment
 ///     wrong for everybody else.
 ///     <para />
 ///     That is the whole reason the project could not run in parallel (#1789):
 ///     a process-wide write is process-wide, so every scenario that made one
-///     had to hold a mutex against every other scenario that made one — and
+///     had to hold a mutex against every other scenario that made one, and
 ///     with unkeyed readers the repo's rule (<c>docs/TEST_PATTERNS.md</c>
 ///     §Parallelism, and the guard in
 ///     <c>tests/Harbor.Architecture.Tests/ProcessEnvIsolationRule.cs</c>)
 ///     demands the BARE <c>[NotInParallel]</c> form, which means "completely
-///     alone". Dropping the write is what makes the honest answer — no key at
-///     all — available.
+///     alone". Dropping the write is what makes the honest answer (no key at
+///     all) available.
 ///     <para />
 ///     The per-test isolation is unchanged by this: a GUID-named temp home,
 ///     a mock server on a random port, and a child process whose environment
@@ -68,7 +68,7 @@ public sealed class PtyScenarioFixture : IAsyncInitializer, IAsyncDisposable
         }
         catch
         {
-            /* swallow — teardown must not throw */
+            /* swallow: teardown must not throw */
         }
 
         try
@@ -80,7 +80,7 @@ public sealed class PtyScenarioFixture : IAsyncInitializer, IAsyncDisposable
         }
         catch
         {
-            /* swallow — temp dir cleanup is best-effort */
+            /* swallow: temp dir cleanup is best-effort */
         }
     }
 }

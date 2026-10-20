@@ -861,17 +861,17 @@ by CI as two `dotnet exec` invocations of the same assembly with different
 `Harbor.Tui.CellForge.PtyTests` is the counter-example, and it is the one
 that shows a key can be *wrong* rather than merely *expensive* (#1789). Forty
 classes carried one `[NotInParallel("pty")]` key, so the project measured a
-parallelism factor of 1.00 — and the key was protecting a resource that did
+parallelism factor of 1.00, and the key was protecting a resource that did
 not exist. Every scenario in that project owns everything it touches: its own
 pseudo-terminal (`posix_openpt` per session), its own child process, its own
 mock server (a random port) and its own temp `$HOME` (a GUID directory). The
 one thing that WAS process-wide was the fixture's
 `Environment.SetEnvironmentVariable("HOME", …)`, and the scenarios never
-needed it — the child receives its `HOME` explicitly through `ChildEnv`, and
+needed it. The child receives its `HOME` explicitly through `ChildEnv`, and
 the test process reads no home-scoped state. So the fix was not a new key: it
 was to stop writing process state ([`PtyScenarioFixture`](../tests/Harbor.Tui.CellForge.PtyTests/PtyScenarioFixture.cs))
 and to let the limiter that was already in the tree do its job
-(`[ParallelLimiter<PtyScenarioLimit>]` — TUnit keys the semaphore by the
+(`[ParallelLimiter<PtyScenarioLimit>]`, where TUnit keys the semaphore by the
 LIMIT TYPE, so it is one four-permit gate for the whole assembly, and four is
 the runner's core count: one spawned child per core).
 
@@ -882,7 +882,7 @@ Two rules fall out of that, and both are enforced by
   real PTYs are serialized by design" is not a resource; a shared PTY, a
   shared `$HOME`, a shared terminal-size global is. If you cannot name it,
   the key is a habit.
-* **Prefer not writing process state at all** — the rule this file already
+* **Prefer not writing process state at all**, the rule this file already
   states, now with a case where it was the whole difference between a
   104-second project and a 30-second one. A process-wide write forces the
   BARE form (unkeyed readers), and the bare form is "completely alone".

@@ -21,7 +21,7 @@ namespace Harbor.Tui.CellForge.PtyTests;
 ///     key was a claim about a shared resource, and there is no such resource:
 ///     every scenario spawns its OWN pseudo-terminal (its own
 ///     <c>posix_openpt</c>), its OWN child process, its OWN mock server (a
-///     random port) and its OWN temp <c>$HOME</c> — a GUID directory, not a
+///     random port) and its OWN temp <c>$HOME</c> (a GUID directory, not a
 ///     shared path. Nothing in this project is process-wide, so nothing needs
 ///     a mutex, and the repo's own rule says so
 ///     (<c>docs/TEST_PATTERNS.md</c> §Parallelism: "use a key when the set of
@@ -34,7 +34,7 @@ namespace Harbor.Tui.CellForge.PtyTests;
 ///     env-write-free fixture that replaced it, so the isolation the scenarios
 ///     rely on is per-test state handed to a child process rather than state
 ///     the test process mutates. A process-wide write would need the BARE
-///     <c>[NotInParallel]</c> form — "completely alone" — which is strictly
+///     <c>[NotInParallel]</c> form ("completely alone"), which is strictly
 ///     worse than the key it replaced.
 ///
 ///     What bounds the concurrency instead is the
@@ -42,7 +42,7 @@ namespace Harbor.Tui.CellForge.PtyTests;
 ///     keyed by the LIMIT TYPE, so
 ///     <see cref="PtyScenarioLimit" /> is one four-permit gate for the whole
 ///     assembly. Four is the runner's core count, and one scenario per core is
-///     the honest budget — each scenario spawns a .NET child, so the resource
+///     the honest budget. Each scenario spawns a .NET child, so the resource
 ///     being bounded is CPU, not the terminal.
 /// </summary>
 [ParallelLimiter<PtyScenarioLimit>]
@@ -615,7 +615,7 @@ public abstract class CellForgePtyScenarioBase
     ///     <para />
     ///     The test host IS a <c>dotnet</c> process (CI runs
     ///     <c>dotnet exec &lt;testdll&gt;</c>), so its own executable is the one
-    ///     muxer that is guaranteed to be able to run the child — and it is the
+    ///     muxer that is guaranteed to be able to run the child, and it is the
     ///     same one the runner already uses. This matters because the fallback
     ///     (<see cref="HarborAppLocator.ResolveDotnetHost" />) resolves
     ///     <c>$HOME/.dotnet/dotnet</c>, and the scenarios no longer control the

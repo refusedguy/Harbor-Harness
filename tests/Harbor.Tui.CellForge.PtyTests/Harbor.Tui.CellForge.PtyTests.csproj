@@ -14,11 +14,11 @@
         used to share one "pty" key across 40 classes, which serialized the
         whole project (parallelism factor 1.00). Nothing here is shared: every
         scenario spawns its own PTY, its own child process, its own mock server
-        and its own temp $HOME, and no scenario writes process-wide state —
+        and its own temp $HOME, and no scenario writes process-wide state:
         the fixture hands the child its HOME explicitly instead of swapping
         the process environment.
       * Concurrency is bounded by [ParallelLimiter<PtyScenarioLimit>] on
-        CellForgePtyScenarioBase — one semaphore per LIMIT TYPE, so four
+        CellForgePtyScenarioBase. One semaphore per LIMIT TYPE, so four
         permits for the whole assembly: one spawned child per runner core.
       * Every wait is bounded; per-test budget ~30 s.
       * Linux-only by design (CI platform); off-Linux runs are Skipped, the

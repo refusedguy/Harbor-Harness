@@ -12,7 +12,7 @@ namespace Harbor.Tui.CellForge.PtyTests;
 ///     The project used to hold one <c>[NotInParallel("pty")]</c> key across
 ///     40 classes, which serialized the whole assembly: the wall time was the
 ///     sum of the durations and the parallelism factor was 1.00. The key was
-///     removed because there was no shared resource behind it — every scenario
+///     removed because there was no shared resource behind it. Every scenario
 ///     spawns its own pseudo-terminal, its own child process, its own mock
 ///     server and its own temp <c>$HOME</c>.
 ///     <para />
@@ -28,7 +28,7 @@ namespace Harbor.Tui.CellForge.PtyTests;
 ///                 <b>No process-environment write.</b> A write to the process
 ///                 environment is process-wide, so every scenario that made one
 ///                 would have to hold a mutex against every other scenario that
-///                 made one — and with unkeyed readers the repo's rule
+///                 made one, and with unkeyed readers the repo's rule
 ///                 (<c>docs/TEST_PATTERNS.md</c> §Parallelism) demands the BARE
 ///                 <c>[NotInParallel]</c> form, which means "completely alone".
 ///                 The scenarios do not need one: the child gets its
@@ -40,7 +40,7 @@ namespace Harbor.Tui.CellForge.PtyTests;
 ///             <description>
 ///                 <b>No project-wide mutex.</b> A constraint key held by more
 ///                 than one class IS a project-wide mutex, whatever the key is
-///                 called — that is the shape #1789 removed. A class that
+///                 called. That is the shape #1789 removed. A class that
 ///                 genuinely needs one must name the resource it shares in a
 ///                 comment on the attribute, and the key must be held only by
 ///                 that resource's holders.
@@ -52,7 +52,7 @@ namespace Harbor.Tui.CellForge.PtyTests;
 ///                 the global <c>NotInParallelLock</c>: the class runs with no
 ///                 other test in the assembly, keyed or not. It is the RIGHT
 ///                 form for a class that mutates a process-wide static whose
-///                 readers are unkeyed — and rule 1 is why no class here does
+///                 readers are unkeyed, and rule 1 is why no class here does
 ///                 that.
 ///             </description>
 ///         </item>
@@ -60,7 +60,7 @@ namespace Harbor.Tui.CellForge.PtyTests;
 ///             <description>
 ///                 <b>Every key is documented.</b> The repo's rule: "keep the
 ///                 reason as a comment on the attribute". A key without a
-///                 comment is a label nobody can check — the mistake #720 was
+///                 comment is a label nobody can check. The mistake #720 was
 ///                 opened for.
 ///             </description>
 ///         </item>
@@ -164,7 +164,7 @@ public sealed class PtyScenarioIsolationTests
         await Assert.That(violations).IsEmpty()
             .Because(
                 "A write to the process environment is process-wide, so every scenario that made one would "
-                + "have to hold a mutex against every other scenario that made one — and with unkeyed "
+                + "have to hold a mutex against every other scenario that made one, and with unkeyed "
                 + "readers the repo's rule (docs/TEST_PATTERNS.md §Parallelism) demands the BARE "
                 + "[NotInParallel] form, which means \"completely alone\". That is strictly worse than the "
                 + "key this project used to carry. The scenarios do not need a process write: the child "
@@ -179,7 +179,7 @@ public sealed class PtyScenarioIsolationTests
     {
         IReadOnlyList<(string File, string Raw, string Code)> sources = ProjectSources();
         await Assert.That(sources.Count).IsGreaterThan(0)
-            .Because("the scan found no source file — the rule would be enforcing nothing.");
+            .Because("the scan found no source file, so the rule would be enforcing nothing.");
 
         Dictionary<string, List<string>> holders = new(StringComparer.Ordinal);
         foreach ((string file, string _raw, string code) in sources)
@@ -196,17 +196,22 @@ public sealed class PtyScenarioIsolationTests
             }
         }
 
-        List<string> violations =
-        [
-            .. from (string key, List<string> files) in holders
-               where files.Count > 1
-               select $"key \"{key}\" is held by {files.Count} classes ({string.Join(", ", files)})"
-        ];
+        List<string> violations = [];
+        foreach (KeyValuePair<string, List<string>> holder in holders)
+        {
+            if (holder.Value.Count <= 1)
+            {
+                continue;
+            }
+
+            violations.Add(
+                $"key \"{holder.Key}\" is held by {holder.Value.Count} classes ({string.Join(", ", holder.Value)})");
+        }
 
         await Assert.That(violations).IsEmpty()
             .Because(
                 "A constraint key held by more than one class IS a project-wide mutex, whatever the key is "
-                + "called — that is exactly the shape #1789 removed (one \"pty\" key on 40 classes, "
+                + "called. That is exactly the shape #1789 removed (one \"pty\" key on 40 classes, "
                 + "parallelism factor 1.00). A class that genuinely shares a resource with another class "
                 + "must name the resource in a comment on the attribute, and the key must be held only by "
                 + "that resource's holders. Violations: " + string.Join("; ", violations));
@@ -219,14 +224,16 @@ public sealed class PtyScenarioIsolationTests
     {
         IReadOnlyList<(string File, string Raw, string Code)> sources = ProjectSources();
         await Assert.That(sources.Count).IsGreaterThan(0)
-            .Because("the scan found no source file — the rule would be enforcing nothing.");
+            .Because("the scan found no source file, so the rule would be enforcing nothing.");
 
-        List<string> violations =
-        [
-            .. from (string file, string _raw, string code) in sources
-               where IsBareNotInParallel(code)
-               select file
-        ];
+        List<string> violations = [];
+        foreach ((string file, string _raw, string code) in sources)
+        {
+            if (IsBareNotInParallel(code))
+            {
+                violations.Add(file);
+            }
+        }
 
         await Assert.That(violations).IsEmpty()
             .Because(
@@ -234,7 +241,7 @@ public sealed class PtyScenarioIsolationTests
                 + "NotInParallelLock, so the class runs with no other test in the assembly, keyed or not. "
                 + "In this project that would serialize the scenarios against the fast in-process tests "
                 + "too (PtyScrollbackTests, and this file). The bare form is the RIGHT form for a class "
-                + "that mutates a process-wide static whose readers are unkeyed — and rule 1 above is why "
+                + "that mutates a process-wide static whose readers are unkeyed, and rule 1 above is why "
                 + "no class here does that. Files using the bare form: " + string.Join(", ", violations));
     }
 
@@ -245,7 +252,7 @@ public sealed class PtyScenarioIsolationTests
     {
         IReadOnlyList<(string File, string Raw, string Code)> sources = ProjectSources();
         await Assert.That(sources.Count).IsGreaterThan(0)
-            .Because("the scan found no source file — the rule would be enforcing nothing.");
+            .Because("the scan found no source file, so the rule would be enforcing nothing.");
 
         List<string> undocumented = [];
         foreach ((string file, string raw, string _code) in sources)
@@ -271,7 +278,7 @@ public sealed class PtyScenarioIsolationTests
             .Because(
                 "The repo's rule for a parallelism attribute: \"keep the reason as a comment on the "
                 + "attribute\" (docs/TEST_PATTERNS.md §Parallelism). A key without a comment is a label "
-                + "nobody can check — the mistake #720 was opened for — and a bare form without a comment "
+                + "nobody can check. The mistake #720 was opened for, and a bare form without a comment "
                 + "is a whole-assembly mutex nobody can justify. Attributes without a comment above them: "
                 + string.Join(", ", undocumented));
     }
@@ -291,7 +298,7 @@ public sealed class PtyScenarioIsolationTests
         await Assert.That(match.Success).IsTrue()
             .Because(
                 "The scenarios are spawned .NET children, and TUnit's unconstrained bucket runs at "
-                + "ProcessorCount × 4 — sixteen children at once on a four-core runner. The budget is what "
+                + "ProcessorCount × 4, which is sixteen children at once on a four-core runner. The budget "
                 + "replaced the project-wide mutex, so it has to be declared: "
                 + "[ParallelLimiter<SomeLimit>] on CellForgePtyScenarioBase.");
 
@@ -331,7 +338,7 @@ public sealed class PtyScenarioIsolationTests
         await Assert.That(ConstraintKeys("[NotInParallel(new[] { \"a\", \"b\" })]").Count).IsEqualTo(2)
             .Because("the array form names two peers, and both must be counted.");
         await Assert.That(ConstraintKeys("[NotInParallel]").Count).IsEqualTo(0)
-            .Because("the bare form names no peer — it is \"completely alone\", not a key.");
+            .Because("the bare form names no peer. It is \"completely alone\", not a key.");
 
         await Assert.That(IsBareNotInParallel("[NotInParallel]")).IsTrue()
             .Because("the bare form must be recognised as bare.");
@@ -359,7 +366,7 @@ public sealed class PtyScenarioIsolationTests
         await Assert.That(stripped).Contains("var s =")
             .Because("a comment must not take the code after it with it.");
         await Assert.That(stripped).Contains("var t =")
-            .Because("a raw string literal must survive the stripper — the scenario files use them.");
+            .Because("a raw string literal must survive the stripper, because the scenario files use them.");
         await Assert.That(stripped).Contains("raw string with")
             .Because("the CONTENT of a raw string is code, not prose, and must survive the stripper.");
     }
@@ -367,7 +374,7 @@ public sealed class PtyScenarioIsolationTests
     // ── helpers ─────────────────────────────────────────────────────────────
 
     /// <summary>
-    ///     The constraint keys a file declares. The bare form declares none —
+    ///     The constraint keys a file declares. The bare form declares none:
     ///     it is "completely alone", not a named peer set.
     /// </summary>
     private static IReadOnlyList<string> ConstraintKeys(string code)
@@ -396,7 +403,7 @@ public sealed class PtyScenarioIsolationTests
     /// <summary>
     ///     Whether the attribute carries a comment of its OWN. The class's
     ///     documentation block ends with <c>/// &lt;/summary&gt;</c>, and that
-    ///     line is not a reason for the attribute — a key that is only
+    ///     line is not a reason for the attribute. A key that is only
     ///     "documented" by the class doc is exactly the undocumented key the
     ///     rule is about.
     /// </summary>

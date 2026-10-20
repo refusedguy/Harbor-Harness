@@ -7,7 +7,7 @@ namespace Harbor.Tui.CellForge.PtyTests;
 ///     at a time, in this process.
 ///     <para />
 ///     TUnit keys the limiter's semaphore by the LIMIT TYPE, so this one type
-///     is one gate for the whole assembly — the scenarios do not each get
+///     is one gate for the whole assembly. The scenarios do not each get
 ///     their own four permits (which would be 40 × 4 = 160 concurrent child
 ///     processes on a four-core runner).
 ///     <para />
