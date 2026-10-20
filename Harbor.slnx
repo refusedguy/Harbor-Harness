@@ -29,6 +29,8 @@
         <Project Path="src/Harbor.ChangeTracking/Harbor.ChangeTracking.csproj"/>
         <Project Path="src/Harbor.Permissions/Harbor.Permissions.csproj"/>
         <Project Path="src/Harbor.Onboarding/Harbor.Onboarding.csproj"/>
+        <!-- #1625: the configuration family (HarborConfig / JsonConfigStore / AuthStore / ProviderPresets) extracted from Harbor.Application. -->
+        <Project Path="src/Harbor.PolicyConfig/Harbor.PolicyConfig.csproj"/>
         <!-- #1623: agent runtime (AgentLoop/TurnRunner/ToolDispatcher + pipeline + resilience impls) extracted from Harbor.Application. -->
         <Project Path="src/Harbor.AgentRuntime/Harbor.AgentRuntime.csproj"/>
         <!-- #1624: session context (compaction/prompt/tracker + workspace probes + session fork) extracted from Harbor.Application. -->

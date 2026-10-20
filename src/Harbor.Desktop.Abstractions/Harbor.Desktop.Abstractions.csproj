@@ -6,10 +6,12 @@
 
     Dependency rule (enforced by Harbor.Architecture.Tests):
       ✅ Harbor.Abstractions, Harbor.Terminal.Abstractions
-      ✅ Harbor.Application — documented exception (#188, part of #96):
+      ✅ Harbor.PolicyConfig — documented exception (#188, part of #96):
          ProviderPresets catalog used by ProviderModelPickerViewModel /
          OnboardingViewModel (Presentation → Application tech debt;
-         future fix: move preset catalog to Domain Harbor.Abstractions)
+         future fix: move preset catalog to Domain Harbor.Abstractions).
+         The target was Harbor.Application until #1625 moved the configuration
+         family out; the debt is the same one, one assembly over.
       ❌ Harbor.Application / Harbor.Registries (except the ProviderPresets
          catalog above — see docs/ARCHITECTURE_LAYERS.md §2 exception)
       ✅ CommunityToolkit.Mvvm (source-gen MVVM)
@@ -49,7 +51,12 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Harbor.Abstractions\Harbor.Abstractions.csproj"/>
-    <ProjectReference Include="..\Harbor.Application\Harbor.Application.csproj"/>
+    <!-- #1625: the ProviderPresets catalog left Harbor.Application for
+         Harbor.PolicyConfig, so the #188 exception's target moved with it.
+         The reference is REPLACED, not added: nothing else in this package
+         reached into Harbor.Application, and a declared-but-unbound edge is a
+         dead edge the architecture gate reports. -->
+    <ProjectReference Include="..\Harbor.PolicyConfig\Harbor.PolicyConfig.csproj"/>
     <ProjectReference Include="..\Harbor.Terminal.Abstractions\Harbor.Terminal.Abstractions.csproj"/>
     <ProjectReference Include="..\Harbor.Ui.Framework\Harbor.Ui.Framework.csproj"/>
     <ProjectReference Include="..\Harbor.Ui.Framework.ViewModels\Harbor.Ui.Framework.ViewModels.csproj"/>

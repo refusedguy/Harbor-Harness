@@ -1,5 +1,14 @@
 # ADR-018: the `Harbor.Application` split, variant A (the maximal five-assembly plan)
 
+> **Update 2026-10-21:** slice #1625 landed. The `PolicyConfig` cohort's remaining
+> part — `Configuration/*` (11 files, 1 693 lines) — is `src/Harbor.PolicyConfig`, an
+> Application-layer sibling with its own matrix row, `Harbor.slnx` row and README.
+> The two thirds that had already left under other issues (`Harbor.Permissions`,
+> #1615; `Harbor.Onboarding`, #1614) stayed where they were. #1626 (`Intelligence`)
+> is the last slice still open. The tables below are the snapshot this ADR was
+> written with and are left as they were; the current state lives in
+> [docs/ROADMAP.md](../ROADMAP.md) and in §5.4's enforced matrix.
+>
 > **Status (2026-10-20):** dated record, not normative. The decision this file
 > records was taken by the owner in a comment on issue #1608 on 2026-10-16; this
 > ADR was written on 2026-10-20, at `dev` = `beee95c7`. It asserts no

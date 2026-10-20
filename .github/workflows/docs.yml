@@ -621,9 +621,11 @@ jobs:
       # widened to four projects (was 9 / 6 / 75 over two), and again after
       # #1623 moved the agent loop out of the Application perimeter
       # (--report: 13 / 7 / 143), and again after #1624 moved the
-      # session-context cohort out of the same perimeter (--report: 13 / 7 / 130).
+      # session-context cohort out of the same perimeter (--report: 13 / 7 / 130),
+      # and again after #1625 moved the configuration family out of it and the
+      # new Harbor.PolicyConfig assembly into it (--report: 19 / 7 / 141).
       - name: Check the guarded projects' declared dependencies
-        run: python3 tools/check-abstractions-contract.py --min-packages 13 --min-namespaces 7 --min-files 130
+        run: python3 tools/check-abstractions-contract.py --min-packages 19 --min-namespaces 7 --min-files 141
 
   # #1778. Sixth question, and the only one about the TEST tree: not "do the
   # links resolve", not "is the file shaped right", not "does the file:line

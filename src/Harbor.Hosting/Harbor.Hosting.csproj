@@ -67,6 +67,12 @@
     <ProjectReference Include="..\Harbor.Diagnostics.Abstractions\Harbor.Diagnostics.Abstractions.csproj"/>
     <ProjectReference Include="..\Harbor.Telemetry.Core\Harbor.Telemetry.Core.csproj"/>
     <ProjectReference Include="..\Harbor.Application\Harbor.Application.csproj"/>
+    <!-- #1625: the configuration family (HarborConfig, IConfigStore, AuthStore,
+         ProviderPresets) left Harbor.Application for Harbor.PolicyConfig;
+         ConfigurationModule registers the config stores and
+         PermissionConfigStoreAdapter, so the composition root names the new
+         assembly directly. -->
+    <ProjectReference Include="..\Harbor.PolicyConfig\Harbor.PolicyConfig.csproj"/>
     <!-- #1624: session-context cohort (compaction/prompt/tracker) — CoreModule + IntelligenceModule bind the moved types. -->
     <ProjectReference Include="..\Harbor.SessionContext\Harbor.SessionContext.csproj"/>
     <ProjectReference Include="..\Harbor.Onboarding\Harbor.Onboarding.csproj"/>

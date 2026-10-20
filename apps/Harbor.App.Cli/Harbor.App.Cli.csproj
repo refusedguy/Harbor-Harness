@@ -274,6 +274,9 @@
          assemblies (Harbor.Application use cases + Harbor.Registries impls);
          reference the real owners directly. -->
     <ProjectReference Include="..\..\src\Harbor.Application\Harbor.Application.csproj"/>
+    <!-- #1625: the CLI binds the moved configuration types (HarborConfig,
+         IConfigStore, AuthStore, ProviderPresets) directly. -->
+    <ProjectReference Include="..\..\src\Harbor.PolicyConfig\Harbor.PolicyConfig.csproj"/>
     <!-- #1624: the CLI binds the moved session-context types (prompt builder, workspace probes, session fork). -->
     <ProjectReference Include="..\..\src\Harbor.SessionContext\Harbor.SessionContext.csproj"/>
     <!-- #1616: the verified-change verbs (run accept/check/change/report/reject, run task)

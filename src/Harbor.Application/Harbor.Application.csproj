@@ -4,32 +4,34 @@
     <TargetFramework>net10.0</TargetFramework>
     <IsPackable>true</IsPackable>
     <PackageId>Harbor.Application</PackageId>
-    <Description>Harbor application layer — use cases (AgentLoop, DefaultAgent, CompactionService, SystemPromptBuilder, MessageConverter, HarborConfig). The Permissions subdomain is the sibling Harbor.Permissions assembly (#1615); OnboardingWizard + SetupChecklistDetector moved to Harbor.Onboarding (#1614).</Description>
+    <Description>Harbor application layer — use cases (AgentLoop, DefaultAgent, CompactionService, SystemPromptBuilder, MessageConverter). The configuration family (HarborConfig, JsonConfigStore, AuthStore, ProviderPresets) is the sibling Harbor.PolicyConfig assembly (#1625); the Permissions subdomain is Harbor.Permissions (#1615); OnboardingWizard + SetupChecklistDetector moved to Harbor.Onboarding (#1614).</Description>
     <PackageTags>harbor;ai;agent;application;use-cases</PackageTags>
   </PropertyGroup>
 
   <!--
-    #580: embed providers/*.json (Directory.Build.targets globs the whole folder —
-    no explicit <EmbeddedResource> list) so ProviderPresetCatalog, which drives the
-    onboarding picker, /providers and /auth set, still sees the bundled configs in a
-    published single-file binary where no providers/ directory sits next to the
-    executable. Dropping a new providers/<name>.json needs no csproj edit.
+    #580/#1625: the providers/*.json embed MOVED to Harbor.PolicyConfig with
+    ProviderPresetCatalog — the catalog reads the embedded resources off its
+    OWN assembly, so the embed has to travel with the code that reads them.
+    Nothing in this assembly reads them any more.
   -->
-  <PropertyGroup>
-    <EmbedProviders>true</EmbedProviders>
-  </PropertyGroup>
 
   <!--
     Application layer depends on Harbor.Abstractions only — never on
     Infrastructure (Providers.*, Storage.*, Tools.Builtin), never on
     Presentation (Tui.*), never on sibling Application projects
-    (Plugins.Runtime, Scripting) — EXCEPT Harbor.Permissions (#1615): the
-    permissions subdomain extracted verbatim from Permissions/. AgentLoop and
-    ToolDispatcher bind only the CONTRACTS (IPermissionService in
-    Abstractions.Contracts, IApprovalCoordinator in Abstractions); the edge
-    stays real for the compaction-adjacent Resources/config readers that name
-    Harbor.Application.Permissions types, and is declared here rather than
-    hidden behind transitivity.
+    (Plugins.Runtime, Scripting).
+
+    #1615: the permissions subdomain was extracted verbatim from
+    Permissions/ and the whole-config IConfigStore surface was cut at the
+    IPermissionConfigStore seam; the Application side realized that seam
+    through PermissionConfigStoreAdapter, which lived in Configuration/.
+    #1625 moved Configuration/ — and with it that adapter — into
+    Harbor.PolicyConfig, so the Harbor.Permissions edge this project carried
+    for the adapter is GONE: nothing here binds a Harbor.Permissions type any
+    more, and a declared-but-unbound reference would be a dead edge the
+    architecture gate reports. The seam itself is unchanged: the port still
+    lives in Harbor.Permissions and the adapter still implements it, one
+    assembly over.
     #1623: the extracted agent loop (Harbor.AgentRuntime) took the IHookRunner
     consumers (ToolDispatcher, AgentLoop, CompactionBehavior, UserHookGates) and
     the Diagnostics.Abstractions telemetry bindings with it, so the former
@@ -40,7 +42,6 @@
   -->
   <ItemGroup>
     <ProjectReference Include="..\Harbor.Abstractions\Harbor.Abstractions.csproj"/>
-    <ProjectReference Include="..\Harbor.Permissions\Harbor.Permissions.csproj"/>
     <ProjectReference Include="..\Harbor.Extensions\Harbor.Extensions.csproj"/>
   </ItemGroup>
 

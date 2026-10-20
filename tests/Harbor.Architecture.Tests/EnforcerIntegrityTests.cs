@@ -460,7 +460,8 @@ public sealed class EnforcerIntegrityTests
     [Test]
     public async Task DocumentedExceptions_AreScopedToNamedFiles()
     {
-        var namespaceOwners = NamespaceOwners(SourceNamespacesByProject());
+        var namespacesByProject = SourceNamespacesByProject();
+        var namespaceOwners = NamespaceOwners(namespacesByProject);
         var failures = new List<string>();
 
         foreach (var (from, exceptions) in FullLayerMatrixTests.DocumentedExceptions)
@@ -486,7 +487,7 @@ public sealed class EnforcerIntegrityTests
                     continue;
                 }
 
-                var actual = FilesBindingTarget(from, exception.Target, namespaceOwners);
+                var actual = FilesBindingTarget(from, exception.Target, namespaceOwners, namespacesByProject);
 
                 var extra = actual.Except(expected, StringComparer.Ordinal).OrderBy(p => p, StringComparer.Ordinal).ToList();
                 var missing = expected.Except(actual, StringComparer.Ordinal).OrderBy(p => p, StringComparer.Ordinal).ToList();
@@ -666,7 +667,8 @@ public sealed class EnforcerIntegrityTests
     private static HashSet<string> FilesBindingTarget(
         string from,
         string target,
-        IReadOnlyDictionary<string, HashSet<string>> namespaceOwners)
+        IReadOnlyDictionary<string, HashSet<string>> namespaceOwners,
+        IReadOnlyDictionary<string, HashSet<string>> namespacesByProject)
     {
         // The projects that own a namespace under the target's namespace prefix,
         // e.g. target "Harbor.Ui.Framework.State" owns "Harbor.Ui.Framework.Panels"
@@ -675,6 +677,40 @@ public sealed class EnforcerIntegrityTests
             namespaceOwners
                 .Where(e => e.Key.StartsWith(target, StringComparison.Ordinal))
                 .SelectMany(e => e.Value), StringComparer.Ordinal);
+
+        // #1625: the prefix above is a HEURISTIC, and the verbatim-move
+        // convention — the one the whole Harbor.Application split is built on —
+        // breaks it: src/Harbor.PolicyConfig holds the
+        // Harbor.Application.Configuration types, kept verbatim, so no namespace
+        // the assembly publishes starts with the assembly's own name. The
+        // prefix alone would stop seeing the binding, and the scope check
+        // would then read a real site as "binds nothing from it" — which
+        // silently stops excusing anything, the failure shape this rule exists
+        // to prevent. The target assembly's OWN namespaces are the other half
+        // of the answer: they are what it actually publishes, and the owners
+        // of each are the projects a file can reach it through.
+        string? targetProject = null;
+        foreach (var (assembly, projectDir) in RepoPaths.EnumerateRepoAssemblyNames())
+        {
+            if (string.Equals(assembly, target, StringComparison.Ordinal)
+                && RepoPaths.FindProjectDir(projectDir) is not null)
+            {
+                targetProject = projectDir;
+                break;
+            }
+        }
+
+        if (targetProject is not null
+            && namespacesByProject.TryGetValue(targetProject, out var targetNamespaces))
+        {
+            foreach (string ns in targetNamespaces)
+            {
+                if (namespaceOwners.TryGetValue(ns, out var owners))
+                {
+                    targetProjects.UnionWith(owners);
+                }
+            }
+        }
 
         var result = new HashSet<string>(StringComparer.Ordinal);
         foreach (string file in RepoPaths.EnumerateCsFiles(from))

@@ -39,7 +39,7 @@ WHY THIS FILE EXISTS (issue #428, slice: the Harbor.Abstractions contract)
   `System.Security.Cryptography`. It is a phantom edge on the exact project the
   freeze is about, and nothing in the tree notices.
 
-WHY THE PERIMETER IS FOUR PROJECTS AND NOT TWO (#1016 follow-up)
+WHY THE PERIMETER IS FIVE PROJECTS AND NOT TWO (#1016 follow-up)
 
   Removing that one edge left the same phantom standing in two more projects that
   the first version of this file named in its own "what this does not do" section
@@ -84,6 +84,15 @@ WHY THE PERIMETER IS FOUR PROJECTS AND NOT TWO (#1016 follow-up)
   depend on it either, so the two graphs are disjoint and the pin protected
   nothing. #1895 removed the pin. This gate counts `<PackageReference>`
   elements, so the pin had cost it nothing either way.
+
+  The fifth project arrived with #1625, and the reason is the same one the
+  other two were added for: `src/Harbor.PolicyConfig` is the configuration
+  family the `Harbor.Application` split (#1625) moved out, and it carries the
+  `ZLinq` / `CSharpFunctionalExtensions` / `Microsoft.Extensions.Logging.Abstractions`
+  set that the composition root and both apps inherit through it. A new project
+  is on the gate the day it lands, not the day someone remembers to add it —
+  the phantom this file exists to catch is exactly the kind that survives in a
+  project nobody re-reads.
 
 WHY THE COMPARISON IS AGAINST FILES, NOT AGAINST PROSE
 
@@ -272,6 +281,7 @@ SCOPE = (
     "src/Harbor.Abstractions.Contracts",
     "src/Harbor.Extensions",
     "src/Harbor.Application",
+    "src/Harbor.PolicyConfig",
 )
 # The list is named SCOPE and not FROZEN because two of the four projects are not
 # frozen. An alias left behind for "readers of the first version" would have had
@@ -680,6 +690,7 @@ CSPROJ = """<Project Sdk="Microsoft.NET.Sdk">
 WIDENED = (
     "src/Harbor.Extensions",
     "src/Harbor.Application",
+    "src/Harbor.PolicyConfig",
 )
 
 

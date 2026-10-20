@@ -7,6 +7,12 @@
 
   <ItemGroup>
     <ProjectReference Include="../../src/Harbor.Application/Harbor.Application.csproj"/>
+    <!-- #1625: MultiSessionLoadHarness constructs a PermissionService directly.
+         The permissions subdomain moved out of Harbor.Application in #1615 and
+         Harbor.Application's edge to it went with the configuration family in
+         #1625, so the reference is declared here rather than inherited
+         transitively. -->
+    <ProjectReference Include="../../src/Harbor.Permissions/Harbor.Permissions.csproj"/>
     <!-- #1624: binds the moved session-context types directly. -->
     <ProjectReference Include="..\..\src\Harbor.SessionContext\Harbor.SessionContext.csproj"/>
     <!-- #1623: MultiSessionLoadHarness constructs AgentLoop/RetryPolicy directly. -->

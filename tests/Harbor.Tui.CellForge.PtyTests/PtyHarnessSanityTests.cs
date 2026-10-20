@@ -43,6 +43,16 @@ public class PtyHarnessSanityTests
 
         int exit = await session.WaitForExitAsync(TimeSpan.FromSeconds(10)).ConfigureAwait(false);
         await Assert.That(exit).IsEqualTo(0);
+
+        // The child's output is FINAL only once the reader thread has seen EOF
+        // (PtySession.IsOutputClosed): the child can be reaped while the reader
+        // is still blocked in read with the last bytes in flight, so reading
+        // RawText straight after the exit can read the tail as MISSING — the
+        // empty string this assertion saw when the runner was loaded. The
+        // wait is on the child's LINE arriving, not on the size: the assertion
+        // below is the one that says what the size was.
+        await session.WaitForOutputAsync(
+            static text => text.Contains('\n'), TimeSpan.FromSeconds(5)).ConfigureAwait(false);
         await Assert.That(session.RawText).Contains("30 100");
     }
 

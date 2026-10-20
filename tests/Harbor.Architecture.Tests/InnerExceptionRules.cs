@@ -6,7 +6,7 @@
 // caught exception on the floor. The MESSAGE survived; the stack trace and the
 // cause did not.
 //
-//   * src/Harbor.Application/Configuration/ConfigStore.cs — a corrupt
+//   * src/Harbor.PolicyConfig/Configuration/ConfigStore.cs — a corrupt
 //     config.json became `InvalidDataException("config.json is corrupt: …")`
 //     with the JsonException interpolated into the text. The user still sees
 //     the same failure string, and the inner exception now carries the stack
@@ -298,7 +298,7 @@ public sealed class InnerExceptionRules
         [
             // The two files #1848's fix touched. A scope that stopped seeing
             // them is broken, not clean.
-            "src/Harbor.Application/Configuration/ConfigStore.cs",
+            "src/Harbor.PolicyConfig/Configuration/ConfigStore.cs",
             "src/Harbor.Ipc.Client/Ide/IdeSessionBridge.cs",
         ],
         CustomParse = Parse,

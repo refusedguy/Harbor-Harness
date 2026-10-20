@@ -228,7 +228,7 @@ Moved platform-agnostic logic out of `Harbor.App.Avalonia` into `Harbor.Ui.Frame
 | File | Lines | Concerns mixed | Plan |
 |---|---|---|---|
 | `Harbor.Providers.OpenAI/OpenAILlmClient.cs` | 656 | HTTP + SSE parsing + event mapping + models endpoint | Extract `OpenAiSseParser` + `OpenAiEventMapper` |
-| `Harbor.Application/Configuration/HarborConfig.cs` | 492 | mega-record with every config field | Split into per-section records (`ProviderConfig`, `ToolConfig`, `UiConfig`, etc.) |
+| `Harbor.PolicyConfig/Configuration/HarborConfig.cs` | 492 | mega-record with every config field | Split into per-section records (`ProviderConfig`, `ToolConfig`, `UiConfig`, etc.) |
 | `Harbor.Providers.Anthropic/AnthropicLlmClient.cs` | 562 | similar to OpenAI | Same decomposition pattern |
 | `apps/Harbor.App.Cli/Hosting/HostBuilder.cs` | 644 | DI registration + config + provider/tool wiring | Decompose into per-concern registrars (mirror Avalonia `Hosting/`) |
 | `apps/Harbor.App.Avalonia/Services/SessionManager.cs` | 492 | orchestration + UI dispatch + agent lifecycle | Move to `Ui.Framework` once `TokenUsageViewModel` dependency abstracted |
@@ -247,14 +247,14 @@ Moved platform-agnostic logic out of `Harbor.App.Avalonia` into `Harbor.Ui.Frame
   nothing. A user who wants SharpConsoleUI clones the tree, builds the wrapper
   and wires it in by hand. This closes one of the three projects in #1921;
   `Harbor.CodeGen` and `apps/Harbor.App.Avalonia` stay open there.
-- [ ] **`Harbor.Application` split, variant A, two slices left (ADR-018).** The
+- [ ] **`Harbor.Application` split, variant A, one slice left (ADR-018).** The
   owner decided on 2026-10-16 to decompose `Harbor.Application` (14 areas, 19.5k
   lines; Sessions 44% + Agents 27%) into **five assemblies**, the maximal plan,
   not the incremental `C → B` path the research recommended. Landed:
   `Harbor.AgentRuntime` (#1623, PR #1666), `Harbor.SessionContext` (#1624, PR
-  #1714) and `Harbor.ChangeTracking` (#1616, PR #1660). Open: #1625
-  `PolicyConfig`, whose remaining cohort is `Configuration/*` alone, since
-  Permissions and Onboarding already left under #1658 and #1701, and #1626
+  #1714), `Harbor.ChangeTracking` (#1616, PR #1660) and `Harbor.PolicyConfig`
+  (#1625 — whose remaining cohort was `Configuration/*` alone, since Permissions
+  and Onboarding already left under #1658 and #1701). Open: #1626
   `Intelligence`. Decision, rejected variants, sequencing DAG and the standing
   rules (guard before rewrite; a new axis must be additive and registered):
   [ADR-018](adr/ADR-018-harbor-application-split-variant-a.md).

@@ -130,11 +130,12 @@ only BCL plus a gated set of 7 NuGet packages (см. `Harbor.Abstractions` ни�
 **Key layering invariants** (enforced by `Harbor.Architecture.Tests` — reflection rules
 + NetArchTest + `FullLayerMatrixTests` data-table over all main-solution src assemblies):
 
-> **Update 2026-10-20: the Application layer is being decomposed (variant A).**
+> **Update 2026-10-21: the Application layer is being decomposed (variant A).**
 > `Harbor.Application` was one 14-area, 19.5k-line project; the owner decided on
 > 2026-10-16 to split it into five assemblies. `Harbor.AgentRuntime` (#1623),
-> `Harbor.SessionContext` (#1624) and `Harbor.ChangeTracking` (#1616) have landed;
-> #1625 (`PolicyConfig`) and #1626 (`Intelligence`) are open. The decision, the
+> `Harbor.SessionContext` (#1624), `Harbor.ChangeTracking` (#1616) and
+> `Harbor.PolicyConfig` (#1625) have landed; #1626 (`Intelligence`) is open. The
+> decision, the
 > rejected variants and the sequencing are recorded in
 > [ADR-018](adr/ADR-018-harbor-application-split-variant-a.md); the enforced truth
 > stays the matrix in

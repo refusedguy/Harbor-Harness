@@ -495,6 +495,11 @@ Two caveats are recorded rather than smoothed over. The cohort boundary has move
 scope is `Configuration/*` alone), and the "additive and registered" axis rule that
 came out of the #555 freeze lift is still policy only until #1719 lands.
 
+**Update 2026-10-21:** #1625 has landed — the configuration family
+(`Configuration/*`, 11 files) is `src/Harbor.PolicyConfig`, an Application-layer
+sibling with its own matrix row, `Harbor.slnx` row and README. #1626
+(`Intelligence`) is the last slice still open.
+
 - Full text, the rejected variants and what the issues do *not* record about
   them, the sequencing DAG, the standing rules and the assembled
   definition-of-done:

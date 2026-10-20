@@ -22,7 +22,7 @@ holds all pure use cases. Depends on `Harbor.Abstractions` + `Harbor.Extensions`
 - [x] Migration out of Harbor.Core complete (the empty facade was deleted in #451)
 - [x] Onboarding: live model catalog during first-run wizard via
       `ProviderPresets` + provider health probes (PROD-UI-0;
-      `Configuration/ProviderPresets.cs:11`, `Providers/ProviderHealthCheck.cs:13`)
+      `../Harbor.PolicyConfig/Configuration/ProviderPresets.cs:11`, `Providers/ProviderHealthCheck.cs:13`)
 - [x] `IProviderHealthCheck` contract implementation (`Providers/ProviderHealthCheck.cs`)
 - [x] Central retry policy helpers for 429/5xx (`Resilience/RetryPolicyExtensions.cs:17`)
       (the implementations moved to `Harbor.AgentRuntime` by #1623; the contracts

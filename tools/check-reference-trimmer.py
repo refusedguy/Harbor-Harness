@@ -6,10 +6,11 @@ check-abstractions-contract.py / check-test-packages.py / check-test-projects.py
 check-test-dup.py / aot-publish-gate.py and it asks the question none of them
 asks about the WHOLE tree:
 
-  check-abstractions-contract.py  is every <PackageReference> of FOUR projects
+  check-abstractions-contract.py  is every <PackageReference> of FIVE projects
                                  load-bearing? (src/Harbor.Abstractions,
                                  src/Harbor.Abstractions.Contracts,
-                                 src/Harbor.Extensions, src/Harbor.Application)
+                                 src/Harbor.Extensions, src/Harbor.Application,
+                                 src/Harbor.PolicyConfig)
   check-test-packages.py          may a test/sample project pull a BANNED
                                  package in, directly or transitively?
   check-test-projects.py          does every test project actually run in CI?

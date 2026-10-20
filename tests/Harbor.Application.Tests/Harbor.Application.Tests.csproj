@@ -7,6 +7,8 @@
 
   <ItemGroup>
     <ProjectReference Include="../../src/Harbor.Application/Harbor.Application.csproj"/>
+    <!-- #1625: binds the moved configuration types (HarborConfig, the config sections) directly. -->
+    <ProjectReference Include="../../src/Harbor.PolicyConfig/Harbor.PolicyConfig.csproj"/>
     <!-- #1624: binds the moved session-context types directly. -->
     <ProjectReference Include="..\..\src\Harbor.SessionContext\Harbor.SessionContext.csproj"/>
     <ProjectReference Include="../../src/Harbor.Hooks/Harbor.Hooks.csproj"/>

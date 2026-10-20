@@ -1,0 +1,89 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsPackable>true</IsPackable>
+    <PackageId>Harbor.PolicyConfig</PackageId>
+    <Description>Harbor configuration family — HarborConfig, JsonConfigStore, AuthStore, ProviderPresets, the config normalizer and the step-budget projection. Extracted verbatim from Harbor.Application (#1625); the namespace stays Harbor.Application.Configuration, so consumers keep their usings.</Description>
+    <PackageTags>harbor;ai;agent;config;policy</PackageTags>
+  </PropertyGroup>
+
+  <!--
+    #580: embed providers/*.json (Directory.Build.targets globs the whole folder —
+    no explicit <EmbeddedResource> list) so ProviderPresetCatalog, which drives the
+    onboarding picker, /providers and /auth set, still ships the bundled configs
+    in a published single-file binary where no providers/ directory sits next to
+    the executable. The embed MOVED with ProviderPresetCatalog out of
+    Harbor.Application (#1625) — the catalog reads the resources off its OWN
+    assembly (typeof(ProviderPresetCatalog).Assembly), so the property has to
+    travel with the code that reads them.
+  -->
+  <PropertyGroup>
+    <EmbedProviders>true</EmbedProviders>
+  </PropertyGroup>
+
+  <!--
+    #1625: verbatim extraction of Harbor.Application/Configuration (the issue's
+    "Configuration/*" cohort — the remaining third of the PolicyConfig cohort
+    after Permissions (#1615) and Onboarding (#1614) left under their own
+    issues). Application-layer sibling, the same convention as the Hooks
+    extraction #1613 and the AgentRuntime / SessionContext slices: the
+    namespace stays Harbor.Application.Configuration verbatim, consumers keep
+    their usings, only ProjectReferences change.
+
+    Depends on Harbor.Abstractions only (the contract vocabulary:
+    AgentDefinition, ProviderId / ModelRef / AgentName, PermissionRule) plus
+    Harbor.Permissions for ONE thing — the IPermissionConfigStore seam that
+    #1615 cut for the permissions subdomain. That seam is why this assembly
+    depends on Harbor.Permissions and not the other way round: the subdomain
+    declares the port, the configuration side implements it
+    (PermissionConfigStoreAdapter). Nothing here reaches back into
+    Harbor.Application — the residue that reads the configuration family moved
+    with it, so the edge is one-way and the graph stays acyclic.
+    See docs/ARCHITECTURE_LAYERS.md §2.
+  -->
+  <ItemGroup>
+    <ProjectReference Include="..\Harbor.Abstractions\Harbor.Abstractions.csproj"/>
+    <!-- The IPermissionConfigStore port (#1615) — the permissions subdomain's
+         one external seam, implemented here over the whole-config IConfigStore. -->
+    <ProjectReference Include="..\Harbor.Permissions\Harbor.Permissions.csproj"/>
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- CSharpFunctionalExtensions: the Result / Maybe railway in
+         ConfigStore, ConfigNormalizer, HarborConfig, AuthStore and
+         ProviderPresetCatalog. Binds it DIRECTLY, so it is declared. -->
+    <PackageReference Include="CSharpFunctionalExtensions"/>
+    <!-- Microsoft.Extensions.Logging.Abstractions: ILogger + the BCL
+         [LoggerMessage] source generator (AuthStoreLog,
+         ProviderPresetCatalogLog). -->
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions"/>
+    <!--
+      ZLinq replaces System.Linq throughout this assembly for zero-allocation
+      LINQ — the same arrangement Harbor.Application uses, and the reason
+      AuthStore's `envVars.Select(...).JoinToString(", ")` keeps compiling
+      (JoinToString is a ZLinq operator, not a System.Linq one). The drop-in
+      generator emits extension methods that take priority over System.Linq's,
+      and the SDK's implicit "System.Linq" using is removed below so that every
+      LINQ call site resolves to ZLinq's pipeline without rewriting call sites.
+    -->
+    <PackageReference Include="ZLinq"/>
+    <PackageReference Include="ZLinq.DropInGenerator" ExcludeAssets="runtime">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <!-- Proj0037 (#1857): the package ships an analyzer and no runtime
+           assembly, so the runtime asset is excluded explicitly. -->
+    </PackageReference>
+  </ItemGroup>
+
+  <!--
+    ZLinq replaces System.Linq throughout Harbor.PolicyConfig for zero-allocation
+    LINQ. The implicit "System.Linq" using injected by the SDK is removed here so
+    that all LINQ operators resolve to ZLinq's zero-allocation equivalents
+    without producing ambiguity errors.
+  -->
+  <ItemGroup>
+    <Using Remove="System.Linq"/>
+  </ItemGroup>
+
+</Project>

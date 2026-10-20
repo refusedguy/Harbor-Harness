@@ -99,7 +99,7 @@ Measured on `dev` = `21db0290`.
 | site | value | notes |
 |---|---|---|
 | `providers/kilocode.json:6` | `tencent/hy3:free` | `defaultModel`; since the initial commit |
-| `src/Harbor.Application/Configuration/ConfigSections.cs:13` | `kilocode/tencent/hy3:free` | `FallbackModel` — what a default install with no `HARBOR_MODEL` actually gets |
+| `src/Harbor.PolicyConfig/Configuration/ConfigSections.cs:13` | `kilocode/tencent/hy3:free` | `FallbackModel` — what a default install with no `HARBOR_MODEL` actually gets |
 | `AGENTS.md` ×5, `README.md` ×3 | `hy3:free` | the reader-facing claims |
 | `docs/GETTING_STARTED.md` ×8, `docs/DEVELOPMENT.md`, `docs/PROJECT_STATUS.md`, `samples/ide-client/README.md`, `apps/Harbor.App.Avalonia/README.md` | `hy3:free` | |
 | `apps/Harbor.App.Avalonia/Program.cs:31` | `hy3:free` | the `--help` banner |

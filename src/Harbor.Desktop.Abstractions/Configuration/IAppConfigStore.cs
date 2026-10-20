@@ -1,7 +1,7 @@
 // IAppConfigStore.cs — repository contract for per-app configuration.
 //
 // Mirrors the IConfigStore shape used by the legacy HarborConfig (see
-// Harbor.Application/Configuration/HarborConfig.cs) but is generic over the
+// Harbor.PolicyConfig/Configuration/HarborConfig.cs) but is generic over the
 // per-app config record type. The generic parameter lets each app declare a
 // dedicated config record (CliConfig, AvaloniaConfig, …) while sharing the
 // same load/save/update API surface.

@@ -18,7 +18,8 @@ namespace Harbor.Config.Tests;
 /// <c>SetupChecklistDetector.DetectAsync</c> calls
 /// <c>AuthStore.ListApiKeysAsync</c> (SetupChecklistDetector.cs:175,
 /// re-anchored after the #1614 extraction to Harbor.Onboarding), which
-/// enumerates the ENTIRE process environment (AuthStore.cs:140) and synthesises a
+/// enumerates the ENTIRE process environment (AuthStore.cs:140, re-anchored after
+/// the #1625 extraction to Harbor.PolicyConfig) and synthesises a
 /// provider entry for every <c>*_API_KEY</c> in it. Two classes in this assembly
 /// write exactly those variables. No assertion here can be flipped by that today —
 /// <c>ProviderKeyStored</c> is true whenever any key is present, and this test

@@ -594,7 +594,7 @@ the message survived, the cause did not.
 
 | Site | Before | After |
 |------|--------|-------|
-| `src/Harbor.Application/Configuration/ConfigStore.cs` | `throw new InvalidDataException($"config.json is corrupt: {je.Message}")` | the same message, with `je` as the inner exception: the stack trace and the JSON position of the malformed key survive |
+| `src/Harbor.PolicyConfig/Configuration/ConfigStore.cs` | `throw new InvalidDataException($"config.json is corrupt: {je.Message}")` | the same message, with `je` as the inner exception: the stack trace and the JSON position of the malformed key survive |
 | `src/Harbor.Ipc.Client/Ide/IdeSessionBridge.cs` | `throw new IdeRpcException(IdeRpcException.InvalidParams, $"Malformed params: {ex.Message}")` | the same message and code, with `ex` as the inner exception |
 
 Both fixes keep the text a user or an IDE sees: `ResultErrors.Message` reads

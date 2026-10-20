@@ -31,13 +31,15 @@
 #
 # - WHAT IS NOT HERE, AND WHY ---------------------------------------------
 #
-# The four projects whose <PackageReference> set tools/check-abstractions-
+# The five projects whose <PackageReference> set tools/check-abstractions-
 # contract.py already answers for - src/Harbor.Abstractions,
-# src/Harbor.Abstractions.Contracts, src/Harbor.Extensions and
-# src/Harbor.Application - are not listed here. Their findings are dropped
-# before the comparison, because two gates answering the same question for
-# the same projects means two baselines to keep in step. Measured on the
-# first run, those four produced no finding at all.
+# src/Harbor.Abstractions.Contracts, src/Harbor.Extensions,
+# src/Harbor.Application and src/Harbor.PolicyConfig - are not listed here.
+# Their findings are dropped before the comparison, because two gates
+# answering the same question for the same projects means two baselines to
+# keep in step. Measured on the first run, those four produced no finding at
+# all. (#1625 widened the perimeter to five; the list is read from the
+# sibling gate at run time, so this paragraph follows it.)
 #
 # Microsoft.NET.Test.Sdk is a separate matter, and the answer is measured
 # rather than assumed: ReferenceTrimmer SKIPS every package that ships a

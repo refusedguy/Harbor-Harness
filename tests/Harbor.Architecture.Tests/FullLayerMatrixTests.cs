@@ -163,6 +163,10 @@ public class FullLayerMatrixTests
         // over Harbor.Application's configuration family (0 reverse edges).
         "Harbor.Onboarding",
         "Harbor.Hooks", "Harbor.Permissions", "Harbor.AgentRuntime",
+        // #1625: the configuration family (HarborConfig / JsonConfigStore /
+        // AuthStore / ProviderPresets / the normalizer), extracted from
+        // Harbor.Application — the last piece of the PolicyConfig cohort.
+        "Harbor.PolicyConfig",
         // #1624: session-context cohort (compaction/prompt/tracker + workspace
         // probes + session fork), extracted from Harbor.Application.
         "Harbor.SessionContext",
@@ -212,14 +216,17 @@ public class FullLayerMatrixTests
     {
         // #188 (part of #96) Presentation → Application tech debt, owner: architecture:
         // ProviderModelPickerViewModel / OnboardingViewModel consume ProviderPresets
-        // from Harbor.Application.Configuration. The Harbor.Core facade that used to
+        // from the configuration family. The Harbor.Core facade that used to
         // carry this edge was removed in #188 and the facade itself deleted in #451.
+        // #1625: the target moved with the catalog — the configuration family
+        // left Harbor.Application for Harbor.PolicyConfig, and the debt is the
+        // same one, one assembly over. The fix named below is unchanged.
         // Future fix: move the preset catalog to Domain (Harbor.Abstractions.Providers)
         // — tracked per site, so the debt cannot spread past these two files.
         ["Harbor.Desktop.Abstractions"] =
         [
             new DocumentedException(
-                "Harbor.Application",
+                "Harbor.PolicyConfig",
                 "#188/#96 Presentation→Application debt: ProviderPresets catalog. Fix: move presets to Domain (Harbor.Abstractions.Providers).",
                 [
                     "ViewModels/OnboardingViewModel.cs",
@@ -515,10 +522,15 @@ public class FullLayerMatrixTests
             [ "Harbor.Extensions", "Harbor.Ui.Framework.Rendering" ]),
 
         // ---- Application ----------------------------------------------------
+        // #1625: the configuration family (Configuration/*) left this assembly
+        // for Harbor.PolicyConfig, and with it the Harbor.Permissions edge:
+        // the only thing that bound the permissions subdomain here was
+        // PermissionConfigStoreAdapter, which implements the #1615 seam over
+        // IConfigStore and moved with the rest of Configuration/. Nothing in
+        // the residue names a Harbor.Permissions type, so the edge is gone
+        // rather than merely unused.
         ["Harbor.Application"] = new(Layer.Application,
-            ["Harbor.Abstractions", "Harbor.Extensions",
-                // #1615: permissions subdomain extraction — mirror edge below.
-                "Harbor.Permissions"]),
+            ["Harbor.Abstractions", "Harbor.Extensions"]),
         // #1613: Harbor.Hooks — Application-layer sibling like Harbor.Registries:
         // the hook runner binds ToolResult (Domain) + BCL + Logging only; edge is Contracts (Hooks resolves no facade-level type).
         ["Harbor.Hooks"] = new(Layer.Application, ["Harbor.Abstractions.Contracts"]),
@@ -541,14 +553,29 @@ public class FullLayerMatrixTests
         ["Harbor.Permissions"] = new(Layer.Application,
             ["Harbor.Abstractions", "Harbor.Extensions"]),
         // #1614: Harbor.Onboarding — Application-layer one-way leaf like Hooks, but
-        // with a real edge INTO Harbor.Application: the wizard binds AuthStore,
-        // IConfigStore, JsonConfigStore and ProviderPresets (the issue's
+        // with a real edge INTO the configuration family: the wizard binds
+        // AuthStore, IConfigStore, JsonConfigStore and ProviderPresets (the issue's
         // "→Configuration" arrow). 0 reverse edges: nothing in src/ names the leaf
         // except the composition root (Harbor.Hosting registers the wizard in
         // CoreModule). The Contracts edge derives from Harbor.Abstractions
         // (ProviderId/ModelRef) via ExpandAllowed.
+        // #1625: that configuration family left Harbor.Application for
+        // Harbor.PolicyConfig, so the one edge the leaf carries now points
+        // there instead — the leaf never reached into Harbor.Application for
+        // anything else.
         ["Harbor.Onboarding"] = new(Layer.Application,
-            ["Harbor.Application", "Harbor.Abstractions"]),
+            ["Harbor.PolicyConfig", "Harbor.Abstractions"]),
+        // #1625: Harbor.PolicyConfig — the configuration family (HarborConfig,
+        // JsonConfigStore, AuthStore, ProviderPresets, the normalizer, the
+        // step-budget projection), extracted verbatim from
+        // Harbor.Application/Configuration. It binds the contract vocabulary
+        // (AgentDefinition, ProviderId / ModelRef / AgentName, PermissionRule),
+        // the Harbor.Extensions Ensure.* leaf (Domain) and the #1615 seam port
+        // IPermissionConfigStore — the one edge INTO Harbor.Permissions, which
+        // is the shape of a subdomain seam: the port is declared by the
+        // permissions side and implemented here.
+        ["Harbor.PolicyConfig"] = new(Layer.Application,
+            ["Harbor.Abstractions", "Harbor.Permissions"]),
         ["Harbor.AgentRuntime"] = new(Layer.Application, ["Harbor.Abstractions", "Harbor.Diagnostics.Abstractions", "Harbor.Extensions",
             // #1623: the extracted loop binds IHookRunner (UserHookGates, CompactionBehavior,
             // ToolDispatcher) — the edge Application keeps on its own row, plus Diagnostics
@@ -643,6 +670,9 @@ public class FullLayerMatrixTests
             "Harbor.Abstractions", "Harbor.Abstractions.Contracts",
             "Harbor.Diagnostics.Abstractions", "Harbor.Telemetry.Core",
             "Harbor.Application", "Harbor.Onboarding", "Harbor.Hooks", "Harbor.Permissions", "Harbor.AgentRuntime", "Harbor.SessionContext", "Harbor.Registries",
+            // #1625: the configuration family — ConfigurationModule registers the
+            // config stores and the #1615 PermissionConfigStoreAdapter.
+            "Harbor.PolicyConfig",
             "Harbor.Desktop.Abstractions",
             "Harbor.Terminal.Abstractions", "Harbor.Ui.Framework.State",
             // #667: FileTreeLoader, registered in TuiModule. First direct edge
