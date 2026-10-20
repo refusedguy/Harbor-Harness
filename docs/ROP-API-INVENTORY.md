@@ -747,6 +747,28 @@ do. Production is not covered by that condition: `src`/`apps`/`contrib` keep CFE
 - It ignores `?.Value`.
 - It matches by property name on a `Result`-named type, not by the `IResult` interface.
 
+### 5.6.1 The blind spot now has a type-resolving analyser beside it (report-only, #1868)
+
+`tests/Harbor.Architecture.Tests/Roslyn/UnguardedResultReadAnalyzer.cs` (`HARCH003`) reads the
+**operation tree** instead of the text, and resolves the **type** instead of the spelling:
+
+- `SemanticModel.GetOperation` on `(await X).Value` is an `IPropertyReferenceOperation` whose
+  `Property.ContainingType` IS `Result<T>` — the await, the parentheses and the
+  `ConfigureAwait(false)` are folded away, so the shape CFE0001 skips is visible here;
+- the rule asks whether an `IsSuccess`/`IsFailure` check on the SAME value **dominates** the
+  read, which is a question about the tree: branch containment (an `if`, a ternary), an early
+  exit (`if (r.IsFailure) return;`), a short circuit (`r.IsSuccess && …`) and a property pattern
+  (`is { IsSuccess: true }`) all count, and a reassignment between the check and the read
+  invalidates the check.
+
+It is **report-only**: it runs in-process from the architecture suite, it is not a build-time
+gate, and the text rule
+(`tests/Harbor.Architecture.Tests/UnguardedResultReadRules.cs`) keeps being the gate until the
+differential in `Roslyn/UnguardedResultReadAnalyzerTests.cs` is green. Two limits are stated
+rather than hidden: `.Error` is not covered (it needs the inverted polarity and its own
+baseline), and the value identity is a storage NAME, so two same-named values share a key — in
+the safe direction (a missed report, never a false accusation).
+
 ### 5.7 Non-vacuity (the part that is easy to get wrong)
 
 A guard that cannot fire is worse than no guard — the same lesson as NetArchTest treating a

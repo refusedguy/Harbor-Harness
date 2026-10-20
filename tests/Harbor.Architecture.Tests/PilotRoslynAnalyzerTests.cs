@@ -62,7 +62,13 @@ public sealed class PilotRoslynAnalyzerTests
     ///     Every product project, compiled once. The compilations are the
     ///     expensive part of the pilot, and three tests want them.
     /// </summary>
-    private static readonly Lazy<IReadOnlyList<(RoslynProjectCompilation.Project Project, CSharpCompilation Compilation)>>
+    /// <remarks>
+    ///     Internal rather than private because issue #1868's differential
+    ///     reuses them: compiling the tree once per analyzer would double the
+    ///     cost of the slowest test project in the repository (#1791 measured
+    ///     738 s of the 1 128 s of test time inside this project).
+    /// </remarks>
+    internal static readonly Lazy<IReadOnlyList<(RoslynProjectCompilation.Project Project, CSharpCompilation Compilation)>>
         LiveCompilations = new(BuildLiveCompilations);
 
     /// <summary>
