@@ -447,6 +447,9 @@ Harbor.Abstractions.Models.UnfinishedRunDetector :: public static UnfinishedRunR
 Harbor.Abstractions.Models.UnfinishedRunDetector :: public static class UnfinishedRunDetector
 Harbor.Abstractions.Models.UnfinishedRunDetector :: public static string Fingerprint(AgentMessage message)
 Harbor.Abstractions.Models.UnfinishedRunReport :: public sealed record UnfinishedRunReport(RunId RunId, string SessionId, RunTermination Termination, LastConfirmedState LastConfirmed, RecoveryBoundary Boundary, string? InFlightToolName = null, string? InFlightToolCallId = null, string? PendingModel = null, int ConfirmedToolCallCount = 0)
+Harbor.Abstractions.Models.UnresolvedToolCall :: public const string NotStartedCode = "TOOL_NOT_STARTED"
+Harbor.Abstractions.Models.UnresolvedToolCall :: public const string OutcomeUnknownCode = "TOOL_OUTCOME_UNKNOWN"
+Harbor.Abstractions.Models.UnresolvedToolCall :: public static class UnresolvedToolCall
 Harbor.Abstractions.Models.Usage :: public sealed partial record Usage(int InputTokens, int OutputTokens, int? ReasoningTokens = null, int? CacheReadTokens = null, int? CacheWriteTokens = null)
 Harbor.Abstractions.Models.UsdCell :: public const string Unpriced = "—"
 Harbor.Abstractions.Models.UsdCell :: public static class UsdCell
