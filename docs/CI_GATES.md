@@ -15,21 +15,21 @@ into a table that describes a repository which no longer exists.
 
 ## The measured picture
 
-Measured on `dev` at `d56aef9f`, the tree the table was last reconciled
-against:
+Measured on `dev` at `b9f3c83c` and on the tree this branch carries, which
+adds the string-switch gate and the rewrites it replays:
 
 | | |
 |---|---|
-| python tools in `tools/` | 35 files, 26 617 lines |
-| of them, the `check-*.py` family | 18 files, 19 162 lines |
+| python tools in `tools/` | 37 files, 28 364 lines |
+| of them, the `check-*.py` family | 19 files, 20 277 lines |
 | workflows that run a python tool | 6: `ci.yml`, `docs.yml`, `demo.yml`, `evaluation-cost.yml`, `test-os.yml`, `meas-build-vcpu.yml` |
-| gates that block a build | 21 |
+| gates that block a build | 22 |
 | gates that report and let the build pass | 1 (`check-test-dup.py`, `--warn-only` while the removal programme runs) |
 | controls for compile-time gates | 1 (`check-tunit-analyzer-gate.py`) |
-| reporters, helpers, libraries | 5 reporters, 6 helpers, 1 library |
-| tools with a self-test | 26 |
-| tools with a ratchet | 13 |
-| tools with a floor | 15 |
+| reporters, helpers, libraries | 5 reporters, 6 helpers, 2 libraries |
+| tools with a self-test | 27 |
+| tools with a ratchet | 14 |
+| tools with a floor | 16 |
 | tools whose self-test no workflow ran before this change | 3 (`pack-validate.py`, `test-skips.py`, `normalize-mtimes.py`) |
 | gates in a workflow that runs a script that is not in the tree | 1 (`ci.yml`'s `public-api-abstractions` job, left behind by the #1845 squash) |
 
@@ -211,17 +211,19 @@ findings that are not defects.
 
 ## The gate table
 
-Every python tool in `tools/` (35 files). 30 of them are run by a workflow; the
-other five are `gen-e2e-shards.py`, a generator a human runs, `md_gate.py`,
-which is imported by two of the others rather than run, the measurement
-helper `aggregate-build-vcpu.py`, which a human runs after a measurement
-run, `measure-project-graph.py`, which a human runs to read the project
-graph, and `codemod-test-events.py`, which rewrites the hand-built test
-events. All 35 are listed, because a tool that is not listed is a tool nobody
-reviews — with the question it answers, where it runs, whether it blocks a
-build, whether it has a self-test, the ratchet it holds, and the floors CI
-passes it. The table is checked by `tools/check-gate-policy.py`, which fails
-when it stops describing the tree.
+Every python tool in `tools/` (37 files). 31 of them are run by a workflow; the
+other six are `gen-e2e-shards.py`, a generator a human runs, `md_gate.py` and
+`string-switch-rewrites.py`, which are loaded by other tools rather than run,
+the measurement helper `aggregate-build-vcpu.py`, which a human runs after a
+measurement run, `measure-project-graph.py`, which a human runs to read the
+project graph, and `codemod-test-events.py`, which rewrites the hand-built
+test events. All 37 are listed, because a tool that is not listed is a tool
+nobody reviews. The table records, for each one, the question it answers, where
+it runs, whether it blocks a build, whether it has a self-test, the ratchet it
+holds, and the floors CI passes it. The table is checked by
+`tools/check-gate-policy.py`, which fails when it stops describing the tree:
+it names a tool the table does not list, and it names a table row the tree
+does not have.
 
 The modes are:
 
@@ -243,7 +245,7 @@ The modes are:
 | `tools/check-doc-cites.py` | a `file:line` in a normative document still points at a line, and a type it names is still built | docs.yml | cites, selftest | gate | `--self-test` | — | `--min-files 2 --min-cites 100 --min-types 50 --min-api 12 --min-counts 1 --min-test-cites 70 --min-guide-usings 30 --min-base-lists 2` |
 | `tools/check-dup-jscpd.py` | the second duplication detector: jscpd over the whole maintained C# surface, against a committed snapshot of the clones the tree has today | docs.yml | dupjscpd, selftest | gate | `--self-test` | `tools/jscpd-baseline.json` | — |
 | `tools/check-doc-facts.py` | a count the onboarding documents state still equals the count of tracked files | docs.yml | facts, selftest | gate | `--self-test` | — | `--min-facts 5` |
-| `tools/check-gate-policy.py` | this table still describes the gates the repository runs | docs.yml | gate-policy, selftest | gate | `--self-test` | `docs/CI_GATES.md` | `--min-gates 35` |
+| `tools/check-gate-policy.py` | this table still describes the gates the repository runs | docs.yml | gate-policy, selftest | gate | `--self-test` | `docs/CI_GATES.md` | `--min-gates 37` |
 | `tools/check-local-merge-loss.py` | a local squash-merge into dev dropped no content: what each merge removed is still missing | docs.yml | merge-loss, selftest | gate | `--self-test` | `tools/merge-loss-exceptions.txt` | `--min-merges 1` |
 | `tools/check-no-test-sdk.py` | no project file declares `Microsoft.NET.Test.Sdk`, the VSTest host that stops TUnit's discovery | ci.yml | test-sdk-absent | gate | `--self-test` | — | `--min-files 150` |
 | `tools/check-md-links.py` | every internal link, anchor and `path/File.cs:123` reference resolves | docs.yml | links, selftest | gate | `--self-test` | — | `--min-files 250 --min-refs 600` |
@@ -321,7 +323,7 @@ Run it:
 
 ```bash
 ./tools/check-gate-policy.py --self-test
-./tools/check-gate-policy.py --min-gates 35
+./tools/check-gate-policy.py --min-gates 37
 ```
 
 Its own `--self-test` plants one defect per rule in a synthetic tree and
