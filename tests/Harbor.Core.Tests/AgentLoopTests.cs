@@ -14,8 +14,7 @@ using Harbor.Application.Resilience;
 using Harbor.Application.Sessions;
 using Microsoft.Extensions.Logging.Abstractions;
 using Harbor.TestKit;
-// #1769: the LLM double is generated — the fake only declares what it needs.
-using FakeLlmClientBase = Harbor.TestKit.Generated.FakeLlmClient;
+using FakeLlmClientBase = Harbor.TestKit.Generated.FakeLlmClient; // #1769: generated double
 
 using Harbor.Registries.Agents;
 using Harbor.Registries.Providers;

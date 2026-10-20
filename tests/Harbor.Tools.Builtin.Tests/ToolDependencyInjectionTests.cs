@@ -9,9 +9,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using TUnit.Assertions;
 using TUnit.Assertions.Extensions;
 using Result = CSharpFunctionalExtensions.Result;
-// #1769: the store double is generated (a concrete class per interface) — the
-// hand-written member-by-member fake is gone.
-using FakeSessionStoreBase = Harbor.TestKit.Generated.FakeSessionStore;
+using FakeSessionStoreBase = Harbor.TestKit.Generated.FakeSessionStore; // #1769: generated double
 
 
 namespace Harbor.Tools.Builtin.Tests;

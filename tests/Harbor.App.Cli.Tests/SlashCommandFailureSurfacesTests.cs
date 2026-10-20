@@ -59,10 +59,8 @@ using Harbor.TestKit;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using TUnit.Assertions;
-// #1769: the doubles are generated (a concrete class per interface) — the
-// hand-written member-by-member fakes are gone.
-using FakePermissionServiceBase = Harbor.TestKit.Generated.FakePermissionService;
-using FakeSessionStoreBase = Harbor.TestKit.Generated.FakeSessionStore;
+using FakePermissionServiceBase = Harbor.TestKit.Generated.FakePermissionService; // #1769: generated double
+using FakeSessionStoreBase = Harbor.TestKit.Generated.FakeSessionStore; // #1769: generated double
 
 
 namespace Harbor.App.Cli.Tests;

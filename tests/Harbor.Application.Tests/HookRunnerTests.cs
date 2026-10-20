@@ -16,8 +16,7 @@ using Harbor.Diagnostics;
 using Harbor.TestKit;
 using Microsoft.Extensions.Logging.Abstractions;
 using TUnit.Assertions;
-// #1769: the permission double is generated — the fake only declares what it needs.
-using FakePermissionServiceBase = Harbor.TestKit.Generated.FakePermissionService;
+using FakePermissionServiceBase = Harbor.TestKit.Generated.FakePermissionService; // #1769: generated double
 
 using TestSessionContext = Harbor.Application.Tests.Fakes.TestSessionContext;
 

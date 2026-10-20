@@ -9,6 +9,10 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using TUnit.Assertions;
 using TUnit.Assertions.Extensions;
+<<<<<<< HEAD
+=======
+
+>>>>>>> 3f255c1 (style(#1769): one-line alias comments in the migrated fakes)
 using FakeToolBase = Harbor.TestKit.Generated.FakeTool; // #1769: generated double
 
 namespace Harbor.Tools.Builtin.Tests;

@@ -8,10 +8,8 @@ using Harbor.Abstractions.Tools;
 using Harbor.Registries.Providers;
 using Harbor.Registries.Tools;
 
-// #1769: the doubles are generated (a concrete class per interface), so the
-// hand-written member-by-member fakes are gone.
-using FakeLlmClientBase = Harbor.TestKit.Generated.FakeLlmClient;
-using FakeToolBase = Harbor.TestKit.Generated.FakeTool;
+using FakeLlmClientBase = Harbor.TestKit.Generated.FakeLlmClient; // #1769: generated double
+using FakeToolBase = Harbor.TestKit.Generated.FakeTool; // #1769: generated double
 
 namespace Harbor.Core.Tests;
 public class RegistryTests

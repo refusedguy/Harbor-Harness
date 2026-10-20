@@ -3,8 +3,7 @@ using Harbor.Abstractions.Agents;
 using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Sessions;
 
-// #1769: the agent-loop double is generated (a concrete class per interface).
-using FakeAgentLoopBase = Harbor.TestKit.Generated.FakeAgentLoop;
+using FakeAgentLoopBase = Harbor.TestKit.Generated.FakeAgentLoop; // #1769: generated double
 
 namespace Harbor.Application.Tests.Fakes;
 

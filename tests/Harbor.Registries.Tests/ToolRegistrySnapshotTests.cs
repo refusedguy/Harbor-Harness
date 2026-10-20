@@ -6,8 +6,7 @@ using Harbor.Abstractions.Tools;
 using Harbor.Registries.Tools;
 using TUnit.Assertions;
 
-// #1769: the tool double is generated — the fake only declares what it needs.
-using FakeToolBase = Harbor.TestKit.Generated.FakeTool;
+using FakeToolBase = Harbor.TestKit.Generated.FakeTool; // #1769: generated double
 
 namespace Harbor.Registries.Tests;
 

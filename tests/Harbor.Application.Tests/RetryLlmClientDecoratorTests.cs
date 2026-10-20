@@ -5,9 +5,7 @@ using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Abstractions.Providers;
 using Harbor.Application.Resilience;
 using TUnit.Assertions;
-// #1769: the LLM double is generated (a concrete class per interface) — the
-// hand-written member-by-member fake is gone.
-using FakeLlmClientBase = Harbor.TestKit.Generated.FakeLlmClient;
+using FakeLlmClientBase = Harbor.TestKit.Generated.FakeLlmClient; // #1769: generated double
 
 
 namespace Harbor.Application.Tests;

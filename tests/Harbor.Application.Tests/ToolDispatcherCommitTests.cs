@@ -9,8 +9,7 @@ using Harbor.Application.Agents;
 using Harbor.Application.Permissions;
 using TestSessionContext = Harbor.Application.Tests.Fakes.TestSessionContext;
 
-// #1769: the tool double is generated — the fake only declares what it needs.
-using FakeToolBase = Harbor.TestKit.Generated.FakeTool;
+using FakeToolBase = Harbor.TestKit.Generated.FakeTool; // #1769: generated double
 
 using Harbor.TestKit;
 using Microsoft.Extensions.Logging.Abstractions;

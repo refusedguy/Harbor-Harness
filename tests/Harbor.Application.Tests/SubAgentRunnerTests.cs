@@ -7,9 +7,7 @@ using Harbor.Abstractions.Permissions;
 using Harbor.Abstractions.Sessions;
 using Harbor.Application.Agents;
 using Harbor.Application.Tests.Fakes;
-// #1769: the agent-loop double is generated (a concrete class per interface) —
-// the hand-written member-by-member fake is gone.
-using FakeAgentLoopBase = Harbor.TestKit.Generated.FakeAgentLoop;
+using FakeAgentLoopBase = Harbor.TestKit.Generated.FakeAgentLoop; // #1769: generated double
 
 using Microsoft.Extensions.Logging.Abstractions;
 

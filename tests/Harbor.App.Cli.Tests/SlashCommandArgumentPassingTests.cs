@@ -64,13 +64,9 @@ using Harbor.Abstractions.Providers;
 using Harbor.App.Cli.Repl;
 using Harbor.Application.Configuration;
 using Harbor.TestKit;
-// #1769: the permission double is generated (a concrete class per interface) —
-// the hand-written member-by-member fake is gone.
-using FakePermissionServiceBase = Harbor.TestKit.Generated.FakePermissionService;
+using FakePermissionServiceBase = Harbor.TestKit.Generated.FakePermissionService; // #1769: generated double
 
-// #1769: the provider-registry double is generated (a concrete class per
-// interface) — the hand-written member-by-member fake is gone.
-using FakeProviderRegistryBase = Harbor.TestKit.Generated.FakeProviderRegistry;
+using FakeProviderRegistryBase = Harbor.TestKit.Generated.FakeProviderRegistry; // #1769: generated double
 
 using Microsoft.Extensions.Logging.Abstractions;
 using TUnit.Assertions;

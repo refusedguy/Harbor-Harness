@@ -13,13 +13,9 @@ using Harbor.Terminal.Abstractions.Renderers;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Harbor.TestKit;
-// #1769: the provider-registry double is generated (a concrete class per
-// interface) — the hand-written member-by-member fake is gone.
-using FakeProviderRegistryBase = Harbor.TestKit.Generated.FakeProviderRegistry;
+using FakeProviderRegistryBase = Harbor.TestKit.Generated.FakeProviderRegistry; // #1769: generated double
 
-// #1769: the agent double is generated (a concrete class per interface) — the
-// hand-written member-by-member fake is gone.
-using FakeAgentBase = Harbor.TestKit.Generated.FakeAgent;
+using FakeAgentBase = Harbor.TestKit.Generated.FakeAgent; // #1769: generated double
 
 
 namespace Harbor.App.Cli.Tests;

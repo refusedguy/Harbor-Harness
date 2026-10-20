@@ -10,8 +10,7 @@ using Harbor.Application.Sessions;
 using Harbor.Storage.Memory;
 using Microsoft.Extensions.Logging.Abstractions;
 using Harbor.Registries.Providers;
-// #1769: the LLM double is generated — the fake only declares what it needs.
-using FakeLlmClientBase = Harbor.TestKit.Generated.FakeLlmClient;
+using FakeLlmClientBase = Harbor.TestKit.Generated.FakeLlmClient; // #1769: generated double
 
 namespace Harbor.Core.Tests;
 /// <summary>

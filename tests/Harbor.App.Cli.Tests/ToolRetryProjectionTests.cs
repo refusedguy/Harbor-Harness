@@ -10,9 +10,7 @@ using Harbor.Abstractions.Sessions;
 using Harbor.App.Cli.Repl;
 using Harbor.App.Cli.Repl.Commands;
 using Harbor.Application.Configuration;
-// #1769: the agent double is generated (a concrete class per interface) — the
-// hand-written member-by-member fake is gone.
-using FakeAgentBase = Harbor.TestKit.Generated.FakeAgent;
+using FakeAgentBase = Harbor.TestKit.Generated.FakeAgent; // #1769: generated double
 
 using Harbor.Hosting.Rendering;
 using Harbor.Tui.CellForge.Rendering;

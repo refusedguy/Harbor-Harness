@@ -5,8 +5,7 @@ using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Abstractions.Providers;
 using TUnit.Assertions;
 using Harbor.Registries.Providers;
-// #1769: the LLM double is generated — the fake only declares what it needs.
-using FakeLlmClientBase = Harbor.TestKit.Generated.FakeLlmClient;
+using FakeLlmClientBase = Harbor.TestKit.Generated.FakeLlmClient; // #1769: generated double
 
 
 namespace Harbor.Registries.Tests;
