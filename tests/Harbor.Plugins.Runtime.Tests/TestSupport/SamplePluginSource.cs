@@ -10,7 +10,13 @@ public static class SamplePluginSource
     ///     suffix is appended to class and tool names so different test runs don't
     ///     collide in the shared AppDomain type system.
     /// </summary>
-    public static string HelloWorld(string suffix) => $$"""
+    /// <param name="suffix">Unique per-run suffix for the generated type names.</param>
+    /// <param name="requiredHarborVersion">
+    ///     The <c>RequiredHarborVersion</c> the generated plugin declares, as the
+    ///     argument list of a <c>Version</c> ("0, 4, 0"). Defaults to the Harbor
+    ///     version this build runs (#1721's gate compares against it).
+    /// </param>
+    public static string HelloWorld(string suffix, string requiredHarborVersion = "0, 4, 0") => $$"""
                                                         using System;
                                                         using System.Collections.Generic;
                                                         using System.Text.Json;
@@ -28,7 +34,7 @@ public static class SamplePluginSource
                                                         {
                                                             public string Name => "hello-world-{{suffix.ToLowerInvariant()}}";
                                                             public Version Version => new(1, 0, 0);
-                                                            public Version RequiredHarborVersion => new(0, 4, 0);
+                                                            public Version RequiredHarborVersion => new({{requiredHarborVersion}});
                                                             public string Description => "Test plugin {{suffix}}";
 
                                                             public void Initialize(PluginContext context)

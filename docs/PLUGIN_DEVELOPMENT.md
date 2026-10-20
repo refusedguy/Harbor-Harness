@@ -100,6 +100,14 @@ public interface IPlugin
 }
 ```
 
+> **`RequiredHarborVersion` проверяется на границе загрузки (#1721).** Это
+> минимум, а не прибитая версия: Harbor новее требуемой версии совместим,
+> Harbor старее означает, что плагин отклоняется ДО `Initialize`, с понятным отказом
+> («требуется Harbor >= X, запущен Harbor Y»), и в хост он не попадает вовсе.
+> Сравнение идёт по компонентам, незаданный компонент читается как 0, поэтому
+> `0.4` и `0.4.0` это одна и та же версия. Подробности и таблица границ:
+> [PLUGIN_SYSTEM.md §Version compatibility](./PLUGIN_SYSTEM.md#version-compatibility-1721).
+
 ### `IToolPlugin` — adds tools
 
 ```csharp
