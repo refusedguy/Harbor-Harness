@@ -16,6 +16,9 @@
          Harbor.Hosting references — declared here for the same reason as the
          row above: the test names the type, so the type is a real edge. -->
     <ProjectReference Include="../../src/Harbor.Telemetry.Core/Harbor.Telemetry.Core.csproj"/>
+    <!-- #1741/#1742: the same test reads the HARBOR_TELEMETRY_* names from
+         HarborEnv, which lives in the contracts assembly. -->
+    <ProjectReference Include="../../src/Harbor.Abstractions.Contracts/Harbor.Abstractions.Contracts.csproj"/>
   </ItemGroup>
 
   <ItemGroup>

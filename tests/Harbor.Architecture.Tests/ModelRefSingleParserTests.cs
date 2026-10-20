@@ -150,6 +150,13 @@ public sealed class ModelRefSingleParserTests
             + "the same answer ModelRef.Qualify gives.",
         ["src/Harbor.Tools.Builtin/Tools/Glob/GlobTool.cs"] =
             "NOT A REFERENCE. A glob pattern is slash-separated by definition.",
+        ["src/Harbor.Telemetry.Core/TelemetryRedaction.cs"] =
+            "NOT A REFERENCE. #1741's redaction gate compares a value against known "
+            + "CREDENTIAL prefixes (sk-, ghp_, AKIA…, a JWT) to decide whether the value may "
+            + "leave the process. Nothing is cut apart: the value is matched whole, and the "
+            + "matcher's spelling — 'StartsWith' on a variable named 'prefix' — is the same "
+            + "shape as the provider/ prefix strip this rule is about. Listed because the "
+            + "matcher is textual, not semantic.",
     };
 
     /// <summary>

@@ -1,3 +1,4 @@
+using Harbor.Abstractions.Env;
 using Harbor.Telemetry;
 using Microsoft.Extensions.Logging;
 
@@ -17,6 +18,9 @@ public class TelemetryExportOptionsTests
 {
     private readonly CapturingLogger _logger = new();
 
+    /// <summary>A throwaway Harbor home — the resolver only joins paths, it writes nothing.</summary>
+    private static readonly string HarborDir = Path.Combine(Path.GetTempPath(), "harbor-telemetry-test");
+
     /// <summary>
     ///     The default composition registers no sink: a normal run writes
     ///     nothing, and a test run stays quiet.
@@ -24,7 +28,7 @@ public class TelemetryExportOptionsTests
     [Test]
     public async Task DefaultComposition_RegistersNoSink()
     {
-        var options = new HarborComposeOptions { HarborDir = "/tmp/harbor-telemetry-test" };
+        var options = new HarborComposeOptions { HarborDir = HarborDir };
 
         TelemetryExportOptions? resolved = TelemetryModule.ResolveExportOptions(
             options,
@@ -40,7 +44,7 @@ public class TelemetryExportOptionsTests
     {
         var options = new HarborComposeOptions
         {
-            HarborDir = "/tmp/harbor-telemetry-test",
+            HarborDir = HarborDir,
             TelemetryExport = TelemetryExportTarget.None,
         };
 
@@ -49,8 +53,8 @@ public class TelemetryExportOptionsTests
             _logger,
             name => name switch
             {
-                "HARBOR_TELEMETRY_EXPORT" => "console",
-                "HARBOR_TELEMETRY_MAX_RECORD_BYTES" => "512",
+                HarborEnv.TelemetryExport => "console",
+                HarborEnv.TelemetryExportMaxRecordBytes => "512",
                 _ => null,
             });
 
@@ -63,12 +67,12 @@ public class TelemetryExportOptionsTests
     [Test]
     public async Task FileTarget_GetsAPathUnderTheHarborHome()
     {
-        var options = new HarborComposeOptions { HarborDir = "/tmp/harbor-telemetry-test" };
+        var options = new HarborComposeOptions { HarborDir = HarborDir };
 
         TelemetryExportOptions? resolved = TelemetryModule.ResolveExportOptions(
             options,
             _logger,
-            name => name == "HARBOR_TELEMETRY_EXPORT" ? "file" : null);
+            name => name == HarborEnv.TelemetryExport ? "file" : null);
 
         await Assert.That(resolved).IsNotNull();
         await Assert.That(resolved!.Target).IsEqualTo(TelemetryExportTarget.File);
@@ -84,36 +88,36 @@ public class TelemetryExportOptionsTests
     [Test]
     public async Task AnUnknownTarget_TurnsTheSinkOff_AndIsReported()
     {
-        var options = new HarborComposeOptions { HarborDir = "/tmp/harbor-telemetry-test" };
+        var options = new HarborComposeOptions { HarborDir = HarborDir };
 
         TelemetryExportOptions? resolved = TelemetryModule.ResolveExportOptions(
             options,
             _logger,
-            name => name == "HARBOR_TELEMETRY_EXPORT" ? "carrier-pigeon" : null);
+            name => name == HarborEnv.TelemetryExport ? "carrier-pigeon" : null);
 
         await Assert.That(resolved).IsNull();
-        await Assert.That(_logger.Messages.Any(m => m.Contains("HARBOR_TELEMETRY_EXPORT"))).IsTrue();
+        await Assert.That(_logger.Messages.Any(m => m.Contains(HarborEnv.TelemetryExport))).IsTrue();
     }
 
     /// <summary>A bound that is not a positive integer falls back instead of disabling the sink.</summary>
     [Test]
     public async Task AnUnreadableBound_FallsBackToTheDefault()
     {
-        var options = new HarborComposeOptions { HarborDir = "/tmp/harbor-telemetry-test" };
+        var options = new HarborComposeOptions { HarborDir = HarborDir };
 
         TelemetryExportOptions? resolved = TelemetryModule.ResolveExportOptions(
             options,
             _logger,
             name => name switch
             {
-                "HARBOR_TELEMETRY_EXPORT" => "console",
-                "HARBOR_TELEMETRY_MAX_BUFFER_BYTES" => "not-a-number",
+                HarborEnv.TelemetryExport => "console",
+                HarborEnv.TelemetryExportMaxBufferBytes => "not-a-number",
                 _ => null,
             });
 
         await Assert.That(resolved).IsNotNull();
         await Assert.That(resolved!.MaxBufferBytes).IsEqualTo(TelemetryExportOptions.DefaultMaxBufferBytes);
-        await Assert.That(_logger.Messages.Any(m => m.Contains("HARBOR_TELEMETRY_MAX_BUFFER_BYTES"))).IsTrue();
+        await Assert.That(_logger.Messages.Any(m => m.Contains(HarborEnv.TelemetryExportMaxBufferBytes))).IsTrue();
     }
 
     /// <summary>Minimal logger that keeps the rendered lines for assertions.</summary>
