@@ -85,6 +85,13 @@ Kill-switch в `~/.harbor/config.json` (приоритет выше выбора
 | Маскот | `Chat/Mascot/` (3: `MascotDirector`, `MascotPanel`, `AmbientMascot`) | #1619: декорация (кот в футере / отдельная панель) вынесена в собственную область; входных ссылок ровно две — `ChatScreenLayout` и `ChatScreenBridge`; `MascotMode`/`MascotModeEnv` остались в Engine (#1620), `MascotReaction` — в `Harbor.Ui.Framework.Rendering` |
 | Адаптер рендера | `CellForgeTuiRenderer.cs` (+ `CellForgeRenderContext`) | `ITuiRenderer`/`BaseTuiRenderer`-адаптер для event-driven пути (`HARBOR_TUI=cellforge`); проекция `UiState` в виджеты (`ProjectStateIntoWidgets`); контекст пишет через `AnsiWriter` |
 
+Клавиши `DiffViewerOverlay` разбирает одна таблица команд
+(`DiffViewerCommandTable`, internal — #1544): строка на gesture, объект-команда
+на действие. Оба `HandleKey` (legacy `ConsoleKeyInfo` и kitty `KeyEvent`) —
+тонкие адаптеры: нормализуют вход в словарь виджета и ищут команду в этой
+таблице. Новая клавиша — одна строка, а два пути ввода разойтись не могут,
+потому что таблица одна.
+
 ## Кадровой цикл (REPL)
 
 Event-driven: кадр собирается только при пробуждении — ввод, событие агента или

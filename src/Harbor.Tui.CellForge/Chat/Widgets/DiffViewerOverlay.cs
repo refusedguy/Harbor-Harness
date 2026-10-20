@@ -62,6 +62,178 @@ internal sealed record DiffBodyRow(
     string? RightText = null,
     CellStyle? RightStyle = null);
 
+// ── The diff viewer's command table (#1544) ─────────────────────────────────
+//
+// The three key dispatches this file used to carry — the legacy named-key
+// switch, its rune switch, and the kitty pair — were ONE table written three
+// times, and nothing held the copies to each other. It is one table now: a
+// gesture (a named key or a rune) resolves to a command (an object that
+// carries the action), and both HandleKey overloads normalise their key into
+// the viewer's own vocabulary before the lookup.
+//
+// The shape is the repo's Command convention (docs/PATTERNS.md §4) at widget
+// scale: the action is an object in a table, not a switch arm, so a new key is
+// ONE row and cannot be added to one copy of the table and forgotten in the
+// other two.
+
+/// <summary>
+/// The gesture a diff-viewer command fires on: a named key, or an exact rune.
+/// </summary>
+/// <param name="Key">The key code that fires the command.</param>
+/// <param name="Rune">The exact rune that fires it (null = a named key).</param>
+internal readonly record struct DiffViewerGesture(KeyCode Key, char? Rune = null);
+
+/// <summary>
+/// One action of the diff viewer, as an object (GoF Command — the repo's §4
+/// convention: a command is an object, not a <c>switch</c> arm).
+/// </summary>
+internal interface IDiffViewerCommand
+{
+    /// <summary>Runs the command against the viewer.</summary>
+    void Execute(DiffViewerOverlay viewer);
+}
+
+/// <summary>Closes the viewer (Esc, q).</summary>
+internal sealed record DiffViewerHideCommand : IDiffViewerCommand
+{
+    /// <inheritdoc/>
+    public void Execute(DiffViewerOverlay viewer) => viewer.Hide();
+}
+
+/// <summary>Moves the selection to the next hunk (Down, n, j).</summary>
+internal sealed record DiffViewerNextHunkCommand : IDiffViewerCommand
+{
+    /// <inheritdoc/>
+    public void Execute(DiffViewerOverlay viewer) => viewer.NextHunk();
+}
+
+/// <summary>Moves the selection to the previous hunk (Up, p, k).</summary>
+internal sealed record DiffViewerPreviousHunkCommand : IDiffViewerCommand
+{
+    /// <inheritdoc/>
+    public void Execute(DiffViewerOverlay viewer) => viewer.PreviousHunk();
+}
+
+/// <summary>Jumps to the first hunk (Home, g).</summary>
+internal sealed record DiffViewerFirstHunkCommand : IDiffViewerCommand
+{
+    /// <inheritdoc/>
+    public void Execute(DiffViewerOverlay viewer) => viewer.FirstHunk();
+}
+
+/// <summary>Jumps to the last hunk (End, G).</summary>
+internal sealed record DiffViewerLastHunkCommand : IDiffViewerCommand
+{
+    /// <inheritdoc/>
+    public void Execute(DiffViewerOverlay viewer) => viewer.LastHunk();
+}
+
+/// <summary>Toggles split/unified (s, t).</summary>
+internal sealed record DiffViewerToggleModeCommand : IDiffViewerCommand
+{
+    /// <inheritdoc/>
+    public void Execute(DiffViewerOverlay viewer) => viewer.ToggleMode();
+}
+
+/// <summary>Toggles line wrapping (w).</summary>
+internal sealed record DiffViewerToggleWrapCommand : IDiffViewerCommand
+{
+    /// <inheritdoc/>
+    public void Execute(DiffViewerOverlay viewer) => viewer.ToggleWrap();
+}
+
+/// <summary>Scrolls the body up by one page (PgUp).</summary>
+internal sealed record DiffViewerScrollUpCommand : IDiffViewerCommand
+{
+    /// <inheritdoc/>
+    public void Execute(DiffViewerOverlay viewer) => viewer.ScrollPage(-1);
+}
+
+/// <summary>Scrolls the body down by one page (PgDn).</summary>
+internal sealed record DiffViewerScrollDownCommand : IDiffViewerCommand
+{
+    /// <inheritdoc/>
+    public void Execute(DiffViewerOverlay viewer) => viewer.ScrollPage(1);
+}
+
+/// <summary>
+/// The diff viewer's command table: gesture → command (#1544). The ONE place
+/// that says what a key does.
+/// </summary>
+/// <remarks>
+/// The rows SHARE their command objects: <c>n</c> and <c>j</c> are the same
+/// move behind two gestures, exactly as <c>Down</c> is. That sharing is what
+/// the old hand-written switches could not express — they spelled the same
+/// move out three times, once per copy of the table — and it is what the
+/// table's own test asserts.
+/// <para>
+/// A gesture with no row is not claimed by the viewer and falls through to
+/// the host.
+/// </para>
+/// </remarks>
+internal static class DiffViewerCommandTable
+{
+    /// <summary>Closes the viewer.</summary>
+    private static readonly IDiffViewerCommand Hide = new DiffViewerHideCommand();
+
+    /// <summary>Moves the selection to the next hunk.</summary>
+    private static readonly IDiffViewerCommand NextHunk = new DiffViewerNextHunkCommand();
+
+    /// <summary>Moves the selection to the previous hunk.</summary>
+    private static readonly IDiffViewerCommand PreviousHunk = new DiffViewerPreviousHunkCommand();
+
+    /// <summary>Jumps to the first hunk.</summary>
+    private static readonly IDiffViewerCommand FirstHunk = new DiffViewerFirstHunkCommand();
+
+    /// <summary>Jumps to the last hunk.</summary>
+    private static readonly IDiffViewerCommand LastHunk = new DiffViewerLastHunkCommand();
+
+    /// <summary>Toggles split/unified.</summary>
+    private static readonly IDiffViewerCommand ToggleMode = new DiffViewerToggleModeCommand();
+
+    /// <summary>Toggles line wrapping.</summary>
+    private static readonly IDiffViewerCommand ToggleWrap = new DiffViewerToggleWrapCommand();
+
+    /// <summary>Scrolls the body up by one page.</summary>
+    private static readonly IDiffViewerCommand ScrollUp = new DiffViewerScrollUpCommand();
+
+    /// <summary>Scrolls the body down by one page.</summary>
+    private static readonly IDiffViewerCommand ScrollDown = new DiffViewerScrollDownCommand();
+
+    /// <summary>
+    /// The table: gesture → command. A named key and a rune are different
+    /// gestures, so <c>Down</c> and <c>n</c> are two rows that happen to run
+    /// the same command.
+    /// </summary>
+    internal static readonly IReadOnlyDictionary<DiffViewerGesture, IDiffViewerCommand> Commands =
+        new Dictionary<DiffViewerGesture, IDiffViewerCommand>
+        {
+            // Named keys. Modifiers are ignored here, exactly as they were in
+            // the switch: Ctrl+Up still moves the selection.
+            [new DiffViewerGesture(KeyCode.Escape)] = Hide,
+            [new DiffViewerGesture(KeyCode.Up)] = PreviousHunk,
+            [new DiffViewerGesture(KeyCode.Down)] = NextHunk,
+            [new DiffViewerGesture(KeyCode.PageUp)] = ScrollUp,
+            [new DiffViewerGesture(KeyCode.PageDown)] = ScrollDown,
+            [new DiffViewerGesture(KeyCode.Home)] = FirstHunk,
+            [new DiffViewerGesture(KeyCode.End)] = LastHunk,
+
+            // Runes. Reached only behind the command-modifier gate, so Shift
+            // is admitted (a capital is a case-shaper) and Ctrl/Alt/Meta are
+            // not (a chord belongs to the host).
+            [new DiffViewerGesture(KeyCode.Char, 'q')] = Hide,
+            [new DiffViewerGesture(KeyCode.Char, 'n')] = NextHunk,
+            [new DiffViewerGesture(KeyCode.Char, 'j')] = NextHunk,
+            [new DiffViewerGesture(KeyCode.Char, 'p')] = PreviousHunk,
+            [new DiffViewerGesture(KeyCode.Char, 'k')] = PreviousHunk,
+            [new DiffViewerGesture(KeyCode.Char, 's')] = ToggleMode,
+            [new DiffViewerGesture(KeyCode.Char, 't')] = ToggleMode,
+            [new DiffViewerGesture(KeyCode.Char, 'w')] = ToggleWrap,
+            [new DiffViewerGesture(KeyCode.Char, 'g')] = FirstHunk,
+            [new DiffViewerGesture(KeyCode.Char, 'G')] = LastHunk,
+        };
+}
+
 /// <summary>
 /// Fullscreen diff viewer overlay (PRIM12, #308 — opencode diff-viewer /
 /// codex <c>/diff</c> competitor pattern, needed by UX7). Takes over the whole
@@ -169,12 +341,25 @@ public sealed class DiffViewerOverlay
     }
 
     /// <summary>
+    /// Scrolls the body by one page in <paramref name="direction"/> (-1 up,
+    /// +1 down). The page height is the widget's own, so the command table
+    /// reaches it through this and not through a private field (#1544).
+    /// </summary>
+    internal void ScrollPage(int direction) => ScrollBy(direction * Math.Max(1, _lastBodyH));
+
+    /// <summary>
     /// Routes a legacy console key. <c>Esc</c>/<c>q</c> closes; <c>n</c>/<c>j</c>
     /// and <c>↓</c> go to the next hunk, <c>p</c>/<c>k</c> and <c>↑</c> to the
     /// previous one; <c>s</c>/<c>t</c> toggles split/unified, <c>w</c> toggles
     /// wrap; <c>g</c>/<c>Home</c> jumps first, <c>G</c>/<c>End</c> last;
     /// <c>PgUp</c>/<c>PgDn</c> scroll. Ctrl/Alt chords pass through untouched.
     /// </summary>
+    /// <remarks>
+    /// The key is normalised into the viewer's own vocabulary and resolved
+    /// against the ONE command table, so this overload and the
+    /// <see cref="KeyEvent" /> one cannot drift apart: there is a single table
+    /// to disagree with (#1544).
+    /// </remarks>
     public bool HandleKey(ConsoleKeyInfo key)
     {
         if (!Visible)
@@ -182,72 +367,32 @@ public sealed class DiffViewerOverlay
             return false;
         }
 
-        switch (key.Key)
+        // Named keys are resolved BEFORE the modifier gate, exactly as the
+        // switch this replaced did: Ctrl+Up still moves the selection.
+        if (LegacyKeyCodes.TryGetValue(key.Key, out KeyCode named))
         {
-            case ConsoleKey.Escape:
-                Hide();
-                return true;
-            case ConsoleKey.UpArrow:
-                PreviousHunk();
-                return true;
-            case ConsoleKey.DownArrow:
-                NextHunk();
-                return true;
-            case ConsoleKey.PageUp:
-                ScrollBy(-Math.Max(1, _lastBodyH));
-                return true;
-            case ConsoleKey.PageDown:
-                ScrollBy(Math.Max(1, _lastBodyH));
-                return true;
-            case ConsoleKey.Home:
-                FirstHunk();
-                return true;
-            case ConsoleKey.End:
-                LastHunk();
-                return true;
+            return Run(new DiffViewerGesture(named));
         }
 
+        // Ctrl/Alt chords pass through untouched — the host owns them.
         if (key.Modifiers.IsCommandModifier())
         {
             return false;
         }
 
-        switch (key.KeyChar)
-        {
-            case 'q':
-                Hide();
-                return true;
-            case 'n':
-            case 'j':
-                NextHunk();
-                return true;
-            case 'p':
-            case 'k':
-                PreviousHunk();
-                return true;
-            case 's':
-            case 't':
-                ToggleMode();
-                return true;
-            case 'w':
-                ToggleWrap();
-                return true;
-            case 'g':
-                FirstHunk();
-                return true;
-            case 'G':
-                LastHunk();
-                return true;
-            default:
-                return false;
-        }
+        return Run(new DiffViewerGesture(KeyCode.Char, key.KeyChar));
     }
 
     /// <summary>
     /// Routes a decoded key (kitty-capable hosts). Mirrors the
-    /// <see cref="ConsoleKeyInfo"/> contract; Shift/Alt/Ctrl/Meta character
-    /// chords pass through untouched (the host keymap owns them).
+    /// <see cref="ConsoleKeyInfo"/> contract; Ctrl/Alt/Meta character chords
+    /// pass through untouched (the host keymap owns them), while Shift is
+    /// admitted — it is a case-shaper, and <c>G</c> is a bound command here.
     /// </summary>
+    /// <remarks>
+    /// The same table the legacy overload resolves against, reached through
+    /// the same normalisation (#1544).
+    /// </remarks>
     public bool HandleKey(in KeyEvent key)
     {
         if (!Visible)
@@ -255,68 +400,59 @@ public sealed class DiffViewerOverlay
             return false;
         }
 
-        switch (key.Key)
+        if (key.Key == KeyCode.Char)
         {
-            case KeyCode.Escape:
-                Hide();
-                return true;
-            case KeyCode.Up:
-                PreviousHunk();
-                return true;
-            case KeyCode.Down:
-                NextHunk();
-                return true;
-            case KeyCode.PageUp:
-                ScrollBy(-Math.Max(1, _lastBodyH));
-                return true;
-            case KeyCode.PageDown:
-                ScrollBy(Math.Max(1, _lastBodyH));
-                return true;
-            case KeyCode.Home:
-                FirstHunk();
-                return true;
-            case KeyCode.End:
-                LastHunk();
-                return true;
-            case KeyCode.Char:
-                if (key.Modifiers.IsCommandModifier())
-                {
-                    return false;
-                }
-
-                switch (key.Character.ToString())
-                {
-                    case "q":
-                        Hide();
-                        return true;
-                    case "n":
-                    case "j":
-                        NextHunk();
-                        return true;
-                    case "p":
-                    case "k":
-                        PreviousHunk();
-                        return true;
-                    case "s":
-                    case "t":
-                        ToggleMode();
-                        return true;
-                    case "w":
-                        ToggleWrap();
-                        return true;
-                    case "g":
-                        FirstHunk();
-                        return true;
-                    case "G":
-                        LastHunk();
-                        return true;
-                    default:
-                        return false;
-                }
-            default:
+            // Ctrl/Alt/Meta chords pass through untouched — the host owns them.
+            if (key.Modifiers.IsCommandModifier())
+            {
                 return false;
+            }
+
+            // A rune outside the BMP stringifies to TWO characters, so the
+            // switch this replaced matched nothing for it either.
+            if (!key.Character.IsBmp)
+            {
+                return false;
+            }
+
+            return Run(new DiffViewerGesture(KeyCode.Char, (char)key.Character.Value));
         }
+
+        return Run(new DiffViewerGesture(key.Key));
     }
+
+    /// <summary>
+    /// Runs the command a gesture resolves to. False when the gesture has no
+    /// row: the viewer does not claim the key, and the host keeps it.
+    /// </summary>
+    private bool Run(DiffViewerGesture gesture)
+    {
+        if (!DiffViewerCommandTable.Commands.TryGetValue(gesture, out IDiffViewerCommand? command))
+        {
+            return false;
+        }
+
+        command.Execute(this);
+        return true;
+    }
+
+    /// <summary>
+    /// The legacy console vocabulary translated into the kitty one, so the
+    /// legacy overload can resolve the SAME command table. Seven rows: the
+    /// named keys the viewer binds. A legacy key that is not named here is a
+    /// rune, and reaches the table as one.
+    /// </summary>
+    private static readonly IReadOnlyDictionary<ConsoleKey, KeyCode> LegacyKeyCodes =
+        new Dictionary<ConsoleKey, KeyCode>
+        {
+            [ConsoleKey.Escape] = KeyCode.Escape,
+            [ConsoleKey.UpArrow] = KeyCode.Up,
+            [ConsoleKey.DownArrow] = KeyCode.Down,
+            [ConsoleKey.PageUp] = KeyCode.PageUp,
+            [ConsoleKey.PageDown] = KeyCode.PageDown,
+            [ConsoleKey.Home] = KeyCode.Home,
+            [ConsoleKey.End] = KeyCode.End,
+        };
 
     /// <summary>
     /// Fullscreen box: the whole viewport when it fits the minimums, default
