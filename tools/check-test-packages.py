@@ -46,7 +46,8 @@ WHY THIS FILE EXISTS (issue #1882)
   proposal is accepted, with nothing in the repository saying so.
 
   The package that is ALREADY there is `NetArchTest.Rules` 1.3.2, whose only
-  dependency is `Mono.Cecil` 0.11.3 (same nuspec). It drags in nothing
+  dependency is `Mono.Cecil` (its nuspec says 0.11.3; the test project declares
+  the package itself and pins 0.11.6 since #1865). It drags in nothing
   banned, so this gate is green on the tree as it stands — a fact this file
   measures on every run rather than assumes.
 
@@ -161,7 +162,9 @@ THE EXCEPTION MECHANISM — NAMED, JUSTIFIED, NEVER SILENT
 
     * `NetArchTest.Rules` 1.3.2 (already referenced by
       `tests/Harbor.Architecture.Tests`) declares exactly one dependency,
-      `Mono.Cecil` 0.11.3. It does NOT bring Newtonsoft.Json. If a future
+      `Mono.Cecil` (its nuspec says 0.11.3; the test project declares the
+      package itself and pins 0.11.6 since #1865). It does NOT bring
+      Newtonsoft.Json. If a future
       version of it did, the fix would be to drop it: the layering rules
       have a zero-dependency reflection fallback already
       (`tests/Harbor.Architecture.Tests/LayerDependencyTests.cs`), so the

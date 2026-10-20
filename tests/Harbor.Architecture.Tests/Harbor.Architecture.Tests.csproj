@@ -23,6 +23,27 @@
   -->
   <ItemGroup>
     <PackageReference Include="NetArchTest.Rules"/>
+    <!--
+      Mono.Cecil — the IL reader the capability rules use (#1865).
+
+      PresentationCapabilityRules.cs and RendererEventSeamRule.cs (2336 lines
+      between them) walk the IL of every method body of every Presentation
+      assembly and read it through Cecil's object model. The dependency used
+      to arrive TRANSITIVELY with NetArchTest.Rules 1.3.2, which made the
+      compiler of those two files depend on a DSL library's dependency graph:
+      dropping or retargeting NetArchTest would have broken 2336 lines of IL
+      rules, and the IL-parsing version was a property of that library rather
+      than of the rules that own it.
+
+      Declared explicitly, the ownership is the rules'. The version is pinned
+      in Directory.Packages.props (0.11.6 — the floor that satisfies both
+      NetArchTest.Rules 1.3.2 and TngTech.ArchUnitNET 0.13.4, so the
+      migration proposed in #1841 does not move the parser under the rules).
+
+      Test-only: nothing under src/ or apps/ references this, so it never
+      reaches a published binary.
+    -->
+    <PackageReference Include="Mono.Cecil"/>
     <PackageReference Include="TUnit.Assertions"/>
     <!--
       Microsoft.CodeAnalysis.CSharp — the PILOT for issue #1729, which asks

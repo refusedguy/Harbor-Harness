@@ -34,9 +34,9 @@
 //     only thing anyone runs.
 //
 // So the probe reads the compiled IL with Mono.Cecil — the same Cecil that
-// NetArchTest.Rules already pulls in transitively and that
-// PresentationCapabilityRules.cs already uses, so no new package and no new
-// restore entry. Every claim in this file's header has been checked against IL.
+// PresentationCapabilityRules.cs already uses, declared once by this project
+// and version-pinned in Directory.Packages.props (#1865). Every claim in this
+// file's header has been checked against IL.
 //
 // NON-VACUITY — WHY THIS FILE IS NOT A COMMENT
 // --------------------------------------------
@@ -137,10 +137,13 @@ internal sealed record RendererSeamViolation(string TypeName, string Assembly, s
 ///     resolver because a call operand's declaring type is a name away.
 /// </para>
 /// <para>
-///     <b>Package provenance:</b> Mono.Cecil arrives transitively with
-///     <c>NetArchTest.Rules</c> (<c>exclude="Build,Analyzers"</c> in its nuspec)
-///     — the same provenance <c>PresentationCapabilityRules.cs</c> relies on. No
-///     new <c>PackageReference</c>, no new restore entry.
+///     <b>Package provenance:</b> <c>Mono.Cecil</c> is DECLARED by this test
+///     project and its version is pinned in <c>Directory.Packages.props</c> —
+///     the same declaration <c>PresentationCapabilityRules.cs</c> relies on
+///     (#1865). It used to arrive transitively with <c>NetArchTest.Rules</c>
+///     (<c>exclude="Build,Analyzers"</c> in its nuspec), which coupled this
+///     probe's compiler to a DSL library's dependency graph and left the
+///     IL-parsing version unowned.
 /// </para>
 /// </remarks>
 internal static class RendererSeamProbe

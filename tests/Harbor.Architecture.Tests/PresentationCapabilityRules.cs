@@ -176,12 +176,16 @@ internal sealed class AssemblyScan
 /// </summary>
 /// <remarks>
 /// <para>
-///     <b>Package provenance:</b> this is the <c>Mono.Cecil</c> that
-///     <c>NetArchTest.Rules 1.3.2</c> already pulls in transitively
-///     (<c>exclude="Build,Analyzers"</c> in its nuspec). No new
-///     <c>PackageReference</c>, no new restore entry — if NetArchTest is ever
-///     dropped, this file fails to compile loudly rather than silently
-///     degrading to a no-op.
+///     <b>Package provenance:</b> <c>Mono.Cecil</c> is DECLARED by this test
+///     project (<c>&lt;PackageReference Include="Mono.Cecil"/&gt;</c>) and its
+///     version is pinned in <c>Directory.Packages.props</c> (0.11.6). It used to
+///     arrive transitively with <c>NetArchTest.Rules 1.3.2</c>
+///     (<c>exclude="Build,Analyzers"</c> in its nuspec), which coupled the
+///     compiler of these 1422 lines to a DSL library's dependency graph: a
+///     change to that library broke this file, and the IL-parsing version was
+///     a property of the library rather than of the rules that own it (#1865).
+///     Declared, it survives the removal of NetArchTest, and the pin holds the
+///     parser still while the migration proposed in #1841 lands.
 /// </para>
 /// <para>
 ///     <b>Why Cecil and not <c>MethodBody.GetILAsByteArray()</c>:</b> decoding

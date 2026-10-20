@@ -829,8 +829,10 @@ The four files above enforce the **reference** half of the contract: which
 ProjectReference, so a perfectly layered assembly can still fork a shell or overwrite
 the user's config. `PresentationCapabilityRules.cs` enforces the missing half.
 
-**Mechanism.** Mono.Cecil (the copy `NetArchTest.Rules 1.3.2` already restores — no new
-`PackageReference`) reads each Presentation assembly's metadata, walks every method body,
+**Mechanism.** Mono.Cecil (declared by the test project and version-pinned in
+`Directory.Packages.props`; it used to arrive transitively with `NetArchTest.Rules 1.3.2`,
+which made the rules depend on a DSL library's dependency graph — #1865 made the
+dependency explicit) reads each Presentation assembly's metadata, walks every method body,
 and collects every BCL type referenced from an IL operand or a type/field/method
 signature. A rule is a list of type-name prefixes matched with `StartsWith`, so one entry
 covers a family (`System.IO.File` also covers `FileStream`, `FileInfo`, `FileAccess`).
