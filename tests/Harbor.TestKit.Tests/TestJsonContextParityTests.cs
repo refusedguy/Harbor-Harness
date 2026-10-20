@@ -171,5 +171,5 @@ public class TestJsonContextParityTests
     ///     A type the shared context does NOT register. It exists to be
     ///     refused.
     /// </summary>
-    private sealed record UnregisteredPayload(string Whatever);
+    private sealed record UnregisteredPayload;
 }
