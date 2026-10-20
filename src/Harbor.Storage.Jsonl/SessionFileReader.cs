@@ -250,7 +250,7 @@ internal static class SessionFileReader
         var after = SessionFileStat.Read(sessionFile);
         bool stable = lastRead == budget && after.Matches(stat) && after.Length == budget;
 
-        var snapshot = new MessageReadSnapshot(inbox.ToChronological(), stat, stable);
+        var snapshot = new MessageReadSnapshot(inbox.ToChronological(), stat, stable, inbox.Header);
         return Result.Success(new SnapshotAttempt(snapshot, errors.Total, errors.Summary(), sawOversized));
     }
 
@@ -322,6 +322,11 @@ internal static class SessionFileReader
 
         if (IsSessionHeaderLine(record))
         {
+            // #1785: the header is captured, not just dropped — the export
+            // needs it from the SAME pass as the history (a second read would
+            // be a second generation). A second header line is a leftover, not
+            // a second generation: the first one wins.
+            inbox.CaptureHeader(record);
             return;
         }
 
@@ -371,6 +376,7 @@ internal static class SessionFileReader
     {
         private readonly List<AgentMessage> _arrival = [];
         private readonly Dictionary<string, int> _slots = new();
+        private bool _headerSeen;
 
         /// <summary>Records one parsed message; a repeated id replaces its value in place.</summary>
         internal void Add(AgentMessage message)
@@ -383,6 +389,39 @@ internal static class SessionFileReader
 
             _slots.Add(message.Id, _arrival.Count);
             _arrival.Add(message);
+        }
+
+        /// <summary>
+        ///     The file's header record, captured from the SAME pass as the
+        ///     messages (<b>#1785</b>). Null when the file carries no readable
+        ///     header — the caller decides what that means.
+        /// </summary>
+        internal SessionHeaderEntry? Header { get; private set; }
+
+        /// <summary>
+        ///     Capture the header line. Only the FIRST header line counts: a
+        ///     second one is a leftover of a rewritten file, not a second
+        ///     generation, and taking the later one would mix generations
+        ///     inside a single read — the very defect #1785 is about.
+        /// </summary>
+        internal void CaptureHeader(ReadOnlySpan<byte> record)
+        {
+            if (_headerSeen)
+            {
+                return;
+            }
+
+            _headerSeen = true;
+            try
+            {
+                Header = JsonSerializer.Deserialize(record, JsonlCodecContext.Default.SessionHeaderEntry);
+            }
+            catch (JsonException)
+            {
+                // Not a header after all (a crafted file can carry the marker
+                // in a record that is not one). The caller reports a
+                // header-less file; the history under it still parses.
+            }
         }
 
         /// <summary>

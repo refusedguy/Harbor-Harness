@@ -63,11 +63,19 @@ internal sealed record SessionCacheEntry(
 ///         timestamp that claims completeness: the next read hits the cache and
 ///         the missing message is invisible until the next write or restart.
 ///     </para>
+///     <para>
+///         <b>#1785:</b> <see cref="Header" /> rides along with the messages
+///         because the export needs BOTH from the SAME pass. A second read of
+///         the header would be a second generation: the header could be
+///         rewritten (a title edit) between the two reads, and the export
+///         would carry a header that contradicts the history under it.
+///     </para>
 /// </remarks>
 internal sealed record MessageReadSnapshot(
     IReadOnlyList<AgentMessage> Messages,
     SessionFileStat Stat,
-    bool IsStable);
+    bool IsStable,
+    SessionHeaderEntry? Header = null);
 
 /// <summary>
 ///     Line-1 header of a session file. Optional trailing fields carry the

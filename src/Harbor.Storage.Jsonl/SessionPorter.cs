@@ -23,6 +23,11 @@ namespace Harbor.Storage.Jsonl;
 ///         Import is append-only by contract (<see cref="ISessionPorter" /> remarks): a fresh
 ///         id is minted on every import so running it twice yields two independent copies.
 ///     </para>
+///     <para>
+///         <b>Export is a snapshot, not a stream (<see cref="ExportAsync" />, #1785).</b>
+///         The whole export is assembled from one read of the session, so the stats it
+///         carries always describe the history it carries.
+///     </para>
 /// </remarks>
 public sealed class JsonlSessionPorter : ISessionPorter
 {
@@ -36,6 +41,25 @@ public sealed class JsonlSessionPorter : ISessionPorter
     public JsonlSessionPorter(ILogger<JsonlSessionPorter> logger) => _logger = logger;
 
     /// <inheritdoc />
+    /// <remarks>
+    ///     <para>
+    ///         <b>#1785 — the export is a SNAPSHOT, taken at one instant.</b> The
+    ///         envelope (the session record + the stats) and the body (the
+    ///         history) are assembled from ONE read of the session, so every
+    ///         part of the export describes the same generation. The export
+    ///         used to read the session three times — the session record, the
+    ///         stats, the messages — and a write landing between those reads
+    ///         (a live agent appending, a compaction rewriting the file) put
+    ///         the stats of one generation next to the history of another. An
+    ///         export is a "send me the log" artefact: a log whose header
+    ///         counts disagree with its body misleads whoever reads it.
+    ///     </para>
+    ///     <para>
+    ///         Which instant the snapshot is taken at is not promised — the
+    ///         file may have grown a moment later. That does not matter: what
+    ///         is promised is that the export is internally consistent.
+    ///     </para>
+    /// </remarks>
     public async Task<Result> ExportAsync(
         ISessionStore store,
         string sessionId,
@@ -45,24 +69,25 @@ public sealed class JsonlSessionPorter : ISessionPorter
         ArgumentNullException.ThrowIfNull(store);
         ArgumentNullException.ThrowIfNull(output);
 
-        var session = await store.GetAsync(sessionId, ct).ConfigureAwait(false);
-        if (session.IsFailure) // §4.6-ok: propagate store diagnostic verbatim.
-            return session.ConvertFailure().MapError(e => $"Cannot export session '{sessionId}': {e}");
+        // #1785: ONE snapshot, from ONE read. Everything below is assembled
+        // from it, so the export cannot mix generations.
+        var snapshotResult = await ReadSnapshotAsync(store, sessionId, ct).ConfigureAwait(false);
+        if (snapshotResult.IsFailure) // §4.6-ok: propagate store diagnostic verbatim.
+            return snapshotResult.ConvertFailure();
 
-        var stats = await store.GetStatsAsync(sessionId, ct).ConfigureAwait(false);
+        SessionSnapshot snapshot = snapshotResult.Value; // guarded: returned above on failure.
 
+        // The stats in the envelope are the stats of the history under it:
+        // both come from the same snapshot (the store derives them from the
+        // very messages it hands over), so they cannot disagree.
         var envelope = new ExportEnvelope(
             Marker: EnvelopeMarker,
             Version: SchemaVersion,
-            Session: session.Value,
-            Metadata: stats.IsSuccess ? stats.Value : null);
+            Session: snapshot.Session,
+            Metadata: snapshot.Session.Metadata);
         await output.WriteLineAsync(JsonSerializer.Serialize(envelope, JsonlCodecContext.Default.ExportEnvelope)).ConfigureAwait(false);
 
-        var messages = await store.GetMessagesAsync(sessionId, ct).ConfigureAwait(false);
-        if (messages.IsFailure) // §4.6-ok: header written → surface a clear partial-export failure.
-            return messages.ConvertFailure().MapError(e => $"Cannot export messages of session '{sessionId}': {e}");
-
-        foreach (AgentMessage message in messages.Value)
+        foreach (AgentMessage message in snapshot.Messages)
         {
             var entry = new MessageEntry(
                 Type: "message",
@@ -74,8 +99,51 @@ public sealed class JsonlSessionPorter : ISessionPorter
             await output.WriteLineAsync(JsonSerializer.Serialize(entry, JsonlCodecContext.Default.MessageEntry)).ConfigureAwait(false);
         }
 
-        JsonlSessionPorterLog.SessionExported(_logger, sessionId, messages.Value.Count);
+        JsonlSessionPorterLog.SessionExported(_logger, sessionId, snapshot.Messages.Count);
         return Result.Success();
+    }
+
+    /// <summary>
+    ///     One coherent view of the session, from ONE read (<b>#1785</b>).
+    /// </summary>
+    /// <remarks>
+    ///     <para>
+    ///         The JSONL store can promise one generation, and is asked for it:
+    ///         it reads the file once and takes the header and the history from
+    ///         that single pass. A store that cannot is read in two calls — the
+    ///         session record (which already carries that store's own stats)
+    ///         and the history.
+    ///     </para>
+    ///     <para>
+    ///         The old THIRD call is gone: <c>GetStatsAsync</c> was pure
+    ///         duplication. Every store returns the same metadata from
+    ///         <c>GetAsync</c> and from <c>GetStatsAsync</c> — the JSONL store
+    ///         derives it from the history, the others persist it — so the
+    ///         second derivation could only ever disagree with the first, and
+    ///         cost one more read of a file that was being written.
+    ///     </para>
+    /// </remarks>
+    private static async Task<Result<SessionSnapshot>> ReadSnapshotAsync(
+        ISessionStore store,
+        string sessionId,
+        CancellationToken ct)
+    {
+        if (store is JsonlSessionStore jsonl)
+        {
+            var read = await jsonl.ReadSessionSnapshotAsync(sessionId, ct).ConfigureAwait(false);
+            return read.MapError(e => $"Cannot export session '{sessionId}': {e}");
+        }
+
+        var session = await store.GetAsync(sessionId, ct).ConfigureAwait(false);
+        if (session.IsFailure) // §4.6-ok: propagate store diagnostic verbatim.
+            return session.ConvertFailure<SessionSnapshot>().MapError(e => $"Cannot export session '{sessionId}': {e}");
+        Session loaded = session.Value; // guarded: returned above on failure.
+
+        var messages = await store.GetMessagesAsync(sessionId, ct).ConfigureAwait(false);
+        if (messages.IsFailure) // §4.6-ok: header written → surface a clear partial-export failure.
+            return messages.ConvertFailure<SessionSnapshot>().MapError(e => $"Cannot export messages of session '{sessionId}': {e}");
+
+        return Result.Success(new SessionSnapshot(loaded, messages.Value));
     }
 
     /// <inheritdoc />
