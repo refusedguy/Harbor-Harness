@@ -295,7 +295,7 @@ public sealed class UnguardedResultReadAnalyzer : DiagnosticAnalyzer
 
                 // (4) PATTERN — a switch arm whose pattern demands the value.
                 case ISwitchCaseOperation switchCase:
-                    facts.Merge(SwitchCaseFacts(switchCase, model));
+                    facts.Merge(SwitchCaseFacts(switchCase));
                     break;
 
                 // (2) EARLY EXIT — the statements BEFORE the read's own
@@ -468,10 +468,10 @@ public sealed class UnguardedResultReadAnalyzer : DiagnosticAnalyzer
             // `A && B` is true when BOTH are true: a fact holds when it holds
             // in either operand's true branch. It is false when either is
             // false, so only a fact that holds in BOTH false branches survives.
-            case IBinaryOperation and when and.Kind == BinaryOperatorKind.And:
+            case IBinaryOperation andOperation when andOperation.Kind == BinaryOperatorKind.And:
             {
-                ConditionFacts left = ConditionFacts(and.LeftOperand, model);
-                ConditionFacts right = ConditionFacts(and.RightOperand, model);
+                ConditionFacts left = ConditionFacts(andOperation.LeftOperand, model);
+                ConditionFacts right = ConditionFacts(andOperation.RightOperand, model);
                 return new ConditionFacts(
                     left.WhenTrue.Union(right.WhenTrue),
                     left.WhenFalse.Intersect(right.WhenFalse));
@@ -480,10 +480,10 @@ public sealed class UnguardedResultReadAnalyzer : DiagnosticAnalyzer
             // `A || B` is false when BOTH are false: a fact holds when it
             // holds in either operand's false branch. It is true when either
             // is true, so only a fact that holds in BOTH true branches survives.
-            case IBinaryOperation or when or.Kind == BinaryOperatorKind.Or:
+            case IBinaryOperation orOperation when orOperation.Kind == BinaryOperatorKind.Or:
             {
-                ConditionFacts left = ConditionFacts(or.LeftOperand, model);
-                ConditionFacts right = ConditionFacts(or.RightOperand, model);
+                ConditionFacts left = ConditionFacts(orOperation.LeftOperand, model);
+                ConditionFacts right = ConditionFacts(orOperation.RightOperand, model);
                 return new ConditionFacts(
                     left.WhenTrue.Intersect(right.WhenTrue),
                     left.WhenFalse.Union(right.WhenFalse));
@@ -529,7 +529,7 @@ public sealed class UnguardedResultReadAnalyzer : DiagnosticAnalyzer
     ///     A case body is entered only when the pattern MATCHED, so the facts
     ///     the pattern demands are the facts that hold in the body.
     /// </remarks>
-    private static Facts SwitchCaseFacts(ISwitchCaseOperation switchCase, SemanticModel model)
+    private static Facts SwitchCaseFacts(ISwitchCaseOperation switchCase)
     {
         var whenTrue = new Facts();
         var whenFalse = new Facts();
