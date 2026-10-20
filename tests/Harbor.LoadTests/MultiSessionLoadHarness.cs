@@ -11,6 +11,7 @@ using Harbor.Providers.OpenAiCompatible;
 using Harbor.Storage.Jsonl;
 using Harbor.Storage.Memory;
 using Harbor.Storage.Sqlite;
+using Harbor.TestKit;
 using Harbor.Ui.Framework.State;
 using Harbor.Abstractions.Models;
 using CSharpFunctionalExtensions;
@@ -131,7 +132,7 @@ public sealed class MultiSessionLoadHarness : IAsyncDisposable
         var inner = new OpenAiCompatibleLlmClient(
             http,
             config,
-            new FixedAuthResolver("load-test-key"),
+            new TestAuthResolver("load-test-key"),
             new StaticModelCatalog(),
             NullLogger<OpenAiCompatibleLlmClient>.Instance);
         var client = new RateLimitedLlmClient(inner, limiter);

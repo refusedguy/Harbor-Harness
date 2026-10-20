@@ -156,18 +156,7 @@ public class RunChangeChainTests : ChangeTrackingTestBase
     // environment, and this class is one of them.
     private static async Task WithIsolatedHome(Func<string, Task> body)
     {
-        string? savedHarborHome = Environment.GetEnvironmentVariable("HARBOR_HOME");
-        string home = Path.Combine(Path.GetTempPath(), $"harbor-home-{Guid.NewGuid():N}");
-        Directory.CreateDirectory(home);
-        Environment.SetEnvironmentVariable("HARBOR_HOME", home);
-        try
-        {
-            await body(home).ConfigureAwait(false);
-        }
-        finally
-        {
-            Environment.SetEnvironmentVariable("HARBOR_HOME", savedHarborHome);
-            DeleteDir(home);
-        }
+        using var home = new TempDirScope("harbor-home");
+        await EnvScope.WithAsync("HARBOR_HOME", home.Path, () => body(home.Path));
     }
 }

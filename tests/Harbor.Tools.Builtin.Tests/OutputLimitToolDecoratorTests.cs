@@ -114,7 +114,7 @@ public class OutputLimitToolDecoratorTests
     {
         ToolResult inner = ToolResult.Error(new string('e', 250_000), new { exitCode = 1 });
         FakeLimitTool fake = new() { Result = inner };
-        CapturedLogger logger = new();
+        CapturingLogger logger = new();
         OutputLimitToolDecorator decorator = new(fake, logger);
 
         ToolResult result = await decorator.ExecuteAsync(EmptyArgs(), TestToolContext.Create());
@@ -123,7 +123,7 @@ public class OutputLimitToolDecoratorTests
         await Assert.That(result.Output.Length).IsGreaterThan(0);
         await Assert.That(result.Output.EndsWith(Note)).IsTrue();
         await Assert.That(ReferenceEquals(result.Metadata, inner.Metadata)).IsTrue();
-        await Assert.That(logger.OutputLimitedFired).IsTrue();
+        await Assert.That(logger.Messages.Any(m => m.Contains("Output limited", StringComparison.Ordinal))).IsTrue();
     }
 
     // ── decorator: validation short-circuit ────────────────────────────
@@ -178,28 +178,5 @@ public class OutputLimitToolDecoratorTests
         }
 
         public JsonElement LastArgs { get; private set; }
-    }
-
-    private sealed class CapturedLogger : ILogger
-    {
-        public bool OutputLimitedFired { get; private set; }
-        public List<(LogLevel Level, string Message)> Entries { get; } = [];
-
-        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
-
-        public bool IsEnabled(LogLevel logLevel) => true;
-
-        public void Log<TState>(
-            LogLevel logLevel,
-            EventId eventId,
-            TState state,
-            Exception? exception,
-            Func<TState, Exception?, string> formatter)
-        {
-            string message = formatter(state, exception);
-            Entries.Add((logLevel, message));
-            if (message.Contains("Output limited"))
-                OutputLimitedFired = true;
-        }
     }
 }

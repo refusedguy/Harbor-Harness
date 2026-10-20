@@ -4,6 +4,7 @@ using System.Buffers;
 using System.Text;
 using System.Text.Json;
 using Harbor.Abstractions.Providers;
+using Harbor.TestKit;
 using Microsoft.Extensions.Logging;
 
 // Same shared-source story as ImageContentBlockTests: the identical adapter
@@ -44,14 +45,14 @@ public class ContentPartAdapterTests
     [Test]
     public async Task ContentPartAdapter_TextBlock_EmitsTheTextPart()
     {
-        var logger = new RecordingLogger();
+        var logger = new CapturingLogger();
 
         string json = AdaptOne(new LlmTextBlock("what is this?"), logger);
 
         await Assert.That(json).IsEqualTo("""[{"type":"text","text":"what is this?"}]""")
             .Because("the compact text part is the most-issued shape of this wire dialect, "
                    + "and the adapter is now its only hand-written emitter on the shared path");
-        await Assert.That(logger.Entries).IsEmpty()
+        await Assert.That(EntriesOf(logger)).IsEmpty()
             .Because("a supported block adapts without touching the diagnostics sink");
     }
 
@@ -60,7 +61,7 @@ public class ContentPartAdapterTests
     [Test]
     public async Task ContentPartAdapter_ImageBlock_EmitsTheImageUrlPart()
     {
-        var logger = new RecordingLogger();
+        var logger = new CapturingLogger();
 
         string json = AdaptOne(new LlmImageBlock("image/png", PngBytes), logger);
 
@@ -69,7 +70,7 @@ public class ContentPartAdapterTests
         await Assert.That(json).IsEqualTo(expected)
             .Because("the data URL is prefixed exactly as the shared ToDataUrl helper "
                    + "builds it — a drifted shape here is a provider 400 mid-stream");
-        await Assert.That(logger.Entries).IsEmpty();
+        await Assert.That(EntriesOf(logger)).IsEmpty();
     }
 
     // ── branch: unsupported block → dropped LOUDLY, nothing on the wire ───
@@ -77,17 +78,17 @@ public class ContentPartAdapterTests
     [Test]
     public async Task ContentPartAdapter_UnsupportedBlock_DropsLoudlyAndEmitsNothing()
     {
-        var logger = new RecordingLogger();
+        var logger = new CapturingLogger();
 
         string json = AdaptOne(ToolCallBlock(), logger);
 
         await Assert.That(json).IsEqualTo("[]")
             .Because("ROP-A ПР.12: an unsupported block is dropped, never silently "
                    + "stringified and never serialised as an alien part shape");
-        await Assert.That(logger.Entries.Count).IsEqualTo(1)
+        await Assert.That(EntriesOf(logger).Count).IsEqualTo(1)
             .Because("the drop must be loud — a silent empty part is a lost image that "
                    + "surfaces as a model-side confusion instead of a log line");
-        LoggedEntry entry = logger.Entries[0];
+        LoggedEntry entry = EntriesOf(logger)[0];
         await Assert.That(entry.Level).IsEqualTo(LogLevel.Warning);
         await Assert.That(entry.BlockType).IsEqualTo("tool_call")
             .Because("the block's own discriminator names what was dropped");
@@ -100,7 +101,7 @@ public class ContentPartAdapterTests
     [Test]
     public async Task WriteUserContent_MixedTurn_EmitsOnlySupportedPartsAndWarnsOnce()
     {
-        var logger = new RecordingLogger();
+        var logger = new CapturingLogger();
 
         string json = UserContent([new LlmTextBlock("hi"), ToolCallBlock(), new LlmImageBlock("image/png", PngBytes)], logger);
 
@@ -109,14 +110,14 @@ public class ContentPartAdapterTests
         await Assert.That(json).IsEqualTo(expected)
             .Because("#1517 is a consolidation, not a wire change: the mixed-turn shape "
                    + "must be byte-identical to the inline-switch era");
-        await Assert.That(logger.Entries.Count).IsEqualTo(1);
-        await Assert.That(logger.Entries[0].BlockType).IsEqualTo("tool_call");
+        await Assert.That(EntriesOf(logger).Count).IsEqualTo(1);
+        await Assert.That(EntriesOf(logger)[0].BlockType).IsEqualTo("tool_call");
     }
 
     // ── helpers ───────────────────────────────────────────────────────────
 
     /// <summary>Drive the adapter with ONE block inside a caller-owned array.</summary>
-    private static string AdaptOne(LlmContentBlock block, RecordingLogger logger)
+    private static string AdaptOne(LlmContentBlock block, CapturingLogger logger)
     {
         ArrayBufferWriter<byte> buffer = new();
         using Utf8JsonWriter writer = new(buffer);
@@ -129,7 +130,7 @@ public class ContentPartAdapterTests
     }
 
     /// <summary>Drive <c>WriteUserContent</c> the way a message writer would.</summary>
-    private static string UserContent(LlmContentBlock[] content, RecordingLogger logger)
+    private static string UserContent(LlmContentBlock[] content, CapturingLogger logger)
     {
         ArrayBufferWriter<byte> buffer = new();
         using Utf8JsonWriter writer = new(buffer);
@@ -144,44 +145,15 @@ public class ContentPartAdapterTests
     private sealed record LoggedEntry(LogLevel Level, string BlockType, string Provider);
 
     /// <summary>
-    ///     Test double for the drop-warning sink: records level plus the
-    ///     source-generated LoggerMessage fields this code path carries
-    ///     (BlockType, Provider).
+    ///     Projects the shared capture onto the fields this file asserts on.
+    ///     The shared logger keeps the STRUCTURED STATE of every entry, and
+    ///     the drop warning names the block and the provider in it.
     /// </summary>
-    private sealed class RecordingLogger : ILogger
-    {
-        public List<LoggedEntry> Entries { get; } = [];
-
-        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
-
-        public bool IsEnabled(LogLevel logLevel) => true;
-
-        public void Log<TState>(
-            LogLevel logLevel,
-            EventId eventId,
-            TState state,
-            Exception? exception,
-            Func<TState, Exception?, string> formatter)
-            where TState : notnull
-        {
-            string blockType = "";
-            string provider = "";
-            if (state is IReadOnlyList<KeyValuePair<string, object?>> fields)
-            {
-                foreach (KeyValuePair<string, object?> field in fields)
-                {
-                    if (field.Key == "BlockType")
-                    {
-                        blockType = field.Value?.ToString() ?? "";
-                    }
-                    else if (field.Key == "Provider")
-                    {
-                        provider = field.Value?.ToString() ?? "";
-                    }
-                }
-            }
-
-            Entries.Add(new LoggedEntry(logLevel, blockType, provider));
-        }
-    }
+    private static IReadOnlyList<LoggedEntry> EntriesOf(CapturingLogger logger) =>
+    [
+        .. logger.Capture.RawEntries.Select(entry => new LoggedEntry(
+            entry.Level,
+            LogCapture.FieldOf(entry.State, "BlockType") ?? string.Empty,
+            LogCapture.FieldOf(entry.State, "Provider") ?? string.Empty))
+    ];
 }

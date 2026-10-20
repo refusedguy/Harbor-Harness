@@ -7,6 +7,7 @@ using Harbor.Terminal.Abstractions;
 using Harbor.Terminal.Abstractions.Renderers;
 using Harbor.Abstractions.Tui;
 using Harbor.Hosting.Rendering;
+using Harbor.TestKit;
 using Harbor.Ui.Framework.State;
 using Harbor.Abstractions.Models;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -186,24 +187,5 @@ public class RendererPipelineTests
         public Task<Result> ClearAsync(CancellationToken ct = default) => Task.FromResult(Result.Success());
 
         public void Dispose() => DisposeCount++;
-    }
-
-    private sealed class NullRenderContext : ITuiRenderContext
-    {
-        public int Width => 80;
-        public int Height => 24;
-        public bool SupportsColor => false;
-        public void Write(string text) { }
-        public void WriteLine(string? text = null) { }
-        public void WriteColored(string text, TuiColor foreground, TuiColor? background = null) { }
-        public void WriteStyled(string text, TuiStyle style) { }
-        public void SetCursorPosition(int row, int col) { }
-        public void ClearLine() { }
-        public void Clear() { }
-        public void HideCursor() { }
-        public void ShowCursor() { }
-        public void EnterAlternateScreen() { }
-        public void ExitAlternateScreen() { }
-        public void Flush() { }
     }
 }

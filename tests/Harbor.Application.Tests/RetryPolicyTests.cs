@@ -3,6 +3,7 @@ using System.Text.Json;
 using Harbor.Abstractions.Events;
 using Harbor.Application.Agents;
 using Harbor.Application.Resilience;
+using Harbor.TestKit;
 using TUnit.Assertions;
 
 namespace Harbor.Application.Tests;
@@ -16,37 +17,6 @@ public class RetryPolicyTests
 {
     private static RetryOptions Opts(int max, int delayMs = 20, bool jitter = false) =>
         new(max, TimeSpan.FromMilliseconds(delayMs), jitter);
-
-    /// <summary>
-    ///     Hermetic clock (#54): records requested delays, completes
-    ///     immediately. No wall-clock is ever observed, so loaded runners
-    ///     cannot perturb assertions. BCL only, no new packages.
-    /// </summary>
-    private sealed class RecordingTimeProvider : TimeProvider
-    {
-        public List<TimeSpan> Delays { get; } = [];
-
-        public override DateTimeOffset GetUtcNow() => DateTimeOffset.UnixEpoch;
-
-        public override ITimer CreateTimer(
-            TimerCallback callback, object? state, TimeSpan dueTime, TimeSpan period)
-        {
-            Delays.Add(dueTime);
-            // Complete synchronously: Task.Delay's callback sets the task
-            // result, so the policy observes an instantly-elapsed delay.
-            callback(state);
-            return NoopTimer.Instance;
-        }
-
-        private sealed class NoopTimer : ITimer
-        {
-            public static readonly NoopTimer Instance = new();
-            public bool Change(TimeSpan dueTime, TimeSpan period) => false;
-            public void Dispose() { }
-            public ValueTask DisposeAsync() => default;
-        }
-    }
-
     // ── classification ──
 
     [Test]
@@ -246,7 +216,7 @@ public class RetryPolicyTests
     [Test]
     public async Task ExecuteAsync_Jitter_DelayNeverExceedsBaseDelay()
     {
-        var time = new RecordingTimeProvider();
+        var time = new ManualTimeProvider(fireTimerOnCreate: true);
         var policy = new RetryPolicy(time);
         var attempts = new List<int>();
 
@@ -305,7 +275,7 @@ public class RetryPolicyTests
     [Test]
     public async Task ExecuteAsync_NoJitter_DelayApproximatesBaseDelay()
     {
-        var time = new RecordingTimeProvider();
+        var time = new ManualTimeProvider(fireTimerOnCreate: true);
         var policy = new RetryPolicy(time);
 
         try

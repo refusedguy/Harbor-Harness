@@ -6,6 +6,7 @@ using Harbor.Abstractions.Tools;
 using Harbor.Hosting.Rendering;
 using Harbor.Storage.Jsonl;
 using Harbor.Storage.Memory;
+using Harbor.TestKit;
 using Harbor.Tui.AnsiPlain;
 using Harbor.Terminal.Abstractions;
 using Harbor.Terminal.Abstractions.Renderers;
@@ -36,22 +37,6 @@ public class RegistrationCompositionTests
         services.AddHarbor(options);
         return services.BuildServiceProvider();
     }
-
-    /// <summary>Run <paramref name="action" /> with an env var pinned, restore afterwards.</summary>
-    private static async Task WithEnv(string name, string? value, Func<Task> action)
-    {
-        string? previous = Environment.GetEnvironmentVariable(name);
-        Environment.SetEnvironmentVariable(name, value);
-        try
-        {
-            await action();
-        }
-        finally
-        {
-            Environment.SetEnvironmentVariable(name, previous);
-        }
-    }
-
     private static IReadOnlyList<string> ToolNames(IServiceProvider sp) =>
         sp.GetRequiredService<IToolRegistry>()
             .GetAllTools()
@@ -173,7 +158,7 @@ public class RegistrationCompositionTests
     [Test]
     public async Task AddHarbor_MemoryPreset_ResolvesMemorySessionStore()
     {
-        await WithEnv("HARBOR_STORAGE", null, async () =>
+        await EnvScope.WithAsync("HARBOR_STORAGE", null, async () =>
         {
             using var sp = Compose(new HarborComposeOptions { HarborDir = TempHarborDir(), DefaultStorageBackend = "memory" });
             await Assert.That(sp.GetRequiredService<ISessionStore>()).IsTypeOf<MemorySessionStore>();
@@ -183,7 +168,7 @@ public class RegistrationCompositionTests
     [Test]
     public async Task AddHarbor_JsonlPreset_ResolvesJsonlSessionStore()
     {
-        await WithEnv("HARBOR_STORAGE", null, async () =>
+        await EnvScope.WithAsync("HARBOR_STORAGE", null, async () =>
         {
             using var sp = Compose(new HarborComposeOptions { HarborDir = TempHarborDir(), DefaultStorageBackend = "jsonl" });
             await Assert.That(sp.GetRequiredService<ISessionStore>()).IsTypeOf<JsonlSessionStore>();
@@ -193,7 +178,7 @@ public class RegistrationCompositionTests
     [Test]
     public async Task AddHarbor_HARBOR_STORAGE_EnvOverridesPreset()
     {
-        await WithEnv("HARBOR_STORAGE", "memory", async () =>
+        await EnvScope.WithAsync("HARBOR_STORAGE", "memory", async () =>
         {
             using var sp = Compose(new HarborComposeOptions { HarborDir = TempHarborDir(), DefaultStorageBackend = "jsonl" });
             await Assert.That(sp.GetRequiredService<ISessionStore>()).IsTypeOf<MemorySessionStore>();
@@ -222,7 +207,7 @@ public class RegistrationCompositionTests
     [Test]
     public async Task AddHarbor_PlainWrites_IntoSharedUiStore_RestoreReplaysOneLine()
     {
-        await WithEnv("HARBOR_TUI", null, async () =>
+        await EnvScope.WithAsync("HARBOR_TUI", null, async () =>
         {
             using var sp = Compose(new HarborComposeOptions
             {
@@ -269,7 +254,7 @@ public class RegistrationCompositionTests
     [Test]
     public async Task AddHarbor_CellForgeWrites_IntoSharedUiStore_RestoreReplaysOneLine()
     {
-        await WithEnv("HARBOR_TUI", null, async () =>
+        await EnvScope.WithAsync("HARBOR_TUI", null, async () =>
         {
             using var sp = Compose(new HarborComposeOptions
             {
@@ -316,7 +301,7 @@ public class RegistrationCompositionTests
     {
         public List<string> WrittenLines { get; } = [];
 
-        public ITuiRenderContext Context { get; } = new AnsiPlainNullRenderContext();
+        public ITuiRenderContext Context { get; } = new NullRenderContext();
         public ViewRegistry Views { get; } = new();
         public ViewModelRegistry ViewModels { get; } = new();
 
@@ -376,45 +361,6 @@ public class RegistrationCompositionTests
 
         public void Dispose() { }
     }
-
-    private sealed class AnsiPlainNullRenderContext : ITuiRenderContext
-    {
-        public int Width => 80;
-        public int Height => 24;
-        public bool SupportsColor => false;
-        public void Write(string text) { }
-        public void WriteLine(string? text = null) { }
-        public void WriteColored(string text, TuiColor foreground, TuiColor? background = null) { }
-        public void WriteStyled(string text, TuiStyle style) { }
-        public void SetCursorPosition(int row, int col) { }
-        public void ClearLine() { }
-        public void Clear() { }
-        public void HideCursor() { }
-        public void ShowCursor() { }
-        public void EnterAlternateScreen() { }
-        public void ExitAlternateScreen() { }
-        public void Flush() { }
-    }
-
-    private sealed class NullRenderContext : ITuiRenderContext
-    {
-        public int Width => 80;
-        public int Height => 24;
-        public bool SupportsColor => false;
-        public void Write(string text) { }
-        public void WriteLine(string? text = null) { }
-        public void WriteColored(string text, TuiColor foreground, TuiColor? background = null) { }
-        public void WriteStyled(string text, TuiStyle style) { }
-        public void SetCursorPosition(int row, int col) { }
-        public void ClearLine() { }
-        public void Clear() { }
-        public void HideCursor() { }
-        public void ShowCursor() { }
-        public void EnterAlternateScreen() { }
-        public void ExitAlternateScreen() { }
-        public void Flush() { }
-    }
-
     // ── Issue #77: shared UiStore for pipeline snapshot-restore ──────────
 
     [Test]

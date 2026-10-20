@@ -12,6 +12,10 @@
     <!-- #1591: the parity suites compare the JSONL and SQLite projections of the
          same domain messages, so both backends must be referenced here. -->
     <ProjectReference Include="..\..\src\Harbor.Storage.Jsonl\Harbor.Storage.Jsonl.csproj"/>
+    <!-- #1772: the shared test doubles (the capturing logger among them).
+         The sibling references Harbor.Abstractions only, which this project
+         already has, so the reference adds no product assembly. -->
+    <ProjectReference Include="..\Harbor.TestKit.Support\Harbor.TestKit.Support.csproj"/>
   </ItemGroup>
 
   <ItemGroup>

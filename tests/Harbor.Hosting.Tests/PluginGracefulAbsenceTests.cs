@@ -1,5 +1,6 @@
 using Harbor.Abstractions.Tools;
 using Harbor.Hosting;
+using Harbor.TestKit;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Harbor.Hosting.Tests;
@@ -27,7 +28,7 @@ public class PluginGracefulAbsenceTests : PluginAbsenceTestBase
     public async Task NoPluginDirs_ComposeSucceeds_LogsSinglePluginOffLine()
     {
         string harborDir = TempHarborDir(); // deliberately NOT created
-        var capture = new CaptureLoggerFactory();
+        var capture = new CapturingLoggerFactory();
         using var _cwd = WithTempCwd(); // empty project scope
         using ServiceProvider sp = Compose(harborDir, capture);
 
@@ -61,7 +62,7 @@ public class PluginGracefulAbsenceTests : PluginAbsenceTestBase
             .ToHashSet(StringComparer.Ordinal);
 
         string harborDir = TempHarborDir(); // deliberately NOT created
-        var capture = new CaptureLoggerFactory();
+        var capture = new CapturingLoggerFactory();
         using var _cwd = WithTempCwd(); // empty project scope
         using ServiceProvider sp = Compose(harborDir, capture);
         _ = sp.GetRequiredService<IToolRegistry>();
@@ -102,7 +103,7 @@ public class PluginGracefulAbsenceTests : PluginAbsenceTestBase
         await File.WriteAllTextAsync(Path.Combine(pluginsDir, "good.cs"), GoodSource)
             .ConfigureAwait(false);
 
-        var capture = new CaptureLoggerFactory();
+        var capture = new CapturingLoggerFactory();
         using var _cwd = WithTempCwd(); // empty project scope
         using ServiceProvider sp = Compose(harborDir, capture);
 

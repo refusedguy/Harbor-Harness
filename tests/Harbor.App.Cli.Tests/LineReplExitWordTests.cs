@@ -233,7 +233,7 @@ public class LineReplExitWordTests
             // never touches it, so a throwing stub is the honest assertion that it does not.
             cellForgeScreens: static () => throw new InvalidOperationException(
                 "Line REPL must not resolve the CellForge screen graph."),
-            rendererHost: EmptyServiceProvider.Instance);
+            rendererHost: new EmptyServiceProvider());
     }
 
     // ── Fakes ───────────────────────────────────────────────────────────────────────
@@ -312,13 +312,5 @@ public class LineReplExitWordTests
         {
             public void Dispose() { }
         }
-    }
-
-    /// <summary>Resolves nothing — the line REPL only forwards the host to renderers.</summary>
-    private sealed class EmptyServiceProvider : IServiceProvider
-    {
-        public static EmptyServiceProvider Instance { get; } = new();
-
-        public object? GetService(Type serviceType) => null;
     }
 }

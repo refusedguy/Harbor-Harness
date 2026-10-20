@@ -98,7 +98,7 @@ public class ReplRunnerConfigLoadTests
         {
             var store = new JsonConfigStore(path, NullLogger<JsonConfigStore>.Instance);
             var agent = new RecordingAgent();
-            var logger = new RecordingLogger();
+            var logger = new CapturingLogger<ReplRunner>(LogLevel.Error);
             ReplRunner runner = CreateRunner(new CapturingRenderer(), agent, new FakeAgentRegistry(TestAgents.AllowAll()), store, logger);
 
             int exitCode = await runner.RunAskAsync("hi").ConfigureAwait(false);
@@ -230,7 +230,7 @@ public class ReplRunnerConfigLoadTests
     {
         var store = new ScriptedConfigStore(Result.Success(Configured()), Result.Success(Configured()));
         var agent = new RecordingAgent();
-        var logger = new RecordingLogger();
+        var logger = new CapturingLogger<ReplRunner>(LogLevel.Error);
         ReplRunner runner = CreateRunner(new CapturingRenderer(), agent, new FakeAgentRegistry(), store, logger);
 
         int exitCode = await runner.RunAskAsync("hi").ConfigureAwait(false);
@@ -514,7 +514,7 @@ public class ReplRunnerConfigLoadTests
         IAgent agent,
         IAgentRegistry agentRegistry,
         IConfigStore configStore,
-        RecordingLogger? logger = null,
+        CapturingLogger<ReplRunner>? logger = null,
         Func<CellForgeScreens>? cellForgeScreens = null)
     {
         var authStore = new AuthStore(configStore);
@@ -707,51 +707,6 @@ public class ReplRunnerConfigLoadTests
         private sealed class NopDisposable : IDisposable
         {
             public void Dispose() { }
-        }
-    }
-
-    /// <summary>
-    ///     Resolves nothing — the REPL only forwards the host to renderers. A plain
-    ///     instance rather than a static singleton: it is stateless, and a static
-    ///     <c>IServiceProvider</c> is DI006.
-    /// </summary>
-    private sealed class EmptyServiceProvider : IServiceProvider
-    {
-        public object? GetService(Type serviceType) => null;
-    }
-
-    /// <summary>
-    ///     Captures the REPL's error log.
-    /// </summary>
-    /// <remarks>
-    ///     This exists instead of redirecting <see cref="Console.Error" />. TUnit
-    ///     runs test classes in parallel inside one process, so a global writer swap
-    ///     races every other test's output for the duration of the call (TUnit0055
-    ///     says exactly this) — the assertions below would be about a buffer that
-    ///     other tests are also writing into. The stderr write itself is one line
-    ///     next to an identical, pre-existing one for session-creation failure, so
-    ///     what needs pinning here is that the message is composed and reported,
-    ///     not which stream it lands on.
-    /// </remarks>
-    private sealed class RecordingLogger : ILogger<ReplRunner>
-    {
-        public List<string> Errors { get; } = [];
-
-        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
-
-        public bool IsEnabled(LogLevel logLevel) => true;
-
-        public void Log<TState>(
-            LogLevel logLevel,
-            EventId eventId,
-            TState state,
-            Exception? exception,
-            Func<TState, Exception?, string> formatter)
-        {
-            if (logLevel >= LogLevel.Error)
-            {
-                Errors.Add(formatter(state, exception));
-            }
         }
     }
 }

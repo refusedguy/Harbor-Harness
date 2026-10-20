@@ -2,6 +2,7 @@ using System.Reflection;
 using System.Text.Json;
 using Harbor.Abstractions.Models;
 using Harbor.Storage.Sqlite;
+using Harbor.TestKit;
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Logging;
 
@@ -294,29 +295,5 @@ public class SqliteForeignPartTagTests
     private sealed record RoguePart(string Text) : ContentPart
     {
         public override string Type => "rogue";
-    }
-
-    /// <summary>Keeps the warnings, so "the refusal is not silent" can be asserted.</summary>
-    private sealed class CapturingLogger<T> : ILogger<T>
-    {
-        internal List<string> Warnings { get; } = [];
-
-        public IDisposable? BeginScope<TState>(TState state)
-            where TState : notnull => null;
-
-        public bool IsEnabled(LogLevel logLevel) => true;
-
-        public void Log<TState>(
-            LogLevel logLevel,
-            EventId eventId,
-            TState state,
-            Exception? exception,
-            Func<TState, Exception?, string> formatter)
-        {
-            if (logLevel >= LogLevel.Warning)
-            {
-                Warnings.Add(formatter(state, exception));
-            }
-        }
     }
 }

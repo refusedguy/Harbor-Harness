@@ -1,4 +1,5 @@
 using System.Text;
+using Harbor.TestKit;
 using Harbor.Tui.CellForge.Input;
 using Harbor.Tui.CellForge.Parsing;
 using Harbor.Tui.CellForge.Rendering;

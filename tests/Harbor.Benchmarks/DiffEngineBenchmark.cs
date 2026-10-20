@@ -1,5 +1,6 @@
 using System.Text;
 using BenchmarkDotNet.Attributes;
+using Harbor.TestKit;
 using Harbor.Tui.CellForge.Rendering;
 using Harbor.Tui.CellForge.Widgets;
 using Harbor.Ui.Framework.Rendering;
@@ -63,25 +64,6 @@ namespace Harbor.Benchmarks;
 [SimpleJob(warmupCount: 3, iterationCount: 5)]
 public class DiffEngineBenchmark
 {
-    private sealed class NullBackend : ITerminalBackend
-    {
-        public ValueTask WriteAsync(ReadOnlyMemory<byte> bytes, CancellationToken cancellationToken = default) =>
-            ValueTask.CompletedTask;
-    }
-
-    private sealed class CountingBackend : ITerminalBackend
-    {
-        public long TotalBytes;
-
-        public void Reset() => TotalBytes = 0;
-
-        public ValueTask WriteAsync(ReadOnlyMemory<byte> bytes, CancellationToken cancellationToken = default)
-        {
-            TotalBytes += bytes.Length;
-            return ValueTask.CompletedTask;
-        }
-    }
-
     private sealed class StubPanel : Panel
     {
         public StubPanel(string id, int minW, int minH, int priority = 0)
@@ -117,7 +99,7 @@ public class DiffEngineBenchmark
     [GlobalSetup]
     public void Setup()
     {
-        _writer = new AnsiWriter(new NullBackend(), syncUpdates: true);
+        _writer = new AnsiWriter(new NullTerminalBackend(), syncUpdates: true);
 
         (_engineIdle, _backIdle) = MakeSyncedScreen(200, 50);
 
@@ -139,7 +121,7 @@ public class DiffEngineBenchmark
 
     private static (DiffEngine Engine, EngineCells.ScreenBuffer Back) MakeSyncedScreen(int cols, int rows)
     {
-        var writer = new AnsiWriter(new NullBackend(), syncUpdates: true);
+        var writer = new AnsiWriter(new NullTerminalBackend(), syncUpdates: true);
         var engine = new DiffEngine(cols, rows);
         var back = new EngineCells.ScreenBuffer(cols, rows);
         for (int y = 0; y < rows; y++)
@@ -226,8 +208,8 @@ public class DiffEngineBenchmark
             await writer.EndFrameAsync();
         }
 
-        TrackStreamBytes(backend.TotalBytes);
-        return backend.TotalBytes;
+        TrackStreamBytes(backend.Bytes);
+        return backend.Bytes;
     }
 
     /// <summary>Paced case: ~1000 deltas/sec batched into ~60 frames/sec —
@@ -252,8 +234,8 @@ public class DiffEngineBenchmark
             await writer.EndFrameAsync();
         }
 
-        TrackStreamBytes(backend.TotalBytes);
-        return backend.TotalBytes;
+        TrackStreamBytes(backend.Bytes);
+        return backend.Bytes;
     }
 
     private void TrackStreamBytes(long bytes)

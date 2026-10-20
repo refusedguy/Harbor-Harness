@@ -381,9 +381,18 @@ public sealed class ScanUniverseRule
     ///         count. Nothing else moved: the new tree is the same project, now declared
     ///         directly.
     ///     </para>
+    ///     <para>
+    ///         #1772: +2 (tests=36) — the TestKit family gained two siblings.
+    ///         <c>Harbor.TestKit.Support</c> references Harbor.Abstractions and
+    ///         <c>Harbor.TestKit.Tui</c> references Harbor.Tui.CellForge.Engine, so
+    ///         both are non-product projects that declare a ProjectReference into
+    ///         src/ and neither is in the inventory. They exist so that a test
+    ///         project can reach the shared test helpers without gaining a
+    ///         product assembly it did not already have.
+    ///     </para>
     /// </remarks>
     private static readonly string[] MeasuredBlindTrees =
-        ["apps=2", "contrib=14", "samples=5", "tests=34", "tools=1"];
+        ["apps=2", "contrib=14", "samples=5", "tests=36", "tools=1"];
 
     /// <summary>What the two walks found, once.</summary>
     private sealed record UniverseReport(

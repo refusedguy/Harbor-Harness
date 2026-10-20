@@ -4,6 +4,7 @@ using Harbor.Abstractions.Events;
 using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Terminal.Abstractions.ViewModels;
+using Harbor.TestKit;
 using Harbor.Tui.CellForge;
 using Harbor.Tui.CellForge.Rendering;
 using Harbor.Tui.CellForge.Widgets;

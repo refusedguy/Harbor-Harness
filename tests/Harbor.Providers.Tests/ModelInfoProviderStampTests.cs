@@ -62,6 +62,7 @@
 using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Models;
 using Harbor.Providers.OpenAiCompatible;
+using Harbor.TestKit;
 using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Harbor.Providers.Tests;
@@ -81,7 +82,7 @@ public sealed class ModelInfoProviderStampTests
     public async Task HardcodedModel_StampedWithAForeignProvider_IsReStampedWithTheConfigsOwnId()
     {
         var catalog = new DynamicModelCatalog(
-            new HttpClient(new StubHttpHandler(_ => new HttpResponseMessage(System.Net.HttpStatusCode.OK))),
+            new HttpClient(new StubHttpMessageHandler(_ => new HttpResponseMessage(System.Net.HttpStatusCode.OK))),
             NewCacheDir(),
             NullLogger<DynamicModelCatalog>.Instance);
 
@@ -138,7 +139,7 @@ public sealed class ModelInfoProviderStampTests
     public async Task EveryEntryInAHardcodedCatalog_IsReStamped_NotJustTheFirst()
     {
         var catalog = new DynamicModelCatalog(
-            new HttpClient(new StubHttpHandler(_ => new HttpResponseMessage(System.Net.HttpStatusCode.OK))),
+            new HttpClient(new StubHttpMessageHandler(_ => new HttpResponseMessage(System.Net.HttpStatusCode.OK))),
             NewCacheDir(),
             NullLogger<DynamicModelCatalog>.Instance);
 
@@ -178,7 +179,7 @@ public sealed class ModelInfoProviderStampTests
     public async Task HardcodedModel_AlreadyStampedCorrectly_IsReturnedUnchanged()
     {
         var catalog = new DynamicModelCatalog(
-            new HttpClient(new StubHttpHandler(_ => new HttpResponseMessage(System.Net.HttpStatusCode.OK))),
+            new HttpClient(new StubHttpMessageHandler(_ => new HttpResponseMessage(System.Net.HttpStatusCode.OK))),
             NewCacheDir(),
             NullLogger<DynamicModelCatalog>.Instance);
 
@@ -212,7 +213,7 @@ public sealed class ModelInfoProviderStampTests
     [Test]
     public async Task FetchedModel_StillCarriesTheFetchingProvidersOwnId()
     {
-        var handler = new StubHttpHandler(_ => new HttpResponseMessage(System.Net.HttpStatusCode.OK)
+        var handler = new StubHttpMessageHandler(_ => new HttpResponseMessage(System.Net.HttpStatusCode.OK)
         {
             Content = new StringContent(
                 """{ "data": [ { "id": "served-model", "context_length": 4096 } ] }""",
@@ -265,7 +266,7 @@ public sealed class ModelInfoProviderStampTests
     public async Task AgreeingEntries_AfterTheFirstDivergence_AreStillReturned()
     {
         var catalog = new DynamicModelCatalog(
-            new HttpClient(new StubHttpHandler(_ => new HttpResponseMessage(System.Net.HttpStatusCode.OK))),
+            new HttpClient(new StubHttpMessageHandler(_ => new HttpResponseMessage(System.Net.HttpStatusCode.OK))),
             NewCacheDir(),
             NullLogger<DynamicModelCatalog>.Instance);
 

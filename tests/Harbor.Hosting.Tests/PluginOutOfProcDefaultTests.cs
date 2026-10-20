@@ -1,5 +1,6 @@
 using Harbor.Abstractions.Tools;
 using Harbor.Hosting;
+using Harbor.TestKit;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Harbor.Hosting.Tests;
@@ -33,7 +34,7 @@ public class PluginOutOfProcDefaultTests : PluginAbsenceTestBase
             Path.Combine(pluginsDir, "outofproc-probe.cs"),
             ProbeSource).ConfigureAwait(false);
 
-        var capture = new CaptureLoggerFactory();
+        var capture = new CapturingLoggerFactory();
         using var _cwd = WithTempCwd(); // empty project scope
         using ServiceProvider sp = Compose(harborDir, capture);
 

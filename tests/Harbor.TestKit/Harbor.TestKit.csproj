@@ -54,6 +54,17 @@
     <ProjectReference Include="../../src/Harbor.Ui.Framework.State/Harbor.Ui.Framework.State.csproj"/>
     <ProjectReference Include="../../src/Harbor.Ui.Framework.ViewModels/Harbor.Ui.Framework.ViewModels.csproj"/>
     <ProjectReference Include="../../src/Harbor.Desktop.Abstractions/Harbor.Desktop.Abstractions.csproj"/>
+    <!--
+      #1772/#1773: the helpers that need no product assembly beyond the
+      contracts (the three scopes, the logging doubles, the Abstractions-level
+      doubles) live in the sibling `Harbor.TestKit.Support`, so that test
+      projects which do NOT have the Ui.Framework / Terminal / Application
+      family in their closure can still reach ONE implementation of them.
+      Referencing the sibling here means a consumer of this project gets those
+      types transitively, in the same `Harbor.TestKit` namespace, without
+      adding a product assembly to anybody's closure.
+    -->
+    <ProjectReference Include="../Harbor.TestKit.Support/Harbor.TestKit.Support.csproj"/>
   </ItemGroup>
 
   <ItemGroup>

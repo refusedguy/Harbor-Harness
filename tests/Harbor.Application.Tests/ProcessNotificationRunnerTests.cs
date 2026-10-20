@@ -1,6 +1,7 @@
 namespace Harbor.Application.Tests;
 
 using Harbor.Application.Notifications;
+using Harbor.TestKit;
 using Microsoft.Extensions.Logging;
 using TUnit.Assertions;
 using TUnit.Assertions.Extensions;
@@ -51,7 +52,7 @@ public class ProcessNotificationRunnerTests
     [Test]
     public async Task MissingNotifier_IsContained_AndWarned()
     {
-        var logger = new CapturingNotificationLogger();
+        var logger = new CapturingLogger<ProcessNotificationRunner>();
         var runner = new ProcessNotificationRunner(logger);
 
         // No await, no Assert.Throws: the assertion IS that this returns at all.
@@ -67,7 +68,7 @@ public class ProcessNotificationRunnerTests
     [Test]
     public async Task PreCancelledCall_StartsNothing_AndStaysAtDebug()
     {
-        var logger = new CapturingNotificationLogger();
+        var logger = new CapturingLogger<ProcessNotificationRunner>();
         var runner = new ProcessNotificationRunner(logger);
         using var cts = new CancellationTokenSource();
         cts.Cancel();
@@ -85,33 +86,4 @@ public class ProcessNotificationRunnerTests
                    + "cancelled should be able to see in the log that its notification was "
                    + "dropped deliberately rather than lost");
     }
-}
-
-/// <summary>Minimal <see cref="ILogger{T}" /> that keeps what was written, for assertions.</summary>
-internal sealed class CapturingNotificationLogger : ILogger<ProcessNotificationRunner>
-{
-    private readonly List<(LogLevel Level, string Message)> _entries = [];
-
-    /// <summary>Everything logged, in order.</summary>
-    public IReadOnlyList<(LogLevel Level, string Message)> Entries => _entries;
-
-    /// <summary>Just the warnings — the ones a caller must never be surprised by.</summary>
-    public IReadOnlyList<string> Warnings =>
-        [.. _entries.Where(e => e.Level == LogLevel.Warning).Select(e => e.Message)];
-
-    /// <inheritdoc />
-    public IDisposable? BeginScope<TState>(TState state)
-        where TState : notnull => null;
-
-    /// <inheritdoc />
-    public bool IsEnabled(LogLevel logLevel) => true;
-
-    /// <inheritdoc />
-    public void Log<TState>(
-        LogLevel logLevel,
-        EventId eventId,
-        TState state,
-        Exception? exception,
-        Func<TState, Exception?, string> formatter)
-        => _entries.Add((logLevel, formatter(state, exception)));
 }

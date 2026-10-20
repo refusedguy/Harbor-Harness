@@ -93,7 +93,7 @@ public class BashToolProxyTests
     [Test]
     public async Task StdoutPastBuilderCap_LineDropped_TruncationLogged()
     {
-        RecordingLogger logger = new();
+        CapturingLogger<BashTool> logger = new();
         FakeProcessProxy proxy = new()
         {
             // L1 lands the builder just past the 100_000-char cap; L2 is dropped.
@@ -340,19 +340,4 @@ internal sealed class FakeProcessHandle(
         StderrLine?.Invoke(this, new ProcessLineEventArgs(null));
         _exit.TrySetResult();
     }
-}
-
-/// <summary>Captures (level, formatted message) pairs for log-shape assertions.</summary>
-internal sealed class RecordingLogger : ILogger<BashTool>
-{
-    public List<(LogLevel Level, string Message)> Entries { get; } = [];
-
-    public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
-
-    public bool IsEnabled(LogLevel logLevel) => true;
-
-    public void Log<TState>(
-        LogLevel logLevel, EventId eventId, TState state, Exception? exception,
-        Func<TState, Exception?, string> formatter)
-        => Entries.Add((logLevel, formatter(state, exception)));
 }

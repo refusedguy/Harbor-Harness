@@ -24,6 +24,10 @@
     <ProjectReference Include="..\..\src\Harbor.Registries\Harbor.Registries.csproj"/>
     <ProjectReference Include="..\..\src\Harbor.Storage.Memory\Harbor.Storage.Memory.csproj"/>
     <ProjectReference Include="..\..\tests\Harbor.E2E.Framework\Harbor.E2E.Framework.csproj"/>
+    <!-- #1772: the shared test doubles (the capturing logger among them).
+         The sibling references Harbor.Abstractions only, which this project
+         already has, so the reference adds no product assembly. -->
+    <ProjectReference Include="..\Harbor.TestKit.Support\Harbor.TestKit.Support.csproj"/>
   </ItemGroup>
 
   <ItemGroup>

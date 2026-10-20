@@ -2,6 +2,7 @@ using System.Net;
 using System.Text;
 using System.Text.Json;
 using CSharpFunctionalExtensions;
+using Harbor.TestKit;
 using Harbor.Tools.Mcp;
 using Microsoft.Extensions.Logging;
 using TUnit.Assertions;
@@ -24,16 +25,6 @@ public class McpOAuthTests : IDisposable
         catch (IOException) { }
         catch (UnauthorizedAccessException) { }
     }
-
-    private sealed class StubHandler : HttpMessageHandler
-    {
-        private readonly Func<HttpRequestMessage, HttpResponseMessage> _respond;
-        public StubHandler(Func<HttpRequestMessage, HttpResponseMessage> respond) => _respond = respond;
-
-        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct) =>
-            Task.FromResult(_respond(request));
-    }
-
     private static HttpResponseMessage Json(object payload, HttpStatusCode status = HttpStatusCode.OK) =>
         new(status)
         {
@@ -41,7 +32,7 @@ public class McpOAuthTests : IDisposable
         };
 
     private static HttpClient StubClient(Func<HttpRequestMessage, HttpResponseMessage> respond) =>
-        new(new StubHandler(respond));
+        new(new StubHttpMessageHandler(respond));
 
     [Test]
     public async Task OAuthConfig_Parse_ReadsAuthBlock()
@@ -207,7 +198,7 @@ public class McpOAuthTests : IDisposable
         bool called = false;
         var handler = new McpOAuthHandler("srv", new Uri("https://mcp.example.com/mcp"),
             new McpOAuthConfig(), cache,
-            () => { called = true; return new HttpClient(new StubHandler(_ => Json(new { }))); });
+            () => { called = true; return new HttpClient(new StubHttpMessageHandler(_ => Json(new { }))); });
 
         Result<Maybe<string>> result = await handler.TryGetAccessTokenResultAsync();
 

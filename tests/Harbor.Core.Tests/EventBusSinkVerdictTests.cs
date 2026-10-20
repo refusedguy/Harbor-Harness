@@ -1,5 +1,6 @@
 using Harbor.Abstractions.Events;
 using Harbor.Registries.Events;
+using Harbor.TestKit;
 using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Harbor.Core.Tests;
@@ -28,7 +29,7 @@ public class EventBusSinkVerdictTests
     [Test]
     public async Task MandatorySink_ZeroSubscribers_StillReachesTheSink()
     {
-        var sink = new RecordingMandatorySink();
+        var sink = new RecordingEventBusMiddleware("recording", EventBusSinkKind.Mandatory);
         var bus = new InMemoryEventBus(NullLogger<InMemoryEventBus>.Instance, 0, new[] { sink });
 
         await Assert.That(bus.HasMandatorySink).IsTrue()
@@ -52,7 +53,7 @@ public class EventBusSinkVerdictTests
     [Test]
     public async Task SinkWithoutAVerdict_IsTreatedAsMandatory()
     {
-        IEventBusMiddleware sink = new UndeclaredSink();
+        IEventBusMiddleware sink = new UndeclaredSinkEventBusMiddleware();
         var bus = new InMemoryEventBus(NullLogger<InMemoryEventBus>.Instance, 0, new[] { sink });
 
         await Assert.That(sink.SinkKind).IsEqualTo(EventBusSinkKind.Mandatory)
@@ -164,7 +165,7 @@ public class EventBusSinkVerdictTests
     [Test]
     public async Task OptionalSink_IsDrainedOnTheFastPath_NotSkipped()
     {
-        var sink = new RecordingOptionalSink();
+        var sink = new RecordingEventBusMiddleware("recording", EventBusSinkKind.Optional);
         var bus = new InMemoryEventBus(NullLogger<InMemoryEventBus>.Instance, 0, new[] { sink });
 
         await Assert.That(bus.HasMandatorySink).IsFalse();
@@ -208,7 +209,7 @@ public class EventBusSinkVerdictTests
     [Test]
     public async Task OptionalSinkDrop_IsCounted()
     {
-        var sink = new DroppingOptionalSink();
+        var sink = new DropEventBusMiddleware("dropping-optional", EventBusSinkKind.Optional);
         var bus = new InMemoryEventBus(NullLogger<InMemoryEventBus>.Instance, 0, new[] { sink });
 
         await bus.PublishAsync(new TurnStartEvent(1));
@@ -250,7 +251,7 @@ public class EventBusSinkVerdictTests
     public async Task AsyncOptionalSink_IsAwaited_NotAbandoned()
     {
         var gate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        var sink = new GatedOptionalSink(gate.Task);
+        var sink = new GatedEventBusMiddleware(gate.Task, "gated-optional", EventBusSinkKind.Optional);
         var bus = new InMemoryEventBus(NullLogger<InMemoryEventBus>.Instance, 0, new[] { sink });
 
         Task publish = bus.PublishAsync(new TurnStartEvent(1));
@@ -305,88 +306,5 @@ public class EventBusSinkVerdictTests
         await Assert.That(retainedTotal).IsEqualTo(publishes);
         await Assert.That(subscribedTotal).IsEqualTo(publishes);
         await Assert.That(qualifyingFraction).IsEqualTo(1.0);
-    }
-
-    // ── sinks ──────────────────────────────────────────────────────────────
-
-    /// <summary>
-    ///     Sink that declared itself mandatory and counts what it saw.
-    ///     <para>
-    ///         <c>IEventBusMiddleware</c> is re-listed in the base list on
-    ///         purpose: <see cref="SinkKind" /> is a <em>default</em> interface
-    ///         member, so a base class that implements the interface without it
-    ///         gets a compiler-synthesised forwarder — and a derived class that
-    ///         only declares a same-named member does NOT re-implement the
-    ///         interface. The forwarder would keep answering Mandatory and the
-    ///         bus would refuse the fast path. Re-listing the interface is the
-    ///         documented way out; the same trap is called out on the interface.
-    ///     </para>
-    /// </summary>
-    private sealed class RecordingMandatorySink : RecordingSinkBase, IEventBusMiddleware
-    {
-        public EventBusSinkKind SinkKind => EventBusSinkKind.Mandatory;
-    }
-
-    /// <summary>Sink that declared itself optional and counts what it saw.</summary>
-    private sealed class RecordingOptionalSink : RecordingSinkBase, IEventBusMiddleware
-    {
-        public EventBusSinkKind SinkKind => EventBusSinkKind.Optional;
-    }
-
-    private abstract class RecordingSinkBase : IEventBusMiddleware
-    {
-        public int Seen { get; private set; }
-
-        public string Name => "recording";
-
-        public ValueTask<bool> ProcessAsync(ref AgentEvent @event, CancellationToken ct = default)
-        {
-            Seen++;
-            return ValueTask.FromResult(true);
-        }
-    }
-
-    /// <summary>Implements only <see cref="IEventBusMiddleware.Name" /> — no verdict.</summary>
-    private sealed class UndeclaredSink : IEventBusMiddleware
-    {
-        public string Name => "undeclared";
-
-        public ValueTask<bool> ProcessAsync(ref AgentEvent @event, CancellationToken ct = default)
-            => ValueTask.FromResult(true);
-    }
-
-    /// <summary>Optional sink that answers <c>false</c> for every event.</summary>
-    private sealed class DroppingOptionalSink : IEventBusMiddleware
-    {
-        public string Name => "dropping-optional";
-
-        public EventBusSinkKind SinkKind => EventBusSinkKind.Optional;
-
-        public ValueTask<bool> ProcessAsync(ref AgentEvent @event, CancellationToken ct = default)
-            => ValueTask.FromResult(false);
-    }
-
-    /// <summary>Optional sink whose ValueTask only completes once <paramref name="gate" /> does.</summary>
-    private sealed class GatedOptionalSink(Task gate) : IEventBusMiddleware
-    {
-        public int Seen { get; private set; }
-
-        public string Name => "gated-optional";
-
-        public EventBusSinkKind SinkKind => EventBusSinkKind.Optional;
-
-        // NOT an async method: CS1988 forbids an async method from declaring
-        // ref/out parameters, and the interface passes the event by ref. The
-        // await therefore lives in a separate helper — which is also the shape
-        // a real async sink has to use.
-        public ValueTask<bool> ProcessAsync(ref AgentEvent @event, CancellationToken ct = default)
-            => new(CountAfterGateAsync());
-
-        private async Task<bool> CountAfterGateAsync()
-        {
-            await gate.ConfigureAwait(false);
-            Seen++;
-            return true;
-        }
     }
 }

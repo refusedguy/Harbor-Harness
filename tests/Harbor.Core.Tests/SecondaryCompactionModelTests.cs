@@ -1,3 +1,4 @@
+using Harbor.TestKit;
 using System.Runtime.CompilerServices;
 using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Events;
@@ -81,7 +82,7 @@ public class SecondaryCompactionModelTests : CompactionTestBase
         // #1582: the parse error used to be swallowed — the feature switched off
         // silently. The raw invalid value + the TryParse reason must reach the
         // Warning log (same observability as the resolution path).
-        var log = new CapturingLogger();
+        var log = new CapturingLogger<CompactionService>();
 
         _ = CreateService(logger: log, secondaryModel: "no-slash-here");
 
@@ -110,7 +111,7 @@ public class SecondaryCompactionModelTests : CompactionTestBase
     {
         // null/blank is "feature off", not "feature broken" — must stay silent
         // and must not pre-fire ModelRef.TryParse's empty-reference error.
-        var log = new CapturingLogger();
+        var log = new CapturingLogger<CompactionService>();
 
         _ = CreateService(logger: log, secondaryModel: " ");
 

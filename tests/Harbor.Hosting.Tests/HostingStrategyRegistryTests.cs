@@ -30,22 +30,6 @@ public class HostingStrategyRegistryTests
         services.AddHarbor(options);
         return services.BuildServiceProvider();
     }
-
-    /// <summary>Run <paramref name="action" /> with an env var pinned, restore afterwards.</summary>
-    private static async Task WithEnv(string name, string? value, Func<Task> action)
-    {
-        string? previous = Environment.GetEnvironmentVariable(name);
-        Environment.SetEnvironmentVariable(name, value);
-        try
-        {
-            await action();
-        }
-        finally
-        {
-            Environment.SetEnvironmentVariable(name, previous);
-        }
-    }
-
     private static HarborComposeOptions BaselineOptions() =>
         new() { HarborDir = TempHarborDir(), DefaultStorageBackend = "memory", DefaultTuiRenderer = "plain" };
 
@@ -54,9 +38,9 @@ public class HostingStrategyRegistryTests
     [Test]
     public async Task Storage_UnknownId_ThrowsArgumentException_NamingIdAndKnownBackends()
     {
-        await WithEnv("HARBOR_MODE", null, async () =>
+        await EnvScope.WithAsync("HARBOR_MODE", null, async () =>
         {
-            await WithEnv("HARBOR_STORAGE", "bogus-backend-175", async () =>
+            await EnvScope.WithAsync("HARBOR_STORAGE", "bogus-backend-175", async () =>
             {
                 ArgumentException? caught = null;
                 try
@@ -79,15 +63,15 @@ public class HostingStrategyRegistryTests
     [Test]
     public async Task Storage_Ids_AreCaseInsensitive_AndTrimmed()
     {
-        await WithEnv("HARBOR_MODE", null, async () =>
+        await EnvScope.WithAsync("HARBOR_MODE", null, async () =>
         {
-            await WithEnv("HARBOR_STORAGE", "MEMORY", async () =>
+            await EnvScope.WithAsync("HARBOR_STORAGE", "MEMORY", async () =>
             {
                 using var sp = Compose(BaselineOptions());
                 await Assert.That(sp.GetRequiredService<ISessionStore>()).IsTypeOf<MemorySessionStore>();
             });
 
-            await WithEnv("HARBOR_STORAGE", "  Jsonl  ", async () =>
+            await EnvScope.WithAsync("HARBOR_STORAGE", "  Jsonl  ", async () =>
             {
                 using var sp = Compose(BaselineOptions());
                 await Assert.That(sp.GetRequiredService<ISessionStore>()).IsTypeOf<JsonlSessionStore>();
@@ -100,9 +84,9 @@ public class HostingStrategyRegistryTests
     [Test]
     public async Task Tui_ConsoleexAlias_ResolvesCellForge()
     {
-        await WithEnv("HARBOR_MODE", null, async () =>
+        await EnvScope.WithAsync("HARBOR_MODE", null, async () =>
         {
-            await WithEnv("HARBOR_TUI", "consoleex", async () =>
+            await EnvScope.WithAsync("HARBOR_TUI", "consoleex", async () =>
             {
                 using var sp = Compose(BaselineOptions());
                 await Assert.That(sp.GetRequiredService<ITuiRenderer>())
@@ -116,9 +100,9 @@ public class HostingStrategyRegistryTests
     [Test]
     public async Task Tui_CellforgeCanonicalId_ResolvesCellForge()
     {
-        await WithEnv("HARBOR_MODE", null, async () =>
+        await EnvScope.WithAsync("HARBOR_MODE", null, async () =>
         {
-            await WithEnv("HARBOR_TUI", "cellforge", async () =>
+            await EnvScope.WithAsync("HARBOR_TUI", "cellforge", async () =>
             {
                 using var sp = Compose(BaselineOptions());
                 await Assert.That(sp.GetRequiredService<ITuiRenderer>())
@@ -132,9 +116,9 @@ public class HostingStrategyRegistryTests
     [Test]
     public async Task Tui_UnknownId_FallsBackToBaselineRenderer_WithMatchingPipelineId()
     {
-        await WithEnv("HARBOR_MODE", null, async () =>
+        await EnvScope.WithAsync("HARBOR_MODE", null, async () =>
         {
-            await WithEnv("HARBOR_TUI", "bogus-tui-175", async () =>
+            await EnvScope.WithAsync("HARBOR_TUI", "bogus-tui-175", async () =>
             {
                 using var sp = Compose(BaselineOptions());
                 object renderer = sp.GetRequiredService<ITuiRenderer>();
@@ -155,9 +139,9 @@ public class HostingStrategyRegistryTests
     [Test]
     public async Task Mode_UnknownId_ThrowsArgumentException_NamingId()
     {
-        await WithEnv("HARBOR_STORAGE", null, async () =>
+        await EnvScope.WithAsync("HARBOR_STORAGE", null, async () =>
         {
-            await WithEnv("HARBOR_MODE", "bogus-mode-175", async () =>
+            await EnvScope.WithAsync("HARBOR_MODE", "bogus-mode-175", async () =>
             {
                 ArgumentException? caught = null;
                 try
@@ -178,19 +162,19 @@ public class HostingStrategyRegistryTests
     [Test]
     public async Task Mode_IpcServer_And_IpcClient_ComposeWithoutThrowing()
     {
-        await WithEnv("HARBOR_STORAGE", null, async () =>
+        await EnvScope.WithAsync("HARBOR_STORAGE", null, async () =>
         {
-            await WithEnv("HARBOR_TUI", null, async () =>
+            await EnvScope.WithAsync("HARBOR_TUI", null, async () =>
             {
-                await WithEnv("HARBOR_LISTEN", null, async () =>
+                await EnvScope.WithAsync("HARBOR_LISTEN", null, async () =>
                 {
-                    await WithEnv("HARBOR_MODE", "ipc-server", async () =>
+                    await EnvScope.WithAsync("HARBOR_MODE", "ipc-server", async () =>
                     {
                         using var sp = Compose(BaselineOptions());
                         await Assert.That(sp).IsNotNull();
                     });
 
-                    await WithEnv("HARBOR_MODE", "ipc-client", async () =>
+                    await EnvScope.WithAsync("HARBOR_MODE", "ipc-client", async () =>
                     {
                         using var sp = Compose(BaselineOptions());
                         await Assert.That(sp).IsNotNull();

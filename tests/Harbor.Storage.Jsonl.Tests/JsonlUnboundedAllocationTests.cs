@@ -597,7 +597,7 @@ public class JsonlUnboundedAllocationTests
             }
             await File.AppendAllTextAsync(path, garbage.ToString());
 
-            var logger = new CapturingLogger();
+            var logger = new CapturingLogger(LogLevel.Warning);
             var read = await SessionFileReader.ParseMessagesFromDiskAsync(
                 path, sessionId, logger, CancellationToken.None);
 
@@ -619,31 +619,6 @@ public class JsonlUnboundedAllocationTests
             Drop(store);
         }
     }
-
-    /// <summary>Keeps the warnings, so a bound on the report can be asserted.</summary>
-    private sealed class CapturingLogger : ILogger
-    {
-        internal List<string> Warnings { get; } = [];
-
-        public IDisposable? BeginScope<TState>(TState state)
-            where TState : notnull => null;
-
-        public bool IsEnabled(LogLevel logLevel) => true;
-
-        public void Log<TState>(
-            LogLevel logLevel,
-            EventId eventId,
-            TState state,
-            Exception? exception,
-            Func<TState, Exception?, string> formatter)
-        {
-            if (logLevel >= LogLevel.Warning)
-            {
-                Warnings.Add(formatter(state, exception));
-            }
-        }
-    }
-
     // ------------------------------------------------------------ rewrite paths
 
     [Test]

@@ -2,6 +2,7 @@ using System.Net;
 using System.Text;
 using Harbor.Abstractions.Models;
 using Harbor.Providers.OpenAiCompatible;
+using Harbor.TestKit;
 using Microsoft.Extensions.Logging.Abstractions;
 namespace Harbor.Providers.Tests;
 /// <summary>
@@ -329,7 +330,7 @@ public class DynamicModelCatalogTests
     [Test]
     public async Task GetModelsAsync_HardcodedModels_ReturnedDirectly()
     {
-        var handler = new StubHttpHandler(_ => new HttpResponseMessage(HttpStatusCode.OK));
+        var handler = new StubHttpMessageHandler(_ => new HttpResponseMessage(HttpStatusCode.OK));
         var http = new HttpClient(handler);
         string cacheDir = NewCacheDir();
         try
@@ -365,7 +366,7 @@ public class DynamicModelCatalogTests
     [Test]
     public async Task GetModelsAsync_NoUrlNoModels_ReturnsFailure()
     {
-        var http = new HttpClient(new StubHttpHandler(_ => new HttpResponseMessage(HttpStatusCode.OK)));
+        var http = new HttpClient(new StubHttpMessageHandler(_ => new HttpResponseMessage(HttpStatusCode.OK)));
         string cacheDir = NewCacheDir();
         try
         {
@@ -400,7 +401,7 @@ public class DynamicModelCatalogTests
                         ]
                       }
                       """;
-        var handler = new StubHttpHandler(_ => new HttpResponseMessage(HttpStatusCode.OK)
+        var handler = new StubHttpMessageHandler(_ => new HttpResponseMessage(HttpStatusCode.OK)
         {
             Content = new StringContent(json, Encoding.UTF8, "application/json")
         });
@@ -442,7 +443,7 @@ public class DynamicModelCatalogTests
                         ]
                       }
                       """;
-        var handler = new StubHttpHandler(_ => new HttpResponseMessage(HttpStatusCode.OK)
+        var handler = new StubHttpMessageHandler(_ => new HttpResponseMessage(HttpStatusCode.OK)
         {
             Content = new StringContent(json, Encoding.UTF8, "application/json")
         });
@@ -482,7 +483,7 @@ public class DynamicModelCatalogTests
                         ]
                       }
                       """;
-        var handler = new StubHttpHandler(_ => new HttpResponseMessage(HttpStatusCode.OK)
+        var handler = new StubHttpMessageHandler(_ => new HttpResponseMessage(HttpStatusCode.OK)
         {
             Content = new StringContent(json, Encoding.UTF8, "application/json")
         });
@@ -527,7 +528,7 @@ public class DynamicModelCatalogTests
                         ]
                       }
                       """;
-        var handler = new StubHttpHandler(_ => new HttpResponseMessage(HttpStatusCode.OK)
+        var handler = new StubHttpMessageHandler(_ => new HttpResponseMessage(HttpStatusCode.OK)
         {
             Content = new StringContent(json, Encoding.UTF8, "application/json")
         });
@@ -566,7 +567,7 @@ public class DynamicModelCatalogTests
     [Test]
     public async Task GetModelsAsync_HttpFailure_ReturnsFailure()
     {
-        var handler = new StubHttpHandler(_ => new HttpResponseMessage(HttpStatusCode.InternalServerError)
+        var handler = new StubHttpMessageHandler(_ => new HttpResponseMessage(HttpStatusCode.InternalServerError)
         {
             Content = new StringContent("server error", Encoding.UTF8)
         });
@@ -599,7 +600,7 @@ public class DynamicModelCatalogTests
         string json = """
                       { "data": [ { "id": "m1", "name": "M1", "context_length": 8192 } ] }
                       """;
-        var handler = new StubHttpHandler(_ => new HttpResponseMessage(HttpStatusCode.OK)
+        var handler = new StubHttpMessageHandler(_ => new HttpResponseMessage(HttpStatusCode.OK)
         {
             Content = new StringContent(json, Encoding.UTF8, "application/json")
         });
@@ -639,7 +640,7 @@ public class DynamicModelCatalogTests
                           { "id": "good-model", "name": "Good", "context_length": 8192 }
                         ] }
                       """;
-        var handler = new StubHttpHandler(_ => new HttpResponseMessage(HttpStatusCode.OK)
+        var handler = new StubHttpMessageHandler(_ => new HttpResponseMessage(HttpStatusCode.OK)
         {
             Content = new StringContent(json, Encoding.UTF8, "application/json")
         });
@@ -681,7 +682,7 @@ public class DynamicModelCatalogTests
                           { "name": "still no id", "context_length": 4096 }
                         ] }
                       """;
-        var handler = new StubHttpHandler(_ => new HttpResponseMessage(HttpStatusCode.OK)
+        var handler = new StubHttpMessageHandler(_ => new HttpResponseMessage(HttpStatusCode.OK)
         {
             Content = new StringContent(json, Encoding.UTF8, "application/json")
         });
@@ -723,7 +724,7 @@ public class DynamicModelCatalogTests
                           { "id": "second", "name": "Second", "context_length": 4096 }
                         ] }
                       """;
-        var handler = new StubHttpHandler(_ => new HttpResponseMessage(HttpStatusCode.OK)
+        var handler = new StubHttpMessageHandler(_ => new HttpResponseMessage(HttpStatusCode.OK)
         {
             Content = new StringContent(json, Encoding.UTF8, "application/json")
         });

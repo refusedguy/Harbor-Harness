@@ -124,7 +124,7 @@ public class WebFetchToolTests
     private static WebFetchTool NewTool(Func<HttpRequestMessage, HttpResponseMessage> responder)
         => new(
             NullLogger<WebFetchTool>.Instance,
-            () => new HttpClient(new StubHandler(responder)),
+            () => new HttpClient(new StubHttpMessageHandler(responder)),
             // The StubHandler never touches the network, but the SSRF gate
             // resolves DNS for every target regardless of the injected
             // client — fail-closed on hosts that don't resolve (CI runners).
@@ -144,32 +144,5 @@ public class WebFetchToolTests
         msg.Content = new ByteArrayContent(bytes);
         msg.Content.Headers.ContentType = new MediaTypeHeaderValue(contentType);
         return msg;
-    }
-
-    /// <summary>
-    ///     Minimal HttpMessageHandler that runs a supplied responder for each request. No
-    ///     network I/O — the responder can throw to simulate transport errors.
-    /// </summary>
-    private sealed class StubHandler : HttpMessageHandler
-    {
-        private readonly Func<HttpRequestMessage, HttpResponseMessage> _responder;
-
-        public StubHandler(Func<HttpRequestMessage, HttpResponseMessage> responder)
-        {
-            _responder = responder;
-        }
-
-        protected override Task<HttpResponseMessage> SendAsync(
-            HttpRequestMessage request, CancellationToken cancellationToken)
-        {
-            try
-            {
-                return Task.FromResult(_responder(request));
-            }
-            catch (Exception ex) when (ex is not OperationCanceledException)
-            {
-                return Task.FromException<HttpResponseMessage>(ex);
-            }
-        }
     }
 }

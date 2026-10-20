@@ -18,7 +18,11 @@
     <ProjectReference Include="../../src/Harbor.Telemetry.Core/Harbor.Telemetry.Core.csproj"/>
     <!-- #1741/#1742: the same test reads the HARBOR_TELEMETRY_* names from
          HarborEnv, which lives in the contracts assembly. -->
-    <ProjectReference Include="../../src/Harbor.Abstractions.Contracts/Harbor.Abstractions.Contracts.csproj"/>
+    <ProjectReference Include="..\..\src\Harbor.Abstractions.Contracts\Harbor.Abstractions.Contracts.csproj"/>
+    <!-- #1772/#1773: the shared test doubles and the three scopes. This
+         project already has every product assembly the library needs, so the
+         reference adds none. -->
+    <ProjectReference Include="..\Harbor.TestKit\Harbor.TestKit.csproj"/>
   </ItemGroup>
 
   <ItemGroup>

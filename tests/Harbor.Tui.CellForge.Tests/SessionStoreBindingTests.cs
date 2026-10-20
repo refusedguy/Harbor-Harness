@@ -2,6 +2,7 @@ using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Events;
 using Harbor.Abstractions.Models;
 using Harbor.Terminal.Abstractions.ViewModels;
+using Harbor.TestKit;
 using Harbor.Ui.Framework.Services;
 using Harbor.Ui.Framework.Sessions;
 using Harbor.Ui.Framework.State;

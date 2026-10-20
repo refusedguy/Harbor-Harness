@@ -1,5 +1,6 @@
 using Harbor.Abstractions.Tools;
 using Harbor.Hosting;
+using Harbor.TestKit;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
@@ -33,7 +34,7 @@ public abstract class PluginAbsenceTestBase
         Path.Combine(Path.GetTempPath(), $"{TempDirPrefix}-tests", Guid.NewGuid().ToString("N"));
 
     /// <summary>Composes the hosting stack over a memory store, capturing the bootstrap log.</summary>
-    protected static ServiceProvider Compose(string harborDir, CaptureLoggerFactory capture)
+    protected static ServiceProvider Compose(string harborDir, CapturingLoggerFactory capture)
     {
         var services = new ServiceCollection();
         services.AddHarbor(new HarborComposeOptions
@@ -80,56 +81,4 @@ public abstract class PluginAbsenceTestBase
     }
 
     protected sealed record LogEntry(LogLevel Level, string Message);
-
-    protected sealed class CaptureLogger : ILogger
-    {
-        private readonly List<LogEntry> _entries;
-        public CaptureLogger(List<LogEntry> entries)
-        {
-            _entries = entries;
-        }
-
-        public IDisposable? BeginScope<TState>(TState state)
-            where TState : notnull => null;
-
-        public bool IsEnabled(LogLevel logLevel) => true;
-
-        public void Log<TState>(
-            LogLevel logLevel,
-            EventId eventId,
-            TState state,
-            Exception? exception,
-            Func<TState, Exception?, string> formatter)
-        {
-            lock (_entries)
-            {
-                _entries.Add(new LogEntry(logLevel, formatter(state, exception)));
-            }
-        }
-    }
-
-    protected sealed class CaptureLoggerFactory : ILoggerFactory
-    {
-        private readonly List<LogEntry> _entries = new();
-        public IReadOnlyList<LogEntry> Entries
-        {
-            get
-            {
-                lock (_entries)
-                {
-                    return _entries.ToArray();
-                }
-            }
-        }
-
-        public void AddProvider(ILoggerProvider provider)
-        {
-        }
-
-        public ILogger CreateLogger(string categoryName) => new CaptureLogger(_entries);
-
-        public void Dispose()
-        {
-        }
-    }
 }

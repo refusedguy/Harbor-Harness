@@ -2,6 +2,7 @@ using System.Diagnostics.Metrics;
 using Harbor.Abstractions.Events;
 using Harbor.Diagnostics;
 using Harbor.Telemetry;
+using Harbor.TestKit;
 using Microsoft.Extensions.Logging;
 
 namespace Harbor.Telemetry.Tests;
@@ -222,23 +223,5 @@ public class EventBusQueueAgeReporterTests : IDisposable
 
             Histograms.Add((name, value, quantile));
         }
-    }
-
-    /// <summary>Minimal logger that keeps the rendered snapshot line for assertions.</summary>
-    private sealed class CapturingLogger : ILogger
-    {
-        public List<string> Messages { get; } = [];
-
-        public IDisposable? BeginScope<TState>(TState state)
-            where TState : notnull => null;
-
-        public bool IsEnabled(LogLevel logLevel) => true;
-
-        public void Log<TState>(
-            LogLevel logLevel,
-            EventId eventId,
-            TState state,
-            Exception? exception,
-            Func<TState, Exception?, string> formatter) => Messages.Add(formatter(state, exception));
     }
 }

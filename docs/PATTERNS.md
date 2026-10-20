@@ -107,7 +107,7 @@ for (int i = 0; i < sinks.Count; i++)
 
 The normative table is [`docs/EVENT_BUS_SINKS.md`](./EVENT_BUS_SINKS.md) §2-§4
 (registration sites, subscriber sites, the guard term by term). The DIM is pinned
-by `tests/Harbor.Core.Tests/EventBusSinkVerdictTests.cs:309-330`.
+by `tests/Harbor.TestKit.Support/TestEventBusMiddleware.cs:25-95`.
 
 ### The two UI seams — state this to yourself before writing a renderer
 

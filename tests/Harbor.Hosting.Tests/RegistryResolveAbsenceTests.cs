@@ -42,27 +42,10 @@ public class RegistryResolveAbsenceTests
         return services.BuildServiceProvider();
     }
 
-    /// <summary>
-    ///     Compose with one environment variable pinned, restoring it afterwards.
-    /// </summary>
-    private static T WithEnv<T>(string name, string? value, Func<T> action)
-    {
-        string? previous = Environment.GetEnvironmentVariable(name);
-        Environment.SetEnvironmentVariable(name, value);
-        try
-        {
-            return action();
-        }
-        finally
-        {
-            Environment.SetEnvironmentVariable(name, previous);
-        }
-    }
-
     [Test]
     public async Task UnknownHarborStorage_StillThrowsTheSameArgumentException()
     {
-        ArgumentException ex = WithEnv("HARBOR_STORAGE", "definitely-not-a-backend",
+        ArgumentException ex = EnvScope.With("HARBOR_STORAGE", "definitely-not-a-backend",
             () => Assert.Throws<ArgumentException>(() => { _ = Compose("memory"); }));
 
         await Assert.That(ex.Message).Contains("Unknown HARBOR_STORAGE: 'definitely-not-a-backend'")
@@ -76,7 +59,7 @@ public class RegistryResolveAbsenceTests
     [Test]
     public async Task KnownHarborStorage_StillResolves()
     {
-        using ServiceProvider sp = WithEnv("HARBOR_STORAGE", "memory", () => Compose("jsonl"));
+        using ServiceProvider sp = EnvScope.With("HARBOR_STORAGE", "memory", () => Compose("jsonl"));
 
         await Assert.That(sp.GetRequiredService<ISessionStore>()).IsNotNull()
             .Because(
@@ -88,7 +71,7 @@ public class RegistryResolveAbsenceTests
     [Test]
     public async Task UnknownHarborMode_StillThrowsTheSameArgumentException()
     {
-        ArgumentException ex = WithEnv("HARBOR_MODE", "definitely-not-a-mode",
+        ArgumentException ex = EnvScope.With("HARBOR_MODE", "definitely-not-a-mode",
             () => Assert.Throws<ArgumentException>(() => { _ = Compose("memory"); }));
 
         await Assert.That(ex.Message).Contains("Unknown HARBOR_MODE: 'definitely-not-a-mode'")
@@ -101,7 +84,7 @@ public class RegistryResolveAbsenceTests
     [Test]
     public async Task KnownHarborMode_StillResolves()
     {
-        using ServiceProvider sp = WithEnv("HARBOR_MODE", "inprocess", () => Compose("memory"));
+        using ServiceProvider sp = EnvScope.With("HARBOR_MODE", "inprocess", () => Compose("memory"));
 
         await Assert.That(sp.GetRequiredService<IAgentRegistry>()).IsNotNull()
             .Because(

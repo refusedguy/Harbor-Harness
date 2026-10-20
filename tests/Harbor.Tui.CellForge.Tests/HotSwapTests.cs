@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using Harbor.DesignSystem;
+using Harbor.TestKit;
 using Harbor.Tui.CellForge.Rendering;
 using Harbor.Tui.CellForge.Streaming;
 using TUnit.Core;

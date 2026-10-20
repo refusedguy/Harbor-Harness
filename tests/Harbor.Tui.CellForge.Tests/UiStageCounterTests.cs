@@ -1,3 +1,4 @@
+using Harbor.TestKit;
 using Harbor.Tui.CellForge.Rendering;
 using Harbor.Tui.CellForge.Widgets;
 // Markdown comes from the project-wide global usings; PerformanceContracts does not.

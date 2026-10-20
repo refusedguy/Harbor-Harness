@@ -1,4 +1,5 @@
 using System.Collections.Immutable;
+using Harbor.TestKit;
 using Harbor.Tui.CellForge.Panels;
 using Harbor.Tui.CellForge.Rendering;
 using Harbor.Tui.CellForge.Widgets;

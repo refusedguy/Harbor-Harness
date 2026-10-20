@@ -10,8 +10,8 @@ using Harbor.Application.Permissions;
 using Harbor.Application.Resilience;
 using Harbor.Application.Sessions;
 using Harbor.Application.Tests.Fakes;
-using Harbor.TestKit;
 using FakeSessionStore = Harbor.Application.Tests.Fakes.FakeSessionStore;
+using Harbor.TestKit;
 using Microsoft.Extensions.Logging.Abstractions;
 using TUnit.Assertions;
 using TestSessionContext = Harbor.Application.Tests.Fakes.TestSessionContext;
@@ -27,29 +27,6 @@ namespace Harbor.Application.Tests;
 /// </summary>
 public class RateLimitRetryTests
 {
-    private sealed class RecordingTimeProvider : TimeProvider
-    {
-        public List<TimeSpan> Delays { get; } = [];
-
-        public override DateTimeOffset GetUtcNow() => DateTimeOffset.UnixEpoch;
-
-        public override ITimer CreateTimer(
-            TimerCallback callback, object? state, TimeSpan dueTime, TimeSpan period)
-        {
-            Delays.Add(dueTime);
-            callback(state);
-            return NoopTimer.Instance;
-        }
-
-        private sealed class NoopTimer : ITimer
-        {
-            public static readonly NoopTimer Instance = new();
-            public bool Change(TimeSpan dueTime, TimeSpan period) => false;
-            public void Dispose() { }
-            public ValueTask DisposeAsync() => default;
-        }
-    }
-
     private static HttpRequestException RateLimited(Dictionary<string, object?>? data = null)
     {
         var ex = new HttpRequestException("429 slow down", inner: null, HttpStatusCode.TooManyRequests);
@@ -66,7 +43,7 @@ public class RateLimitRetryTests
     [Test]
     public async Task RetryAfter_DataHint_HonoredInsteadOfBackoff()
     {
-        var time = new RecordingTimeProvider();
+        var time = new ManualTimeProvider(fireTimerOnCreate: true);
         var policy = new RetryPolicy(time);
         int calls = 0;
 
@@ -90,7 +67,7 @@ public class RateLimitRetryTests
     [Test]
     public async Task RetryAfter_RogueHint_ClampedToMax()
     {
-        var time = new RecordingTimeProvider();
+        var time = new ManualTimeProvider(fireTimerOnCreate: true);
         var policy = new RetryPolicy(time);
 
         try
@@ -113,7 +90,7 @@ public class RateLimitRetryTests
     [Test]
     public async Task RetryAfter_StringSecondsHint_Honored()
     {
-        var time = new RecordingTimeProvider();
+        var time = new ManualTimeProvider(fireTimerOnCreate: true);
         var policy = new RetryPolicy(time);
 
         try
@@ -200,7 +177,7 @@ public class RateLimitRetryTests
     [Test]
     public async Task RateLimitBudget_ExceedsGeneralBudget()
     {
-        var policy = new RetryPolicy(new RecordingTimeProvider());
+        var policy = new RetryPolicy(new ManualTimeProvider(fireTimerOnCreate: true));
         var options = new RetryOptions(2, TimeSpan.FromMilliseconds(1), UseJitter: false, MaxRateLimitAttempts: 4);
         int rateCalls = 0;
         int serverCalls = 0;
@@ -228,7 +205,7 @@ public class RateLimitRetryTests
     [Test]
     public async Task RateLimitBudget_DefaultsToGeneralBudget()
     {
-        var policy = new RetryPolicy(new RecordingTimeProvider());
+        var policy = new RetryPolicy(new ManualTimeProvider(fireTimerOnCreate: true));
         int calls = 0;
 
         await Assert.ThrowsAsync<HttpRequestException>(async () => await policy.ExecuteAsync<HttpResponseMessage>(
@@ -286,7 +263,7 @@ public class RateLimitRetryTests
             new TextDeltaEvent("t", "partial-"),
             new ErrorEvent("slow down", Kind: ProviderErrorKind.RateLimit, StatusCode: 429)]);
         var bus = new FakeEventBus();
-        var loop = LoopWithClock(client, bus, new RecordingTimeProvider());
+        var loop = LoopWithClock(client, bus, new ManualTimeProvider(fireTimerOnCreate: true));
         var session = new TestSessionContext(
             Session.Create("/tmp/harbor-rate-limit-degrade-tests", "code", "test", "test-model"));
 
@@ -314,7 +291,7 @@ public class RateLimitRetryTests
         var client = new ScriptedLlmClient([
             new ErrorEvent("bad key", Kind: ProviderErrorKind.Auth, StatusCode: 401)]);
         var bus = new FakeEventBus();
-        var loop = LoopWithClock(client, bus, new RecordingTimeProvider());
+        var loop = LoopWithClock(client, bus, new ManualTimeProvider(fireTimerOnCreate: true));
         var session = new TestSessionContext(
             Session.Create("/tmp/harbor-rate-limit-fatal-tests", "code", "test", "test-model"));
 

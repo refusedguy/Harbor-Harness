@@ -1,0 +1,41 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+    <!--
+      #1772/#1773: the shared test helpers that need NO product assembly beyond
+      the contracts live here, so that EVERY test project can reach one
+      implementation without widening its product-assembly closure.
+
+      The closure rule (#1549) is the reason this is a sibling and not part of
+      `Harbor.TestKit` itself: `Harbor.TestKit` already drags the
+      Ui.Framework / Terminal.Abstractions / Application family in, so a
+      project that does not have that family (Storage.Tests, Ipc.Tests,
+      Providers.Tests, Config.Tests, LoadTests, ...) could not reference it
+      without gaining 14+ product assemblies. This project references
+      `Harbor.Abstractions` only — an assembly every one of those projects
+      already has — so adding it is closure-neutral.
+
+      The NAMESPACE is `Harbor.TestKit`, so `using Harbor.TestKit;` is all a
+      consumer needs regardless of which sibling the type lives in.
+    -->
+    <RootNamespace>Harbor.TestKit</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../../src/Harbor.Abstractions/Harbor.Abstractions.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!--
+      ILogger/ILoggerFactory/ILogger<T> live here. The package is already in
+      the closure of every consumer through Harbor.Abstractions, so declaring
+      it directly widens nothing.
+    -->
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
+  </ItemGroup>
+
+</Project>

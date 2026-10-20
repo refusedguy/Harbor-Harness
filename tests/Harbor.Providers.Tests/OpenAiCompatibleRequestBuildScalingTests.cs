@@ -3,6 +3,7 @@ using System.Text.Json;
 using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Providers;
 using Harbor.Providers.OpenAiCompatible;
+using Harbor.TestKit;
 using Microsoft.Extensions.Logging.Abstractions;
 using TUnit.Assertions;
 
@@ -46,7 +47,7 @@ public class OpenAiCompatibleRequestBuildScalingTests
         new(
             new HttpClient(),
             new ProviderConfig { Id = "stub", BaseUrl = "http://stub" },
-            StubAuthResolver.Instance,
+            new TestAuthResolver(),
             StubModelCatalog.Instance,
             NullLogger<OpenAiCompatibleLlmClient>.Instance);
 

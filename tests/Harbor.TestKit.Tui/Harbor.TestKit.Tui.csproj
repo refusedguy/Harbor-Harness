@@ -1,0 +1,29 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+    <!--
+      #1772: the terminal-backend doubles.
+
+      They live in a sibling rather than in `Harbor.TestKit` for the same
+      reason the other sibling exists (#1549's closure rule): the seam they
+      substitute is `ISyncTerminalBackend`, which lives in
+      `Harbor.Tui.CellForge.Engine`. `Harbor.TestKit` may not reference that
+      assembly — eleven of its consumers do not have it in their closure, and
+      adding the edge would push a product assembly into all of them.
+
+      `Harbor.Tui.CellForge.Engine` is a leaf (no project references of its
+      own), so this project adds exactly ONE assembly to a consumer's closure
+      — and every consumer of these doubles already has it.
+    -->
+    <RootNamespace>Harbor.TestKit</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../../src/Harbor.Tui.CellForge.Engine/Harbor.Tui.CellForge.Engine.csproj" />
+  </ItemGroup>
+
+</Project>

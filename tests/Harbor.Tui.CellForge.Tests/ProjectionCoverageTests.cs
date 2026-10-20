@@ -2,6 +2,7 @@ using System.Reflection;
 using Harbor.Abstractions.Events;
 using Harbor.Abstractions.Models;
 using Harbor.Terminal.Abstractions.ViewModels;
+using Harbor.TestKit;
 using Harbor.Tui.CellForge;
 using Harbor.Ui.Framework.State;
 using Harbor.Abstractions.Models;

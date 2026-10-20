@@ -181,29 +181,6 @@ public class ToolDispatcherRetryTests
         await Assert.That(tool.Executions).IsEqualTo(1);
         await Assert.That(message.Results[0].IsError).IsTrue();
     }
-
-    /// <summary>
-    ///     #1088: frozen clock — the grace timer never fires, so the cancel
-    ///     path cannot lose a wall-clock race to it. Mirrors
-    ///     <c>RunWallClockLimitTests.ManualTimeProvider</c>: the timer callback
-    ///     is never invoked, so <c>Task.Delay(grace, clock)</c> only completes
-    ///     if the test advances it — which this test never does. BCL only.
-    /// </summary>
-    private sealed class FrozenTimeProvider : TimeProvider
-    {
-        public override ITimer CreateTimer(
-            TimerCallback callback, object? state, TimeSpan dueTime, TimeSpan period) =>
-            NoopTimer.Instance;
-
-        private sealed class NoopTimer : ITimer
-        {
-            public static readonly NoopTimer Instance = new();
-            public bool Change(TimeSpan dueTime, TimeSpan period) => false;
-            public void Dispose() { }
-            public ValueTask DisposeAsync() => default;
-        }
-    }
-
     [Test]
     public async Task CancelDuringBackoff_NoSecondStart()
     {
@@ -217,7 +194,7 @@ public class ToolDispatcherRetryTests
         var bus = new FakeEventBus();
         var dispatcher = NewDispatcher(
             new AllowPermissions(), tool, new FixedDecider(ex => ex is IOException), bus,
-            abandonGrace: TimeSpan.FromMilliseconds(250), clock: new FrozenTimeProvider());
+            abandonGrace: TimeSpan.FromMilliseconds(250), clock: new ManualTimeProvider());
         using var cts = new CancellationTokenSource();
 
         var run = dispatcher.ExecuteAsync(

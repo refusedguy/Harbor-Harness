@@ -6,6 +6,7 @@ using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Providers;
 using Harbor.Providers.Anthropic;
 using Harbor.Providers.OpenAI;
+using Harbor.TestKit;
 using Microsoft.Extensions.Logging.Abstractions;
 using CompatClient = Harbor.Providers.OpenAiCompatible.OpenAiCompatibleLlmClient;
 using CompatConfig = Harbor.Providers.OpenAiCompatible.ProviderConfig;
@@ -203,7 +204,7 @@ public class ImageContentBlockTests
     private static async Task<string?> CaptureCompatBodyAsync(
         LlmContentBlock[]? userContent = null)
     {
-        var handler = new StubHttpHandler(_ => new HttpResponseMessage(System.Net.HttpStatusCode.OK)
+        var handler = new StubHttpMessageHandler(_ => new HttpResponseMessage(System.Net.HttpStatusCode.OK)
         {
             Content = new StringContent(
                 "data: {\"choices\":[{\"delta\":{\"content\":\"ok\"}}]}\n\ndata: [DONE]\n\n",
@@ -214,7 +215,7 @@ public class ImageContentBlockTests
         var client = new CompatClient(
             new HttpClient(handler),
             new CompatConfig { Id = "stub", BaseUrl = "http://stub" },
-            StubAuthResolver.Instance,
+            new TestAuthResolver(),
             StubModelCatalog.Instance,
             NullLogger<CompatClient>.Instance);
 

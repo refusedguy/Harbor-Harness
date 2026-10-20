@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.RegularExpressions;
 using Harbor.Abstractions.Events;
 using Harbor.Terminal.Abstractions.ViewModels;
+using Harbor.TestKit;
 using Harbor.Ui.Framework.State;
 using Microsoft.Extensions.Logging.Abstractions;
 

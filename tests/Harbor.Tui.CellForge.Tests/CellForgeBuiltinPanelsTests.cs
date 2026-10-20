@@ -1,5 +1,6 @@
 using System.Collections.Immutable;
 using System.IO;
+using Harbor.TestKit;
 using Harbor.Tui.CellForge.Panels;
 using Harbor.Ui.Framework.Diagnostics;
 using Harbor.Ui.Framework.Panels;
@@ -19,21 +20,6 @@ namespace Harbor.Tui.CellForge.Tests;
 /// </summary>
 public class CellForgeBuiltinPanelsTests
 {
-    private sealed class StubPanel : IPanelProvider
-    {
-        public string Id => "stub-a";
-
-        public string Title => "Stub A";
-
-        public TuiPanelPlacement DefaultPlacement => TuiPanelPlacement.Right;
-
-        public int DefaultSize => 10;
-
-        public object? Build(PanelContext ctx) => "stub";
-
-        public bool OnKey(UiKey key, PanelContext ctx) => false;
-    }
-
     // #470: panels read typed dependencies, never a container.
     private static PanelContext Ctx(UiState state, int width = 80, int height = 24, PanelServices? services = null) =>
         new(state, width, height, services);
@@ -431,7 +417,7 @@ public class CellForgeBuiltinPanelsTests
     public async Task Help_WithRegistry_ListsPanels()
     {
         var registry = new PanelRegistry();
-        _ = registry.Register(new StubPanel());
+        _ = registry.Register(new TestPanelProvider("stub-a", "Stub A", "stub"));
         var services = new PanelServices { PanelRegistry = registry };
         string text = Joined(new CellForgeHelpPanel().Build(Ctx(new UiState(), services: services)));
         await Assert.That(text).Contains("stub-a");

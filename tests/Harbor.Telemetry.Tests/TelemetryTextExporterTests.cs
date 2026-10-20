@@ -1,3 +1,4 @@
+using Harbor.TestKit;
 using System.Diagnostics.Metrics;
 using Harbor.Diagnostics;
 using Harbor.Telemetry;
@@ -239,23 +240,5 @@ public class TelemetryTextExporterTests : IDisposable
                 File.Delete(path);
             }
         }
-    }
-
-    /// <summary>Minimal logger that keeps the rendered lines for assertions.</summary>
-    private sealed class CapturingLogger : ILogger
-    {
-        public List<string> Messages { get; } = [];
-
-        public IDisposable? BeginScope<TState>(TState state)
-            where TState : notnull => null;
-
-        public bool IsEnabled(LogLevel logLevel) => true;
-
-        public void Log<TState>(
-            LogLevel logLevel,
-            EventId eventId,
-            TState state,
-            Exception? exception,
-            Func<TState, Exception?, string> formatter) => Messages.Add(formatter(state, exception));
     }
 }

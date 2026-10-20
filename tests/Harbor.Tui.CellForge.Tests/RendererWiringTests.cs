@@ -6,6 +6,7 @@ using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Terminal.Abstractions;
 using Harbor.Terminal.Abstractions.ViewModels;
 using Harbor.Terminal.Abstractions.Views;
+using Harbor.TestKit;
 using Harbor.Ui.Framework.State;
 using Harbor.Abstractions.Models;
 using Microsoft.Extensions.Logging.Abstractions;

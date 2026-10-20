@@ -34,6 +34,10 @@
     <!-- #1624: binds the moved session-context types directly. -->
     <ProjectReference Include="..\..\src\Harbor.SessionContext\Harbor.SessionContext.csproj"/>
     <ProjectReference Include="..\..\tests\Harbor.TestKit\Harbor.TestKit.csproj"/>
+    <!-- #1772: the shared terminal-backend doubles. The sibling references
+         Harbor.Tui.CellForge.Engine only, which this project already has,
+         so the reference adds no product assembly. -->
+    <ProjectReference Include="..\Harbor.TestKit.Tui\Harbor.TestKit.Tui.csproj"/>
   </ItemGroup>
 
   <ItemGroup>

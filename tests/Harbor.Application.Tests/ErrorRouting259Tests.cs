@@ -21,26 +21,6 @@ namespace Harbor.Application.Tests;
 /// </summary>
 public class ErrorRouting259Tests
 {
-    private sealed class InstantTimeProvider : TimeProvider
-    {
-        public override DateTimeOffset GetUtcNow() => DateTimeOffset.UnixEpoch;
-
-        public override ITimer CreateTimer(
-            TimerCallback callback, object? state, TimeSpan dueTime, TimeSpan period)
-        {
-            callback(state);
-            return NoopTimer.Instance;
-        }
-
-        private sealed class NoopTimer : ITimer
-        {
-            public static readonly NoopTimer Instance = new();
-            public bool Change(TimeSpan dueTime, TimeSpan period) => false;
-            public void Dispose() { }
-            public ValueTask DisposeAsync() => default;
-        }
-    }
-
     private static AgentLoop LoopWithClock(ScriptedLlmClient client, FakeEventBus bus, TimeProvider clock)
     {
         var agent = TestAgents.AllowAll();
@@ -66,7 +46,7 @@ public class ErrorRouting259Tests
             new TextDeltaEvent("t", "partial-"),
             new ErrorEvent("slow down", Kind: ProviderErrorKind.RateLimit, StatusCode: 429)]);
         var bus = new FakeEventBus();
-        var loop = LoopWithClock(client, bus, new InstantTimeProvider());
+        var loop = LoopWithClock(client, bus, new ManualTimeProvider(fireTimerOnCreate: true));
         var session = new TestSessionContext(
             Session.Create("/tmp/harbor-259-storm", "code", "test", "test-model"));
 
@@ -83,7 +63,7 @@ public class ErrorRouting259Tests
         var client = new ScriptedLlmClient([
             new ErrorEvent("bad key", Kind: ProviderErrorKind.Auth, StatusCode: 401)]);
         var bus = new FakeEventBus();
-        var loop = LoopWithClock(client, bus, new InstantTimeProvider());
+        var loop = LoopWithClock(client, bus, new ManualTimeProvider(fireTimerOnCreate: true));
         var session = new TestSessionContext(
             Session.Create("/tmp/harbor-259-fatal", "code", "test", "test-model"));
 
@@ -101,7 +81,7 @@ public class ErrorRouting259Tests
             [new ErrorEvent("slow down", Kind: ProviderErrorKind.RateLimit, StatusCode: 429)],
             [new TextDeltaEvent("t", "recovered"), new StepFinishEvent(0, "stop", new Usage(1, 1))]);
         var bus = new FakeEventBus();
-        var loop = LoopWithClock(client, bus, new InstantTimeProvider());
+        var loop = LoopWithClock(client, bus, new ManualTimeProvider(fireTimerOnCreate: true));
         var session = new TestSessionContext(
             Session.Create("/tmp/harbor-259-recovery", "code", "test", "test-model"));
 

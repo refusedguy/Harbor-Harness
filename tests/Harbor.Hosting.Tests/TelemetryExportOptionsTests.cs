@@ -1,5 +1,6 @@
 using Harbor.Abstractions.Env;
 using Harbor.Telemetry;
+using Harbor.TestKit;
 using Microsoft.Extensions.Logging;
 
 namespace Harbor.Hosting.Tests;
@@ -118,23 +119,5 @@ public class TelemetryExportOptionsTests
         await Assert.That(resolved).IsNotNull();
         await Assert.That(resolved!.MaxBufferBytes).IsEqualTo(TelemetryExportOptions.DefaultMaxBufferBytes);
         await Assert.That(_logger.Messages.Any(m => m.Contains(HarborEnv.TelemetryExportMaxBufferBytes))).IsTrue();
-    }
-
-    /// <summary>Minimal logger that keeps the rendered lines for assertions.</summary>
-    private sealed class CapturingLogger : ILogger
-    {
-        public List<string> Messages { get; } = [];
-
-        public IDisposable? BeginScope<TState>(TState state)
-            where TState : notnull => null;
-
-        public bool IsEnabled(LogLevel logLevel) => true;
-
-        public void Log<TState>(
-            LogLevel logLevel,
-            EventId eventId,
-            TState state,
-            Exception? exception,
-            Func<TState, Exception?, string> formatter) => Messages.Add(formatter(state, exception));
     }
 }
