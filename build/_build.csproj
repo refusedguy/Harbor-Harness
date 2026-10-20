@@ -42,13 +42,20 @@
   <ItemGroup>
     <PackageReference Include="Nuke.Common" Version="9.0.4"/>
     <!--
-      Direct pins override Nuke.Common 9.0.4's vulnerable transitive tree:
-      - System.Security.Cryptography.Xml 8.0.0 → 10.0.11 (NU1903: GHSA-cvvh-rhrc-wg4q,
-        GHSA-g8r8-53c2-pm3f, GHSA-mmjf-rqrv-855v, GHSA-w3x6-4m5h-cxqf)
+      Direct pins override Nuke.Common 9.0.4's vulnerable transitive tree.
+      The pins stay; only their versions move. Removing any of them re-opens
+      the advisories the pin was put there to close:
+      - System.Security.Cryptography.Xml 8.0.0 → 10.0.13. Nuke's own tree pulls
+        9.0.0 (11 advisories) and its 8.0.0 group carries 12 (NU1903:
+        GHSA-cvvh-rhrc-wg4q, GHSA-g8r8-53c2-pm3f, GHSA-mmjf-rqrv-855v,
+        GHSA-w3x6-4m5h-cxqf, …). 10.0.11 was itself inside the affected range
+        >= 10.0.0, <= 10.0.12 (NU1903: GHSA-r955-8q5j-3h83,
+        GHSA-c399-9853-6jmj, GHSA-7hqp-7c5m-4vq6); 10.0.13 closes that range
+        and carries 0 advisories for this package.
       - Microsoft.Build* 17.12.6 → 17.14.28 (NU1903: GHSA-w3q9-fxm7-j8fq, GHSA-h4j7-5rxr-p4wc)
       - NuGet.Packaging 6.12.1 → 6.12.5 (NU1901: GHSA-g4vj-cjjj-v7hg)
     -->
-    <PackageReference Include="System.Security.Cryptography.Xml" Version="10.0.11"/>
+    <PackageReference Include="System.Security.Cryptography.Xml" Version="10.0.13"/>
     <PackageReference Include="Microsoft.Build" Version="17.14.28"/>
     <PackageReference Include="Microsoft.Build.Tasks.Core" Version="17.14.28"/>
     <PackageReference Include="Microsoft.Build.Utilities.Core" Version="17.14.28"/>
