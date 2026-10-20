@@ -6,6 +6,7 @@ using Harbor.Terminal.Abstractions.Renderers;
 using Harbor.Terminal.Abstractions.ViewModels;
 using Harbor.Terminal.Abstractions.Views;
 using Microsoft.Extensions.Logging.Abstractions;
+using Harbor.TestKit;
 namespace Harbor.Tui.Tests;
 public class StatusBarViewTests
 {
@@ -52,8 +53,8 @@ public class ChatHistoryViewTests
     public async Task Render_StreamingText_AppendedAsAssistantEntry()
     {
         var vm = new ChatHistoryViewModel();
-        await vm.UpdateFromEventAsync(new MessageStartEvent(AssistantMessage.Empty("s1", "m")));
-        await vm.UpdateFromEventAsync(new MessageUpdateEvent(new TextDeltaEvent("0", "streaming..."), AssistantMessage.Empty("s1", "m")));
+        await vm.UpdateFromEventAsync(TestEvents.MessageStart());
+        await vm.UpdateFromEventAsync(TestEvents.TextDeltaUpdate("0", "streaming..."));
 
         var view = new ChatHistoryView { ViewModel = vm };
         var ctx = new CaptureRenderContext();
@@ -68,8 +69,8 @@ public class ChatHistoryViewTests
     public async Task Render_ThinkingText_RendersThinkingPrefix()
     {
         var vm = new ChatHistoryViewModel();
-        await vm.UpdateFromEventAsync(new MessageStartEvent(AssistantMessage.Empty("s1", "m")));
-        await vm.UpdateFromEventAsync(new MessageUpdateEvent(new ThinkingDeltaEvent("0", "reasoning..."), AssistantMessage.Empty("s1", "m")));
+        await vm.UpdateFromEventAsync(TestEvents.MessageStart());
+        await vm.UpdateFromEventAsync(TestEvents.ThinkingDeltaUpdate("0", "reasoning..."));
 
         var view = new ChatHistoryView { ViewModel = vm };
         var ctx = new CaptureRenderContext();
@@ -85,7 +86,7 @@ public class ChatHistoryViewTests
     {
         var vm = new ChatHistoryViewModel();
         var result = new ToolResult("done", false);
-        await vm.UpdateFromEventAsync(new ToolExecutionEndEvent("tc1", result, false));
+        await vm.UpdateFromEventAsync(TestEvents.ToolExecutionEnd(result: result));
 
         var view = new ChatHistoryView { ViewModel = vm };
         var ctx = new CaptureRenderContext();
@@ -323,7 +324,7 @@ public class BaseTuiRendererBuiltinViewTests
         await Assert.That(statusBarVm).IsNotNull();
         await Assert.That(statusBarVm!.Status).IsEqualTo("idle");
 
-        await renderer.RenderAsync(new AgentStartEvent("s1", Array.Empty<AgentMessage>()));
+        await renderer.RenderAsync(TestEvents.AgentStart());
 
         await Assert.That(statusBarVm.Status).IsEqualTo("running");
         renderer.Dispose();
@@ -338,7 +339,7 @@ public class BaseTuiRendererBuiltinViewTests
         var ctx = (CaptureRenderContext)renderer.Context;
         ctx.Clear();
 
-        await renderer.RenderAsync(new AgentStartEvent("s1", Array.Empty<AgentMessage>()));
+        await renderer.RenderAsync(TestEvents.AgentStart());
 
         // StatusBar should be rendered (contains status info).
         var statusBarVm = renderer.ViewModels.Get<StatusBarViewModel>("status-bar");
@@ -354,7 +355,7 @@ public class BaseTuiRendererBuiltinViewTests
 
         // Feed a tool end event that adds a diff.
         var result = new ToolResult("Wrote 100 chars to /tmp/test.cs", false);
-        await renderer.RenderAsync(new ToolExecutionEndEvent("tc1", result, false));
+        await renderer.RenderAsync(TestEvents.ToolExecutionEnd(result: result));
 
         var ctx = (CaptureRenderContext)renderer.Context;
         // The diff preview overlay should show the diff header.

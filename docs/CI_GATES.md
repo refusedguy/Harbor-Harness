@@ -19,15 +19,15 @@ Measured on `dev` at `15b5e44c`, the tree this policy landed on:
 
 | | |
 |---|---|
-| python tools in `tools/` | 27 files, 22 427 lines |
-| of them, the `check-*.py` family | 14 files, 16 928 lines |
-| workflows that run a python tool | 5: `ci.yml`, `docs.yml`, `demo.yml`, `evaluation-cost.yml`, `test-os.yml` |
-| gates that block a build | 18 |
+| python tools in `tools/` | 35 files, 26 595 lines |
+| of them, the `check-*.py` family | 18 files, 19 162 lines |
+| workflows that run a python tool | 7: `ci.yml`, `docs.yml`, `demo.yml`, `evaluation-cost.yml`, `test-os.yml`, `meas-build-vcpu.yml`, `release.yml` |
+| gates that block a build | 22 |
 | gates that report and let the build pass | 1 (`check-test-dup.py`, `--warn-only` while the removal programme runs) |
-| reporters, helpers, libraries | 4 reporters, 3 helpers, 1 library |
-| tools with a self-test | 22 |
-| tools with a ratchet | 10 |
-| tools with a floor | 13 |
+| reporters, helpers, libraries | 5 reporters, 6 helpers, 1 library |
+| tools with a self-test | 26 |
+| tools with a ratchet | 13 |
+| tools with a floor | 15 |
 | tools whose self-test no workflow ran before this change | 3 (`pack-validate.py`, `test-skips.py`, `normalize-mtimes.py`) |
 | gates in a workflow that runs a script that is not in the tree | 1 (`ci.yml`'s `public-api-abstractions` job, left behind by the #1845 squash) |
 
@@ -204,14 +204,17 @@ findings that are not defects.
 
 ## The gate table
 
-Every python tool in `tools/` (33 files). 29 of them are run by a workflow; the
-other four are `gen-e2e-shards.py`, a generator a human runs, `md_gate.py`,
-which is imported by two of the others rather than run, and the two
-measurement helpers `aggregate-build-vcpu.py` and `measure-project-graph.py`,
-which a human runs after a measurement run. All 33 are listed, because a
-tool that is not listed is a tool nobody reviews., with the question
-it answers, where it runs, whether it blocks a build, whether it has a
-self-test, the ratchet it holds, and the floors CI passes it. The table is
+Every python tool in `tools/` (35 files). 30 of them are run by a workflow; the
+other five are `gen-e2e-shards.py`, a generator a human runs, `md_gate.py`,
+which is imported by two of the others rather than run, the measurement
+helper `aggregate-build-vcpu.py`, which a human runs after a measurement
+run, `measure-project-graph.py`, which a human runs to read the project
+graph, and `codemod-test-events.py`, which rewrites the hand-built test
+events. All 35 are listed, because a tool that is not listed is a tool nobody
+reviews — with the question it answers, where it runs, whether it blocks a
+build, whether it has a self-test, the ratchet it holds, and the floors CI
+passes it. The table is
+
 checked by `tools/check-gate-policy.py`, which fails when it stops describing
 the tree.
 
@@ -246,6 +249,7 @@ The modes are:
 | `tools/check-tunit-analyzer-gate.py` | TUnit's own analyzers are armed: a planted offender fails the build and a planted waiver does not | ci.yml | build | gate | `--selftest` | — | — |
 | `tools/check-xml-doc-coverage.py` | every public member of the frozen contract assembly carries an XML doc | docs.yml | selftest, xmldoc | gate | `--self-test` | — | `--min-members 493 --min-documented 478 --min-coverage 0.96` |
 | `tools/ci-shard-slices.py` | the build-output slices match the test shards | ci.yml | build | gate | — | — | — |
+| `tools/codemod-test-events.py` | rewrites the hand-built test events in `tests/` into the shared `TestEvents` builders, and reports the forms it will not touch. A tool a human runs, and no workflow runs it | — | — | helper | — | — | — |
 | `tools/demo_repro.py` | the demo playback is reproducible, and the GIFs are within their frame budget | demo.yml | demo-gifs, demo-reproducibility | gate | — | `assets/demo/baseline.json` | — |
 | `tools/md-lint.py` | the tracked markdown obeys the invariants the repository claims | docs.yml | lint, selftest | gate | `--self-test` | — | `--min-files 250 --min-lines 60000` |
 | `tools/gen-e2e-shards.py` | generates the process plan of the headless Avalonia E2E suite. A tool a human runs, and no workflow runs it | — | — | helper | — | — | — |

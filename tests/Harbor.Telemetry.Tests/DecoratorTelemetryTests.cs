@@ -142,9 +142,9 @@ public class DecoratorTelemetryTests : IDisposable
             [
                 new LlmEvent[]
                 {
-                    new TextDeltaEvent("t1", "hello"),
-                    new StepFinishEvent(0, "stop", new Usage(10, 5)),
-                    new StepFinishEvent(1, "stop", new Usage(0, 0)),
+                    TestEvents.TextDelta("t1", "hello"),
+                    TestEvents.StepFinish(usage: new Usage(10, 5)),
+                    TestEvents.StepFinish(1, usage: new Usage(0, 0)),
                 }
             ]),
             new MeterMetrics(),

@@ -14,6 +14,7 @@ using Harbor.Application.Agents;
 using Harbor.Application.Resilience;
 using Harbor.Application.Sessions;
 using Microsoft.Extensions.Logging.Abstractions;
+using Harbor.TestKit;
 namespace Harbor.Benchmarks;
 /// <summary>
 ///     Benchmarks the per-turn fixed overhead of <see cref="AgentLoop" /> — the orchestration
@@ -178,9 +179,9 @@ internal sealed class BenchTextLlmClient : ILlmClient
 
     private static async IAsyncEnumerable<LlmEvent> StreamText([EnumeratorCancellation] CancellationToken ct)
     {
-        yield return new TextDeltaEvent("d1", "Hello from the stubbed agent loop benchmark.");
+        yield return TestEvents.TextDelta("d1", "Hello from the stubbed agent loop benchmark.");
         await Task.Yield();
-        yield return new StepFinishEvent(1, "stop", new Usage(10, 5));
+        yield return TestEvents.StepFinish(1, usage: new Usage(10, 5));
     }
 }
 
@@ -212,10 +213,10 @@ internal sealed class BenchToolLlmClient : ILlmClient
 
     private static async IAsyncEnumerable<LlmEvent> StreamTool([EnumeratorCancellation] CancellationToken ct)
     {
-        yield return new ToolCallStartEvent("tc_bench", "bench_tool");
+        yield return TestEvents.ToolCallStart("tc_bench", "bench_tool");
         await Task.Yield();
-        yield return new ToolCallDeltaEvent("tc_bench", "{\"input\":\"x\"}");
-        yield return new StepFinishEvent(1, "tool_use", new Usage(12, 6));
+        yield return TestEvents.ToolCallDelta("tc_bench", "{\"input\":\"x\"}");
+        yield return TestEvents.StepFinish(1, "tool_use", new Usage(12, 6));
     }
 }
 

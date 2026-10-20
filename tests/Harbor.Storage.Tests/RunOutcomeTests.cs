@@ -3,6 +3,7 @@ using Harbor.Abstractions.Events;
 using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Storage.Memory;
+using Harbor.TestKit;
 
 namespace Harbor.Storage.Tests;
 
@@ -76,7 +77,7 @@ public class RunOutcomeTests
         await Assert.That(stored.IsSuccess).IsTrue();
 
         var outcome = RunOutcome.Reconstruct(
-            runId, sessionId, stored.Value, new AgentEndEvent(stored.Value));
+            runId, sessionId, stored.Value, TestEvents.AgentEnd(stored.Value));
 
         await Assert.That(outcome.RunId).IsEqualTo(runId);
         await Assert.That(outcome.SessionId).IsEqualTo(sessionId);
@@ -114,8 +115,8 @@ public class RunOutcomeTests
 
         var outcome = RunOutcome.Reconstruct(
             runId, sessionId, stored.Value,
-            new AgentEndEvent(stored.Value),
-            new AgentErrorEvent("provider exploded"));
+            TestEvents.AgentEnd(stored.Value),
+            TestEvents.AgentError("provider exploded"));
 
         await Assert.That(outcome.StopReason).IsEqualTo(RunStopReason.Failed);
         await Assert.That(outcome.ErrorMessage).IsEqualTo("provider exploded");
@@ -142,7 +143,7 @@ public class RunOutcomeTests
 
         var outcome = RunOutcome.Reconstruct(
             runId, sessionId, stored.Value,
-            new AgentEndEvent(stored.Value, Cancelled: true));
+            TestEvents.AgentEnd(stored.Value, true));
 
         await Assert.That(outcome.StopReason).IsEqualTo(RunStopReason.Stopped);
         await Assert.That(outcome.ErrorMessage).IsNull();
@@ -181,7 +182,7 @@ public class RunOutcomeTests
         await Assert.That(stored.Value.Count).IsEqualTo(0);
 
         var outcome = RunOutcome.Reconstruct(
-            runId, sessionId, stored.Value, new AgentEndEvent(stored.Value));
+            runId, sessionId, stored.Value, TestEvents.AgentEnd(stored.Value));
 
         // #993: the old mapping ended in a catch-all, so this reached
         // `Succeeded` — "the loop exited cleanly" for a loop that never ran.
@@ -210,7 +211,7 @@ public class RunOutcomeTests
         await Assert.That(stored.IsSuccess).IsTrue();
 
         var outcome = RunOutcome.Reconstruct(
-            runId, sessionId, stored.Value, new AgentEndEvent(stored.Value));
+            runId, sessionId, stored.Value, TestEvents.AgentEnd(stored.Value));
 
         // #993: `startedAt = finishedAt = UtcNow` gave a run that never happened a
         // duration of exactly zero, measured at reconstruction time. A plausible
@@ -237,7 +238,7 @@ public class RunOutcomeTests
         await Assert.That(stored.IsSuccess).IsTrue();
 
         var outcome = RunOutcome.Reconstruct(
-            runId, sessionId, stored.Value, new AgentEndEvent(stored.Value, Cancelled: true));
+            runId, sessionId, stored.Value, TestEvents.AgentEnd(stored.Value, true));
 
         // Direction check #1: a known terminal signal must still win. Cancelled
         // before the first message was persisted is a real, reportable stop — the
@@ -266,8 +267,8 @@ public class RunOutcomeTests
 
         var outcome = RunOutcome.Reconstruct(
             runId, sessionId, stored.Value,
-            new AgentEndEvent(stored.Value),
-            new AgentErrorEvent("provider exploded before anything was persisted"));
+            TestEvents.AgentEnd(stored.Value),
+            TestEvents.AgentError("provider exploded before anything was persisted"));
 
         // Direction check #2 — the decisive one. If "empty history" had been
         // mapped to a blanket "no evidence, stop asserting anything", the known
@@ -297,7 +298,7 @@ public class RunOutcomeTests
         await Assert.That(stored.IsSuccess).IsTrue();
 
         var outcome = RunOutcome.Reconstruct(
-            runId, sessionId, stored.Value, new AgentEndEvent(stored.Value));
+            runId, sessionId, stored.Value, TestEvents.AgentEnd(stored.Value));
 
         await Assert.That(outcome.StopReason).IsNotEqualTo(RunStopReason.Succeeded)
             .Because("no assistant message means no evidence the loop exited cleanly");
@@ -328,7 +329,7 @@ public class RunOutcomeTests
         var empty = await store.GetMessagesAsync(sessionId);
         await Assert.That(empty.IsSuccess).IsTrue();
         var noEvidence = RunOutcome.Reconstruct(
-            RunId.New(), sessionId, empty.Value, new AgentEndEvent(empty.Value));
+            RunId.New(), sessionId, empty.Value, TestEvents.AgentEnd(empty.Value));
 
         await store.AppendMessageAsync(sessionId, NewUser(sessionId, 1));
         await store.AppendMessageAsync(sessionId, NewFinalAssistant(sessionId, 2, StopReason.Stop));
@@ -336,7 +337,7 @@ public class RunOutcomeTests
         var ran = await store.GetMessagesAsync(sessionId);
         await Assert.That(ran.IsSuccess).IsTrue();
         var succeeded = RunOutcome.Reconstruct(
-            RunId.New(), sessionId, ran.Value, new AgentEndEvent(ran.Value));
+            RunId.New(), sessionId, ran.Value, TestEvents.AgentEnd(ran.Value));
 
         await Assert.That(succeeded.StopReason).IsEqualTo(RunStopReason.Succeeded);
         await Assert.That(noEvidence.StopReason).IsNotEqualTo(RunStopReason.Succeeded);
@@ -385,7 +386,7 @@ public class RunOutcomeTests
 
         var verification = PassedVerification();
         var outcome = RunOutcome.Reconstruct(
-            runId, sessionId, stored.Value, new AgentEndEvent(stored.Value),
+            runId, sessionId, stored.Value, TestEvents.AgentEnd(stored.Value),
             verification: verification);
 
         await Assert.That(outcome.Verification).IsNotNull();
@@ -418,7 +419,7 @@ public class RunOutcomeTests
         await Assert.That(stored.IsSuccess).IsTrue();
 
         var outcome = RunOutcome.Reconstruct(
-            runId, sessionId, stored.Value, new AgentEndEvent(stored.Value));
+            runId, sessionId, stored.Value, TestEvents.AgentEnd(stored.Value));
 
         await Assert.That(outcome.Verification).IsNull()
             .Because("no evidence was supplied: the inspection never happened, which is not a verdict");

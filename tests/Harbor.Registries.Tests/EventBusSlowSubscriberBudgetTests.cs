@@ -2,6 +2,7 @@ using Harbor.Abstractions.Events;
 using Microsoft.Extensions.Logging.Abstractions;
 using TUnit.Assertions;
 using Harbor.Registries.Events;
+using Harbor.TestKit;
 
 namespace Harbor.Registries.Tests;
 
@@ -43,7 +44,7 @@ public class EventBusSlowSubscriberBudgetTests
 
         for (int i = 0; i < 4; i++)
         {
-            await bus.PublishAsync(new TurnStartEvent(i), cancellationToken);
+            await bus.PublishAsync(TestEvents.TurnStart(i), cancellationToken);
         }
 
         await Assert.That(calls).IsEqualTo(3)
@@ -71,7 +72,7 @@ public class EventBusSlowSubscriberBudgetTests
 
         using var cts = new CancellationTokenSource();
         cts.Cancel();
-        await bus.PublishAsync(new TurnStartEvent(1), cts.Token);
+        await bus.PublishAsync(TestEvents.TurnStart(), cts.Token);
 
         await Assert.That(calls).IsEqualTo(1);
     }

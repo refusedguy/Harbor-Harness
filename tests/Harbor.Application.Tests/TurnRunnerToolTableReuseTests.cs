@@ -210,20 +210,20 @@ public class TurnRunnerToolTableReuseTests
     [
         new LlmEvent[]
         {
-            new ToolCallStartEvent("call-1", "noop"),
-            new ToolCallDeltaEvent("call-1", """{}"""),
-            new StepFinishEvent(0, "tool_use", new Usage(2, 1)),
+            TestEvents.ToolCallStart(toolName: "noop"),
+            TestEvents.ToolCallDelta(argsDelta: """{}"""),
+            TestEvents.StepFinish(finishReason: "tool_use", usage: new Usage(2, 1)),
         },
         new LlmEvent[]
         {
-            new ToolCallStartEvent("call-2", "noop"),
-            new ToolCallDeltaEvent("call-2", """{}"""),
-            new StepFinishEvent(0, "tool_use", new Usage(2, 1)),
+            TestEvents.ToolCallStart("call-2", "noop"),
+            TestEvents.ToolCallDelta("call-2", """{}"""),
+            TestEvents.StepFinish(finishReason: "tool_use", usage: new Usage(2, 1)),
         },
         new LlmEvent[]
         {
-            new TextDeltaEvent("t", "done"),
-            new StepFinishEvent(0, "stop", new Usage(1, 1)),
+            TestEvents.TextDelta(delta: "done"),
+            TestEvents.StepFinish(usage: new Usage(1, 1)),
         },
     ]);
 
@@ -231,8 +231,8 @@ public class TurnRunnerToolTableReuseTests
     [
         new LlmEvent[]
         {
-            new TextDeltaEvent("t", "done"),
-            new StepFinishEvent(0, "stop", new Usage(1, 1)),
+            TestEvents.TextDelta(delta: "done"),
+            TestEvents.StepFinish(usage: new Usage(1, 1)),
         },
     ]);
 

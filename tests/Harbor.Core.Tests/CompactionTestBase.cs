@@ -127,9 +127,9 @@ public abstract class CompactionTestBase
             [EnumeratorCancellation] CancellationToken cancellationToken = default)
         {
             Requests.Add(request);
-            yield return new TextDeltaEvent("0", summary);
+            yield return TestEvents.TextDelta("0", summary);
             await Task.Delay(1, cancellationToken).ConfigureAwait(false);
-            yield return new StepFinishEvent(0, "stop", new Usage(0, summary.Length / 4));
+            yield return TestEvents.StepFinish(usage: new Usage(0, summary.Length / 4));
         }
 
         public Task<Result<IReadOnlyList<ModelInfo>>> GetModelsAsync(CancellationToken cancellationToken = default)

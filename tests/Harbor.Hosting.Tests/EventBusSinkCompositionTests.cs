@@ -21,6 +21,7 @@ using Harbor.Hosting;
 using Harbor.Registries.Events;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Harbor.TestKit;
 
 namespace Harbor.Hosting.Tests;
 
@@ -48,7 +49,7 @@ public class EventBusSinkCompositionTests
 
         for (int i = 0; i < Publishes; i++)
         {
-            await bus.PublishAsync(new TurnStartEvent(i));
+            await bus.PublishAsync(TestEvents.TurnStart(i));
         }
 
         return (bus.FastPathCount, bus.PublishedCount, bus);

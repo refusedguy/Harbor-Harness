@@ -41,6 +41,7 @@ using Harbor.Tui.RendererTests.Support;
 using Microsoft.Extensions.Logging.Abstractions;
 using TUnit.Assertions;
 using TUnit.Assertions.Extensions;
+using Harbor.TestKit;
 
 /// <summary>
 ///     Pins the injected-runner seam behind the notification backends (#665).
@@ -199,7 +200,7 @@ public class NotificationProcessSeamTests
             runner);
 
         await renderer.InitializeAsync(cancellationToken);
-        await renderer.RenderAsync(new AgentEndEvent([]), cancellationToken);
+        await renderer.RenderAsync(TestEvents.AgentEnd(), cancellationToken);
 
         await Assert.That(runner.Count).IsEqualTo(1)
             .Because("this is what makes the five tests above statements about the "
@@ -222,7 +223,7 @@ public class NotificationProcessSeamTests
             runner);
 
         await renderer.InitializeAsync();
-        await renderer.RenderAsync(new AgentErrorEvent("provider exploded"));
+        await renderer.RenderAsync(TestEvents.AgentError("provider exploded"));
 
         await Assert.That(runner.Count).IsEqualTo(1);
         await Assert.That(string.Join(' ', runner.Single.Arguments))

@@ -49,25 +49,25 @@ public class RendererVisitorRegressionTests
     private static IEnumerable<AgentEvent> FullSweep()
     {
         var partial = Partial("sweep");
-        yield return new AgentStartEvent("s1", []);
-        yield return new TurnStartEvent(1);
-        yield return new MessageStartEvent(partial);
-        yield return new MessageUpdateEvent(new TextDeltaEvent("0", "hi"), partial);
-        yield return new MessageUpdateEvent(new ThinkingDeltaEvent("0", "hmm"), partial);
-        yield return new MessageUpdateEvent(new ToolCallDeltaEvent("0", "{}"), partial);
-        yield return new MessageEndEvent(partial);
+        yield return TestEvents.AgentStart();
+        yield return TestEvents.TurnStart();
+        yield return TestEvents.MessageStart(partial);
+        yield return TestEvents.TextDeltaUpdate("0", "hi", partial);
+        yield return TestEvents.ThinkingDeltaUpdate("0", "hmm", partial);
+        yield return TestEvents.ToolCallDeltaUpdate("0", partial: partial);
+        yield return TestEvents.MessageEnd(partial);
         yield return new ToolExecutionStartEvent("tc_1", "read", Args());
-        yield return new ToolExecutionUpdateEvent("tc_1", "partial");
-        yield return new ToolExecutionEndEvent("tc_1", ToolResult.Success("ok"), IsError: false);
-        yield return new ToolExecutionEndEvent("tc_2", ToolResult.Error("boom"), IsError: true);
-        yield return new TurnEndEvent(partial, []);
-        yield return new CompactionStartedEvent("s1");
-        yield return new CompactionCompletedEvent("s1", "summary", 3, 100, TimeSpan.FromSeconds(1));
-        yield return new CompactionFailedEvent("s1", "nope");
-        yield return new SessionChangedEvent("s1");
-        yield return new PluginBlockedEvent("p", "timeout", "detail");
-        yield return new AgentErrorEvent("boom");
-        yield return new AgentEndEvent([]);
+        yield return TestEvents.ToolExecutionUpdate("tc_1", "partial");
+        yield return TestEvents.ToolExecutionEnd("tc_1", ToolResult.Success("ok"));
+        yield return TestEvents.ToolExecutionEnd("tc_2", ToolResult.Error("boom"), true);
+        yield return TestEvents.TurnEnd(partial);
+        yield return TestEvents.CompactionStarted();
+        yield return TestEvents.CompactionCompleted(prunedMessageCount: 3, tokensSaved: 100);
+        yield return TestEvents.CompactionFailed(error: "nope");
+        yield return TestEvents.SessionChanged();
+        yield return TestEvents.PluginBlocked("p");
+        yield return TestEvents.AgentError();
+        yield return TestEvents.AgentEnd();
     }
 
     [Test]
@@ -78,11 +78,11 @@ public class RendererVisitorRegressionTests
         try
         {
             await renderer.InitializeAsync();
-            await renderer.RenderAsync(new TurnStartEvent(1));
-            await renderer.RenderAsync(new TurnEndEvent(Partial("t"), []));
-            await renderer.RenderAsync(new ToolExecutionUpdateEvent("tc_1", "partial"));
-            await renderer.RenderAsync(new SessionChangedEvent("s1"));
-            await renderer.RenderAsync(new PluginBlockedEvent("p", "timeout", "detail"));
+            await renderer.RenderAsync(TestEvents.TurnStart());
+            await renderer.RenderAsync(TestEvents.TurnEnd(Partial("t")));
+            await renderer.RenderAsync(TestEvents.ToolExecutionUpdate("tc_1", "partial"));
+            await renderer.RenderAsync(TestEvents.SessionChanged());
+            await renderer.RenderAsync(TestEvents.PluginBlocked("p"));
         }
         finally
         {
@@ -101,8 +101,8 @@ public class RendererVisitorRegressionTests
         {
             await renderer.InitializeAsync();
             var partial = Partial("m");
-            await renderer.RenderAsync(new MessageStartEvent(partial));
-            await renderer.RenderAsync(new AgentErrorEvent("boom"));
+            await renderer.RenderAsync(TestEvents.MessageStart(partial));
+            await renderer.RenderAsync(TestEvents.AgentError());
         }
         finally
         {

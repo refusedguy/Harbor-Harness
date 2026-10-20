@@ -17,6 +17,7 @@ using Harbor.Ui.Framework.ViewModels;
 using ChatLineVm = Harbor.Ui.Framework.ViewModels.ChatLineViewModel;
 using ToolCallVm = Harbor.Ui.Framework.ViewModels.ToolCallViewModel;
 using Microsoft.Extensions.DependencyInjection;
+using Harbor.TestKit;
 // See HeadlessAvaloniaDriver.cs for the rationale — the test namespace
 // Harbor.E2E.App.Avalonia shadows Harbor.App.Avalonia for name lookup,
 // so we alias the production App class to 'HarborApp' (not 'App' — that
@@ -876,10 +877,7 @@ public sealed class AvaloniaUiTests
         var startModel = new Harbor.Abstractions.Models.ModelInfo(
             "qwen2.5-coder:7b", "ollama", "Qwen2.5 Coder 7B", 32_768, 4_096, false, false, true,
             Harbor.Abstractions.Models.Pricing.Unknown, "ollama");
-        await eventBus.PublishAsync(new AgentStartEvent(
-            "e2e-streaming-session",
-            Array.Empty<Harbor.Abstractions.Models.AgentMessage>(),
-            startModel)).ConfigureAwait(false);
+        await eventBus.PublishAsync(TestEvents.AgentStart("e2e-streaming-session", model: startModel)).ConfigureAwait(false);
 
         // Honest visibility probe (C1): collapsed banners no longer satisfy it.
         bool hasIndicator = await Driver.WaitForRenderedTextAsync("Agent is running", TimeSpan.FromSeconds(3))
@@ -889,8 +887,7 @@ public sealed class AvaloniaUiTests
         await Driver.ScreenshotAsync("19-streaming-indicator").ConfigureAwait(false);
 
         // Stop the agent through the same production path.
-        await eventBus.PublishAsync(new AgentEndEvent(
-            Array.Empty<Harbor.Abstractions.Models.AgentMessage>(), Cancelled: false)).ConfigureAwait(false);
+        await eventBus.PublishAsync(TestEvents.AgentEnd()).ConfigureAwait(false);
 
         // Poll until the running indicator is gone instead of a fixed delay.
         await Driver.WaitForConditionAsync(
@@ -1025,8 +1022,7 @@ public sealed class AvaloniaUiTests
         // ToolDispatcher publishes, carrying the args and the tool's own glyph.
         // The LLM-level start is still published because production publishes
         // both: it is what writes the transcript line the card sits under.
-        await eventBus.PublishAsync(new MessageUpdateEvent(
-            new ToolCallStartEvent("tc-e2e-1", "read"), partial)).ConfigureAwait(false);
+        await eventBus.PublishAsync(TestEvents.ToolCallStartUpdate("tc-e2e-1", "read", partial)).ConfigureAwait(false);
         await eventBus.PublishAsync(ToolExecutionStartEvent.Create(
             "tc-e2e-1",
             "read",
@@ -1042,10 +1038,7 @@ public sealed class AvaloniaUiTests
 
         // Close the call through the matching production event — the execution
         // end, not the LLM-level one, which the reducer does not act on.
-        await eventBus.PublishAsync(new ToolExecutionEndEvent(
-            "tc-e2e-1",
-            Harbor.Abstractions.Models.ToolResult.Success("ok"),
-            false)).ConfigureAwait(false);
+        await eventBus.PublishAsync(TestEvents.ToolExecutionEnd("tc-e2e-1", Harbor.Abstractions.Models.ToolResult.Success("ok"))).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -1296,19 +1289,16 @@ public sealed class AvaloniaUiTests
             "user",
             "qwen2.5-coder:7b")).ToList();
 
-        await eventBus.PublishAsync(new AgentStartEvent("e2e-scroll-session", userMessages, model))
+        await eventBus.PublishAsync(TestEvents.AgentStart("e2e-scroll-session", userMessages, model))
             .ConfigureAwait(false);
 
         foreach (string response in new[] { "Response 1", "Response 2", "Response 3", "Response 4" })
         {
             var partial = Harbor.Abstractions.Models.AssistantMessage.Empty(
                 "e2e-scroll-session", "qwen2.5-coder:7b");
-            await eventBus.PublishAsync(new MessageStartEvent(partial)).ConfigureAwait(false);
-            await eventBus.PublishAsync(new MessageUpdateEvent(
-                new TextDeltaEvent("t-" + response, response), partial)).ConfigureAwait(false);
-            await eventBus.PublishAsync(new MessageEndEvent(partial.WithFinish(
-                Harbor.Abstractions.Models.StopReason.Stop,
-                new Harbor.Abstractions.Models.Usage(0, 0)))).ConfigureAwait(false);
+            await eventBus.PublishAsync(TestEvents.MessageStart(partial)).ConfigureAwait(false);
+            await eventBus.PublishAsync(TestEvents.TextDeltaUpdate("t-" + response, response, partial)).ConfigureAwait(false);
+            await eventBus.PublishAsync(TestEvents.MessageEnd(partial.WithFinish(Harbor.Abstractions.Models.StopReason.Stop, new Harbor.Abstractions.Models.Usage(0, 0)))).ConfigureAwait(false);
         }
 
         // Poll for the chat lines to render instead of a fixed delay.

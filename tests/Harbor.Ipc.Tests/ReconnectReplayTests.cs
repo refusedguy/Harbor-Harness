@@ -3,6 +3,7 @@ using Harbor.Ipc.Protocol;
 using Harbor.Ipc.Transport;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Harbor.TestKit;
 
 namespace Harbor.Ipc.Tests;
 
@@ -39,7 +40,7 @@ public class ReconnectReplayTests
             // While "offline": more events fire on the bus.
             for (int turn = 2; turn <= 6; turn++)
             {
-                await bus.PublishAsync(new TurnStartEvent(turn));
+                await bus.PublishAsync(TestEvents.TurnStart(turn));
             }
 
             // Generation 2: fresh connection presenting its last position.
@@ -62,7 +63,7 @@ public class ReconnectReplayTests
             // oldest retained envelope is far ahead of any stale client.
             for (int i = 0; i < EventBroadcaster.MaxReplayEnvelopes + 50; i++)
             {
-                await bus.PublishAsync(new TurnStartEvent(i));
+                await bus.PublishAsync(TestEvents.TurnStart(i));
             }
 
             var lf = sp.GetRequiredService<ILoggerFactory>();
@@ -119,7 +120,7 @@ public class ReconnectReplayTests
         _ = Task.Run(async () => await client.SendAsync(new SubscribeToEventsRequest(), cancellationToken));
         await server.SubscriptionReady;
 
-        await bus.PublishAsync(new TurnStartEvent(1));
+        await bus.PublishAsync(TestEvents.TurnStart());
         List<EventFrame> frames = await FrameCollector.CollectFramesAsync(client, 1, cancellationToken);
 
         // Abrupt disconnect: dispose the transport underneath the RPC

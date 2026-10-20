@@ -1,6 +1,7 @@
 using Harbor.Abstractions.Events;
 using Microsoft.Extensions.Logging.Abstractions;
 using Harbor.Registries.Events;
+using Harbor.TestKit;
 
 namespace Harbor.Core.Tests;
 
@@ -64,7 +65,7 @@ public class EventBusQueueAgePercentileTests
         });
 
         // Publish #0 without awaiting it: it parks inside the handler.
-        Task parked = bus.PublishAsync(new TurnStartEvent(0));
+        Task parked = bus.PublishAsync(TestEvents.TurnStart(0));
         await gateEntered.Task.WaitAsync(HangGuard);
         await Task.Delay(20);
 
@@ -74,12 +75,12 @@ public class EventBusQueueAgePercentileTests
         // The rest of the burst runs while #0 is still parked.
         for (int turn = 1; turn <= BurstSlowCount; turn++)
         {
-            await bus.PublishAsync(new TurnStartEvent(turn)).WaitAsync(HangGuard);
+            await bus.PublishAsync(TestEvents.TurnStart(turn)).WaitAsync(HangGuard);
         }
 
         for (int i = 0; i < BurstFastCount; i++)
         {
-            await bus.PublishAsync(new TurnStartEvent(BurstSlowCount + 1 + i)).WaitAsync(HangGuard);
+            await bus.PublishAsync(TestEvents.TurnStart(BurstSlowCount + 1 + i)).WaitAsync(HangGuard);
         }
 
         gate.TrySetResult();
@@ -121,14 +122,14 @@ public class EventBusQueueAgePercentileTests
 
         for (int i = 0; i < InMemoryEventBus.DispatchSampleWindowCapacity; i++)
         {
-            await bus.PublishAsync(new TurnStartEvent(i));
+            await bus.PublishAsync(TestEvents.TurnStart(i));
             await Assert.That(bus.DispatchSampleCount).IsEqualTo(i + 1);
         }
 
         // 20x the capacity — the count must not move.
         for (int i = 0; i < InMemoryEventBus.DispatchSampleWindowCapacity * 20; i++)
         {
-            await bus.PublishAsync(new TurnStartEvent(i));
+            await bus.PublishAsync(TestEvents.TurnStart(i));
         }
 
         await Assert.That(bus.DispatchSampleCount).IsEqualTo(InMemoryEventBus.DispatchSampleWindowCapacity);
@@ -148,7 +149,7 @@ public class EventBusQueueAgePercentileTests
 
         for (int i = 0; i < 100; i++)
         {
-            await bus.PublishAsync(new TurnStartEvent(i));
+            await bus.PublishAsync(TestEvents.TurnStart(i));
         }
 
         await Assert.That(bus.PublishedCount).IsEqualTo(0);
@@ -168,9 +169,9 @@ public class EventBusQueueAgePercentileTests
         await Assert.That(bus.DispatchDurationPercentile(0.5)).IsEqualTo(TimeSpan.Zero);
 
         bus.Subscribe(static (_, _) => ValueTask.CompletedTask);
-        await bus.PublishAsync(new TurnStartEvent(1));
+        await bus.PublishAsync(TestEvents.TurnStart());
         await Task.Delay(15);
-        await bus.PublishAsync(new TurnStartEvent(2));
+        await bus.PublishAsync(TestEvents.TurnStart(2));
 
         long slowest = bus.MaxDispatchDuration.Ticks;
         await Assert.That(slowest).IsGreaterThan(0);

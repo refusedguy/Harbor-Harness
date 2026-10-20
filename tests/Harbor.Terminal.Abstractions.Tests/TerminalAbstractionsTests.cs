@@ -7,6 +7,7 @@ using Harbor.Terminal.Abstractions.Views;
 using Microsoft.Extensions.Logging.Abstractions;
 using System.ComponentModel;
 using TUnit.Assertions;
+using Harbor.TestKit;
 
 namespace Harbor.Terminal.Abstractions.Tests;
 
@@ -175,7 +176,7 @@ public class ITuiViewModelContractTests
     public async Task ITuiViewModel_UpdateFromEventAsync_HandlesAgentStart()
     {
         var vm = new StatusBarViewModel();
-        var @event = new AgentStartEvent("test-session", [], null);
+        var @event = TestEvents.AgentStart("test-session");
         await vm.UpdateFromEventAsync(@event, CancellationToken.None);
         // "HandlesAgentStart" is the claim, so the assertion is what the
         // handler DID: the status bar leaves "idle" for "running". The

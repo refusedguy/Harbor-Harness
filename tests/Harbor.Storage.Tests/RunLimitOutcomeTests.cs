@@ -3,6 +3,7 @@ using Harbor.Abstractions.Events;
 using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Storage.Memory;
+using Harbor.TestKit;
 
 namespace Harbor.Storage.Tests;
 
@@ -93,7 +94,7 @@ public class RunLimitOutcomeTests
 
         var outcome = RunOutcome.Reconstruct(
             runId, sessionId, messages,
-            new AgentEndEvent(messages, Limit: RunLimitKind.MaxSteps));
+            TestEvents.AgentEnd(messages, limit: RunLimitKind.MaxSteps));
 
         await Assert.That(outcome.StopReason).IsEqualTo(RunStopReason.LimitExceeded);
         await Assert.That(outcome.Limit).IsEqualTo(RunLimitKind.MaxSteps);
@@ -112,7 +113,7 @@ public class RunLimitOutcomeTests
 
         var outcome = RunOutcome.Reconstruct(
             runId, sessionId, messages,
-            new AgentEndEvent(messages, Limit: RunLimitKind.Timeout));
+            TestEvents.AgentEnd(messages, limit: RunLimitKind.Timeout));
 
         await Assert.That(outcome.StopReason).IsEqualTo(RunStopReason.LimitExceeded);
         await Assert.That(outcome.Limit).IsEqualTo(RunLimitKind.Timeout);
@@ -128,9 +129,9 @@ public class RunLimitOutcomeTests
         var (sessionId, messages) = await StoredAsync();
 
         var capped = RunOutcome.Reconstruct(
-            RunId.New(), sessionId, messages, new AgentEndEvent(messages, Limit: RunLimitKind.MaxSteps));
+            RunId.New(), sessionId, messages, TestEvents.AgentEnd(messages, limit: RunLimitKind.MaxSteps));
         var finished = RunOutcome.Reconstruct(
-            RunId.New(), sessionId, messages, new AgentEndEvent(messages));
+            RunId.New(), sessionId, messages, TestEvents.AgentEnd(messages));
 
         await Assert.That(capped.StopReason).IsEqualTo(RunStopReason.LimitExceeded);
         await Assert.That(finished.StopReason).IsEqualTo(RunStopReason.Succeeded);
@@ -150,10 +151,10 @@ public class RunLimitOutcomeTests
         RunStopReason VerdictOf(AgentEndEvent end, AgentErrorEvent? error = null) =>
             RunOutcome.Reconstruct(RunId.New(), sessionId, messages, end, error).StopReason;
 
-        var succeeded = VerdictOf(new AgentEndEvent(messages));
-        var failed = VerdictOf(new AgentEndEvent(messages), new AgentErrorEvent("provider exploded"));
-        var stopped = VerdictOf(new AgentEndEvent(messages, Cancelled: true));
-        var limited = VerdictOf(new AgentEndEvent(messages, Limit: RunLimitKind.MaxSteps));
+        var succeeded = VerdictOf(TestEvents.AgentEnd(messages));
+        var failed = VerdictOf(TestEvents.AgentEnd(messages), TestEvents.AgentError("provider exploded"));
+        var stopped = VerdictOf(TestEvents.AgentEnd(messages, true));
+        var limited = VerdictOf(TestEvents.AgentEnd(messages, limit: RunLimitKind.MaxSteps));
 
         var all = new[] { succeeded, failed, stopped, limited };
         var distinct = new HashSet<RunStopReason>(all);
@@ -174,7 +175,7 @@ public class RunLimitOutcomeTests
 
         var outcome = RunOutcome.Reconstruct(
             RunId.New(), sessionId, messages,
-            new AgentEndEvent(messages, Limit: RunLimitKind.MaxSteps));
+            TestEvents.AgentEnd(messages, limit: RunLimitKind.MaxSteps));
 
         await Assert.That(outcome.StopReason).IsNotEqualTo(RunStopReason.Failed);
         await Assert.That(outcome.ErrorMessage).IsNull();

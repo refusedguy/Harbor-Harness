@@ -5,6 +5,7 @@ using Harbor.Ipc.Server;
 using Harbor.Ipc.Transport;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Harbor.TestKit;
 
 namespace Harbor.Ipc.Tests;
 
@@ -45,7 +46,7 @@ public class BroadcasterFanoutTests
                 await Assert.That(ackB is OkResponse).IsTrue();
 
                 // Session-less turn event: no lease owner ⇒ broadcast to all.
-                await bus.PublishAsync(new TurnStartEvent(7));
+                await bus.PublishAsync(TestEvents.TurnStart(7));
 
                 EventFrame? frameA = await ReadOneFrameWithin(clientA, cancellationToken);
                 EventFrame? frameB = await ReadOneFrameWithin(clientB, cancellationToken);

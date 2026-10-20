@@ -47,14 +47,14 @@ public class SkillLoopTests : IDisposable
         [
             new LlmEvent[]
             {
-                new ToolCallStartEvent("call-1", "skill"),
-                new ToolCallDeltaEvent("call-1", """{"name":"review"}"""),
-                new StepFinishEvent(0, "stop", new Usage(4, 2))
+                TestEvents.ToolCallStart(toolName: "skill"),
+                TestEvents.ToolCallDelta(argsDelta: """{"name":"review"}"""),
+                TestEvents.StepFinish(usage: new Usage(4, 2))
             },
             new LlmEvent[]
             {
-                new TextDeltaEvent("t", "reviewed"),
-                new StepFinishEvent(1, "stop", new Usage(1, 1))
+                TestEvents.TextDelta(delta: "reviewed"),
+                TestEvents.StepFinish(1, usage: new Usage(1, 1))
             }
         ]);
         var skill = new SkillTool(null, NullLogger<SkillTool>.Instance, projectSkills, null);

@@ -21,6 +21,7 @@ using Harbor.Ui.Framework.State;
 using Microsoft.Extensions.Logging.Abstractions;
 using Harbor.Registries.Agents;
 using Harbor.Registries.Providers;
+using Harbor.TestKit;
 
 namespace Harbor.App.Cli.Tests;
 
@@ -38,8 +39,7 @@ public class ToolRetryProjectionTests
         var status = new StatusViewModel();
         using var pipeline = NewPipeline(status);
 
-        pipeline.ObserveEvent(new ToolExecutionUpdateEvent(
-            "tc1", "working…", RetryAttempt: 1, RetryMaxAttempts: 3, RetryBackoffSeconds: 0.2));
+        pipeline.ObserveEvent(TestEvents.ToolExecutionUpdate(partialResult: "working…", retryAttempt: 1, retryMaxAttempts: 3, retryBackoffSeconds: 0.2));
 
         await Assert.That(status.Retry).IsEqualTo("retry 1/3 in 1s");
         await Assert.That(pipeline.TryGetRetryProjection(out int attempt, out int max, out int remaining)).IsTrue();
@@ -47,7 +47,7 @@ public class ToolRetryProjectionTests
         await Assert.That(max).IsEqualTo(3);
         await Assert.That(remaining).IsGreaterThanOrEqualTo(0);
 
-        pipeline.ObserveEvent(new ToolExecutionEndEvent("tc1", ToolResult.Success("recovered"), IsError: false));
+        pipeline.ObserveEvent(TestEvents.ToolExecutionEnd(result: ToolResult.Success("recovered")));
 
         await Assert.That(status.Retry).IsNull();
         await Assert.That(pipeline.TryGetRetryProjection(out _, out _, out _)).IsFalse();
@@ -61,9 +61,7 @@ public class ToolRetryProjectionTests
         var status = new StatusViewModel();
         using var pipeline = NewPipeline(status);
 
-        pipeline.ObserveEvent(new MessageUpdateEvent(
-            new ErrorEvent("overloaded", Kind: ProviderErrorKind.ServerError),
-            AssistantMessage.Empty("s", "m")));
+        pipeline.ObserveEvent(TestEvents.MessageUpdate(TestEvents.LlmError("overloaded", kind: ProviderErrorKind.ServerError), AssistantMessage.Empty("s", "m")));
 
         await Assert.That(status.Retry).IsEqualTo("retry 1/3 in 1s");
         await Assert.That(pipeline.TryGetRetryProjection(out int attempt, out int max, out _)).IsTrue();

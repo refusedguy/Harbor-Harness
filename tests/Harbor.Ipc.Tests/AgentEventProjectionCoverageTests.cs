@@ -38,41 +38,41 @@ public class AgentEventProjectionCoverageTests
     /// <summary>One instance per concrete <see cref="AgentEvent" /> subtype.</summary>
     private static readonly Dictionary<Type, AgentEvent> AgentEventSamples = new()
     {
-        [typeof(AgentStartEvent)] = new AgentStartEvent("s1", []),
-        [typeof(TurnStartEvent)] = new TurnStartEvent(1, "s1"),
-        [typeof(MessageStartEvent)] = new MessageStartEvent(Sample),
-        [typeof(MessageUpdateEvent)] = new MessageUpdateEvent(new TextDeltaEvent("m1", "hi"), Sample),
-        [typeof(MessageEndEvent)] = new MessageEndEvent(Sample),
+        [typeof(AgentStartEvent)] = TestEvents.AgentStart(),
+        [typeof(TurnStartEvent)] = TestEvents.TurnStart(sessionId: "s1"),
+        [typeof(MessageStartEvent)] = TestEvents.MessageStart(Sample),
+        [typeof(MessageUpdateEvent)] = TestEvents.TextDeltaUpdate("m1", "hi", Sample),
+        [typeof(MessageEndEvent)] = TestEvents.MessageEnd(Sample),
         [typeof(ToolExecutionStartEvent)] = ToolExecutionStartEvent.Create("tc1", "read", default),
-        [typeof(ToolExecutionUpdateEvent)] = new ToolExecutionUpdateEvent("tc1", "partial"),
-        [typeof(ToolExecutionEndEvent)] = new ToolExecutionEndEvent("tc1", ToolResult.Success("ok"), false),
-        [typeof(TurnEndEvent)] = new TurnEndEvent(Sample, [], "s1"),
-        [typeof(AgentEndEvent)] = new AgentEndEvent([]),
-        [typeof(AgentErrorEvent)] = new AgentErrorEvent("boom"),
-        [typeof(PluginBlockedEvent)] = new PluginBlockedEvent("my-plugin", "timeout", "30s exceeded"),
-        [typeof(CompactionStartedEvent)] = new CompactionStartedEvent("s1"),
-        [typeof(CompactionCompletedEvent)] = new CompactionCompletedEvent("s1", "summary", 2, 100, TimeSpan.FromSeconds(1)),
-        [typeof(CompactionFailedEvent)] = new CompactionFailedEvent("s1", "tokenizer blew up"),
-        [typeof(SessionStatsEvent)] = new SessionStatsEvent("s1", SessionMetadata.Empty),
-        [typeof(SessionChangedEvent)] = new SessionChangedEvent("s2")
+        [typeof(ToolExecutionUpdateEvent)] = TestEvents.ToolExecutionUpdate(partialResult: "partial"),
+        [typeof(ToolExecutionEndEvent)] = TestEvents.ToolExecutionEnd(result: ToolResult.Success("ok")),
+        [typeof(TurnEndEvent)] = TestEvents.TurnEnd(Sample, sessionId: "s1"),
+        [typeof(AgentEndEvent)] = TestEvents.AgentEnd(),
+        [typeof(AgentErrorEvent)] = TestEvents.AgentError(),
+        [typeof(PluginBlockedEvent)] = TestEvents.PluginBlocked("my-plugin", detail: "30s exceeded"),
+        [typeof(CompactionStartedEvent)] = TestEvents.CompactionStarted(),
+        [typeof(CompactionCompletedEvent)] = TestEvents.CompactionCompleted(prunedMessageCount: 2, tokensSaved: 100),
+        [typeof(CompactionFailedEvent)] = TestEvents.CompactionFailed(error: "tokenizer blew up"),
+        [typeof(SessionStatsEvent)] = TestEvents.SessionStats(),
+        [typeof(SessionChangedEvent)] = TestEvents.SessionChanged("s2")
     };
 
     /// <summary>One instance per concrete <see cref="LlmEvent" /> subtype.</summary>
     private static readonly Dictionary<Type, LlmEvent> LlmEventSamples = new()
     {
-        [typeof(TextStartEvent)] = new TextStartEvent("t1"),
-        [typeof(TextDeltaEvent)] = new TextDeltaEvent("t1", "tok"),
-        [typeof(TextEndEvent)] = new TextEndEvent("t1", "final"),
-        [typeof(ThinkingStartEvent)] = new ThinkingStartEvent("h1"),
-        [typeof(ThinkingDeltaEvent)] = new ThinkingDeltaEvent("h1", "think"),
-        [typeof(ThinkingEndEvent)] = new ThinkingEndEvent("h1", "thought"),
-        [typeof(ToolCallStartEvent)] = new ToolCallStartEvent("c1", "read"),
-        [typeof(ToolCallDeltaEvent)] = new ToolCallDeltaEvent("c1", "{\"pa"),
+        [typeof(TextStartEvent)] = TestEvents.TextStart("t1"),
+        [typeof(TextDeltaEvent)] = TestEvents.TextDelta("t1", "tok"),
+        [typeof(TextEndEvent)] = TestEvents.TextEnd("t1", "final"),
+        [typeof(ThinkingStartEvent)] = TestEvents.ThinkingStart(),
+        [typeof(ThinkingDeltaEvent)] = TestEvents.ThinkingDelta(delta: "think"),
+        [typeof(ThinkingEndEvent)] = TestEvents.ThinkingEnd(finalText: "thought"),
+        [typeof(ToolCallStartEvent)] = TestEvents.ToolCallStart("c1", "read"),
+        [typeof(ToolCallDeltaEvent)] = TestEvents.ToolCallDelta("c1", "{\"pa"),
         [typeof(ToolCallEndEvent)] = ToolCallEndEvent.Create("c1", "read", default),
-        [typeof(StepStartEvent)] = new StepStartEvent(0),
-        [typeof(StepFinishEvent)] = new StepFinishEvent(0, "tool_use", null),
-        [typeof(FinishEvent)] = new FinishEvent(),
-        [typeof(ErrorEvent)] = new ErrorEvent("stream broke")
+        [typeof(StepStartEvent)] = TestEvents.StepStart(),
+        [typeof(StepFinishEvent)] = TestEvents.StepFinish(finishReason: "tool_use"),
+        [typeof(FinishEvent)] = TestEvents.LlmFinish(),
+        [typeof(ErrorEvent)] = TestEvents.LlmError("stream broke")
     };
 
     /// <summary>
@@ -319,11 +319,11 @@ public class AgentEventProjectionCoverageTests
     {
         var state = new ProjectionState();
 
-        AgentEventProjector.Project(new AgentStartEvent("run-a", []), state);
+        AgentEventProjector.Project(TestEvents.AgentStart("run-a"), state);
         await Assert.That(state.ActiveSessionId).IsEqualTo("run-a");
 
-        AgentEventProjector.Project(new TurnStartEvent(4), state);
-        var turnEnd = AgentEventProjector.Project(new TurnEndEvent(Sample, []), state);
+        AgentEventProjector.Project(TestEvents.TurnStart(4), state);
+        var turnEnd = AgentEventProjector.Project(TestEvents.TurnEnd(Sample), state);
 
         // TurnStart carried no session id → resolved against the active run.
         await Assert.That(turnEnd.IsEmitted).IsTrue();
@@ -331,8 +331,8 @@ public class AgentEventProjectionCoverageTests
         await Assert.That(((HarborEvent.TurnEnd)turnEnd.Event!).Turn).IsEqualTo(4);
 
         // A second run in the same session restarts the counter.
-        AgentEventProjector.Project(new AgentStartEvent("run-a", []), state);
-        var restarted = AgentEventProjector.Project(new TurnEndEvent(Sample, [], "run-a"), state);
+        AgentEventProjector.Project(TestEvents.AgentStart("run-a"), state);
+        var restarted = AgentEventProjector.Project(TestEvents.TurnEnd(Sample, sessionId: "run-a"), state);
         await Assert.That(((HarborEvent.TurnEnd)restarted.Event!).Turn).IsEqualTo(0);
     }
 

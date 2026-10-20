@@ -140,9 +140,9 @@ public class AgentLoopTests
     {
         // Script: a single text run + step finish. No tool calls → loop exits after turn 1.
         var client = new MockLlmClient(
-            new TextDeltaEvent("0", "Hello, "),
-            new TextDeltaEvent("0", "World!"),
-            new StepFinishEvent(0, "stop", new Usage(10, 5)));
+            TestEvents.TextDelta("0", "Hello, "),
+            TestEvents.TextDelta("0", "World!"),
+            TestEvents.StepFinish(usage: new Usage(10, 5)));
 
         var (loop, _, _, _, bus) = CreateLoop(client);
         var session = CreateSession();
@@ -170,9 +170,9 @@ public class AgentLoopTests
     public async Task RunAsync_TextDeltas_AreJoinedInAssistantMessage()
     {
         var client = new MockLlmClient(
-            new TextDeltaEvent("0", "Hello, "),
-            new TextDeltaEvent("0", "World!"),
-            new StepFinishEvent(0, "stop", new Usage(10, 5)));
+            TestEvents.TextDelta("0", "Hello, "),
+            TestEvents.TextDelta("0", "World!"),
+            TestEvents.StepFinish(usage: new Usage(10, 5)));
 
         var (loop, _, _, _, _) = CreateLoop(client);
         var session = CreateSession();
@@ -190,8 +190,8 @@ public class AgentLoopTests
     {
         var usage = new Usage(100, 50);
         var client = new MockLlmClient(
-            new TextDeltaEvent("0", "ok"),
-            new StepFinishEvent(0, "stop", usage));
+            TestEvents.TextDelta("0", "ok"),
+            TestEvents.StepFinish(usage: usage));
 
         var (loop, _, _, _, bus) = CreateLoop(client);
         var statsUpdates = new List<Usage>();
@@ -217,7 +217,7 @@ public class AgentLoopTests
     public async Task RunAsync_ErrorEvent_ReturnsFailure()
     {
         var client = new MockLlmClient(
-            new ErrorEvent("upstream blew up"));
+            TestEvents.LlmError("upstream blew up"));
 
         var (loop, _, _, _, bus) = CreateLoop(client);
         var session = CreateSession();
@@ -235,7 +235,7 @@ public class AgentLoopTests
     [Test]
     public async Task RunAsync_UnknownModel_ReturnsFailure()
     {
-        var client = new MockLlmClient(new TextDeltaEvent("0", "x"), new StepFinishEvent(0, "stop", null));
+        var client = new MockLlmClient(TestEvents.TextDelta("0", "x"), TestEvents.StepFinish());
         var (loop, _, _, _, _) = CreateLoop(client);
         var session = CreateSession();
 
@@ -251,9 +251,9 @@ public class AgentLoopTests
     public async Task RunAsync_ThinkingDeltaFollowedByText_BothAreAppended()
     {
         var client = new MockLlmClient(
-            new ThinkingDeltaEvent("0", "Let me think..."),
-            new TextDeltaEvent("0", "Answer"),
-            new StepFinishEvent(0, "stop", new Usage(1, 1)));
+            TestEvents.ThinkingDelta("0", "Let me think..."),
+            TestEvents.TextDelta("0", "Answer"),
+            TestEvents.StepFinish(usage: new Usage(1, 1)));
 
         var (loop, _, _, _, _) = CreateLoop(client);
         var session = CreateSession();
@@ -280,8 +280,8 @@ public class AgentLoopTests
     {
         var client = new ScriptedLlmClient(
             ScriptedLlmClient.CompactableModel,
-            new LlmEvent[] { new TextDeltaEvent("s", "summary text"), new StepFinishEvent(0, "stop", new Usage(0, 10)) },
-            new LlmEvent[] { new TextDeltaEvent("t", "done"), new StepFinishEvent(0, "stop", new Usage(5, 5)) });
+            new LlmEvent[] { TestEvents.TextDelta("s", "summary text"), TestEvents.StepFinish(usage: new Usage(0, 10)) },
+            new LlmEvent[] { TestEvents.TextDelta(delta: "done"), TestEvents.StepFinish(usage: new Usage(5, 5)) });
 
         var (loop, _, _, _, bus) = CreateLoop(client, ConfigureAggressiveCompaction);
         var session = CreateSeededSession(seedCount: 20);
@@ -332,14 +332,14 @@ public class AgentLoopTests
         // in a tool call, (3) turn-2 stream ending the run.
         var client = new ScriptedLlmClient(
             ScriptedLlmClient.CompactableModel,
-            new LlmEvent[] { new TextDeltaEvent("s", "summary text"), new StepFinishEvent(0, "stop", new Usage(0, 10)) },
+            new LlmEvent[] { TestEvents.TextDelta("s", "summary text"), TestEvents.StepFinish(usage: new Usage(0, 10)) },
             new LlmEvent[]
             {
-                new ToolCallStartEvent("call-1", "read"),
-                new ToolCallDeltaEvent("call-1", "{}"),
-                new StepFinishEvent(0, "tool_use", new Usage(10, 5))
+                TestEvents.ToolCallStart(toolName: "read"),
+                TestEvents.ToolCallDelta(),
+                TestEvents.StepFinish(finishReason: "tool_use", usage: new Usage(10, 5))
             },
-            new LlmEvent[] { new TextDeltaEvent("t", "done"), new StepFinishEvent(0, "stop", new Usage(5, 5)) });
+            new LlmEvent[] { TestEvents.TextDelta(delta: "done"), TestEvents.StepFinish(usage: new Usage(5, 5)) });
 
         var (loop, _, _, _, bus) = CreateLoop(client, ConfigureAggressiveCompaction);
         var session = CreateSeededSession(seedCount: 20);

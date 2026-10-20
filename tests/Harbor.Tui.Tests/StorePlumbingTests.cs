@@ -6,6 +6,7 @@ using Harbor.Ui.Framework.Projection;
 using Harbor.Ui.Framework.State;
 using TUnit.Assertions;
 using TUnit.Assertions.Extensions;
+using Harbor.TestKit;
 
 namespace Harbor.Tui.Tests;
 
@@ -94,7 +95,7 @@ public class StorePlumbingTests
         var store = new UiStore();
         using var args = JsonDocument.Parse("{\"path\":\"f.txt\"}");
         store.Dispatch(new ChatAppMsg.Agent(new ToolExecutionStartEvent("tc_1", "read", args.RootElement)));
-        store.Dispatch(new ChatAppMsg.Agent(new ToolExecutionEndEvent("tc_1", ToolResult.Success("contents"), false)));
+        store.Dispatch(new ChatAppMsg.Agent(TestEvents.ToolExecutionEnd("tc_1", ToolResult.Success("contents"))));
 
         var lines = ToolCallKey.FindLines(store.State, "tc_1");
         await Assert.That(lines.Count).IsEqualTo(2);

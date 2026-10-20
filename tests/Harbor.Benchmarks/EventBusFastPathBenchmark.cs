@@ -2,6 +2,7 @@ using BenchmarkDotNet.Attributes;
 using Harbor.Abstractions.Events;
 using Harbor.Registries.Events;
 using Microsoft.Extensions.Logging.Abstractions;
+using Harbor.TestKit;
 
 namespace Harbor.Benchmarks;
 /// <summary>
@@ -76,7 +77,7 @@ public class EventBusFastPathBenchmark
     [GlobalSetup]
     public void Setup()
     {
-        _event = new TurnStartEvent(42);
+        _event = TestEvents.TurnStart(42);
 
         // Qualifies: 0 subscribers, nothing to retain, no mandatory sink.
         _qualifying = new InMemoryEventBus(NullLogger<InMemoryEventBus>.Instance, 0);

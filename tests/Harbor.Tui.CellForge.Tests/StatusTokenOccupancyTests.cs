@@ -2,6 +2,7 @@ using Harbor.Abstractions.Events;
 using Harbor.Abstractions.Models;
 using Harbor.Tui.CellForge.Streaming;
 using Harbor.Tui.CellForge.Widgets;
+using Harbor.TestKit;
 
 namespace Harbor.Tui.CellForge.Tests;
 
@@ -42,14 +43,10 @@ public class StatusTokenOccupancyTests
         // 10 270 prompt tokens every time, and the core accumulates 61 620.
         for (int turn = 0; turn < 6; turn++)
         {
-            await bus.PublishAsync(new MessageUpdateEvent(
-                new StepFinishEvent(turn, "stop", new Usage(RequestInput, RequestOutput)),
-                AssistantMessage.Empty("s1", "m")));
+            await bus.PublishAsync(TestEvents.StepFinishUpdate(turn, usage: new Usage(RequestInput, RequestOutput)));
         }
 
-        await bus.PublishAsync(new SessionStatsEvent(
-            "s1",
-            new SessionMetadata(0.1878m, 6 * RequestInput, 6 * RequestOutput, 0, 0, 0, 6, null)));
+        await bus.PublishAsync(TestEvents.SessionStats(metadata: new SessionMetadata(0.1878m, 6 * RequestInput, 6 * RequestOutput, 0, 0, 0, 6, null)));
 
         await Assert.That(status.Tokens).IsEqualTo("10.3k↑ 198↓");
         await Assert.That(status.Cost).IsEqualTo("$0.1878");
@@ -68,9 +65,7 @@ public class StatusTokenOccupancyTests
         var status = new StatusViewModel { Model = "m" };
         using var bridge = new ChatScreenBridge(bus, panel, status);
 
-        await bus.PublishAsync(new SessionStatsEvent(
-            "s1",
-            new SessionMetadata(0.1878m, 6 * RequestInput, 6 * RequestOutput, 0, 0, 0, 6, null)));
+        await bus.PublishAsync(TestEvents.SessionStats(metadata: new SessionMetadata(0.1878m, 6 * RequestInput, 6 * RequestOutput, 0, 0, 0, 6, null)));
 
         await Assert.That(status.Tokens).IsEqualTo("61.6k↑ 198↓");
     }

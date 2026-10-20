@@ -2,6 +2,7 @@ using System.Text.Json;
 using Harbor.Abstractions.Events;
 using Harbor.Transport.Remote;
 using TUnit.Assertions;
+using Harbor.TestKit;
 
 namespace Harbor.Transport.Remote.Tests;
 
@@ -21,7 +22,7 @@ public class UiTransportPacketCodecTests
     {
         var packet = new UiTransportPacket(
             Type: "turn_start",
-            Event: new TurnStartEvent(TurnIndex: 1, SessionId: "s-1"),
+            Event: TestEvents.TurnStart(sessionId: "s-1"),
             Timestamp: FixedTimestamp);
 
         byte[] bytes = JsonSerializer.SerializeToUtf8Bytes(packet, RemoteJsonContext.Default.UiTransportPacket);
@@ -58,7 +59,7 @@ public class UiTransportPacketCodecTests
     [Test]
     public async Task FromEvent_Packet_PreservesTypeAndPayload()
     {
-        var packet = UiTransportPacket.FromEvent(new TurnStartEvent(TurnIndex: 2, SessionId: "s-2"));
+        var packet = UiTransportPacket.FromEvent(TestEvents.TurnStart(2, "s-2"));
 
         byte[] bytes = JsonSerializer.SerializeToUtf8Bytes(packet, RemoteJsonContext.Default.UiTransportPacket);
         var decoded = JsonSerializer.Deserialize(bytes, RemoteJsonContext.Default.UiTransportPacket);

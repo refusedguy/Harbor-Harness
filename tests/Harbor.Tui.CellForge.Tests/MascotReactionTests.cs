@@ -5,6 +5,7 @@ using Harbor.Tui.CellForge.Rendering;
 using Harbor.Tui.CellForge.Streaming;
 using Harbor.Tui.CellForge.Widgets;
 using TUnit.Core;
+using Harbor.TestKit;
 
 namespace Harbor.Tui.CellForge.Tests;
 
@@ -294,18 +295,18 @@ public class MascotReactionTests
         var status = new StatusViewModel();
         using var bridge = new ChatScreenBridge(bus, panel, status);
 
-        await bus.PublishAsync(new AgentStartEvent("s1", []));
+        await bus.PublishAsync(TestEvents.AgentStart());
         await Assert.That(status.ConsumeMascotSignal()).IsEqualTo(MascotReaction.None);
 
-        await bus.PublishAsync(new AgentErrorEvent("boom"));
+        await bus.PublishAsync(TestEvents.AgentError());
         await Assert.That(status.ConsumeMascotSignal()).IsEqualTo(MascotReaction.ErrorBlink);
         await Assert.That(status.ConsumeMascotSignal()).IsEqualTo(MascotReaction.None);
 
-        await bus.PublishAsync(new AgentEndEvent([])); // errored run — no bounce
+        await bus.PublishAsync(TestEvents.AgentEnd()); // errored run — no bounce
         await Assert.That(status.ConsumeMascotSignal()).IsEqualTo(MascotReaction.None);
 
-        await bus.PublishAsync(new AgentStartEvent("s1", []));
-        await bus.PublishAsync(new AgentEndEvent([])); // clean run — bounce
+        await bus.PublishAsync(TestEvents.AgentStart());
+        await bus.PublishAsync(TestEvents.AgentEnd()); // clean run — bounce
         await Assert.That(status.ConsumeMascotSignal()).IsEqualTo(MascotReaction.SuccessBounce);
 
         _ = bridge.BeginApprovalGate("bash", "ls -la /tmp");

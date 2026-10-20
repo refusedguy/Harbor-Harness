@@ -633,7 +633,7 @@ public sealed class StorePathScalingGates
         int projects = 0;
         for (int m = 0; m < Messages; m++)
         {
-            store.Dispatch(new ChatAppMsg.Agent(new MessageStartEvent(partial)));
+            store.Dispatch(new ChatAppMsg.Agent(TestEvents.MessageStart(partial)));
             dispatches++;
             _ = projector.Project(store.State);
             projects++;
@@ -641,13 +641,13 @@ public sealed class StorePathScalingGates
             for (int i = 0; i < perMessage; i++)
             {
                 store.Dispatch(new ChatAppMsg.Agent(
-                    new MessageUpdateEvent(new TextDeltaEvent("m", chunk), partial)));
+                    TestEvents.TextDeltaUpdate("m", chunk, partial)));
                 dispatches++;
                 _ = projector.Project(store.State);
                 projects++;
             }
 
-            store.Dispatch(new ChatAppMsg.Agent(new MessageEndEvent(partial)));
+            store.Dispatch(new ChatAppMsg.Agent(TestEvents.MessageEnd(partial)));
             dispatches++;
             _ = projector.Project(store.State);
             projects++;
@@ -795,7 +795,7 @@ public sealed class StorePathScalingGates
 
         for (int m = 0; m < Messages; m++)
         {
-            store.Dispatch(new ChatAppMsg.Agent(new MessageStartEvent(partial)));
+            store.Dispatch(new ChatAppMsg.Agent(TestEvents.MessageStart(partial)));
             dispatches++;
             Observe();
 
@@ -805,7 +805,7 @@ public sealed class StorePathScalingGates
             for (int i = 0; i < perMessage; i++)
             {
                 store.Dispatch(new ChatAppMsg.Agent(
-                    new MessageUpdateEvent(new TextDeltaEvent("m", chunk), partial)));
+                    TestEvents.TextDeltaUpdate("m", chunk, partial)));
                 dispatches++;
 
                 policyPending += chunk.Length;
@@ -819,7 +819,7 @@ public sealed class StorePathScalingGates
                 Observe();
             }
 
-            store.Dispatch(new ChatAppMsg.Agent(new MessageEndEvent(partial)));
+            store.Dispatch(new ChatAppMsg.Agent(TestEvents.MessageEnd(partial)));
             dispatches++;
             folds++;
 

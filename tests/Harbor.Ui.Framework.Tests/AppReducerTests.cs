@@ -6,6 +6,7 @@ using Harbor.Ui.Framework.State;
 using Harbor.Abstractions.Models;
 using TUnit.Assertions;
 using TUnit.Assertions.Extensions;
+using Harbor.TestKit;
 
 namespace Harbor.Ui.Framework.Tests;
 
@@ -20,7 +21,7 @@ public class AppReducerTests
     public async Task AgentStartEvent_DelegatesToReduce_SetsRunningStatus()
     {
         var state = new UiState();
-        var result = ChatAppReducer.Update(state, new ChatAppMsg.Agent(new AgentStartEvent("s", [])));
+        var result = ChatAppReducer.Update(state, new ChatAppMsg.Agent(TestEvents.AgentStart("s")));
         await Assert.That(result.State.Chat.Status).IsEqualTo("running");
         await Assert.That(result.State.Chat.IsAgentRunning).IsTrue();
         await Assert.That(result.State.Ui.ScrollOffset).IsEqualTo(0);
@@ -30,7 +31,7 @@ public class AppReducerTests
     public async Task MessageStartEvent_DelegatesToReduce_SetsStreaming()
     {
         var state = new UiState();
-        var result = ChatAppReducer.Update(state, new ChatAppMsg.Agent(new MessageStartEvent(AssistantMessage.Empty("s", "m"))));
+        var result = ChatAppReducer.Update(state, new ChatAppMsg.Agent(TestEvents.MessageStart(AssistantMessage.Empty("s", "m"))));
         await Assert.That(result.State.Chat.IsStreaming).IsTrue();
         await Assert.That(result.State.Chat.Status).IsEqualTo("running");
     }
@@ -39,7 +40,7 @@ public class AppReducerTests
     public async Task AgentEndEvent_DelegatesToReduce_SetsIdle()
     {
         var state = new UiState { Chat = ChatDomainState.Empty with { IsAgentRunning = true } };
-        var result = ChatAppReducer.Update(state, new ChatAppMsg.Agent(new AgentEndEvent([])));
+        var result = ChatAppReducer.Update(state, new ChatAppMsg.Agent(TestEvents.AgentEnd()));
         await Assert.That(result.State.Chat.Status).IsEqualTo("idle");
         await Assert.That(result.State.Chat.IsAgentRunning).IsFalse();
     }
@@ -48,7 +49,7 @@ public class AppReducerTests
     public async Task AgentErrorEvent_AddsErrorLineAndSetsStatus()
     {
         var state = new UiState();
-        var result = ChatAppReducer.Update(state, new ChatAppMsg.Agent(new AgentErrorEvent("oops")));
+        var result = ChatAppReducer.Update(state, new ChatAppMsg.Agent(TestEvents.AgentError("oops")));
         await Assert.That(result.State.Chat.Lines.Length).IsEqualTo(1);
         await Assert.That(result.State.Chat.Lines[0].Role).IsEqualTo(ChatRole.Error);
         await Assert.That(result.State.Chat.Status).IsEqualTo("error");

@@ -1,6 +1,7 @@
 using Harbor.Abstractions.Events;
 using Harbor.Abstractions.Models;
 using Harbor.Registries.Events;
+using Harbor.TestKit;
 
 namespace Harbor.Core.Tests;
 
@@ -28,7 +29,7 @@ public class EventTopologySemanticsTests
 
         for (int i = 0; i < 20; i++)
         {
-            await bus.PublishAsync(new TurnStartEvent(i));
+            await bus.PublishAsync(TestEvents.TurnStart(i));
         }
 
         await Assert.That(seen.Count).IsEqualTo(20);
@@ -57,7 +58,7 @@ public class EventTopologySemanticsTests
 
         for (int i = 0; i < 10; i++)
         {
-            await bus.PublishAsync(new TurnStartEvent(i));
+            await bus.PublishAsync(TestEvents.TurnStart(i));
         }
 
         await Assert.That(first.Count).IsEqualTo(10);
@@ -79,8 +80,8 @@ public class EventTopologySemanticsTests
             await Task.CompletedTask;
         });
 
-        await bus.PublishAsync(new TurnStartEvent(1));
-        await bus.PublishAsync(new TurnStartEvent(2));
+        await bus.PublishAsync(TestEvents.TurnStart());
+        await bus.PublishAsync(TestEvents.TurnStart(2));
 
         // No drain/grace period: when PublishAsync returns, fast subscribers
         // have processed the event (docs/EVENT_TOPOLOGY.md G5).
@@ -98,7 +99,7 @@ public class EventTopologySemanticsTests
 
         for (int i = 0; i < 5; i++)
         {
-            await bus.PublishAsync(new TurnStartEvent(i));
+            await bus.PublishAsync(TestEvents.TurnStart(i));
         }
 
         var tail = bus.GetScrollback(5);
@@ -116,8 +117,8 @@ public class EventTopologySemanticsTests
         // two publishes below are the ones the snapshot is expected to carry.
         _ = bus.GetScrollback(8);
 
-        await bus.PublishAsync(new TurnStartEvent(0));
-        await bus.PublishAsync(new TurnStartEvent(1));
+        await bus.PublishAsync(TestEvents.TurnStart(0));
+        await bus.PublishAsync(TestEvents.TurnStart());
 
         var late = new List<int>();
         bus.Subscribe(async (evt, ct) =>
@@ -126,7 +127,7 @@ public class EventTopologySemanticsTests
             await Task.CompletedTask;
         });
 
-        await bus.PublishAsync(new TurnStartEvent(2));
+        await bus.PublishAsync(TestEvents.TurnStart(2));
 
         // Subscribe never replays: only the post-subscription event arrives.
         await Assert.That(late.Count).IsEqualTo(1);
@@ -150,10 +151,10 @@ public class EventTopologySemanticsTests
             await Task.CompletedTask;
         });
 
-        await bus.PublishAsync(new TurnStartEvent(1));
+        await bus.PublishAsync(TestEvents.TurnStart());
         sub.Dispose();
         sub.Dispose(); // idempotent — must not throw
-        await bus.PublishAsync(new TurnStartEvent(2));
+        await bus.PublishAsync(TestEvents.TurnStart(2));
 
         await Assert.That(received.Count).IsEqualTo(1);
     }

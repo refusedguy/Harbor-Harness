@@ -1,6 +1,7 @@
 using Harbor.Abstractions.Events;
 using TUnit.Assertions;
 using Harbor.Registries.Events;
+using Harbor.TestKit;
 
 namespace Harbor.Registries.Tests;
 
@@ -33,7 +34,7 @@ public class EventBusSubscriptionVisibilityTests
                        return ValueTask.CompletedTask;
                    }))
             {
-                await bus.PublishAsync(new TurnStartEvent(i));
+                await bus.PublishAsync(TestEvents.TurnStart(i));
             }
 
             await Assert.That(seen).IsEqualTo(1)
@@ -59,8 +60,8 @@ public class EventBusSubscriptionVisibilityTests
                    return ValueTask.CompletedTask;
                }))
         {
-            await bus.PublishAsync(new TurnStartEvent(1));
-            await bus.PublishAsync(new TurnStartEvent(2));
+            await bus.PublishAsync(TestEvents.TurnStart());
+            await bus.PublishAsync(TestEvents.TurnStart(2));
         }
 
         await Assert.That(seen).IsEqualTo(2);

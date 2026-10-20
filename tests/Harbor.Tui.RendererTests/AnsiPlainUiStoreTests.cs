@@ -32,11 +32,11 @@ public class AnsiPlainUiStoreTests
         {
             await renderer.InitializeAsync();
             var partial = AssistantMessage.Empty("s1", "stub-1");
-            await renderer.RenderAsync(new MessageStartEvent(partial));
-            await renderer.RenderAsync(new MessageUpdateEvent(new TextDeltaEvent("0", "Hello"), partial));
-            await renderer.RenderAsync(new MessageUpdateEvent(new TextDeltaEvent("0", ", "), partial));
-            await renderer.RenderAsync(new MessageUpdateEvent(new TextDeltaEvent("0", "world!"), partial));
-            await renderer.RenderAsync(new MessageEndEvent(partial));
+            await renderer.RenderAsync(TestEvents.MessageStart(partial));
+            await renderer.RenderAsync(TestEvents.TextDeltaUpdate("0", "Hello", partial));
+            await renderer.RenderAsync(TestEvents.TextDeltaUpdate("0", ", ", partial));
+            await renderer.RenderAsync(TestEvents.TextDeltaUpdate("0", "world!", partial));
+            await renderer.RenderAsync(TestEvents.MessageEnd(partial));
         }
         finally
         {
@@ -64,7 +64,7 @@ public class AnsiPlainUiStoreTests
                 new ToolPathLimitArgs("README.md", 10),
                 TestJsonContext.Default.ToolPathLimitArgs);
             await renderer.RenderAsync(new ToolExecutionStartEvent("tc_1", "read", args));
-            await renderer.RenderAsync(new ToolExecutionEndEvent("tc_1", ToolResult.Success("[0001] # Harbor"), IsError: false));
+            await renderer.RenderAsync(TestEvents.ToolExecutionEnd("tc_1", ToolResult.Success("[0001] # Harbor")));
         }
         finally
         {

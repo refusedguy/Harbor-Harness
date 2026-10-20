@@ -8,6 +8,7 @@ using Harbor.Ui.Framework.State;
 using Microsoft.Extensions.Logging.Abstractions;
 using TUnit.Assertions;
 using TUnit.Assertions.Extensions;
+using Harbor.TestKit;
 
 /// <summary>
 ///     Issue #840 — the <b>line</b> half of the compaction lifecycle, in the
@@ -84,7 +85,7 @@ public class CompactionLifecycleLineTests
         using var renderer = new PlainTuiRenderer(writer, new UiStore());
         await renderer.InitializeAsync();
 
-        await renderer.RenderAsync(new CompactionStartedEvent("s1"));
+        await renderer.RenderAsync(TestEvents.CompactionStarted());
         await renderer.RenderAsync(Failure());
 
         string output = writer.ToString();
@@ -114,9 +115,9 @@ public class CompactionLifecycleLineTests
     {
         var members = new Dictionary<string, Func<AgentEvent>>(StringComparer.Ordinal)
         {
-            ["CompactionStartedEvent"] = () => new CompactionStartedEvent("s1"),
+            ["CompactionStartedEvent"] = () => TestEvents.CompactionStarted(),
             ["CompactionCompletedEvent"] = () =>
-                new CompactionCompletedEvent("s1", "summary", 3, 100, TimeSpan.FromSeconds(1)),
+                TestEvents.CompactionCompleted(prunedMessageCount: 3, tokensSaved: 100),
             ["CompactionFailedEvent"] = () => Failure(),
         };
 
@@ -197,7 +198,7 @@ public class CompactionLifecycleLineTests
         await renderer.InitializeAsync();
 
         await renderer.RenderAsync(
-            new CompactionCompletedEvent("s1", "summary", 3, 100, TimeSpan.FromSeconds(1)));
+            TestEvents.CompactionCompleted(prunedMessageCount: 3, tokensSaved: 100));
         string successNotice = string.Join(' ', runner.Single.Arguments);
 
         var second = new RecordingNotificationRunner();
@@ -228,7 +229,7 @@ public class CompactionLifecycleLineTests
             NullLogger<NotificationTuiRenderer>.Instance, runner);
         await renderer.InitializeAsync();
 
-        await renderer.RenderAsync(new CompactionStartedEvent("s1"));
+        await renderer.RenderAsync(TestEvents.CompactionStarted());
 
         await Assert.That(runner.Count).IsEqualTo(0)
             .Because("compaction starts repeatedly through a long run; toasting each "

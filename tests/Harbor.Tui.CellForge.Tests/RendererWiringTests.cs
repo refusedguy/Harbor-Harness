@@ -55,8 +55,8 @@ public class RendererWiringTests
         bool Invoke(TuiViewPlacement placement, AgentEvent evt) =>
             (bool)method.Invoke(renderer, [placement, evt])!;
 
-        var start = new AgentStartEvent("s1", Array.Empty<AgentMessage>());
-        var end = new AgentEndEvent(Array.Empty<AgentMessage>());
+        var start = TestEvents.AgentStart();
+        var end = TestEvents.AgentEnd();
 
         await Assert.That(Invoke(TuiViewPlacement.ChatHistory, start)).IsTrue();
         await Assert.That(Invoke(TuiViewPlacement.Input, start)).IsTrue();
@@ -167,8 +167,8 @@ public class RendererWiringTests
         await renderer.InitializeAsync();
 
         var user = new UserMessage("m1", "s1", DateTimeOffset.UtcNow, "hello e2e", "code", "model");
-        await renderer.RenderAsync(new AgentStartEvent("s1", new AgentMessage[] { user }));
-        await renderer.RenderAsync(new AgentEndEvent(Array.Empty<AgentMessage>()));
+        await renderer.RenderAsync(TestEvents.AgentStart(messages: new AgentMessage[] { user }));
+        await renderer.RenderAsync(TestEvents.AgentEnd());
 
         string text = backend.Text;
         await Assert.That(text.Contains("[user]")).IsTrue();

@@ -63,7 +63,7 @@ public class ProjectionCoverageTests
     public async Task Status_Running_AfterAgentStart()
     {
         using var harness = await CreateAsync();
-        await harness.Renderer.RenderAsync(new AgentStartEvent("s1", []));
+        await harness.Renderer.RenderAsync(TestEvents.AgentStart());
         await Assert.That(harness.Status.Status).IsEqualTo("running");
     }
 
@@ -71,8 +71,8 @@ public class ProjectionCoverageTests
     public async Task Status_Idle_AfterAgentEnd()
     {
         using var harness = await CreateAsync();
-        await harness.Renderer.RenderAsync(new AgentStartEvent("s1", []));
-        await harness.Renderer.RenderAsync(new AgentEndEvent([]));
+        await harness.Renderer.RenderAsync(TestEvents.AgentStart());
+        await harness.Renderer.RenderAsync(TestEvents.AgentEnd());
         await Assert.That(harness.Status.Status).IsEqualTo("idle");
     }
 
@@ -80,7 +80,7 @@ public class ProjectionCoverageTests
     public async Task Status_Error_AfterAgentError()
     {
         using var harness = await CreateAsync();
-        await harness.Renderer.RenderAsync(new AgentErrorEvent("boom"));
+        await harness.Renderer.RenderAsync(TestEvents.AgentError());
         await Assert.That(harness.Status.Status).IsEqualTo("error");
     }
 
@@ -88,7 +88,7 @@ public class ProjectionCoverageTests
     public async Task Status_Compacting_AfterCompactionStarted()
     {
         using var harness = await CreateAsync();
-        await harness.Renderer.RenderAsync(new CompactionStartedEvent("s1"));
+        await harness.Renderer.RenderAsync(TestEvents.CompactionStarted());
         await Assert.That(harness.Status.Status).IsEqualTo("compacting");
     }
 
@@ -113,11 +113,9 @@ public class ProjectionCoverageTests
     {
         using var harness = await CreateAsync();
         var partial = Partial();
-        await harness.Renderer.RenderAsync(new MessageStartEvent(partial));
-        await harness.Renderer.RenderAsync(new MessageUpdateEvent(
-            new StepFinishEvent(0, "stop", new Usage(1000, 500)), partial));
-        await harness.Renderer.RenderAsync(new SessionStatsEvent(
-            "s1", new SessionMetadata(0.0105m, 1000, 500, 0, 400, 100, 1, null)));
+        await harness.Renderer.RenderAsync(TestEvents.MessageStart(partial));
+        await harness.Renderer.RenderAsync(TestEvents.StepFinishUpdate(usage: new Usage(1000, 500), partial: partial));
+        await harness.Renderer.RenderAsync(TestEvents.SessionStats(metadata: new SessionMetadata(0.0105m, 1000, 500, 0, 400, 100, 1, null)));
 
         await Assert.That(harness.Status.TokensIn).IsEqualTo(1000);
         await Assert.That(harness.Status.TokensOut).IsEqualTo(500);
@@ -132,9 +130,7 @@ public class ProjectionCoverageTests
     public async Task UnknownPrice_ReachesTheRendererAsUnpriced()
     {
         using var harness = await CreateAsync();
-        await harness.Renderer.RenderAsync(new SessionStatsEvent(
-            "s1",
-            new SessionMetadata(0m, 61_600, 196, 0, 0, 0, 1, null, IsCostKnown: false)));
+        await harness.Renderer.RenderAsync(TestEvents.SessionStats(metadata: new SessionMetadata(0m, 61_600, 196, 0, 0, 0, 1, null, IsCostKnown: false)));
 
         await Assert.That(harness.Status.IsCostKnown).IsFalse();
         await Assert.That(harness.Status.Formatted).Contains("—");
@@ -146,9 +142,9 @@ public class ProjectionCoverageTests
     {
         using var harness = await CreateAsync();
         var partial = Partial();
-        await harness.Renderer.RenderAsync(new MessageStartEvent(partial));
-        await harness.Renderer.RenderAsync(new MessageUpdateEvent(new TextDeltaEvent("t1", "Hello "), partial));
-        await harness.Renderer.RenderAsync(new MessageUpdateEvent(new TextDeltaEvent("t1", "World"), partial));
+        await harness.Renderer.RenderAsync(TestEvents.MessageStart(partial));
+        await harness.Renderer.RenderAsync(TestEvents.TextDeltaUpdate("t1", "Hello ", partial));
+        await harness.Renderer.RenderAsync(TestEvents.TextDeltaUpdate("t1", "World", partial));
         await Assert.That(harness.Chat.IsStreaming).IsTrue();
         await Assert.That(harness.Chat.StreamingText).IsEqualTo("Hello World");
     }
@@ -158,8 +154,8 @@ public class ProjectionCoverageTests
     {
         using var harness = await CreateAsync();
         var partial = Partial();
-        await harness.Renderer.RenderAsync(new MessageStartEvent(partial));
-        await harness.Renderer.RenderAsync(new MessageUpdateEvent(new ThinkingDeltaEvent("h1", "quiet-plan"), partial));
+        await harness.Renderer.RenderAsync(TestEvents.MessageStart(partial));
+        await harness.Renderer.RenderAsync(TestEvents.ThinkingDeltaUpdate(delta: "quiet-plan", partial: partial));
         await Assert.That(harness.Chat.ThinkingText).IsEqualTo("quiet-plan");
         await Assert.That(harness.Chat.IsThinking).IsTrue();
     }
@@ -169,10 +165,10 @@ public class ProjectionCoverageTests
     {
         using var harness = await CreateAsync();
         var partial = Partial();
-        await harness.Renderer.RenderAsync(new MessageStartEvent(partial));
-        await harness.Renderer.RenderAsync(new MessageUpdateEvent(new TextDeltaEvent("t1", "draft"), partial));
-        await harness.Renderer.RenderAsync(new MessageUpdateEvent(new ThinkingDeltaEvent("h1", "musing"), partial));
-        await harness.Renderer.RenderAsync(new MessageEndEvent(partial));
+        await harness.Renderer.RenderAsync(TestEvents.MessageStart(partial));
+        await harness.Renderer.RenderAsync(TestEvents.TextDeltaUpdate("t1", "draft", partial));
+        await harness.Renderer.RenderAsync(TestEvents.ThinkingDeltaUpdate(delta: "musing", partial: partial));
+        await harness.Renderer.RenderAsync(TestEvents.MessageEnd(partial));
         await Assert.That(harness.Chat.IsStreaming).IsFalse();
         await Assert.That(harness.Chat.IsThinking).IsFalse();
         await Assert.That(harness.Chat.StreamingText).IsEqualTo(string.Empty);
@@ -188,12 +184,12 @@ public class ProjectionCoverageTests
         var partial = Partial();
         AgentEvent[] stream =
         [
-            new AgentStartEvent("s1", []),
-            new MessageStartEvent(partial),
-            new MessageUpdateEvent(new TextDeltaEvent("t1", "mirror-me"), partial),
-            new MessageUpdateEvent(new ThinkingDeltaEvent("h1", "deep-thought"), partial),
-            new MessageUpdateEvent(new StepFinishEvent(0, "stop", new Usage(2000, 1000)), partial),
-            new SessionStatsEvent("s1", new SessionMetadata(0.0210m, 2000, 1000, 0, 0, 0, 1, null)),
+            TestEvents.AgentStart(),
+            TestEvents.MessageStart(partial),
+            TestEvents.TextDeltaUpdate("t1", "mirror-me", partial),
+            TestEvents.ThinkingDeltaUpdate(delta: "deep-thought", partial: partial),
+            TestEvents.StepFinishUpdate(usage: new Usage(2000, 1000), partial: partial),
+            TestEvents.SessionStats(metadata: new SessionMetadata(0.0210m, 2000, 1000, 0, 0, 0, 1, null)),
         ];
         foreach (var evt in stream)
         {
@@ -234,10 +230,10 @@ public class ProjectionCoverageTests
     {
         using var harness = await CreateAsync();
         var partial = Partial();
-        await harness.Renderer.RenderAsync(new MessageStartEvent(partial));
+        await harness.Renderer.RenderAsync(TestEvents.MessageStart(partial));
         await Assert.That(harness.Chat.IsStreaming).IsTrue();
         await Assert.That(harness.Chat.StreamingText).IsEqualTo(string.Empty);
-        await harness.Renderer.RenderAsync(new MessageEndEvent(partial));
+        await harness.Renderer.RenderAsync(TestEvents.MessageEnd(partial));
         await Assert.That(harness.Chat.IsStreaming).IsFalse();
     }
 
@@ -245,9 +241,8 @@ public class ProjectionCoverageTests
     public async Task Status_Running_AfterCompactionCompleted()
     {
         using var harness = await CreateAsync();
-        await harness.Renderer.RenderAsync(new CompactionStartedEvent("s1"));
-        await harness.Renderer.RenderAsync(new CompactionCompletedEvent(
-            "s1", "summary", PrunedMessageCount: 5, TokensSaved: 100, TimeSpan.FromSeconds(1)));
+        await harness.Renderer.RenderAsync(TestEvents.CompactionStarted());
+        await harness.Renderer.RenderAsync(TestEvents.CompactionCompleted(prunedMessageCount: 5, tokensSaved: 100));
         await Assert.That(harness.Status.Status).IsEqualTo("running");
     }
 }

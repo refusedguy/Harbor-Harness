@@ -36,7 +36,7 @@ public class EventBusSinkVerdictTests
             .Because("a sink that declared EventBusSinkKind.Mandatory must be visible in the decision");
         await Assert.That(bus.FastPathEligible).IsFalse();
 
-        await bus.PublishAsync(new TurnStartEvent(1));
+        await bus.PublishAsync(TestEvents.TurnStart());
 
         await Assert.That(sink.Seen).IsEqualTo(1);
         await Assert.That(bus.FastPathCount).IsEqualTo(0)
@@ -60,7 +60,7 @@ public class EventBusSinkVerdictTests
             .Because("the interface default is the conservative direction");
         await Assert.That(bus.HasMandatorySink).IsTrue();
 
-        await bus.PublishAsync(new TurnStartEvent(1));
+        await bus.PublishAsync(TestEvents.TurnStart());
 
         await Assert.That(bus.FastPathCount).IsEqualTo(0);
     }
@@ -84,7 +84,7 @@ public class EventBusSinkVerdictTests
         await Assert.That(bus.HasMandatorySink).IsFalse();
         await Assert.That(bus.FastPathEligible).IsFalse();
 
-        await bus.PublishAsync(new TurnStartEvent(1));
+        await bus.PublishAsync(TestEvents.TurnStart());
 
         await Assert.That(bus.GetScrollback(8).Count).IsEqualTo(1);
         await Assert.That(bus.FastPathCount).IsEqualTo(0);
@@ -102,10 +102,10 @@ public class EventBusSinkVerdictTests
         var bus = new InMemoryEventBus(NullLogger<InMemoryEventBus>.Instance, 0);
 
         await Assert.That(bus.FastPathEligible).IsTrue();
-        await Assert.That(bus.PublishAsync(new TurnStartEvent(1)).IsCompletedSuccessfully).IsTrue()
+        await Assert.That(bus.PublishAsync(TestEvents.TurnStart()).IsCompletedSuccessfully).IsTrue()
             .Because("the fast path returns the cached completed task — no state machine, no Task allocation");
 
-        var evt = new TurnStartEvent(1);
+        var evt = TestEvents.TurnStart();
         for (int i = 0; i < Warmup; i++)
         {
             await bus.PublishAsync(evt);
@@ -145,7 +145,7 @@ public class EventBusSinkVerdictTests
             return ValueTask.CompletedTask;
         });
 
-        var evt = new TurnStartEvent(1);
+        var evt = TestEvents.TurnStart();
         await bus.PublishAsync(evt);
 
         await Assert.That(delivered).IsEqualTo(1);
@@ -172,7 +172,7 @@ public class EventBusSinkVerdictTests
         await Assert.That(bus.FastPathEligible).IsTrue()
             .Because("only OPTIONAL sinks are attached — that is the case the old guard could not express");
 
-        var evt = new TurnStartEvent(1);
+        var evt = TestEvents.TurnStart();
         await bus.PublishAsync(evt);
 
         await Assert.That(sink.Seen).IsEqualTo(1)
@@ -212,7 +212,7 @@ public class EventBusSinkVerdictTests
         var sink = new DropEventBusMiddleware("dropping-optional", EventBusSinkKind.Optional);
         var bus = new InMemoryEventBus(NullLogger<InMemoryEventBus>.Instance, 0, new[] { sink });
 
-        await bus.PublishAsync(new TurnStartEvent(1));
+        await bus.PublishAsync(TestEvents.TurnStart());
 
         await Assert.That(bus.OptionalSinkDropCount).IsEqualTo(1)
             .Because("silent loss is not an option — a drop has to be countable");
@@ -235,7 +235,7 @@ public class EventBusSinkVerdictTests
         await Assert.That(bus.HasMandatorySink).IsFalse()
             .Because("SamplingMiddleware declares EventBusSinkKind.Optional (docs/EVENT_BUS_SINKS.md)");
 
-        await bus.PublishAsync(new TurnStartEvent(1));
+        await bus.PublishAsync(TestEvents.TurnStart());
 
         await Assert.That(bus.FastPathCount).IsEqualTo(1);
         await Assert.That(bus.OptionalSinkDrainCount).IsEqualTo(1);
@@ -254,7 +254,7 @@ public class EventBusSinkVerdictTests
         var sink = new GatedEventBusMiddleware(gate.Task, "gated-optional", EventBusSinkKind.Optional);
         var bus = new InMemoryEventBus(NullLogger<InMemoryEventBus>.Instance, 0, new[] { sink });
 
-        Task publish = bus.PublishAsync(new TurnStartEvent(1));
+        Task publish = bus.PublishAsync(TestEvents.TurnStart());
 
         await Assert.That(publish.IsCompleted).IsFalse()
             .Because("an incomplete ValueTask from an optional sink must not be fire-and-forgotten");
@@ -286,7 +286,7 @@ public class EventBusSinkVerdictTests
         const int publishes = 100;
         for (int i = 0; i < publishes; i++)
         {
-            var evt = new TurnStartEvent(i);
+            var evt = TestEvents.TurnStart(i);
             await qualifying.PublishAsync(evt);
             await retained.PublishAsync(evt);
             await withSubscriber.PublishAsync(evt);

@@ -238,7 +238,7 @@ public class InlineAgentStreamBridgeTests
         var (bridge, backend, session, _, bus) = Make();
 
         await bus.PublishAsync(new MessageStartEvent(null!));
-        await bus.PublishAsync(Update(new TextDeltaEvent("t1", "line-one\n")));
+        await bus.PublishAsync(Update(TestEvents.TextDelta("t1", "line-one\n")));
         bridge.Tick(nowMs: 1);
         _ = bridge.RenderLiveRegion();
         await bridge.FlushAsync();
@@ -263,7 +263,7 @@ public class InlineAgentStreamBridgeTests
         var (bridge, backend, _, _, bus) = Make();
 
         await bus.PublishAsync(new MessageStartEvent(null!));
-        await bus.PublishAsync(Update(new TextDeltaEvent("t", "thinking out")));
+        await bus.PublishAsync(Update(TestEvents.TextDelta(delta: "thinking out")));
         await bus.PublishAsync(new ToolExecutionStartEvent("tc1", "read", default));
 
         await bridge.FlushAsync();
@@ -274,7 +274,7 @@ public class InlineAgentStreamBridgeTests
     public async Task AgentError_CommitsBoldLine()
     {
         var (bridge, backend, _, _, bus) = Make();
-        await bus.PublishAsync(new AgentErrorEvent("boom"));
+        await bus.PublishAsync(TestEvents.AgentError());
         await bridge.FlushAsync();
 
         await Assert.That(backend.Escaped.Contains("! boom")).IsTrue();
@@ -287,8 +287,8 @@ public class InlineAgentStreamBridgeTests
         // above the answer (opencode ReasoningPart, collapsed by default).
         var (bridge, backend, _, _, bus) = Make();
         await bus.PublishAsync(new MessageStartEvent(null!));
-        await bus.PublishAsync(new MessageUpdateEvent(new ThinkingDeltaEvent("t", "weighing options here"), null!));
-        await bus.PublishAsync(Update(new TextDeltaEvent("t", "done")));
+        await bus.PublishAsync(new MessageUpdateEvent(TestEvents.ThinkingDelta("t", "weighing options here"), null!));
+        await bus.PublishAsync(Update(TestEvents.TextDelta(delta: "done")));
         await bus.PublishAsync(new MessageEndEvent(null!));
         await bridge.FlushAsync();
 
@@ -359,7 +359,7 @@ public class ThinkingBridgeTests
         var bridge = new InlineAgentStreamBridge(bus, writer, session, composer);
 
         await bus.PublishAsync(new MessageStartEvent(null!));
-        await bus.PublishAsync(new MessageUpdateEvent(new ThinkingDeltaEvent("h1", "pondering"), null!));
+        await bus.PublishAsync(new MessageUpdateEvent(TestEvents.ThinkingDelta(delta: "pondering"), null!));
         bridge.Tick(nowMs: 1);
         _ = bridge.RenderLiveRegion();
         await bridge.FlushAsync();
@@ -367,7 +367,7 @@ public class ThinkingBridgeTests
         await Assert.That(backend.Escaped.Contains("Thinking")).IsTrue();
         await Assert.That(session.LiveLines >= 2).IsTrue(); // thinking line + prompt row
 
-        await bus.PublishAsync(new MessageUpdateEvent(new ThinkingEndEvent("h1", "pondering"), null!));
+        await bus.PublishAsync(new MessageUpdateEvent(TestEvents.ThinkingEnd(finalText: "pondering"), null!));
         _ = bridge.RenderLiveRegion();
         await bridge.FlushAsync();
 

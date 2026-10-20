@@ -2,6 +2,7 @@ using Harbor.Abstractions.Events;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Harbor.Registries.Events;
+using Harbor.TestKit;
 
 namespace Harbor.Core.Tests;
 
@@ -26,7 +27,7 @@ public class EventBusBackpressureTests
             await Task.CompletedTask;
         });
 
-        var evt = new TurnStartEvent(1);
+        var evt = TestEvents.TurnStart();
         await bus.PublishAsync(evt);
 
         await Assert.That(received.Count).IsEqualTo(1);
@@ -59,7 +60,7 @@ public class EventBusBackpressureTests
         for (int i = 0; i < 3; i++)
         {
             var sw = System.Diagnostics.Stopwatch.StartNew();
-            await bus.PublishAsync(new TurnStartEvent(i));
+            await bus.PublishAsync(TestEvents.TurnStart(i));
             sw.Stop();
             await Assert.That(sw.ElapsedMilliseconds).IsLessThan(2_000);
         }
@@ -71,7 +72,7 @@ public class EventBusBackpressureTests
         // After eviction the slow subscriber no longer receives anything —
         // and publishes stay fast.
         var fourth = System.Diagnostics.Stopwatch.StartNew();
-        await bus.PublishAsync(new TurnStartEvent(99));
+        await bus.PublishAsync(TestEvents.TurnStart(99));
         fourth.Stop();
         await Assert.That(fourth.ElapsedMilliseconds).IsLessThan(500);
 
@@ -90,7 +91,7 @@ public class EventBusBackpressureTests
             received.Add(evt);
         });
 
-        await bus.PublishAsync(new TurnStartEvent(1));
+        await bus.PublishAsync(TestEvents.TurnStart());
 
         // No budget ⇒ publisher waited out the 120ms handler.
         await Assert.That(received.Count).IsEqualTo(1);

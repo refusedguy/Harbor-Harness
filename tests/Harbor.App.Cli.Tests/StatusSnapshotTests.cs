@@ -4,6 +4,7 @@ using Harbor.App.Cli.Repl;
 using Harbor.Tui.CellForge.Widgets;
 using Harbor.Ui.Framework.Projection;
 using Harbor.Ui.Framework.State;
+using Harbor.TestKit;
 
 namespace Harbor.App.Cli.Tests;
 
@@ -95,9 +96,7 @@ public class StatusSnapshotTests
     public async Task UnknownPrice_RendersADash_NotZeroDollars()
     {
         var store = new UiStore();
-        _ = store.Dispatch(new ChatAppMsg.Agent(new SessionStatsEvent(
-            "s1",
-            new SessionMetadata(0m, 61_600, 196, 0, 0, 0, 1, null, IsCostKnown: false))));
+        _ = store.Dispatch(new ChatAppMsg.Agent(TestEvents.SessionStats(metadata: new SessionMetadata(0m, 61_600, 196, 0, 0, 0, 1, null, IsCostKnown: false))));
 
         var snapshot = ReplLifecycle.BuildStatusSnapshot(null, store.State, 61_600, 196, Rows, Total);
 
@@ -194,15 +193,11 @@ public class StatusSnapshotTests
         Apply(store, new AppMsg.Viewport(rows), new AppMsg.HistoryMeasured(total));
 
     private static void StepFinished(UiStore store, int inputTokens, int outputTokens) =>
-        Apply(store, new ChatAppMsg.Agent(new MessageUpdateEvent(
-            new StepFinishEvent(0, "stop", new Usage(inputTokens, outputTokens)),
-            AssistantMessage.Empty("s", "m"))));
+        Apply(store, new ChatAppMsg.Agent(TestEvents.StepFinishUpdate(usage: new Usage(inputTokens, outputTokens), partial: AssistantMessage.Empty("s", "m"))));
 
     /// <summary>What the core publishes after a turn: the session totals it folded.</summary>
     private static void StatsPublished(UiStore store, decimal cost, int tokensIn, int tokensOut) =>
-        Apply(store, new ChatAppMsg.Agent(new SessionStatsEvent(
-            "s",
-            new SessionMetadata(cost, tokensIn, tokensOut, 0, 0, 0, 1, null))));
+        Apply(store, new ChatAppMsg.Agent(TestEvents.SessionStats("s", new SessionMetadata(cost, tokensIn, tokensOut, 0, 0, 0, 1, null))));
 
     private static void Apply(UiStore store, params AppMsg[] msgs)
     {

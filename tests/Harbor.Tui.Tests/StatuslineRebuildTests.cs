@@ -2,6 +2,7 @@ using System.Text.Json;
 using Harbor.Abstractions.Events;
 using Harbor.Abstractions.Models;
 using Harbor.Terminal.Abstractions.ViewModels;
+using Harbor.TestKit;
 
 namespace Harbor.Tui.Tests;
 
@@ -46,7 +47,7 @@ public class StatuslineRebuildTests
         var vm = new StatusBarViewModel();
         await vm.UpdateFromEventAsync(ToolStart("tc_1"));
         await vm.UpdateFromEventAsync(ToolStart("tc_2"));
-        await vm.UpdateFromEventAsync(new AgentEndEvent(Array.Empty<AgentMessage>()));
+        await vm.UpdateFromEventAsync(TestEvents.AgentEnd());
         await Assert.That(vm.QueuedCount).IsEqualTo(0);
         await Assert.That(vm.Status).IsEqualTo("idle");
     }
@@ -59,7 +60,7 @@ public class StatuslineRebuildTests
         vm.SetModel(new ModelInfo("m", "p", "M", 10_000, 4000, false, false, true, new Pricing(3m, 15m), string.Empty));
 
         var usage = new Usage(1000, 100);
-        await vm.UpdateFromEventAsync(new MessageUpdateEvent(new StepFinishEvent(0, "stop", usage), AssistantMessage.Empty("s1", "m")));
+        await vm.UpdateFromEventAsync(TestEvents.StepFinishUpdate(usage: usage));
 
         await Assert.That(vm.Cost).IsEqualTo(0.0045m);
         await Assert.That(vm.Formatted).Contains("$0.0045");
@@ -70,7 +71,7 @@ public class StatuslineRebuildTests
     {
         var vm = new StatusBarViewModel();
         var metadata = SessionMetadata.Empty with { Cost = 1.5m, TokensInput = 10, TokensOutput = 5 };
-        await vm.UpdateFromEventAsync(new SessionStatsEvent("s1", metadata));
+        await vm.UpdateFromEventAsync(TestEvents.SessionStats(metadata: metadata));
 
         await Assert.That(vm.Cost).IsEqualTo(1.5m);
         await Assert.That(vm.TokensIn).IsEqualTo(10);
@@ -87,7 +88,7 @@ public class StatuslineRebuildTests
             Status = "running",
         };
         vm.SetModel(new ModelInfo("m", "p", "M", 10_000, 4000, false, false, true, new Pricing(0, 0), string.Empty));
-        await vm.UpdateFromEventAsync(new MessageUpdateEvent(new StepFinishEvent(0, "stop", new Usage(3000, 500)), AssistantMessage.Empty("s1", "m")));
+        await vm.UpdateFromEventAsync(TestEvents.StepFinishUpdate(usage: new Usage(3000, 500)));
 
         string formatted = vm.Formatted;
         await Assert.That(formatted).Contains("ctx:");

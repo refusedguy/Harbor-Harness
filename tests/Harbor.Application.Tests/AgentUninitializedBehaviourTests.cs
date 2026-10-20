@@ -208,7 +208,7 @@ public sealed class AgentUninitializedBehaviourTests
             return ValueTask.CompletedTask;
         });
 
-        await bus.PublishAsync(new AgentStartEvent(session.Id, []));
+        await bus.PublishAsync(TestEvents.AgentStart(session.Id));
 
         await Assert.That(received.Count).IsEqualTo(1)
             .Because(

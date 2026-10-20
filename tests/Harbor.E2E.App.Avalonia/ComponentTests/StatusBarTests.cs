@@ -4,6 +4,7 @@ using Microsoft.Extensions.DependencyInjection;
 using TUnit.Assertions;
 using TUnit.Assertions.Extensions;
 using TUnit.Core.Enums;
+using Harbor.TestKit;
 
 namespace Harbor.E2E.App.Avalonia.ComponentTests;
 
@@ -113,10 +114,7 @@ public sealed class StatusBarTests : ComponentTestBase
         // reducer no longer prices, so a StepFinishEvent no longer moves them).
         var eventBus = Driver.Host.Services
             .GetRequiredService<Harbor.Abstractions.Events.IEventBus>();
-        await eventBus.PublishAsync(new SessionStatsEvent(
-            "e2e-tok-session",
-            new Harbor.Abstractions.Models.SessionMetadata(
-                0.0234m, 1234, 5678, 0, 0, 0, 1, null))).ConfigureAwait(false);
+        await eventBus.PublishAsync(TestEvents.SessionStats("e2e-tok-session", new Harbor.Abstractions.Models.SessionMetadata(0.0234m, 1234, 5678, 0, 0, 0, 1, null))).ConfigureAwait(false);
 
         // N0 grouping is culture-dependent ("1,234" vs "1 234") — build the
         // expected strings with the process culture instead of hardcoding.

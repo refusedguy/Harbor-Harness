@@ -2,6 +2,7 @@ using Harbor.Abstractions.Events;
 using TUnit.Assertions;
 using Harbor.Registries.Events;
 using Microsoft.Extensions.Logging.Abstractions;
+using Harbor.TestKit;
 
 namespace Harbor.Registries.Tests;
 
@@ -72,7 +73,7 @@ public class EventBusPublishShapeTests
     ///     <c>PublishAsync_1Sub</c> / <c>PublishAsync_1Sub_ScrollbackOff</c> rows of
     ///     <c>tests/Harbor.Benchmarks/EventBusBenchmark.cs</c> measure.
     /// </summary>
-    private static readonly AgentEvent Event = new TurnStartEvent(1);
+    private static readonly AgentEvent Event = TestEvents.TurnStart();
 
     /// <summary>
     ///     Fast path (no subscriber, no sink, unarmed ring): the return is the

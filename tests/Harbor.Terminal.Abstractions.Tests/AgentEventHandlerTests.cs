@@ -5,6 +5,7 @@ using Harbor.Terminal.Abstractions.Renderers;
 using Microsoft.Extensions.Logging.Abstractions;
 using TUnit.Assertions;
 using TUnit.Assertions.Extensions;
+using Harbor.TestKit;
 
 namespace Harbor.Terminal.Abstractions.Tests;
 
@@ -65,7 +66,7 @@ public class AgentEventHandlerRegistryTests
         renderer.Add(match);
         renderer.Add(miss);
 
-        await renderer.Dispatch(new MessageStartEvent(AssistantMessage.Empty("s1", "m1")));
+        await renderer.Dispatch(TestEvents.MessageStart(AssistantMessage.Empty("s1", "m1")));
 
         await Assert.That(match.Calls).IsEqualTo(1);
         await Assert.That(miss.Calls).IsEqualTo(0);
@@ -75,7 +76,7 @@ public class AgentEventHandlerRegistryTests
     public async Task Dispatch_WithNoHandlers_IsNoOp()
     {
         var renderer = new HandlerTestRenderer();
-        await renderer.Dispatch(new TurnStartEvent(1));
+        await renderer.Dispatch(TestEvents.TurnStart());
         await Assert.That(renderer.Capture.Output).IsEqualTo(string.Empty);
     }
 
@@ -90,7 +91,7 @@ public class AgentEventHandlerRegistryTests
         renderer.Add(failing);
         renderer.Add(next);
 
-        await renderer.Dispatch(new MessageStartEvent(AssistantMessage.Empty("s1", "m1")));
+        await renderer.Dispatch(TestEvents.MessageStart(AssistantMessage.Empty("s1", "m1")));
 
         await Assert.That(failing.Calls).IsEqualTo(1);
         await Assert.That(next.Calls).IsEqualTo(1);
@@ -105,7 +106,7 @@ public class AgentEventHandlerRegistryTests
         renderer.Add(failing);
         renderer.Add(next);
 
-        await renderer.Dispatch(new TurnStartEvent(1));
+        await renderer.Dispatch(TestEvents.TurnStart());
 
         await Assert.That(next.Calls).IsEqualTo(1);
     }

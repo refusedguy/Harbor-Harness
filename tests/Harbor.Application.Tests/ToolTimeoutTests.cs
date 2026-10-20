@@ -71,14 +71,14 @@ public class ToolTimeoutTests
         [
             new LlmEvent[]
             {
-                new ToolCallStartEvent("call-1", "hang"),
-                new ToolCallDeltaEvent("call-1", "{}"),
-                new StepFinishEvent(0, "tool_use", new Usage(4, 2))
+                TestEvents.ToolCallStart(toolName: "hang"),
+                TestEvents.ToolCallDelta(),
+                TestEvents.StepFinish(finishReason: "tool_use", usage: new Usage(4, 2))
             },
             new LlmEvent[]
             {
-                new TextDeltaEvent("t", "recovered after timeout"),
-                new StepFinishEvent(1, "stop", new Usage(1, 1))
+                TestEvents.TextDelta(delta: "recovered after timeout"),
+                TestEvents.StepFinish(1, usage: new Usage(1, 1))
             }
         ]);
         var agents = new FakeAgentRegistry(agent);
@@ -127,8 +127,8 @@ public class ToolTimeoutTests
         [
             new LlmEvent[]
             {
-                new TextDeltaEvent("t", "plain answer"),
-                new StepFinishEvent(0, "stop", new Usage(1, 1))
+                TestEvents.TextDelta(delta: "plain answer"),
+                TestEvents.StepFinish(usage: new Usage(1, 1))
             }
         ]);
         var agents = new FakeAgentRegistry(agent);

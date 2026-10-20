@@ -26,6 +26,13 @@ files that need the UI/Desktop stack. This core reaches no UI assembly at
 all, which is the whole point of the split: nineteen test projects reference
 it, and every product assembly it reached was paid for by all of them.
 
+The shared event builders are in neither part: they live in
+[`Harbor.TestKit.Support`](../Harbor.TestKit.Support/) as `TestEvents`, because
+the events themselves live in `Harbor.Abstractions.Contracts` and that part's
+closure is exactly the two contract assemblies. A test project that publishes
+an event therefore reaches the builders without gaining a product assembly it
+did not already have (#1821).
+
 ## Naming
 
 - `Fake*` — a double for an interface **Harbor owns**. It implements the real

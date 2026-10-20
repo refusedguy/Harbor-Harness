@@ -113,15 +113,14 @@ public class TurnChangeOracleTests
         var bus = new FakeEventBus();
         using var oracle = new TurnChangeOracle(bus) { Root = temp.Path };
 
-        await bus.PublishAsync(new TurnStartEvent(1, SessionId));
+        await bus.PublishAsync(TestEvents.TurnStart(sessionId: SessionId));
 
         // The model says it edited three files. It did not call a tool.
         AssistantMessage claimed = AssistantMessage.Empty(SessionId, "test-model")
             .AppendText("I edited src/a.cs, src/b.cs and src/c.rs.");
-        await bus.PublishAsync(new MessageEndEvent(claimed));
+        await bus.PublishAsync(TestEvents.MessageEnd(claimed));
 
-        await bus.PublishAsync(new TurnEndEvent(
-            claimed, [], SessionId));
+        await bus.PublishAsync(TestEvents.TurnEnd(claimed, sessionId: SessionId));
 
         TurnChangeReport report = await LastReportAsync(oracle);
         await Assert.That(report.Files.Count).IsEqualTo(0)
@@ -263,7 +262,7 @@ public class TurnChangeOracleTests
         int turnIndex,
         params ToolCall[] calls)
     {
-        await bus.PublishAsync(new TurnStartEvent(turnIndex, SessionId));
+        await bus.PublishAsync(TestEvents.TurnStart(turnIndex, SessionId));
 
         List<ToolCallPart> parts = [];
         List<ToolResultEntry> results = [];
@@ -294,7 +293,7 @@ public class TurnChangeOracleTests
                 await File.WriteAllTextAsync(full, content);
             }
 
-            await bus.PublishAsync(new ToolExecutionEndEvent(id, ToolResult.Success("ok"), false));
+            await bus.PublishAsync(TestEvents.ToolExecutionEnd(id, ToolResult.Success("ok")));
             results.Add(new ToolResultEntry(id, call.ToolName, "ok", false));
         }
 
@@ -305,7 +304,7 @@ public class TurnChangeOracleTests
         }
 
         var toolResults = new ToolResultMessage("m-results", SessionId, DateTimeOffset.UtcNow, results);
-        await bus.PublishAsync(new TurnEndEvent(message, [toolResults], SessionId));
+        await bus.PublishAsync(TestEvents.TurnEnd(message, [toolResults], SessionId));
     }
 
     /// <summary>

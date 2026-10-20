@@ -68,9 +68,9 @@ public class RunLimitStampingTests
     [
         new LlmEvent[]
         {
-            new ToolCallStartEvent("call-1", "counter"),
-            new ToolCallDeltaEvent("call-1", """{"n":1}"""),
-            new StepFinishEvent(0, "tool_use", new Usage(2, 1))
+            TestEvents.ToolCallStart(),
+            TestEvents.ToolCallDelta(argsDelta: """{"n":1}"""),
+            TestEvents.StepFinish(finishReason: "tool_use", usage: new Usage(2, 1))
         }
     ]);
 
@@ -115,14 +115,14 @@ public class RunLimitStampingTests
         [
             new LlmEvent[]
             {
-                new ToolCallStartEvent("call-1", "counter"),
-                new ToolCallDeltaEvent("call-1", """{"n":1}"""),
-                new StepFinishEvent(0, "tool_use", new Usage(2, 1))
+                TestEvents.ToolCallStart(),
+                TestEvents.ToolCallDelta(argsDelta: """{"n":1}"""),
+                TestEvents.StepFinish(finishReason: "tool_use", usage: new Usage(2, 1))
             },
             new LlmEvent[]
             {
-                new TextDeltaEvent("t", "finished"),
-                new StepFinishEvent(1, "stop", new Usage(1, 1))
+                TestEvents.TextDelta(delta: "finished"),
+                TestEvents.StepFinish(1, usage: new Usage(1, 1))
             }
         ]);
         var bus = new FakeEventBus();

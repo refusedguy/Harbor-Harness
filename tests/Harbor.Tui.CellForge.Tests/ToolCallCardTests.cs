@@ -37,7 +37,7 @@ public class ToolCallCardTests
         {
             await bus.PublishAsync(new ToolExecutionStartEvent("tc1", "read", TestArgs.FromJson("{\"path\":\"src/a.cs\"}")));
             bridge.Tick(120);
-            await bus.PublishAsync(new ToolExecutionEndEvent("tc1", ToolResult.Success("file body"), IsError: false));
+            await bus.PublishAsync(TestEvents.ToolExecutionEnd(result: ToolResult.Success("file body")));
 
             await Assert.That(panel.Timeline.Count).IsEqualTo(1);
             var card = (ToolCallBlock)panel.Timeline.BlockAt(0);
@@ -57,7 +57,7 @@ public class ToolCallCardTests
         {
             await bus.PublishAsync(new ToolExecutionStartEvent("tc9", "bash", TestArgs.FromJson("{}")));
             bridge.Tick(50);
-            await bus.PublishAsync(new ToolExecutionEndEvent("tc9", ToolResult.Error("exit code 1"), IsError: true));
+            await bus.PublishAsync(TestEvents.ToolExecutionEnd("tc9", ToolResult.Error("exit code 1"), true));
 
             var card = (ToolCallBlock)panel.Timeline.BlockAt(panel.Timeline.Count - 1);
             await Assert.That(card.Status).IsEqualTo(ToolCallState.Error);
@@ -203,7 +203,7 @@ public class ToolCallCardTests
         using (bridge)
         {
             await bus.PublishAsync(new ToolExecutionStartEvent("tc1", "read", TestArgs.FromJson("{\"path\":\"a.cs\"}")));
-            await bus.PublishAsync(new ToolExecutionEndEvent("tc1", ToolResult.Success("file body"), IsError: false));
+            await bus.PublishAsync(TestEvents.ToolExecutionEnd(result: ToolResult.Success("file body")));
 
             var tl = panel.Timeline;
             tl.PrepareFrame(40, 8);
@@ -232,9 +232,9 @@ public class ToolCallCardTests
             await Assert.That(bridge.TryRouteToolCardKey(KeyEvent.Simple(KeyCode.Enter))).IsFalse();
 
             await bus.PublishAsync(new ToolExecutionStartEvent("tc1", "read", TestArgs.FromJson("{}")));
-            await bus.PublishAsync(new ToolExecutionEndEvent("tc1", ToolResult.Success("one"), IsError: false));
+            await bus.PublishAsync(TestEvents.ToolExecutionEnd(result: ToolResult.Success("one")));
             await bus.PublishAsync(new ToolExecutionStartEvent("tc2", "bash", TestArgs.FromJson("{}")));
-            await bus.PublishAsync(new ToolExecutionEndEvent("tc2", ToolResult.Success("two"), IsError: false));
+            await bus.PublishAsync(TestEvents.ToolExecutionEnd("tc2", ToolResult.Success("two")));
 
             var first = (ToolCallBlock)panel.Timeline.BlockAt(0);
             var second = (ToolCallBlock)panel.Timeline.BlockAt(1);

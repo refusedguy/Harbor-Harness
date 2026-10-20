@@ -222,9 +222,9 @@ public class RegistrationCompositionTests
             // Prod write path: one assistant message through the composed
             // plain renderer (RenderAsync → UiStore.Dispatch).
             var partial = AssistantMessage.Empty("s1", "stub-model");
-            await pipeline.Current.RenderAsync(new MessageStartEvent(partial));
-            await pipeline.Current.RenderAsync(new MessageUpdateEvent(new TextDeltaEvent("0", "Hello"), partial));
-            await pipeline.Current.RenderAsync(new MessageEndEvent(partial));
+            await pipeline.Current.RenderAsync(TestEvents.MessageStart(partial));
+            await pipeline.Current.RenderAsync(TestEvents.TextDeltaUpdate("0", "Hello", partial));
+            await pipeline.Current.RenderAsync(TestEvents.MessageEnd(partial));
 
             // The write landed in the DI-shared instance — functional proof
             // the renderer no longer owns a private store.
@@ -269,9 +269,9 @@ public class RegistrationCompositionTests
             // Prod write path: one assistant message through the composed
             // CellForge renderer (RenderAsync → UiStore.Dispatch).
             var partial = AssistantMessage.Empty("s1", "stub-model");
-            await pipeline.Current.RenderAsync(new MessageStartEvent(partial));
-            await pipeline.Current.RenderAsync(new MessageUpdateEvent(new TextDeltaEvent("0", "Hello"), partial));
-            await pipeline.Current.RenderAsync(new MessageEndEvent(partial));
+            await pipeline.Current.RenderAsync(TestEvents.MessageStart(partial));
+            await pipeline.Current.RenderAsync(TestEvents.TextDeltaUpdate("0", "Hello", partial));
+            await pipeline.Current.RenderAsync(TestEvents.MessageEnd(partial));
 
             // The write landed in the DI-shared instance — functional proof
             // the renderer no longer owns a private store.

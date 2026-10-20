@@ -3,6 +3,7 @@ using Harbor.Abstractions.Models;
 using Harbor.Ui.Framework.State;
 using TUnit.Assertions;
 using TUnit.Assertions.Extensions;
+using Harbor.TestKit;
 
 namespace Harbor.Ui.Framework.Tests;
 
@@ -34,7 +35,7 @@ public class RunLimitPrintTests
     public async Task AgentEnd_WithTimeoutLimit_PrintsWallClockLineAndIsNotAborted()
     {
         var ended = ChatAppReducer.Update(
-            new UiState(), new ChatAppMsg.Agent(new AgentEndEvent([], Limit: RunLimitKind.Timeout))).State;
+            new UiState(), new ChatAppMsg.Agent(TestEvents.AgentEnd(limit: RunLimitKind.Timeout))).State;
 
         await Assert.That(ended.Chat.SessionStatus).IsEqualTo(SessionStatus.Done);
         await Assert.That(ended.Chat.SessionStatus).IsNotEqualTo(SessionStatus.Aborted);
@@ -49,7 +50,7 @@ public class RunLimitPrintTests
     public async Task AgentEnd_WithMaxStepsLimit_PrintsStepLineAndIsNotAborted()
     {
         var ended = ChatAppReducer.Update(
-            new UiState(), new ChatAppMsg.Agent(new AgentEndEvent([], Limit: RunLimitKind.MaxSteps))).State;
+            new UiState(), new ChatAppMsg.Agent(TestEvents.AgentEnd(limit: RunLimitKind.MaxSteps))).State;
 
         await Assert.That(ended.Chat.SessionStatus).IsEqualTo(SessionStatus.Done);
         await Assert.That(ended.Chat.SessionStatus).IsNotEqualTo(SessionStatus.Aborted);
@@ -72,7 +73,7 @@ public class RunLimitPrintTests
         foreach ((RunLimitKind kind, string word) in cases)
         {
             var ended = ChatAppReducer.Update(
-                new UiState(), new ChatAppMsg.Agent(new AgentEndEvent([], Limit: kind))).State;
+                new UiState(), new ChatAppMsg.Agent(TestEvents.AgentEnd(limit: kind))).State;
 
             await Assert.That(ended.Chat.SessionStatus).IsEqualTo(SessionStatus.Done);
             await Assert.That(ended.Chat.Lines.Length).IsEqualTo(1);
@@ -88,7 +89,7 @@ public class RunLimitPrintTests
         // NON-VACUITY. A run that did its work must leave the transcript
         // alone, or the assertions above would hold on any tree that ends.
         var ended = ChatAppReducer.Update(
-            new UiState(), new ChatAppMsg.Agent(new AgentEndEvent([]))).State;
+            new UiState(), new ChatAppMsg.Agent(TestEvents.AgentEnd())).State;
 
         await Assert.That(ended.Chat.SessionStatus).IsEqualTo(SessionStatus.Done);
         await Assert.That(ended.Chat.Lines).IsEmpty();

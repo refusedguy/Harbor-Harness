@@ -52,7 +52,7 @@ public class AgentLoopLifecycleTests
     public async Task RunAsync_CancelledBeforeFirstTurn_ReturnsFailure()
     {
         var client = new ScriptedLlmClient(
-            [[new TextDeltaEvent("t", "never reached"), new StepFinishEvent(0, "stop", new Usage(1, 1))]]);
+            [[TestEvents.TextDelta(delta: "never reached"), TestEvents.StepFinish(usage: new Usage(1, 1))]]);
         var loop = TestLoops.Create(client, new FakeToolRegistry(), new FakeTokenTracker(), new FakeCompactionService(), new FakeEventBus());
         var session = NewSession();
 
@@ -72,14 +72,14 @@ public class AgentLoopLifecycleTests
         [
             new LlmEvent[]
             {
-                new ToolCallStartEvent("call-1", "counter"),
-                new ToolCallDeltaEvent("call-1", """{"n":7}"""),
-                new StepFinishEvent(0, "stop", new Usage(4, 2))
+                TestEvents.ToolCallStart(),
+                TestEvents.ToolCallDelta(argsDelta: """{"n":7}"""),
+                TestEvents.StepFinish(usage: new Usage(4, 2))
             },
             new LlmEvent[]
             {
-                new TextDeltaEvent("t", "finished"),
-                new StepFinishEvent(1, "stop", new Usage(1, 1))
+                TestEvents.TextDelta(delta: "finished"),
+                TestEvents.StepFinish(1, usage: new Usage(1, 1))
             }
         ]);
         var loop = TestLoops.Create(client, new FakeToolRegistry(counter), new FakeTokenTracker(), new FakeCompactionService(), new FakeEventBus());
@@ -100,14 +100,14 @@ public class AgentLoopLifecycleTests
         [
             new LlmEvent[]
             {
-                new ToolCallStartEvent("call-1", "counter"),
-                new ToolCallDeltaEvent("call-1", "{ this is not json"),
-                new StepFinishEvent(0, "tool_use", new Usage(2, 1))
+                TestEvents.ToolCallStart(),
+                TestEvents.ToolCallDelta(argsDelta: "{ this is not json"),
+                TestEvents.StepFinish(finishReason: "tool_use", usage: new Usage(2, 1))
             },
             new LlmEvent[]
             {
-                new TextDeltaEvent("t", "recovered"),
-                new StepFinishEvent(1, "stop", new Usage(1, 1))
+                TestEvents.TextDelta(delta: "recovered"),
+                TestEvents.StepFinish(1, usage: new Usage(1, 1))
             }
         ]);
         var loop = TestLoops.Create(client, new FakeToolRegistry(counter), new FakeTokenTracker(), new FakeCompactionService(), new FakeEventBus());
@@ -130,14 +130,14 @@ public class AgentLoopLifecycleTests
         [
             new LlmEvent[]
             {
-                new ToolCallStartEvent("call-1", "counter"),
-                new ToolCallDeltaEvent("call-1", "{ this is not json"),
-                new StepFinishEvent(0, "tool_use", new Usage(2, 1))
+                TestEvents.ToolCallStart(),
+                TestEvents.ToolCallDelta(argsDelta: "{ this is not json"),
+                TestEvents.StepFinish(finishReason: "tool_use", usage: new Usage(2, 1))
             },
             new LlmEvent[]
             {
-                new TextDeltaEvent("t", "recovered"),
-                new StepFinishEvent(1, "stop", new Usage(1, 1))
+                TestEvents.TextDelta(delta: "recovered"),
+                TestEvents.StepFinish(1, usage: new Usage(1, 1))
             }
         ]);
         var loop = TestLoops.Create(client, new FakeToolRegistry(counter), new FakeTokenTracker(), new FakeCompactionService(), new FakeEventBus());
@@ -166,16 +166,16 @@ public class AgentLoopLifecycleTests
         [
             new LlmEvent[]
             {
-                new ToolCallStartEvent("call-1", "counter"),
-                new ToolCallDeltaEvent("call-1", "{ broken one"),
-                new ToolCallStartEvent("call-2", "counter"),
-                new ToolCallDeltaEvent("call-2", "{ broken two"),
-                new StepFinishEvent(0, "tool_use", new Usage(2, 1))
+                TestEvents.ToolCallStart(),
+                TestEvents.ToolCallDelta(argsDelta: "{ broken one"),
+                TestEvents.ToolCallStart("call-2"),
+                TestEvents.ToolCallDelta("call-2", "{ broken two"),
+                TestEvents.StepFinish(finishReason: "tool_use", usage: new Usage(2, 1))
             },
             new LlmEvent[]
             {
-                new TextDeltaEvent("t", "recovered"),
-                new StepFinishEvent(1, "stop", new Usage(1, 1))
+                TestEvents.TextDelta(delta: "recovered"),
+                TestEvents.StepFinish(1, usage: new Usage(1, 1))
             }
         ]);
         var loop = TestLoops.Create(client, new FakeToolRegistry(counter), new FakeTokenTracker(), new FakeCompactionService(), new FakeEventBus());
@@ -209,16 +209,16 @@ public class AgentLoopLifecycleTests
         [
             new LlmEvent[]
             {
-                new ToolCallStartEvent("call-1", "counter"),
-                new ToolCallDeltaEvent("call-1", """{"n":7}"""),
-                new ToolCallStartEvent("call-2", "counter"),
-                new ToolCallDeltaEvent("call-2", "{ broken"),
-                new StepFinishEvent(0, "tool_use", new Usage(2, 1))
+                TestEvents.ToolCallStart(),
+                TestEvents.ToolCallDelta(argsDelta: """{"n":7}"""),
+                TestEvents.ToolCallStart("call-2"),
+                TestEvents.ToolCallDelta("call-2", "{ broken"),
+                TestEvents.StepFinish(finishReason: "tool_use", usage: new Usage(2, 1))
             },
             new LlmEvent[]
             {
-                new TextDeltaEvent("t", "recovered"),
-                new StepFinishEvent(1, "stop", new Usage(1, 1))
+                TestEvents.TextDelta(delta: "recovered"),
+                TestEvents.StepFinish(1, usage: new Usage(1, 1))
             }
         ]);
         var loop = TestLoops.Create(client, new FakeToolRegistry(counter), new FakeTokenTracker(), new FakeCompactionService(), new FakeEventBus());
@@ -265,14 +265,14 @@ public class AgentLoopLifecycleTests
             [
                 new LlmEvent[]
                 {
-                    new ToolCallStartEvent("call-1", "counter"),
-                    new ToolCallDeltaEvent("call-1", payload),
-                    new StepFinishEvent(0, "tool_use", new Usage(2, 1))
+                    TestEvents.ToolCallStart(),
+                    TestEvents.ToolCallDelta(argsDelta: payload),
+                    TestEvents.StepFinish(finishReason: "tool_use", usage: new Usage(2, 1))
                 },
                 new LlmEvent[]
                 {
-                    new TextDeltaEvent("t", "recovered"),
-                    new StepFinishEvent(1, "stop", new Usage(1, 1))
+                    TestEvents.TextDelta(delta: "recovered"),
+                    TestEvents.StepFinish(1, usage: new Usage(1, 1))
                 }
             ]);
             var loop = TestLoops.Create(client, new FakeToolRegistry(counter), new FakeTokenTracker(), new FakeCompactionService(), new FakeEventBus());
@@ -301,7 +301,7 @@ public class AgentLoopLifecycleTests
         var seed = SeedHistory(session.Session.Id, userAssistantPairs: 6);
         var context = new TestSessionContext(session.Session, seed);
         var client = new ScriptedLlmClient(
-            [[new TextDeltaEvent("t", "ok"), new StepFinishEvent(0, "stop", new Usage(1, 1))]]);
+            [[TestEvents.TextDelta(delta: "ok"), TestEvents.StepFinish(usage: new Usage(1, 1))]]);
         var compaction = new FakeCompactionService();
         var loop = TestLoops.Create(
             client,
@@ -326,14 +326,14 @@ public class AgentLoopLifecycleTests
         [
             new LlmEvent[]
             {
-                new ToolCallStartEvent("call-1", "counter"),
-                new ToolCallDeltaEvent("call-1", """{"n":1}"""),
-                new StepFinishEvent(0, "tool_use", new Usage(2, 1))
+                TestEvents.ToolCallStart(),
+                TestEvents.ToolCallDelta(argsDelta: """{"n":1}"""),
+                TestEvents.StepFinish(finishReason: "tool_use", usage: new Usage(2, 1))
             },
             new LlmEvent[]
             {
-                new TextDeltaEvent("t", "done"),
-                new StepFinishEvent(1, "stop", new Usage(1, 1))
+                TestEvents.TextDelta(delta: "done"),
+                TestEvents.StepFinish(1, usage: new Usage(1, 1))
             }
         ]);
         var loop = TestLoops.Create(client, new FakeToolRegistry(counter), new FakeTokenTracker(), new FakeCompactionService(), new FakeEventBus());

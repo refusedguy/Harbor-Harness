@@ -27,18 +27,18 @@ public class StreamingCoalescerPoolTests
         [
             new LlmEvent[]
             {
-                new ToolCallStartEvent("call-1", "counter"),
-                new ToolCallDeltaEvent("call-1", """{"n":7}"""),
+                TestEvents.ToolCallStart(),
+                TestEvents.ToolCallDelta(argsDelta: """{"n":7}"""),
                 // Repeated start for the same id: the old args builder goes
                 // back to the pool, the latest args win.
-                new ToolCallStartEvent("call-1", "counter"),
-                new ToolCallDeltaEvent("call-1", """{"n":8}"""),
-                new StepFinishEvent(0, "stop", new Usage(4, 2))
+                TestEvents.ToolCallStart(),
+                TestEvents.ToolCallDelta(argsDelta: """{"n":8}"""),
+                TestEvents.StepFinish(usage: new Usage(4, 2))
             },
             new LlmEvent[]
             {
-                new TextDeltaEvent("t", "finished"),
-                new StepFinishEvent(1, "stop", new Usage(1, 1))
+                TestEvents.TextDelta(delta: "finished"),
+                TestEvents.StepFinish(1, usage: new Usage(1, 1))
             }
         ]);
         var loop = TestLoops.Create(client, new FakeToolRegistry(counter), new FakeTokenTracker(), new FakeCompactionService(), new FakeEventBus());
@@ -61,21 +61,21 @@ public class StreamingCoalescerPoolTests
         // of which parse path was taken (chunk-direct vs fallback).
         string pad = new('x', 20_000);
         string argsJson = "{\"n\":7,\"pad\":\"" + pad + "\"}";
-        var deltas = new List<LlmEvent> { new ToolCallStartEvent("call-1", "counter") };
+        var deltas = new List<LlmEvent> { TestEvents.ToolCallStart() };
         for (int i = 0; i < argsJson.Length; i += 100)
         {
             int len = Math.Min(100, argsJson.Length - i);
-            deltas.Add(new ToolCallDeltaEvent("call-1", argsJson.Substring(i, len)));
+            deltas.Add(TestEvents.ToolCallDelta(argsDelta: argsJson.Substring(i, len)));
         }
 
-        deltas.Add(new StepFinishEvent(0, "stop", new Usage(4, 2)));
+        deltas.Add(TestEvents.StepFinish(usage: new Usage(4, 2)));
         var client = new ScriptedLlmClient(
         [
             deltas.ToArray(),
             new LlmEvent[]
             {
-                new TextDeltaEvent("t", "finished"),
-                new StepFinishEvent(1, "stop", new Usage(1, 1))
+                TestEvents.TextDelta(delta: "finished"),
+                TestEvents.StepFinish(1, usage: new Usage(1, 1))
             }
         ]);
         var counter = new CountingTool();

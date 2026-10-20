@@ -1,6 +1,7 @@
 using Harbor.Abstractions.Events;
 using Harbor.Abstractions.Models;
 using Harbor.Tui.CellForge.Tests.Pilot;
+using Harbor.TestKit;
 
 namespace Harbor.Tui.CellForge.Tests;
 
@@ -58,8 +59,8 @@ public sealed class CellForgePilotTests
             return ValueTask.CompletedTask;
         });
 
-        var start = new AgentStartEvent("s1", Array.Empty<AgentMessage>());
-        var end = new AgentEndEvent(Array.Empty<AgentMessage>());
+        var start = TestEvents.AgentStart();
+        var end = TestEvents.AgentEnd();
         await pilot.PublishAsync(start);
         await pilot.PublishAsync(end);
 
@@ -73,7 +74,7 @@ public sealed class CellForgePilotTests
     public async Task WaitForEvent_ResolvesAlreadySeen_WithoutDelay()
     {
         await using var pilot = await CellForgePilot.LaunchAsync();
-        await pilot.PublishAsync(new AgentEndEvent(Array.Empty<AgentMessage>()));
+        await pilot.PublishAsync(TestEvents.AgentEnd());
 
         var sw = System.Diagnostics.Stopwatch.StartNew();
         var seen = await pilot.WaitForEventAsync<AgentEndEvent>();

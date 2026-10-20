@@ -112,14 +112,14 @@ public class SteeringDeliveryTests
         [
             new LlmEvent[]
             {
-                new ToolCallStartEvent("call-1", "steerer"),
-                new ToolCallDeltaEvent("call-1", "{}"),
-                new StepFinishEvent(0, "tool_use", new Usage(4, 2))
+                TestEvents.ToolCallStart(toolName: "steerer"),
+                TestEvents.ToolCallDelta(),
+                TestEvents.StepFinish(finishReason: "tool_use", usage: new Usage(4, 2))
             },
             new LlmEvent[]
             {
-                new TextDeltaEvent("t", "done"),
-                new StepFinishEvent(1, "stop", new Usage(1, 1))
+                TestEvents.TextDelta(delta: "done"),
+                TestEvents.StepFinish(1, usage: new Usage(1, 1))
             }
         ]);
         var agent = TestAgents.AllowAll();
@@ -158,14 +158,14 @@ public class SteeringDeliveryTests
         [
             new LlmEvent[]
             {
-                new ToolCallStartEvent("call-1", "steerer"),
-                new ToolCallDeltaEvent("call-1", "{}"),
-                new StepFinishEvent(0, "tool_use", new Usage(4, 2))
+                TestEvents.ToolCallStart(toolName: "steerer"),
+                TestEvents.ToolCallDelta(),
+                TestEvents.StepFinish(finishReason: "tool_use", usage: new Usage(4, 2))
             },
             new LlmEvent[]
             {
-                new TextDeltaEvent("t", "done"),
-                new StepFinishEvent(1, "stop", new Usage(1, 1))
+                TestEvents.TextDelta(delta: "done"),
+                TestEvents.StepFinish(1, usage: new Usage(1, 1))
             }
         ]);
         var agent = TestAgents.AllowAll();
@@ -204,9 +204,9 @@ public class SteeringDeliveryTests
         [
             new LlmEvent[]
             {
-                new ToolCallStartEvent("call-1", "canceller"),
-                new ToolCallDeltaEvent("call-1", "{}"),
-                new StepFinishEvent(0, "tool_use", new Usage(4, 2))
+                TestEvents.ToolCallStart(toolName: "canceller"),
+                TestEvents.ToolCallDelta(),
+                TestEvents.StepFinish(finishReason: "tool_use", usage: new Usage(4, 2))
             }
         ]);
         var agent = TestAgents.AllowAll();

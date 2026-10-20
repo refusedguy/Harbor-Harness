@@ -2,6 +2,7 @@ using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Events;
 using Harbor.Tui.CellForge.Streaming;
 using Harbor.Tui.CellForge.Widgets;
+using Harbor.TestKit;
 
 namespace Harbor.Tui.CellForge.Tests;
 
@@ -55,20 +56,17 @@ public class ContextSegmentSyncTests
         var status = new StatusViewModel();
         using var bridge = new ChatScreenBridge(bus, panel, status);
 
-        await bus.PublishAsync(new AgentStartEvent("s1", [], Model));
+        await bus.PublishAsync(TestEvents.AgentStart(model: Model));
 
         for (int turn = 1; turn <= 5; turn++)
         {
             // Session-cumulative spend — the running total that used to be
             // rendered as occupancy (30k, 60k, 90k, 120k, 150k).
             int cumulative = RequestTokens * turn;
-            await bus.PublishAsync(new SessionStatsEvent(
-                "s1", new SessionMetadata(0.01m * turn, cumulative, 500, 0, 0, 0, turn, null)));
+            await bus.PublishAsync(TestEvents.SessionStats(metadata: new SessionMetadata(0.01m * turn, cumulative, 500, 0, 0, 0, turn, null)));
 
             // The request actually sent this turn: unchanged at 30k.
-            await bus.PublishAsync(new MessageUpdateEvent(
-                new StepFinishEvent(0, "stop", new Usage(RequestTokens, 500)),
-                AssistantMessage.Empty("s1", "m")));
+            await bus.PublishAsync(TestEvents.StepFinishUpdate(usage: new Usage(RequestTokens, 500)));
 
             await Assert.That(status.TryGetContextTokens(out var used)).IsTrue();
             await Assert.That(used).IsEqualTo(RequestTokens); // not the cumulative total
@@ -105,9 +103,8 @@ public class ContextSegmentSyncTests
         var status = new StatusViewModel();
         using var bridge = new ChatScreenBridge(bus, panel, status);
 
-        await bus.PublishAsync(new AgentStartEvent("s1", [], Model));
-        await bus.PublishAsync(new SessionStatsEvent(
-            "s1", new SessionMetadata(0.01m, 150_000, 500, 0, 0, 0, 5, null)));
+        await bus.PublishAsync(TestEvents.AgentStart(model: Model));
+        await bus.PublishAsync(TestEvents.SessionStats(metadata: new SessionMetadata(0.01m, 150_000, 500, 0, 0, 0, 5, null)));
 
         await Assert.That(status.TryGetContextTokens(out _)).IsFalse();
 
