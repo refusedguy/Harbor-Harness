@@ -187,8 +187,8 @@ the message each time).
 | `KeyGateFamilyRules.TableCoversEveryRoutedSiteInTheProductTree` | `KeyGateFamilyRules.cs:741` | 1 | defect | keep |
 | `MaybeAbsenceTests.GuardedProjects_DeclareNoAbsenceViaNullableOutParameter` | `MaybeAbsenceTests.cs:225` | 1 | defect | keep |
 | `McpHttpClientOwnershipRules.Assert_TheClientHasExactlyOneOwnerAndItIsNotPublic` | `McpHttpClientOwnershipRules.cs:160` | 1 | defect | keep |
-| `ModelRefSingleParserTests.EveryAdHocCut_IsEitherTheContractOrInventoryed` | `ModelRefSingleParserTests.cs:413` | 2 | defect | keep |
-| `ModelRefSingleParserTests.EveryInventoryEntry_StillNamesAFileThatStillCuts` | `ModelRefSingleParserTests.cs:436` | 1 | noise | ledger-edit |
+| `ModelRefSingleParserTests.EveryAdHocCut_IsEitherTheContractOrInventoryed` | `ModelRefSingleParserTests.cs:419` | 2 | defect | keep |
+| `ModelRefSingleParserTests.EveryInventoryEntry_StillNamesAFileThatStillCuts` | `ModelRefSingleParserTests.cs:442` | 1 | noise | ledger-edit |
 | `PilotRoslynAnalyzerTests.Pilot_Harch001_Reports_Every_Planted_Dynamic_Code_Capability` | `PilotRoslynAnalyzerTests.cs:184` | 1 | defect | keep |
 | `ReadmeCoverageTests.Assert_NoNewProjectLacksAReadme` | `ReadmeCoverageTests.cs:114` | 3 | style | keep |
 | `ReadmeCoverageTests.Assert_PackableReadmesHaveRequiredSections` | `ReadmeCoverageTests.cs:136` | 4 | style | keep |
@@ -200,7 +200,7 @@ the message each time).
 | `ResultMaybeSignatureTests.Assert_NoResultOfNullableValueTypeUnderSrc` | `ResultMaybeSignatureTests.cs:86` | 1 | defect | keep |
 | `ResultTryAdoptionTests.HandRolledTryCatchToResult_UsesResultTry` | `ResultTryAdoptionTests.cs:151` | 1 | defect | keep |
 | `ResultTryAdoptionTests.KnownExemptSites_AreStillAccurate` | `ResultTryAdoptionTests.cs:177` | 1 | noise | ledger-edit |
-| `ScanUniverseRule.BlindProjects_MatchTheMeasuredBaseline` | `ScanUniverseRule.cs:565` | 5 | noise | fix-the-rule |
+| `ScanUniverseRule.BlindProjects_MatchTheMeasuredBaseline` | `ScanUniverseRule.cs:577` | 5 | noise | fix-the-rule |
 | `SharedSourceLinkRules.The_Link_Inventory_Is_Not_Empty` | `SharedSourceLinkRules.cs:207` | 2 | noise | fix-the-rule |
 | `TestShardZeroTestGuardRules.TheGuardFlagIsActuallyReadByTheRunStep` | `TestShardZeroTestGuardRules.cs:170` | 3 | defect | keep |
 | `TokenTrackingRatchet.Control_TheSplitLandingIsReportedAsProgressNotAsARegression` | `TokenTrackingRatchet.cs:709` | 1 | noise | fix-the-rule |

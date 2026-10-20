@@ -186,7 +186,7 @@
       "reason": "A new hand-rolled read of a slash-separated string appeared in product code, with the file and line named. A second parser of the same concept is a real drift source.",
       "ratchet": "keep",
       "evidence": [
-        "guard: tests/Harbor.Architecture.Tests/ModelRefSingleParserTests.cs:413 — 'src/Harbor.Application/Configuration/OnboardingPicks.cs:56 [ADHOC-CUT]'"
+        "guard: tests/Harbor.Architecture.Tests/ModelRefSingleParserTests.cs:419 — 'src/Harbor.Application/Configuration/OnboardingPicks.cs:56 [ADHOC-CUT]'"
       ]
     },
     {
@@ -195,7 +195,7 @@
       "reason": "The rule fired on its own inventory: an entry names a file that no longer contains an ad-hoc cut, so the exception is stale. The rule asks for the row to be deleted.",
       "ratchet": "ledger-edit",
       "evidence": [
-        "guard: tests/Harbor.Architecture.Tests/ModelRefSingleParserTests.cs:436 — 'inventory entry src/Harbor.Application/Configuration/OnboardingWizard.cs no longer contains an ad-hoc cut'"
+        "guard: tests/Harbor.Architecture.Tests/ModelRefSingleParserTests.cs:442 — 'inventory entry src/Harbor.Application/Configuration/OnboardingWizard.cs no longer contains an ad-hoc cut'"
       ]
     },
     {
@@ -314,7 +314,7 @@
         "run 39365793623 — '... | tests=33 | tools=1'",
         "run 39380697456 — '... | tests=34 | tools=1'",
         "run 39416159291 — '... | tests=36 | tools=1'",
-        "guard: tests/Harbor.Architecture.Tests/ScanUniverseRule.cs:565"
+        "guard: tests/Harbor.Architecture.Tests/ScanUniverseRule.cs:577"
       ]
     },
     {
