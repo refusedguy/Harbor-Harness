@@ -6,16 +6,6 @@ using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Harbor.Lsp.Tests;
 
-/// <summary>Skips unless python3 is on PATH (drives the fake language server).</summary>
-internal sealed class SkipUnlessPython3Attribute : SkipAttribute
-{
-    public SkipUnlessPython3Attribute()
-        : base("python3 is not on PATH — fake LSP server cannot run.") { }
-
-    public override Task<bool> ShouldSkip(TestRegisteredContext context)
-        => Task.FromResult(TestPaths.FindOnPath("python3") is null);
-}
-
 internal static class TestPaths
 {
     public static string? FindOnPath(string executable)
@@ -32,10 +22,20 @@ internal static class TestPaths
 }
 
 /// <summary>Wire-level flow over a real out-of-process fake server (python3).</summary>
-[SkipUnlessPython3]
 [NotInParallel("lsp")]
 public class LspServerSessionIntegrationTests
 {
+    /// <summary>
+    ///     Skips unless python3 is on PATH (drives the fake language server).
+    ///     TUnit's <c>Skip.Unless</c> marks every test in the class skipped,
+    ///     with the reason.
+    /// </summary>
+    [Before(HookType.Class)]
+    public static void SkipWithoutPython3() =>
+        Skip.Unless(
+            TestPaths.FindOnPath("python3") is not null,
+            "python3 is not on PATH — fake LSP server cannot run.");
+
     private const string FakeServerScript = """
         import sys, json
 

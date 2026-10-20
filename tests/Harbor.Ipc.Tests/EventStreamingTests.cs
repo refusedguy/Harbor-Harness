@@ -11,34 +11,30 @@ using Microsoft.Extensions.Logging;
 namespace Harbor.Ipc.Tests;
 
 /// <summary>
-///     Skip unless explicitly opted in via <c>HARBOR_IPC_EVENTSTREAM=1</c>.
-///     Real named-pipe event streaming deadlocks under TUnit scheduling on
-///     this environment (pre-existing, see Harbor.slnx comment). One env
-///     var keeps the coverage reachable without destabilizing default runs.
-/// </summary>
-internal sealed class SkipUnlessIpcEventStreamEnabledAttribute : SkipAttribute
-{
-    public SkipUnlessIpcEventStreamEnabledAttribute() : base(
-        "Named-pipe event streaming is timing-flaky on Linux under TUnit "
-        + "scheduling (pre-existing). Set HARBOR_IPC_EVENTSTREAM=1 to enable.") { }
-
-    /// <inheritdoc />
-    public override Task<bool> ShouldSkip(TestRegisteredContext context)
-        => Task.FromResult(Environment.GetEnvironmentVariable("HARBOR_IPC_EVENTSTREAM") != "1");
-}
-
-
-/// <summary>
 ///     Event streaming tests. Verifies that:
 ///     <list type="bullet">
 ///         <item>The InProcessHarborClient delivers events via IEventBus.</item>
 ///         <item>The IpcHarborClient receives server-pushed events over the pipe.</item>
 ///     </list>
 /// </summary>
-[SkipUnlessIpcEventStreamEnabled]
 [NotInParallel("ipc")]
 public class EventStreamingTests
 {
+    /// <summary>
+    ///     Skip unless explicitly opted in via <c>HARBOR_IPC_EVENTSTREAM=1</c>.
+    ///     Real named-pipe event streaming deadlocks under TUnit scheduling on
+    ///     this environment (pre-existing, see Harbor.slnx comment). One env
+    ///     var keeps the coverage reachable without destabilizing default
+    ///     runs. TUnit's <c>Skip.Unless</c> marks every test in the class
+    ///     skipped, with the reason.
+    /// </summary>
+    [Before(HookType.Class)]
+    public static void SkipUnlessEventStreamEnabled() =>
+        Skip.Unless(
+            Environment.GetEnvironmentVariable("HARBOR_IPC_EVENTSTREAM") == "1",
+            "Named-pipe event streaming is timing-flaky on Linux under TUnit "
+            + "scheduling (pre-existing). Set HARBOR_IPC_EVENTSTREAM=1 to enable.");
+
     /// <summary>
     ///     When the IEventBus publishes an AgentStartEvent, the
     ///     InProcessHarborClient's SubscribeToEventsAsync should yield a

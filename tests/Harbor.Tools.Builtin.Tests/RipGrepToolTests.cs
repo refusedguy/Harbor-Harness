@@ -6,17 +6,18 @@ namespace Harbor.Tools.Builtin.Tests;
 /// <summary>
 ///     Tests for <see cref="RipGrepTool" />. The tool wraps the external <c>rg</c> binary;
 ///     when <c>rg</c> is not installed (CI sandbox without ripgrep) the "_WhenRgInstalled"
-///     tests are skipped via <see cref="SkipWhenRgMissingAttribute" />; when <c>rg</c> IS
-///     installed the "MissingRg" test is skipped via <see cref="SkipWhenRgPresentAttribute" />.
+///     tests skip through <c>Skip.Unless</c>; when <c>rg</c> IS installed the "MissingRg"
+///     test skips through <c>Skip.When</c>.
 /// </summary>
 /// <remarks>
 ///     <para>
-///         §ARCH-007: TUnit 0.50.0's in-test <c>Skip.Test(string)</c> throws
-///         <c>SkipTestException</c> but the engine reports it as a failure rather than a
-///         skip in this environment (verified via a standalone probe). The robust path is
-///         a custom <see cref="SkipAttribute" /> subclass overriding
-///         <c>ShouldSkip(TestRegisteredContext)</c> — the engine honours that at discovery
-///         time and reports the test as "skipped" with the attribute's reason.
+///         The skip is a runtime decision, so it is TUnit's own
+///         <c>Skip.Unless</c> / <c>Skip.When</c>: both raise
+///         <c>SkipTestException</c>, and the runner reports the test as SKIPPED
+///         with the reason. The §ARCH-007 note that used to sit here described
+///         TUnit 0.50.0, where the same call was reported as a failure; the pin
+///         is 1.75.0 and the five other suites in this repository already skip
+///         this way (see <c>TestScalingGate</c>).
 ///     </para>
 /// </remarks>
 public class RipGrepToolTests
@@ -71,9 +72,10 @@ public class RipGrepToolTests
     }
 
     [Test]
-    [SkipWhenRgMissing]
     public async Task ExecuteAsync_FindsMatches_WhenRgInstalled()
     {
+        Skip.Unless(IsRgAvailable(), RgMissingReason);
+
         string root = Path.Combine(Path.GetTempPath(), $"harbor-rg-{Guid.NewGuid():N}");
         Directory.CreateDirectory(root);
         await File.WriteAllTextAsync(Path.Combine(root, "a.txt"), "foo\nbar\nbaz");
@@ -98,9 +100,10 @@ public class RipGrepToolTests
     }
 
     [Test]
-    [SkipWhenRgMissing]
     public async Task ExecuteAsync_NoMatches_ReturnsEmptyResult_WhenRgInstalled()
     {
+        Skip.Unless(IsRgAvailable(), RgMissingReason);
+
         string root = Path.Combine(Path.GetTempPath(), $"harbor-rg-{Guid.NewGuid():N}");
         Directory.CreateDirectory(root);
         await File.WriteAllTextAsync(Path.Combine(root, "a.txt"), "foo");
@@ -122,7 +125,6 @@ public class RipGrepToolTests
     }
 
     [Test]
-    [SkipWhenRgMissing]
     public async Task ExecuteAsync_PathNotFound_ReturnsError()
     {
         // The tool checks rg availability BEFORE the path, so without rg the
@@ -130,6 +132,8 @@ public class RipGrepToolTests
         // ExecuteAsync_MissingRg_ReturnsHelpfulError) and this test would
         // assert against the wrong error. Gate on rg so the path branch is
         // deterministic on runners without ripgrep.
+        Skip.Unless(IsRgAvailable(), RgMissingReason);
+
         var tool = new RipGrepTool(NullLogger<RipGrepTool>.Instance);
         var args = JsonDocument.Parse(
             $$"""{"pattern":"foo","path":"/tmp/harbor-rg-missing-{{Guid.NewGuid():N}}"}""").RootElement;
@@ -139,9 +143,10 @@ public class RipGrepToolTests
     }
 
     [Test]
-    [SkipWhenRgMissing]
     public async Task ExecuteAsync_GlobFilterLimitsFileTypes_WhenRgInstalled()
     {
+        Skip.Unless(IsRgAvailable(), RgMissingReason);
+
         string root = Path.Combine(Path.GetTempPath(), $"harbor-rg-{Guid.NewGuid():N}");
         Directory.CreateDirectory(root);
         await File.WriteAllTextAsync(Path.Combine(root, "a.cs"), "foo");
@@ -165,9 +170,10 @@ public class RipGrepToolTests
     }
 
     [Test]
-    [SkipWhenRgPresent]
     public async Task ExecuteAsync_MissingRg_ReturnsHelpfulError()
     {
+        Skip.When(IsRgAvailable(), RgPresentReason);
+
         var tool = new RipGrepTool(NullLogger<RipGrepTool>.Instance);
         string root = Path.Combine(Path.GetTempPath(), $"harbor-rg-{Guid.NewGuid():N}");
         Directory.CreateDirectory(root);
@@ -186,30 +192,4 @@ public class RipGrepToolTests
             if (Directory.Exists(root)) Directory.Delete(root, true);
         }
     }
-}
-
-/// <summary>
-///     Skip the test when <c>rg</c> is NOT on PATH. Used by the "WhenRgInstalled" tests.
-/// </summary>
-[AttributeUsage(AttributeTargets.Method | AttributeTargets.Class, Inherited = false)]
-internal sealed class SkipWhenRgMissingAttribute : SkipAttribute
-{
-    public SkipWhenRgMissingAttribute() : base(RipGrepToolTests.RgMissingReason) { }
-
-    /// <inheritdoc />
-    public override Task<bool> ShouldSkip(TestRegisteredContext context)
-        => Task.FromResult(!RipGrepToolTests.IsRgAvailable());
-}
-
-/// <summary>
-///     Skip the test when <c>rg</c> IS on PATH. Used by the "MissingRg" test.
-/// </summary>
-[AttributeUsage(AttributeTargets.Method | AttributeTargets.Class, Inherited = false)]
-internal sealed class SkipWhenRgPresentAttribute : SkipAttribute
-{
-    public SkipWhenRgPresentAttribute() : base(RipGrepToolTests.RgPresentReason) { }
-
-    /// <inheritdoc />
-    public override Task<bool> ShouldSkip(TestRegisteredContext context)
-        => Task.FromResult(RipGrepToolTests.IsRgAvailable());
 }

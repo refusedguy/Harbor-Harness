@@ -3,6 +3,7 @@ using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Models;
 using Harbor.Application.Sessions;
 using Harbor.ChangeTracking;
+using Harbor.TestKit;
 
 namespace Harbor.ChangeTracking.Tests;
 
@@ -30,6 +31,17 @@ namespace Harbor.ChangeTracking.Tests;
 /// </summary>
 public abstract class ChangeTrackingTestBase
 {
+    /// <summary>
+    ///     Every one of these suites drives a real git repository, so the whole
+    ///     family needs git on PATH. The gate lives here, ONCE: TUnit collects
+    ///     <c>Before(Class)</c> hooks from the whole hierarchy, so the one
+    ///     hook covers all five derived suites. The decision is TUnit's —
+    ///     <c>Skip.Unless</c> marks every test in the class skipped, with the
+    ///     reason, before the class is instantiated.
+    /// </summary>
+    [Before(HookType.Class)]
+    public static void SkipWithoutGit() => Skip.Unless(GitProbe.Available, GitProbe.SkipReason);
+
     /// <summary>The git identity this suite commits under.</summary>
     protected abstract (string Email, string Name) GitAuthor { get; }
 

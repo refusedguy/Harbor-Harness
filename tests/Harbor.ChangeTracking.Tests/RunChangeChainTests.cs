@@ -4,6 +4,7 @@ using Harbor.Abstractions.Models;
 using Harbor.Application.Sessions;
 using Harbor.ChangeTracking;
 using Harbor.TestKit;
+using TUnit.Core.Enums;
 
 namespace Harbor.ChangeTracking.Tests;
 
@@ -11,13 +12,13 @@ namespace Harbor.ChangeTracking.Tests;
 ///     S9 (#397): one end-to-end test driving the whole verified-change chain
 ///     against a throwaway repo — pin, isolate, a scripted agent write (no
 ///     LLM), freeze, checks, report, accept — plus the fail-closed edges.
-///     Real git worktrees under an isolated <c>HARBOR_HOME</c>; skips when
-///     git is missing and returns early off Linux (the check step executes
-///     POSIX binaries, the same honest-skip shape as
-///     <c>CheckRunnerTests</c>).
+///     Real git worktrees under an isolated <c>HARBOR_HOME</c>; the family
+///     skips when git is missing (see <see cref="ChangeTrackingTestBase" />),
+///     and the chain itself is Linux-only because the check step executes
+///     POSIX binaries.
 /// </summary>
-[SkipWhenGitMissing]
 [NotInParallel("harbor-home")]
+[RunOn(OS.Linux)]
 public class RunChangeChainTests : ChangeTrackingTestBase
 {
     /// <inheritdoc />
@@ -26,8 +27,6 @@ public class RunChangeChainTests : ChangeTrackingTestBase
     [Test]
     public async Task EndToEnd_PassChain_ReportThenAccept_OperatorTreeHasChange()
     {
-        if (!OperatingSystem.IsLinux())
-            return;
         await WithIsolatedHome(async _ =>
         {
             string dir = InitRepo();
@@ -108,8 +107,6 @@ public class RunChangeChainTests : ChangeTrackingTestBase
     [Test]
     public async Task EndToEnd_FailedCheck_StillReported_AcceptStaysOperatorChoice()
     {
-        if (!OperatingSystem.IsLinux())
-            return;
         await WithIsolatedHome(async _ =>
         {
             string dir = InitRepo();

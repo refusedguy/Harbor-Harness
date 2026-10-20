@@ -9,7 +9,7 @@ namespace Harbor.Tools.Builtin.Tests;
 ///     Uses real temp directories and real symlinks — Linux only.
 /// </summary>
 [NotInParallel("filesystem")]
-[SkipWhenNotLinux]
+[RunOn(OS.Linux)]
 public class SymlinkGuardTests
 {
     private static string NewWorkspace()

@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using Harbor.Abstractions.Models;
 using Harbor.Application.Sessions;
+using Harbor.TestKit;
 
 namespace Harbor.Application.Tests;
 
@@ -9,9 +10,16 @@ namespace Harbor.Application.Tests;
 ///     HEAD succeeds with the pinned revision, tracked dirt or any git failure
 ///     rejects the run, and untracked-only state succeeds with the presence flag.
 /// </summary>
-[SkipWhenGitMissing]
 public class WorkspaceInspectorTests
 {
+    /// <summary>
+    ///     The suite drives a real git repository, so it needs git on PATH. The
+    ///     decision is TUnit's: <c>Skip.Unless</c> marks every test in the
+    ///     class skipped, with the reason, before the class is instantiated.
+    /// </summary>
+    [Before(HookType.Class)]
+    public static void SkipWithoutGit() => Skip.Unless(GitProbe.Available, GitProbe.SkipReason);
+
     [Test]
     public async Task Inspect_CleanHead_SuccessWithPinnedRevision()
     {
@@ -193,28 +201,6 @@ public class WorkspaceInspectorTests
             $"Cannot locate '{relativePath}' above '{AppContext.BaseDirectory}'.");
     }
 
-    internal static bool GitAvailable()
-    {
-        try
-        {
-            var psi = new ProcessStartInfo("git", "--version")
-            {
-                UseShellExecute = false,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                CreateNoWindow = true,
-            };
-            using var proc = Process.Start(psi);
-            return proc is not null && proc.WaitForExit(10_000) && proc.ExitCode == 0;
-        }
-        catch (Exception ex) when (ex is System.ComponentModel.Win32Exception
-            || ex is FileNotFoundException
-            || ex is InvalidOperationException)
-        {
-            return false;
-        }
-    }
-
     private static void Git(string dir, string arguments)
     {
         string output = GitOut(dir, arguments);
@@ -254,15 +240,4 @@ public class WorkspaceInspectorTests
             throw new InvalidOperationException($"git {arguments} failed ({proc.ExitCode}): {stderr}");
         return stdout;
     }
-}
-
-/// <summary>Skip the suite when <c>git</c> is not on PATH (mirrors SkipWhenRgMissing).</summary>
-[AttributeUsage(AttributeTargets.Method | AttributeTargets.Class, Inherited = false)]
-internal sealed class SkipWhenGitMissingAttribute : SkipAttribute
-{
-    public SkipWhenGitMissingAttribute() : base("git is not available on PATH") { }
-
-    /// <inheritdoc />
-    public override Task<bool> ShouldSkip(TestRegisteredContext context)
-        => Task.FromResult(!WorkspaceInspectorTests.GitAvailable());
 }

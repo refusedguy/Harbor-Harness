@@ -6,6 +6,7 @@ using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Application.Sessions;
 using Harbor.ChangeTracking;
 using Harbor.TestKit;
+using TUnit.Core.Enums;
 
 namespace Harbor.ChangeTracking.Tests;
 
@@ -16,7 +17,6 @@ namespace Harbor.ChangeTracking.Tests;
 ///     worktrees under an isolated <c>HARBOR_HOME</c>; the class skips when
 ///     git is missing.
 /// </summary>
-[SkipWhenGitMissing]
 [NotInParallel("harbor-home")]
 public class ChangeSetFreezerTests : ChangeTrackingTestBase
 {
@@ -411,10 +411,9 @@ public class ChangeSetFreezerTests : ChangeTrackingTestBase
     }
 
     [Test]
+    [RunOn(OS.Linux)]
     public async Task Freeze_HooksBypassed_PreCommitRejectorCannotInject()
     {
-        if (!OperatingSystem.IsLinux())
-            return;
         await WithIsolatedHome(async _ =>
         {
             string dir = InitRepo();

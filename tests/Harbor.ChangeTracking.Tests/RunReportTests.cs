@@ -4,6 +4,7 @@ using Harbor.Abstractions.Models;
 using Harbor.Application.Sessions;
 using Harbor.ChangeTracking;
 using Harbor.TestKit;
+using TUnit.Core.Enums;
 
 namespace Harbor.ChangeTracking.Tests;
 
@@ -13,12 +14,12 @@ namespace Harbor.ChangeTracking.Tests;
 ///     set (S3) plus the recorded checks (S4) — persisted as
 ///     <c>report.json</c> + <c>report.txt</c>, and the manifest moves
 ///     <c>Checked -&gt; Reported</c>. Real git worktrees under an isolated
-///     <c>HARBOR_HOME</c>; the class skips when git is missing, and the
-///     process-execution tests return early off Linux (the same honest-skip
-///     shape as <c>CheckRunnerTests</c>).
+///     <c>HARBOR_HOME</c>; the family skips when git is missing (see
+///     <see cref="ChangeTrackingTestBase" />), and the process-execution tests
+///     are Linux-only.
 /// </summary>
-[SkipWhenGitMissing]
 [NotInParallel("harbor-home")]
+[RunOn(OS.Linux)]
 public class RunReportTests : ChangeTrackingTestBase
 {
     /// <inheritdoc />
@@ -27,8 +28,6 @@ public class RunReportTests : ChangeTrackingTestBase
     [Test]
     public async Task Report_PassCheck_AdvancesToReported_WritesArtifacts()
     {
-        if (!OperatingSystem.IsLinux())
-            return;
         await WithIsolatedHome(async home =>
         {
             string dir = InitRepo();
@@ -86,8 +85,6 @@ public class RunReportTests : ChangeTrackingTestBase
     [Test]
     public async Task Report_FailedCheck_ExitOne_StillReported()
     {
-        if (!OperatingSystem.IsLinux())
-            return;
         await WithIsolatedHome(async _ =>
         {
             string dir = InitRepo();
@@ -248,8 +245,6 @@ public class RunReportTests : ChangeTrackingTestBase
     [Test]
     public async Task Report_Rereport_ByteIdentical()
     {
-        if (!OperatingSystem.IsLinux())
-            return;
         await WithIsolatedHome(async home =>
         {
             string dir = InitRepo();
