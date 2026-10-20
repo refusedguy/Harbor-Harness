@@ -15,18 +15,18 @@ into a table that describes a repository which no longer exists.
 
 ## The measured picture
 
-Measured on `dev` at `b9f3c83c` and on the tree this branch carries, which
-adds the string-switch gate and the rewrites it replays:
+Measured on this branch (one commit on `dev` at `10c4bf6a`), the tree the
+table was last reconciled against:
 
 | | |
 |---|---|
-| python tools in `tools/` | 37 files, 28 364 lines |
-| of them, the `check-*.py` family | 19 files, 20 277 lines |
-| workflows that run a python tool | 6: `ci.yml`, `docs.yml`, `demo.yml`, `evaluation-cost.yml`, `test-os.yml`, `meas-build-vcpu.yml` |
+| python tools in `tools/` | 37 files, 28 376 lines |
+| of them, the `check-*.py` family | 19 files, 20 306 lines |
+| workflows that run a python tool | 6: `ci.yml`, `docs.yml`, `demo.yml`, `nightly.yml`, `test-os.yml`, `meas-build-vcpu.yml` |
 | gates that block a build | 22 |
 | gates that report and let the build pass | 1 (`check-test-dup.py`, `--warn-only` while the removal programme runs) |
 | controls for compile-time gates | 1 (`check-tunit-analyzer-gate.py`) |
-| reporters, helpers, libraries | 5 reporters, 6 helpers, 2 libraries |
+| reporters, helpers, libraries | 6 reporters, 5 helpers, 2 libraries |
 | tools with a self-test | 27 |
 | tools with a ratchet | 14 |
 | tools with a floor | 16 |
