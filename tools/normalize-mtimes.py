@@ -89,6 +89,37 @@ def _tracked_files(repo: str) -> list[str]:
     return paths
 
 
+def _stamp_outputs(repo: str, when: float) -> int:
+    """Stamp every file under an obj/ or bin/ directory with `when`.
+
+    The restored outputs carry the timestamps they had when the cache was
+    built. MSBuild compares an output against its other inputs, and the
+    analyzer assemblies in the NuGet folder are among them: a restored
+    NuGet folder is extracted at the start of the run, so the analyzers are
+    NEWER than the outputs the cache carries, and every project looks stale
+    again. Stamping the outputs with the current time puts them back on top
+    of those inputs.
+
+    Returns the number of files stamped.
+    """
+    stamped = 0
+    for dirpath, dirnames, _ in os.walk(repo):
+        outputs = [d for d in dirnames if d in ("obj", "bin")]
+        # Do not walk into the output trees twice.
+        dirnames[:] = [d for d in dirnames if d not in ("obj", "bin") and d != ".git"]
+        for name in outputs:
+            for root, _subdirs, files in os.walk(os.path.join(dirpath, name)):
+                for entry in files:
+                    try:
+                        os.utime(
+                            os.path.join(root, entry), (when, when), follow_symlinks=False
+                        )
+                        stamped += 1
+                    except (NotImplementedError, OSError):
+                        pass
+    return stamped
+
+
 def normalise(repo: str, base: str, now: float, dry_run: bool) -> tuple[int, str]:
     """Set every tracked file's mtime. Returns (exit code, report)."""
     resolved = _git(repo, "rev-parse", "--verify", "--quiet", f"{base}^{{commit}}")
@@ -121,19 +152,27 @@ def normalise(repo: str, base: str, now: float, dry_run: bool) -> tuple[int, str
     touched_now = 0
     touched_base = 0
     missing = 0
+
+    # The outputs first, and the changed sources a second later than them:
+    #
+    #   * the outputs are stamped NOW, so they are newer than every other
+    #     input MSBuild compares them against (the analyzer assemblies in the
+    #     NuGet folder above all) and the unchanged projects are skipped;
+    #   * a CHANGED source is stamped one second after the outputs, so it is
+    #     newer than the output that was built from the old version of it —
+    #     otherwise MSBuild would skip it and the build would be stale;
+    #   * an UNCHANGED source is stamped with the base commit's time, which
+    #     is older than the outputs, so MSBuild skips it.
+    outputs_stamped = 0
+    if not dry_run:
+        outputs_stamped = _stamp_outputs(repo, now)
+
     for path in _tracked_files(repo):
         full = os.path.join(repo, path)
         if not os.path.lexists(full):
             missing += 1
             continue
-        # A changed file must be NEWER than the output that was built from the
-        # old version of it, or the old output survives and the build is stale.
-        # An unchanged file must be OLDER than the restored output, or MSBuild
-        # rebuilds it for nothing. The base commit's time is older than every
-        # restored output (the cache was built after that commit) and "now" is
-        # newer than every restored output (the cache was built in an earlier
-        # run), so the two times bracket the outputs exactly.
-        stamp_for_file = now if path in changed else base_time
+        stamp_for_file = (now + 1.0) if path in changed else base_time
         if not dry_run:
             try:
                 os.utime(full, (stamp_for_file, stamp_for_file), follow_symlinks=False)
@@ -147,7 +186,7 @@ def normalise(repo: str, base: str, now: float, dry_run: bool) -> tuple[int, str
     report = (
         f"base={base} base_time={base_time} changed={len(changed)} "
         f"rebuilt={touched_now} skipped={touched_base} missing={missing} "
-        f"now={int(now)}"
+        f"outputs_stamped={outputs_stamped} now={int(now)}"
     )
     return EXIT_OK, report
 
@@ -176,6 +215,12 @@ def self_test() -> int:
             fh.write("// v2\n")
         subprocess.run(["git", "-C", tmp, "commit", "-qam", "change"], check=True)
 
+        # A restored output: a file under an obj/ directory.
+        os.makedirs(os.path.join(tmp, "obj", "Release", "net10.0"), exist_ok=True)
+        output = os.path.join(tmp, "obj", "Release", "net10.0", "Thing.dll")
+        with open(output, "w", encoding="utf-8") as fh:
+            fh.write("binary")
+
         base_time = int(
             subprocess.run(
                 ["git", "-C", tmp, "log", "-1", "--format=%ct", base],
@@ -192,9 +237,11 @@ def self_test() -> int:
 
         got_changed = os.stat(changed).st_mtime
         got_unchanged = os.stat(unchanged).st_mtime
-        if int(got_changed) != int(now):
+        got_output = os.stat(output).st_mtime
+        if int(got_changed) != int(now) + 1:
             print(
-                f"self-test: the changed file kept mtime {int(got_changed)}, expected {int(now)}",
+                f"self-test: the changed file has mtime {int(got_changed)}, "
+                f"expected {int(now) + 1} (one second after the outputs)",
                 file=sys.stderr,
             )
             return 1
@@ -205,8 +252,18 @@ def self_test() -> int:
                 file=sys.stderr,
             )
             return 1
-        if got_unchanged >= got_changed:
-            print("self-test: the unchanged file is not older than the changed one", file=sys.stderr)
+        if int(got_output) != int(now):
+            print(
+                f"self-test: the restored output has mtime {int(got_output)}, "
+                f"expected {int(now)}",
+                file=sys.stderr,
+            )
+            return 1
+        if got_unchanged >= got_output:
+            print("self-test: the unchanged source is not older than the output", file=sys.stderr)
+            return 1
+        if got_output >= got_changed:
+            print("self-test: the output is not older than the changed source", file=sys.stderr)
             return 1
 
         # An unknown base must NOT be silently accepted.

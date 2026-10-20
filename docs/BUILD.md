@@ -304,11 +304,15 @@ nothing.
 
 `tools/normalize-mtimes.py` puts the mtimes back where the truth is:
 
-- a file whose content DIFFERS from the commit the cache was built from gets
-  the current time → MSBuild rebuilds it, and through the project graph its
-  dependents;
+- the restored outputs (everything under `obj/` and `bin/`) get the current
+  time, so they are newer than the other things MSBuild compares them
+  against — the analyzer assemblies in the NuGet folder above all, which a
+  restored NuGet cache extracts at the start of every run;
+- a file whose content DIFFERS from the commit the cache was built from
+  gets one second after that, so MSBuild rebuilds it, and through the
+  project graph its dependents;
 - a file whose content is IDENTICAL to it gets that commit's time, which is
-  older than the restored outputs → MSBuild skips it.
+  older than the restored outputs, so MSBuild skips it.
 
 The first rule keeps the build honest: a changed file must be NEWER than the
 output that was built from the old version of it, or the old output survives
