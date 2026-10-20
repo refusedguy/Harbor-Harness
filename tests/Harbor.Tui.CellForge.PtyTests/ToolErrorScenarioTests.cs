@@ -12,8 +12,9 @@ namespace Harbor.Tui.CellForge.PtyTests;
 ///     (#1056) and the diff trio (#1122). Right after approving, the test
 ///     switches the mock to a plain text response so follow-up turns settle
 ///     instead of re-executing the canned call (the mock re-serves per
-///     request and the home-config <c>maxSteps</c> budget does not end the
-///     run — see #1118). The approved call executes and fails: the card
+///     request, and the home-config <c>maxSteps</c> budget ends the run now —
+///     #1118 — so the budget is set to the two turns this scenario needs).
+///     The approved call executes and fails: the card
 ///     completes in the error state (glyph <c>✖</c>, symmetric to the
 ///     <c>✔</c> success header asserted by #1122), the run goes idle, and
 ///     nothing appears on disk. The error BODY ("File not found: …") is
@@ -37,7 +38,7 @@ public sealed class ToolErrorScenarioTests : CellForgePtyScenarioBase
               "model": "mock/test-model",
               "agent": "code",
               "onboarded": true,
-              "maxSteps": 1
+              "maxSteps": 2
             }
             """);
         Server.SetToolCallResponse("test-model", "read", new { path = probe });

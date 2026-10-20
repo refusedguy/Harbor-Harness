@@ -8,7 +8,7 @@
 // decision tree, not the CLI:
 //
 //   1. src/Harbor.Abstractions/Agents/AgentDefinition.cs              declaration
-//   2. src/Harbor.Hosting/Modules/ToolsCatalog.cs:30-32                registration
+//   2. src/Harbor.Hosting/Modules/ToolsCatalog.cs:40-46                registration
 //   3. src/Harbor.Onboarding/Onboarding/OnboardingWizard.cs:376-390     the menu
 //   4. apps/Harbor.App.Cli/Commands/AgentCommand.cs:63                 /agent's own text
 //   5. src/Harbor.Application/Configuration/HarborConfig.cs:108        doc comment

@@ -15,9 +15,9 @@ namespace Harbor.Tui.CellForge.PtyTests;
 ///     <para />
 ///     Right after approving, the test switches the mock to a plain text
 ///     response so follow-up turns settle instead of re-executing the canned
-///     call (the mock re-serves per request and the home-config
-///     <c>maxSteps</c> budget does not end the run — see #1118; without the
-///     switch the flood scrolls the turn-1 card off the 30-row grid). The
+///     call (the mock re-serves per request, and the home-config
+///     <c>maxSteps</c> budget ends the run now — #1118 — so the budget is
+///     set to the two turns this scenario needs). The
 ///     approved call runs exactly once: its success header (tool + ok pill)
 ///     stays on the settled timeline next to the approval trail, and the
 ///     probe is patched on disk.
@@ -33,14 +33,15 @@ public sealed class PatchDiffScenarioTests : CellForgePtyScenarioBase
         string probe = Path.Combine(TempHome, "pty-patch-probe-1057.txt");
         await File.WriteAllTextAsync(probe, "alpha-1057\npatchme-line-1057\nomega-1057\n").ConfigureAwait(false);
 
-        // Cap the tool-call loop: the mock re-serves the canned call per request.
+        // Two turns, and no more: the tool call and the follow-up text. The
+        // home-config budget ends the run now (#1118) — it used not to.
         WriteHomeConfig("""
             {
               "provider": "mock",
               "model": "mock/test-model",
               "agent": "code",
               "onboarded": true,
-              "maxSteps": 1
+              "maxSteps": 2
             }
             """);
         Server.SetToolCallResponse("test-model", "patch", new

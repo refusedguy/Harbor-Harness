@@ -89,7 +89,10 @@ internal sealed class ConfigCommand : IReplCommand
             new("agent", "Agent", "Agent name", string.Empty, "Keys"),
             new("tui", "Tui", "TUI renderer", string.Empty, "Keys"),
             new("storage", "Storage", "Storage backend", string.Empty, "Keys"),
-            new("maxsteps", "MaxSteps", "Max steps per turn", string.Empty, "Keys"),
+            // #1118: the key is the step BUDGET of a run — the number of LLM
+            // turns the run may take — so the description says that, not
+            // "per turn", which read as a per-message limit.
+            new("maxsteps", "MaxSteps", "Step budget per agent run", string.Empty, "Keys"),
             new("costlimit", "CostLimit", "Cost limit per session", string.Empty, "Keys")
         };
 
