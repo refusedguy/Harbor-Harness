@@ -69,7 +69,7 @@ services.AddSingleton<ISessionStore>(new SqliteSessionStore(sqlitePath, logger))
 ```
 
 WAL mode is enabled for concurrent readers (`PRAGMA journal_mode = WAL`,
-`src/Harbor.Storage.Sqlite/SqliteSessionStore.cs:345`). The agent persists messages through the same `ISessionStore` contract as every other backend.
+`src/Harbor.Storage.Sqlite/SqliteSessionStore.cs:646`). The agent persists messages through the same `ISessionStore` contract as every other backend.
 
 ## See also
 

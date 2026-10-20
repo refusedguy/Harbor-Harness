@@ -165,4 +165,62 @@ public class SqliteCheckpointStoreImplSiteTests
             Cleanup(dbPath);
         }
     }
+
+    /// <summary>
+    ///     The store's forwarders really do route to the axis: the store holds
+    ///     ONE <c>SqliteCheckpointStore</c>, and a write through the store's
+    ///     forwarder is visible to the axis (and the other way round). The
+    ///     forwarder is a hand-off, not a second implementation.
+    /// </summary>
+    [Test]
+    public async Task Store_Forwards_The_Checkpoint_Calls_To_The_Axis()
+    {
+        var store = Create(out string dbPath);
+        try
+        {
+            SqliteCheckpointStore? axis = ReadAxis(store);
+            await Assert.That(axis is not null).IsTrue();
+            await Assert.That(axis!.GetType().IsSealed).IsTrue();
+            await Assert.That(axis.GetType().IsNotPublic).IsTrue();
+            await Assert.That(axis is ISessionCheckpointStore).IsTrue();
+
+            var session = (await store.CreateAsync("/proj", "code", "test", "test-model")).Value;
+            var ids = await SeedAsync(store, session.Id, 3);
+
+            // Written through the STORE's forwarder...
+            var marked = await store.CreateCheckpointAsync(session.Id, ids[1], "through-store");
+            await Assert.That(marked.IsSuccess).IsTrue();
+
+            // ... and read back through the AXIS: the forwarder is not a copy.
+            var listedOnAxis = await axis.ListCheckpointsAsync(session.Id);
+            await Assert.That(listedOnAxis.IsSuccess).IsTrue();
+            await Assert.That(listedOnAxis.Value.Count).IsEqualTo(1);
+            await Assert.That(listedOnAxis.Value[0].Id).IsEqualTo(marked.Value.Id);
+
+            // Written through the AXIS...
+            var markedOnAxis = await axis.CreateCheckpointAsync(session.Id, ids[2], "through-axis");
+            await Assert.That(markedOnAxis.IsSuccess).IsTrue();
+
+            // ... and read back through the STORE's forwarder.
+            var listedOnStore = await store.ListCheckpointsAsync(session.Id);
+            await Assert.That(listedOnStore.IsSuccess).IsTrue();
+            await Assert.That(listedOnStore.Value.Count).IsEqualTo(2);
+            await Assert.That(listedOnStore.Value[1].Id).IsEqualTo(markedOnAxis.Value.Id);
+        }
+        finally
+        {
+            Cleanup(dbPath);
+        }
+    }
+
+    /// <summary>
+    ///     The axis the store delegates to: the store's single
+    ///     <c>SqliteCheckpointStore</c> field.
+    /// </summary>
+    private static SqliteCheckpointStore? ReadAxis(SqliteSessionStore store)
+    {
+        FieldInfo? field = typeof(SqliteSessionStore)
+            .GetField("_checkpoints", BindingFlags.NonPublic | BindingFlags.Instance);
+        return field?.GetValue(store) as SqliteCheckpointStore;
+    }
 }
