@@ -413,9 +413,21 @@ public sealed class ScanUniverseRule
     ///         it moved no row. The count is re-measured from the tree on every
     ///         change, and the split left it at 36.
     ///     </para>
+    ///     <para>
+    ///         #1875 moves <c>tests=37</c> to <c>tests=38</c>: the
+    ///         source-generated test doubles moved into the part
+    ///         <c>tests/Harbor.TestKit.Generated</c>, which references
+    ///         <c>Harbor.Abstractions</c> and
+    ///         <c>Harbor.Abstractions.Contracts</c> and is not in the inventory —
+    ///         the architecture tests do not reference it, so no reflection rule
+    ///         built on this helper can see it. It is blind for the same reason
+    ///         <c>Harbor.TestKit.Support</c> is (#1772): a test-only part that
+    ///         exists so that a test project can reach the shared helpers
+    ///         without gaining a product assembly it did not already have.
+    ///     </para>
     /// </remarks>
     private static readonly string[] MeasuredBlindTrees =
-        ["apps=2", "contrib=15", "samples=5", "tests=37", "tools=1"];
+        ["apps=2", "contrib=15", "samples=5", "tests=38", "tools=1"];
 
     /// <summary>What the two walks found, once.</summary>
     private sealed record UniverseReport(
