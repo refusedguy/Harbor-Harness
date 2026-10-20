@@ -1762,6 +1762,7 @@ using System.Text.Json;
 using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Permissions;
 using Harbor.Abstractions.Tools;
+using Harbor.TestKit;
 using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Harbor.Tools.Builtin.Tests;
@@ -1783,14 +1784,6 @@ public class WebFetchToolTests
 
     private static WebFetchTool NewTool(Func<HttpRequestMessage, HttpResponseMessage> responder)
         => new(NullLogger<WebFetchTool>.Instance, () => new HttpClient(new StubHandler(responder)));
-
-    private static ToolContext CreateContext() => new(
-        "test-session", "test-message", "test-call", "code",
-        CancellationToken.None,
-        Array.Empty<AgentMessage>(),
-        (_, _) => Task.CompletedTask,
-        (_, _) => Task.FromResult(new PermissionResponse(PermissionAction.Allow, false)),
-        null!);
 }
 ```
 

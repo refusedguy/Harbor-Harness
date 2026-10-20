@@ -12,6 +12,7 @@ using Harbor.Abstractions.Providers;
 using Harbor.Abstractions.Tools;
 using Harbor.Diagnostics;
 using Harbor.Telemetry;
+using Harbor.TestKit;
 using TUnit.Assertions;
 
 namespace Harbor.Telemetry.Tests;
@@ -256,15 +257,8 @@ public class DecoratorTelemetryTests : IDisposable
 
     private static JsonElement Args() => JsonDocument.Parse("{}").RootElement.Clone();
 
-    private static ToolContext DefaultContext() => new(
-        "session-tel-1",
-        "assistant-tel-1",
-        "call-tel-1",
-        "code",
-        CancellationToken.None,
-        [],
-        (_, _) => Task.CompletedTask,
-        (_, _) => Task.FromResult(new PermissionResponse(PermissionAction.Allow, false)));
+    private static ToolContext DefaultContext() =>
+        TestToolContext.Create(sessionId: "session-tel-1", messageId: "assistant-tel-1", callId: "call-tel-1");
 
     private static LlmRequest Request() => new(
         "test-model",

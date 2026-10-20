@@ -1,7 +1,5 @@
 using System.Text.Json;
-using Harbor.Abstractions.Models;
-using Harbor.Abstractions.Permissions;
-using Harbor.Abstractions.Tools;
+using Harbor.TestKit;
 using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Harbor.Tools.Builtin.Tests;
@@ -20,16 +18,6 @@ public class WriteEditBypassTests
     private static JsonElement Args(object payload) =>
         JsonDocument.Parse(JsonSerializer.Serialize(payload)).RootElement.Clone();
 
-    private static ToolContext CreateContext() => new(
-        "test-session",
-        "test-message",
-        "test-call",
-        "code",
-        CancellationToken.None,
-        Array.Empty<AgentMessage>(),
-        (_, _) => Task.CompletedTask,
-        (_, _) => Task.FromResult(new PermissionResponse(PermissionAction.Allow, false)));
-
     [Test]
     public async Task Write_ExecuteAsync_AbsoluteTraversalPathEscapingWorkspace_IsRefused()
     {
@@ -43,7 +31,7 @@ public class WriteEditBypassTests
             var tool = new WriteTool(NullLogger<WriteTool>.Instance);
             var result = await tool.ExecuteAsync(
                 Args(new { path = traversalPath, content = "pwned" }),
-                CreateContext());
+                TestToolContext.Create());
 
             await Assert.That(result.IsError).IsTrue();
             await Assert.That(File.Exists(escapedTarget)).IsFalse();
@@ -68,7 +56,7 @@ public class WriteEditBypassTests
             var tool = new EditTool(NullLogger<EditTool>.Instance);
             var result = await tool.ExecuteAsync(
                 Args(new { path = traversalPath, oldString = "AAA", newString = "BBB" }),
-                CreateContext());
+                TestToolContext.Create());
 
             await Assert.That(result.IsError).IsTrue();
             await Assert.That(await File.ReadAllTextAsync(victim)).IsEqualTo("AAA");
@@ -95,7 +83,7 @@ public class WriteEditBypassTests
             var tool = new WriteTool(NullLogger<WriteTool>.Instance);
             var result = await tool.ExecuteAsync(
                 Args(new { path = linkRelativePath, content = "pwned" }),
-                CreateContext());
+                TestToolContext.Create());
 
             await Assert.That(result.IsError).IsTrue();
             await Assert.That(File.Exists(escapeTarget)).IsFalse();
@@ -123,7 +111,7 @@ public class WriteEditBypassTests
             var tool = new EditTool(NullLogger<EditTool>.Instance);
             var result = await tool.ExecuteAsync(
                 Args(new { path = linkRelativePath, oldString = "AAA", newString = "BBB" }),
-                CreateContext());
+                TestToolContext.Create());
 
             await Assert.That(result.IsError).IsTrue();
             await Assert.That(await File.ReadAllTextAsync(victim)).IsEqualTo("AAA");

@@ -1,7 +1,5 @@
 using System.Text.Json;
-using Harbor.Abstractions.Models;
-using Harbor.Abstractions.Permissions;
-using Harbor.Abstractions.Tools;
+using Harbor.TestKit;
 using Microsoft.Extensions.Logging.Abstractions;
 namespace Harbor.Tools.Builtin.Tests;
 /// <summary>
@@ -58,7 +56,7 @@ public class McpResourcePromptToolTests
         var tool = new McpResourceTool(registry, NullLogger<McpResourceTool>.Instance);
 
         var result = await tool.ExecuteAsync(
-            JsonDocument.Parse("""{"server":"db","uri":"file:///a.md"}""").RootElement, CreateContext());
+            JsonDocument.Parse("""{"server":"db","uri":"file:///a.md"}""").RootElement, TestToolContext.Create());
 
         await Assert.That(result.IsError).IsFalse();
         await Assert.That(result.Output).Contains("# API");
@@ -75,7 +73,7 @@ public class McpResourcePromptToolTests
         var tool = new McpResourceTool(registry, NullLogger<McpResourceTool>.Instance);
 
         var result = await tool.ExecuteAsync(
-            JsonDocument.Parse("""{"server":"db","uri":"file:///a.png"}""").RootElement, CreateContext());
+            JsonDocument.Parse("""{"server":"db","uri":"file:///a.png"}""").RootElement, TestToolContext.Create());
 
         await Assert.That(result.IsError).IsTrue();
         await Assert.That(result.Output).Contains("binary");
@@ -87,7 +85,7 @@ public class McpResourcePromptToolTests
         var tool = new McpResourceTool(ScriptedMcpRegistry.Fail("boom"), NullLogger<McpResourceTool>.Instance);
 
         var result = await tool.ExecuteAsync(
-            JsonDocument.Parse("""{"server":"db","uri":"file:///a.md"}""").RootElement, CreateContext());
+            JsonDocument.Parse("""{"server":"db","uri":"file:///a.md"}""").RootElement, TestToolContext.Create());
 
         await Assert.That(result.IsError).IsTrue();
         await Assert.That(result.Output).Contains("boom");
@@ -102,7 +100,7 @@ public class McpResourcePromptToolTests
         var tool = new McpPromptTool(registry, NullLogger<McpPromptTool>.Instance);
 
         var result = await tool.ExecuteAsync(
-            JsonDocument.Parse("""{"server":"s","name":"review","arguments":{"focus":"api"}}""").RootElement, CreateContext());
+            JsonDocument.Parse("""{"server":"s","name":"review","arguments":{"focus":"api"}}""").RootElement, TestToolContext.Create());
 
         await Assert.That(result.IsError).IsFalse();
         await Assert.That(result.Output).Contains("[user]");
@@ -119,7 +117,7 @@ public class McpResourcePromptToolTests
         var tool = new McpPromptTool(registry, NullLogger<McpPromptTool>.Instance);
 
         var result = await tool.ExecuteAsync(
-            JsonDocument.Parse("""{"server":"s","name":"p"}""").RootElement, CreateContext());
+            JsonDocument.Parse("""{"server":"s","name":"p"}""").RootElement, TestToolContext.Create());
 
         await Assert.That(result.IsError).IsFalse();
         await Assert.That(result.Output).Contains("Describe");
@@ -133,18 +131,8 @@ public class McpResourcePromptToolTests
         var tool = new McpPromptTool(registry, NullLogger<McpPromptTool>.Instance);
 
         var result = await tool.ExecuteAsync(
-            JsonDocument.Parse("""{"server":"s","name":"p"}""").RootElement, CreateContext());
+            JsonDocument.Parse("""{"server":"s","name":"p"}""").RootElement, TestToolContext.Create());
 
         await Assert.That(result.IsError).IsTrue();
     }
-
-    private static ToolContext CreateContext() => new(
-        "test-session",
-        "test-message",
-        "test-call",
-        "code",
-        CancellationToken.None,
-        Array.Empty<AgentMessage>(),
-        (_, _) => Task.CompletedTask,
-        (_, _) => Task.FromResult(new PermissionResponse(PermissionAction.Allow, false)));
 }

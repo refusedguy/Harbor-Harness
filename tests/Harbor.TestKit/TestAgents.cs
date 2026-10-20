@@ -1,5 +1,4 @@
 using Harbor.Abstractions.Agents;
-using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Abstractions.Permissions;
 using Harbor.Abstractions.Tools;
@@ -36,13 +35,11 @@ public static class TestAgents
             ruleset);
     }
 
-    public static ToolContext CreateToolContext() => new(
-        "test-session",
-        "test-message",
-        "test-call",
-        "code",
-        CancellationToken.None,
-        Array.Empty<AgentMessage>(),
-        (_, _) => Task.CompletedTask,
-        (_, _) => Task.FromResult(new PermissionResponse(PermissionAction.Allow, false)));
+    /// <summary>
+    ///     Canonical test context. Kept as a named entry point for call sites
+    ///     that read better as <c>TestAgents.CreateToolContext()</c>; the literal
+    ///     itself now lives in one place — <see cref="TestToolContext.Create" />
+    ///     (#1775).
+    /// </summary>
+    public static ToolContext CreateToolContext() => TestToolContext.Create();
 }

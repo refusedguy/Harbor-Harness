@@ -5,6 +5,7 @@ using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Abstractions.Permissions;
 using Harbor.Abstractions.Tools;
+using Harbor.TestKit;
 using Microsoft.Extensions.Logging.Abstractions;
 using Harbor.Registries.Agents;
 
@@ -27,15 +28,8 @@ public class TaskToolCostTests
         20,
         IsSubAgent: true);
 
-    private static ToolContext CreateContext() => new(
-        "session-1",
-        "message-1",
-        "call-1",
-        "code",
-        CancellationToken.None,
-        Array.Empty<AgentMessage>(),
-        (_, _) => Task.CompletedTask,
-        (_, _) => Task.FromResult(new PermissionResponse(PermissionAction.Allow, false)));
+    private static ToolContext CreateContext() =>
+        TestToolContext.Create(sessionId: "session-1", messageId: "message-1", callId: "call-1");
 
     private static JsonElement Args(params (string key, string value)[] pairs)
     {

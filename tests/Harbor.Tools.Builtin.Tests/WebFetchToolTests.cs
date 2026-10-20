@@ -2,9 +2,8 @@ using System.Net;
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
-using Harbor.Abstractions.Models;
-using Harbor.Abstractions.Permissions;
 using Harbor.Abstractions.Tools;
+using Harbor.TestKit;
 using Microsoft.Extensions.Logging.Abstractions;
 namespace Harbor.Tools.Builtin.Tests;
 /// <summary>
@@ -55,7 +54,7 @@ public class WebFetchToolTests
         var tool = NewTool(_ => NewResponse(HttpStatusCode.OK, html, "text/html"));
         var args = JsonDocument.Parse("""{"url":"https://example.com/"}""").RootElement;
 
-        var result = await tool.ExecuteAsync(args, CreateContext());
+        var result = await tool.ExecuteAsync(args, TestToolContext.Create());
 
         await Assert.That(result.IsError).IsFalse();
         // Status code surfaced in summary
@@ -75,7 +74,7 @@ public class WebFetchToolTests
         var tool = NewTool(_ => NewResponse(HttpStatusCode.OK, new byte[] { 1, 2, 3 }, "image/png"));
         var args = JsonDocument.Parse("""{"url":"https://example.com/img.png"}""").RootElement;
 
-        var result = await tool.ExecuteAsync(args, CreateContext());
+        var result = await tool.ExecuteAsync(args, TestToolContext.Create());
 
         await Assert.That(result.IsError).IsTrue();
         await Assert.That(result.Output).Contains("binary");
@@ -88,7 +87,7 @@ public class WebFetchToolTests
         var tool = NewTool(_ => NewResponse(HttpStatusCode.OK, json, "application/json"));
         var args = JsonDocument.Parse("""{"url":"https://api.example.com/v1/foo"}""").RootElement;
 
-        var result = await tool.ExecuteAsync(args, CreateContext());
+        var result = await tool.ExecuteAsync(args, TestToolContext.Create());
 
         await Assert.That(result.IsError).IsFalse();
         await Assert.That(result.Output).Contains("\"hello\":\"world\"");
@@ -102,7 +101,7 @@ public class WebFetchToolTests
         var tool = NewTool(_ => NewResponse(HttpStatusCode.OK, body, "text/html"));
         var args = JsonDocument.Parse("""{"url":"https://example.com/","maxChars":100}""").RootElement;
 
-        var result = await tool.ExecuteAsync(args, CreateContext());
+        var result = await tool.ExecuteAsync(args, TestToolContext.Create());
 
         await Assert.That(result.IsError).IsFalse();
         await Assert.That(result.Output).Contains("truncated at 100");
@@ -114,7 +113,7 @@ public class WebFetchToolTests
         var tool = NewTool(_ => throw new HttpRequestException("connection refused"));
         var args = JsonDocument.Parse("""{"url":"https://example.com/"}""").RootElement;
 
-        var result = await tool.ExecuteAsync(args, CreateContext());
+        var result = await tool.ExecuteAsync(args, TestToolContext.Create());
 
         await Assert.That(result.IsError).IsTrue();
         await Assert.That(result.Output).Contains("HTTP request failed");
@@ -131,16 +130,6 @@ public class WebFetchToolTests
             // client — fail-closed on hosts that don't resolve (CI runners).
             // "*" disables the address check for the whole mock harness.
             allowedHosts: ["*"]);
-
-    private static ToolContext CreateContext() => new(
-        "test-session",
-        "test-message",
-        "test-call",
-        "code",
-        CancellationToken.None,
-        Array.Empty<AgentMessage>(),
-        (_, _) => Task.CompletedTask,
-        (_, _) => Task.FromResult(new PermissionResponse(PermissionAction.Allow, false)));
 
     private static HttpResponseMessage NewResponse(HttpStatusCode status, string body, string contentType) =>
         new()

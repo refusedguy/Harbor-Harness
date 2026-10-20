@@ -2,8 +2,7 @@ using System.Collections.Generic;
 using System.Text.Json;
 using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Models;
-using Harbor.Abstractions.Permissions;
-using Harbor.Abstractions.Tools;
+using Harbor.TestKit;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using TUnit.Assertions;
@@ -44,7 +43,7 @@ public class BashToolProxyTests
         BashTool tool = new(proxy, NullLogger<BashTool>.Instance);
         var args = JsonDocument.Parse("""{"command":"echo hi","timeout":5}""").RootElement;
 
-        ToolResult result = await tool.ExecuteAsync(args, CreateContext()).WaitAsync(TimeSpan.FromSeconds(15));
+        ToolResult result = await tool.ExecuteAsync(args, TestToolContext.Create()).WaitAsync(TimeSpan.FromSeconds(15));
 
         await Assert.That(result.IsError).IsTrue();
         await Assert.That(result.Output).IsEqualTo("Failed to start process: no such file");
@@ -59,7 +58,7 @@ public class BashToolProxyTests
         BashTool tool = new(proxy, NullLogger<BashTool>.Instance);
         var args = JsonDocument.Parse("""{"command":"echo hi","timeout":5}""").RootElement;
 
-        ToolResult result = await tool.ExecuteAsync(args, CreateContext()).WaitAsync(TimeSpan.FromSeconds(15));
+        ToolResult result = await tool.ExecuteAsync(args, TestToolContext.Create()).WaitAsync(TimeSpan.FromSeconds(15));
 
         await Assert.That(result.IsError).IsFalse();
         // Composition appends a '\n' separator after each non-empty block, on
@@ -77,7 +76,7 @@ public class BashToolProxyTests
         var args = JsonDocument.Parse("""{"command":"exit 2","timeout":5}""").RootElement;
         proxy.ExitCodeOverride = 2;
 
-        ToolResult result = await tool.ExecuteAsync(args, CreateContext()).WaitAsync(TimeSpan.FromSeconds(15));
+        ToolResult result = await tool.ExecuteAsync(args, TestToolContext.Create()).WaitAsync(TimeSpan.FromSeconds(15));
 
         await Assert.That(result.IsError).IsTrue();
         await Assert.That(result.Output).Contains("[exit code: 2]");
@@ -103,7 +102,7 @@ public class BashToolProxyTests
         BashTool tool = new(proxy, logger);
         var args = JsonDocument.Parse("""{"command":"cat huge.log","timeout":5}""").RootElement;
 
-        ToolResult result = await tool.ExecuteAsync(args, CreateContext()).WaitAsync(TimeSpan.FromSeconds(15));
+        ToolResult result = await tool.ExecuteAsync(args, TestToolContext.Create()).WaitAsync(TimeSpan.FromSeconds(15));
 
         await Assert.That(result.IsError).IsFalse();
         // Combined transcript exceeds the hard cut → truncated to exactly 50_000.
@@ -126,7 +125,7 @@ public class BashToolProxyTests
         BashTool tool = new(proxy, NullLogger<BashTool>.Instance);
         var args = JsonDocument.Parse("""{"command":"sleep 100","timeout":1}""").RootElement;
 
-        ToolResult result = await tool.ExecuteAsync(args, CreateContext()).WaitAsync(TimeSpan.FromSeconds(15));
+        ToolResult result = await tool.ExecuteAsync(args, TestToolContext.Create()).WaitAsync(TimeSpan.FromSeconds(15));
 
         await Assert.That(result.IsError).IsTrue();
         await Assert.That(result.Output).Contains("Command timed out after 1s and was killed.");
@@ -146,7 +145,7 @@ public class BashToolProxyTests
         var args = JsonDocument.Parse("""{"command":"sleep 100","timeout":30}""").RootElement;
 
         ToolResult result = await tool
-            .ExecuteAsync(args, CreateContext(), callerCts.Token)
+            .ExecuteAsync(args, TestToolContext.Create(), callerCts.Token)
             .WaitAsync(TimeSpan.FromSeconds(15));
 
         await Assert.That(result.IsError).IsTrue();
@@ -170,7 +169,7 @@ public class BashToolProxyTests
 
         try
         {
-            await tool.ExecuteAsync(args, CreateContext()).WaitAsync(TimeSpan.FromSeconds(15));
+            await tool.ExecuteAsync(args, TestToolContext.Create()).WaitAsync(TimeSpan.FromSeconds(15));
 
             await Assert.That(proxy.LastSpec!.FileName).IsEqualTo(shell);
             await Assert.That(proxy.LastSpec.Arguments.Count).IsEqualTo(2);
@@ -198,7 +197,7 @@ public class BashToolProxyTests
         var args = JsonDocument.Parse(
             """{"command":"pwd","cwd":"/definitely/missing/kilo-1590"}""").RootElement;
 
-        ToolResult result = await tool.ExecuteAsync(args, CreateContext()).WaitAsync(TimeSpan.FromSeconds(15));
+        ToolResult result = await tool.ExecuteAsync(args, TestToolContext.Create()).WaitAsync(TimeSpan.FromSeconds(15));
 
         await Assert.That(result.IsError).IsTrue();
         await Assert.That(result.Output).Contains("Working directory does not exist");
@@ -212,16 +211,6 @@ public class BashToolProxyTests
     {
         Build = _ => new FakeProcessHandle(["out-1", "out-2"], ["err-1"], 0)
     };
-
-    private static ToolContext CreateContext() => new(
-        "test-session",
-        "test-message",
-        "test-call",
-        "code",
-        CancellationToken.None,
-        Array.Empty<AgentMessage>(),
-        (_, _) => Task.CompletedTask,
-        (_, _) => Task.FromResult(new PermissionResponse(PermissionAction.Allow, false)));
 }
 
 /// <summary>

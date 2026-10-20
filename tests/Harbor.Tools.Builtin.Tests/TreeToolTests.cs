@@ -1,7 +1,6 @@
 using System.Text.Json;
-using Harbor.Abstractions.Models;
-using Harbor.Abstractions.Permissions;
 using Harbor.Abstractions.Tools;
+using Harbor.TestKit;
 using Microsoft.Extensions.Logging.Abstractions;
 namespace Harbor.Tools.Builtin.Tests;
 /// <summary>
@@ -41,7 +40,7 @@ public class TreeToolTests
         var tool = new TreeTool(NullLogger<TreeTool>.Instance);
         var args = JsonDocument.Parse(
             $$"""{"path":"/tmp/harbor-tree-missing-{{Guid.NewGuid():N}}"}""").RootElement;
-        var result = await tool.ExecuteAsync(args, CreateContext());
+        var result = await tool.ExecuteAsync(args, TestToolContext.Create());
         await Assert.That(result.IsError).IsTrue();
         await Assert.That(result.Output).Contains("not found");
     }
@@ -62,7 +61,7 @@ public class TreeToolTests
             var tool = new TreeTool(NullLogger<TreeTool>.Instance);
             var args = JsonDocument.Parse(
                 $$"""{"path":"{{root.Replace("\\", "\\\\")}}","maxDepth":4,"gitignore":false}""").RootElement;
-            var result = await tool.ExecuteAsync(args, CreateContext());
+            var result = await tool.ExecuteAsync(args, TestToolContext.Create());
 
             await Assert.That(result.IsError).IsFalse();
             await Assert.That(result.Output).Contains("src/");
@@ -95,7 +94,7 @@ public class TreeToolTests
             var tool = new TreeTool(NullLogger<TreeTool>.Instance);
             var args = JsonDocument.Parse(
                 $$"""{"path":"{{root.Replace("\\", "\\\\")}}","maxDepth":2,"gitignore":false}""").RootElement;
-            var result = await tool.ExecuteAsync(args, CreateContext());
+            var result = await tool.ExecuteAsync(args, TestToolContext.Create());
 
             await Assert.That(result.IsError).IsFalse();
             await Assert.That(result.Output).Contains("a/");
@@ -122,7 +121,7 @@ public class TreeToolTests
             var tool = new TreeTool(NullLogger<TreeTool>.Instance);
             var args = JsonDocument.Parse(
                 $$"""{"path":"{{root.Replace("\\", "\\\\")}}","gitignore":false}""").RootElement;
-            var result = await tool.ExecuteAsync(args, CreateContext());
+            var result = await tool.ExecuteAsync(args, TestToolContext.Create());
 
             await Assert.That(result.IsError).IsFalse();
             await Assert.That(result.Output).Contains("visible.txt");
@@ -147,7 +146,7 @@ public class TreeToolTests
             var tool = new TreeTool(NullLogger<TreeTool>.Instance);
             var args = JsonDocument.Parse(
                 $$"""{"path":"{{root.Replace("\\", "\\\\")}}","includeHidden":true,"gitignore":false}""").RootElement;
-            var result = await tool.ExecuteAsync(args, CreateContext());
+            var result = await tool.ExecuteAsync(args, TestToolContext.Create());
 
             await Assert.That(result.IsError).IsFalse();
             await Assert.That(result.Output).Contains(".env");
@@ -157,14 +156,4 @@ public class TreeToolTests
             if (Directory.Exists(root)) Directory.Delete(root, true);
         }
     }
-
-    private static ToolContext CreateContext() => new(
-        "test-session",
-        "test-message",
-        "test-call",
-        "code",
-        CancellationToken.None,
-        Array.Empty<AgentMessage>(),
-        (_, _) => Task.CompletedTask,
-        (_, _) => Task.FromResult(new PermissionResponse(PermissionAction.Allow, false)));
 }

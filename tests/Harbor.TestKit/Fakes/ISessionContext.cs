@@ -1,60 +1,8 @@
-using Harbor.Abstractions.Events;
 using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Providers;
 using Harbor.Abstractions.Sessions;
-using System.IO;
 
 namespace Harbor.TestKit;
-
-/// <summary>Message builders with sensible defaults (P.6: −15 fixture copies).</summary>
-public static class TestMessages
-{
-    public static UserMessage User(string content, string sessionId = "session-1") => new(
-        Guid.NewGuid().ToString("N"),
-        sessionId,
-        DateTimeOffset.UtcNow,
-        content,
-        "user",
-        "test-model");
-
-    public static AssistantMessage Assistant(string text, string sessionId = "session-1") => new(
-        Guid.NewGuid().ToString("N"),
-        sessionId,
-        DateTimeOffset.UtcNow,
-        [new TextPart(text)],
-        StopReason.Stop,
-        new Usage(0, 0),
-        "test-model");
-
-    public static ToolResultMessage ToolResult(string toolName, string output, string callId = "call-1", string sessionId = "session-1") => new(
-        Guid.NewGuid().ToString("N"),
-        sessionId,
-        DateTimeOffset.UtcNow,
-        [new ToolResultEntry(callId, toolName, output, false)]);
-
-    public static string RenderText(LlmRequest request)
-    {
-        var sb = new System.Text.StringBuilder();
-        foreach (LlmMessage message in request.Messages)
-        {
-            if (message is LlmUserMessage user)
-            {
-                foreach (LlmContentBlock block in user.Content)
-                {
-                    if (block is LlmTextBlock text)
-                    {
-                        sb.Append(text.Text);
-                    }
-                }
-            }
-            else if (message is LlmToolResultMessage toolResult)
-            {
-                sb.Append(toolResult.Output);
-            }
-        }
-        return sb.ToString();
-    }
-}
 
 /// <summary>In-memory <see cref="ISessionContext" /> with steering helpers.</summary>
 public sealed class TestSessionContext(Session session, IReadOnlyList<AgentMessage>? seedMessages = null) : ISessionContext

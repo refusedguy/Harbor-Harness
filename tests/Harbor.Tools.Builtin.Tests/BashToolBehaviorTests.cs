@@ -1,8 +1,7 @@
 using System.Diagnostics;
 using System.Text.Json;
 using Harbor.Abstractions.Models;
-using Harbor.Abstractions.Permissions;
-using Harbor.Abstractions.Tools;
+using Harbor.TestKit;
 using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Harbor.Tools.Builtin.Tests;
@@ -186,18 +185,8 @@ public class BashToolBehaviorTests
     private static BashTool NewTool() =>
         new(new SystemProcessProxy(), NullLogger<BashTool>.Instance);
 
-    private static ToolContext CreateContext() => new(
-        "test-session",
-        "test-message",
-        "test-call",
-        "code",
-        CancellationToken.None,
-        Array.Empty<AgentMessage>(),
-        (_, _) => Task.CompletedTask,
-        (_, _) => Task.FromResult(new PermissionResponse(PermissionAction.Allow, false)));
-
     private static Task<ToolResult> ExecuteAsync(JsonElement args)
-        => NewTool().ExecuteAsync(args, CreateContext());
+        => NewTool().ExecuteAsync(args, TestToolContext.Create());
 
     private static async Task<bool> WaitForAsync(Func<Task<bool>> condition, TimeSpan deadline, TimeSpan pollInterval)
     {

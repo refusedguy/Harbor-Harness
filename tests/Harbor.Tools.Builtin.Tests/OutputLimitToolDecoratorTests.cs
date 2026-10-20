@@ -4,6 +4,7 @@ using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Permissions;
 using Harbor.Abstractions.Tools;
 using Harbor.Abstractions.Models.Identifiers;
+using Harbor.TestKit;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using TUnit.Assertions;
@@ -98,7 +99,7 @@ public class OutputLimitToolDecoratorTests
         FakeLimitTool fake = new() { Result = inner };
         OutputLimitToolDecorator decorator = new(fake, NullLogger.Instance);
 
-        ToolResult result = await decorator.ExecuteAsync(EmptyArgs(), CreateContext());
+        ToolResult result = await decorator.ExecuteAsync(EmptyArgs(), TestToolContext.Create());
 
         await Assert.That(result.Output).IsEqualTo("fine");
         await Assert.That(result.IsError).IsFalse();
@@ -114,7 +115,7 @@ public class OutputLimitToolDecoratorTests
         CapturedLogger logger = new();
         OutputLimitToolDecorator decorator = new(fake, logger);
 
-        ToolResult result = await decorator.ExecuteAsync(EmptyArgs(), CreateContext());
+        ToolResult result = await decorator.ExecuteAsync(EmptyArgs(), TestToolContext.Create());
 
         await Assert.That(result.IsError).IsTrue();
         await Assert.That(result.Output.Length).IsGreaterThan(0);
@@ -139,16 +140,6 @@ public class OutputLimitToolDecoratorTests
 
     private static JsonElement EmptyArgs() =>
         JsonDocument.Parse("""{}""").RootElement;
-
-    private static ToolContext CreateContext() => new(
-        "test-session",
-        "test-message",
-        "test-call",
-        "code",
-        CancellationToken.None,
-        Array.Empty<AgentMessage>(),
-        (_, _) => Task.CompletedTask,
-        (_, _) => Task.FromResult(new PermissionResponse(PermissionAction.Allow, false)));
 
     private sealed class FakeLimitTool : ITool
     {

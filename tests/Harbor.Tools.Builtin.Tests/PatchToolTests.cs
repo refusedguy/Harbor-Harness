@@ -1,7 +1,6 @@
 using System.Text.Json;
-using Harbor.Abstractions.Models;
-using Harbor.Abstractions.Permissions;
 using Harbor.Abstractions.Tools;
+using Harbor.TestKit;
 using Microsoft.Extensions.Logging.Abstractions;
 namespace Harbor.Tools.Builtin.Tests;
 /// <summary>
@@ -42,7 +41,7 @@ public class PatchToolTests
         var tool = new PatchTool(NullLogger<PatchTool>.Instance);
         var args = JsonDocument.Parse(
             $$"""{"path":"/tmp/harbor-not-here-{{Guid.NewGuid():N}}.txt","patch":"@@ -1,1 +1,1 @@\n-a\n+b\n"}""").RootElement;
-        var result = await tool.ExecuteAsync(args, CreateContext());
+        var result = await tool.ExecuteAsync(args, TestToolContext.Create());
         await Assert.That(result.IsError).IsTrue();
         await Assert.That(result.Output).Contains("not found");
     }
@@ -66,7 +65,7 @@ public class PatchToolTests
             var args = JsonDocument.Parse(
                 $$"""{"path":"{{tempFile.Replace("\\", "\\\\")}}","patch":{{JsonSerializer.Serialize(patch)}}}""").RootElement;
 
-            var result = await tool.ExecuteAsync(args, CreateContext());
+            var result = await tool.ExecuteAsync(args, TestToolContext.Create());
 
             await Assert.That(result.IsError).IsFalse();
             string updated = await File.ReadAllTextAsync(tempFile);
@@ -99,7 +98,7 @@ public class PatchToolTests
             var args = JsonDocument.Parse(
                 $$"""{"path":"{{tempFile.Replace("\\", "\\\\")}}","patch":{{JsonSerializer.Serialize(patch)}}}""").RootElement;
 
-            var result = await tool.ExecuteAsync(args, CreateContext());
+            var result = await tool.ExecuteAsync(args, TestToolContext.Create());
 
             await Assert.That(result.IsError).IsFalse();
             string updated = await File.ReadAllTextAsync(tempFile);
@@ -132,7 +131,7 @@ public class PatchToolTests
             var args = JsonDocument.Parse(
                 $$"""{"path":"{{tempFile.Replace("\\", "\\\\")}}","patch":{{JsonSerializer.Serialize(patch)}}}""").RootElement;
 
-            var result = await tool.ExecuteAsync(args, CreateContext());
+            var result = await tool.ExecuteAsync(args, TestToolContext.Create());
 
             await Assert.That(result.IsError).IsTrue();
             await Assert.That(result.Output).Contains("match");
@@ -162,7 +161,7 @@ public class PatchToolTests
             var args = JsonDocument.Parse(
                 $$"""{"path":"{{tempFile.Replace("\\", "\\\\")}}","patch":{{JsonSerializer.Serialize(patch)}}}""").RootElement;
 
-            var result = await tool.ExecuteAsync(args, CreateContext());
+            var result = await tool.ExecuteAsync(args, TestToolContext.Create());
 
             await Assert.That(result.IsError).IsFalse();
             await Assert.That(result.Output).Contains("- x");
@@ -190,7 +189,7 @@ public class PatchToolTests
             var args = JsonDocument.Parse(
                 $$"""{"path":"{{tempFile.Replace("\\", "\\\\")}}","patch":{{JsonSerializer.Serialize(patch)}}}""").RootElement;
 
-            var result = await tool.ExecuteAsync(args, CreateContext());
+            var result = await tool.ExecuteAsync(args, TestToolContext.Create());
 
             await Assert.That(result.IsError).IsTrue();
             await Assert.That(result.Output).Contains("no hunks");
@@ -200,14 +199,4 @@ public class PatchToolTests
             if (File.Exists(tempFile)) File.Delete(tempFile);
         }
     }
-
-    private static ToolContext CreateContext() => new(
-        "test-session",
-        "test-message",
-        "test-call",
-        "code",
-        CancellationToken.None,
-        Array.Empty<AgentMessage>(),
-        (_, _) => Task.CompletedTask,
-        (_, _) => Task.FromResult(new PermissionResponse(PermissionAction.Allow, false)));
 }

@@ -1,7 +1,6 @@
 using System.Text.Json;
-using Harbor.Abstractions.Models;
-using Harbor.Abstractions.Permissions;
 using Harbor.Abstractions.Tools;
+using Harbor.TestKit;
 using Microsoft.Extensions.Logging.Abstractions;
 namespace Harbor.Tools.Builtin.Tests;
 /// <summary>
@@ -43,8 +42,8 @@ public class NotebookToolTests
     public async Task Set_ThenGet_ReturnsContent()
     {
         var tool = NewTool();
-        await tool.ExecuteAsync(Args(("action", "set"), ("key", "todo"), ("content", "buy milk")), CreateContext());
-        var result = await tool.ExecuteAsync(Args(("action", "get"), ("key", "todo")), CreateContext());
+        await tool.ExecuteAsync(Args(("action", "set"), ("key", "todo"), ("content", "buy milk")), TestToolContext.Create());
+        var result = await tool.ExecuteAsync(Args(("action", "get"), ("key", "todo")), TestToolContext.Create());
 
         await Assert.That(result.IsError).IsFalse();
         await Assert.That(result.Output).Contains("buy milk");
@@ -54,7 +53,7 @@ public class NotebookToolTests
     public async Task Get_MissingKey_ReturnsError()
     {
         var tool = NewTool();
-        var result = await tool.ExecuteAsync(Args(("action", "get"), ("key", "nope")), CreateContext());
+        var result = await tool.ExecuteAsync(Args(("action", "get"), ("key", "nope")), TestToolContext.Create());
 
         await Assert.That(result.IsError).IsTrue();
         await Assert.That(result.Output).Contains("nope");
@@ -64,9 +63,9 @@ public class NotebookToolTests
     public async Task Add_AppendsToExisting()
     {
         var tool = NewTool();
-        await tool.ExecuteAsync(Args(("action", "set"), ("key", "log"), ("content", "first")), CreateContext());
-        await tool.ExecuteAsync(Args(("action", "add"), ("key", "log"), ("content", "second")), CreateContext());
-        var result = await tool.ExecuteAsync(Args(("action", "get"), ("key", "log")), CreateContext());
+        await tool.ExecuteAsync(Args(("action", "set"), ("key", "log"), ("content", "first")), TestToolContext.Create());
+        await tool.ExecuteAsync(Args(("action", "add"), ("key", "log"), ("content", "second")), TestToolContext.Create());
+        var result = await tool.ExecuteAsync(Args(("action", "get"), ("key", "log")), TestToolContext.Create());
 
         await Assert.That(result.IsError).IsFalse();
         await Assert.That(result.Output).Contains("first");
@@ -77,9 +76,9 @@ public class NotebookToolTests
     public async Task List_ReturnsAllKeysWithPreview()
     {
         var tool = NewTool();
-        await tool.ExecuteAsync(Args(("action", "set"), ("key", "alpha"), ("content", "first note")), CreateContext());
-        await tool.ExecuteAsync(Args(("action", "set"), ("key", "beta"), ("content", "second note")), CreateContext());
-        var result = await tool.ExecuteAsync(Args(("action", "list")), CreateContext());
+        await tool.ExecuteAsync(Args(("action", "set"), ("key", "alpha"), ("content", "first note")), TestToolContext.Create());
+        await tool.ExecuteAsync(Args(("action", "set"), ("key", "beta"), ("content", "second note")), TestToolContext.Create());
+        var result = await tool.ExecuteAsync(Args(("action", "list")), TestToolContext.Create());
 
         await Assert.That(result.IsError).IsFalse();
         await Assert.That(result.Output).Contains("alpha");
@@ -91,13 +90,13 @@ public class NotebookToolTests
     public async Task Clear_SingleKey_RemovesJustThatKey()
     {
         var tool = NewTool();
-        await tool.ExecuteAsync(Args(("action", "set"), ("key", "alpha"), ("content", "x")), CreateContext());
-        await tool.ExecuteAsync(Args(("action", "set"), ("key", "beta"), ("content", "y")), CreateContext());
+        await tool.ExecuteAsync(Args(("action", "set"), ("key", "alpha"), ("content", "x")), TestToolContext.Create());
+        await tool.ExecuteAsync(Args(("action", "set"), ("key", "beta"), ("content", "y")), TestToolContext.Create());
 
-        var clearResult = await tool.ExecuteAsync(Args(("action", "clear"), ("key", "alpha")), CreateContext());
+        var clearResult = await tool.ExecuteAsync(Args(("action", "clear"), ("key", "alpha")), TestToolContext.Create());
         await Assert.That(clearResult.IsError).IsFalse();
 
-        var listResult = await tool.ExecuteAsync(Args(("action", "list")), CreateContext());
+        var listResult = await tool.ExecuteAsync(Args(("action", "list")), TestToolContext.Create());
         await Assert.That(listResult.Output).Contains("beta");
         await Assert.That(listResult.Output.Contains("alpha")).IsFalse();
     }
@@ -106,14 +105,14 @@ public class NotebookToolTests
     public async Task Clear_All_RemovesEverything()
     {
         var tool = NewTool();
-        await tool.ExecuteAsync(Args(("action", "set"), ("key", "a"), ("content", "x")), CreateContext());
-        await tool.ExecuteAsync(Args(("action", "set"), ("key", "b"), ("content", "y")), CreateContext());
+        await tool.ExecuteAsync(Args(("action", "set"), ("key", "a"), ("content", "x")), TestToolContext.Create());
+        await tool.ExecuteAsync(Args(("action", "set"), ("key", "b"), ("content", "y")), TestToolContext.Create());
 
-        var clearResult = await tool.ExecuteAsync(Args(("action", "clear")), CreateContext());
+        var clearResult = await tool.ExecuteAsync(Args(("action", "clear")), TestToolContext.Create());
         await Assert.That(clearResult.IsError).IsFalse();
         await Assert.That(clearResult.Output).Contains("Cleared");
 
-        var listResult = await tool.ExecuteAsync(Args(("action", "list")), CreateContext());
+        var listResult = await tool.ExecuteAsync(Args(("action", "list")), TestToolContext.Create());
         await Assert.That(listResult.Output).Contains("no notes");
     }
 
@@ -128,12 +127,12 @@ public class NotebookToolTests
             var tool1 = new NotebookTool(NullLogger<NotebookTool>.Instance, notesRoot);
             await tool1.ExecuteAsync(
                 Args(("action", "set"), ("key", "persisted"), ("content", "across instances")),
-                CreateContext(sessionId: "shared-session"));
+                TestToolContext.Create(sessionId: "shared-session"));
 
             var tool2 = new NotebookTool(NullLogger<NotebookTool>.Instance, notesRoot);
             var result = await tool2.ExecuteAsync(
                 Args(("action", "get"), ("key", "persisted")),
-                CreateContext(sessionId: "shared-session"));
+                TestToolContext.Create(sessionId: "shared-session"));
 
             await Assert.That(result.IsError).IsFalse();
             await Assert.That(result.Output).Contains("across instances");
@@ -150,11 +149,11 @@ public class NotebookToolTests
         var tool = NewTool();
         await tool.ExecuteAsync(
             Args(("action", "set"), ("key", "secret"), ("content", "session-A only")),
-            CreateContext(sessionId: "session-A"));
+            TestToolContext.Create(sessionId: "session-A"));
 
         var result = await tool.ExecuteAsync(
             Args(("action", "get"), ("key", "secret")),
-            CreateContext(sessionId: "session-B"));
+            TestToolContext.Create(sessionId: "session-B"));
 
         await Assert.That(result.IsError).IsTrue();
         await Assert.That(result.Output).Contains("No note");
@@ -168,8 +167,8 @@ public class NotebookToolTests
         // succeed without a huge up-front allocation.
         var tool = NewTool();
         for (int i = 0; i < 200; i++)
-            await tool.ExecuteAsync(Args(("action", "set"), ("key", $"k{i:000}"), ("content", $"note number {i}")), CreateContext());
-        var result = await tool.ExecuteAsync(Args(("action", "list")), CreateContext());
+            await tool.ExecuteAsync(Args(("action", "set"), ("key", $"k{i:000}"), ("content", $"note number {i}")), TestToolContext.Create());
+        var result = await tool.ExecuteAsync(Args(("action", "list")), TestToolContext.Create());
 
         await Assert.That(result.IsError).IsFalse();
         await Assert.That(result.Output).Contains("200 note(s)");
@@ -183,16 +182,6 @@ public class NotebookToolTests
 
     private static string NewNotesRoot()
         => Path.Combine(Path.GetTempPath(), $"harbor-notes-{Guid.NewGuid():N}");
-
-    private static ToolContext CreateContext(string sessionId = "test-session") => new(
-        sessionId,
-        "test-message",
-        "test-call",
-        "code",
-        CancellationToken.None,
-        Array.Empty<AgentMessage>(),
-        (_, _) => Task.CompletedTask,
-        (_, _) => Task.FromResult(new PermissionResponse(PermissionAction.Allow, false)));
 
     private static JsonElement Args(params (string key, string value)[] pairs)
     {

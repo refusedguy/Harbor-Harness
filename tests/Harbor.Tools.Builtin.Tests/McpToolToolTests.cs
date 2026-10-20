@@ -1,8 +1,7 @@
 using System.Text.Json;
-using Harbor.Abstractions.Models;
-using Harbor.Abstractions.Permissions;
 using Harbor.Abstractions.Tools;
 using Harbor.Registries.Tools;
+using Harbor.TestKit;
 using Microsoft.Extensions.Logging.Abstractions;
 namespace Harbor.Tools.Builtin.Tests;
 /// <summary>
@@ -49,7 +48,7 @@ public class McpToolToolTests
 
         var args = JsonDocument.Parse(
             """{"server":"nonexistent","method":"tools/list"}""").RootElement;
-        var result = await tool.ExecuteAsync(args, CreateContext());
+        var result = await tool.ExecuteAsync(args, TestToolContext.Create());
 
         await Assert.That(result.IsError).IsTrue();
         await Assert.That(result.Output).Contains("MCP call failed");
@@ -67,7 +66,7 @@ public class McpToolToolTests
 
         var args = JsonDocument.Parse(
             """{"server":"filesystem","method":"tools/list","args":{}}""").RootElement;
-        var result = await tool.ExecuteAsync(args, CreateContext());
+        var result = await tool.ExecuteAsync(args, TestToolContext.Create());
 
         await Assert.That(result.IsError).IsTrue();
         // The stub registry returns Failure for InvokeAsync even on registered servers —
@@ -86,7 +85,7 @@ public class McpToolToolTests
 
         var args = JsonDocument.Parse(
             """{"server":"missing","method":"tools/list"}""").RootElement;
-        var result = await tool.ExecuteAsync(args, CreateContext());
+        var result = await tool.ExecuteAsync(args, TestToolContext.Create());
 
         await Assert.That(result.IsError).IsTrue();
         await Assert.That(result.Output).Contains("not registered");
@@ -138,14 +137,4 @@ public class McpToolToolTests
 
     private static McpToolTool NewTool(IMcpRegistry registry)
         => new(registry, NullLogger<McpToolTool>.Instance);
-
-    private static ToolContext CreateContext() => new(
-        "test-session",
-        "test-message",
-        "test-call",
-        "code",
-        CancellationToken.None,
-        Array.Empty<AgentMessage>(),
-        (_, _) => Task.CompletedTask,
-        (_, _) => Task.FromResult(new PermissionResponse(PermissionAction.Allow, false)));
 }

@@ -1,8 +1,6 @@
 using System.Net;
 using System.Text.Json;
-using Harbor.Abstractions.Models;
-using Harbor.Abstractions.Permissions;
-using Harbor.Abstractions.Tools;
+using Harbor.TestKit;
 using Harbor.Tools.Builtin;
 using Microsoft.Extensions.Logging.Abstractions;
 using TUnit.Assertions;
@@ -21,16 +19,6 @@ namespace Harbor.Tools.Builtin.Tests;
 [NotInParallel("network")]
 public class WebFetchSsrfNegativeTests
 {
-    private static ToolContext Ctx() => new(
-        "test-session",
-        "test-message",
-        "test-call",
-        "code",
-        CancellationToken.None,
-        Array.Empty<AgentMessage>(),
-        (_, _) => Task.CompletedTask,
-        (_, _) => Task.FromResult(new PermissionResponse(PermissionAction.Allow, false)));
-
     private static JsonElement Args(string url) =>
         JsonDocument.Parse($"{{\"url\":\"{url}\"}}").RootElement.Clone();
 
@@ -70,7 +58,7 @@ public class WebFetchSsrfNegativeTests
         var handler = new CountingHandler(_ => Html());
         var tool = new WebFetchTool(NullLogger<WebFetchTool>.Instance, () => new HttpClient(handler));
 
-        var result = await tool.ExecuteAsync(Args("http://127.0.0.1:9/x"), Ctx());
+        var result = await tool.ExecuteAsync(Args("http://127.0.0.1:9/x"), TestToolContext.Create());
 
         await Assert.That(result.IsError).IsTrue();
         await Assert.That(result.Output).Contains("non-public");
@@ -83,7 +71,7 @@ public class WebFetchSsrfNegativeTests
         var handler = new CountingHandler(_ => Html());
         var tool = new WebFetchTool(NullLogger<WebFetchTool>.Instance, () => new HttpClient(handler));
 
-        var result = await tool.ExecuteAsync(Args("http://10.1.2.3/x"), Ctx());
+        var result = await tool.ExecuteAsync(Args("http://10.1.2.3/x"), TestToolContext.Create());
 
         await Assert.That(result.IsError).IsTrue();
         await Assert.That(handler.Calls).IsEqualTo(0);
@@ -96,7 +84,7 @@ public class WebFetchSsrfNegativeTests
         var tool = new WebFetchTool(NullLogger<WebFetchTool>.Instance, () => new HttpClient(handler));
 
         var result = await tool.ExecuteAsync(
-            Args("http://169.254.169.254/latest/meta-data/"), Ctx());
+            Args("http://169.254.169.254/latest/meta-data/"), TestToolContext.Create());
 
         await Assert.That(result.IsError).IsTrue();
         await Assert.That(result.Output).Contains("169.254.169.254");
@@ -109,7 +97,7 @@ public class WebFetchSsrfNegativeTests
         var handler = new CountingHandler(_ => Html());
         var tool = new WebFetchTool(NullLogger<WebFetchTool>.Instance, () => new HttpClient(handler));
 
-        var result = await tool.ExecuteAsync(Args("http://[::1]/x"), Ctx());
+        var result = await tool.ExecuteAsync(Args("http://[::1]/x"), TestToolContext.Create());
 
         await Assert.That(result.IsError).IsTrue();
         await Assert.That(handler.Calls).IsEqualTo(0);
@@ -133,7 +121,7 @@ public class WebFetchSsrfNegativeTests
             () => new HttpClient(handler),
             allowedHosts: ["localhost"]);
 
-        var result = await tool.ExecuteAsync(Args("http://localhost:59999/ping"), Ctx());
+        var result = await tool.ExecuteAsync(Args("http://localhost:59999/ping"), TestToolContext.Create());
 
         // The gate let it through; the handler answer comes back as success.
         await Assert.That(result.IsError).IsFalse();
@@ -151,7 +139,7 @@ public class WebFetchSsrfNegativeTests
             () => new HttpClient(handler),
             allowedHosts: ["example.com"]);
 
-        var result = await tool.ExecuteAsync(Args("http://example.com/redirect"), Ctx());
+        var result = await tool.ExecuteAsync(Args("http://example.com/redirect"), TestToolContext.Create());
 
         await Assert.That(result.IsError).IsTrue();
         await Assert.That(handler.Calls).IsEqualTo(1); // hop 1 only; hop 2 blocked pre-connect
@@ -166,7 +154,7 @@ public class WebFetchSsrfNegativeTests
             () => new HttpClient(handler),
             allowedHosts: ["example.com"]);
 
-        var result = await tool.ExecuteAsync(Args("http://example.com/down"), Ctx());
+        var result = await tool.ExecuteAsync(Args("http://example.com/down"), TestToolContext.Create());
 
         await Assert.That(result.IsError).IsTrue();
         await Assert.That(result.Output).Contains("only http/https");
@@ -186,7 +174,7 @@ public class WebFetchSsrfNegativeTests
             () => new HttpClient(handler),
             allowedHosts: ["example.com"]);
 
-        var result = await tool.ExecuteAsync(Args("http://example.com/start"), Ctx());
+        var result = await tool.ExecuteAsync(Args("http://example.com/start"), TestToolContext.Create());
 
         await Assert.That(result.IsError).IsTrue();
         await Assert.That(result.Output).Contains("exceeded");

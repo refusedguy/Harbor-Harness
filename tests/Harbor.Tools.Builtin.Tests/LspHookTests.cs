@@ -1,8 +1,7 @@
 using System.Text.Json;
 using Harbor.Abstractions.Lsp;
-using Harbor.Abstractions.Models;
-using Harbor.Abstractions.Permissions;
 using Harbor.Abstractions.Tools;
+using Harbor.TestKit;
 using Microsoft.Extensions.Logging.Abstractions;
 namespace Harbor.Tools.Builtin.Tests;
 /// <summary>
@@ -33,7 +32,7 @@ public class LspHookTests : IDisposable
 
         var result = await tool.ExecuteAsync(
             JsonDocument.Parse($"{{\"path\":{JsonSerializer.Serialize(path)}}}").RootElement,
-            CreateContext());
+            TestToolContext.Create());
 
         await Assert.That(result.IsError).IsFalse();
         await Assert.That(lsp.Opened).Contains(path);
@@ -48,7 +47,7 @@ public class LspHookTests : IDisposable
 
         var result = await tool.ExecuteAsync(
             JsonDocument.Parse($"{{\"path\":{JsonSerializer.Serialize(path)}}}").RootElement,
-            CreateContext());
+            TestToolContext.Create());
 
         await Assert.That(result.IsError).IsFalse();
         await Assert.That(lsp.Opened).IsEmpty();
@@ -63,7 +62,7 @@ public class LspHookTests : IDisposable
 
         var result = await tool.ExecuteAsync(
             JsonDocument.Parse($"{{\"path\":{JsonSerializer.Serialize(path)}}}").RootElement,
-            CreateContext());
+            TestToolContext.Create());
 
         await Assert.That(result.IsError).IsFalse();
         await Assert.That(result.Output).Contains("class B");
@@ -80,7 +79,7 @@ public class LspHookTests : IDisposable
 
         var result = await tool.ExecuteAsync(
             JsonDocument.Parse($"{{\"path\":{JsonSerializer.Serialize(path)},\"oldString\":\"class C\",\"newString\":\"class C2\"}}").RootElement,
-            CreateContext());
+            TestToolContext.Create());
 
         await Assert.That(result.IsError).IsFalse();
         await Assert.That(lsp.Changed.Count).IsEqualTo(1);
@@ -98,7 +97,7 @@ public class LspHookTests : IDisposable
 
         var result = await tool.ExecuteAsync(
             JsonDocument.Parse($"{{\"path\":{JsonSerializer.Serialize(path)},\"oldString\":\"class D\",\"newString\":\"class D2\"}}").RootElement,
-            CreateContext());
+            TestToolContext.Create());
 
         await Assert.That(result.IsError).IsFalse();
         await Assert.That(result.Output).DoesNotContain("LSP:");
@@ -114,7 +113,7 @@ public class LspHookTests : IDisposable
 
         var result = await tool.ExecuteAsync(
             JsonDocument.Parse($"{{\"path\":{JsonSerializer.Serialize(path)},\"oldString\":\"a\",\"newString\":\"b\"}}").RootElement,
-            CreateContext());
+            TestToolContext.Create());
 
         await Assert.That(result.IsError).IsFalse();
         await Assert.That(lsp.Changed).IsEmpty();
@@ -129,14 +128,4 @@ public class LspHookTests : IDisposable
         File.WriteAllText(path, content);
         return path;
     }
-
-    private static ToolContext CreateContext() => new(
-        "test-session",
-        "test-message",
-        "test-call",
-        "code",
-        CancellationToken.None,
-        Array.Empty<AgentMessage>(),
-        (_, _) => Task.CompletedTask,
-        (_, _) => Task.FromResult(new PermissionResponse(PermissionAction.Allow, false)));
 }

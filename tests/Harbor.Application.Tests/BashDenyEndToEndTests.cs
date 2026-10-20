@@ -4,9 +4,9 @@ using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Abstractions.Permissions;
 using Harbor.Abstractions.Tools;
-using Harbor.TestKit;
 using Harbor.Application.Permissions;
 using Harbor.Application.Sessions;
+using Harbor.TestKit;
 using Harbor.Tools.Builtin;
 using Microsoft.Extensions.Logging.Abstractions;
 using TUnit.Assertions;
@@ -68,15 +68,8 @@ public class BashDenyEndToEndTests
         return await tool.ExecuteAsync(Args(command), DefaultCtx()).ConfigureAwait(false);
     }
 
-    private static ToolContext DefaultCtx() => new(
-        "e2e-deny-session",
-        "m1",
-        "call-1",
-        "code",
-        CancellationToken.None,
-        Array.Empty<AgentMessage>(),
-        (_, _) => Task.CompletedTask,
-        (_, _) => Task.FromResult(new PermissionResponse(PermissionAction.Allow, false)));
+    private static ToolContext DefaultCtx() =>
+        TestToolContext.Create(sessionId: "e2e-deny-session", messageId: "m1", callId: "call-1");
 
     [Test]
     public async Task DenyRule_BlocksRealExecution_NoSideEffect()

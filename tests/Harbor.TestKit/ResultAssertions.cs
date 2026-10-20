@@ -16,9 +16,11 @@ namespace Harbor.TestKit;
 ///     Prefer these over spelling out the boolean property
 ///     (<c>await Assert.That(result.IsSuccess).IsTrue();</c>): the property
 ///     form reports the failure at the <c>bool</c>, losing which result failed
-///     and its error text. The hand-written <c>TestAsserts</c> helpers solve the
-///     same problem with richer messages but break the fluent chain; these are
-///     the chain-preserving complement for the two most common checks.
+///     and its error text. #1774 removed the hand-written helper family that
+///     used to solve the same problem with richer messages but a broken fluent
+///     chain — two competing APIs for one job. This is now the only shape:
+///     assert through the chain, and put the error text in
+///     <c>.Because(result.Error)</c> when the message matters.
 /// </remarks>
 public static partial class ResultAssertions
 {

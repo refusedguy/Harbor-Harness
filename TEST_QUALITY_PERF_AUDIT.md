@@ -8,7 +8,7 @@
 **Что уже заебись:**
 - 99.9% `async Task`, все `await Assert.That` (0 пропущенных `await` — редкость)
 - Нет `Microsoft.NET.Test.Sdk`/coverlet после фикса `3ba1158`, `OutputType=Exe` через `Directory.Build.targets:12`, нет `Program.cs` в `tests/`
-- Ручные фейки вместо Moq в 95% кода: `Harbor.TestKit/Fakes.cs:13-117` (`FakeAgentRegistry`, `FakeToolRegistry`, `CountingTool`), `AgentLoopTests.cs:352-411` (`MockLlmClient`/`ScriptedLlmClient`) — быстро, AOT-friendly, детерминированно. Это **правильно** для перфоманса.
+- Ручные фейки вместо Moq в 95% кода: `Harbor.TestKit/Fakes/IAgentRegistry.cs:8-29` (`FakeAgentRegistry`), `Harbor.TestKit/Fakes/IToolRegistry.cs:9-50` (`FakeToolRegistry`), `Harbor.TestKit/Fakes/ITool.cs:9-51` (`CountingTool`), `AgentLoopTests.cs:352-411` (`MockLlmClient`/`ScriptedLlmClient`) — быстро, AOT-friendly, детерминированно. Это **правильно** для перфоманса.
 - Параллелизм осознанный: `[NotInParallel("pty")]`, `[NotInParallel("terminal-color-palette")]`, `[Timeout(30_000)]` для PTY — без этого PtySession бы падал.
 - `Harbor.TestKit` как shared fixture — экономит 500+ строк дублирования.
 - `TUnit.Assertions` везде, `FluentAssertions`/`NUnit` не тянут.

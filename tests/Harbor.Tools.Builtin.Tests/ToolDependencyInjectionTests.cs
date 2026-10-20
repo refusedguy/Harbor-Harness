@@ -1,10 +1,10 @@
 using System.Text.Json;
 using Harbor.Abstractions.Lsp;
 using Harbor.Abstractions.Models;
-using Harbor.Abstractions.Permissions;
 using Harbor.Abstractions.Sessions;
 using Harbor.Abstractions.Tools;
 using CSharpFunctionalExtensions;
+using Harbor.TestKit;
 using Microsoft.Extensions.Logging.Abstractions;
 using TUnit.Assertions;
 using TUnit.Assertions.Extensions;
@@ -24,15 +24,8 @@ public class ToolDependencyInjectionTests
 {
     private readonly string _root = Directory.CreateTempSubdirectory("harbor-tool-di").FullName;
 
-    private static ToolContext Ctx() => new(
-        "s1",
-        "m1",
-        "c1",
-        "code",
-        CancellationToken.None,
-        Array.Empty<AgentMessage>(),
-        (_, _) => Task.CompletedTask,
-        (_, _) => Task.FromResult(new PermissionResponse(PermissionAction.Allow, false)));
+    private static ToolContext Ctx() =>
+        TestToolContext.Create(sessionId: "s1", messageId: "m1", callId: "c1");
 
     private static JsonElement Args(string json) => JsonDocument.Parse(json).RootElement.Clone();
 

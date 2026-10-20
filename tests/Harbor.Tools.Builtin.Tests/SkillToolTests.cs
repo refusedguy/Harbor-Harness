@@ -1,6 +1,4 @@
 using System.Text.Json;
-using Harbor.Abstractions.Models;
-using Harbor.Abstractions.Permissions;
 using Harbor.Abstractions.Tools;
 using Harbor.TestKit;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -66,7 +64,7 @@ public class SkillToolTests
         File.WriteAllText(Path.Combine(ProjectSkills, "review.md"), "# Legacy flat body\n");
 
         var tool = NewTool();
-        var result = await tool.ExecuteAsync(Args("review"), CreateContext());
+        var result = await tool.ExecuteAsync(Args("review"), TestToolContext.Create());
 
         await Assert.That(result).HasSucceeded();
         await Assert.That(result.Output).Contains("Project review body");
@@ -79,7 +77,7 @@ public class SkillToolTests
         WriteSkill(GlobalSkills, "deploy", "# Global deploy\n");
 
         var tool = NewTool();
-        var result = await tool.ExecuteAsync(Args("deploy"), CreateContext());
+        var result = await tool.ExecuteAsync(Args("deploy"), TestToolContext.Create());
 
         await Assert.That(result).HasSucceeded();
         await Assert.That(result.Output).Contains("Project deploy");
@@ -91,7 +89,7 @@ public class SkillToolTests
         WriteSkill(GlobalSkills, "deploy", "# Global deploy\n");
 
         var tool = NewTool();
-        var result = await tool.ExecuteAsync(Args("deploy"), CreateContext());
+        var result = await tool.ExecuteAsync(Args("deploy"), TestToolContext.Create());
 
         await Assert.That(result).HasSucceeded();
         await Assert.That(result.Output).Contains("Global deploy");
@@ -104,7 +102,7 @@ public class SkillToolTests
         WriteSkill(GlobalSkills, "deploy", "# Global deploy\n");
 
         var tool = NewTool();
-        var result = await tool.ExecuteAsync(Args("deploy", "global"), CreateContext());
+        var result = await tool.ExecuteAsync(Args("deploy", "global"), TestToolContext.Create());
 
         await Assert.That(result).HasSucceeded();
         await Assert.That(result.Output).Contains("Global deploy");
@@ -114,7 +112,7 @@ public class SkillToolTests
     public async Task ExecuteAsync_MissingSkill_ReturnsHelpfulError()
     {
         var tool = NewTool();
-        var result = await tool.ExecuteAsync(Args("nope"), CreateContext());
+        var result = await tool.ExecuteAsync(Args("nope"), TestToolContext.Create());
 
         await Assert.That(result).HasFailed();
         await Assert.That(result.Output).Contains("nope");
@@ -127,7 +125,7 @@ public class SkillToolTests
         var tool = NewTool();
         foreach (string bad in new[] { "../evil", "a/b", "..", "a\\b" })
         {
-            var result = await tool.ExecuteAsync(Args(bad), CreateContext());
+            var result = await tool.ExecuteAsync(Args(bad), TestToolContext.Create());
             await Assert.That(result).HasFailed();
         }
     }
@@ -138,7 +136,7 @@ public class SkillToolTests
         WriteSkill(ProjectSkills, "big", new string('x', SkillTool.MaxContentChars + 100));
 
         var tool = NewTool();
-        var result = await tool.ExecuteAsync(Args("big"), CreateContext());
+        var result = await tool.ExecuteAsync(Args("big"), TestToolContext.Create());
 
         await Assert.That(result).HasSucceeded();
         await Assert.That(result.Output).Contains("truncated");
@@ -161,14 +159,4 @@ public class SkillToolTests
         JsonDocument.Parse(scope is null
             ? $$"""{"name":"{{name}}"}"""
             : $$"""{"name":"{{name}}","scope":"{{scope}}"}""").RootElement;
-
-    private static ToolContext CreateContext() => new(
-        "test-session",
-        "test-message",
-        "test-call",
-        "code",
-        CancellationToken.None,
-        Array.Empty<AgentMessage>(),
-        (_, _) => Task.CompletedTask,
-        (_, _) => Task.FromResult(new PermissionResponse(PermissionAction.Allow, false)));
 }
