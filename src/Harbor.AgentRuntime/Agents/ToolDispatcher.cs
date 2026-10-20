@@ -742,19 +742,22 @@ public sealed class ToolDispatcher(
             ToolDispatcherLog.ExecutingTool(logger, toolCall.ToolName, toolCall.Id, toolCall.Args.GetRawText());
         }
 
-        // #1529: both callbacks used to compile to one closure display-class
-        // plus an async delegate each — lambda 1 captured eventBus and logger,
-        // lambda 2 captured permissions and logger, both with the per-call
-        // toolCall: two display-classes per tool call on the hot path. The
-        // lambda bodies are static in behaviour and only toolCall varies per
-        // call, so they now route through one small sealed state object per
-        // call — the issue's small sealed state record option, with the
-        // ToolContext delegate signatures untouched — and the display-class
-        // allocations are gone. Behaviour stays byte-identical: the publish
-        // remains awaited with failures only logged, per the progress shape
-        // defined on ReportProgressCore, and Ask still fails closed to Deny
-        // on any permission failure, per the AskCore shape from #201 B1.
-        ToolCallGates gates = new(this, toolCall);
+        // #1529: the two callbacks used to be inline async lambdas, and each
+        // one compiled to a closure display-class — the progress lambda
+        // captured the event bus, the logger and the tool call, the ask
+        // lambda captured the permission service, the logger and the tool
+        // call — so every tool call paid for two display-classes on the
+        // per-tool-call hot path. The bodies never varied, only the captured
+        // state did, so they now live in one small sealed state record per
+        // call — the issue's small sealed state record option — whose two
+        // bodies are static and take that record as an explicit state
+        // parameter, and the two delegates bind to the record as their
+        // target. The display-class allocations are gone and the public
+        // ToolContext delegate signatures are untouched. Behaviour stays
+        // byte-identical: the progress publish is still awaited with failures
+        // only logged, and Ask still fails closed to Deny on any permission
+        // failure.
+        ToolCallGates gates = new(eventBus, logger, permissions, toolCall);
         return new ToolContext(
             session.Session.Id,
             partial.Id,
@@ -771,67 +774,100 @@ public sealed class ToolDispatcher(
     }
 
     /// <summary>
-    ///     #1529: body of the per-call progress callback (was an async lambda
-    ///     capturing <c>toolCall</c>/<c>eventBus</c>/<c>logger</c>).
+    ///     #1529: the per-call state behind the two <see cref="ToolContext" />
+    ///     callbacks, and the two callback bodies that used to be inline
+    ///     lambdas in <see cref="CreateToolContext" />.
+    ///     <para>
+    ///         Both bodies are static and take this record as an explicit
+    ///         state parameter, and the two delegates bind to this record as
+    ///         their target — so a tool call no longer compiles a closure
+    ///         display-class for either callback. The bodies are one-to-one
+    ///         with the former lambdas: the progress publish is awaited and
+    ///         only its failures are logged, and the ask path fails closed to
+    ///         Deny whenever the permission service itself fails.
+    ///     </para>
     /// </summary>
-    private async Task ReportProgressCore(
-        ToolCallPart toolCall,
-        ToolProgressUpdate update,
-        CancellationToken c)
+    private sealed class ToolCallGates(
+        IEventBus eventBus,
+        ILogger<ToolDispatcher> logger,
+        IPermissionService permissions,
+        ToolCallPart toolCall)
     {
-        // §FP-003 (RESOLVED): previously `_ = eventBus.PublishAsync(...)`
-        // was fire-and-forget — exceptions died as unobserved task exceptions
-        // and tool progress updates were silently dropped on bus back-pressure.
-        // The callback is async and awaits the publish with a try/catch so
-        // failures are logged without breaking tool execution. Return type is
-        // still `Task` per the ToolContext.ReportProgress contract.
-        try
-        {
-            await eventBus.PublishAsync(new ToolExecutionUpdateEvent(toolCall.Id, update.PartialResult ?? update), c)
-                .ConfigureAwait(false);
-        }
-        catch (Exception ex)
-        {
-            ToolDispatcherLog.ToolProgressPublishFailed(logger, ex, toolCall.Id);
-        }
-    }
+        /// <summary>The event bus this call's progress updates go to.</summary>
+        private IEventBus EventBus => eventBus;
 
-    /// <summary>
-    ///     #1529: body of the per-call Ask callback (was an async lambda
-    ///     capturing <c>toolCall</c>/<c>permissions</c>/<c>logger</c>).
-    /// </summary>
-    private async Task<PermissionResponse> AskCore(
-        ToolCallPart toolCall,
-        PermissionRequest req,
-        CancellationToken c)
-    {
-        // #201 B1: the Ask callback rides the AskUserAsync railway (checked,
-        // never .Value) — a permission-subsystem failure fails closed to
-        // Deny instead of throwing into the tool run (§ROP-002 recurrence).
-        Result<PermissionResponse> asked = await permissions.AskUserAsync(req, c).ConfigureAwait(false);
-        if (asked.IsFailure)
-        {
-            ToolDispatcherLog.PermissionAskFailed(logger, req.Permission, toolCall.Id, asked.Error);
-            return new PermissionResponse(PermissionAction.Deny, false);
-        }
+        /// <summary>The logger this call's callback failures are logged to.</summary>
+        private ILogger<ToolDispatcher> Logger => logger;
 
-        return asked.Value;
-    }
+        /// <summary>The permission service this call asks for decisions.</summary>
+        private IPermissionService Permissions => permissions;
 
-    /// <summary>
-    ///     #1529: per-call state behind <see cref="ToolContext.ReportProgress" />
-    ///     and <see cref="ToolContext.Ask" />. One small sealed object replaces
-    ///     the two former closure display-classes; the bodies live on the
-    ///     dispatcher (<see cref="ReportProgressCore" /> / <see cref="AskCore" />),
-    ///     forwarded 1:1 so the callback behaviour is unchanged.
-    /// </summary>
-    private sealed class ToolCallGates(ToolDispatcher dispatcher, ToolCallPart toolCall)
-    {
+        /// <summary>The tool call this context was built for.</summary>
+        private ToolCallPart ToolCall => toolCall;
+
+        /// <summary>
+        ///     The per-call progress callback. Bound to this record, so it
+        ///     costs no closure display-class per call.
+        /// </summary>
         public Task ReportProgress(ToolProgressUpdate update, CancellationToken c) =>
-            dispatcher.ReportProgressCore(toolCall, update, c);
+            ReportProgressCore(this, update, c);
 
+        /// <summary>
+        ///     The per-call ask callback. Bound to this record, so it costs
+        ///     no closure display-class per call.
+        /// </summary>
         public Task<PermissionResponse> Ask(PermissionRequest req, CancellationToken c) =>
-            dispatcher.AskCore(toolCall, req, c);
+            AskCore(this, req, c);
+
+        /// <summary>
+        ///     The body of the per-call progress callback (was an async lambda
+        ///     capturing the event bus, the logger and the tool call).
+        /// </summary>
+        private static async Task ReportProgressCore(
+            ToolCallGates state,
+            ToolProgressUpdate update,
+            CancellationToken c)
+        {
+            // §FP-003 (RESOLVED): previously the publish was fire-and-forget
+            // — exceptions died as unobserved task exceptions and tool
+            // progress updates were silently dropped on bus back-pressure.
+            // The body awaits the publish with a guard around it so failures
+            // are logged without breaking tool execution. Return type is
+            // still Task per the ToolContext.ReportProgress contract.
+            try
+            {
+                await state.EventBus.PublishAsync(
+                        new ToolExecutionUpdateEvent(state.ToolCall.Id, update.PartialResult ?? update), c)
+                    .ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                ToolDispatcherLog.ToolProgressPublishFailed(state.Logger, ex, state.ToolCall.Id);
+            }
+        }
+
+        /// <summary>
+        ///     The body of the per-call ask callback (was an async lambda
+        ///     capturing the permission service, the logger and the tool call).
+        /// </summary>
+        private static async Task<PermissionResponse> AskCore(
+            ToolCallGates state,
+            PermissionRequest req,
+            CancellationToken c)
+        {
+            // #201 B1: the Ask callback rides the AskUserAsync railway
+            // (checked, never .Value) — a permission-subsystem failure fails
+            // closed to Deny instead of throwing into the tool run (§ROP-002
+            // recurrence).
+            Result<PermissionResponse> asked = await state.Permissions.AskUserAsync(req, c).ConfigureAwait(false);
+            if (asked.IsFailure)
+            {
+                ToolDispatcherLog.PermissionAskFailed(state.Logger, req.Permission, state.ToolCall.Id, asked.Error);
+                return new PermissionResponse(PermissionAction.Deny, false);
+            }
+
+            return asked.Value;
+        }
     }
 
     /// <summary>

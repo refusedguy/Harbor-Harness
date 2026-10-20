@@ -21,10 +21,11 @@ namespace Harbor.Application.Tests;
 ///     closure display-class (progress captured toolCall/eventBus/logger,
 ///     Ask captured toolCall/permissions/logger) — 2 display-classes per tool
 ///     call on the hot path. Both now route through one small sealed state
-///     object per call (<c>ToolCallGates</c>) with the bodies hoisted to
-///     dispatcher instance methods, so zero display-class allocations remain
-///     per call; behaviour is byte-identical (the callback pins below, plus
-///     <c>ToolDispatcherAskFailClosedTests</c> for the Ask fail-closed half).
+///     object per call (<c>ToolCallGates</c>) whose bodies are static and take
+///     that record as an explicit state parameter, so zero display-class
+///     allocations remain per call; behaviour is byte-identical (the callback
+///     pins below, plus <c>ToolDispatcherAskFailClosedTests</c> for the Ask
+///     fail-closed half).
 ///     <para>
 ///         The scaling gate is relative, not absolute: building twice the
 ///         tool contexts must cost at most 3x the time and allocations of
@@ -126,6 +127,39 @@ public class ToolDispatcherToolContextScalingTests
             _tools.Remove(name.Value)
                 ? Result.Success()
                 : Result.Failure($"Tool '{name.Value}' is not registered.");
+    }
+
+    /// <summary>
+    ///     #1529: a tool that keeps the callbacks of the <see cref="ToolContext" />
+    ///     it was handed, so the test can look at WHERE the per-call state
+    ///     lives instead of counting bytes.
+    /// </summary>
+    private sealed class ContextCapturingTool(string name) : ITool
+    {
+        public ToolName Name => ToolName.Create(name);
+        public ToolSafetyProfile SafetyProfile => ToolSafetyProfile.Opaque;
+        public string DisplayName => name;
+        public string Description => "Tool-context capturing harness tool.";
+        public ExecutionMode ExecutionMode => ExecutionMode.Parallel;
+        public string? PromptSnippet => null;
+        public IReadOnlyList<string> PromptGuidelines => [];
+        public JsonDocument ParameterSchema { get; } = JsonDocument.Parse("""{"type":"object"}""");
+
+        /// <summary>The progress callback the dispatcher wired for this call.</summary>
+        public Func<ToolProgressUpdate, CancellationToken, Task>? Progress { get; private set; }
+
+        /// <summary>The ask callback the dispatcher wired for this call.</summary>
+        public Func<PermissionRequest, CancellationToken, Task<PermissionResponse>>? Ask { get; private set; }
+
+        public Result ValidateArguments(JsonElement args) => Result.Success();
+
+        public Task<ToolResult> ExecuteAsync(
+            JsonElement args, ToolContext context, CancellationToken ct = default)
+        {
+            Progress = context.ReportProgress;
+            Ask = context.Ask;
+            return Task.FromResult(ToolResult.Success("ok"));
+        }
     }
 
     private static AgentDefinition CodeAgent() => new(
@@ -236,6 +270,42 @@ public class ToolDispatcherToolContextScalingTests
 
         await Assert.That(updates[1].PartialResult).IsEqualTo("partial-preview")
             .Because("a partial result rides the event unchanged instead of being rewrapped");
+    }
+
+    /// <summary>
+    ///     #1529: the steady-state allocation SHAPE, pinned directly. The two
+    ///     per-call callbacks used to be inline async lambdas, so each one
+    ///     compiled to its own closure display-class — two per tool call.
+    ///     They now bind to ONE small sealed state record per call, and this
+    ///     test says so without counting bytes: both delegates must carry the
+    ///     SAME target object, and that target must not be a compiler-generated
+    ///     closure class. It fails the moment either callback goes back to
+    ///     capturing state of its own.
+    /// </summary>
+    [Test]
+    public async Task Callbacks_ShareOneStateObject_AndNoClosureDisplayClass()
+    {
+        var tool = new ContextCapturingTool("capturing");
+        var dispatcher = NewDispatcher(new CountingRegistry(tool));
+
+        ToolResultMessage message = await dispatcher.ExecuteAsync(
+            Batch("capturing", 1),
+            NewSession(),
+            AssistantMessage.Empty("s", "m"),
+            CodeAgent(),
+            CancellationToken.None).ConfigureAwait(false);
+
+        await Assert.That(message.Results[0].IsError).IsFalse();
+
+        object? progressTarget = tool.Progress?.Target;
+        object? askTarget = tool.Ask?.Target;
+
+        await Assert.That(progressTarget).IsNotNull()
+            .Because("the progress callback binds to the per-call state record as its target");
+        await Assert.That(progressTarget).IsSameReferenceAs(askTarget)
+            .Because("both callbacks must share ONE per-call state object, not one closure display-class each");
+        await Assert.That(progressTarget!.GetType().Name).DoesNotContain("DisplayClass")
+            .Because("a compiler-generated closure display-class is exactly what #1529 removed from this path");
     }
 
     /// <summary>

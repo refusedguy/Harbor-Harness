@@ -1075,13 +1075,23 @@ both `ToolContext` callbacks as inline async lambdas — one closure
 display-class per lambda (progress captured `toolCall`/`eventBus`/`logger`,
 Ask captured `toolCall`/`permissions`/`logger`) — 2 display-classes per tool
 call on the per-tool-call hot path, on top of the `ToolContext` itself.
-**After:** the bodies hoisted to dispatcher instance methods
-(`ReportProgressCore`/`AskCore`, behaviour 1:1 — §FP-003 progress try/catch
-and the #201 B1 ask fail-closed shape are pinned by
-`ToolDispatcherProgressCallbackTests` plus `ToolDispatcherAskFailClosedTests`),
-routed through one small sealed state object per call (`ToolCallGates`, the
-issue's "small sealed state record" shape; `ToolContext`'s public delegate
-signatures untouched) — zero display-class allocations per call.
+**After:** the bodies hoisted into one small sealed state object per call
+(`ToolCallGates`, the issue's "small sealed state record" shape) whose two
+bodies are static and take that record as an explicit state parameter, and
+the two delegates bind to the record as their target — zero display-class
+allocations per call, and `ToolContext`'s public delegate signatures
+untouched. Behaviour 1:1 — §FP-003 progress await-and-log and the #201 B1 ask
+fail-closed shape are pinned by `ToolDispatcherToolContextScalingTests` plus
+`ToolDispatcherAskFailClosedTests`.
+
+Per call, the allocation shape is therefore: `ToolContext` + one state record
++ the two delegates (the delegates are the `ToolContext`'s own public
+contract, so they cannot be shared across calls without changing that
+contract) — 4 objects per call, down from 5. The shape is pinned directly,
+without a byte budget, by
+`Callbacks_ShareOneStateObject_AndNoClosureDisplayClass`: both delegates must
+carry the same target object, and that target must not be a
+compiler-generated closure class.
 
 | Test | Relative claim | Gate | Measured |
 |---|---|---|---|
