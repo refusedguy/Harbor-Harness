@@ -8,6 +8,25 @@ Harbor.Abstractions.Contracts.MoodFrameAttribute :: public sealed class MoodFram
 Harbor.Abstractions.Contracts.MoodFrameAttribute :: public string FrameBank
 Harbor.Abstractions.Contracts.MoodFrameAttribute :: public string? PanelEars
 Harbor.Abstractions.Contracts.MoodFrameAttribute :: public string? PanelPaws
+Harbor.Abstractions.Contracts.ObservedAttribute :: public ObservedAttribute()
+Harbor.Abstractions.Contracts.ObservedAttribute :: public ObservedAttribute(string span)
+Harbor.Abstractions.Contracts.ObservedAttribute :: public ObservedScope Scope
+Harbor.Abstractions.Contracts.ObservedAttribute :: public bool CaptureArguments
+Harbor.Abstractions.Contracts.ObservedAttribute :: public bool CaptureResult
+Harbor.Abstractions.Contracts.ObservedAttribute :: public sealed class ObservedAttribute : Attribute
+Harbor.Abstractions.Contracts.ObservedAttribute :: public string? Counter
+Harbor.Abstractions.Contracts.ObservedAttribute :: public string? Duration
+Harbor.Abstractions.Contracts.ObservedAttribute :: public string? Exclude
+Harbor.Abstractions.Contracts.ObservedAttribute :: public string? Span
+Harbor.Abstractions.Contracts.ObservedPolicyAttribute :: public ObservedScope Scope
+Harbor.Abstractions.Contracts.ObservedPolicyAttribute :: public bool CaptureArguments
+Harbor.Abstractions.Contracts.ObservedPolicyAttribute :: public sealed class ObservedPolicyAttribute : Attribute
+Harbor.Abstractions.Contracts.ObservedPolicyAttribute :: public string? SpanPrefix
+Harbor.Abstractions.Contracts.ObservedScope :: Metrics = 2
+Harbor.Abstractions.Contracts.ObservedScope :: None = 0
+Harbor.Abstractions.Contracts.ObservedScope :: Span = 1
+Harbor.Abstractions.Contracts.ObservedScope :: SpanAndMetrics = 3
+Harbor.Abstractions.Contracts.ObservedScope :: public enum ObservedScope
 Harbor.Abstractions.Contracts.TerminalEscapeAttribute :: public sealed class TerminalEscapeAttribute : Attribute
 Harbor.Abstractions.Contracts.TerminalEscapeAttribute :: public string ClassName
 Harbor.Abstractions.Contracts.TerminalEscapeAttribute :: public string ResetMember
