@@ -225,6 +225,8 @@ public interface IPlugin
     Version RequiredHarborVersion { get; } // minimum Harbor version
     string Description { get; }           // shown in /plugins
 
+    IReadOnlyList<string> Dependencies => []; // what the plugin needs before it activates (#1733)
+
     void Initialize(PluginContext context);            // called once on load
     Task ShutdownAsync(CancellationToken ct = default); // called once on unload
 }
@@ -309,6 +311,58 @@ The gate lives in `src/Harbor.Plugins.Registration/PluginCompatibility.cs` and i
 called from `PluginRegistrar.Register`, the one seam both load routes pass
 through: the out-of-process `harbor-plugins-host` and the legacy in-process
 `CsPluginLoader`.
+
+## Declared dependencies and deferred activation (#1733)
+
+A plugin can declare what it needs before the host activates it:
+
+```csharp
+public IReadOnlyList<string> Dependencies => new[] { "mcp-session" };
+```
+
+The names are opaque strings and the HOST decides what a name means and when it
+becomes true. Two kinds of name resolve today:
+
+| The name | Resolved against | Satisfied when |
+|---|---|---|
+| another plugin's `Name` | the plugins in the same load set | that plugin is ACTIVE |
+| a capability the host published | `IPluginDependencyResolver` | the host's probe says so |
+
+The out-of-process host publishes one capability: `mcp-session` — the MCP
+session with the CLI. It is false while the plugins load (the client has not
+connected yet) and true from the handshake onwards.
+
+**What "not ready" means.** The plugin is LOADED — compiled, instantiated, known
+to the host — but NOT ACTIVATED: `Initialize` has not run and no `Register*`
+call has happened, so it contributes no tool, no provider, no agent, no panel.
+It is listed in `PluginHost.PendingPlugins` with the names it waits for, and the
+host logs it:
+
+> Plugin web-search@1.0.0 (WebSearchPlugin.cs) is registered but not activated: waiting for mcp-session.
+
+**What the user sees.** The host's log (the line above) and the host's
+inventory (`PluginHost.PendingPlugins`). The CLI's `/plugins` panel lists the
+plugin FILES, not their activation state — the activation state lives in the
+host process, which is where the plugins run.
+
+**When it activates.** The host re-checks the pending plugins on every
+activation pass: once at the end of the load (so a plugin that depends on
+another plugin loaded in the same pass comes up with it), and whenever the
+composition root says the environment changed — for the out-of-process host,
+that is the MCP handshake. The plugin is then initialized and registered like
+any other.
+
+**A name the host does not know is never satisfied.** Unknown is not ready: a
+capability the host never published must not read as "available", or the plugin
+would activate against an infrastructure that is not there and fail at the
+moment it matters.
+
+**A cycle does not hang the load.** Two plugins that require each other can
+never both activate. The activation pass is a loop over a snapshot, never a
+recursion, so it terminates, and the cycle is reported rather than waited on
+silently:
+
+> Plugin a@1.0.0 is blocked by a circular dependency (a -> b -> a). It will not activate until the cycle is broken.
 
 ## Minimal example — a hello tool
 
