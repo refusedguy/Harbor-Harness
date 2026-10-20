@@ -388,7 +388,7 @@ internal static class DeadPublicInterfaceProbe
                 while (pending.Count > 0)
                 {
                     (string token, SourceFile context) = pending.Dequeue();
-                    (string, string)? resolved = Resolve(context, token, universe);
+                    (string Namespace, string Name)? resolved = Resolve(context, token, universe);
                     if (resolved is null)
                     {
                         continue;
@@ -467,7 +467,7 @@ internal static class DeadPublicInterfaceProbe
                     continue;
                 }
 
-                (string, string)? resolved = Resolve(file, candidate.Name, universe);
+                (string Namespace, string Name)? resolved = Resolve(file, candidate.Name, universe);
                 if (resolved is { } r
                     && r.Namespace == candidate.Namespace
                     && r.Name == candidate.Name)
