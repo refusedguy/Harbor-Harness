@@ -130,7 +130,7 @@ public sealed class PromptPipelineObservationTests
         {
             lock (_entries)
             {
-                return _entries.Any(static e => e.Id.Id == eventId);
+                return _entries.Any(e => e.Id.Id == eventId);
             }
         }
 
