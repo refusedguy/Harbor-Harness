@@ -393,11 +393,16 @@ public sealed class SharedSourceTreeSnapshotTests
 
         foreach (SourceTreeEnumeration captured in snapshot.CapturedEnumerations)
         {
-            ImmutableArray<string> files = Directory.Exists(captured.Directory)
-                ? [.. Directory
-                    .EnumerateFiles(captured.Directory, "*.cs", SearchOption.AllDirectories)
-                    .Where(p => !SharedSourceTreeSnapshot.IsBuildOutputPath(p))]
-                : [];
+            ImmutableArray<string> files = [];
+            if (Directory.Exists(captured.Directory))
+            {
+                files =
+                [
+                    .. Directory
+                        .EnumerateFiles(captured.Directory, "*.cs", SearchOption.AllDirectories)
+                        .Where(p => !SharedSourceTreeSnapshot.IsBuildOutputPath(p))
+                ];
+            }
 
             live.Add(new SourceTreeEnumeration(captured.Directory, files));
         }
