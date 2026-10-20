@@ -165,10 +165,9 @@ jobs:
       - name: Compile twice (resolver on, resolver off)
         shell: bash
         env:
-          # off-first: the experiment run that controls for the cold-start
-          # order effect. The default (on-first) is the other half of the
-          # pair; see the job's comment.
-          ORDER: off-first
+          # Which compile gets the cold slot. The dispatch input chooses;
+          # a push-triggered run gets the default.
+          ORDER: ${{ inputs.order || 'on-first' }}
         run: |
           set -uo pipefail
           mkdir -p analysis

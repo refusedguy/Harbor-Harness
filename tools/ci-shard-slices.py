@@ -224,8 +224,19 @@ def main() -> int:
                     f"the `{shard}` shard's project list differs from the `{mirror}` shard's "
                     f"it mirrors — only in `{shard}`: {only_here}; only in `{mirror}`: {only_there}")
 
+        # The runner is not optional. The job's `runs-on` is
+        # `${{ matrix.runner }}`, so a shard without one has no runner at
+        # all — and, worse, the check below would silently stop asking for
+        # the native assets that runner needs.
+        runner = entry.get("runner")
+        if not runner:
+            problems.append(
+                f"the `{shard}` shard does not say which runner it runs on — the job's "
+                f"`runs-on` is `${{{{ matrix.runner }}}}`, so the entry needs a `runner:` key")
+            continue
+
         required = set(REQUIRED_KINDS)
-        if "arm" in (entry.get("runner") or ""):
+        if "arm" in runner:
             required |= ARM_REQUIRED_KINDS
 
         for project in projects:
