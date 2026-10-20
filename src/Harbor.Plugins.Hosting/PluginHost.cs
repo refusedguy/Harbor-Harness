@@ -178,7 +178,6 @@ public sealed class PluginHost
                     _logger.LogWarning("Plugin registration failed for {DisplayName}: {Error}", plugin.DisplayName, error);
                     if (FailOrContinue(error))
                         return Result.Failure<IReadOnlyList<LoadedPlugin>>(error);
-                    continue;
                 }
             }
         }
