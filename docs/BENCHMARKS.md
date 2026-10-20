@@ -1603,6 +1603,25 @@ so no amount of concurrency takes the project's wall under that. The 4-permit li
 lanes is 25.9 s of work per lane, which is just above the 21.41 s floor — so the wall
 lands at ≈26–30 s with the outliers intact.
 
+**What the three groups of tests are, priced.** The 81 tests split into three
+kinds, classified from the tree and priced with the same TRX:
+
+| kind | classes | tests | time | share |
+|---|---:|---:|---:|---:|
+| wire / terminal — the real PTY is the subject (alt-screen, mouse grab, bracketed paste, kitty CSI-u, SGR mouse, UTF-8 split writes, termios, resize, the 0x03 byte, exit codes) | 18 | 28 | 50.86 s | 49.1 % |
+| app-level, asserted on the grid — needs the whole app (CLI process, agent loop, provider, tools, permission gate, config file), not only the renderer | 21 | 24 | 52.41 s | 50.6 % |
+| in-process — `PtyScrollbackTests` (3) and `StateTestRunnerTests` (26, from `Harbor.E2E.Framework`, which rides along in the same executable through its module initializer) | 2 | 29 | 0.31 s | 0.3 % |
+
+The renderer already has an in-process seam (`CellForgeTuiRenderer(ISyncTerminalBackend)`,
+`ScreenSession`, `TestBackend`, `InMemoryTerminalBackend`) and 2 409 tests use
+it in 8.56 s. The APP does not: the interactive path reads fd 0 directly
+(`TerminalInputStream.Open()`) and owns the terminal through
+`ITerminalModeController`, and the interactive app is composed by `Program.cs`.
+So the 24 grid-asserting tests are not renderer tests — they assert on the
+grid the whole app produced — and moving them in-process needs an in-process
+interactive host that does not exist today. That is a design decision for the
+owner of the CLI composition root, not a test-suite reshuffle.
+
 **A process split of this project, measured (LPT over the class costs above).** A
 constraint key is process-local, so splitting the project into CI jobs by
 `--treenode-filter` leaves the classes INSIDE each job serial — the table below is the
