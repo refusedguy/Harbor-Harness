@@ -19,7 +19,7 @@
 // EventBus, PluginDirectory and DataDirectory, and NOT IPluginLoadHost. So the
 // storage and renderer axes were open on the host side and unreachable on the
 // plugin side — a sealed interface promising a capability no plugin had any way
-// to use. `ExtensionAxisFreezeRule` (#620) is what found it; this file is the
+// to use. `ExtensionAxisRegistrationRule` (#620) is what found it; this file is the
 // other half of that fix.
 //
 // WHY A NARROW SINK AND NOT IPluginLoadHost ITSELF

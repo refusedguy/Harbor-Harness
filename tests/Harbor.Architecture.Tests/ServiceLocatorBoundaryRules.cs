@@ -635,7 +635,7 @@ public class ServiceLocatorBoundaryRules
     ///     Types of an assembly, tolerating the ones that will not enumerate. The
     ///     <c>src/</c> sweep reaches ~60 assemblies, one of which failing to load
     ///     must not crash the rule — the same tolerance
-    ///     <c>ExtensionAxisFreezeRule.ProductTypes</c> and <c>SeamLeakProbe</c>
+    ///     <c>ExtensionAxisProbe.ProductTypes</c> and <c>SeamLeakProbe</c>
     ///     apply. Discovery is not a silent pass: <c>Sweeps_CoverRealTypes</c>
     ///     requires the type count to be real.
     /// </summary>
