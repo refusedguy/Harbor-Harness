@@ -412,15 +412,16 @@ jobs:
       # hand. The artifact is uploaded even when the gate is red — that is
       # exactly when somebody needs it.
       #
-      # `--warn-only` keeps the measurement and stops the blocking. The
-      # baseline matches a duplicate group by its MEMBERS (the paths and
-      # names of the methods in it), so a PR that splits or moves a file
-      # holding duplicated bodies relocates the group and the gate reads the
-      # relocation as new duplication. The removal programme (#1808 and its
-      # children) lowers the duplicated line count while it moves those
-      # files, and a bookkeeping red blocks the very PRs that do the
-      # removing. The findings are printed as WARN and the job goes green;
-      # the blocking default of the script is unchanged.
+      # `--warn-only` keeps the measurement and stops the blocking until the
+      # removal programme is over: #1808 and its children (#1810, #1815,
+      # #1816, #1821, #1822, #1774, #1776, #1889) MOVE the files the
+      # baseline is keyed on, and the baseline is lowered by one deliberate
+      # `--update` when the last of them lands. The gate now knows a
+      # relocated group (same shape, same copy count, same method names), so
+      # a move is not a finding any more — but the programme is still in
+      # flight, and the gate comes back to blocking with that final
+      # `--update`, not before. The findings are printed as WARN and the job
+      # goes green; the blocking default of the script is unchanged.
       - name: Check the test tree for duplicated bodies
         run: python3 tools/check-test-dup.py --min-files 800 --min-methods 9000 --json-out test-dup-groups.json --warn-only
       - name: Upload the duplicate-group list

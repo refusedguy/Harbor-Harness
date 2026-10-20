@@ -104,17 +104,49 @@ THE THRESHOLDS, AND WHY THEY ARE WHERE THEY ARE
 
 RULES
 
-  DUP-NEW            A duplicate group whose MEMBERS the baseline does not
-                     know: a copy that was added, or a group that did not
-                     exist. New duplication — the thing this gate exists to
-                     stop. The comparison is on the group's MEMBERS (the
-                     paths and names of the methods in it), never on the text
-                     of their bodies: the text changes every time somebody
-                     edits a duplicated test, and an edit is not new
-                     duplication. Keying on the text made the first version
-                     of this gate go red on #1814, which rewrote the PTY wait
+  DUP-NEW            A duplicate group the baseline does not know: a copy
+                     that was added, or a group that did not exist. New
+                     duplication — the thing this gate exists to stop.
+                     The comparison is NEVER on the text of the bodies:
+                     the text changes every time somebody edits a
+                     duplicated test, and an edit is not new duplication.
+                     Keying on the text made the first version of this
+                     gate go red on #1814, which rewrote the PTY wait
                      helpers in eleven duplicated files without adding a
                      single copy.
+
+                     A group is KNOWN when the baseline holds the same
+                     duplication, and it is known in two ways:
+
+                       by its MEMBERS — the same `path::method#ordinal`
+                         keys. This is what survives a rewrite of the body
+                         and a removal of one copy.
+
+                       by its SHAPE, its COPY COUNT and its multiset of
+                         METHOD NAMES — the same body, the same number of
+                         copies, the same names, at other paths. This is
+                         what survives a MOVE: the path of a member changes
+                         when the file moves, its ordinal changes when a
+                         sibling method is inserted, while the name is what
+                         identifies the body.
+
+                     The second rule is the "same duplication, relocated"
+                     case, and it is the one #1912 adds. The baseline was
+                     keyed on paths, so every PR that split or moved a
+                     file holding duplicated bodies relocated its groups
+                     and the gate read the relocation as new duplication.
+                     #1827 split `tests/Harbor.TestKit/Fakes.cs` into ten
+                     files, LOWERED the duplicated line count by 241 lines,
+                     and the gate went red on it — a bookkeeping red on the
+                     very PR that removes duplication.
+
+                     The relocation rule excuses a relocation and NOTHING
+                     else. It does not excuse a group whose count grew (a
+                     copy was added: the growth branch still fires, and it
+                     still says how many more were added), a shape the
+                     baseline does not know (genuinely new duplication), or
+                     a group whose method names differ (a different body, or
+                     a rename that is really a different duplication).
   DUP-GROWTH         Total duplicated code lines are above the baseline's.
                      Catches growth the per-group comparison cannot see.
   DUP-BASELINE-MISSING
@@ -137,13 +169,16 @@ TWO MODES, ONE MEASUREMENT
 
   The default mode is the gate: it exits 1 on a finding. `--warn-only`
   prints the same findings and exits 0. CI runs the gate in warn-only mode
-  while the removal programme (#1808 and its children) is relocating the
-  files the baseline is keyed on: the baseline matches a duplicate group by
-  its MEMBERS — the paths and names of the methods in it — so a PR that
-  splits or moves a file that holds duplicated bodies relocates the group
-  and the gate reads the relocation as new duplication. That is a
-  bookkeeping red, not a duplication red: the removal PRs lower the
-  duplicated line count while they move the files.
+  until the removal programme is over: #1808 and its children (#1810,
+  #1815, #1816, #1821, #1822, #1774, #1776, #1889) MOVE the files the
+  baseline is keyed on, and the baseline is lowered by one deliberate
+  `--update` when the last of them lands.
+
+  The matching rule knows a relocated group (same shape, same copy count,
+  same method names — see DUP-NEW), so a move is no longer a bookkeeping
+  red. Warn-only stays anyway: the programme is still in flight, the
+  baseline still has to be re-cut against the tree it leaves behind, and
+  the gate comes back to blocking with that final `--update`, not before.
 
   The mode changes the exit code and nothing else. The self-test covers
   both: `--warn-only` must report the finding and exit 0, and the default
@@ -187,12 +222,16 @@ NON-VACUITY
   that merely have the same shape MUST NOT be reported; a group already in
   the baseline MUST pass; a group whose count grew MUST fail; REWRITING the
   body of every copy of a known group MUST still pass (the edit is not new
-  duplication); a tree below the floors MUST fail (the blindness case); a
-  missing baseline MUST fail; a three-line assert helper MUST NOT be
-  flagged (the false-positive control); a brace inside a string literal and
-  a `//` inside a raw string MUST NOT move the scanner; and the gate's own
-  source MUST NOT be inside the scanned scope. The CI `selftest` job runs it
-  on every PR that touches the gate.
+  duplication); a known group whose FILES MOVED MUST still pass (a
+  relocation is not new duplication) and the same moved group with ONE MORE
+  COPY MUST fail (an added copy is); a relocated group whose method names
+  DIFFER MUST fail (a rename is not a relocation); a tree below the floors
+  MUST fail (the blindness case); a missing baseline MUST fail; a
+  three-line assert helper MUST NOT be flagged (the false-positive
+  control); a brace inside a string literal and a `//` inside a raw string
+  MUST NOT move the scanner; and the gate's own source MUST NOT be inside
+  the scanned scope. The CI `selftest` job runs it on every PR that touches
+  the gate.
 
 WHAT THIS DOES NOT DO, STATED RATHER THAN IMPLIED
 
@@ -219,6 +258,7 @@ import re
 import subprocess
 import sys
 import tempfile
+from collections import Counter
 from itertools import combinations
 
 # ---------------------------------------------------------------------------
@@ -1043,6 +1083,90 @@ def _today():
     return datetime.date.today().isoformat()
 
 
+def _member_names(member_keys):
+    """The multiset of method names behind a set of member keys.
+
+    A member key is `path::method#ordinal`. The PATH is what a move
+    changes; the ORDINAL is what an inserted sibling changes; the NAME is
+    what identifies the duplicated body. So the name multiset is what
+    survives a relocation, and it is what the baseline is compared on when
+    the paths differ.
+    """
+    counts = Counter()
+    for key in member_keys:
+        name = key.split("::", 1)[-1].split("#", 1)[0]
+        counts[name] += 1
+    return counts
+
+
+def _covers(big, small):
+    """Whether the multiset `big` holds every element of `small`."""
+    return all(big.get(name, 0) >= count for name, count in small.items())
+
+
+def _entry_count(entry):
+    """How many copies a baseline entry recorded."""
+    count = entry.get("count")
+    if isinstance(count, int):
+        return count
+    return len(entry.get("members") or [])
+
+
+def _relocation_match(group, by_shape):
+    """The baseline entry that knows this group at other paths, or None.
+
+    A duplicate group survives a MOVE: the file that holds a copy is
+    renamed, split or relocated, and the copy itself is the same copy.
+    The baseline is keyed on member keys, and a member key starts with the
+    path, so a move changes every key of the group and the gate read the
+    relocation as new duplication. #1827 split `tests/Harbor.TestKit/
+    Fakes.cs` into ten files, LOWERED the duplicated line count by 241
+    lines, and the gate went red on it — a bookkeeping red on the very PR
+    that removes duplication.
+
+    Two facts survive the move, and both have to hold:
+      - the SHAPE of the body (the fingerprint of the normalised token
+        stream) — a different body is a different duplication;
+      - the multiset of METHOD NAMES — a renamed method is a different
+        body, or at least one the baseline cannot vouch for.
+
+    The copy count follows from the name multiset: the baseline covers
+    the group only when it knew at least as many copies of every name, so
+    the same count means the same number of copies and a smaller count
+    means a copy was REMOVED — a removal, which the gate has always
+    allowed (the member-subset branch above allows it too).
+
+    What does NOT survive is an ADDED copy: the baseline's names do not
+    cover the group's, and the growth branch reports it.
+    """
+    names = _member_names(group["member_keys"])
+    for entry in by_shape.get(group["fingerprint"], []):
+        base_names = _member_names(entry.get("members") or [])
+        if _covers(base_names, names):
+            return entry
+    return None
+
+
+def _growth_match(group, by_shape):
+    """The baseline entry this group grew from, or None.
+
+    The same body, at other paths, with copies ADDED. The growth is the
+    new duplication; the relocation is not. The message says both, so a
+    reviewer sees that the count moved and not that the files did.
+    """
+    names = _member_names(group["member_keys"])
+    best = None
+    for entry in by_shape.get(group["fingerprint"], []):
+        base_names = _member_names(entry.get("members") or [])
+        if len(base_names) >= len(names):
+            continue
+        if not _covers(names, base_names):
+            continue
+        if best is None or len(base_names) > _entry_count(best):
+            best = entry
+    return best
+
+
 def run_gate(root, min_lines=MIN_BODY_LINES, min_members=MIN_MEMBERS,
              min_similarity=MIN_SIMILARITY, min_files=0, min_methods=0,
              changed_files=None):
@@ -1108,11 +1232,26 @@ def run_gate(root, min_lines=MIN_BODY_LINES, min_members=MIN_MEMBERS,
     # and must not be reported as new duplication. Keying on the body made
     # the gate red on the first such edit; keying on the members makes it
     # red only when a COPY is added, which is what it is for.
+    #
+    # The members carry the PATH, and a move changes it — so the members
+    # alone are not enough: a PR that splits or moves a file that holds
+    # duplicated bodies relocates the group, and the gate read the
+    # relocation as new duplication. The second matcher below closes that
+    # hole: the same SHAPE and the same METHOD NAMES mean the same
+    # duplication, wherever its files now live — and a group with FEWER
+    # copies of it is a removal, which the gate has always allowed.
     baseline_groups = []
     for entry in known.values():
         baseline_groups.append(
             (set(entry.get("members") or []), entry)
         )
+
+    # The same baseline entries, indexed by the shape of the body. The shape
+    # is what a move leaves alone, so it is how a relocated group finds the
+    # entry that knows it.
+    by_shape = {}
+    for entry in known.values():
+        by_shape.setdefault(entry.get("shape"), []).append(entry)
 
     offenders = []
     for group in blocking:
@@ -1137,6 +1276,11 @@ def run_gate(root, min_lines=MIN_BODY_LINES, min_members=MIN_MEMBERS,
             # Known: the same methods are still duplicated (the body may have
             # been rewritten on purpose — that is not new duplication).
             continue
+        if _relocation_match(group, by_shape) is not None:
+            # Known: the same duplication, relocated. The files moved; the
+            # copies did not grow.
+            continue
+        growth_of = _growth_match(group, by_shape)
         offenders.append(group)
         if superset_of is not None:
             findings.append(
@@ -1144,6 +1288,14 @@ def run_gate(root, min_lines=MIN_BODY_LINES, min_members=MIN_MEMBERS,
                 f"({group['lines']} code lines each) — the baseline recorded "
                 f"{superset_of.get('count')} copies of these bodies; "
                 f"{group['count'] - superset_of.get('count', 0)} more were added"
+            )
+        elif growth_of is not None:
+            findings.append(
+                f"DUP-NEW {group['members'][0].where()} x {group['count']} copies "
+                f"({group['lines']} code lines each) — the baseline recorded "
+                f"{_entry_count(growth_of)} copies of these bodies under other "
+                f"paths; {group['count'] - _entry_count(growth_of)} more were "
+                f"added"
             )
         elif same_shape_of is not None:
             findings.append(
@@ -1892,6 +2044,79 @@ def selftest():
         "the default mode reports the same finding as FAIL",
         "FAIL DUP-NEW" in buffer2.getvalue(),
         buffer2.getvalue(),
+    )
+
+    # 17. A group the baseline knows must stay green when its FILES MOVE.
+    #     The baseline is keyed on member keys (`path::method#ordinal`), and
+    #     the path is what a move changes — so the gate used to read a
+    #     relocation as new duplication. #1827 split
+    #     `tests/Harbor.TestKit/Fakes.cs` into ten files, LOWERED the
+    #     duplicated line count by 241 lines, and the gate went red on it:
+    #     a bookkeeping red on the very PR that removes duplication. A gate
+    #     that punishes the programme it exists for is a gate that gets
+    #     switched off.
+    tmp = _fixture({"tests/Demo.Tests/AlphaTests.cs": tree_a,
+                    "tests/Demo.Tests/BetaTests.cs": tree_b})
+    methods, _ = scan_tree(tmp)
+    groups_now, _ = build_groups(methods)
+    _write_fixture_baseline(
+        tmp,
+        groups_now,
+        {"duplicate_lines": sum(g["duplicate_lines"] for g in groups_now)},
+    )
+    findings, _, _, _, _ = run_gate(tmp)
+    check(
+        "a known group is green before the move",
+        not findings,
+        str(findings),
+    )
+    _write_tree(tmp, {"tests/Demo.Tests/Moved/AlphaTests.cs": tree_a,
+                      "tests/Demo.Tests/Moved/BetaTests.cs": tree_b})
+    os.remove(os.path.join(tmp, "tests/Demo.Tests/AlphaTests.cs"))
+    os.remove(os.path.join(tmp, "tests/Demo.Tests/BetaTests.cs"))
+    findings, _, _, _, _ = run_gate(tmp)
+    check(
+        "a known group whose files moved stays green",
+        not findings,
+        str(findings),
+    )
+
+    # 18. The same moved group with ONE MORE COPY MUST fail. The relocation
+    #     is not new duplication; the added copy is. "The baseline knows
+    #     this body" is not "this body may have any number of copies", and
+    #     the growth message has to say so.
+    _write_tree(tmp, {"tests/Demo.Tests/Moved/GammaTests.cs": tree_c})
+    findings, _, _, _, _ = run_gate(tmp)
+    check(
+        "a moved group with an extra copy fails",
+        any("more were added" in f for f in findings),
+        str(findings),
+    )
+
+    # 19. A relocated group whose method names DIFFER must still fail: a
+    #     rename is not a relocation. The baseline vouches for a body by
+    #     its shape and its names; a body whose methods it has never seen
+    #     is a duplication it cannot vouch for, however many files hold it.
+    tmp = _fixture({"tests/Demo.Tests/AlphaTests.cs": tree_a,
+                    "tests/Demo.Tests/BetaTests.cs": tree_b})
+    methods, _ = scan_tree(tmp)
+    groups_now, _ = build_groups(methods)
+    _write_fixture_baseline(
+        tmp,
+        groups_now,
+        {"duplicate_lines": sum(g["duplicate_lines"] for g in groups_now)},
+    )
+    _write_tree(tmp, {"tests/Demo.Tests/Moved/AlphaTests.cs":
+                      tree_a.replace("Alpha_Works", "Renamed_Works"),
+                      "tests/Demo.Tests/Moved/BetaTests.cs":
+                      tree_b.replace("Beta_Works", "Also_Renamed_Works")})
+    os.remove(os.path.join(tmp, "tests/Demo.Tests/AlphaTests.cs"))
+    os.remove(os.path.join(tmp, "tests/Demo.Tests/BetaTests.cs"))
+    findings, _, _, _, _ = run_gate(tmp)
+    check(
+        "a relocated group whose method names differ fails",
+        any(f.startswith("DUP-NEW") for f in findings),
+        str(findings),
     )
 
     if failures:
