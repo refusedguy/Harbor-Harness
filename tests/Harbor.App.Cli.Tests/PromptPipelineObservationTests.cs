@@ -45,13 +45,13 @@ using Harbor.Application.Configuration;
 using Harbor.Hosting.Rendering;
 using Harbor.Registries.Agents;
 using Harbor.Registries.Providers;
+using Harbor.TestKit;
 using Harbor.Tui.CellForge.Rendering;
 using Harbor.Tui.CellForge.Streaming;
 using Harbor.Tui.CellForge.Widgets;
 using Harbor.Ui.Framework.Panels;
 using Harbor.Ui.Framework.Rendering.Widgets;
 using Harbor.Ui.Framework.State;
-using Microsoft.Extensions.Logging;
 
 namespace Harbor.App.Cli.Tests;
 
@@ -69,6 +69,14 @@ public sealed class PromptPipelineObservationTests
     ///     exists only because the detach site observes the task.
     /// </remarks>
     private const int PromptTaskFaultedEventId = 2;
+
+    /// <summary>
+    ///     The runner's own catch-all must have fired first — the fault has
+    ///     to ESCAPE that net before the detach site's observer has anything
+    ///     to report. If event 1 is missing, the test is not exercising the
+    ///     path it claims to exercise.
+    /// </summary>
+    private const int PromptFailedEventId = 1;
 
     [Test]
     public async Task A_Fault_In_The_Detached_Prompt_Task_Reaches_The_Detach_Site_Observer()
@@ -90,76 +98,31 @@ public sealed class PromptPipelineObservationTests
         // The prompt is detached BY DESIGN, so the observer's continuation
         // runs on the thread pool. Wait for it rather than assume it has
         // already run.
-        for (int attempt = 0; attempt < 200 && !logger.HasEvent(PromptTaskFaultedEventId); attempt++)
+        for (int attempt = 0; attempt < 200 && !Logged(logger, PromptTaskFaultedEventId); attempt++)
         {
             await Task.Delay(10);
         }
 
-        await Assert.That(logger.HasEvent(PromptTaskFaultedEventId)).IsTrue()
+        await Assert.That(Logged(logger, PromptTaskFaultedEventId)).IsTrue()
             .Because(
                 "the prompt task is detached on purpose — the REPL frame loop must not wait for a model "
                 + "turn — and observed on purpose: the house fire-and-forget helper reads the task's "
                 + "exception and the detach site reports it. A fault nobody observes is reported nowhere: "
                 + ".NET parks the exception on the Task and only raises UnobservedTaskException at "
                 + "finalization, which for a REPL that lives for hours is never. Logged entries: "
-                + string.Join(" | ", logger.Describe()));
+                + string.Join(" | ", logger.Capture.DetailedEntries.Select(static e => $"[{e.EventId}] {e.Message}")));
 
-        await Assert.That(logger.HasEvent(1)).IsTrue()
+        await Assert.That(Logged(logger, PromptFailedEventId)).IsTrue()
             .Because(
                 "the runner's own catch-all must have fired first — the fault has to ESCAPE that net "
                 + "before the detach site's observer has anything to report. If event 1 is missing, the "
                 + "test is not exercising the path it claims to exercise. Logged entries: "
-                + string.Join(" | ", logger.Describe()));
+                + string.Join(" | ", logger.Capture.DetailedEntries.Select(static e => $"[{e.EventId}] {e.Message}")));
     }
 
-    /// <summary>
-    ///     A logger that keeps what it was told, so the test can assert on
-    ///     the EVENT rather than on a message string.
-    /// </summary>
-    /// <remarks>
-    ///     The event id is the assertion's subject: the runner's catch-all
-    ///     and the detach site's observer are two different events, and a
-    ///     test that matched on the message text would pass on either.
-    /// </remarks>
-    private sealed class CapturingLogger : ILogger
-    {
-        private readonly List<(EventId Id, LogLevel Level, string Message)> _entries = [];
-
-        /// <summary>Whether an event with this id was logged.</summary>
-        public bool HasEvent(int eventId)
-        {
-            lock (_entries)
-            {
-                return _entries.Any(e => e.Id.Id == eventId);
-            }
-        }
-
-        /// <summary>The entries, as printable text.</summary>
-        public string Describe()
-        {
-            lock (_entries)
-            {
-                return string.Join(" | ", _entries.Select(static e => $"[{e.Id.Id}] {e.Message}"));
-            }
-        }
-
-        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
-
-        public bool IsEnabled(LogLevel logLevel) => true;
-
-        public void Log<TState>(
-            LogLevel logLevel,
-            EventId eventId,
-            TState state,
-            Exception? exception,
-            Func<TState, Exception?, string> formatter)
-        {
-            lock (_entries)
-            {
-                _entries.Add((eventId, logLevel, formatter(state, exception)));
-            }
-        }
-    }
+    /// <summary>Whether anything was logged under this event id.</summary>
+    private static bool Logged(CapturingLogger logger, int eventId) =>
+        logger.Capture.DetailedEntries.Any(e => e.EventId == eventId);
 
     /// <summary>
     ///     An agent whose prompt FAILS. The failure is what the detach
