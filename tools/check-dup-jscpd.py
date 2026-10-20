@@ -198,8 +198,20 @@ def download_tool(cache_dir: Path, force: bool = False) -> Path:
     if force or not archive.exists() or sha256_of(archive) != expected:
         url = f"{TOOL_RELEASES}/v{TOOL_VERSION}/{asset}"
         print(f"  downloading {TOOL_NAME} {TOOL_VERSION} ({asset})")
-        with urllib.request.urlopen(url, timeout=120) as response:  # noqa: S310
-            payload = response.read()
+        payload = b""
+        last_error: Exception | None = None
+        for attempt in range(1, 4):
+            try:
+                with urllib.request.urlopen(url, timeout=120) as response:  # noqa: S310
+                    payload = response.read()
+                break
+            except Exception as exc:  # noqa: BLE001 - a network hiccup, retried
+                last_error = exc
+                print(f"  attempt {attempt} failed: {exc}")
+        if not payload:
+            raise SystemExit(
+                f"  could not download {url} after 3 attempts: {last_error}"
+            )
         archive.write_bytes(payload)
         verify_archive(archive, expected)
     target = cache_dir / TOOL_NAME
