@@ -1061,6 +1061,57 @@ byte-identical (pinned by `JsonlMessagePayloadShapeTests`, including the
 > `test (platform)` job log on every run — cite THAT run's values when filling
 > the Measured column, never the local absolute milliseconds.
 
+### Tool-context callback closures (#1529) — **RELATIVE**, CI merge gate ✅ measured
+
+`Harbor.Application.Tests.ToolDispatcherToolContextScalingTests`, in the `test (core)` merge-gate shard.
+
+Same relative convention as #410/#1528: N against 2N inside one run, no
+absolute budgets, measured through the shared `Harbor.TestKit.TestScalingGate`
+(#1652 — GC-fenced legs scaled toward ~100 ms of real work, medians over five
+rounds, x1.05 noise band on the time branch only).
+
+**Before (per call, structural):** `ToolDispatcher.CreateToolContext` wired
+both `ToolContext` callbacks as inline async lambdas — one closure
+display-class per lambda (progress captured `toolCall`/`eventBus`/`logger`,
+Ask captured `toolCall`/`permissions`/`logger`) — 2 display-classes per tool
+call on the per-tool-call hot path, on top of the `ToolContext` itself.
+**After:** the bodies hoisted into one small sealed state object per call
+(`ToolCallGates`, the issue's "small sealed state record" shape) whose two
+bodies are static and take that record as an explicit state parameter, and
+the two delegates bind to the record as their target — zero display-class
+allocations per call, and `ToolContext`'s public delegate signatures
+untouched. Behaviour 1:1 — §FP-003 progress await-and-log and the #201 B1 ask
+fail-closed shape are pinned by `ToolDispatcherToolContextScalingTests` plus
+`ToolDispatcherAskFailClosedTests`.
+
+Per call, the allocation shape is therefore: `ToolContext` + one state record
++ the two delegates (the delegates are the `ToolContext`'s own public
+contract, so they cannot be shared across calls without changing that
+contract) — 4 objects per call, down from 5. The shape is pinned directly,
+without a byte budget, by
+`Callbacks_ShareOneStateObject_AndNoClosureDisplayClass`: both delegates must
+carry the same target object, and that target must not be a
+compiler-generated closure class.
+
+**Why a second dispatcher gate and not a new label on the existing one:**
+`ToolDispatcherResolveOnceTests.ExecuteAsync_DoubledBatch_StaysWithinGrowthLimit`
+(label `dispatcher-dispatch-scaling`) already measures N against 2N on the
+same dispatch path — but its tool is a no-op, so the **callback** this slice
+changed is never entered. The #1529 gate drives a tool that reports progress
+twice per call, so every measured call goes through the rebuilt progress
+callback.
+
+| Test | Relative claim | Gate | Measured |
+|---|---|---|---|
+| `ToolContextBuilds_DoubledBatch_StaysWithinGrowthLimit` | time over dispatching a 100 → 200 tool-call batch (one `ToolContext` build per tool call per dispatch) — leg-scaled, medians of 5 rounds, linux-gated | ratio ≤ 3.0 (linear ≈ 2.0; O(N²) ≈ 4.0) | **x2.64** — CI run 39365025268, `test (core)`, median of 5 legs of 512 units (small 61.564 ms / 133042216 B, large 162.570 ms / 264523816 B) |
+| `ToolContextBuilds_DoubledBatch_StaysWithinGrowthLimit` | allocations over the same batches — runner-independent half of the claim | ratio ≤ 3.0, strict (no band, #1652) | **x1.99** — same run; linear is 2.00, so the dispatch path allocates in proportion to the batch |
+
+> The `[scaling] dispatcher-tool-context-scaling: ...` report line prints into
+> the `test (core)` job log on every run — cite THAT run's values when filling
+> the Measured column, never the local absolute milliseconds. A **passing**
+> gate's line lands in the shard's TRX (and the job summary), not in the
+> console log — the console only shows a gate's line when it skips.
+
 ### ConsoleEx cell-diff core (`DiffEngineBenchmark`, 2026-08-26, Release)
 
 Frame-budget targets from `specs/07-tui.md` (< 16 ms/frame) and celldiff §7 — all met with an order of magnitude of headroom. Flush = real DiffEngine scan + AnsiWriter SGR/cursor encoding into a discarding backend (no tty I/O).
