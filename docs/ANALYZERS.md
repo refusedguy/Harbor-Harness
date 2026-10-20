@@ -67,9 +67,9 @@ API.
 
 | Package | Version checked | Licence | Verdict | Reason |
 |---------|-----------------|---------|---------|--------|
-| `Microsoft.CodeAnalysis.NetAnalyzers` | 10.0.402 | MIT | ADOPT, solution-wide | The base layer every other package is judged against. 40 of its rules carry a Harbor severity of their own (4 `none`, 33 `suggestion`, 3 `error`); the rest keep the severity they ship with. The 10.0.302 → 10.0.402 move adds zero ids (329 `CA####` ids in both builds) and changes no severity (#1897). |
+| `Microsoft.CodeAnalysis.NetAnalyzers` | 10.0.402 | MIT | ADOPT, solution-wide | The base layer every other package is judged against. 40 of its rules carry a Harbor severity of their own (4 `none`, 33 `suggestion`, 3 `error`); the rest keep the severity they ship with. The 10.0.302 → 10.0.402 move adds zero ids (329 `CA####` ids in both builds) and changes no severity (#1897). The duplication the SDK's own bundled copy might have caused is not there: the package ships `buildTransitive/DisableNETAnalyzersForNuGetPackage.props`, which sets `EnableNETAnalyzers=false`, and the SDK adds its bundled `Microsoft.CodeAnalysis.NetAnalyzers.dll` under `Condition="$(EnableNETAnalyzers)"` in `Microsoft.NET.Sdk.Analyzers.targets` (read from the SDK on disk, release/10.0.4xx). The package therefore REPLACES the SDK's copy rather than adding to it, which is why a `-p:ReportAnalyzer=true` run is not needed to settle it. What the pin does decide is the rule set: the SDK's bundled copy follows the SDK, this one does not, so the pin is what freezes the CA rules at 10.0.402 until it is moved by hand. |
 | `Roslynator.Analyzers` | 5.0.1 | Apache-2.0 | ADOPT, solution-wide | 284 RCS ids and no severity rows at all: the 4.15.0 to 5.0.1 gap introduced zero new ids and removed twenty obsolete implementations (#1851). |
-| `SonarAnalyzer.CSharp` | 10.29.0.143774 | source-available, not SPDX (a `LICENSE` file in the package) | ADOPT, solution-wide | 24 S rules are demoted or switched off, each with a reason. The licence is not LGPL: it is the "SONAR Source-Available License v1.0", whose AI-use clause is open in #1858. |
+| `SonarAnalyzer.CSharp` | 10.29.0.143774 | source-available, not SPDX (a `LICENSE` file in the package) | ADOPT, solution-wide | 447 rule ids ship in the package. 23 are configured in `.editorconfig` (22 `none`, 1 `suggestion`), 4 more are NoWarn'd in `Directory.Build.props`, and 6 more are off under `tests/` only; each carries its own reason. Measured on `dev@086ef777` (CI run 39472959027, the Release build of `Harbor.slnx`): 476 sites in 40 rules, every one of them under `tests/`, and 0 under `src/` or `apps/`. The licence is the "SONAR Source-Available License v1.0", not LGPL: its grant covers "any Non-competitive Purpose", and the three carve-outs (SonarQube's own functionality, competition with it, and AI engaging with the Program or the data it provides) do not reach Harbor's product, because the package is build-time (`PrivateAssets=all`, `ExcludeAssets="runtime"`), so no Sonar code or data reaches a binary and the Harbor runtime never consumes a diagnostic. The one reading that does reach Harbor is the dev workflow, where an AI agent reads the analyzer's diagnostics in the build log; that is the owner's call and it is stated as the residual in [`docs/DEVELOPMENT.md §Analyzer licences`](./DEVELOPMENT.md#analyzer-licences). The pin stays at 10.29.0.143774: 10.35.0.4138 is the current release and was measured (10 new rule ids, none removed, the licence file byte-identical, every configured id still present), and taking it needs the #1851 baseline, which is a build this change cannot run. |
 | `Meziantou.Analyzer` | 3.0.315 | MIT | ADOPT, solution-wide | 207 MA rows. The 3.0.123 to 3.0.315 gap added 31 ids, each baselined at the severity the package ships it with (#1851). |
 | `AsyncFixer` | 2.1.0 | Apache-2.0 | ADOPT, solution-wide | Five rules, AsyncFixer01 to AsyncFixer05, all at `suggestion`. |
 | `ReflectionAnalyzers` | 0.3.1 | MIT | ADOPT, solution-wide | 46 REFL ids and no severity rows: nine rules fire 216 times and every one of them is in `tests/`, where `TreatWarningsAsErrors` is off (#1905). The dynamic-code ban is not this package, it is RS0030 (#1844). |
@@ -303,17 +303,25 @@ and the shapes this repository has are those.
 ### Path-scoped severity overrides
 
 Every severity above is set by `[*.{cs,csx}]` in `.editorconfig` and applies to
-the whole tree. There is exactly **one** section that scopes a diagnostic's
-severity to a path instead, and it is this one:
+the whole tree. Two sections scope a diagnostic's severity to a path instead,
+and they are these two:
 
 ```ini
 [apps/Harbor.App.Avalonia/**.cs]
 dotnet_diagnostic.DI006.severity = suggestion   # static IServiceProvider cache
 dotnet_diagnostic.DI008.severity = suggestion   # disposable transient service
 dotnet_diagnostic.DI014.severity = suggestion   # root provider not disposed
+
+[tests/**.cs]
+dotnet_diagnostic.S5443.severity = none          # hardcoded temp path is the test's own fixture data
+dotnet_diagnostic.S1215.severity = none          # GC.Collect is the setup of the allocation and finalization tests
+dotnet_diagnostic.S1313.severity = none          # hardcoded IP addresses are the test's own data
+dotnet_diagnostic.S5332.severity = none          # http is the fixture: an .invalid host or a local test server
+dotnet_diagnostic.S3878.severity = none          # explicit array for a params overload, by convention
+dotnet_diagnostic.S3220.severity = none          # overload shape, not a defect
 ```
 
-**Why:** an Avalonia composition root has to hand its container to the XAML
+**Why the Avalonia block:** an Avalonia composition root has to hand its container to the XAML
 object graph, which cannot take constructor parameters, so the static root
 provider is the idiom there. The CLI root resolves through
 `Harbor.App.Cli/Hosting/HostBuilder.Build` instead and is deliberately **not**
@@ -321,6 +329,19 @@ in this list. The asymmetry is observed rather than assumed: #837 planted a
 static container in the CLI root and the build failed with `error DI006` before
 a single test ran, in the same session that found the Avalonia root's
 equivalent compiling clean.
+
+**Why the test block:** it is the measurement, not a preference. On
+`dev@086ef777` (CI run 39472959027, the Release build of `Harbor.slnx`)
+`SonarAnalyzer.CSharp` reported 476 sites in 40 rules, and every one of them
+is under `tests/`: 0 under `src/`, 0 under `apps/`. The six rules above are
+the ones whose findings are noise in a test tree and are worth something in a
+product tree, so they stay on everywhere else. S5443 and S1313 want a
+hardcoded path or address to be a defect, and in a test the hardcoded value is
+the fixture; S1215 wants GC.Collect gone, and in the allocation and
+finalization tests it is the setup; S5332 wants https, and the http URL is
+the fixture, an `.invalid` host or a local server the test starts itself;
+S3878 and S3220 are call style.
+The 116 sites that remain under `tests/` are the ones worth reading.
 
 **The consequence worth memorising:** the effective severity of a DI rule is a
 function of *(rule, path)*, not of the rule alone. `App.Services` is the one
@@ -374,8 +395,10 @@ under `contrib/`, which is not in `Harbor.slnx` and is not built by CI — so th
 blocks were inert configuration that read like live policy.
 `AnalyzerSeverityScopeRules.PathScopedSections_ResolveToRealPaths` in
 `tests/Harbor.Architecture.Tests/` fails if such a block reappears, and
-`DiSeverityOverrides_AreScopedToExactlyTheDeclaredRoot` pins this one path as
-the entire surface.
+`DiSeverityOverrides_AreScopedToExactlyTheDeclaredRoot` pins the Avalonia path
+as the entire DI surface. The `tests/` block above is not part of that
+inventory, because it relaxes no DI rule: it is a Sonar block, and the DI
+inventory is a statement about the DI family.
 
 ### Threading rules (Microsoft.VisualStudio.Threading.Analyzers 18.12.1)
 
@@ -1262,7 +1285,7 @@ every pre-existing finding into a red build on the day the package lands.
 | File | What goes in it | Why it is there |
 |------|-----------------|-----------------|
 | `.editorconfig`, section `[*.{cs,csx}]` | every diagnostic reported on a C# source tree, tree-wide | Roslyn resolves the severity of a source-tree diagnostic from the editor config. |
-| `.editorconfig`, a path section such as `[apps/Harbor.App.Avalonia/**.cs]` | the same, but only for one directory | One such section exists today. `AnalyzerSeverityScopeRules` pins the set of paths and fails if a path-scoped section addresses a directory that is not in the checkout. |
+| `.editorconfig`, a path section such as `[apps/Harbor.App.Avalonia/**.cs]` or `[tests/**.cs]` | the same, but only for one directory | Two such sections exist today: the Avalonia DI block and the Sonar block under `tests/`. `AnalyzerSeverityScopeRules` pins the set of paths and fails if a path-scoped section addresses a directory that is not in the checkout. |
 | [`/Directory.Build.globalconfig`](../Directory.Build.globalconfig) | every diagnostic reported on an additional file, which today means the project-file rules | An additional-file diagnostic has no `SourceTree`, and Roslyn applies an editor-config severity only to a diagnostic that has one. A global analyzer config is the only per-rule mechanism that reaches them. |
 
 A severity written anywhere else reaches nothing. That is not a style rule:

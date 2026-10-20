@@ -296,12 +296,14 @@ public sealed class AnalyzerSeverityScopeRules
         ];
 
         // One real path section is enough to prove the scanner distinguishes a
-        // path section from a glob, and there is exactly one left: the second
-        // entry used to be the TUnit0055 demotion for the vendored renderer's
-        // golden-frame test, and that file left with the renderer.
+        // path section from a glob, and there are two of them today: the
+        // Avalonia DI block and the Sonar block under tests/. The list used to
+        // have a second entry, the TUnit0055 demotion for the vendored
+        // renderer's golden-frame test, and that file left with the renderer.
         string[] realPathSections =
         [
             "apps/Harbor.App.Avalonia",
+            "tests",
         ];
 
         foreach (string real in realPathSections)
