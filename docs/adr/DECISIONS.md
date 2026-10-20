@@ -596,8 +596,8 @@ exception moves with them. A consumer that wants only `ICommonConfigStore` or
 `Harbor.Application` in.
 
 Two cost claims in the issue were corrected by measurement: there is **no**
-public-API baseline for this assembly to re-sign (`PublicAPI.Baseline.txt` exists
-only for `Harbor.Abstractions` and `Harbor.Abstractions.Contracts`), and there are
+public-API baseline for this assembly to re-sign (the public-API freeze covers
+only `Harbor.Abstractions` and `Harbor.Abstractions.Contracts`), and there are
 **no external consumers** (nuget.org answers 404 for every Harbor package; the
 release workflow publishes only the CLI).
 

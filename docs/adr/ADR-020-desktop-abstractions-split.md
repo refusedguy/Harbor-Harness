@@ -95,10 +95,10 @@ read the catalogue sat in the same assembly as the schema.
 ### Two corrections to the issue's cost estimate
 
 1. **There is no public-API baseline to re-sign.** The issue lists
-   *"пере-подпись public-API baseline"* among the costs. `PublicAPI.Baseline.txt`
-   exists only for `Harbor.Abstractions` and `Harbor.Abstractions.Contracts`; the
-   desktop assembly never had one. The `tools/check-public-api.py` gate does not
-   cover it, so there is nothing to regenerate.
+   *"пере-подпись public-API baseline"* among the costs. The public-API freeze
+   covers two assemblies: `Harbor.Abstractions` and `Harbor.Abstractions.Contracts`
+   (each with its own `PublicAPI.Shipped.txt`). The desktop assembly was never in
+   the freeze, so there is nothing to regenerate and nothing to re-sign.
 2. **There are no external consumers today, and there never were.** The
    packages are `IsPackable` and CI packs them (`dotnet pack Harbor.slnx`), but
    the release workflow publishes only the CLI, and nuget.org has no Harbor
