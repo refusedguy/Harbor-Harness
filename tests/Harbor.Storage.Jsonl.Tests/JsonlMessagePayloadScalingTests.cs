@@ -4,37 +4,59 @@ using Harbor.TestKit;
 namespace Harbor.Storage.Jsonl.Tests;
 
 /// <summary>
-///     Relative scaling gate over the <see cref="JsonlMessageCodec.SerializeMessagePayload" />
+///     Cost gate over the <see cref="JsonlMessageCodec.SerializeMessagePayload" />
 ///     batch path (issue #1531, one slice of #97). The slice replaced the
 ///     per-message <c>Select(...).ToArray()</c> chains (two iterators + two
 ///     growable arrays each) and the <c>StopReason.ToString().ToLowerInvariant()</c>
 ///     call with pre-sized indexed loops and a constant switch, on the append
 ///     path of every turn.
 ///     <para>
-///         The gate is RELATIVE, not absolute (#410 / #1373 shape): serializing
-///         twice the messages must cost at most 3x the time and allocations of
-///         the single-size batch, measured in the same run
-///         (<c>t(2N) &lt;= 3*t(N)</c>, <c>alloc(2N) &lt;= 3*alloc(N)</c>). A
-///         per-message quadratic/additive regression lands above the bound and
-///         cannot hide under it; runner speed cancels in the ratio. Measured
-///         through the shared <see cref="TestScalingGate" /> (#1652): GC-fenced
-///         legs scaled toward ~100 ms of real work, medians over five rounds,
-///         and a x1.05 noise band on the time branch only. Absolute columns
-///         print for information; only the ratios are gated.
+///         THE GATE IS A BUDGET PER UNIT OF WORK (#1948), not a ratio. It used
+///         to be <c>t(2N) &lt;= 3*t(N)</c> and <c>alloc(2N) &lt;= 3*alloc(N)</c>
+///         over 16 against 32 messages, decided by the shared TestScalingGate
+///         (#1652). It is now:
+///         <code>
+///         bytes per serialized message &lt;= 220   (machine-independent, HARD)
+///         probe units per message        &lt;= 0.6  (machine-scaled time, SOFT)
+///         </code>
+///         measured over a FIXED amount of work (1 000 000 messages, in
+///         batches of 16) on the SAME runner in the SAME run. The allocation
+///         branch is machine-independent and is asserted hard; the time branch
+///         is in PROBE UNITS and stands down when the rounds do not reproduce
+///         each other. The report prints on every run, pass or fail.
 ///         Linux-only (GC accounting varies across OS).
 ///     </para>
 /// </summary>
 [NotInParallel("jsonl-payload-scale")]
 public class JsonlMessagePayloadScalingTests
 {
-    /// <summary>Messages in the small batch; the large one doubles it.</summary>
-    private const int SmallMessages = 16;
+    /// <summary>Messages in one serialized batch - the FIXED shape the gate drives.</summary>
+    private const int MessagesPerBatch = 16;
 
-    /// <summary>Batches serialized per measured leg's unit (one batch is sub-millisecond).</summary>
-    private const int Iterations = 30;
+    /// <summary>
+    ///     Messages serialized per measured leg - the FIXED amount of work.
+    ///     1 000 000 messages is 62 500 batches, about 44 ms of real work on
+    ///     the CI runner.
+    /// </summary>
+    private const int MessagesPerLeg = 1_000_000;
 
-    /// <summary>Growth allowed for a doubled input, on cost and allocations.</summary>
-    private const double GrowthLimit = 3.0;
+    /// <summary>
+    ///     Allocation budget for ONE serialized message, in bytes.
+    ///     Machine-independent, so it is compared as measured, with no band.
+    ///     Pinned from the CI measurement of the ratio gate this replaced (run
+    ///     39423151864): 49 788 976 B over 21 387 batches of 16 messages =
+    ///     145 B per message. The budget leaves ~1.51x headroom.
+    /// </summary>
+    private const long MaxBytesPerMessage = 220;
+
+    /// <summary>
+    ///     Time budget for ONE serialized message, in PROBE UNITS (see
+    ///     <see cref="Harbor.TestKit.PerfGate" />). Machine-scaled and SOFT.
+    ///     Pinned from the same run: 14.973 ms over 342 192 messages = 0.044 us
+    ///     per message against a probe that costs 0.000380 ms/unit, i.e. ~0.115
+    ///     probe units per message. The budget leaves ~5x headroom.
+    /// </summary>
+    private const double MaxProbeUnitsPerMessage = 0.6;
 
     private static readonly JsonDocument ArgsDoc = JsonDocument.Parse("""{"path":"a.txt"}""");
     private static readonly DateTime CreatedAt = new(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
@@ -75,15 +97,17 @@ public class JsonlMessagePayloadScalingTests
     }
 
     /// <summary>
-    ///     One measured leg: serialize <paramref name="units" /> batches of
-    ///     <paramref name="messages" /> payloads, timed and allocation-counter'd
-    ///     as one window.
+    ///     One measured leg: serialize <paramref name="messages" /> payloads,
+    ///     timed and allocation-counter'd as one window. The batch is a
+    ///     pre-built array of <see cref="MessagesPerBatch" /> messages, so the
+    ///     window is the serialization and nothing else.
     /// </summary>
-    private static (double Ms, long Allocated) Measure(AgentMessage[] batch, int units)
+    private static PerfGateLeg Measure(AgentMessage[] batch, int messages)
     {
+        int batches = messages / MessagesPerBatch;
         long before = GC.GetAllocatedBytesForCurrentThread();
         var sw = System.Diagnostics.Stopwatch.StartNew();
-        for (int i = 0; i < units; i++)
+        for (int i = 0; i < batches; i++)
         {
             for (int m = 0; m < batch.Length; m++)
             {
@@ -92,33 +116,28 @@ public class JsonlMessagePayloadScalingTests
         }
 
         sw.Stop();
-        return (sw.Elapsed.TotalMilliseconds, GC.GetAllocatedBytesForCurrentThread() - before);
+        return new PerfGateLeg(sw.Elapsed.TotalMilliseconds, GC.GetAllocatedBytesForCurrentThread() - before);
     }
 
-    private static TestScalingGateLeg AsLeg((double Ms, long Allocated) leg) => new(leg.Ms, leg.Allocated);
-
     [Test]
-    [Timeout(120_000)]
-    public async Task SerializeMessagePayload_DoubledMessages_StaysWithinGrowthLimit()
+    [Timeout(300_000)]
+    public async Task SerializeMessagePayload_CostPerMessage_StaysWithinBudget()
     {
         if (!OperatingSystem.IsLinux())
             return; // GC accounting varies across OS runtimes.
 
-        var small = Batch(SmallMessages);
-        var large = Batch(SmallMessages * 2);
+        var batch = Batch(MessagesPerBatch);
 
-        TestScalingGateResult result = await TestScalingGate.MeasureAsync(
-            measureSmallLeg: units => Task.FromResult(AsLeg(Measure(small, units))),
-            measureLargeLeg: units => Task.FromResult(AsLeg(Measure(large, units))),
-            initialUnits: Iterations,
-            options: new TestScalingGateOptions
+        PerfGateResult result = await PerfGate.MeasureAsync(
+            work: messages => Task.FromResult(Measure(batch, messages)),
+            units: MessagesPerLeg,
+            options: new PerfGateOptions
             {
-                Label = "jsonl-payload-scaling",
-                GrowthLimit = GrowthLimit,
+                Label = "jsonl-payload-cost",
+                MaxBytesPerUnit = MaxBytesPerMessage,
+                MaxProbeUnitsPerUnit = MaxProbeUnitsPerMessage,
             });
 
-        await result.AssertWithinLimitsAsync(
-            topic: "serialize(2N)/serialize(N)",
-            linearWhy: "Linear is 2.00, so this bound separates linear from quadratic without depending on how fast this runner is.");
+        await result.AssertWithinBudgetsAsync("jsonl message payload serialization per message");
     }
 }

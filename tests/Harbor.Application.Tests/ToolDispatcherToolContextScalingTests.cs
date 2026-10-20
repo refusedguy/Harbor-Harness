@@ -29,32 +29,95 @@ namespace Harbor.Application.Tests;
 ///     pins below, plus <c>ToolDispatcherAskFailClosedTests</c> for the Ask
 ///     fail-closed half).
 ///     <para>
-///         The scaling gate is relative, not absolute: building twice the
-///         tool contexts must cost at most 3x the time and allocations of
-///         the single-size batch, measured in the same run
-///         (<c>t(2N) &lt;= 3*t(N)</c>, <c>alloc(2N) &lt;= 3*alloc(N)</c> —
-///         the #410/#1373 shape on the shared
-///         <see cref="Harbor.TestKit.TestScalingGate" /> #1652 recipe).
-///         Absolute columns print for info only. Linux-only (GC accounting
-///         varies by OS).
+///         THE GATE IS A BUDGET PER UNIT OF WORK (#1948), not a ratio. It used
+///         to be <c>t(2N) &lt;= 3*t(N)</c> and <c>alloc(2N) &lt;= 3*alloc(N)</c>
+///         over 100 against 200 tool calls, decided by
+///         <see cref="Harbor.TestKit.TestScalingGate" /> (#1652) — and it
+///         reddened on 7 of 151 <c>core</c> runs (4.6 %), at ratios of
+///         3.19–4.69 against a 3.15 limit, on trees nobody had touched.
+///     </para>
+///     <para>
+///         <b>WHY THE RATIO WAS A RATIO OF THE HARNESS, NOT OF THE CODE.</b>
+///         The measured receipt is run 39423151864: the small leg read
+///         47.139 ms / 135 563 152 B and the large leg 221.250 ms /
+///         269 391 952 B — time x4.69 with allocations x1.99. Linear memory,
+///         super-linear wall clock. The cause is in the HARNESS: the fake event
+///         bus keeps every published event forever, so the live set grows with
+///         the number of dispatches, and the GC's marking cost per dispatch
+///         grows with it. The 2N leg therefore paid for a bigger pile of
+///         retained events, and the ratio measured the retention, not the
+///         dispatcher. The number of dispatches per leg came from the leg
+///         SCALER, which raises it until a leg lasts ~100 ms — so the faster
+///         the runner, the fewer dispatches, the smaller the retained pile and
+///         the lower the ratio. That is why the same tree read x2.03 on one
+///         run and x4.69 on another: the gate's verdict moved with the
+///         runner's speed, which is exactly what a merge gate must not do.
+///     </para>
+///     <para>
+///         The gate is now:
+///         <code>
+///         bytes per tool call   &lt;= 4 000    (machine-independent, HARD)
+///         probe units per call   &lt;= 12       (machine-scaled time, SOFT)
+///         </code>
+///         measured over a FIXED amount of work (50 000 tool calls, in batches
+///         of 100) on the SAME runner in the SAME run, with the harness's
+///         retained event pile cleared between dispatches so the live set is
+///         BOUNDED and the measurement is of the dispatch path. The allocation
+///         branch is machine-independent and is asserted hard; the time branch
+///         is in PROBE UNITS (the cost of one call divided by the cost of one
+///         unit of the fixed calibration probe measured on the same runner in
+///         the same run, so the runner's speed cancels) and is asserted only
+///         when the rounds reproduce each other. The report prints on every
+///         run, pass or fail. Linux-only (GC accounting varies by OS).
 ///     </para>
 ///     <para>
 ///         This is a second gate next to
-///         <c>ToolDispatcherResolveOnceTests.ExecuteAsync_DoubledBatch_StaysWithinGrowthLimit</c>
-///         (label <c>dispatcher-dispatch-scaling</c>) on purpose: that one
+///         <c>ToolDispatcherResolveOnceTests.ExecuteAsync_CostPerToolCall_StaysWithinBudget</c>
+///         (label <c>dispatcher-dispatch-cost</c>) on purpose: that one
 ///         dispatches a no-op tool, so it never enters the callback this
 ///         slice rebuilt. The tool here reports progress twice per call, so
 ///         every measured call goes through the rebuilt progress callback.
 ///     </para>
 /// </summary>
-[NotInParallel("dispatcher-scale")]
+[NotInParallel]
 public class ToolDispatcherToolContextScalingTests
 {
-    /// <summary>Tool calls in the small batch; the large one doubles it.</summary>
+    /// <summary>Tool calls in one dispatch — the batch the gate measures.</summary>
     private const int ToolCalls = 100;
 
-    /// <summary>Growth allowed for a doubled input, on cost and allocations.</summary>
-    private const double GrowthLimit = 3.0;
+    /// <summary>
+    ///     Tool calls per measured leg — the FIXED amount of work. 50 000 calls
+    ///     is 500 dispatches, about 40 ms of real work on the CI runner: long
+    ///     enough for the round-to-round spread to mean something, short enough
+    ///     that the leg does not dominate the shard.
+    /// </summary>
+    private const int ToolCallsPerLeg = 50_000;
+
+    /// <summary>
+    ///     Allocation budget for ONE tool call, in bytes. Machine-independent,
+    ///     so it is compared as measured, with no band.
+    ///     <para>
+    ///         Pinned from the CI measurement of the ratio gate this replaced
+    ///         (run 39423151864): 135 563 152 B over 569 dispatches of 100
+    ///         calls = 2 382 B per tool call. The budget leaves ~1.68x
+    ///         headroom for the process-wide counter's share of the other
+    ///         threads' allocations and for the harness's own bookkeeping. The
+    ///         report line prints the measured value on every run, so the
+    ///         constant can be tightened against what the runner does.
+    ///     </para>
+    /// </summary>
+    private const long MaxBytesPerToolCall = 4_000;
+
+    /// <summary>
+    ///     Time budget for ONE tool call, in PROBE UNITS (see
+    ///     <see cref="Harbor.TestKit.PerfGate" />). Machine-scaled and SOFT:
+    ///     the dispatch path awaits, so a thread hop lands inside the window
+    ///     and no CPU yardstick scales a descheduled thread. Pinned from the
+    ///     same run: 47.139 ms over 56 900 calls = 0.828 us per call against a
+    ///     probe that costs 0.000380 ms/unit, i.e. ~2.2 probe units per call.
+    ///     The budget leaves ~5.5x headroom.
+    /// </summary>
+    private const double MaxProbeUnitsPerToolCall = 12.0;
 
     private static readonly JsonDocument ArgsDoc = JsonDocument.Parse("""{}""");
 
@@ -177,8 +240,8 @@ public class ToolDispatcherToolContextScalingTests
     private static TestSessionContext NewSession() => new(
         Session.Create("/tmp/harbor-tool-context-scaling-tests", "code", "test", "test-model"));
 
-    private static ToolDispatcher NewDispatcher(CountingRegistry registry) =>
-        new(registry, new AllowPermissions(), new FakeEventBus(),
+    private static ToolDispatcher NewDispatcher(CountingRegistry registry, FakeEventBus bus) =>
+        new(registry, new AllowPermissions(), bus,
             NullLogger<ToolDispatcher>.Instance);
 
     private static IReadOnlyList<ToolCallPart> Batch(string toolName, int count)
@@ -194,54 +257,73 @@ public class ToolDispatcherToolContextScalingTests
     }
 
     /// <summary>
-    ///     One measured leg: <paramref name="units" /> dispatches of the same
-    ///     batch — each dispatch builds one <see cref="ToolContext" /> per
-    ///     tool call (batch N = N builds), timed and allocation-counter'd as
-    ///     one window. The #1652 leg scaler multiplies <paramref name="units" />
-    ///     until the window reaches a measurable duration; the batch stays
-    ///     fixed so the ratio stays about the per-build cost, not about batch
-    ///     size.
+    ///     One measured leg: <paramref name="toolCalls" /> tool calls, driven
+    ///     in batches of <see cref="ToolCalls" />, timed and allocation-
+    ///     counter'd as ONE window. The amount of work is fixed, so the
+    ///     budget is a per-call number and the runner's load cannot move it.
     /// </summary>
-    private static async Task<TestScalingGateLeg> DispatchLegAsync(
-        ToolDispatcher dispatcher, IReadOnlyList<ToolCallPart> calls, int units)
+    /// <remarks>
+    ///     <para>
+    ///         The fake event bus's retained event pile is CLEARED between
+    ///         dispatches. It is the harness's own bookkeeping, and an
+    ///         unbounded pile makes the GC's marking cost per dispatch grow
+    ///         with the number of dispatches - which is what turned the old
+    ///         2N leg into 4.69x while the allocations stayed at 1.99x (run
+    ///         39423151864). Clearing it bounds the live set, so the measured
+    ///         leg is the dispatch path and nothing else.
+    ///     </para>
+    ///     <para>
+    ///         The allocation window uses the PROCESS-WIDE counter (#741): the
+    ///         dispatch path awaits, so a per-thread counter sampled on both
+    ///         sides of an <c>await</c> is the difference between two unrelated
+    ///         thread counters. That is why the class is keyless
+    ///         <c>[NotInParallel]</c> - the process counter bills every
+    ///         allocation in the process for the duration of the window.
+    ///     </para>
+    /// </remarks>
+    private static async Task<PerfGateLeg> DispatchLegAsync(
+        ToolDispatcher dispatcher, FakeEventBus bus, IReadOnlyList<ToolCallPart> calls, int toolCalls)
     {
-        long before = GC.GetAllocatedBytesForCurrentThread();
+        int dispatches = toolCalls / ToolCalls;
         var sw = Stopwatch.StartNew();
-        for (int i = 0; i < units; i++)
+        long allocated = await AllocationProbe.MeasureProcessAsync(async () =>
         {
-            await dispatcher.ExecuteAsync(calls, NewSession(), AssistantMessage.Empty("s", "m"), CodeAgent(), CancellationToken.None)
-                .ConfigureAwait(false);
-        }
-
+            for (int i = 0; i < dispatches; i++)
+            {
+                bus.Events.Clear();
+                await dispatcher
+                    .ExecuteAsync(calls, NewSession(), AssistantMessage.Empty("s", "m"), CodeAgent(), CancellationToken.None)
+                    .ConfigureAwait(false);
+            }
+        }).ConfigureAwait(false);
         sw.Stop();
-        return new TestScalingGateLeg(sw.Elapsed.TotalMilliseconds, GC.GetAllocatedBytesForCurrentThread() - before);
+
+        return new PerfGateLeg(sw.Elapsed.TotalMilliseconds, allocated);
     }
 
     [Test]
-    [Timeout(120_000)]
-    public async Task ToolContextBuilds_DoubledBatch_StaysWithinGrowthLimit()
+    [Timeout(300_000)]
+    public async Task ToolContextBuilds_CostPerToolCall_StaysWithinBudget()
     {
         if (!OperatingSystem.IsLinux())
             return; // GC accounting varies across OS runtimes.
 
         var registry = new CountingRegistry(new ProgressTool("noop"));
-        var dispatcher = NewDispatcher(registry);
-        var small = Batch("noop", ToolCalls);
-        var large = Batch("noop", ToolCalls * 2);
+        var bus = new FakeEventBus();
+        var dispatcher = NewDispatcher(registry, bus);
+        var calls = Batch("noop", ToolCalls);
 
-        TestScalingGateResult result = await TestScalingGate.MeasureAsync(
-            measureSmallLeg: units => DispatchLegAsync(dispatcher, small, units),
-            measureLargeLeg: units => DispatchLegAsync(dispatcher, large, units),
-            initialUnits: 1,
-            options: new TestScalingGateOptions
+        PerfGateResult result = await PerfGate.MeasureAsync(
+            work: toolCalls => DispatchLegAsync(dispatcher, bus, calls, toolCalls),
+            units: ToolCallsPerLeg,
+            options: new PerfGateOptions
             {
-                Label = "dispatcher-tool-context-scaling",
-                GrowthLimit = GrowthLimit,
+                Label = "dispatcher-tool-context-cost",
+                MaxBytesPerUnit = MaxBytesPerToolCall,
+                MaxProbeUnitsPerUnit = MaxProbeUnitsPerToolCall,
             });
 
-        await result.AssertWithinLimitsAsync(
-            topic: "tool-context(2N)/tool-context(N)",
-            linearWhy: "Linear is 2.00, so this bound separates linear from quadratic without depending on how fast this runner is.");
+        await result.AssertWithinBudgetsAsync("tool context build per tool call");
     }
 
     [Test]
@@ -290,7 +372,7 @@ public class ToolDispatcherToolContextScalingTests
     public async Task Callbacks_ShareOneStateObject_AndNoClosureDisplayClass()
     {
         var tool = new ContextCapturingTool("capturing");
-        var dispatcher = NewDispatcher(new CountingRegistry(tool));
+        var dispatcher = NewDispatcher(new CountingRegistry(tool), new FakeEventBus());
 
         ToolResultMessage message = await dispatcher.ExecuteAsync(
             Batch("capturing", 1),

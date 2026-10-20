@@ -9,6 +9,34 @@ namespace Harbor.Tui.CellForge.Tests;
 [NotInParallel("pty")]
 public class GenericLiveRegionTests
 {
+    /// <summary>Paints per measured leg - the FIXED amount of work.</summary>
+    /// <remarks>
+    ///     400 paints of a 400-line region is about 47 ms of real work on the
+    ///     CI runner.
+    /// </remarks>
+    private const int PaintsPerLeg = 400;
+
+    /// <summary>
+    ///     Allocation budget for ONE painted frame, in bytes. The steady paint
+    ///     allocates NOTHING, so the budget is the exact zero - the strongest
+    ///     shape a byte claim can take, and the one
+    ///     <c>Region_Paint_IsAllocationFree</c> above already pins. A
+    ///     per-frame snapshot (the #1100 regression) allocates kilobytes and
+    ///     cannot hide under it.
+    /// </summary>
+    private const long MaxBytesPerPaint = 0;
+
+    /// <summary>
+    ///     Time budget for ONE painted frame, in PROBE UNITS (see
+    ///     <see cref="Harbor.TestKit.PerfGate" />). Machine-scaled and SOFT.
+    ///     Pinned from the CI measurement of the ratio gate this replaced (run
+    ///     39423151864): 17.099 ms over 287 paints of a 200-line region, and
+    ///     1.99x that for the 400-line one, i.e. ~312 probe units per frame
+    ///     against a probe that costs 0.000380 ms/unit. The budget leaves
+    ///     ~2.9x headroom.
+    /// </summary>
+    private const double MaxProbeUnitsPerPaint = 900.0;
+
     private static string Art(GenericLiveRegion region, int width = 20)
     {
         var buffer = new ScreenBuffer(width, Math.Max(1, region.DesiredHeight));
@@ -192,28 +220,33 @@ public class GenericLiveRegionTests
             .Because("per-frame Paint must read _lines by index instead of snapshotting it per frame.");
     }
 
+    /// <summary>
+    ///     THE GATE IS A BUDGET PER UNIT OF WORK (#1948), not a ratio. It used
+    ///     to be <c>t(2N) &lt;= 3*t(N)</c> over 200 against 400 buffered lines,
+    ///     decided by the shared TestScalingGate (#1652), and it reddened on a
+    ///     real CI run at 3.54 against the 3.15 limit. It is now:
+    ///     <code>
+    ///     bytes per painted frame  &lt;= 0      (machine-independent, HARD)
+    ///     probe units per frame    &lt;= 900    (machine-scaled time, SOFT)
+    ///     </code>
+    ///     measured over a FIXED amount of work (400 paints of a 400-line
+    ///     region) on the SAME runner in the SAME run. The allocation branch is
+    ///     machine-independent and is asserted hard - the steady paint
+    ///     allocates NOTHING, and a per-frame snapshot (the #1100 regression)
+    ///     allocates kilobytes. The time branch is in PROBE UNITS and stands
+    ///     down when the rounds do not reproduce each other. The report prints
+    ///     on every run, pass or fail. Linux-only (timing varies by OS load).
+    /// </summary>
     [Test]
-    [Timeout(120_000)]
-    public async Task Region_Paint_DoubledLines_StaysWithinGrowthLimit()
+    [Timeout(300_000)]
+    public async Task Region_Paint_CostPerFrame_StaysWithinBudget()
     {
-        // Relative gate t(2N) <= 3*t(N): painting twice the buffered lines
-        // must cost at most 3x the time, measured in the same process so
-        // runner speed cancels. Quadratic behaviour lands at 4x and cannot
-        // hide under the bound. Time-only (no alloc leg): the steady paint is
-        // pinned allocation-free by Region_Paint_IsAllocationFree above, and
-        // an alloc ratio over "0 / 0 B" would be a number invented for the
-        // caller. Measured through Harbor.TestKit's TestScalingGate (#1652):
-        // GC-fenced legs scaled toward ~100 ms of real work, medians over five
-        // rounds, x1.05 noise band on the time branch — the old best-of-5 over
-        // millisecond legs decided real CI runs (the #1649 flake). Linux-only
-        // (timing varies by OS load). All lines fit the width, so Fit is the
-        // identity and the ratio isolates the windowing itself.
         if (!OperatingSystem.IsLinux())
         {
             return;
         }
 
-        const int lineCount = 200;
+        const int lineCount = 400;
 
         static GenericLiveRegion BuildRegion(int lines)
         {
@@ -228,38 +261,43 @@ public class GenericLiveRegionTests
             return region;
         }
 
-        var small = BuildRegion(lineCount);
-        var large = BuildRegion(lineCount * 2);
-        var smallBuffer = new ScreenBuffer(80, 500);
-        var largeBuffer = new ScreenBuffer(80, 500);
-        var smallRect = new Rect(0, 0, 80, 500);
-        var largeRect = new Rect(0, 0, 80, 500);
+        var region = BuildRegion(lineCount);
+        var buffer = new ScreenBuffer(80, 500);
+        var rect = new Rect(0, 0, 80, 500);
 
-        static TestScalingGateLeg MeasureLegs(GenericLiveRegion region, ScreenBuffer buffer, Rect rect, int units)
-        {
-            var sw = Stopwatch.StartNew();
-            for (int i = 0; i < units; i++)
+        PerfGateResult result = await PerfGate.MeasureAsync(
+            work: units => Task.FromResult(MeasurePaints(region, buffer, rect, units)),
+            units: PaintsPerLeg,
+            options: new PerfGateOptions
             {
-                region.Paint(buffer, rect);
-            }
+                Label = "liveregion-paint-cost",
+                MaxBytesPerUnit = MaxBytesPerPaint,
+                MaxProbeUnitsPerUnit = MaxProbeUnitsPerPaint,
 
-            sw.Stop();
-            return new TestScalingGateLeg(sw.Elapsed.TotalMilliseconds, 0L);
-        }
-
-        TestScalingGateResult result = await TestScalingGate.MeasureAsync(
-            measureSmallLeg: units => Task.FromResult(MeasureLegs(small, smallBuffer, smallRect, units)),
-            measureLargeLeg: units => Task.FromResult(MeasureLegs(large, largeBuffer, largeRect, units)),
-            initialUnits: 20,
-            options: new TestScalingGateOptions
-            {
-                Label = "liveregion-paint-scaling",
-                GrowthLimit = 3.0,
-                MeasureAllocations = false,
+                // A steady paint legitimately allocates NOTHING, so zero is the
+                // correct answer here and not a missing measurement.
+                RequirePositiveBytes = false,
             });
 
-        await result.AssertWithinLimitsAsync(
-            topic: "paint(2N)/paint(N)",
-            linearWhy: "Linear is 2.00, so this bound separates linear from quadratic without depending on how fast this runner is.");
+        await result.AssertWithinBudgetsAsync("live region paint per frame");
+    }
+
+    /// <summary>
+    ///     One measured leg: <paramref name="paints" /> paints of the same
+    ///     region into the same buffer, timed and allocation-counter'd as one
+    ///     window. The stopwatch is created BEFORE the counter is read, so its
+    ///     own allocation stays out of the exact-zero window.
+    /// </summary>
+    private static PerfGateLeg MeasurePaints(GenericLiveRegion region, ScreenBuffer buffer, Rect rect, int paints)
+    {
+        var sw = Stopwatch.StartNew();
+        long before = GC.GetAllocatedBytesForCurrentThread();
+        for (int i = 0; i < paints; i++)
+        {
+            region.Paint(buffer, rect);
+        }
+
+        sw.Stop();
+        return new PerfGateLeg(sw.Elapsed.TotalMilliseconds, GC.GetAllocatedBytesForCurrentThread() - before);
     }
 }

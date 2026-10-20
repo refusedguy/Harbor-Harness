@@ -18,33 +18,65 @@ namespace Harbor.Application.Tests;
 
 /// <summary>
 ///     Issue #1100 (one slice): <c>ToolDispatcher.ExecuteAsync</c> resolved
-///     every tool name twice per turn — once in <c>HasSequentialTool</c>
+///     every tool name twice per turn - once in <c>HasSequentialTool</c>
 ///     (<c>ToolName.TryCreate</c> + <c>GetTool</c> per call) and again in
 ///     <c>ExecuteSingleAsync.ResolveTool</c> for the same names. The batch is
 ///     now resolved once up front; the pre-resolved outcomes feed both the
 ///     sequential gate and dispatch.
 ///     <para>
-///         The scaling gate is relative, not absolute: dispatching twice the
-///         calls must cost at most 3x the time and allocations of the
-///         single-size batch, measured in the same run
-///         (<c>t(2N) &lt;= 3*t(N)</c>). A double-resolve regression lands
-///         above it only when paired with the exact-count test below, which
-///         pins the registry hits at N, not 2N. Measured through
-///         <see cref="Harbor.TestKit.TestScalingGate" /> (#1652): GC-fenced
-///         legs scaled to ~100 ms of real work, medians over five rounds, and
-///         a x1.05 noise band on the time branch only — the millisecond-leg
-///         best-of-5 shape that flaked three gates in one day is gone.
-///         Linux-only (GC accounting varies by OS).
+///         THE GATE IS A BUDGET PER UNIT OF WORK (#1948), not a ratio. It used
+///         to be <c>t(2N) &lt;= 3*t(N)</c> and <c>alloc(2N) &lt;= 3*alloc(N)</c>
+///         over 100 against 200 tool calls, decided by
+///         <see cref="Harbor.TestKit.TestScalingGate" /> (#1652). The gate is
+///         now:
+///         <code>
+///         bytes per tool call   &lt;= 3 500    (machine-independent, HARD)
+///         probe units per call   &lt;= 35       (machine-scaled time, SOFT)
+///         </code>
+///         measured over a FIXED amount of work (25 000 tool calls, in batches
+///         of 100) on the SAME runner in the SAME run. The allocation branch
+///         is machine-independent and is asserted hard; the time branch is in
+///         PROBE UNITS (the cost of one call divided by the cost of one unit
+///         of the fixed calibration probe measured on the same runner in the
+///         same run, so the runner's speed cancels) and is asserted only when
+///         the rounds reproduce each other. The report prints on every run,
+///         pass or fail. Linux-only (GC accounting varies by OS).
+///     </para>
+///     <para>
+///         A double-resolve regression lands far above the byte budget: it
+///         pays a second <c>GetTool</c> hit per call, and the budget is
+///         pinned to the one-resolve measurement.
 ///     </para>
 /// </summary>
-[NotInParallel("dispatcher-scale")]
+[NotInParallel]
 public class ToolDispatcherResolveOnceTests
 {
-    /// <summary>Tool calls in the small batch; the large one doubles it.</summary>
+    /// <summary>Tool calls in one dispatch - the batch the gate measures.</summary>
     private const int ToolCalls = 100;
 
-    /// <summary>Growth allowed for a doubled input, on cost and allocations.</summary>
-    private const double GrowthLimit = 3.0;
+    /// <summary>
+    ///     Tool calls per measured leg - the FIXED amount of work. 25 000 calls
+    ///     is 250 dispatches, about 60 ms of real work on the CI runner.
+    /// </summary>
+    private const int ToolCallsPerLeg = 25_000;
+
+    /// <summary>
+    ///     Allocation budget for ONE tool call, in bytes. Machine-independent,
+    ///     so it is compared as measured, with no band. Pinned from the CI
+    ///     measurement of the ratio gate this replaced (run 39423151864):
+    ///     58 421 064 B over 281 dispatches of 100 calls = 2 079 B per tool
+    ///     call. The budget leaves ~1.68x headroom.
+    /// </summary>
+    private const long MaxBytesPerToolCall = 3_500;
+
+    /// <summary>
+    ///     Time budget for ONE tool call, in PROBE UNITS (see
+    ///     <see cref="Harbor.TestKit.PerfGate" />). Machine-scaled and SOFT.
+    ///     Pinned from the same run: 68.499 ms over 28 100 calls = 2.44 us per
+    ///     call against a probe that costs 0.000380 ms/unit, i.e. ~6.4 probe
+    ///     units per call. The budget leaves ~5.5x headroom.
+    /// </summary>
+    private const double MaxProbeUnitsPerToolCall = 35.0;
 
     private static readonly JsonDocument ArgsDoc = JsonDocument.Parse("""{}""");
 
@@ -133,8 +165,8 @@ public class ToolDispatcherResolveOnceTests
     private static TestSessionContext NewSession() => new(
         Session.Create("/tmp/harbor-resolve-once-tests", "code", "test", "test-model"));
 
-    private static ToolDispatcher NewDispatcher(CountingRegistry registry) =>
-        new(registry, new AllowPermissions(), new FakeEventBus(),
+    private static ToolDispatcher NewDispatcher(CountingRegistry registry, FakeEventBus bus) =>
+        new(registry, new AllowPermissions(), bus,
             NullLogger<ToolDispatcher>.Instance);
 
     private static IReadOnlyList<ToolCallPart> Batch(string toolName, int count)
@@ -153,7 +185,7 @@ public class ToolDispatcherResolveOnceTests
     public async Task ExecuteAsync_ResolvesEachToolOnce()
     {
         var registry = new CountingRegistry(new NoopTool("noop", ExecutionMode.Parallel));
-        var dispatcher = NewDispatcher(registry);
+        var dispatcher = NewDispatcher(registry, new FakeEventBus());
 
         ToolResultMessage result = await dispatcher.ExecuteAsync(
             Batch("noop", 8), NewSession(), AssistantMessage.Empty("s", "m"), CodeAgent(), CancellationToken.None);
@@ -169,7 +201,7 @@ public class ToolDispatcherResolveOnceTests
         var registry = new CountingRegistry(
             new NoopTool("seq", ExecutionMode.Sequential),
             new NoopTool("noop", ExecutionMode.Parallel));
-        var dispatcher = NewDispatcher(registry);
+        var dispatcher = NewDispatcher(registry, new FakeEventBus());
 
         var calls = new ToolCallPart[]
         {
@@ -192,7 +224,7 @@ public class ToolDispatcherResolveOnceTests
     public async Task ExecuteAsync_UnknownTool_KeepsDiagnostic()
     {
         var registry = new CountingRegistry(new NoopTool("noop", ExecutionMode.Parallel));
-        var dispatcher = NewDispatcher(registry);
+        var dispatcher = NewDispatcher(registry, new FakeEventBus());
 
         ToolResultMessage result = await dispatcher.ExecuteAsync(
             [new ToolCallPart("tc_0", "nope", ArgsDoc.RootElement)],
@@ -205,51 +237,67 @@ public class ToolDispatcherResolveOnceTests
     }
 
     /// <summary>
-    ///     One measured leg: <paramref name="units" /> dispatches of the same
-    ///     batch, timed and allocation-counter'd as one window. The #1652 leg
-    ///     scaler multiplies <paramref name="units" /> until the window reaches
-    ///     a measurable duration; the batch itself stays fixed so the ratio
-    ///     stays about the dispatch path, not about batch size.
+    ///     One measured leg: <paramref name="toolCalls" /> tool calls, driven
+    ///     in batches of <see cref="ToolCalls" />, timed and allocation-
+    ///     counter'd as ONE window.
     /// </summary>
-    private static async Task<TestScalingGateLeg> DispatchLegAsync(
-        ToolDispatcher dispatcher, IReadOnlyList<ToolCallPart> calls, int units)
+    /// <remarks>
+    ///     <para>
+    ///         The fake event bus's retained event pile is CLEARED between
+    ///         dispatches: an unbounded pile makes the GC's marking cost per
+    ///         dispatch grow with the number of dispatches, which is a property
+    ///         of the harness and not of the dispatcher.
+    ///     </para>
+    ///     <para>
+    ///         The allocation window uses the PROCESS-WIDE counter (#741): the
+    ///         dispatch path awaits, so a per-thread counter sampled on both
+    ///         sides of an <c>await</c> is the difference between two unrelated
+    ///         thread counters. That is why the class is keyless
+    ///         <c>[NotInParallel]</c>.
+    ///     </para>
+    /// </remarks>
+    private static async Task<PerfGateLeg> DispatchLegAsync(
+        ToolDispatcher dispatcher, FakeEventBus bus, IReadOnlyList<ToolCallPart> calls, int toolCalls)
     {
-        long before = GC.GetAllocatedBytesForCurrentThread();
+        int dispatches = toolCalls / ToolCalls;
         var sw = Stopwatch.StartNew();
-        for (int i = 0; i < units; i++)
+        long allocated = await AllocationProbe.MeasureProcessAsync(async () =>
         {
-            await dispatcher.ExecuteAsync(calls, NewSession(), AssistantMessage.Empty("s", "m"), CodeAgent(), CancellationToken.None)
-                .ConfigureAwait(false);
-        }
-
+            for (int i = 0; i < dispatches; i++)
+            {
+                bus.Events.Clear();
+                await dispatcher
+                    .ExecuteAsync(calls, NewSession(), AssistantMessage.Empty("s", "m"), CodeAgent(), CancellationToken.None)
+                    .ConfigureAwait(false);
+            }
+        }).ConfigureAwait(false);
         sw.Stop();
-        return new TestScalingGateLeg(sw.Elapsed.TotalMilliseconds, GC.GetAllocatedBytesForCurrentThread() - before);
+
+        return new PerfGateLeg(sw.Elapsed.TotalMilliseconds, allocated);
     }
 
     [Test]
-    [Timeout(120_000)]
-    public async Task ExecuteAsync_DoubledBatch_StaysWithinGrowthLimit()
+    [Timeout(300_000)]
+    public async Task ExecuteAsync_CostPerToolCall_StaysWithinBudget()
     {
         if (!OperatingSystem.IsLinux())
             return; // GC accounting varies across OS runtimes.
 
         var registry = new CountingRegistry(new NoopTool("noop", ExecutionMode.Parallel));
-        var dispatcher = NewDispatcher(registry);
-        var small = Batch("noop", ToolCalls);
-        var large = Batch("noop", ToolCalls * 2);
+        var bus = new FakeEventBus();
+        var dispatcher = NewDispatcher(registry, bus);
+        var calls = Batch("noop", ToolCalls);
 
-        TestScalingGateResult result = await TestScalingGate.MeasureAsync(
-            measureSmallLeg: units => DispatchLegAsync(dispatcher, small, units),
-            measureLargeLeg: units => DispatchLegAsync(dispatcher, large, units),
-            initialUnits: 1,
-            options: new TestScalingGateOptions
+        PerfGateResult result = await PerfGate.MeasureAsync(
+            work: toolCalls => DispatchLegAsync(dispatcher, bus, calls, toolCalls),
+            units: ToolCallsPerLeg,
+            options: new PerfGateOptions
             {
-                Label = "dispatcher-dispatch-scaling",
-                GrowthLimit = GrowthLimit,
+                Label = "dispatcher-dispatch-cost",
+                MaxBytesPerUnit = MaxBytesPerToolCall,
+                MaxProbeUnitsPerUnit = MaxProbeUnitsPerToolCall,
             });
 
-        await result.AssertWithinLimitsAsync(
-            topic: "dispatch(2N)/dispatch(N)",
-            linearWhy: "Linear is 2.00, so this bound separates linear from quadratic without depending on how fast this runner is.");
+        await result.AssertWithinBudgetsAsync("tool dispatch per tool call");
     }
 }

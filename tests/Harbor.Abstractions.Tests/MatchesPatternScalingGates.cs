@@ -21,6 +21,28 @@ namespace Harbor.Abstractions.Tests;
 // work, medians over five rounds, x1.05 noise band on the time branch;
 // #1642's ratio-3.63-out-of-a-20-ms-best-of leg is the shape that dies here.
 //
+// THE LEG LENGTH, FIXED (#1948). The scaler that picks how much work a leg
+// carries only ever RAISES the unit count - it starts at `initialUnits` and
+// grows until a leg lasts ~100 ms. This gate started at
+// `initialUnits = CallsPerWindow = 200`, and one unit is already a burst of
+// 200 Evaluate calls, so the probe read 876-1726 ms per leg: 8-17x the
+// target, and the gate paid that on every probe, every confirmation, the
+// large-leg warm-up and all five measured rounds. The measured receipt is run
+// 39423151864: the small leg 876.361 ms and the large one 1 838.109 ms, and
+// the test itself took 17.4 s - 96 % of the wall time of
+// `Harbor.Abstractions.Tests` (29.0 s) and 19 % of the non-architecture time
+// of the `core` shard. The ratio never moved while that was happening
+// (x2.03-x2.21 across seven runs), so 26.5 s were spent proving a number
+// that did not change.
+//
+// The fix is one number: the scaler now starts at ONE unit and grows to the
+// target like every other gate, so the leg lands at ~100 ms instead of ~900.
+// The FORM of this gate (a ratio) is still the ratio form - converting it to
+// the #1747 per-unit-of-work budget needs `Harbor.TestKit.PerfGate`, and this
+// assembly cannot reach it until #1889's TestKit split lands and gives it the
+// TestKit reference. Until then the leg-length fix is the whole of the
+// measurable win here, and it is 26.5 s of it.
+//
 // The alloc leg is exact-zero rather than a ratio, deliberately: 2 wasted
 // strings per rule is still LINEAR, so alloc(2N)/alloc(N) ~= 2.0 passes with
 // the bug in place — a ratio gate cannot see this regression. Zero is
@@ -109,7 +131,14 @@ public sealed class MatchesPatternScalingGates
         TestScalingGateResult result = await TestScalingGate.MeasureAsync(
             measureSmallLeg: units => Task.FromResult(AsLeg(DriveEvaluates(small, units))),
             measureLargeLeg: units => Task.FromResult(AsLeg(DriveEvaluates(large, units))),
-            initialUnits: CallsPerWindow,
+
+            // ONE unit, not `CallsPerWindow` (#1948): the scaler only raises the
+            // count, so starting at a burst of 200 calls froze the leg at
+            // 876-1726 ms - 8-17x the ~100 ms target - and the gate paid that
+            // on every probe, every confirmation, the warm-up and all five
+            // rounds. Starting at one unit lets the scaler reach the target,
+            // which is what every other leg in the tree does.
+            initialUnits: 1,
             options: new TestScalingGateOptions
             {
                 Label = "matches-pattern-scaling",

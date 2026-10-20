@@ -55,14 +55,32 @@ namespace Harbor.Application.Tests;
 [NotInParallel]
 public class TurnRunnerToolTableReuseTests
 {
-    /// <summary>Tools in the small leg; the large one doubles it.</summary>
-    private const int ToolCount = 100;
+    /// <summary>Tools the registry the gate drives holds.</summary>
+    private const int ToolCount = 200;
 
-    /// <summary>Runs per measured leg's unit: one text-only turn; the #1652 leg scaler repeats it.</summary>
-    private const int Iterations = 20;
+    /// <summary>
+    ///     Text-only turns per measured leg - the FIXED amount of work. 1 000
+    ///     turns is about 78 ms of real work on the CI runner.
+    /// </summary>
+    private const int TurnsPerLeg = 1_000;
 
-    /// <summary>Growth allowed for a doubled input, on cost and allocations.</summary>
-    private const double GrowthLimit = 3.0;
+    /// <summary>
+    ///     Allocation budget for ONE text-only turn, in bytes. Machine-
+    ///     independent, so it is compared as measured, with no band. Pinned
+    ///     from the CI measurement of the ratio gate this replaced (run
+    ///     39423151864): 34 055 168 B over 1 480 turns against a 200-tool
+    ///     registry = 23 010 B per turn. The budget leaves ~1.30x headroom.
+    /// </summary>
+    private const long MaxBytesPerTurn = 30_000;
+
+    /// <summary>
+    ///     Time budget for ONE text-only turn, in PROBE UNITS (see
+    ///     <see cref="Harbor.TestKit.PerfGate" />). Machine-scaled and SOFT.
+    ///     Pinned from the same run: 115.124 ms over 1 480 turns = 77.8 us per
+    ///     turn against a probe that costs 0.000380 ms/unit, i.e. ~205 probe
+    ///     units per turn. The budget leaves ~2.9x headroom.
+    /// </summary>
+    private const double MaxProbeUnitsPerTurn = 600.0;
 
     private static readonly JsonDocument SchemaDoc = JsonDocument.Parse("""{"type":"object"}""");
 
@@ -305,7 +323,7 @@ public class TurnRunnerToolTableReuseTests
     ///     fresh cold-table run, so a build-path regression still lands on the
     ///     2N leg and not the N leg.
     /// </summary>
-    private static async Task<TestScalingGateLeg> MeasureLegAsync(StableToolRegistry registry, AgentDefinition agent, int units)
+    private static async Task<PerfGateLeg> MeasureLegAsync(StableToolRegistry registry, AgentDefinition agent, int units)
     {
         var sw = Stopwatch.StartNew();
         long allocated = await AllocationProbe.MeasureProcessAsync(async () =>
@@ -316,32 +334,49 @@ public class TurnRunnerToolTableReuseTests
             }
         }).ConfigureAwait(false);
         sw.Stop();
-        return new TestScalingGateLeg(sw.Elapsed.TotalMilliseconds, allocated);
+        return new PerfGateLeg(sw.Elapsed.TotalMilliseconds, allocated);
     }
 
+    /// <summary>
+    ///     THE GATE IS A BUDGET PER UNIT OF WORK (#1948), not a ratio. It used
+    ///     to be <c>t(2N) &lt;= 3*t(N)</c> and <c>alloc(2N) &lt;= 3*alloc(N)</c>
+    ///     over 100 against 200 tools, decided by the shared TestScalingGate
+    ///     (#1652). It is now:
+    ///     <code>
+    ///     bytes per turn        &lt;= 30 000   (machine-independent, HARD)
+    ///     probe units per turn  &lt;= 600      (machine-scaled time, SOFT)
+    ///     </code>
+    ///     measured over a FIXED amount of work (1 000 text-only turns against
+    ///     a 200-tool registry) on the SAME runner in the SAME run. The
+    ///     allocation branch is machine-independent and is asserted hard; the
+    ///     time branch is in PROBE UNITS and stands down when the rounds do not
+    ///     reproduce each other. The report prints on every run, pass or fail.
+    ///     <para>
+    ///         A per-turn table rebuild - the regression this gate exists for -
+    ///         allocates N tool definitions per turn and lands far above the
+    ///         byte budget.
+    ///     </para>
+    /// </summary>
     [Test]
-    [Timeout(120_000)]
-    public async Task RunAsync_DoubledTools_StaysWithinGrowthLimit()
+    [Timeout(300_000)]
+    public async Task RunAsync_CostPerTurn_StaysWithinBudget()
     {
         if (!OperatingSystem.IsLinux())
             return; // GC accounting varies across OS runtimes.
 
         var agent = ToolAgent(maxSteps: 5);
-        var small = new StableToolRegistry(NumberedTools(ToolCount));
-        var large = new StableToolRegistry(NumberedTools(ToolCount * 2));
+        var registry = new StableToolRegistry(NumberedTools(ToolCount));
 
-        TestScalingGateResult result = await TestScalingGate.MeasureAsync(
-            measureSmallLeg: units => MeasureLegAsync(small, agent, units),
-            measureLargeLeg: units => MeasureLegAsync(large, agent, units),
-            initialUnits: Iterations,
-            options: new TestScalingGateOptions
+        PerfGateResult result = await PerfGate.MeasureAsync(
+            work: units => MeasureLegAsync(registry, agent, units),
+            units: TurnsPerLeg,
+            options: new PerfGateOptions
             {
-                Label = "turnrunner-tooltable-scaling",
-                GrowthLimit = GrowthLimit,
+                Label = "turnrunner-tooltable-cost",
+                MaxBytesPerUnit = MaxBytesPerTurn,
+                MaxProbeUnitsPerUnit = MaxProbeUnitsPerTurn,
             });
 
-        await result.AssertWithinLimitsAsync(
-            topic: "run(2N)/run(N)",
-            linearWhy: "Linear is 2.00, so this bound separates linear from quadratic without depending on how fast this runner is.");
+        await result.AssertWithinBudgetsAsync("text-only agent turn");
     }
 }
