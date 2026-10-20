@@ -302,7 +302,13 @@ public class SessionLogGuardTests
     {
         protected List<SessionLogEntry> Log { get; } = [];
 
-        public IReadOnlyList<SessionLogEntry> Entries => Log;
+        /// <summary>
+        ///     A SNAPSHOT of the log, not the live list. The guard compares two
+        ///     moments, so handing it the same mutable list twice would compare
+        ///     a list with itself and report nothing — which is exactly the
+        ///     vacuous control this file exists to avoid.
+        /// </summary>
+        public IReadOnlyList<SessionLogEntry> Entries => Log.ToArray();
 
         public void Seed(params string[] messageIds)
         {
