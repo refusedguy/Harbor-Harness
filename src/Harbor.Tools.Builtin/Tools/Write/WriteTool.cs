@@ -18,7 +18,8 @@ namespace Harbor.Tools.Builtin;
     {
         "Use `write` to create new files or fully replace existing ones",
         "For small changes prefer `edit` after `read`",
-        "Paths are absolute or relative to the working directory"
+        "Paths are absolute or relative to the working directory",
+        "Pass expectedVersion (the [file-version: …] token from your last read/write/edit) so an external change is rejected instead of overwritten"
     })]
 [AutoConstruct]
 public sealed partial class WriteTool : ITool
@@ -41,7 +42,8 @@ public sealed partial class WriteTool : ITool
                                                                         "properties": {
                                                                           "path":       { "type": "string",  "description": "File path to write" },
                                                                           "content":    { "type": "string",  "description": "Full file content" },
-                                                                          "createDirs": { "type": "boolean", "description": "Create parent dirs (default: true)" }
+                                                                          "createDirs": { "type": "boolean", "description": "Create parent dirs (default: true)" },
+                                                                          "expectedVersion": { "type": "string", "description": "Version of the file as you last read it (the [file-version: sha256:…] token). The write is rejected when the file changed on disk since" }
                                                                         },
                                                                         "required": ["path", "content"]
                                                                       }
@@ -64,6 +66,18 @@ public sealed partial class WriteTool : ITool
         if (content.Length > MaxContentChars)
             return Result.Failure(
                 $"content too large ({content.Length} chars; max {MaxContentChars}).");
+
+        // #1757: the compare-and-swap base. Validated here so a malformed
+        // token fails before the file is touched, not after. The argument is
+        // optional — absent means "no freshness constraint", which is the
+        // pre-#1757 behaviour.
+        string? rawExpected = JsonArgs.GetString(args, "expectedVersion");
+        if (!string.IsNullOrWhiteSpace(rawExpected))
+        {
+            Result<string> expectedVersion = FileVersion.NormalizeExpected(rawExpected);
+            if (expectedVersion.IsFailure)
+                return expectedVersion.ConvertFailure();
+        }
 
         return Result.Success();
     }
@@ -101,6 +115,38 @@ public sealed partial class WriteTool : ITool
 
         if (Directory.Exists(path))
             return ToolResult.Error($"Path is a directory, not a file: {path}");
+
+        // #1757: compare-and-swap. When the caller states which version of the
+        // file it observed, a file that moved on in the meantime is rejected
+        // instead of silently overwritten. The digest is taken BEFORE the
+        // write, so a mismatch is reported against the bytes that are on disk
+        // right now.
+        string? expectedVersion = JsonArgs.GetString(args, "expectedVersion");
+        if (!string.IsNullOrWhiteSpace(expectedVersion))
+        {
+            string? currentDigest;
+            try
+            {
+                currentDigest = await FileVersion.ComputeDigestAsync(path, cancellationToken)
+                    .ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                return ToolResult.Error(
+                    $"Failed to read {path} for the version check: {ex.Message}");
+            }
+
+            Result cas = FileVersion.Check(path, expectedVersion, currentDigest);
+            if (cas.IsFailure)
+            {
+                WriteToolLog.VersionMismatch(_logger, path, cas.Error);
+                return ToolResult.Error(cas.Error);
+            }
+        }
 
         bool existed = File.Exists(path);
         var encoding = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
@@ -148,15 +194,20 @@ public sealed partial class WriteTool : ITool
         string action = existed ? "Overwrote" : "Created";
         int bytes = Encoding.UTF8.GetByteCount(content);
 
+        // #1757: the version of what was just written, so the model can keep
+        // writing against the file it now knows without re-reading it.
+        string digest = FileVersion.ComputeDigest(content.AsSpan(), encoding);
+
         return ToolResult.Success(
-            $"{action} {path} ({content.Length} chars, {bytes} bytes)",
+            $"{action} {path} ({content.Length} chars, {bytes} bytes) {FileVersion.Annotate(digest)}",
             new
             {
                 path,
                 chars = content.Length,
                 bytes,
                 created = !existed,
-                overwritten = existed
+                overwritten = existed,
+                fileVersion = FileVersion.Token(digest)
             });
     }
 
@@ -175,4 +226,7 @@ internal static partial class WriteToolLog
 
     [LoggerMessage(EventId = 2, Level = LogLevel.Warning, Message = "Write error: {Path}: {Error}")]
     public static partial void WriteError(ILogger logger, Exception ex, string path, string error);
+
+    [LoggerMessage(EventId = 3, Level = LogLevel.Warning, Message = "Write rejected — file version changed: {Path}: {Reason}")]
+    public static partial void VersionMismatch(ILogger logger, string path, string reason);
 }

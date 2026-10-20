@@ -96,8 +96,9 @@ public class ToolGlueSpikeTests
             "Replace text in a file. Single: oldString→newString. Multi: edits[]. oldString must be unique unless replaceAll=true.");
         await Assert.That(tool.ExecutionMode).IsEqualTo(ExecutionMode.Sequential);
         await Assert.That(tool.PromptSnippet).IsEqualTo("edit: String replacement in a file");
-        await Assert.That(tool.PromptGuidelines.Count).IsEqualTo(4);
+        await Assert.That(tool.PromptGuidelines.Count).IsEqualTo(5);
         await Assert.That(tool.PromptGuidelines[0]).IsEqualTo("Prefer `edit` over `write` for existing files");
+        await Assert.That(tool.PromptGuidelines[4]).Contains("expectedVersion");
     }
 
     [Test]
@@ -112,8 +113,9 @@ public class ToolGlueSpikeTests
             "Write content to a file (create or overwrite). Creates parent directories by default.");
         await Assert.That(tool.ExecutionMode).IsEqualTo(ExecutionMode.Sequential);
         await Assert.That(tool.PromptSnippet).IsEqualTo("write: Write file contents");
-        await Assert.That(tool.PromptGuidelines.Count).IsEqualTo(3);
+        await Assert.That(tool.PromptGuidelines.Count).IsEqualTo(4);
         await Assert.That(tool.PromptGuidelines[1]).IsEqualTo("For small changes prefer `edit` after `read`");
+        await Assert.That(tool.PromptGuidelines[3]).Contains("expectedVersion");
     }
 
     [Test]

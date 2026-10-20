@@ -43,6 +43,7 @@ internal static class ParameterSchemaGolden
                     "oldString": { "type": "string", "description": "Exact text to find (unique unless replaceAll)" },
                     "newString": { "type": "string", "description": "Replacement (empty = delete)" },
                     "replaceAll": { "type": "boolean", "description": "Replace all occurrences (default: false)" },
+                    "expectedVersion": { "type": "string", "description": "Version of the file as you last read it (the [file-version: sha256:…] token). The edit is rejected when the file changed on disk since" },
                     "edits": {
                       "type": "array",
                       "description": "Multiple edits applied in order",
@@ -337,7 +338,8 @@ internal static class ParameterSchemaGolden
                   "properties": {
                     "path":       { "type": "string",  "description": "File path to write" },
                     "content":    { "type": "string",  "description": "Full file content" },
-                    "createDirs": { "type": "boolean", "description": "Create parent dirs (default: true)" }
+                    "createDirs": { "type": "boolean", "description": "Create parent dirs (default: true)" },
+                    "expectedVersion": { "type": "string", "description": "Version of the file as you last read it (the [file-version: sha256:…] token). The write is rejected when the file changed on disk since" }
                   },
                   "required": ["path", "content"]
                 }

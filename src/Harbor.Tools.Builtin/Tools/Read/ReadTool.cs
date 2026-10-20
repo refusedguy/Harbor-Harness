@@ -127,16 +127,21 @@ public sealed partial class ReadTool : ITool
             byte[] bytes = await File.ReadAllBytesAsync(path, cancellationToken).ConfigureAwait(false);
             string b64 = Convert.ToBase64String(bytes);
 
+            // #1757: the bytes are already in hand — the version is free here.
+            string imageDigest = FileVersion.ComputeDigest(bytes);
+
             return ToolResult.Success(
                 $"Image: {path} ({bytes.Length} bytes, {mime}). " +
-                "Base64 is in metadata.imageBase64 for vision-capable hosts.",
+                "Base64 is in metadata.imageBase64 for vision-capable hosts. " +
+                FileVersion.Annotate(imageDigest),
                 new
                 {
                     path,
                     mimeType = mime,
                     sizeBytes = bytes.Length,
                     estimatedTokens = ImageTokenEstimate,
-                    imageBase64 = b64
+                    imageBase64 = b64,
+                    fileVersion = FileVersion.Token(imageDigest)
                 });
         }
 
@@ -161,6 +166,32 @@ public sealed partial class ReadTool : ITool
             return ToolResult.Error(
                 $"File too large ({info.Length} bytes). Max {MaxFileBytes}. " +
                 "Use offset/limit on a smaller window, or another tool.");
+        }
+
+        // #1757: the version of the file the model is about to see. Taken
+        // BEFORE the text pass, so the token never describes a newer file than
+        // the lines the model received — a stale token is rejected later, a
+        // fresh-looking one would not be. Null when the file vanished between
+        // the existence check and this pass.
+        string? digest = null;
+        try
+        {
+            digest = await FileVersion.ComputeDigestAsync(path, cancellationToken)
+                .ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            // The version is an enrichment — a read must not fail because the
+            // digest pass did. The text pass below reports a real read error.
+            ReadToolLog.VersionUnavailable(_logger, path, ex.Message);
+        }
+
+        string? version = null;
+        string annotation = string.Empty;
+        if (digest is not null)
+        {
+            version = FileVersion.Token(digest);
+            annotation = FileVersion.Annotate(digest);
         }
 
         // ── text, streamed by line ───────────────────────────────
@@ -239,7 +270,9 @@ public sealed partial class ReadTool : ITool
         }
 
         if (taken == 0)
-            return ToolResult.Success($"[empty file] {path}", new { path, mimeType = mime, sizeBytes = info.Length });
+            return ToolResult.Success(
+                $"[empty file] {path} {annotation}",
+                new { path, mimeType = mime, sizeBytes = info.Length, fileVersion = version });
 
         if (truncatedByLines || truncatedByChars)
         {
@@ -252,6 +285,10 @@ public sealed partial class ReadTool : ITool
             if (truncatedByChars)
                 sb.Append(ToolOutputLimit.TruncationNote(MaxChars, "chars"));
         }
+
+        // #1757: the version the model may hand back as expectedVersion.
+        if (annotation.Length > 0)
+            sb.Append('\n').Append(annotation);
 
         ReadToolLog.ReadComplete(_logger, taken, truncatedByLines || truncatedByChars);
 
@@ -266,7 +303,8 @@ public sealed partial class ReadTool : ITool
                 sizeBytes = info.Length,
                 startLine,
                 linesReturned = taken,
-                truncated = truncatedByLines || truncatedByChars
+                truncated = truncatedByLines || truncatedByChars,
+                fileVersion = version
             });
     }
 
@@ -377,4 +415,7 @@ internal static partial class ReadToolLog
 
     [LoggerMessage(EventId = 4, Level = LogLevel.Debug, Message = "LSP auto-open failed for {Path}")]
     public static partial void LspAutoOpenFailed(ILogger logger, Exception ex, string path);
+
+    [LoggerMessage(EventId = 5, Level = LogLevel.Debug, Message = "File version unavailable for {Path}: {Error}")]
+    public static partial void VersionUnavailable(ILogger logger, string path, string error);
 }

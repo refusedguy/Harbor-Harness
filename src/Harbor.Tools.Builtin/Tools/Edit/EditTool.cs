@@ -21,12 +21,14 @@ namespace Harbor.Tools.Builtin;
         "Prefer `edit` over `write` for existing files",
         "Make oldString unique (include surrounding context)",
         "Use edits[] for several replacements in one file",
-        "Set replaceAll=true only when every occurrence should change"
+        "Set replaceAll=true only when every occurrence should change",
+        "Pass expectedVersion (the [file-version: …] token from your last read/write/edit) so an external change is rejected instead of overwritten"
     })]
 public sealed partial class EditTool : ITool
 {
 
     private const int MaxFileChars = 5_000_000;
+    private const long MaxFileBytes = 32 * 1024 * 1024; // memory guard for the byte snapshot (#1757)
     private const int MaxDiffLines = 80;
     private const int SnippetLen = 80;
     private readonly ILogger<EditTool> _logger;
@@ -64,6 +66,7 @@ public sealed partial class EditTool : ITool
                                                                           "oldString": { "type": "string", "description": "Exact text to find (unique unless replaceAll)" },
                                                                           "newString": { "type": "string", "description": "Replacement (empty = delete)" },
                                                                           "replaceAll": { "type": "boolean", "description": "Replace all occurrences (default: false)" },
+                                                                          "expectedVersion": { "type": "string", "description": "Version of the file as you last read it (the [file-version: sha256:…] token). The edit is rejected when the file changed on disk since" },
                                                                           "edits": {
                                                                             "type": "array",
                                                                             "description": "Multiple edits applied in order",
@@ -115,6 +118,16 @@ public sealed partial class EditTool : ITool
             }
         }
 
+        // #1757: the compare-and-swap base. Optional — absent means "no
+        // freshness constraint", which is the pre-#1757 behaviour.
+        string? rawExpected = JsonArgs.GetString(args, "expectedVersion");
+        if (!string.IsNullOrWhiteSpace(rawExpected))
+        {
+            Result<string> expectedVersion = FileVersion.NormalizeExpected(rawExpected);
+            if (expectedVersion.IsFailure)
+                return expectedVersion.ConvertFailure();
+        }
+
         return Result.Success();
     }
 
@@ -155,11 +168,43 @@ public sealed partial class EditTool : ITool
         if (symlinkCheck.IsFailure)
             return ToolResult.Error(symlinkCheck.Error);
 
+        // #1757: the bytes are read ONCE — the digest and the text come from
+        // the same snapshot, so the version the model is compared against is
+        // the version the edit is actually applied to.
+        byte[] raw;
+        try
+        {
+            var info = new FileInfo(path);
+            if (info.Length > MaxFileBytes)
+                return ToolResult.Error(
+                    $"File too large to edit in-memory ({info.Length} bytes; max {MaxFileBytes}).");
+
+            raw = await File.ReadAllBytesAsync(path, cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            return ToolResult.Error($"Failed to read: {ex.Message}");
+        }
+
+        string currentDigest = FileVersion.ComputeDigest(raw);
+
+        // #1757: compare-and-swap. A file that moved on since the model read
+        // it is rejected instead of edited on top of somebody else's change.
+        string? expectedVersion = JsonArgs.GetString(args, "expectedVersion");
+        if (!string.IsNullOrWhiteSpace(expectedVersion))
+        {
+            Result cas = FileVersion.Check(path, expectedVersion, currentDigest);
+            if (cas.IsFailure)
+            {
+                EditToolLog.VersionMismatch(_logger, path, cas.Error);
+                return ToolResult.Error(cas.Error);
+            }
+        }
+
         string original;
         try
         {
-            original = await File.ReadAllTextAsync(path, Encoding.UTF8, cancellationToken)
-                .ConfigureAwait(false);
+            original = DecodeText(raw);
         }
         catch (Exception ex)
         {
@@ -227,9 +272,9 @@ public sealed partial class EditTool : ITool
             return ToolResult.Error("No changes applied (oldString not found or identical to newString).");
         }
 
+        var utf8 = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
         try
         {
-            var utf8 = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
             await File.WriteAllTextAsync(path, content, utf8, cancellationToken)
                 .ConfigureAwait(false);
         }
@@ -239,13 +284,18 @@ public sealed partial class EditTool : ITool
             return ToolResult.Error(ToolErrors.Handler("edit", cancellationToken, failurePrefix: "Failed to write: ")(ex));
         }
 
+        // #1757: the version of what was just written, so the model can keep
+        // editing against the file it now knows without re-reading it.
+        string digest = FileVersion.ComputeDigest(content.AsSpan(), utf8);
+
         string diff = GenerateContextDiff(original, content, MaxDiffLines);
         // §PERF-006: per-call result transcript rented, not allocated.
         // Synchronous composition — no callback can touch it.
         using var msg = StringBuilderPool.Rent(1024);
         msg.Builder.Append("Edited ").Append(path)
             .Append(": ").Append(totalReplacements).Append(" replacement(s) in ")
-            .Append(editSteps).Append(" edit step(s)");
+            .Append(editSteps).Append(" edit step(s)")
+            .Append(' ').Append(FileVersion.Annotate(digest));
         if (diff.Length > 0)
             msg.Builder.Append("\n\n").Append(diff);
 
@@ -253,7 +303,26 @@ public sealed partial class EditTool : ITool
 
         return ToolResult.Success(
             msg.ToString(),
-            new { path, changes = totalReplacements, steps = editSteps });
+            new { path, changes = totalReplacements, steps = editSteps, fileVersion = FileVersion.Token(digest) });
+    }
+
+    /// <summary>
+    ///     Decode the file's bytes as text, mirroring
+    ///     <c>File.ReadAllTextAsync(path, Encoding.UTF8)</c>: UTF-8 with
+    ///     byte-order-mark detection, so a UTF-16 file still decodes the way it
+    ///     did before the read moved to bytes (#1757).
+    /// </summary>
+    /// <param name="raw">The file's bytes.</param>
+    /// <returns>The decoded text.</returns>
+    private static string DecodeText(byte[] raw)
+    {
+        using var stream = new MemoryStream(raw, writable: false);
+        using var reader = new StreamReader(
+            stream,
+            Encoding.UTF8,
+            detectEncodingFromByteOrderMarks: true,
+            bufferSize: 64 * 1024);
+        return reader.ReadToEnd();
     }
 
     /// <summary>
@@ -470,4 +539,7 @@ internal static partial class EditToolLog
 
     [LoggerMessage(EventId = 3, Level = LogLevel.Debug, Message = "LSP diagnostics note failed for {Path}")]
     public static partial void LspDiagnosticsNoteFailed(ILogger logger, Exception ex, string path);
+
+    [LoggerMessage(EventId = 4, Level = LogLevel.Warning, Message = "Edit rejected — file version changed: {Path}: {Reason}")]
+    public static partial void VersionMismatch(ILogger logger, string path, string reason);
 }
