@@ -1186,6 +1186,12 @@ jobs:
     # the artifacts the build job produced. The arm64 runner loads the
     # arm64 natives out of the same output directory, which is why the
     # slices carry both.
+    #
+    # ── MEASUREMENT CONFIG A (issue #1919, the two-pool dispatch study) ────
+    # All four shards on the arm64 pool. This is the state `dev` is in
+    # after #1952, kept here as the A arm of the A/B/C measurement: the
+    # four shards share ONE queue, so the pool's capacity decides how many
+    # of them run at once.
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 25
     permissions:
