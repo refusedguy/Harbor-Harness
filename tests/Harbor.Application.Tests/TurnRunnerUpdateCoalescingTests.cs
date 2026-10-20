@@ -5,8 +5,6 @@ using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Agents;
 using Harbor.Abstractions.Events;
 using Harbor.Abstractions.Models;
-using Harbor.Abstractions.Models.Identifiers;
-using Harbor.Abstractions.Permissions;
 using Harbor.Abstractions.Providers;
 using Harbor.Abstractions.Sessions;
 using Harbor.Application.Agents;
@@ -320,15 +318,18 @@ public class TurnRunnerUpdateCoalescingTests
     private static async Task<TestScalingGateLeg> MeasureLegAsync(UpdateFlushPolicy policy, LlmEvent[] script, int units)
     {
         var sw = Stopwatch.StartNew();
-        long allocated = await AllocationProbe.MeasureProcessAsync(async () =>
-        {
-            for (int i = 0; i < units; i++)
-            {
-                await RunTurnAsync(policy, script).ConfigureAwait(false);
-            }
-        }).ConfigureAwait(false);
+        long allocated = await AllocationProbe.MeasureProcessAsync(() => RunTurnsAsync(policy, script, units)).ConfigureAwait(false);
         sw.Stop();
         return new TestScalingGateLeg(sw.Elapsed.TotalMilliseconds, allocated);
+    }
+
+    /// <summary>The turns of one measured leg, one after another.</summary>
+    private static async Task RunTurnsAsync(UpdateFlushPolicy policy, LlmEvent[] script, int units)
+    {
+        for (int i = 0; i < units; i++)
+        {
+            await RunTurnAsync(policy, script).ConfigureAwait(false);
+        }
     }
 
     /// <summary>The before/after measurement helper (time + bytes, one window).</summary>
@@ -360,14 +361,7 @@ public class TurnRunnerUpdateCoalescingTests
 
     // ── fixtures ────────────────────────────────────────────────────────────
 
-    private static AgentDefinition Agent() => new(
-        AgentName.Create("code"),
-        "Code",
-        "update-coalescing harness agent",
-        "test-model",
-        "test",
-        new PermissionRuleset(new PermissionRule[] { new("*", "*", PermissionAction.Allow) }),
-        MaxSteps: 5);
+    private static AgentDefinition Agent() => TestAgents.AllowAll();
 
     private static TestSessionContext NewSession() => new(
         Session.Create("/tmp/harbor-update-coalescing-tests", "code", "test", "test-model"));
