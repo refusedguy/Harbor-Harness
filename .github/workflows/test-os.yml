@@ -64,7 +64,7 @@ name: test-os
 
 on:
   push:
-    branches: [dev, master]
+    branches: [dev, master, tmp/verify-narrow]
   pull_request:
     branches: [master]
   schedule:
