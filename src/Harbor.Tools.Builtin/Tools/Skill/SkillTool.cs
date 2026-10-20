@@ -86,8 +86,12 @@ public sealed partial class SkillTool : ITool
     /// <inheritdoc />
     public ToolSafetyProfile SafetyProfile => ToolSafetyProfile.Opaque;
 
-    /// <inheritdoc />
-    public JsonDocument ParameterSchema { get; } = JsonDocument.Parse("""
+    /// <summary>
+    ///     The tool's parameter schema. Parsed once per process (#1574) — the JSON
+    ///     below is a compile-time constant, so re-parsing it for every tool
+    ///     instance was pure allocation churn.
+    /// </summary>
+    private static readonly JsonDocument Schema = JsonDocument.Parse("""
                                                                       {
                                                                         "type": "object",
                                                                         "properties": {
@@ -97,6 +101,8 @@ public sealed partial class SkillTool : ITool
                                                                         "required": ["name"]
                                                                       }
                                                                       """);
+    /// <inheritdoc />
+    public JsonDocument ParameterSchema => Schema;
 
     /// <inheritdoc />
     public Result ValidateArguments(JsonElement args)
