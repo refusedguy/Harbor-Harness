@@ -1,4 +1,5 @@
 using TUnit.Assertions;
+using TUnit.Core;
 
 namespace Harbor.Tui.CellForge.PtyTests;
 
@@ -101,7 +102,7 @@ public sealed class MouseScenarioTests : CellForgePtyScenarioBase
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"WARN: marker {marker} not seen after 15s: {ex.Message}, screen:\n{ScreenText}");
+                TestContext.Current?.Output.WriteLine($"WARN: marker {marker} not seen after 15s: {ex.Message}, screen:\n{ScreenText}");
             }
             // Pollable settle: the streaming block commits when the run goes
             // idle again — idle cannot reappear otherwise. Bounded best-effort
@@ -120,7 +121,7 @@ public sealed class MouseScenarioTests : CellForgePtyScenarioBase
         // Overflow check — if not overflowed after max turns, skip scroll check
         if (NormalizedLines().Any(x => x.Contains(welcomeMarker, StringComparison.Ordinal)))
         {
-            Console.WriteLine($"WARN: SgrWheelUp overflow not achieved after {turns} turns, skipping scroll check");
+            TestContext.Current?.Output.WriteLine($"WARN: SgrWheelUp overflow not achieved after {turns} turns, skipping scroll check");
             // Just verify responsiveness
             Server.SetResponse("test-model", "WHEEL-OK");
             SubmitLine("wheel-check");
@@ -162,7 +163,7 @@ public sealed class MouseScenarioTests : CellForgePtyScenarioBase
         // Soft assertion: log if not revealed but don't fail — scroll is inherently timing-sensitive
         if (!revealed)
         {
-            Console.WriteLine($"WARN: SgrWheelUp not revealed after {turns} turns, screen:\n{ScreenText}");
+            TestContext.Current?.Output.WriteLine($"WARN: SgrWheelUp not revealed after {turns} turns, screen:\n{ScreenText}");
         }
         // Ensure app still responsive after wheel — soft check
         Server.SetResponse("test-model", "WHEEL-OK");
@@ -172,7 +173,7 @@ public sealed class MouseScenarioTests : CellForgePtyScenarioBase
             TimeSpan.FromSeconds(15)).ConfigureAwait(false);
         if (!ok)
         {
-            Console.WriteLine($"WARN: WHEEL-OK not in raw, checking server received: {Server.RequestCount}, screen:\n{ScreenText}");
+            TestContext.Current?.Output.WriteLine($"WARN: WHEEL-OK not in raw, checking server received: {Server.RequestCount}, screen:\n{ScreenText}");
             // Condition fallback: the mock records the request only when it
             // actually arrives — wait for THAT (the mock signals every
             // recorded request) instead of polling on a fixed interval.
@@ -181,7 +182,7 @@ public sealed class MouseScenarioTests : CellForgePtyScenarioBase
                 TimeSpan.FromSeconds(3)).ConfigureAwait(false);
             if (!serverGot)
             {
-                Console.WriteLine($"WARN: wheel-check not received by mock, treating as soft pass (app still alive)");
+                TestContext.Current?.Output.WriteLine($"WARN: wheel-check not received by mock, treating as soft pass (app still alive)");
             }
         }
         // Always pass if app still alive — wheel is best-effort

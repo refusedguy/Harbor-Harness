@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using Harbor.Ui.Framework.State;
 using TUnit.Assertions;
 using TUnit.Assertions.Extensions;
+using TUnit.Core;
 
 namespace Harbor.Ui.Framework.Tests;
 
@@ -72,7 +73,7 @@ public class StoreDispatchAllocTests
         }
 
         long overhead = (bestSubscribed - bestBare) / Dispatches;
-        Console.WriteLine(
+        TestContext.Current?.Output.WriteLine(
             $"uistore-notify-alloc: {overhead} B per dispatch with 1 subscriber " +
             $"(subscribed {(double)bestSubscribed / Dispatches:F0} B, bare {(double)bestBare / Dispatches:F0} B, min of {Rounds})");
 
@@ -80,7 +81,12 @@ public class StoreDispatchAllocTests
         // cannot be pooled (subscribers may retain it) and is now built only
         // when somebody is listening. Pre-fix a notification also built a
         // Delegate[] and a Cast iterator, several times over this bound.
-        await Assert.That(overhead).IsLessThanOrEqualTo(32L);
+        await Assert.That(overhead).IsLessThanOrEqualTo(32L)
+            .Because(
+                $"uistore-notify-alloc: {overhead} B per dispatch with 1 subscriber "
+                + $"(subscribed {(double)bestSubscribed / Dispatches:F0} B, bare {(double)bestBare / Dispatches:F0} B, "
+                + $"min of {Rounds}); the budget is 32 B per dispatch. Above it a notification is "
+                + "building more than the one event args it is allowed to build.");
     }
 
     [Test]
@@ -116,14 +122,18 @@ public class StoreDispatchAllocTests
 
         long viaStorePer = bestStore / Dispatches;
         long viaReducerPer = bestReducer / Dispatches;
-        Console.WriteLine(
+        TestContext.Current?.Output.WriteLine(
             $"uistore-copy-alloc: store {viaStorePer} B vs reducer {viaReducerPer} B per dispatch (min of {Rounds}); " +
             $"store overhead {viaStorePer - viaReducerPer} B");
 
         // The store's own bookkeeping — CAS, revision stamp, empty fan-out —
         // must not buy a whole extra snapshot. Pre-fix this gap was exactly one
         // UiState copy (`next with { Revision = … }`).
-        await Assert.That(viaStorePer - viaReducerPer).IsLessThanOrEqualTo(24L);
+        await Assert.That(viaStorePer - viaReducerPer).IsLessThanOrEqualTo(24L)
+            .Because(
+                $"uistore-copy-alloc: store {viaStorePer} B vs reducer {viaReducerPer} B per dispatch "
+                + $"(min of {Rounds}); the store overhead is {viaStorePer - viaReducerPer} B and the budget "
+                + "is 24 B. Above it the store buys a whole extra UiState snapshot per dispatch.");
     }
 
     [Test]

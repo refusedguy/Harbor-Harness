@@ -7,6 +7,7 @@ using Harbor.E2E.Framework;
 using Harbor.Registries.Events;
 using Harbor.Ui.Framework.State;
 using TUnit.Assertions;
+using TUnit.Core;
 
 namespace Harbor.LoadTests;
 
@@ -237,7 +238,7 @@ public sealed class MultiSessionLoadTests
             largePeak = Math.Max(largePeak, peak);
         }
 
-        Console.WriteLine(
+        TestContext.Current?.Output.WriteLine(
             $"[scaling] {smallSessions}x{agents}: {smallMs:F1} ms best of {ScalingRounds} " +
             $"(rounds {string.Join(", ", smallRounds.Select(v => v.ToString("F1")))}; peak {smallPeak}); " +
             $"{largeSessions}x{agents}: {largeMs:F1} ms best of {ScalingRounds} " +

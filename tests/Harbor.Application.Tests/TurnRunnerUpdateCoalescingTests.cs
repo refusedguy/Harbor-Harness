@@ -16,6 +16,7 @@ using Harbor.Application.Tests.Fakes;
 using Harbor.TestKit;
 using Microsoft.Extensions.Logging.Abstractions;
 using TUnit.Assertions;
+using TUnit.Core;
 using TestSessionContext = Harbor.Application.Tests.Fakes.TestSessionContext;
 
 namespace Harbor.Application.Tests;
@@ -299,7 +300,7 @@ public class TurnRunnerUpdateCoalescingTests
         (double PerDeltaMs, long PerDeltaBytes) = await MeasureAsync(UpdateFlushPolicy.PerDelta, Script2000, Units);
         (double BatchedMs, long BatchedBytes) = await MeasureAsync(BoundedPolicy, Script2000, Units);
 
-        Console.WriteLine(
+        TestContext.Current?.Output.WriteLine(
             $"[coalescing] {Script2000.Length - 1} deltas x {Units} units — per-delta: {PerDeltaMs:F3} ms / {PerDeltaBytes} B; "
             + $"batched: {BatchedMs:F3} ms / {BatchedBytes} B; "
             + $"alloc x{(double)PerDeltaBytes / Math.Max(1, BatchedBytes):F2}");

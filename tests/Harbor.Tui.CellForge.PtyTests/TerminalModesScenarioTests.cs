@@ -1,4 +1,5 @@
 using TUnit.Assertions;
+using TUnit.Core;
 
 namespace Harbor.Tui.CellForge.PtyTests;
 
@@ -43,7 +44,7 @@ public sealed class TerminalModesScenarioTests : CellForgePtyScenarioBase
         if (exit == -1)
         {
             // Fallback: try /exit
-            Console.WriteLine($"WARN: Ctrl+C exit timed out, trying /exit, Raw tail: {Session.RawText[^Math.Min(500, Session.RawText.Length)..]}");
+            TestContext.Current?.Output.WriteLine($"WARN: Ctrl+C exit timed out, trying /exit, Raw tail: {Session.RawText[^Math.Min(500, Session.RawText.Length)..]}");
             SubmitLine("/exit");
             exit = await Session.WaitForExitAsync(TimeSpan.FromSeconds(15)).ConfigureAwait(false);
         }
@@ -51,11 +52,19 @@ public sealed class TerminalModesScenarioTests : CellForgePtyScenarioBase
         bool hasLeaveSeq = Session.RawText.Contains("\x1b[?2004l\x1b[?25h\x1b[?1049l\x1b[?1006l\x1b[?1002l\x1b[?1000l", StringComparison.Ordinal);
         if (exit != 0 && hasLeaveSeq)
         {
-            Console.WriteLine($"WARN: exit={exit} but leave seq present, treating as pass");
+            TestContext.Current?.Output.WriteLine($"WARN: exit={exit} but leave seq present, treating as pass");
             exit = 0;
         }
-        await Assert.That(exit).IsEqualTo(0);
-        await Assert.That(hasLeaveSeq).IsTrue();
+        await Assert.That(exit).IsEqualTo(0)
+            .Because(
+                $"the TUI must exit cleanly on Ctrl+C: exit={exit}, leave-sequence present={hasLeaveSeq}. "
+                + "A non-zero exit WITHOUT the leave sequence means the app died before restoring the "
+                + "terminal modes, so the modes assertion below would be reading a half-restored screen.");
+        await Assert.That(hasLeaveSeq).IsTrue()
+            .Because(
+                "the leave sequence (?2004l ?25h ?1049l ?1006l ?1002l ?1000l) is what proves the app "
+                + "released the mouse grab and the alt screen; without it the terminal keeps the grab "
+                + "even though the process is gone.");
     }
 
     [Test]

@@ -2,6 +2,7 @@ using System.Diagnostics;
 using Harbor.Tui.CellForge.Rendering;
 using Harbor.Tui.CellForge.Streaming;
 using Harbor.Tui.CellForge.Widgets;
+using TUnit.Core;
 
 namespace Harbor.Tui.CellForge.Tests;
 
@@ -159,13 +160,17 @@ public class PerfBudgetTests
 
         long small = PushCostBytes(8);
         long large = PushCostBytes(800);
-        Console.WriteLine($"#463 live-tail push cost: 8 lines = {small} B/push, 800 lines = {large} B/push");
+        TestContext.Current?.Output.WriteLine($"#463 live-tail push cost: 8 lines = {small} B/push, 800 lines = {large} B/push");
 
         // 100x the message must not cost meaningfully more per push. The flat
         // slack keeps the assertion honest if the per-push floor ever lands at
         // zero (fully inlined span work), while still failing hard on the old
         // ~10-allocations-per-line behaviour.
-        await Assert.That(large).IsLessThan(small * 4 + 2048);
+        await Assert.That(large).IsLessThan(small * 4 + 2048)
+            .Because(
+                $"#463 live-tail push cost: 8 lines = {small} B/push, 800 lines = {large} B/push "
+                + $"(budget {small * 4 + 2048} B/push). A 100x longer message must not cost "
+                + "proportionally more per push.");
     }
 
     [Test]
@@ -250,7 +255,7 @@ public class PerfBudgetTests
 
         sw.Stop();
         double avgMs = sw.Elapsed.TotalMilliseconds / frames;
-        Console.WriteLine($"ce3-frame-avg: {avgMs:F3} ms over {frames} frames (budget 16 ms)");
+        TestContext.Current?.Output.WriteLine($"ce3-frame-avg: {avgMs:F3} ms over {frames} frames (budget 16 ms)");
 
         // #996: reported only — the gates for this path are the allocation-free
         // counts above and the #463 relative push-cost pairing beside them.

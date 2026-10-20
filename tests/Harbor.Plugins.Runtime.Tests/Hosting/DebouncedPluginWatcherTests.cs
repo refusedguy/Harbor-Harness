@@ -3,6 +3,7 @@ using System.Diagnostics;
 using Harbor.Plugins.Hosting;
 using Harbor.Plugins.Storage;
 using Microsoft.Extensions.Logging.Abstractions;
+using TUnit.Core;
 namespace Harbor.Plugins.Runtime.Tests.Hosting;
 
 /// <summary>
@@ -204,11 +205,15 @@ public sealed class DebouncedPluginWatcherTests : IDisposable
         // 1.43x, so no threshold separates code from runner. The count below stays the
         // gate: splitting it now needs ~one full debounce of pre-emption (#757 raised
         // the window 120 ms → 500 ms), not a quarter of it.
-        Console.WriteLine(
+        TestContext.Current?.Output.WriteLine(
             $"[burst] five writes took {burst.ElapsedMilliseconds} ms inside a {(int)Debounce.TotalMilliseconds} ms debounce window.");
 
         var change = await NextAsync(watcher, received, baseline + 1, TimeSpan.FromSeconds(10));
-        await Assert.That(change.Kind).IsEqualTo(PluginSourceChangeKind.Modified);
+        await Assert.That(change.Kind).IsEqualTo(PluginSourceChangeKind.Modified)
+            .Because(
+                $"the burst was {burst.ElapsedMilliseconds} ms inside a {(int)Debounce.TotalMilliseconds} ms "
+                + "debounce window, so the callback that fired has to be the Modified one the burst caused. "
+                + "A different kind means the watcher reported a change the burst did not make.");
 
         // The burst produced ONE callback. Wait for the queue to go quiet rather than
         // for a fixed multiple of the debounce: the old `Debounce * 2` settle was the

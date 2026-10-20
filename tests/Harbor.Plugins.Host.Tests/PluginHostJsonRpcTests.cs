@@ -12,6 +12,7 @@ using Harbor.Terminal.Abstractions.ViewModels;
 using Harbor.Ui.Framework.Panels;
 using Harbor.Ui.Framework.State;
 using Microsoft.Extensions.Logging.Abstractions;
+using TUnit.Core;
 
 namespace Harbor.Plugins.Host.Tests;
 
@@ -268,7 +269,7 @@ public class PluginHostJsonRpcTests
         sw.Stop();
 
         double meanMs = sw.Elapsed.TotalMilliseconds / iterations;
-        Console.WriteLine(
+        TestContext.Current?.Output.WriteLine(
             $"plugin-host tools/call dispatch: mean {meanMs:F3} ms over {iterations} calls "
             + "(in-process loopback, transport excluded)");
 

@@ -41,6 +41,7 @@ using Harbor.TestKit;
 using Microsoft.Extensions.Logging.Abstractions;
 using TUnit.Assertions;
 using TUnit.Assertions.Extensions;
+using TUnit.Core;
 
 namespace Harbor.Storage.Jsonl.Tests;
 
@@ -124,7 +125,7 @@ public class SessionFileReaderScalingTests
                     Label = "session-read#1533-legacy",
                 });
 
-            Console.WriteLine(legacy.Report);
+            TestContext.Current?.Output.WriteLine(legacy.Report);
         }
         finally
         {

@@ -1,4 +1,5 @@
 using TUnit.Assertions;
+using TUnit.Core;
 
 namespace Harbor.Tui.CellForge.PtyTests;
 
@@ -71,7 +72,7 @@ public sealed class MouseEdgeScenarioTests : CellForgePtyScenarioBase
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"WARN: D{turns} not seen: {ex.Message}, screen:\n{ScreenText}");
+                TestContext.Current?.Output.WriteLine($"WARN: D{turns} not seen: {ex.Message}, screen:\n{ScreenText}");
             }
             // Pollable settle: idle cannot reappear until the streaming block
             // commits. Bounded best-effort (replaces fixed 800ms sleep).
@@ -112,7 +113,7 @@ public sealed class MouseEdgeScenarioTests : CellForgePtyScenarioBase
 
         if (!revealed)
         {
-            Console.WriteLine($"WARN: WheelDown_AfterWheelUp not revealed, screen:\n{ScreenText}");
+            TestContext.Current?.Output.WriteLine($"WARN: WheelDown_AfterWheelUp not revealed, screen:\n{ScreenText}");
         }
 
         // Wheel down walks back to the live bottom — pollable per tick, best
@@ -133,7 +134,7 @@ public sealed class MouseEdgeScenarioTests : CellForgePtyScenarioBase
 
         if (!back)
         {
-            Console.WriteLine($"WARN: WheelDown back not achieved, screen:\n{ScreenText}");
+            TestContext.Current?.Output.WriteLine($"WARN: WheelDown back not achieved, screen:\n{ScreenText}");
         }
 
         // Ensure app still responsive after scroll. NOTE (#211): assert on
