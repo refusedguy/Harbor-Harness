@@ -22,10 +22,15 @@ THIS SCRIPT MEASURES, PER RUN
 * wall time of the command (the number the issue's ratio is built on),
 * CPU utilisation sampled from /proc/stat once a second: average / peak busy
   cores, and how long the machine sat at 4 busy cores,
-* the project timeline: which project started when, and (when the build runs
-  at normal verbosity) which project finished when — from which the number of
-  projects in flight over time is derived, i.e. the "was the graph ever able
-  to keep 4 compilers busy?" question, measured instead of modelled.
+* MSBuild's own task aggregates, parsed out of the console log's Performance
+  Summary: the count and the total duration of the `Csc` tasks (the compiler
+  work), of `Exec` (the architecture gate) and of the other heavy tasks,
+* the project timeline: which project started when, and which finished when,
+  from which the number of projects in flight over time is derived — i.e. the
+  "was the graph ever able to keep 4 compilers busy?" question, measured
+  instead of modelled. The timeline needs normal verbosity (MSBuild only
+  prints the "is building" line there); at minimal verbosity only the
+  completion side is available.
 
 It is a MEASUREMENT tool: it does not gate, it does not touch the build, and
 it works on any command. Standard library only.
@@ -40,7 +45,8 @@ OUTPUTS (in --out-dir)
     <label>.log   every line of the command's output, prefixed with the
                   elapsed seconds since the command started
     <label>.json  the measurement: wall time, CPU samples and their summary,
-                  the project timeline, and the "projects in flight" profile
+                  the MSBuild task aggregates, the project timeline, and the
+                  "projects in flight" profile
 """
 
 from __future__ import annotations
@@ -53,19 +59,25 @@ import subprocess
 import sys
 import threading
 import time
+import traceback
 
 # "  Harbor.Abstractions -> /home/runner/work/.../Harbor.Abstractions.dll"
-# (minimal verbosity: one line per project, printed when the project is built)
+# — printed when the project is BUILT, i.e. a completion marker.
 _ARROW_RE = re.compile(r"^\s*(?P<name>\S+)\s+->\s+(?P<out>\S+\.(?:dll|exe))\s*$")
 
-# "  Project "/path/x.csproj" (target(s) -> "Build"):"  (normal verbosity)
-_PROJ_START_RE = re.compile(r'^\s*Project\s+"(?P<proj>[^"]+)"\s+\(target\(s\)')
+# '  1>Project "/…/Harbor.slnx" (1) is building "/…/x.csproj" (2) with 3 targets.'
+# — the project START marker. Normal verbosity only.
+_IS_BUILDING_RE = re.compile(
+    r'^\s*\d+>Project\s+"[^"]*"\s+\(\d+\)\s+is building\s+"(?P<proj>[^"]+)"'
+)
 
-# '  Done Building Project "/path/x.csproj" (target(s) -> "Build").'
-_PROJ_DONE_RE = re.compile(r'^\s*Done Building Project\s+"(?P<proj>[^"]+)"')
+# '  2>Done Building Project "/…/x.csproj" (default targets).'
+_DONE_RE = re.compile(r'^\s*\d+>Done Building Project\s+"(?P<proj>[^"]+)"')
 
-# "      Csc:  ... " — a task header at normal/detailed verbosity.
-_TASK_RE = re.compile(r"^\s+(?P<task>[A-Za-z_][A-Za-z0-9_]*):\s")
+# Performance Summary rows: "    434717 ms  Csc     112 calls"
+_PERF_ROW_RE = re.compile(
+    r"^\s*(?P<ms>\d+)\s+ms\s+(?P<task>\S+)\s+(?P<calls>\d+)\s+calls\s*$"
+)
 
 
 def read_cpu_times() -> tuple[int, int]:
@@ -102,25 +114,29 @@ class CpuSampler(threading.Thread):
         super().__init__(daemon=True)
         self.interval = interval
         self.samples: list[tuple[float, float]] = []  # (elapsed_s, busy_cores)
-        self._stop = threading.Event()
-        self._start = 0.0
+        # NOTE: the attribute names below are deliberately NOT `_stop`/`_start`:
+        # threading.Thread owns private methods with those names, and shadowing
+        # them breaks Thread.join() with "TypeError: 'Event' object is not
+        # callable".
+        self._stop_event = threading.Event()
+        self._started_at = 0.0
         self._prev_total, self._prev_busy = read_cpu_times()
-        self._prev_time = 0.0
 
     def run(self) -> None:
-        self._start = time.monotonic()
-        self._prev_time = self._start
-        while not self._stop.wait(self.interval):
+        self._started_at = time.monotonic()
+        previous_time = self._started_at
+        while not self._stop_event.wait(self.interval):
             now = time.monotonic()
             total, busy = read_cpu_times()
-            d_total = total - self._prev_total
-            d_busy = busy - self._prev_busy
-            cores = (d_busy / d_total) if d_total > 0 else 0.0
-            self.samples.append((now - self._start, round(cores, 3)))
-            self._prev_total, self._prev_busy, self._prev_time = total, busy, now
+            delta_total = total - self._prev_total
+            delta_busy = busy - self._prev_busy
+            cores = (delta_busy / delta_total) if delta_total > 0 else 0.0
+            self.samples.append((now - self._started_at, round(cores, 3)))
+            self._prev_total, self._prev_busy = total, busy
+            previous_time = now
 
-    def stop(self) -> None:
-        self._stop.set()
+    def stop_sampling(self) -> None:
+        self._stop_event.set()
 
 
 def percentile(values: list[float], fraction: float) -> float:
@@ -151,13 +167,23 @@ def summarize_cpu(samples: list[tuple[float, float]], ncpu: int) -> dict:
     }
 
 
-def parse_timeline(log_path: str) -> list[dict]:
-    """Recover project start/stop events from the timestamped log."""
+def project_key(path_or_name: str) -> str:
+    """Normalise a project path or name to a comparable key."""
+    base = path_or_name.replace("\\", "/").rstrip("/").split("/")[-1]
+    if base.endswith(".csproj"):
+        base = base[: -len(".csproj")]
+    return base
+
+
+def parse_log(log_path: str) -> tuple[list[dict], dict, float]:
+    """Recover the timeline, the task aggregates and the last output stamp."""
     events: list[dict] = []
+    tasks: dict[str, dict] = {}
+    last_stamp = 0.0
     try:
         handle = open(log_path, "r", encoding="utf-8", errors="replace")
     except OSError:
-        return events
+        return events, tasks, last_stamp
     with handle:
         for line in handle:
             head, _, rest = line.partition("|")
@@ -165,29 +191,38 @@ def parse_timeline(log_path: str) -> list[dict]:
                 stamp = float(head.strip())
             except ValueError:
                 continue
+            last_stamp = max(last_stamp, stamp)
             match = _ARROW_RE.match(rest)
             if match:
                 events.append(
                     {
                         "t": stamp,
-                        "kind": "start",
-                        "project": match.group("name"),
+                        "kind": "done",
+                        "project": project_key(match.group("name")),
                         "output": match.group("out"),
                     }
                 )
                 continue
-            match = _PROJ_START_RE.match(rest)
+            match = _IS_BUILDING_RE.match(rest)
             if match:
                 events.append(
-                    {"t": stamp, "kind": "start", "project": match.group("proj")}
+                    {"t": stamp, "kind": "start", "project": project_key(match.group("proj"))}
                 )
                 continue
-            match = _PROJ_DONE_RE.match(rest)
+            match = _DONE_RE.match(rest)
             if match:
                 events.append(
-                    {"t": stamp, "kind": "done", "project": match.group("proj")}
+                    {"t": stamp, "kind": "done", "project": project_key(match.group("proj"))}
                 )
-    return events
+                continue
+            match = _PERF_ROW_RE.match(rest)
+            if match:
+                name = match.group("task")
+                tasks[name] = {
+                    "total_ms": int(match.group("ms")),
+                    "calls": int(match.group("calls")),
+                }
+    return events, tasks, last_stamp
 
 
 def in_flight_profile(events: list[dict], wall: float) -> dict:
@@ -196,14 +231,16 @@ def in_flight_profile(events: list[dict], wall: float) -> dict:
     This is the issue's "95 % of the time >= 4 projects in flight" metric,
     measured: a project is in flight from its start event to its done event.
     """
-    starts = sorted(
-        (e["t"], e["project"]) for e in events if e["kind"] == "start"
-    )
+    starts = sorted((e["t"], e["project"]) for e in events if e["kind"] == "start")
     dones = sorted((e["t"], e["project"]) for e in events if e["kind"] == "done")
+    profile: dict = {
+        "available": False,
+        "projects_started": len(starts),
+        "projects_finished": len(dones),
+    }
     if not starts:
-        return {"available": False}
+        return profile
 
-    # Walk the merged event stream and sample the in-flight count on a 1 s grid.
     grid = 0.0
     step = 1.0
     inflight_at: list[tuple[float, int]] = []
@@ -220,18 +257,14 @@ def in_flight_profile(events: list[dict], wall: float) -> dict:
         grid += step
 
     if not inflight_at:
-        return {"available": False}
+        return profile
 
     counts = [c for _, c in inflight_at]
-    profile = {
-        "available": True,
-        "grid_seconds": step,
-        "avg_in_flight": round(sum(counts) / len(counts), 3),
-        "max_in_flight": max(counts),
-        "projects_started": len(starts),
-        "projects_finished": len(dones),
-    }
-    for threshold in (1, 2, 3, 4, 6, 8, 12, 16):
+    profile["available"] = True
+    profile["grid_seconds"] = step
+    profile["avg_in_flight"] = round(sum(counts) / len(counts), 3)
+    profile["max_in_flight"] = max(counts)
+    for threshold in (1, 2, 3, 4, 6, 8, 12, 16, 24):
         profile[f"fraction_at_or_above_{threshold}"] = round(
             sum(1 for c in counts if c >= threshold) / len(counts), 4
         )
@@ -285,10 +318,9 @@ def main() -> int:
             log.flush()
         exit_code = process.wait()
     wall = time.monotonic() - started
-    sampler.stop()
+    sampler.stop_sampling()
     sampler.join(timeout=5.0)
 
-    events = parse_timeline(log_path)
     result = {
         "label": args.label,
         "command": command,
@@ -298,18 +330,34 @@ def main() -> int:
         "cpu_model": cpu_model(),
         "cpu": summarize_cpu(sampler.samples, ncpu),
         "cpu_samples": [[round(t, 3), c] for t, c in sampler.samples],
-        "projects_in_flight": in_flight_profile(events, wall),
-        "timeline": events,
     }
+
+    # The measurement above is the point of the run: write it BEFORE the
+    # analysis, so a failure in the analysis cannot lose the numbers.
+    with open(json_path, "w", encoding="utf-8") as handle:
+        json.dump(result, handle, indent=2)
+
+    try:
+        events, tasks, last_stamp = parse_log(log_path)
+        result["last_output_seconds"] = round(last_stamp, 3)
+        result["tasks"] = tasks
+        result["projects_in_flight"] = in_flight_profile(events, wall)
+        result["timeline"] = events
+    except Exception:  # noqa: BLE001 — the measurement above already survived
+        result["analysis_error"] = traceback.format_exc()
+
     with open(json_path, "w", encoding="utf-8") as handle:
         json.dump(result, handle, indent=2)
 
     cpu = result["cpu"]
+    tasks = result.get("tasks", {})
+    csc = tasks.get("Csc", {})
     print(
         f"[measure-build-cpu] label={args.label} exit={exit_code} "
         f"wall={wall:.1f}s avg_cores={cpu.get('avg_busy_cores')} "
         f"max_cores={cpu.get('max_busy_cores')} "
-        f"at4={cpu.get('fraction_at_or_above_3_5_cores')} -> {json_path}"
+        f"at4={cpu.get('fraction_at_or_above_3_5_cores')} "
+        f"csc_calls={csc.get('calls')} csc_ms={csc.get('total_ms')} -> {json_path}"
     )
     return exit_code
 

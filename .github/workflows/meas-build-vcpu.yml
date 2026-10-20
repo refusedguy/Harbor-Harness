@@ -187,14 +187,21 @@ jobs:
           d = json.load(open(path))
           cpu = d["cpu"]
           pf = d.get("projects_in_flight", {})
+          tasks = d.get("tasks", {})
+          csc = tasks.get("Csc", {})
+          gate = tasks.get("Exec", {})
           print(f"{label}: wall={d['wall_seconds']}s exit={d['exit_code']} "
                 f"avg_cores={cpu.get('avg_busy_cores')} max_cores={cpu.get('max_busy_cores')} "
                 f"at_3_5_cores={cpu.get('fraction_at_or_above_3_5_cores')} "
+                f"csc={csc.get('calls')}calls/{csc.get('total_ms')}ms "
+                f"gate={gate.get('total_ms')}ms "
                 f"max_projects_in_flight={pf.get('max_in_flight')} "
                 f"frac_ge4_in_flight={pf.get('fraction_at_or_above_4')} {restore}")
           with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as fh:
               fh.write(f"| {label} | {d['wall_seconds']} | {cpu.get('avg_busy_cores')} "
-                       f"| {cpu.get('max_busy_cores')} | {pf.get('max_in_flight')} "
+                       f"| {cpu.get('max_busy_cores')} | {csc.get('total_ms')} "
+                       f"| {csc.get('calls')} | {gate.get('total_ms')} "
+                       f"| {pf.get('max_in_flight')} "
                        f"| {pf.get('fraction_at_or_above_4')} |\n")
           PY
 
