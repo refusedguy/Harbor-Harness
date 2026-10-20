@@ -311,7 +311,7 @@ public sealed class DefaultAgent : IAgent
         // unwound through the layers.
         Result<AgentState> bound = ReadBoundState();
         if (bound.IsFailure)
-            return Result.Failure(bound.Error);
+            return bound.ConvertFailure();
 
         AgentState state = bound.Value;
 
@@ -356,7 +356,7 @@ public sealed class DefaultAgent : IAgent
         // out of the corridor.
         Result<AgentState> bound = ReadBoundState();
         if (bound.IsFailure)
-            return Result.Failure(bound.Error);
+            return bound.ConvertFailure();
 
         AgentState state = bound.Value;
 
