@@ -89,7 +89,7 @@ recorded, because they answer #44's topology question.
 
 | Site | Verdict | Reason |
 |---|---|---|
-| `src/Harbor.AgentRuntime/Agents/DefaultAgent.cs:110` | mandatory | listener fan-out drives sub-agent/turn accounting |
+| `src/Harbor.AgentRuntime/Agents/DefaultAgent.cs:300-303` | mandatory | listener fan-out drives sub-agent/turn accounting. The subscription is taken when a caller calls `IAgent.Subscribe`, not in the agent's constructor (#1561): the agent no longer holds a bus subscription of its own, so an agent nobody listens to leaves the bus with zero subscribers |
 | `src/Harbor.Application/Diagnostics/DiagnosticsAggregator.cs:102,103` | mandatory | tool-error and agent-error records must exist for `/diagnostics` |
 | `src/Harbor.Ipc.Server/Protocol/EventBroadcaster.cs:129` | mandatory | remote/daemon clients and reconnect replay (own 1000-envelope ring) |
 | `src/Harbor.Ipc.InProcess/InProcessHarborClient.cs:104` | mandatory | in-process client stream |
@@ -100,7 +100,7 @@ recorded, because they answer #44's topology question.
 | `apps/Harbor.App.Avalonia/Hosting/UiEventRouter.cs:61` | mandatory | Avalonia UI state router |
 | `apps/Harbor.App.Cli/Commands/DemoCommand.cs:236` | optional | demo renderer; no state depends on it |
 | plugin subscriptions (#16 above) | optional | third-party extension point |
-| `src/Harbor.Telemetry.Core/TracingAgentProxy.cs:30` | n/a | subscribes to an *agent*, not to the bus |
+| `src/Harbor.Telemetry.Core/TracingAgentProxy.cs:30` | n/a | the proxy holds no subscription of its own — it forwards to the agent, and since #1561 the agent's subscription IS a bus subscription |
 
 `EventBusAppStoreDispatcher` used to sit in this table as "the UI state
 projection — the state the user reads". It was not: no composition root

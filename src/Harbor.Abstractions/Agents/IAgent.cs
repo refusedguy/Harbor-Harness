@@ -159,6 +159,24 @@ public interface IAgent : IAgentRunner, IDisposable
     /// </summary>
     /// <param name="listener">Async callback invoked for every event.</param>
     /// <returns>An <see cref="IDisposable" /> that removes the listener on dispose.</returns>
+    /// <remarks>
+    ///     <para>
+    ///         <b>One subscription contract (#1561).</b> This is an
+    ///         <see cref="IEventBus" /> subscription — the same one the bus offers every
+    ///         other consumer, with the same promise and the same implementation. The agent
+    ///         used to keep a second fan-out of its own next to the bus (a hand-rolled
+    ///         listener registry with its own list, lock, snapshot and dispatch loop), which
+    ///         meant a fix to the ordering, the backpressure or the eviction of subscribers
+    ///         in one of the two never reached the other.
+    ///     </para>
+    ///     <para>
+    ///         <b>What the caller may rely on.</b> Listeners are invoked in subscription
+    ///         order, one at a time; a listener that throws is logged and skipped — the
+    ///         other listeners still receive the event, and the failing one stays
+    ///         subscribed; disposing the returned handle unsubscribes the listener, and
+    ///         disposing the agent stops delivery altogether.
+    ///     </para>
+    /// </remarks>
     public IDisposable Subscribe(Func<AgentEvent, CancellationToken, ValueTask> listener);
 
     /// <summary>

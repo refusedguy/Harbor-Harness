@@ -109,6 +109,21 @@ The normative table is [`docs/EVENT_BUS_SINKS.md`](./EVENT_BUS_SINKS.md) §2-§4
 (registration sites, subscriber sites, the guard term by term). The DIM is pinned
 by `tests/Harbor.TestKit.Support/TestEventBusMiddleware.cs:25-95`.
 
+### One fan-out, not two
+
+`IAgent.Subscribe` (`src/Harbor.Abstractions/Agents/IAgent.cs:156-180`) hands out
+a BUS subscription. The agent used to keep a second fan-out next to the bus — a
+hand-rolled listener registry with its own list, lock, snapshot and dispatch
+loop — so the call order, the backpressure and the fate of a failing subscriber
+were decided in two places, and a fix in one of them never reached the other.
+One list, one dispatch loop, one place to fix.
+
+The agent's promise is narrower than the bus's in exactly one respect, and the
+difference is deliberate: a listener that throws is LOGGED and kept, where the
+bus evicts a subscriber whose handler threw
+(`src/Harbor.AgentRuntime/Agents/DefaultAgent.cs:316-334`). A listener that had
+one bad day must not silently stop receiving events.
+
 ### The two UI seams — state this to yourself before writing a renderer
 
 1. **Store seam (the convention).** An `AgentEvent` enters UI state through

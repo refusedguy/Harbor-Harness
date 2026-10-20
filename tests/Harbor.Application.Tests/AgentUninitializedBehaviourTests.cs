@@ -212,9 +212,11 @@ public sealed class AgentUninitializedBehaviourTests
 
         await Assert.That(received.Count).IsEqualTo(1)
             .Because(
-                "The bus subscription is installed in the CONSTRUCTOR, so this callback runs before any "
-                + "Initialize. It used to read `State?.SessionId`; the Maybe rewrite must resolve the "
-                + "unbound session id to Maybe.None rather than dereference a state that does not exist.");
+                "The listener is an event-bus subscription (#1561: the agent no longer fans out into a "
+                + "registry of its own), so it runs before any Initialize and reaches a callback that "
+                + "knows nothing about the agent's state. It used to read `State?.SessionId`; the Maybe "
+                + "rewrite must resolve the unbound session id to Maybe.None rather than dereference a "
+                + "state that does not exist.");
     }
 
     [Test]
