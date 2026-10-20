@@ -28,6 +28,11 @@
          Harbor.Hosting references — declared here for the same reason as the
          rows above: the test names the type, so the type is a real edge. -->
     <ProjectReference Include="../../src/Harbor.Providers.OpenAiCompatible/Harbor.Providers.OpenAiCompatible.csproj"/>
+    <!-- #1501: OllamaProviderFactoryTests binds the AuthStore / JsonConfigStore
+         vocabulary the provider factories take, which Harbor.Hosting
+         references — declared here for the same reason as the rows above: the
+         test names the type, so the type is a real edge. -->
+    <ProjectReference Include="../../src/Harbor.Application/Harbor.Application.csproj"/>
     <!--
       #1889: the helpers this project uses (the scopes, the logging doubles)
       live in the `Harbor.TestKit.Support` sibling, and #1834 reached them
