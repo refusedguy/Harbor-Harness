@@ -406,6 +406,56 @@ The file is a **ratchet**: an exception the tree no longer produces fails the
 gate (`EXCEPTION-STALE`), so a closed hole cannot stay blessed. It can only
 shrink.
 
+## String-switch gate, issue 1575
+
+`tools/check-string-switch.py` answers one question about every `switch` in
+`src/` and `apps/`: **does it compare a string literal, and is every ladder
+that is still there named in the exceptions file with a reason?**
+
+```bash
+./tools/check-string-switch.py --report                    # the census, exit 0
+./tools/check-string-switch.py --propose PATH:LINE         # the table a switch would become
+./tools/check-string-switch.py --apply                     # replay the reviewed rewrites
+./tools/check-string-switch.py --self-test                 # prove the gate still fails on a planted switch
+./tools/check-string-switch.py --check --min-labels 280    # the gate itself, exit 1 on a violation
+```
+
+**Why it exists.** Issue #1575 filed the shape as boilerplate: 152 `case "…"`
+labels, of which 47 lived in one file (the CellForge key-spec parser) and
+answered two questions ("which modifier?" and "which key?") from two case
+ladders. The replacement is a `FrozenDictionary` table, and the argument for
+it is not lookup speed (the compiler already hash-optimises a large string
+switch): it is that the vocabulary gets **one owner**, so a key added to one
+ladder and not its twin cannot happen.
+
+That argument only holds if nothing else is allowed to grow a second ladder
+over the same strings, which is what the gate is for. It runs in **baseline
+mode**: the ladders the tree has today are recorded in
+`tools/string-switch-exceptions.txt`, one row per ladder with a reason, and
+only NEW ladders fail. The file is a ratchet in both directions: a row the
+tree no longer produces fails too, so a closed hole cannot stay blessed.
+
+**What counts as a string switch.** A `switch` whose selector dispatches on a
+string, in either C# form (`switch (kind) { case "udp": … }` and
+`kind switch { "udp" => … }`). The test is the LABEL, not the selector's
+declared type: a `case` label that is a string literal only compiles when the
+selector is a string. Comments and string literals are blanked before the
+scan, so a ladder inside a raw string (the source generators under
+`src/Harbor.CodeGen/` EMIT ladders) is not a ladder, and a ladder in real
+code is.
+
+**The ratchet covers the statement form**, the population #1575 counts. The
+expression form is reported as a measured, ungated class: 46 switches and 238
+labels today, and a `switch` expression over a small closed vocabulary is not
+the same defect.
+
+**`--propose` names the table a switch would become**, when every arm of it
+reduces to one value expression, and says why it cannot when it does not (an
+arm with a `when` guard, an arm that assigns two locals). `--apply` replays
+the reviewed rewrites in `tools/string-switch-rewrites.py` and reports the
+census before and after, so the rewrite is reproducible and its effect is
+measured rather than asserted.
+
 ## Package-set checks (test and sample projects)
 
 `tools/check-test-packages.py` answers one question about every project under

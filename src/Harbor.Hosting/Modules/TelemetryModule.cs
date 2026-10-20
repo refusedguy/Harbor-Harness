@@ -1,3 +1,4 @@
+using System.Collections.Frozen;
 using System.Globalization;
 using Harbor.Abstractions.Env;
 using Harbor.Abstractions.Events;
@@ -17,6 +18,24 @@ namespace Harbor.Hosting;
 /// </summary>
 internal static class TelemetryModule
 {
+    /// <summary>
+    ///     The <c>HARBOR_TELEMETRY_EXPORT</c> values that name a sink. The
+    ///     lookup key is the trimmed, lowercased environment value, which is
+    ///     what the case ladder this table replaced compared against. A value
+    ///     that is not in the table is an unknown target: it is reported and
+    ///     the sink stays off, never guessed.
+    /// </summary>
+    private static readonly FrozenDictionary<string, TelemetryExportTarget> ExportTargets =
+        FrozenDictionary.ToFrozenDictionary(
+            new Dictionary<string, TelemetryExportTarget>(StringComparer.Ordinal)
+            {
+                ["none"] = TelemetryExportTarget.None,
+                ["off"] = TelemetryExportTarget.None,
+                ["console"] = TelemetryExportTarget.Console,
+                ["file"] = TelemetryExportTarget.File,
+            },
+            StringComparer.Ordinal);
+
     /// <summary>
     ///     Register the tracer/metrics singletons plus the event-bus queue-age
     ///     reporter (#47/S2).
@@ -120,22 +139,13 @@ internal static class TelemetryModule
         string? rawTarget = read(HarborEnv.TelemetryExport);
         if (!string.IsNullOrWhiteSpace(rawTarget))
         {
-            switch (rawTarget.Trim().ToLowerInvariant())
+            if (!ExportTargets.TryGetValue(rawTarget.Trim().ToLowerInvariant(), out TelemetryExportTarget resolved))
             {
-                case "none":
-                case "off":
-                    target = TelemetryExportTarget.None;
-                    break;
-                case "console":
-                    target = TelemetryExportTarget.Console;
-                    break;
-                case "file":
-                    target = TelemetryExportTarget.File;
-                    break;
-                default:
-                    TelemetryModuleLog.UnknownExportTarget(logger, HarborEnv.TelemetryExport, rawTarget);
-                    return null;
+                TelemetryModuleLog.UnknownExportTarget(logger, HarborEnv.TelemetryExport, rawTarget);
+                return null;
             }
+
+            target = resolved;
         }
 
         if (target == TelemetryExportTarget.None)

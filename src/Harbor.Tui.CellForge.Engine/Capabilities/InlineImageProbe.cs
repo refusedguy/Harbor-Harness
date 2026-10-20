@@ -1,3 +1,5 @@
+using System.Collections.Frozen;
+
 namespace Harbor.Tui.CellForge.Capabilities;
 
 /// <summary>Inline-image protocols the runtime can speak.</summary>
@@ -27,15 +29,30 @@ public static class InlineImageProbe
 {
     private const string OverrideVar = "HARBOR_INLINE_IMAGE";
 
+    /// <summary>
+    /// The <c>HARBOR_INLINE_IMAGE</c> values that name a protocol. The lookup
+    /// key is the trimmed, lowercased override value, which is exactly what the case
+    /// ladder this table replaced compared against. A value that is not in
+    /// the table is not an override: the detection below still runs.
+    /// </summary>
+    private static readonly FrozenDictionary<string, InlineImageKind> OverrideKinds =
+        FrozenDictionary.ToFrozenDictionary(
+            new Dictionary<string, InlineImageKind>(StringComparer.Ordinal)
+            {
+                ["off"] = InlineImageKind.None,
+                ["osc1337"] = InlineImageKind.Osc1337,
+                ["kitty"] = InlineImageKind.KittyApc,
+            },
+            StringComparer.Ordinal);
+
     /// <summary>Detects the inline-image protocol for the current session.</summary>
     public static InlineImageKind Detect(Func<string, string?>? environmentLookup = null)
     {
         var lookup = environmentLookup ?? Environment.GetEnvironmentVariable;
-        switch (NormalizeOverride(lookup(OverrideVar)))
+        string? overrideValue = NormalizeOverride(lookup(OverrideVar));
+        if (overrideValue is not null && OverrideKinds.TryGetValue(overrideValue, out InlineImageKind overridden))
         {
-            case "off": return InlineImageKind.None;
-            case "osc1337": return InlineImageKind.Osc1337;
-            case "kitty": return InlineImageKind.KittyApc;
+            return overridden;
         }
 
         if (IsInsideMultiplexer(lookup))
