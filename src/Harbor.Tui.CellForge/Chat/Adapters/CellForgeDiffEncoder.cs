@@ -1,6 +1,6 @@
 namespace Harbor.Tui.CellForge.Rendering;
 
-using System.Text;
+using System.Buffers;
 using Harbor.Ui.Framework.Rendering;
 using Ensure = Harbor.Abstractions.Extensions.Ensure;
 using Harbor.Ui.Framework.Rendering.Protocol;
@@ -405,28 +405,58 @@ public static class HunkVirtualizer
     ///     the old shape's per-line <c>Replace("\t", "  ")</c>, materialized
     ///     once instead of once per line plus once per tabbed line.
     /// </summary>
+    /// <remarks>
+    ///     The expansion is written into a POOLED buffer and handed to the
+    ///     string constructor, so a tabbed line costs ONE allocation (the
+    ///     string). The first cut of this slice built the line in a
+    ///     <see cref="System.Text.StringBuilder" /> instead, and the CI measurement of
+    ///     that cut read **208 936 B per split against the old shape's
+    ///     175 248 B** — a StringBuilder per line costs more than the
+    ///     Replace it replaced (the object, its chunk buffer and the string
+    ///     it hands back), which is exactly the kind of number this slice
+    ///     exists to remove.
+    /// </remarks>
     private static string ExpandTabs(ReadOnlySpan<char> line)
     {
-        if (line.IndexOf('\t') < 0)
+        int firstTab = line.IndexOf('\t');
+        if (firstTab < 0)
         {
             return line.ToString();
         }
 
-        var sb = new StringBuilder(line.Length + 8);
-        for (int i = 0; i < line.Length; i++)
+        int tabs = 0;
+        for (int i = firstTab; i < line.Length; i++)
         {
-            char c = line[i];
-            if (c == '\t')
+            if (line[i] == '\t')
             {
-                sb.Append("  ");
-            }
-            else
-            {
-                sb.Append(c);
+                tabs++;
             }
         }
 
-        return sb.ToString();
+        char[] buffer = ArrayPool<char>.Shared.Rent(line.Length + tabs);
+        try
+        {
+            int n = 0;
+            for (int i = 0; i < line.Length; i++)
+            {
+                char c = line[i];
+                if (c == '\t')
+                {
+                    buffer[n++] = ' ';
+                    buffer[n++] = ' ';
+                }
+                else
+                {
+                    buffer[n++] = c;
+                }
+            }
+
+            return new string(buffer, 0, n);
+        }
+        finally
+        {
+            ArrayPool<char>.Shared.Return(buffer);
+        }
     }
 
     private static void FlushHunk(
