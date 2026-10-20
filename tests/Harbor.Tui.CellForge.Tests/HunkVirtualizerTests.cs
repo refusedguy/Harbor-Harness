@@ -37,9 +37,17 @@ public class HunkVirtualizerTests
     [Test]
     public async Task Thresholds_Match_Opencode_Port()
     {
+        // The three thresholds ARE constants, and the constants ARE the
+        // subject: this test pins the numbers the port was measured at. A
+        // change to a constant recompiles these assertions to the new value
+        // and the test fails, so the drift is noticed. TUnit's
+        // TUnitAssertions0005 reports the constant first argument; see the
+        // policy in tests/Directory.Build.props.
+#pragma warning disable TUnitAssertions0005 // the virtualizer threshold constants are the subject: the test pins their numeric values
         await Assert.That(HunkVirtualizer.VirtualMinLines).IsEqualTo(3000);
         await Assert.That(HunkVirtualizer.VirtualChunkLines).IsEqualTo(128);
         await Assert.That(HunkVirtualizer.SplitWidthThreshold).IsEqualTo(120);
+#pragma warning restore TUnitAssertions0005
     }
 
     [Test]

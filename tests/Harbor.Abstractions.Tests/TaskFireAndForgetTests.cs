@@ -24,12 +24,51 @@ public class TaskFireAndForgetTests
     [Test]
     public async Task FaultedTask_NullCallback_ObservedWithoutThrow()
     {
-        TaskFireAndForget.Forget(Task.FromException(new InvalidOperationException("dropped")));
+        // The claim this test makes is "the fault was OBSERVED": with a null
+        // callback the exception is read and dropped, so it never surfaces as
+        // an unobserved task exception. `Assert.That(true).IsTrue()` — the
+        // assertion this test used to end with — asserted nothing at all
+        // (TUnit's TUnitAssertions0005 says so out loud), so the claim was
+        // never checked. It is checked here: the process-wide unobserved
+        // exception event is captured, and the assertion is that THIS fault
+        // never reached it.
+        var unobserved = new List<Exception>();
+        void OnUnobserved(object? sender, UnobservedTaskExceptionEventArgs args)
+        {
+            lock (unobserved)
+            {
+                unobserved.AddRange(args.Exception.InnerExceptions);
+            }
+        }
 
-        await Task.Delay(100).ConfigureAwait(false);
-        GC.Collect();
-        GC.WaitForPendingFinalizers();
-        await Assert.That(true).IsTrue();
+        TaskScheduler.UnobservedTaskException += OnUnobserved;
+        try
+        {
+            TaskFireAndForget.Forget(Task.FromException(new InvalidOperationException("dropped")));
+
+            await Task.Delay(100).ConfigureAwait(false);
+            GC.Collect();
+            GC.WaitForPendingFinalizers();
+            // The event is raised from the finalizer thread, so give it a
+            // moment to be delivered before the absence is asserted.
+            await Task.Delay(100).ConfigureAwait(false);
+        }
+        finally
+        {
+            TaskScheduler.UnobservedTaskException -= OnUnobserved;
+        }
+
+        // Snapshot under the lock: the handler runs on a finalizer thread, and
+        // unsubscribing does not prove it is not mid-add.
+        Exception[] surfaced;
+        lock (unobserved)
+        {
+            surfaced = [.. unobserved];
+        }
+
+        await Assert.That(surfaced.Any(ex => ex.Message == "dropped")).IsFalse()
+            .Because("TaskFireAndForget reads the fault even with a null callback, so it must "
+                   + "never reach TaskScheduler.UnobservedTaskException");
     }
 
     [Test]

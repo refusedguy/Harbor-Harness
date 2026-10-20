@@ -118,7 +118,7 @@ public class PluginGracefulAbsenceTests : PluginAbsenceTestBase
             .GetAllTools()
             .Select(t => t.Name.Value)
             .ToArray();
-        await Assert.That(toolNames.Contains("absence_s1_hello")).IsEqualTo(false)
+        await Assert.That(toolNames.Contains("absence_s1_hello")).IsFalse()
             .Because("slice 3: plugin tools arrive over MCP from harbor-plugins-host, "
                 + "never through the in-process IToolRegistry");
         await Assert.That(toolNames.Contains("read")).IsTrue()

@@ -51,15 +51,15 @@ public class PluginReloadServiceTests : PluginProbeTestBase
         // Slice 3: reload registers nothing in-process — the tools live in
         // the host process. Zero loaded with the restart-the-host note.
         await Assert.That(summary.Loaded).IsEqualTo(0);
-        await Assert.That(summary.Notes.Any(n => n.Contains("harbor-plugins-host", StringComparison.Ordinal))).IsEqualTo(true);
+        await Assert.That(summary.Notes.Any(n => n.Contains("harbor-plugins-host", StringComparison.Ordinal))).IsTrue();
         var toolsNow = sp.GetRequiredService<IToolRegistry>().GetAllTools()
             .Select(t => t.Name.Value)
             .ToArray();
-        await Assert.That(toolsNow.Contains($"hello_{uniqueSuffix}")).IsEqualTo(false);
+        await Assert.That(toolsNow.Contains($"hello_{uniqueSuffix}")).IsFalse();
 
         // The scope enumeration still sees the file for the /plugins panel.
         var installed = service.ListInstalled();
-        await Assert.That(installed.Any(p => p.Name.Equals($"reload-probe-{uniqueSuffix}.cs", StringComparison.Ordinal))).IsEqualTo(true);
+        await Assert.That(installed.Any(p => p.Name.Equals($"reload-probe-{uniqueSuffix}.cs", StringComparison.Ordinal))).IsTrue();
     }
 
     /// <summary>

@@ -76,6 +76,6 @@ public class PluginStartupLoadTests : PluginProbeTestBase
         bool found = sp.GetRequiredService<IToolRegistry>()
             .GetAllTools()
             .Any(t => t.Name.Value.Equals(toolName, StringComparison.Ordinal));
-        await Assert.That(found).IsEqualTo(false);
+        await Assert.That(found).IsFalse();
     }
 }

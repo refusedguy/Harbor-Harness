@@ -119,12 +119,14 @@ providers/                            — 13 JSON LLM provider configs (embedded
 docs/specs/                           — 20 design specification documents (top-level specs/ no longer exists)
 docs/                                 — 75 top-level docs (architecture, tools catalog, roadmap, patterns, …)
                                         + adr/, specs/, standards/, ui/, themes/, notes/, .kilo-docs/ (archived sprint notes)
-tests/                                — 44 test/bench projects, one directory each
+tests/                                — 45 test/bench projects, one directory each
                                         incl. shared Harbor.TestKit (+ its Harbor.TestKit.Tui
                                         part) and Harbor.Benchmarks
-                                        (`tests/` holds 46 directories: the 44 projects plus
+                                        and the TUnit analyzer canary (a compile fixture, not a
+                                        suite: it is not in Harbor.slnx — see #1836)
+                                        (`tests/` holds 47 directories: the 45 projects plus
                                         `fixtures/` and `Plugins/`, which are data and have no .csproj — so a
-                                        plain `ls -d tests/*/ | wc -l` reads 46, two more than the
+                                        plain `ls -d tests/*/ | wc -l` reads 47, two more than the
                                         project count, and is the wrong number to quote)
 ```
 

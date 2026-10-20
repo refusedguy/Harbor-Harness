@@ -8,7 +8,15 @@ public class AnimationClockTests
     [Test]
     public async Task Cadence_Is_TenHertz()
     {
+        // The target rate IS a constant, and the constant IS the subject: the
+        // test pins the cadence the animation clock was specified with. A
+        // change to the constant recompiles this assertion to the new value
+        // and the test fails, so the cadence cannot move silently. TUnit's
+        // TUnitAssertions0005 reports the constant first argument; see the
+        // policy in tests/Directory.Build.props.
+#pragma warning disable TUnitAssertions0005 // the target-hertz constant is the subject: the test pins its numeric value
         await Assert.That(AnimationClock.TargetHertz).IsEqualTo(10);
+#pragma warning restore TUnitAssertions0005
         await Assert.That(AnimationClock.Interval).IsEqualTo(TimeSpan.FromMilliseconds(100));
     }
 

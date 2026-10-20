@@ -8,7 +8,15 @@ public class FrameTickerTests
     [Test]
     public async Task Cap_Is_SixtyFps()
     {
+        // The frame cap IS a constant, and the constant IS the subject: the
+        // test pins the rate the ticker was specified with. A change to the
+        // constant recompiles this assertion to the new value and the test
+        // fails, so the cap cannot move silently. TUnit's TUnitAssertions0005
+        // reports the constant first argument; see the policy in
+        // tests/Directory.Build.props.
+#pragma warning disable TUnitAssertions0005 // the max-hertz constant is the subject: the test pins its numeric value
         await Assert.That(FrameTicker.MaxHertz).IsEqualTo(60);
+#pragma warning restore TUnitAssertions0005
         await Assert.That(FrameTicker.MinInterval).IsEqualTo(TimeSpan.FromMilliseconds(1000.0 / 60));
     }
 

@@ -255,9 +255,17 @@ public class ChangeReportTests
     [Test]
     public async Task ExitCodes_AreDistinct()
     {
+        // The exit codes ARE constants, and the constants ARE the subject:
+        // the test pins the three numbers the CLI exits with. A change to a
+        // constant recompiles these assertions to the new value and the test
+        // fails, so it catches the change instead of hiding it. TUnit's
+        // TUnitAssertions0005 reports the constant first argument; see the
+        // policy in tests/Directory.Build.props.
+#pragma warning disable TUnitAssertions0005 // the exit-code constants are the subject: the test pins their numeric values
         await Assert.That(ChangeReport.ExitAllPassed).IsEqualTo(0);
         await Assert.That(ChangeReport.ExitCheckFailed).IsEqualTo(1);
         await Assert.That(ChangeReport.ExitCannotProduce).IsEqualTo(2);
+#pragma warning restore TUnitAssertions0005
     }
 
     [Test]

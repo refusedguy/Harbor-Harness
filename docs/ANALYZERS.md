@@ -1417,3 +1417,72 @@ If you add new test code that triggers DI006 in the same fixture,
 don't re-suppress — restructure so the new code doesn't need a static
 provider cache. The file-level pragma is scoped to this one fixture
 on purpose.
+
+---
+
+## TUnit's own analyzers (`TUnit.Analyzers`, `TUnit.Assertions.Analyzers`)
+
+TUnit 1.75 ships two analyzer assemblies inside its own NuGet packages —
+`TUnit.Analyzers` in `TUnit.Core` and `TUnit.Assertions.Analyzers` in
+`TUnit.Assertions` — and NuGet hands both to the compiler as analyzers
+automatically. They only ever run on test projects: the TUnit reference
+comes from `Directory.Build.targets`, which adds it to every project with
+`IsTestProject=true`, and nothing under `src/` or `apps/` asks for it.
+
+### The severity table
+
+The rules are on with TUnit's own default severities; the promotion is
+`tests/Directory.Build.props`, and it is the only place the policy is
+written down.
+
+| Rule | Severity | Enforced? | What it reports |
+|------|----------|-----------|-----------------|
+| `TUnitAssertions0005` | Warning (TUnit's default) | **error** for every test project | `Assert.That(...)` whose first argument is a compile-time constant |
+| `TUnitAssertions0015` | Warning (TUnit's default) | **error** for every test project | `IsEqualTo(true)` / `IsEqualTo(false)` where `IsTrue()` / `IsFalse()` belong |
+| `TUnit0055` | Warning | warning — the fix is #1790's `ParallelLimiter` work | `Console.SetOut` / `Console.SetError` inside a test (a real race on the global `Console`) |
+| `TUnit0015` | Warning | warning — the CTS/`[Timeout]` boilerplate is its own ticket | a test with a `CancellationToken` parameter and no `[Timeout]` |
+| `TUnit0023` | Warning | warning | a disposable that is not released in a cleanup method |
+
+The promotion is `WarningsAsErrors`, not `TreatWarningsAsErrors`: the test
+tree keeps `TreatWarningsAsErrors=false` on purpose (RS0030 and CFE0001
+are documented false positives there), and the compiler applies a
+specific warning id next to the general setting — the specific one wins.
+
+### The two shapes of `TUnitAssertions0005`
+
+A constant first argument is one of two things, and they get opposite
+verdicts.
+
+* **A literal** (`Assert.That(true).IsTrue()`) — a **defect**. The
+  assertion cannot fail, so the test proves nothing. Fixed by writing the
+  assertion the test actually means (`Assert.That(() => action()).ThrowsNothing()`,
+  `Assert.That(vm.Status).IsEqualTo("running")`,
+  `Assert.That(() => backend.AppendLines(-1)).Throws<ArgumentOutOfRangeException>()`).
+* **A production constant compared against a number the test owns**
+  (`Assert.That(ContextUsage.WarnThreshold).IsEqualTo(0.50)`) —
+  **legitimate**: the constant IS the subject. The constant is inlined at
+  the call site, so a change to it recompiles the assertion to a different
+  number and the test fails. It is a change detector, not a tautology.
+
+The legitimate ones are waived at the call site, with a reason, the way
+the RS0030 exemptions are:
+
+```csharp
+#pragma warning disable TUnitAssertions0005 // the threshold constant is the subject: the test pins its numeric value
+await Assert.That(ContextUsage.WarnThreshold).IsEqualTo(0.50);
+#pragma warning restore TUnitAssertions0005
+```
+
+A blanket suppression — a file-wide pragma, a `NoWarn` in a `.csproj`, an
+`.editorconfig` entry — is not accepted here: each waiver covers its own
+site and says why the constant is the subject.
+
+### The control
+
+`tools/check-tunit-analyzer-gate.py` builds `tests/TUnitAnalyzerCanary` —
+a project deliberately kept out of `Harbor.slnx`, because its planted
+offender is an error by design — and asserts that the planted offender is
+reported as an error and that the planted *waived* offender is not. If the
+analyzer stopped shipping, if the promotion stopped applying, or if a
+waiver grew past its own site, that check goes red. The gate is proved,
+not assumed.

@@ -72,10 +72,18 @@ public class ToolCallBlockDiffCapTests
     {
         var card = new ToolCallBlock(new ToolCallInfo("t1", "edit", "big.cs"));
 
+        // The preview budget IS a constant, and the constant IS the subject:
+        // the test pins the number the card's renderer is compiled against. A
+        // change to the constant recompiles this assertion to the new value
+        // and the test fails, so the card height cannot move silently. TUnit's
+        // TUnitAssertions0005 reports the constant first argument; see the
+        // policy in tests/Directory.Build.props.
+#pragma warning disable TUnitAssertions0005 // the preview-budget constant is the subject: the test pins its numeric value
         await Assert.That(DiffPreview.MaxPreviewLines).IsEqualTo(6)
             .Because("the visible inline preview is six lines and one overflow row, and this is the "
                    + "budget the tool card's DiffRenderer is compiled against; a silent change here "
                    + "would move the card's height without moving anything the user reads");
+#pragma warning restore TUnitAssertions0005
         await Assert.That(card.HasDiffText).IsFalse()
             .Because("a card built from ToolCallInfo alone carries no result body yet, so the diff "
                    + "surface is empty rather than absent — the guard is about the cap, and this "

@@ -406,6 +406,14 @@ public sealed class LogRowFormatTests
             .ToString(LogRowFormat.TimestampFormat, CultureInfo.InvariantCulture);
 
         await Assert.That(clock.Length).IsEqualTo(LogRowFormat.TimestampWidth);
+        // The level-tag width IS a constant, and the constant IS the subject:
+        // the test pins the number of columns the tag occupies. A change to
+        // the constant recompiles this assertion to the new value and the
+        // test fails, so the column count cannot move silently. TUnit's
+        // TUnitAssertions0005 reports the constant first argument; see the
+        // policy in tests/Directory.Build.props.
+#pragma warning disable TUnitAssertions0005 // the tag-width constant is the subject: the test pins its numeric value
         await Assert.That(LogLevelTag.Width).IsEqualTo(4);
+#pragma warning restore TUnitAssertions0005
     }
 }

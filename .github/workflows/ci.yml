@@ -148,6 +148,12 @@ jobs:
               # a different payload. Editing the tool has the same problem.
               - 'tools/aot-publish-gate.py'
               - '.github/aot-warning-baseline.txt'
+              # The TUnit analyzer gate's instrument (#1836). The same #618
+              # argument as the lines above: editing the tool that proves the
+              # gate must run the job that executes it, or the edit lands
+              # unvalidated. The canary's own source is under tests/, which the
+              # dotnet filter already covers.
+              - 'tools/check-tunit-analyzer-gate.py'
               # NUKE build code, the installer and the native-packaging
               # scripts. Same #618 argument: without these lines an edit to
               # the build tool would set dotnet=false, skip the build job
@@ -343,10 +349,17 @@ jobs:
       - name: Restore the solution (the resolved package graph, no build)
         run: |
           dotnet restore Harbor.slnx
-          # The one scope project outside Harbor.slnx. Harbor.Samples.slnx is
+          # The scope projects outside Harbor.slnx. Harbor.Samples.slnx is
           # NOT restored as a whole: it also lists the contrib/ sample apps,
           # which need workloads this job does not have.
           dotnet restore samples/designsystem-consumer/Harbor.Samples.DesignSystemConsumer.csproj
+          # The TUnit analyzer canary (#1836). It is a scope project — it
+          # lives under tests/ and is tracked — so the package gate below has
+          # to see its resolved graph like every other one. It is not a row
+          # of Harbor.slnx because its planted offender is an ERROR by
+          # design: the build of that project is expected to fail, and one
+          # job (the build job) builds it on purpose to prove the gate.
+          dotnet restore tests/TUnitAnalyzerCanary/TUnitAnalyzerCanary.csproj
       - name: Package-set gate fails on an injected banned package
         run: python3 tools/check-test-packages.py --self-test
       - name: Check the resolved package set of every test and sample project
@@ -790,6 +803,32 @@ jobs:
       # package in the graph.
       - name: No banned assembly in any test/sample output directory
         run: python3 tools/check-test-packages.py --output-only --min-projects 43 --min-output-dirs 40
+
+      # #1836 — the TUnit analyzer gate, proved rather than assumed.
+      #
+      # TUnit's own analyzers report TUnitAssertions0005 (an Assert.That on a
+      # constant) and TUnitAssertions0015 (IsEqualTo(true) where IsTrue()
+      # belongs), and tests/Directory.Build.props promotes both to errors for
+      # every test project. A promotion nobody watches is a decoration: if the
+      # analyzer stopped shipping, the build would go quietly green and the
+      # gate would protect nothing.
+      #
+      # So the gate is proved by a PLANTED OFFENDER. tests/TUnitAnalyzerCanary
+      # is not a row of Harbor.slnx — it is not built by the step above,
+      # because its planted offender is an ERROR by design. This step builds
+      # it on purpose and asserts that the build failed with
+      # TUnitAssertions0005 at the planted line, and that the planted WAIVED
+      # offender was not reported: a waiver that grew past its own site would
+      # fail here.
+      #
+      # The self-test runs first, over synthetic logs, because a checker that
+      # cannot fail is not a checker: it proves the analysis REJECTS a log
+      # with no diagnostic, with the waived site reported, and with the
+      # diagnostic on the wrong line.
+      - name: The TUnit analyzer gate is armed (planted offender, waived site)
+        run: |
+          python3 tools/check-tunit-analyzer-gate.py --selftest
+          python3 tools/check-tunit-analyzer-gate.py
 
       - name: Smoke — CLI binary runs
         run: dotnet exec apps/Harbor.App.Cli/bin/Release/net10.0/Harbor.App.Cli.dll --version

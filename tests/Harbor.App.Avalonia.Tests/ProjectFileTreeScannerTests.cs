@@ -296,6 +296,13 @@ public sealed class ProjectFileTreeScannerTests
     [Test]
     public async Task TheDefaultBudgetsAreNamed_AndMatchThePortsOwnEntryCap()
     {
+        // Both budgets are constants, and the constants ARE the subject: the
+        // first assertion pins the walk depth, the second one exists to catch
+        // the two constants drifting apart. A change to either recompiles the
+        // comparison to a different pair of numbers, so the test fails and the
+        // drift is noticed. TUnit's TUnitAssertions0005 reports the constant
+        // first argument; see the policy in tests/Directory.Build.props.
+#pragma warning disable TUnitAssertions0005 // the budget constants are the subject: the test pins them and catches them drifting apart
         await Assert.That(ProjectFileTreeScanner.DefaultMaxDepth).IsEqualTo(3)
             .Because("three levels is what the sidebar has always drawn; changing it here would be a "
                    + "silent UX change riding along in a refactor");
@@ -304,6 +311,7 @@ public sealed class ProjectFileTreeScannerTests
             .Because("the walk budget and the per-directory budget are the same number on purpose: the "
                    + "port caps one directory, a walk of N directories at that cap is N times it, and "
                    + "two constants for one idea drift apart silently");
+#pragma warning restore TUnitAssertions0005
     }
 
     // ── fixtures ──────────────────────────────────────────────────────────

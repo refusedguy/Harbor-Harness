@@ -92,18 +92,24 @@ public class PanelChromeTests
     public async Task PaintTitleRow_TinyRects_NoThrow()
     {
         var buffer = new ScreenBuffer(4, 2);
-        PanelChrome.PaintTitleRow(buffer, 0, 0, 0, "INPUT");
-        PanelChrome.PaintTitleRow(buffer, 0, 0, 2, "INPUT");
-        PanelChrome.PaintTitleRow(buffer, 0, 0, 4, string.Empty);
-        PanelChrome.PaintTopRule(buffer, new Rect(0, 0, 0, 0));
-        PanelChrome.PaintBottomRule(buffer, new Rect(0, 0, 0, 0));
-        PanelChrome.PaintLeftRule(buffer, new Rect(0, 0, 0, 0));
-        PanelChrome.PaintMessageSeparator(buffer, 0, 0, 0);
-        PanelChrome.FillPanelBackground(buffer, new Rect(0, 0, 0, 0));
-        PanelChrome.PaintBorderBox(buffer, new Rect(0, 0, 0, 0));
-        PanelChrome.PaintBorderBox(buffer, new Rect(0, 0, 1, 1));
-        PanelChrome.PaintBorderBox(buffer, new Rect(0, 0, 0, 5), BoxStyle.SquareFrame);
-        await Assert.That(true).IsTrue();
+        // "NoThrow" is the claim, so the assertion is that the degenerate-rect
+        // sweep does not throw. The trailing `Assert.That(true).IsTrue()`
+        // asserted nothing (TUnit's TUnitAssertions0005 says so) — it could
+        // not fail, so the sweep it decorated was an unverified call list.
+        await Assert.That(() =>
+        {
+            PanelChrome.PaintTitleRow(buffer, 0, 0, 0, "INPUT");
+            PanelChrome.PaintTitleRow(buffer, 0, 0, 2, "INPUT");
+            PanelChrome.PaintTitleRow(buffer, 0, 0, 4, string.Empty);
+            PanelChrome.PaintTopRule(buffer, new Rect(0, 0, 0, 0));
+            PanelChrome.PaintBottomRule(buffer, new Rect(0, 0, 0, 0));
+            PanelChrome.PaintLeftRule(buffer, new Rect(0, 0, 0, 0));
+            PanelChrome.PaintMessageSeparator(buffer, 0, 0, 0);
+            PanelChrome.FillPanelBackground(buffer, new Rect(0, 0, 0, 0));
+            PanelChrome.PaintBorderBox(buffer, new Rect(0, 0, 0, 0));
+            PanelChrome.PaintBorderBox(buffer, new Rect(0, 0, 1, 1));
+            PanelChrome.PaintBorderBox(buffer, new Rect(0, 0, 0, 5), BoxStyle.SquareFrame);
+        }).ThrowsNothing();
     }
 
     // ── Composer chrome ─────────────────────────────────────────────────────
@@ -413,25 +419,30 @@ public class PanelChromeTests
     [Test]
     public async Task Blocks_EmptyAndUnicode_PaintSeparatorsWithoutThrow()
     {
-        foreach (string text in new[] { string.Empty, " ", "привет 🌍\n日本語\t• tab", new string('x', 200) })
+        // "WithoutThrow" is the claim, so the assertion is that the paint
+        // sweep does not throw. The trailing `Assert.That(true).IsTrue()`
+        // asserted nothing (TUnit's TUnitAssertions0005 says so), so a
+        // painter that threw on the 200-character row would have passed.
+        await Assert.That(() =>
         {
-            var ubuffer = new ScreenBuffer(24, 6);
-            var user = new UserBlock(text);
-            int uh = user.Measure(24).MinLines;
-            user.Paint(new BlockPaintContext(ubuffer, new Rect(0, 0, 24, Math.Min(6, uh)), 0, showSeparators: true));
+            foreach (string text in new[] { string.Empty, " ", "привет 🌍\n日本語\t• tab", new string('x', 200) })
+            {
+                var ubuffer = new ScreenBuffer(24, 6);
+                var user = new UserBlock(text);
+                int uh = user.Measure(24).MinLines;
+                user.Paint(new BlockPaintContext(ubuffer, new Rect(0, 0, 24, Math.Min(6, uh)), 0, showSeparators: true));
 
-            var abuffer = new ScreenBuffer(24, 8);
-            var assistant = new AssistantMarkdownBlock(text);
-            int ah = assistant.Measure(24).MinLines;
-            assistant.Paint(new BlockPaintContext(abuffer, new Rect(0, 0, 24, Math.Min(8, ah)), 0, showSeparators: true));
+                var abuffer = new ScreenBuffer(24, 8);
+                var assistant = new AssistantMarkdownBlock(text);
+                int ah = assistant.Measure(24).MinLines;
+                assistant.Paint(new BlockPaintContext(abuffer, new Rect(0, 0, 24, Math.Min(8, ah)), 0, showSeparators: true));
 
-            var sbuffer = new ScreenBuffer(24, 3);
-            var system = new SystemBlock(text);
-            int sh = system.Measure(24).MinLines;
-            system.Paint(new BlockPaintContext(sbuffer, new Rect(0, 0, 24, Math.Min(3, sh)), 0, showSeparators: true));
-        }
-
-        await Assert.That(true).IsTrue();
+                var sbuffer = new ScreenBuffer(24, 3);
+                var system = new SystemBlock(text);
+                int sh = system.Measure(24).MinLines;
+                system.Paint(new BlockPaintContext(sbuffer, new Rect(0, 0, 24, Math.Min(3, sh)), 0, showSeparators: true));
+            }
+        }).ThrowsNothing();
     }
 
     // ── Box-paint helpers (#553) ─────────────────────────────────────────────

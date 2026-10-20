@@ -440,6 +440,15 @@ public sealed class CfeValueBaselineTests
         // re-measures and updates one side, this fails and forces the other.
         string inventory = ReadRepoFile("docs/ROP-API-INVENTORY.md");
 
+        // The two assertions below take a compile-time constant as their
+        // first argument, which is what TUnit's TUnitAssertions0005 reports.
+        // Here the constant IS the subject, and the comparison is against a
+        // value the test owns: a re-measure that moves the total recompiles
+        // these assertions to a different pair of numbers and the test fails
+        // until the recorded numbers are updated. That is the whole point of
+        // a baseline test, so the finding is waived at the call site rather
+        // than papered over. See the policy in tests/Directory.Build.props.
+#pragma warning disable TUnitAssertions0005 // the measured baseline constants are the subject: the test pins them and checks they reconcile
         await Assert.That(MeasuredTotalSites).IsEqualTo(209)
             .Because("209 is the CFE0001 count (35 shipped + 174 tests) on analyzer "
                    + "1.3.0. It is recorded so that a future package bump which drops the "
@@ -455,6 +464,7 @@ public sealed class CfeValueBaselineTests
         await Assert.That(MeasuredProductionSites + MeasuredTestSites).IsEqualTo(MeasuredTotalSites)
             .Because("the recorded total is the sum of the recorded halves; if these drift apart, "
                    + "someone edited one without re-running the measurement");
+#pragma warning restore TUnitAssertions0005
     }
 
     /// <summary>

@@ -54,7 +54,15 @@ public sealed class SandboxedPluginToolTests
     public async Task Defaults_Timeout30s_MemoryBudget10MB()
     {
         await Assert.That(SandboxedPluginTool.DefaultTimeout).IsEqualTo(TimeSpan.FromSeconds(30));
+        // The memory budget IS a constant, and the constant IS the subject:
+        // the test pins the number the sandbox caps a plugin's heap at. A
+        // change to the constant recompiles this assertion to the new value
+        // and the test fails, so the change is noticed. TUnit's
+        // TUnitAssertions0005 reports the constant first argument; see the
+        // policy in tests/Directory.Build.props.
+#pragma warning disable TUnitAssertions0005 // the memory-budget constant is the subject: the test pins its numeric value
         await Assert.That(SandboxedPluginTool.DefaultMemoryBudgetBytes).IsEqualTo(10L * 1024 * 1024);
+#pragma warning restore TUnitAssertions0005
     }
 
     [Test]

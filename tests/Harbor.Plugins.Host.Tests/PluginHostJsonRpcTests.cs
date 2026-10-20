@@ -89,7 +89,7 @@ public class PluginHostJsonRpcTests
         var registered = loadHost.RegisterTool(new EchoTool());
         await Assert.That(registered.IsSuccess).IsTrue();
         var duplicate = loadHost.RegisterTool(new EchoTool());
-        await Assert.That(duplicate.IsSuccess).IsEqualTo(false);
+        await Assert.That(duplicate.IsSuccess).IsFalse();
 
         var server = CreateServer(loadHost);
         using var doc = await CallAsync(server, """{"jsonrpc":"2.0","id":2,"method":"tools/list"}""");
@@ -100,7 +100,7 @@ public class PluginHostJsonRpcTests
         await Assert.That(tool.GetProperty("name").GetString()).IsEqualTo("echo");
         await Assert.That(tool.GetProperty("description").GetString()).Contains("Echoes");
         await Assert.That(tool.GetProperty("inputSchema").GetProperty("properties").TryGetProperty("text", out _))
-            .IsEqualTo(true);
+            .IsTrue();
     }
 
     [Test]
@@ -114,7 +114,7 @@ public class PluginHostJsonRpcTests
             """{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"echo","arguments":{"text":"hi"}}}""");
 
         var result = doc.RootElement.GetProperty("result");
-        await Assert.That(result.GetProperty("isError").GetBoolean()).IsEqualTo(false);
+        await Assert.That(result.GetProperty("isError").GetBoolean()).IsFalse();
         await Assert.That(result.GetProperty("content")[0].GetProperty("text").GetString())
             .IsEqualTo("echo:hi");
     }
@@ -154,13 +154,13 @@ public class PluginHostJsonRpcTests
             """{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"boom"}}""");
 
         var result = failed.RootElement.GetProperty("result");
-        await Assert.That(result.GetProperty("isError").GetBoolean()).IsEqualTo(true);
+        await Assert.That(result.GetProperty("isError").GetBoolean()).IsTrue();
         await Assert.That(result.GetProperty("content")[0].GetProperty("text").GetString())
             .Contains("boom failed");
 
         // One bad tool cannot wedge the loop: the next frame is still served.
         using var ping = await CallAsync(server, """{"jsonrpc":"2.0","id":4,"method":"ping"}""");
-        await Assert.That(ping.RootElement.TryGetProperty("result", out _)).IsEqualTo(true);
+        await Assert.That(ping.RootElement.TryGetProperty("result", out _)).IsTrue();
     }
 
     [Test]

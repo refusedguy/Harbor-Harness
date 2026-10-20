@@ -157,14 +157,11 @@ public class TestBackendHarnessTests
     public async Task AppendLines_Negative_Throws()
     {
         var backend = new TestBackend(4, 2);
-        try
-        {
-            backend.AppendLines(-1);
-            await Assert.That(true).IsFalse();
-        }
-        catch (ArgumentOutOfRangeException)
-        {
-        }
+        // The claim is "throws", and the assertion now says so. It used to be
+        // a try/catch around `Assert.That(true).IsFalse()` — a tautology
+        // (TUnit's TUnitAssertions0005 says so) wrapped in a catch that
+        // swallowed the exception the test was about.
+        await Assert.That(() => backend.AppendLines(-1)).Throws<ArgumentOutOfRangeException>();
     }
 }
 

@@ -31,6 +31,6 @@ public class ModeIndicatorTests
 
         await Assert.That(vm.Agent).IsEqualTo("ask");
         await Assert.That(vm.Formatted).Contains("agent: ask");
-        await Assert.That(vm.Formatted.Contains("agent: code")).IsEqualTo(false);
+        await Assert.That(vm.Formatted.Contains("agent: code")).IsFalse();
     }
 }

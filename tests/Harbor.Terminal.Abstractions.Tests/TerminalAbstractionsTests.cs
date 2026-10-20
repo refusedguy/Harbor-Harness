@@ -29,9 +29,22 @@ public class TuiViewPlacementTests
     [Test]
     public async Task TuiViewPlacement_CanCastToInt()
     {
+        // The placement's NUMERIC value is the contract, not an accident:
+        // ViewRegistry's frozen snapshot indexes a per-placement slot array
+        // with `int slot = (int)placement`, so the values have to stay
+        // contiguous from zero. Pinning them is the whole point of the test,
+        // and a change to an enum member recompiles these assertions to a
+        // different number, so the test fails and the change is noticed.
+        //
+        // TUnit's TUnitAssertions0005 reports an Assert.That whose first
+        // argument is a constant, and an enum member cast to int is one. The
+        // constant IS the subject here, so the finding is waived at the call
+        // site rather than papered over.
+#pragma warning disable TUnitAssertions0005 // the placement's numeric value is the contract (ViewRegistry indexes slots with it)
         await Assert.That((int)TuiViewPlacement.StatusBar).IsEqualTo(0);
         await Assert.That((int)TuiViewPlacement.ChatHistory).IsEqualTo(1);
         await Assert.That((int)TuiViewPlacement.Input).IsEqualTo(2);
+#pragma warning restore TUnitAssertions0005
     }
 }
 
@@ -141,8 +154,11 @@ public class BaseTuiRendererTests
     public async Task BaseTuiRenderer_Dispose_DoesNotThrow()
     {
         var renderer = new ConcreteTuiRenderer();
-        renderer.Dispose();
-        await Assert.That(true).IsTrue();
+        // "DoesNotThrow" is the claim, so the assertion is that the dispose
+        // does not throw. The trailing `Assert.That(true).IsTrue()` asserted
+        // nothing at all (TUnit's TUnitAssertions0005 says so) and could not
+        // fail, so it was decoration on a call that could throw.
+        await Assert.That(() => renderer.Dispose()).ThrowsNothing();
     }
 }
 
@@ -161,7 +177,12 @@ public class ITuiViewModelContractTests
         var vm = new StatusBarViewModel();
         var @event = new AgentStartEvent("test-session", [], null);
         await vm.UpdateFromEventAsync(@event, CancellationToken.None);
-        await Assert.That(true).IsTrue();
+        // "HandlesAgentStart" is the claim, so the assertion is what the
+        // handler DID: the status bar leaves "idle" for "running". The
+        // trailing `Assert.That(true).IsTrue()` asserted nothing (TUnit's
+        // TUnitAssertions0005 says so), so the handler could have ignored the
+        // event entirely and the test would still have passed.
+        await Assert.That(vm.Status).IsEqualTo("running");
     }
 }
 
