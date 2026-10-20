@@ -82,6 +82,7 @@ jobs:
     outputs:
       dotnet: ${{ steps.filter.outputs.dotnet }}
       ui: ${{ steps.filter.outputs.ui }}
+      packages: ${{ steps.filter.outputs.packages }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -135,6 +136,23 @@ jobs:
               # the tree it ships in, and land unvalidated — issue #618's
               # defect with the same payload again (#1565 batch-4 hit this).
               - 'tools/Harbor.Evals/**'
+            # #1882. The package set of the test and sample projects can only
+            # change through one of these: a project's own .csproj, the props
+            # that inject a PackageReference into every project, the version
+            # catalogue, the banned-symbols input the gate reads its ban set
+            # from, or the gate and its allow-list. The filter is the gate's
+            # own trigger, so the job that enforces it runs exactly when the
+            # thing it enforces could have moved - and, by the same argument
+            # the `dotnet` filter makes above for the other instruments,
+            # editing the gate itself runs the gate.
+            packages:
+              - 'tests/**/*.csproj'
+              - 'samples/**/*.csproj'
+              - 'Directory.Build.props'
+              - 'Directory.Packages.props'
+              - 'BannedSymbols.txt'
+              - 'tools/check-test-packages.py'
+              - 'tools/test-package-exceptions.txt'
             ui:
               - 'src/Harbor.Tui*/**'
               - 'src/Harbor.Ui.Framework*/**'
@@ -182,6 +200,71 @@ jobs:
         run: python3 tools/check-public-api-abstractions.py --self-test
       - name: Check the frozen facade surface against its baseline
         run: python3 tools/check-public-api-abstractions.py --min-members 413
+
+  # #1882. Package-set gate for the test and sample projects.
+  #
+  # Nothing in the repository gated the package set of a test project.
+  # Measured on dev@69fb5c80, before this gate existed:
+  #
+  #   BannedSymbols.txt (`N:Newtonsoft.Json`)  an RS0030 analyzer input. It
+  #                                           covers SOURCE CODE only, and
+  #                                           RS0030 is switched off for
+  #                                           tests/ and samples/ in
+  #                                           Directory.Build.props, so it
+  #                                           does not reach the test tree
+  #                                           as a diagnostic either.
+  #   tools/check-abstractions-contract.py     four src/ projects.
+  #   tools/aot-publish-gate.py                src/ + apps/.
+  #   AGENTS.md §"What NOT to do" #2           prose.
+  #
+  # So a TRANSITIVE dependency could put a banned package into any test
+  # project's bin/ and nothing would notice. The concrete case is not
+  # hypothetical: TngTech.ArchUnitNET 0.13.4 (proposed in #1841) declares
+  # Newtonsoft.Json 13.0.4 for every target framework it supports.
+  #
+  # The gate reads the resolved package graph NuGet writes during RESTORE
+  # (obj/project.assets.json) plus each .csproj: which packages a test
+  # project may reference, directly or transitively, and whether any of them
+  # is banned. No build and no network - the restore below is the only
+  # reason this job needs the SDK, the gate itself is stdlib python.
+  #
+  # The floors are a ratchet: 43 projects in scope, 55 declared references
+  # and ~1950 resolved package entries on the tree this landed on. A scan
+  # that silently narrowed goes red instead of green, and a project whose
+  # resolved graph is missing is reported rather than passed.
+  #
+  # The non-vacuity proof is the gate's own --self-test (a banned package
+  # declared by a .csproj, one that arrives transitively, and one sitting
+  # in an output directory each fail, naming it), run as the first step.
+  test-packages:
+    name: test/sample package set
+    needs: changes
+    if: (needs.changes.outputs.packages == 'true' || github.event_name == 'workflow_dispatch') && github.actor != 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: recursive
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: "10.0.x"
+          cache: true
+          cache-dependency-path: "Directory.Packages.props"
+      - name: Restore the solution (the resolved package graph, no build)
+        run: |
+          dotnet restore Harbor.slnx
+          # The one scope project outside Harbor.slnx. Harbor.Samples.slnx is
+          # NOT restored as a whole: it also lists the contrib/ sample apps,
+          # which need workloads this job does not have.
+          dotnet restore samples/designsystem-consumer/Harbor.Samples.DesignSystemConsumer.csproj
+      - name: Package-set gate fails on an injected banned package
+        run: python3 tools/check-test-packages.py --self-test
+      - name: Check the resolved package set of every test and sample project
+        run: python3 tools/check-test-packages.py --min-projects 43 --min-declared 40 --min-packages 1400
 
   build:
     needs: changes
@@ -249,6 +332,17 @@ jobs:
       # build/_build.csproj, so NUKE build-code edits validate here too.
       - name: Build solution via NUKE (Release, zero warnings, docs, deterministic)
         run: bash build/build.sh Compile --configuration Release
+
+      # #1882. The issue's question, asked of the tree that was just built:
+      # is a banned assembly in the OUTPUT DIRECTORY of a test or sample
+      # project? The `test/sample package set` job below answers the same
+      # question from the resolved package graph, without a build; this step
+      # answers it from the output the build actually produced, which is
+      # where a banned package really lands. The two are separate
+      # mechanisms: a file can reach an output directory without being a
+      # package in the graph.
+      - name: No banned assembly in any test/sample output directory
+        run: python3 tools/check-test-packages.py --output-only --min-projects 43 --min-output-dirs 40
 
       - name: Smoke — CLI binary runs
         run: dotnet exec apps/Harbor.App.Cli/bin/Release/net10.0/Harbor.App.Cli.dll --version
