@@ -126,6 +126,13 @@ jobs:
               # wrong files builds stale binaries, and a stale build is not
               # a red build).
               - 'tools/normalize-mtimes.py'
+              # The instrument that reads the MSBuild performance summary
+              # (issue #1919). It runs in its own workflow, on demand, and
+              # its own self-test runs in the build job — but editing it
+              # must still run the build job, so the tree it parses is
+              # validated by the same commit.
+              - 'tools/msbuild-evaluation-cost.py'
+              - '.github/workflows/evaluation-cost.yml'
               # The AOT gate's instrument and its committed inventory (#413).
               # The same argument as the line above, one step further: editing
               # the BASELINE is the ordinary way to answer a red AOT job, and
@@ -703,6 +710,14 @@ jobs:
       # download.
       - name: The build-output slices match the test shards
         run: python3 tools/ci-shard-slices.py
+
+      # The evaluation-cost instrument's own failure path (issue #1919).
+      # Same argument as the aot gate's self-test below and docs.yml's
+      # `selftest` job: a parser edited until it matches nothing is
+      # indistinguishable from a parser that found nothing, so the
+      # fixture has numbers this asserts, not just rows.
+      - name: Self-test the evaluation-cost instrument
+        run: python3 tools/msbuild-evaluation-cost.py --self-test
 
       # ── Build outputs: one artifact PER CONSUMER ──────────────────────────
       #

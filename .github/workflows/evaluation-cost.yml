@@ -1,0 +1,211 @@
+# The project-evaluation cost of the Release compile (issue #1919).
+#
+# WHAT THIS IS
+# ------------
+# Issue #1919 claims that `NuGetSdkResolver` adds 180–400 ms to EVERY
+# project evaluation (dotnet/msbuild#4025), which for this tree's ~109
+# projects would be 19–42 s of cost that appears in NO wall-clock line:
+# not in the build's duration, not in the NUKE target output, not in any
+# per-project line of the ordinary console log. The only place MSBuild
+# reports it is the performance summary.
+#
+# This workflow answers the question on THIS tree, with an A/B:
+#
+#   * RUN A: the ordinary Release compile, with the NuGet SDK resolver
+#     enabled.
+#   * RUN B: the same compile with the resolver switched off through its
+#     OWN escape hatch — `MSBUILDDISABLENUGETSDKRESOLVER=1`
+#     (NuGet/NuGet.Client, `NuGetSdkResolver.cs`). The resolver then
+#     returns immediately for every SDK reference.
+#
+# The difference between the two IS the resolver's cost here. An argument
+# from the upstream issue is not a measurement of this tree, and the two
+# are not the same thing: the 180–400 ms of #4025 was measured in Visual
+# Studio on a project that referenced a VERSIONED SDK
+# (`MSBuild.Sdk.Extras/1.0.0`), and the NuGet resolver only does work for
+# a versioned reference ("This resolver only works if the user specifies a
+# version in a project or a global.json"). Every `Sdk=` in this tree is
+# `Microsoft.NET.Sdk` with no version, so the honest answer may well be
+# "not much" — and the only way to know is to measure it.
+#
+# WHY IT IS A SEPARATE WORKFLOW, AND WHY IT IS MANUAL
+# ---------------------------------------------------
+# Two reasons, both from the issue itself:
+#
+#   * A binary log is not free. MSBuild warns about the binlogger's
+#     overhead on large builds, and this tree is a large build, so the
+#     capture must not be on the PR path. The issue says the same thing:
+#     a separate job, not the build job.
+#   * It is a MEASUREMENT, not a gate. Nothing is allowed to fail because
+#     of it, and it must not cost a PR anything. So it runs on demand.
+#
+#   The nightly lane's own `measurement` job (PR #1923, branch
+#   `ci/restructure-lanes-and-gates`) captures a binary log of the same
+#   Release compile and is the instrument that keeps doing this on a
+#   schedule. It is NOT on `dev` yet, and GitHub will not dispatch a
+#   workflow that does not exist on the default branch — verified:
+#   `gh workflow run nightly.yml --ref ci/restructure-lanes-and-gates`
+#   answers "HTTP 404: workflow nightly.yml not found on the default
+#   branch". So the numbers for issue #1919 could not be taken with it.
+#   When it lands, this file should be DELETED and
+#   `tools/msbuild-evaluation-cost.py` wired into that job's analysis
+#   step: the script takes the performance summary and the wall time, so
+#   the wiring is one command.
+#
+# HOW TO RUN IT
+# -------------
+#   gh workflow run evaluation-cost.yml --ref dev
+#
+# WHAT IT PUBLISHES
+# ------------------
+# The comparison, in the job summary, and the two build logs plus the two
+# performance summaries as an artifact. The binary log itself is NOT
+# uploaded: it is hundreds of megabytes and this repository's artifact
+# storage is 500 MB in total.
+name: evaluation-cost
+
+on:
+  workflow_dispatch:
+    inputs:
+      skip-resolver-off:
+        description: >
+          Run only the resolver-ON compile (the A/B needs two compiles, so
+          this halves the job's time and loses the comparison).
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: evaluation-cost-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: true
+  DOTNET_GENERATE_ASPNET_CERTIFICATE: false
+  NUGET_CERT_REVOCATION_MODE: offline
+  MSBuildEnableWorkloadResolver: false
+  DOTNET_gcServer: 1
+
+jobs:
+  measurement:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v6
+        with:
+          # The exact SDK global.json asks for — the same one the build job
+          # installs, so the numbers are comparable with the CI compile.
+          dotnet-version: "10.0.402"
+          cache: true
+          cache-dependency-path: "Directory.Packages.props"
+
+      # The compile is `dotnet build` on the whole solution, with the same
+      # properties the NUKE Compile target uses (build/_build/Targets/
+      # CompileTarget.cs): --no-restore, MaxCpuCount=0,
+      # ContinuousIntegrationBuild=true. The difference from the CI compile
+      # is the two measurement flags and nothing else.
+      - name: Restore
+        run: |
+          set -uo pipefail
+          start=$(date +%s)
+          dotnet restore Harbor.slnx -v minimal
+          rc=$?
+          end=$(date +%s)
+          echo "restore_seconds=$((end - start))" >> "$GITHUB_ENV"
+          exit $rc
+
+      # RUN A — the resolver as it is today.
+      #
+      # `-clp:PerformanceSummary` is what makes MSBuild print the
+      # performance summary, and the "Project Evaluation Performance
+      # Summary" section of it is the only report of the time spent
+      # EVALUATING projects (as opposed to running targets in them). It is
+      # produced by the console logger's parallel variant, which is what
+      # the console logger wraps, so it is there for a parallel build.
+      #
+      # `-bl:` writes the binary log the issue asks for. It is captured and
+      # NOT uploaded (hundreds of megabytes); the console log next to it
+      # carries the same performance summary in text form.
+      - name: Compile A (NuGet SDK resolver enabled)
+        shell: bash
+        run: |
+          set -uo pipefail
+          mkdir -p analysis
+          start=$(date +%s)
+          dotnet build Harbor.slnx -c Release --no-restore \
+            -p:MaxCpuCount=0 -p:ContinuousIntegrationBuild=true \
+            -clp:PerformanceSummary \
+            -bl:analysis/build-resolver-on.binlog \
+            > analysis/build-resolver-on.log 2>&1
+          rc=$?
+          end=$(date +%s)
+          echo "on_seconds=$((end - start))" >> "$GITHUB_ENV"
+          echo "on_rc=$rc" >> "$GITHUB_ENV"
+          tail -40 analysis/build-resolver-on.log
+          exit $rc
+
+      # The tree is cleaned between the two compiles, so RUN B is a
+      # from-scratch build like RUN A. An incremental build would compile
+      # nothing and the comparison would be meaningless.
+      - name: Clean (so the second compile is from scratch)
+        run: |
+          set -uo pipefail
+          dotnet build Harbor.slnx -c Release --no-restore -t:Clean > analysis/clean.log 2>&1
+          echo "clean_rc=$?" >> "$GITHUB_ENV"
+          exit 0
+
+      # RUN B — the resolver off. Everything else is identical, including
+      # the properties, the parallelism and the flags.
+      - name: Compile B (NuGet SDK resolver disabled)
+        if: ${{ !inputs.skip-resolver-off }}
+        shell: bash
+        run: |
+          set -uo pipefail
+          start=$(date +%s)
+          MSBUILDDISABLENUGETSDKRESOLVER=1 \
+          dotnet build Harbor.slnx -c Release --no-restore \
+            -p:MaxCpuCount=0 -p:ContinuousIntegrationBuild=true \
+            -clp:PerformanceSummary \
+            -bl:analysis/build-resolver-off.binlog \
+            > analysis/build-resolver-off.log 2>&1
+          rc=$?
+          end=$(date +%s)
+          echo "off_seconds=$((end - start))" >> "$GITHUB_ENV"
+          echo "off_rc=$rc" >> "$GITHUB_ENV"
+          tail -40 analysis/build-resolver-off.log
+          exit $rc
+
+      - name: Publish the comparison
+        if: always()
+        shell: bash
+        run: |
+          set -uo pipefail
+          on_seconds="${on_seconds:-0}"
+          off_seconds="${off_seconds:-0}"
+          args=(--run "resolver-on:analysis/build-resolver-on.log:${on_seconds}")
+          if [ -f analysis/build-resolver-off.log ]; then
+            args+=(--run "resolver-off:analysis/build-resolver-off.log:${off_seconds}")
+          fi
+          python3 tools/msbuild-evaluation-cost.py "${args[@]}" \
+            --summary "$GITHUB_STEP_SUMMARY" || true
+
+      - name: Upload the logs and the performance summaries
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: evaluation-cost-logs
+          path: |
+            analysis/build-resolver-on.log
+            analysis/build-resolver-off.log
+            analysis/clean.log
+          if-no-files-found: ignore
+          retention-days: 7
