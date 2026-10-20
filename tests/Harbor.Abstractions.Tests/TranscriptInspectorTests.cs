@@ -26,7 +26,7 @@ public class TranscriptInspectorTests
     private static ToolCallPart Call(string id, string toolName) =>
         new(id, toolName, JsonDocument.Parse("{}").RootElement.Clone());
 
-    private static AssistantMessage Asking(params ToolCallPart[] calls) => new(
+    private static AssistantMessage Asking(params ContentPart[] calls) => new(
         "a1",
         "session-1",
         T0,

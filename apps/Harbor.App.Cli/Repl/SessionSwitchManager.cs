@@ -267,16 +267,26 @@ internal sealed class SessionSwitchManager(IReplHost host, Action onSwitched)
                 return transcript.Value.Messages;
             }
 
-            // A store that cannot report a transcript state (an out-of-tree
-            // one) still has its messages: the reader gets them without the
-            // interrupted-turn marker, which is less and not wrong.
-            var history = await store.GetMessagesAsync(session.Id, ct).ConfigureAwait(false);
-            if (history.IsSuccess && history.Value.Count > 0)
+            if (transcript.IsFailure)
             {
-                host.Bridge.ReplayHistory(history.Value);
+                // The failure arm, and it is LOUD: a store that cannot report
+                // a transcript state (an out-of-tree one) still has its
+                // messages, so the reader gets them — without the
+                // interrupted-turn marker, which is less and not wrong — but
+                // the gap is said out loud instead of passing for a whole
+                // transcript.
+                Announce("! " + transcript.Error + " — показан исходный журнал сессии");
+
+                var history = await store.GetMessagesAsync(session.Id, ct).ConfigureAwait(false);
+                if (history.IsSuccess && history.Value.Count > 0)
+                {
+                    host.Bridge.ReplayHistory(history.Value);
+                }
+
+                return history.IsSuccess ? history.Value : null;
             }
 
-            return history.IsSuccess ? history.Value : null;
+            return null;
         }
 
         public async Task RefreshSidebarAsync(Session session, IReadOnlyList<AgentMessage>? history, CancellationToken ct)
