@@ -31,11 +31,15 @@ adds the string-switch gate and the rewrites it replays:
 | tools with a ratchet | 14 |
 | tools with a floor | 16 |
 | tools whose self-test no workflow ran before this change | 3 (`pack-validate.py`, `test-skips.py`, `normalize-mtimes.py`) |
-| gates in a workflow that runs a script that is not in the tree | 1 (`ci.yml`'s `public-api-abstractions` job, left behind by the #1845 squash) |
+| gates in a workflow that runs a script that is not in the tree | 0 |
 
 The last two rows are the two gaps this policy closed on the way in, and both
 were found by the checker rather than by reading: the checker was run against
-the tree before the table was written, and it named them.
+the tree before the table was written, and it named them. The last row is now
+0: `ci.yml`'s `public-api` job runs `tools/check-public-api-resign.py` and
+`tools/public-api-nonvacuity.sh`, both of which are in the tree (the job that
+used to name the removed `check-public-api-abstractions.py` is the `public-api
+freeze` one, and it was re-wired).
 
 Two more gaps, found the same way and worth naming.
 
