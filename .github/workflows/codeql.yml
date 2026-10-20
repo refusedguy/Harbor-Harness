@@ -19,6 +19,16 @@ on:
   schedule:
     - cron: "17 3 * * 1" # Mondays 03:17 UTC — off-peak
 
+# The other PR-triggered workflows all carry a `concurrency` group with
+# cancel-in-progress; this one did not, so a superseded CodeQL run kept
+# a runner slot for its full ~11 minutes and none of the 3.7 runs per
+# PR were ever cancelled. The group is per branch, so a push to
+# dev/master still runs unconditionally -- only superseded runs of the
+# same branch are dropped.
+concurrency:
+  group: codeql-${{ github.workflow }}-${{ github.head_ref || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 permissions: {}
 
 jobs:
