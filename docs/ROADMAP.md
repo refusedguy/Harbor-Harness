@@ -233,6 +233,17 @@ Moved platform-agnostic logic out of `Harbor.App.Avalonia` into `Harbor.Ui.Frame
 
 ### Architectural debt
 
+- [ ] **`Harbor.Application` split, variant A, two slices left (ADR-018).** The
+  owner decided on 2026-10-16 to decompose `Harbor.Application` (14 areas, 19.5k
+  lines; Sessions 44% + Agents 27%) into **five assemblies**, the maximal plan,
+  not the incremental `C → B` path the research recommended. Landed:
+  `Harbor.AgentRuntime` (#1623, PR #1666), `Harbor.SessionContext` (#1624, PR
+  #1714) and `Harbor.ChangeTracking` (#1616, PR #1660). Open: #1625
+  `PolicyConfig`, whose remaining cohort is `Configuration/*` alone, since
+  Permissions and Onboarding already left under #1658 and #1701, and #1626
+  `Intelligence`. Decision, rejected variants, sequencing DAG and the standing
+  rules (guard before rewrite; a new axis must be additive and registered):
+  [ADR-018](adr/ADR-018-harbor-application-split-variant-a.md).
 - [x] `Harbor.Desktop.Abstractions` namespace drift: 4 files declared `namespace Harbor.App.Avalonia.ViewModels` while living in `Harbor.Desktop.Abstractions/ViewModels/`. **Verified fixed (ROP-D Z1, 25.08): every file in the project now declares `Harbor.Desktop.Abstractions.*`.**
 - [x] Namespace drift `Harbor.Core.*` in Harbor.Application.dll (42 declarations) and Harbor.Registries.dll (3) — migrated to assembly-matching namespaces (ROP-D Z1). The `Harbor.Core` assembly that inherited the name was deleted in #451.
 - [x] Namespace drift `Harbor.Cli.*` in Harbor.App.Cli — 18 declarations + all references migrated to `Harbor.App.Cli.*`; remaining census findings documented as intentional at migration time (compat namespaces in Contracts/Extensions/Registries; same-family sub-namespaces in Ipc/Telemetry/Ui.Framework) (ROP-D Z1, 25.08; see commit 9ec5c7b).
@@ -287,7 +298,13 @@ Moved platform-agnostic logic out of `Harbor.App.Avalonia` into `Harbor.Ui.Frame
   entry overstates what is missing, so it can only shrink. Fix a listed README
   and drop its entry in the same PR. Audit trail and false-positive list:
   [`standards/README-AUDIT.md`](./standards/README-AUDIT.md).
-- [x] Architecture decision records exist: `DECISIONS.md` (ADR-001…ADR-008 — production stabilization, ROP rails, ConsoleEx, sub-agent `task`, plugin hosting split, MCP adapter, ProviderPresets catalog, F1 Abstractions.Contracts decoupling).
+- [x] Architecture decision records exist: [`docs/adr/`](adr/): `DECISIONS.md` is the log
+  (ADR-001…ADR-018: production stabilization, ROP rails, ConsoleEx, sub-agent `task`,
+  plugin hosting split, MCP adapter, ProviderPresets catalog, F1 Abstractions.Contracts
+  decoupling, config-model-ref reader, token notation, doc-example gate, vendored HTML
+  pair, CellForge widget axis, `Sessions` staying in Ui.Framework, i18n catalogue home,
+  Roslyn plugin-host split, DocFX docs site, and the `Harbor.Application` split,
+  variant A). The long-form records are the `ADR-0NN-*.md` files beside the log.
 
 ---
 

@@ -27,7 +27,10 @@ Harbor.slnx                          (.sln не существует; есть �
 ├── src/                             (52 проекта на диске — 51 в Harbor.slnx + Harbor.CodeGen build-tool; representative subset below)
 │   ├── Harbor.Abstractions/         (contract surface: no Harbor deps except Contracts; 7 NuGet, gated — см. AGENTS.md)
 │   ├── Harbor.Abstractions.Contracts/ (models/formatters; бывший Harbor.Domain)
-│   ├── Harbor.Application/          (AgentLoop, Configuration, Permissions…)
+│   ├── Harbor.Application/          (config, resources, skills, fs + git probes)
+│   ├── Harbor.AgentRuntime/         (Agents + Pipeline + Resilience, #1623)
+│   ├── Harbor.SessionContext/       (compaction, prompt, tracker, #1624)
+│   ├── Harbor.ChangeTracking/       (verified-change pipeline, #1616)
 │   ├── Harbor.Ui.Framework*/        (TEA state + VMs + services, 9 проектов)
 │   ├── Harbor.Storage.Jsonl|Memory|Sqlite/
 │   ├── Harbor.Providers.Anthropic|OpenAI|Ollama|OpenAiCompatible|Shared/
@@ -77,11 +80,16 @@ only BCL plus a gated set of 7 NuGet packages (см. `Harbor.Abstractions` ни�
                                   ▼
 ┌─────────────────────────────────────────────────────────────────┐
 │  APPLICATION (use cases, orchestration)                         │
-│  - Harbor.Application (AgentLoop, Configuration, Permissions)   │
+│  - Harbor.Application (config, resources, skills, fs + git)     │
+│  - Harbor.AgentRuntime (Agents + Pipeline + Resilience, #1623)  │
+│  - Harbor.SessionContext (compaction, prompt, tracker, #1624)   │
+│  - Harbor.ChangeTracking (verified-change pipeline, #1616)      │
 │  - Harbor.Registries                                            │
 │  - Harbor.Plugins.{Runtime, Hosting, Registration, …}           │
 │  - contrib/scripting: Harbor.Scripting.* (ScriptHost, Bridge)   │
-│  Depends on: Abstractions ONLY                                  │
+│  Depends on: Abstractions ONLY (AgentRuntime,                   │
+│            SessionContext and ChangeTracking ride Application   │
+│            too, per ADR-018)                                    │
 └─────────────────────────────────────────────────────────────────┘
                                   ▲
                                   │ implements
@@ -120,6 +128,16 @@ only BCL plus a gated set of 7 NuGet packages (см. `Harbor.Abstractions` ни�
 
 **Key layering invariants** (enforced by `Harbor.Architecture.Tests` — reflection rules
 + NetArchTest + `FullLayerMatrixTests` data-table over all main-solution src assemblies):
+
+> **Update 2026-10-20: the Application layer is being decomposed (variant A).**
+> `Harbor.Application` was one 14-area, 19.5k-line project; the owner decided on
+> 2026-10-16 to split it into five assemblies. `Harbor.AgentRuntime` (#1623),
+> `Harbor.SessionContext` (#1624) and `Harbor.ChangeTracking` (#1616) have landed;
+> #1625 (`PolicyConfig`) and #1626 (`Intelligence`) are open. The decision, the
+> rejected variants and the sequencing are recorded in
+> [ADR-018](adr/ADR-018-harbor-application-split-variant-a.md); the enforced truth
+> stays the matrix in
+> [ARCHITECTURE_LAYERS.md §5.4](./ARCHITECTURE_LAYERS.md).
 
 > Историческая заметка: этот раздел раньше называл `Harbor.Tui.Abstractions`
 > проектом слоя Domain. Такого проекта нет — у него нет `.csproj`, нет каталога
