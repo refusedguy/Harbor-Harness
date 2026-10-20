@@ -180,6 +180,12 @@ jobs:
               # the gate that checks it from running — unvalidated, which is
               # the #618 defect again with a different payload.
               - 'tools/ci-project-lists.json'
+              # The gate that keeps the architecture suite at ONE execution on
+              # the pull-request lane (issue #1920). It reads this workflow
+              # file, so an edit to the workflow must run it — and an edit to
+              # the gate must run the job that executes it. Same #618
+              # argument, one line over.
+              - 'tools/check-arch-suite-once.py'
               # The build-output cache's mtime normalisation (issue #1927).
               # It runs INSIDE the build job, and it decides whether MSBuild
               # may skip a project — so an edit to it must set dotnet=true,
@@ -756,9 +762,17 @@ jobs:
       # It is a good gate and it stays a gate: on a push to dev/master (and
       # on every non-pull_request event, which includes the nightly lane and
       # workflow_dispatch) a layering regression still fails the BUILD
-      # itself. What changes is the PR lane, where the same suite runs
-      # THREE times for one result: once as this gate, once in the `core`
-      # test shard (65.8 s) and once in `coverage`.
+      # itself. What changes is the PR lane, where the same suite ran THREE
+      # times for one result (issue #1920, measured on run 39389070999:
+      # 68.0 s here, 65.9 s in the `core` shard, 63.3 s in `coverage`).
+      # #1923 moved the coverage collection to the nightly lane and this
+      # variable switched the gate off here, so the PR lane runs the suite
+      # ONCE now — in the `core` shard.
+      #
+      # The count is not a convention: tools/check-arch-suite-once.py reads
+      # this file and fails the build when the PR lane runs the suite more
+      # than once, or not at all, or when this variable stops switching the
+      # gate off for pull_request events.
       #
       # The ASSEMBLY is still built here — the `core` shard needs the DLL —
       # only the EXECUTION moves to the shard. The property is read by
@@ -1156,6 +1170,33 @@ jobs:
       # is named.
       - name: Self-test the CI project-list gate
         run: python3 tools/ci-shard-slices.py --self-test
+
+      # ── The architecture suite runs ONCE on the pull-request lane ──────────
+      #
+      # Issue #1920 measured THREE executions of the same suite on one pull
+      # request, all of them the 966-test architecture assembly: 68.0 s inside
+      # this build (the [arch-gate] target), 65.9 s in the `core` shard and
+      # 63.3 s again in the `coverage` job — 197.2 s of CPU for one answer.
+      # #1928 switched the build-time gate off on the pull-request lane and
+      # #1923 moved the coverage collection to the nightly lane, so the suite
+      # runs ONCE now, in the `core` shard.
+      #
+      # Nothing held that count. The gate is ONE environment variable (see
+      # the job's env block above), and a coverage-like job on this lane is
+      # one block of YAML; either can come back by accident, and the pull
+      # request would still be green while the suite ran twice.
+      #
+      # So the gate below reads this file and fails when the lane runs the
+      # suite more than once (or not at all), when a job that compiles the
+      # solution stops switching the build-time gate off for pull_request
+      # events, and when the merge path loses the gate altogether. Its own
+      # failure path is proved first, for the same reason every other gate
+      # here has one: a checker edited until it matches nothing is
+      # indistinguishable from a checker that found nothing.
+      - name: The architecture-once gate still fails on a planted duplicate
+        run: python3 tools/check-arch-suite-once.py --self-test
+      - name: The architecture suite runs once on the pull-request lane (#1920)
+        run: python3 tools/check-arch-suite-once.py --min-shards 4
 
       # The evaluation-cost instrument's own failure path (issue #1919).
       # Same argument as the aot gate's self-test below and docs.yml's

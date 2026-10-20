@@ -10,11 +10,17 @@
 // expected cost rather than a surprise."
 //
 // The reason was false and this PR is the consequence. `ci.yml` BUILDS
-// tests/Harbor.Architecture.Tests and RUNS it twice — once in the `test (core)`
-// shard, and once as the `HarborArchGate` MSBuild target in `build`, which is
-// `AfterTargets="Build"` and fails the BUILD on a non-zero exit. A test here cannot
-// be the unexpected cost of a docs diff; it is the cheapest possible place to put
+// tests/Harbor.Architecture.Tests and RUNS it — once in the `test (core)`
+// shard on a pull request, and once more as the `HarborArchGate` MSBuild
+// target in `build` on a push to dev/master, which is `AfterTargets="Build"`
+// and fails the BUILD on a non-zero exit. A test here cannot be the
+// unexpected cost of a docs diff; it is the cheapest possible place to put
 // one.
+//
+// (The count moved: issue #1920 measured THREE executions of this suite on
+// one pull request — the build-time gate, the `core` shard and the coverage
+// job — and #1928/#1923 left one. The gate that holds the count is
+// tools/check-arch-suite-once.py.)
 //
 // WHAT THIS RULE IS, RELATIVE TO THE TWO THAT ALREADY EXIST
 // -------------------------------------------------------
