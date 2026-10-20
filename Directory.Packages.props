@@ -17,17 +17,20 @@
     1. Microsoft.Extensions.*  (logging, DI, hosting, options, http, configuration)
     2. Microsoft.CodeAnalysis.* (Roslyn, analyzers, banned-api)
     3. Microsoft.Data.*        (storage drivers)
-    4. Microsoft.NET.* / test SDK
-    5. TUnit + NetArchTest     (test framework + architecture rules)
-    6. CommunityToolkit.*      (MVVM)
-    7. Spectre.*               (console + TUI libraries)
-    8. Terminal.Gui / Termina / RazorConsole / Avalonia (alt UI stacks)
-    9. Jint                     (scripting engine)
-   10. Roslyn analyzers         (Roslynator, Sonar, Meziantou, AsyncFixer, Reflection)
-   11. Performance              (ZLinq, NonBlocking, MemoryPack, CSharpFunctionalExtensions)
-   12. SQLite drivers
-   13. Source generators        (ZLinq.DropInGenerator, Termina.Generators)
-   14. Reference hygiene        (ReferenceTrimmer — build-time only, #1853)
+    4. TUnit + NetArchTest     (test framework + architecture rules)
+    5. CommunityToolkit.*      (MVVM)
+    6. Spectre.*               (console + TUI libraries)
+    7. Terminal.Gui / Termina / RazorConsole / Avalonia (alt UI stacks)
+    8. Jint                     (scripting engine)
+    9. Roslyn analyzers         (Roslynator, Sonar, Meziantou, AsyncFixer, Reflection)
+   10. Performance              (ZLinq, NonBlocking, MemoryPack, CSharpFunctionalExtensions)
+   11. SQLite drivers
+   12. Source generators        (ZLinq.DropInGenerator, Termina.Generators)
+   13. Reference hygiene        (ReferenceTrimmer — build-time only, #1853)
+
+  There is deliberately NO `Microsoft.NET.Test.Sdk` pin: TUnit documents that
+  package as breaking test discovery (#1893). See the comment on the TUnit
+  group below.
 -->
 <Project>
   <PropertyGroup>
@@ -94,8 +97,32 @@
       so the native side is unchanged by this bump.
     -->
     <PackageVersion Include="Microsoft.Data.Sqlite" Version="10.0.13" />
-    <!-- ── Microsoft.NET test SDK ────────────────────────────────────────── -->
-    <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.8.1" />
+    <!-- ── Microsoft.NET test SDK: DELIBERATELY ABSENT (#1893) ──────────── -->
+    <!--
+      `Microsoft.NET.Test.Sdk` is NOT pinned here, and no project in this
+      repository references it. TUnit's installation docs say so directly:
+
+        "If you're used to other testing frameworks, you're probably used to
+         the package Microsoft.NET.Test.Sdk. This should NOT be used with
+         TUnit. It'll stop test discovery from working properly."
+        — https://tunit.dev/docs/getting-started/installation
+
+      The package brought the VSTest host (Microsoft.TestPlatform.TestHost +
+      Microsoft.TestPlatform.ObjectModel) and Microsoft.CodeCoverage into the
+      output of every test project. None of it was needed: this repository
+      runs on Microsoft.Testing.Platform (`global.json` selects the MTP
+      runner), the test entry point comes from TUnit's source generator
+      together with `Microsoft.Testing.Platform.MSBuild` (which arrives
+      transitively through TUnit.Engine), and coverage and TRX reports come
+      from `Microsoft.Testing.Extensions.CodeCoverage` /
+      `Microsoft.Testing.Extensions.TrxReport`, which TUnit already carries.
+
+      Nothing here replaces it, on purpose: adding a replacement package
+      would re-introduce the VSTest host this removal was about.
+
+      `tools/check-no-test-sdk.py` fails the build if the package comes back,
+      in a .csproj or in this file.
+    -->
     <!-- ── TUnit + NetArchTest (test framework + arch rules) ─────────────── -->
     <PackageVersion Include="TUnit" Version="1.75.0" />
     <PackageVersion Include="TUnit.Assertions" Version="1.75.0" />

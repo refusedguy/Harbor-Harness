@@ -31,11 +31,17 @@
 # pull request into dev.
 #
 # NOTE on running tests: do NOT use `dotnet test` in this repo. The
-# `dotnet test` → Microsoft.Testing.Platform bridge discovers ZERO tests
-# (MTP host exits 5 with one silent discovery error; verified on SDK 10.0.302
-# for every tests/*.Tests project) while the same assemblies run green via
-# direct host execution. So every job below runs test projects as plain
-# executables: `dotnet run --project tests/<Name> -- <mtp-args>`.
+# `dotnet test` → Microsoft.Testing.Platform bridge rejects the VSTest-era
+# options (`--logger`, `--filter`) our old commands passed: that is the
+# platform's *invalid command-line arguments* exit code 5, whereas a run
+# that genuinely discovers no tests exits 8. So "exits 5" was never evidence
+# of zero discovery (CHANGELOG.md, sprint *ci-cd-maturity*, records that
+# deleting one `--logger` turned renderer-perf-gate.yml green).
+# `Microsoft.NET.Test.Sdk` is gone from every project (#1893): TUnit
+# documents it as stopping test discovery, and the MTP pieces this tree
+# needs arrive transitively through TUnit.
+# So every job below runs test projects as plain executables:
+# `dotnet run --project tests/<Name> -- <mtp-args>`.
 # MTP args forward after `--`: --minimum-expected-tests N (zero-test guard),
 # --treenode-filter (TUnit selection), --output Detailed (per-test console).
 #
@@ -296,8 +302,9 @@ jobs:
   # is banned. No build and no network - the restore below is the only
   # reason this job needs the SDK, the gate itself is stdlib python.
   #
-  # The floors are a ratchet: 43 projects in scope, 55 declared references
-  # and ~1950 resolved package entries on the tree this landed on. A scan
+  # The floors are a ratchet: 49 projects in scope, 50 declared references
+  # (61 before #1893 removed `Microsoft.NET.Test.Sdk` from eleven of them) and
+  # ~1950 resolved package entries on the tree this landed on. A scan
   # that silently narrowed goes red instead of green, and a project whose
   # resolved graph is missing is reported rather than passed.
   #
@@ -332,7 +339,48 @@ jobs:
       - name: Package-set gate fails on an injected banned package
         run: python3 tools/check-test-packages.py --self-test
       - name: Check the resolved package set of every test and sample project
-        run: python3 tools/check-test-packages.py --min-projects 43 --min-declared 40 --min-packages 1400
+        run: python3 tools/check-test-packages.py --min-projects 43 --min-declared 50 --min-packages 1400
+
+  # #1893. The VSTest test host must not come back.
+  #
+  # `Microsoft.NET.Test.Sdk` was declared in 16 .csproj files (11 under
+  # tests/, 5 under contrib/tests/) and pinned once in
+  # Directory.Packages.props. TUnit's installation docs name the package as
+  # the thing that stops test discovery:
+  #
+  #   "This should NOT be used with TUnit. It'll stop test discovery from
+  #    working properly." — https://tunit.dev/docs/getting-started/installation
+  #
+  # The package brought the VSTest host and Microsoft.CodeCoverage into the
+  # output of every test project, and this repository uses none of it: it
+  # runs on Microsoft.Testing.Platform (global.json selects the MTP runner)
+  # and every job executes a test project as a plain executable. The MTP
+  # pieces the tree actually needs — Microsoft.Testing.Platform.MSBuild,
+  # Microsoft.Testing.Extensions.CodeCoverage, Microsoft.Testing.Extensions.
+  # TrxReport — arrive TRANSITIVELY through TUnit, so the removal needed no
+  # replacement package.
+  #
+  # Nothing in the tree would have complained if the package came back: the
+  # build stays green and the tests still run. This job is what makes the
+  # removal irreversible.
+  #
+  # It ALWAYS runs (no `needs:`), because a gate that only runs when the
+  # paths it watches change is a gate that a rename can switch off. Stdlib
+  # python only, no dotnet, no restore — a few seconds.
+  test-sdk-absent:
+    name: no VSTest SDK in the tree
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      # No `submodules: recursive`: the vendored ConsoleEx submodule left the
+      # product (ADR-019), and the gate excludes contrib/external/ anyway.
+      - uses: actions/checkout@v7
+      - name: No-VSTest-SDK gate fails on an injected reference
+        run: python3 tools/check-no-test-sdk.py --self-test
+      - name: Check that no project file declares Microsoft.NET.Test.Sdk
+        run: python3 tools/check-no-test-sdk.py --min-files 150
 
   # #1853. Unused-reference detection over the whole solution.
   #
@@ -1437,11 +1485,10 @@ jobs:
 
   # Task: coverage collection — REPORT-ONLY (issue #99). Runs the fast unit
   # suites (core + platform shard lists) under the MTP CodeCoverage extension
-  # (Microsoft.Testing.Extensions.CodeCoverage ships transitively with
-  # Microsoft.NET.Test.Sdk — no new packages) and publishes per-project line
-  # coverage to the job summary + raw cobertura.xml artifacts (30-day
-  # retention feeds the "month of green reports" baseline for a future
-  # diff-threshold).
+  # (Microsoft.Testing.Extensions.CodeCoverage ships transitively with TUnit —
+  # no new packages) and publishes per-project line coverage to the job
+  # summary + raw cobertura.xml artifacts (30-day retention feeds the "month of
+  # green reports" baseline for a future diff-threshold).
   #
   # Report-only contract (do NOT "fix" into a gate):
   #   - NO thresholds, NO fail-on-numbers. A global percentage gate is

@@ -44,11 +44,17 @@
 #                               dispatch an agent to fix whatever it finds.
 #
 # NOTE on running tests: do NOT use `dotnet test` in this repo. The
-# `dotnet test` → Microsoft.Testing.Platform bridge discovers ZERO tests
-# (MTP host exits 5 with one silent discovery error; verified on SDK 10.0.302
-# for every tests/*.Tests project) while the same assemblies run green via
-# direct host execution. So every job below runs test projects as plain
-# executables: `dotnet exec tests/<Name>/bin/Release/net10.0/<Name>.dll`.
+# `dotnet test` → Microsoft.Testing.Platform bridge rejects the VSTest-era
+# options (`--logger`, `--filter`) our old commands passed: that is the
+# platform's *invalid command-line arguments* exit code 5, whereas a run
+# that genuinely discovers no tests exits 8. So "exits 5" was never evidence
+# of zero discovery (CHANGELOG.md, sprint *ci-cd-maturity*, records that
+# deleting one `--logger` turned renderer-perf-gate.yml green).
+# `Microsoft.NET.Test.Sdk` is gone from every project (#1893): TUnit
+# documents it as stopping test discovery, and the MTP pieces this tree
+# needs arrive transitively through TUnit.
+# So every job below runs test projects as plain executables:
+# `dotnet exec tests/<Name>/bin/Release/net10.0/<Name>.dll`.
 # MTP args forward after `--`: --minimum-expected-tests N (zero-test guard),
 # --treenode-filter (TUnit selection), --output Detailed (per-test console).
 #

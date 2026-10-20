@@ -30,17 +30,19 @@ versions of this file conflated into a single wrong explanation:
   arguments* — exit code **5**. A run that genuinely discovers no tests exits
   **8**. `CHANGELOG.md` (sprint *ci-cd-maturity*) records that removing a single
   `--logger` flag turned `renderer-perf-gate.yml` green.
-- **11 of the 36 test projects still reference `Microsoft.NET.Test.Sdk`**
-  (pinned in `Directory.Packages.props:71`). TUnit's installation docs state
-  that package must not be used with TUnit because it stops test discovery.
-  `TUNIT_MTP_AUDIT.md` proposes removing it; that change has not landed.
+- **`Microsoft.NET.Test.Sdk` is not used, and must not be.** It was declared in
+  16 test projects and pinned in `Directory.Packages.props`; #1893 removed all
+  of them. TUnit's installation docs state that the package must not be used
+  with TUnit because it stops test discovery. `tools/check-no-test-sdk.py`
+  fails the build if it comes back.
 
 Because of the second point the earlier claim that `dotnet test` "discovers zero
-tests repo-wide" cannot be right as written — 25 of the 36 test projects never
-reference the package blamed for it. No CI job has run `dotnet test` since, so
-its current per-project behaviour is **unverified** rather than known. That is
-why the plain-executable form above is the only one documented, and why you
-should not read `dotnet test` as "safe, just undocumented".
+tests repo-wide" was never right as written: the package named as the blocker
+was never in most of the test projects, and it is not in any of them now. No CI
+job has run `dotnet test` since, so its current per-project behaviour is
+**unverified** rather than known. That is why the plain-executable form above
+is the only one documented, and why you should not read `dotnet test` as
+"safe, just undocumented".
 Run [`tests/Harbor.Architecture.Tests/`](tests/Harbor.Architecture.Tests) after
 **every** project-reference change — the layering matrix is enforced there and
 nowhere else.

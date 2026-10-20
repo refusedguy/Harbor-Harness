@@ -940,8 +940,9 @@ exit 5 was never evidence of zero discovery. `global.json` selects the
 Microsoft.Testing.Platform runner, which rejects the VSTest-era options
 (`--logger`, `--filter`) the old commands passed; `CHANGELOG.md` (sprint
 *ci-cd-maturity*) records that deleting one `--logger` turned
-`renderer-perf-gate.yml` green. 11 of the 36 test projects also still reference
-`Microsoft.NET.Test.Sdk`, which TUnit documents as stopping discovery. See
+`renderer-perf-gate.yml` green. No project references `Microsoft.NET.Test.Sdk`
+any more — #1893 removed it from all 16 test projects and from the central pin,
+because TUnit documents it as stopping discovery. See
 [CONTRIBUTING.md §Why not `dotnet test`](../CONTRIBUTING.md#why-not-dotnet-test).
 The same assemblies run green via direct host execution.
 `tests/Harbor.Architecture.Tests` additionally re-runs inside the Release build

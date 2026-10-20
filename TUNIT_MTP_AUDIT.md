@@ -1,32 +1,53 @@
 # TUnit + MTP — полный аудит Harbor (branch chore/tunit-mtp-audit)
 
 > Worktree: `.worktrees/tunit-audit` → ветка `chore/tunit-mtp-audit` (от `dev` @ 13c78cf)
-> Дата: 2026-09-05 · SDK: 10.0.302 · TUnit: 1.61.0 · `Microsoft.NET.Test.Sdk`: 18.8.1
+> Дата аудита: 2026-09-05 · SDK: 10.0.302 · TUnit: 1.61.0 · `Microsoft.NET.Test.Sdk`: 18.8.1
 > Источники: https://tunit.dev/docs/intro, /getting-started/installation, /getting-started/running-your-tests, /troubleshooting
 
-> ## ⚠️ Статус: предложение, не применено
+> ## ✅ Статус: применено (issue #1893)
 >
-> Это **записанный, но не выполненный** план из worktree `chore/tunit-mtp-audit`.
-> Он лежит в `dev`, потому что был закоммичен туда как документ, а не потому
-> что что-то из него применено. Проверялось:
+> План из этого документа **выполнен**. `Microsoft.NET.Test.Sdk` удалён:
 >
-> - `scripts/verify-tunit-mtp.sh`, на который ссылается §5, **в `dev` отсутствует** —
->   жил только в том worktree.
-> - `AGENT_PROMPT.md`, который ссылается §3, **в `dev` отсутствует** — то же.
-> - `Microsoft.NET.Test.Sdk` **по-прежнему** в тех же 11 `.csproj` и в
->   `Directory.Packages.props:71` (проверено на `dev`).
-> - Шаг «Теперь `dotnet test` должен перестать падать с exit 5» (§4 Step 2,
->   п. 4) — это **предсказание, которое никогда не выполнялось**. `dotnet test`
->   не запускался в CI после 2026-09-04, поэтому и «перестал», и «не перестал» —
->   на `dev` это **не проверено**.
+> - из **16** `.csproj`: 11 в `tests/` и 5 в `contrib/tests/`;
+> - из **одного** центрального пина в `Directory.Packages.props`;
+> - вместе с ложными комментариями «test host adapter — required for `dotnet test`»
+>   в `tests/Harbor.App.Cli.Tests/` и `tests/Harbor.E2E.Framework/`.
 >
-> Диагноз про конфликт пакета остаётся верным (цитата TUnit ниже — дословная), но
-> он объясняет **11 проектов из 36**, а не репозиторий целиком. Утверждение, что
-> `dotnet test` «находит НОЛЬ тестов по всему репо», в этот документ попало из
-> `AGENTS.md` и **было неверным**: код 5 у MTP — это «неверные аргументы командной
-> строки», а реальное отсутствие тестов даёт код 8. `CHANGELOG.md` (спринт
-> *ci-cd-maturity*) прямо показывает исходную причину: `renderer-perf-gate.yml`
-> печатал `Zero tests ran` / exit 5, пока не удалили **один** флаг `--logger`.
+> Что при этом выяснилось (сверх плана §4):
+>
+> - **Замена пакета не нужна.** `Microsoft.Testing.Platform.MSBuild` (генератор
+>   точки входа), `Microsoft.Testing.Extensions.CodeCoverage` (`--coverage`) и
+>   `Microsoft.Testing.Extensions.TrxReport` (`--report-trx`) приходят
+>   **транзитивно из `TUnit` → `TUnit.Engine`**. Проверено по
+>   восстановленному графу `tests/Harbor.Core.Tests`: и `Microsoft.Testing.
+>   Platform.MSBuild`, и `Microsoft.Testing.Platform` в нём есть без
+>   VSTest-хоста.
+> - **`IsTestProject` не потерялся.** `Microsoft.NET.Test.Sdk` в своих props
+>   выставляет `<IsTestProject>true</IsTestProject>`, и пять `contrib/tests/`
+>   проектов (имена не заканчиваются на `.Tests`) опирались именно на это.
+>   Теперь это даёт `tests/Directory.Build.props` и
+>   `contrib/tests/Directory.Build.props`, где `IsTestProject=true` стоит
+>   явно.
+> - **`dotnet test` не «перестал падать с exit 5»** — предсказание §4 Step 2
+>   (п. 4) осталось непроверенным, и теперь это неважно: `dotnet test` в
+>   этом репозитории не используется, ни в CI, ни в локальной сборке.
+>
+> **Возврат пакета теперь ловит гейт** `tools/check-no-test-sdk.py`
+> (issue #1893), подключённый в `.github/workflows/ci.yml` отдельным джобом
+> `test-sdk-absent`, который запускается **всегда**. Он читает все
+> отслеживаемые `*.csproj` / `*.props` / `*.targets` (кроме вендорённого
+> `contrib/external/`, ADR-019) и падает на `<PackageReference>` /
+> `<PackageVersion>` с этим id. §5 ниже описывает инструмент, которого в
+> `dev` так и не было (`scripts/verify-tunit-mtp.sh` жил только в том
+> worktree) — его место занял гейт из `tools/`.
+>
+> Диагноз про конфликт пакета остаётся верным (цитата TUnit ниже — дословная).
+> Утверждение, что `dotnet test` «находит НОЛЬ тестов по всему репо», в этот
+> документ попало из `AGENTS.md` и **было неверным**: код 5 у MTP — это
+> «неверные аргументы командной строки», а реальное отсутствие тестов даёт
+> код 8. `CHANGELOG.md` (спринт *ci-cd-maturity*) прямо показывает исходную
+> причину: `renderer-perf-gate.yml` печатал `Zero tests ran` / exit 5, пока
+> не удалили **один** флаг `--logger`.
 >
 > Актуальная версия этого объяснения — [CONTRIBUTING.md §Why not `dotnet test`](./CONTRIBUTING.md#why-not-dotnet-test).
 
@@ -154,6 +175,13 @@
 
 ## 4. План фикса (для этого worktree)
 
+> **Выполнено в #1893.** Шаги ниже — в том виде, в каком они были записаны
+> в 2026-09-05. Что реально изменилось против плана: п. 4 шага 2 («теперь
+> `dotnet test` должен перестать падать с exit 5») **не проверялся** и
+> остаётся непроверенным — `dotnet test` в этом репозитории не
+> используется; а шаг 4 (IDE) не входит в состав PR, потому что настройка
+> IDE — это состояние машины читателя, а не файл репозитория.
+
 ### Step 1 — удалить Microsoft.NET.Test.Sdk (CRITICAL)
 
 - Удалить `<PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.8.1" />` из `Directory.Packages.props:71`
@@ -201,7 +229,14 @@ grep -r "coverlet" tests --include="*.csproj" --include="*.props"
 
 ## 5. Скрипт для автопроверки
 
-См. `scripts/verify-tunit-mtp.sh` в этом worktree — гоняет все проверки из Step 2 одним запуском.
+`scripts/verify-tunit-mtp.sh` из того worktree **в `dev` так и не попал** (он
+жил только там). Его роль занял гейт репозитория:
+[`tools/check-no-test-sdk.py`](./tools/check-no-test-sdk.py) — stdlib python,
+без dotnet и без сети, читает все отслеживаемые `*.csproj` / `*.props` /
+`*.targets` и падает, если `Microsoft.NET.Test.Sdk` объявлен хоть в одном из
+них. Подключён в `.github/workflows/ci.yml` (джоб `test-sdk-absent`), у
+гайта есть `--self-test` (12 фикстур на каждую форму объявления) и
+`--min-files` (пол floors, чтобы сузившийся скан не стал зелёным).
 
 ---
 
@@ -216,4 +251,4 @@ grep -r "coverlet" tests --include="*.csproj" --include="*.props"
 - https://tunit.dev/docs/getting-started/running-your-tests — dotnet run vs dotnet test vs dotnet exec
 - https://tunit.dev/docs/troubleshooting — Tests Not Discovered, IDE Setup, Test Filtering, Code Coverage
 - https://tunit.dev/docs/writing-tests/things-to-know — Parallelisation, Instance Data
-- `Directory.Build.targets:11-19`, `tests/Directory.Build.props:1-13`, `Directory.Packages.props:71-77`
+- `Directory.Build.targets:11-19`, `tests/Directory.Build.props:1-13`, `contrib/tests/Directory.Build.props`

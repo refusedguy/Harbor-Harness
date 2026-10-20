@@ -11,11 +11,14 @@ namespace Harbor.Build.Targets;
 /// <remarks>
 ///     <para>
 ///         <c>dotnet test</c> is deliberately NOT used: its
-///         Microsoft.Testing.Platform bridge discovers zero tests in this repo
-///         (MTP host exits 5 with a silent discovery error), while the same
-///         assemblies run green via direct host execution. MTP args forward
-///         after <c>--</c>, including <c>--minimum-expected-tests 1</c> so a
-///         silent zero-test regression fails loudly.
+///         Microsoft.Testing.Platform bridge rejects the VSTest-era options
+///         (<c>--logger</c>, <c>--filter</c>) our old commands passed, and that
+///         is the platform's <c>invalid command-line arguments</c> exit code 5
+///         rather than evidence of zero discovered tests (a run that genuinely
+///         discovers no tests exits 8). The same assemblies run green via
+///         direct host execution. MTP args forward after <c>--</c>, including
+///         <c>--minimum-expected-tests 1</c> so a silent zero-test regression
+///         fails loudly.
 ///     </para>
 ///     <para>
 ///         Environment-bound suites are excluded from the local gate and run in
