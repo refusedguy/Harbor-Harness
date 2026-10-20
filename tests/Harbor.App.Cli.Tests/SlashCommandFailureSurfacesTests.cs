@@ -401,14 +401,11 @@ public class SlashCommandFailureSurfacesTests
     }
 
     /// <summary>
-    ///     Members the failure tests do not exercise fail loudly rather than
-    ///     returning an empty success, so a command that starts calling one shows
-    ///     up as a test failure instead of as a mysteriously blank list.
-    /// </summary>
-    /// <summary>
-    ///     The store baseline. Every member the /sessions failure tests do NOT
-    ///     exercise stays at the generated default — a loud "not configured"
-    ///     failure — so the fake only declares the two the tests read.
+    ///     The store baseline. The members the failure tests do not exercise stay
+    ///     at the generated default — a loud "not configured" failure, not an
+    ///     empty success — so a command that starts calling one shows up as a
+    ///     test failure instead of as a mysteriously blank list. The two the
+    ///     tests do read are declared here.
     /// </summary>
     private abstract class StoreBase : FakeSessionStoreBase
     {
