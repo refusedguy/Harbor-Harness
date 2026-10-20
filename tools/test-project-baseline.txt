@@ -118,4 +118,3 @@
 # separates run in a single process.
 #
 CLAIM-CONDITIONAL | Harbor.Tui.PerfTests | The perf-gate job runs it only when the PR touches the UI paths, because the suite measures renderer throughput against a committed baseline rather than asserting correctness. | @refusedguy
-SHARD-UNWIRED | Harbor.E2E.App.Avalonia | E2eShards defines the two-process split that would place the framework's tests in one shard, but CI runs the project once without a filter, so the partition is dead code. PR 1946 wires it. | @refusedguy

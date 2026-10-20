@@ -911,11 +911,30 @@ has its own statics, its own environment, and its own application instance.
 (`Application.Current` is a per-AppDomain singleton — there is no second app
 to build), one `$HOME` and one Harbor home. Re-keying the classes apart would
 not make the suite faster; it would make two of them drive the same window.
-The lever is the process, not the attribute: the two shards are defined in
-[`E2eShards.cs`](../tests/Harbor.E2E.App.Avalonia/E2eShards.cs), guarded by
-`E2eShardsTests` (which fails if a class is left out of both shards), and run
-by CI as two `dotnet exec` invocations of the same assembly with different
-`--treenode-filter` expressions.
+The lever is the process, not the attribute: the shards are defined in
+[`e2e-shards.json`](../tests/Harbor.E2E.App.Avalonia/e2e-shards.json) — a
+GENERATED plan, produced by [`tools/gen-e2e-shards.py`](../tools/gen-e2e-shards.py)
+from the source tree and from a measured CI run — and CI runs them as one
+`dotnet exec` of the same assembly PER SHARD, each with its own
+`--treenode-filter`, through
+[`tools/run-e2e-avalonia-shards.py`](../tools/run-e2e-avalonia-shards.py).
+
+Two things make that safe, and both are gates rather than comments:
+
+* **A class in no shard is a class CI stops running.** The plan is graded by
+  `E2eAvaloniaShardCoverageRules` in
+  [`tests/Harbor.Architecture.Tests`](../tests/Harbor.Architecture.Tests/),
+  which re-derives the class universe from the tree — including the classes of
+  the REFERENCED `Harbor.E2E.Framework` project, which TUnit also runs inside
+  every project that references it, and which a filter that forgot them would
+  drop silently — and fails when one is missing. That check is an architecture
+  rule rather than a test inside the E2E assembly on purpose: a new class
+  there is an UNKEYED test, and its presence reshuffles an order-fragile
+  suite. The first version of the shard table shipped such a guard and it cost
+  two real failures before it was removed (PR #1818).
+* **The runner proves what ran.** It enumerates the assembly's tests with
+  `--list-tests json`, compares that map against each shard's TRX, and fails
+  naming the class and the shard if a filter dropped anything.
 
 `Harbor.Tui.CellForge.PtyTests` is the counter-example, and it is the one
 that shows a key can be *wrong* rather than merely *expensive* (#1789). Forty

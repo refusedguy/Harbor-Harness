@@ -885,6 +885,15 @@ public sealed class HeadlessAvaloniaDriver : IAsyncDisposable
                 // case where OnQueryChanged never fires.
                 vm.CommandPalette.Query = string.Empty;
                 vm.CommandPalette.SelectedIndex = 0;
+                // The session list's search box, for the same reason and with
+                // the same shape of leak: a filter test leaves "IPC" in the
+                // box, and the NEXT test's refresh then re-queries the store
+                // THROUGH the filter - so the list shows only the matching
+                // session and the test that expected the unfiltered list
+                // cannot find its row. The clear is here, next to the
+                // palette's, because a reset that leaves one search box dirty
+                // and the other clean is a reset that depends on the order.
+                vm.Sessions.SearchText = string.Empty;
                 // Clear the chat transcript + reset the UiStore so the next
                 // test starts from a clean status (idle, no agent running).
                 // Without this, a previous test that triggered the agent loop
