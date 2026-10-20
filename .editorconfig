@@ -521,28 +521,36 @@ dotnet_diagnostic.VSTHRD202.severity = none # "remove the unnecessary async stat
 # tree. "Errors on the frozen surface and nowhere else" is therefore a fact
 # about the package graph, not a promise made by this file.
 #
-# The severities are written as `error` rather than left to
-# TreatWarningsAsErrors, and that is deliberate: the analyzer package's own
-# buildTransitive props appends every RS id to `WarningsNotAsErrors` when
+# WHY THE SEVERITIES ARE SET EXPLICITLY RATHER THAN LEFT TO
+# TreatWarningsAsErrors: the analyzer package's own buildTransitive props
+# appends every RS id to `WarningsNotAsErrors` when
 # `CodeAnalysisTreatWarningsAsErrors` is false, so the promotion to error
 # would depend on a property inside a package rather than on a decision
 # recorded here. `severity = error` does not go through that promotion, so
 # the gate stays an error even if the repo's warnings-as-errors policy is
 # ever relaxed.
 #
+# AND WHY ONLY SOME OF THE RULES ARE HERE. Roslyn applies a per-rule
+# `.editorconfig` severity to a diagnostic ONLY when the diagnostic's
+# location has a syntax tree (AnalyzerDriver.GetFilteredDiagnostic tests
+# `diagnostic.Location.SourceTree`). Five of the analyzer's rules are NOT
+# reported at a symbol: RS0017 (a declared API symbol that is not in the
+# code), RS0024 and RS0025 (an invalid or duplicated baseline) and RS0050 (a
+# removal marker that disagrees with the code) are reported INSIDE
+# PublicAPI.*.txt, and RS0048 (a missing API file) is reported at no
+# location at all. A `.editorconfig` severity cannot reach any of them, so
+# they are configured where it can: `<WarningsAsErrors>` in the two frozen
+# projects' .csproj files, which the compiler applies to a diagnostic by its
+# id wherever it is reported. Writing them here as well would be the kind of
+# configuration that reads like policy and reaches nothing — the same defect
+# ANALYZERS.md records for REL0001/REL0002.
+#
 # RS0016 — a public symbol is not in the declared API. The gate's core.
 dotnet_diagnostic.RS0016.severity = error
-# RS0017 — a declared API symbol is not in the code (deleted, or renamed).
-# The other half of the gate: a removal cannot land silently.
-dotnet_diagnostic.RS0017.severity = error
 # RS0022 — a constructor makes a non-inheritable base class inheritable and
 # so exposes the base's protected members. Fires only on unshipped API, so
 # it is a rule about what may be ADDED to the frozen surface.
 dotnet_diagnostic.RS0022.severity = error
-# RS0024 — the public API files are invalid (unparseable content).
-dotnet_diagnostic.RS0024.severity = error
-# RS0025 — a symbol appears more than once in the public API files.
-dotnet_diagnostic.RS0025.severity = error
 # RS0026 — do not add several public overloads with optional parameters.
 # Breaks compatibility when the API is EXTENDED, which is the case the
 # freeze exists for.
@@ -565,12 +573,15 @@ dotnet_diagnostic.RS0037.severity = error
 # people to ignore it. RS0036 (annotate the DECLARED API) is the rule that
 # is enforced, and it is the one that protects consumers.
 dotnet_diagnostic.RS0041.severity = none
-# RS0048 — a public API file is missing or is not an analyzer additional
-# file. Without it the analyzer would silently track nothing.
-dotnet_diagnostic.RS0048.severity = error
-# RS0050 — a symbol is marked as removed in the API files but still exists
-# in the source. The removal marker and the code must agree.
-dotnet_diagnostic.RS0050.severity = error
+#
+# NOT HERE, and where they are instead:
+#   RS0017  a declared API symbol is not in the code   -> <WarningsAsErrors>
+#   RS0024  the public API files are invalid            -> <WarningsAsErrors>
+#   RS0025  a symbol appears twice in the API files     -> <WarningsAsErrors>
+#   RS0048  a public API file is missing                -> <WarningsAsErrors>
+#   RS0050  a symbol is marked removed but still exists -> <WarningsAsErrors>
+# in src/Harbor.Abstractions/Harbor.Abstractions.csproj and
+# src/Harbor.Abstractions.Contracts/Harbor.Abstractions.Contracts.csproj.
 
 # ============================================================================
 # DEPENDENCY INJECTION ANALYZERS (Task A3)

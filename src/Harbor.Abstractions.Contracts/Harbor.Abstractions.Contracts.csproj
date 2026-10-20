@@ -67,4 +67,23 @@
     </PackageReference>
   </ItemGroup>
 
+  <!--
+    #1845: the five public-API rules the analyzer does NOT report at a symbol.
+    RS0017 (a declared API symbol that is not in the code), RS0024 and RS0025
+    (an invalid or a duplicated baseline) and RS0050 (a removal marker that
+    disagrees with the code) are reported INSIDE PublicAPI.*.txt, and RS0048
+    (a missing API file) is reported at no location at all. Roslyn applies a
+    per-rule `.editorconfig` severity only to a diagnostic whose location has
+    a syntax tree, so those five cannot be configured there — a row for them
+    in `.editorconfig` would read like policy and reach nothing.
+
+    `WarningsAsErrors` is the mechanism that does reach them: the compiler
+    applies it to a diagnostic by its id wherever the diagnostic is reported.
+    The list is the two frozen assemblies' own, and the six rules reported at
+    a symbol are configured in `.editorconfig` instead, where they can be.
+  -->
+  <PropertyGroup>
+    <WarningsAsErrors>$(WarningsAsErrors);RS0017;RS0024;RS0025;RS0048;RS0050</WarningsAsErrors>
+  </PropertyGroup>
+
 </Project>

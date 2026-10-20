@@ -383,32 +383,50 @@ Both are picked up as analyzer additional files by the package's own
 of each is `#nullable enable` — without it the analyzer cannot track
 nullability at all (RS0037).
 
-| Rule | What it says | Severity | Why |
-|---|---|---|---|
-| RS0016 | a public symbol is not in the declared API | error | the gate's core: an added member fails the build until the baseline names it |
-| RS0017 | a declared API symbol is not in the code | error | the other half: a removed or renamed member fails the build until the baseline says so |
-| RS0022 | a constructor makes a non-inheritable base inheritable | error | it exposes the base's `protected` members |
-| RS0024 | the public API files are invalid | error | a malformed baseline is not a baseline |
-| RS0025 | a symbol appears twice in the public API files | error | a duplicate row is a row nobody reviewed twice |
-| RS0026 | do not add several public overloads with optional parameters | error | breaks compatibility when the API is extended |
-| RS0027 | an API with optional parameters must have the most parameters among its overloads | error | same back-compat family |
-| RS0036 | a declared API symbol is missing its nullability annotations | error | nullability is part of the signature a consumer compiles against |
-| RS0037 | the API files must carry `#nullable enable` | error | without it the analyzer tracks nothing about nullability |
-| RS0041 | a public member uses an oblivious reference type | none | off until the tree is fully annotated, per the analyzer's own guidance |
-| RS0048 | an API file is missing or is not an analyzer additional file | error | without it the analyzer would silently track nothing |
-| RS0050 | a symbol is marked removed but still exists in the code | error | the removal marker and the code must agree |
+| Rule | What it says | Severity | Where it is configured | Why |
+|---|---|---|---|---|
+| RS0016 | a public symbol is not in the declared API | error | `.editorconfig` | the gate's core: an added member fails the build until the baseline names it |
+| RS0017 | a declared API symbol is not in the code | error | `<WarningsAsErrors>` | the other half: a removed or renamed member fails the build until the baseline says so |
+| RS0022 | a constructor makes a non-inheritable base inheritable | error | `.editorconfig` | it exposes the base's `protected` members |
+| RS0024 | the public API files are invalid | error | `<WarningsAsErrors>` | a malformed baseline is not a baseline |
+| RS0025 | a symbol appears twice in the public API files | error | `<WarningsAsErrors>` | a duplicate row is a row nobody reviewed twice |
+| RS0026 | do not add several public overloads with optional parameters | error | `.editorconfig` | breaks compatibility when the API is extended |
+| RS0027 | an API with optional parameters must have the most parameters among its overloads | error | `.editorconfig` | same back-compat family |
+| RS0036 | a declared API symbol is missing its nullability annotations | error | `.editorconfig` | nullability is part of the signature a consumer compiles against |
+| RS0037 | the API files must carry `#nullable enable` | error | `.editorconfig` | without it the analyzer tracks nothing about nullability |
+| RS0041 | a public member uses an oblivious reference type | none | `.editorconfig` | off until the tree is fully annotated, per the analyzer's own guidance |
+| RS0048 | an API file is missing or is not an analyzer additional file | error | `<WarningsAsErrors>` | without it the analyzer would silently track nothing |
+| RS0050 | a symbol is marked removed but still exists in the code | error | `<WarningsAsErrors>` | the removal marker and the code must agree |
+
+**Why two places, and not one.** Roslyn applies a per-rule `.editorconfig`
+severity to a diagnostic **only when the diagnostic's location has a syntax
+tree** (`AnalyzerDriver.GetFilteredDiagnostic` tests
+`diagnostic.Location.SourceTree`). Six of the twelve rules are reported at a
+symbol and are configured in `.editorconfig` as usual. The other five —
+RS0017, RS0024, RS0025 and RS0050, which are reported **inside
+`PublicAPI.*.txt`**, and RS0048, which is reported at **no location at
+all** — cannot be reached that way: a `.editorconfig` row for them would
+read like policy and change nothing. They are configured in the two frozen
+projects' `.csproj` files with `<WarningsAsErrors>`, which the compiler
+applies to a diagnostic **by its id, wherever it is reported**.
+
+This was found by the non-vacuity job, not by reading the documentation: with
+only the `.editorconfig` rows, the planted removal produced
+`warning RS0017` and the build succeeded. The same job would have missed it
+if it had been written to accept a warning.
 
 **Why `severity = error` and not the global warnings-as-errors.** The
 analyzer package's own `buildTransitive` props appends every RS id to
 `WarningsNotAsErrors` when `CodeAnalysisTreatWarningsAsErrors` is false, so
 relying on `TreatWarningsAsErrors=true` to promote them would make the gate
-depend on a property inside a package rather than on a decision recorded in
-this repository. `.editorconfig` sets the severities explicitly, so the gate
-stays an error even if the warnings-as-errors policy is relaxed. The
-non-vacuity job proves it: it builds a throwaway project **outside** the
-repository (so `Directory.Build.props` does not apply and
-`TreatWarningsAsErrors` is off) with this repository's `.editorconfig`
-copied in, and the planted violation fails as `error RS0016`.
+depend on a property **inside a package** rather than on a decision recorded
+in this repository. The two mechanisms above do not go through that
+promotion, so the gate stays an error even if the warnings-as-errors policy
+is relaxed. The non-vacuity job proves it: it builds a throwaway project
+**outside** the repository (so `Directory.Build.props` does not apply and
+`TreatWarningsAsErrors` is **off**) with this repository's `.editorconfig`
+and the frozen projects' `<WarningsAsErrors>` list copied in, and the planted
+violation fails as `error RS0016`.
 
 **What the analyzer cannot do.** It sees one tree. The old gate's rule was
 about a diff — "commit the regenerated baseline in the SAME PR as the API

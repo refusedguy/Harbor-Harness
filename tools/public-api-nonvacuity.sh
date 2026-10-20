@@ -25,12 +25,12 @@
 #
 # The throwaway project lives OUTSIDE the repository, so the repo's
 # Directory.Build.props does NOT apply to it: TreatWarningsAsErrors is off
-# there, and the failure in step 1 is caused by the explicit
-# `dotnet_diagnostic.RS0016.severity = error` line in the repo's
-# .editorconfig — which is copied in — and by nothing else. That is the
-# point of the exercise: the gate is an error because the severity was
-# decided, not because a global warnings-as-errors policy happened to
-# promote it.
+# there, and the failures in steps 1 and 3 are caused by the two explicit
+# mechanisms — the `dotnet_diagnostic.RS0016.severity = error` line in the
+# repo's .editorconfig (copied in) and the `<WarningsAsErrors>` list — and by
+# nothing else. That is the point of the exercise: the gate is an error
+# because the severity was decided, not because a global warnings-as-errors
+# policy happened to promote it.
 #
 # The rows for step 2 are not written by hand: they are read out of the
 # analyzer's own RS0016 message, which carries the exact line the analyzer
@@ -60,6 +60,22 @@ cat > "$work/gate.csproj" <<EOF
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <ManagePackageVersionsCentrally>false</ManagePackageVersionsCentrally>
+    <!--
+      The two frozen assemblies configure the five rules the analyzer reports
+      inside the baseline file (RS0017, RS0024, RS0025, RS0048, RS0050) with
+      <WarningsAsErrors>, because Roslyn applies a per-rule .editorconfig
+      severity only to a diagnostic whose location has a syntax tree. The
+      same list is here, so the proof exercises the same mechanism.
+    -->
+    <WarningsAsErrors>RS0017;RS0024;RS0025;RS0048;RS0050</WarningsAsErrors>
+    <!--
+      TreatWarningsAsErrors is deliberately OFF here, while it is ON in the
+      repository. The gate must not depend on the global warnings-as-errors
+      policy: with it off, an error in this job can only come from the two
+      explicit mechanisms — the .editorconfig severity and the
+      <WarningsAsErrors> list — which is exactly what the proof is for.
+    -->
+    <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="Microsoft.CodeAnalysis.PublicApiAnalyzers" Version="$version">
