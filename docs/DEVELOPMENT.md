@@ -154,6 +154,32 @@ that way: adding a link check to `ReadmeCoverageTests`, or a section check to
 `md-lint.py`, would give two gates an opinion about the same fact, and two
 gates that can disagree are worse than one.
 
+### The gate policy — why the gates are python, and what the compiler takes
+
+[docs/CI_GATES.md](./CI_GATES.md) is the policy for the python tools in
+`tools/`: why they are python (a gate has to run where the SDK and the build
+are not, which is a docs-only pull request and the pull request that breaks
+the build), what the compiler takes over instead (a check that needs a type or
+a symbol is a Roslyn analyzer in the build, as the public-API freeze became
+in #1845), what every gate owes (a self-test with a planted control, a
+ratchet whose floor only goes down, a deterministic exit, a message that names
+the violator), and what a gate must not do (measure time, duplicate another
+gate, require dotnet).
+
+The page carries a table of every python tool CI runs, and
+`tools/check-gate-policy.py` is the gate over that table: it reads the table,
+the scripts and the workflow files, and fails when they disagree. So the
+policy is not a paragraph a reviewer has to remember.
+
+```bash
+./tools/check-gate-policy.py --self-test   # each rule still fires
+./tools/check-gate-policy.py --min-gates 21
+```
+
+A new `tools/check-*.py` needs the "why python" line in its header, a row in
+that table, and a self-test step in `docs.yml`. The checker says which of the
+three is missing.
+
 ## Test duplication gate — issue 1778
 
 `tools/check-test-dup.py` finds duplicated **test bodies** in `tests/` and

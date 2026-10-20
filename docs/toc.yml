@@ -28,6 +28,8 @@
   href: CENTRAL_PACKAGE_MANAGEMENT.md
 - name: Citation Drift Measurement
   href: CITATION_DRIFT_MEASUREMENT.md
+- name: Ci Gates
+  href: CI_GATES.md
 - name: Ci Ui Tests
   href: CI_UI_TESTS.md
 - name: Claude Code Ui Ux Analysis
