@@ -21,7 +21,7 @@ public class LspClientAnswerRaceTests
     [Test]
     public async Task Answer_That_Arrives_Before_The_Writer_Returns_Is_Not_Dropped()
     {
-        var pipe = new EagerAnswerPipe();
+        using var pipe = new EagerAnswerPipe();
         await using var client = new LspClient(pipe.ToClient, pipe.FromClient, NullLogger.Instance);
         client.ServerNotification += (_, e) =>
         {
