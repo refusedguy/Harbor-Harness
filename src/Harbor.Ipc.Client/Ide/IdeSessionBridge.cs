@@ -317,7 +317,11 @@ public sealed class IdeSessionBridge : IIdeSessionBridge
         }
         catch (JsonException ex)
         {
-            throw new IdeRpcException(IdeRpcException.InvalidParams, $"Malformed params: {ex.Message}");
+            // #1848: carry the JsonException as the inner exception. The
+            // message text is unchanged, so the JSON-RPC error the IDE sees
+            // is unchanged; the inner exception is what carries the stack
+            // trace and the JSON position of the malformed value.
+            throw new IdeRpcException(IdeRpcException.InvalidParams, $"Malformed params: {ex.Message}", ex);
         }
     }
 

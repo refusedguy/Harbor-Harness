@@ -68,7 +68,7 @@ API.
 | `Excubo.Analyzers.DependencyInjectionValidation` | 1.0.33 | a `LICENSE` file, no SPDX expression | ADOPT, apps-only | EDI01 to EDI04 plus ADP0001, all demoted to `suggestion` because the analyzer's flow analysis only follows the immediate method body. The real coverage is the DI registration tests (§2). |
 | `Microsoft.VisualStudio.Threading.Analyzers` | 18.12.1 | MIT | ADOPT with scope, `src/` and `apps/` only (#1852) | 29 rules, one of them on: VSTHRD110 at `suggestion`. The other 28 are `none` with a reason each, and four of them ship as `error` by default, so landing the package without the demotions would have reddened the tree on the day it arrived. |
 | `Microsoft.CodeAnalysis.PublicApiAnalyzers` | 5.6.0 | MIT | ADOPT, staged (PR #1944, issue #1845) | Replaces 1212 lines of python public-API gate with the compiler, on the two frozen projects only. The pull request is open, so this row records the decision, not the merge. |
-| `TheExceptionator.Analyzers` | 1.3.33 | Apache-2.0 | ADOPT with scope (issue #1848, open) | EX003 (a lost inner exception), EX021 (an exception type with no `(message, inner)` constructor) and EX011 (an empty catch) are the findings worth taking; the rest overlaps CA and Sonar. |
+| `TheExceptionator.Analyzers` | 1.3.33 | Apache-2.0 | REJECT the package, ADOPT the findings (#1848) | The two findings were real and both are fixed, and the rule that finds them is now a house rule (`InnerExceptionRules.cs`). The package itself is not consumable here: its nuspec declares its Roslyn dependencies with `exclude="Build,Analyzers"`, and every version of the Roslyn packages carries EXACT version constraints (`[3.3.1, 3.3.1]`), so against this repository's central Roslyn pin (5.6.0) the restore fails with NU1608 on every product project, and the same edges leave the compile and runtime assets of `Microsoft.CodeAnalysis.CSharp` in the closure of every project that references the package. The nine analyzer packages this repository already uses declare NO dependencies at all, because the Roslyn assemblies come from the compiler. |
 | `NetArchTest.Rules` | 1.3.2 | MIT | IN the tree, the replacement is open | The layer gate runs on it, and its last release was 2021-05-23. The replacement is tracked in #1841 (ArchUnitNET) and #1864 (aweXpect.Reflection). |
 | `aweXpect.Reflection` | 3.1.0 | MIT | SPIKE, the live pilot (#1864, #1879) | The successor `Testably.Architecture.Rules` names, with no transitive Newtonsoft and no TUnit pin. It covers exactly one of our tasks: the shape of an interface and the dead surface. |
 | `ErrorProne.NET.CoreAnalyzers` | 0.9.0-beta.4 | MIT (a `licenseUrl`, no SPDX expression) | REJECT (#1849) | Measured on this tree: 2 product findings, both duplicating EX003. The unique rules give 0 (EPC32, EPC19, EPC16, EPC17, EPC26, EPC30, EPC23, EPC11), and EPC27 gives 4 false positives on the `async void` handlers `docs/ANTIPATTERNS.md` §13 blesses. |
@@ -122,7 +122,7 @@ state:
 | `Microsoft.CodeAnalysis.PublicApiAnalyzers` | a candidate with an open decision | ADOPT, staged | #1845 is decided and PR #1944 is open. The python public-API gate it replaces is still in the tree until that pull request merges. |
 | `IDisposableAnalyzers` | REJECT, it duplicates what CA1001 and CA1063 already say | REJECT the package, ADOPT the findings | IDISP014 is not covered by CA1001 or CA1063. The package is still dead; the two `HttpClient` sites it named were fixed by hand, a house rule now guards them (`HttpClientReuseRules.cs`), and both landed (#1854). |
 | `ErrorProne.NET.CoreAnalyzers` | REJECT, measured | REJECT, measured | The verdict stands, but the version the audit recorded (`0.1.5898.41180`) is not a version this package ever published. The measured version is `0.9.0-beta.4`, and it is the one the verdict applies to (#1849). |
-| `TheExceptionator.Analyzers` | not rejected, resolved separately in #1848 | ADOPT with scope, still open | #1848 has not merged, so the package is not in the tree. The scope is the three rules the table names. |
+| `TheExceptionator.Analyzers` | not rejected, resolved separately in #1848 | REJECT the package, ADOPT the findings | #1848 merged. The two lost inner exceptions are fixed, and the rule that finds them is a house rule (`InnerExceptionRules.cs`) rather than the package's EX003 and EX021. The package is not in the tree, and the reason is in the row above: its dependency edges break the restore. |
 | `Microsoft.CodeAnalysis.BannedApiAnalyzers` | already connected, not a candidate | ADOPT, and it now carries the dynamic-code ban | Since #1844 the second ban file, `BannedSymbols.DynamicCode.txt`, is enforced by RS0030 as well, so the package does more than the "What NOT to do" list. |
 
 Re-check this table when a package releases a new version, when Roslyn moves a
@@ -358,6 +358,53 @@ being asynchronous, and a type *derived* from `Task`, and it does not flag a
 method named `…Async` that returns `int`. The pattern matcher it replaced
 (`AvaloniaFireAndForgetRules.cs`) survives as the non-gating **oracle** the
 differential compares against; see that file's header. Issue #1852.
+
+### Exception rules (house gate, not a package)
+
+The rule that a new exception thrown inside a catch must carry the caught
+exception, and the rule that a custom exception type must be able to carry one
+at all, are enforced by
+[`tests/Harbor.Architecture.Tests/InnerExceptionRules.cs`](../tests/Harbor.Architecture.Tests/InnerExceptionRules.cs).
+They are house rules rather than an analyzer package's rules, and the reason is
+in the candidate table above: the package that shipped them
+(`TheExceptionator.Analyzers`, rules EX003 and EX021) is not consumable here.
+
+| Rule | What it catches |
+|------|-----------------|
+| `lost-inner-exception` | a `throw new X(…)` inside a catch that names the exception it caught, where the new exception does not receive that exception as an argument |
+| `exception-without-inner-constructor` | a custom exception type that declares neither `(string message)` nor `(string message, Exception innerException)` |
+
+**The two findings, and what was done about them.** Both were the same defect:
+the message survived, the cause did not.
+
+| Site | Before | After |
+|------|--------|-------|
+| `src/Harbor.Application/Configuration/ConfigStore.cs` | `throw new InvalidDataException($"config.json is corrupt: {je.Message}")` | the same message, with `je` as the inner exception: the stack trace and the JSON position of the malformed key survive |
+| `src/Harbor.Ipc.Client/Ide/IdeSessionBridge.cs` | `throw new IdeRpcException(IdeRpcException.InvalidParams, $"Malformed params: {ex.Message}")` | the same message and code, with `ex` as the inner exception |
+
+Both fixes keep the text a user or an IDE sees: `ResultErrors.Message` reads
+`ex.Message`, and the JSON-RPC error writer reads `ex.Message`.
+
+**The control.** The rule's planted controls are the load-bearing part. The
+offender (a catch that throws without the caught exception, in both the
+interpolated-message spelling and the plain one) must be reported **exactly
+once**, and the near-misses must be reported **not at all**: the throw that
+carries the caught exception, the bare rethrow, the throw outside a catch, the
+catch that names no variable, and the exception type that declares both
+constructors. The runner asserts the count and not only the presence, because
+"reports everything" and "reports nothing" are the same broken detector.
+
+**What the rule does not cover, stated rather than left for a reader to
+discover.** The first rule is syntactic: it sees a throw statement, an
+enclosing catch clause and the argument list of the creation, and nothing else.
+It does not see whether the exception that is passed is the one the catch
+named, so `throw new X(ex.InnerException)` is reported (correctly: that is the
+old exception's cause, not the one the catch named, and throwing it directly
+loses the stack trace). The second rule is syntactic too: it reads the base
+list and the constructor declarations, so a type that reaches `Exception`
+through a base this rule cannot see is out of scope. The tree has none: all
+four exception types under `src/` + `apps/` derive from `System.Exception`
+directly.
 
 ### Banned APIs (`BannedSymbols.txt`, `BannedSymbols.DynamicCode.txt`)
 
