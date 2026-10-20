@@ -355,17 +355,25 @@ public sealed partial class PatchTool : ITool
         // failure and hands the SAME error on — `Bind` re-types a failure to
         // the chain's result type, which is what the old
         // `x.ConvertFailure<PatchInput>()` guard did — so every message and
-        // every failure point is unchanged. The order of the steps is the
-        // order of the links: existence, read, size, parse.
+        // every failure point is unchanged. The order of the checks is the
+        // order of the old ladder: existence, read, size, parse.
+        // Two type facts shape the links:
+        //   - `ConfiguredTaskAwaitable<T>` is not a `Task<T>`, so a
+        //     `.ConfigureAwait(false)` inside a continuation does not bind. The
+        //     read link hands `Bind` the TASK; the library's own `Result.Try`
+        //     awaits with `DefaultConfigureAwait` (false), so the
+        //     ConfigureAwait that came off it bought nothing.
+        //   - a `Bind` continuation receives the UNWRAPPED value, so the size
+        //     check rides on the `Task<Result<string>>` (`Ensure` has a Task
+        //     overload) rather than on the string.
         return await Result.Success(path)
             .Ensure(static p => !Directory.Exists(p), p => $"Path is a directory: {p}")
             .Ensure(static p => File.Exists(p), p => $"File not found: {p}")
             .Bind(_ => Result.Try(
                     () => File.ReadAllTextAsync(path, Encoding.UTF8, ct),
                     ex => $"Failed to read: {ex.Message}")
-                .ConfigureAwait(false))
-            .Bind(read => read.Ensure(s => s.Length <= MaxFileChars,
-                s => $"File too large ({s.Length} chars; max {MaxFileChars})."))
+                .Ensure(s => s.Length <= MaxFileChars,
+                    s => $"File too large ({s.Length} chars; max {MaxFileChars})."))
             .Bind(sized => HunkParser.TryParse(patch)
                 .MapError(static e => $"Failed to parse patch: {e}")
                 .Bind(parsed => Result.Success(new PatchInput(sized, SplitLines(sized), parsed))
