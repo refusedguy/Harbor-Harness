@@ -51,38 +51,28 @@ namespace Harbor.App.Avalonia.Tests;
 [NotInParallel(new[] { "avalonia-headless", "process-env" })]
 public class ViewInflationTests
 {
+    // #1770: the plain-inflation copies differed only in the view type — the
+    // assert never changed. The type is the table now (`typeof(...)` is legal
+    // in an attribute argument; Activator picks the parameterless constructor
+    // the former `new X()` called), and every row keeps its original test name
+    // as the display name. The two views that need a headless session
+    // (ChatView, SettingsView) keep their own methods — their body is not the
+    // same shape.
     [Test]
-    public async Task TitleBarView_Inflates()
+    [Arguments(typeof(Views.Chrome.TitleBarView), DisplayName = "TitleBarView_Inflates")]
+    [Arguments(typeof(Views.Shell.ActivityRailView), DisplayName = "ActivityRailView_Inflates")]
+    [Arguments(typeof(Views.Shell.StatusBarView), DisplayName = "StatusBarView_Inflates")]
+    [Arguments(typeof(Views.Shell.RightDrawerView), DisplayName = "RightDrawerView_Inflates")]
+    [Arguments(typeof(Views.Shell.SessionsFlyoutView), DisplayName = "SessionsFlyoutView_Inflates")]
+    [Arguments(typeof(Views.Shell.ComposerView), DisplayName = "ComposerView_Inflates")]
+    [Arguments(typeof(Views.CommandPaletteView), DisplayName = "CommandPaletteView_Inflates")]
+    [Arguments(typeof(Views.DiffView), DisplayName = "DiffView_Inflates")]
+    [Arguments(typeof(Views.Dev.ComponentGalleryView), DisplayName = "ComponentGalleryView_Inflates")]
+    [Arguments(typeof(BoardView), DisplayName = "BoardView_Inflates")]
+    [Arguments(typeof(SessionCardView), DisplayName = "SessionCardView_Inflates")]
+    public async Task View_Inflates(Type viewType)
     {
-        var view = new Views.Chrome.TitleBarView();
-        await Assert.That(view).IsNotNull();
-    }
-
-    [Test]
-    public async Task ActivityRailView_Inflates()
-    {
-        var view = new Views.Shell.ActivityRailView();
-        await Assert.That(view).IsNotNull();
-    }
-
-    [Test]
-    public async Task StatusBarView_Inflates()
-    {
-        var view = new Views.Shell.StatusBarView();
-        await Assert.That(view).IsNotNull();
-    }
-
-    [Test]
-    public async Task RightDrawerView_Inflates()
-    {
-        var view = new Views.Shell.RightDrawerView();
-        await Assert.That(view).IsNotNull();
-    }
-
-    [Test]
-    public async Task SessionsFlyoutView_Inflates()
-    {
-        var view = new Views.Shell.SessionsFlyoutView();
+        var view = Activator.CreateInstance(viewType);
         await Assert.That(view).IsNotNull();
     }
 
@@ -109,13 +99,6 @@ public class ViewInflationTests
     }
 
     [Test]
-    public async Task ComposerView_Inflates()
-    {
-        var view = new Views.Shell.ComposerView();
-        await Assert.That(view).IsNotNull();
-    }
-
-    [Test]
     public async Task ToastNotificationsView_Inflates_ThreeToasts()
     {
         var vm = new ToastVm();
@@ -129,13 +112,6 @@ public class ViewInflationTests
         };
 
         view.ApplyTemplate();
-        await Assert.That(view).IsNotNull();
-    }
-
-    [Test]
-    public async Task CommandPaletteView_Inflates()
-    {
-        var view = new Views.CommandPaletteView();
         await Assert.That(view).IsNotNull();
     }
 
@@ -157,38 +133,11 @@ public class ViewInflationTests
     }
 
     [Test]
-    public async Task DiffView_Inflates()
-    {
-        var view = new Views.DiffView();
-        await Assert.That(view).IsNotNull();
-    }
-
-    [Test]
-    public async Task ComponentGalleryView_Inflates()
-    {
-        var view = new Views.Dev.ComponentGalleryView();
-        await Assert.That(view).IsNotNull();
-    }
-
-    [Test]
-    public async Task BoardView_Inflates()
-    {
-        var view = new BoardView();
-        await Assert.That(view).IsNotNull();
-    }
-
-    [Test]
-    public async Task SessionCardView_Inflates()
-    {
-        var view = new SessionCardView();
-        await Assert.That(view).IsNotNull();
-    }
-
-    [Test]
     public async Task SessionCardView_Inflates_WithAnApplicationRunning()
     {
-        // #973. The test above is the only inflation coverage this card had, and
-        // it could not have caught what was wrong with it.
+        // #973. The SessionCardView row of the inflation table above is the
+        // only inflation coverage this card had, and it could not have caught
+        // what was wrong with it.
         //
         // It constructs the view with no Avalonia Application, and StatusDot's
         // constructor enters its body only `if (Application.Current is not null)`

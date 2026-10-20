@@ -23,79 +23,31 @@ public sealed class ToastTests : ComponentTestBase
     public async Task SetupAsync() => await GetDriverAsync("Toast").ConfigureAwait(false);
 
     /// <summary>
-    ///     Info toast: blue accent border, "Info" kind label, message visible.
+    ///     One toast per kind: info (blue), success (green), warning (peach),
+    ///     error (red) — the accent border, the kind label and the message are
+    ///     all visible, and each kind gets its own golden frame.
     /// </summary>
+    // #1770: the four kind-copies differed only in the kind, the message and
+    // the capture name — the asserts never changed. All three are the table
+    // now, and every row keeps its original test name as the display name.
     [Test]
     [Category("E2E")]
     [Category("Component")]
-    public async Task Toast_Info_BlueAccentAndMessage()
+    [Arguments(ToastKind.Info, "Info: connection established.", "toast-info", DisplayName = "Toast_Info_BlueAccentAndMessage")]
+    [Arguments(ToastKind.Success, "Success: file saved.", "toast-success", DisplayName = "Toast_Success_GreenAccent")]
+    [Arguments(ToastKind.Warning, "Warning: rate limit approaching.", "toast-warning", DisplayName = "Toast_Warning_PeachAccent")]
+    [Arguments(ToastKind.Error, "Error: provider returned 503.", "toast-error", DisplayName = "Toast_Error_RedAccent")]
+    public async Task Toast_Kind_ShowsItsMessage(ToastKind kind, string message, string captureName)
     {
         await Driver.ResetStateAsync().ConfigureAwait(false);
 
-        UI(() => Vm.AddToast(new ToastNotification("Info: connection established.", ToastKind.Info)));
+        UI(() => Vm.AddToast(new ToastNotification(message, kind)));
 
-        var hasMsg = await Driver.WaitForTextAsync("Info: connection established.", TimeSpan.FromSeconds(2))
+        var hasMsg = await Driver.WaitForTextAsync(message, TimeSpan.FromSeconds(2))
             .ConfigureAwait(false);
         await Assert.That(hasMsg).IsTrue().Because(Driver.LastWaitDiagnostic);
 
-        var path = await CaptureAsync("toast-info").ConfigureAwait(false);
-    }
-
-    /// <summary>
-    ///     Success toast: green accent border.
-    /// </summary>
-    [Test]
-    [Category("E2E")]
-    [Category("Component")]
-    public async Task Toast_Success_GreenAccent()
-    {
-        await Driver.ResetStateAsync().ConfigureAwait(false);
-
-        UI(() => Vm.AddToast(new ToastNotification("Success: file saved.", ToastKind.Success)));
-
-        var hasMsg = await Driver.WaitForTextAsync("Success: file saved.", TimeSpan.FromSeconds(2))
-            .ConfigureAwait(false);
-        await Assert.That(hasMsg).IsTrue().Because(Driver.LastWaitDiagnostic);
-
-        var path = await CaptureAsync("toast-success").ConfigureAwait(false);
-    }
-
-    /// <summary>
-    ///     Warning toast: peach/orange accent border.
-    /// </summary>
-    [Test]
-    [Category("E2E")]
-    [Category("Component")]
-    public async Task Toast_Warning_PeachAccent()
-    {
-        await Driver.ResetStateAsync().ConfigureAwait(false);
-
-        UI(() => Vm.AddToast(new ToastNotification("Warning: rate limit approaching.", ToastKind.Warning)));
-
-        var hasMsg = await Driver.WaitForTextAsync("Warning: rate limit approaching.", TimeSpan.FromSeconds(2))
-            .ConfigureAwait(false);
-        await Assert.That(hasMsg).IsTrue().Because(Driver.LastWaitDiagnostic);
-
-        var path = await CaptureAsync("toast-warning").ConfigureAwait(false);
-    }
-
-    /// <summary>
-    ///     Error toast: red accent border.
-    /// </summary>
-    [Test]
-    [Category("E2E")]
-    [Category("Component")]
-    public async Task Toast_Error_RedAccent()
-    {
-        await Driver.ResetStateAsync().ConfigureAwait(false);
-
-        UI(() => Vm.AddToast(new ToastNotification("Error: provider returned 503.", ToastKind.Error)));
-
-        var hasMsg = await Driver.WaitForTextAsync("Error: provider returned 503.", TimeSpan.FromSeconds(2))
-            .ConfigureAwait(false);
-        await Assert.That(hasMsg).IsTrue().Because(Driver.LastWaitDiagnostic);
-
-        var path = await CaptureAsync("toast-error").ConfigureAwait(false);
+        var path = await CaptureAsync(captureName).ConfigureAwait(false);
     }
 
     /// <summary>

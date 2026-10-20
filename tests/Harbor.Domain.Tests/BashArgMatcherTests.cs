@@ -25,26 +25,20 @@ public class BashArgMatcherTests
     ///     command substitution INSIDE double quotes. Before the fix,
     ///     <c>cat "x$(rm -rf ~)"</c> passed an Allow rule like <c>bash "cat *"</c>.
     /// </summary>
+    // #1770: the "flagged" copies differed only in the command lines — every
+    // assert was the same `IsTrue` over a list of vectors. The vectors are one
+    // '|'-separated string per row, because an attribute argument cannot
+    // carry an implicitly-typed array, and every row keeps its original test
+    // name as the display name.
     [Test]
-    public async Task HasShellMetacharacters_DoubleQuotedCommandSubstitution_IsFlagged()
+    [Arguments("cat \"x$(rm -rf ~)\"|echo \"$(id -u)\"|cat \"$((1+1))\"", DisplayName = "HasShellMetacharacters_DoubleQuotedCommandSubstitution_IsFlagged")]
+    [Arguments("echo \"a`b\"|echo \"run `whoami` now\"", DisplayName = "HasShellMetacharacters_DoubleQuotedBackticks_AreFlagged")]
+    [Arguments("grep \"a\\.b\" x|echo \"C:\\temp\"", DisplayName = "HasShellMetacharacters_DoubleQuotedBackslashEscapes_AreFlagged")]
+    [Arguments("echo \"abc|echo 'abc|cat abc\\", DisplayName = "HasShellMetacharacters_UnterminatedQuotesOrTrailingEscape_AreStillFlagged")]
+    public async Task HasShellMetacharacters_DangerousVectors_AreFlagged(string commands)
     {
-        await Assert.That(BashArgMatcher.HasShellMetacharacters("cat \"x$(rm -rf ~)\"")).IsTrue();
-        await Assert.That(BashArgMatcher.HasShellMetacharacters("echo \"$(id -u)\"")).IsTrue();
-        await Assert.That(BashArgMatcher.HasShellMetacharacters("cat \"$((1+1))\"")).IsTrue();
-    }
-
-    [Test]
-    public async Task HasShellMetacharacters_DoubleQuotedBackticks_AreFlagged()
-    {
-        await Assert.That(BashArgMatcher.HasShellMetacharacters("echo \"a`b\"")).IsTrue();
-        await Assert.That(BashArgMatcher.HasShellMetacharacters("echo \"run `whoami` now\"")).IsTrue();
-    }
-
-    [Test]
-    public async Task HasShellMetacharacters_DoubleQuotedBackslashEscapes_AreFlagged()
-    {
-        await Assert.That(BashArgMatcher.HasShellMetacharacters("grep \"a\\.b\" x")).IsTrue();
-        await Assert.That(BashArgMatcher.HasShellMetacharacters("echo \"C:\\temp\"")).IsTrue();
+        foreach (string command in commands.Split('|'))
+            await Assert.That(BashArgMatcher.HasShellMetacharacters(command)).IsTrue();
     }
 
     [Test]
@@ -58,14 +52,6 @@ public class BashArgMatcherTests
         await Assert.That(BashArgMatcher.HasShellMetacharacters("cat f > /etc/passwd")).IsTrue();
         await Assert.That(BashArgMatcher.HasShellMetacharacters("sort < f")).IsTrue();
         await Assert.That(BashArgMatcher.HasShellMetacharacters("cat f\nrm -rf ~")).IsTrue();
-    }
-
-    [Test]
-    public async Task HasShellMetacharacters_UnterminatedQuotesOrTrailingEscape_AreStillFlagged()
-    {
-        await Assert.That(BashArgMatcher.HasShellMetacharacters("echo \"abc")).IsTrue();
-        await Assert.That(BashArgMatcher.HasShellMetacharacters("echo 'abc")).IsTrue();
-        await Assert.That(BashArgMatcher.HasShellMetacharacters("cat abc\\")).IsTrue();
     }
 
     [Test]
@@ -85,11 +71,17 @@ public class BashArgMatcherTests
     ///     The exploit this fix closes: double-quoted command substitution must not be
     ///     silently authorized by a wildcard Allow rule.
     /// </summary>
+    // #1770: the three wildcard-rule evaluations differed only in the command
+    // and the expected action — the assert never changed. They are the table
+    // now, and every row keeps its original test name as the display name.
     [Test]
-    public async Task Evaluate_DoubleQuotedCommandSubstitution_EscapesAllowRuleToAsk()
+    [Arguments("cat \"x$(rm -rf ~)\"", PermissionAction.Ask, DisplayName = "Evaluate_DoubleQuotedCommandSubstitution_EscapesAllowRuleToAsk")]
+    [Arguments("cat 'x$(rm -rf ~)'", PermissionAction.Allow, DisplayName = "Evaluate_SingleQuotedCommandSubstitution_AllowedByWildcardAllow")]
+    [Arguments("cat README.md", PermissionAction.Allow, DisplayName = "Evaluate_PlainArgs_StillAllowedByWildcardAllow")]
+    public async Task Evaluate_WildcardAllowRule_ResolvesToAction(string command, PermissionAction expected)
     {
-        var action = CreateCatWildcardRuleset().Evaluate("bash", "cat \"x$(rm -rf ~)\"");
-        await Assert.That(action).IsEqualTo(PermissionAction.Ask);
+        var action = CreateCatWildcardRuleset().Evaluate("bash", command);
+        await Assert.That(action).IsEqualTo(expected);
     }
 
     [Test]
@@ -98,20 +90,6 @@ public class BashArgMatcherTests
         var ruleset = CreateCatWildcardRuleset();
         await Assert.That(ruleset.Evaluate("bash", "cat \"x`y`\"")).IsEqualTo(PermissionAction.Ask);
         await Assert.That(ruleset.Evaluate("bash", "cat \"a\\.b\"")).IsEqualTo(PermissionAction.Ask);
-    }
-
-    [Test]
-    public async Task Evaluate_SingleQuotedCommandSubstitution_AllowedByWildcardAllow()
-    {
-        var action = CreateCatWildcardRuleset().Evaluate("bash", "cat 'x$(rm -rf ~)'");
-        await Assert.That(action).IsEqualTo(PermissionAction.Allow);
-    }
-
-    [Test]
-    public async Task Evaluate_PlainArgs_StillAllowedByWildcardAllow()
-    {
-        var action = CreateCatWildcardRuleset().Evaluate("bash", "cat README.md");
-        await Assert.That(action).IsEqualTo(PermissionAction.Allow);
     }
 
     /// <summary>

@@ -21,20 +21,21 @@ namespace Harbor.App.Cli.Tests;
 /// </summary>
 public class SlashSkillsRefreshTests
 {
+    // #1770: the usage/fallback copies differed only in the dispatched input
+    // and the fragment the output must contain — the asserts never changed.
+    // They are the table now, and every row keeps its original test name as
+    // the display name.
     [Test]
-    public async Task HandleAsync_SkillsWithoutArgs_ReportsUsage()
+    [Arguments("/skills", "Usage: /skills refresh", DisplayName = "HandleAsync_SkillsWithoutArgs_ReportsUsage")]
+    [Arguments("/skills refresh", "not available", DisplayName = "HandleAsync_SkillsRefreshWithoutModel_ReportsNotAvailable")]
+    [Arguments("/skills", "Usage: /skills update [name…]", DisplayName = "HandleAsync_SkillsWithoutArgs_ListsUpdateUsage")]
+    [Arguments("/skills update", "not available", DisplayName = "HandleAsync_SkillsUpdateWithoutModel_ReportsNotAvailable")]
+    [Arguments("/skills bogus", "Usage: /skills refresh", DisplayName = "HandleAsync_SkillsUpdate_UnknownVerb_ShowsUsage")]
+    public async Task HandleAsync_UsageOrFallback_ReportsTheExpectedFragment(string input, string expectedFragment)
     {
-        var output = await DispatchAsync("/skills", refresh: null);
+        var output = await DispatchAsync(input, refresh: null, update: null);
 
-        await Assert.That(output.Any(l => l.Contains("Usage: /skills refresh"))).IsTrue();
-    }
-
-    [Test]
-    public async Task HandleAsync_SkillsRefreshWithoutModel_ReportsNotAvailable()
-    {
-        var output = await DispatchAsync("/skills refresh", refresh: null);
-
-        await Assert.That(output.Any(l => l.Contains("not available"))).IsTrue();
+        await Assert.That(output.Any(l => l.Contains(expectedFragment))).IsTrue();
     }
 
     [Test]
@@ -73,22 +74,6 @@ public class SlashSkillsRefreshTests
     }
 
     // ── #384: /skills update ──────────────────────────────────────────────
-
-    [Test]
-    public async Task HandleAsync_SkillsWithoutArgs_ListsUpdateUsage()
-    {
-        var output = await DispatchAsync("/skills", refresh: null);
-
-        await Assert.That(output.Any(l => l.Contains("Usage: /skills update [name…]"))).IsTrue();
-    }
-
-    [Test]
-    public async Task HandleAsync_SkillsUpdateWithoutModel_ReportsNotAvailable()
-    {
-        var output = await DispatchAsync("/skills update", refresh: null, update: null);
-
-        await Assert.That(output.Any(l => l.Contains("not available"))).IsTrue();
-    }
 
     [Test]
     public async Task HandleAsync_SkillsUpdate_SuccessReseedsAndSummarizes()
@@ -159,14 +144,6 @@ public class SlashSkillsRefreshTests
         // A failed update must never mark the skill current and never reseed.
         await Assert.That(refreshCalls).IsEqualTo(0);
         await Assert.That(model.StaleCount).IsEqualTo(1);
-    }
-
-    [Test]
-    public async Task HandleAsync_SkillsUpdate_UnknownVerb_ShowsUsage()
-    {
-        var output = await DispatchAsync("/skills bogus", refresh: null, update: null);
-
-        await Assert.That(output.Any(l => l.Contains("Usage: /skills refresh"))).IsTrue();
     }
 
     /// <summary>Dispatch through the renderer-free overload, capturing writer lines.</summary>

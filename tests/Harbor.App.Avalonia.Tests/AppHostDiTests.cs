@@ -63,120 +63,56 @@ public class AppHostDiTests
 
     // ── Core services ─────────────────────────────────────────────────────
 
+    // #1770: the former copies differed only in the service type they asked
+    // the container for — the assert never changed. The type is the table now.
+    // `typeof(...)` is legal in an attribute argument, and the non-generic
+    // `GetService(Type)` resolves the same closed type the generic overload
+    // did. Every row keeps its original test name as the display name.
     [Test]
-    public async Task BuildAsync_Registers_ITokenTracker()
+    [Arguments(typeof(ITokenTracker), DisplayName = "BuildAsync_Registers_ITokenTracker")]
+    [Arguments(typeof(IEventBus), DisplayName = "BuildAsync_Registers_IEventBus")]
+    [Arguments(typeof(ISystemPromptBuilder), DisplayName = "BuildAsync_Registers_ISystemPromptBuilder")]
+    [Arguments(typeof(MessageConverter), DisplayName = "BuildAsync_Registers_MessageConverter")]
+    [Arguments(typeof(IAgentLoop), DisplayName = "BuildAsync_Registers_IAgentLoop")]
+    [Arguments(typeof(IAgent), DisplayName = "BuildAsync_Registers_IAgent")]
+    [Arguments(typeof(ISessionStore), DisplayName = "BuildAsync_Registers_ISessionStore")]
+    [Arguments(typeof(ICompactionService), DisplayName = "BuildAsync_Registers_ICompactionService")]
+    [Arguments(typeof(IPermissionService), DisplayName = "BuildAsync_Registers_IPermissionService")]
+    public async Task BuildAsync_Registers_CoreService(Type serviceType)
     {
         await GetHostAsync();
-        await Assert.That(Services.GetService<ITokenTracker>()).IsNotNull();
-    }
-
-    [Test]
-    public async Task BuildAsync_Registers_IEventBus()
-    {
-        await GetHostAsync();
-        await Assert.That(Services.GetService<IEventBus>()).IsNotNull();
-    }
-
-    [Test]
-    public async Task BuildAsync_Registers_ISystemPromptBuilder()
-    {
-        await GetHostAsync();
-        await Assert.That(Services.GetService<ISystemPromptBuilder>()).IsNotNull();
-    }
-
-    [Test]
-    public async Task BuildAsync_Registers_MessageConverter()
-    {
-        await GetHostAsync();
-        await Assert.That(Services.GetService<MessageConverter>()).IsNotNull();
-    }
-
-    [Test]
-    public async Task BuildAsync_Registers_IAgentLoop()
-    {
-        await GetHostAsync();
-        await Assert.That(Services.GetService<IAgentLoop>()).IsNotNull();
-    }
-
-    [Test]
-    public async Task BuildAsync_Registers_IAgent()
-    {
-        await GetHostAsync();
-        await Assert.That(Services.GetService<IAgent>()).IsNotNull();
-    }
-
-    [Test]
-    public async Task BuildAsync_Registers_ISessionStore()
-    {
-        await GetHostAsync();
-        await Assert.That(Services.GetService<ISessionStore>()).IsNotNull();
-    }
-
-    [Test]
-    public async Task BuildAsync_Registers_ICompactionService()
-    {
-        await GetHostAsync();
-        await Assert.That(Services.GetService<ICompactionService>()).IsNotNull();
-    }
-
-    [Test]
-    public async Task BuildAsync_Registers_IPermissionService()
-    {
-        await GetHostAsync();
-        await Assert.That(Services.GetService<IPermissionService>()).IsNotNull();
+        await Assert.That(Services.GetService(serviceType)).IsNotNull();
     }
 
     // ── Registries ────────────────────────────────────────────────────────
 
     [Test]
-    public async Task BuildAsync_Registers_IToolRegistry()
+    [Arguments(typeof(IToolRegistry), DisplayName = "BuildAsync_Registers_IToolRegistry")]
+    [Arguments(typeof(IProviderRegistry), DisplayName = "BuildAsync_Registers_IProviderRegistry")]
+    [Arguments(typeof(IAgentRegistry), DisplayName = "BuildAsync_Registers_IAgentRegistry")]
+    [Arguments(typeof(IMcpRegistry), DisplayName = "BuildAsync_Registers_IMcpRegistry")]
+    public async Task BuildAsync_Registers_Registry(Type serviceType)
     {
         await GetHostAsync();
-        await Assert.That(Services.GetService<IToolRegistry>()).IsNotNull();
-    }
-
-    [Test]
-    public async Task BuildAsync_Registers_IProviderRegistry()
-    {
-        await GetHostAsync();
-        await Assert.That(Services.GetService<IProviderRegistry>()).IsNotNull();
-    }
-
-    [Test]
-    public async Task BuildAsync_Registers_IAgentRegistry()
-    {
-        await GetHostAsync();
-        await Assert.That(Services.GetService<IAgentRegistry>()).IsNotNull();
-    }
-
-    [Test]
-    public async Task BuildAsync_Registers_IMcpRegistry()
-    {
-        await GetHostAsync();
-        await Assert.That(Services.GetService<IMcpRegistry>()).IsNotNull();
+        await Assert.That(Services.GetService(serviceType)).IsNotNull();
     }
 
     // ── UI framework + app-local services ─────────────────────────────────
 
     [Test]
-    public async Task BuildAsync_Registers_UiStore()
+    [Arguments(typeof(UiStore), DisplayName = "BuildAsync_Registers_UiStore")]
+    [Arguments(typeof(TuiEffectHost), DisplayName = "BuildAsync_Registers_TuiEffectHost")]
+    [Arguments(typeof(ThemeService), DisplayName = "BuildAsync_Registers_ThemeService")]
+    [Arguments(typeof(DialogService), DisplayName = "BuildAsync_Registers_DialogService")]
+    [Arguments(typeof(AvaloniaFilePicker), DisplayName = "BuildAsync_Registers_AvaloniaFilePicker")]
+    [Arguments(typeof(SessionManager), DisplayName = "BuildAsync_Registers_SessionManager")]
+    [Arguments(typeof(ToastService), DisplayName = "BuildAsync_Registers_ToastService")]
+    [Arguments(typeof(ICommonConfigStore), DisplayName = "BuildAsync_Registers_ICommonConfigStore")]
+    [Arguments(typeof(IAppConfigStore<AvaloniaConfig>), DisplayName = "BuildAsync_Registers_IAppConfigStore_AvaloniaConfig")]
+    public async Task BuildAsync_Registers_UiService(Type serviceType)
     {
         await GetHostAsync();
-        await Assert.That(Services.GetService<UiStore>()).IsNotNull();
-    }
-
-    [Test]
-    public async Task BuildAsync_Registers_TuiEffectHost()
-    {
-        await GetHostAsync();
-        await Assert.That(Services.GetService<TuiEffectHost>()).IsNotNull();
-    }
-
-    [Test]
-    public async Task BuildAsync_Registers_ThemeService()
-    {
-        await GetHostAsync();
-        await Assert.That(Services.GetService<ThemeService>()).IsNotNull();
+        await Assert.That(Services.GetService(serviceType)).IsNotNull();
     }
 
     /// <summary>#469: every theme role aliases the one ThemeService singleton.</summary>
@@ -192,43 +128,11 @@ public class AppHostDiTests
         await Assert.That(Services.GetRequiredService<IThemeWatcher>()).IsEqualTo(concrete);
     }
 
-    [Test]
-    public async Task BuildAsync_Registers_DialogService()
-    {
-        await GetHostAsync();
-        await Assert.That(Services.GetService<DialogService>()).IsNotNull();
-    }
-
-    [Test]
-    public async Task BuildAsync_Registers_AvaloniaFilePicker()
-    {
-        await GetHostAsync();
-        await Assert.That(Services.GetService<AvaloniaFilePicker>()).IsNotNull();
-    }
-
-    [Test]
-    public async Task BuildAsync_Registers_SessionManager()
-    {
-        await GetHostAsync();
-        await Assert.That(Services.GetService<SessionManager>()).IsNotNull();
-    }
-
-    [Test]
-    public async Task BuildAsync_Registers_ToastService()
-    {
-        await GetHostAsync();
-        await Assert.That(Services.GetService<ToastService>()).IsNotNull();
-    }
-
     // ── Per-app config (~/.harbor/avalonia.json) ──────────────────────────
 
-    [Test]
-    public async Task BuildAsync_Registers_IAppConfigStore_AvaloniaConfig()
-    {
-        await GetHostAsync();
-        await Assert.That(Services.GetService<IAppConfigStore<AvaloniaConfig>>()).IsNotNull();
-    }
-
+    // The two config shapes assert DIFFERENT fields (AppId + ConfigFileName
+    // for the app config, ConfigFileName + DefaultProvider for the shared
+    // one), so they stay separate methods — one table, one behaviour (#1770).
     [Test]
     public async Task BuildAsync_Registers_AvaloniaConfig()
     {
@@ -240,13 +144,6 @@ public class AppHostDiTests
     }
 
     // ── Shared common config (~/.harbor/config.json) ──────────────────────
-
-    [Test]
-    public async Task BuildAsync_Registers_ICommonConfigStore()
-    {
-        await GetHostAsync();
-        await Assert.That(Services.GetService<ICommonConfigStore>()).IsNotNull();
-    }
 
     [Test]
     public async Task BuildAsync_Registers_CommonConfig()

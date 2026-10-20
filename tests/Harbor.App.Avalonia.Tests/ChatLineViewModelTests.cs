@@ -20,53 +20,21 @@ public class ChatLineVmTests
 {
     // ── RoleBrushKey ───────────────────────────────────────────────
 
+    // #1770: the role→brush copies differed only in the role, the sample text
+    // and the expected key — the assert never changed. All three are the table
+    // now, and every row keeps its original test name as the display name.
     [Test]
-    public async Task RoleBrushKey_User_ReturnsChatUserBrush()
+    [Arguments(ChatRole.User, "hi", "ChatUserBrush", DisplayName = "RoleBrushKey_User_ReturnsChatUserBrush")]
+    [Arguments(ChatRole.Assistant, "hello", "ChatAssistantBrush", DisplayName = "RoleBrushKey_Assistant_ReturnsChatAssistantBrush")]
+    [Arguments(ChatRole.Thinking, "hmm", "ChatThinkingBrush", DisplayName = "RoleBrushKey_Thinking_ReturnsChatThinkingBrush")]
+    [Arguments(ChatRole.Tool, "executing", "ChatToolBrush", DisplayName = "RoleBrushKey_Tool_ReturnsChatToolBrush")]
+    [Arguments(ChatRole.ToolResult, "done", "ChatToolResultBrush", DisplayName = "RoleBrushKey_ToolResult_ReturnsChatToolResultBrush")]
+    [Arguments(ChatRole.System, "note", "ChatSystemBrush", DisplayName = "RoleBrushKey_System_ReturnsChatSystemBrush")]
+    [Arguments(ChatRole.Error, "oops", "ChatErrorBrush", DisplayName = "RoleBrushKey_Error_ReturnsChatErrorBrush")]
+    public async Task RoleBrushKey_ReturnsRoleBrushKey(ChatRole role, string text, string expectedBrush)
     {
-        var vm = new ChatLineVm(ChatRole.User, "hi");
-        await Assert.That(vm.RoleBrushKey).IsEqualTo("ChatUserBrush");
-    }
-
-    [Test]
-    public async Task RoleBrushKey_Assistant_ReturnsChatAssistantBrush()
-    {
-        var vm = new ChatLineVm(ChatRole.Assistant, "hello");
-        await Assert.That(vm.RoleBrushKey).IsEqualTo("ChatAssistantBrush");
-    }
-
-    [Test]
-    public async Task RoleBrushKey_Thinking_ReturnsChatThinkingBrush()
-    {
-        var vm = new ChatLineVm(ChatRole.Thinking, "hmm");
-        await Assert.That(vm.RoleBrushKey).IsEqualTo("ChatThinkingBrush");
-    }
-
-    [Test]
-    public async Task RoleBrushKey_Tool_ReturnsChatToolBrush()
-    {
-        var vm = new ChatLineVm(ChatRole.Tool, "executing");
-        await Assert.That(vm.RoleBrushKey).IsEqualTo("ChatToolBrush");
-    }
-
-    [Test]
-    public async Task RoleBrushKey_ToolResult_ReturnsChatToolResultBrush()
-    {
-        var vm = new ChatLineVm(ChatRole.ToolResult, "done");
-        await Assert.That(vm.RoleBrushKey).IsEqualTo("ChatToolResultBrush");
-    }
-
-    [Test]
-    public async Task RoleBrushKey_System_ReturnsChatSystemBrush()
-    {
-        var vm = new ChatLineVm(ChatRole.System, "note");
-        await Assert.That(vm.RoleBrushKey).IsEqualTo("ChatSystemBrush");
-    }
-
-    [Test]
-    public async Task RoleBrushKey_Error_ReturnsChatErrorBrush()
-    {
-        var vm = new ChatLineVm(ChatRole.Error, "oops");
-        await Assert.That(vm.RoleBrushKey).IsEqualTo("ChatErrorBrush");
+        var vm = new ChatLineVm(role, text);
+        await Assert.That(vm.RoleBrushKey).IsEqualTo(expectedBrush);
     }
 
     [Test]
@@ -79,52 +47,17 @@ public class ChatLineVmTests
     // ── RoleLabel ──────────────────────────────────────────────────
 
     [Test]
-    public async Task RoleLabel_User_ReturnsUser()
+    [Arguments(ChatRole.User, "hi", "user", DisplayName = "RoleLabel_User_ReturnsUser")]
+    [Arguments(ChatRole.Assistant, "hello", "assistant", DisplayName = "RoleLabel_Assistant_ReturnsAssistant")]
+    [Arguments(ChatRole.Thinking, "hmm", "thinking", DisplayName = "RoleLabel_Thinking_ReturnsThinking")]
+    [Arguments(ChatRole.Tool, "executing", "tool", DisplayName = "RoleLabel_Tool_ReturnsTool")]
+    [Arguments(ChatRole.ToolResult, "done", "tool-result", DisplayName = "RoleLabel_ToolResult_ReturnsToolResult")]
+    [Arguments(ChatRole.System, "note", "system", DisplayName = "RoleLabel_System_ReturnsSystem")]
+    [Arguments(ChatRole.Error, "oops", "error", DisplayName = "RoleLabel_Error_ReturnsError")]
+    public async Task RoleLabel_ReturnsRoleLabel(ChatRole role, string text, string expectedLabel)
     {
-        var vm = new ChatLineVm(ChatRole.User, "hi");
-        await Assert.That(vm.RoleLabel).IsEqualTo("user");
-    }
-
-    [Test]
-    public async Task RoleLabel_Assistant_ReturnsAssistant()
-    {
-        var vm = new ChatLineVm(ChatRole.Assistant, "hello");
-        await Assert.That(vm.RoleLabel).IsEqualTo("assistant");
-    }
-
-    [Test]
-    public async Task RoleLabel_Thinking_ReturnsThinking()
-    {
-        var vm = new ChatLineVm(ChatRole.Thinking, "hmm");
-        await Assert.That(vm.RoleLabel).IsEqualTo("thinking");
-    }
-
-    [Test]
-    public async Task RoleLabel_Tool_ReturnsTool()
-    {
-        var vm = new ChatLineVm(ChatRole.Tool, "executing");
-        await Assert.That(vm.RoleLabel).IsEqualTo("tool");
-    }
-
-    [Test]
-    public async Task RoleLabel_ToolResult_ReturnsToolResult()
-    {
-        var vm = new ChatLineVm(ChatRole.ToolResult, "done");
-        await Assert.That(vm.RoleLabel).IsEqualTo("tool-result");
-    }
-
-    [Test]
-    public async Task RoleLabel_System_ReturnsSystem()
-    {
-        var vm = new ChatLineVm(ChatRole.System, "note");
-        await Assert.That(vm.RoleLabel).IsEqualTo("system");
-    }
-
-    [Test]
-    public async Task RoleLabel_Error_ReturnsError()
-    {
-        var vm = new ChatLineVm(ChatRole.Error, "oops");
-        await Assert.That(vm.RoleLabel).IsEqualTo("error");
+        var vm = new ChatLineVm(role, text);
+        await Assert.That(vm.RoleLabel).IsEqualTo(expectedLabel);
     }
 
     // ── TimestampText ──────────────────────────────────────────────

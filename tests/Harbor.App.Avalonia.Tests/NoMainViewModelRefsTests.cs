@@ -32,87 +32,25 @@ public sealed class NoMainViewModelRefsTests
                            && m.Name.Contains("GetRequiredService", StringComparison.Ordinal));
     }
 
+    // #1770: the twelve former copies differed only in the type they scanned —
+    // the assert never changed. The type is the table now (`typeof(...)` is
+    // legal in an attribute argument), and every row keeps its original test
+    // name as the display name.
     [Test]
-    public async Task CommandPaletteViewModel_DoesNotReferenceMainViewModel()
+    [Arguments(typeof(ViewModels.CommandPaletteViewModel), DisplayName = "CommandPaletteViewModel_DoesNotReferenceMainViewModel")]
+    [Arguments(typeof(Services.KeyboardShortcutService), DisplayName = "KeyboardShortcutService_DoesNotReferenceMainViewModel")]
+    [Arguments(typeof(Views.ProviderBrowserView), DisplayName = "ProviderBrowserView_DoesNotReferenceMainViewModel")]
+    [Arguments(typeof(Views.DiffView), DisplayName = "DiffView_DoesNotReferenceMainViewModel")]
+    [Arguments(typeof(Views.TokenUsageView), DisplayName = "TokenUsageView_DoesNotReferenceMainViewModel")]
+    [Arguments(typeof(Views.FocusSessionView), DisplayName = "FocusSessionView_DoesNotReferenceMainViewModel")]
+    [Arguments(typeof(Views.SettingsView), DisplayName = "SettingsView_DoesNotReferenceMainViewModel")]
+    [Arguments(typeof(Views.CommandPaletteView), DisplayName = "CommandPaletteView_DoesNotReferenceMainViewModel")]
+    [Arguments(typeof(Views.Overlays.ModalHostView), DisplayName = "ModalHostView_DoesNotReferenceMainViewModel")]
+    [Arguments(typeof(Views.Controls.ToolCallCardView), DisplayName = "ToolCallCardView_DoesNotReferenceMainViewModel")]
+    [Arguments(typeof(Views.Shell.ActivityRailView), DisplayName = "ActivityRailView_DoesNotReferenceMainViewModel")]
+    [Arguments(typeof(Views.Shell.RightDrawerView), DisplayName = "RightDrawerView_DoesNotReferenceMainViewModel")]
+    public async Task Type_DoesNotReferenceMainViewModel(Type type)
     {
-        var type = typeof(ViewModels.CommandPaletteViewModel);
-        await Assert.That(HasMainViewModelRef(type)).IsFalse();
-    }
-
-    [Test]
-    public async Task KeyboardShortcutService_DoesNotReferenceMainViewModel()
-    {
-        var type = typeof(Services.KeyboardShortcutService);
-        await Assert.That(HasMainViewModelRef(type)).IsFalse();
-    }
-
-    [Test]
-    public async Task ProviderBrowserView_DoesNotReferenceMainViewModel()
-    {
-        var type = typeof(Views.ProviderBrowserView);
-        await Assert.That(HasMainViewModelRef(type)).IsFalse();
-    }
-
-    [Test]
-    public async Task DiffView_DoesNotReferenceMainViewModel()
-    {
-        var type = typeof(Views.DiffView);
-        await Assert.That(HasMainViewModelRef(type)).IsFalse();
-    }
-
-    [Test]
-    public async Task TokenUsageView_DoesNotReferenceMainViewModel()
-    {
-        var type = typeof(Views.TokenUsageView);
-        await Assert.That(HasMainViewModelRef(type)).IsFalse();
-    }
-
-    [Test]
-    public async Task FocusSessionView_DoesNotReferenceMainViewModel()
-    {
-        var type = typeof(Views.FocusSessionView);
-        await Assert.That(HasMainViewModelRef(type)).IsFalse();
-    }
-
-    [Test]
-    public async Task SettingsView_DoesNotReferenceMainViewModel()
-    {
-        var type = typeof(Views.SettingsView);
-        await Assert.That(HasMainViewModelRef(type)).IsFalse();
-    }
-
-    [Test]
-    public async Task CommandPaletteView_DoesNotReferenceMainViewModel()
-    {
-        var type = typeof(Views.CommandPaletteView);
-        await Assert.That(HasMainViewModelRef(type)).IsFalse();
-    }
-
-    [Test]
-    public async Task ModalHostView_DoesNotReferenceMainViewModel()
-    {
-        var type = typeof(Views.Overlays.ModalHostView);
-        await Assert.That(HasMainViewModelRef(type)).IsFalse();
-    }
-
-    [Test]
-    public async Task ToolCallCardView_DoesNotReferenceMainViewModel()
-    {
-        var type = typeof(Views.Controls.ToolCallCardView);
-        await Assert.That(HasMainViewModelRef(type)).IsFalse();
-    }
-
-    [Test]
-    public async Task ActivityRailView_DoesNotReferenceMainViewModel()
-    {
-        var type = typeof(Views.Shell.ActivityRailView);
-        await Assert.That(HasMainViewModelRef(type)).IsFalse();
-    }
-
-    [Test]
-    public async Task RightDrawerView_DoesNotReferenceMainViewModel()
-    {
-        var type = typeof(Views.Shell.RightDrawerView);
         await Assert.That(HasMainViewModelRef(type)).IsFalse();
     }
 }
