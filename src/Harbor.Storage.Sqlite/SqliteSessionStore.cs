@@ -39,14 +39,25 @@ public sealed class SqliteSessionStore : ISessionStore, ISessionCheckpointStore
     private readonly ILogger<SqliteSessionStore> _logger;
     private volatile bool _initialized;
 
+    // #1831 (#95 slice): the checkpoint/rewind axis lives in
+    // SqliteCheckpointStore (verbatim move); this store keeps thin forwarders
+    // so the ISessionCheckpointStore impl site stays where it is.
+    private readonly SqliteCheckpointStore _checkpoints;
+
     public SqliteSessionStore(string dbPath, ILogger<SqliteSessionStore> logger)
     {
         _dbPath = dbPath;
         _connectionString = $"Data Source={dbPath}";
         _logger = logger;
+        _checkpoints = new SqliteCheckpointStore(this, logger);
     }
 
-    private ValueTask<SemaphoreSlim> GetSessionLockAsync(string sessionId, CancellationToken ct) =>
+    /// <summary>
+    ///     Per-session mutex. <b>#1831:</b> shared with the checkpoint axis —
+    ///     it is the same semaphore, so a checkpoint write still serializes
+    ///     against a message append on the same session.
+    /// </summary>
+    internal ValueTask<SemaphoreSlim> GetSessionLockAsync(string sessionId, CancellationToken ct) =>
         // Same strip primitive as JsonlSessionStore (#184).
         SessionLockStrip.AcquireAsync(_sessionLocks, sessionId, ct);
 
@@ -107,8 +118,10 @@ public sealed class SqliteSessionStore : ISessionStore, ISessionCheckpointStore
     ///     a missing row is absence (<see cref="Maybe{T}.None" />), not an
     ///     error — "not found" stays distinguishable from a storage failure
     ///     instead of sharing the same Error channel (ROP-B П.24).
+    ///     <b>#1831:</b> shared with the checkpoint axis — it is the same read,
+    ///     so the "session exists" policy is decided in one place.
     /// </summary>
-    private Task<Result<Maybe<Session>>> ReadRowAsync(string sessionId, CancellationToken ct)
+    internal Task<Result<Maybe<Session>>> ReadRowAsync(string sessionId, CancellationToken ct)
     {
         return Result.Try(async () =>
         {
@@ -406,121 +419,35 @@ public sealed class SqliteSessionStore : ISessionStore, ISessionCheckpointStore
     ///     <see cref="GetMessagesAsync" /> reads with, and the row is
     ///     inserted under the per-session lock.
     /// </summary>
-    public async Task<Result<SessionCheckpoint>> CreateCheckpointAsync(
-        string sessionId, string messageId, string? label = null, CancellationToken ct = default)
-    {
-        // §3.4: observe cancellation BEFORE the existence policy — an Esc must
-        // never surface as "session not found".
-        ct.ThrowIfCancellationRequested();
-
-        // #199: the expected "not found" outcomes are decided before the try
-        // boundary so they stay plain failures (no throw, no error log).
-        var sessionRow = await ReadRowAsync(sessionId, ct).ConfigureAwait(false);
-        if (sessionRow.IsFailure)
-            return sessionRow.ConvertFailure<SessionCheckpoint>();
-        if (sessionRow.Value.HasNoValue) // guarded: .Value only read after the failure check.
-            return Result.Failure<SessionCheckpoint>(SessionStoreErrors.SessionNotFound(sessionId));
-
-        var semaphore = await GetSessionLockAsync(sessionId, ct).ConfigureAwait(false);
-        await semaphore.WaitAsync(ct).ConfigureAwait(false);
-        try
-        {
-            return Result.Try(() =>
-            {
-                using var conn = OpenConnection();
-
-                // The index is a count over the rows ordered up to and
-                // including the anchor (created_at_ms ASC, rowid ASC — the
-                // read path's exact ordering), so it cannot disagree with
-                // the order it describes, and no history is materialized.
-                // A missing anchor surfaces here as an empty scalar rather
-                // than as a session-level failure — same decision point as
-                // JsonlSessionStore's index scan.
-                int index;
-                using (var probe = conn.CreateCommand())
-                {
-                    probe.CommandText = """
-                                        SELECT (SELECT COUNT(*) FROM messages x
-                                                WHERE x.session_id = m.session_id
-                                                  AND (x.created_at_ms < m.created_at_ms
-                                                       OR (x.created_at_ms = m.created_at_ms AND x.rowid <= m.rowid))) - 1
-                                        FROM messages m
-                                        WHERE m.session_id = @sid AND m.id = @mid
-                                        LIMIT 1
-                                        """;
-                    probe.Parameters.AddWithValue("@sid", sessionId);
-                    probe.Parameters.AddWithValue("@mid", messageId);
-                    object? scalar = probe.ExecuteScalar();
-                    if (scalar is null or DBNull)
-                        return Result.Failure<SessionCheckpoint>(
-                            SessionStoreErrors.MessageNotFound(sessionId, messageId));
-                    index = (int)(long)scalar;
-                }
-
-                var checkpoint = new SessionCheckpoint(
-                    Guid.NewGuid().ToString("N"), sessionId, messageId, index,
-                    DateTimeOffset.UtcNow, label);
-
-                using var insert = conn.CreateCommand();
-                insert.CommandText = """
-                                     INSERT INTO checkpoints (id, session_id, message_id, message_index, created_at, label, rewind_of, removed)
-                                     VALUES (@id, @sid, @mid, @idx, @created, @label, NULL, 0)
-                                     """;
-                insert.Parameters.AddWithValue("@id", checkpoint.Id);
-                insert.Parameters.AddWithValue("@sid", sessionId);
-                insert.Parameters.AddWithValue("@mid", messageId);
-                insert.Parameters.Add(IntParam("@idx", index));
-                insert.Parameters.Add(StampParam("@created", checkpoint.CreatedAt));
-                insert.Parameters.AddWithValue("@label", (object?)label ?? DBNull.Value);
-                insert.ExecuteNonQuery();
-
-                return Result.Success(checkpoint);
-            }, ResultErrors.Message)
-                .Bind(x => x)
-                .TapError(e => SqliteSessionStoreLog.RecordCheckpointFailed(_logger, sessionId, e));
-        }
-        finally
-        {
-            semaphore.Release();
-        }
-    }
+    /// <remarks>
+    ///     Forwarder over <see cref="SqliteCheckpointStore" /> (#1831, #95
+    ///     slice: verbatim move) — the checkpoint axis has one home; the
+    ///     <see cref="ISessionCheckpointStore" /> impl site stays here.
+    /// </remarks>
+    /// <param name="sessionId">The session id.</param>
+    /// <param name="messageId">Anchor message id to mark.</param>
+    /// <param name="label">Optional human label.</param>
+    /// <param name="ct">Cancellation token.</param>
+    /// <returns>The recorded checkpoint, or failure if session/message not found.</returns>
+    public Task<Result<SessionCheckpoint>> CreateCheckpointAsync(
+        string sessionId, string messageId, string? label = null, CancellationToken ct = default) =>
+        _checkpoints.CreateCheckpointAsync(sessionId, messageId, label, ct);
 
     /// <summary>
     ///     List the session's checkpoints and rewind trail markers in
     ///     recording order (#1247). Recording order is rowid order — the
     ///     sqlite counterpart of the jsonl backend's file order.
     /// </summary>
-    public async Task<Result<IReadOnlyList<SessionCheckpoint>>> ListCheckpointsAsync(
-        string sessionId, CancellationToken ct = default)
-    {
-        // #199: the expected "not found" outcome is decided before the try
-        // boundary so it stays a plain failure (no throw, no error log).
-        var sessionRow = await ReadRowAsync(sessionId, ct).ConfigureAwait(false);
-        if (sessionRow.IsFailure)
-            return sessionRow.ConvertFailure<IReadOnlyList<SessionCheckpoint>>();
-        if (sessionRow.Value.HasNoValue) // guarded: .Value only read after the failure check.
-            return Result.Failure<IReadOnlyList<SessionCheckpoint>>(SessionStoreErrors.SessionNotFound(sessionId));
-
-        return await Result.Try(async () =>
-        {
-            EnsureInitialized();
-            using var conn = OpenConnection();
-            using var cmd = conn.CreateCommand();
-            cmd.CommandText = """
-                              SELECT id, session_id, message_id, message_index, created_at, label, rewind_of, removed
-                              FROM checkpoints
-                              WHERE session_id = @sid
-                              ORDER BY rowid ASC
-                              """;
-            cmd.Parameters.AddWithValue("@sid", sessionId);
-
-            var checkpoints = new List<SessionCheckpoint>();
-            using var reader = await cmd.ExecuteReaderAsync(ct).ConfigureAwait(false);
-            while (await reader.ReadAsync(ct).ConfigureAwait(false))
-                checkpoints.Add(ReadCheckpoint(reader));
-            return (IReadOnlyList<SessionCheckpoint>)checkpoints;
-        }, ResultErrors.Message).ConfigureAwait(false);
-    }
+    /// <remarks>
+    ///     Forwarder over <see cref="SqliteCheckpointStore" /> (#1831, #95
+    ///     slice: verbatim move).
+    /// </remarks>
+    /// <param name="sessionId">The session id.</param>
+    /// <param name="ct">Cancellation token.</param>
+    /// <returns>The checkpoints, or failure if the session does not exist.</returns>
+    public Task<Result<IReadOnlyList<SessionCheckpoint>>> ListCheckpointsAsync(
+        string sessionId, CancellationToken ct = default) =>
+        _checkpoints.ListCheckpointsAsync(sessionId, ct);
 
     /// <summary>
     ///     Rewind the session to <paramref name="checkpointId" /> (#1247):
@@ -531,109 +458,17 @@ public sealed class SqliteSessionStore : ISessionStore, ISessionCheckpointStore
     ///     share one transaction, so a crash cannot leave a rewind recorded
     ///     without its dropped checkpoints gone (or the reverse).
     /// </summary>
-    public async Task<Result<SessionRewindOutcome>> RewindToCheckpointAsync(
-        string sessionId, string checkpointId, CancellationToken ct = default)
-    {
-        // §3.4: observe cancellation BEFORE the existence policy.
-        ct.ThrowIfCancellationRequested();
-
-        // #199: the expected "not found" outcomes are decided before the try
-        // boundary so they stay plain failures (no throw, no error log).
-        var sessionRow = await ReadRowAsync(sessionId, ct).ConfigureAwait(false);
-        if (sessionRow.IsFailure)
-            return sessionRow.ConvertFailure<SessionRewindOutcome>();
-        if (sessionRow.Value.HasNoValue) // guarded: .Value only read after the failure check.
-            return Result.Failure<SessionRewindOutcome>(SessionStoreErrors.SessionNotFound(sessionId));
-
-        // Only plain checkpoints are restore points — a trail marker records
-        // a past rewind, it is not itself a target (the jsonl backend draws
-        // the same line with its !IsRewindTrail filter). Absence rides the
-        // Maybe rail until it becomes the shared CheckpointNotFound text,
-        // the same ToResult idiom GetAsync uses for a missing session.
-        var checkpointRow = await ReadCheckpointRowAsync(sessionId, checkpointId, ct).ConfigureAwait(false);
-        if (checkpointRow.IsFailure)
-            return checkpointRow.ConvertFailure<SessionRewindOutcome>();
-        // guarded: .Value only read after the failure check.
-        var checkpointResult = checkpointRow.Value.ToResult(
-            SessionStoreErrors.CheckpointNotFound(sessionId, checkpointId));
-        if (checkpointResult.IsFailure)
-            return checkpointResult.ConvertFailure<SessionRewindOutcome>();
-        return await RewindToAnchorAsync(sessionId, checkpointResult.Value, ct).ConfigureAwait(false);
-    }
-
-    /// <summary>
-    ///     Truncate to <paramref name="checkpoint" />'s anchor and write the
-    ///     honest-trail marker. Kept private and separate so the public verb
-    ///     stays a thin validation-and-dispatch seam.
-    /// </summary>
-    private async Task<Result<SessionRewindOutcome>> RewindToAnchorAsync(
-        string sessionId, SessionCheckpoint checkpoint, CancellationToken ct)
-    {
-        var truncated = await DeleteMessagesAfterAsync(sessionId, checkpoint.MessageId, ct).ConfigureAwait(false);
-        if (truncated.IsFailure)
-            return truncated.ConvertFailure<SessionRewindOutcome>();
-
-#pragma warning disable CFE0001
-        // CFE0001: false positive — the IsFailure guard above is an early return.
-        int removed = truncated.Value;
-#pragma warning restore CFE0001
-
-        var trailId = Guid.NewGuid().ToString("N");
-        var now = DateTimeOffset.UtcNow;
-
-        var semaphore = await GetSessionLockAsync(sessionId, ct).ConfigureAwait(false);
-        await semaphore.WaitAsync(ct).ConfigureAwait(false);
-        try
-        {
-            return Result.Try(() =>
-            {
-                using var conn = OpenConnection();
-                using var tx = conn.BeginTransaction();
-                using var cmd = conn.CreateCommand();
-                cmd.Transaction = tx;
-
-                // Checkpoints whose anchor message went with the dropped
-                // future are dropped with them; checkpoints at or before
-                // the anchor survive. The boundary is derived from "does
-                // the anchor message still exist" rather than from the
-                // recorded message_index, which an earlier rewind may have
-                // left stale — the same survive/drop split the jsonl
-                // backend draws by file order.
-                cmd.CommandText = """
-                                  DELETE FROM checkpoints
-                                  WHERE session_id = @sid
-                                    AND NOT EXISTS (
-                                        SELECT 1 FROM messages m
-                                        WHERE m.session_id = @sid AND m.id = checkpoints.message_id
-                                    );
-                                  INSERT INTO checkpoints (id, session_id, message_id, message_index, created_at, label, rewind_of, removed)
-                                  VALUES (@id, @sid, @mid, @idx, @created, NULL, @rewindOf, @removed)
-                                  """;
-                cmd.Parameters.AddWithValue("@sid", sessionId);
-                cmd.Parameters.AddWithValue("@id", trailId);
-                cmd.Parameters.AddWithValue("@mid", checkpoint.MessageId);
-                cmd.Parameters.Add(IntParam("@idx", checkpoint.MessageIndex));
-                cmd.Parameters.Add(StampParam("@created", now));
-                cmd.Parameters.AddWithValue("@rewindOf", checkpoint.Id);
-                cmd.Parameters.Add(IntParam("@removed", removed));
-                cmd.ExecuteNonQuery();
-
-                cmd.CommandText = "SELECT COUNT(*) FROM messages WHERE session_id = @sid";
-                object? count = cmd.ExecuteScalar();
-                long remaining = count is long l ? l : 0L;
-
-                tx.Commit();
-                return Result.Success(new SessionRewindOutcome(
-                    checkpoint.Id, checkpoint.MessageId, removed, (int)remaining));
-            }, ResultErrors.Message)
-                .Bind(x => x)
-                .TapError(e => SqliteSessionStoreLog.RecordRewindFailed(_logger, sessionId, e));
-        }
-        finally
-        {
-            semaphore.Release();
-        }
-    }
+    /// <remarks>
+    ///     Forwarder over <see cref="SqliteCheckpointStore" /> (#1831, #95
+    ///     slice: verbatim move).
+    /// </remarks>
+    /// <param name="sessionId">The session id.</param>
+    /// <param name="checkpointId">Id of the checkpoint to restore (from <see cref="ListCheckpointsAsync" />).</param>
+    /// <param name="ct">Cancellation token.</param>
+    /// <returns>How many messages were dropped and how many remain.</returns>
+    public Task<Result<SessionRewindOutcome>> RewindToCheckpointAsync(
+        string sessionId, string checkpointId, CancellationToken ct = default) =>
+        _checkpoints.RewindToCheckpointAsync(sessionId, checkpointId, ct);
 
     public async Task<Result<SessionMetadata>> GetStatsAsync(string sessionId, CancellationToken ct = default)
     {
@@ -721,58 +556,16 @@ public sealed class SqliteSessionStore : ISessionStore, ISessionCheckpointStore
     }
 
     /// <summary>
-    ///     Read one checkpoint row, plain checkpoints only
-    ///     (<c>rewind_of IS NULL</c>). Absence (<see cref="Maybe{T}.None" />)
-    ///     is not a storage error — the caller decides the failure text
-    ///     (ROP-B П.24).
-    /// </summary>
-    private Task<Result<Maybe<SessionCheckpoint>>> ReadCheckpointRowAsync(
-        string sessionId, string checkpointId, CancellationToken ct)
-    {
-        return Result.Try(async () =>
-        {
-            EnsureInitialized();
-            using var conn = OpenConnection();
-            using var cmd = conn.CreateCommand();
-            cmd.CommandText = """
-                              SELECT id, session_id, message_id, message_index, created_at, label, rewind_of, removed
-                              FROM checkpoints
-                              WHERE session_id = @sid AND id = @cid AND rewind_of IS NULL
-                              """;
-            cmd.Parameters.AddWithValue("@sid", sessionId);
-            cmd.Parameters.AddWithValue("@cid", checkpointId);
-            using var reader = await cmd.ExecuteReaderAsync(ct).ConfigureAwait(false);
-            if (!await reader.ReadAsync(ct).ConfigureAwait(false))
-                return Maybe<SessionCheckpoint>.None;
-            return Maybe.From(ReadCheckpoint(reader));
-        }, ResultErrors.Message);
-    }
-
-    /// <summary>
-    ///     Map one checkpoint row to the model. <c>created_at</c> is stored
-    ///     round-trip ("O"); an unparseable stamp yields <see langword="default" />
-    ///     instead of failing the whole list — the row-level tolerance of the
-    ///     message read path, applied to checkpoint metadata.
-    /// </summary>
-    private static SessionCheckpoint ReadCheckpoint(SqliteDataReader reader) => new(
-        reader.GetString(0),
-        reader.GetString(1),
-        reader.GetString(2),
-        reader.GetInt32(3),
-        DateTimeOffset.TryParse(reader.GetString(4), out var createdAt) ? createdAt : default,
-        reader.IsDBNull(5) ? null : reader.GetString(5),
-        reader.IsDBNull(6) ? null : reader.GetString(6),
-        reader.GetInt32(7));
-
-    /// <summary>
     ///     One-time lazy initialization: create the directory, apply the schema,
     ///     migrate pre-#85 databases (global message PK, missing integer
     ///     ordering stamp) and pre-#1107 databases (missing status/kind/
     ///     parent_session_id columns). The constructor performs no I/O; every public
     ///     method funnels through here first, so init failures travel the
     ///     Result channel instead of throwing from the ctor.
+    ///     <b>#1831:</b> shared with the checkpoint axis — it is the same
+    ///     one-time initialization, so the schema is applied once for both.
     /// </summary>
-    private void EnsureInitialized()
+    internal void EnsureInitialized()
     {
         if (_initialized) return;
         lock (_initLock)
@@ -802,7 +595,7 @@ public sealed class SqliteSessionStore : ISessionStore, ISessionCheckpointStore
     ///     Every TEXT date column — sessions.created_at/updated_at,
     ///     messages.created_at, checkpoints.created_at — formats through this
     ///     one method, and every read (<c>SqliteMappers.ReadSession</c>,
-    ///     <see cref="ReadCheckpoint" />) parses the same text back with
+    ///     <c>SqliteCheckpointStore.ReadCheckpoint</c>) parses the same text back with
     ///     <c>DateTimeOffset.Parse</c>. "O" is the round-trip specifier, so the
     ///     parse returns the original instant with its offset intact and the
     ///     symmetry is pinned by <c>SqliteIsoStampRoundTripTests</c>. The
@@ -823,17 +616,25 @@ public sealed class SqliteSessionStore : ISessionStore, ISessionCheckpointStore
     ///     setter itself still boxes the value once (a binder-API shape, not
     ///     an inference cost); what these builders remove is the per-call
     ///     inference walk plus the per-site duplicated "O" formatting.
+    ///     <b>#1831:</b> shared with the checkpoint axis — the axis writes
+    ///     checkpoints.created_at and checkpoints.message_index through the
+    ///     same builders, so both halves format a column the same way.
     /// </summary>
-    private static SqliteParameter IntParam(string name, int value) =>
+    internal static SqliteParameter IntParam(string name, int value) =>
         new(name, SqliteType.Integer) { Value = value };
 
     private static SqliteParameter LongParam(string name, long value) =>
         new(name, SqliteType.Integer) { Value = value };
 
-    private static SqliteParameter StampParam(string name, DateTimeOffset value) =>
+    internal static SqliteParameter StampParam(string name, DateTimeOffset value) =>
         new(name, SqliteType.Text) { Value = Timestamp(value) };
 
-    private SqliteConnection OpenConnection()
+    /// <summary>
+    ///     Open a connection to the database file. <b>#1831:</b> shared with
+    ///     the checkpoint axis — it is the same connection string and the
+    ///     same PRAGMAs, so the axis never opens a connection of its own.
+    /// </summary>
+    internal SqliteConnection OpenConnection()
     {
         var conn = new SqliteConnection(_connectionString);
         conn.Open();

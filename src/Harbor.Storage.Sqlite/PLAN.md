@@ -7,7 +7,7 @@
 - [x] SQLite schema with indexes (session id, timestamps)
 - [x] Full `ISessionStore` contract
 - [x] Bundled e_sqlite3 native lib (no system SQLite dependency)
-- [x] WAL journal mode enabled for concurrent readers (`SqliteSessionStore.cs:345`)
+- [x] WAL journal mode enabled for concurrent readers (`SqliteSessionStore.cs:646`)
 - [x] Behind `HarborWithAllProviders` build flavor in the CLI csproj alongside extra providers (`apps/Harbor.App.Cli/Harbor.App.Cli.csproj:205-211`)
 - [x] FTS5 index over the searchable text of the message log, kept in sync by
       triggers on the message table and ranked with BM25 (#1743,
