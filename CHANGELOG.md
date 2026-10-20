@@ -6,14 +6,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
-### #1878 — TTL кэша каталога моделей читает `TimeProvider`
-
-**Кэш каталога моделей получил шов часов: протухание перестало быть состоянием, которое нужно ждать.**
-
-- `ProviderRegistry` (`src/Harbor.Registries/Providers/ProviderRegistry.cs`) принимает `TimeProvider?` — по умолчанию `TimeProvider.System`, то есть поведение не меняется — и читает TTL каталога через него. Четыре чтения `DateTimeOffset.UtcNow` заменены на `_time.GetUtcNow()`.
-- Ветка фан-аута (`GetAllModelsAsync`) считает `now` один раз на провайдера: проверка протухания и запись в кэш теперь согласованы, и гонка не может оставить две записи с разным `ExpiresAt`.
-- **Публичный API:** в `Harbor.Registries` у `ProviderRegistry` добавлен необязательный параметр конструктора `TimeProvider? timeProvider = null`. Сборка не заморожена гейтом — `tools/check-public-api.py` покрывает `Harbor.Abstractions.Contracts`, `tools/check-public-api-abstractions.py` — `Harbor.Abstractions` — поэтому пере-подпись базовой линии не требуется.
-- **Тест:** `tests/Harbor.Registries.Tests/ProviderRegistryCatalogTtlTests.cs` — ручной `TimeProvider` (BCL, без новой зависимости). Часы фейка стоят в 2001 году, поэтому тест ловит и частичный откат (запись через шов, сравнение по стенным часам). Тесты закрывают перекрёстные пути: запись фан-аута видна одиночному вызову и протухает для него, и наоборот; отдаётся именно перезапрошенный каталог, а не просто «провайдер спросили второй раз».
 
 ### #1921 — три проекта из 112 собирались в Debug внутри Release-сборки
 
@@ -27,10 +19,71 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 **Вторая половина исправления: конфигурация не наследуется, а называется.** Наследование — один канал, и он не единственный: прогон 39407510139 (он уже нёс первый переключатель) показал, что `src/Harbor.CodeGen` собирается ВТОРЫМ разом, в Debug, по пути, который не несёт `Configuration` родителя. Релизный вывод в том прогоне был корректен (ни одна Debug-сборка не дошла до Release-`bin`), но проект всё равно компилировался в Debug внутри Release-сборки — а это и есть дефект #1921. Поэтому корневой `Directory.Build.props` даёт каждому `<ProjectReference>` явный `SetConfiguration` (`Configuration=$(Configuration)`) — это те самые метаданные, которые MSBuild передаёт в вызов, строящий зависимый проект (`Microsoft.Common.CurrentVersion.targets (line 2150)`), и конфигурация ребёнка становится явным глобальным свойством, а не унаследованным.
 
+**Политика должна доходить до каждого контекста.** Переключатель и метаданные живут в корневом `Directory.Build.props`, поэтому проект, чья цепочка props до этого файла не доходит, — «остров политики»: он разрешает свои ссылки без политики, и MSBuild отвечает значением по умолчанию. В графе сборки такой остров ровно один — `tests/Harbor.Benchmarks`, чей `Directory.Build.props` существует, чтобы выключить анализаторы для автогенерируемых проектов BenchmarkDotNet, и намеренно не импортирует корень. Именно он стоил Release-сборке генератора: в прогоне 39413736043 `tests/Harbor.Benchmarks/bin/Release/net10.0/Harbor.CodeGen.dll` оказалась Debug-сборкой. Этот props-файл теперь несёт политику сам.
+
 **Гвард: `tests/Harbor.Architecture.Tests/ReleaseBuildConfigurationRule.cs`.** Два утверждения, оба вычисляемые, а не табличные. Первое: каждое ребро графа, чей конец не является строкой решения, защищено — родитель наследует свою конфигурацию в ссылку, которую решение отобразить не может. Второе: ни один Release-`bin` не содержит побайтовой копии Debug-вывода проекта — это измерение по байтам, а не модель, и оно накрывает и вендорённый UI-кит, и Avalonia-приложение. Контроль невакуумности: синтетическая таблица графа (row-less ребёнок за родителем, который не отказался от снятия конфигурации, — репортится; за родителем, который отказался, — молчит; ребёнок, который сам строка решения, — не репортится никогда), синтетическая таблица копий (побайтовая копия — репортится, другие байты — молчат) и проверка, что обход графа вообще что-то нашёл.
 
 **SharpConsoleUI.** `external/ConsoleEx` уезжает в `contrib/external/ConsoleEx` (рендерер покидает продукт), так что вендорённый UI-кит вообще перестаёт быть частью продуктовой сборки. Независимо от этого перемещения исправление покрывает и его: пока ссылка на `SharpConsoleUI` существует в продуктовом графе, проект собирается в Release.
 т тоже. Единственное упоминание `IHarborIdeClient` во всём дереве, рефлексивный тест `tests/Harbor.Abstractions.Tests/IHarborIdeClientTests.cs`, который вызывает ни одного члена; у двух других только собственный файл объявления. `ITuiRenderBackend` дополнительно ссылался в doc-комментарии на несуществующий тип `IRenderAsyncBackend`, то есть контракт не был привязан никогда.
+
+**Вердикт по интерфейсам: не «мёртвые», а три разных случая.**
+
+- `ITuiRenderBackend` (`Harbor.Terminal.Abstractions`) и `IRenderEngine` (`Harbor.Ui.Framework.Services`): **мёртвые и безопасные к удалению**: ноль реализаторов, ноль потребителей, нет документационной резервации. Файлы удалены.
+- `IHarborIdeClient` + `IProcessHandle` (`Harbor.Abstractions.Ide`): **резервация под отложенное решение**: IDE-мост отложен владельцем (issue #1252, «DEFERRED», «Do NOT implement»), а `docs/IDE_INTEGRATION_PATTERNS.md` §7.5 называет `IHarborIdeClient` швом, который реализует будущий адаптер VS Code / JetBrains. Удаление сняло бы опубликованное обещание, пока решение не принято. Оставлены, помечены «RESERVED, deliberately unimplemented» и внесены в таблицу резерваций.
+- `IEventSubscriber` (`Harbor.Abstractions.Events`): **резервация под #21** (двухпроцессная архитектура AOT-core + JIT-UI ещё в открытой разведке). Оставлена, помечена.
+- `IPluginHost` (`Harbor.Abstractions.Plugins`): **резервация под #418** (ADR о судьбе plugin-host: полный load/unload-хост ещё не решён; живой хост собран из `IPluginSource` → `IPluginCompiler` → `IPluginInstantiator` → `IPluginRegistrar`). Оставлен, помечен.
+
+**BREAKING (публичный API `Harbor.Abstractions`, заморожен гейтом `tools/check-public-api-abstractions.py`):** удалены `Harbor.Abstractions.Tui.IInputHandler` (2 участника) и `Harbor.Abstractions.Tui.KeyPressEventArgs` (3 участника). Контракт ввода не имел ни реализатора, ни потребителя: `ITuiRenderer` уехал в `Harbor.Terminal.Abstractions`, а живая стратегия ввода это другой интерфейс с тем же простым именем, `Harbor.Tui.CellForge.Engine.Input.IInputHandler`. `KeyPress` (запись) остаётся: это payload для обработки клавиш во view-слое (`Harbor.Terminal.Abstractions`). Также удалены `Harbor.Terminal.Abstractions.Renderers.ITuiRenderBackend` (6 участников) и `Harbor.Ui.Framework.Services.IRenderEngine` (5 участников): они вне замороженной сборки, но входят в пакуемые сборки. Пакеты `0.4.0-alpha` на nuget.org ещё не публикуются, поэтому внешних потребителей нет по определению.
+
+**Новый гвард: `tests/Harbor.Architecture.Tests/DeadPublicInterfaceRule.cs`.** Публичный интерфейс в контрактной сборке обязан иметь хотя бы одного реализатора ИЛИ хотя бы одного потребителя. Исключение это не комментарий, а именованная таблица `ReservedSurface`: каждая строка несёт причину (проверяется общим `ExemptionReason`) и ссылку на issue-владельца в отдельной колонке, а её живость проверяется: если интерфейс получил реализатора или исчез, строка обязана быть удалена в том же коммите. Тип в потребителе (`typeof`/`nameof`) использованием не считается, и именно эта форма держала `IHarborIdeClient` «живым». Разрешение имён учитывает namespace (в дереве два `IProcessHandle` и два `IInputHandler`), сканируются только верхнеуровневые объявления, а `tests/` включён в обход (тест-дубль, реализующий контракт, это реализатор), `contrib/` нет (не компилируется CI). Контроль невакуумности: правило обязано найти все три аудиторских интерфейса (синтетические исходники с исходными именами) и различать «есть реализатор», «есть потребитель» и «только `typeof`».
+
+**Известный пробел (не в этом PR):** `FatInterfaceShapeRatchet` считает `DeclaredOnly`, поэтому широкий алиас вроде `ISessionManager` (0 объявленных / 23 эффективных) недооценивается. Это относится к программе arch-guard (#1724, #1725–#1730), которая идёт последней.
+
+### #1878 — TTL кэша каталога моделей читает `TimeProvider`
+
+**Кэш каталога моделей получил шов часов: протухание перестало быть состоянием, которое нужно ждать.**
+
+- `ProviderRegistry` (`src/Harbor.Registries/Providers/ProviderRegistry.cs`) принимает `TimeProvider?` — по умолчанию `TimeProvider.System`, то есть поведение не меняется — и читает TTL каталога через него. Четыре чтения `DateTimeOffset.UtcNow` заменены на `_time.GetUtcNow()`.
+- Ветка фан-аута (`GetAllModelsAsync`) считает `now` один раз на провайдера: проверка протухания и запись в кэш теперь согласованы, и гонка не может оставить две записи с разным `ExpiresAt`.
+- **Публичный API:** в `Harbor.Registries` у `ProviderRegistry` добавлен необязательный параметр конструктора `TimeProvider? timeProvider = null`. Сборка не заморожена гейтом — `tools/check-public-api.py` покрывает `Harbor.Abstractions.Contracts`, `tools/check-public-api-abstractions.py` — `Harbor.Abstractions` — поэтому пере-подпись базовой линии не требуется.
+- **Тест:** `tests/Harbor.Registries.Tests/ProviderRegistryCatalogTtlTests.cs` — ручной `TimeProvider` (BCL, без новой зависимости). Часы фейка стоят в 2001 году, поэтому тест ловит и частичный откат (запись через шов, сравнение по стенным часам). Тесты закрывают перекрёстные пути: запись фан-аута видна одиночному вызову и протухает для него, и наоборот; отдаётся именно перезапрошенный каталог, а не просто «провайдер спросили второй раз».
+
+### #1844 — the dynamic-code ban is the compiler's rule, not a regex's
+
+**`src/Harbor.Plugins.*` may load code at run time; nothing else may. The compiler says so now.**
+
+- `BannedSymbols.DynamicCode.txt` (new) — the ban as a list of documentation-comment IDs, read by the `RS0030` diagnostic of `Microsoft.CodeAnalysis.BannedApiAnalyzers`, which was already referenced solution-wide. **No new package.**
+- The ban: `Assembly.Load` / `LoadFrom` / `LoadFile` (all seven public overloads, each with its parameter list), `System.Runtime.Loader.AssemblyLoadContext`, the `System.Reflection.Emit` namespace, `TypeBuilder`, `DynamicMethod`.
+- The plugin exception is expressed **by the tool**: the ban file is not added to the plugin projects' `<AdditionalFiles>`, so the compiler never sees the rule there. The predicate is a project-name prefix in one property, `HarborDynamicCodeBanExemptProjectNamePrefix`.
+- `tests/Harbor.Architecture.Tests/ReflectionConventionRule.cs` keeps the convention, the reason, and the proof that the compiler-side configuration is live: the build's own analyzer is run in-process over planted source (a synthetic violation must be reported, a JSON key must not be), the ban list is checked for dead entries and for coverage of the framework's public surface, and the plugin family's real code is shown to trip the ban only when the ban file is applied. The text matcher survives only as the oracle of the #1729 pilot's differential, and gates nothing.
+- `tests/Harbor.Architecture.Tests/PluginAllowance.cs` (new) — the plugin allowance table, shared with the trim-safety rules (#414), so the fact has one home.
+- Two corrections to the issue's premises, both verified against Roslyn's own sources: an ID with no parameter list matches only the **parameterless** overload, so `M:System.Reflection.Assembly.Load` on its own bans nothing; and `AppDomain.DefineDynamicAssembly` is **not public API in .NET 10**, so it is covered by the `System.Reflection.Emit` namespace ban rather than by a dead entry of its own.
+
+### #1921 - вендоренный SharpConsoleUI-рендерер уходит из продукта в `contrib/`
+
+**Рендерер `Harbor.Tui.NickConsoleEx` (id `nickconsoleex`) и вендоренное дерево `nickprotop/ConsoleEx` больше не часть продукта. Это breaking change публичной поверхности.**
+
+**Что показало issue #1921.** Разбор таймлайна Release-сборки 39389070999 нашёл **три из 110 проектов, собираемых в Debug внутри Release-сборки**, причём Release-вывода у них не существует. Один из трёх — `external/ConsoleEx/SharpConsoleUI`. Вендоренное дерево закрывало окно компиляции на **28.3 с в каждой Release-сборке**, а его **Debug-вывод попадал в поставляемый CLI** (`apps/Harbor.App.Cli/bin/Release/net10.0/`), потому что Release-сборка не порождала Release-сборку стороннего UI-кита. Сам рендерер при этом был тонким: только `MarkupControl` SharpConsoleUI, без его window/panel/theme-системы.
+
+**BREAKING (публичная поверхность `Harbor.Terminal.Abstractions`):** удалён член `BackendKind.NickConsoleEx` из перечисления `BackendKind`. Потребитель, который исчерпывающе перебирает это перечисление, должен обработать более короткий список.
+
+**Убрано из продукта:**
+- константа сборки `HARBOR_WITH_NICK_CONSOLE_EX` и все кодовые пути за ней;
+- значение `nickconsoleex` сборочного `HarborWithRenderer` (остались `all`, `cellforge`, `ansiplain`);
+- значение `tui` = `nickconsoleex`. `HARBOR_TUI=nickconsoleex` больше ничего не выбирает: id не в реестре бэкендов, поэтому срабатывает общее правило fallback с предупреждением `Unknown HARBOR_TUI 'nickconsoleex'; falling back to 'plain'`;
+- NuGet-пакет `Harbor.Tui.NickConsoleEx` больше не публикуется.
+
+**Переехало в `contrib/` (на условиях `contrib/`):** `src/Harbor.Tui.NickConsoleEx/` → `contrib/tui/Harbor.Tui.NickConsoleEx/`; сабмодуль `external/ConsoleEx` → `contrib/external/ConsoleEx/`; три boundary-файла (`Directory.Build.props`, `Directory.Build.targets`, `Directory.Packages.props`) → `contrib/external/`. `contrib/` — **НЕ поддерживается, НЕ собирается CI, не в `Harbor.slnx`, без `ProjectReference` из `src/` и `apps/`, не публикуется**. Три boundary-файла едут вместе с сабмодулем, потому что их работа — не пускать корневые build-свойства в чужой код.
+
+**Что теряет пользователь.** Готового SharpConsoleUI-рендера в продукте больше нет. Тот, кому он нужен, теперь сам клонирует вендоренное дерево, сам собирает обёртку и сам подключает её к сборке Harbor, руками. Конфигурацией его не включить. В продукте остаются два рендерера: CellForge (канонический) и AnsiPlain (ANSI-стриминг, plain-пайпы, CI).
+
+**Решение владельца** (2026-10-20, по issue #1921): *«убрать полностью в контриб, кто захочет - пусть и дрочится»*. Запись решения: [ADR-019](docs/adr/ADR-019-vendored-sharpconsoleui-renderer-leaves-the-product.md). Одно из трёх проблемных проектов в #1921 закрыто; `Harbor.CodeGen` и `apps/Harbor.App.Avalonia` остаются открытыми.
+
+### #1831 - мёртвая публичная поверхность: удалено, зарезервировано, защищено гвардом
+
+**22 публичных члена, которые охранял public-API-гейт, но которыми не пользовался никто. Два интерфейса удалены, четыре оставлены как явная резервация под отложенное продуктовое решение, новый гвард не даёт мёртвой поверхности вернуться.**
+
+**Проверка предпосылки (весь репозиторий: `src/`, `apps/`, `tests/`, `samples/`, `contrib/`, `tools/`).** Реализаторов нет ни у одного из трёх: `IHarborIdeClient`, `ITuiRenderBackend`, `IRenderEngine`. Потребителей нет тоже. Единственное упоминание `IHarborIdeClient` во всём дереве, рефлексивный тест `tests/Harbor.Abstractions.Tests/IHarborIdeClientTests.cs`, который вызывает ни одного члена; у двух других только собственный файл объявления. `ITuiRenderBackend` дополнительно ссылался в doc-комментарии на несуществующий тип `IRenderAsyncBackend`, то есть контракт не был привязан никогда.
 
 **Вердикт по интерфейсам: не «мёртвые», а три разных случая.**
 

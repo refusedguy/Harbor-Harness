@@ -63,6 +63,26 @@
 // global property, so whichever path asks for the child, the child is built in
 // the configuration of the build that asks.
 //
+// AND THE POLICY HAS TO REACH EVERY CONTEXT
+// -----------------------------------------
+// The switch and the metadata live in the root `Directory.Build.props`, so a
+// project whose own props chain does not reach that file is a POLICY ISLAND:
+// it resolves its references without the policy, and MSBuild answers with its
+// default configuration. There is exactly one such island in the build graph —
+// `tests/Harbor.Benchmarks`, whose `Directory.Build.props` exists to turn the
+// analyzers off for the auto-generated BenchmarkDotNet projects and
+// deliberately does not import the root — and it is the one that cost the
+// Release build its generator: run 39413736043 produced
+// `tests/Harbor.Benchmarks/bin/Release/net10.0/Harbor.CodeGen.dll` as the
+// DEBUG build. That props file now carries the policy itself.
+//
+// This file does not claim that every project reaches the root props: the
+// perimeter for claim 1 is the OWNED trees, and the vendored tree's props
+// deliberately sever the repository's policy from the vendored sources by
+// design. What the claims below DO cover is the consequence: no Release
+// output may hold a Debug-built assembly, and no reference the solution cannot
+// map may leave its child's configuration to MSBuild's default.
+//
 // WHY THIS FILE IS NOT A TABLE OF KNOWN OFFENDERS
 // ----------------------------------------------
 // The defect is a property of the BUILD GRAPH, not of three names: any project

@@ -12,4 +12,34 @@
     <RunAnalyzersDuringBuild>false</RunAnalyzersDuringBuild>
     <EnforceCodeStyleInBuild>false</EnforceCodeStyleInBuild>
   </PropertyGroup>
+
+  <!--
+    #1921: этот файл НЕ импортирует корневой Directory.Build.props (см. выше),
+    поэтому конфигурационную политику он несёт сам. Без неё контекст этой
+    проекта разрешает ссылки, которых решение отобразить не может, без
+    `Configuration` — и MSBuild отвечает на это значением по умолчанию, Debug.
+
+    Измерено на CI-прогоне 39413736043: `src/Harbor.CodeGen` (генератор
+    исходников за Terminal.Abstractions / Tools.Builtin / Tui.AnsiPlain /
+    Tui.CellForge) собирался в этом контексте в Debug, и Debug-сборка
+    оказывалась в `tests/Harbor.Benchmarks/bin/Release/net10.0/` — то есть
+    Debug-вывод генератора попадал в Release-вывод проекта.
+
+    Два свойства — те же, что в корне: `ShouldUnsetParentConfigurationAndPlatform=false`
+    заставляет неотобразимую ссылку НАСЛЕДОВАТЬ конфигурацию ссылающегося
+    проекта, а `SetConfiguration` на каждом `<ProjectReference>` НАЗЫВАЕТ
+    конфигурацию явно (это метаданные, которые MSBuild передаёт в вызов,
+    строящий зависимый проект). Ссылка на проект, который СТРОКОЙ решения,
+    не затрагивается: карта конфигураций решения перезаписывает эти метаданные
+    для неё.
+  -->
+  <PropertyGroup>
+    <ShouldUnsetParentConfigurationAndPlatform>false</ShouldUnsetParentConfigurationAndPlatform>
+  </PropertyGroup>
+
+  <ItemDefinitionGroup>
+    <ProjectReference>
+      <SetConfiguration>Configuration=$(Configuration)</SetConfiguration>
+    </ProjectReference>
+  </ItemDefinitionGroup>
 </Project>
