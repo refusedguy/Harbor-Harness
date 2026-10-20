@@ -131,15 +131,6 @@ on:
       # itself — is a compile-time gate in the ci.yml build job and needs no
       # trigger here.
       - 'tools/check-public-api-resign.py'
-      - 'tools/check-public-api-resign.py'
-      # merged LOCALLY (the token has no `workflow` scope), and the local
-      # squash-merge dropped content. The gate has to run on every such pull
-      # request, and on the push that lands it — so the trigger is the
-      # workflow files themselves, not the gate's own sources alone.
-      - '.github/workflows/**'
-      - 'tools/check-local-merge-loss.py'
-      - 'tools/merge-loss-exceptions.txt'
-      # #431. docfx.json is the docs-site manifest and docs/toc.yml is its nav:
       # The merge-loss gate. A pull request that touches a workflow file is
       # merged LOCALLY (the token has no `workflow` scope), and the local
       # squash-merge dropped content. The gate has to run on every such pull
@@ -228,6 +219,12 @@ on:
       # #1845. Same trigger as above: the re-signing gate reads the commit
       # history, so a PR that edits the gate runs its self-test.
       - 'tools/check-public-api-resign.py'
+      # The merge-loss gate. Same trigger as above: a pull request that
+      # touches a workflow file is the one that gets merged LOCALLY, so the
+      # gate has to run on it.
+      - '.github/workflows/**'
+      - 'tools/check-local-merge-loss.py'
+      - 'tools/merge-loss-exceptions.txt'
       # #1888. Same trigger as above: the policy checker, and the three tools
       # whose self-test no workflow ran until the policy asked for one.
       - 'tools/check-gate-policy.py'
