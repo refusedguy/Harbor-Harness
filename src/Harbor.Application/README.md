@@ -15,6 +15,7 @@ LLM turns, tool invocations, compaction events, and permission checks.
 | `Configuration/HarborConfig.cs`    | Application config model + `JsonConfigStore`, `AuthStore`, `ProviderPresets` (the provider picker catalogue, projected from `providers/*.json` by `Configuration/ProviderPresetCatalog.cs` — one declaration per provider, #580).    |
 | `Skills/`                          | `SkillFreshnessSeeder` + `SkillUpdater` — the skill-lifecycle side of the workspace context.                             |
 | `FrontMatter.cs`                   | The single front-matter field reader shared by the skill seeder and the workspace-context service (#1580).              |
+| `Observability/`                   | `TurnChangeOracle` — the harness-side oracle of what a turn changed in the workspace: a projection over the event bus that fingerprints a mutating tool's target before and after the call and reports what the FILESYSTEM says (#1745, [ADR-020](../../docs/adr/ADR-020-turn-change-oracle.md)). |
 
 Two cohorts that used to live here have their own assemblies, with their
 namespaces kept verbatim so no consumer had to rewrite a `using`:

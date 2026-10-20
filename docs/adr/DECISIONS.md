@@ -537,3 +537,31 @@ does not ship it, and no configuration value brings it back.
 
 - Full text, the measurement, the removed surface and the alternatives:
   [ADR-019](ADR-019-vendored-sharpconsoleui-renderer-leaves-the-product.md).
+
+## ADR-020: the per-turn change oracle is computed by the harness, outside the agent
+
+Issue [#1745](https://github.com/refusedguy/Harbor-Harness/issues/1745) asked for a
+per-turn «what changed» in the interactive scenario, where nothing existed: `harbor
+run` had a frozen change set, the REPL and `harbor ask` had no change story at
+all. The point of the issue was the distinction between two claims — «the agent
+says it changed X» and «the world says X changed» — and only the second one is
+evidence.
+
+The decision: a workspace path whose bytes differ across the turn, as the HARNESS
+fingerprinted them (a content hash taken before and after every mutating tool
+call). The agent's prose is not an input to any verdict, a tool that writes
+without declaring a path (`bash`, `task`, an MCP server, a plugin tool) is named
+as *unobserved* rather than assumed away, and a path the harness cannot read is a
+verdict (`Unverified`) rather than a silence. The oracle is a projection over the
+event bus in the Application layer, outside the agent loop; the hosts (the REPL,
+`harbor ask`) draw one line per turn from what it decided.
+
+Not taken, and why: git snapshots of the working tree (the issue's own proposal —
+a different product, and it needs a temporary index to leave the user's
+repository untouched), a new `AgentEvent` subtype (the event union is a frozen
+public contract, and two hosts read the report), and persisting the reports (the
+part that survives a restart is the part that does not need to, and the rest
+would cost the frozen `ISessionStore` contract).
+
+- Full text, the four decisions, the rejected alternatives and where the code is:
+  [ADR-020](ADR-020-turn-change-oracle.md).

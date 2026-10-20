@@ -149,6 +149,14 @@ public sealed class ToolNameListRule
             "TrackedTools is the set of tools whose edits the Recent-Changes panel "
             + "watches — a projection concern with no tool-side declaration.",
 
+        ["src/Harbor.Application/Observability/TurnChangeOracle.cs"] =
+            "The oracle's watch list: the tools that WRITE a file, and the tools that cannot. "
+            + "The same shape as PanelExtractors' TrackedTools — no tool declaration says whether "
+            + "a tool mutates, only which ARGUMENT holds its subject (ToolSafetyProfile), so the "
+            + "write/no-write split cannot be derived. Deriving it the other way (watch every "
+            + "path-declaring tool) would hash every file a read touches, twice, to report that "
+            + "nothing changed.",
+
         ["src/Harbor.Ui.Framework.State/Diff/DiffPreview.cs"] =
             "The diff preview must decide which tool calls render a diff. A tool does "
             + "not declare that it is diff-shaped; the renderer owns that.",
