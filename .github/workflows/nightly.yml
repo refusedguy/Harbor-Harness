@@ -1,0 +1,930 @@
+# The nightly lane — what the PR lane does not do.
+#
+# WHY THIS IS A SEPARATE WORKFLOW FILE
+# -------------------------------------
+# GitHub triggers are WORKFLOW-level: the `on:` block is shared by every job
+# in a file, so a job cannot be moved off `pull_request` from inside it. The
+# same argument that moved the OS matrix into test-os.yml (#1787) moves the
+# coverage collection, the analyzer inventory and the build measurement in
+# here: they are EXPENSIVE and they are not PR gates.
+#
+# WHAT IS IN HERE
+# ---------------
+#   coverage    — the report-only coverage collection (issue #99), moved out
+#                 of ci.yml. It used to run on every pull request, re-running
+#                 20 of the 43 test projects to produce a number with no
+#                 threshold (issue #1783). Measured on run 39389070999: 236 s
+#                 of job time, 185 s of it the collect step, +40 % over the
+#                 uninstrumented run of the same projects — and it was the
+#                 LAST job to finish, so it WAS the PR wall.
+#   measurement — the MSBuild binary log and what it says about the build
+#                 (issue #1801 asks for the analyzer profile; this is the
+#                 answer), plus the two probes that turn #1929's hypothesis
+#                 into a measurement.
+#
+# WHEN IT RUNS
+# ------------
+#   push: [dev, master]  — a merge landed. This is where the expensive work
+#                          is allowed to happen.
+#   schedule              — "17 */2 * * *", the cron the repo already has
+#                          (test-os.yml). The `gate` job below skips a
+#                          scheduled run when dev's newest commit is younger
+#                          than an hour, because the push-run that merge
+#                          triggered already covered that commit.
+#   workflow_dispatch     — the owner's manual lever.
+#
+# A NOTE ON WHAT THE COVERAGE NUMBER IS
+# --------------------------------------
+# It is REPORT-ONLY, and it stays report-only: no thresholds, no
+# fail-on-numbers (issue #99 explicitly defers a global percentage gate),
+# per-project test failures are recorded and never fatal, and the scope is
+# stated in the summary so the number is never misread as whole-repo
+# coverage. What changed is WHERE it runs: on every merge into dev/master
+# and on the nightly schedule, not on every pull request.
+#
+# WHY THE COVERAGE JOB BUILDS THE TREE ITSELF
+# --------------------------------------------
+# The build-output slices (#1928) are per-CONSUMER artifacts of one build:
+# each shard's slice carries that shard's projects' output directories. A
+# workflow cannot consume another workflow's artifacts — the only way is a
+# cross-run API lookup of the other run's id, which is a coupling this
+# repository has nowhere else and which fails for a reason (the other run
+# was cancelled) that has nothing to do with the coverage. So the coverage
+# job builds the tree it measures.
+#
+# That build is not wasted: it is the zero-warning Release build (the same
+# one ci.yml's `build` job runs) and its log is the analyzer inventory's
+# source. What the nightly lane does NOT duplicate is the architecture
+# gate: #1928's build lane runs it on every push to dev/master already
+# (the job-level `HarborArchGate` env var), so here it is switched on only
+# for the SCHEDULE, where ci.yml does not run at all.
+#
+# NOTE on running tests: do NOT use `dotnet test` in this repo. Every job
+# below runs test projects as plain executables:
+# `dotnet exec tests/<Name>/bin/Release/net10.0/<Name>.dll`.
+name: nightly
+
+on:
+  push:
+    branches: [dev, master]
+  schedule:
+    - cron: "17 */2 * * *"
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: nightly-${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: true
+  DOTNET_GENERATE_ASPNET_CERTIFICATE: false
+  NUGET_CERT_REVOCATION_MODE: offline
+  MSBuildEnableWorkloadResolver: false
+  DOTNET_gcServer: 1
+
+jobs:
+  # ── the dedupe gate ────────────────────────────────────────────────────────
+  #
+  # The owner's rule: «не надо запускать дубликаты билдов/тестов в деве, если
+  # было влитие в течение часа» — do not run duplicate builds/tests in dev if
+  # there was a merge within the hour. The same rule, and the same
+  # implementation, as test-os.yml's `gate` job.
+  #
+  # FAIL-OPEN by construction: `proceed` starts true and is only ever set to
+  # false when the age of dev's newest commit is KNOWN to be inside the
+  # window. If the checkout or the git command fails, the gate proceeds and
+  # says so in the log. For push and workflow_dispatch events the gate ALWAYS
+  # proceeds: only the schedule can be a duplicate.
+  gate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    outputs:
+      proceed: ${{ steps.decide.outputs.proceed }}
+      reason: ${{ steps.decide.outputs.reason }}
+    steps:
+      - name: Check out dev (the branch the work happens on)
+        if: github.event_name == 'schedule'
+        uses: actions/checkout@v7
+        with:
+          ref: dev
+          fetch-depth: 1
+
+      - name: Decide whether this run duplicates a push-run
+        id: decide
+        shell: bash
+        run: |
+          set -uo pipefail
+          proceed=true
+          reason="event '${{ github.event_name }}' is not a scheduled run — the dedupe does not apply"
+          if [ "${{ github.event_name }}" = "schedule" ]; then
+            now=$(date +%s)
+            head_ts=$(git log -1 --format=%ct 2>/dev/null || true)
+            if ! printf '%s' "${head_ts:-}" | grep -Eq '^[0-9]+$'; then
+              reason="could not determine dev's newest commit age — proceeding (fail-open)"
+              echo "::warning::$reason"
+            else
+              age=$((now - head_ts))
+              if [ "$age" -lt 3600 ]; then
+                proceed=false
+                reason="dev's newest commit is ${age}s old (< 3600s) — a merge landed within the hour and the push-run already covered it"
+              else
+                reason="dev's newest commit is ${age}s old (>= 3600s) — no merge in the last hour, the safety net is due"
+              fi
+              echo "$reason"
+            fi
+          fi
+          echo "proceed=$proceed" >> "$GITHUB_OUTPUT"
+          echo "reason=$reason" >> "$GITHUB_OUTPUT"
+
+      # The runner-wait measurement, in the job summary (#1782 step 4). This
+      # is the FIRST job of the nightly run, so its own wait IS the "run
+      # created -> first job started" number.
+      - name: Queue-wait measurement (#1782 step 4)
+        if: always()
+        uses: ./.github/actions/queue-wait
+        with:
+          job-name: gate
+
+  # ── coverage: report-only, and the analyzer inventory ─────────────────────
+  #
+  # One job, two measurements, one build:
+  #
+  #   * the coverage number (issue #99) — the 20 core+platform unit suites
+  #     under the MTP CodeCoverage extension, per-project line rates in the
+  #     job summary + raw cobertura.xml artifacts (30-day retention feeds the
+  #     "month of green reports" baseline for a future diff-threshold);
+  #   * the analyzer inventory of the test projects, read out of the SAME
+  #     build's log.
+  #
+  # The analyzer set is MEASURED, not gated, and the reason is measured too:
+  # the test projects carry 223 DISTINCT analyzer diagnostics (run
+  # 39389070999's build log, deduplicated by file+line+id) — Sonar's
+  # test-code rules above all — while src/ + apps/ are warning-free because
+  # TreatWarningsAsErrors is on there. Turning the test tree's analyzers into
+  # errors would therefore be RED on day one, and a gate that is red on day
+  # one is not a gate. Publishing the count makes the noise visible and
+  # measurable, which is the precondition for a baseline (the same shape as
+  # .github/aot-warning-baseline.txt) — and that baseline is a follow-up, not
+  # something this workflow can invent.
+  #
+  # Report-only contract for the coverage (do NOT "fix" into a gate):
+  #   - NO thresholds, NO fail-on-numbers. A global percentage gate is
+  #     explicitly deferred (legacy areas would fail day one — see #99).
+  #   - Per-project test failures are RECORDED, never fatal: the `test` job
+  #     stays the gate. Instrumentation must not block PRs on flakes.
+  # Excluded suites: ui (Avalonia-headless flakes amplify under
+  # instrumentation), e2e/load (slow, need display). Scope is stated in the
+  # summary so numbers are never misread as whole-repo coverage.
+  coverage:
+    needs: [gate]
+    if: needs.gate.outputs.proceed == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      actions: read
+    env:
+      # The architecture gate as a build-time gate — for the SCHEDULE only.
+      # On a push to dev/master, ci.yml's build job already runs it (#1928's
+      # job-level env var), so running it here as well would pay for the
+      # same 68 s twice per merge. The schedule is the case ci.yml does not
+      # cover at all, and it is exactly the case the gate exists for: a dev
+      # that did not move.
+      HarborArchGate: ${{ github.event_name == 'schedule' && 'true' || 'false' }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # No `submodules: recursive`: the vendored ConsoleEx submodule left
+          # the product (ADR-019) and nothing in the build graph references it.
+          # A scheduled run checks out dev (the branch the work happens on);
+          # a push run checks out what was pushed.
+          ref: ${{ github.event_name == 'schedule' && 'dev' || github.ref }}
+
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v6
+        with:
+          # The same pinned SDK as ci.yml's build job (global.json asks for
+          # 10.0.402 with rollForward=latestPatch, which forbids the SDK
+          # from leaving the 10.0.4xx feature band).
+          dotnet-version: "10.0.402"
+          cache: true
+          cache-dependency-path: "Directory.Packages.props"
+
+      - name: Build the tree the coverage runs against
+        run: |
+          # pipefail is load-bearing: `... | tee build.log` reports tee's
+          # exit code, so without it a FAILED build would leave this job
+          # green.
+          set -o pipefail
+          bash build/build.sh Compile --configuration Release 2>&1 | tee build.log
+
+      - name: Publish the analyzer inventory of the test projects
+        if: always()
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import re
+          import os
+          from collections import defaultdict
+
+          # One warning line looks like:
+          #   /path/to/file.cs(12,34): warning S5443: message [ProjectName]
+          # The same warning is printed twice by MSBuild (once inline, once
+          # in the build summary), so the lines are DEDUPLICATED by
+          # (file, line, column, id) before counting: the number has to be a
+          # number of distinct diagnostics, not a number of printed lines.
+          pattern = re.compile(
+              r"^(?P<file>[^:\n]+\.(?:cs|vb|fs)):?\s*"
+              r"\((?P<line>\d+),(?P<col>\d+)\):\s*"
+              r"warning\s+(?P<id>[A-Za-z]+\d+):"
+          )
+          per_project = defaultdict(set)
+          ids = defaultdict(set)
+          try:
+              with open("build.log", encoding="utf-8", errors="replace") as fh:
+                  for raw in fh:
+                      match = pattern.match(raw.strip())
+                      if not match:
+                          continue
+                      tail = raw.rstrip().rsplit("[", 1)
+                      project = tail[1].rstrip("]\n ") if len(tail) == 2 else "?"
+                      key = (match.group("file"), match.group("line"),
+                             match.group("col"), match.group("id"))
+                      per_project[project].add(key)
+                      ids[project].add(match.group("id"))
+          except OSError as exc:
+              print(f"::warning::could not read build.log: {exc}")
+
+          total = sum(len(v) for v in per_project.values())
+          lines = [
+              "## Analyzer inventory (report-only)",
+              "",
+              "_Distinct analyzer diagnostics per project, from this build. The "
+              "analyzers run on every build (they are referenced solution-wide); "
+              "what this lane adds is the COUNT, which is what a future "
+              "baseline needs._",
+              "",
+              "| project | distinct diagnostics | ids |",
+              "|---|---|---|",
+          ]
+          for project in sorted(per_project, key=lambda p: (-len(per_project[p]), p)):
+              codes = ", ".join(sorted(ids[project]))
+              lines.append(f"| {project} | {len(per_project[project])} | {codes} |")
+          lines += ["", f"**Total distinct analyzer diagnostics: {total}**"]
+          with open(os.environ["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as fh:
+              fh.write("\n".join(lines) + "\n")
+          print(f"analyzer inventory: {total} distinct diagnostics across {len(per_project)} projects")
+          PY
+
+      # ubuntu-latest does not ship ripgrep — without it the RipGrepTool
+      # integration tests self-skip (same note as in ci.yml's `test` job).
+      - name: Ensure ripgrep installed
+        run: |
+          if ! command -v rg &> /dev/null; then
+            sudo apt-get update -qq && sudo apt-get install -y -qq ripgrep
+          fi
+          rg --version | head -1
+
+      # Per-project failures are recorded in Coverage/status.tsv, never fatal
+      # (final `exit 0` is intentional — report-only, see job comment).
+      - name: Collect coverage (core + platform unit suites)
+        timeout-minutes: 25
+        shell: bash
+        run: |
+          set -uo pipefail
+          mkdir -p Coverage
+          : > Coverage/status.tsv
+          for p in \
+            Harbor.Abstractions.Tests \
+            Harbor.Config.Tests \
+            Harbor.Domain.Tests \
+            Harbor.Application.Tests \
+            Harbor.ChangeTracking.Tests \
+            Harbor.Core.Tests \
+            Harbor.Registries.Tests \
+            Harbor.Hosting.Tests \
+            Harbor.Architecture.Tests \
+            Harbor.Lsp.Tests \
+            Harbor.Telemetry.Tests \
+            Harbor.Tools.Builtin.Tests \
+            Harbor.Storage.Tests \
+            Harbor.Storage.Jsonl.Tests \
+            Harbor.Providers.Tests \
+            Harbor.Transport.Remote.Tests \
+            Harbor.Plugins.Abstractions.Tests \
+            Harbor.Plugins.Runtime.Tests \
+            Harbor.Plugins.Host.Tests \
+            Harbor.Ipc.Tests; do
+            echo "::group::coverage $p"
+            dll="tests/$p/bin/Release/net10.0/$p.dll"
+            if [ ! -f "$dll" ]; then
+              echo "Missing $dll — did the build produce it?"
+              printf '%s\tmissing\n' "$p" >> Coverage/status.tsv
+            elif dotnet exec "$dll" --minimum-expected-tests 1 \
+                --coverage \
+                --coverage-output "$GITHUB_WORKSPACE/Coverage/$p.cobertura.xml" \
+                --coverage-output-format cobertura; then
+              printf '%s\tpass\n' "$p" >> Coverage/status.tsv
+            else
+              printf '%s\tFAIL\n' "$p" >> Coverage/status.tsv
+            fi
+            echo "::endgroup::"
+          done
+          exit 0
+
+      # Summarize whatever cobertura files exist (explicit outputs + fallback
+      # sweep of TestResults in case the extension places files elsewhere).
+      # Pure stdlib python — no ReportGenerator/coverlet dependency.
+      # No thresholds here: numbers are informational only (issue #99).
+      - name: Publish coverage summary (report-only, no thresholds)
+        if: always()
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import glob, os, xml.etree.ElementTree as ET
+
+          cov_dir = os.path.join(os.environ["GITHUB_WORKSPACE"], "Coverage")
+          files = {os.path.basename(f): f for f in glob.glob(os.path.join(cov_dir, "*.cobertura.xml"))}
+          for f in glob.glob(os.path.join(os.environ["GITHUB_WORKSPACE"], "TestResults", "**", "*.cobertura.xml"), recursive=True):
+              files.setdefault("TestResults/" + os.path.basename(f), f)
+
+          status = {}
+          try:
+              with open(os.path.join(cov_dir, "status.tsv")) as fh:
+                  for line in fh:
+                      name, _, st = line.rstrip("\n").partition("\t")
+                      status[name.strip()] = st.strip()
+          except OSError:
+              pass
+
+          lines = ["## Coverage (report-only, issue #99)", "",
+                   "_No thresholds — informational only. Scope: core + platform unit",
+                   "suites (ui/e2e excluded, see `coverage` job). Per-suite columns",
+                   "overlap on shared `src/` assemblies, so the TOTAL is indicative,",
+                   "not whole-repo coverage._", "",
+                   "| suite | tests | line coverage | lines |", "|---|---|---|---|"]
+          total_valid = total_covered = 0
+          for name in sorted(files):
+              try:
+                  root = ET.parse(files[name]).getroot()
+                  valid = int(float(root.get("lines-valid", 0)))
+                  covered = int(float(root.get("lines-covered", 0)))
+                  rate = float(root.get("line-rate", 0.0)) * 100.0
+                  cell = f"{rate:.1f}%"
+                  detail = f"{covered}/{valid}"
+                  total_valid += valid
+                  total_covered += covered
+              except Exception as ex:
+                  cell = "n/a (unparsable)"
+                  detail = str(ex)[:60]
+              st = status.get(name.removesuffix(".cobertura.xml"), "?")
+              short = name.removesuffix(".cobertura.xml")
+              lines.append(f"| {short} | {st} | {cell} | {detail} |")
+          if total_valid:
+              lines += ["",
+                        f"**TOTAL (indicative): {100.0 * total_covered / total_valid:.1f}% "
+                        f"({total_covered}/{total_valid} lines)**"]
+          else:
+              lines += ["", "**No cobertura files produced — check the collect step log.**"]
+          with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as fh:
+              fh.write("\n".join(lines) + "\n")
+          PY
+
+      - name: Upload cobertura reports
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: coverage-cobertura
+          path: "Coverage/*.cobertura.xml"
+          if-no-files-found: warn
+          retention-days: 30
+
+      - name: Queue-wait measurement (#1782 step 4)
+        if: always()
+        uses: ./.github/actions/queue-wait
+        with:
+          job-name: coverage
+
+  # ── the build measurement: an MSBuild binary log, and what it says ────────
+  #
+  # Issue #1801 measured that the NUKE `Compile` step is 372.5 s on a 4-vCPU
+  # runner — 69 % of the `build` job and 20 % of all PR runner-minutes — and
+  # asked for the analyzer profile ("take a profile and find which analyzer
+  # costs more than all the others together"). This job is the answer: it
+  # takes the MSBuild BINARY LOG of the same build and publishes the
+  # expensive tasks, the expensive analyzers and the node utilisation.
+  #
+  # TWO PROBES THAT TURN AN INFERENCE INTO A MEASUREMENT
+  # ------------------------------------------------------
+  # The dependency-graph analysis of run 39389070999 concluded that for
+  # 344.9 s of the 362.7 s compile step at least four projects were runnable
+  # at the same time, and from that inferred that the 4-vCPU runner is the
+  # constraint — which is what #1929 ("split the compile into two parallel
+  # jobs") would be built on. That is a conclusion from a scheduling MODEL,
+  # not a measurement of the runner. These two probes measure it:
+  #
+  #   1. CPU UTILISATION. /proc/stat is sampled every 2 s for the whole
+  #      compile. The average and the peak are reported as a percentage of
+  #      the runner's vCPUs: ~400 % means all four cores are busy (the build
+  #      is CPU-bound and more cores WOULD help); ~100-200 % means the runner
+  #      is idle half the time and the cost is elsewhere (I/O, the
+  #      dependency chain, or the runner's own noise).
+  #   2. PARALLEL EFFICIENCY. The same compile is run a second time with
+  #      -p:MaxCpuCount=1 (strictly serial) and the ratio
+  #      serial / parallel is reported: ~4 means perfectly parallel and
+  #      core-bound; ~2-2.5 means half-serialised (more cores would not help
+  #      much); ~1 means the dependency chain is the constraint.
+  #
+  # Both are MEASUREMENTS, never gates: this job cannot fail a build, and it
+  # is not a required check. The serial compile roughly doubles this job's
+  # time, which is exactly why the job lives on the schedule and not on the
+  # PR path.
+  #
+  # The measurement does not consume the build-output slices: it builds the
+  # tree itself, from source, with the same commands the NUKE `Compile`
+  # target runs (RestoreTarget and CompileTarget in build/_build/Targets/).
+  # The slices carry BUILD OUTPUTS; this job needs the build itself, with
+  # the binary log attached.
+  measurement:
+    needs: [gate]
+    if: >-
+      needs.gate.outputs.proceed == 'true' &&
+      (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    permissions:
+      contents: read
+      actions: read
+    env:
+      # The architecture gate is OFF here, and it must be: the gate runs the
+      # whole Harbor.Architecture.Tests assembly INSIDE the build (68 s), and
+      # that work is not what this job measures. Measuring a compile that
+      # carries 68 s of unrelated work would make both numbers (the CPU
+      # utilisation and the serial/parallel ratio) describe the wrong thing.
+      HarborArchGate: 'false'
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event_name == 'schedule' && 'dev' || github.ref }}
+
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: "10.0.402"
+          cache: true
+          cache-dependency-path: "Directory.Packages.props"
+
+      # The environment the numbers belong to. The runner image is recorded
+      # because `ubuntu-latest` moves (issue #1919: Ubuntu 26.04 in November
+      # 2026) and a CPU-utilisation number without the image it was measured
+      # on is a number without a denominator.
+      - name: Record the environment
+        shell: bash
+        run: |
+          mkdir -p analysis
+          {
+            echo "nproc=$(nproc)"
+            echo "dotnet_sdk=$(dotnet --version)"
+            echo "dotnet_sdks=$(dotnet --list-sdks | tr '\n' ' ')"
+            echo "runner_image=${ImageOS:-unknown}"
+            echo "runner_image_version=${ImageVersion:-unknown}"
+            echo "kernel=$(uname -sr)"
+            echo "os=$(. /etc/os-release 2>/dev/null && echo "${PRETTY_NAME:-unknown}")"
+            echo "utc=$(date -u +%FT%TZ)"
+          } | tee analysis/environment.txt
+
+      # The same two commands the NUKE `Compile` target runs, with the binary
+      # log added: `dotnet restore Harbor.slnx` and then
+      # `dotnet build Harbor.slnx -c Release --no-restore
+      # -p:MaxCpuCount=0 -p:ContinuousIntegrationBuild=true`. The NUKE
+      # bootstrap (one extra project: build/_build.csproj) is NOT part of
+      # this measurement, so the number is comparable with the CI compile
+      # step, not with the whole NUKE invocation.
+      - name: Restore
+        run: |
+          set -uo pipefail
+          start=$(date +%s)
+          dotnet restore Harbor.slnx -v minimal
+          rc=$?
+          end=$(date +%s)
+          echo "restore_seconds=$((end - start))" >> "$GITHUB_ENV"
+          echo "restore_rc=$rc" >> "$GITHUB_ENV"
+          exit $rc
+
+      # PROBE 1 + the binary log: the all-cores compile, with /proc/stat
+      # sampled every 2 s from before the compile starts until it ends.
+      - name: Build with a binary log (all cores, CPU sampled)
+        run: |
+          set -uo pipefail
+          # The sampler writes "<epoch> <total> <busy> <idle>" per line,
+          # where total/busy/idle are the /proc/stat jiffy counters
+          # (busy = total - idle - iowait).
+          (
+            while true; do
+              printf '%s ' "$(date +%s.%N)" >> analysis/cpu-parallel.samples
+              awk '/^cpu /{t=$2+$3+$4+$5+$6+$7+$8+$9; i=$5+$6; print t, t-i, i}' /proc/stat \
+                >> analysis/cpu-parallel.samples
+              sleep 2
+            done
+          ) &
+          sampler=$!
+          start=$(date +%s)
+          # `-clp:PerformanceSummary` makes MSBuild print the performance
+          # summary, whose "Project Evaluation Performance Summary" section
+          # is the only report of the time spent EVALUATING projects (as
+          # opposed to running targets in them). It is what
+          # tools/msbuild-evaluation-cost.py reads, and it is produced by the
+          # console logger's parallel variant, so a parallel build has it.
+          dotnet build Harbor.slnx -c Release --no-restore \
+            -p:MaxCpuCount=0 -p:ContinuousIntegrationBuild=true \
+            -clp:PerformanceSummary \
+            -bl:build.binlog 2>&1 | tee analysis/compile-parallel.log
+          rc=${PIPESTATUS[0]}
+          end=$(date +%s)
+          kill "$sampler" 2>/dev/null || true
+          wait "$sampler" 2>/dev/null || true
+          echo "build_seconds=$((end - start))" >> "$GITHUB_ENV"
+          echo "build_rc=$rc" >> "$GITHUB_ENV"
+          exit $rc
+
+      # PROBE 2: the same compile, strictly serial (-p:MaxCpuCount=1).
+      #
+      # The tree is CLEANED first, so the serial compile is a from-scratch
+      # build like the parallel one was — an incremental build would compile
+      # nothing and the ratio would be meaningless. The clean is timed on its
+      # own and reported separately, because only this compile pays it and
+      # charging it to the serial number would inflate the ratio.
+      - name: Clean (so the serial compile is from scratch)
+        run: |
+          set -uo pipefail
+          start=$(date +%s)
+          dotnet build Harbor.slnx -c Release --no-restore -t:Clean > analysis/clean.log 2>&1
+          rc=$?
+          end=$(date +%s)
+          echo "clean_seconds=$((end - start))" >> "$GITHUB_ENV"
+          echo "clean_rc=$rc" >> "$GITHUB_ENV"
+          exit 0
+
+      - name: Build again, strictly serial (CPU sampled)
+        run: |
+          set -uo pipefail
+          (
+            while true; do
+              printf '%s ' "$(date +%s.%N)" >> analysis/cpu-serial.samples
+              awk '/^cpu /{t=$2+$3+$4+$5+$6+$7+$8+$9; i=$5+$6; print t, t-i, i}' /proc/stat \
+                >> analysis/cpu-serial.samples
+              sleep 2
+            done
+          ) &
+          sampler=$!
+          start=$(date +%s)
+          dotnet build Harbor.slnx -c Release --no-restore \
+            -p:MaxCpuCount=1 -p:ContinuousIntegrationBuild=true \
+            -clp:PerformanceSummary \
+            2>&1 | tee analysis/compile-serial.log
+          rc=${PIPESTATUS[0]}
+          end=$(date +%s)
+          kill "$sampler" 2>/dev/null || true
+          wait "$sampler" 2>/dev/null || true
+          echo "serial_seconds=$((end - start))" >> "$GITHUB_ENV"
+          echo "serial_rc=$rc" >> "$GITHUB_ENV"
+          exit 0
+
+      # The binlog CLI (baronfel.binlog.cli): the same analysis engine as the
+      # binlog MCP server, with `expensive-tasks`, `expensive-analyzers` and
+      # `timeline` commands, and compact JSON output. Pinned: a measurement
+      # that changes shape when the tool changes is not a measurement.
+      # continue-on-error: the tool is an instrument, and an instrument that
+      # cannot be installed must not take the measurement down with it.
+      - name: Install the binlog CLI
+        continue-on-error: true
+        run: dotnet tool install --global baronfel.binlog.cli --version 0.0.14
+
+      - name: Analyse the binary log
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -uo pipefail
+          BINLOG="$HOME/.dotnet/tools/binlog"
+          export PATH="$HOME/.dotnet/tools:$PATH"
+          mkdir -p analysis
+          if [ -x "$BINLOG" ]; then
+            "$BINLOG" expensive-tasks build.binlog --top 15 > analysis/tasks.json 2>analysis/tasks.err || true
+            "$BINLOG" expensive-analyzers build.binlog --top 10 > analysis/analyzers.json 2>analysis/analyzers.err || true
+            "$BINLOG" expensive-projects build.binlog --top 10 > analysis/projects.json 2>analysis/projects.err || true
+            "$BINLOG" timeline build.binlog > analysis/timeline.json 2>analysis/timeline.err || true
+          else
+            echo "the binlog CLI is not installed — the summary will carry the wall times only"
+          fi
+          # The MSBuild-native replay: MSBuild can replay a binary log, and
+          # the `performancesummary` file logger parameter writes the same
+          # summary the console logger prints at the end of a build.
+          dotnet msbuild build.binlog -noconlog \
+            -flp:"v=diag;logfile=full.log;performancesummary" \
+            > analysis/replay.log 2>&1 || true
+          ls -la analysis || true
+
+      # The project-EVALUATION cost of each compile (#1919). This is the
+      # instrument that used to live in .github/workflows/evaluation-cost.yml
+      # — a manual A/B workflow that could not be dispatched at all, because
+      # GitHub will not dispatch a workflow that does not exist on the
+      # default branch. It reads the performance summary the compile printed
+      # (-clp:PerformanceSummary) and the wall time, and reports the time
+      # spent evaluating projects. It is a REPORTER: it never fails the job.
+      - name: Publish the project-evaluation cost
+        if: always()
+        shell: bash
+        run: |
+          set -uo pipefail
+          args=(--run "all-cores:analysis/compile-parallel.log:${build_seconds:-0}")
+          if [ -f analysis/compile-serial.log ]; then
+            args+=(--run "serial:analysis/compile-serial.log:${serial_seconds:-0}")
+          fi
+          python3 tools/msbuild-evaluation-cost.py "${args[@]}" \
+            --summary "$GITHUB_STEP_SUMMARY" || true
+
+      - name: Publish the measurement into the job summary
+        if: always()
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+          import re
+          from pathlib import Path
+
+          summary = os.environ["GITHUB_STEP_SUMMARY"]
+          analysis = Path("analysis")
+
+          def number(name, default="n/a"):
+              raw = os.environ.get(name, "")
+              return raw if raw else default
+
+          def load(name):
+              path = analysis / name
+              if not path.exists():
+                  return None
+              try:
+                  return json.loads(path.read_text(encoding="utf-8", errors="replace"))
+              except (OSError, ValueError):
+                  return None
+
+          def environment():
+              values = {}
+              path = analysis / "environment.txt"
+              if path.exists():
+                  for raw in path.read_text(encoding="utf-8", errors="replace").splitlines():
+                      name, _, value = raw.partition("=")
+                      values[name.strip()] = value.strip()
+              return values
+
+          def cpu_profile(name, ncpu):
+              """Average and peak CPU utilisation from the /proc/stat samples.
+
+              Each sample is "<epoch> <total> <busy> <idle>" in jiffies, the
+              counters of the `cpu` line (all cores). The utilisation of the
+              runner is the fraction of the elapsed jiffies that were NOT
+              idle, scaled by the number of vCPUs: 400 % on a 4-vCPU runner
+              means every core was busy for the whole sample, 100 % means one
+              core's worth of work.
+              """
+              path = analysis / name
+              if not path.exists():
+                  return None
+              samples = []
+              for raw in path.read_text(encoding="utf-8", errors="replace").splitlines():
+                  parts = raw.split()
+                  if len(parts) < 4:
+                      continue
+                  try:
+                      samples.append((float(parts[1]), float(parts[2])))
+                  except ValueError:
+                      continue
+              if len(samples) < 2:
+                  return None
+              utilisations = []
+              for (total_a, busy_a), (total_b, busy_b) in zip(samples, samples[1:]):
+                  d_total = total_b - total_a
+                  d_busy = busy_b - busy_a
+                  if d_total <= 0:
+                      continue
+                  utilisations.append(100.0 * ncpu * (d_busy / d_total))
+              if not utilisations:
+                  return None
+              return {
+                  "samples": len(utilisations),
+                  "average": sum(utilisations) / len(utilisations),
+                  "peak": max(utilisations),
+                  "min": min(utilisations),
+              }
+
+          env = environment()
+          ncpu = int(env.get("nproc", "1") or 1)
+
+          lines = [
+              "## Build measurement (MSBuild binary log)",
+              "",
+              "| metric | value |",
+              "|---|---|",
+              f"| restore wall time | {number('restore_seconds')} s |",
+              f"| build wall time, all cores (`MaxCpuCount=0`) | {number('build_seconds')} s |",
+              f"| build wall time, serial (`MaxCpuCount=1`) | {number('serial_seconds')} s |",
+              f"| clean (paid only by the serial compile) | {number('clean_seconds')} s |",
+              f"| restore / build / serial exit code | {number('restore_rc')} / {number('build_rc')} / {number('serial_rc')} |",
+              f"| clean exit code | {number('clean_rc')} |",
+              "",
+          ]
+
+          # PROBE 2 — the parallel-efficiency ratio, and what it decides.
+          parallel = number("build_seconds", "")
+          serial = number("serial_seconds", "")
+          ratio = None
+          if parallel.isdigit() and serial.isdigit() and int(parallel) > 0:
+              ratio = int(serial) / int(parallel)
+          lines += ["### Parallel efficiency", "",
+                    "| metric | value |", "|---|---|"]
+          if ratio is None:
+              lines += ["| serial / all-cores ratio | n/a |", ""]
+          else:
+              verdict = (
+                  "core-bound: more cores would help, and #1929 (split the compile "
+                  "into two parallel jobs) is worth measuring"
+                  if ratio >= 3.0 else
+                  "half-serialised: more cores would not help much — the levers are "
+                  "the obj/+bin/ cache (#1927) and taking the architecture gate out "
+                  "of the build (#1920)"
+                  if ratio >= 1.8 else
+                  "fully serialised: the dependency chain is the constraint, and both "
+                  "#1929 and the cache are largely pointless"
+              )
+              lines += [
+                  f"| serial / all-cores ratio | **{ratio:.2f}** |",
+                  f"| reading | {verdict} |",
+                  "",
+              ]
+
+          # PROBE 1 — the CPU utilisation of the runner.
+          lines += ["### CPU utilisation of the runner", "",
+                    "| compile | average | peak | min | samples |", "|---|---|---|---|---|"]
+          for label, sample in (("all cores (`MaxCpuCount=0`)", "cpu-parallel.samples"),
+                                ("serial (`MaxCpuCount=1`)", "cpu-serial.samples")):
+              profile = cpu_profile(sample, ncpu)
+              if profile is None:
+                  lines += [f"| {label} | n/a | n/a | n/a | 0 |"]
+              else:
+                  lines += [
+                      f"| {label} | {profile['average']:.0f} % | {profile['peak']:.0f} % | "
+                      f"{profile['min']:.0f} % | {profile['samples']} |"
+                  ]
+          lines += [
+              "",
+              f"_Percentages are of the runner's {ncpu} vCPUs: 100 % is one core's "
+              f"worth of work, {ncpu * 100} % is every core busy._",
+              "",
+          ]
+
+          lines += ["### Environment", "", "| key | value |", "|---|---|"]
+          for key in ("nproc", "dotnet_sdk", "dotnet_sdks", "runner_image",
+                      "runner_image_version", "kernel", "os", "utc"):
+              lines.append(f"| {key} | {env.get(key, 'n/a')} |")
+          lines.append("")
+
+          def rows(payload, limit=15):
+              """Pull (label, duration) pairs out of an unknown JSON shape.
+
+              The CLI's JSON contract is not something this workflow should
+              depend on: a renamed property must degrade the TABLE, not
+              break the job. So the walk looks for any object that carries a
+              duration-ish number and a name-ish string, and sorts those.
+
+              The duration key is chosen by PRIORITY, not by iteration
+              order: an explicit "duration"/"elapsed" wins over a bare
+              "time", which may well be a start or end timestamp.
+              """
+              priority = (("duration", "elapsed"), ("ms", "millisecond"),
+                          ("second", "sec"), ("time",))
+              found = []
+
+              def duration_of(node):
+                  best = None
+                  for rank, needles in enumerate(priority):
+                      for key, value in node.items():
+                          if (isinstance(value, (int, float))
+                                  and not isinstance(value, bool)
+                                  and any(needle in key.lower() for needle in needles)):
+                              if best is None or rank < best[0]:
+                                  best = (rank, float(value))
+                      if best is not None:
+                          return best[1]
+                  return best[1] if best else None
+
+              def label_of(node):
+                  for key, value in node.items():
+                      low = key.lower()
+                      if (not isinstance(value, str) or len(value) > 120
+                              or not any(t in low for t in ("name", "task", "target",
+                                                           "project", "analyzer", "id",
+                                                           "path", "file"))):
+                          continue
+                      # An ISO timestamp is a timestamp, not a label.
+                      if re.match(r"^\d{4}-\d{2}-\d{2}T", value):
+                          continue
+                      return value
+                  return None
+
+              def walk(node):
+                  if isinstance(node, dict):
+                      duration = duration_of(node)
+                      if duration is not None:
+                          label = label_of(node)
+                          if label:
+                              found.append((label, duration))
+                      for value in node.values():
+                          walk(value)
+                  elif isinstance(node, list):
+                      for item in node:
+                          walk(item)
+
+              walk(payload)
+              found.sort(key=lambda pair: pair[1], reverse=True)
+              return found[:limit]
+
+          def table(title, pairs, unit="duration (as reported)"):
+              if not pairs:
+                  return [f"_{title}: no data._", ""]
+              out = [f"**{title}**", "", f"| item | {unit} |", "|---|---|"]
+              for label, duration in pairs:
+                  out.append(f"| {label} | {duration:g} |")
+              out.append("")
+              return out
+
+          for title, filename in (
+              ("Most expensive MSBuild tasks", "tasks.json"),
+              ("Most expensive Roslyn analyzers", "analyzers.json"),
+              ("Most expensive projects", "projects.json"),
+          ):
+              payload = load(filename)
+              lines += table(title, rows(payload) if payload is not None else [])
+
+          # The node utilisation / timeline, whatever shape it arrives in.
+          timeline = load("timeline.json")
+          if timeline is not None:
+              flat = json.dumps(timeline)
+              nodes = re.findall(r'"nodes"\s*:\s*(\d+)', flat)
+              lines += ["**Timeline / node utilisation**", ""]
+              if nodes:
+                  lines += [f"- nodes reported: {nodes[0]}", ""]
+              else:
+                  lines += ["_the timeline command returned no node count; open the binlog artifact._", ""]
+
+          # The MSBuild-native performance summary from the replay, when the
+          # replay produced one. The format is "    12.34s CoreCompile", and
+          # it lives in the "Performance Summary:" SECTION of the log — the
+          # diagnostic log above it is full of other lines that would match
+          # the same shape, so only the section is read.
+          perf = Path("full.log")
+          if perf.exists():
+              entries = []
+              in_summary = False
+              for raw in perf.read_text(encoding="utf-8", errors="replace").splitlines():
+                  if "Performance Summary:" in raw:
+                      in_summary = True
+                      continue
+                  if not in_summary:
+                      continue
+                  match = re.match(r"^\s*([0-9]+(?:\.[0-9]+)?)s\s+(\S.*)$", raw)
+                  if match:
+                      entries.append((match.group(2).strip(), float(match.group(1))))
+              entries.sort(key=lambda pair: pair[1], reverse=True)
+              lines += table("MSBuild performance summary (replay)", entries[:15], "seconds")
+
+          lines += [
+              "_This job never fails the build: it measures. The binary log is "
+              "uploaded as an artifact, so the MSBuild Structured Log Viewer can "
+              "be pointed at the same data._",
+          ]
+          with open(summary, "a", encoding="utf-8") as fh:
+              fh.write("\n".join(lines) + "\n")
+          print("\n".join(lines))
+          PY
+
+      - name: Upload the binary log
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: build-binlog
+          path: build.binlog
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Queue-wait measurement (#1782 step 4)
+        if: always()
+        uses: ./.github/actions/queue-wait
+        with:
+          job-name: measurement
