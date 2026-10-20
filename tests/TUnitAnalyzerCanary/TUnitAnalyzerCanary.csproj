@@ -1,0 +1,50 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    TUnitAnalyzerCanary — the non-vacuity fixture for the TUnit analyzer gate
+    (#1836). NOT a test suite and NOT a row of Harbor.slnx.
+
+    WHAT IT IS
+    A project whose only content is two planted TUnitAssertions0005 offences:
+    one that must be reported and one that is waived and must NOT be. The
+    gate tool (tools/check-tunit-analyzer-gate.py) builds this project and
+    asserts exactly that outcome, so the gate is proved rather than assumed.
+
+    WHY IT IS NOT IN THE SOLUTION
+    Because the planted offender is an ERROR: tests/Directory.Build.props
+    promotes TUnitAssertions0005 to an error, so a project carrying one
+    cannot be part of a build that has to stay green. Keeping it out of
+    Harbor.slnx is what lets the canary exist at all — and it is why the
+    canary is built by exactly one job, which expects the failure.
+
+    WHY IT LIVES UNDER tests/
+    Because the policy under test is the one in tests/Directory.Build.props
+    (the promotion of TUnitAssertions0005 to an error). A canary outside
+    tests/ would inherit the root props instead, where TreatWarningsAsErrors
+    is true for every diagnostic — and then it would prove nothing about the
+    promotion this change adds.
+
+    IsTestProject is false on purpose: nothing here is a test to RUN, and the
+    flag decides whether Directory.Build.targets hands the project a TUnit
+    reference. The reference is declared explicitly below instead, so this
+    file says what it needs rather than relying on a convention.
+  -->
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>false</IsTestProject>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!--
+      The TUnit package is what carries the analyzer assemblies
+      (TUnit.Analyzers inside TUnit.Core, TUnit.Assertions.Analyzers inside
+      TUnit.Assertions). Without this reference the canary would compile with
+      no analyzer at all and would prove nothing — which is exactly the
+      failure this fixture exists to catch.
+    -->
+    <PackageReference Include="TUnit"/>
+  </ItemGroup>
+
+</Project>

@@ -1013,6 +1013,65 @@ await Assert.That(async () => await fragile.Method())
     .Throws<InvalidOperationException>(ex => ex.Message.Contains("expected text"));
 ```
 
+### The TUnit analyzer gate: an assertion may not be made on a constant
+
+TUnit 1.75 ships its own compiler analyzers inside its NuGet packages
+(`TUnit.Analyzers` in `TUnit.Core`, `TUnit.Assertions.Analyzers` in
+`TUnit.Assertions`), and two of their rules are **errors** for every test
+project. The promotion lives in `tests/Directory.Build.props` — it is
+`WarningsAsErrors`, which the compiler applies next to the
+`TreatWarningsAsErrors=false` the test tree sets on purpose.
+
+| Rule | What it reports | What to do |
+|------|-----------------|------------|
+| `TUnitAssertions0005` | `Assert.That(...)` whose first argument is a compile-time constant | Fix it, or waive it at the call site with a reason |
+| `TUnitAssertions0015` | `IsEqualTo(true)` / `IsEqualTo(false)` | Write `IsTrue()` / `IsFalse()` |
+
+The rule that decides most of them:
+
+```csharp
+// A DEFECT: the assertion cannot fail, so the test proves nothing.
+await Assert.That(true).IsTrue();
+
+// A DEFECT of the same shape: the constant is the writer's mistake.
+await Assert.That(false).IsTrue();
+
+// LEGITIMATE, and the shape to write when the constant IS the subject. The
+// assertion compares the constant's inlined value against a number the test
+// owns, so a change to the constant breaks the test.
+await Assert.That(ContextUsage.WarnThreshold).IsEqualTo(0.50);
+```
+
+Two rules of thumb:
+
+- **If the assertion could not fail whatever the code under test does, it is
+  a defect.** Replace it with the assertion the test actually means:
+  `Assert.That(() => action()).ThrowsNothing()` for a "does not throw" test,
+  `Assert.That(vm.Status).IsEqualTo("running")` for a "handles the event"
+  test, `Assert.That(() => backend.AppendLines(-1)).Throws<ArgumentOutOfRangeException>()`
+  for a "throws" test.
+- **If the constant IS the subject, waive it at the call site, and say
+  why.** The repository's convention is the scoped pragma, and the reason is
+  not optional:
+
+```csharp
+#pragma warning disable TUnitAssertions0005 // the threshold constant is the subject: the test pins its numeric value
+await Assert.That(ContextUsage.WarnThreshold).IsEqualTo(0.50);
+#pragma warning restore TUnitAssertions0005
+```
+
+A blanket suppression is what this repository forbids: a `#pragma` covering a
+whole file, a `NoWarn` in a `.csproj`, or a `.editorconfig` entry that
+silences the rule for a project. Each waiver covers its own site and carries
+the reason that says why the constant is the subject.
+
+The gate is proved, not assumed: `tools/check-tunit-analyzer-gate.py` builds
+`tests/TUnitAnalyzerCanary` — a project that is deliberately not a row of
+`Harbor.slnx` — and asserts that its planted offender is reported as an
+error while its planted *waived* offender is not. If the analyzer stopped
+shipping, or the promotion stopped applying, or a waiver grew past its own
+site, that check goes red.
+
 ### Reporting several failures at once
 
 `Assert.Multiple()` opens a scope that collects the failures instead of

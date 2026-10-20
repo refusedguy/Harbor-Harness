@@ -157,8 +157,19 @@ public class WordDiffBoundsTests
         string shortRow = string.Join(' ', Enumerable.Repeat("y", shortTokens));
 
         await Assert.That(longRow.Length).IsLessThan(WordDiff.MaxPairableLineChars);
+        // The fixture's cell count and the product's cell cap are both
+        // compile-time constants, and the constants ARE the subject: this
+        // assertion exists to prove the fixture really is over the cap (and
+        // under the character cap), and it keeps proving that only for as
+        // long as the two numbers still straddle the boundary. A change to
+        // the product cap recompiles the comparison to a different pair of
+        // numbers and the test fails, which is the point. TUnit's
+        // TUnitAssertions0005 reports the constant first argument; see the
+        // policy in tests/Directory.Build.props.
+#pragma warning disable TUnitAssertions0005 // the fixture's cell count and the product's cell cap are constants: the test checks they straddle the boundary
         await Assert.That((longTokens + 1) * (shortTokens + 1))
             .IsGreaterThan(WordDiff.MaxLcsMatrixCells);
+#pragma warning restore TUnitAssertions0005
 
         IReadOnlyList<DiffLine> lines =
         [

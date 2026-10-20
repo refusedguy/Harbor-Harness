@@ -64,7 +64,16 @@ public class ContextUsageTests
     [Test]
     public async Task Thresholds_Are_Warn_50_And_Danger_85()
     {
+        // The thresholds ARE constants, and the constant is the subject: this
+        // test exists to pin the two numbers the context gauge switches on.
+        // A change to either constant recompiles these assertions to the new
+        // value and the test fails, so it is a change detector rather than a
+        // tautology — which is why the finding is waived here instead of
+        // papered over. TUnit's TUnitAssertions0005 reports the constant
+        // first argument; see the policy in tests/Directory.Build.props.
+#pragma warning disable TUnitAssertions0005 // the threshold constants are the subject: the test pins their numeric values
         await Assert.That(ContextUsage.WarnThreshold).IsEqualTo(0.50);
         await Assert.That(ContextUsage.DangerThreshold).IsEqualTo(0.85);
+#pragma warning restore TUnitAssertions0005
     }
 }

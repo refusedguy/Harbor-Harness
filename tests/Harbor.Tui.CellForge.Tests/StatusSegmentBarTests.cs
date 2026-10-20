@@ -70,8 +70,17 @@ public class StatusSegmentBarTests
     {
         // #75 unification pin: the bar bands must stay identical to the
         // canonical helper — change them in ContextUsage, not here.
+        //
+        // Both sides are compile-time constants, and the constants ARE the
+        // subject: this test exists to catch the two drifting apart. A change
+        // to either recompiles the comparison to a different pair of numbers
+        // and the test fails, so it is a change detector, not a tautology.
+        // TUnit's TUnitAssertions0005 reports the constant first argument; see
+        // the policy in tests/Directory.Build.props.
+#pragma warning disable TUnitAssertions0005 // the two threshold constants are the subject: the test checks they stay single-sourced
         await Assert.That(StatusViewModel.CtxWarnThreshold).IsEqualTo(ContextUsage.WarnThreshold);
         await Assert.That(StatusViewModel.CtxDangerThreshold).IsEqualTo(ContextUsage.DangerThreshold);
+#pragma warning restore TUnitAssertions0005
     }
 
     [Test]

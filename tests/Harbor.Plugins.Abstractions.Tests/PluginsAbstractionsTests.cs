@@ -188,7 +188,12 @@ public class IPluginContractTests
     public async Task IPlugin_Initialize_CanBeCalled()
     {
         var plugin = new StubPlugin("test", "1.0.0");
-        plugin.Initialize(new PluginContext
+        // "Can be called" IS the claim, so the assertion is that the call
+        // does not throw. The trailing `Assert.That(true).IsTrue()` this used
+        // to end with asserted nothing (TUnit's TUnitAssertions0005 says so
+        // out loud) — it could not fail, so the test it decorated was a
+        // comment about a method call.
+        await Assert.That(() => plugin.Initialize(new PluginContext
         {
             Services = new Microsoft.Extensions.DependencyInjection.ServiceCollection(),
             Configuration = new Microsoft.Extensions.Configuration.ConfigurationBuilder().Build(),
@@ -196,16 +201,18 @@ public class IPluginContractTests
             EventBus = new Harbor.TestKit.FakeEventBus(),
             PluginDirectory = "/tmp/plugins",
             DataDirectory = "/tmp/plugins/data"
-        });
-        await Assert.That(true).IsTrue();
+        })).ThrowsNothing();
     }
 
     [Test]
     public async Task IPlugin_ShutdownAsync_CompletesWithoutError()
     {
         var plugin = new StubPlugin("test", "1.0.0");
-        await plugin.ShutdownAsync(CancellationToken.None);
-        await Assert.That(true).IsTrue();
+        // Same shape as the test above: the claim is "completes without
+        // error", and the tautology that used to stand in for it asserted
+        // nothing.
+        await Assert.That(async () => await plugin.ShutdownAsync(CancellationToken.None))
+            .ThrowsNothing();
     }
 }
 

@@ -298,15 +298,16 @@ public class SubAgentRunnerTests
             new ScriptedLoop(),
             NullLogger<SubAgentRunner>.Instance);
 
-        try
-        {
-            await runner.RunAsync(AgentFixtures.SubAgent(), new SubAgentRunRequest("boom"));
-            await Assert.That(false).IsTrue();
-        }
-        catch (InvalidOperationException)
-        {
-            // Expected: the point is the depth unwind below, not the throw.
-        }
+        // The store throws synchronously, so RunAsync must surface that
+        // InvalidOperationException instead of swallowing it. The assertion
+        // used to be `Assert.That(false).IsTrue()` inside a try/catch — a
+        // tautology (TUnit's TUnitAssertions0005 says so) whose failure would
+        // have been an AssertionException the catch below could not even
+        // swallow. `Assert.ThrowsAsync<InvalidOperationException>` is the same
+        // claim, stated as the assertion it is: the exception happens, and the
+        // test continues past it to the depth check.
+        await Assert.ThrowsAsync<InvalidOperationException>(async () =>
+            await runner.RunAsync(AgentFixtures.SubAgent(), new SubAgentRunRequest("boom")));
 
         await Assert.That(runner.CanSpawn).IsTrue();
     }

@@ -19,4 +19,68 @@
     <NoWarn>$(NoWarn);CS1591;CA1707;CA1861;S5445;S3011</NoWarn>
   </PropertyGroup>
 
+  <!--
+    TUNIT'S OWN ANALYZERS ARE A GATE HERE, NOT A COMMENT (#1836).
+
+    TUnit 1.75 ships two analyzer assemblies inside its own NuGet packages —
+    TUnit.Analyzers (in TUnit.Core) and TUnit.Assertions.Analyzers (in
+    TUnit.Assertions) — and NuGet hands both to the compiler as analyzers
+    automatically. They were already RUNNING on this tree before #1836; what
+    was missing is the part that makes a finding mean something: the
+    diagnostics below are promoted to ERRORS for every test project, so a new
+    violation fails the build instead of scrolling past as a warning.
+
+    HOW THE PROMOTION WORKS, AND WHY IT IS NOT `TreatWarningsAsErrors`
+    The property above sets TreatWarningsAsErrors=false on purpose: the
+    test tree carries documented false positives (RS0030, CFE0001) and
+    "treat everything as an error" would train people to ignore the analyzer
+    rather than fix it. `WarningsAsErrors` is the OTHER half of the same
+    switch and is INDEPENDENT of it: the compiler gets /warnaserror+:<ids>
+    next to /warnaserror-, and a specific warning id always wins over the
+    general setting. So the tree keeps its lenient default and these two
+    rules are strict.
+
+    THE TWO RULES
+    TUnitAssertions0005 — "Assert.That(...) should not be used with a constant
+      value". The rule fires when the FIRST argument of Assert.That is a
+      compile-time constant. Two shapes exist in this tree, and they get
+      opposite verdicts:
+        * a literal (`Assert.That(true).IsTrue()`) — a REAL DEFECT. The
+          assertion cannot fail, so the test proves nothing. Fixed: the
+          tautology is replaced by the assertion the test actually means.
+        * a production constant compared against a literal
+          (`Assert.That(ContextUsage.WarnThreshold).IsEqualTo(0.50)`) — the
+          constant IS the subject. A change to the constant recompiles the
+          assertion to a different value and the test fails, so it is a
+          change detector, not a tautology. Waived at the call site with a
+          written reason (the repo convention, same as RS0030).
+
+    TUnitAssertions0015 — "Use .IsTrue() instead of .IsEqualTo(true)". The
+      same defect written in a worse spelling; the fix is mechanical and
+      needs no waiver.
+
+    WHAT IS DELIBERATELY NOT PROMOTED
+    TUnit0055 (Console.SetOut inside a test — a real race, owned by #1790's
+    ParallelLimiter work), TUnit0015 (a CancellationToken parameter with no
+    [Timeout] — the CTS boilerplate ticket) and TUnit0023 (a disposable not
+    released in a cleanup method) stay WARNINGS here. Promoting them would
+    mean either a blanket NoWarn per project (which is the thing this
+    repository forbids) or a behaviour change at the 42 sites those three
+    rules name (12 + 29 + 1, measured on the build log of run 39421864352),
+    which belongs to its own ticket. They are still reported on every build,
+    so the count is visible; only the enforcement is deferred, and the reason
+    is written here so the deferral is a decision rather than an oversight.
+
+    THE CONTROL: tools/check-tunit-analyzer-gate.py, run by ci.yml, builds
+    tests/TUnitAnalyzerCanary — a project that is NOT in Harbor.slnx and is
+    therefore never part of the normal build — and asserts that the
+    planted offender in it is reported as an error while the planted WAIVED
+    offender next to it is not. If the analyzer stopped shipping, or this
+    promotion stopped applying, or a waiver grew past its own site, that
+    check goes red.
+  -->
+  <PropertyGroup>
+    <WarningsAsErrors>$(WarningsAsErrors);TUnitAssertions0005;TUnitAssertions0015</WarningsAsErrors>
+  </PropertyGroup>
+
 </Project>

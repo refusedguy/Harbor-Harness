@@ -48,7 +48,7 @@ public class PluginOutOfProcDefaultTests : PluginAbsenceTestBase
             .GetAllTools()
             .Select(t => t.Name.Value)
             .ToArray();
-        await Assert.That(toolNames.Contains("outofproc_s3_probe")).IsEqualTo(false)
+        await Assert.That(toolNames.Contains("outofproc_s3_probe")).IsFalse()
             .Because("slice 3: plugin tools arrive over MCP from harbor-plugins-host, "
                 + "never through the in-process IToolRegistry");
 
@@ -81,12 +81,12 @@ public class PluginOutOfProcDefaultTests : PluginAbsenceTestBase
                      "Harbor.Plugins.Registration",
                  })
         {
-            await Assert.That(referenced.Contains(assembly)).IsEqualTo(false)
+            await Assert.That(referenced.Contains(assembly)).IsFalse()
                 .Because("slice 3: " + assembly + " is the in-process compile pipeline — "
                     + "the CLI must not reference it; CS plugins compile in harbor-plugins-host");
         }
 
-        await Assert.That(referenced.Contains("Harbor.Plugins.Hosting")).IsEqualTo(true)
+        await Assert.That(referenced.Contains("Harbor.Plugins.Hosting")).IsTrue()
             .Because("the host-binary probe and the filesystem watcher stay in-process");
     }
 

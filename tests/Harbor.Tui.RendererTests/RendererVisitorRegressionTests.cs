@@ -156,8 +156,10 @@ public class RendererVisitorRegressionTests
             renderer.Dispose();
         }
 
-        await Assert.That(true).IsTrue();
-
+        // The tautology that used to stand here (`Assert.That(true).IsTrue()`)
+        // asserted nothing (TUnit's TUnitAssertions0005 says so) and the real
+        // assertion is the one below it: the sweep has to have reached the
+        // notification runner.
         await Assert.That(runner.Count).IsGreaterThan(0)
             .Because("a sweep that throws nothing because it notified nothing is not a "
                    + "regression test of the notification path — the three events this "

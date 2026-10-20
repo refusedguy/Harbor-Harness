@@ -169,7 +169,15 @@ public class InputHistoryTests
     [Test]
     public async Task Cap_Default50_EvictsOldest_MruOrder()
     {
+        // The default capacity IS a constant, and the constant IS the subject:
+        // the test pins the number the history starts with. A change to the
+        // constant recompiles this assertion to the new value and the test
+        // fails, so the change is noticed. TUnit's TUnitAssertions0005 reports
+        // the constant first argument; see the policy in
+        // tests/Directory.Build.props.
+#pragma warning disable TUnitAssertions0005 // the default-capacity constant is the subject: the test pins its numeric value
         await Assert.That(PromptHistory.DefaultCapacity).IsEqualTo(50);
+#pragma warning restore TUnitAssertions0005
 
         var history = new PromptHistory();
         for (int i = 0; i < 55; i++)

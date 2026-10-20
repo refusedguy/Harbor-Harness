@@ -21,7 +21,7 @@ public class StatuslineRebuildTests
     public async Task Queue_TracksToolRoundTrip_AndRendersSegment()
     {
         var vm = new StatusBarViewModel();
-        await Assert.That(vm.Formatted.Contains("queue:")).IsEqualTo(false);
+        await Assert.That(vm.Formatted.Contains("queue:")).IsFalse();
 
         await vm.UpdateFromEventAsync(ToolStart());
         await Assert.That(vm.QueuedCount).IsEqualTo(1);
@@ -29,7 +29,7 @@ public class StatuslineRebuildTests
 
         await vm.UpdateFromEventAsync(ToolEnd());
         await Assert.That(vm.QueuedCount).IsEqualTo(0);
-        await Assert.That(vm.Formatted.Contains("queue:")).IsEqualTo(false);
+        await Assert.That(vm.Formatted.Contains("queue:")).IsFalse();
     }
 
     [Test]
@@ -91,7 +91,7 @@ public class StatuslineRebuildTests
 
         string formatted = vm.Formatted;
         await Assert.That(formatted).Contains("ctx:");
-        await Assert.That(formatted.IndexOf("ctx:", StringComparison.Ordinal) < formatted.IndexOf('$')).IsEqualTo(true);
+        await Assert.That(formatted.IndexOf("ctx:", StringComparison.Ordinal) < formatted.IndexOf('$')).IsTrue();
     }
 
     [Test]

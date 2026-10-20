@@ -155,8 +155,8 @@ public sealed class ChildContainerTests
         container.Add(c, FlexTrack.Fixed(6));
         container.Solve(new Rect(0, 0, 40, 10));
 
-        await Assert.That(container.Remove(b)).IsEqualTo(true);
-        await Assert.That(container.Remove(b)).IsEqualTo(false);
+        await Assert.That(container.Remove(b)).IsTrue();
+        await Assert.That(container.Remove(b)).IsFalse();
         await Assert.That(container.Count).IsEqualTo(2);
 
         container.Solve(new Rect(0, 0, 40, 10));
