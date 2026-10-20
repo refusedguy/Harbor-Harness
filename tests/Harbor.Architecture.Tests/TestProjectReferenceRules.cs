@@ -10,7 +10,7 @@
 //    Harbor.Ipc.Tests referenced Harbor.E2E.Framework and used NONE of its
 //    types; the edge still put Harbor.Application and the whole
 //    Harbor.Ui.Framework family into the IPC test project's closure — 23
-//    projects where 9 were needed.
+//    projects where 10 were needed.
 //
 // 2. THE DISCOVERY. TUnit discovers the test classes of a REFERENCED TEST
 //    PROJECT inside every project that references it. So a [Test] method
@@ -260,8 +260,8 @@ public sealed class TestProjectReferenceRules
                 + "project's closure for nothing, and — because a referenced TEST PROJECT's test "
                 + "classes are discovered inside every project that references it — this project also "
                 + "becomes a module in which the referenced project's tests run. Harbor.Ipc.Tests "
-                + "referenced Harbor.E2E.Framework and used none of it: 23 projects in its closure "
-                + "where 9 were needed, and a sixth copy of 26 unrelated tests. Unused edges: "
+                + "referenced Harbor.E2E.Framework and used none of it: 24 projects in its closure "
+                + "where 10 were needed, and a sixth copy of 26 unrelated tests. Unused edges: "
                 + string.Join(" | ", unused));
     }
 

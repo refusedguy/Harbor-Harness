@@ -11,7 +11,7 @@
     types. The reference was not free in either direction:
 
       * it dragged Harbor.Application and the whole Harbor.Ui.Framework family
-        into this project's closure (23 -> 9 projects) for nothing, and
+        into this project's closure (24 -> 10 projects) for nothing, and
       * because a referenced TEST PROJECT's test classes are discovered inside
         every project that references it, it made the E2E framework's 26
         StateTestRunnerTests run here as well — a sixth copy, in a project
