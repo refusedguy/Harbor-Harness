@@ -56,6 +56,20 @@ namespace Harbor.E2E.App.Avalonia;
 ///         <see cref="E2eShardsTests" /> fails the build if a class is left
 ///         out of both shards.
 ///     </para>
+///     <para>
+///         <b>The order inside a class is not stable.</b> Two runs of the
+///         same tree execute this project's tests in the same order, but a
+///         change to any test's DURATION moves that order — TUnit schedules
+///         a class's tests by an estimate, so shortening one test reshuffles
+///         the rest. This suite is order-fragile by documentation (the
+///         <c>SettingsTests</c> skip names "orphaned dispatcher continuations
+///         from previously-initialized hosts" and says the deterministic fix
+///         "requires process-per-class isolation — sprint 6"), so a shard
+///         split is a real-isolation change and not only a scheduling one:
+///         watch the sharded run for the same class of failure, and prefer
+///         one process per class over two processes per project once the
+///         sprint-6 isolation lands.
+///     </para>
 /// </remarks>
 public static class E2eShards
 {
