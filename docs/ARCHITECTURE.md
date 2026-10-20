@@ -37,10 +37,12 @@ Harbor.slnx                          (.sln не существует; есть �
 │   ├── Harbor.Plugins.{Abstractions..Runtime,Host}/  (8 проектов plugin pipeline)
 │   ├── Harbor.Ipc.{Abstractions,Client,Server,InProcess}/
 │   ├── Harbor.Terminal.Abstractions/ (контракты TUI: ITuiRenderer, UiState, AppReducer, ViewRegistry, IPanels, …)
-│   ├── Harbor.Tui.{AnsiPlain,CellForge(+.Engine),CellForge.Syntax,CellForge.Prompts,NickConsoleEx,Notifications}/
+│   ├── Harbor.Tui.{AnsiPlain,CellForge(+.Engine),CellForge.Syntax,CellForge.Prompts,Notifications}/
 │   ├── Harbor.Tools.Builtin/        (20 builtin tools в Tools/)
 │   └── … (Telemetry.*, Logging, Extensions, Hosting, CodeGen и др.)
-├── contrib/                         (optional components: tui/, apps/, scripting/, tests/)
+├── contrib/                         (optional components: tui/, apps/, scripting/, tests/;
+│                                     + the vendored ConsoleEx tree, moved out of the
+│                                     product — ADR-019)
 ├── tests/                           (37 csproj dirs incl. benchmarks + E2E harnesses)
 ├── providers/                       (13 JSON LLM provider configs)
 ├── specs/                           (docs/specs/: 19 файлов — 18 design documents + README; top-level specs/ no longer exists)
@@ -66,11 +68,10 @@ only BCL plus a gated set of 7 NuGet packages (см. `Harbor.Abstractions` ни�
 │  PRESENTATION (UI / CLI)                                        │
 │  - Harbor.App.Cli (composition root) / Harbor.App.Avalonia      │
 │  - contrib: App.Wpf / App.Maui / App.Blazor                     │
-│  - In-solution TUI backends: plain, ansi, cellforge (legacy alias consoleex), │
-│    nickconsoleex (conditional: vendored ConsoleEx submodule + renderer flag) — │
-│    projects Harbor.Tui.AnsiPlain, Harbor.Tui.CellForge(+.Engine/.Syntax/    │
-│    .Prompts), Harbor.Tui.NickConsoleEx, Harbor.Tui.Notifications; TUI        │
-│    contracts live in Harbor.Terminal.Abstractions (Presentation)              │
+│  - In-solution TUI backends: plain, ansi, cellforge (legacy alias consoleex) │
+│    — projects Harbor.Tui.AnsiPlain, Harbor.Tui.CellForge(+.Engine/.Syntax/  │
+│    .Prompts), Harbor.Tui.Notifications; TUI contracts live in                │
+│    Harbor.Terminal.Abstractions (Presentation)                              │
 │  - contrib/tui (optional, NOT in the default build): Spectre,               │
 │    Spectre.Fullscreen, SpectreTui, TerminalGui, Termina, RazorConsole, Sixel │
 │  Depends on: Application + Abstractions                         │
@@ -138,6 +139,15 @@ only BCL plus a gated set of 7 NuGet packages (см. `Harbor.Abstractions` ни�
 > [ADR-018](adr/ADR-018-harbor-application-split-variant-a.md); the enforced truth
 > stays the matrix in
 > [ARCHITECTURE_LAYERS.md §5.4](./ARCHITECTURE_LAYERS.md).
+
+> **Update 2026-10-20: the SharpConsoleUI renderer is out of the product.**
+> `Harbor.Tui.NickConsoleEx` (id `nickconsoleex`) and the vendored
+> `nickprotop/ConsoleEx` submodule moved to `contrib/`: unmaintained, not built
+> by CI, not published, and no `ProjectReference` from `src/` or `apps/` points
+> at them any more. The product ships two renderers, CellForge and AnsiPlain,
+> and `HARBOR_TUI=nickconsoleex` selects nothing. The decision and the measured
+> cost are recorded in
+> [ADR-019](adr/ADR-019-vendored-sharpconsoleui-renderer-leaves-the-product.md).
 
 > Историческая заметка: этот раздел раньше называл `Harbor.Tui.Abstractions`
 > проектом слоя Domain. Такого проекта нет — у него нет `.csproj`, нет каталога
@@ -432,7 +442,7 @@ public static IHost Build(params string[] args)
     RegisterCore(builder);                              // AgentLoop, EventBus, registries
     RegisterRegistries(builder, harborDir);             // Tools, Providers, Agents
     RegisterStorage(builder, sessionsDir, sqlitePath);  // Jsonl | Memory | Sqlite
-    RegisterTui(builder);                               // plain | ansi | cellforge | nickconsoleex (+ contrib shells iff HARBOR_WITH_SPECTRE_TUI; см. TuiBackendRegistry)
+    RegisterTui(builder);                               // plain | ansi | cellforge (+ contrib shells iff HARBOR_WITH_SPECTRE_TUI; см. TuiBackendRegistry)
     RegisterHttpClients(builder);
     return builder.Build();
 }

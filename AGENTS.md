@@ -6,7 +6,7 @@
 > - Solutions are `.slnx` files: `Harbor.slnx` (main) and `Harbor.Samples.slnx`; no plain `.sln`.
 > - Tests must be run **per project as plain executables** (`dotnet run --project tests/<Project> -c Release --no-build -- --minimum-expected-tests 1`); that is the form every CI job executes. Do not use `dotnet test` — not per-project, not solution-wide. The old wording for this ("discovers ZERO tests … host exits 5 with a silent discovery error") was **wrong and has been corrected**: exit 5 is the MTP *invalid command-line arguments* code, while a run that genuinely discovers no tests exits 8, so exit 5 was never evidence of zero discovery. What is actually true: `global.json` selects the Microsoft.Testing.Platform runner, which rejects the VSTest-era options (`--logger`, `--filter`) our old commands passed (`CHANGELOG.md`, sprint *ci-cd-maturity*, records that deleting one `--logger` turned a job green); and 11 of the 40 test projects still reference `Microsoft.NET.Test.Sdk`, which TUnit documents as stopping discovery (`TUNIT_MTP_AUDIT.md` proposes the removal; unlanded). No CI job has run `dotnet test` since, so its current behaviour is **unverified**, not known — which is why only the plain-executable form is documented.
 > - Known/flaky tests historically cited (verify against `docs/ROADMAP.md` before counting on current numbers): Avalonia-12 headless `MarkdownRenderer`/`CodeBlock`/`TypewriterStreamingText` ("Stack empty" in `SetInheritanceParent`), the IPC named-pipe event-stream class on Linux (self-skips unless `HARBOR_IPC_EVENTSTREAM=1`), and an occasional `ChatView_Inflates` ListBoxItem `StaticResource` flake.
-> - CellForge (+ Engine — fullscreen cell-diff terminal renderer) is the canonical interactive backend (`HARBOR_TUI=cellforge`, `consoleex` kept as legacy alias); AnsiPlain covers ANSI-streaming + plain pipes/CI; MCP tools ship out-of-process; plugin hosting is split across the `Harbor.Plugins.*` projects.
+> - CellForge (+ Engine — fullscreen cell-diff terminal renderer) is the canonical interactive backend (`HARBOR_TUI=cellforge`, `consoleex` kept as legacy alias); AnsiPlain covers ANSI-streaming + plain pipes/CI; the SharpConsoleUI renderer is **not** part of the product any more (moved to `contrib/`, see [ADR-019](./docs/adr/ADR-019-vendored-sharpconsoleui-renderer-leaves-the-product.md)); MCP tools ship out-of-process; plugin hosting is split across the `Harbor.Plugins.*` projects.
 > - **Markdown is gated.** `ci.yml` ignores `**.md` and `docs/**` on purpose, so a docs-only PR gets its own fast workflow: `.github/workflows/docs.yml` runs `tools/check-md-links.py` (links + anchors) and `tools/md-lint.py` (encoding/headings/fences), each with a scan-size floor, plus a self-test that proves both still fail on broken input (#509). Run both locally before pushing a doc change — see [docs/DEVELOPMENT.md §Documentation checks](./docs/DEVELOPMENT.md#documentation-checks). Do not "fix" this by deleting `paths-ignore` from `ci.yml`.
 >
 > **Связанные документы:**
@@ -76,7 +76,6 @@ src/Harbor.Tui.AnsiPlain/             — unified ANSI-streaming + plain-text re
 src/Harbor.Tui.CellForge(+.Engine)/   — canonical fullscreen cell-diff renderer (HARBOR_TUI=cellforge; `consoleex` is a legacy alias)
 src/Harbor.Tui.CellForge.Syntax/      — CellForge syntax-highlight + themes cluster (CodeSyntaxTokenizer/ILanguageSupport/CodeHighlightPalette + JsonThemeLoader/ThemeFileWatcher), extracted verbatim #1617; namespaces stay Harbor.Tui.CellForge.*
 src/Harbor.Tui.CellForge.Prompts/     — CellForge prompt engines (ListPromptEngine/ListPromptState/strategies + FormPromptEngine/FormPromptState/FormConverters), extracted verbatim #1618; namespace stays Harbor.Tui.CellForge.Widgets
-src/Harbor.Tui.NickConsoleEx/         — SharpConsoleUI-based renderer (HARBOR_TUI=nickconsoleex; complements CellForge)
 src/Harbor.Tui.Notifications/         — desktop OS notifications renderer
 src/Harbor.Ui.Framework{,.Abstractions,.State,.ViewModels,.Rendering,.Projection,.Services,.Sessions}/ — TEA-style UI state/reducers/projection/services shared by apps (shell csproj is a meta-package)
 src/Harbor.Desktop.{Abstractions,Shared,Animations} — desktop app support
@@ -101,10 +100,16 @@ contrib/                              — UNMAINTAINED, NOT COMPILED BY CI. Not 
                                         defined nowhere, so six renderer factories in TuiBackendRegistry
                                         sit behind an #if that never opens). Do NOT send work here and do
                                         not expect CI to catch breakage in it. The supported renderers
-                                        are in src/ (CellForge, AnsiPlain, NickConsoleEx) and apps/.
+                                        are in src/ (CellForge, AnsiPlain) and apps/.
                                         What is here, kept for reference only:
                                         Harbor.Tui.SpectreTui, Harbor.Tui.Spectre.Fullscreen,
                                         Harbor.Tui.{Spectre,TerminalGui,Termina,RazorConsole}
+contrib/tui/Harbor.Tui.NickConsoleEx/  — the SharpConsoleUI renderer, moved out of the product (ADR-019);
+                                        not built by CI, not published, not referenced by src/ or apps/
+contrib/external/ConsoleEx/           — the vendored nickprotop/ConsoleEx git submodule, plus the three
+                                        boundary files next to it (Directory.Build.props,
+                                        Directory.Build.targets, Directory.Packages.props) that keep the
+                                        root build props out of third-party source
 contrib/apps/, contrib/scripting/, contrib/tests/ — WPF/Maui/Blazor apps, scripting stack, their tests
 
 samples/plugins/                      — 4 DLL-based sample plugins (WebSearch, TodoWrite, GitTools, FileTree)
@@ -733,6 +738,7 @@ Harbor следует принципам OOP/SOLID/GoF/FP/ROP/perf. Полный
 10. **Don't break the build** — `dotnet build` must succeed with 0 warnings (treat as errors).
 11. **Don't break tests** — run affected test projects individually before commit (`dotnet run --project tests/<Project> -c Release --no-build`).
 12. **Don't assume docs are unchecked** — a docs-only PR is gated by `.github/workflows/docs.yml`, not by `ci.yml`. `./tools/check-md-links.py` and `./tools/md-lint.py` both exit 1 on a bad edit; run them before pushing markdown (#509).
+13. **Don't bring the vendored SharpConsoleUI renderer back into the product** — `Harbor.Tui.NickConsoleEx` and the `nickprotop/ConsoleEx` submodule live in `contrib/` now, unmaintained and not compiled by CI (ADR-019). The product ships two renderers, CellForge and AnsiPlain. The `HARBOR_WITH_NICK_CONSOLE_EX` build constant, the `nickconsoleex` value of `HarborWithRenderer`, the `tui` value `nickconsoleex` and the public enum member `BackendKind.NickConsoleEx` are all gone, and `HARBOR_TUI=nickconsoleex` selects nothing. If you want SharpConsoleUI, clone the vendored tree, build the wrapper and wire it in by hand.
 
 ## Build & test commands
 

@@ -499,3 +499,41 @@ came out of the #555 freeze lift is still policy only until #1719 lands.
   them, the sequencing DAG, the standing rules and the assembled
   definition-of-done:
   [ADR-018](ADR-018-harbor-application-split-variant-a.md).
+
+## ADR-019: the vendored SharpConsoleUI renderer leaves the product
+
+Issue [#1921](https://github.com/refusedguy/Harbor-Harness/issues/1921) read the
+compile timeline of a Release build and found that three of the 110 projects
+were compiled in **Debug inside the Release build**, and that no Release output
+of them exists. One of the three was `external/ConsoleEx/SharpConsoleUI`, the
+third-party terminal UI kit Harbor vendored as a git submodule to back the
+`Harbor.Tui.NickConsoleEx` renderer. That tree cost a 28.3 s window in every
+Release compile, and its Debug output landed in the shipped CLI.
+
+Decided 2026-10-20 by the owner while working on that issue: *"убрать полностью
+в контриб, кто захочет - пусть и дрочится"* (move it out to `contrib/` entirely;
+whoever wants it can wire it up themselves). The decision is not recorded in a
+comment on the issue, so [ADR-019](ADR-019-vendored-sharpconsoleui-renderer-leaves-the-product.md)
+is the durable record.
+
+Removed from the product: the `HARBOR_WITH_NICK_CONSOLE_EX` build constant and
+its code paths, the `nickconsoleex` value of the build-time `HarborWithRenderer`
+selection, the `tui` value `nickconsoleex`, and the public enum member
+`BackendKind.NickConsoleEx` (a breaking public API change). `HARBOR_TUI=nickconsoleex`
+stops working and resolves to the fallback backend with a warning. The
+`Harbor.Tui.NickConsoleEx` NuGet package is not published any more.
+
+Moved to `contrib/`: `src/Harbor.Tui.NickConsoleEx/` to
+`contrib/tui/Harbor.Tui.NickConsoleEx/`, the `external/ConsoleEx` submodule to
+`contrib/external/ConsoleEx/`, and the three boundary files
+(`Directory.Build.props`, `Directory.Build.targets`, `Directory.Packages.props`)
+to `contrib/external/`. The `contrib/` terms apply unchanged: unmaintained, not
+compiled by CI, not in `Harbor.slnx`, no `ProjectReference` from `src/` or
+`apps/`, not published.
+
+A user who wants SharpConsoleUI-backed rendering now has to clone the vendored
+tree, build the wrapper and wire it into a Harbor build by hand. The product
+does not ship it, and no configuration value brings it back.
+
+- Full text, the measurement, the removed surface and the alternatives:
+  [ADR-019](ADR-019-vendored-sharpconsoleui-renderer-leaves-the-product.md).

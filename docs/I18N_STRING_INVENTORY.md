@@ -36,7 +36,7 @@ grep -rn "InvariantCulture" src/ apps/ --include="*.cs" | wc -l
 | CellForge TUI (`src/Harbor.Tui.CellForge`) | non-comment candidate lines | 134 |
 | `Harbor.Terminal.Abstractions` views/VMs | non-comment candidate lines | 12 |
 | `Harbor.Tui.AnsiPlain` | non-comment candidate lines | 0 (22 hits, all `///` doc comments) |
-| `Harbor.Tui.NickConsoleEx` + `Harbor.Tui.Notifications` | non-comment candidate lines | 12 |
+| `Harbor.Tui.Notifications` (this count also covered `Harbor.Tui.NickConsoleEx`, which has since moved to `contrib/` — ADR-019) | non-comment candidate lines | 12 |
 | `Harbor.Ui.Framework.*` (mappers, rows, status text, widgets) | non-comment candidate lines | 160 |
 | CLI (`apps/Harbor.App.Cli`) | non-comment candidate lines | 449 |
 | Existing `.resx` (`ErrorMessages` + `LogMessages`, 5 entries each) | log/diagnostic text, **not UI** | 10 |

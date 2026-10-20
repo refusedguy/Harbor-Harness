@@ -99,7 +99,7 @@ full backlog. Highlights:
 | Storage backends | `src/Harbor.Storage.{Jsonl,Memory,Sqlite}/` |
 | LLM providers | `src/Harbor.Providers.{Anthropic,OpenAI,Ollama,OpenAiCompatible,Shared}/` |
 | Builtin tools (18) | `src/Harbor.Tools.Builtin/Tools/` (read/write/edit/bash/glob/grep/ls/task/webfetch/patch/notebook/ripgrep/tree/mcp/skill/read_mcp_resource/mcp_prompt и др.) |
-| Terminal TUI renderers | in-solution: `src/Harbor.Tui.{Ansi,Plain,ConsoleEx,Notifications}/`; optional (`contrib/tui/`): Spectre, Spectre.Fullscreen, SpectreTui, TerminalGui, Termina, RazorConsole, Sixel |
+| Terminal TUI renderers | in-solution: `src/Harbor.Tui.{AnsiPlain,CellForge(+.Engine/.Syntax/.Prompts),Notifications}/`; optional (`contrib/tui/`): Spectre, Spectre.Fullscreen, SpectreTui, TerminalGui, Termina, RazorConsole, Sixel. The SharpConsoleUI renderer (`Harbor.Tui.NickConsoleEx`, id `nickconsoleex`) is **not** part of the product any more: it and the vendored `nickprotop/ConsoleEx` submodule moved to `contrib/` (ADR-019) |
 | Platform apps (composition roots) | `apps/Harbor.App.{Cli,Avalonia}/`; WPF / MAUI / Blazor — `contrib/apps/` |
 | Reusable UI components | `apps/Harbor.App.Avalonia/Views/Components/`, `contrib/apps/Harbor.App.Blazor/Components/Shared/`, `contrib/apps/Harbor.App.Wpf/Controls/` |
 | Tests | `tests/Harbor.*.Tests/`, `tests/Harbor.E2E.*/`, `tests/Harbor.Benchmarks/` (+ contrib-наборы в `contrib/tests/`) |
@@ -150,5 +150,5 @@ dotnet run --project tests/Harbor.Architecture.Tests -c Release --no-build -- --
 | `OPENAI_API_KEY` | OpenAI native provider | `sk-...` |
 | `OPENROUTER_API_KEY` | OpenRouter (200+ models) | `sk-or-...` |
 | `HARBOR_MODEL` | Override active model | `kilocode/tencent/hy3:free` |
-| `HARBOR_TUI` | Pick TUI renderer (`ansi`/`plain`/`consoleex`; `spectre-tui` по умолчанию, семейство Spectre живёт в `contrib/tui`) | `plain` |
+| `HARBOR_TUI` | Pick TUI renderer (`ansi`/`plain`/`cellforge` (legacy alias `consoleex`); `spectre-tui` по умолчанию, семейство Spectre живёт в `contrib/tui`). `nickconsoleex` больше не выбирает ничего | `plain` |
 | `HARBOR_SHELL` | `orca` for experimental Orca shell | `orca` |

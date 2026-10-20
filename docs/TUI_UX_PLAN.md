@@ -1,5 +1,13 @@
 # Harbor TUI UI/UX Improvement Plan
 
+> **Update 2026-10-20: the SharpConsoleUI backend is no longer part of the
+> product.** The owner decided to move `Harbor.Tui.NickConsoleEx` and the
+> vendored `nickprotop/ConsoleEx` subtree to `contrib/` (ADR-019): the renderer
+> is unmaintained, not built by CI, not published, and no configuration value
+> selects it any more. The two plan items that targeted it are dropped rather
+> than re-scoped. The rest of this plan is about CellForge, the canonical
+> renderer, and is unaffected.
+
 ## Current State
 
 ### CellForge (primary renderer, always enabled)
@@ -12,10 +20,11 @@
 - **Capabilities**: TerminalCapabilities, InlineImageProbe, NotifyProbe
 - **Status**: StatusViewModel in ComposerController
 
-### NickConsoleEx (additive backend)
-- **Connected**: Yes, registered in TuiModule as additive backend
-- **Current**: Basic MarkupControl log surface, no panel system usage
-- **Potential**: Full SharpConsoleUI window system with 100+ controls
+### NickConsoleEx (out of the product since 2026-10-20, ADR-019)
+- **Connected**: No. It used to be registered in TuiModule as an additive backend; the registration, the `nickconsoleex` id and the `HARBOR_WITH_NICK_CONSOLE_EX` build constant are gone.
+- **Where it is now**: `contrib/tui/Harbor.Tui.NickConsoleEx/`, with the vendored SharpConsoleUI subtree at `contrib/external/ConsoleEx/`. Unmaintained, not built by CI, not published.
+- **What it was**: a basic MarkupControl log surface with no panel system usage, over a third-party kit it did not use the window/panel/theme system of.
+- **What it would have been**: the full SharpConsoleUI window system with 100+ controls. That is what the removal gives up.
 
 ### SpectreTui (contrib, not default)
 - **Connected**: No, not in default pipeline
@@ -29,7 +38,7 @@
 4. **No mouse support** — MouseRouter exists but not wired to UI actions.
 5. **No theme picker** — ThemeFileWatcher reloads on file change, no picker UI.
 6. **No configurable keybindings** — LeaderKeyRouter has hardcoded bindings.
-7. **NickConsoleEx underutilized** — Only uses MarkupControl, not the full window/panel/theme system.
+7. ~~**NickConsoleEx underutilized**~~ — closed by the removal: the renderer only ever used MarkupControl, and it is out of the product now (ADR-019).
 
 ## Proposed Improvements
 
@@ -57,11 +66,6 @@
 - Add keybinding picker UI (editable JSON config)
 - Show keybinding hints in command palette
 
-### P2: NickConsoleEx Panel Host
-- Use SharpConsoleUI's PanelControl, Grid, Splitter
-- Create HarborChatWindow with sidebar + main + status bar
-- Wire to existing Harbor event stream
-
 ### P3: Theme System
 - Add theme picker command (`/theme`)
 - Built-in themes: HarborDark, HarborLight, ConsoleExGray
@@ -81,10 +85,14 @@
 - [ ] Port HelpPanel → overlay
 - [ ] Wire panel visibility to command palette
 
-### Phase 3: NickConsoleEx Polish
-- [ ] Replace single MarkupControl with Grid layout
-- [ ] Add sidebar + status bar
-- [ ] Wire to Harbor.Ui.Framework state
+### Phase 3: ~~NickConsoleEx Polish~~ — dropped (ADR-019)
+- [ ] Replaced single MarkupControl with Grid layout
+- [ ] Added sidebar + status bar
+- [ ] Wired to Harbor.Ui.Framework state
+
+The renderer these items targeted is out of the product. The work is not
+re-scoped onto another backend: CellForge has its own panel plan above
+(Phase 1 and Phase 2).
 
 ### Phase 4: UX Polish
 - [ ] Permission card UI

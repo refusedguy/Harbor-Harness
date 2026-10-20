@@ -840,7 +840,8 @@ public sealed class LspDiagnosticsPanel : IPanelProvider
 > `IReadOnlyList<string>` or an `IEnumerable<string>` into rows. Anything else
 > falls through to `widget.ToString()`, so returning a widget object paints **its
 > type name**. The signature leaves room for a native widget; the decoder has no
-> case for one. (`AnsiPlain` and `NickConsoleEx` have no panel path at all.)
+> case for one. (`AnsiPlain` has no panel path at all. The SharpConsoleUI
+> renderer is no longer part of the product — it moved to `contrib/`, ADR-019.)
 >
 > **It does not register a view.** `ITuiPlugin` and `ITuiView` are a **closed seam
 > (#564)** — collected, never rendered. A panel is `ITuiPanelPlugin` +

@@ -17,11 +17,13 @@ chmod +x dotnet-install.sh && ./dotnet-install.sh --channel 10.0
 export PATH="$HOME/.dotnet:$PATH"
 
 # 2. Склонируй и собери Harbor
-git clone --recurse-submodules https://github.com/refusedguy/Harbor-Harness.git
+git clone https://github.com/refusedguy/Harbor-Harness.git
 cd Harbor-Harness
 dotnet build
-# Уже склонировал без сабмодулей (external/ConsoleEx пустой)?
-git submodule update --init --recursive
+# Единственный сабмодуль в репозитории — contrib/external/ConsoleEx (вендоренное
+# дерево SharpConsoleUI, которое НЕ входит в продукт, см. ADR-019). Обычного
+# клона достаточно; он нужен только тем, кто собирает этот рендерер сам:
+# git submodule update --init --recursive
 
 # 3. Установи API ключ (Kilocode = бесплатно, без кредитки)
 #    Получи ключ на https://kilo.ai

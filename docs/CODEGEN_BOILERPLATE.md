@@ -26,7 +26,7 @@ Harbor uses three incremental source generators in `src/Harbor.CodeGen/`, wired 
 | Generator | Attribute | Generates | Hot-spot |
 |-----------|-----------|-----------|----------|
 | `EscapeCodeGenerator` | `[TerminalEscape]` on enums | `*EscapeCodes` static classes with precomputed ECMA-48 sequences | `AnsiPlain/EscapeCodeStrategy.cs` |
-| `RendererAdapterGenerator` | `[TuiRenderer(Backend = "...")]` on renderer classes | `*Adapter` static classes with backend metadata | 4 renderer backends |
+| `RendererAdapterGenerator` | `[TuiRenderer(Backend = "...")]` on renderer classes | `*Adapter` static classes with backend metadata | 3 renderer backends |
 | `MoodFrameGenerator` | `[MoodFrame("...")]` on enum members | `*FrameDispatch` static classes replacing manual mood switches | `AmbientMascot` frames |
 
 All generators are **opt-in**: they only fire when the corresponding attribute is present. No public API changes; existing hand-written code continues to compile unchanged.
@@ -124,10 +124,12 @@ public class PlainTuiRenderer : AnsiPlainTuiRenderer { ... }
 
 [TuiRenderer(Backend = "cellforge")]
 public class CellForgeTuiRenderer : BaseTuiRenderer { ... }
-
-[TuiRenderer(Backend = "nickconsoleex")]
-public class NickConsoleExTuiRenderer : BaseTuiRenderer { ... }
 ```
+
+> A fourth backend used to sit here: `NickConsoleExTuiRenderer`
+> (`[TuiRenderer(Backend = "nickconsoleex")]`). The SharpConsoleUI renderer
+> left the product and moved to `contrib/` (ADR-019), so the generator has
+> three annotated renderers to emit adapters for.
 
 ### Generated output
 
@@ -261,14 +263,13 @@ Golden files:
 | ansi | `ansiplain-ansi.golden.txt` |
 | plain | `ansiplain-plain.golden.txt` |
 | cellforge | `cellforge.golden.txt` |
-| nickconsoleex | `nickconsoleex.golden.txt` |
 
 ---
 
 ## Acceptance checklist
 
 - [x] `EscapeCodeGenerator` emits `*EscapeCodes` for `StyleFlag`, `Color8Bit`, `CursorDirection`
-- [x] `RendererAdapterGenerator` emits `*Adapter` for `AnsiTuiRenderer`, `PlainTuiRenderer`, `CellForgeTuiRenderer`, `NickConsoleExTuiRenderer`
+- [x] `RendererAdapterGenerator` emits `*Adapter` for `AnsiTuiRenderer`, `PlainTuiRenderer`, `CellForgeTuiRenderer`
 - [x] `MoodFrameGenerator` emits `*FrameDispatch` for `MascotMood`
 - [x] All generated code compiles with `dotnet build --warnaserror` (0 warnings)
 - [x] Unit tests in `tests/Harbor.Tui.Tests/GeneratedEscapeCodeTests.cs` pass (13/13)

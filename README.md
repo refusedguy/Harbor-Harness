@@ -47,6 +47,7 @@ CI regenerates the GIFs on TUI changes (`.github/workflows/demo.yml`).
   - `AnsiTuiRenderer` / `PlainTuiRenderer` — classic streaming/plain-text renderers
   - Additional interactive renderers (`Spectre.Tui` shell, `Fullscreen`, `Terminal.Gui`, `Termina`, `RazorConsole`) physically live in [`contrib/tui/`](./contrib/tui) but are compiled into the default CLI build
   - `Notifications` renderer (desktop OS notifications), Avalonia desktop app (`apps/Harbor.App.Avalonia`)
+  - The SharpConsoleUI renderer (`Harbor.Tui.NickConsoleEx`) is **not** part of the product any more. It and the vendored `nickprotop/ConsoleEx` submodule moved to [`contrib/`](./contrib) (unmaintained, not built by CI, not published). `HARBOR_TUI=nickconsoleex` selects nothing. See [ADR-019](./docs/adr/ADR-019-vendored-sharpconsoleui-renderer-leaves-the-product.md).
 - **20 builtin tools** under [`src/Harbor.Tools.Builtin`](./src/Harbor.Tools.Builtin): `read`, `write`, `edit`, `bash`, `glob`, `grep`, `ls`, `skill`, `patch`, `notebook`, `tree`, `lsp`, `task` (sub-agent delegation), `webfetch`, `ripgrep`, `mcp` (plus `read_mcp_resource`, `mcp_prompt`, `session_read`, `session_steer`)
 - **MCP support** — Model Context Protocol servers over stdio in an out-of-process host: registry, JSON-RPC transport, argv parsing, source-generated serialization ([AOT-safe](./docs/BUILD.md)); a single `mcp` tool surface maps any configured server's tools into the agent; server instructions are aggregated into the system prompt
 - **Sub-agents** — builtin agents `code`, `plan`, `explore` (own permissions per `PermissionRuleset`); the `task` tool delegates to child agents through `IAgentRegistry`
@@ -93,11 +94,14 @@ Windows: download `harbor-win-x64.zip`, extract, run `Harbor.App.Cli.exe`.
 
 ```bash
 # Install .NET 10, then:
-git clone --recurse-submodules https://github.com/refusedguy/Harbor-Harness.git
+git clone https://github.com/refusedguy/Harbor-Harness.git
 cd Harbor-Harness
 dotnet build
-# Already cloned without submodules? external/ConsoleEx is a git submodule:
-git submodule update --init --recursive
+# The repo's only submodule is contrib/external/ConsoleEx — the vendored
+# SharpConsoleUI tree, which is not part of the product any more (ADR-019).
+# A plain clone builds Harbor; fetch it only if you want to work on that
+# renderer yourself:
+# git submodule update --init --recursive
 
 # Option A — Kilocode free model (recommended, no credit card)
 export KILO_API_KEY=klo_...
@@ -186,7 +190,7 @@ Presentation      Harbor.Ui.Framework (+ .State/.ViewModels/.Projection/.Renderi
                   .Services/.Sessions — TEA-style state/reducers/projection),
                   Harbor.Desktop.{Abstractions,Shared,Animations},
                   Harbor.DesignSystem, Harbor.Terminal.Abstractions,
-                  Harbor.Tui.{AnsiPlain,CellForge,CellForge.Syntax,CellForge.Prompts,NickConsoleEx,Notifications},
+                  Harbor.Tui.{AnsiPlain,CellForge,CellForge.Syntax,CellForge.Prompts,Notifications},
                   apps/Harbor.App.Avalonia
 Composition Root  apps/Harbor.App.Cli (+ src/Harbor.Hosting, Harbor.Plugins.Host)
 ```

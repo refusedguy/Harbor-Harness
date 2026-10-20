@@ -70,13 +70,13 @@
 | `tests/Harbor.Tui.CellForge.PtyTests/Harbor.Tui.CellForge.PtyTests.csproj:39` | — // — | CRITICAL |
 | `tests/Harbor.LoadTests/Harbor.LoadTests.csproj:18` | — // — | CRITICAL |
 | `contrib/tests/*/Harbor.E2E.*.csproj` (5 шт) | — // — | CRITICAL |
-| `external/ConsoleEx/...` | `coverlet.collector` + `Microsoft.NET.Test.Sdk` 17.x/18.6 | OK — external, не трогать |
+| `external/ConsoleEx/...` (now `contrib/external/ConsoleEx/...` — the vendored tree moved out of the product in ADR-019) | `coverlet.collector` + `Microsoft.NET.Test.Sdk` 17.x/18.6 | OK — external, не трогать |
 
 Всего: **11 прямых упоминаний** в `tests/` + 5 в `contrib/tests` + 1 pin в CPM = 17 точек.
 
 **Что правильно (не трогать):**
 - `OutputType=Exe` — уже ставится автоматом из `Directory.Build.targets:12`. Явных `<OutputType>Exe</OutputType>` в тестах нет, кроме `Harbor.Benchmarks` (не тест). Это **верно** — дублировать не нужно.
-- `coverlet.collector` — в наших проектах **отсутствует** (только в `external/ConsoleEx`). Правильно, TUnit уже тащит `Microsoft.Testing.Extensions.CodeCoverage` транзитивно.
+- `coverlet.collector` — в наших проектах **отсутствует** (только в `external/ConsoleEx`, ныне `contrib/external/ConsoleEx`). Правильно, TUnit уже тащит `Microsoft.Testing.Extensions.CodeCoverage` транзитивно.
 - `Program.cs` — в `tests/` **нет** `Program.cs` (только `tests/Harbor.Benchmarks/Program.cs` — не тест, ок). TUnit генерит `Main` через source generator, ручной `Program.cs` ломает сборку `CS0017`.
 - `await Assert.That` — выборочная проверка `tests/Harbor.Abstractions.Tests/*.cs` показала 100% `await`. Нужно прогнать линтер на все `Assert.That` без `await` (см. скрипт ниже).
 
