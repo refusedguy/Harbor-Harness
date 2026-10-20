@@ -83,6 +83,19 @@ on:
       # measures.
       - 'tools/check-test-dup.py'
       - 'tools/test-dup-baseline.json'
+      # #1823. `check-test-projects.py` reads the test projects, the solution
+      # that carries them and the CI lists that name them, so a PR that
+      # touches any of the three has to run it: a new test project (its
+      # .csproj and the solution entry that goes with it), a change to a CI
+      # list, a change to the gate or to its baseline, and the NUKE `Test`
+      # target whose exclusions the census reads.
+      - 'tests/**/*.csproj'
+      - 'Harbor.slnx'
+      - '.github/workflows/ci.yml'
+      - '.github/workflows/test-os.yml'
+      - 'tools/check-test-projects.py'
+      - 'tools/test-project-baseline.txt'
+      - 'build/_build/Targets/TestTarget.cs'
       # #431 (slice D3). `check-xml-doc-coverage.py` gates the XML-doc surface
       # of the frozen contract assembly: a PR that edits the gate must run it.
       - 'tools/check-xml-doc-coverage.py'
@@ -131,6 +144,16 @@ on:
       # the baseline — must run it.
       - 'tools/check-test-dup.py'
       - 'tools/test-dup-baseline.json'
+      # #1823. Same trigger as above: the completeness gate reads the test
+      # projects, the solution and the CI lists, so a PR that edits any of
+      # the three must run it.
+      - 'tests/**/*.csproj'
+      - 'Harbor.slnx'
+      - '.github/workflows/ci.yml'
+      - '.github/workflows/test-os.yml'
+      - 'tools/check-test-projects.py'
+      - 'tools/test-project-baseline.txt'
+      - 'build/_build/Targets/TestTarget.cs'
       # #431 (slice D3). Same trigger as above: the XML-doc coverage gate
       # reads the frozen contract sources, so a PR touching the gate runs it.
       - 'tools/check-xml-doc-coverage.py'
@@ -224,6 +247,16 @@ jobs:
       # a same-shape body that shares no identifiers with it.
       - name: Duplicate-test-body gate fails on a planted duplicate
         run: python3 tools/check-test-dup.py --self-test
+      # #1823. The ninth gate is the only one that asks whether a test
+      # project is claimed by a CI list AT ALL. The other gates read the
+      # contents of the test tree; this one reads the lists that decide
+      # which projects run, and the answer is a property of the workflow
+      # files rather than of a test body. Its self-test carries the
+      # load-bearing fixtures: a project left out of every list, a stale
+      # list entry, a project claimed only behind a condition, and a
+      # baseline row that no longer matches anything.
+      - name: Test-project completeness gate fails on a project left out of CI
+        run: python3 tools/check-test-projects.py --self-test
 
   links:
     name: internal links
@@ -431,6 +464,77 @@ jobs:
           name: test-dup-groups
           path: test-dup-groups.json
           retention-days: 7
+
+  # #1823. Ninth question, and the only one about the LISTS rather than
+  # about the test bodies: does every test project in the solution actually
+  # run in CI?
+  #
+  # The shard lists in ci.yml are hand-written. There are six of them across
+  # two workflow files, plus a derived list in the NUKE `Test` target, and
+  # nothing compared them against the tree.
+  #
+  # The obvious question has the wrong answer, and the repository says so:
+  # TUnit discovers a REFERENCED test project's classes in every project
+  # that references it (tests/Harbor.E2E.App.Avalonia/E2eShards.cs, and the
+  # TRX of run 39399653820, where 26 of Harbor.E2E.App.Avalonia's 133
+  # tests are Harbor.E2E.Framework.StateTestRunnerTests). So a test project
+  # reaches a CI run through its OWN list entry OR through a listed project
+  # that references it, and the gate has to count both.
+  #
+  # What the gate finds on dev@8d09f569, with 40 .csproj under tests/ and 37
+  # test projects carrying tests:
+  #
+  #   * every one of the 37 is discovered by some CI run, so nothing is
+  #     silently unrun -- the hole the issue was filed about does not
+  #     exist in the shape the issue described;
+  #   * Harbor.E2E.Framework's 26 tests run SIX times per CI run, in each
+  #     of the six listed projects that reference it: 156 executions of 26
+  #     tests, about 1.23 s of duplicated test time;
+  #   * Harbor.Ipc.Tests references that framework and names none of its
+  #     types, so the reference buys nothing: 13 product assemblies dragged
+  #     into the IPC closure, and a sixth copy of the 26 tests;
+  #   * Harbor.Terminal.Abstractions.Tests references Harbor.TestKit and
+  #     names none of its types: 3 product assemblies dragged in for
+  #     nothing;
+  #   * Harbor.E2E.App.Avalonia defines the two-process split (E2eShards)
+  #     that would put the framework's tests in one shard, and CI runs the
+  #     project once without a filter, so the partition is dead code.
+  #
+  # WHY THIS JOB LIVES HERE AND NOT IN ci.yml: the gate is stdlib python
+  # with no SDK, no restore and no build, and this workflow is the one that
+  # stays SDK-free. It reads ci.yml and test-os.yml as FILES, so the lists
+  # it checks living in a different workflow is not a problem. A job in
+  # ci.yml would inherit ci.yml's change filter and would be skipped on the
+  # PRs where a new test project is added, which is exactly the PR the gate
+  # exists for.
+  #
+  # The floors are a ratchet, set AT the measured counts rather than below
+  # them: a floor with slack cannot tell "the tree got smaller" from "the
+  # matcher stopped matching". Measured on this tree: 40 .csproj under
+  # tests/, 37 test projects carrying tests, 7 CI lists, 36 distinct
+  # projects the lists name, 38 projects discovered by a CI run. A PR that
+  # legitimately removes a project lowers them in the same diff, where a
+  # reviewer sees it.
+  #
+  # The gate runs in BASELINE MODE: the holes the tree has today are
+  # recorded in tools/test-project-baseline.txt, one row per hole with a
+  # reason and an owner, and only NEW holes fail. A gate that is red on
+  # today's tree is a gate nobody lands, and a gate nobody lands protects
+  # nothing. The baseline is a ratchet in both directions: a row the tree
+  # no longer produces fails too, so a closed hole cannot stay blessed.
+  #
+  # The non-vacuity proof is the gate's own --self-test, run in the
+  # `selftest` job above.
+  testprojects:
+    name: test project coverage
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+      - name: Check every test project is discovered by a CI run
+        run: python3 tools/check-test-projects.py --min-projects 40 --min-tested 37 --min-lists 7 --min-claims 36 --min-contexts 38
 
   # #431 (slice D3). XML-doc coverage gate for the frozen contract assembly.
   #
