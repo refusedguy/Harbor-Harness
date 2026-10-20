@@ -126,6 +126,13 @@ jobs:
               # wrong files builds stale binaries, and a stale build is not
               # a red build).
               - 'tools/normalize-mtimes.py'
+              # The instrument that reads the MSBuild performance summary
+              # (issue #1919). It runs in its own workflow, on demand, and
+              # its own self-test runs in the build job — but editing it
+              # must still run the build job, so the tree it parses is
+              # validated by the same commit.
+              - 'tools/msbuild-evaluation-cost.py'
+              - '.github/workflows/evaluation-cost.yml'
               # The AOT gate's instrument and its committed inventory (#413).
               # The same argument as the line above, one step further: editing
               # the BASELINE is the ordinary way to answer a red AOT job, and
@@ -149,15 +156,6 @@ jobs:
               # the tree it ships in, and land unvalidated — issue #618's
               # defect with the same payload again (#1565 batch-4 hit this).
               - 'tools/Harbor.Evals/**'
-            # #1853. The unused-reference gate (#1853) and its baseline. The
-            # same #618 argument as the lines above: the ordinary way to
-            # answer a red unused-reference job is to edit the BASELINE, and
-            # if the baseline were not in this filter then the edit that
-            # silences the gate would also be the edit that stops the gate
-            # from running — unvalidated. Editing the tool has the same
-            # problem.
-              - 'tools/check-reference-trimmer.py'
-              - 'tools/reference-trimmer-baseline.txt'
             # #1882. The package set of the test and sample projects can only
             # change through one of these: a project's own .csproj, the props
             # that inject a PackageReference into every project, the version
@@ -201,31 +199,6 @@ jobs:
               - 'Directory.Packages.props'
               - 'Directory.Build.props'
 
-  # #428 / #1845. The public-API freeze of the two frozen assemblies.
-  #
-  # The freeze itself is a COMPILE-time gate now, not a job:
-  # Microsoft.CodeAnalysis.PublicApiAnalyzers is referenced by
-  # Harbor.Abstractions and Harbor.Abstractions.Contracts and by nothing
-  # else, so RS0016 (a public symbol that is not in the declared API) and
-  # RS0017 (a declared API symbol that is not in the code) fail the build
-  # of the `build` job above. No runner, no python, no second copy of the
-  # surface: the compiler already has the symbol table.
-  #
-  # What the analyzer cannot see is WHICH COMMIT carried a change, so the
-  # re-signing half of the freeze lives here: a commit that edits the
-  # frozen baseline must edit the assembly's sources with it, and a commit
-  # that changes a public declaration must re-sign the baseline with it.
-  # tools/check-public-api-resign.py reads the PR's commit range and says
-  # so. Its --self-test is the non-vacuity proof of the python half, and it
-  # runs in the docs.yml `selftest` job.
-  #
-  # The second step is the non-vacuity proof of the COMPILE-time half, and
-  # it is here because it needs an SDK: a throwaway project with one public
-  # member and an empty baseline must FAIL the build with `error RS0016`,
-  # must PASS once the analyzer's own requested row is added, and must FAIL
-  # again with `error RS0017` when the member is deleted while the baseline
-  # still names it. A gate that stopped firing is indistinguishable from a
-  # surface nobody changed, and this job is what tells the two apart.
   public-api:
     name: public-api freeze
     runs-on: ubuntu-latest
@@ -236,6 +209,7 @@ jobs:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
+          submodules: recursive
 
       # The floors are ratchets on the ROWS of the frozen baselines: 1896 for
       # the contract assembly, 1269 for the facade. They are set AT the
@@ -332,108 +306,6 @@ jobs:
         run: python3 tools/check-test-packages.py --self-test
       - name: Check the resolved package set of every test and sample project
         run: python3 tools/check-test-packages.py --min-projects 43 --min-declared 40 --min-packages 1400
-
-  # #1853. Unused-reference detection over the whole solution.
-  #
-  # ReferenceTrimmer 3.5.13 (MIT) is a build-time analyzer: it asks Roslyn
-  # which assemblies the compiled code actually uses and reports the declared
-  # references that none of them reach (RT0001 bare reference, RT0002 project
-  # reference, RT0003 package reference).
-  #
-  # It is a separate job and not a build step, for three reasons.
-  #
-  #   COST. GetUsedAssemblyReferences is a real semantic analysis of every
-  #   compilation. Running it on every PR would tax every PR for a signal
-  #   that changes only when a dependency changes.
-  #
-  #   BLAST RADIUS. The findings are warnings, and this repository sets
-  #   TreatWarningsAsErrors=true, so the package would break the build the
-  #   day it was added. The job turns warnings-as-errors off FOR ITSELF and
-  #   compares the findings with a baseline instead. The property is a global
-  #   property, so it overrides the props files that set it.
-  #
-  #   SCOPE. The tool sees SOURCE. It cannot see reflection, DI registration
-  #   by convention, or a plugin loaded by name. This repository forbids
-  #   dynamic code outside src/Harbor.Plugins.* (#626), so the blind spot is
-  #   small — but a candidate still needs a human read before anything is
-  #   removed, and the baseline is where that read is recorded.
-  #
-  # Two properties make the run measure the whole tree rather than a part of
-  # it:
-  #
-  #   GenerateDocumentationFile=true — tests/Directory.Build.props turns the
-  #   doc file off, and the tool says itself (RT0000) that without one its
-  #   "used references" answer is less accurate. A weaker instrument that is
-  #   allowed to under-report is not a measurement, so the job turns the doc
-  #   file on everywhere; the gate treats an RT0000 as a failure.
-  #
-  #   HarborArchGate=false — the architecture suite that runs inside the
-  #   Release build is the `core` test shard's job on the PR path, and running
-  #   it here as well would compile the same assembly twice for one answer.
-  #
-  # The raw log is uploaded as an artifact so that a reader can check the
-  # tool's answer without re-running it.
-  reference-trimmer:
-    name: unused references (ReferenceTrimmer)
-    needs: changes
-    if: (needs.changes.outputs.dotnet == 'true' || github.event_name == 'workflow_dispatch') && github.actor != 'dependabot[bot]'
-    runs-on: ubuntu-24.04
-    timeout-minutes: 45
-    permissions:
-      contents: read
-    steps:
-      # No `submodules: recursive`: the vendored ConsoleEx submodule left the
-      # product (ADR-019); nothing in this workflow builds contrib/external/.
-      - uses: actions/checkout@v7
-      - name: Setup .NET 10
-        uses: actions/setup-dotnet@v6
-        with:
-          dotnet-version: "10.0.402"
-          cache: true
-          cache-dependency-path: "Directory.Packages.props"
-      # The restore has to run with the property too: the package has to be in
-      # the assets file before the compiler can load the analyzer, and a
-      # restore without the property would write an assets file the build
-      # then does not agree with.
-      - name: Restore the solution with the ReferenceTrimmer analyzer
-        run: dotnet restore Harbor.slnx -p:HarborReferenceTrimmer=true
-      - name: Build the solution and collect the analyzer's findings
-        run: |
-          dotnet build Harbor.slnx -c Release --no-restore \
-            -p:HarborReferenceTrimmer=true \
-            -p:TreatWarningsAsErrors=false \
-            -p:GenerateDocumentationFile=true \
-            -p:HarborArchGate=false \
-            -p:MaxCpuCount=0 \
-            -flp:"logfile=rt-warnings.log;warningsonly" \
-            -flp2:"logfile=rt-errors.log;errorsonly"
-      # The coverage list is the answer to "how many projects did the analyzer
-      # actually run in". The analyzer writes its declared-reference table
-      # into each project's intermediate directory, so the table's own file
-      # names are the evidence — and the gate checks the count against a
-      # floor, because a scan that silently narrowed must go red, not quiet.
-      - name: Coverage — the projects the analyzer actually ran in
-        run: |
-          find . -name '_ReferenceTrimmer_DeclaredReferences.tsv' \
-                   -not -path './.git/*' -not -path './external/*' \
-            | sed 's|/obj/.*||' | sed 's|^\./||' | sort -u > rt-coverage.txt
-          echo "the analyzer ran in $(wc -l < rt-coverage.txt) project(s)"
-      - name: Upload the findings artifact
-        if: always()
-        uses: actions/upload-artifact@v7
-        with:
-          name: reference-trimmer-findings
-          path: |
-            rt-warnings.log
-            rt-coverage.txt
-          if-no-files-found: warn
-          retention-days: 7
-      - name: The gate is red when the tool is not allowed to answer
-        if: always()
-        run: python3 tools/check-reference-trimmer.py --self-test
-      - name: Gate — no unused reference outside the baseline
-        if: always()
-        run: python3 tools/check-reference-trimmer.py --findings rt-warnings.log --coverage rt-coverage.txt --min-projects 100
 
   build:
     needs: changes
@@ -847,6 +719,14 @@ jobs:
       - name: The build-output slices match the test shards
         run: python3 tools/ci-shard-slices.py
 
+      # The evaluation-cost instrument's own failure path (issue #1919).
+      # Same argument as the aot gate's self-test below and docs.yml's
+      # `selftest` job: a parser edited until it matches nothing is
+      # indistinguishable from a parser that found nothing, so the
+      # fixture has numbers this asserts, not just rows.
+      - name: Self-test the evaluation-cost instrument
+        run: python3 tools/msbuild-evaluation-cost.py --self-test
+
       # ── Build outputs: one artifact PER CONSUMER ──────────────────────────
       #
       # Measured on run 39389070999 (artifact 12249049956): ONE artifact,
@@ -934,45 +814,59 @@ jobs:
             Harbor.slnx
             tests/Harbor.Abstractions.Tests/bin/Release/net10.0/*.*
             tests/Harbor.Abstractions.Tests/bin/Release/net10.0/runtimes/linux-x64/native/*
+            tests/Harbor.Abstractions.Tests/bin/Release/net10.0/runtimes/linux-arm64/native/*
             tests/Harbor.Abstractions.Tests/bin/Release/net10.0/*/Harbor.*.resources.dll
             tests/Harbor.Config.Tests/bin/Release/net10.0/*.*
             tests/Harbor.Config.Tests/bin/Release/net10.0/runtimes/linux-x64/native/*
+            tests/Harbor.Config.Tests/bin/Release/net10.0/runtimes/linux-arm64/native/*
             tests/Harbor.Config.Tests/bin/Release/net10.0/*/Harbor.*.resources.dll
             tests/Harbor.Domain.Tests/bin/Release/net10.0/*.*
             tests/Harbor.Domain.Tests/bin/Release/net10.0/runtimes/linux-x64/native/*
+            tests/Harbor.Domain.Tests/bin/Release/net10.0/runtimes/linux-arm64/native/*
             tests/Harbor.Domain.Tests/bin/Release/net10.0/*/Harbor.*.resources.dll
             tests/Harbor.Application.Tests/bin/Release/net10.0/*.*
             tests/Harbor.Application.Tests/bin/Release/net10.0/runtimes/linux-x64/native/*
+            tests/Harbor.Application.Tests/bin/Release/net10.0/runtimes/linux-arm64/native/*
             tests/Harbor.Application.Tests/bin/Release/net10.0/*/Harbor.*.resources.dll
             tests/Harbor.ChangeTracking.Tests/bin/Release/net10.0/*.*
             tests/Harbor.ChangeTracking.Tests/bin/Release/net10.0/runtimes/linux-x64/native/*
+            tests/Harbor.ChangeTracking.Tests/bin/Release/net10.0/runtimes/linux-arm64/native/*
             tests/Harbor.ChangeTracking.Tests/bin/Release/net10.0/*/Harbor.*.resources.dll
             tests/Harbor.Core.Tests/bin/Release/net10.0/*.*
             tests/Harbor.Core.Tests/bin/Release/net10.0/runtimes/linux-x64/native/*
+            tests/Harbor.Core.Tests/bin/Release/net10.0/runtimes/linux-arm64/native/*
             tests/Harbor.Core.Tests/bin/Release/net10.0/*/Harbor.*.resources.dll
             tests/Harbor.Registries.Tests/bin/Release/net10.0/*.*
             tests/Harbor.Registries.Tests/bin/Release/net10.0/runtimes/linux-x64/native/*
+            tests/Harbor.Registries.Tests/bin/Release/net10.0/runtimes/linux-arm64/native/*
             tests/Harbor.Registries.Tests/bin/Release/net10.0/*/Harbor.*.resources.dll
             tests/Harbor.Hosting.Tests/bin/Release/net10.0/*.*
             tests/Harbor.Hosting.Tests/bin/Release/net10.0/runtimes/linux-x64/native/*
+            tests/Harbor.Hosting.Tests/bin/Release/net10.0/runtimes/linux-arm64/native/*
             tests/Harbor.Hosting.Tests/bin/Release/net10.0/*/Harbor.*.resources.dll
             tests/Harbor.Architecture.Tests/bin/Release/net10.0/*.*
             tests/Harbor.Architecture.Tests/bin/Release/net10.0/runtimes/linux-x64/native/*
+            tests/Harbor.Architecture.Tests/bin/Release/net10.0/runtimes/linux-arm64/native/*
             tests/Harbor.Architecture.Tests/bin/Release/net10.0/*/Harbor.*.resources.dll
             tests/Harbor.Lsp.Tests/bin/Release/net10.0/*.*
             tests/Harbor.Lsp.Tests/bin/Release/net10.0/runtimes/linux-x64/native/*
+            tests/Harbor.Lsp.Tests/bin/Release/net10.0/runtimes/linux-arm64/native/*
             tests/Harbor.Lsp.Tests/bin/Release/net10.0/*/Harbor.*.resources.dll
             tests/Harbor.Terminal.Pty.Tests/bin/Release/net10.0/*.*
             tests/Harbor.Terminal.Pty.Tests/bin/Release/net10.0/runtimes/linux-x64/native/*
+            tests/Harbor.Terminal.Pty.Tests/bin/Release/net10.0/runtimes/linux-arm64/native/*
             tests/Harbor.Terminal.Pty.Tests/bin/Release/net10.0/*/Harbor.*.resources.dll
             tests/Harbor.Telemetry.Tests/bin/Release/net10.0/*.*
             tests/Harbor.Telemetry.Tests/bin/Release/net10.0/runtimes/linux-x64/native/*
+            tests/Harbor.Telemetry.Tests/bin/Release/net10.0/runtimes/linux-arm64/native/*
             tests/Harbor.Telemetry.Tests/bin/Release/net10.0/*/Harbor.*.resources.dll
             tests/Harbor.TestKit.Generators.Tests/bin/Release/net10.0/*.*
             tests/Harbor.TestKit.Generators.Tests/bin/Release/net10.0/runtimes/linux-x64/native/*
+            tests/Harbor.TestKit.Generators.Tests/bin/Release/net10.0/runtimes/linux-arm64/native/*
             tests/Harbor.TestKit.Generators.Tests/bin/Release/net10.0/*/Harbor.*.resources.dll
             tests/Harbor.TestKit.Tests/bin/Release/net10.0/*.*
             tests/Harbor.TestKit.Tests/bin/Release/net10.0/runtimes/linux-x64/native/*
+            tests/Harbor.TestKit.Tests/bin/Release/net10.0/runtimes/linux-arm64/native/*
             tests/Harbor.TestKit.Tests/bin/Release/net10.0/*/Harbor.*.resources.dll
             !**/*.pdb
             !**/*.xml
@@ -987,30 +881,39 @@ jobs:
             Harbor.slnx
             tests/Harbor.Tools.Builtin.Tests/bin/Release/net10.0/*.*
             tests/Harbor.Tools.Builtin.Tests/bin/Release/net10.0/runtimes/linux-x64/native/*
+            tests/Harbor.Tools.Builtin.Tests/bin/Release/net10.0/runtimes/linux-arm64/native/*
             tests/Harbor.Tools.Builtin.Tests/bin/Release/net10.0/*/Harbor.*.resources.dll
             tests/Harbor.Storage.Tests/bin/Release/net10.0/*.*
             tests/Harbor.Storage.Tests/bin/Release/net10.0/runtimes/linux-x64/native/*
+            tests/Harbor.Storage.Tests/bin/Release/net10.0/runtimes/linux-arm64/native/*
             tests/Harbor.Storage.Tests/bin/Release/net10.0/*/Harbor.*.resources.dll
             tests/Harbor.Storage.Jsonl.Tests/bin/Release/net10.0/*.*
             tests/Harbor.Storage.Jsonl.Tests/bin/Release/net10.0/runtimes/linux-x64/native/*
+            tests/Harbor.Storage.Jsonl.Tests/bin/Release/net10.0/runtimes/linux-arm64/native/*
             tests/Harbor.Storage.Jsonl.Tests/bin/Release/net10.0/*/Harbor.*.resources.dll
             tests/Harbor.Providers.Tests/bin/Release/net10.0/*.*
             tests/Harbor.Providers.Tests/bin/Release/net10.0/runtimes/linux-x64/native/*
+            tests/Harbor.Providers.Tests/bin/Release/net10.0/runtimes/linux-arm64/native/*
             tests/Harbor.Providers.Tests/bin/Release/net10.0/*/Harbor.*.resources.dll
             tests/Harbor.Transport.Remote.Tests/bin/Release/net10.0/*.*
             tests/Harbor.Transport.Remote.Tests/bin/Release/net10.0/runtimes/linux-x64/native/*
+            tests/Harbor.Transport.Remote.Tests/bin/Release/net10.0/runtimes/linux-arm64/native/*
             tests/Harbor.Transport.Remote.Tests/bin/Release/net10.0/*/Harbor.*.resources.dll
             tests/Harbor.Plugins.Abstractions.Tests/bin/Release/net10.0/*.*
             tests/Harbor.Plugins.Abstractions.Tests/bin/Release/net10.0/runtimes/linux-x64/native/*
+            tests/Harbor.Plugins.Abstractions.Tests/bin/Release/net10.0/runtimes/linux-arm64/native/*
             tests/Harbor.Plugins.Abstractions.Tests/bin/Release/net10.0/*/Harbor.*.resources.dll
             tests/Harbor.Plugins.Runtime.Tests/bin/Release/net10.0/*.*
             tests/Harbor.Plugins.Runtime.Tests/bin/Release/net10.0/runtimes/linux-x64/native/*
+            tests/Harbor.Plugins.Runtime.Tests/bin/Release/net10.0/runtimes/linux-arm64/native/*
             tests/Harbor.Plugins.Runtime.Tests/bin/Release/net10.0/*/Harbor.*.resources.dll
             tests/Harbor.Plugins.Host.Tests/bin/Release/net10.0/*.*
             tests/Harbor.Plugins.Host.Tests/bin/Release/net10.0/runtimes/linux-x64/native/*
+            tests/Harbor.Plugins.Host.Tests/bin/Release/net10.0/runtimes/linux-arm64/native/*
             tests/Harbor.Plugins.Host.Tests/bin/Release/net10.0/*/Harbor.*.resources.dll
             tests/Harbor.Ipc.Tests/bin/Release/net10.0/*.*
             tests/Harbor.Ipc.Tests/bin/Release/net10.0/runtimes/linux-x64/native/*
+            tests/Harbor.Ipc.Tests/bin/Release/net10.0/runtimes/linux-arm64/native/*
             tests/Harbor.Ipc.Tests/bin/Release/net10.0/*/Harbor.*.resources.dll
             !**/*.pdb
             !**/*.xml
@@ -1028,30 +931,39 @@ jobs:
             Harbor.slnx
             tests/Harbor.Tui.Tests/bin/Release/net10.0/*.*
             tests/Harbor.Tui.Tests/bin/Release/net10.0/runtimes/linux-x64/native/*
+            tests/Harbor.Tui.Tests/bin/Release/net10.0/runtimes/linux-arm64/native/*
             tests/Harbor.Tui.Tests/bin/Release/net10.0/*/Harbor.*.resources.dll
             tests/Harbor.Tui.RendererTests/bin/Release/net10.0/*.*
             tests/Harbor.Tui.RendererTests/bin/Release/net10.0/runtimes/linux-x64/native/*
+            tests/Harbor.Tui.RendererTests/bin/Release/net10.0/runtimes/linux-arm64/native/*
             tests/Harbor.Tui.RendererTests/bin/Release/net10.0/*/Harbor.*.resources.dll
             tests/Harbor.Tui.CellForge.Tests/bin/Release/net10.0/*.*
             tests/Harbor.Tui.CellForge.Tests/bin/Release/net10.0/runtimes/linux-x64/native/*
+            tests/Harbor.Tui.CellForge.Tests/bin/Release/net10.0/runtimes/linux-arm64/native/*
             tests/Harbor.Tui.CellForge.Tests/bin/Release/net10.0/*/Harbor.*.resources.dll
             tests/Harbor.Ui.Framework.Tests/bin/Release/net10.0/*.*
             tests/Harbor.Ui.Framework.Tests/bin/Release/net10.0/runtimes/linux-x64/native/*
+            tests/Harbor.Ui.Framework.Tests/bin/Release/net10.0/runtimes/linux-arm64/native/*
             tests/Harbor.Ui.Framework.Tests/bin/Release/net10.0/*/Harbor.*.resources.dll
             tests/Harbor.DesignSystem.Tests/bin/Release/net10.0/*.*
             tests/Harbor.DesignSystem.Tests/bin/Release/net10.0/runtimes/linux-x64/native/*
+            tests/Harbor.DesignSystem.Tests/bin/Release/net10.0/runtimes/linux-arm64/native/*
             tests/Harbor.DesignSystem.Tests/bin/Release/net10.0/*/Harbor.*.resources.dll
             tests/Harbor.Tui.CellForge.PtyTests/bin/Release/net10.0/*.*
             tests/Harbor.Tui.CellForge.PtyTests/bin/Release/net10.0/runtimes/linux-x64/native/*
+            tests/Harbor.Tui.CellForge.PtyTests/bin/Release/net10.0/runtimes/linux-arm64/native/*
             tests/Harbor.Tui.CellForge.PtyTests/bin/Release/net10.0/*/Harbor.*.resources.dll
             tests/Harbor.Terminal.Abstractions.Tests/bin/Release/net10.0/*.*
             tests/Harbor.Terminal.Abstractions.Tests/bin/Release/net10.0/runtimes/linux-x64/native/*
+            tests/Harbor.Terminal.Abstractions.Tests/bin/Release/net10.0/runtimes/linux-arm64/native/*
             tests/Harbor.Terminal.Abstractions.Tests/bin/Release/net10.0/*/Harbor.*.resources.dll
             tests/Harbor.App.Avalonia.Tests/bin/Release/net10.0/*.*
             tests/Harbor.App.Avalonia.Tests/bin/Release/net10.0/runtimes/linux-x64/native/*
+            tests/Harbor.App.Avalonia.Tests/bin/Release/net10.0/runtimes/linux-arm64/native/*
             tests/Harbor.App.Avalonia.Tests/bin/Release/net10.0/*/Harbor.*.resources.dll
             apps/Harbor.App.Cli/bin/Release/net10.0/*.*
             apps/Harbor.App.Cli/bin/Release/net10.0/runtimes/linux-x64/native/*
+            apps/Harbor.App.Cli/bin/Release/net10.0/runtimes/linux-arm64/native/*
             apps/Harbor.App.Cli/bin/Release/net10.0/*/Harbor.*.resources.dll
             !**/*.pdb
             !**/*.xml
@@ -1069,24 +981,31 @@ jobs:
             Harbor.slnx
             tests/Harbor.E2E.Cli/bin/Release/net10.0/*.*
             tests/Harbor.E2E.Cli/bin/Release/net10.0/runtimes/linux-x64/native/*
+            tests/Harbor.E2E.Cli/bin/Release/net10.0/runtimes/linux-arm64/native/*
             tests/Harbor.E2E.Cli/bin/Release/net10.0/*/Harbor.*.resources.dll
             tests/Harbor.E2E.App.Avalonia/bin/Release/net10.0/*.*
             tests/Harbor.E2E.App.Avalonia/bin/Release/net10.0/runtimes/linux-x64/native/*
+            tests/Harbor.E2E.App.Avalonia/bin/Release/net10.0/runtimes/linux-arm64/native/*
             tests/Harbor.E2E.App.Avalonia/bin/Release/net10.0/*/Harbor.*.resources.dll
             tests/Harbor.Tui.E2E.Tests/bin/Release/net10.0/*.*
             tests/Harbor.Tui.E2E.Tests/bin/Release/net10.0/runtimes/linux-x64/native/*
+            tests/Harbor.Tui.E2E.Tests/bin/Release/net10.0/runtimes/linux-arm64/native/*
             tests/Harbor.Tui.E2E.Tests/bin/Release/net10.0/*/Harbor.*.resources.dll
             tests/Harbor.App.Cli.Tests/bin/Release/net10.0/*.*
             tests/Harbor.App.Cli.Tests/bin/Release/net10.0/runtimes/linux-x64/native/*
+            tests/Harbor.App.Cli.Tests/bin/Release/net10.0/runtimes/linux-arm64/native/*
             tests/Harbor.App.Cli.Tests/bin/Release/net10.0/*/Harbor.*.resources.dll
             tests/Harbor.LoadTests/bin/Release/net10.0/*.*
             tests/Harbor.LoadTests/bin/Release/net10.0/runtimes/linux-x64/native/*
+            tests/Harbor.LoadTests/bin/Release/net10.0/runtimes/linux-arm64/native/*
             tests/Harbor.LoadTests/bin/Release/net10.0/*/Harbor.*.resources.dll
             tests/Harbor.E2E.Framework.Tests/bin/Release/net10.0/*.*
             tests/Harbor.E2E.Framework.Tests/bin/Release/net10.0/runtimes/linux-x64/native/*
+            tests/Harbor.E2E.Framework.Tests/bin/Release/net10.0/runtimes/linux-arm64/native/*
             tests/Harbor.E2E.Framework.Tests/bin/Release/net10.0/*/Harbor.*.resources.dll
             apps/Harbor.App.Cli/bin/Release/net10.0/*.*
             apps/Harbor.App.Cli/bin/Release/net10.0/runtimes/linux-x64/native/*
+            apps/Harbor.App.Cli/bin/Release/net10.0/runtimes/linux-arm64/native/*
             apps/Harbor.App.Cli/bin/Release/net10.0/*/Harbor.*.resources.dll
             !**/*.pdb
             !**/*.xml
@@ -1219,10 +1138,55 @@ jobs:
   test:
     needs: [changes, build]
     if: (needs.changes.outputs.dotnet == 'true' || github.event_name == 'workflow_dispatch') && github.actor != 'dependabot[bot]'
-    # Pinned image + pinned SDK, same reasons as the build job: the numbers
-    # this repo measures were taken on ubuntu-24.04 with SDK 10.0.402, and
-    # global.json forbids the SDK from leaving the 10.0.4xx band.
-    runs-on: ubuntu-24.04
+    # THE ARM64 POOL (issue #1919). GitHub-hosted arm64 runners are a
+    # SEPARATE pool from the x64 ones and they are free for a public
+    # repository: `ubuntu-24.04-arm` is 4 vCPU Armv9-A. The test shards
+    # were the queue-bound part of a PR run (issue #1782 measured 73–1282 s
+    # of queue wait against 30–179 s of own time), and the queue is the
+    # cost, so the shards are the thing that can move.
+    #
+    # The label is per-shard (`matrix.runner`) so the shard-slices gate can
+    # see it: a shard that runs on an arm64 runner must have a slice that
+    # carries the linux-arm64 native assets. The job names do not change —
+    # the matrix still names them by `shard`.
+    #
+    # What stays on x64, each for a reason that is a fact about the tree:
+    # the build job (it produces the linux-x64 natives and the x64
+    # apphost), the coverage job (Microsoft.Testing.Extensions.CodeCoverage
+    # 18.12.0 ships no linux-arm64 instrumentation engine), the AOT job
+    # (it publishes linux-x64) and the perf gate (it measures the machine
+    # its baselines were taken on).
+    #
+    # The runner label is the ONLY thing to change back: `ubuntu-24.04`
+    # returns the shards to the x64 pool.
+    #
+    # WHAT AN ARM64 RUNNER NEEDS, AND WHAT THIS JOB DOES FOR IT — three
+    # facts about the tree, each one measured on run 39433292136 (the
+    # spike that ran these same four shards on both pools):
+    #
+    #   * The SDK. The arm64 image ships .NET SDK 10.0.401; global.json
+    #     asks for 10.0.402 (rollForward latestPatch does not accept 401
+    #     for 402), so setup-dotnet installs 10.0.402 for linux-arm64 — the
+    #     tarball exists (dotnetcli.azureedge.net/dotnet/Sdk/10.0.402/
+    #     …-linux-arm64.tar.gz).
+    #   * The NATIVES. The build is RID-agnostic (`dotnet build`, no `-r`),
+    #     so the build output already carries runtimes/linux-arm64/native/*
+    #     next to runtimes/linux-x64/native/* — the upload globs only
+    #     picked the x64 folder, and the four test slices now pick both.
+    #     What is in the arm64 folder: libe_sqlite3.so, libSkiaSharp.so
+    #     and libHarfBuzzSharp.so (all three ship linux-arm64). What is
+    #     NOT: the coverage instrumentation engine, which is why the
+    #     coverage job stays on x64.
+    #   * ripgrep. The arm64 image does not ship `rg` either, and the
+    #     platform shard's RipGrepTool integration tests self-skip without
+    #     it, so the install step below runs on arm64 too. Ubuntu 24.04
+    #     publishes `ripgrep` for arm64 (14.1.0 on the arm64 image).
+    #
+    # The shards run the SAME binaries as before: `dotnet exec <dll>` on
+    # the artifacts the build job produced. The arm64 runner loads the
+    # arm64 natives out of the same output directory, which is why the
+    # slices carry both.
+    runs-on: ${{ matrix.runner }}
     timeout-minutes: 25
     permissions:
       contents: read
@@ -1233,6 +1197,7 @@ jobs:
         shard: [core, platform, ui, e2e]
         include:
           - shard: core
+            runner: ubuntu-24.04-arm
             # MinimumExpectedTests guard: a silent zero-test regression must
             # fail loudly (MTP exit code 8), never pass as "green".
             guard: true
@@ -1252,6 +1217,7 @@ jobs:
               Harbor.TestKit.Generators.Tests
               Harbor.TestKit.Tests
           - shard: platform
+            runner: ubuntu-24.04-arm
             guard: true
             projects: >-
               Harbor.Tools.Builtin.Tests
@@ -1264,6 +1230,7 @@ jobs:
               Harbor.Plugins.Host.Tests
               Harbor.Ipc.Tests
           - shard: ui
+            runner: ubuntu-24.04-arm
             guard: true
             # PerfTests live in renderer-perf-gate.yml — do not duplicate.
             projects: >-
@@ -1276,6 +1243,7 @@ jobs:
               Harbor.Terminal.Abstractions.Tests
               Harbor.App.Avalonia.Tests
           - shard: e2e
+            runner: ubuntu-24.04-arm
             # Same guard as the three above, and it was OFF here with nothing
             # recorded next to it (#977). The counts made this free: e2e's five
             # projects measured 36 / 104 / 39 / 272 / 28 tests on run
@@ -1336,9 +1304,12 @@ jobs:
         with:
           name: solution-binaries-${{ matrix.shard }}
 
-      # ubuntu-latest does not ship ripgrep — without it the RipGrepTool
-      # integration tests self-skip and the platform shard silently runs
-      # three fewer real tests.
+      # The runner image does not ship ripgrep — neither the x64 one nor
+      # the arm64 one — and without it the RipGrepTool integration tests
+      # self-skip and the platform shard silently runs three fewer real
+      # tests. Ubuntu 24.04 publishes `ripgrep` for arm64 too (14.1.0 on
+      # the arm64 image, measured on run 39433292136), so the apt line is
+      # the same one on both pools.
       - name: Ensure ripgrep installed
         if: matrix.shard == 'platform'
         run: |
