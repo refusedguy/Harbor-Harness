@@ -1054,6 +1054,22 @@ jobs:
           fi
           trx_dir="TestResults/${{ matrix.shard }}"
           mkdir -p "$trx_dir"
+          # ABSOLUTE, and that is the point (#1791). A relative
+          # --results-directory used to be resolved against the runner's
+          # working directory, which is the workspace root, so the TRX landed
+          # in TestResults/<shard>/ where the step below looks for it. TUnit
+          # 1.75.0 (#1885) changed that: the relative path is now resolved
+          # against the test assembly's base directory, so every TRX landed in
+          # tests/<Project>/bin/Release/net10.0/TestResults/<shard>/ instead.
+          # Nothing noticed, because the two steps that consume the TRX both
+          # treat "no TRX" as "nothing to report": the measurement script
+          # exits 0, and the upload step has if-no-files-found: ignore. The
+          # per-test measurements — issue #618's whole mechanism — stopped
+          # being produced, and no job went red.
+          #
+          # An absolute path is what both versions agree on, so this is the
+          # fix that does not have to be re-made at the next bump.
+          trx_dir_abs="$GITHUB_WORKSPACE/$trx_dir"
           summary="$GITHUB_STEP_SUMMARY"
           echo "| project | result | duration |" >> "$summary"
           echo "|---|---|---|" >> "$summary"
@@ -1066,7 +1082,7 @@ jobs:
               echo "Missing $dll — the artifact for this shard does not carry it. If the project was added to this shard's list recently, add it to the matching 'Stash build outputs' step in the build job too (tools/ci-shard-slices.py checks the two lists)."
               status="FAIL"
               rc=1
-            elif dotnet exec "$dll" $guard --report-trx --results-directory "$trx_dir" --report-trx-filename "$p.trx"; then
+            elif dotnet exec "$dll" $guard --report-trx --results-directory "$trx_dir_abs" --report-trx-filename "$p.trx"; then
               status="pass"
             else
               status="FAIL"
