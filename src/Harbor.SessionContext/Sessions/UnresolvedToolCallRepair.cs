@@ -38,12 +38,17 @@ namespace Harbor.Application.Sessions;
 ///         </list>
 ///     </para>
 ///     <para>
-///         <b>One owner for the text.</b> The writer (the turn runner) and the
-///         repairer (the message converter) must hand the model the same
+///         <b>One owner for the text.</b> The writer (the turn runner, in
+///         <c>Harbor.AgentRuntime</c>) and the repairer (the message
+///         converter, beside this file) must hand the model the same
 ///         vocabulary, so both build it here — one literal, one place.
+///         The type is public for that reason: the namespace is
+///         <c>Harbor.Application.Sessions</c> (unchanged by the #1624
+///         extraction, like every other member of this cohort) and the
+///         turn runner lives in another assembly.
 ///     </para>
 /// </remarks>
-internal static class UnresolvedToolCallRepair
+public static class UnresolvedToolCallRepair
 {
     /// <summary>
     ///     The text the model reads back for a call that never started: it had
@@ -51,7 +56,7 @@ internal static class UnresolvedToolCallRepair
     /// </summary>
     /// <param name="toolName">The tool the model asked for.</param>
     /// <returns>The model-facing explanation, carrying the code.</returns>
-    internal static string NotStartedText(string toolName) =>
+    public static string NotStartedText(string toolName) =>
         $"{UnresolvedToolCall.NotStartedCode}: tool '{toolName}' was never started — the turn ended before it ran. "
         + "The call had no effect and is safe to retry.";
 
@@ -61,7 +66,7 @@ internal static class UnresolvedToolCallRepair
     /// </summary>
     /// <param name="toolName">The tool the model asked for.</param>
     /// <returns>The model-facing explanation, carrying the code.</returns>
-    internal static string OutcomeUnknownText(string toolName) =>
+    public static string OutcomeUnknownText(string toolName) =>
         $"{UnresolvedToolCall.OutcomeUnknownCode}: tool '{toolName}' has no recorded result — the turn ended before its outcome was captured. "
         + "The call may have taken effect: retry only if the operation is read-only or idempotent; "
         + "if it may have side effects, first verify external state or ask the user. Do not retry blindly.";
@@ -72,7 +77,7 @@ internal static class UnresolvedToolCallRepair
     /// <param name="code">One of the <see cref="UnresolvedToolCall" /> codes.</param>
     /// <param name="toolName">The tool the model asked for.</param>
     /// <returns>The model-facing explanation, carrying the code.</returns>
-    internal static string TextFor(string code, string toolName) =>
+    public static string TextFor(string code, string toolName) =>
         string.Equals(code, UnresolvedToolCall.NotStartedCode, StringComparison.Ordinal)
             ? NotStartedText(toolName)
             : OutcomeUnknownText(toolName);
@@ -88,7 +93,7 @@ internal static class UnresolvedToolCallRepair
     ///     or <see langword="null" /> when the assistant message asked for no
     ///     tool at all (nothing to close).
     /// </returns>
-    internal static ToolResultMessage? Close(AssistantMessage assistant, string code)
+    public static ToolResultMessage? Close(AssistantMessage assistant, string code)
     {
         List<ToolResultEntry>? results = null;
         for (int i = 0; i < assistant.Parts.Count; i++)

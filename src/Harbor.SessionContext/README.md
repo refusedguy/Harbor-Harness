@@ -5,7 +5,9 @@
 The session-context cohort: compaction (`CompactionService`, `CompactionPolicy`,
 `CompactionView`), system-prompt assembly (`SystemPromptBuilder`,
 `CachingSystemPromptBuilder`), the domain↔LLM message bridge
-(`MessageConverter`, `ToolResultContextTrim`), the per-session token ledger
+(`MessageConverter`, `ToolResultContextTrim`), the tool-call repair that keeps
+a `tool_use` paired with a `tool_result` (`UnresolvedToolCallRepair`), the
+per-session token ledger
 (`TokenTracker`), the workspace probes (`WorkspaceContextSource`,
 `WorkspaceInspector`), the session fork (`SessionForkService`) and the isolated
 run records (`IsolatedWorkspace`) — a verbatim extraction from
@@ -33,6 +35,7 @@ public sealed class WorkspaceInspector;                       // Sessions/ — w
 public sealed class SessionForkService;                        // Sessions/ — branch a session into a child
 public sealed record IsolatedWorkspace;                       // Sessions/ — the materialized run worktree
 public static class ToolResultContextTrim;                    // Sessions/ — caps a tool result's context cost
+public static class UnresolvedToolCallRepair;                // Sessions/ — closes a tool_use that never got its tool_result (#1751)
 ```
 
 Also moved beyond the issue's list, because the cohort bound them in code and
