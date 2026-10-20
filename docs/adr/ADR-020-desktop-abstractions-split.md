@@ -55,11 +55,14 @@ reference; see issue #543 / #542"*.
 
 "Dead" means dead **in IL**, and that distinction cost one build to learn:
 `Harbor.Terminal.Abstractions` bound no type from this assembly, but it was
-load-bearing **transitively**, because `tests/Harbor.TestKit` reached
-`Harbor.Terminal.Abstractions.Renderers` through it. The split made the leaf a
-two-assembly closure, and `Harbor.TestKit` stopped compiling until it declared
-the reference it had been leaning on. The reference is now explicit there, with
-the reason in the csproj.
+load-bearing **transitively**. `tests/Harbor.TestKit/NullRenderContext.cs`
+reaches `Harbor.Terminal.Abstractions.Renderers` through the leaf, and the
+split made the leaf a two-assembly closure, so the build stopped with
+*"The type or namespace name 'Terminal' does not exist in the namespace
+'Harbor'"*. The fix landed where the file lives: `Harbor.TestKit.Tui`, the
+UI-scoped part #1889 moved it to, already declares the reference. What the
+build taught is that a reference can bind no type and still be the reason
+another project compiles.
 
 ### The split the seam actually draws
 
@@ -207,12 +210,11 @@ directly is what makes the closure 2 rather than 3.
 - `Harbor.Desktop.ViewModels` is a new packable assembly with a new
   `PackageId`. Nothing is published, so no consumer breaks; the name is a
   forward-looking commitment.
-- `Harbor.TestKit` and `Harbor.Ui.Framework.Tests` reference the hub instead
-  of the leaf. The TestKit closure is the same size as before the split (the
-  `#188` edge moved with the view-models), and the csproj comments say so.
-- `Harbor.TestKit` gained an explicit `Harbor.Terminal.Abstractions` reference.
-  It had been reaching that assembly through the leaf, which is the one place
-  where the leaf's "dead" reference turned out to be load-bearing.
+- `Harbor.Ui.Framework.Tests` and `Harbor.TestKit.Tui` reference the hub
+  instead of the leaf; the core `Harbor.TestKit` references neither, because
+  #1889 made it core-only. The `#188` edge that drags `Harbor.Application` in
+  travelled with the view-models, so the part that still pays for it pays for
+  it in the same place as before.
 - The Avalonia app references both halves; the CLI, `Harbor.Hosting` and
   `Harbor.Desktop.Shared` reference the leaf only.
 
