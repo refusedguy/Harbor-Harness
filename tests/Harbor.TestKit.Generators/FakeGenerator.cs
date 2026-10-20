@@ -364,7 +364,7 @@ public sealed class FakeGenerator : IIncrementalGenerator
 
     private static GeneratedProperty BuildProperty(IPropertySymbol property) => new()
     {
-        Name = property.Name,
+        Name = EscapeIdentifier(property.Name),
         Type = Render(property.Type),
         DefaultValue = DefaultValueFor(property.Type, property.Name),
     };
@@ -375,7 +375,7 @@ public sealed class FakeGenerator : IIncrementalGenerator
         List<Diagnostic> diagnostics,
         bool configurable)
     {
-        var generated = new GeneratedMethod { Name = method.Name };
+        var generated = new GeneratedMethod { Name = EscapeIdentifier(method.Name) };
 
         // Generic method: copy the type parameters and their constraints.
         if (method.TypeParameters.Length > 0)
@@ -409,7 +409,7 @@ public sealed class FakeGenerator : IIncrementalGenerator
 
             generated.Parameters.Add(new GeneratedParameter
             {
-                Name = parameter.Name,
+                Name = EscapeIdentifier(parameter.Name),
                 Type = Render(parameter.Type),
                 RefKind = parameter.RefKind,
                 IsParams = parameter.IsParams,
@@ -756,6 +756,28 @@ public sealed class FakeGenerator : IIncrementalGenerator
         return "default";
     }
 
+    /// <summary>
+    ///     The C# RESERVED keywords. A parameter or member whose name is one of
+    ///     them (the interface writes it as <c>@event</c>) has to be escaped
+    ///     again in the emitted code — <c>ref AgentEvent event</c> would not
+    ///     compile.
+    /// </summary>
+    private static readonly HashSet<string> ReservedKeywords = new(StringComparer.Ordinal)
+    {
+        "abstract", "as", "base", "bool", "break", "byte", "case", "catch", "char", "checked",
+        "class", "const", "continue", "decimal", "default", "delegate", "do", "double", "else",
+        "enum", "event", "explicit", "extern", "false", "finally", "fixed", "float", "for",
+        "foreach", "goto", "if", "implicit", "in", "int", "interface", "internal", "is", "lock",
+        "long", "namespace", "new", "null", "object", "operator", "out", "override", "params",
+        "private", "protected", "public", "readonly", "ref", "return", "sbyte", "sealed", "short",
+        "sizeof", "stackalloc", "static", "string", "struct", "switch", "this", "throw", "true",
+        "try", "typeof", "uint", "ulong", "unchecked", "unsafe", "ushort", "using", "virtual",
+        "void", "volatile", "while",
+    };
+
+    private static string EscapeIdentifier(string name) =>
+        ReservedKeywords.Contains(name) ? "@" + name : name;
+
     private static string StripLeadingI(string name) =>
         name.Length > 1 && name[0] == 'I' && char.IsUpper(name[1]) ? name[1..] : name;
 
@@ -787,7 +809,7 @@ public sealed class FakeGenerator : IIncrementalGenerator
         sb.AppendLine("namespace " + GeneratedNamespace + ";");
         sb.AppendLine();
         sb.AppendLine("/// <summary>");
-        sb.AppendLine("///     Generated test double for <see cref=\"global::" + fake.InterfaceName + "\" />.");
+        sb.AppendLine("///     Generated test double for <c>" + fake.InterfaceName + "</c>.");
         sb.AppendLine("/// </summary>");
         sb.AppendLine("/// <remarks>");
         sb.AppendLine("///     <para>");
