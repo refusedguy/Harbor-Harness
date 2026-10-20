@@ -725,6 +725,18 @@ jobs:
 
   # Task: matrix builds. Portable suites only — the bash tool, PTY and
   # SpectreTUI suites are Linux-bound; the heavy Avalonia E2E stays on ubuntu.
+  #
+  # #1787 — this shard compiles ONLY what it runs.
+  # The shard exists to catch OS-specific RUNTIME behaviour (NTFS rename
+  # semantics, named pipes, terminal rendering). It never existed to re-compile
+  # the whole tree on two more runners, and it was paying for that:
+  # `dotnet build Harbor.slnx` compiles 104 projects (the 103 in the solution
+  # plus the vendored SharpConsoleUI under external/ConsoleEx), of which 43
+  # are neither run nor needed here — including Harbor.Architecture.Tests, the
+  # single largest project in the repo at ~90k lines.
+  # Measured on run 39368167225 (dev, 2026-10-20): the build step alone was
+  # 420 s on windows-latest and 380 s on macos-latest, while the ten suites it
+  # then ran took 93 s and 103 s. The build was 3-4x the work.
   test-os:
     needs: [changes, build]
     # Dependabot action-bump PRs cannot break OS-specific behavior — the
@@ -738,6 +750,25 @@ jobs:
       fail-fast: false
       matrix:
         os: [windows-latest, macos-latest]
+        # ONE declaration of the suites this shard runs, read by BOTH steps
+        # below: the build step compiles exactly these projects (and their
+        # transitive dependency closure), the test step runs exactly these
+        # projects. Before #1787 the list lived only in the test step, so the
+        # build step had no way to know what it actually needed and compiled
+        # the entire solution instead. A project added here is now built AND
+        # run; there is no second list to keep in sync.
+        include:
+          - projects: >-
+              Harbor.Abstractions.Tests
+              Harbor.Config.Tests
+              Harbor.Domain.Tests
+              Harbor.Application.Tests
+              Harbor.Core.Tests
+              Harbor.Storage.Tests
+              Harbor.Storage.Jsonl.Tests
+              Harbor.Tui.Tests
+              Harbor.Tui.CellForge.Tests
+              Harbor.Ipc.Tests
     steps:
       - uses: actions/checkout@v7
         with:
@@ -755,25 +786,82 @@ jobs:
       # ubuntu `build` job, which builds the same Harbor.slnx. Re-enabling the
       # doc file on the matrix would double the cost of a signal that cannot
       # differ by OS. This job exists for OS coverage, not for warnings.
-      - name: Build for ${{ matrix.os }} (local, no Linux artifact)
-        run: dotnet build Harbor.slnx -c Release -p:ContinuousIntegrationBuild=true -p:GenerateDocumentationFile=false
+      #
+      # #1787 — the build is NARROW: the ten suites this shard runs and their
+      # transitive dependency closure (61 of the 104 projects the full
+      # solution build compiles). MSBuild resolves the closure itself, so the
+      # list below is the whole input.
+      #
+      # Why a generated solution file rather than ten `dotnet build` calls:
+      # one MSBuild invocation evaluates the graph once, restores it once and
+      # compiles it in parallel; ten calls would pay the start-up and
+      # project-evaluation cost ten times over, which is exactly the kind of
+      # overhead this change exists to remove. The file is generated in the
+      # workspace and never committed.
+      #
+      # Why NOT the linux artifact the `build` job uploads (the `test` and
+      # `coverage` jobs download it): the MANAGED assemblies are portable —
+      # they are plain net10.0 IL — but the NATIVE assets beside them are
+      # not. A linux build drops runtimes/linux-x64/native/* into the output
+      # (SQLitePCLRaw's e_sqlite3 among them); windows-latest needs
+      # e_sqlite3.dll and macos-latest needs libe_sqlite3.dylib, and
+      # Harbor.Storage.Tests exercises SQLite on exactly those filesystems.
+      # Reusing the linux output would silently test the wrong native
+      # library, so this job still builds natively on its own runner — it
+      # just no longer builds projects it does not run.
+      #
+      # What is NOT lost by the narrowing: the ubuntu `build` job still
+      # compiles the WHOLE solution on every PR (zero-warning gate +
+      # HarborArchGate), and no project in this repository declares an
+      # OS-conditional compilation symbol — `WINDOWS`, `OSX` and `UNIX` appear
+      # in no csproj/props/targets — so the excluded projects compile
+      # identically on all three runners. What IS lost: an OS-side COMPILE of
+      # the 43 projects this shard never runs. That is a compile-only signal,
+      # not a behavioural one, and it is already covered on ubuntu.
+      #
+      # ONE concrete consequence, stated rather than glossed: the
+      # HarborArchitectureGate target in Directory.Build.props fires
+      # AfterTargets="Build" of Harbor.Architecture.Tests, so compiling the
+      # whole solution used to run that gate on windows and macOS too. It no
+      # longer does here — the gate is a static, source-scanning gate whose
+      # rules normalise path separators (`Path.DirectorySeparatorChar`,
+      # `Replace('\\', '/')`), and the copy that GATES the PR is the ubuntu
+      # one, which still runs twice there (as the build-time gate and again
+      # as the `core` shard's test suite).
+      - name: Build OS-shard projects on ${{ matrix.os }} (local, no Linux artifact)
+        shell: bash
+        run: |
+          set -euo pipefail
+          # shellcheck disable=SC2086
+          set -- ${{ matrix.projects }}
+          if [ "$#" -eq 0 ]; then
+            echo "::error::The OS-shard project list is empty — refusing to build an empty solution."
+            exit 1
+          fi
+          {
+            echo '<Solution>'
+            for p in "$@"; do
+              echo "  <Project Path=\"tests/$p/$p.csproj\"/>"
+            done
+            echo '</Solution>'
+          } > ci-os-shard.slnx
+          echo "Building $# OS-shard projects and their dependency closure:"
+          cat ci-os-shard.slnx
+          dotnet build ci-os-shard.slnx -c Release \
+            -p:ContinuousIntegrationBuild=true \
+            -p:GenerateDocumentationFile=false
 
       - name: Test critical suites on ${{ matrix.os }}
         timeout-minutes: 15
         shell: pwsh
         run: |
-          $projects = @(
-            'Harbor.Abstractions.Tests',
-            'Harbor.Config.Tests',
-            'Harbor.Domain.Tests',
-            'Harbor.Application.Tests',
-            'Harbor.Core.Tests',
-            'Harbor.Storage.Tests',
-            'Harbor.Storage.Jsonl.Tests',
-            'Harbor.Tui.Tests',
-            'Harbor.Tui.CellForge.Tests',
-            'Harbor.Ipc.Tests'
-          )
+          # Same list the build step above compiled (matrix.projects) — one
+          # declaration, so the two cannot drift apart (#1787).
+          $projects = @("${{ matrix.projects }}" -split '\s+' | Where-Object { $_ -ne '' })
+          if ($projects.Count -eq 0) {
+            Write-Host "::error::The OS-shard project list resolved to zero entries - refusing to report green."
+            exit 1
+          }
           $failed = @()
           # --report-trx (issue #618): this job produced no TRX at all, so a
           # measurement a test printed was unrecoverable here. TRX is written to
