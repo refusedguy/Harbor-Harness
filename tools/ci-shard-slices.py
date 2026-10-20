@@ -34,7 +34,8 @@ WHY THIS FILE EXISTS
 WHAT IT CHECKS
 
   1. Every project in a shard's `projects:` list appears in that shard's
-     slice (the upload step named `solution-binaries-<shard>`).
+     slice (the upload step named `solution-binaries-<shard>`, or the one
+     the shard's `artifact:` key names).
   2. The combined artifact `solution-binaries` — the one the `coverage`
      job downloads — carries every project the coverage job runs.
   3. The slices that run the CLI carry the CLI's own output directory
@@ -43,6 +44,20 @@ WHAT IT CHECKS
      assembly: tests/Harbor.E2E.Framework/CliDriver.cs (the e2e shard)
      and tests/Harbor.Tui.CellForge.PtyTests/CellForgePtyScenarioBase.cs
      (the ui shard).
+  4. A shard whose `mirror:` key names another shard runs the SAME
+     project list as that shard. The arm64 spike (issue #1919) writes the
+     four shard lists a second time, and the two copies are the only
+     thing standing between the shards and a silent drift.
+  5. A shard that runs on an arm64 runner gets a slice that carries the
+     linux-arm64 NATIVE ASSETS as well as the linux-x64 ones. The build
+     is RID-agnostic, so the arm64 assets exist in the build output; the
+     upload globs pick them per RID. A slice that carries only the x64
+     ones runs on x64 and fails on arm64 with a DllNotFoundException —
+     a failure that names the missing library, not the missing glob.
+  6. Every shard says WHICH RUNNER it runs on (`runner:`), because the
+     job's `runs-on` is `${{ matrix.runner }}` — a shard without one has
+     no runner at all, and, worse, check 5 would silently stop asking
+     for the native assets that runner needs.
 
 HOW IT READS THE FILE
 
@@ -69,9 +84,25 @@ CLI_CONSUMING_SLICES = ("solution-binaries-ui", "solution-binaries-e2e")
 CLI_OUTPUT_DIR = "apps/Harbor.App.Cli/bin/Release/net10.0"
 
 
-def read_shard_lists(text: str) -> dict[str, list[str]]:
-    """shard name -> the projects the `test` job's matrix runs for it."""
-    shards: dict[str, list[str]] = {}
+def read_shard_lists(text: str) -> dict[str, dict]:
+    """shard name -> what the matrix entry says about that shard.
+
+    The entry carries four things:
+
+      * `projects` — the projects the shard runs.
+      * `mirror`   — the shard whose project list this one must equal. The
+        arm64 spike (issue #1919) runs the SAME shards as the x64 `test`
+        job, so its lists are written a second time; `mirror` names the
+        list they must agree with, and this checker is what makes the
+        second copy safe to maintain.
+      * `artifact` — the build-output slice the shard downloads. It
+        defaults to `solution-binaries-<shard>`, but the arm64 spike
+        downloads the SAME slice as its x64 twin (the build produces one
+        set of binaries), so it names it explicitly.
+      * `runner`   — the runner the shard runs on. A shard on an arm64
+        runner needs the arm64 native assets in its slice.
+    """
+    shards: dict[str, dict] = {}
     for match in re.finditer(r"- shard: (\S+)\n(.*?)(?=\n\s+- shard: |\n\s+steps:)", text, re.S):
         shard, block = match.group(1), match.group(2)
         lines = block.splitlines()
@@ -84,8 +115,14 @@ def read_shard_lists(text: str) -> dict[str, list[str]]:
                 projects.append(line.strip())
             elif projects:
                 break
-        if projects:
-            shards[shard] = projects
+        if not projects:
+            continue
+        entry: dict = {"projects": projects}
+        for line in lines[:start]:
+            option = re.match(r"\s+(mirror|artifact|runner):\s*(\S+)\s*$", line)
+            if option:
+                entry[option.group(1)] = option.group(2)
+        shards[shard] = entry
     return shards
 
 
@@ -107,21 +144,30 @@ def read_slices(text: str) -> dict[str, dict[str, set[str]]]:
             base, tail = glob.group(1), glob.group(2)
             if tail == "*.*":
                 kind = "files"
-            elif tail == "runtimes/linux-x64/native/*":
-                kind = "native"
-            elif tail == "*/Harbor.*.resources.dll":
-                kind = "satellite"
             else:
-                kind = tail
+                # The native assets are per-RID: an x64 runner loads the
+                # linux-x64 ones and an arm64 runner the linux-arm64 ones,
+                # so the RID is part of what the slice carries. A slice
+                # that carries only linux-x64 native assets runs on x64 and
+                # fails on arm64 with a DllNotFoundException, and the
+                # failure names the missing library, not the missing glob.
+                native = re.fullmatch(r"runtimes/linux-([^/]+)/native/\*", tail)
+                kind = f"native:{native.group(1)}" if native else tail
+            if tail == "*/Harbor.*.resources.dll":
+                kind = "satellite"
             carried.setdefault(base, set()).add(kind)
         slices[artifact] = carried
     return slices
 
 
-# The three kinds of file a project's slice must carry: the project's own
+# The kinds of file a project's slice must carry: the project's own
 # assemblies and JSON, the linux-x64 native assets, and Harbor's own
 # satellite assembly.
-REQUIRED_KINDS = {"files", "native", "satellite"}
+REQUIRED_KINDS = {"files", "native:x64", "satellite"}
+
+# The arm64 runners (issue #1919) load the linux-arm64 native assets, so a
+# slice that an arm64 shard consumes must carry those too.
+ARM_REQUIRED_KINDS = {"native:arm64"}
 
 
 def read_coverage_projects(text: str) -> list[str]:
@@ -155,12 +201,48 @@ def main() -> int:
 
     problems: list[str] = []
 
-    for shard, projects in sorted(shards.items()):
-        artifact = f"solution-binaries-{shard}"
+    for shard, entry in sorted(shards.items()):
+        projects = entry["projects"]
+        artifact = entry.get("artifact") or f"solution-binaries-{shard}"
         carried = slices.get(artifact)
         if carried is None:
             problems.append(f"the `{shard}` shard has no `{artifact}` upload step")
             continue
+
+        # The arm64 spike (issue #1919) writes the shard's project list a
+        # second time. `mirror` names the shard whose list it must equal,
+        # and this is the check that keeps the two copies from drifting:
+        # a project added to one and not the other would run in one shard
+        # and not the other, and nothing else in CI would say so.
+        mirror = entry.get("mirror")
+        if mirror:
+            source = shards.get(mirror)
+            if source is None:
+                problems.append(
+                    f"the `{shard}` shard mirrors `{mirror}`, which is not a shard — "
+                    f"the mirror name does not match any matrix entry")
+            elif source["projects"] != projects:
+                only_here = [p for p in projects if p not in source["projects"]]
+                only_there = [p for p in source["projects"] if p not in projects]
+                problems.append(
+                    f"the `{shard}` shard's project list differs from the `{mirror}` shard's "
+                    f"it mirrors — only in `{shard}`: {only_here}; only in `{mirror}`: {only_there}")
+
+        # The runner is not optional. The job's `runs-on` is
+        # `${{ matrix.runner }}`, so a shard without one has no runner at
+        # all — and, worse, the check below would silently stop asking for
+        # the native assets that runner needs.
+        runner = entry.get("runner")
+        if not runner:
+            problems.append(
+                f"the `{shard}` shard does not say which runner it runs on — the job's "
+                f"`runs-on` is `${{{{ matrix.runner }}}}`, so the entry needs a `runner:` key")
+            continue
+
+        required = set(REQUIRED_KINDS)
+        if "arm" in runner:
+            required |= ARM_REQUIRED_KINDS
+
         for project in projects:
             base = f"tests/{project}/bin/Release/net10.0"
             if base not in carried:
@@ -168,7 +250,7 @@ def main() -> int:
                     f"`{project}` is in the `{shard}` shard's project list but not in the "
                     f"`{artifact}` slice — the shard would fail with 'Missing …dll'")
             else:
-                missing_kinds = REQUIRED_KINDS - carried[base]
+                missing_kinds = required - carried[base]
                 if missing_kinds:
                     problems.append(
                         f"the `{artifact}` slice does not carry {sorted(missing_kinds)} for "
@@ -194,7 +276,11 @@ def main() -> int:
                 f"the `{artifact}` slice does not carry `{CLI_OUTPUT_DIR}` — the CLI is "
                 f"started from there by the e2e and PTY helpers")
         else:
-            missing_kinds = REQUIRED_KINDS - carried[CLI_OUTPUT_DIR]
+            # The ui and e2e slices are consumed by an arm64 shard as well
+            # (issue #1919), and the CLI is started from there by the PTY
+            # helpers — so the CLI's own output directory must carry the
+            # arm64 native assets too.
+            missing_kinds = (REQUIRED_KINDS | ARM_REQUIRED_KINDS) - carried[CLI_OUTPUT_DIR]
             if missing_kinds:
                 problems.append(
                     f"the `{artifact}` slice does not carry {sorted(missing_kinds)} for "
