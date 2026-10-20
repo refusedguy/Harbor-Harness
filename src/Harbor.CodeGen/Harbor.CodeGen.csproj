@@ -23,9 +23,21 @@
     <PackageReference Include="Microsoft.CodeAnalysis.CSharp" PrivateAssets="all" NoWarn="Proj0037"/>
   </ItemGroup>
 
-  <ItemGroup>
-    <ProjectReference Include="..\Harbor.Abstractions.Contracts\Harbor.Abstractions.Contracts.csproj"/>
-  </ItemGroup>
+  <!--
+    #1853. The ProjectReference to Harbor.Abstractions.Contracts was dropped
+    from this file: every generator here binds no type from that assembly.
+    The attributes the generators emit (TerminalEscape, MoodFrame,
+    TuiRenderer) are named as STRINGS — `private const string AttributeName
+    = "TerminalEscapeAttribute";` — and the generator looks them up in the
+    CONSUMER's compilation, which is where they have to be resolvable. The
+    consumers all carry Harbor.Abstractions, which references
+    Harbor.Abstractions.Contracts, so the attribute types stay resolvable in
+    every compilation that runs a generator.
+
+    The one thing that changes is this project's own closure: the generator
+    no longer compiles against the contracts assembly, so its output no
+    longer carries a copy of it. Nothing loads it at run time.
+  -->
 
   <PropertyGroup>
     <NoWarn>$(NoWarn);RS1041;S1944</NoWarn>

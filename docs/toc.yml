@@ -100,6 +100,8 @@
   href: PROJECT_STATUS.md
 - name: Release Engineering Analysis
   href: RELEASE_ENGINEERING_ANALYSIS.md
+- name: Reference Trimmer
+  href: REFERENCE-TRIMMER.md
 - name: Remote Tailscale
   href: REMOTE-TAILSCALE.md
 - name: Roadmap

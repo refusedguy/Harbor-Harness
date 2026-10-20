@@ -15,6 +15,14 @@
     <PackageReference Include="Serilog.Sinks.File"/>
     <PackageReference Include="Serilog.Sinks.Console"/>
     <PackageReference Include="Serilog.Sinks.Async"/>
-    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions"/>
+    <!--
+      #1853. Microsoft.Extensions.Logging.Abstractions was dropped from this
+      file: the only source file here (LoggerSetup.cs) binds Serilog.ILogger
+      and nothing else, so the reference carried no compile-time use. The
+      assembly stays in the closure through Serilog.Extensions.Hosting 10.0.0,
+      which depends on it directly, and CentralPackageTransitivePinningEnabled
+      resolves that transitive to the same 10.0.13 the direct reference pinned
+      — so the removal changes no resolved version and no output file.
+    -->
   </ItemGroup>
 </Project>
