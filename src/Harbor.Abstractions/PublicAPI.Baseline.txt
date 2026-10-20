@@ -469,9 +469,6 @@ Harbor.Abstractions.Tui.ICommandContext :: public IProviderRegistry Providers
 Harbor.Abstractions.Tui.ICommandContext :: public ISessionContext Session
 Harbor.Abstractions.Tui.ICommandContext :: public IToolRegistry Tools
 Harbor.Abstractions.Tui.ICommandContext :: public interface ICommandContext
-Harbor.Abstractions.Tui.IInputHandler :: public Task<Result<KeyPress>> ReadKeyAsync(CancellationToken ct = default)
-Harbor.Abstractions.Tui.IInputHandler :: public event EventHandler<KeyPressEventArgs>? KeyPressed
-Harbor.Abstractions.Tui.IInputHandler :: public interface IInputHandler : IDisposable
 Harbor.Abstractions.Tui.ISlashCommand :: public IReadOnlyList<string> Aliases
 Harbor.Abstractions.Tui.ISlashCommand :: public IReadOnlyList<string>? ArgSuggestions
 Harbor.Abstractions.Tui.ISlashCommand :: public Task<Result> ExecuteAsync(IReadOnlyList<string> args, ICommandContext context, CancellationToken ct = default)
@@ -480,8 +477,5 @@ Harbor.Abstractions.Tui.ISlashCommand :: public string Description
 Harbor.Abstractions.Tui.ISlashCommand :: public string Name
 Harbor.Abstractions.Tui.ISlashCommand :: public string Usage
 Harbor.Abstractions.Tui.KeyPress :: public sealed record KeyPress(ConsoleKey Key, char Character, ConsoleModifiers Modifiers)
-Harbor.Abstractions.Tui.KeyPressEventArgs :: public KeyPress Key
-Harbor.Abstractions.Tui.KeyPressEventArgs :: public KeyPressEventArgs(KeyPress key)
-Harbor.Abstractions.Tui.KeyPressEventArgs :: public sealed class KeyPressEventArgs : EventArgs
 Harbor.Abstractions.Tui.QrMatrix :: public static bool Encode(string text)
 Harbor.Abstractions.Tui.QrMatrix :: public static class QrMatrix

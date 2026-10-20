@@ -4,61 +4,26 @@ using Harbor.Abstractions.Sessions;
 using Harbor.Abstractions.Tools;
 namespace Harbor.Abstractions.Tui;
 /// <summary>
-///     Strategy interface for input handling.
+///     A single key press event.
 /// </summary>
 /// <remarks>
 ///     <para>
-///         The input handler is the abstraction over the user's keyboard. TUI renderers receive
-///         an <see cref="IInputHandler" /> implementation (e.g. raw-mode Console, custom terminal
-///         library, or test double) and call <see cref="ReadKeyAsync" /> in their main loop.
+///         REMOVED IN #1831. The <c>IInputHandler</c> contract that used to live beside this
+///         record had no implementor and no consumer anywhere in the tree: the TUI renderer
+///         contract it belonged to (<c>Harbor.Abstractions.Tui.ITuiRenderer</c>) had already moved
+///         to <c>Harbor.Terminal.Abstractions</c>, and the live input strategy is
+///         <c>Harbor.Tui.CellForge.Engine.Input.IInputHandler</c>, a different interface with the
+///         same simple name. See <c>CHANGELOG.md</c> and issue #1831.
 ///     </para>
 ///     <para>
-///         Implementations MUST be thread-safe for <see cref="KeyPressed" /> event subscription
-///         and SHOULD support cooperative cancellation via the supplied <see cref="CancellationToken" />.
+///         The record itself stays: it is the payload of
+///         <c>Harbor.Terminal.Abstractions.Views.ITuiView.HandleKey</c>.
 ///     </para>
 /// </remarks>
-public interface IInputHandler : IDisposable
-{
-    /// <summary>
-    ///     Asynchronously read the next key press.
-    /// </summary>
-    /// <param name="ct">Cancellation token used to abort the wait.</param>
-    /// <returns>Success with the <see cref="KeyPress" />, or failure if cancelled or errored.</returns>
-    public Task<Result<KeyPress>> ReadKeyAsync(CancellationToken ct = default);
-
-    /// <summary>
-    ///     Event raised for each key press. Useful for push-based UIs.
-    /// </summary>
-    public event EventHandler<KeyPressEventArgs>? KeyPressed;
-}
-
-/// <summary>
-///     A single key press event.
-/// </summary>
 /// <param name="Key">The <see cref="ConsoleKey" /> enumeration value.</param>
 /// <param name="Character">The printable character, or <c>'\0'</c> if not printable.</param>
 /// <param name="Modifiers">Active modifier keys (Shift, Ctrl, Alt).</param>
 public sealed record KeyPress(ConsoleKey Key, char Character, ConsoleModifiers Modifiers);
-
-/// <summary>
-///     Event args for <see cref="IInputHandler.KeyPressed" />.
-/// </summary>
-public sealed class KeyPressEventArgs : EventArgs
-{
-
-    /// <summary>
-    ///     Construct event args wrapping a <see cref="KeyPress" />.
-    /// </summary>
-    /// <param name="key">The key press to wrap.</param>
-    public KeyPressEventArgs(KeyPress key)
-    {
-        Key = key;
-    }
-    /// <summary>
-    ///     The key press that triggered the event.
-    /// </summary>
-    public KeyPress Key { get; }
-}
 
 /// <summary>
 ///     Slash-command contract.

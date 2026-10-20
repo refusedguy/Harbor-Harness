@@ -63,8 +63,20 @@ public interface IEventBus
 ///     Subscriber that receives events (used for IPC clients, e.g. TUI process).
 /// </summary>
 /// <remarks>
-///     Implementations forward <see cref="AgentEvent" />s to an out-of-process consumer
-///     (typically the TUI process in the planned two-process architecture).
+///     <para>
+///         Implementations forward <see cref="AgentEvent" />s to an out-of-process consumer
+///         (typically the TUI process in the planned two-process architecture).
+///     </para>
+///     <para>
+///         <b>RESERVED, deliberately unimplemented (issue #1831).</b> This contract has NO
+///         implementor and NO consumer in the tree today, and that is a DECISION: the
+///         two-process architecture it exists for (NativeAOT core + JIT UI over UDS) is still
+///         an open exploration (issue #21), so the subscriber shape is kept and marked rather
+///         than deleted while the decision is pending. It is pinned by
+///         <c>tests/Harbor.Architecture.Tests/DeadPublicInterfaceRule.cs</c>, whose reservation
+///         rows are liveness-checked: the day a forwarding subscriber lands, the row must go in
+///         the same commit.
+///     </para>
 /// </remarks>
 public interface IEventSubscriber
 {
