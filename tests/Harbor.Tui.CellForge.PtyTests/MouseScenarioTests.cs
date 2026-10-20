@@ -190,9 +190,18 @@ public sealed class MouseScenarioTests : CellForgePtyScenarioBase
         // test scrolled it there on purpose), so the answer can legitimately be
         // out of view. A WARN, never a failure: this scenario is best effort
         // by design, and the responsiveness check above is the real one.
-        bool answered = await WaitForScreenAsync(
-            l => l.Any(x => x.Contains("WHEEL-OK", StringComparison.Ordinal)),
-            TimeSpan.FromSeconds(2)).ConfigureAwait(false);
+        bool answered = true;
+        try
+        {
+            _ = await WaitForScreenAsync(
+                l => l.Any(x => x.Contains("WHEEL-OK", StringComparison.Ordinal)),
+                TimeSpan.FromSeconds(2)).ConfigureAwait(false);
+        }
+        catch (TimeoutException)
+        {
+            answered = false;
+        }
+
         if (!answered)
         {
             TestContext.Current?.Output.WriteLine($"WARN: WHEEL-OK not on screen, screen:\n{ScreenText}");
