@@ -132,11 +132,12 @@ public sealed class McpRegistry : IMcpRegistry, IAsyncDisposable
 
         // Validation and dispatch share one table (#477) — a name that is not
         // registered here can never reach the transport call site.
-        Result<string> canonical = _transports.Canonicalize(transport);
-        if (canonical.IsFailure)
-            return canonical.ConvertFailure();
-
-        return RegisterInternal(name, null, new McpRemoteEndpoint(url, canonical.Value, headers, oauth));
+        // #1558: the guard + `.Value` pair is one `Bind` link. The transport
+        // name is canonicalized first, exactly as before, and its error
+        // travels on unchanged — `Bind` re-types a failure to the chain's
+        // result type, which is what the old `ConvertFailure()` guard did.
+        return _transports.Canonicalize(transport)
+            .Bind(canonical => RegisterInternal(name, null, new McpRemoteEndpoint(url, canonical, headers, oauth)));
     }
 
     private Result RegisterInternal(string name, McpServerStartInfo? startInfo, McpRemoteEndpoint? remote)

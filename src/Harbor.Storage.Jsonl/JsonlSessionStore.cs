@@ -736,12 +736,12 @@ public sealed partial class JsonlSessionStore : ISessionStore, ISessionCheckpoin
     /// </summary>
     public async Task<Result<SessionMetadata>> GetStatsAsync(string sessionId, CancellationToken ct = default)
     {
-        var messagesResult = await GetMessagesAsync(sessionId, ct).ConfigureAwait(false);
-        if (messagesResult.IsFailure)
-            return messagesResult.ConvertFailure<SessionMetadata>();
-
+        // #1558: the guard + `.Value` pair is one `Map` link now. `Map`
+        // short-circuits on failure, so the aggregate is derived only from a
+        // readable history and the store's own error travels unchanged.
         // Fold lives in the shared aggregator (#184) — same derive semantics.
-        return Result.Success(SessionStatsAggregator.Aggregate(messagesResult.Value));
+        return (await GetMessagesAsync(sessionId, ct).ConfigureAwait(false))
+            .Map(messages => SessionStatsAggregator.Aggregate(messages));
     }
 
     public async Task<Result> UpdateStatsAsync(string sessionId, SessionMetadata metadata, CancellationToken ct = default)

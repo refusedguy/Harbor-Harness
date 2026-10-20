@@ -98,15 +98,12 @@ public sealed class PermissionGatedTerminalPaneLauncher : ITerminalPaneLauncher
             Cols: request.Cols,
             Rows: request.Rows));
 
-        // Explicit early return rather than a ternary: the CFE0001 guard cannot see
-        // that a ternary's `started.Value` is reached only on the IsFailure == false
-        // branch, and shipped code is held to that guard at error severity (§ROP).
-        if (started.IsFailure)
-        {
-            return started.ConvertFailure<ITerminalPane>();
-        }
-
-        return Result.Success<ITerminalPane>(new PtyTerminalPane(started.Value));
+        // #1558: the guard + `.Value` pair is now one `Map` link. `Map`
+        // short-circuits on failure and never invokes the selector, so the
+        // pane is built only on the success branch — which is exactly what
+        // the explicit early return guaranteed, and what CFE0001 could not
+        // see through a ternary. Same error, same result type.
+        return started.Map(pane => (ITerminalPane)new PtyTerminalPane(pane));
     }
 
     /// <summary>

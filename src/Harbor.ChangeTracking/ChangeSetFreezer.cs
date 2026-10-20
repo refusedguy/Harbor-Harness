@@ -461,14 +461,16 @@ public static class ChangeSetFreezer
     private static async Task<Result<string>> ResolveHeadAsync(
         string worktree, string baseRevision, string runId, int entryCount, CancellationToken ct)
     {
-        Result<string> head = await RevParseHeadAsync(worktree, ct).ConfigureAwait(false);
-        if (head.IsFailure)
-            return head;
-        // Hoisted to the guard level (see FreezeIsolatedAsync).
-        string current = head.Value;
-        if (entryCount == 0 || !current.Equals(baseRevision, StringComparison.Ordinal))
-            return Result.Success(current);
-        return await CommitFrozenAsync(worktree, runId, ct).ConfigureAwait(false);
+        // #1558: the guard + `.Value` pair is one `Bind` link now. The head
+        // read still happens FIRST and its error still travels unchanged —
+        // `Bind` re-types a failure to the chain's result type, which is what
+        // the old `return head;` guard did — and the branch below is the
+        // same branch it was.
+        return await (await RevParseHeadAsync(worktree, ct).ConfigureAwait(false))
+            .Bind(async current => entryCount == 0 || !current.Equals(baseRevision, StringComparison.Ordinal)
+                ? Result.Success(current)
+                : await CommitFrozenAsync(worktree, runId, ct).ConfigureAwait(false))
+            .ConfigureAwait(false);
     }
 
     /// <summary>
@@ -496,20 +498,19 @@ public static class ChangeSetFreezer
         {
             return Result.Failure<FrozenChangeSet>($"Freeze of run '{manifest.RunId}' was cancelled.");
         }
-        if (head.IsFailure)
-            return head.ConvertFailure<FrozenChangeSet>();
-        // Hoisted to the guard level (see FreezeIsolatedAsync).
-        string currentHead = head.Value;
 
-        Result<FrozenChangeSet> recorded = ReadChangesetJson(changesetPath, patchPath);
-        if (recorded.IsFailure)
-            return recorded;
-        FrozenChangeSet existing = recorded.Value;
-        if (!existing.HeadRevision.Equals(currentHead, StringComparison.Ordinal))
-            return Result.Failure<FrozenChangeSet>(
-                $"Run '{manifest.RunId}' is {manifest.State} at recorded head {existing.HeadRevision} " +
-                $"but the worktree is at {currentHead} — refusing to present a stale frozen set.");
-        return recorded;
+        // #1558: the head read and the recorded-set read are one rail. Both
+        // links short-circuit on failure and hand the SAME error on — the
+        // old guards re-typed it with `ConvertFailure<FrozenChangeSet>()`
+        // and returned the recorded result verbatim — so the messages and
+        // the result type are unchanged.
+        return head
+            .Bind(currentHead => ReadChangesetJson(changesetPath, patchPath)
+                .Bind(existing => existing.HeadRevision.Equals(currentHead, StringComparison.Ordinal)
+                    ? Result.Success(existing)
+                    : Result.Failure<FrozenChangeSet>(
+                        $"Run '{manifest.RunId}' is {manifest.State} at recorded head {existing.HeadRevision} " +
+                        $"but the worktree is at {currentHead} — refusing to present a stale frozen set.")));
     }
 
     private sealed record NameStatus(string Status, string Path, string? OldPath);

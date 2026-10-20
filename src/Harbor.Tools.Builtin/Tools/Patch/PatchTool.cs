@@ -351,36 +351,29 @@ public sealed partial class PatchTool : ITool
 
     private async Task<Result<PatchInput>> LoadPatchInputAsync(string path, string patch, CancellationToken ct)
     {
-        Result<string> exists =
-            Result.Success(path)
-                .Ensure(static p => !Directory.Exists(p), p => $"Path is a directory: {p}")
-                .Ensure(static p => File.Exists(p), p => $"File not found: {p}");
-        if (exists.IsFailure)
-            return exists.ConvertFailure<PatchInput>();
-
-        Result<string> read = await Result.Try(
-                () => File.ReadAllTextAsync(path, Encoding.UTF8, ct),
-                ex => $"Failed to read: {ex.Message}")
+        // #1558: the four-step ladder is one rail. Each link short-circuits on
+        // failure and hands the SAME error on — `Bind` re-types a failure to
+        // the chain's result type, which is what the old
+        // `x.ConvertFailure<PatchInput>()` guard did — so every message and
+        // every failure point is unchanged. The order of the steps is the
+        // order of the links: existence, read, size, parse.
+        return await Result.Success(path)
+            .Ensure(static p => !Directory.Exists(p), p => $"Path is a directory: {p}")
+            .Ensure(static p => File.Exists(p), p => $"File not found: {p}")
+            .Bind(_ => Result.Try(
+                    () => File.ReadAllTextAsync(path, Encoding.UTF8, ct),
+                    ex => $"Failed to read: {ex.Message}")
+                .ConfigureAwait(false))
+            .Bind(read => read.Ensure(s => s.Length <= MaxFileChars,
+                s => $"File too large ({s.Length} chars; max {MaxFileChars})."))
+            .Bind(sized => HunkParser.TryParse(patch)
+                .MapError(static e => $"Failed to parse patch: {e}")
+                .Bind(parsed => Result.Success(new PatchInput(sized, SplitLines(sized), parsed))
+                    .Ensure(pi => pi.Hunks.Count > 0,
+                        "Patch contains no hunks (no @@ ... @@ headers found).")
+                    .Ensure(pi => pi.Hunks.Count <= MaxPatchLines,
+                        pi => $"Patch has too many hunks ({pi.Hunks.Count}; max {MaxPatchLines}).")))
             .ConfigureAwait(false);
-        if (read.IsFailure)
-            return read.ConvertFailure<PatchInput>();
-
-        Result<string> sized =
-            read.Ensure(s => s.Length <= MaxFileChars,
-                s => $"File too large ({s.Length} chars; max {MaxFileChars}).");
-        if (sized.IsFailure)
-            return sized.ConvertFailure<PatchInput>();
-
-        Result<List<Hunk>> parsed = HunkParser.TryParse(patch)
-            .MapError(static e => $"Failed to parse patch: {e}");
-        if (parsed.IsFailure)
-            return parsed.ConvertFailure<PatchInput>();
-
-        return Result.Success(new PatchInput(sized.Value, SplitLines(sized.Value), parsed.Value))
-            .Ensure(pi => pi.Hunks.Count > 0,
-                "Patch contains no hunks (no @@ ... @@ headers found).")
-            .Ensure(pi => pi.Hunks.Count <= MaxPatchLines,
-                pi => $"Patch has too many hunks ({pi.Hunks.Count}; max {MaxPatchLines}).");
     }
 
     private static Result<int> TryResolveHunkStart(string[] lines, Hunk h, int targetStart)
