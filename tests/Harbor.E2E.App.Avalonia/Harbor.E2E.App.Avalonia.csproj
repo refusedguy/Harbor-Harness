@@ -13,7 +13,7 @@
     driver sets and the Harbor home CommonConfig.OverrideHarborHomeForTests
     pins are all process-wide, so two classes cannot drive one window in one
     process. CI therefore runs this assembly once per shard of
-    `e2e-shards.json`, each with its own --treenode-filter; see
+    `e2e-shards.json`, each with its own treenode filter; see
     tools/run-e2e-avalonia-shards.py.
 
     Output:
