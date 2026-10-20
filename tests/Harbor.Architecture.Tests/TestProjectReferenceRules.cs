@@ -75,19 +75,29 @@
 // project does not reference Harbor.E2E.Framework, so its dll is not here to
 // be asked about). The answer is YES when any of these holds:
 //
-//   a) the consumer imports one of the provider's namespaces, or a namespace
-//      INSIDE one of them — the second half covers a generated sub-namespace
-//      such as Harbor.TestKit.Generated, whose types exist only after the
-//      build;
+//   a) the consumer can see one of the provider's namespaces — explicitly, by
+//      a using directive, or implicitly, because the consumer's own namespace
+//      IS that namespace or a DESCENDANT of it;
 //   b) the consumer writes one of the provider's types fully qualified;
 //   c) the consumer writes one of the provider's type names bare, and does
 //      not declare a type of that name itself.
 //
-// Clause (c)'s last half is not decoration. Harbor.Ui.Framework.Tests
-// declares its OWN TestScalingGate in namespace Harbor.Ui.Framework.Tests
-// while Harbor.TestKit declares a TestScalingGate in namespace
-// Harbor.TestKit; without the exclusion, the bare name would count as a use
-// of the provider's type and the shadowing would hide a dead edge.
+// Clause (a)'s second half is the C# name-lookup rule, and it is not
+// decoration: inside `namespace A.B.C`, the compiler searches A.B.C, then
+// A.B, then A, then the global namespace, so a type in an ANCESTOR
+// namespace needs no using directive at all. Two of the tree's own
+// references depend on it — tests/Harbor.TestKit.Tests sits in namespace
+// Harbor.TestKit.Tests and reaches Harbor.TestKit's types without importing
+// anything, and tests/Harbor.TestKit and tests/Harbor.TestKit.Support share
+// the namespace Harbor.TestKit outright — and a reader that only looked at
+// using directives would call both of them dead.
+//
+// Clause (c)'s last half is not decoration either.
+// Harbor.Ui.Framework.Tests declares its OWN TestScalingGate in namespace
+// Harbor.Ui.Framework.Tests while Harbor.TestKit declares a TestScalingGate
+// in namespace Harbor.TestKit; without the exclusion, the bare name would
+// count as a use of the provider's type and the shadowing would hide a dead
+// edge.
 //
 // The rule is deliberately PERMISSIVE in the direction that matters: a
 // reported edge is a red build, so every reading that could plausibly mean
@@ -98,10 +108,10 @@
 // --------------------------------------
 // * The scan is line-level over comment-stripped source, not a C# parser.
 //   A type used only through a `using static`, a type alias, or a name that
-//   never appears in source (an inferred `var`) is not seen. That is the
-//   permissive direction for (a) and (b) and the strict direction for (c);
-//   a consumer that writes `using Provider;` and then only ever says `var`
-//   is still caught by (a).
+//   never appears in source (an inferred `var`) is not seen by clauses (b)
+//   and (c). Clause (a) covers the common case, because a consumer that
+//   writes `using Provider;` and then only ever says `var` still imports
+//   the namespace.
 // * A provider type that is GENERATED rather than written in the provider's
 //   own sources is not in the provider's type list, so clause (c) cannot
 //   name it. Clause (a) covers it, because the generated namespace is inside
@@ -119,9 +129,9 @@
 // controls below:
 //
 //   1. TheScanFindsTheTestToTestEdges — the real tree must contain a
-//      non-trivial number of test -> test edges, and at least two distinct
-//      providers. A scanner that stopped matching would otherwise pass
-//      vacuously.
+//      non-trivial number of test -> test edges (measured 36), and at least
+//      two distinct providers (measured 4). A scanner that stopped matching
+//      would otherwise pass vacuously.
 //   2. TheUnusedEdgeRuleFiresOnAPlantedUnusedEdge — a synthetic consumer
 //      that references a provider and names none of its types MUST be
 //      reported. This is the "a synthetic unused reference must be
@@ -212,15 +222,19 @@ public sealed class TestProjectReferenceRules
 
     /// <summary>
     ///     Lowest acceptable number of test -&gt; test edges in the real tree.
-    ///     Measured 20 on the tree this landed on; the floor sits below that
-    ///     so an ordinary cleanup does not red the build, but a scanner that
-    ///     stopped matching does.
+    ///     Measured 36 on the tree this landed on; the floor sits well below
+    ///     that so an ordinary cleanup does not red the build, but a scanner
+    ///     that stopped matching does.
     /// </summary>
-    private const int MinimumMeasuredEdges = 15;
+    private const int MinimumMeasuredEdges = 25;
 
     /// <summary>
     ///     Lowest acceptable number of DISTINCT providers among those edges.
-    ///     Measured 2 (Harbor.TestKit and Harbor.E2E.Framework).
+    ///     Measured 4 (Harbor.TestKit, Harbor.TestKit.Support,
+    ///     Harbor.TestKit.Tui and Harbor.E2E.Framework); the floor is 2
+    ///     because the point of the check is that the rule is read off more
+    ///     than one pair, and a provider coming or going is not a broken
+    ///     scanner.
     /// </summary>
     private const int MinimumMeasuredProviders = 2;
 
@@ -298,7 +312,7 @@ public sealed class TestProjectReferenceRules
                 + "every rule in this file vacuously green. Found: " + projects.Count);
 
         await Assert.That(edges.Count).IsGreaterThanOrEqualTo(MinimumMeasuredEdges)
-            .Because("the tree carries at least " + MinimumMeasuredEdges + " test -> test edges today, "
+            .Because("the tree carries at least " + MinimumMeasuredEdges + " test -> test edges today "
                 + "and both rules above are graded over them. Fewer than that means the reader stopped "
                 + "matching the project graph — and a rule over an empty subject is a rule that "
                 + "reports nothing and is believed. Found: " + edges.Count
@@ -396,6 +410,42 @@ public sealed class TestProjectReferenceRules
         await Assert.That(reported).IsEmpty()
             .Because("a referenced library with no test methods has no tests to duplicate. Reported: "
                 + string.Join(" | ", reported));
+    }
+
+    /// <summary>
+    ///     A provider in an ANCESTOR namespace of the consumer's is reachable
+    ///     without a using directive, so the edge is not a dead one.
+    /// </summary>
+    /// <remarks>
+    ///     This is the C# name-lookup rule, and two of the tree's own
+    ///     references depend on it: tests/Harbor.TestKit.Tests sits in
+    ///     namespace Harbor.TestKit.Tests and reaches Harbor.TestKit's types
+    ///     without importing anything, and tests/Harbor.TestKit and
+    ///     tests/Harbor.TestKit.Support share the namespace Harbor.TestKit
+    ///     outright. A reader that looked at using directives only would call
+    ///     both of them dead.
+    /// </remarks>
+    [Test]
+    public async Task TheAncestorNamespaceCountsAsAVisibleNamespace()
+    {
+        ProjectFacts provider = PlantedProvider(namespaceName: "Harbor.Planted");
+        ProjectFacts consumer = PlantedConsumer(
+            "Planted.Consumer",
+            "namespace Harbor.Planted.Consumer;\n",
+            [],
+            new[] { "LocalType" });
+
+        await Assert.That(UsesProviderTypes(consumer, provider)).IsTrue()
+            .Because("the consumer sits in namespace Harbor.Planted.Consumer, so the compiler "
+                + "searches Harbor.Planted.Consumer, then Harbor.Planted, then Harbor: the "
+                + "provider's namespace is reachable with no using directive at all, and the edge "
+                + "is not dead. A reader that only looked at using directives would report it and "
+                + "break the build on a live reference.");
+
+        List<string> reported = ReportUnusedEdges([new Edge(consumer, provider)]);
+
+        await Assert.That(reported).IsEmpty()
+            .Because("the edge must not be reported. Reported: " + string.Join(" | ", reported));
     }
 
     // ---------------------------------------------------------------------
@@ -610,6 +660,19 @@ public sealed class TestProjectReferenceRules
                 if (ns.Success)
                 {
                     namespaces.Add(ns.Groups["ns"].Value);
+
+                    // The consumer's OWN namespace, and every ancestor of it,
+                    // are visible to it without a using directive: inside
+                    // `namespace A.B.C` the compiler searches A.B.C, then A.B,
+                    // then A, then the global namespace. A provider whose
+                    // namespace is one of those is reachable from the consumer
+                    // whether or not the consumer imports it by hand, and
+                    // treating that as "not used" would call a live reference
+                    // dead.
+                    foreach (string visible in NamespaceAndAncestors(ns.Groups["ns"].Value))
+                    {
+                        imported.Add(visible);
+                    }
                 }
 
                 Match type = TypeDeclaration.Match(line);
@@ -661,6 +724,33 @@ public sealed class TestProjectReferenceRules
     }
 
     /// <summary>
+    ///     A namespace and every ancestor of it, from the longest to the
+    ///     shortest: <c>Harbor.E2E.Framework.Pty</c> yields
+    ///     <c>Harbor.E2E.Framework.Pty</c>, <c>Harbor.E2E.Framework</c>,
+    ///     <c>Harbor.E2E</c>, <c>Harbor</c>.
+    /// </summary>
+    /// <remarks>
+    ///     This is the C# name-lookup rule written out: inside
+    ///     <c>namespace A.B.C</c>, an unqualified name is searched for in
+    ///     A.B.C, then A.B, then A, then the global namespace. A type in an
+    ///     ancestor namespace therefore binds with no using directive, which is
+    ///     why "the consumer does not import the provider's namespace" is not
+    ///     the same question as "the consumer cannot see the provider's
+    ///     types".
+    /// </remarks>
+    private static IEnumerable<string> NamespaceAndAncestors(string ns)
+    {
+        string current = ns;
+        while (!string.IsNullOrEmpty(current))
+        {
+            yield return current;
+
+            int lastDot = current.LastIndexOf('.');
+            current = lastDot < 0 ? string.Empty : current[..lastDot];
+        }
+    }
+
+    /// <summary>
     ///     The test -&gt; test edges of the tree: an edge is a reference from
     ///     one test project to another.
     /// </summary>
@@ -706,14 +796,14 @@ public sealed class TestProjectReferenceRules
     ///     A provider with one namespace and one type, optionally carrying a
     ///     test method.
     /// </summary>
-    private static ProjectFacts PlantedProvider(bool testBearing = false)
+    private static ProjectFacts PlantedProvider(bool testBearing = false, string namespaceName = "Harbor.Planted.Provider")
     {
         string[] lines;
         if (testBearing)
         {
             lines =
             [
-                "namespace Harbor.Planted.Provider;",
+                $"namespace {namespaceName};",
                 "public sealed class ProvidedType { }",
                 "public class ProvidedTests",
                 "{",
@@ -726,7 +816,7 @@ public sealed class TestProjectReferenceRules
         {
             lines =
             [
-                "namespace Harbor.Planted.Provider;",
+                $"namespace {namespaceName};",
                 "public sealed class ProvidedType { }"
             ];
         }
@@ -741,7 +831,7 @@ public sealed class TestProjectReferenceRules
             "Planted.Provider",
             true,
             [],
-            new HashSet<string>(new[] { "Harbor.Planted.Provider" }, StringComparer.Ordinal),
+            new HashSet<string>(new[] { namespaceName }, StringComparer.Ordinal),
             new HashSet<string>(new[] { "ProvidedType" }, StringComparer.Ordinal),
             new HashSet<string>(StringComparer.Ordinal),
             new HashSet<string>(StringComparer.Ordinal),
@@ -757,7 +847,8 @@ public sealed class TestProjectReferenceRules
         string name,
         string source,
         IReadOnlyCollection<string> importedNamespaces,
-        IReadOnlyCollection<string> declaredTypeNames)
+        IReadOnlyCollection<string> declaredTypeNames,
+        string namespaceName = "Harbor.Planted.Consumer")
     {
         string[] lines = source.Replace("\r\n", "\n").Split('\n');
         var sourceLines = new List<SourceLine>();
@@ -771,13 +862,21 @@ public sealed class TestProjectReferenceRules
             }
         }
 
+        // The consumer's own namespace and its ancestors are visible to it
+        // without a using directive, exactly as in ReadProject.
+        var visible = new HashSet<string>(importedNamespaces, StringComparer.Ordinal);
+        foreach (string ancestor in NamespaceAndAncestors(namespaceName))
+        {
+            visible.Add(ancestor);
+        }
+
         return new ProjectFacts(
             name,
             true,
             [],
-            new HashSet<string>(new[] { "Harbor.Planted.Consumer" }, StringComparer.Ordinal),
+            new HashSet<string>(new[] { namespaceName }, StringComparer.Ordinal),
             new HashSet<string>(declaredTypeNames, StringComparer.Ordinal),
-            new HashSet<string>(importedNamespaces, StringComparer.Ordinal),
+            visible,
             identifiers,
             sourceLines,
             source);
