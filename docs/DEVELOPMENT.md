@@ -115,6 +115,7 @@ scripts themselves and runs three jobs in ~30s with no .NET SDK.
 | `test duplication` | `check-test-dup.py --min-files 800 --min-methods 9000` (#1778) |
 | `duplication (jscpd)` | `check-dup-jscpd.py` — the second duplication detector, over `src/` + `apps/` + `tests/` (#1847) |
 | `reflection JSON` | `check-test-json-reflection.py` — no test serializes through the reflection resolver (#1822) |
+| `local squash-merges dropped nothing` | `check-local-merge-loss.py` — no local squash-merge dropped content that is still missing |
 
 Three things make this a real gate rather than decoration:
 
@@ -137,6 +138,46 @@ exist, `git push`, and watch the `internal links` job fail on the PR.
 > rebuild the whole solution for a typo in a paragraph, and `docs.yml` would
 > still be the only thing linting markdown. The two workflows are meant to
 > coexist.
+
+### Local squash-merges
+
+A pull request that touches `.github/workflows/` cannot be merged through the
+GitHub API with this repository's token: the token has no `workflow` scope, so
+the API refuses the merge. Those pull requests were merged LOCALLY instead —
+`git merge --squash` onto `dev`, then `git push origin HEAD:dev` — with the
+conflicted files resolved by hand.
+
+The resolution kept the YAML valid and the build green, and it dropped lines.
+The conflicted file was taken WHOLESALE from the pull request branch, and the
+branch was older than `dev`, so everything `dev` had added to that file since
+the merge base went with it. Measured on dev's history, the gate below found
+six files: `CHANGELOG.md` (three sections), `tools/README.md` (one table row),
+`.github/workflows/docs.yml` (one self-test step), `docs/ANALYZERS.md` (one
+section) and `.github/workflows/ci.yml` (the absolute `--results-directory` and
+two reporting steps).
+
+```bash
+./tools/check-local-merge-loss.py            # is anything still missing?
+./tools/check-local-merge-loss.py --self-test # prove the checker still fires
+```
+
+The gate reads the history and asks, for every local squash-merge, two
+questions about each file the pull request touched:
+
+1. is every line the pull request ADDED still in the tree?
+2. is every line `dev` had before the merge that the pull request did not
+   remove still in the tree?
+
+The pull request's own diff is `merge-base..<head>`, never the merge commit's
+diff: the merge commit's diff is against `dev` and says nothing about what the
+pull request intended. The head SHA is in the merge commit's own body, so the
+gate needs no network; the CI job fetches `refs/pull/<n>/head` for the merges
+it names.
+
+A line the pull request removed is not a loss. A file the pull request deleted
+is not a loss. A line an ordinary commit removed on purpose is not a loss.
+Content that came back in another form is not a loss, and those are named, one
+per line with a reason, in [`tools/merge-loss-exceptions.txt`](../tools/merge-loss-exceptions.txt).
 
 ### Who owns which markdown fact
 

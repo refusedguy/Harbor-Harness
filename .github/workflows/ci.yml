@@ -31,11 +31,17 @@
 # pull request into dev.
 #
 # NOTE on running tests: do NOT use `dotnet test` in this repo. The
-# `dotnet test` → Microsoft.Testing.Platform bridge discovers ZERO tests
-# (MTP host exits 5 with one silent discovery error; verified on SDK 10.0.302
-# for every tests/*.Tests project) while the same assemblies run green via
-# direct host execution. So every job below runs test projects as plain
-# executables: `dotnet run --project tests/<Name> -- <mtp-args>`.
+# `dotnet test` → Microsoft.Testing.Platform bridge rejects the VSTest-era
+# options (`--logger`, `--filter`) our old commands passed: that is the
+# platform's *invalid command-line arguments* exit code 5, whereas a run
+# that genuinely discovers no tests exits 8. So "exits 5" was never evidence
+# of zero discovery (CHANGELOG.md, sprint *ci-cd-maturity*, records that
+# deleting one `--logger` turned renderer-perf-gate.yml green).
+# `Microsoft.NET.Test.Sdk` is gone from every project (#1893): TUnit
+# documents it as stopping test discovery, and the MTP pieces this tree
+# needs arrive transitively through TUnit.
+# So every job below runs test projects as plain executables:
+# `dotnet run --project tests/<Name> -- <mtp-args>`.
 # MTP args forward after `--`: --minimum-expected-tests N (zero-test guard),
 # --treenode-filter (TUnit selection), --output Detailed (per-test console).
 #
@@ -142,12 +148,6 @@ jobs:
               # a different payload. Editing the tool has the same problem.
               - 'tools/aot-publish-gate.py'
               - '.github/aot-warning-baseline.txt'
-              # The TUnit analyzer gate's instrument (#1836). The same #618
-              # argument as the lines above: editing the tool that proves the
-              # gate must run the job that executes it, or the edit lands
-              # unvalidated. The canary's own source is under tests/, which the
-              # dotnet filter already covers.
-              - 'tools/check-tunit-analyzer-gate.py'
               # NUKE build code, the installer and the native-packaging
               # scripts. Same #618 argument: without these lines an edit to
               # the build tool would set dotnet=false, skip the build job
@@ -162,6 +162,19 @@ jobs:
               # the tree it ships in, and land unvalidated — issue #618's
               # defect with the same payload again (#1565 batch-4 hit this).
               - 'tools/Harbor.Evals/**'
+            # #1853. The unused-reference gate (#1853) and its baseline. The
+            # same #618 argument as the lines above: the ordinary way to
+            # answer a red unused-reference job is to edit the BASELINE, and
+            # if the baseline were not in this filter then the edit that
+            # silences the gate would also be the edit that stops the gate
+            # from running — unvalidated. Editing the tool has the same
+            # problem.
+              - 'tools/check-reference-trimmer.py'
+              - 'tools/reference-trimmer-baseline.txt'
+              # The skipped-test report (issue #1795) — same #618 argument:
+              # an edit to the script alone must not skip the job that
+              # executes it.
+              - 'tools/test-skips.py'
             # #1882. The package set of the test and sample projects can only
             # change through one of these: a project's own .csproj, the props
             # that inject a PackageReference into every project, the version
@@ -205,6 +218,31 @@ jobs:
               - 'Directory.Packages.props'
               - 'Directory.Build.props'
 
+  # #428 / #1845. The public-API freeze of the two frozen assemblies.
+  #
+  # The freeze itself is a COMPILE-time gate now, not a job:
+  # Microsoft.CodeAnalysis.PublicApiAnalyzers is referenced by
+  # Harbor.Abstractions and Harbor.Abstractions.Contracts and by nothing
+  # else, so RS0016 (a public symbol that is not in the declared API) and
+  # RS0017 (a declared API symbol that is not in the code) fail the build
+  # of the `build` job above. No runner, no python, no second copy of the
+  # surface: the compiler already has the symbol table.
+  #
+  # What the analyzer cannot see is WHICH COMMIT carried a change, so the
+  # re-signing half of the freeze lives here: a commit that edits the
+  # frozen baseline must edit the assembly's sources with it, and a commit
+  # that changes a public declaration must re-sign the baseline with it.
+  # tools/check-public-api-resign.py reads the PR's commit range and says
+  # so. Its --self-test is the non-vacuity proof of the python half, and it
+  # runs in the docs.yml `selftest` job.
+  #
+  # The second step is the non-vacuity proof of the COMPILE-time half, and
+  # it is here because it needs an SDK: a throwaway project with one public
+  # member and an empty baseline must FAIL the build with `error RS0016`,
+  # must PASS once the analyzer's own requested row is added, and must FAIL
+  # again with `error RS0017` when the member is deleted while the baseline
+  # still names it. A gate that stopped firing is indistinguishable from a
+  # surface nobody changed, and this job is what tells the two apart.
   public-api:
     name: public-api freeze
     runs-on: ubuntu-latest
@@ -275,8 +313,9 @@ jobs:
   # is banned. No build and no network - the restore below is the only
   # reason this job needs the SDK, the gate itself is stdlib python.
   #
-  # The floors are a ratchet: 43 projects in scope, 55 declared references
-  # and ~1950 resolved package entries on the tree this landed on. A scan
+  # The floors are a ratchet: 49 projects in scope, 50 declared references
+  # (61 before #1893 removed `Microsoft.NET.Test.Sdk` from eleven of them) and
+  # ~1950 resolved package entries on the tree this landed on. A scan
   # that silently narrowed goes red instead of green, and a project whose
   # resolved graph is missing is reported rather than passed.
   #
@@ -304,22 +343,41 @@ jobs:
       - name: Restore the solution (the resolved package graph, no build)
         run: |
           dotnet restore Harbor.slnx
-          # The scope projects outside Harbor.slnx. Harbor.Samples.slnx is
+          # The one scope project outside Harbor.slnx. Harbor.Samples.slnx is
           # NOT restored as a whole: it also lists the contrib/ sample apps,
           # which need workloads this job does not have.
           dotnet restore samples/designsystem-consumer/Harbor.Samples.DesignSystemConsumer.csproj
-          # The TUnit analyzer canary (#1836). It is a scope project — it
-          # lives under tests/ and is tracked — so the package gate below has
-          # to see its resolved graph like every other one. It is not a row
-          # of Harbor.slnx because its planted offender is an ERROR by
-          # design: the build of that project is expected to fail, and one
-          # job (the build job) builds it on purpose to prove the gate.
-          dotnet restore tests/TUnitAnalyzerCanary/TUnitAnalyzerCanary.csproj
       - name: Package-set gate fails on an injected banned package
         run: python3 tools/check-test-packages.py --self-test
       - name: Check the resolved package set of every test and sample project
-        run: python3 tools/check-test-packages.py --min-projects 43 --min-declared 40 --min-packages 1400
+        run: python3 tools/check-test-packages.py --min-projects 43 --min-declared 50 --min-packages 1400
 
+  # #1893. The VSTest test host must not come back.
+  #
+  # `Microsoft.NET.Test.Sdk` was declared in 16 .csproj files (11 under
+  # tests/, 5 under contrib/tests/) and pinned once in
+  # Directory.Packages.props. TUnit's installation docs name the package as
+  # the thing that stops test discovery:
+  #
+  #   "This should NOT be used with TUnit. It'll stop test discovery from
+  #    working properly." — https://tunit.dev/docs/getting-started/installation
+  #
+  # The package brought the VSTest host and Microsoft.CodeCoverage into the
+  # output of every test project, and this repository uses none of it: it
+  # runs on Microsoft.Testing.Platform (global.json selects the MTP runner)
+  # and every job executes a test project as a plain executable. The MTP
+  # pieces the tree actually needs — Microsoft.Testing.Platform.MSBuild,
+  # Microsoft.Testing.Extensions.CodeCoverage, Microsoft.Testing.Extensions.
+  # TrxReport — arrive TRANSITIVELY through TUnit, so the removal needed no
+  # replacement package.
+  #
+  # Nothing in the tree would have complained if the package came back: the
+  # build stays green and the tests still run. This job is what makes the
+  # removal irreversible.
+  #
+  # It ALWAYS runs (no `needs:`), because a gate that only runs when the
+  # paths it watches change is a gate that a rename can switch off. Stdlib
+  # python only, no dotnet, no restore — a few seconds.
   test-sdk-absent:
     name: no VSTest SDK in the tree
     runs-on: ubuntu-latest
@@ -335,6 +393,46 @@ jobs:
       - name: Check that no project file declares Microsoft.NET.Test.Sdk
         run: python3 tools/check-no-test-sdk.py --min-files 150
 
+  # #1853. Unused-reference detection over the whole solution.
+  #
+  # ReferenceTrimmer 3.5.13 (MIT) is a build-time analyzer: it asks Roslyn
+  # which assemblies the compiled code actually uses and reports the declared
+  # references that none of them reach (RT0001 bare reference, RT0002 project
+  # reference, RT0003 package reference).
+  #
+  # It is a separate job and not a build step, for three reasons.
+  #
+  #   COST. GetUsedAssemblyReferences is a real semantic analysis of every
+  #   compilation. Running it on every PR would tax every PR for a signal
+  #   that changes only when a dependency changes.
+  #
+  #   BLAST RADIUS. The findings are warnings, and this repository sets
+  #   TreatWarningsAsErrors=true, so the package would break the build the
+  #   day it was added. The job turns warnings-as-errors off FOR ITSELF and
+  #   compares the findings with a baseline instead. The property is a global
+  #   property, so it overrides the props files that set it.
+  #
+  #   SCOPE. The tool sees SOURCE. It cannot see reflection, DI registration
+  #   by convention, or a plugin loaded by name. This repository forbids
+  #   dynamic code outside src/Harbor.Plugins.* (#626), so the blind spot is
+  #   small — but a candidate still needs a human read before anything is
+  #   removed, and the baseline is where that read is recorded.
+  #
+  # Two properties make the run measure the whole tree rather than a part of
+  # it:
+  #
+  #   GenerateDocumentationFile=true — tests/Directory.Build.props turns the
+  #   doc file off, and the tool says itself (RT0000) that without one its
+  #   "used references" answer is less accurate. A weaker instrument that is
+  #   allowed to under-report is not a measurement, so the job turns the doc
+  #   file on everywhere; the gate treats an RT0000 as a failure.
+  #
+  #   HarborArchGate=false — the architecture suite that runs inside the
+  #   Release build is the `core` test shard's job on the PR path, and running
+  #   it here as well would compile the same assembly twice for one answer.
+  #
+  # The raw log is uploaded as an artifact so that a reader can check the
+  # tool's answer without re-running it.
   reference-trimmer:
     name: unused references (ReferenceTrimmer)
     needs: changes
@@ -636,6 +734,52 @@ jobs:
       - name: Build solution via NUKE (Release, zero warnings, docs, deterministic)
         run: bash build/build.sh Compile --configuration Release
 
+      # The zero-test guard is only a guard if it can go red (#1795). This
+      # step proves it: it runs one suite with a filter that matches NO test
+      # and requires the runner to exit with one of MTP's "nothing ran"
+      # verdicts (8 = zero tests, 9 = fewer than --minimum-expected-tests).
+      # Without it, a guard that had been neutered — an option renamed, a
+      # policy that stopped applying, a filter that silently matched nothing
+      # — would keep every job green while checking nothing.
+      #
+      # It lives in the BUILD job, not in the `test` job, for a reason that
+      # is not about runners: the test-project completeness gate reads
+      # "--treenode-filter" as "this list applies a partition to the projects
+      # it runs", and a filter in the `test` job would make it believe that
+      # the Avalonia E2E project's own shard partition is wired — a finding
+      # that is TRUE today (CI runs that project once, without a filter) and
+      # that #1946 closes. The check is a property of the test platform, not
+      # of the image, so proving it here proves it for the test job too.
+
+      - name: The zero-test guard can go red (issue #1795)
+        shell: bash
+        run: |
+          set -uo pipefail
+          dll="tests/Harbor.Abstractions.Tests/bin/Release/net10.0/Harbor.Abstractions.Tests.dll"
+          if [ ! -f "$dll" ]; then
+            echo "::error::missing $dll — the guard check would be vacuous"
+            exit 1
+          fi
+          set +e
+          dotnet exec "$dll" --minimum-expected-tests 1 --zero-tests-policy strict \
+            --treenode-filter "/*/*/NoSuchClassForTheGuardCheck/*" > /dev/null 2>&1
+          rc=$?
+          set -e
+          if [ "$rc" -ne 8 ] && [ "$rc" -ne 9 ]; then
+            echo "::error::the zero-test guard is vacuous: a run that discovered no test exited $rc (expected 8 or 9)"
+            exit 1
+          fi
+          echo "the zero-test guard is not vacuous: an empty run exits $rc"
+
+      # #1882. The issue's question, asked of the tree that was just built:
+      # is a banned assembly in the OUTPUT DIRECTORY of a test or sample
+      # project? The `test/sample package set` job below answers the same
+      # question from the resolved package graph, without a build; this step
+      # answers it from the output the build actually produced, which is
+      # where a banned package really lands. The two are separate
+      # mechanisms: a file can reach an output directory without being a
+      # package in the graph.
+
       # #1882. The issue's question, asked of the tree that was just built:
       # is a banned assembly in the OUTPUT DIRECTORY of a test or sample
       # project? The `test/sample package set` job below answers the same
@@ -646,32 +790,6 @@ jobs:
       # package in the graph.
       - name: No banned assembly in any test/sample output directory
         run: python3 tools/check-test-packages.py --output-only --min-projects 43 --min-output-dirs 40
-
-      # #1836 — the TUnit analyzer gate, proved rather than assumed.
-      #
-      # TUnit's own analyzers report TUnitAssertions0005 (an Assert.That on a
-      # constant) and TUnitAssertions0015 (IsEqualTo(true) where IsTrue()
-      # belongs), and tests/Directory.Build.props promotes both to errors for
-      # every test project. A promotion nobody watches is a decoration: if the
-      # analyzer stopped shipping, the build would go quietly green and the
-      # gate would protect nothing.
-      #
-      # So the gate is proved by a PLANTED OFFENDER. tests/TUnitAnalyzerCanary
-      # is not a row of Harbor.slnx — it is not built by the step above,
-      # because its planted offender is an ERROR by design. This step builds
-      # it on purpose and asserts that the build failed with
-      # TUnitAssertions0005 at the planted line, and that the planted WAIVED
-      # offender was not reported: a waiver that grew past its own site would
-      # fail here.
-      #
-      # The self-test runs first, over synthetic logs, because a checker that
-      # cannot fail is not a checker: it proves the analysis REJECTS a log
-      # with no diagnostic, with the waived site reported, and with the
-      # diagnostic on the wrong line.
-      - name: The TUnit analyzer gate is armed (planted offender, waived site)
-        run: |
-          python3 tools/check-tunit-analyzer-gate.py --selftest
-          python3 tools/check-tunit-analyzer-gate.py
 
       - name: Smoke — CLI binary runs
         run: dotnet exec apps/Harbor.App.Cli/bin/Release/net10.0/Harbor.App.Cli.dll --version
@@ -1441,16 +1559,25 @@ jobs:
           set -uo pipefail
           guard=""
           if [ "${{ matrix.guard }}" = "true" ]; then
+            # The zero-test guard: a suite that discovered nothing must not
+            # read as green. `--minimum-expected-tests 1` is the count-based
+            # half (MTP exit 9 when fewer than one test ran).
             guard="--minimum-expected-tests 1"
           fi
-          # The TRX has to land under the WORKSPACE, not under the assembly's
-          # own bin directory: the upload step globs `TestResults/**/*.trx`
-          # from the workspace root, and a relative --results-directory is
-          # resolved against the assembly directory by the test platform -
-          # so a relative path put every TRX where the glob could not see
-          # it, and the shard uploaded no results at all.
-          trx_dir="$GITHUB_WORKSPACE/TestResults/${{ matrix.shard }}"
+          trx_dir="TestResults/${{ matrix.shard }}"
           mkdir -p "$trx_dir"
+          # #1884: the results directory is ABSOLUTE on purpose. Before the
+          # TUnit 1.75 upgrade (b6fcc333) the same relative path
+          # ("TestResults/<shard>") landed at the workspace root, so the
+          # upload below found the files and the TRX artifacts existed.
+          # After it, the runner resolves a relative --results-directory
+          # against the test app's OWN working directory, which is the
+          # assembly's own output folder, and the TRX landed in
+          # tests/<project>/bin/Release/net10.0/TestResults/<shard>/, where
+          # neither the artifact upload (TestResults/**, relative to the
+          # workspace) nor tools/test-measurements.py can see it. Both
+          # reported "no TRX" and the per-test measurements were unreachable.
+          # An absolute path is unambiguous in both layouts.
           summary="$GITHUB_STEP_SUMMARY"
           echo "| project | result | duration |" >> "$summary"
           echo "|---|---|---|" >> "$summary"
@@ -1463,24 +1590,7 @@ jobs:
               echo "Missing $dll — the artifact for this shard does not carry it. If the project was added to this shard's list recently, add it to the matching 'Stash build outputs' step in the build job too (tools/ci-shard-slices.py checks the two lists)."
               status="FAIL"
               rc=1
-            elif [ "$p" = "Harbor.E2E.App.Avalonia" ]; then
-              # The headless Avalonia suite runs as ONE PROCESS PER SHARD, not
-              # as one process for the whole project. The Avalonia Application,
-              # the $HOME the driver sets and the pinned Harbor home are all
-              # process-wide, so two classes cannot drive one window in one
-              # process; a second PROCESS can. The shard list is
-              # tests/Harbor.E2E.App.Avalonia/e2e-shards.json, and the runner
-              # fails loudly when a shard's filter drops a class (a filter that
-              # silently drops tests is worse than the serialisation this
-              # removes).
-              if python3 tools/run-e2e-avalonia-shards.py \
-                  --dll "$dll" --results-dir "$trx_dir" --guard "$guard"; then
-                status="pass"
-              else
-                status="FAIL"
-                rc=1
-              fi
-            elif dotnet exec "$dll" $guard --zero-tests-policy strict --report-trx --results-directory "$trx_dir" --report-trx-filename "$p.trx"; then
+            elif dotnet exec "$dll" $guard --zero-tests-policy strict --report-trx --results-directory "$GITHUB_WORKSPACE/$trx_dir" --report-trx-filename "$p.trx"; then
               status="pass"
             else
               status="FAIL"
@@ -1525,6 +1635,39 @@ jobs:
           python3 tools/test-measurements.py "TestResults/${{ matrix.shard }}" \
             --summary "$GITHUB_STEP_SUMMARY"
 
+      # #1884: the CENSUS, next to the measurements above. The step above
+      # renders the tests that PRINTED something, so it sees ~75 of the ~8 400
+      # tests in a run: it is a measurement table, not a census. A baseline
+      # (how many tests does this suite have, what does this project cost)
+      # needs EVERY result, printed or not, and that is what this step
+      # renders: per project, the DISCOVERED count (not the passed count),
+      # the sum of the per-test durations, the wall the runner measured, and
+      # the parallelism factor that says whether the project is one serial
+      # chain. It is the table `docs/BENCHMARKS.md` §6 quotes, produced on
+      # every run instead of once by hand.
+      #
+      # Reporting only, never a gate: the script exits 0 on a missing or
+      # corrupt TRX set, and it prints its own one-line summary to the log.
+      - name: Report the test census (issue #1884)
+        if: always()
+        shell: bash
+        run: |
+          python3 tools/test-census.py "TestResults/${{ matrix.shard }}" \
+            --summary "$GITHUB_STEP_SUMMARY" --top 15
+
+      # Issue #1795 — the SKIPPED tests, with their reasons, in the same
+      # summary panel. A skipped test asserts nothing, and the shard loop
+      # prints per-ASSEMBLY counts only, so a suite that quietly stopped
+      # running half its tests stayed green until somebody counted by hand
+      # (that is how the 20 skipped Avalonia golden tests were found).
+      # Reporting only, never a gate: the script exits 0 on a missing TRX.
+      - name: Report skipped tests (issue #1795)
+        if: always()
+        shell: bash
+        run: |
+          python3 tools/test-skips.py "TestResults/${{ matrix.shard }}" \
+            --summary "$GITHUB_STEP_SUMMARY"
+
       - name: Publish Test Results
         if: always()
         uses: dorny/test-reporter@v2
@@ -1546,11 +1689,10 @@ jobs:
 
   # Task: coverage collection — REPORT-ONLY (issue #99). Runs the fast unit
   # suites (core + platform shard lists) under the MTP CodeCoverage extension
-  # (Microsoft.Testing.Extensions.CodeCoverage ships transitively with
-  # Microsoft.NET.Test.Sdk — no new packages) and publishes per-project line
-  # coverage to the job summary + raw cobertura.xml artifacts (30-day
-  # retention feeds the "month of green reports" baseline for a future
-  # diff-threshold).
+  # (Microsoft.Testing.Extensions.CodeCoverage ships transitively with TUnit —
+  # no new packages) and publishes per-project line coverage to the job
+  # summary + raw cobertura.xml artifacts (30-day retention feeds the "month of
+  # green reports" baseline for a future diff-threshold).
   #
   # Report-only contract (do NOT "fix" into a gate):
   #   - NO thresholds, NO fail-on-numbers. A global percentage gate is

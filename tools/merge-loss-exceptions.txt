@@ -1,0 +1,45 @@
+# Accepted losses of the local squash-merges
+# (tools/check-local-merge-loss.py).
+#
+# ONE exception per line, four fields, separated by `|`:
+#
+#   <path> | <PR number> | <regex> | <reason>
+#
+# Every field is mandatory. The regex is matched against the lost line
+# (whitespace collapsed), and the path and the pull request number scope it:
+# a loss that the gate reports is accepted when one exception names its
+# file, its pull request and a regex that picks it out.
+#
+# WHAT AN EXCEPTION IS FOR
+#
+# The gate compares LINES. A piece of content that a squash-merge dropped is
+# not a live loss when it is back in the tree in another form — the same fix
+# written with a variable instead of inline, the same note written in other
+# words, a later version of the same command line. Those are the entries
+# here. Every one of them names the pull request that restored the content
+# and says what it was replaced with.
+#
+# An exception that matches nothing is reported as a note and nothing else:
+# the content is back, so the allowance has outlived the thing it allowed.
+#
+# WHAT IS NOT HERE
+#
+# Content that is simply MISSING is not an exception. It is a loss, and the
+# gate fails on it until a pull request puts it back. Every entry below names
+# a restoration that is already in the tree.
+
+# PR #1944 wrote the shard step's TRX path inline:
+#   elif dotnet exec "$dll" $guard --report-trx --results-directory "$GITHUB_WORKSPACE/$trx_dir" ...
+# The line in ci.yml today is the same command with the absolute path AND
+# the --zero-tests-policy strict flag PR #1967 added on top of it, so the
+# inline form is superseded rather than restored.
+.github/workflows/ci.yml | 1944 | --results-directory "\$GITHUB_WORKSPACE/\$trx_dir" | the same command line with the absolute path; the one in ci.yml today carries the --zero-tests-policy strict flag PR #1967 added on top of it
+
+# PR #1967 explained the absolute results directory in a note of its own
+# (#1791) and then wrote the path through a variable. The #1884 note that is
+# in ci.yml today says the same thing in the same place, and the path is
+# inline, so the note and the variable are the same content in the other
+# form. The first regex picks up the note (every line of it is a comment);
+# the second picks up the variable and the command line that uses it.
+.github/workflows/ci.yml | 1967 | ^# | the #1791 note on the absolute results directory; the #1884 note already in ci.yml says the same thing, and the path is inline
+.github/workflows/ci.yml | 1967 | trx_dir_abs | the same command line with the path in a variable; the inline $GITHUB_WORKSPACE/$trx_dir is restored instead
