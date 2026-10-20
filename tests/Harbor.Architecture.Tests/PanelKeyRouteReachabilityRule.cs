@@ -159,6 +159,7 @@
 //   5. `NonVacuity_TheRepoRootWasFound` — a guard that cannot see the tree
 //      reports zero hand-offs and reads as clean.
 
+using System.Collections.Immutable;
 using System.Text.RegularExpressions;
 
 namespace Harbor.Architecture.Tests;
@@ -327,8 +328,8 @@ internal static class PanelKeyRouteProbe
     ///     line number still points at real source and the prose in this header —
     ///     which names <c>RouteKey</c> a dozen times — cannot trip the scan.
     /// </summary>
-    /// <returns>Absolute-path / text pairs; unreadable files are skipped.</returns>
-    internal static List<(string Path, string Text)> ReadProductTrees() =>
+    /// <returns>The snapshot's view of each product file; unreadable files are skipped.</returns>
+    internal static IReadOnlyList<SourceTreeFile> ReadProductTrees() =>
         Read(SourceScan.EnumerateCsFiles(SourceScan.ProductTrees));
 
     /// <summary>
@@ -345,8 +346,8 @@ internal static class PanelKeyRouteProbe
     ///     changing <c>IsBuildOutput</c> for one caller would move all of them, so
     ///     this file walks the tree itself and excludes only build output.
     /// </remarks>
-    /// <returns>Absolute-path / text pairs; unreadable files are skipped.</returns>
-    internal static List<(string Path, string Text)> ReadTestTrees() => Read(EnumerateTestFiles());
+    /// <returns>The snapshot's view of each test file; unreadable files are skipped.</returns>
+    internal static IReadOnlyList<SourceTreeFile> ReadTestTrees() => Read(EnumerateTestFiles());
 
     /// <summary>Every <c>*.cs</c> file under <c>tests/</c>, excluding build output only.</summary>
     /// <returns>Sorted absolute paths.</returns>
@@ -363,30 +364,26 @@ internal static class PanelKeyRouteProbe
             return [];
         }
 
-        return Directory
-            .EnumerateFiles(dir, "*.cs", SearchOption.AllDirectories)
-            .Where(path =>
-            {
-                string normalised = path.Replace('\\', '/');
-                return !normalised.Contains("/obj/", StringComparison.Ordinal)
-                    && !normalised.Contains("/bin/", StringComparison.Ordinal)
-                    && !normalised.Contains("/.worktrees/", StringComparison.Ordinal);
-            })
+        // The walk itself is the shared snapshot's (#1791); the filter stays
+        // this rule's, because the filter is what decides the rule's SCOPE and
+        // the snapshot only knows the part every rule agrees on.
+        return SharedSourceTreeSnapshot.Shared
+            .EnumerateCsFiles(dir)
             .OrderBy(path => path, StringComparer.Ordinal)
             .ToList();
     }
 
-    /// <summary>Reads and comment-strips the given files.</summary>
+    /// <summary>Reads the given files through the shared snapshot.</summary>
     /// <param name="paths">Absolute file paths.</param>
-    /// <returns>Absolute-path / comment-stripped text pairs.</returns>
-    private static List<(string Path, string Text)> Read(IReadOnlyList<string> paths)
+    /// <returns>The snapshot's view of each file; unreadable files are skipped.</returns>
+    private static List<SourceTreeFile> Read(IReadOnlyList<string> paths)
     {
-        var sources = new List<(string Path, string Text)>();
+        var sources = new List<SourceTreeFile>();
         foreach (string path in paths)
         {
-            if (SourceScan.TryReadAllText(path) is { } text)
+            if (SharedSourceTreeSnapshot.Shared.Get(path) is { } file)
             {
-                sources.Add((path, SourceScan.StripComments(text)));
+                sources.Add(file);
             }
         }
 
@@ -401,17 +398,23 @@ internal static class PanelKeyRouteProbe
     ///     in the file header: one hop cannot distinguish a wired router from a
     ///     router wired into another dead one, and that pair is the #857 shape.
     /// </remarks>
-    /// <param name="sources">Product sources as absolute path / comment-stripped text.</param>
+    /// <param name="sources">Product sources as the shared snapshot's file views.</param>
     /// <returns>What the scan found, including the orphans it could not place.</returns>
-    internal static KeyRouteReport Scan(IReadOnlyList<(string Path, string Text)> sources)
+    internal static KeyRouteReport Scan(IReadOnlyList<SourceTreeFile> sources)
     {
         var typeOwner = new Dictionary<string, List<string>>(StringComparer.Ordinal);
         var handOffs = new List<KeyHandOff>();
 
-        foreach ((string path, string text) in sources)
+        foreach (SourceTreeFile source in sources)
         {
-            string file = SourceScan.Relative(path);
-            string[] lines = text.Split('\n');
+            string file = SourceScan.Relative(source.Path);
+            string text = source.StrippedText;
+
+            // The snapshot's own line view (#1791). The scan used to split the
+            // text here, and `Callers` below split it AGAIN for every hand-off
+            // it looked up — so the tree was split once per hand-off, over
+            // every file, on every scan. One split per file, shared.
+            ImmutableArray<string> lines = source.StrippedNewlineLines;
 
             foreach (Match type in TypeDeclaration.Matches(text))
             {
@@ -529,17 +532,22 @@ internal static class PanelKeyRouteProbe
     /// <param name="typeOwner">Type simple name → the files declaring it.</param>
     /// <returns>The identified callers, and whether any call went unattributed.</returns>
     private static CallerSet Callers(
-        IReadOnlyList<(string Path, string Text)> sources,
+        IReadOnlyList<SourceTreeFile> sources,
         ProductMethod target,
         IReadOnlyDictionary<string, List<string>> typeOwner)
     {
         var found = new HashSet<ProductMethod>();
         bool unattributed = false;
 
-        foreach ((string path, string text) in sources)
+        foreach (SourceTreeFile source in sources)
         {
-            string file = SourceScan.Relative(path);
-            string[] lines = text.Split('\n');
+            string file = SourceScan.Relative(source.Path);
+
+            // The snapshot's line view, not a fresh split. This is the hot
+            // loop of the whole rule: it runs once per hand-off, over every
+            // file in the product trees, and it used to re-split every file
+            // on every one of those passes.
+            ImmutableArray<string> lines = source.StrippedNewlineLines;
 
             for (int i = 0; i < lines.Length; i++)
             {
@@ -638,7 +646,7 @@ internal static class PanelKeyRouteProbe
     /// <param name="lines">The comment-stripped lines of one file.</param>
     /// <param name="index">Zero-based line index to start from.</param>
     /// <returns>The declared name and its one-based line, or <c>null</c>.</returns>
-    private static (string Name, int Line)? EnclosingMethod(string[] lines, int index)
+    private static (string Name, int Line)? EnclosingMethod(IReadOnlyList<string> lines, int index)
     {
         int floor = Math.Max(0, index - MaxEnclosingWalk);
         for (int i = index; i >= floor; i--)
@@ -666,11 +674,11 @@ internal static class PanelKeyRouteProbe
     ///     test. The skip is reported, never silent.
     /// </remarks>
     /// <param name="report">What the product scan found.</param>
-    /// <param name="testSources">Test sources as absolute path / comment-stripped text.</param>
+    /// <param name="testSources">Test sources as the shared snapshot's file views.</param>
     /// <returns>One entry per test method that drives a dead router, plus any skip, sorted.</returns>
     internal static IReadOnlyList<string> TestsThatDriveOnlyDeadRoutes(
         KeyRouteReport report,
-        IReadOnlyList<(string Path, string Text)> testSources)
+        IReadOnlyList<SourceTreeFile> testSources)
     {
         var dead = new SortedSet<string>(StringComparer.Ordinal);
         foreach (OrphanHandOff orphan in report.Orphans)
@@ -690,10 +698,10 @@ internal static class PanelKeyRouteProbe
             StringComparer.Ordinal);
 
         var hits = new SortedSet<string>(StringComparer.Ordinal);
-        foreach ((string path, string text) in testSources)
+        foreach (SourceTreeFile source in testSources)
         {
-            string file = SourceScan.Relative(path);
-            string[] lines = text.Split('\n');
+            string file = SourceScan.Relative(source.Path);
+            ImmutableArray<string> lines = source.StrippedNewlineLines;
             string? current = null;
             bool armed = false;
 
@@ -776,8 +784,20 @@ public sealed class PanelKeyRouteReachabilityRule
     private static readonly Lazy<KeyRouteReport> Report = new(
         () => PanelKeyRouteProbe.Scan(PanelKeyRouteProbe.ReadProductTrees()));
 
-    private static readonly Lazy<IReadOnlyList<(string Path, string Text)>> Tests = new(
+    private static readonly Lazy<IReadOnlyList<SourceTreeFile>> Tests = new(
         () => PanelKeyRouteProbe.ReadTestTrees());
+
+    /// <summary>
+    ///     The memoised scan of the product trees, for the measurement that
+    ///     reports what this rule finds (#1791).
+    /// </summary>
+    internal static KeyRouteReport ProductReport => Report.Value;
+
+    /// <summary>
+    ///     The memoised read of the test tree, for the measurement that
+    ///     reports what this rule finds (#1791).
+    /// </summary>
+    internal static IReadOnlyList<SourceTreeFile> TestSources => Tests.Value;
 
     /// <summary>
     ///     No hand-off in the product trees may be unreachable unless the ledger says
@@ -924,8 +944,13 @@ public sealed class PanelKeyRouteReachabilityRule
             }
             """;
 
-        var wired = PanelKeyRouteProbe.Scan([("SyntheticRouter.cs", Wired)]);
-        var orphan = PanelKeyRouteProbe.Scan([("SyntheticRouter.cs", Orphan)]);
+        // The synthetic sources go through the same file view the tree does
+        // (#1791), so the control exercises the production path and not a
+        // second, parallel one. `FromStrippedText` takes the source as it
+        // already is: these fixtures carry no comments, and the tree's files
+        // arrive comment-stripped from the snapshot.
+        var wired = PanelKeyRouteProbe.Scan([SourceTreeFile.FromStrippedText("SyntheticRouter.cs", Wired)]);
+        var orphan = PanelKeyRouteProbe.Scan([SourceTreeFile.FromStrippedText("SyntheticRouter.cs", Orphan)]);
 
         await Assert.That(wired.HandOffs.Count).IsEqualTo(1).Because(
             "the control source declares one hand-off (`_consumer.OnKey(in key)`), and the scan "

@@ -20,13 +20,23 @@
 // its violations because the tree snapshot changed shape is a silent hole,
 // and "the tests are still green" does not prove otherwise: a rule that finds
 // nothing reports nothing, which is green. So the counts are printed with
-// stable keys, and the same keys are printed by the same file AFTER the
-// shared-snapshot change — the diff between the two runs is the parity proof.
+// stable keys, and the same keys are printed by the same file BEFORE and
+// AFTER the shared-snapshot change — the diff between the two runs is the
+// parity proof.
 //
 // The output lines are picked up by `tools/test-measurements.py`, which renders
 // every `Console.WriteLine` a test emits into the CI job summary. Nothing here
 // is a gate: this file measures and reports, and the rules it measures keep
 // their own assertions.
+//
+// THE TWO KINDS OF LINE
+// ---------------------
+//   [arch-count] — the parity contract. These lines must be IDENTICAL before
+//                  and after the change. A difference means a rule's findings
+//                  moved, and a rule whose findings moved has changed its
+//                  verdict even if its test is still green.
+//   [arch-cost]  — the measurement. These lines are expected to move, and
+//                  moving them down is the point.
 
 using System.Diagnostics;
 
@@ -43,14 +53,15 @@ namespace Harbor.Architecture.Tests;
 ///         <c>Harbor.Abstractions.Tests</c> (#1790): a measurement that reads
 ///         wall-clock while a neighbouring test burns cores is measuring the
 ///         neighbour. The bare form is the only one that takes the
-///         <c>NotInParallelLock</c>, so this class runs COMPLETELY ALONE — which
-///         also means the per-test durations of every other rule in this
+///         <c>NotInParallelLock</c>, so this class runs COMPLETELY ALONE —
+///         which also means the per-test durations of every other rule in this
 ///         assembly are measured without this measurement distorting them, so
 ///         two runs of the same tree can be compared rule by rule.
 ///     </para>
 ///     <para>
 ///         The cost is that the run pays for this measurement serially, on top
-///         of the suite. It is a measurement, and it is reported as one.
+///         of the suite. It is a measurement, and it is reported as one: its
+///         own duration is one of the per-test durations in the TRX.
 ///     </para>
 /// </remarks>
 [NotInParallel]
@@ -81,16 +92,11 @@ public sealed class SourceTreeScanMeasurement
     {
         var watch = Stopwatch.StartNew();
 
-        IReadOnlyList<(string Path, string Text)> productSources = PanelKeyRouteProbe.ReadProductTrees();
-        long productReadMs = watch.ElapsedMilliseconds;
-
-        watch.Restart();
-        KeyRouteReport report = PanelKeyRouteProbe.Scan(productSources);
-        long scanMs = watch.ElapsedMilliseconds;
-
-        watch.Restart();
-        IReadOnlyList<(string Path, string Text)> testSources = PanelKeyRouteProbe.ReadTestTrees();
-        long testReadMs = watch.ElapsedMilliseconds;
+        // The rule's OWN memoised state, so the measurement reports what the
+        // rule sees rather than a second, parallel computation of it.
+        KeyRouteReport report = PanelKeyRouteReachabilityRule.ProductReport;
+        IReadOnlyList<SourceTreeFile> testSources = PanelKeyRouteReachabilityRule.TestSources;
+        long readMs = watch.ElapsedMilliseconds;
 
         watch.Restart();
         IReadOnlyList<string> deadRouteTests =
@@ -103,17 +109,18 @@ public sealed class SourceTreeScanMeasurement
             out IReadOnlyList<AcknowledgedDebt> stale);
 
         Console.WriteLine(
-            $"[arch-scan] panel-key-route files={report.FilesScanned} handoffs={report.HandOffs.Count} "
+            $"[arch-count] panel-key-route files={report.FilesScanned} handoffs={report.HandOffs.Count} "
             + $"orphans={report.Orphans.Count} undeclared={undeclared.Count} stale={stale.Count} "
-            + $"dead-route-tests={deadRouteTests.Count} "
-            + $"read-product-ms={productReadMs} scan-ms={scanMs} "
-            + $"read-test-ms={testReadMs} dead-test-ms={deadTestMs}");
+            + $"dead-route-tests={deadRouteTests.Count}");
+
+        Console.WriteLine(
+            $"[arch-cost] panel-key-route read-ms={readMs} dead-test-ms={deadTestMs}");
     }
 
     /// <summary>
     ///     The process-environment rule: 173 s of the suite's 738 s, and the
-    ///     only one of the three that does NOT memoise its discovery — so it
-    ///     re-parses the whole test tree once per test.
+    ///     only one of the three that did NOT memoise its discovery — so it
+    ///     re-parsed the whole test tree once per test.
     /// </summary>
     private static void MeasureProcessEnv()
     {
@@ -128,13 +135,15 @@ public sealed class SourceTreeScanMeasurement
         int projects = writers.Select(s => s.Project).Distinct(StringComparer.Ordinal).Count();
 
         Console.WriteLine(
-            $"[arch-scan] process-env writers={writers.Count} restored={restored} "
-            + $"written-variables={written} projects={projects} discover-ms={discoverMs}");
+            $"[arch-count] process-env writers={writers.Count} restored={restored} "
+            + $"written-variables={written} projects={projects}");
+
+        Console.WriteLine($"[arch-cost] process-env discover-ms={discoverMs}");
     }
 
     /// <summary>
-    ///     The approval-gate waiter race rule: 50 s of the suite's 738 s, and it
-    ///     re-walks and re-scans the test tree once per test as well.
+    ///     The approval-gate waiter race rule: 50 s of the suite's 738 s, and
+    ///     it re-walked and re-scanned the test tree once per test as well.
     /// </summary>
     private static void MeasureApprovalGate()
     {
@@ -142,33 +151,36 @@ public sealed class SourceTreeScanMeasurement
         IReadOnlyList<string> files = ApprovalGateWaiterRaceRules.EnumerateTestSources();
         long enumerateMs = watch.ElapsedMilliseconds;
 
-        int races = 0;
-        int subjects = 0;
         watch.Restart();
+        IReadOnlyList<(string File, ApprovalGateWaiterRaceRules.WaiterRace Race)> scan =
+            ApprovalGateWaiterRaceRules.ScanTestTree();
+        long scanMs = watch.ElapsedMilliseconds;
+
+        // The subject of the rule, counted so the scan's reach is visible: a
+        // rule that saw no waiter call at all would report zero races, and
+        // that zero would be indistinguishable from a clean tree.
+        int subjects = 0;
         foreach (string file in files)
         {
-            if (SourceScan.TryReadAllText(file) is not { } source)
+            SourceTreeFile? source = SharedSourceTreeSnapshot.Shared.Get(file);
+            if (source is null)
             {
                 continue;
             }
 
-            races += ApprovalGateWaiterRaceRules.FindRaces(source).Count;
-
-            // The subject of the rule, counted so the scan's reach is visible:
-            // a rule that saw no waiter call at all would report zero races
-            // and that zero would be indistinguishable from a clean tree.
-            int index = source.IndexOf("WaitForDecisionAsync", StringComparison.Ordinal);
+            int index = source.Text.IndexOf("WaitForDecisionAsync", StringComparison.Ordinal);
             while (index >= 0)
             {
                 subjects++;
-                index = source.IndexOf("WaitForDecisionAsync", index + 1, StringComparison.Ordinal);
+                index = source.Text.IndexOf("WaitForDecisionAsync", index + 1, StringComparison.Ordinal);
             }
         }
 
-        long scanMs = watch.ElapsedMilliseconds;
+        Console.WriteLine(
+            $"[arch-count] approval-gate files={files.Count} races={scan.Count} "
+            + $"waiter-subjects={subjects}");
 
         Console.WriteLine(
-            $"[arch-scan] approval-gate files={files.Count} races={races} "
-            + $"waiter-subjects={subjects} enumerate-ms={enumerateMs} scan-ms={scanMs}");
+            $"[arch-cost] approval-gate enumerate-ms={enumerateMs} scan-ms={scanMs}");
     }
 }

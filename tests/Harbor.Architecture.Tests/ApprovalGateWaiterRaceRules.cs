@@ -211,26 +211,18 @@ public class ApprovalGateWaiterRaceRules
     {
         var violations = new List<string>();
 
-        foreach (string file in EnumerateTestSources())
+        foreach ((string file, WaiterRace race) in ApprovalGateWaiterRaceRules.ScanTestTree())
         {
-            if (SourceScan.TryReadAllText(file) is not { } source)
-            {
-                continue;
-            }
-
-            foreach (WaiterRace race in FindRaces(source))
-            {
-                violations.Add(
-                    $"{SourceScan.Relative(file)}:{race.Line} — `{race.Method}` asserts "
-                    + $"ApprovalDecisionDisposition.{race.Disposition} while a "
-                    + $"`WaitForDecisionAsync` waiter ({race.Waiter}) is still parked on the gate's "
-                    + "TCS. The decision that "
-                    + "completes that TCS queues the waiter (RunContinuationsAsynchronously), "
-                    + "and on consume it calls ForgetGate, which drops the slot — so the same "
-                    + "gate answers AlreadyDecided or StaleGate depending on pool timing. "
-                    + "Stamp the twin with no waiter in flight, then await the waiter "
-                    + "afterwards (the shape #808 introduced).");
-            }
+            violations.Add(
+                $"{SourceScan.Relative(file)}:{race.Line} — `{race.Method}` asserts "
+                + $"ApprovalDecisionDisposition.{race.Disposition} while a "
+                + $"`WaitForDecisionAsync` waiter ({race.Waiter}) is still parked on the gate's "
+                + "TCS. The decision that "
+                + "completes that TCS queues the waiter (RunContinuationsAsynchronously), "
+                + "and on consume it calls ForgetGate, which drops the slot — so the same "
+                + "gate answers AlreadyDecided or StaleGate depending on pool timing. "
+                + "Stamp the twin with no waiter in flight, then await the waiter "
+                + "afterwards (the shape #808 introduced).");
         }
 
         await Assert.That(violations).IsEmpty()
@@ -396,14 +388,7 @@ public class ApprovalGateWaiterRaceRules
     {
         // Pins the count rather than the shape, so a detector edit that starts
         // matching nothing fails here. Measured on this tree: 0.
-        var count = 0;
-        foreach (string file in EnumerateTestSources())
-        {
-            if (SourceScan.TryReadAllText(file) is { } source)
-            {
-                count += FindRaces(source).Count;
-            }
-        }
+        int count = ApprovalGateWaiterRaceRules.ScanTestTree().Count;
 
         await Assert.That(count).IsEqualTo(0)
             .Because(
@@ -671,8 +656,18 @@ public class ApprovalGateWaiterRaceRules
     ///     <c>IsBuildOutput</c> predicate returns true for any path containing
     ///     <c>/tests/</c>, so it would discard every file in the tree it was asked to
     ///     walk and the rule would pass vacuously.
+    ///     <para>
+    ///         The WALK is the shared snapshot's (#1791) and the FILTER stays this
+    ///         rule's, because the filter is what decides this rule's scope — and
+    ///         this rule excludes one file of its own, which the shared walk
+    ///         cannot know about.
+    ///     </para>
     /// </remarks>
-    internal static IReadOnlyList<string> EnumerateTestSources()
+    internal static IReadOnlyList<string> EnumerateTestSources() => CachedTestSources.Value;
+
+    private static readonly Lazy<IReadOnlyList<string>> CachedTestSources = new(WalkTestSources);
+
+    private static IReadOnlyList<string> WalkTestSources()
     {
         if (RepoPaths.RepoRoot is not { } root)
         {
@@ -686,7 +681,7 @@ public class ApprovalGateWaiterRaceRules
         }
 
         var found = new List<string>();
-        foreach (string file in Directory.EnumerateFiles(dir, "*.cs", SearchOption.AllDirectories))
+        foreach (string file in SharedSourceTreeSnapshot.Shared.EnumerateCsFiles(dir))
         {
             if (IsExcluded(file))
             {
@@ -697,6 +692,40 @@ public class ApprovalGateWaiterRaceRules
         }
 
         found.Sort(StringComparer.Ordinal);
+        return found;
+    }
+
+    /// <summary>
+    ///     Every racy assertion in the test tree, found once.
+    /// </summary>
+    /// <remarks>
+    ///     Memoised (#1791). The scan is a pure function of the tree, and the
+    ///     tree does not change while the suite runs — so the two tests that
+    ///     ask for it were each paying for a whole-tree scan. The bytes come
+    ///     from the shared snapshot, so this scan reads nothing twice.
+    /// </remarks>
+    internal static IReadOnlyList<(string File, WaiterRace Race)> ScanTestTree() => CachedScan.Value;
+
+    private static readonly Lazy<IReadOnlyList<(string File, WaiterRace Race)>> CachedScan =
+        new(ScanTestTreeCore);
+
+    private static IReadOnlyList<(string File, WaiterRace Race)> ScanTestTreeCore()
+    {
+        var found = new List<(string File, WaiterRace Race)>();
+
+        foreach (string file in EnumerateTestSources())
+        {
+            if (SharedSourceTreeSnapshot.Shared.Get(file) is not { } source)
+            {
+                continue;
+            }
+
+            foreach (WaiterRace race in FindRacesInStrippedCode(source.StrippedText))
+            {
+                found.Add((file, race));
+            }
+        }
+
         return found;
     }
 
@@ -749,17 +778,38 @@ public class ApprovalGateWaiterRaceRules
     ///     Every terminal-disposition assertion that a parked waiter can still race,
     ///     in the order it appears in the file.
     /// </summary>
-    internal static IReadOnlyList<WaiterRace> FindRaces(string source)
+    /// <remarks>
+    ///     Takes the source AS IT IS and blanks the comments out itself, because
+    ///     one of this file's own fixtures is PROSE in a comment: a detector
+    ///     that was handed pre-stripped source would be handed that prose with
+    ///     the comment already gone, and would report nothing — which is the
+    ///     #948 shape, a guard reporting green while the bug was alive.
+    /// </remarks>
+    /// <param name="source">The raw source of one file.</param>
+    internal static IReadOnlyList<WaiterRace> FindRaces(string source) =>
+        FindRacesInStrippedCode(SourceScan.StripComments(source));
+
+    /// <summary>
+    ///     The detector, over source whose comments are ALREADY blanked out.
+    /// </summary>
+    /// <remarks>
+    ///     The tree path (#1791) comes through here: the shared snapshot hands
+    ///     out the comment-stripped view of each file, so the strip is not
+    ///     repeated. The result is the same one, because stripping twice is
+    ///     stripping once — a stripped file has no comment left to match.
+    /// </remarks>
+    /// <param name="code">The source of one file, with its comments blanked out.</param>
+    internal static IReadOnlyList<WaiterRace> FindRacesInStrippedCode(string code)
     {
         var races = new List<WaiterRace>();
 
-        // Comments carry the prose that documents this very class, and a string
-        // literal could name the enum member; both are blanked so only code counts.
-        string code = BlankOutLiterals(SourceScan.StripComments(source));
+        // A string literal could name the enum member; it is blanked so only
+        // code counts.
+        string blanked = BlankOutLiterals(code);
 
-        foreach ((string method, int bodyStart, int bodyEnd) in MethodBodies(code))
+        foreach ((string method, int bodyStart, int bodyEnd) in MethodBodies(blanked))
         {
-            string body = code[bodyStart..bodyEnd];
+            string body = blanked[bodyStart..bodyEnd];
 
             // Two passes over the same body, because "where the waiter is parked" and
             // "where the window closes" are two different questions:

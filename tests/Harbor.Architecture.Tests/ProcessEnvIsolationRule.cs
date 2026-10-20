@@ -171,6 +171,7 @@
 //   still reported. A second bounded write of the SAME variable would be masked;
 //   that is the price of an exemption that cannot be derived.
 
+using System.Collections.Concurrent;
 using System.Text.RegularExpressions;
 
 namespace Harbor.Architecture.Tests;
@@ -1315,12 +1316,32 @@ public class ProcessEnvIsolationRule
         return false;
     }
 
-    internal static IReadOnlyList<TypeSite> DiscoverWriters() =>
-        [.. DiscoverTypesInProjects(EnumerateTestProjects())
-            .Where(t => t.WriteLine > 0 && t.DeclaresTests)];
+    /// <summary>
+    ///     Every test class that writes the process environment.
+    /// </summary>
+    /// <remarks>
+    ///     Memoised (#1791). The discovery is a pure function of the tree, and
+    ///     the tree does not change while the suite runs — so the SIX tests
+    ///     that ask for it were each paying for the same whole-test-tree
+    ///     parse. This is the rule's own cache over the shared snapshot: the
+    ///     bytes come from the snapshot, the parse comes once, and the verdict
+    ///     is the one the parse produced the first time.
+    /// </remarks>
+    internal static IReadOnlyList<TypeSite> DiscoverWriters() => CachedWriters.Value;
 
-    private static IReadOnlyList<TypeSite> DiscoverTypesInProject(string project) =>
+    private static readonly Lazy<IReadOnlyList<TypeSite>> CachedWriters = new(
+        () => [.. DiscoverTypesInProjects(EnumerateTestProjects())
+            .Where(t => t.WriteLine > 0 && t.DeclaresTests)]);
+
+    /// <summary>
+    ///     Every top-level type in one test project.
+    /// </summary>
+    /// <param name="project">The <c>tests/&lt;project&gt;</c> directory name.</param>
+    internal static IReadOnlyList<TypeSite> DiscoverTypesInProject(string project) =>
         DiscoverTypesInProjects([project]);
+
+    private static readonly ConcurrentDictionary<string, IReadOnlyList<TypeSite>> TypeSitesByProject =
+        new(StringComparer.Ordinal);
 
     private static IReadOnlyList<TypeSite> DiscoverTypesInProjects(IReadOnlyList<string> projects)
     {
@@ -1333,19 +1354,35 @@ public class ProcessEnvIsolationRule
 
         foreach (string project in projects)
         {
-            string dir = Path.Combine(root, "tests", project);
-            if (!Directory.Exists(dir))
-            {
-                continue;
-            }
+            found.AddRange(TypeSitesByProject.GetOrAdd(project, p => ParseProject(root, p)));
+        }
 
-            foreach (string file in Directory
-                         .EnumerateFiles(dir, "*.cs", SearchOption.AllDirectories)
-                         .Where(p => !IsExcluded(p))
-                         .OrderBy(p => p, StringComparer.Ordinal))
-            {
-                found.AddRange(ParseTypes(root, project, file));
-            }
+        return found;
+    }
+
+    /// <summary>
+    ///     Parses one test project's sources into the type sites the rules judge.
+    /// </summary>
+    /// <param name="root">The repository root.</param>
+    /// <param name="project">The <c>tests/&lt;project&gt;</c> directory name.</param>
+    private static IReadOnlyList<TypeSite> ParseProject(string root, string project)
+    {
+        string dir = Path.Combine(root, "tests", project);
+        if (!Directory.Exists(dir))
+        {
+            return [];
+        }
+
+        var found = new List<TypeSite>();
+
+        // The walk is the shared snapshot's (#1791); the filter is this rule's,
+        // because the filter is what decides the rule's SCOPE.
+        foreach (string file in SharedSourceTreeSnapshot.Shared
+                     .EnumerateCsFiles(dir)
+                     .Where(p => !IsExcluded(p))
+                     .OrderBy(p => p, StringComparer.Ordinal))
+        {
+            found.AddRange(ParseTypes(root, project, file));
         }
 
         return found;
@@ -1353,12 +1390,13 @@ public class ProcessEnvIsolationRule
 
     private static IEnumerable<TypeSite> ParseTypes(string root, string project, string file)
     {
-        string[] lines;
-        try
-        {
-            lines = File.ReadAllLines(file);
-        }
-        catch (IOException)
+        // The shared snapshot's view of the file (#1791): the content was read
+        // once for the whole assembly, and the comment-stripped view of it is
+        // computed once too. Before the snapshot this file was read, joined,
+        // comment-stripped and split again for EVERY call — and this rule
+        // called it once per test, six times over.
+        SourceTreeFile? source = SharedSourceTreeSnapshot.Shared.Get(file);
+        if (source is null)
         {
             yield break;
         }
@@ -1376,8 +1414,8 @@ public class ProcessEnvIsolationRule
         //     into it. StripComments preserves line count by design; if that ever
         //     stops being true the numbers point at the wrong source, and failing
         //     loudly beats reporting confident nonsense.
-        string[] code = SourceScan.StripComments(string.Join('\n', lines)).Split('\n');
-        if (code.Length != lines.Length)
+        string[] code = [.. source.StrippedReadLineLines];
+        if (code.Length != source.RawLineCount)
         {
             yield break;
         }
@@ -1704,8 +1742,8 @@ public class ProcessEnvIsolationRule
                 continue;
             }
 
-            files.AddRange(Directory
-                .EnumerateFiles(dir, "*.cs", SearchOption.AllDirectories)
+            files.AddRange(SharedSourceTreeSnapshot.Shared
+                .EnumerateCsFiles(dir)
                 .Where(p => !IsExcluded(p)));
         }
 
