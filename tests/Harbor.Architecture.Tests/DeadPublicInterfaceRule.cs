@@ -676,7 +676,16 @@ internal static class DeadPublicInterfaceProbe
                     continue;
                 }
 
-                interfaceBases[match.Groups[1].Value] = SplitBaseList(match.Groups[2].Value);
+                // Merged, not overwritten: two declarations may share a simple name
+                // (the tree has more than one `IInputHandler`), and the base lists of
+                // both belong to the name.
+                if (!interfaceBases.TryGetValue(match.Groups[1].Value, out List<string>? bases))
+                {
+                    bases = [];
+                    interfaceBases[match.Groups[1].Value] = bases;
+                }
+
+                bases.AddRange(SplitBaseList(match.Groups[2].Value));
             }
 
             var typeBases = new List<List<string>>();
