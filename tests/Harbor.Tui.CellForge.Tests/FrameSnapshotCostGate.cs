@@ -96,11 +96,13 @@ public sealed class FrameSnapshotCostGate
     // ── the budgets ─────────────────────────────────────────────────────────
     //
     // The byte budgets are CEILINGS, pinned from the CI measurement of the
-    // pre-#1140 tree: the tab strip paid ~1.4 KB per painted frame and the
-    // toast overlay ~0.6 KB, so a ceiling an order of magnitude below those
-    // numbers catches the regression the slice removes while leaving room
-    // for the runtime's own bookkeeping. The time budgets are in PROBE UNITS
-    // (see `PerfGate`), so they mean the same thing on every runner.
+    // pre-#1140 tree: the tab strip paid 2 688 B per painted frame and the
+    // toast overlay 560 B (run 39391746836), and the fixed tree measures 0 B
+    // on both (run 39399184283). The ceilings sit an order of magnitude above
+    // zero and well below the pre-fix cost, so the gate is red on the tree
+    // the slice fixes and green on the tree it leaves. The time budgets are in
+    // PROBE UNITS (see `PerfGate`), so they mean the same thing on every
+    // runner.
 
     /// <summary>
     ///     Allocation budget for ONE painted tab-strip frame, in bytes.
@@ -113,19 +115,22 @@ public sealed class FrameSnapshotCostGate
 
     /// <summary>
     ///     Time budget for ONE painted tab-strip frame, in probe units (see
-    ///     <c>PerfGate</c>). Machine-scaled and soft.
+    ///     <c>PerfGate</c>). Machine-scaled and soft. The measured value is
+    ///     7.2 probe units per frame (run 39399184283).
     /// </summary>
     private const double MaxProbeUnitsPerTabStripFrame = 5_000.0;
 
     /// <summary>
     ///     Allocation budget for ONE painted overlay frame (the toast strip
     ///     inside the overlay stack), in bytes. Same shape as the tab strip's
-    ///     ceiling: the measured value on the fixed tree is 0 B per frame.
+    ///     ceiling: the measured value on the fixed tree is 0 B per frame,
+    ///     against 560 B before (runs 39399184283 / 39391746836).
     /// </summary>
     private const long MaxBytesPerOverlayFrame = 128;
 
     /// <summary>
-    ///     Time budget for ONE painted overlay frame, in probe units.
+    ///     Time budget for ONE painted overlay frame, in probe units. The
+    ///     measured value is 3.4 probe units per frame (run 39399184283).
     /// </summary>
     private const double MaxProbeUnitsPerOverlayFrame = 5_000.0;
 
