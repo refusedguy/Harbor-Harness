@@ -789,7 +789,7 @@ public sealed class ToolDispatcher(
     /// </summary>
     private sealed class ToolCallGates(
         IEventBus eventBus,
-        ILogger<ToolDispatcher> logger,
+        ILogger logger,
         IPermissionService permissions,
         ToolCallPart toolCall)
     {
@@ -797,7 +797,7 @@ public sealed class ToolDispatcher(
         private IEventBus EventBus => eventBus;
 
         /// <summary>The logger this call's callback failures are logged to.</summary>
-        private ILogger<ToolDispatcher> Logger => logger;
+        private ILogger Logger => logger;
 
         /// <summary>The permission service this call asks for decisions.</summary>
         private IPermissionService Permissions => permissions;
