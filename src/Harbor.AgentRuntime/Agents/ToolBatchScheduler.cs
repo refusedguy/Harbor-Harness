@@ -53,8 +53,19 @@ public static class ToolBatchScheduler
     ///     A tool that declares <see cref="ExecutionMode.Sequential" /> owns
     ///     the workspace for the length of its call.
     /// </remarks>
-    public static bool IsExclusive(Result<ITool> resolved) =>
-        resolved.IsSuccess && resolved.Value.ExecutionMode == ExecutionMode.Sequential;
+    public static bool IsExclusive(Result<ITool> resolved)
+    {
+        // The `if` form, not an expression-bodied `&&`: the CFE0001 analyzer
+        // recognises the guard only when the check and the read sit in the
+        // same `if` condition (the shape the dispatcher's own sequential gate
+        // used before #1766).
+        if (resolved.IsSuccess && resolved.Value.ExecutionMode == ExecutionMode.Sequential)
+        {
+            return true;
+        }
+
+        return false;
+    }
 
     /// <summary>
     ///     The end of the parallel-safe group that starts at

@@ -1,3 +1,4 @@
+using CSharpFunctionalExtensions;
 using Harbor.Application.Configuration;
 
 namespace Harbor.Config.Tests;
