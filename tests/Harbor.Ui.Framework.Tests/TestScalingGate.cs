@@ -1,11 +1,14 @@
 // TestScalingGate.cs — DOCUMENTED MINI-COPY (#1652) of
-// tests/Harbor.TestKit/TestScalingGate.cs. This project cannot reference
-// Harbor.TestKit (TestKit drags Harbor.Application, Harbor.Ui.Framework.Tests must
-// not pull it to measure its slice — the known constraint #1652 records), so
-// the same signature API ships locally as INTERNAL: TestScalingGateLeg,
-// TestScalingGateOptions, TestScalingGateResult, TestScalingGate. Keep the
-// copies in sync with the TestKit master — a drift in the decision function or
-// the noise band would make one assembly's green mean something different.
+// tests/Harbor.TestKit/TestScalingGate.cs. The same signature API ships
+// locally as INTERNAL: TestScalingGateLeg, TestScalingGateOptions,
+// TestScalingGateResult, TestScalingGate — the gates in this assembly
+// measure THIS assembly's slice, so the helper they ride stays local.
+// #1549 added a Harbor.TestKit reference to this project (for the shared UI
+// test doubles); it changes no measured assembly, because
+// Harbor.Application already arrived here through Harbor.Desktop.Abstractions
+// long before that reference existed. Keep the copies in sync with the
+// TestKit master — a drift in the decision function or the noise band would
+// make one assembly's green mean something different.
 // Tests in this assembly may disambiguate: this copy is internal, the TestKit
 // type (if ever referenced) is public.
 

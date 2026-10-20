@@ -100,15 +100,6 @@ public class AvaloniaWorkspaceCommandsTests
         public ToastKind LastKind { get; private set; }
     }
 
-    private sealed class FakeDispatcherAdapter : IDispatcherAdapter
-    {
-        public void Post(Action action) => action();
-        public T Invoke<T>(Func<T> func) => func();
-        public void Bind(UiStore store) { }
-        public void Unbind(UiStore store) { }
-        public event EventHandler<UiState>? StateChanged;
-    }
-
     private sealed class FakeFilePicker : IFilePicker
     {
         public Task<IReadOnlyList<string>> PickFilesAsync(string title, bool allowMultiple = false, CancellationToken cancellationToken = default)
@@ -149,7 +140,7 @@ public class AvaloniaWorkspaceCommandsTests
         var effects = new TuiEffectHost(agentRunner ?? new FakeAgentRunner(), store);
         var sessionManager = new FakeSessionManager();
         var sessionStore = new FakeSessionStore();
-        var dispatcher = new FakeDispatcherAdapter();
+        var dispatcher = new TestDispatcherAdapter();
         var logger = new FakeLogger<ChatViewModel>();
         var toastService = toasts ?? new FakeToastService();
         var renderEngine = new UiRenderEngine(new DefaultUiProjector(), new AvaloniaUiViewport(), new ChatStreamingPresenter());
@@ -164,7 +155,7 @@ public class AvaloniaWorkspaceCommandsTests
         var dialogs = new FakeDialogService();
         var logger = new FakeLogger<SessionListViewModel>();
         var toasts = new FakeToastService();
-        var dispatcher = new FakeDispatcherAdapter();
+        var dispatcher = new TestDispatcherAdapter();
 
         return new SessionListViewModel(sessionStore, sessionManager, dialogs, logger, toasts, dispatcher);
     }
@@ -181,7 +172,7 @@ public class AvaloniaWorkspaceCommandsTests
         var filePicker = picker ?? new AvaloniaFilePicker(new FakeLogger<AvaloniaFilePicker>());
         var logger = new FakeLogger<CodeEditorViewModel>();
         var toastService = toasts ?? new FakeToastService();
-        var dispatcher = new FakeDispatcherAdapter();
+        var dispatcher = new TestDispatcherAdapter();
         var files = new SystemTextFileStore(new FakeLogger<SystemTextFileStore>());
 
         return new CodeEditorViewModel(filePicker, logger, toastService, dispatcher, files);
