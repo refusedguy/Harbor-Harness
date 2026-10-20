@@ -12,15 +12,16 @@
 //      an all-whitespace window, and the 599/600/601 budget edges. A couple of
 //      hand-written literals double-check the oracle itself.
 //
-//   2. SCALING (lower class) — the #410/#1373 RELATIVE gate over N
-//      tool-start/end pairs: t(2N) <= 3*t(N) and alloc(2N) <= 3*alloc(N),
-//      medians of rounds, GC-fenced, on the shared #1652 TestScalingGate.
-//      No absolute budget lives here — absolute columns print for info only —
-//      because the repo's receipts (#460, commit c5eb5e28) show an absolute
-//      number measuring the runner, not the code. The double-encode this slice
-//      removes doubles ABSOLUTE bytes per call, which is exactly what the
-//      info columns show in docs/BENCHMARKS.md; the merge gate holds the
-//      linearity claim.
+//   2. COST (lower class) — the per-unit-of-work gate over N tool-start/end
+//      pairs, on the shared #1747 PerfGate: bytes per pair (machine-
+//      independent, hard) and probe units per pair (machine-scaled time,
+//      soft), measured over a FIXED amount of work. Since #1948 this gate is
+//      NOT a ratio: the two ratio legs it used to measure were the SAME
+//      measurement (`ToolBoundaryLeg(units)` on both sides), so the ratio it
+//      asserted was noise around 1.00 and could not catch the quadratic
+//      behaviour it was written for. The double-encode this slice removes
+//      doubles the ABSOLUTE bytes per call, which is exactly what the byte
+//      budget now holds.
 
 using System.Diagnostics;
 using System.Text.Json;
@@ -189,15 +190,39 @@ public class AgentReducerToolBoundaryTests
 }
 
 /// <summary>
-///     The #410/#1373 RELATIVE cost gate for the tool boundary (#1530):
-///     <c>t(2N) &lt;= 3*t(N)</c> and <c>alloc(2N) &lt;= 3*alloc(N)</c> over
-///     full tool-start/end pairs, on the shared #1652 scaling skeleton. The
-///     unit is ONE self-contained pair over a >2 KiB-args document and a
-///     >1 KiB output, so the payloads that #1530 stopped double-encoding
-///     dominate the measured bytes.
+///     The per-unit-of-work cost gate for the tool boundary (#1530), on the
+///     shared #1747 <c>PerfGate</c>. The unit is ONE self-contained
+///     tool-start/end pair over a >2 KiB-args document and a >1 KiB output, so
+///     the payloads that #1530 stopped double-encoding dominate the measured
+///     bytes.
 /// </summary>
+[NotInParallel]
 public class AgentReducerToolBoundaryScalingGates
 {
+    /// <summary>
+    ///     Tool-start/end pairs per measured leg - the FIXED amount of work.
+    ///     4 000 pairs is about 15 ms of real work on the CI runner.
+    /// </summary>
+    private const int PairsPerLeg = 4_000;
+
+    /// <summary>
+    ///     Allocation budget for ONE tool-start/end pair, in bytes. Machine-
+    ///     independent, so it is compared as measured, with no band. Pinned
+    ///     from the CI measurement of the ratio gate this replaced (run
+    ///     39423151864): 208 151 840 B over 17 404 pairs = 11 959 B per pair.
+    ///     The budget leaves ~1.34x headroom.
+    /// </summary>
+    private const long MaxBytesPerPair = 16_000;
+
+    /// <summary>
+    ///     Time budget for ONE tool-start/end pair, in PROBE UNITS (see
+    ///     <see cref="PerfGate" />). Machine-scaled and SOFT. Pinned from the
+    ///     same run: 63.327 ms over 17 404 pairs = 3.64 us per pair against a
+    ///     probe that costs 0.000380 ms/unit, i.e. ~9.6 probe units per pair.
+    ///     The budget leaves ~4.2x headroom.
+    /// </summary>
+    private const double MaxProbeUnitsPerPair = 40.0;
+
     private const string ToolName = "read";
 
     // >2 KiB of raw args: one GetRawText() allocation of this dominates the
@@ -227,26 +252,37 @@ public class AgentReducerToolBoundaryScalingGates
             return;
         }
 
-        // The leg is a REPEAT of the same unit, per the helper's own contract
-        // (#1652): each unit folds ONE tool pair into a FRESH state, so the
-        // ImmutableArray line-copy cost stays O(1) per unit and the leg stays
-        // linear. A single fold of N units into ONE state would be quadratic
-        // by the transcript itself — a changed problem, not a gate.
-        TestScalingGateResult result = await TestScalingGate.MeasureAsync(
-            measureSmallLeg: units => Task.FromResult(ToolBoundaryLeg(units)),
-            measureLargeLeg: units => Task.FromResult(ToolBoundaryLeg(units)),
-            initialUnits: 2_000,
-            options: new TestScalingGateOptions
+        // The leg is a REPEAT of the same unit: each unit folds ONE tool pair
+        // into a FRESH state, so the ImmutableArray line-copy cost stays O(1)
+        // per unit and the leg stays linear. A single fold of N units into ONE
+        // state would be quadratic by the transcript itself - a changed
+        // problem, not a gate.
+        //
+        // THE GATE IS A BUDGET PER UNIT OF WORK (#1948), not a ratio. It used
+        // to measure `ToolBoundaryLeg(units)` on BOTH sides and assert
+        // `t(2N)/t(N) <= 3` - the same measurement twice, so the ratio was
+        // noise around 1.00 and the gate could not fail on the quadratic
+        // behaviour it was written for. It is now:
+        //
+        //     bytes per tool pair      <= 16 000   (machine-independent, HARD)
+        //     probe units per tool pair <= 40       (machine-scaled time, SOFT)
+        //
+        // measured over a FIXED amount of work (4 000 pairs) on the SAME runner
+        // in the SAME run. The allocation branch is machine-independent and is
+        // asserted hard; the time branch is in PROBE UNITS and stands down when
+        // the rounds do not reproduce each other. The report prints on every
+        // run, pass or fail.
+        PerfGateResult result = await PerfGate.MeasureAsync(
+            work: units => Task.FromResult(ToolBoundaryLeg(units)),
+            units: PairsPerLeg,
+            options: new PerfGateOptions
             {
-                Label = "tool-boundary-scaling",
+                Label = "tool-boundary-cost",
+                MaxBytesPerUnit = MaxBytesPerPair,
+                MaxProbeUnitsPerUnit = MaxProbeUnitsPerPair,
             });
 
-        await result.AssertWithinLimitsAsync(
-            topic: "time(2N)/time(N)",
-            linearWhy:
-                "The unit is self-contained, so per-unit cost is constant and linear is 2.00; "
-                + "an O(N^2) regression (or a per-event transcript re-encode) is 4.00. This bound is why "
-                + "#1530 does not pin an absolute millisecond, which would measure the runner (#460).");
+        await result.AssertWithinBudgetsAsync("tool boundary fold per tool-start/end pair");
 
         // Non-vacuity: the measured body must have done the work it claims —
         // the payloads are above budget on purpose, so both writers' shapes
@@ -268,7 +304,7 @@ public class AgentReducerToolBoundaryScalingGates
                      + "tool-end walks the truncation branch #1530 rewrote.");
     }
 
-    private static TestScalingGateLeg ToolBoundaryLeg(int units)
+    private static PerfGateLeg ToolBoundaryLeg(int units)
     {
         // Payload parse happens OUTSIDE the measured window: the leg times and
         // charges the boundary fold only. One document per leg, shared by all
@@ -291,6 +327,6 @@ public class AgentReducerToolBoundaryScalingGates
 
         double ms = (Stopwatch.GetTimestamp() - started) * 1_000.0 / Stopwatch.Frequency;
         long allocated = GC.GetAllocatedBytesForCurrentThread() - allocatedBefore;
-        return new TestScalingGateLeg(ms, allocated);
+        return new PerfGateLeg(ms, allocated);
     }
 }
